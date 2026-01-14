@@ -24,6 +24,7 @@ from POMDPPlanners.planners import (
     PFT_DPW,
     DiscreteActionSequencesPlanner,
     SparsePFT,
+    StandardSparseSamplingDiscreteActionsPlanner,
 )
 from POMDPPlanners.utils.action_samplers import DiscreteActionSampler
 
@@ -80,6 +81,8 @@ class TestPlannerSaveLoadInterface:
                 assert loaded_planner.exploration_constant == planner.exploration_constant
             if hasattr(planner, "n_simulations"):
                 assert loaded_planner.n_simulations == planner.n_simulations
+            if hasattr(planner, "branching_factor"):
+                assert loaded_planner.branching_factor == planner.branching_factor
 
         finally:
             # Cleanup
@@ -248,6 +251,27 @@ class TestPlannerSaveLoadInterface:
                 "depth": 3,
                 "n_return_samples": 10,
                 "name": "DiscreteActionSeq_Test",
+            },
+        )
+
+    def test_standard_sparse_sampling_planner_save_load(self):
+        """Test StandardSparseSamplingDiscreteActionsPlanner save/load interface.
+
+        Purpose: Validates StandardSparseSamplingDiscreteActionsPlanner can be saved and loaded
+
+        Given: StandardSparseSamplingDiscreteActionsPlanner with sparse sampling parameters
+        When: Planner is saved to JSON and loaded
+        Then: Loaded planner matches original configuration including branching_factor
+
+        Test type: interface
+        """
+        self._test_planner_save_load(
+            StandardSparseSamplingDiscreteActionsPlanner,
+            {
+                "environment": self.tiger_env,
+                "branching_factor": 2,
+                "depth": 3,
+                "name": "StandardSparseSampling_Test",
             },
         )
 

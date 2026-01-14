@@ -573,16 +573,22 @@ class Policy(ABC):
                 sampler = _deserialize_action_sampler(data["action_sampler"])
                 policy_params["action_sampler"] = sampler
 
-            # Deserialize parameter types
+            # Deserialize parameter types and filter to only valid constructor params
             sig = inspect.signature(policy_class.__init__)
-            for param_name, param in sig.parameters.items():
-                if param_name in policy_params and param.annotation != inspect.Parameter.empty:
-                    policy_params[param_name] = _deserialize_value(
-                        policy_params[param_name], param.annotation
-                    )
+            filtered_params = {}
 
-            # Construct policy
-            policy = policy_class(**policy_params)
+            for param_name, param in sig.parameters.items():
+                if param_name == "self":
+                    continue
+                if param_name in policy_params:
+                    value = policy_params[param_name]
+                    # Deserialize if type annotation available
+                    if param.annotation != inspect.Parameter.empty:
+                        value = _deserialize_value(value, param.annotation)
+                    filtered_params[param_name] = value
+
+            # Construct policy with only valid parameters
+            policy = policy_class(**filtered_params)
 
             # Optionally warn about config_id mismatch
             loaded_config_id = policy.config_id
