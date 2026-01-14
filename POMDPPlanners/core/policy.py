@@ -538,10 +538,10 @@ class Policy(ABC):
             >>> from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
             >>> # Create and save a policy
             >>> env = TigerPOMDP(discount_factor=0.95)
-            >>> planner = POMCP(environment=env, depth=10, exploration_constant=1.0, name="test")
+            >>> planner = POMCP(environment=env, discount_factor=0.95, depth=10, exploration_constant=1.0, name="test", n_simulations=100)
             >>> with tempfile.TemporaryDirectory() as tmpdir:
             ...     filepath = Path(tmpdir) / "test_policy.json"
-            ...     planner.save(filepath)
+            ...     _ = planner.save(filepath)
             ...     # Load the policy back
             ...     loaded_planner = POMCP.load(filepath)
             ...     print(loaded_planner.depth)
