@@ -675,7 +675,7 @@ def test_max_depth_reached_with_timeout(environment, action_sampler):
 
     # PFT_DPW with timeout may not reach full depth due to environment complexity
     # Verify it reaches at least depth+1 and doesn't exceed 2*depth+2
-    assert root_belief_node.height == 2 * depth
+    assert depth + 1 <= root_belief_node.height <= 2 * depth + 2
     for node in PostOrderIter(root_belief_node):
         assert node.visit_count >= 0
         if isinstance(node, BeliefNode):
