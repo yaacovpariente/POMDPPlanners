@@ -969,11 +969,11 @@ def test_reward_function():
 def test_is_terminal():
     """Test terminal state detection
 
-    Purpose: Validates that DiscreteLightDarkPOMDP correctly identifies terminal states including goal, obstacles, and boundary violations
+    Purpose: Validates that DiscreteLightDarkPOMDP correctly identifies terminal states including goal and obstacles
 
     Given: DiscreteLightDarkPOMDP with goal state, obstacle positions, grid boundaries, and normal states
     When: is_terminal checks various state positions for termination conditions
-    Then: Returns True for goal state, obstacle states, out-of-bounds states, False for normal navigation states
+    Then: Returns True for goal state and obstacle states, False for out-of-bounds states and normal navigation states
 
     Test type: unit
     """
@@ -985,9 +985,9 @@ def test_is_terminal():
     # Test obstacle state
     assert env.is_terminal(env.obstacles[:, 0])  # First obstacle
 
-    # Test out of grid state
-    assert env.is_terminal(np.array([-1, 5]))
-    assert env.is_terminal(np.array([12, 5]))  # grid_size + 1
+    # Test out of grid state (no longer terminal)
+    assert not env.is_terminal(np.array([-1, 5]))
+    assert not env.is_terminal(np.array([12, 5]))  # grid_size + 1
 
     # Test non-terminal state
     assert not env.is_terminal(np.array([1, 1]))

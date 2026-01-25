@@ -245,9 +245,8 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
 
         is_goal_state = np.all(state == self.goal_state)
         is_obstacle_hit = np.any(np.all(state.reshape(-1, 1) == self.obstacles, axis=0))
-        is_out_of_grid = np.any(state < 0) or np.any(state > self.grid_size)
 
-        is_terminal = is_goal_state or is_obstacle_hit or is_out_of_grid
+        is_terminal = is_goal_state or is_obstacle_hit
 
         return bool(is_terminal)
 
