@@ -376,9 +376,9 @@ def test_is_terminal():
     assert env.is_terminal(env.obstacles[:, 0])  # First obstacle
     assert env.is_terminal(env.obstacles[:, 0] + np.array([1, 0]))  # Within radius
 
-    # Test out of grid state
-    assert env.is_terminal(np.array([-1, 5]))
-    assert env.is_terminal(np.array([12, 5]))  # grid_size + 1
+    # Test out of grid state (no longer terminal)
+    assert not env.is_terminal(np.array([-1, 5]))
+    assert not env.is_terminal(np.array([12, 5]))  # grid_size + 1
 
     # Test non-terminal state
     assert not env.is_terminal(np.array([1, 1]))
@@ -606,9 +606,9 @@ def test_continuous_light_dark_pomdp_is_terminal(base_continuous_light_dark_pomd
     # Obstacle state
     assert env.is_terminal(env.obstacles[:, 0])
     assert env.is_terminal(env.obstacles[:, 0] + np.array([1, 0]))
-    # Out of grid
-    assert env.is_terminal(np.array([-1, 5]))
-    assert env.is_terminal(np.array([12, 5]))
+    # Out of grid (no longer terminal)
+    assert not env.is_terminal(np.array([-1, 5]))
+    assert not env.is_terminal(np.array([12, 5]))
     # Non-terminal
     assert not env.is_terminal(np.array([1, 1]))
 

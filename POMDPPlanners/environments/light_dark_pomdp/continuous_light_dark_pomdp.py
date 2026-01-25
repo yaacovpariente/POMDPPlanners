@@ -409,9 +409,7 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         else:
             is_obstacle_hit = False
 
-        is_out_of_grid = np.any(state < 0) or np.any(state > self.grid_size)
-
-        is_terminal = is_goal_state or is_obstacle_hit or is_out_of_grid
+        is_terminal = is_goal_state or is_obstacle_hit
 
         return bool(is_terminal)
 
