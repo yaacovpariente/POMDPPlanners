@@ -592,3 +592,115 @@ def test_belief_node_get_child_numeric_actions(test_belief):
     # Test non-existing numeric action
     result_none = belief_node.get_child(999)
     assert result_none is None
+
+
+def test_immediate_cost_setter_updates_immediate_reward(test_belief):
+    """Test that setting immediate_cost automatically updates immediate_reward to its negative value.
+
+    Purpose: Validates that the immediate_cost setter property correctly updates immediate_reward to -immediate_cost
+
+    Given: ActionNode and BeliefNode instances with initial immediate_cost=None and immediate_reward=None
+    When: immediate_cost is set to various values (positive, negative, zero, None)
+    Then: immediate_reward is automatically set to -immediate_cost for non-None values, and immediate_reward remains unchanged when immediate_cost is set to None
+
+    Test type: unit
+    """
+    # Test with ActionNode - positive cost
+    action_node = ActionNode("test_action", children=())
+    action_node.immediate_cost = 5.0
+    assert action_node.immediate_cost == 5.0
+    assert action_node.immediate_reward == -5.0
+
+    # Test with ActionNode - negative cost
+    action_node.immediate_cost = -3.5
+    assert action_node.immediate_cost == -3.5
+    assert action_node.immediate_reward == 3.5
+
+    # Test with ActionNode - zero cost
+    action_node.immediate_cost = 0.0
+    assert action_node.immediate_cost == 0.0
+    assert action_node.immediate_reward == 0.0
+
+    # Test with ActionNode - None (should not update immediate_reward)
+    action_node._immediate_reward = 10.0  # Set private attribute directly to avoid setter
+    action_node.immediate_cost = None
+    assert action_node.immediate_cost is None
+    assert action_node.immediate_reward == 10.0  # Should remain unchanged
+
+    # Test with BeliefNode - positive cost
+    belief_node = BeliefNode(test_belief, children=())
+    belief_node.immediate_cost = 7.5
+    assert belief_node.immediate_cost == 7.5
+    assert belief_node.immediate_reward == -7.5
+
+    # Test with BeliefNode - negative cost
+    belief_node.immediate_cost = -2.0
+    assert belief_node.immediate_cost == -2.0
+    assert belief_node.immediate_reward == 2.0
+
+    # Test with BeliefNode - zero cost
+    belief_node.immediate_cost = 0.0
+    assert belief_node.immediate_cost == 0.0
+    assert belief_node.immediate_reward == 0.0
+
+    # Test with BeliefNode - None (should not update immediate_reward)
+    belief_node._immediate_reward = 15.0  # Set private attribute directly to avoid setter
+    belief_node.immediate_cost = None
+    assert belief_node.immediate_cost is None
+    assert belief_node.immediate_reward == 15.0  # Should remain unchanged
+
+
+def test_immediate_reward_setter_updates_immediate_cost(test_belief):
+    """Test that setting immediate_reward automatically updates immediate_cost to its negative value.
+
+    Purpose: Validates that the immediate_reward setter property correctly updates immediate_cost to -immediate_reward
+
+    Given: ActionNode and BeliefNode instances with initial immediate_cost=None and immediate_reward=None
+    When: immediate_reward is set to various values (positive, negative, zero, None)
+    Then: immediate_cost is automatically set to -immediate_reward for non-None values, and immediate_cost remains unchanged when immediate_reward is set to None
+
+    Test type: unit
+    """
+    # Test with ActionNode - positive reward
+    action_node = ActionNode("test_action", children=())
+    action_node.immediate_reward = 5.0
+    assert action_node.immediate_reward == 5.0
+    assert action_node.immediate_cost == -5.0
+
+    # Test with ActionNode - negative reward
+    action_node.immediate_reward = -3.5
+    assert action_node.immediate_reward == -3.5
+    assert action_node.immediate_cost == 3.5
+
+    # Test with ActionNode - zero reward
+    action_node.immediate_reward = 0.0
+    assert action_node.immediate_reward == 0.0
+    assert action_node.immediate_cost == 0.0
+
+    # Test with ActionNode - None (should not update immediate_cost)
+    action_node._immediate_cost = 10.0  # Set private attribute directly to avoid setter
+    action_node.immediate_reward = None
+    assert action_node.immediate_reward is None
+    assert action_node.immediate_cost == 10.0  # Should remain unchanged
+
+    # Test with BeliefNode - positive reward
+    belief_node = BeliefNode(test_belief, children=())
+    belief_node.immediate_reward = 7.5
+    assert belief_node.immediate_reward == 7.5
+    assert belief_node.immediate_cost == -7.5
+
+    # Test with BeliefNode - negative reward
+    belief_node.immediate_reward = -2.0
+    assert belief_node.immediate_reward == -2.0
+    assert belief_node.immediate_cost == 2.0
+
+    # Test with BeliefNode - zero reward
+    belief_node.immediate_reward = 0.0
+    assert belief_node.immediate_reward == 0.0
+    assert belief_node.immediate_cost == 0.0
+
+    # Test with BeliefNode - None (should not update immediate_cost)
+    belief_node._immediate_cost = 15.0  # Set private attribute directly to avoid setter
+    belief_node.immediate_reward = None
+    assert belief_node.immediate_reward is None
+    assert belief_node.immediate_cost == 15.0  # Should remain unchanged
