@@ -25,8 +25,6 @@ from typing import Any, List, Optional
 import numpy as np
 from numpy.typing import NDArray
 
-from scipy import stats
-
 from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
@@ -36,6 +34,7 @@ from POMDPPlanners.core.environment import (
     StateTransitionModel,
 )
 from POMDPPlanners.core.simulation import History, MetricValue
+from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
 from POMDPPlanners.utils.statistics_utils import confidence_interval
 
 
@@ -165,23 +164,25 @@ class CartPoleObservation(ObservationModel):
     Attributes:
         next_state: True state after action execution
         action: Action that was taken (not used in observation generation)
-        noise_cov: Covariance matrix for observation noise
+        obs_dist: Pre-computed multivariate normal distribution for efficient sampling/PDF
 
     Example:
         >>> import numpy as np
         >>> np.random.seed(42)  # For reproducible results
+        >>> from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
         >>> # Define true state after action
         >>> true_state = np.array([0.1, 0.05, 0.02, -0.1])
         >>> action = 1
 
-        >>> # Define observation noise covariance
+        >>> # Define observation noise covariance and create distribution
         >>> noise_cov = np.diag([0.1, 0.1, 0.1, 0.1])
+        >>> obs_dist = CovarianceParameterizedMultivariateNormal(noise_cov)
 
         >>> # Create observation model
         >>> obs_model = CartPoleObservation(
         ...     next_state=true_state,
         ...     action=action,
-        ...     noise_cov=noise_cov
+        ...     obs_dist=obs_dist
         ... )
 
         >>> # Sample noisy observation
@@ -197,29 +198,25 @@ class CartPoleObservation(ObservationModel):
         True
     """
 
-    def __init__(self, next_state: np.ndarray, action: int, noise_cov: NDArray[np.floating[Any]]):
+    def __init__(
+        self,
+        next_state: np.ndarray,
+        action: int,
+        obs_dist: CovarianceParameterizedMultivariateNormal,
+    ):
         super().__init__(next_state=next_state, action=action)
-        self.noise_cov = noise_cov
+        self.obs_dist = obs_dist
 
     def sample(self, n_samples: int = 1) -> List[np.ndarray]:
-        samples = []
-        for _ in range(n_samples):
-            sample = np.random.multivariate_normal(self.next_state, self.noise_cov)
-            samples.append(sample)
-        return samples
+        samples = self.obs_dist.sample(self.next_state, n_samples)
+        return [samples[i] for i in range(n_samples)]
 
     def probability(self, values: List[np.ndarray]) -> np.ndarray:
-        # Handle empty list case
         if len(values) == 0:
             return np.array([])
 
-        # Convert list of arrays to 2D numpy array for vectorized computation
         values_array = np.array(values)
-        mvn = stats.multivariate_normal(mean=self.next_state, cov=self.noise_cov)  # type: ignore
-        pdf_values = mvn.pdf(values_array)
-
-        # Ensure result is always a 1D array (pdf returns scalar for single input)
-        return np.atleast_1d(pdf_values)
+        return self.obs_dist.pdf(values_array, self.next_state)
 
 
 class CartPoleInitialStateDistribution(Distribution):
@@ -311,6 +308,7 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
     ):
         # Set all configuration parameters first
         self.noise_cov = noise_cov
+        self._obs_dist = CovarianceParameterizedMultivariateNormal(noise_cov)
         self.gravity = 9.8
         self.masscart = 1.0
         self.masspole = 0.1
@@ -360,7 +358,7 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
         )
 
     def observation_model(self, next_state: np.ndarray, action: int) -> ObservationModel:
-        return CartPoleObservation(next_state=next_state, action=action, noise_cov=self.noise_cov)
+        return CartPoleObservation(next_state=next_state, action=action, obs_dist=self._obs_dist)
 
     def reward(self, state: np.ndarray, action: int) -> float:
         terminated = self.is_terminal(state)

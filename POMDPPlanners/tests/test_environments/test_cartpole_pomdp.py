@@ -19,6 +19,7 @@ from POMDPPlanners.environments.cartpole_pomdp import (
     CartPolePOMDP,
     CartPoleStateTransition,
 )
+from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
 
 # Set seeds for reproducible tests
 np.random.seed(42)
@@ -457,7 +458,8 @@ def test_cartpole_observation_model_probability_shape_single_observation():
     true_state = np.array([0.1, 0.05, 0.02, -0.1])
     action = 1
     noise_cov = np.diag([0.1, 0.1, 0.1, 0.1])
-    obs_model = CartPoleObservation(next_state=true_state, action=action, noise_cov=noise_cov)
+    obs_dist = CovarianceParameterizedMultivariateNormal(noise_cov)
+    obs_model = CartPoleObservation(next_state=true_state, action=action, obs_dist=obs_dist)
 
     # Create single observation
     observation = np.array([0.12, 0.06, 0.025, -0.09])
@@ -491,7 +493,8 @@ def test_cartpole_observation_model_probability_shape_multiple_observations():
     true_state = np.array([0.1, 0.05, 0.02, -0.1])
     action = 1
     noise_cov = np.diag([0.1, 0.1, 0.1, 0.1])
-    obs_model = CartPoleObservation(next_state=true_state, action=action, noise_cov=noise_cov)
+    obs_dist = CovarianceParameterizedMultivariateNormal(noise_cov)
+    obs_model = CartPoleObservation(next_state=true_state, action=action, obs_dist=obs_dist)
 
     # Create multiple observations
     observations = [
@@ -534,7 +537,8 @@ def test_cartpole_observation_model_probability_empty_list():
     true_state = np.array([0.1, 0.05, 0.02, -0.1])
     action = 1
     noise_cov = np.diag([0.1, 0.1, 0.1, 0.1])
-    obs_model = CartPoleObservation(next_state=true_state, action=action, noise_cov=noise_cov)
+    obs_dist = CovarianceParameterizedMultivariateNormal(noise_cov)
+    obs_model = CartPoleObservation(next_state=true_state, action=action, obs_dist=obs_dist)
 
     # ACT: Get probability for empty list
     probs = obs_model.probability([])
@@ -561,7 +565,8 @@ def test_cartpole_observation_model_probability_values_reasonable():
     true_state = np.array([0.1, 0.05, 0.02, -0.1])
     action = 1
     noise_cov = np.diag([0.1, 0.1, 0.1, 0.1])
-    obs_model = CartPoleObservation(next_state=true_state, action=action, noise_cov=noise_cov)
+    obs_dist = CovarianceParameterizedMultivariateNormal(noise_cov)
+    obs_model = CartPoleObservation(next_state=true_state, action=action, obs_dist=obs_dist)
 
     # Create observations: one close to true state, one far
     close_obs = true_state + np.array([0.01, 0.01, 0.01, 0.01])  # Small deviation
