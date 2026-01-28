@@ -41,6 +41,24 @@ from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_da
     ContinuousLightDarkDecayingHitProbabilityRewardModel,
     ContinuousLDDangerousStatesRewardModel,
 )
+from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
+
+
+def create_obs_distributions(
+    cov_matrix: np.ndarray,
+) -> tuple[CovarianceParameterizedMultivariateNormal, CovarianceParameterizedMultivariateNormal]:
+    """Helper function to create observation distribution instances for tests.
+
+    Args:
+        cov_matrix: Base covariance matrix
+
+    Returns:
+        Tuple of (near_beacon_dist, far_from_beacon_dist)
+    """
+    far_dist = CovarianceParameterizedMultivariateNormal(cov_matrix)
+    near_dist = CovarianceParameterizedMultivariateNormal(cov_matrix * 0.5)
+    return near_dist, far_dist
+
 
 # Set seeds for reproducible tests
 np.random.seed(42)
@@ -1285,13 +1303,13 @@ class TestVisualizePath:
 
 
 def test_beacon_proximity_observation_covariance_changes():
-    """Test that observation covariance matrix changes when agent is near a beacon.
+    """Test that observation distribution changes when agent is near a beacon.
 
-    Purpose: Validates that observation covariance is reduced when agent is within beacon radius
+    Purpose: Validates that observation uses near-beacon distribution when agent is within beacon radius
 
     Given: A continuous light-dark POMDP environment with beacons and beacon radius
     When: Observation model is created for states near vs far from beacons
-    Then: Near-beacon states have reduced covariance matrix (multiplied by 0.5)
+    Then: Near-beacon states use the near-beacon distribution (reduced covariance)
 
     Test type: unit
     """
@@ -1302,13 +1320,15 @@ def test_beacon_proximity_observation_covariance_changes():
     beacons = np.array([[0, 5, 10], [0, 5, 10]])  # Beacons at (0,0), (5,5), (10,10)
     beacon_radius = 1.0
     action = np.array([0, 0])  # Dummy action
+    obs_dist_near, obs_dist_far = create_obs_distributions(observation_cov_matrix)
 
     # Test state near beacon (0,0) - within radius
     near_beacon_state = np.array([0.5, 0.5])  # Distance sqrt(0.5) < 1.0 from beacon (0,0)
     obs_model_near = ContinuousLightDarkNormalNoiseObservationModel(
         next_state=near_beacon_state,
         action=action,
-        observation_cov_matrix=observation_cov_matrix,
+        obs_dist_near_beacon=obs_dist_near,
+        obs_dist_far_from_beacon=obs_dist_far,
         grid_size=grid_size,
         beacons=beacons,
         beacon_radius=beacon_radius,
@@ -1319,7 +1339,8 @@ def test_beacon_proximity_observation_covariance_changes():
     obs_model_far = ContinuousLightDarkNormalNoiseObservationModel(
         next_state=far_from_beacon_state,
         action=action,
-        observation_cov_matrix=observation_cov_matrix,
+        obs_dist_near_beacon=obs_dist_near,
+        obs_dist_far_from_beacon=obs_dist_far,
         grid_size=grid_size,
         beacons=beacons,
         beacon_radius=beacon_radius,
@@ -1329,23 +1350,17 @@ def test_beacon_proximity_observation_covariance_changes():
     assert obs_model_near.near_beacon is True, "Should detect proximity to beacon at (0,0)"
     assert obs_model_far.near_beacon is False, "Should not detect proximity to any beacon"
 
-    # Verify covariance matrix changes
-    expected_near_cov = observation_cov_matrix * 0.5  # Reduced by half when near beacon
-    expected_far_cov = observation_cov_matrix.copy()  # Unchanged when far from beacons
-
-    assert np.array_equal(
-        obs_model_near.observation_cov_matrix, expected_near_cov
-    ), "Observation covariance should be reduced by half when near beacon"
-    assert np.array_equal(
-        obs_model_far.observation_cov_matrix, expected_far_cov
-    ), "Observation covariance should remain unchanged when far from beacons"
+    # Verify correct distribution selection
+    assert obs_model_near._active_dist is obs_dist_near, "Should use near-beacon distribution"
+    assert obs_model_far._active_dist is obs_dist_far, "Should use far-from-beacon distribution"
 
     # Test edge case: exactly at beacon radius boundary
     boundary_state = np.array([1.0, 0.0])  # Exactly 1.0 distance from beacon (0,0)
     obs_model_boundary = ContinuousLightDarkNormalNoiseObservationModel(
         next_state=boundary_state,
         action=action,
-        observation_cov_matrix=observation_cov_matrix,
+        obs_dist_near_beacon=obs_dist_near,
+        obs_dist_far_from_beacon=obs_dist_far,
         grid_size=grid_size,
         beacons=beacons,
         beacon_radius=beacon_radius,
@@ -1353,9 +1368,9 @@ def test_beacon_proximity_observation_covariance_changes():
 
     # At exactly beacon_radius distance, should be considered "near" (<=)
     assert obs_model_boundary.near_beacon is True, "Should detect proximity at exact beacon radius"
-    assert np.array_equal(
-        obs_model_boundary.observation_cov_matrix, expected_near_cov
-    ), "Observation covariance should be reduced at exact beacon radius boundary"
+    assert (
+        obs_model_boundary._active_dist is obs_dist_near
+    ), "Should use near-beacon distribution at boundary"
 
 
 def test_beacon_proximity_with_multiple_beacons():
@@ -1376,13 +1391,15 @@ def test_beacon_proximity_with_multiple_beacons():
     beacons = np.array([[0, 5, 10], [0, 5, 10]])
     beacon_radius = 1.5
     action = np.array([0, 0])
+    obs_dist_near, obs_dist_far = create_obs_distributions(observation_cov_matrix)
 
     # Test near first beacon (0,0)
     near_first_beacon = np.array([1.0, 1.0])  # Distance sqrt(2) ≈ 1.41 < 1.5 from (0,0)
     obs_model_1 = ContinuousLightDarkNormalNoiseObservationModel(
         next_state=near_first_beacon,
         action=action,
-        observation_cov_matrix=observation_cov_matrix,
+        obs_dist_near_beacon=obs_dist_near,
+        obs_dist_far_from_beacon=obs_dist_far,
         grid_size=grid_size,
         beacons=beacons,
         beacon_radius=beacon_radius,
@@ -1393,7 +1410,8 @@ def test_beacon_proximity_with_multiple_beacons():
     obs_model_2 = ContinuousLightDarkNormalNoiseObservationModel(
         next_state=near_middle_beacon,
         action=action,
-        observation_cov_matrix=observation_cov_matrix,
+        obs_dist_near_beacon=obs_dist_near,
+        obs_dist_far_from_beacon=obs_dist_far,
         grid_size=grid_size,
         beacons=beacons,
         beacon_radius=beacon_radius,
@@ -1404,7 +1422,8 @@ def test_beacon_proximity_with_multiple_beacons():
     obs_model_3 = ContinuousLightDarkNormalNoiseObservationModel(
         next_state=near_last_beacon,
         action=action,
-        observation_cov_matrix=observation_cov_matrix,
+        obs_dist_near_beacon=obs_dist_near,
+        obs_dist_far_from_beacon=obs_dist_far,
         grid_size=grid_size,
         beacons=beacons,
         beacon_radius=beacon_radius,
@@ -1416,7 +1435,8 @@ def test_beacon_proximity_with_multiple_beacons():
     obs_model_4 = ContinuousLightDarkNormalNoiseObservationModel(
         next_state=equidistant_state,
         action=action,
-        observation_cov_matrix=observation_cov_matrix,
+        obs_dist_near_beacon=obs_dist_near,
+        obs_dist_far_from_beacon=obs_dist_far,
         grid_size=grid_size,
         beacons=beacons,
         beacon_radius=beacon_radius,
@@ -1428,14 +1448,11 @@ def test_beacon_proximity_with_multiple_beacons():
     assert obs_model_3.near_beacon is True, "Should detect proximity to last beacon (10,10)"
     assert obs_model_4.near_beacon is False, "Should not detect proximity when far from all beacons"
 
-    # Verify covariance reduction for near-beacon cases
-    expected_reduced_cov = observation_cov_matrix * 0.5
-    expected_normal_cov = observation_cov_matrix.copy()
-
-    assert np.array_equal(obs_model_1.observation_cov_matrix, expected_reduced_cov)
-    assert np.array_equal(obs_model_2.observation_cov_matrix, expected_reduced_cov)
-    assert np.array_equal(obs_model_3.observation_cov_matrix, expected_reduced_cov)
-    assert np.array_equal(obs_model_4.observation_cov_matrix, expected_normal_cov)
+    # Verify correct distribution selection
+    assert obs_model_1._active_dist is obs_dist_near, "Should use near-beacon dist for beacon 1"
+    assert obs_model_2._active_dist is obs_dist_near, "Should use near-beacon dist for beacon 2"
+    assert obs_model_3._active_dist is obs_dist_near, "Should use near-beacon dist for beacon 3"
+    assert obs_model_4._active_dist is obs_dist_far, "Should use far-from-beacon dist when far"
 
 
 def test_observation_model_probability_function():
@@ -1457,12 +1474,14 @@ def test_observation_model_probability_function():
     grid_size = 11
     beacons = np.array([[0, 10], [0, 10]])  # Beacons far from next_state
     beacon_radius = 1.0
+    obs_dist_near, obs_dist_far = create_obs_distributions(observation_cov_matrix)
 
-    # Create observation model (far from beacons so covariance unchanged)
+    # Create observation model (far from beacons so uses far-from-beacon distribution)
     obs_model = ContinuousLightDarkNormalNoiseObservationModel(
         next_state=next_state,
         action=action,
-        observation_cov_matrix=observation_cov_matrix,
+        obs_dist_near_beacon=obs_dist_near,
+        obs_dist_far_from_beacon=obs_dist_far,
         grid_size=grid_size,
         beacons=beacons,
         beacon_radius=beacon_radius,
@@ -1472,7 +1491,7 @@ def test_observation_model_probability_function():
     observation_values = [np.array([5.0, 3.0])]  # Same as next_state (mean)
     probabilities = obs_model.probability(observation_values)
 
-    # Calculate expected probability using scipy
+    # Calculate expected probability using scipy (uses base covariance since far from beacon)
     expected_prob = multivariate_normal.pdf(
         observation_values[0], mean=next_state, cov=observation_cov_matrix  # type: ignore
     )
@@ -1518,7 +1537,7 @@ def test_observation_model_probability_with_beacon_proximity():
 
     Purpose: Validates that probability calculations use reduced covariance when near beacons
 
-    Given: Observation models near and far from beacons with different covariance matrices
+    Given: Observation models near and far from beacons with different distributions
     When: Probability is calculated for the same observation values
     Then: Near-beacon model has higher probability density due to reduced covariance
 
@@ -1531,23 +1550,26 @@ def test_observation_model_probability_with_beacon_proximity():
     grid_size = 11
     beacons = np.array([[0, 5], [0, 5]])  # Beacon at (0,0) and (5,5)
     beacon_radius = 1.0
+    obs_dist_near, obs_dist_far = create_obs_distributions(observation_cov_matrix)
 
-    # Create observation model near beacon (covariance will be reduced)
+    # Create observation model near beacon (uses near-beacon distribution)
     obs_model_near = ContinuousLightDarkNormalNoiseObservationModel(
         next_state=next_state,
         action=action,
-        observation_cov_matrix=observation_cov_matrix,
+        obs_dist_near_beacon=obs_dist_near,
+        obs_dist_far_from_beacon=obs_dist_far,
         grid_size=grid_size,
         beacons=beacons,
         beacon_radius=beacon_radius,
     )
 
-    # Create observation model far from beacons (covariance unchanged)
+    # Create observation model far from beacons (uses far-from-beacon distribution)
     far_state = np.array([7.0, 7.0])  # Far from all beacons
     obs_model_far = ContinuousLightDarkNormalNoiseObservationModel(
         next_state=far_state,
         action=action,
-        observation_cov_matrix=observation_cov_matrix,
+        obs_dist_near_beacon=obs_dist_near,
+        obs_dist_far_from_beacon=obs_dist_far,
         grid_size=grid_size,
         beacons=beacons,
         beacon_radius=beacon_radius,
@@ -1563,16 +1585,15 @@ def test_observation_model_probability_with_beacon_proximity():
         near_prob > far_prob
     ), f"Near-beacon probability {near_prob} should be higher than far-beacon {far_prob}"
 
-    # Verify the covariance matrices are different
-    assert not np.array_equal(
-        obs_model_near.observation_cov_matrix, obs_model_far.observation_cov_matrix
-    ), "Near and far beacon models should have different covariance matrices"
+    # Verify different distributions are used
+    assert (
+        obs_model_near._active_dist is not obs_model_far._active_dist
+    ), "Should use different distributions"
 
-    # Verify the near-beacon covariance is reduced
-    expected_near_cov = observation_cov_matrix * 0.5
-    assert np.array_equal(
-        obs_model_near.observation_cov_matrix, expected_near_cov
-    ), "Near-beacon covariance should be reduced by factor of 0.5"
+    # Verify the near-beacon model uses the near-beacon distribution
+    assert (
+        obs_model_near._active_dist is obs_dist_near
+    ), "Near-beacon model should use near-beacon distribution"
 
 
 def test_observation_model_probability_edge_cases():
@@ -1593,11 +1614,13 @@ def test_observation_model_probability_edge_cases():
     grid_size = 11
     beacons = np.array([[2, 8], [2, 8]])  # No beacons near next_state
     beacon_radius = 1.0
+    obs_dist_near, obs_dist_far = create_obs_distributions(observation_cov_matrix)
 
     obs_model = ContinuousLightDarkNormalNoiseObservationModel(
         next_state=next_state,
         action=action,
-        observation_cov_matrix=observation_cov_matrix,
+        obs_dist_near_beacon=obs_dist_near,
+        obs_dist_far_from_beacon=obs_dist_far,
         grid_size=grid_size,
         beacons=beacons,
         beacon_radius=beacon_radius,
@@ -1633,10 +1656,13 @@ def test_observation_model_probability_edge_cases():
     assert all(prob >= 0 for prob in boundary_probs), "All probabilities should be non-negative"
 
     # Test very small covariance (high precision)
+    small_cov = np.eye(2) * 1e-6
+    small_obs_dist_near, small_obs_dist_far = create_obs_distributions(small_cov)
     small_cov_model = ContinuousLightDarkNormalNoiseObservationModel(
         next_state=next_state,
         action=action,
-        observation_cov_matrix=np.eye(2) * 1e-6,  # Very small covariance
+        obs_dist_near_beacon=small_obs_dist_near,
+        obs_dist_far_from_beacon=small_obs_dist_far,
         grid_size=grid_size,
         beacons=beacons,
         beacon_radius=beacon_radius,
@@ -2040,8 +2066,7 @@ def test_distance_based_observation_model():
     obs_model = env.observation_model(state, action)
     assert isinstance(obs_model, ContinuousLightDarkDistanceBasedObservationModel)
 
-    # Test near beacon - should return observations with continuous distance-based scaling
-    # Use state at exactly distance 0.5 from beacon (0,0) - place at (0.5, 0.0)
+    # Test near beacon - should return observations
     state_near = np.array([0.5, 0.0])  # Exactly 0.5 distance from beacon at (0,0)
     obs_model_near = env.observation_model(state_near, action)
     observations_near = obs_model_near.sample(n_samples=10)
@@ -2049,16 +2074,9 @@ def test_distance_based_observation_model():
         obs is not None for obs in observations_near
     ), "Distance-based model should return observations when near beacon"
 
-    # Verify continuous scaling (not binary)
-    # At distance 0.5 from beacon (half of beacon_radius), scale should be between min_scale and 1.0
-    # Formula: scale = 0.00001 + (1.0 - 0.00001) * (0.5 / 1.0) ≈ 0.500005
-    min_scale = 0.00001
-    expected_scale = min_scale + (1.0 - min_scale) * (0.5 / 1.0)
-    expected_cov = np.eye(2) * expected_scale
+    # Verify binary distribution selection (uses near-beacon distribution)
     obs_model_near_typed = cast(ContinuousLightDarkDistanceBasedObservationModel, obs_model_near)
-    assert np.allclose(
-        obs_model_near_typed.observation_cov_matrix, expected_cov, atol=1e-5
-    ), f"Distance-based model should scale covariance continuously. Expected scale {expected_scale}, got {obs_model_near_typed.observation_cov_matrix[0, 0]}"
+    assert obs_model_near_typed.near_beacon is True, "Should detect proximity to beacon"
 
     # Test far from beacon - should return "None"
     state_far = np.array([3.0, 3.0])  # Far from beacons (distance > beacon_radius)
@@ -2076,60 +2094,50 @@ def test_distance_based_observation_model():
         obs is not None for obs in observations_at_radius
     ), "Distance-based model should return observations when exactly at beacon radius"
 
-    # Verify scaling at boundary (should be 1.0 * base)
-    expected_boundary_scale = 1.0
-    expected_boundary_cov = np.eye(2) * expected_boundary_scale
+    # Verify near-beacon detection at boundary
     obs_model_at_radius_typed = cast(
         ContinuousLightDarkDistanceBasedObservationModel, obs_model_at_radius
     )
-    assert np.allclose(
-        obs_model_at_radius_typed.observation_cov_matrix, expected_boundary_cov, atol=1e-10
-    ), f"At beacon radius, scale should be 1.0. Got {obs_model_at_radius_typed.observation_cov_matrix[0, 0]}"
+    assert (
+        obs_model_at_radius_typed.near_beacon is True
+    ), "Should detect proximity at beacon radius boundary"
 
 
-def test_distance_based_observation_model_continuous_scaling():
-    """Test that distance-based observation model provides continuous scaling, not binary."""
+def test_distance_based_observation_model_binary_selection():
+    """Test that distance-based observation model uses binary near/far distribution selection."""
+    # Use single beacon at origin to have predictable distance calculations
     env = ContinuousLightDarkPOMDPDiscreteActions(
         discount_factor=0.95,
         state_transition_cov_matrix=np.eye(2),
         observation_cov_matrix=np.eye(2) * 2.0,  # Base covariance
         beacon_radius=2.0,  # Larger radius for more test points
+        beacons=[(0.0, 0.0)],  # Single beacon at origin
         observation_model_type=ObservationModelType.DISTANCE_BASED,
     )
 
     action = "up"
-    base_cov = np.eye(2) * 2.0
 
-    # Test at different distances
-    test_distances = [0.0, 0.5, 1.0, 1.5, 2.0]
-    scales = []
+    # Test at different distances - all should use the same distribution per near/far status
+    near_distances = [0.0, 0.5, 1.0, 1.5, 2.0]  # All within beacon_radius
+    far_distances = [2.1, 3.0, 5.0]  # All beyond beacon_radius
 
-    for d in test_distances:
+    # All near-beacon states should use near-beacon distribution
+    for d in near_distances:
         state = np.array([d, 0.0])  # Place state at distance d from beacon at (0,0)
         obs_model = env.observation_model(state, action)
-        # Extract scale factor
         obs_model_typed = cast(ContinuousLightDarkDistanceBasedObservationModel, obs_model)
-        scale = obs_model_typed.observation_cov_matrix[0, 0] / base_cov[0, 0]
-        scales.append(scale)
-
-    # Verify continuous scaling (not just min_scale or 1.0)
-    min_scale = 0.00001
-    assert np.isclose(
-        scales[0], min_scale, atol=1e-6
-    ), f"At distance 0, scale should be {min_scale}"
-    assert np.isclose(scales[-1], 1.0, atol=1e-10), "At distance beacon_radius, scale should be 1.0"
-    # Verify intermediate values are different and continuous
-    assert not np.isclose(scales[1], min_scale, atol=1e-6) and not np.isclose(
-        scales[1], 1.0, atol=1e-10
-    ), "Intermediate scale should be between min_scale and 1.0"
-    assert not np.isclose(scales[2], min_scale, atol=1e-6) and not np.isclose(
-        scales[2], 1.0, atol=1e-10
-    ), "Intermediate scale should be between min_scale and 1.0"
-    # Verify monotonic increase
-    for i in range(len(scales) - 1):
         assert (
-            scales[i] <= scales[i + 1]
-        ), f"Scale should increase with distance: {scales[i]} <= {scales[i + 1]}"
+            obs_model_typed.near_beacon is True
+        ), f"At distance {d}, should detect proximity to beacon"
+
+    # All far-from-beacon states should use far-from-beacon distribution
+    for d in far_distances:
+        state = np.array([d, 0.0])  # Place state at distance d from beacon at (0,0)
+        obs_model = env.observation_model(state, action)
+        obs_model_typed = cast(ContinuousLightDarkDistanceBasedObservationModel, obs_model)
+        assert (
+            obs_model_typed.near_beacon is False
+        ), f"At distance {d}, should not detect proximity to beacon"
 
 
 def test_distance_based_observation_model_probability():

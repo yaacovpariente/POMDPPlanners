@@ -30,6 +30,24 @@ from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_da
     DiscreteLDObservationModel,
     DiscreteLDObservationModelNoObsInDark,
 )
+from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
+
+
+def create_obs_distributions(
+    cov_matrix: np.ndarray,
+) -> tuple[CovarianceParameterizedMultivariateNormal, CovarianceParameterizedMultivariateNormal]:
+    """Helper function to create observation distribution instances for tests.
+
+    Args:
+        cov_matrix: Base covariance matrix
+
+    Returns:
+        Tuple of (near_beacon_dist, far_from_beacon_dist)
+    """
+    far_dist = CovarianceParameterizedMultivariateNormal(cov_matrix)
+    near_dist = CovarianceParameterizedMultivariateNormal(cov_matrix * 0.5)
+    return near_dist, far_dist
+
 
 # Set seeds for reproducible tests
 np.random.seed(42)
@@ -41,11 +59,13 @@ class TestBaseLightDarkObservationModel:
 
     def test_abstract_class_cannot_be_instantiated(self):
         """Test that abstract base class cannot be instantiated."""
+        obs_dist_near, obs_dist_far = create_obs_distributions(np.eye(2))
         with pytest.raises(TypeError):
             BaseContinuousLightDarkObservationModel(  # type: ignore  # pylint: disable=abstract-class-instantiated
                 next_state=np.array([1.0, 2.0]),
                 action=np.array([0.5, -0.3]),
-                observation_cov_matrix=np.eye(2),
+                obs_dist_near_beacon=obs_dist_near,
+                obs_dist_far_from_beacon=obs_dist_far,
                 grid_size=10,
                 beacons=np.array([[0, 5], [0, 5]]),
                 beacon_radius=1.0,
@@ -63,11 +83,13 @@ class TestBaseLightDarkObservationModel:
         next_state_near = np.array([0.5, 0.5])
         beacons = np.array([[0, 5], [0, 5]])  # Beacon at (0,0) and (5,5)
         beacon_radius = 1.0
+        obs_dist_near, obs_dist_far = create_obs_distributions(np.eye(2))
 
         model_near = ConcreteObservationModel(
             next_state=next_state_near,
             action=np.array([0, 0]),
-            observation_cov_matrix=np.eye(2),
+            obs_dist_near_beacon=obs_dist_near,
+            obs_dist_far_from_beacon=obs_dist_far,
             grid_size=10,
             beacons=beacons,
             beacon_radius=beacon_radius,
@@ -80,7 +102,8 @@ class TestBaseLightDarkObservationModel:
         model_far = ConcreteObservationModel(
             next_state=next_state_far,
             action=np.array([0, 0]),
-            observation_cov_matrix=np.eye(2),
+            obs_dist_near_beacon=obs_dist_near,
+            obs_dist_far_from_beacon=obs_dist_far,
             grid_size=10,
             beacons=beacons,
             beacon_radius=beacon_radius,
@@ -100,47 +123,50 @@ class TestContinuousLightDarkNormalNoiseObservationModel:
         self.grid_size = 11
         self.beacons = np.array([[0, 10], [0, 10]])  # Beacons at (0,0) and (10,10)
         self.beacon_radius = 1.0
+        self.obs_dist_near, self.obs_dist_far = create_obs_distributions(
+            self.observation_cov_matrix
+        )
 
-    def test_initialization_near_beacon_reduces_covariance(self):
-        """Test initialization when state is near a beacon reduces covariance."""
+    def test_initialization_near_beacon_uses_near_distribution(self):
+        """Test initialization when state is near a beacon uses near-beacon distribution."""
         next_state_near = np.array([0.5, 0.5])  # Near beacon at (0,0)
         obs_model = ContinuousLightDarkNormalNoiseObservationModel(
             next_state=next_state_near,
             action=self.action,
-            observation_cov_matrix=self.observation_cov_matrix,
+            obs_dist_near_beacon=self.obs_dist_near,
+            obs_dist_far_from_beacon=self.obs_dist_far,
             grid_size=self.grid_size,
             beacons=self.beacons,
             beacon_radius=self.beacon_radius,
         )
 
         assert obs_model.near_beacon == True, "Should detect proximity to beacon"
-        expected_cov = self.observation_cov_matrix * 0.5
-        assert np.array_equal(
-            obs_model.observation_cov_matrix, expected_cov
-        ), f"Covariance should be reduced by 0.5 when near beacon. Expected {expected_cov}, got {obs_model.observation_cov_matrix}"
+        # Verify the active distribution is the near-beacon distribution
+        assert obs_model._active_dist is self.obs_dist_near
 
-    def test_initialization_far_from_beacon_preserves_covariance(self):
-        """Test initialization when state is far from beacons preserves covariance."""
+    def test_initialization_far_from_beacon_uses_far_distribution(self):
+        """Test initialization when state is far from beacons uses far-from-beacon distribution."""
         obs_model = ContinuousLightDarkNormalNoiseObservationModel(
             next_state=self.next_state,
             action=self.action,
-            observation_cov_matrix=self.observation_cov_matrix,
+            obs_dist_near_beacon=self.obs_dist_near,
+            obs_dist_far_from_beacon=self.obs_dist_far,
             grid_size=self.grid_size,
             beacons=self.beacons,
             beacon_radius=self.beacon_radius,
         )
 
         assert obs_model.near_beacon == False, "Should not detect proximity when far from beacons"
-        assert np.array_equal(
-            obs_model.observation_cov_matrix, self.observation_cov_matrix
-        ), "Covariance should remain unchanged when far from beacons"
+        # Verify the active distribution is the far-from-beacon distribution
+        assert obs_model._active_dist is self.obs_dist_far
 
     def test_sample_always_returns_observations(self):
         """Test that sampling always returns actual observations (never None)."""
         obs_model = ContinuousLightDarkNormalNoiseObservationModel(
             next_state=self.next_state,
             action=self.action,
-            observation_cov_matrix=self.observation_cov_matrix,
+            obs_dist_near_beacon=self.obs_dist_near,
+            obs_dist_far_from_beacon=self.obs_dist_far,
             grid_size=self.grid_size,
             beacons=self.beacons,
             beacon_radius=self.beacon_radius,
@@ -164,7 +190,8 @@ class TestContinuousLightDarkNormalNoiseObservationModel:
         obs_model = ContinuousLightDarkNormalNoiseObservationModel(
             next_state=next_state_near,
             action=self.action,
-            observation_cov_matrix=self.observation_cov_matrix,
+            obs_dist_near_beacon=self.obs_dist_near,
+            obs_dist_far_from_beacon=self.obs_dist_far,
             grid_size=self.grid_size,
             beacons=self.beacons,
             beacon_radius=self.beacon_radius,
@@ -195,7 +222,8 @@ class TestContinuousLightDarkNormalNoiseObservationModel:
         obs_model = ContinuousLightDarkNormalNoiseObservationModel(
             next_state=self.next_state,
             action=self.action,
-            observation_cov_matrix=self.observation_cov_matrix,
+            obs_dist_near_beacon=self.obs_dist_near,
+            obs_dist_far_from_beacon=self.obs_dist_far,
             grid_size=self.grid_size,
             beacons=self.beacons,
             beacon_radius=self.beacon_radius,
@@ -213,10 +241,12 @@ class TestContinuousLightDarkNormalNoiseObservationModel:
         next_state_near = np.array([0.5, 0.5])
         # Use large covariance to ensure some samples go outside grid
         large_cov = np.eye(2) * 10.0
+        large_obs_dist_near, large_obs_dist_far = create_obs_distributions(large_cov)
         obs_model = ContinuousLightDarkNormalNoiseObservationModel(
             next_state=next_state_near,
             action=self.action,
-            observation_cov_matrix=large_cov,
+            obs_dist_near_beacon=large_obs_dist_near,
+            obs_dist_far_from_beacon=large_obs_dist_far,
             grid_size=self.grid_size,
             beacons=self.beacons,
             beacon_radius=self.beacon_radius,
@@ -234,7 +264,8 @@ class TestContinuousLightDarkNormalNoiseObservationModel:
         obs_model = ContinuousLightDarkNormalNoiseObservationModel(
             next_state=self.next_state,
             action=self.action,
-            observation_cov_matrix=self.observation_cov_matrix,
+            obs_dist_near_beacon=self.obs_dist_near,
+            obs_dist_far_from_beacon=self.obs_dist_far,
             grid_size=self.grid_size,
             beacons=self.beacons,
             beacon_radius=self.beacon_radius,
@@ -260,7 +291,8 @@ class TestContinuousLightDarkNormalNoiseObservationModel:
         obs_model = ContinuousLightDarkNormalNoiseObservationModel(
             next_state=self.next_state,
             action=self.action,
-            observation_cov_matrix=self.observation_cov_matrix,
+            obs_dist_near_beacon=self.obs_dist_near,
+            obs_dist_far_from_beacon=self.obs_dist_far,
             grid_size=self.grid_size,
             beacons=self.beacons,
             beacon_radius=self.beacon_radius,
@@ -289,7 +321,8 @@ class TestContinuousLightDarkNormalNoiseObservationModel:
         obs_model = ContinuousLightDarkNormalNoiseObservationModel(
             next_state=self.next_state,
             action=self.action,
-            observation_cov_matrix=self.observation_cov_matrix,
+            obs_dist_near_beacon=self.obs_dist_near,
+            obs_dist_far_from_beacon=self.obs_dist_far,
             grid_size=self.grid_size,
             beacons=self.beacons,
             beacon_radius=self.beacon_radius,
@@ -311,23 +344,26 @@ class TestContinuousLightDarkNormalNoiseObservationModel:
         observation_cov_matrix = np.eye(2) * 1.0
         beacons = np.array([[0, 5], [0, 5]])  # Beacon at (0,0) and (5,5)
         beacon_radius = 1.0
+        obs_dist_near, obs_dist_far = create_obs_distributions(observation_cov_matrix)
 
-        # Create observation model near beacon (covariance will be reduced)
+        # Create observation model near beacon (uses near-beacon distribution)
         obs_model_near = ContinuousLightDarkNormalNoiseObservationModel(
             next_state=next_state_near,
             action=self.action,
-            observation_cov_matrix=observation_cov_matrix,
+            obs_dist_near_beacon=obs_dist_near,
+            obs_dist_far_from_beacon=obs_dist_far,
             grid_size=self.grid_size,
             beacons=beacons,
             beacon_radius=beacon_radius,
         )
 
-        # Create observation model far from beacon (covariance unchanged)
+        # Create observation model far from beacon (uses far-from-beacon distribution)
         next_state_far = np.array([3.0, 3.0])
         obs_model_far = ContinuousLightDarkNormalNoiseObservationModel(
             next_state=next_state_far,
             action=self.action,
-            observation_cov_matrix=observation_cov_matrix,
+            obs_dist_near_beacon=obs_dist_near,
+            obs_dist_far_from_beacon=obs_dist_far,
             grid_size=self.grid_size,
             beacons=beacons,
             beacon_radius=beacon_radius,
@@ -350,23 +386,26 @@ class TestContinuousLightDarkNormalNoiseObservationModel:
         observation_cov_matrix = np.eye(2) * 2.0
         beacons = np.array([[0], [0]])
         beacon_radius = 1.0
+        obs_dist_near, obs_dist_far = create_obs_distributions(observation_cov_matrix)
 
-        # Model near beacon (reduced covariance)
+        # Model near beacon (uses near-beacon distribution with reduced covariance)
         obs_model_near = ContinuousLightDarkNormalNoiseObservationModel(
             next_state=next_state_near,
             action=self.action,
-            observation_cov_matrix=observation_cov_matrix,
+            obs_dist_near_beacon=obs_dist_near,
+            obs_dist_far_from_beacon=obs_dist_far,
             grid_size=self.grid_size,
             beacons=beacons,
             beacon_radius=beacon_radius,
         )
 
-        # Model far from beacon (normal covariance)
+        # Model far from beacon (uses far-from-beacon distribution with normal covariance)
         next_state_far = np.array([5.0, 5.0])
         obs_model_far = ContinuousLightDarkNormalNoiseObservationModel(
             next_state=next_state_far,
             action=self.action,
-            observation_cov_matrix=observation_cov_matrix,
+            obs_dist_near_beacon=obs_dist_near,
+            obs_dist_far_from_beacon=obs_dist_far,
             grid_size=self.grid_size,
             beacons=beacons,
             beacon_radius=beacon_radius,
@@ -396,13 +435,15 @@ class TestContinuousLightDarkNormalNoiseObservationModel:
         beacons = np.array([[0, 5, 10], [0, 5, 10]])
         beacon_radius = 1.5
         action = np.array([0, 0])
+        obs_dist_near, obs_dist_far = create_obs_distributions(observation_cov_matrix)
 
         # Test near first beacon (0,0)
         near_first_beacon = np.array([1.0, 1.0])
         obs_model_1 = ContinuousLightDarkNormalNoiseObservationModel(
             next_state=near_first_beacon,
             action=action,
-            observation_cov_matrix=observation_cov_matrix,
+            obs_dist_near_beacon=obs_dist_near,
+            obs_dist_far_from_beacon=obs_dist_far,
             grid_size=grid_size,
             beacons=beacons,
             beacon_radius=beacon_radius,
@@ -413,7 +454,8 @@ class TestContinuousLightDarkNormalNoiseObservationModel:
         obs_model_2 = ContinuousLightDarkNormalNoiseObservationModel(
             next_state=near_middle_beacon,
             action=action,
-            observation_cov_matrix=observation_cov_matrix,
+            obs_dist_near_beacon=obs_dist_near,
+            obs_dist_far_from_beacon=obs_dist_far,
             grid_size=grid_size,
             beacons=beacons,
             beacon_radius=beacon_radius,
@@ -424,7 +466,8 @@ class TestContinuousLightDarkNormalNoiseObservationModel:
         obs_model_3 = ContinuousLightDarkNormalNoiseObservationModel(
             next_state=far_state,
             action=action,
-            observation_cov_matrix=observation_cov_matrix,
+            obs_dist_near_beacon=obs_dist_near,
+            obs_dist_far_from_beacon=obs_dist_far,
             grid_size=grid_size,
             beacons=beacons,
             beacon_radius=beacon_radius,
@@ -435,19 +478,14 @@ class TestContinuousLightDarkNormalNoiseObservationModel:
         assert obs_model_2.near_beacon == True, "Should detect proximity to middle beacon"
         assert obs_model_3.near_beacon == False, "Should not detect proximity when far"
 
-        # Verify covariance reduction
-        expected_reduced_cov = observation_cov_matrix * 0.5
-        expected_normal_cov = observation_cov_matrix.copy()
-
-        assert np.array_equal(
-            obs_model_1.observation_cov_matrix, expected_reduced_cov
-        ), "Covariance should be reduced near beacon 1"
-        assert np.array_equal(
-            obs_model_2.observation_cov_matrix, expected_reduced_cov
-        ), "Covariance should be reduced near beacon 2"
-        assert np.array_equal(
-            obs_model_3.observation_cov_matrix, expected_normal_cov
-        ), "Covariance should remain normal when far from beacons"
+        # Verify correct distribution selection
+        assert (
+            obs_model_1._active_dist is obs_dist_near
+        ), "Should use near-beacon dist near beacon 1"
+        assert (
+            obs_model_2._active_dist is obs_dist_near
+        ), "Should use near-beacon dist near beacon 2"
+        assert obs_model_3._active_dist is obs_dist_far, "Should use far-from-beacon dist when far"
 
     def test_edge_case_exactly_on_beacon_radius(self):
         """Test behavior when state is exactly on beacon radius boundary."""
@@ -458,7 +496,8 @@ class TestContinuousLightDarkNormalNoiseObservationModel:
         obs_model = ContinuousLightDarkNormalNoiseObservationModel(
             next_state=next_state_on_boundary,
             action=self.action,
-            observation_cov_matrix=self.observation_cov_matrix,
+            obs_dist_near_beacon=self.obs_dist_near,
+            obs_dist_far_from_beacon=self.obs_dist_far,
             grid_size=self.grid_size,
             beacons=beacons,
             beacon_radius=beacon_radius,
@@ -466,10 +505,7 @@ class TestContinuousLightDarkNormalNoiseObservationModel:
 
         # Should be considered near beacon (distance == radius)
         assert obs_model.near_beacon == True, "Should detect proximity when exactly on radius"
-        expected_cov = self.observation_cov_matrix * 0.5
-        assert np.array_equal(
-            obs_model.observation_cov_matrix, expected_cov
-        ), "Covariance should be reduced when on boundary"
+        assert obs_model._active_dist is self.obs_dist_near, "Should use near-beacon distribution"
 
     def test_edge_case_just_outside_beacon_radius(self):
         """Test behavior when state is just outside beacon radius."""
@@ -482,7 +518,8 @@ class TestContinuousLightDarkNormalNoiseObservationModel:
         obs_model = ContinuousLightDarkNormalNoiseObservationModel(
             next_state=next_state_outside,
             action=self.action,
-            observation_cov_matrix=self.observation_cov_matrix,
+            obs_dist_near_beacon=self.obs_dist_near,
+            obs_dist_far_from_beacon=self.obs_dist_far,
             grid_size=self.grid_size,
             beacons=beacons,
             beacon_radius=beacon_radius,
@@ -490,16 +527,17 @@ class TestContinuousLightDarkNormalNoiseObservationModel:
 
         # Should not be considered near beacon
         assert obs_model.near_beacon == False, "Should not detect proximity when outside radius"
-        assert np.array_equal(
-            obs_model.observation_cov_matrix, self.observation_cov_matrix
-        ), "Covariance should remain unchanged when outside boundary"
+        assert (
+            obs_model._active_dist is self.obs_dist_far
+        ), "Should use far-from-beacon distribution"
 
     def test_vectorized_probability_calculation(self):
         """Test that probability calculation works correctly for vectorized input."""
         obs_model = ContinuousLightDarkNormalNoiseObservationModel(
             next_state=self.next_state,
             action=self.action,
-            observation_cov_matrix=self.observation_cov_matrix,
+            obs_dist_near_beacon=self.obs_dist_near,
+            obs_dist_far_from_beacon=self.obs_dist_far,
             grid_size=self.grid_size,
             beacons=self.beacons,
             beacon_radius=self.beacon_radius,
@@ -531,6 +569,9 @@ class TestContinuousLightDarkNormalNoiseNoObsInDarkObservationModel:
         self.grid_size = 11
         self.beacons = np.array([[0, 10], [0, 10]])  # Beacons at (0,0) and (10,10)
         self.beacon_radius = 1.0
+        self.obs_dist_near, self.obs_dist_far = create_obs_distributions(
+            self.observation_cov_matrix
+        )
 
     def test_initialization_near_beacon(self):
         """Test initialization when state is near a beacon."""
@@ -538,32 +579,34 @@ class TestContinuousLightDarkNormalNoiseNoObsInDarkObservationModel:
         obs_model = ContinuousLightDarkNormalNoiseNoObsInDarkObservationModel(
             next_state=next_state_near,
             action=self.action,
-            observation_cov_matrix=self.observation_cov_matrix,
+            obs_dist_near_beacon=self.obs_dist_near,
+            obs_dist_far_from_beacon=self.obs_dist_far,
             grid_size=self.grid_size,
             beacons=self.beacons,
             beacon_radius=self.beacon_radius,
         )
 
         assert obs_model.near_beacon == True, "Should detect proximity to beacon"
-        assert np.array_equal(
-            obs_model.observation_cov_matrix, self.observation_cov_matrix
-        ), "Covariance should not be modified (unlike normal noise model)"
+        # This model uses the near-beacon distribution when near beacon
+        assert obs_model._active_dist is self.obs_dist_near, "Should use near-beacon distribution"
 
     def test_initialization_far_from_beacon(self):
         """Test initialization when state is far from beacons."""
         obs_model = ContinuousLightDarkNormalNoiseNoObsInDarkObservationModel(
             next_state=self.next_state,
             action=self.action,
-            observation_cov_matrix=self.observation_cov_matrix,
+            obs_dist_near_beacon=self.obs_dist_near,
+            obs_dist_far_from_beacon=self.obs_dist_far,
             grid_size=self.grid_size,
             beacons=self.beacons,
             beacon_radius=self.beacon_radius,
         )
 
         assert obs_model.near_beacon == False, "Should not detect proximity when far from beacons"
-        assert np.array_equal(
-            obs_model.observation_cov_matrix, self.observation_cov_matrix
-        ), "Covariance should remain unchanged"
+        # This model uses the far-from-beacon distribution when far from beacon
+        assert (
+            obs_model._active_dist is self.obs_dist_far
+        ), "Should use far-from-beacon distribution"
 
     def test_sample_near_beacon_returns_observations(self):
         """Test that sampling near beacon returns actual observations."""
@@ -571,7 +614,8 @@ class TestContinuousLightDarkNormalNoiseNoObsInDarkObservationModel:
         obs_model = ContinuousLightDarkNormalNoiseNoObsInDarkObservationModel(
             next_state=next_state_near,
             action=self.action,
-            observation_cov_matrix=self.observation_cov_matrix,
+            obs_dist_near_beacon=self.obs_dist_near,
+            obs_dist_far_from_beacon=self.obs_dist_far,
             grid_size=self.grid_size,
             beacons=self.beacons,
             beacon_radius=self.beacon_radius,
@@ -603,7 +647,8 @@ class TestContinuousLightDarkNormalNoiseNoObsInDarkObservationModel:
         obs_model = ContinuousLightDarkNormalNoiseNoObsInDarkObservationModel(
             next_state=self.next_state,
             action=self.action,
-            observation_cov_matrix=self.observation_cov_matrix,
+            obs_dist_near_beacon=self.obs_dist_near,
+            obs_dist_far_from_beacon=self.obs_dist_far,
             grid_size=self.grid_size,
             beacons=self.beacons,
             beacon_radius=self.beacon_radius,
@@ -623,7 +668,8 @@ class TestContinuousLightDarkNormalNoiseNoObsInDarkObservationModel:
         obs_model = ContinuousLightDarkNormalNoiseNoObsInDarkObservationModel(
             next_state=next_state_near,
             action=self.action,
-            observation_cov_matrix=self.observation_cov_matrix,
+            obs_dist_near_beacon=self.obs_dist_near,
+            obs_dist_far_from_beacon=self.obs_dist_far,
             grid_size=self.grid_size,
             beacons=self.beacons,
             beacon_radius=self.beacon_radius,
@@ -640,7 +686,8 @@ class TestContinuousLightDarkNormalNoiseNoObsInDarkObservationModel:
         obs_model = ContinuousLightDarkNormalNoiseNoObsInDarkObservationModel(
             next_state=self.next_state,
             action=self.action,
-            observation_cov_matrix=self.observation_cov_matrix,
+            obs_dist_near_beacon=self.obs_dist_near,
+            obs_dist_far_from_beacon=self.obs_dist_far,
             grid_size=self.grid_size,
             beacons=self.beacons,
             beacon_radius=self.beacon_radius,
@@ -656,10 +703,12 @@ class TestContinuousLightDarkNormalNoiseNoObsInDarkObservationModel:
         next_state_near = np.array([0.5, 0.5])
         # Use large covariance to ensure some samples go outside grid
         large_cov = np.eye(2) * 10.0
+        large_obs_dist_near, large_obs_dist_far = create_obs_distributions(large_cov)
         obs_model = ContinuousLightDarkNormalNoiseNoObsInDarkObservationModel(
             next_state=next_state_near,
             action=self.action,
-            observation_cov_matrix=large_cov,
+            obs_dist_near_beacon=large_obs_dist_near,
+            obs_dist_far_from_beacon=large_obs_dist_far,
             grid_size=self.grid_size,
             beacons=self.beacons,
             beacon_radius=self.beacon_radius,
@@ -681,7 +730,8 @@ class TestContinuousLightDarkNormalNoiseNoObsInDarkObservationModel:
         obs_model = ContinuousLightDarkNormalNoiseNoObsInDarkObservationModel(
             next_state=self.next_state,
             action=self.action,
-            observation_cov_matrix=self.observation_cov_matrix,
+            obs_dist_near_beacon=self.obs_dist_near,
+            obs_dist_far_from_beacon=self.obs_dist_far,
             grid_size=self.grid_size,
             beacons=self.beacons,
             beacon_radius=self.beacon_radius,
@@ -702,7 +752,8 @@ class TestContinuousLightDarkNormalNoiseNoObsInDarkObservationModel:
         obs_model = ContinuousLightDarkNormalNoiseNoObsInDarkObservationModel(
             next_state=next_state_near,
             action=self.action,
-            observation_cov_matrix=self.observation_cov_matrix,
+            obs_dist_near_beacon=self.obs_dist_near,
+            obs_dist_far_from_beacon=self.obs_dist_far,
             grid_size=self.grid_size,
             beacons=self.beacons,
             beacon_radius=self.beacon_radius,
@@ -725,7 +776,8 @@ class TestContinuousLightDarkNormalNoiseNoObsInDarkObservationModel:
         obs_model = ContinuousLightDarkNormalNoiseNoObsInDarkObservationModel(
             next_state=next_state_near,
             action=self.action,
-            observation_cov_matrix=self.observation_cov_matrix,
+            obs_dist_near_beacon=self.obs_dist_near,
+            obs_dist_far_from_beacon=self.obs_dist_far,
             grid_size=self.grid_size,
             beacons=beacons_near,
             beacon_radius=self.beacon_radius,
@@ -735,9 +787,9 @@ class TestContinuousLightDarkNormalNoiseNoObsInDarkObservationModel:
         observation_values = [np.array([5.0, 3.0])]
         probabilities = obs_model.probability(observation_values)  # type: ignore
 
-        # Calculate expected probability using scipy
+        # Calculate expected probability using scipy - uses near-beacon distribution (0.5 * cov)
         expected_prob = multivariate_normal.pdf(
-            observation_values[0], mean=next_state_near, cov=self.observation_cov_matrix  # type: ignore
+            observation_values[0], mean=next_state_near, cov=self.observation_cov_matrix * 0.5  # type: ignore
         )
 
         assert isinstance(probabilities, np.ndarray), "Should return numpy array"
@@ -751,14 +803,15 @@ class TestContinuousLightDarkNormalNoiseNoObsInDarkObservationModel:
         obs_model = ContinuousLightDarkNormalNoiseNoObsInDarkObservationModel(
             next_state=self.next_state,
             action=self.action,
-            observation_cov_matrix=self.observation_cov_matrix,
+            obs_dist_near_beacon=self.obs_dist_near,
+            obs_dist_far_from_beacon=self.obs_dist_far,
             grid_size=self.grid_size,
             beacons=self.beacons,
             beacon_radius=self.beacon_radius,
         )
 
         # Test probability of actual observation when far from beacon
-        # Should still calculate normal probability (even though sampling returns None)
+        # Uses far-from-beacon distribution (normal covariance)
         observation_values = [np.array([5.0, 3.0])]
         probabilities = obs_model.probability(observation_values)  # type: ignore
 
@@ -778,7 +831,8 @@ class TestContinuousLightDarkNormalNoiseNoObsInDarkObservationModel:
         obs_model = ContinuousLightDarkNormalNoiseNoObsInDarkObservationModel(
             next_state=self.next_state,
             action=self.action,
-            observation_cov_matrix=self.observation_cov_matrix,
+            obs_dist_near_beacon=self.obs_dist_near,
+            obs_dist_far_from_beacon=self.obs_dist_far,
             grid_size=self.grid_size,
             beacons=self.beacons,
             beacon_radius=self.beacon_radius,
@@ -831,7 +885,8 @@ class TestContinuousLightDarkNormalNoiseNoObsInDarkObservationModel:
         obs_model = ContinuousLightDarkNormalNoiseNoObsInDarkObservationModel(
             next_state=next_state_near,
             action=self.action,
-            observation_cov_matrix=self.observation_cov_matrix,
+            obs_dist_near_beacon=self.obs_dist_near,
+            obs_dist_far_from_beacon=self.obs_dist_far,
             grid_size=self.grid_size,
             beacons=beacons_near,
             beacon_radius=self.beacon_radius,
@@ -844,9 +899,9 @@ class TestContinuousLightDarkNormalNoiseNoObsInDarkObservationModel:
         ]
         probabilities = obs_model.probability(observation_values)  # type: ignore
 
-        # Calculate expected probabilities
+        # Calculate expected probabilities - uses near-beacon distribution (0.5 * cov)
         expected_probs = multivariate_normal.pdf(
-            observation_values, mean=next_state_near, cov=self.observation_cov_matrix  # type: ignore
+            observation_values, mean=next_state_near, cov=self.observation_cov_matrix * 0.5  # type: ignore
         )
 
         assert len(probabilities) == 3, "Should return three probabilities"
@@ -861,7 +916,8 @@ class TestContinuousLightDarkNormalNoiseNoObsInDarkObservationModel:
         obs_model = ContinuousLightDarkNormalNoiseNoObsInDarkObservationModel(
             next_state=next_state_near,
             action=self.action,
-            observation_cov_matrix=self.observation_cov_matrix,
+            obs_dist_near_beacon=self.obs_dist_near,
+            obs_dist_far_from_beacon=self.obs_dist_far,
             grid_size=self.grid_size,
             beacons=beacons_near,
             beacon_radius=self.beacon_radius,
@@ -885,13 +941,15 @@ class TestContinuousLightDarkNormalNoiseNoObsInDarkObservationModel:
         beacons = np.array([[0, 5, 10], [0, 5, 10]])
         beacon_radius = 1.5
         action = np.array([0, 0])
+        obs_dist_near, obs_dist_far = create_obs_distributions(observation_cov_matrix)
 
         # Test near first beacon (0,0)
         near_first_beacon = np.array([1.0, 1.0])
         obs_model_1 = ContinuousLightDarkNormalNoiseNoObsInDarkObservationModel(
             next_state=near_first_beacon,
             action=action,
-            observation_cov_matrix=observation_cov_matrix,
+            obs_dist_near_beacon=obs_dist_near,
+            obs_dist_far_from_beacon=obs_dist_far,
             grid_size=grid_size,
             beacons=beacons,
             beacon_radius=beacon_radius,
@@ -902,7 +960,8 @@ class TestContinuousLightDarkNormalNoiseNoObsInDarkObservationModel:
         obs_model_2 = ContinuousLightDarkNormalNoiseNoObsInDarkObservationModel(
             next_state=near_middle_beacon,
             action=action,
-            observation_cov_matrix=observation_cov_matrix,
+            obs_dist_near_beacon=obs_dist_near,
+            obs_dist_far_from_beacon=obs_dist_far,
             grid_size=grid_size,
             beacons=beacons,
             beacon_radius=beacon_radius,
@@ -913,7 +972,8 @@ class TestContinuousLightDarkNormalNoiseNoObsInDarkObservationModel:
         obs_model_3 = ContinuousLightDarkNormalNoiseNoObsInDarkObservationModel(
             next_state=far_state,
             action=action,
-            observation_cov_matrix=observation_cov_matrix,
+            obs_dist_near_beacon=obs_dist_near,
+            obs_dist_far_from_beacon=obs_dist_far,
             grid_size=grid_size,
             beacons=beacons,
             beacon_radius=beacon_radius,
@@ -948,7 +1008,8 @@ class TestContinuousLightDarkNormalNoiseNoObsInDarkObservationModel:
         obs_model = ContinuousLightDarkNormalNoiseNoObsInDarkObservationModel(
             next_state=next_state_on_boundary,
             action=self.action,
-            observation_cov_matrix=self.observation_cov_matrix,
+            obs_dist_near_beacon=self.obs_dist_near,
+            obs_dist_far_from_beacon=self.obs_dist_far,
             grid_size=self.grid_size,
             beacons=beacons,
             beacon_radius=beacon_radius,
@@ -972,7 +1033,8 @@ class TestContinuousLightDarkNormalNoiseNoObsInDarkObservationModel:
         obs_model = ContinuousLightDarkNormalNoiseNoObsInDarkObservationModel(
             next_state=next_state_outside,
             action=self.action,
-            observation_cov_matrix=self.observation_cov_matrix,
+            obs_dist_near_beacon=self.obs_dist_near,
+            obs_dist_far_from_beacon=self.obs_dist_far,
             grid_size=self.grid_size,
             beacons=beacons,
             beacon_radius=beacon_radius,
@@ -1433,7 +1495,11 @@ class TestDiscreteLDObservationModelNoObsInDark:
 
 
 class TestContinuousLightDarkDistanceBasedObservationModel:
-    """Test cases for ContinuousLightDarkDistanceBasedObservationModel."""
+    """Test cases for ContinuousLightDarkDistanceBasedObservationModel.
+
+    Note: This model uses binary near/far distribution selection based on
+    whether the distance to nearest beacon is <= beacon_radius.
+    """
 
     def setup_method(self):
         """Set up test environment before each test method."""
@@ -1443,6 +1509,9 @@ class TestContinuousLightDarkDistanceBasedObservationModel:
         self.grid_size = 11
         self.beacons = np.array([[0, 10], [0, 10]])  # Beacons at (0,0) and (10,10)
         self.beacon_radius = 1.0
+        self.obs_dist_near, self.obs_dist_far = create_obs_distributions(
+            self.observation_cov_matrix
+        )
 
     def test_initialization_computes_distance(self):
         """Test that initialization computes distance to nearest beacon."""
@@ -1450,7 +1519,8 @@ class TestContinuousLightDarkDistanceBasedObservationModel:
         obs_model = ContinuousLightDarkDistanceBasedObservationModel(
             next_state=next_state_near,
             action=self.action,
-            observation_cov_matrix=self.observation_cov_matrix,
+            obs_dist_near_beacon=self.obs_dist_near,
+            obs_dist_far_from_beacon=self.obs_dist_far,
             grid_size=self.grid_size,
             beacons=self.beacons,
             beacon_radius=self.beacon_radius,
@@ -1462,69 +1532,66 @@ class TestContinuousLightDarkDistanceBasedObservationModel:
             obs_model.min_distance_to_beacon, expected_distance, atol=1e-6
         ), f"Distance should be {expected_distance}, got {obs_model.min_distance_to_beacon}"
 
-    def test_continuous_scaling_at_beacon(self):
-        """Test that covariance scales to 0.5 at beacon (distance=0)."""
+    def test_binary_selection_at_beacon(self):
+        """Test that near-beacon distribution is used at beacon (distance=0)."""
         next_state_at_beacon = np.array([0.0, 0.0])  # Exactly at beacon
         obs_model = ContinuousLightDarkDistanceBasedObservationModel(
             next_state=next_state_at_beacon,
             action=self.action,
-            observation_cov_matrix=self.observation_cov_matrix,
+            obs_dist_near_beacon=self.obs_dist_near,
+            obs_dist_far_from_beacon=self.obs_dist_far,
             grid_size=self.grid_size,
             beacons=self.beacons,
             beacon_radius=self.beacon_radius,
         )
 
-        min_scale = 0.00001
-        expected_cov = self.observation_cov_matrix * min_scale
-        assert np.allclose(
-            obs_model.observation_cov_matrix, expected_cov, atol=1e-6
-        ), f"Covariance should be {min_scale} * base at beacon. Expected {expected_cov}, got {obs_model.observation_cov_matrix}"
+        assert obs_model._active_dist is self.obs_dist_near, "Should use near-beacon distribution"
+        assert obs_model.near_beacon == True, "Should detect proximity to beacon"
 
-    def test_continuous_scaling_at_beacon_radius(self):
-        """Test that covariance scales to 1.0 at beacon_radius."""
+    def test_binary_selection_at_beacon_radius(self):
+        """Test that near-beacon distribution is used at beacon_radius."""
         # Place state exactly at beacon_radius from beacon at (0,0)
         next_state_at_radius = np.array([1.0, 0.0])  # Distance = 1.0 = beacon_radius
         obs_model = ContinuousLightDarkDistanceBasedObservationModel(
             next_state=next_state_at_radius,
             action=self.action,
-            observation_cov_matrix=self.observation_cov_matrix,
+            obs_dist_near_beacon=self.obs_dist_near,
+            obs_dist_far_from_beacon=self.obs_dist_far,
             grid_size=self.grid_size,
             beacons=self.beacons,
             beacon_radius=self.beacon_radius,
         )
 
-        expected_cov = self.observation_cov_matrix * 1.0
-        assert np.allclose(
-            obs_model.observation_cov_matrix, expected_cov, atol=1e-10
-        ), f"Covariance should be 1.0 * base at beacon_radius. Expected {expected_cov}, got {obs_model.observation_cov_matrix}"
+        # distance == radius is still considered near
+        assert (
+            obs_model._active_dist is self.obs_dist_near
+        ), "Should use near-beacon distribution at radius"
+        assert obs_model.near_beacon == True, "Should detect proximity at radius boundary"
 
-    def test_continuous_scaling_between_beacon_and_radius(self):
-        """Test that covariance scales continuously between beacon and radius."""
+    def test_binary_selection_between_beacon_and_radius(self):
+        """Test that near-beacon distribution is used between beacon and radius."""
         # Place state at half the beacon_radius
         next_state_half = np.array([0.5, 0.0])  # Distance = 0.5 = 0.5 * beacon_radius
         obs_model = ContinuousLightDarkDistanceBasedObservationModel(
             next_state=next_state_half,
             action=self.action,
-            observation_cov_matrix=self.observation_cov_matrix,
+            obs_dist_near_beacon=self.obs_dist_near,
+            obs_dist_far_from_beacon=self.obs_dist_far,
             grid_size=self.grid_size,
             beacons=self.beacons,
             beacon_radius=self.beacon_radius,
         )
 
-        # Expected scale: 0.00001 + (1 - 0.00001) * (0.5 / 1.0) ≈ 0.500005
-        min_scale = 0.00001
-        expected_scale = min_scale + (1.0 - min_scale) * (0.5 / 1.0)
-        expected_cov = self.observation_cov_matrix * expected_scale
-        assert np.allclose(
-            obs_model.observation_cov_matrix, expected_cov, atol=1e-5
-        ), f"Covariance should scale to {expected_scale} * base. Expected {expected_cov}, got {obs_model.observation_cov_matrix}"
+        assert obs_model._active_dist is self.obs_dist_near, "Should use near-beacon distribution"
+        assert obs_model.near_beacon == True, "Should detect proximity"
 
     def test_sample_returns_none_when_far_from_beacon(self):
         """Test that sampling returns None when distance > beacon_radius."""
         obs_model = ContinuousLightDarkDistanceBasedObservationModel(
             next_state=self.next_state,
             action=self.action,
-            observation_cov_matrix=self.observation_cov_matrix,
+            obs_dist_near_beacon=self.obs_dist_near,
+            obs_dist_far_from_beacon=self.obs_dist_far,
             grid_size=self.grid_size,
             beacons=self.beacons,
             beacon_radius=self.beacon_radius,
@@ -1544,7 +1611,8 @@ class TestContinuousLightDarkDistanceBasedObservationModel:
         obs_model = ContinuousLightDarkDistanceBasedObservationModel(
             next_state=next_state_near,
             action=self.action,
-            observation_cov_matrix=self.observation_cov_matrix,
+            obs_dist_near_beacon=self.obs_dist_near,
+            obs_dist_far_from_beacon=self.obs_dist_far,
             grid_size=self.grid_size,
             beacons=self.beacons,
             beacon_radius=self.beacon_radius,
@@ -1569,7 +1637,8 @@ class TestContinuousLightDarkDistanceBasedObservationModel:
         obs_model = ContinuousLightDarkDistanceBasedObservationModel(
             next_state=self.next_state,
             action=self.action,
-            observation_cov_matrix=self.observation_cov_matrix,
+            obs_dist_near_beacon=self.obs_dist_near,
+            obs_dist_far_from_beacon=self.obs_dist_far,
             grid_size=self.grid_size,
             beacons=self.beacons,
             beacon_radius=self.beacon_radius,
@@ -1589,7 +1658,8 @@ class TestContinuousLightDarkDistanceBasedObservationModel:
         obs_model = ContinuousLightDarkDistanceBasedObservationModel(
             next_state=next_state_near,
             action=self.action,
-            observation_cov_matrix=self.observation_cov_matrix,
+            obs_dist_near_beacon=self.obs_dist_near,
+            obs_dist_far_from_beacon=self.obs_dist_far,
             grid_size=self.grid_size,
             beacons=self.beacons,
             beacon_radius=self.beacon_radius,
@@ -1611,7 +1681,8 @@ class TestContinuousLightDarkDistanceBasedObservationModel:
         obs_model = ContinuousLightDarkDistanceBasedObservationModel(
             next_state=next_state_near,
             action=self.action,
-            observation_cov_matrix=self.observation_cov_matrix,
+            obs_dist_near_beacon=self.obs_dist_near,
+            obs_dist_far_from_beacon=self.obs_dist_far,
             grid_size=self.grid_size,
             beacons=beacons_near,
             beacon_radius=self.beacon_radius,
@@ -1621,9 +1692,9 @@ class TestContinuousLightDarkDistanceBasedObservationModel:
         observation_values = [np.array([5.0, 3.0])]
         probabilities = obs_model.probability(observation_values)  # type: ignore
 
-        # Calculate expected probability using scipy with scaled covariance
+        # Calculate expected probability using the near-beacon distribution (0.5 * cov)
         expected_prob = multivariate_normal.pdf(
-            observation_values[0], mean=next_state_near, cov=obs_model.observation_cov_matrix  # type: ignore
+            observation_values[0], mean=next_state_near, cov=self.observation_cov_matrix * 0.5  # type: ignore
         )
 
         assert isinstance(probabilities, np.ndarray), "Should return numpy array"
@@ -1637,7 +1708,8 @@ class TestContinuousLightDarkDistanceBasedObservationModel:
         obs_model = ContinuousLightDarkDistanceBasedObservationModel(
             next_state=self.next_state,
             action=self.action,
-            observation_cov_matrix=self.observation_cov_matrix,
+            obs_dist_near_beacon=self.obs_dist_near,
+            obs_dist_far_from_beacon=self.obs_dist_far,
             grid_size=self.grid_size,
             beacons=self.beacons,
             beacon_radius=self.beacon_radius,
@@ -1653,15 +1725,16 @@ class TestContinuousLightDarkDistanceBasedObservationModel:
             probabilities[0], 0.0
         ), f"Probability of actual observation when far from beacon should be 0.0, got {probabilities[0]}"
 
-    def test_continuous_scaling_vs_binary_scaling(self):
-        """Test that distance-based scaling is continuous, not binary."""
+    def test_binary_near_far_selection(self):
+        """Test that distribution selection is binary (near vs far)."""
         base_cov = np.eye(2) * 1.0
         beacons = np.array([[0], [0]])
         beacon_radius = 2.0
+        obs_dist_near, obs_dist_far = create_obs_distributions(base_cov)
 
         # Test at different distances
         distances = [0.0, 0.5, 1.0, 1.5, 2.0]
-        covariances = []
+        distributions = []
 
         for d in distances:
             # Place state at distance d from beacon
@@ -1669,35 +1742,24 @@ class TestContinuousLightDarkDistanceBasedObservationModel:
             obs_model = ContinuousLightDarkDistanceBasedObservationModel(
                 next_state=next_state,
                 action=self.action,
-                observation_cov_matrix=base_cov,
+                obs_dist_near_beacon=obs_dist_near,
+                obs_dist_far_from_beacon=obs_dist_far,
                 grid_size=self.grid_size,
                 beacons=beacons,
                 beacon_radius=beacon_radius,
             )
-            # Extract scale factor (covariance / base_cov)
-            scale = obs_model.observation_cov_matrix[0, 0] / base_cov[0, 0]
-            covariances.append(scale)
+            distributions.append(obs_model._active_dist)
 
-        # Verify continuous scaling (not just min_scale or 1.0)
-        min_scale = 0.00001
-        assert np.isclose(
-            covariances[0], min_scale, atol=1e-6
-        ), f"At distance 0, scale should be {min_scale}"
-        assert np.isclose(
-            covariances[-1], 1.0, atol=1e-10
-        ), "At distance beacon_radius, scale should be 1.0"
-        # Verify intermediate values are different (continuous)
-        assert not np.isclose(covariances[1], min_scale, atol=1e-6) and not np.isclose(
-            covariances[1], 1.0, atol=1e-10
-        ), "Intermediate scale should be between min_scale and 1.0"
-        assert (
-            covariances[2] != 0.5 and covariances[2] != 1.0
-        ), "Intermediate scale should be between 0.5 and 1.0"
-        # Verify monotonic increase
-        for i in range(len(covariances) - 1):
-            assert (
-                covariances[i] <= covariances[i + 1]
-            ), f"Scale should increase with distance: {covariances[i]} <= {covariances[i + 1]}"
+        # All distances <= beacon_radius should use near-beacon distribution
+        for i, d in enumerate(distances):
+            if d <= beacon_radius:
+                assert (
+                    distributions[i] is obs_dist_near
+                ), f"At distance {d}, should use near-beacon distribution"
+            else:
+                assert (
+                    distributions[i] is obs_dist_far
+                ), f"At distance {d}, should use far-from-beacon distribution"
 
     def test_edge_case_exactly_on_beacon_radius(self):
         """Test behavior when state is exactly on beacon radius boundary."""
@@ -1708,7 +1770,8 @@ class TestContinuousLightDarkDistanceBasedObservationModel:
         obs_model = ContinuousLightDarkDistanceBasedObservationModel(
             next_state=next_state_on_boundary,
             action=self.action,
-            observation_cov_matrix=self.observation_cov_matrix,
+            obs_dist_near_beacon=self.obs_dist_near,
+            obs_dist_far_from_beacon=self.obs_dist_far,
             grid_size=self.grid_size,
             beacons=beacons,
             beacon_radius=beacon_radius,
@@ -1730,7 +1793,8 @@ class TestContinuousLightDarkDistanceBasedObservationModel:
         obs_model = ContinuousLightDarkDistanceBasedObservationModel(
             next_state=next_state_outside,
             action=self.action,
-            observation_cov_matrix=self.observation_cov_matrix,
+            obs_dist_near_beacon=self.obs_dist_near,
+            obs_dist_far_from_beacon=self.obs_dist_far,
             grid_size=self.grid_size,
             beacons=beacons,
             beacon_radius=beacon_radius,

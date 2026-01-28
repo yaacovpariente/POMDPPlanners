@@ -2,10 +2,10 @@ from abc import abstractmethod
 from typing import Any, List, Union
 
 import numpy as np
-from scipy.stats import multivariate_normal
 
 from POMDPPlanners.core.distributions import DiscreteDistribution
 from POMDPPlanners.core.environment import ObservationModel
+from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
 
 __all__ = [
     "BaseContinuousLightDarkObservationModel",
@@ -24,13 +24,15 @@ class BaseContinuousLightDarkObservationModel(ObservationModel):
         self,
         next_state: np.ndarray,
         action: np.ndarray,
-        observation_cov_matrix: np.ndarray,
+        obs_dist_near_beacon: CovarianceParameterizedMultivariateNormal,
+        obs_dist_far_from_beacon: CovarianceParameterizedMultivariateNormal,
         grid_size: int,
         beacons: np.ndarray,
         beacon_radius: float,
     ):
         super().__init__(next_state=next_state, action=action)
-        self.observation_cov_matrix = observation_cov_matrix.copy()
+        self.obs_dist_near_beacon = obs_dist_near_beacon
+        self.obs_dist_far_from_beacon = obs_dist_far_from_beacon
         self.grid_size = grid_size
         self.beacons = beacons
         self.beacon_radius = beacon_radius
@@ -52,7 +54,8 @@ class ContinuousLightDarkNormalNoiseObservationModel(BaseContinuousLightDarkObse
         self,
         next_state: np.ndarray,
         action: np.ndarray,
-        observation_cov_matrix: np.ndarray,
+        obs_dist_near_beacon: CovarianceParameterizedMultivariateNormal,
+        obs_dist_far_from_beacon: CovarianceParameterizedMultivariateNormal,
         grid_size: int,
         beacons: np.ndarray,
         beacon_radius: float,
@@ -60,22 +63,20 @@ class ContinuousLightDarkNormalNoiseObservationModel(BaseContinuousLightDarkObse
         super().__init__(
             next_state=next_state,
             action=action,
-            observation_cov_matrix=observation_cov_matrix,
+            obs_dist_near_beacon=obs_dist_near_beacon,
+            obs_dist_far_from_beacon=obs_dist_far_from_beacon,
             grid_size=grid_size,
             beacons=beacons,
             beacon_radius=beacon_radius,
         )
-        if self.near_beacon:
-            self.observation_cov_matrix *= 0.5
-
-    def sample(self, n_samples: int = 1) -> List[np.ndarray]:
-        # Vectorized sampling: generate all noise samples at once
-        noise = np.random.multivariate_normal(
-            mean=np.zeros(2), cov=self.observation_cov_matrix, size=n_samples
+        # Select distribution based on beacon proximity
+        self._active_dist = (
+            self.obs_dist_near_beacon if self.near_beacon else self.obs_dist_far_from_beacon
         )
 
-        # Vectorized observation calculation
-        observations = self.next_state + noise
+    def sample(self, n_samples: int = 1) -> List[np.ndarray]:
+        # Sample using pre-computed Cholesky decomposition
+        observations = self._active_dist.sample(self.next_state, n_samples)
         observations = np.clip(observations, 0, self.grid_size)
 
         # Convert to list of arrays
@@ -84,9 +85,7 @@ class ContinuousLightDarkNormalNoiseObservationModel(BaseContinuousLightDarkObse
     def probability(self, values: List[np.ndarray]) -> np.ndarray:
         # Convert list to numpy array for vectorized computation
         values_array = np.array(values)
-        res = multivariate_normal.pdf(
-            values_array, mean=self.next_state, cov=self.observation_cov_matrix  # type: ignore
-        )
+        res = self._active_dist.pdf(values_array, self.next_state)
         if not isinstance(res, np.ndarray):
             res = np.array([res])
 
@@ -100,7 +99,8 @@ class ContinuousLightDarkNormalNoiseNoObsInDarkObservationModel(
         self,
         next_state: np.ndarray,
         action: np.ndarray,
-        observation_cov_matrix: np.ndarray,
+        obs_dist_near_beacon: CovarianceParameterizedMultivariateNormal,
+        obs_dist_far_from_beacon: CovarianceParameterizedMultivariateNormal,
         grid_size: int,
         beacons: np.ndarray,
         beacon_radius: float,
@@ -108,20 +108,21 @@ class ContinuousLightDarkNormalNoiseNoObsInDarkObservationModel(
         super().__init__(
             next_state=next_state,
             action=action,
-            observation_cov_matrix=observation_cov_matrix,
+            obs_dist_near_beacon=obs_dist_near_beacon,
+            obs_dist_far_from_beacon=obs_dist_far_from_beacon,
             grid_size=grid_size,
             beacons=beacons,
             beacon_radius=beacon_radius,
         )
-
-    def sample(self, n_samples: int = 1) -> List[Union[np.ndarray, str]]:
-        noise = np.random.multivariate_normal(
-            mean=np.zeros(2), cov=self.observation_cov_matrix, size=n_samples
+        # Select distribution based on beacon proximity
+        self._active_dist = (
+            self.obs_dist_near_beacon if self.near_beacon else self.obs_dist_far_from_beacon
         )
 
+    def sample(self, n_samples: int = 1) -> List[Union[np.ndarray, str]]:
         if self._near_beacon(self.next_state):
-            # Vectorized observation calculation
-            observations = self.next_state + noise
+            # Sample using pre-computed Cholesky decomposition
+            observations = self._active_dist.sample(self.next_state, n_samples)
             observations = np.clip(observations, 0, self.grid_size)
             return [obs for obs in observations]
         else:
@@ -136,34 +137,20 @@ class ContinuousLightDarkNormalNoiseNoObsInDarkObservationModel(
                 else:
                     res[i] = 1
             else:
-                res[i] = multivariate_normal.pdf(
-                    value, mean=self.next_state, cov=self.observation_cov_matrix  # type: ignore
-                )
+                res[i] = self._active_dist.pdf(np.array([value]), self.next_state)[0]
 
         return res
 
 
 class ContinuousLightDarkDistanceBasedObservationModel(BaseContinuousLightDarkObservationModel):
-    """Continuous Light-Dark observation model with continuous distance-based noise scaling.
+    """Continuous Light-Dark observation model with binary near/far beacon noise levels.
 
-    This observation model scales the observation covariance matrix continuously based on
-    the distance to the nearest beacon, rather than using a binary threshold. The covariance
-    scales linearly from a minimum value (when at beacon) to the base value (when at beacon_radius
-    distance). When the distance exceeds beacon_radius, observations are "None" (no observation available).
-
-    The scaling formula is:
-        cov_scale = min_scale + (1 - min_scale) * (distance / beacon_radius)
-        Σ(d) = Σ_base * cov_scale  (only when distance <= beacon_radius)
-
-    Where:
-        - min_scale = 0.5 (covariance is halved when at beacon)
-        - distance = distance to nearest beacon
-        - At distance 0: Σ = 0.5 * Σ_base
-        - At distance beacon_radius: Σ = 1.0 * Σ_base
-        - Beyond beacon_radius: observation = "None"
+    This observation model uses a binary near/far approach based on the distance to the
+    nearest beacon. When within beacon_radius, observations are sampled from the near-beacon
+    distribution. When the distance exceeds beacon_radius, observations are "None"
+    (no observation available).
 
     Attributes:
-        observation_cov_matrix: Distance-scaled covariance matrix (only used when near beacon)
         min_distance_to_beacon: Distance to the nearest beacon
     """
 
@@ -171,7 +158,8 @@ class ContinuousLightDarkDistanceBasedObservationModel(BaseContinuousLightDarkOb
         self,
         next_state: np.ndarray,
         action: np.ndarray,
-        observation_cov_matrix: np.ndarray,
+        obs_dist_near_beacon: CovarianceParameterizedMultivariateNormal,
+        obs_dist_far_from_beacon: CovarianceParameterizedMultivariateNormal,
         grid_size: int,
         beacons: np.ndarray,
         beacon_radius: float,
@@ -179,7 +167,8 @@ class ContinuousLightDarkDistanceBasedObservationModel(BaseContinuousLightDarkOb
         super().__init__(
             next_state=next_state,
             action=action,
-            observation_cov_matrix=observation_cov_matrix,
+            obs_dist_near_beacon=obs_dist_near_beacon,
+            obs_dist_far_from_beacon=obs_dist_far_from_beacon,
             grid_size=grid_size,
             beacons=beacons,
             beacon_radius=beacon_radius,
@@ -189,35 +178,18 @@ class ContinuousLightDarkDistanceBasedObservationModel(BaseContinuousLightDarkOb
         distances = np.linalg.norm(next_state_reshaped - self.beacons, axis=0)
         self.min_distance_to_beacon: float = float(np.min(distances))
 
-        # Continuous distance-based scaling (only when within beacon_radius)
-        # Scale from 0.00001 (at beacon) to 1.0 (at beacon_radius)
-        min_scale = 0.00001
-        if self.min_distance_to_beacon <= self.beacon_radius and self.beacon_radius > 0:
-            # Linear interpolation: scale = min_scale + (1 - min_scale) * (d / beacon_radius)
-            # This gives 0.00001 at d=0, 1.0 at d=beacon_radius
-            distance_ratio = self.min_distance_to_beacon / self.beacon_radius
-            cov_scale = min_scale + (1.0 - min_scale) * distance_ratio
-            self.observation_cov_matrix *= cov_scale
-        elif self.beacon_radius > 0:
-            # Beyond beacon_radius: observations will be "None", but keep base covariance
-            # in case probability is called (though it should return 0 for non-"None" values)
-            pass
-        else:
-            # If beacon_radius is 0, use base covariance
-            self.observation_cov_matrix *= 1.0
+        # Select distribution based on beacon proximity
+        self._active_dist = (
+            self.obs_dist_near_beacon if self.near_beacon else self.obs_dist_far_from_beacon
+        )
 
     def sample(self, n_samples: int = 1) -> List[Union[np.ndarray, str]]:
         # If beyond beacon_radius, return "None" observations
         if self.min_distance_to_beacon > self.beacon_radius:
             return ["None"] * n_samples
 
-        # Vectorized sampling: generate all noise samples at once
-        noise = np.random.multivariate_normal(
-            mean=np.zeros(2), cov=self.observation_cov_matrix, size=n_samples
-        )
-
-        # Vectorized observation calculation
-        observations = self.next_state + noise
+        # Sample using pre-computed Cholesky decomposition
+        observations = self._active_dist.sample(self.next_state, n_samples)
         observations = np.clip(observations, 0, self.grid_size)
 
         # Convert to list of arrays
@@ -235,10 +207,8 @@ class ContinuousLightDarkDistanceBasedObservationModel(BaseContinuousLightDarkOb
                 if self.min_distance_to_beacon > self.beacon_radius:
                     res[i] = 0.0  # Actual observations have probability 0 when far from beacon
                 else:
-                    # Calculate probability from multivariate normal
-                    res[i] = multivariate_normal.pdf(
-                        value, mean=self.next_state, cov=self.observation_cov_matrix  # type: ignore
-                    )
+                    # Calculate probability using pre-computed Cholesky decomposition
+                    res[i] = self._active_dist.pdf(np.array([value]), self.next_state)[0]
 
         return res
 

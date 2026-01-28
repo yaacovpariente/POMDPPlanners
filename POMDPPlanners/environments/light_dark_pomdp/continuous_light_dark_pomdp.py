@@ -43,6 +43,7 @@ from POMDPPlanners.core.simulation import History, MetricValue
 from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp import (
     BaseLightDarkPOMDP,
 )
+from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
 
 # pylint: disable=no-name-in-module
 from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_observation_models import (
@@ -284,6 +285,14 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         self.penalty_decay = penalty_decay
         self.is_obstacle_hit_terminal = is_obstacle_hit_terminal
 
+        # Create observation distributions with pre-computed Cholesky decomposition
+        self._obs_dist_far_from_beacon = CovarianceParameterizedMultivariateNormal(
+            observation_cov_matrix
+        )
+        self._obs_dist_near_beacon = CovarianceParameterizedMultivariateNormal(
+            observation_cov_matrix * 0.5
+        )
+
         # Initialize reward model based on type
         self.reward_model: BaseLightDarkRewardModel
         if reward_model_type == RewardModelType.STANDARD:
@@ -367,7 +376,8 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
             return ContinuousLightDarkNormalNoiseObservationModel(
                 next_state=next_state,
                 action=action,
-                observation_cov_matrix=self.observation_cov_matrix,
+                obs_dist_near_beacon=self._obs_dist_near_beacon,
+                obs_dist_far_from_beacon=self._obs_dist_far_from_beacon,
                 grid_size=self.grid_size,
                 beacons=self.beacons,
                 beacon_radius=self.beacon_radius,
@@ -376,7 +386,8 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
             return ContinuousLightDarkNormalNoiseNoObsInDarkObservationModel(
                 next_state=next_state,
                 action=action,
-                observation_cov_matrix=self.observation_cov_matrix,
+                obs_dist_near_beacon=self._obs_dist_near_beacon,
+                obs_dist_far_from_beacon=self._obs_dist_far_from_beacon,
                 grid_size=self.grid_size,
                 beacons=self.beacons,
                 beacon_radius=self.beacon_radius,
@@ -385,7 +396,8 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
             return ContinuousLightDarkDistanceBasedObservationModel(
                 next_state=next_state,
                 action=action,
-                observation_cov_matrix=self.observation_cov_matrix,
+                obs_dist_near_beacon=self._obs_dist_near_beacon,
+                obs_dist_far_from_beacon=self._obs_dist_far_from_beacon,
                 grid_size=self.grid_size,
                 beacons=self.beacons,
                 beacon_radius=self.beacon_radius,
