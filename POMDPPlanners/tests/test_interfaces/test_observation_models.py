@@ -13,6 +13,7 @@ import numpy as np
 import pytest
 
 from POMDPPlanners.environments.cartpole_pomdp import CartPoleObservation
+from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
 from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp import (
     LaserTagObservation,
 )
@@ -148,7 +149,8 @@ class TestCartPoleObservationProbability:
         """
         noise_cov = np.diag([0.1, 0.1, 0.1, 0.1])
         true_state = np.array([0.1, 0.05, 0.02, -0.1])
-        obs_model = CartPoleObservation(next_state=true_state, action=0, noise_cov=noise_cov)
+        obs_dist = CovarianceParameterizedMultivariateNormal(noise_cov)
+        obs_model = CartPoleObservation(next_state=true_state, action=0, obs_dist=obs_dist)
 
         results = validate_continuous_observation_model_pdf_consistency(obs_model, num_samples=1000)
 
@@ -169,7 +171,8 @@ class TestCartPoleObservationProbability:
         """
         noise_cov = np.diag([0.01, 0.01, 0.01, 0.01])
         true_state = np.array([0.0, 0.0, 0.0, 0.0])  # Centered state
-        obs_model = CartPoleObservation(next_state=true_state, action=1, noise_cov=noise_cov)
+        obs_dist = CovarianceParameterizedMultivariateNormal(noise_cov)
+        obs_model = CartPoleObservation(next_state=true_state, action=1, obs_dist=obs_dist)
 
         results = validate_continuous_observation_model_pdf_consistency(obs_model, num_samples=1000)
 
@@ -189,7 +192,8 @@ class TestCartPoleObservationProbability:
         """
         noise_cov = np.diag([1.0, 1.0, 1.0, 1.0])
         true_state = np.array([0.5, -0.3, 0.1, 0.2])  # Non-centered state
-        obs_model = CartPoleObservation(next_state=true_state, action=0, noise_cov=noise_cov)
+        obs_dist = CovarianceParameterizedMultivariateNormal(noise_cov)
+        obs_model = CartPoleObservation(next_state=true_state, action=0, obs_dist=obs_dist)
 
         results = validate_continuous_observation_model_pdf_consistency(obs_model, num_samples=1000)
 
@@ -213,8 +217,9 @@ class TestMountainCarObservationProbability:
         Test type: unit
         """
         cov_matrix = np.array([[0.1**2, 0], [0, 0.01**2]])
+        obs_dist = CovarianceParameterizedMultivariateNormal(cov_matrix)
         true_state = (-0.5, 0.0)  # Valley position, zero velocity
-        obs_model = MountainCarObservation(next_state=true_state, action=1, cov_matrix=cov_matrix)
+        obs_model = MountainCarObservation(next_state=true_state, action=1, obs_dist=obs_dist)
 
         results = validate_continuous_observation_model_pdf_consistency(obs_model, num_samples=1000)
 
@@ -234,8 +239,9 @@ class TestMountainCarObservationProbability:
         Test type: unit
         """
         cov_matrix = np.array([[0.1**2, 0], [0, 0.01**2]])
+        obs_dist = CovarianceParameterizedMultivariateNormal(cov_matrix)
         true_state = (-1.0, -0.05)  # Near left boundary, moving left
-        obs_model = MountainCarObservation(next_state=true_state, action=0, cov_matrix=cov_matrix)
+        obs_model = MountainCarObservation(next_state=true_state, action=0, obs_dist=obs_dist)
 
         results = validate_continuous_observation_model_pdf_consistency(obs_model, num_samples=1000)
 
@@ -254,8 +260,9 @@ class TestMountainCarObservationProbability:
         Test type: unit
         """
         cov_matrix = np.array([[0.05**2, 0], [0, 0.005**2]])  # Lower noise near goal
+        obs_dist = CovarianceParameterizedMultivariateNormal(cov_matrix)
         true_state = (0.45, 0.05)  # Near goal, moving right
-        obs_model = MountainCarObservation(next_state=true_state, action=2, cov_matrix=cov_matrix)
+        obs_model = MountainCarObservation(next_state=true_state, action=2, obs_dist=obs_dist)
 
         results = validate_continuous_observation_model_pdf_consistency(obs_model, num_samples=1000)
 
