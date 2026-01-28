@@ -30,7 +30,6 @@ from enum import Enum
 from typing import Any, List, Tuple
 
 import numpy as np
-from scipy.stats import multivariate_normal
 
 from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
@@ -94,7 +93,6 @@ class ContinuousLightDarkStateTransitionModel(StateTransitionModel):
     Attributes:
         state: Current 2D position [x, y]
         action: Movement vector [dx, dy]
-        state_transition_cov_matrix: Covariance matrix for transition noise
         mean: Expected next position (state + action)
 
     Example:
@@ -106,12 +104,13 @@ class ContinuousLightDarkStateTransitionModel(StateTransitionModel):
         >>>
         >>> # Define movement noise
         >>> cov_matrix = np.eye(2) * 0.1  # Small movement noise
+        >>> state_dist = CovarianceParameterizedMultivariateNormal(cov_matrix)
         >>>
         >>> # Create transition model
         >>> transition = ContinuousLightDarkStateTransitionModel(
         ...     state=state,
         ...     action=action,
-        ...     state_transition_cov_matrix=cov_matrix
+        ...     state_dist=state_dist
         ... )
         >>>
         >>> # Sample next position with noise
@@ -126,28 +125,19 @@ class ContinuousLightDarkStateTransitionModel(StateTransitionModel):
         self,
         state: np.ndarray,
         action: np.ndarray,
-        state_transition_cov_matrix: np.ndarray,
+        state_dist: CovarianceParameterizedMultivariateNormal,
     ):
         super().__init__(state=state, action=action)
-        self.state_transition_cov_matrix = state_transition_cov_matrix
+        self._state_dist = state_dist
         self.mean = state + action
 
     def sample(self, n_samples: int = 1) -> List[np.ndarray]:
-        # Vectorized sampling: generate all samples at once
-        samples = np.random.multivariate_normal(
-            mean=self.mean, cov=self.state_transition_cov_matrix, size=n_samples
-        )
-
+        samples = self._state_dist.sample(self.mean, n_samples)
         return list(samples)
 
     def probability(self, values: List[np.ndarray]) -> np.ndarray:
-        # Convert list to numpy array for vectorized computation
         values_array = np.array(values)
-
-        # Use scipy's built-in multivariate normal PDF
-        return multivariate_normal.pdf(
-            values_array, mean=self.mean, cov=self.state_transition_cov_matrix  # type: ignore
-        )
+        return self._state_dist.pdf(values_array, self.mean)
 
 
 class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
@@ -285,7 +275,10 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         self.penalty_decay = penalty_decay
         self.is_obstacle_hit_terminal = is_obstacle_hit_terminal
 
-        # Create observation distributions with pre-computed Cholesky decomposition
+        # Create distributions with pre-computed Cholesky decomposition
+        self._state_transition_dist = CovarianceParameterizedMultivariateNormal(
+            state_transition_cov_matrix
+        )
         self._obs_dist_far_from_beacon = CovarianceParameterizedMultivariateNormal(
             observation_cov_matrix
         )
@@ -363,7 +356,7 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         return ContinuousLightDarkStateTransitionModel(  # type: ignore[return-value]
             state=state,
             action=action,
-            state_transition_cov_matrix=self.state_transition_cov_matrix,
+            state_dist=self._state_transition_dist,
         )
 
     def observation_model(self, next_state: np.ndarray, action: np.ndarray) -> ObservationModel:
