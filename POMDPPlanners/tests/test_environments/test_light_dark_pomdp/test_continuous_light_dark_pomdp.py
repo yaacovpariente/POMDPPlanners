@@ -30,6 +30,7 @@ from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp imp
     RewardModelType,
     StateTransitionModel,
 )
+from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
 
 # pylint: disable=no-name-in-module
 from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_observation_models import (
@@ -1845,7 +1846,7 @@ def test_continuous_light_dark_state_transition_model_sample_returns_list_of_num
 
     Purpose: Validates that the sample method returns a properly structured list of numpy arrays
 
-    Given: A ContinuousLightDarkStateTransitionModel with specific state, action, and covariance
+    Given: A ContinuousLightDarkStateTransitionModel with specific state, action, and state distribution
     When: sample() is called with different numbers of samples
     Then: Returns a list where all elements are numpy arrays with correct shapes
 
@@ -1855,12 +1856,13 @@ def test_continuous_light_dark_state_transition_model_sample_returns_list_of_num
     state = np.array([2.0, 3.0])
     action = np.array([1.0, -0.5])
     state_transition_cov_matrix = np.eye(2) * 0.1
+    state_dist = CovarianceParameterizedMultivariateNormal(state_transition_cov_matrix)
 
     # Create transition model
     transition_model = ContinuousLightDarkStateTransitionModel(
         state=state,
         action=action,
-        state_transition_cov_matrix=state_transition_cov_matrix,
+        state_dist=state_dist,
     )
 
     # Test single sample
