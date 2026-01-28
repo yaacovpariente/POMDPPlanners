@@ -198,7 +198,7 @@ def test_observation_model_probability_mathematical_correctness(base_mountain_ca
 
     # Get the true state and covariance matrix
     true_state = obs_model.mean
-    cov_matrix = obs_model.cov_matrix
+    cov_matrix = base_mountain_car_environment.cov_matrix
 
     # Test with observation at true state (should have highest probability)
     observation_at_mean = true_state.copy()
