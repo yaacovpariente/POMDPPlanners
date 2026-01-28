@@ -27,7 +27,6 @@ from typing import Any, List, Optional, Tuple
 
 import matplotlib
 import numpy as np
-import scipy.stats
 
 from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.core.environment import (
@@ -39,6 +38,7 @@ from POMDPPlanners.core.environment import (
     StepData,
 )
 from POMDPPlanners.core.simulation import History, MetricValue
+from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
 from POMDPPlanners.utils.statistics_utils import confidence_interval
 
 matplotlib.use("Agg")  # Use non-interactive backend
@@ -147,7 +147,6 @@ class MountainCarObservation(ObservationModel):
     Attributes:
         next_state: True state after action execution
         action: Action that was taken (not used in observation generation)
-        cov_matrix: Covariance matrix for observation noise
         mean: Expected observation (equals true state)
 
     Example:
@@ -160,14 +159,16 @@ class MountainCarObservation(ObservationModel):
             >>> true_state = (-0.45, 0.02)  # [position, velocity]
             >>> action = 1
             >>>
-            >>> # Define observation noise
+            >>> # Define observation noise covariance and create distribution
+            >>> from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
             >>> cov_matrix = np.array([[0.1**2, 0], [0, 0.01**2]])  # Position and velocity noise
+            >>> obs_dist = CovarianceParameterizedMultivariateNormal(cov_matrix)
             >>>
             >>> # Create observation model
             >>> obs_model = MountainCarObservation(
             ...     next_state=true_state,
             ...     action=action,
-            ...     cov_matrix=cov_matrix
+            ...     obs_dist=obs_dist
             ... )
             >>>
             >>> # Sample noisy observation
@@ -184,29 +185,26 @@ class MountainCarObservation(ObservationModel):
             Observation probability: 139.345607
     """
 
-    def __init__(self, next_state: Tuple[float, float], action: int, cov_matrix: np.ndarray):
+    def __init__(
+        self,
+        next_state: Tuple[float, float],
+        action: int,
+        obs_dist: CovarianceParameterizedMultivariateNormal,
+    ):
         super().__init__(next_state=next_state, action=action)
-        self.cov_matrix = cov_matrix
+        self._obs_dist = obs_dist
         self.mean = np.array(next_state)
 
     def sample(self, n_samples: int = 1) -> List[np.ndarray]:
-        samples = []
-        for _ in range(n_samples):
-            obs = np.random.multivariate_normal(self.mean, self.cov_matrix)
-            samples.append(np.array(obs))
-        return samples
+        samples = self._obs_dist.sample(self.mean, n_samples)
+        return [samples[i] for i in range(n_samples)]
 
     def probability(self, values: List[np.ndarray]) -> np.ndarray:
-        # Handle empty list case
         if len(values) == 0:
             return np.array([])
 
-        # Vectorized probability for a batch of observations
         values_array = np.array(values)
-        pdf_values = scipy.stats.multivariate_normal(self.mean, self.cov_matrix).pdf(values_array)  # type: ignore
-
-        # Ensure result is always a 1D array (pdf returns scalar for single input)
-        return np.atleast_1d(pdf_values)
+        return self._obs_dist.pdf(values_array, self.mean)
 
 
 class MountainCarPOMDP(DiscreteActionsEnvironment):
@@ -268,6 +266,9 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
         # Observation noise matrix
         self.cov_matrix = np.array([[self.position_noise**2, 0], [0, self.velocity_noise**2]])
 
+        # Pre-compute Cholesky decomposition for efficient sampling and PDF
+        self._obs_dist = CovarianceParameterizedMultivariateNormal(self.cov_matrix)
+
         space_info = SpaceInfo(
             action_space=SpaceType.DISCRETE,  # Action space is [-1, 0, 1]
             observation_space=SpaceType.CONTINUOUS,  # Observation space is position and velocity
@@ -296,9 +297,7 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
         )
 
     def observation_model(self, next_state: Tuple[float, float], action: int) -> ObservationModel:
-        return MountainCarObservation(
-            next_state=next_state, action=action, cov_matrix=self.cov_matrix
-        )
+        return MountainCarObservation(next_state=next_state, action=action, obs_dist=self._obs_dist)
 
     def reward(self, state: Tuple[float, float], action: int) -> float:
         position, _ = state
