@@ -42,7 +42,6 @@ from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_da
     ContinuousLightDarkDecayingHitProbabilityRewardModel,
     ContinuousLDDangerousStatesRewardModel,
 )
-from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
 
 
 def create_obs_distributions(
