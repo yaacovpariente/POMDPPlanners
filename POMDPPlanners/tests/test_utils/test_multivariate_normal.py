@@ -271,7 +271,7 @@ class TestPDF:
         mvn = CovarianceParameterizedMultivariateNormal(cov)
         our_pdf = mvn.pdf(values, mean)
 
-        scipy_pdf = multivariate_normal.pdf(values, mean=mean, cov=cov)
+        scipy_pdf = multivariate_normal.pdf(values, mean=mean, cov=cov)  # type: ignore[arg-type]
 
         assert np.allclose(our_pdf, scipy_pdf)
 
@@ -415,7 +415,7 @@ class TestSpecialCases:
 
         values = np.array([[5.0], [7.0], [3.0]])
         pdf_values = mvn.pdf(values, mean)
-        scipy_pdf = multivariate_normal.pdf(values, mean=mean, cov=cov)
+        scipy_pdf = multivariate_normal.pdf(values, mean=mean, cov=cov)  # type: ignore[arg-type]
         assert np.allclose(pdf_values, scipy_pdf)
 
     def test_identity_covariance(self):
@@ -442,7 +442,7 @@ class TestSpecialCases:
 
         values = np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]])
         pdf_values = mvn.pdf(values, mean)
-        scipy_pdf = multivariate_normal.pdf(values, mean=mean, cov=cov)
+        scipy_pdf = multivariate_normal.pdf(values, mean=mean, cov=cov)  # type: ignore[arg-type]
         assert np.allclose(pdf_values, scipy_pdf)
 
     def test_diagonal_covariance(self):
@@ -496,7 +496,7 @@ class TestSpecialCases:
         assert pdf_values.shape == (5,)
         assert np.all(pdf_values > 0)
 
-        scipy_pdf = multivariate_normal.pdf(values, mean=mean, cov=cov)
+        scipy_pdf = multivariate_normal.pdf(values, mean=mean, cov=cov)  # type: ignore[arg-type]
         assert np.allclose(pdf_values, scipy_pdf)
 
     def test_covariance_is_copied(self):
@@ -579,8 +579,8 @@ class TestScipyComparison:
             our_pdf = mvn.pdf(test_points, mean)
             our_log_pdf = mvn.log_pdf(test_points, mean)
 
-            scipy_pdf = multivariate_normal.pdf(test_points, mean=mean, cov=cov)
-            scipy_log_pdf = multivariate_normal.logpdf(test_points, mean=mean, cov=cov)
+            scipy_pdf = multivariate_normal.pdf(test_points, mean=mean, cov=cov)  # type: ignore[arg-type]
+            scipy_log_pdf = multivariate_normal.logpdf(test_points, mean=mean, cov=cov)  # type: ignore[arg-type]
 
             assert np.allclose(our_pdf, scipy_pdf), f"PDF mismatch for cov={cov}"
             assert np.allclose(our_log_pdf, scipy_log_pdf), f"Log PDF mismatch for cov={cov}"
