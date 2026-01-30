@@ -7,10 +7,13 @@ performs an update, and samples from the result.
 Particle beliefs (WeightedParticleBelief, WeightedParticleBeliefStateUpdate,
 UnweightedParticleBeliefStateUpdate) are tested against all 11 environments.
 
-Gaussian beliefs (GaussianBelief with linear_kalman_filter_updater and
-extended_kalman_filter_updater) are tested against
-ContinuousLightDarkPOMDPDiscreteActions, which has a linear-Gaussian
-state-space model matching the Kalman filter assumptions.
+Gaussian beliefs (GaussianBelief with linear_kalman_filter_updater,
+extended_kalman_filter_updater, and unscented_kalman_filter_updater)
+are tested against ContinuousLightDarkPOMDPDiscreteActions, which has
+a linear-Gaussian state-space model matching the Kalman filter assumptions.
+
+GaussianMixtureBelief is smoke-tested with a single-component mixture
+on ContinuousLightDarkPOMDPDiscreteActions.
 """
 
 import numpy as np
@@ -18,11 +21,13 @@ import pytest
 
 from POMDPPlanners.core.belief import (
     GaussianBelief,
+    GaussianMixtureBelief,
     UnweightedParticleBeliefStateUpdate,
     WeightedParticleBelief,
     WeightedParticleBeliefStateUpdate,
     extended_kalman_filter_updater,
     linear_kalman_filter_updater,
+    unscented_kalman_filter_updater,
 )
 from POMDPPlanners.environments import (
     CartPolePOMDP,
@@ -442,3 +447,193 @@ class TestGaussianBeliefExtendedKalmanFilterContinuousLightDark:
 
         np.testing.assert_allclose(lkf_belief.mean, ekf_belief.mean, atol=1e-10)
         np.testing.assert_allclose(lkf_belief.covariance, ekf_belief.covariance, atol=1e-10)
+
+
+# ---------------------------------------------------------------------------
+# UKF belief tests against ContinuousLightDarkPOMDPDiscreteActions
+# ---------------------------------------------------------------------------
+
+
+class TestGaussianBeliefUnscentedKalmanFilterContinuousLightDark:
+    """Smoke-test GaussianBelief with unscented Kalman filter on ContinuousLightDark."""
+
+    def test_smoke(self):
+        """Smoke-test GaussianBelief with UKF over multiple update steps.
+
+        Purpose: Validates that GaussianBelief with an unscented Kalman
+            filter updater can be constructed, updated over multiple steps,
+            and sampled using ContinuousLightDarkPOMDPDiscreteActions.
+
+        Given: A ContinuousLightDarkPOMDPDiscreteActions environment with
+            known process and observation noise, and a GaussianBelief
+            initialized at the start state with a UKF updater using
+            identity transition and observation functions.
+        When: The belief is updated over multiple action-observation steps.
+        Then: The updated belief is a GaussianBelief, has 2D mean and
+            2x2 covariance, covariance is symmetric, and sampling succeeds.
+
+        Test type: integration
+        """
+        np.random.seed(42)
+        env, Q, R = _make_continuous_light_dark_with_cov()
+        actions, observations = _simulate_trajectory(env, NUM_GAUSSIAN_UPDATE_STEPS)
+
+        updater = unscented_kalman_filter_updater(
+            transition_fn=lambda x, u: x + u,
+            observation_fn=lambda x: x,
+            Q=Q,
+            R=R,
+        )
+        belief = GaussianBelief(
+            mean=env.start_state.copy(),
+            covariance=np.eye(2),
+            updater=updater,
+        )
+
+        for action, obs in zip(actions, observations):
+            belief = belief.update(action=ACTION_TO_VECTOR[action], observation=obs, pomdp=env)
+
+        assert isinstance(belief, GaussianBelief)
+        assert belief.mean.shape == (2,)
+        assert belief.covariance.shape == (2, 2)
+        np.testing.assert_allclose(belief.covariance, belief.covariance.T, atol=1e-10)
+        sample = belief.sample()
+        assert sample.shape == (2,)
+
+    def test_ukf_matches_linear_kf(self):
+        """Test that UKF with linear functions matches linear Kalman filter.
+
+        Purpose: Validates that the UKF produces identical results to the
+            linear KF when the system is linear.
+
+        Given: Both a linear KF and a UKF configured with linear
+            transition/observation functions on the same environment.
+        When: Both are updated with the same action-observation trajectory.
+        Then: The resulting means and covariances are numerically close.
+
+        Test type: integration
+        """
+        np.random.seed(42)
+        env, Q, R = _make_continuous_light_dark_with_cov()
+        actions, observations = _simulate_trajectory(env, NUM_GAUSSIAN_UPDATE_STEPS)
+
+        lkf_updater = linear_kalman_filter_updater(A=np.eye(2), B=np.eye(2), H=np.eye(2), Q=Q, R=R)
+        ukf_updater = unscented_kalman_filter_updater(
+            transition_fn=lambda x, u: x + u,
+            observation_fn=lambda x: x,
+            Q=Q,
+            R=R,
+        )
+
+        start_mean = env.start_state.copy()
+        start_cov = np.eye(2)
+        lkf_belief = GaussianBelief(mean=start_mean, covariance=start_cov, updater=lkf_updater)
+        ukf_belief = GaussianBelief(
+            mean=start_mean.copy(), covariance=start_cov.copy(), updater=ukf_updater
+        )
+
+        for action, obs in zip(actions, observations):
+            action_vec = ACTION_TO_VECTOR[action]
+            lkf_belief = lkf_belief.update(action=action_vec, observation=obs, pomdp=env)
+            ukf_belief = ukf_belief.update(action=action_vec, observation=obs, pomdp=env)
+
+        np.testing.assert_allclose(lkf_belief.mean, ukf_belief.mean, atol=1e-6)
+        np.testing.assert_allclose(lkf_belief.covariance, ukf_belief.covariance, atol=1e-6)
+
+
+# ---------------------------------------------------------------------------
+# Gaussian Mixture Belief tests against ContinuousLightDarkPOMDPDiscreteActions
+# ---------------------------------------------------------------------------
+
+
+class TestGaussianMixtureBeliefContinuousLightDark:
+    """Smoke-test GaussianMixtureBelief on ContinuousLightDark."""
+
+    def test_smoke_single_component(self):
+        """Smoke-test single-component GaussianMixtureBelief on ContinuousLightDark.
+
+        Purpose: Validates that a single-component GaussianMixtureBelief can
+            be constructed, updated, and sampled using a real POMDP environment.
+
+        Given: A ContinuousLightDarkPOMDPDiscreteActions environment and a
+            single-component GMM using a KF-based updater wrapped for GMM.
+        When: The belief is updated over multiple steps.
+        Then: The updated belief is a GaussianMixtureBelief, has correct
+            dimensions, and sampling succeeds.
+
+        Test type: integration
+        """
+        np.random.seed(42)
+        env, Q, R = _make_continuous_light_dark_with_cov()
+        actions, observations = _simulate_trajectory(env, NUM_GAUSSIAN_UPDATE_STEPS)
+
+        kf_updater = linear_kalman_filter_updater(A=np.eye(2), B=np.eye(2), H=np.eye(2), Q=Q, R=R)
+
+        def gmm_updater(means, covs, weights, action, obs, pomdp):
+            new_mean, new_cov = kf_updater(means[0], covs[0], ACTION_TO_VECTOR[action], obs, pomdp)
+            return [new_mean], [new_cov], weights
+
+        belief = GaussianMixtureBelief(
+            means=[env.start_state.copy()],
+            covariances=[np.eye(2)],
+            weights=np.array([1.0]),
+            updater=gmm_updater,
+        )
+
+        for action, obs in zip(actions, observations):
+            belief = belief.update(action=action, observation=obs, pomdp=env)
+
+        assert isinstance(belief, GaussianMixtureBelief)
+        assert belief.n_components == 1
+        assert belief.dim == 2
+        assert belief.means[0].shape == (2,)
+        assert belief.covariances[0].shape == (2, 2)
+        sample = belief.sample()
+        assert sample.shape == (2,)
+
+    def test_single_component_matches_gaussian_belief(self):
+        """Test single-component GMM matches GaussianBelief on the same trajectory.
+
+        Purpose: Validates that a single-component GMM produces the same
+            posterior as GaussianBelief using the same update logic.
+
+        Given: Both a GaussianBelief and a single-component GMM initialized
+            identically on ContinuousLightDarkPOMDPDiscreteActions.
+        When: Both are updated with the same trajectory.
+        Then: The posterior means and covariances match.
+
+        Test type: integration
+        """
+        np.random.seed(42)
+        env, Q, R = _make_continuous_light_dark_with_cov()
+        actions, observations = _simulate_trajectory(env, NUM_GAUSSIAN_UPDATE_STEPS)
+
+        kf_updater = linear_kalman_filter_updater(A=np.eye(2), B=np.eye(2), H=np.eye(2), Q=Q, R=R)
+
+        gaussian_belief = GaussianBelief(
+            mean=env.start_state.copy(),
+            covariance=np.eye(2),
+            updater=kf_updater,
+        )
+
+        def gmm_updater(means, covs, weights, action, obs, pomdp):
+            new_mean, new_cov = kf_updater(means[0], covs[0], ACTION_TO_VECTOR[action], obs, pomdp)
+            return [new_mean], [new_cov], weights
+
+        gmm_belief = GaussianMixtureBelief(
+            means=[env.start_state.copy()],
+            covariances=[np.eye(2)],
+            weights=np.array([1.0]),
+            updater=gmm_updater,
+        )
+
+        for action, obs in zip(actions, observations):
+            gaussian_belief = gaussian_belief.update(
+                action=ACTION_TO_VECTOR[action], observation=obs, pomdp=env
+            )
+            gmm_belief = gmm_belief.update(action=action, observation=obs, pomdp=env)
+
+        np.testing.assert_allclose(gmm_belief.means[0], gaussian_belief.mean, atol=1e-10)
+        np.testing.assert_allclose(
+            gmm_belief.covariances[0], gaussian_belief.covariance, atol=1e-10
+        )

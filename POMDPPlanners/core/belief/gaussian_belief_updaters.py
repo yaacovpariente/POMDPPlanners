@@ -9,6 +9,7 @@ by :class:`~POMDPPlanners.core.belief.GaussianBelief`.
 Functions:
     linear_kalman_filter_updater: Factory for linear-Gaussian systems.
     extended_kalman_filter_updater: Factory for nonlinear systems with known Jacobians.
+    unscented_kalman_filter_updater: Factory for nonlinear systems without Jacobians.
 """
 
 from typing import Any, Callable, Tuple
@@ -152,5 +153,113 @@ def extended_kalman_filter_updater(
         new_cov = (np.eye(len(predicted_mean)) - K @ H) @ predicted_cov
         new_cov = 0.5 * (new_cov + new_cov.T)
         return new_mean, new_cov
+
+    return _update
+
+
+def unscented_kalman_filter_updater(
+    transition_fn: Callable[[np.ndarray, np.ndarray], np.ndarray],
+    observation_fn: Callable[[np.ndarray], np.ndarray],
+    Q: np.ndarray,
+    R: np.ndarray,
+    alpha: float = 1e-3,
+    beta: float = 2.0,
+    kappa: float = 0.0,
+) -> Callable[[np.ndarray, np.ndarray, Any, Any, Any], Tuple[np.ndarray, np.ndarray]]:
+    """Create an Unscented Kalman Filter updater for nonlinear systems.
+
+    The system model is:
+
+        x_{t+1} = f(x_t, u_t) + w,   w ~ N(0, Q)
+        z_t     = h(x_{t+1}) + v,     v ~ N(0, R)
+
+    Unlike the EKF, the UKF does not require Jacobians. Instead, it
+    propagates deterministic sigma points through the nonlinear functions
+    to estimate the posterior statistics.
+
+    Args:
+        transition_fn: State transition function ``f(state, action) -> next_state``.
+        observation_fn: Observation function ``h(state) -> observation``.
+        Q: Process noise covariance of shape (d, d).
+        R: Observation noise covariance of shape (p, p).
+        alpha: Spread of sigma points around the mean. Defaults to 1e-3.
+        beta: Prior knowledge about the distribution (2.0 is optimal for
+            Gaussian). Defaults to 2.0.
+        kappa: Secondary scaling parameter. Defaults to 0.0.
+
+    Returns:
+        A callable suitable for ``GaussianBelief(updater=...)``.
+
+    Example:
+        >>> import numpy as np
+        >>> f = lambda x, u: x
+        >>> h = lambda x: x
+        >>> Q = 0.1 * np.eye(2)
+        >>> R = 0.5 * np.eye(2)
+        >>> updater = unscented_kalman_filter_updater(f, h, Q, R)
+        >>> mean = np.zeros(2)
+        >>> cov = np.eye(2)
+        >>> new_mean, new_cov = updater(mean, cov, np.zeros(1), np.array([1.0, 0.0]), None)
+        >>> new_mean.shape
+        (2,)
+    """
+    Q = np.asarray(Q, dtype=float)
+    R = np.asarray(R, dtype=float)
+
+    def _compute_sigma_points(mean, covariance):
+        d = len(mean)
+        lam = alpha**2 * (d + kappa) - d
+        scaling = d + lam
+
+        W_m = np.full(2 * d + 1, 1.0 / (2.0 * scaling))
+        W_c = np.full(2 * d + 1, 1.0 / (2.0 * scaling))
+        W_m[0] = lam / scaling
+        W_c[0] = lam / scaling + (1.0 - alpha**2 + beta)
+
+        sqrt_matrix = np.linalg.cholesky(scaling * covariance)
+
+        sigma_points = np.empty((2 * d + 1, d))
+        sigma_points[0] = mean
+        for i in range(d):
+            sigma_points[i + 1] = mean + sqrt_matrix[:, i]
+            sigma_points[d + i + 1] = mean - sqrt_matrix[:, i]
+
+        return sigma_points, W_m, W_c
+
+    def _predict(mean, covariance, action):
+        sigma_points, W_m, W_c = _compute_sigma_points(mean, covariance)
+        propagated = np.array(
+            [transition_fn(sigma_points[i], action) for i in range(len(sigma_points))]
+        )
+
+        predicted_mean = W_m @ propagated
+        diff = propagated - predicted_mean
+        predicted_cov = (diff * W_c[:, None]).T @ diff + Q
+        predicted_cov = 0.5 * (predicted_cov + predicted_cov.T)
+
+        return predicted_mean, predicted_cov
+
+    def _correct(predicted_mean, predicted_cov, observation):
+        sigma_points, W_m, W_c = _compute_sigma_points(predicted_mean, predicted_cov)
+        obs_sigmas = np.array([observation_fn(sigma_points[i]) for i in range(len(sigma_points))])
+
+        z_mean = W_m @ obs_sigmas
+        z_diff = obs_sigmas - z_mean
+        S = (z_diff * W_c[:, None]).T @ z_diff + R
+        x_diff = sigma_points - predicted_mean
+        Pxz = (x_diff * W_c[:, None]).T @ z_diff
+
+        K = Pxz @ np.linalg.inv(S)
+        new_mean = predicted_mean + K @ (observation - z_mean)
+        new_cov = predicted_cov - K @ S @ K.T
+        new_cov = 0.5 * (new_cov + new_cov.T)
+        return new_mean, new_cov
+
+    def _update(mean, covariance, action, observation, _pomdp):
+        action = np.asarray(action, dtype=float).ravel()
+        observation = np.asarray(observation, dtype=float).ravel()
+
+        predicted_mean, predicted_cov = _predict(mean, covariance, action)
+        return _correct(predicted_mean, predicted_cov, observation)
 
     return _update
