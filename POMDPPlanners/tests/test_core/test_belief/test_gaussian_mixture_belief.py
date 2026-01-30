@@ -11,14 +11,16 @@ This module tests the GaussianMixtureBelief class, covering:
 - Cost dispatch integration
 """
 
-from typing import Any, List
+from typing import Any
 
 import numpy as np
 import pytest
 
 from POMDPPlanners.core.belief import (
     GaussianBelief,
+    GaussianBeliefUpdater,
     GaussianMixtureBelief,
+    GaussianMixtureBeliefUpdater,
     is_terminal_belief,
 )
 from POMDPPlanners.core.cost import (
@@ -33,8 +35,33 @@ from POMDPPlanners.core.cost import (
 # ---------------------------------------------------------------------------
 
 
-def _noop_updater(means, covs, weights, action, obs, pomdp):
-    return means, [c * 0.9 for c in covs], weights
+class _NoopGMMUpdater(GaussianMixtureBeliefUpdater):
+    """Test-only updater that shrinks covariances by 0.9."""
+
+    def update(self, means, covariances, weights, action, observation):
+        return means, [c * 0.9 for c in covariances], weights
+
+    @property
+    def config_id(self) -> str:
+        return "noop_gmm_updater"
+
+
+class _SplittingGMMUpdater(GaussianMixtureBeliefUpdater):
+    """Test-only updater that splits the first component into two."""
+
+    def update(self, means, covariances, weights, action, observation):
+        return (
+            [means[0], means[0] + 1.0],
+            [covariances[0], covariances[0]],
+            np.array([0.5, 0.5]),
+        )
+
+    @property
+    def config_id(self) -> str:
+        return "splitting_gmm_updater"
+
+
+_noop_updater = _NoopGMMUpdater()
 
 
 def _make_1comp_belief(**kwargs: Any) -> GaussianMixtureBelief:
@@ -352,19 +379,11 @@ class TestGaussianMixtureBeliefUpdate:
 
         Test type: unit
         """
-
-        def splitting_updater(means, covs, weights, action, obs, pomdp):
-            return (
-                [means[0], means[0] + 1.0],
-                [covs[0], covs[0]],
-                np.array([0.5, 0.5]),
-            )
-
         belief = GaussianMixtureBelief(
             means=[np.array([0.0])],
             covariances=[np.array([[1.0]])],
             weights=np.array([1.0]),
-            updater=splitting_updater,
+            updater=_SplittingGMMUpdater(),
         )
         new_belief = belief.update(action=0, observation=np.array([1.0]), pomdp=None)
         assert new_belief.n_components == 2
@@ -497,10 +516,15 @@ class TestGaussianMixtureBeliefEntropy:
         mean = np.array([0.0, 0.0])
         cov = np.eye(2)
 
-        def dummy_updater(m, c, a, o, p):
-            return o, c
+        class _DummyUpdater(GaussianBeliefUpdater):
+            def update(self, mean, covariance, action, observation):
+                return np.asarray(observation, dtype=float).ravel(), covariance
 
-        gaussian_belief = GaussianBelief(mean=mean, covariance=cov, updater=dummy_updater)
+            @property
+            def config_id(self) -> str:
+                return "dummy"
+
+        gaussian_belief = GaussianBelief(mean=mean, covariance=cov, updater=_DummyUpdater())
         gmm_belief = GaussianMixtureBelief(
             means=[mean],
             covariances=[cov],

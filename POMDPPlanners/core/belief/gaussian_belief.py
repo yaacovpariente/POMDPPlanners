@@ -1,40 +1,34 @@
 """Gaussian belief state representation for POMDP environments.
 
 This module provides a multivariate Gaussian belief state that delegates
-updates to a user-provided callable, allowing compatibility with EKF, UKF,
-or any custom Gaussian update rule.
+updates to a :class:`~POMDPPlanners.core.belief.gaussian_belief_updaters.GaussianBeliefUpdater`
+instance, allowing compatibility with EKF, UKF, or any custom Gaussian update rule.
 
 Classes:
-    GaussianBelief: Multivariate Gaussian belief with callable updater
-
-Type Aliases:
-    GaussianBeliefUpdater: Callable signature for Gaussian belief update functions
+    GaussianBelief: Multivariate Gaussian belief with pluggable updater.
 """
 
-from typing import Any, Callable, Optional, Tuple
+from typing import Any, Optional
 
 import numpy as np
 
 from POMDPPlanners.core.belief.base_belief import Belief
+from POMDPPlanners.core.belief.gaussian_belief_updaters import GaussianBeliefUpdater
 from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.utils.config_to_id import config_to_id
 from POMDPPlanners.utils.multivariate_normal import (
     CovarianceParameterizedMultivariateNormal,
 )
 
-GaussianBeliefUpdater = Callable[
-    [np.ndarray, np.ndarray, Any, Any, Optional["Environment"]],
-    Tuple[np.ndarray, np.ndarray],
-]
-
 
 class GaussianBelief(Belief):
     """Multivariate Gaussian belief state representation.
 
     Represents the belief as a multivariate normal distribution N(mean, covariance).
-    The update mechanism delegates to a user-provided callable, allowing the same
-    class to work with EKF, UKF, or any custom Gaussian update rule without
-    requiring environment modifications.
+    The update mechanism delegates to a
+    :class:`~POMDPPlanners.core.belief.gaussian_belief_updaters.GaussianBeliefUpdater`
+    instance, allowing the same class to work with EKF, UKF, or any custom
+    Gaussian update rule without requiring environment modifications.
 
     This belief type is compatible with PFT_DPW, Sparse-PFT, and SparseSampling
     planners. It is NOT compatible with POMCP/POMCP_DPW planners because it does
@@ -43,21 +37,26 @@ class GaussianBelief(Belief):
     Attributes:
         mean: Mean vector of the Gaussian distribution.
         covariance: Covariance matrix of the Gaussian distribution.
-        updater: Callable that computes the Bayesian belief update.
+        updater: GaussianBeliefUpdater that computes the Bayesian belief update.
         n_terminal_check_samples: Number of Monte Carlo samples for terminal checks.
 
     Example:
         >>> import numpy as np
         >>> np.random.seed(42)
         >>>
-        >>> # Define a simple identity updater
-        >>> def identity_updater(mean, cov, action, obs, pomdp):
-        ...     return obs, cov * 0.9
+        >>> # Create a linear Kalman filter updater
+        >>> from POMDPPlanners.core.belief.gaussian_belief_updaters import (
+        ...     LinearKalmanFilterUpdater,
+        ... )
+        >>> updater = LinearKalmanFilterUpdater(
+        ...     A=np.eye(2), B=np.zeros((2, 1)), H=np.eye(2),
+        ...     Q=0.1 * np.eye(2), R=0.5 * np.eye(2),
+        ... )
         >>>
         >>> # Create 2D Gaussian belief
         >>> mean = np.array([0.0, 0.0])
         >>> cov = np.eye(2)
-        >>> belief = GaussianBelief(mean=mean, covariance=cov, updater=identity_updater)
+        >>> belief = GaussianBelief(mean=mean, covariance=cov, updater=updater)
         >>>
         >>> # Sample a state
         >>> state = belief.sample()
@@ -66,10 +65,10 @@ class GaussianBelief(Belief):
         >>>
         >>> # Update belief with observation
         >>> new_belief = belief.update(
-        ...     action=0, observation=np.array([1.0, 1.0]), pomdp=None
+        ...     action=np.zeros(1), observation=np.array([1.0, 1.0]), pomdp=None
         ... )
-        >>> np.allclose(new_belief.mean, [1.0, 1.0])
-        True
+        >>> new_belief.mean.shape
+        (2,)
     """
 
     def __init__(
@@ -84,8 +83,9 @@ class GaussianBelief(Belief):
         Args:
             mean: Mean vector of shape (d,).
             covariance: Positive definite covariance matrix of shape (d, d).
-            updater: Callable with signature
-                ``(mean, covariance, action, observation, pomdp) -> (new_mean, new_covariance)``.
+            updater: A :class:`GaussianBeliefUpdater` instance whose
+                ``update(mean, covariance, action, observation)`` method
+                returns ``(new_mean, new_covariance)``.
             n_terminal_check_samples: Number of Monte Carlo samples drawn for
                 terminal state checks. Defaults to 50.
 
@@ -132,18 +132,19 @@ class GaussianBelief(Belief):
         pomdp: Optional[Environment] = None,
         state: Optional[Any] = None,
     ) -> "GaussianBelief":
-        """Update belief using the provided updater callable.
+        """Update belief using the provided updater.
 
         Args:
             action: Action that was executed.
             observation: Observation that was received.
-            pomdp: Environment instance passed to the updater.
+            pomdp: Unused. Kept for interface compatibility with
+                :class:`~POMDPPlanners.core.belief.base_belief.Belief`.
             state: Ignored for Gaussian beliefs.
 
         Returns:
             New GaussianBelief with updated mean and covariance.
         """
-        new_mean, new_cov = self.updater(self.mean, self.covariance, action, observation, pomdp)
+        new_mean, new_cov = self.updater.update(self.mean, self.covariance, action, observation)
         return GaussianBelief(
             mean=new_mean,
             covariance=new_cov,
@@ -158,6 +159,7 @@ class GaussianBelief(Belief):
             "mean": self.mean.tolist(),
             "covariance": self.covariance.tolist(),
             "n_terminal_check_samples": self.n_terminal_check_samples,
+            "updater": self.updater.config_id,
         }
         return config_to_id(config_dict)
 

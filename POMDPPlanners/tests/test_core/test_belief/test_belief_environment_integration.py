@@ -22,12 +22,13 @@ import pytest
 from POMDPPlanners.core.belief import (
     GaussianBelief,
     GaussianMixtureBelief,
+    GaussianMixtureBeliefUpdater,
+    LinearKalmanFilterUpdater,
+    ExtendedKalmanFilterUpdater,
+    UnscentedKalmanFilterUpdater,
     UnweightedParticleBeliefStateUpdate,
     WeightedParticleBelief,
     WeightedParticleBeliefStateUpdate,
-    extended_kalman_filter_updater,
-    linear_kalman_filter_updater,
-    unscented_kalman_filter_updater,
 )
 from POMDPPlanners.environments import (
     CartPolePOMDP,
@@ -257,6 +258,23 @@ ACTION_TO_VECTOR = {
 NUM_GAUSSIAN_UPDATE_STEPS = 5
 
 
+class _SingleComponentKFUpdater(GaussianMixtureBeliefUpdater):
+    """GMM updater that applies a single KF updater to the first component."""
+
+    def __init__(self, kf_updater):
+        self._kf = kf_updater
+
+    def update(self, means, covariances, weights, action, observation):
+        new_mean, new_cov = self._kf.update(
+            means[0], covariances[0], ACTION_TO_VECTOR[action], observation
+        )
+        return [new_mean], [new_cov], weights
+
+    @property
+    def config_id(self) -> str:
+        return f"single_component_kf_{self._kf.config_id}"
+
+
 def _make_continuous_light_dark_with_cov():
     Q = 0.01 * np.eye(2)
     R = 0.1 * np.eye(2)
@@ -308,7 +326,7 @@ class TestGaussianBeliefLinearKalmanFilterContinuousLightDark:
         env, Q, R = _make_continuous_light_dark_with_cov()
         actions, observations = _simulate_trajectory(env, NUM_GAUSSIAN_UPDATE_STEPS)
 
-        updater = linear_kalman_filter_updater(A=np.eye(2), B=np.eye(2), H=np.eye(2), Q=Q, R=R)
+        updater = LinearKalmanFilterUpdater(A=np.eye(2), B=np.eye(2), H=np.eye(2), Q=Q, R=R)
         belief = GaussianBelief(
             mean=env.start_state.copy(),
             covariance=np.eye(2),
@@ -343,7 +361,7 @@ class TestGaussianBeliefLinearKalmanFilterContinuousLightDark:
         env, Q, R = _make_continuous_light_dark_with_cov()
         actions, observations = _simulate_trajectory(env, NUM_GAUSSIAN_UPDATE_STEPS)
 
-        updater = linear_kalman_filter_updater(A=np.eye(2), B=np.eye(2), H=np.eye(2), Q=Q, R=R)
+        updater = LinearKalmanFilterUpdater(A=np.eye(2), B=np.eye(2), H=np.eye(2), Q=Q, R=R)
         initial_cov = np.eye(2)
         belief = GaussianBelief(
             mean=env.start_state.copy(),
@@ -382,7 +400,7 @@ class TestGaussianBeliefExtendedKalmanFilterContinuousLightDark:
         env, Q, R = _make_continuous_light_dark_with_cov()
         actions, observations = _simulate_trajectory(env, NUM_GAUSSIAN_UPDATE_STEPS)
 
-        updater = extended_kalman_filter_updater(
+        updater = ExtendedKalmanFilterUpdater(
             transition_fn=lambda x, u: x + u,
             observation_fn=lambda x: x,
             transition_jacobian=lambda x, u: np.eye(len(x)),
@@ -423,8 +441,8 @@ class TestGaussianBeliefExtendedKalmanFilterContinuousLightDark:
         env, Q, R = _make_continuous_light_dark_with_cov()
         actions, observations = _simulate_trajectory(env, NUM_GAUSSIAN_UPDATE_STEPS)
 
-        lkf_updater = linear_kalman_filter_updater(A=np.eye(2), B=np.eye(2), H=np.eye(2), Q=Q, R=R)
-        ekf_updater = extended_kalman_filter_updater(
+        lkf_updater = LinearKalmanFilterUpdater(A=np.eye(2), B=np.eye(2), H=np.eye(2), Q=Q, R=R)
+        ekf_updater = ExtendedKalmanFilterUpdater(
             transition_fn=lambda x, u: x + u,
             observation_fn=lambda x: x,
             transition_jacobian=lambda x, u: np.eye(len(x)),
@@ -478,7 +496,7 @@ class TestGaussianBeliefUnscentedKalmanFilterContinuousLightDark:
         env, Q, R = _make_continuous_light_dark_with_cov()
         actions, observations = _simulate_trajectory(env, NUM_GAUSSIAN_UPDATE_STEPS)
 
-        updater = unscented_kalman_filter_updater(
+        updater = UnscentedKalmanFilterUpdater(
             transition_fn=lambda x, u: x + u,
             observation_fn=lambda x: x,
             Q=Q,
@@ -517,8 +535,8 @@ class TestGaussianBeliefUnscentedKalmanFilterContinuousLightDark:
         env, Q, R = _make_continuous_light_dark_with_cov()
         actions, observations = _simulate_trajectory(env, NUM_GAUSSIAN_UPDATE_STEPS)
 
-        lkf_updater = linear_kalman_filter_updater(A=np.eye(2), B=np.eye(2), H=np.eye(2), Q=Q, R=R)
-        ukf_updater = unscented_kalman_filter_updater(
+        lkf_updater = LinearKalmanFilterUpdater(A=np.eye(2), B=np.eye(2), H=np.eye(2), Q=Q, R=R)
+        ukf_updater = UnscentedKalmanFilterUpdater(
             transition_fn=lambda x, u: x + u,
             observation_fn=lambda x: x,
             Q=Q,
@@ -567,11 +585,8 @@ class TestGaussianMixtureBeliefContinuousLightDark:
         env, Q, R = _make_continuous_light_dark_with_cov()
         actions, observations = _simulate_trajectory(env, NUM_GAUSSIAN_UPDATE_STEPS)
 
-        kf_updater = linear_kalman_filter_updater(A=np.eye(2), B=np.eye(2), H=np.eye(2), Q=Q, R=R)
-
-        def gmm_updater(means, covs, weights, action, obs, pomdp):
-            new_mean, new_cov = kf_updater(means[0], covs[0], ACTION_TO_VECTOR[action], obs, pomdp)
-            return [new_mean], [new_cov], weights
+        kf_updater = LinearKalmanFilterUpdater(A=np.eye(2), B=np.eye(2), H=np.eye(2), Q=Q, R=R)
+        gmm_updater = _SingleComponentKFUpdater(kf_updater)
 
         belief = GaussianMixtureBelief(
             means=[env.start_state.copy()],
@@ -608,7 +623,7 @@ class TestGaussianMixtureBeliefContinuousLightDark:
         env, Q, R = _make_continuous_light_dark_with_cov()
         actions, observations = _simulate_trajectory(env, NUM_GAUSSIAN_UPDATE_STEPS)
 
-        kf_updater = linear_kalman_filter_updater(A=np.eye(2), B=np.eye(2), H=np.eye(2), Q=Q, R=R)
+        kf_updater = LinearKalmanFilterUpdater(A=np.eye(2), B=np.eye(2), H=np.eye(2), Q=Q, R=R)
 
         gaussian_belief = GaussianBelief(
             mean=env.start_state.copy(),
@@ -616,9 +631,7 @@ class TestGaussianMixtureBeliefContinuousLightDark:
             updater=kf_updater,
         )
 
-        def gmm_updater(means, covs, weights, action, obs, pomdp):
-            new_mean, new_cov = kf_updater(means[0], covs[0], ACTION_TO_VECTOR[action], obs, pomdp)
-            return [new_mean], [new_cov], weights
+        gmm_updater = _SingleComponentKFUpdater(kf_updater)
 
         gmm_belief = GaussianMixtureBelief(
             means=[env.start_state.copy()],

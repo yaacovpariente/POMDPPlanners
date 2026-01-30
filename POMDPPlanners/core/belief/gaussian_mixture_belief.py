@@ -2,17 +2,17 @@
 
 This module provides a Gaussian Mixture Model (GMM) belief state that
 represents the posterior as a weighted mixture of multivariate Gaussians.
-Updates are delegated to a user-provided callable, following the same
-pattern as :class:`~POMDPPlanners.core.belief.GaussianBelief`.
+Updates are delegated to a :class:`GaussianMixtureBeliefUpdater` instance,
+following the same dependency injection pattern as
+:class:`~POMDPPlanners.core.belief.GaussianBelief`.
 
 Classes:
-    GaussianMixtureBelief: GMM belief with callable updater
-
-Type Aliases:
-    GaussianMixtureBeliefUpdater: Callable signature for GMM belief update functions
+    GaussianMixtureBeliefUpdater: ABC for GMM belief update strategies.
+    GaussianMixtureBelief: GMM belief with pluggable updater.
 """
 
-from typing import Any, Callable, List, Optional, Tuple
+from abc import ABC, abstractmethod
+from typing import Any, List, Optional, Tuple
 
 import numpy as np
 from scipy.special import logsumexp
@@ -24,17 +24,44 @@ from POMDPPlanners.utils.multivariate_normal import (
     CovarianceParameterizedMultivariateNormal,
 )
 
-GaussianMixtureBeliefUpdater = Callable[
-    [
-        List[np.ndarray],
-        List[np.ndarray],
-        np.ndarray,
-        Any,
-        Any,
-        Optional["Environment"],
-    ],
-    Tuple[List[np.ndarray], List[np.ndarray], np.ndarray],
-]
+
+class GaussianMixtureBeliefUpdater(ABC):
+    """Abstract base class for Gaussian mixture belief updaters.
+
+    Subclasses implement an update cycle that maps
+    ``(means, covariances, weights, action, observation)`` to an updated
+    ``(new_means, new_covariances, new_weights)`` tuple.
+
+    Note:
+        This is an abstract base class and cannot be instantiated directly.
+    """
+
+    @abstractmethod
+    def update(
+        self,
+        means: List[np.ndarray],
+        covariances: List[np.ndarray],
+        weights: np.ndarray,
+        action: Any,
+        observation: Any,
+    ) -> Tuple[List[np.ndarray], List[np.ndarray], np.ndarray]:
+        """Perform a belief update for the Gaussian mixture.
+
+        Args:
+            means: List of k mean vectors, each of shape (d,).
+            covariances: List of k covariance matrices, each of shape (d, d).
+            weights: Mixture weights of shape (k,).
+            action: Action that was executed.
+            observation: Observation that was received.
+
+        Returns:
+            A tuple ``(new_means, new_covariances, new_weights)``.
+        """
+
+    @property
+    @abstractmethod
+    def config_id(self) -> str:
+        """Return a deterministic identifier for this updater configuration."""
 
 
 class GaussianMixtureBelief(Belief):
@@ -42,8 +69,9 @@ class GaussianMixtureBelief(Belief):
 
     Represents the belief as a weighted mixture of multivariate normal
     distributions: p(x) = sum_k w_k * N(x; mu_k, Sigma_k). The update
-    mechanism delegates to a user-provided callable, allowing flexibility
-    in how mixture components are updated, pruned, or merged.
+    mechanism delegates to a :class:`GaussianMixtureBeliefUpdater` instance,
+    allowing flexibility in how mixture components are updated, pruned, or
+    merged.
 
     This belief type is compatible with PFT_DPW, Sparse-PFT, and
     SparseSampling planners. It is NOT compatible with POMCP/POMCP_DPW
@@ -54,7 +82,7 @@ class GaussianMixtureBelief(Belief):
         means: List of mean vectors, one per component.
         covariances: List of covariance matrices, one per component.
         weights: Array of mixture weights summing to 1.
-        updater: Callable that computes the Bayesian belief update.
+        updater: GaussianMixtureBeliefUpdater that computes the Bayesian belief update.
         n_terminal_check_samples: Number of Monte Carlo samples for terminal checks.
 
     Example:
@@ -62,15 +90,22 @@ class GaussianMixtureBelief(Belief):
         >>> np.random.seed(42)
         >>>
         >>> # Define a simple updater that shrinks covariances
-        >>> def simple_updater(means, covs, weights, action, obs, pomdp):
-        ...     return means, [c * 0.9 for c in covs], weights
+        >>> from POMDPPlanners.core.belief.gaussian_mixture_belief import (
+        ...     GaussianMixtureBeliefUpdater,
+        ... )
+        >>> class ShrinkUpdater(GaussianMixtureBeliefUpdater):
+        ...     def update(self, means, covs, weights, action, obs):
+        ...         return means, [c * 0.9 for c in covs], weights
+        ...     @property
+        ...     def config_id(self):
+        ...         return "shrink"
         >>>
         >>> # Create a 2-component GMM belief in 2D
         >>> means = [np.array([0.0, 0.0]), np.array([3.0, 3.0])]
         >>> covs = [np.eye(2), np.eye(2)]
         >>> weights = np.array([0.5, 0.5])
         >>> belief = GaussianMixtureBelief(
-        ...     means=means, covariances=covs, weights=weights, updater=simple_updater,
+        ...     means=means, covariances=covs, weights=weights, updater=ShrinkUpdater(),
         ... )
         >>>
         >>> # Sample a state
@@ -101,9 +136,9 @@ class GaussianMixtureBelief(Belief):
             covariances: List of k positive definite covariance matrices,
                 each of shape (d, d).
             weights: Mixture weights of shape (k,) that must sum to 1.
-            updater: Callable with signature
-                ``(means, covariances, weights, action, observation, pomdp)``
-                ``-> (new_means, new_covariances, new_weights)``.
+            updater: A :class:`GaussianMixtureBeliefUpdater` instance whose
+                ``update(means, covariances, weights, action, observation)``
+                method returns ``(new_means, new_covariances, new_weights)``.
             n_terminal_check_samples: Number of Monte Carlo samples drawn for
                 terminal state checks. Defaults to 50.
 
@@ -173,19 +208,20 @@ class GaussianMixtureBelief(Belief):
         pomdp: Optional[Environment] = None,
         state: Optional[Any] = None,
     ) -> "GaussianMixtureBelief":
-        """Update belief using the provided updater callable.
+        """Update belief using the provided updater.
 
         Args:
             action: Action that was executed.
             observation: Observation that was received.
-            pomdp: Environment instance passed to the updater.
+            pomdp: Unused. Kept for interface compatibility with
+                :class:`~POMDPPlanners.core.belief.base_belief.Belief`.
             state: Ignored for Gaussian mixture beliefs.
 
         Returns:
             New GaussianMixtureBelief with updated components and weights.
         """
-        new_means, new_covs, new_weights = self.updater(
-            self.means, self.covariances, self.weights, action, observation, pomdp
+        new_means, new_covs, new_weights = self.updater.update(
+            self.means, self.covariances, self.weights, action, observation
         )
         return GaussianMixtureBelief(
             means=new_means,
@@ -208,6 +244,7 @@ class GaussianMixtureBelief(Belief):
         config_dict = {
             "components": sorted_data,
             "n_terminal_check_samples": self.n_terminal_check_samples,
+            "updater": self.updater.config_id,
         }
         return config_to_id(config_dict)
 

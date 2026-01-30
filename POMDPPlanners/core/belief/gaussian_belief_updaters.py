@@ -1,45 +1,78 @@
-"""Pre-built Gaussian belief updater factories.
+"""Gaussian belief updater abstract base class and concrete implementations.
 
-This module provides factory functions that return ``GaussianBeliefUpdater``
-callables for common Bayesian filtering algorithms. Each factory captures
-the system model parameters in a closure so that the returned callable has
-the ``(mean, covariance, action, observation, pomdp)`` signature expected
-by :class:`~POMDPPlanners.core.belief.GaussianBelief`.
+This module provides the ``GaussianBeliefUpdater`` ABC and three concrete
+implementations for common Bayesian filtering algorithms. Each updater
+captures its system model parameters at construction time, so the
+``update`` method only requires the current belief statistics and the
+latest action-observation pair.
 
-Functions:
-    linear_kalman_filter_updater: Factory for linear-Gaussian systems.
-    extended_kalman_filter_updater: Factory for nonlinear systems with known Jacobians.
-    unscented_kalman_filter_updater: Factory for nonlinear systems without Jacobians.
+Classes:
+    GaussianBeliefUpdater: Abstract base class for Gaussian belief updaters.
+    LinearKalmanFilterUpdater: Updater for linear-Gaussian systems.
+    ExtendedKalmanFilterUpdater: Updater for nonlinear systems with known Jacobians.
+    UnscentedKalmanFilterUpdater: Updater for nonlinear systems without Jacobians.
 """
 
-from typing import Any, Callable, Tuple
+from abc import ABC, abstractmethod
+from typing import Callable, Tuple
 
 import numpy as np
 
+from POMDPPlanners.utils.config_to_id import config_to_id
 
-def linear_kalman_filter_updater(
-    A: np.ndarray,
-    B: np.ndarray,
-    H: np.ndarray,
-    Q: np.ndarray,
-    R: np.ndarray,
-) -> Callable[[np.ndarray, np.ndarray, Any, Any, Any], Tuple[np.ndarray, np.ndarray]]:
-    """Create a Kalman filter updater for a linear-Gaussian system.
+
+class GaussianBeliefUpdater(ABC):
+    """Abstract base class for Gaussian belief updaters.
+
+    Subclasses implement a Bayesian predict-correct cycle that maps
+    ``(mean, covariance, action, observation)`` to an updated
+    ``(new_mean, new_covariance)`` pair.
+
+    Note:
+        This is an abstract base class and cannot be instantiated directly.
+    """
+
+    @abstractmethod
+    def update(
+        self,
+        mean: np.ndarray,
+        covariance: np.ndarray,
+        action: np.ndarray,
+        observation: np.ndarray,
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """Perform a single predict-correct belief update.
+
+        Args:
+            mean: Prior mean vector of shape (d,).
+            covariance: Prior covariance matrix of shape (d, d).
+            action: Action that was executed.
+            observation: Observation that was received.
+
+        Returns:
+            A tuple ``(new_mean, new_covariance)`` representing the
+            posterior Gaussian.
+        """
+
+    @property
+    @abstractmethod
+    def config_id(self) -> str:
+        """Return a deterministic identifier for this updater configuration."""
+
+
+class LinearKalmanFilterUpdater(GaussianBeliefUpdater):
+    """Kalman filter updater for a linear-Gaussian system.
 
     The system model is:
 
         x_{t+1} = A x_t + B u_t + w,   w ~ N(0, Q)
         z_t     = H x_{t+1} + v,        v ~ N(0, R)
 
-    Args:
+    Attributes:
         A: State transition matrix of shape (d, d).
         B: Control input matrix of shape (d, m).
         H: Observation matrix of shape (p, d).
         Q: Process noise covariance of shape (d, d).
         R: Observation noise covariance of shape (p, p).
-
-    Returns:
-        A callable suitable for ``GaussianBelief(updater=...)``.
 
     Example:
         >>> import numpy as np
@@ -48,70 +81,79 @@ def linear_kalman_filter_updater(
         >>> H = np.eye(2)
         >>> Q = 0.1 * np.eye(2)
         >>> R = 0.5 * np.eye(2)
-        >>> updater = linear_kalman_filter_updater(A, B, H, Q, R)
+        >>> updater = LinearKalmanFilterUpdater(A=A, B=B, H=H, Q=Q, R=R)
         >>> mean = np.zeros(2)
         >>> cov = np.eye(2)
-        >>> new_mean, new_cov = updater(mean, cov, np.zeros(1), np.array([1.0, 0.0]), None)
+        >>> new_mean, new_cov = updater.update(mean, cov, np.zeros(1), np.array([1.0, 0.0]))
         >>> new_mean.shape
         (2,)
     """
-    A = np.asarray(A, dtype=float)
-    B = np.asarray(B, dtype=float)
-    H = np.asarray(H, dtype=float)
-    Q = np.asarray(Q, dtype=float)
-    R = np.asarray(R, dtype=float)
 
-    def _update(mean, covariance, action, observation, _pomdp):
+    def __init__(
+        self,
+        A: np.ndarray,
+        B: np.ndarray,
+        H: np.ndarray,
+        Q: np.ndarray,
+        R: np.ndarray,
+    ):
+        self.A = np.asarray(A, dtype=float)
+        self.B = np.asarray(B, dtype=float)
+        self.H = np.asarray(H, dtype=float)
+        self.Q = np.asarray(Q, dtype=float)
+        self.R = np.asarray(R, dtype=float)
+
+    def update(self, mean, covariance, action, observation):
         action = np.asarray(action, dtype=float).ravel()
         observation = np.asarray(observation, dtype=float).ravel()
+        predicted_mean, predicted_cov = self._predict(mean, covariance, action)
+        return self._correct(predicted_mean, predicted_cov, observation)
 
-        predicted_mean, predicted_cov = _predict(mean, covariance, action)
-        return _correct(predicted_mean, predicted_cov, observation)
-
-    def _predict(mean, covariance, action):
-        predicted_mean = A @ mean + B @ action
-        predicted_cov = A @ covariance @ A.T + Q
+    def _predict(self, mean, covariance, action):
+        predicted_mean = self.A @ mean + self.B @ action
+        predicted_cov = self.A @ covariance @ self.A.T + self.Q
         return predicted_mean, predicted_cov
 
-    def _correct(predicted_mean, predicted_cov, observation):
-        innovation = observation - H @ predicted_mean
-        S = H @ predicted_cov @ H.T + R
-        K = predicted_cov @ H.T @ np.linalg.inv(S)
+    def _correct(self, predicted_mean, predicted_cov, observation):
+        innovation = observation - self.H @ predicted_mean
+        S = self.H @ predicted_cov @ self.H.T + self.R
+        K = predicted_cov @ self.H.T @ np.linalg.inv(S)
         new_mean = predicted_mean + K @ innovation
-        new_cov = (np.eye(len(predicted_mean)) - K @ H) @ predicted_cov
+        new_cov = (np.eye(len(predicted_mean)) - K @ self.H) @ predicted_cov
         new_cov = 0.5 * (new_cov + new_cov.T)
         return new_mean, new_cov
 
-    return _update
+    @property
+    def config_id(self) -> str:
+        config_dict = {
+            "class": "LinearKalmanFilterUpdater",
+            "A": self.A.tolist(),
+            "B": self.B.tolist(),
+            "H": self.H.tolist(),
+            "Q": self.Q.tolist(),
+            "R": self.R.tolist(),
+        }
+        return config_to_id(config_dict)
 
 
-def extended_kalman_filter_updater(
-    transition_fn: Callable[[np.ndarray, np.ndarray], np.ndarray],
-    observation_fn: Callable[[np.ndarray], np.ndarray],
-    transition_jacobian: Callable[[np.ndarray, np.ndarray], np.ndarray],
-    observation_jacobian: Callable[[np.ndarray], np.ndarray],
-    Q: np.ndarray,
-    R: np.ndarray,
-) -> Callable[[np.ndarray, np.ndarray, Any, Any, Any], Tuple[np.ndarray, np.ndarray]]:
-    """Create an Extended Kalman Filter updater for nonlinear systems.
+class ExtendedKalmanFilterUpdater(GaussianBeliefUpdater):
+    """Extended Kalman Filter updater for nonlinear systems.
 
     The system model is:
 
         x_{t+1} = f(x_t, u_t) + w,   w ~ N(0, Q)
         z_t     = h(x_{t+1}) + v,     v ~ N(0, R)
 
-    The EKF linearises around the current estimate using the provided Jacobians.
+    The EKF linearises around the current estimate using the provided
+    Jacobians.
 
-    Args:
+    Attributes:
         transition_fn: State transition function ``f(state, action) -> next_state``.
         observation_fn: Observation function ``h(state) -> observation``.
         transition_jacobian: Jacobian of ``f`` w.r.t. state, ``F(state, action) -> (d, d)``.
         observation_jacobian: Jacobian of ``h`` w.r.t. state, ``H(state) -> (p, d)``.
         Q: Process noise covariance of shape (d, d).
         R: Observation noise covariance of shape (p, p).
-
-    Returns:
-        A callable suitable for ``GaussianBelief(updater=...)``.
 
     Example:
         >>> import numpy as np
@@ -121,52 +163,67 @@ def extended_kalman_filter_updater(
         >>> H = lambda x: np.eye(len(x))
         >>> Q = 0.1 * np.eye(2)
         >>> R = 0.5 * np.eye(2)
-        >>> updater = extended_kalman_filter_updater(f, h, F, H, Q, R)
+        >>> updater = ExtendedKalmanFilterUpdater(
+        ...     transition_fn=f, observation_fn=h,
+        ...     transition_jacobian=F, observation_jacobian=H, Q=Q, R=R,
+        ... )
         >>> mean = np.zeros(2)
         >>> cov = np.eye(2)
-        >>> new_mean, new_cov = updater(mean, cov, np.zeros(1), np.array([1.0, 0.0]), None)
+        >>> new_mean, new_cov = updater.update(mean, cov, np.zeros(1), np.array([1.0, 0.0]))
         >>> new_mean.shape
         (2,)
     """
-    Q = np.asarray(Q, dtype=float)
-    R = np.asarray(R, dtype=float)
 
-    def _update(mean, covariance, action, observation, _pomdp):
+    def __init__(
+        self,
+        transition_fn: Callable[[np.ndarray, np.ndarray], np.ndarray],
+        observation_fn: Callable[[np.ndarray], np.ndarray],
+        transition_jacobian: Callable[[np.ndarray, np.ndarray], np.ndarray],
+        observation_jacobian: Callable[[np.ndarray], np.ndarray],
+        Q: np.ndarray,
+        R: np.ndarray,
+    ):
+        self.transition_fn = transition_fn
+        self.observation_fn = observation_fn
+        self.transition_jacobian = transition_jacobian
+        self.observation_jacobian = observation_jacobian
+        self.Q = np.asarray(Q, dtype=float)
+        self.R = np.asarray(R, dtype=float)
+
+    def update(self, mean, covariance, action, observation):
         action = np.asarray(action, dtype=float).ravel()
         observation = np.asarray(observation, dtype=float).ravel()
+        predicted_mean, predicted_cov = self._predict(mean, covariance, action)
+        return self._correct(predicted_mean, predicted_cov, observation)
 
-        predicted_mean, predicted_cov = _predict(mean, covariance, action)
-        return _correct(predicted_mean, predicted_cov, observation)
-
-    def _predict(mean, covariance, action):
-        predicted_mean = transition_fn(mean, action)
-        F = transition_jacobian(mean, action)
-        predicted_cov = F @ covariance @ F.T + Q
+    def _predict(self, mean, covariance, action):
+        predicted_mean = self.transition_fn(mean, action)
+        F = self.transition_jacobian(mean, action)
+        predicted_cov = F @ covariance @ F.T + self.Q
         return predicted_mean, predicted_cov
 
-    def _correct(predicted_mean, predicted_cov, observation):
-        H = observation_jacobian(predicted_mean)
-        innovation = observation - observation_fn(predicted_mean)
-        S = H @ predicted_cov @ H.T + R
+    def _correct(self, predicted_mean, predicted_cov, observation):
+        H = self.observation_jacobian(predicted_mean)
+        innovation = observation - self.observation_fn(predicted_mean)
+        S = H @ predicted_cov @ H.T + self.R
         K = predicted_cov @ H.T @ np.linalg.inv(S)
         new_mean = predicted_mean + K @ innovation
         new_cov = (np.eye(len(predicted_mean)) - K @ H) @ predicted_cov
         new_cov = 0.5 * (new_cov + new_cov.T)
         return new_mean, new_cov
 
-    return _update
+    @property
+    def config_id(self) -> str:
+        config_dict = {
+            "class": "ExtendedKalmanFilterUpdater",
+            "Q": self.Q.tolist(),
+            "R": self.R.tolist(),
+        }
+        return config_to_id(config_dict)
 
 
-def unscented_kalman_filter_updater(
-    transition_fn: Callable[[np.ndarray, np.ndarray], np.ndarray],
-    observation_fn: Callable[[np.ndarray], np.ndarray],
-    Q: np.ndarray,
-    R: np.ndarray,
-    alpha: float = 1e-3,
-    beta: float = 2.0,
-    kappa: float = 0.0,
-) -> Callable[[np.ndarray, np.ndarray, Any, Any, Any], Tuple[np.ndarray, np.ndarray]]:
-    """Create an Unscented Kalman Filter updater for nonlinear systems.
+class UnscentedKalmanFilterUpdater(GaussianBeliefUpdater):
+    """Unscented Kalman Filter updater for nonlinear systems.
 
     The system model is:
 
@@ -177,18 +234,14 @@ def unscented_kalman_filter_updater(
     propagates deterministic sigma points through the nonlinear functions
     to estimate the posterior statistics.
 
-    Args:
+    Attributes:
         transition_fn: State transition function ``f(state, action) -> next_state``.
         observation_fn: Observation function ``h(state) -> observation``.
         Q: Process noise covariance of shape (d, d).
         R: Observation noise covariance of shape (p, p).
-        alpha: Spread of sigma points around the mean. Defaults to 1e-3.
-        beta: Prior knowledge about the distribution (2.0 is optimal for
-            Gaussian). Defaults to 2.0.
-        kappa: Secondary scaling parameter. Defaults to 0.0.
-
-    Returns:
-        A callable suitable for ``GaussianBelief(updater=...)``.
+        alpha: Spread of sigma points around the mean.
+        beta: Prior knowledge about the distribution (2.0 is optimal for Gaussian).
+        kappa: Secondary scaling parameter.
 
     Example:
         >>> import numpy as np
@@ -196,25 +249,49 @@ def unscented_kalman_filter_updater(
         >>> h = lambda x: x
         >>> Q = 0.1 * np.eye(2)
         >>> R = 0.5 * np.eye(2)
-        >>> updater = unscented_kalman_filter_updater(f, h, Q, R)
+        >>> updater = UnscentedKalmanFilterUpdater(
+        ...     transition_fn=f, observation_fn=h, Q=Q, R=R,
+        ... )
         >>> mean = np.zeros(2)
         >>> cov = np.eye(2)
-        >>> new_mean, new_cov = updater(mean, cov, np.zeros(1), np.array([1.0, 0.0]), None)
+        >>> new_mean, new_cov = updater.update(mean, cov, np.zeros(1), np.array([1.0, 0.0]))
         >>> new_mean.shape
         (2,)
     """
-    Q = np.asarray(Q, dtype=float)
-    R = np.asarray(R, dtype=float)
 
-    def _compute_sigma_points(mean, covariance):
+    def __init__(
+        self,
+        transition_fn: Callable[[np.ndarray, np.ndarray], np.ndarray],
+        observation_fn: Callable[[np.ndarray], np.ndarray],
+        Q: np.ndarray,
+        R: np.ndarray,
+        alpha: float = 1e-3,
+        beta: float = 2.0,
+        kappa: float = 0.0,
+    ):
+        self.transition_fn = transition_fn
+        self.observation_fn = observation_fn
+        self.Q = np.asarray(Q, dtype=float)
+        self.R = np.asarray(R, dtype=float)
+        self.alpha = alpha
+        self.beta = beta
+        self.kappa = kappa
+
+    def update(self, mean, covariance, action, observation):
+        action = np.asarray(action, dtype=float).ravel()
+        observation = np.asarray(observation, dtype=float).ravel()
+        predicted_mean, predicted_cov = self._predict(mean, covariance, action)
+        return self._correct(predicted_mean, predicted_cov, observation)
+
+    def _compute_sigma_points(self, mean, covariance):
         d = len(mean)
-        lam = alpha**2 * (d + kappa) - d
+        lam = self.alpha**2 * (d + self.kappa) - d
         scaling = d + lam
 
         W_m = np.full(2 * d + 1, 1.0 / (2.0 * scaling))
         W_c = np.full(2 * d + 1, 1.0 / (2.0 * scaling))
         W_m[0] = lam / scaling
-        W_c[0] = lam / scaling + (1.0 - alpha**2 + beta)
+        W_c[0] = lam / scaling + (1.0 - self.alpha**2 + self.beta)
 
         sqrt_matrix = np.linalg.cholesky(scaling * covariance)
 
@@ -226,26 +303,28 @@ def unscented_kalman_filter_updater(
 
         return sigma_points, W_m, W_c
 
-    def _predict(mean, covariance, action):
-        sigma_points, W_m, W_c = _compute_sigma_points(mean, covariance)
+    def _predict(self, mean, covariance, action):
+        sigma_points, W_m, W_c = self._compute_sigma_points(mean, covariance)
         propagated = np.array(
-            [transition_fn(sigma_points[i], action) for i in range(len(sigma_points))]
+            [self.transition_fn(sigma_points[i], action) for i in range(len(sigma_points))]
         )
 
         predicted_mean = W_m @ propagated
         diff = propagated - predicted_mean
-        predicted_cov = (diff * W_c[:, None]).T @ diff + Q
+        predicted_cov = (diff * W_c[:, None]).T @ diff + self.Q
         predicted_cov = 0.5 * (predicted_cov + predicted_cov.T)
 
         return predicted_mean, predicted_cov
 
-    def _correct(predicted_mean, predicted_cov, observation):
-        sigma_points, W_m, W_c = _compute_sigma_points(predicted_mean, predicted_cov)
-        obs_sigmas = np.array([observation_fn(sigma_points[i]) for i in range(len(sigma_points))])
+    def _correct(self, predicted_mean, predicted_cov, observation):
+        sigma_points, W_m, W_c = self._compute_sigma_points(predicted_mean, predicted_cov)
+        obs_sigmas = np.array(
+            [self.observation_fn(sigma_points[i]) for i in range(len(sigma_points))]
+        )
 
         z_mean = W_m @ obs_sigmas
         z_diff = obs_sigmas - z_mean
-        S = (z_diff * W_c[:, None]).T @ z_diff + R
+        S = (z_diff * W_c[:, None]).T @ z_diff + self.R
         x_diff = sigma_points - predicted_mean
         Pxz = (x_diff * W_c[:, None]).T @ z_diff
 
@@ -255,11 +334,14 @@ def unscented_kalman_filter_updater(
         new_cov = 0.5 * (new_cov + new_cov.T)
         return new_mean, new_cov
 
-    def _update(mean, covariance, action, observation, _pomdp):
-        action = np.asarray(action, dtype=float).ravel()
-        observation = np.asarray(observation, dtype=float).ravel()
-
-        predicted_mean, predicted_cov = _predict(mean, covariance, action)
-        return _correct(predicted_mean, predicted_cov, observation)
-
-    return _update
+    @property
+    def config_id(self) -> str:
+        config_dict = {
+            "class": "UnscentedKalmanFilterUpdater",
+            "Q": self.Q.tolist(),
+            "R": self.R.tolist(),
+            "alpha": self.alpha,
+            "beta": self.beta,
+            "kappa": self.kappa,
+        }
+        return config_to_id(config_dict)

@@ -8,14 +8,12 @@ from POMDPPlanners.core.belief.particle_beliefs import (
     UnweightedParticleBeliefStateUpdate,
     get_unique_support,
 )
-from POMDPPlanners.core.belief.gaussian_belief import (
-    GaussianBelief,
-    GaussianBeliefUpdater,
-)
+from POMDPPlanners.core.belief.gaussian_belief import GaussianBelief
 from POMDPPlanners.core.belief.gaussian_belief_updaters import (
-    linear_kalman_filter_updater,
-    extended_kalman_filter_updater,
-    unscented_kalman_filter_updater,
+    GaussianBeliefUpdater,
+    LinearKalmanFilterUpdater,
+    ExtendedKalmanFilterUpdater,
+    UnscentedKalmanFilterUpdater,
 )
 from POMDPPlanners.core.belief.gaussian_mixture_belief import (
     GaussianMixtureBelief,
@@ -37,9 +35,9 @@ __all__ = [
     "UnweightedParticleBeliefStateUpdate",
     "GaussianBelief",
     "GaussianBeliefUpdater",
-    "linear_kalman_filter_updater",
-    "extended_kalman_filter_updater",
-    "unscented_kalman_filter_updater",
+    "LinearKalmanFilterUpdater",
+    "ExtendedKalmanFilterUpdater",
+    "UnscentedKalmanFilterUpdater",
     "GaussianMixtureBelief",
     "GaussianMixtureBeliefUpdater",
     "get_unique_support",
