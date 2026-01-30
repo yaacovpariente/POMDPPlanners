@@ -16,7 +16,7 @@ from typing import Any
 import numpy as np
 import pytest
 
-from POMDPPlanners.core.belief import GaussianBelief, is_terminal_belief
+from POMDPPlanners.core.belief import GaussianBelief, GaussianBeliefUpdater, is_terminal_belief
 from POMDPPlanners.core.cost import (
     belief_expectation_cost,
     belief_expectation_cost_entropy_penalty,
@@ -29,8 +29,18 @@ from POMDPPlanners.core.cost import (
 # ---------------------------------------------------------------------------
 
 
-def _identity_updater(mean, cov, action, observation, pomdp):
-    return observation, cov * 0.9
+class _IdentityUpdater(GaussianBeliefUpdater):
+    """Test-only updater that returns the observation as the new mean."""
+
+    def update(self, mean, covariance, action, observation):
+        return np.asarray(observation, dtype=float).ravel(), covariance * 0.9
+
+    @property
+    def config_id(self) -> str:
+        return "identity_updater"
+
+
+_identity_updater = _IdentityUpdater()
 
 
 def _make_1d_belief(**kwargs: Any) -> GaussianBelief:

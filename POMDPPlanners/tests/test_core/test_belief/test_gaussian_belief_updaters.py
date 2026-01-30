@@ -1,18 +1,18 @@
-"""Tests for Gaussian belief updater factories.
+"""Tests for Gaussian belief updater classes.
 
-This module tests the pre-built updater factories:
-- linear_kalman_filter_updater: linear-Gaussian systems
-- extended_kalman_filter_updater: nonlinear systems with Jacobians
+This module tests the concrete updater implementations:
+- LinearKalmanFilterUpdater: linear-Gaussian systems
+- ExtendedKalmanFilterUpdater: nonlinear systems with Jacobians
+- UnscentedKalmanFilterUpdater: nonlinear systems without Jacobians
 """
 
 import numpy as np
-import pytest
 
 from POMDPPlanners.core.belief import GaussianBelief
 from POMDPPlanners.core.belief.gaussian_belief_updaters import (
-    linear_kalman_filter_updater,
-    extended_kalman_filter_updater,
-    unscented_kalman_filter_updater,
+    LinearKalmanFilterUpdater,
+    ExtendedKalmanFilterUpdater,
+    UnscentedKalmanFilterUpdater,
 )
 
 
@@ -33,7 +33,7 @@ class TestLinearKalmanFilterUpdater:
 
         Test type: unit
         """
-        updater = linear_kalman_filter_updater(
+        updater = LinearKalmanFilterUpdater(
             A=np.array([[1.0]]),
             B=np.array([[0.0]]),
             H=np.array([[1.0]]),
@@ -45,7 +45,7 @@ class TestLinearKalmanFilterUpdater:
         action = np.array([0.0])
         observation = np.array([3.0])
 
-        new_mean, new_cov = updater(mean, cov, action, observation, None)
+        new_mean, new_cov = updater.update(mean, cov, action, observation)
 
         # Mean should move toward observation
         assert new_mean[0] > 0.0
@@ -64,7 +64,7 @@ class TestLinearKalmanFilterUpdater:
 
         Test type: unit
         """
-        updater = linear_kalman_filter_updater(
+        updater = LinearKalmanFilterUpdater(
             A=np.array([[1.0]]),
             B=np.array([[0.0]]),
             H=np.array([[1.0]]),
@@ -74,7 +74,7 @@ class TestLinearKalmanFilterUpdater:
         mean = np.array([0.0])
         cov = np.array([[1.0]])
 
-        new_mean, new_cov = updater(mean, cov, np.array([0.0]), np.array([2.0]), None)
+        new_mean, new_cov = updater.update(mean, cov, np.array([0.0]), np.array([2.0]))
 
         # Predicted: mean_pred=0, cov_pred=1 (Q=0)
         # S = 1 + 1 = 2, K = 1/2
@@ -94,7 +94,7 @@ class TestLinearKalmanFilterUpdater:
 
         Test type: unit
         """
-        updater = linear_kalman_filter_updater(
+        updater = LinearKalmanFilterUpdater(
             A=np.eye(2),
             B=np.zeros((2, 1)),
             H=np.eye(2),
@@ -106,7 +106,7 @@ class TestLinearKalmanFilterUpdater:
         prev_trace = np.trace(cov)
 
         for _ in range(10):
-            mean, cov = updater(mean, cov, np.array([0.0]), np.array([1.0, 1.0]), None)
+            mean, cov = updater.update(mean, cov, np.array([0.0]), np.array([1.0, 1.0]))
             curr_trace = np.trace(cov)
             assert curr_trace < prev_trace + 0.02 + 1e-10  # allow for process noise
             prev_trace = curr_trace
@@ -122,7 +122,7 @@ class TestLinearKalmanFilterUpdater:
 
         Test type: unit
         """
-        updater = linear_kalman_filter_updater(
+        updater = LinearKalmanFilterUpdater(
             A=np.array([[1.0]]),
             B=np.array([[1.0]]),
             H=np.array([[1.0]]),
@@ -132,7 +132,7 @@ class TestLinearKalmanFilterUpdater:
         mean = np.array([0.0])
         cov = np.array([[1.0]])
 
-        new_mean, _ = updater(mean, cov, np.array([5.0]), np.array([5.0]), None)
+        new_mean, _ = updater.update(mean, cov, np.array([5.0]), np.array([5.0]))
 
         # Predicted mean = 0 + 1*5 = 5, S=1+1=2, K=0.5
         # new_mean = 5 + 0.5*(5-5) = 5.0
@@ -141,7 +141,7 @@ class TestLinearKalmanFilterUpdater:
     def test_integration_with_gaussian_belief(self):
         """Test that the linear KF updater works with GaussianBelief.update().
 
-        Purpose: Validates end-to-end integration of the updater factory with GaussianBelief.
+        Purpose: Validates end-to-end integration of the updater class with GaussianBelief.
 
         Given: A GaussianBelief using a linear KF updater.
         When: belief.update() is called.
@@ -149,7 +149,7 @@ class TestLinearKalmanFilterUpdater:
 
         Test type: integration
         """
-        updater = linear_kalman_filter_updater(
+        updater = LinearKalmanFilterUpdater(
             A=np.eye(2),
             B=np.zeros((2, 1)),
             H=np.eye(2),
@@ -160,12 +160,65 @@ class TestLinearKalmanFilterUpdater:
         new_belief = belief.update(
             action=np.array([0.0]),
             observation=np.array([1.0, 2.0]),
-            pomdp=None,
         )
         assert isinstance(new_belief, GaussianBelief)
         assert new_belief.dim == 2
         assert new_belief.mean[0] > 0.0
         assert new_belief.mean[1] > 0.0
+
+    def test_config_id_deterministic(self):
+        """Test that config_id is deterministic for identical updaters.
+
+        Purpose: Validates that the same parameters produce the same config_id.
+
+        Given: Two LinearKalmanFilterUpdater instances with identical parameters.
+        When: config_id is computed for both.
+        Then: Both config_ids are equal.
+
+        Test type: unit
+        """
+        u1 = LinearKalmanFilterUpdater(
+            A=np.eye(2),
+            B=np.zeros((2, 1)),
+            H=np.eye(2),
+            Q=0.1 * np.eye(2),
+            R=0.5 * np.eye(2),
+        )
+        u2 = LinearKalmanFilterUpdater(
+            A=np.eye(2),
+            B=np.zeros((2, 1)),
+            H=np.eye(2),
+            Q=0.1 * np.eye(2),
+            R=0.5 * np.eye(2),
+        )
+        assert u1.config_id == u2.config_id
+
+    def test_config_id_sensitive_to_parameters(self):
+        """Test that config_id differs when parameters differ.
+
+        Purpose: Validates config_id sensitivity to matrix values.
+
+        Given: Two LinearKalmanFilterUpdater instances with different Q matrices.
+        When: config_id is computed for both.
+        Then: The config_ids are different.
+
+        Test type: unit
+        """
+        u1 = LinearKalmanFilterUpdater(
+            A=np.eye(2),
+            B=np.zeros((2, 1)),
+            H=np.eye(2),
+            Q=0.1 * np.eye(2),
+            R=0.5 * np.eye(2),
+        )
+        u2 = LinearKalmanFilterUpdater(
+            A=np.eye(2),
+            B=np.zeros((2, 1)),
+            H=np.eye(2),
+            Q=0.2 * np.eye(2),
+            R=0.5 * np.eye(2),
+        )
+        assert u1.config_id != u2.config_id
 
 
 # ---------------------------------------------------------------------------
@@ -191,8 +244,8 @@ class TestExtendedKalmanFilterUpdater:
         Q = 0.1 * np.eye(2)
         R = 0.5 * np.eye(2)
 
-        kf_updater = linear_kalman_filter_updater(A, B, H, Q, R)
-        ekf_updater = extended_kalman_filter_updater(
+        kf_updater = LinearKalmanFilterUpdater(A=A, B=B, H=H, Q=Q, R=R)
+        ekf_updater = ExtendedKalmanFilterUpdater(
             transition_fn=lambda x, u: A @ x + B @ u,
             observation_fn=lambda x: H @ x,
             transition_jacobian=lambda x, u: A,
@@ -206,8 +259,8 @@ class TestExtendedKalmanFilterUpdater:
         action = np.array([0.0])
         obs = np.array([2.0, 3.0])
 
-        kf_mean, kf_cov = kf_updater(mean, cov, action, obs, None)
-        ekf_mean, ekf_cov = ekf_updater(mean, cov, action, obs, None)
+        kf_mean, kf_cov = kf_updater.update(mean, cov, action, obs)
+        ekf_mean, ekf_cov = ekf_updater.update(mean, cov, action, obs)
 
         np.testing.assert_allclose(ekf_mean, kf_mean, atol=1e-12)
         np.testing.assert_allclose(ekf_cov, kf_cov, atol=1e-12)
@@ -223,7 +276,7 @@ class TestExtendedKalmanFilterUpdater:
 
         Test type: unit
         """
-        ekf_updater = extended_kalman_filter_updater(
+        ekf_updater = ExtendedKalmanFilterUpdater(
             transition_fn=lambda x, u: x,
             observation_fn=lambda x: x**3,
             transition_jacobian=lambda x, u: np.eye(len(x)),
@@ -234,7 +287,7 @@ class TestExtendedKalmanFilterUpdater:
         mean = np.array([1.0])
         cov = np.array([[0.5]])
 
-        new_mean, new_cov = ekf_updater(mean, cov, np.array([0.0]), np.array([1.0]), None)
+        _, new_cov = ekf_updater.update(mean, cov, np.array([0.0]), np.array([1.0]))
 
         # Predicted cov = cov + Q = 0.51
         # After correction, cov should be less than predicted
@@ -243,7 +296,7 @@ class TestExtendedKalmanFilterUpdater:
     def test_integration_with_gaussian_belief(self):
         """Test that the EKF updater works with GaussianBelief.update().
 
-        Purpose: Validates end-to-end integration of the EKF factory with GaussianBelief.
+        Purpose: Validates end-to-end integration of the EKF class with GaussianBelief.
 
         Given: A GaussianBelief using an EKF updater for a linear system.
         When: belief.update() is called.
@@ -251,7 +304,7 @@ class TestExtendedKalmanFilterUpdater:
 
         Test type: integration
         """
-        ekf_updater = extended_kalman_filter_updater(
+        ekf_updater = ExtendedKalmanFilterUpdater(
             transition_fn=lambda x, u: x,
             observation_fn=lambda x: x,
             transition_jacobian=lambda x, u: np.eye(len(x)),
@@ -263,7 +316,6 @@ class TestExtendedKalmanFilterUpdater:
         new_belief = belief.update(
             action=np.array([0.0]),
             observation=np.array([1.0, 2.0]),
-            pomdp=None,
         )
         assert isinstance(new_belief, GaussianBelief)
         assert new_belief.dim == 2
@@ -279,7 +331,7 @@ class TestExtendedKalmanFilterUpdater:
 
         Test type: unit
         """
-        ekf_updater = extended_kalman_filter_updater(
+        ekf_updater = ExtendedKalmanFilterUpdater(
             transition_fn=lambda x, u: x,
             observation_fn=lambda x: x**2,
             transition_jacobian=lambda x, u: np.eye(len(x)),
@@ -290,9 +342,70 @@ class TestExtendedKalmanFilterUpdater:
         mean = np.array([1.0, 2.0])
         cov = np.array([[1.0, 0.3], [0.3, 1.0]])
 
-        _, new_cov = ekf_updater(mean, cov, np.array([0.0]), np.array([1.0, 4.0]), None)
+        _, new_cov = ekf_updater.update(mean, cov, np.array([0.0]), np.array([1.0, 4.0]))
 
         np.testing.assert_allclose(new_cov, new_cov.T, atol=1e-12)
+
+    def test_config_id_deterministic(self):
+        """Test that config_id is deterministic for identical EKF updaters.
+
+        Purpose: Validates that the same Q and R produce the same config_id.
+
+        Given: Two ExtendedKalmanFilterUpdater instances with identical Q and R.
+        When: config_id is computed for both.
+        Then: Both config_ids are equal.
+
+        Test type: unit
+        """
+        Q = 0.1 * np.eye(2)
+        R = 0.5 * np.eye(2)
+        u1 = ExtendedKalmanFilterUpdater(
+            transition_fn=lambda x, u: x,
+            observation_fn=lambda x: x,
+            transition_jacobian=lambda x, u: np.eye(len(x)),
+            observation_jacobian=lambda x: np.eye(len(x)),
+            Q=Q,
+            R=R,
+        )
+        u2 = ExtendedKalmanFilterUpdater(
+            transition_fn=lambda x, u: x,
+            observation_fn=lambda x: x,
+            transition_jacobian=lambda x, u: np.eye(len(x)),
+            observation_jacobian=lambda x: np.eye(len(x)),
+            Q=Q,
+            R=R,
+        )
+        assert u1.config_id == u2.config_id
+
+    def test_config_id_sensitive_to_parameters(self):
+        """Test that config_id differs when Q differs.
+
+        Purpose: Validates config_id sensitivity to noise parameters.
+
+        Given: Two ExtendedKalmanFilterUpdater instances with different Q matrices.
+        When: config_id is computed for both.
+        Then: The config_ids are different.
+
+        Test type: unit
+        """
+        R = 0.5 * np.eye(2)
+        u1 = ExtendedKalmanFilterUpdater(
+            transition_fn=lambda x, u: x,
+            observation_fn=lambda x: x,
+            transition_jacobian=lambda x, u: np.eye(len(x)),
+            observation_jacobian=lambda x: np.eye(len(x)),
+            Q=0.1 * np.eye(2),
+            R=R,
+        )
+        u2 = ExtendedKalmanFilterUpdater(
+            transition_fn=lambda x, u: x,
+            observation_fn=lambda x: x,
+            transition_jacobian=lambda x, u: np.eye(len(x)),
+            observation_jacobian=lambda x: np.eye(len(x)),
+            Q=0.2 * np.eye(2),
+            R=R,
+        )
+        assert u1.config_id != u2.config_id
 
 
 # ---------------------------------------------------------------------------
@@ -318,8 +431,8 @@ class TestUnscentedKalmanFilterUpdater:
         Q = 0.1 * np.eye(2)
         R = 0.5 * np.eye(2)
 
-        kf_updater = linear_kalman_filter_updater(A, B, H, Q, R)
-        ukf_updater = unscented_kalman_filter_updater(
+        kf_updater = LinearKalmanFilterUpdater(A=A, B=B, H=H, Q=Q, R=R)
+        ukf_updater = UnscentedKalmanFilterUpdater(
             transition_fn=lambda x, u: A @ x + B @ u,
             observation_fn=lambda x: H @ x,
             Q=Q,
@@ -331,8 +444,8 @@ class TestUnscentedKalmanFilterUpdater:
         action = np.array([0.0])
         obs = np.array([2.0, 3.0])
 
-        kf_mean, kf_cov = kf_updater(mean, cov, action, obs, None)
-        ukf_mean, ukf_cov = ukf_updater(mean, cov, action, obs, None)
+        kf_mean, kf_cov = kf_updater.update(mean, cov, action, obs)
+        ukf_mean, ukf_cov = ukf_updater.update(mean, cov, action, obs)
 
         np.testing.assert_allclose(ukf_mean, kf_mean, atol=1e-6)
         np.testing.assert_allclose(ukf_cov, kf_cov, atol=1e-6)
@@ -348,7 +461,7 @@ class TestUnscentedKalmanFilterUpdater:
 
         Test type: unit
         """
-        ukf_updater = unscented_kalman_filter_updater(
+        ukf_updater = UnscentedKalmanFilterUpdater(
             transition_fn=lambda x, u: x,
             observation_fn=lambda x: x**3,
             Q=0.01 * np.eye(1),
@@ -357,7 +470,7 @@ class TestUnscentedKalmanFilterUpdater:
         mean = np.array([1.0])
         cov = np.array([[0.5]])
 
-        new_mean, new_cov = ukf_updater(mean, cov, np.array([0.0]), np.array([1.0]), None)
+        new_mean, new_cov = ukf_updater.update(mean, cov, np.array([0.0]), np.array([1.0]))
 
         # Predicted cov = cov + Q = 0.51
         # After correction, cov should be less than predicted
@@ -367,7 +480,7 @@ class TestUnscentedKalmanFilterUpdater:
     def test_integration_with_gaussian_belief(self):
         """Test that the UKF updater works with GaussianBelief.update().
 
-        Purpose: Validates end-to-end integration of the UKF factory with GaussianBelief.
+        Purpose: Validates end-to-end integration of the UKF class with GaussianBelief.
 
         Given: A GaussianBelief using a UKF updater for a linear system.
         When: belief.update() is called.
@@ -375,7 +488,7 @@ class TestUnscentedKalmanFilterUpdater:
 
         Test type: integration
         """
-        ukf_updater = unscented_kalman_filter_updater(
+        ukf_updater = UnscentedKalmanFilterUpdater(
             transition_fn=lambda x, u: x,
             observation_fn=lambda x: x,
             Q=0.1 * np.eye(2),
@@ -385,7 +498,6 @@ class TestUnscentedKalmanFilterUpdater:
         new_belief = belief.update(
             action=np.array([0.0]),
             observation=np.array([1.0, 2.0]),
-            pomdp=None,
         )
         assert isinstance(new_belief, GaussianBelief)
         assert new_belief.dim == 2
@@ -401,7 +513,7 @@ class TestUnscentedKalmanFilterUpdater:
 
         Test type: unit
         """
-        ukf_updater = unscented_kalman_filter_updater(
+        ukf_updater = UnscentedKalmanFilterUpdater(
             transition_fn=lambda x, u: x,
             observation_fn=lambda x: x**2,
             Q=0.1 * np.eye(2),
@@ -410,7 +522,7 @@ class TestUnscentedKalmanFilterUpdater:
         mean = np.array([1.0, 2.0])
         cov = np.array([[1.0, 0.3], [0.3, 1.0]])
 
-        _, new_cov = ukf_updater(mean, cov, np.array([0.0]), np.array([1.0, 4.0]), None)
+        _, new_cov = ukf_updater.update(mean, cov, np.array([0.0]), np.array([1.0, 4.0]))
 
         np.testing.assert_allclose(new_cov, new_cov.T, atol=1e-12)
 
@@ -428,7 +540,7 @@ class TestUnscentedKalmanFilterUpdater:
         Q = 0.1 * np.eye(2)
         R = 0.5 * np.eye(2)
 
-        ekf_updater = extended_kalman_filter_updater(
+        ekf_updater = ExtendedKalmanFilterUpdater(
             transition_fn=lambda x, u: x,
             observation_fn=lambda x: x,
             transition_jacobian=lambda x, u: np.eye(len(x)),
@@ -436,7 +548,7 @@ class TestUnscentedKalmanFilterUpdater:
             Q=Q,
             R=R,
         )
-        ukf_updater = unscented_kalman_filter_updater(
+        ukf_updater = UnscentedKalmanFilterUpdater(
             transition_fn=lambda x, u: x,
             observation_fn=lambda x: x,
             Q=Q,
@@ -448,8 +560,8 @@ class TestUnscentedKalmanFilterUpdater:
         action = np.array([0.0])
         obs = np.array([2.0, 3.0])
 
-        ekf_mean, ekf_cov = ekf_updater(mean, cov, action, obs, None)
-        ukf_mean, ukf_cov = ukf_updater(mean, cov, action, obs, None)
+        ekf_mean, ekf_cov = ekf_updater.update(mean, cov, action, obs)
+        ukf_mean, ukf_cov = ukf_updater.update(mean, cov, action, obs)
 
         np.testing.assert_allclose(ukf_mean, ekf_mean, atol=1e-6)
         np.testing.assert_allclose(ukf_cov, ekf_cov, atol=1e-6)
@@ -465,7 +577,7 @@ class TestUnscentedKalmanFilterUpdater:
 
         Test type: unit
         """
-        ukf_updater = unscented_kalman_filter_updater(
+        ukf_updater = UnscentedKalmanFilterUpdater(
             transition_fn=lambda x, u: x,
             observation_fn=lambda x: x,
             Q=0.1 * np.eye(2),
@@ -477,7 +589,7 @@ class TestUnscentedKalmanFilterUpdater:
         mean = np.array([0.0, 0.0])
         cov = np.eye(2)
 
-        new_mean, new_cov = ukf_updater(mean, cov, np.array([0.0]), np.array([1.0, 1.0]), None)
+        new_mean, new_cov = ukf_updater.update(mean, cov, np.array([0.0]), np.array([1.0, 1.0]))
 
         assert new_mean.shape == (2,)
         np.testing.assert_allclose(new_cov, new_cov.T, atol=1e-12)
@@ -499,7 +611,7 @@ class TestUnscentedKalmanFilterUpdater:
         d, p = 5, 3
         H = np.random.RandomState(42).randn(p, d)
 
-        ukf_updater = unscented_kalman_filter_updater(
+        ukf_updater = UnscentedKalmanFilterUpdater(
             transition_fn=lambda x, u: x,
             observation_fn=lambda x: H @ x,
             Q=0.01 * np.eye(d),
@@ -509,10 +621,72 @@ class TestUnscentedKalmanFilterUpdater:
         cov = np.eye(d)
 
         obs = np.ones(p)
-        new_mean, new_cov = ukf_updater(mean, cov, np.zeros(1), obs, None)
+        new_mean, new_cov = ukf_updater.update(mean, cov, np.zeros(1), obs)
 
         assert new_mean.shape == (d,)
         assert new_cov.shape == (d, d)
         np.testing.assert_allclose(new_cov, new_cov.T, atol=1e-10)
         eigenvalues = np.linalg.eigvalsh(new_cov)
         assert np.all(eigenvalues > 0)
+
+    def test_config_id_deterministic(self):
+        """Test that config_id is deterministic for identical UKF updaters.
+
+        Purpose: Validates that the same parameters produce the same config_id.
+
+        Given: Two UnscentedKalmanFilterUpdater instances with identical parameters.
+        When: config_id is computed for both.
+        Then: Both config_ids are equal.
+
+        Test type: unit
+        """
+        Q = 0.1 * np.eye(2)
+        R = 0.5 * np.eye(2)
+        u1 = UnscentedKalmanFilterUpdater(
+            transition_fn=lambda x, u: x,
+            observation_fn=lambda x: x,
+            Q=Q,
+            R=R,
+            alpha=1e-3,
+            beta=2.0,
+            kappa=0.0,
+        )
+        u2 = UnscentedKalmanFilterUpdater(
+            transition_fn=lambda x, u: x,
+            observation_fn=lambda x: x,
+            Q=Q,
+            R=R,
+            alpha=1e-3,
+            beta=2.0,
+            kappa=0.0,
+        )
+        assert u1.config_id == u2.config_id
+
+    def test_config_id_sensitive_to_parameters(self):
+        """Test that config_id differs when scaling parameters differ.
+
+        Purpose: Validates config_id sensitivity to alpha/beta/kappa.
+
+        Given: Two UnscentedKalmanFilterUpdater instances with different alpha.
+        When: config_id is computed for both.
+        Then: The config_ids are different.
+
+        Test type: unit
+        """
+        Q = 0.1 * np.eye(2)
+        R = 0.5 * np.eye(2)
+        u1 = UnscentedKalmanFilterUpdater(
+            transition_fn=lambda x, u: x,
+            observation_fn=lambda x: x,
+            Q=Q,
+            R=R,
+            alpha=1e-3,
+        )
+        u2 = UnscentedKalmanFilterUpdater(
+            transition_fn=lambda x, u: x,
+            observation_fn=lambda x: x,
+            Q=Q,
+            R=R,
+            alpha=0.5,
+        )
+        assert u1.config_id != u2.config_id
