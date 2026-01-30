@@ -571,6 +571,7 @@ def test_continuous_light_dark_pomdp_initialization(base_continuous_light_dark_p
 def test_continuous_light_dark_pomdp_state_transition_model(
     base_continuous_light_dark_pomdp,
 ):
+    np.random.seed(42)
     env = base_continuous_light_dark_pomdp
     state = np.array([5, 5])
     action = np.array([0, 1])
@@ -586,6 +587,7 @@ def test_continuous_light_dark_pomdp_state_transition_model(
 def test_continuous_light_dark_pomdp_observation_model(
     base_continuous_light_dark_pomdp,
 ):
+    np.random.seed(42)
     env = base_continuous_light_dark_pomdp
     next_state = np.array([5, 5])
     action = np.array([0, 1])
