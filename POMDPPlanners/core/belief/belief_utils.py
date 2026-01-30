@@ -17,6 +17,7 @@ import numpy as np
 
 from POMDPPlanners.core.belief.base_belief import Belief
 from POMDPPlanners.core.belief.gaussian_belief import GaussianBelief
+from POMDPPlanners.core.belief.gaussian_mixture_belief import GaussianMixtureBelief
 from POMDPPlanners.core.belief.particle_beliefs import (
     UnweightedParticleBeliefStateUpdate,
     WeightedParticleBelief,
@@ -104,6 +105,9 @@ def is_terminal_belief(belief: Belief, env: Environment) -> bool:
     ):
         return is_terminal_particle_belief(belief=belief, env=env)
     elif isinstance(belief, GaussianBelief):
+        samples = [belief.sample() for _ in range(belief.n_terminal_check_samples)]
+        return all(env.is_terminal(s) for s in samples)
+    elif isinstance(belief, GaussianMixtureBelief):
         samples = [belief.sample() for _ in range(belief.n_terminal_check_samples)]
         return all(env.is_terminal(s) for s in samples)
     else:

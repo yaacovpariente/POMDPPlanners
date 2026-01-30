@@ -15,6 +15,11 @@ from POMDPPlanners.core.belief.gaussian_belief import (
 from POMDPPlanners.core.belief.gaussian_belief_updaters import (
     linear_kalman_filter_updater,
     extended_kalman_filter_updater,
+    unscented_kalman_filter_updater,
+)
+from POMDPPlanners.core.belief.gaussian_mixture_belief import (
+    GaussianMixtureBelief,
+    GaussianMixtureBeliefUpdater,
 )
 from POMDPPlanners.core.belief.belief_utils import (
     sample_next_belief,
@@ -34,6 +39,9 @@ __all__ = [
     "GaussianBeliefUpdater",
     "linear_kalman_filter_updater",
     "extended_kalman_filter_updater",
+    "unscented_kalman_filter_updater",
+    "GaussianMixtureBelief",
+    "GaussianMixtureBeliefUpdater",
     "get_unique_support",
     "sample_next_belief",
     "get_initial_belief",

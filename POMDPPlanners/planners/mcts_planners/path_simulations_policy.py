@@ -11,6 +11,7 @@ from POMDPPlanners.core.belief import (
     WeightedParticleBelief,
     WeightedParticleBeliefStateUpdate,
     GaussianBelief,
+    GaussianMixtureBelief,
 )
 from POMDPPlanners.core.environment import Environment, SpaceType
 from POMDPPlanners.core.policy import Policy, PolicyRunData, PolicySpaceInfo
@@ -145,7 +146,13 @@ class PathSimulationPolicy(Policy):
 
     def _is_terminal_belief(self, belief: Belief) -> bool:
         if isinstance(
-            belief, (WeightedParticleBelief, WeightedParticleBeliefStateUpdate, GaussianBelief)
+            belief,
+            (
+                WeightedParticleBelief,
+                WeightedParticleBeliefStateUpdate,
+                GaussianBelief,
+                GaussianMixtureBelief,
+            ),
         ):
             return is_terminal_belief(belief=belief, env=self.environment)
 
