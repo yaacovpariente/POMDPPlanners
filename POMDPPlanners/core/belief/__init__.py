@@ -19,6 +19,12 @@ from POMDPPlanners.core.belief.gaussian_mixture_belief import (
     GaussianMixtureBelief,
     GaussianMixtureBeliefUpdater,
 )
+from POMDPPlanners.core.belief.vectorized_particle_belief_updater import (
+    VectorizedParticleBeliefUpdater,
+)
+from POMDPPlanners.core.belief.vectorized_weighted_particle_belief import (
+    VectorizedWeightedParticleBelief,
+)
 from POMDPPlanners.core.belief.belief_utils import (
     sample_next_belief,
     get_initial_belief,
@@ -40,6 +46,8 @@ __all__ = [
     "UnscentedKalmanFilterUpdater",
     "GaussianMixtureBelief",
     "GaussianMixtureBeliefUpdater",
+    "VectorizedParticleBeliefUpdater",
+    "VectorizedWeightedParticleBelief",
     "get_unique_support",
     "sample_next_belief",
     "get_initial_belief",
