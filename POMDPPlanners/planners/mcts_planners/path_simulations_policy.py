@@ -10,6 +10,7 @@ from POMDPPlanners.core.belief import (
     is_terminal_belief,
     WeightedParticleBelief,
     WeightedParticleBeliefStateUpdate,
+    GaussianBelief,
 )
 from POMDPPlanners.core.environment import Environment, SpaceType
 from POMDPPlanners.core.policy import Policy, PolicyRunData, PolicySpaceInfo
@@ -143,7 +144,9 @@ class PathSimulationPolicy(Policy):
             self._simulate_path(belief_node=belief_node, depth=0)
 
     def _is_terminal_belief(self, belief: Belief) -> bool:
-        if isinstance(belief, (WeightedParticleBelief, WeightedParticleBeliefStateUpdate)):
+        if isinstance(
+            belief, (WeightedParticleBelief, WeightedParticleBeliefStateUpdate, GaussianBelief)
+        ):
             return is_terminal_belief(belief=belief, env=self.environment)
 
         raise ValueError("Unsupported belief type")

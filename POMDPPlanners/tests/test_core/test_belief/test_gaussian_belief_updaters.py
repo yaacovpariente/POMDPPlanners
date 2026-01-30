@@ -1,0 +1,294 @@
+"""Tests for Gaussian belief updater factories.
+
+This module tests the pre-built updater factories:
+- linear_kalman_filter_updater: linear-Gaussian systems
+- extended_kalman_filter_updater: nonlinear systems with Jacobians
+"""
+
+import numpy as np
+import pytest
+
+from POMDPPlanners.core.belief import GaussianBelief
+from POMDPPlanners.core.belief.gaussian_belief_updaters import (
+    linear_kalman_filter_updater,
+    extended_kalman_filter_updater,
+)
+
+
+# ---------------------------------------------------------------------------
+# Linear Kalman Filter tests
+# ---------------------------------------------------------------------------
+
+
+class TestLinearKalmanFilterUpdater:
+    def test_1d_static_system(self):
+        """Test 1D Kalman filter on a static system with perfect observation.
+
+        Purpose: Validates that the KF converges toward the observation for a static system.
+
+        Given: A=1, B=0, H=1, Q=0.1, R=0.5 (1D static system with noisy observation).
+        When: A single predict-correct cycle is performed with observation z=3.0.
+        Then: The posterior mean moves toward 3.0 and covariance decreases.
+
+        Test type: unit
+        """
+        updater = linear_kalman_filter_updater(
+            A=np.array([[1.0]]),
+            B=np.array([[0.0]]),
+            H=np.array([[1.0]]),
+            Q=np.array([[0.1]]),
+            R=np.array([[0.5]]),
+        )
+        mean = np.array([0.0])
+        cov = np.array([[1.0]])
+        action = np.array([0.0])
+        observation = np.array([3.0])
+
+        new_mean, new_cov = updater(mean, cov, action, observation, None)
+
+        # Mean should move toward observation
+        assert new_mean[0] > 0.0
+        assert new_mean[0] < 3.0
+        # Covariance should decrease (information gained)
+        assert new_cov[0, 0] < cov[0, 0] + 0.1  # prior + process noise
+
+    def test_1d_analytical_values(self):
+        """Test 1D Kalman filter against hand-computed analytical solution.
+
+        Purpose: Validates KF predict-correct matches textbook formula.
+
+        Given: A=1, B=0, H=1, Q=0, R=1, prior mean=0, prior cov=1.
+        When: Observation z=2.0 is incorporated.
+        Then: Posterior mean = 1.0, posterior variance = 0.5.
+
+        Test type: unit
+        """
+        updater = linear_kalman_filter_updater(
+            A=np.array([[1.0]]),
+            B=np.array([[0.0]]),
+            H=np.array([[1.0]]),
+            Q=np.array([[0.0]]),
+            R=np.array([[1.0]]),
+        )
+        mean = np.array([0.0])
+        cov = np.array([[1.0]])
+
+        new_mean, new_cov = updater(mean, cov, np.array([0.0]), np.array([2.0]), None)
+
+        # Predicted: mean_pred=0, cov_pred=1 (Q=0)
+        # S = 1 + 1 = 2, K = 1/2
+        # new_mean = 0 + 0.5*2 = 1.0
+        # new_cov = (1 - 0.5)*1 = 0.5
+        np.testing.assert_allclose(new_mean, [1.0], atol=1e-12)
+        np.testing.assert_allclose(new_cov, [[0.5]], atol=1e-12)
+
+    def test_2d_tracking_covariance_decreases(self):
+        """Test 2D Kalman filter covariance reduction over multiple steps.
+
+        Purpose: Validates that repeated observations reduce uncertainty.
+
+        Given: 2D identity system with Q=0.01*I and R=0.5*I.
+        When: 10 observations at [1, 1] are incorporated sequentially.
+        Then: Covariance trace decreases monotonically.
+
+        Test type: unit
+        """
+        updater = linear_kalman_filter_updater(
+            A=np.eye(2),
+            B=np.zeros((2, 1)),
+            H=np.eye(2),
+            Q=0.01 * np.eye(2),
+            R=0.5 * np.eye(2),
+        )
+        mean = np.zeros(2)
+        cov = np.eye(2)
+        prev_trace = np.trace(cov)
+
+        for _ in range(10):
+            mean, cov = updater(mean, cov, np.array([0.0]), np.array([1.0, 1.0]), None)
+            curr_trace = np.trace(cov)
+            assert curr_trace < prev_trace + 0.02 + 1e-10  # allow for process noise
+            prev_trace = curr_trace
+
+    def test_with_control_input(self):
+        """Test Kalman filter with a non-zero control input.
+
+        Purpose: Validates that the control matrix B shifts the predicted mean.
+
+        Given: A=1, B=1, H=1, Q=0, R=1, prior mean=0, prior cov=1.
+        When: Action u=5 and observation z=5 are applied.
+        Then: Posterior mean is close to 5.
+
+        Test type: unit
+        """
+        updater = linear_kalman_filter_updater(
+            A=np.array([[1.0]]),
+            B=np.array([[1.0]]),
+            H=np.array([[1.0]]),
+            Q=np.array([[0.0]]),
+            R=np.array([[1.0]]),
+        )
+        mean = np.array([0.0])
+        cov = np.array([[1.0]])
+
+        new_mean, _ = updater(mean, cov, np.array([5.0]), np.array([5.0]), None)
+
+        # Predicted mean = 0 + 1*5 = 5, S=1+1=2, K=0.5
+        # new_mean = 5 + 0.5*(5-5) = 5.0
+        np.testing.assert_allclose(new_mean, [5.0], atol=1e-12)
+
+    def test_integration_with_gaussian_belief(self):
+        """Test that the linear KF updater works with GaussianBelief.update().
+
+        Purpose: Validates end-to-end integration of the updater factory with GaussianBelief.
+
+        Given: A GaussianBelief using a linear KF updater.
+        When: belief.update() is called.
+        Then: Returns a new GaussianBelief with updated mean and covariance.
+
+        Test type: integration
+        """
+        updater = linear_kalman_filter_updater(
+            A=np.eye(2),
+            B=np.zeros((2, 1)),
+            H=np.eye(2),
+            Q=0.1 * np.eye(2),
+            R=0.5 * np.eye(2),
+        )
+        belief = GaussianBelief(mean=np.zeros(2), covariance=np.eye(2), updater=updater)
+        new_belief = belief.update(
+            action=np.array([0.0]),
+            observation=np.array([1.0, 2.0]),
+            pomdp=None,
+        )
+        assert isinstance(new_belief, GaussianBelief)
+        assert new_belief.dim == 2
+        assert new_belief.mean[0] > 0.0
+        assert new_belief.mean[1] > 0.0
+
+
+# ---------------------------------------------------------------------------
+# Extended Kalman Filter tests
+# ---------------------------------------------------------------------------
+
+
+class TestExtendedKalmanFilterUpdater:
+    def test_linear_system_matches_kf(self):
+        """Test that the EKF matches the linear KF on a linear system.
+
+        Purpose: Validates that the EKF reduces to the standard KF for linear models.
+
+        Given: A linear system represented as both KF and EKF.
+        When: Both are updated with the same observation.
+        Then: Posterior means and covariances match within numerical tolerance.
+
+        Test type: unit
+        """
+        A = np.eye(2)
+        B = np.zeros((2, 1))
+        H = np.eye(2)
+        Q = 0.1 * np.eye(2)
+        R = 0.5 * np.eye(2)
+
+        kf_updater = linear_kalman_filter_updater(A, B, H, Q, R)
+        ekf_updater = extended_kalman_filter_updater(
+            transition_fn=lambda x, u: A @ x + B @ u,
+            observation_fn=lambda x: H @ x,
+            transition_jacobian=lambda x, u: A,
+            observation_jacobian=lambda x: H,
+            Q=Q,
+            R=R,
+        )
+
+        mean = np.array([1.0, -1.0])
+        cov = 2.0 * np.eye(2)
+        action = np.array([0.0])
+        obs = np.array([2.0, 3.0])
+
+        kf_mean, kf_cov = kf_updater(mean, cov, action, obs, None)
+        ekf_mean, ekf_cov = ekf_updater(mean, cov, action, obs, None)
+
+        np.testing.assert_allclose(ekf_mean, kf_mean, atol=1e-12)
+        np.testing.assert_allclose(ekf_cov, kf_cov, atol=1e-12)
+
+    def test_nonlinear_system_reduces_covariance(self):
+        """Test EKF on a nonlinear system reduces covariance after observation.
+
+        Purpose: Validates that the EKF incorporates observations to reduce uncertainty.
+
+        Given: A nonlinear system f(x,u)=x, h(x)=x^3 (cube observation).
+        When: An observation is incorporated.
+        Then: Posterior covariance trace is smaller than predicted covariance trace.
+
+        Test type: unit
+        """
+        ekf_updater = extended_kalman_filter_updater(
+            transition_fn=lambda x, u: x,
+            observation_fn=lambda x: x**3,
+            transition_jacobian=lambda x, u: np.eye(len(x)),
+            observation_jacobian=lambda x: 3.0 * np.diag(x**2),
+            Q=0.01 * np.eye(1),
+            R=0.1 * np.eye(1),
+        )
+        mean = np.array([1.0])
+        cov = np.array([[0.5]])
+
+        new_mean, new_cov = ekf_updater(mean, cov, np.array([0.0]), np.array([1.0]), None)
+
+        # Predicted cov = cov + Q = 0.51
+        # After correction, cov should be less than predicted
+        assert new_cov[0, 0] < 0.51
+
+    def test_integration_with_gaussian_belief(self):
+        """Test that the EKF updater works with GaussianBelief.update().
+
+        Purpose: Validates end-to-end integration of the EKF factory with GaussianBelief.
+
+        Given: A GaussianBelief using an EKF updater for a linear system.
+        When: belief.update() is called.
+        Then: Returns a new GaussianBelief with updated parameters.
+
+        Test type: integration
+        """
+        ekf_updater = extended_kalman_filter_updater(
+            transition_fn=lambda x, u: x,
+            observation_fn=lambda x: x,
+            transition_jacobian=lambda x, u: np.eye(len(x)),
+            observation_jacobian=lambda x: np.eye(len(x)),
+            Q=0.1 * np.eye(2),
+            R=0.5 * np.eye(2),
+        )
+        belief = GaussianBelief(mean=np.zeros(2), covariance=np.eye(2), updater=ekf_updater)
+        new_belief = belief.update(
+            action=np.array([0.0]),
+            observation=np.array([1.0, 2.0]),
+            pomdp=None,
+        )
+        assert isinstance(new_belief, GaussianBelief)
+        assert new_belief.dim == 2
+
+    def test_ekf_covariance_is_symmetric(self):
+        """Test that the EKF posterior covariance is symmetric.
+
+        Purpose: Validates the symmetrization step in the EKF implementation.
+
+        Given: A nonlinear EKF system.
+        When: An update is performed.
+        Then: The resulting covariance is symmetric.
+
+        Test type: unit
+        """
+        ekf_updater = extended_kalman_filter_updater(
+            transition_fn=lambda x, u: x,
+            observation_fn=lambda x: x**2,
+            transition_jacobian=lambda x, u: np.eye(len(x)),
+            observation_jacobian=lambda x: 2.0 * np.diag(x),
+            Q=0.1 * np.eye(2),
+            R=0.5 * np.eye(2),
+        )
+        mean = np.array([1.0, 2.0])
+        cov = np.array([[1.0, 0.3], [0.3, 1.0]])
+
+        _, new_cov = ekf_updater(mean, cov, np.array([0.0]), np.array([1.0, 4.0]), None)
+
+        np.testing.assert_allclose(new_cov, new_cov.T, atol=1e-12)

@@ -1,160 +1,31 @@
-"""Module for POMDP belief state representations.
+"""Particle-based belief state representations for POMDP environments.
 
-This module provides belief state abstractions for POMDP environments, including
-particle filter implementations for approximate belief tracking and belief update
-mechanisms.
+This module provides particle filter implementations for approximate belief
+tracking, including both weighted and unweighted variants, with support for
+reinvigoration and incremental state accumulation.
 
 Classes:
-    Belief: Abstract base class for belief representations
-    WeightedParticleBelief: Weighted particle filter for continuous observation spaces
     UnweightedParticleBelief: Uniform particle filter for discrete observation spaces
+    WeightedParticleBelief: Weighted particle filter for continuous observation spaces
     WeightedParticleBeliefReinvigoration: Extended weighted filter with reinvigoration
     WeightedParticleBeliefStateUpdate: Incremental weighted particle belief for online learning
+    UnweightedParticleBeliefStateUpdate: Incremental unweighted particle belief
 
 Functions:
-    sample_next_belief: Simulate one step of belief evolution
-    get_initial_belief: Create initial belief from environment's initial distribution
+    get_unique_support: Extract unique particles and their combined probabilities
 """
 
-import inspect
 import random
 from abc import ABC, abstractmethod
-from typing import Any, Optional, Tuple, Dict, Hashable, List, Union
+from collections.abc import Hashable
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
+from POMDPPlanners.core.belief.base_belief import Belief
 from POMDPPlanners.core.distributions import DiscreteDistribution
 from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.utils.config_to_id import config_to_id
-
-
-class Belief(ABC):
-    """Abstract base class for POMDP belief state representations.
-
-    This class defines the interface for belief states in POMDP environments.
-    Belief states represent probability distributions over the state space,
-    capturing the agent's uncertainty about the current state.
-
-    Note:
-        This is an abstract base class and cannot be instantiated directly.
-        Subclasses must implement the update() and sample() methods.
-    """
-
-    @classmethod
-    def from_config(cls, config):
-        """Create a belief instance from configuration.
-
-        Factory method that dynamically creates belief instances based on
-        configuration objects specifying the class name and parameters.
-
-        Args:
-            config: Configuration object with class_name and params attributes
-
-        Returns:
-            New belief instance of the specified type
-
-        Raises:
-            ValueError: If the specified belief class is not found
-        """
-
-        # Get all subclasses of Belief recursively
-        def get_all_subclasses(c):
-            subclasses = c.__subclasses__()
-            for subclass in subclasses:
-                subclasses.extend(get_all_subclasses(subclass))
-            return subclasses
-
-        all_subclasses = get_all_subclasses(cls)
-        for subclass in all_subclasses:
-            if subclass.__name__ == config.class_name:
-                # Skip abstract classes - they cannot be instantiated
-                if inspect.isabstract(subclass):
-                    raise ValueError(
-                        f"Belief class '{config.class_name}' is abstract and cannot be instantiated"
-                    )
-                return subclass(**config.params)  # pylint: disable=abstract-class-instantiated
-        raise ValueError(f"Belief class '{config.class_name}' not found")
-
-    @property
-    def config_id(self) -> str:
-        """Generate a deterministic identifier based on belief configuration."""
-
-        def serialize_value(value):
-            """Serialize values in a deterministic way."""
-            if isinstance(value, np.ndarray):
-                return value.tolist()
-            elif isinstance(value, (str, int, float, bool)):
-                return value
-            elif isinstance(value, (list, tuple)):
-                return [serialize_value(v) for v in value]
-            elif isinstance(value, dict):
-                return {str(k): serialize_value(v) for k, v in sorted(value.items())}
-            elif hasattr(value, "__dict__"):
-                return serialize_value(value.__dict__)
-            return str(value)
-
-        config_dict = {}
-        for key, value in self.__dict__.items():
-            if key.startswith("_") or callable(value):
-                continue
-            config_dict[key] = serialize_value(value)
-        config_dict = dict(sorted(config_dict.items()))
-        return config_to_id(config_dict)
-
-    def __hash__(self) -> int:
-        """Make the belief hashable by using its config_id."""
-        return hash(self.config_id)
-
-    def __eq__(self, other: object) -> bool:
-        """Define equality based on config_id."""
-        if not isinstance(other, Belief):
-            return NotImplemented
-        return self.config_id == other.config_id
-
-    def inplace_update(
-        self, action: Any, observation: Any, pomdp: Environment, state: Optional[Any] = None
-    ) -> None:
-        raise NotImplementedError("Subclasses must implement this method")
-
-    @abstractmethod
-    def update(
-        self,
-        action: Any,
-        observation: Any,
-        pomdp: Environment,
-        state: Optional[Any] = None,
-    ) -> "Belief":
-        """Update belief given an action-observation pair.
-
-        Performs Bayesian belief update using the environment's transition
-        and observation models.
-
-        Args:
-            action: Action that was executed
-            observation: Observation that was received
-            pomdp: Environment providing transition and observation models
-
-        Returns:
-            Updated belief state reflecting the new information
-
-        Note:
-            Subclasses must implement this method according to their
-            specific belief representation and update strategy.
-        """
-        pass
-
-    @abstractmethod
-    def sample(self) -> Any:
-        """Sample a state from the current belief distribution.
-
-        Returns:
-            A state sampled according to the belief's probability distribution
-
-        Note:
-            Subclasses must implement this method to enable state sampling
-            for planning and simulation purposes.
-        """
-        pass
 
 
 class UnweightedParticleBelief(Belief):
@@ -227,7 +98,6 @@ class UnweightedParticleBelief(Belief):
     @abstractmethod
     def _reinvigoration_pertubation(self, action: Any, observation: Any, pomdp: Environment) -> Any:
         """Implement perturbation for reinvigoration in specific environment."""
-        pass
 
 
 class WeightedParticleBelief(Belief):
@@ -372,17 +242,6 @@ class WeightedParticleBelief(Belief):
     def _resample(
         self, particles: List[Any], log_weights: np.ndarray
     ) -> Tuple[List[Any], np.ndarray]:
-        """Resample particles based on their weights if effective sample size is below threshold.
-
-        Args:
-            particles: List of particles to potentially resample
-            log_weights: Log weights of the particles
-
-        Returns:
-            Tuple containing:
-            - Resampled particles (or original if no resampling needed)
-            - New log weights (or original if no resampling needed)
-        """
         normalized_weights = np.exp(log_weights - np.max(log_weights))
         normalized_weights = normalized_weights / np.sum(normalized_weights)
 
@@ -493,7 +352,6 @@ class WeightedParticleBeliefReinvigoration(WeightedParticleBelief, ABC):
         self, action: Any, observation: Any, pomdp: Environment, belief: Belief
     ) -> Belief:
         """Implement reinvigoration for specific POMDP environment."""
-        pass
 
 
 class WeightedParticleBeliefStateUpdate(Belief):
@@ -1035,13 +893,6 @@ def get_unique_support(
     """
 
     def _make_hashable(value):
-        """Recursively convert numpy arrays and lists to hashable tuples.
-
-        This is necessary because numpy arrays are not hashable and cannot
-        be used as dictionary keys. Multi-dimensional arrays require recursive
-        conversion since tuple(arr.tolist()) on 2D+ arrays produces tuples
-        containing lists, which are still unhashable.
-        """
         # Try to hash directly first - if it works, return as-is
         try:
             hash(value)
@@ -1090,85 +941,3 @@ def get_unique_support(
         probabilities_arr = probabilities_arr / np.sum(probabilities_arr)  # Normalize to sum to 1
 
     return unique_particles_list, probabilities_arr
-
-
-def sample_next_belief(belief: Belief, action: Any, pomdp: "Environment") -> Tuple[Belief, Any]:
-    """Simulate one step of belief evolution.
-
-    This function samples a state from the current belief, simulates the
-    environment dynamics, and updates the belief with the resulting observation.
-
-    Args:
-        belief: Current belief state
-        action: Action to execute
-        pomdp: Environment providing dynamics models
-
-    Returns:
-        Tuple containing:
-            - Updated belief after incorporating the observation
-            - Observation that was generated
-    """
-    state = belief.sample()
-    next_state = pomdp.state_transition_model(state=state, action=action).sample()[0]
-    observation = pomdp.observation_model(next_state=next_state, action=action).sample()[0]
-
-    next_belief = belief.update(action=action, observation=observation, pomdp=pomdp)
-
-    return next_belief, observation
-
-
-def get_initial_belief(
-    pomdp: Environment, n_particles: int, resampling: bool = True
-) -> WeightedParticleBelief:
-    """Create initial belief from environment's initial state distribution.
-
-    Args:
-        pomdp: Environment to get initial distribution from
-        n_particles: Number of particles to generate for the belief
-        resampling: Enable resampling in the created belief. Defaults to True.
-
-    Returns:
-        WeightedParticleBelief with uniform weights over initial states
-
-    Raises:
-        TypeError: If n_particles is not an integer
-        ValueError: If n_particles is not positive
-    """
-    if not isinstance(n_particles, int):
-        raise TypeError("n_particles must be an integer")
-    if n_particles <= 0:
-        raise ValueError("n_particles must be greater than 0")
-
-    particles = pomdp.initial_state_dist().sample(n_samples=n_particles)
-    log_weights = np.log(np.ones(n_particles) / n_particles)
-
-    return WeightedParticleBelief(
-        particles=particles, log_weights=log_weights, resampling=resampling
-    )
-
-
-def is_terminal_particle_belief(
-    belief: Union[
-        WeightedParticleBelief,
-        WeightedParticleBeliefStateUpdate,
-        UnweightedParticleBeliefStateUpdate,
-    ],
-    env: Environment,
-) -> bool:
-    """Check if the belief is terminal."""
-    return all(env.is_terminal(particle) for particle in belief.particles)
-
-
-def is_terminal_belief(belief: Belief, env: Environment) -> bool:
-    """Check if the belief is terminal."""
-    if isinstance(
-        belief,
-        (
-            WeightedParticleBelief,
-            WeightedParticleBeliefStateUpdate,
-            UnweightedParticleBeliefStateUpdate,
-        ),
-    ):
-        return is_terminal_particle_belief(belief=belief, env=env)
-    else:
-        raise NotImplementedError("is_terminal_belief is not implemented for this belief type")
