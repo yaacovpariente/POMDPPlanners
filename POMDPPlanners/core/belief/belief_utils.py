@@ -23,6 +23,9 @@ from POMDPPlanners.core.belief.particle_beliefs import (
     WeightedParticleBelief,
     WeightedParticleBeliefStateUpdate,
 )
+from POMDPPlanners.core.belief.vectorized_weighted_particle_belief import (
+    VectorizedWeightedParticleBelief,
+)
 from POMDPPlanners.core.environment import Environment
 
 
@@ -104,6 +107,8 @@ def is_terminal_belief(belief: Belief, env: Environment) -> bool:
         ),
     ):
         return is_terminal_particle_belief(belief=belief, env=env)
+    elif isinstance(belief, VectorizedWeightedParticleBelief):
+        return all(env.is_terminal(belief.particles[i]) for i in range(belief.n_particles))
     elif isinstance(belief, GaussianBelief):
         samples = [belief.sample() for _ in range(belief.n_terminal_check_samples)]
         return all(env.is_terminal(s) for s in samples)
