@@ -7,6 +7,7 @@ directory can be instantiated and provide valid POMDP environments and beliefs.
 
 
 import random
+import sys
 import traceback
 
 import numpy as np
@@ -15,7 +16,11 @@ from POMDPPlanners.configs.environment_configs import (
     EnvironmentConfigsAPI,
     RiskAverseEnvironmentConfigsAPI,
 )
-from POMDPPlanners.core.belief import WeightedParticleBelief
+from POMDPPlanners.core.belief import (
+    Belief,
+    VectorizedWeightedParticleBelief,
+    WeightedParticleBelief,
+)
 from POMDPPlanners.core.environment import Environment, SpaceType
 from POMDPPlanners.core.policy import PolicySpaceInfo
 
@@ -63,13 +68,12 @@ class TestEnvironmentConfigs:
 
         # Verify types
         assert isinstance(pomdp, Environment), f"Expected Environment, got {type(pomdp)}"
-        assert isinstance(
-            belief, WeightedParticleBelief
-        ), f"Expected WeightedParticleBelief, got {type(belief)}"
+        assert isinstance(belief, Belief), f"Expected Belief, got {type(belief)}"
 
         # Verify basic properties
         assert pomdp.discount_factor is not None
         assert pomdp.name is not None
+        assert isinstance(belief, (WeightedParticleBelief, VectorizedWeightedParticleBelief))
         assert len(belief.particles) > 0
 
         print("  ✓ CartPolePOMDP configuration test passed!")
@@ -82,13 +86,12 @@ class TestEnvironmentConfigs:
 
         # Verify types
         assert isinstance(pomdp, Environment), f"Expected Environment, got {type(pomdp)}"
-        assert isinstance(
-            belief, WeightedParticleBelief
-        ), f"Expected WeightedParticleBelief, got {type(belief)}"
+        assert isinstance(belief, Belief), f"Expected Belief, got {type(belief)}"
 
         # Verify basic properties
         assert pomdp.discount_factor is not None
         assert pomdp.name is not None
+        assert isinstance(belief, (WeightedParticleBelief, VectorizedWeightedParticleBelief))
         assert len(belief.particles) > 0
 
         print("  ✓ MountainCarPOMDP configuration test passed!")
@@ -206,13 +209,12 @@ class TestEnvironmentConfigs:
 
         # Verify types
         assert isinstance(pomdp, Environment), f"Expected Environment, got {type(pomdp)}"
-        assert isinstance(
-            belief, WeightedParticleBelief
-        ), f"Expected WeightedParticleBelief, got {type(belief)}"
+        assert isinstance(belief, Belief), f"Expected Belief, got {type(belief)}"
 
         # Verify basic properties
         assert pomdp.discount_factor is not None
         assert pomdp.name is not None
+        assert isinstance(belief, (WeightedParticleBelief, VectorizedWeightedParticleBelief))
         assert len(belief.particles) > 0
 
         print("  ✓ LaserTagPOMDP configuration test passed!")
@@ -227,13 +229,12 @@ class TestEnvironmentConfigs:
 
         # Verify types
         assert isinstance(pomdp, Environment), f"Expected Environment, got {type(pomdp)}"
-        assert isinstance(
-            belief, WeightedParticleBelief
-        ), f"Expected WeightedParticleBelief, got {type(belief)}"
+        assert isinstance(belief, Belief), f"Expected Belief, got {type(belief)}"
 
         # Verify basic properties
         assert pomdp.discount_factor is not None
         assert pomdp.name is not None
+        assert isinstance(belief, (WeightedParticleBelief, VectorizedWeightedParticleBelief))
         assert len(belief.particles) > 0
 
         print("  ✓ SafeAntVelocityPOMDP configuration test passed!")
@@ -246,7 +247,7 @@ class TestEnvironmentConfigs:
         risk_averse_api = RiskAverseEnvironmentConfigsAPI(discount_factor=0.95, debug=False)
 
         # Test initialization without errors
-        pomdp, belief = risk_averse_api.push_pomdp_config(n_particles=self.test_n_particles)
+        risk_averse_api.push_pomdp_config(n_particles=self.test_n_particles)
 
         print("  ✓ RiskAverseEnvironmentConfigsAPI push POMDP configuration test passed!")
 
@@ -258,7 +259,7 @@ class TestEnvironmentConfigs:
         risk_averse_api = RiskAverseEnvironmentConfigsAPI(discount_factor=0.95, debug=False)
 
         # Test initialization without errors
-        pomdp, belief = risk_averse_api.rock_sample_pomdp_config(n_particles=self.test_n_particles)
+        risk_averse_api.rock_sample_pomdp_config(n_particles=self.test_n_particles)
 
         print("  ✓ RiskAverseEnvironmentConfigsAPI rock sample POMDP configuration test passed!")
 
@@ -272,10 +273,7 @@ class TestEnvironmentConfigs:
         risk_averse_api = RiskAverseEnvironmentConfigsAPI(discount_factor=0.95, debug=False)
 
         # Test initialization without errors
-        (
-            pomdp,
-            belief,
-        ) = risk_averse_api.continuous_observations_discrete_actions_light_dark_pomdp_config(
+        risk_averse_api.continuous_observations_discrete_actions_light_dark_pomdp_config(
             n_particles=self.test_n_particles
         )
 
@@ -293,10 +291,7 @@ class TestEnvironmentConfigs:
         risk_averse_api = RiskAverseEnvironmentConfigsAPI(discount_factor=0.95, debug=False)
 
         # Test initialization without errors
-        (
-            pomdp,
-            belief,
-        ) = risk_averse_api.continuous_observations_continuous_actions_light_dark_pomdp_config(
+        risk_averse_api.continuous_observations_continuous_actions_light_dark_pomdp_config(
             n_particles=self.test_n_particles
         )
 
@@ -431,7 +426,7 @@ class TestEnvironmentConfigs:
         # Should return a list
         assert isinstance(compatible_envs, list), "Should return a list"
 
-        for env, belief in compatible_envs:
+        for env, _ in compatible_envs:
             assert isinstance(env, Environment), "First element should be Environment"
 
             # Verify action space compatibility
@@ -500,6 +495,7 @@ class TestEnvironmentConfigs:
 
         # Verify all beliefs have correct number of particles
         for env, belief in compatible_envs:
+            assert isinstance(belief, (WeightedParticleBelief, VectorizedWeightedParticleBelief))
             assert (
                 len(belief.particles) == n_particles
             ), f"Belief for {env.name} should have {n_particles} particles, got {len(belief.particles)}"
@@ -556,7 +552,7 @@ class TestEnvironmentConfigs:
         )
 
         # Verify none of the returned environments have purely continuous action spaces
-        for env, belief in compatible_envs:
+        for env, _ in compatible_envs:
             assert (
                 env.space_info.action_space != SpaceType.CONTINUOUS
                 or env.space_info.action_space == SpaceType.MIXED
@@ -593,10 +589,9 @@ def main():
     if passed == total:
         print("🎉 All environment configuration tests passed!")
         return 0
-    else:
-        print(f"❌ {total - passed} tests failed")
-        return 1
+    print(f"❌ {total - passed} tests failed")
+    return 1
 
 
 if __name__ == "__main__":
-    exit(main())
+    sys.exit(main())
