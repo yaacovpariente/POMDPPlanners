@@ -370,6 +370,17 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
 
         return reward
 
+    def reward_batch(self, states: np.ndarray, action: int) -> np.ndarray:
+        x = states[:, 0]
+        theta = states[:, 2]
+        terminated = (
+            (x < -self.x_threshold)
+            | (x > self.x_threshold)
+            | (theta < -self.theta_threshold_radians)
+            | (theta > self.theta_threshold_radians)
+        )
+        return np.where(terminated, 0.0, 1.0)
+
     def is_terminal(self, state: np.ndarray) -> bool:
         x, theta = state[0], state[2]
 

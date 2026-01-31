@@ -309,6 +309,10 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
         # Small negative reward for each step to encourage reaching the goal quickly
         return -1.0
 
+    def reward_batch(self, states: np.ndarray, action: int) -> np.ndarray:
+        positions = states[:, 0]
+        return np.where(positions >= self.goal_position, 0.0, -1.0)
+
     def is_terminal(self, state: Tuple[float, float]) -> bool:
         position, _ = state
         return bool(position >= self.goal_position)

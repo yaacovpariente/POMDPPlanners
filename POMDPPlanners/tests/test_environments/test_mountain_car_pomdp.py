@@ -1008,3 +1008,38 @@ def test_compute_metrics_goal_reaching():
     goal_rate = metrics_dict["goal_reaching_rate"]
     assert goal_rate.value == 2 / 3  # 2 out of 3 histories reach goal
     assert goal_rate.lower_confidence_bound <= goal_rate.value <= goal_rate.upper_confidence_bound
+
+
+def test_reward_batch_matches_scalar_reward():
+    """Test that reward_batch returns results consistent with scalar reward.
+
+    Purpose: Validates that the vectorized reward_batch gives identical outputs
+    to calling reward() individually for each state.
+
+    Given: A MountainCarPOMDP environment and an array of states with mixed goal/non-goal positions
+    When: reward_batch is called with the state array
+    Then: Output shape is (N,) and values match element-wise reward() calls exactly
+
+    Test type: unit
+    """
+    env = MountainCarPOMDP(discount_factor=0.95)
+    np.random.seed(42)
+    # Create states with positions spanning below and above goal_position
+    states = np.column_stack(
+        [
+            np.random.uniform(-1.2, 0.7, 100),
+            np.random.uniform(-0.07, 0.07, 100),
+        ]
+    )
+    action = 1
+
+    batch_rewards = env.reward_batch(states, action)
+
+    assert batch_rewards.shape == (100,)
+    expected = np.array([env.reward(states[i], action) for i in range(100)])
+    np.testing.assert_array_equal(batch_rewards, expected)
+
+    # Also test with N=1
+    single = env.reward_batch(states[:1], action)
+    assert single.shape == (1,)
+    assert single[0] == env.reward(states[0], action)
