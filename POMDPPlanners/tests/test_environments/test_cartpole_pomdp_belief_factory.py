@@ -72,13 +72,13 @@ class TestCreateCartpoleBelief:
         Purpose: Validates error handling for unsupported belief types.
 
         Given: A CartPolePOMDP environment.
-        When: create_cartpole_belief is called with BeliefType.GAUSSIAN.
+        When: create_cartpole_belief is called with BeliefType.GAUSSIAN_MIXTURE.
         Then: A ValueError is raised.
 
         Test type: unit
         """
         with pytest.raises(ValueError, match="does not support"):
-            create_cartpole_belief(env, belief_type=BeliefType.GAUSSIAN)
+            create_cartpole_belief(env, belief_type=BeliefType.GAUSSIAN_MIXTURE)
 
     def test_n_particles_respected_vectorized(self, env):
         """Test that n_particles is respected for vectorized belief.

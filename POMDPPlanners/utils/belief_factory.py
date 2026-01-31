@@ -128,7 +128,7 @@ def create_environment_belief(
         >>> from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
         >>> env = TigerPOMDP(discount_factor=0.95)
         >>> belief = create_environment_belief(env, n_particles=100)
-        >>> belief.sample() in ["tiger-left", "tiger-right"]
+        >>> belief.sample() in ["tiger_left", "tiger_right"]
         True
     """
     env_class_name = type(env).__name__
