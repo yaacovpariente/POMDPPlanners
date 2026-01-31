@@ -724,3 +724,32 @@ def test_compute_metrics_goal_reaching():
     goal_rate = metrics_dict["goal_reaching_rate"]
     assert goal_rate.value == 2 / 3  # 2 out of 3 histories complete successfully
     assert goal_rate.lower_confidence_bound <= goal_rate.value <= goal_rate.upper_confidence_bound
+
+
+def test_reward_batch_matches_scalar_reward():
+    """Test that reward_batch returns results consistent with scalar reward.
+
+    Purpose: Validates that the vectorized reward_batch gives identical outputs
+    to calling reward() individually for each state.
+
+    Given: A CartPolePOMDP environment and an array of 100 random states
+    When: reward_batch is called with the state array
+    Then: Output shape is (N,) and values match element-wise reward() calls exactly
+
+    Test type: unit
+    """
+    env = CartPolePOMDP(discount_factor=0.95, noise_cov=np.diag([0.1, 0.1, 0.1, 0.1]))
+    np.random.seed(42)
+    states = np.random.randn(100, 4)
+    action = 1
+
+    batch_rewards = env.reward_batch(states, action)
+
+    assert batch_rewards.shape == (100,)
+    expected = np.array([env.reward(states[i], action) for i in range(100)])
+    np.testing.assert_array_equal(batch_rewards, expected)
+
+    # Also test with N=1
+    single = env.reward_batch(states[:1], action)
+    assert single.shape == (1,)
+    assert single[0] == env.reward(states[0], action)

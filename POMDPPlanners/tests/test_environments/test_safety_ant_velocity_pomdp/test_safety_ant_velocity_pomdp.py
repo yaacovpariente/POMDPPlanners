@@ -917,3 +917,38 @@ def test_observation_probability_list_interface():
     # Closer observations should have higher probability
     assert probs_multi[0] > probs_multi[2], "Closer observation should have higher probability"
     assert probs_multi[1] > probs_multi[2], "Closer observation should have higher probability"
+
+
+def test_reward_batch_matches_scalar_reward():
+    """Test that reward_batch returns results consistent with scalar reward.
+
+    Purpose: Validates that the vectorized reward_batch gives identical outputs
+    to calling reward() individually for each state.
+
+    Given: A SafeAntVelocityPOMDP environment and an array of states with mixed safe/unsafe velocities
+    When: reward_batch is called with the state array
+    Then: Output shape is (N,) and values match element-wise reward() calls exactly
+
+    Test type: unit
+    """
+    env = SafeAntVelocityPOMDP(
+        discount_factor=0.95,
+        safe_velocity_threshold=2.0,
+        safety_violation_penalty=-100.0,
+        movement_reward_scale=1.0,
+    )
+    np.random.seed(42)
+    # 4-dim states: [pos_x, pos_y, vel_x, vel_y]
+    states = np.random.randn(100, 4) * 2.0
+    action = 1
+
+    batch_rewards = env.reward_batch(states, action)
+
+    assert batch_rewards.shape == (100,)
+    expected = np.array([env.reward(states[i], action) for i in range(100)])
+    np.testing.assert_allclose(batch_rewards, expected)
+
+    # Also test with N=1
+    single = env.reward_batch(states[:1], action)
+    assert single.shape == (1,)
+    np.testing.assert_allclose(single[0], env.reward(states[0], action))
