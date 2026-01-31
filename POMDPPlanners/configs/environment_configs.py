@@ -2,7 +2,8 @@ from typing import List, Tuple
 
 import numpy as np
 
-from POMDPPlanners.core.belief import WeightedParticleBelief, get_initial_belief
+from POMDPPlanners.core.belief import Belief, WeightedParticleBelief, get_initial_belief
+from POMDPPlanners.utils.belief_factory import create_environment_belief
 from POMDPPlanners.core.environment import Environment, DiscreteActionsEnvironment, SpaceType
 from POMDPPlanners.core.policy import PolicySpaceInfo
 from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
@@ -18,14 +19,11 @@ from POMDPPlanners.environments.push_pomdp import PushPOMDP
 from POMDPPlanners.environments.rock_sample_pomdp import RockSamplePOMDP
 from POMDPPlanners.environments.safety_ant_velocity_pomdp import SafeAntVelocityPOMDP
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-from POMDPPlanners.utils.weighted_particle_beliefs import (
-    WeightedParticleBeliefContinuousLightDarkFullCoverage,
-)
 
 
 def get_compatible_environments(
     config_api_instance, policy_space_info: PolicySpaceInfo, n_particles: int = 20, seed: int = 42
-) -> List[Tuple[Environment, WeightedParticleBelief]]:
+) -> List[Tuple[Environment, Belief]]:
     """Get list of environments compatible with the given policy space info.
 
     Args:
@@ -81,7 +79,7 @@ def _is_compatible(policy_space_info: PolicySpaceInfo, env_space_info) -> bool:
 
 def get_all_environments(
     n_particles: int = 20, include_risk_averse: bool = True
-) -> List[Tuple[Environment, WeightedParticleBelief]]:
+) -> List[Tuple[Environment, Belief]]:
     """Get all environments from both standard and risk-averse API classes.
 
     Args:
@@ -128,7 +126,7 @@ class EnvironmentConfigsAPI:
 
     def get_compatible_environments(
         self, policy_space_info: PolicySpaceInfo, n_particles: int = 20, seed: int = 42
-    ) -> List[Tuple[Environment, WeightedParticleBelief]]:
+    ) -> List[Tuple[Environment, Belief]]:
         """Get list of environments compatible with the given policy space info.
 
         Args:
@@ -153,7 +151,7 @@ class EnvironmentConfigsAPI:
 
     def cartpole_pomdp_config(
         self, n_particles: int = 20
-    ) -> Tuple[DiscreteActionsEnvironment, WeightedParticleBelief]:
+    ) -> Tuple[DiscreteActionsEnvironment, Belief]:
         # Create noise covariance matrix for CartPole observations
         noise_cov = np.diag(
             [0.1, 0.1, 0.1, 0.1]
@@ -163,14 +161,14 @@ class EnvironmentConfigsAPI:
             noise_cov=noise_cov,
             name="CartPolePOMDP",
         )
-        belief = get_initial_belief(pomdp=pomdp, n_particles=n_particles, resampling=True)
+        belief = create_environment_belief(pomdp, n_particles=n_particles)
         return pomdp, belief
 
     def mountain_car_pomdp_config(
         self, n_particles: int = 20
-    ) -> Tuple[DiscreteActionsEnvironment, WeightedParticleBelief]:
+    ) -> Tuple[DiscreteActionsEnvironment, Belief]:
         pomdp = MountainCarPOMDP(discount_factor=self.discount_factor, name="MountainCarPOMDP")
-        belief = get_initial_belief(pomdp=pomdp, n_particles=n_particles, resampling=True)
+        belief = create_environment_belief(pomdp, n_particles=n_particles)
         return pomdp, belief
 
     def push_pomdp_config(
@@ -182,7 +180,7 @@ class EnvironmentConfigsAPI:
 
     def continuous_observations_discrete_actions_light_dark_pomdp_config(
         self, n_particles: int = 20
-    ) -> Tuple[DiscreteActionsEnvironment, WeightedParticleBelief]:
+    ) -> Tuple[DiscreteActionsEnvironment, Belief]:
         DISCOUNT_FACTOR = self.discount_factor
         STATE_TRANSITION_COV_MATRIX = np.eye(2) * 0.075  # Identity matrix for state transitions
         OBSERVATION_COV_MATRIX = np.array(
@@ -224,19 +222,12 @@ class EnvironmentConfigsAPI:
             name="ContinuousLightDarkPOMDPDiscreteActions",
         )
 
-        # Get initial belief and extract particles
-        initial_belief = get_initial_belief(pomdp=pomdp, n_particles=n_particles, resampling=True)
-        belief = WeightedParticleBeliefContinuousLightDarkFullCoverage(
-            particles=initial_belief.particles,
-            log_weights=np.log(np.ones(n_particles) / n_particles),
-            ess_factor=0.5,
-            reinvigoration_fraction=0.1,
-        )
+        belief = create_environment_belief(pomdp, n_particles=n_particles)
         return pomdp, belief
 
     def continuous_observations_continuous_actions_light_dark_pomdp_config(
         self, n_particles: int = 20
-    ) -> Tuple[Environment, WeightedParticleBelief]:
+    ) -> Tuple[Environment, Belief]:
         DISCOUNT_FACTOR = self.discount_factor
         STATE_TRANSITION_COV_MATRIX = np.eye(2) * 0.075  # Identity matrix for state transitions
         OBSERVATION_COV_MATRIX = np.array(
@@ -279,15 +270,7 @@ class EnvironmentConfigsAPI:
             is_obstacle_hit_terminal=True,
         )
 
-        # Get initial belief and extract particles
-        initial_belief = get_initial_belief(pomdp=pomdp, n_particles=n_particles, resampling=True)
-        belief = WeightedParticleBeliefContinuousLightDarkFullCoverage(
-            particles=initial_belief.particles,
-            log_weights=np.log(np.ones(n_particles) / n_particles),
-            ess_factor=0.5,
-            reinvigoration_fraction=0.1,
-        )
-
+        belief = create_environment_belief(pomdp, n_particles=n_particles)
         return pomdp, belief
 
     def rock_sample_pomdp_config(
@@ -308,20 +291,16 @@ class EnvironmentConfigsAPI:
         belief = get_initial_belief(pomdp=pomdp, n_particles=n_particles, resampling=True)
         return pomdp, belief
 
-    def laser_tag_pomdp_config(
-        self, n_particles: int = 20
-    ) -> Tuple[Environment, WeightedParticleBelief]:
+    def laser_tag_pomdp_config(self, n_particles: int = 20) -> Tuple[Environment, Belief]:
         pomdp = LaserTagPOMDP(discount_factor=self.discount_factor, name="LaserTagPOMDP")
-        belief = get_initial_belief(pomdp=pomdp, n_particles=n_particles, resampling=True)
+        belief = create_environment_belief(pomdp, n_particles=n_particles)
         return pomdp, belief
 
-    def safety_ant_velocity_pomdp_config(
-        self, n_particles: int = 20
-    ) -> Tuple[Environment, WeightedParticleBelief]:
+    def safety_ant_velocity_pomdp_config(self, n_particles: int = 20) -> Tuple[Environment, Belief]:
         pomdp = SafeAntVelocityPOMDP(
             discount_factor=self.discount_factor, name="SafeAntVelocityPOMDP"
         )
-        belief = get_initial_belief(pomdp=pomdp, n_particles=n_particles, resampling=True)
+        belief = create_environment_belief(pomdp, n_particles=n_particles)
         return pomdp, belief
 
 
@@ -332,7 +311,7 @@ class RiskAverseEnvironmentConfigsAPI:
 
     def get_compatible_environments(
         self, policy_space_info: PolicySpaceInfo, n_particles: int = 20, seed: int = 42
-    ) -> List[Tuple[Environment, WeightedParticleBelief]]:
+    ) -> List[Tuple[Environment, Belief]]:
         """Get list of environments compatible with the given policy space info.
 
         Args:
@@ -347,7 +326,7 @@ class RiskAverseEnvironmentConfigsAPI:
 
     def continuous_observations_discrete_actions_light_dark_pomdp_config(
         self, n_particles: int = 20
-    ) -> Tuple[DiscreteActionsEnvironment, WeightedParticleBelief]:
+    ) -> Tuple[DiscreteActionsEnvironment, Belief]:
         DISCOUNT_FACTOR = self.discount_factor
         STATE_TRANSITION_COV_MATRIX = np.eye(2) * 0.075  # Identity matrix for state transitions
         OBSERVATION_COV_MATRIX = np.array(
@@ -393,19 +372,12 @@ class RiskAverseEnvironmentConfigsAPI:
             name="ContinuousLightDarkPOMDPDiscreteActions",
         )
 
-        # Get initial belief and extract particles
-        initial_belief = get_initial_belief(pomdp=pomdp, n_particles=n_particles, resampling=True)
-        belief = WeightedParticleBeliefContinuousLightDarkFullCoverage(
-            particles=initial_belief.particles,
-            log_weights=np.log(np.ones(n_particles) / n_particles),
-            ess_factor=0.5,
-            reinvigoration_fraction=0.1,
-        )
+        belief = create_environment_belief(pomdp, n_particles=n_particles)
         return pomdp, belief
 
     def continuous_observations_continuous_actions_light_dark_pomdp_config(
         self, n_particles: int = 20
-    ) -> Tuple[Environment, WeightedParticleBelief]:
+    ) -> Tuple[Environment, Belief]:
         DISCOUNT_FACTOR = self.discount_factor
         STATE_TRANSITION_COV_MATRIX = np.eye(2) * 0.075  # Identity matrix for state transitions
         OBSERVATION_COV_MATRIX = np.array(
@@ -452,15 +424,7 @@ class RiskAverseEnvironmentConfigsAPI:
             is_obstacle_hit_terminal=True,
         )
 
-        # Get initial belief and extract particles
-        initial_belief = get_initial_belief(pomdp=pomdp, n_particles=n_particles, resampling=True)
-        belief = WeightedParticleBeliefContinuousLightDarkFullCoverage(
-            particles=initial_belief.particles,
-            log_weights=np.log(np.ones(n_particles) / n_particles),
-            ess_factor=0.5,
-            reinvigoration_fraction=0.1,
-        )
-
+        belief = create_environment_belief(pomdp, n_particles=n_particles)
         return pomdp, belief
 
     def rock_sample_pomdp_config(
@@ -511,18 +475,14 @@ class RiskAverseEnvironmentConfigsAPI:
         belief = get_initial_belief(pomdp=pomdp, n_particles=n_particles, resampling=True)
         return pomdp, belief
 
-    def laser_tag_pomdp_config(
-        self, n_particles: int = 20
-    ) -> Tuple[Environment, WeightedParticleBelief]:
+    def laser_tag_pomdp_config(self, n_particles: int = 20) -> Tuple[Environment, Belief]:
         pomdp = LaserTagPOMDP(discount_factor=self.discount_factor, name="LaserTagPOMDP")
-        belief = get_initial_belief(pomdp=pomdp, n_particles=n_particles, resampling=True)
+        belief = create_environment_belief(pomdp, n_particles=n_particles)
         return pomdp, belief
 
-    def safety_ant_velocity_pomdp_config(
-        self, n_particles: int = 20
-    ) -> Tuple[Environment, WeightedParticleBelief]:
+    def safety_ant_velocity_pomdp_config(self, n_particles: int = 20) -> Tuple[Environment, Belief]:
         pomdp = SafeAntVelocityPOMDP(
             discount_factor=self.discount_factor, name="SafeAntVelocityPOMDP"
         )
-        belief = get_initial_belief(pomdp=pomdp, n_particles=n_particles, resampling=True)
+        belief = create_environment_belief(pomdp, n_particles=n_particles)
         return pomdp, belief
