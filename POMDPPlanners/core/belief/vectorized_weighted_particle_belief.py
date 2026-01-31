@@ -100,6 +100,7 @@ class VectorizedWeightedParticleBelief(Belief):
         self.particles = particles
         self.log_weights = log_weights
         self.normalized_weights = self._normalize(log_weights)
+        self._cumulative_weights = np.cumsum(self.normalized_weights)
         self.updater = updater
         self.resampling = resampling
         self.ess_factor = ess_factor
@@ -115,7 +116,7 @@ class VectorizedWeightedParticleBelief(Belief):
         Returns:
             A state vector of shape (d,).
         """
-        idx = np.random.choice(self.n_particles, p=self.normalized_weights)
+        idx = np.searchsorted(self._cumulative_weights, np.random.random())
         return self.particles[idx]
 
     def update(
