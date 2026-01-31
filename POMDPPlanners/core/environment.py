@@ -21,7 +21,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
@@ -504,14 +504,14 @@ class Environment(ABC):
         """
         pass
 
-    def reward_batch(self, states: np.ndarray, action: Any) -> np.ndarray:
+    def reward_batch(self, states: Union[np.ndarray, Sequence[Any]], action: Any) -> np.ndarray:
         """Calculate rewards for a batch of states given a single action.
 
         Provides a loop-based default that subclasses can override with
         vectorized numpy implementations for better performance.
 
         Args:
-            states: Array of states with shape ``(N, ...)``.
+            states: Sequence of states of length ``N``.
             action: Action executed from each state.
 
         Returns:
