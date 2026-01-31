@@ -137,7 +137,6 @@ class VectorizedWeightedParticleBelief(Belief):
         Returns:
             New VectorizedWeightedParticleBelief with updated particles and weights.
         """
-        action = np.asarray(action, dtype=float)
         observation = np.asarray(observation, dtype=float)
 
         next_particles = self.updater.batch_transition(self.particles, action)
