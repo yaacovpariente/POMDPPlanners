@@ -504,6 +504,21 @@ class Environment(ABC):
         """
         pass
 
+    def reward_batch(self, states: np.ndarray, action: Any) -> np.ndarray:
+        """Calculate rewards for a batch of states given a single action.
+
+        Provides a loop-based default that subclasses can override with
+        vectorized numpy implementations for better performance.
+
+        Args:
+            states: Array of states with shape ``(N, ...)``.
+            action: Action executed from each state.
+
+        Returns:
+            1-D array of reward values with shape ``(N,)``.
+        """
+        return np.array([self.reward(states[i], action) for i in range(len(states))])
+
     @abstractmethod
     def is_terminal(self, state: Any) -> bool:
         """Check if a state is terminal.
