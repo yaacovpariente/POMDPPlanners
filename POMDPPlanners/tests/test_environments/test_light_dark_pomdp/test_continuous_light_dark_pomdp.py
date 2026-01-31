@@ -2181,3 +2181,51 @@ def test_distance_based_observation_model_probability():
     assert np.isclose(
         prob_obs_far, 0.0
     ), f"Probability of actual observation when far from beacon should be 0.0, got {prob_obs_far}"
+
+
+def test_reward_batch_continuous_matches_scalar(base_continuous_light_dark_pomdp):
+    """Test that ContinuousLightDarkPOMDP reward_batch matches per-element reward.
+
+    Purpose: Validates vectorized reward_batch gives same results as scalar reward with same seed
+
+    Given: A ContinuousLightDarkPOMDP environment and 100 random states
+    When: reward_batch and scalar reward calls are made with identical seeds
+    Then: Both produce identical reward arrays and output shape is (N,)
+
+    Test type: unit
+    """
+    env = base_continuous_light_dark_pomdp
+    states = np.random.RandomState(0).uniform(0, 10, (100, 2))
+    action = np.array([0.5, 0.5])
+
+    np.random.seed(99)
+    batch_rewards = env.reward_batch(states, action)
+    assert batch_rewards.shape == (100,)
+
+    np.random.seed(99)
+    expected = np.array([env.reward(states[i], action) for i in range(100)])
+    np.testing.assert_allclose(batch_rewards, expected)
+
+
+def test_reward_batch_discrete_actions_matches_scalar(base_light_dark_environment):
+    """Test that ContinuousLightDarkPOMDPDiscreteActions reward_batch matches scalar reward.
+
+    Purpose: Validates vectorized reward_batch for discrete-action variant
+
+    Given: A ContinuousLightDarkPOMDPDiscreteActions environment and 100 random states
+    When: reward_batch and scalar reward calls are made with identical seeds for string action "up"
+    Then: Both produce identical reward arrays and output shape is (N,)
+
+    Test type: unit
+    """
+    env = base_light_dark_environment
+    states = np.random.RandomState(0).uniform(0, 10, (100, 2))
+    action = "up"
+
+    np.random.seed(99)
+    batch_rewards = env.reward_batch(states, action)
+    assert batch_rewards.shape == (100,)
+
+    np.random.seed(99)
+    expected = np.array([env.reward(states[i], action) for i in range(100)])
+    np.testing.assert_allclose(batch_rewards, expected)

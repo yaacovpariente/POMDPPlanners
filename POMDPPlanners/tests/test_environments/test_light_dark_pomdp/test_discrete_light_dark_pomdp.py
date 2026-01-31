@@ -1545,3 +1545,35 @@ def test_distance_based_observation_model_probability():
     assert np.isclose(
         prob_obs_far, 0.0
     ), f"Probability of actual observation when far from beacon should be 0.0, got {prob_obs_far}"
+
+
+def test_reward_batch_matches_scalar(base_light_dark_environment):
+    """Test that DiscreteLightDarkPOMDP reward_batch matches scalar reward with same seed.
+
+    Purpose: Validates vectorized reward_batch gives same results as scalar reward
+
+    Given: A DiscreteLightDarkPOMDP environment and 100 random integer states on the grid
+    When: reward_batch and scalar reward calls are made with identical seeds
+    Then: Both produce identical reward arrays and output shape is (N,)
+
+    Test type: unit
+    """
+    env = base_light_dark_environment
+    rng = np.random.RandomState(0)
+    states = rng.randint(0, env.grid_size + 1, (100, 2)).astype(float)
+    action = "up"
+
+    np.random.seed(99)
+    batch_rewards = env.reward_batch(states, action)
+    assert batch_rewards.shape == (100,)
+
+    np.random.seed(99)
+    expected = np.array([env.reward(states[i], action) for i in range(100)])
+    np.testing.assert_allclose(batch_rewards, expected)
+
+    # Test with N=1
+    np.random.seed(42)
+    single = env.reward_batch(states[:1], action)
+    assert single.shape == (1,)
+    np.random.seed(42)
+    np.testing.assert_allclose(single[0], env.reward(states[0], action))

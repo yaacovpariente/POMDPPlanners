@@ -711,3 +711,147 @@ class TestContinuousLightDarkDecayingHitProbabilityRewardModel:
         derived_method = self.model._obstacle_reward
 
         assert base_method != derived_method
+
+
+class TestRewardModelBatch:
+    """Test cases for vectorized compute_reward_batch methods."""
+
+    def setup_method(self):
+        self.goal_state = np.array([8.0, 8.0])
+        self.obstacles = np.array([[3.0, 3.0], [6.0, 6.0]]).T
+        self.goal_state_radius = 1.0
+        self.obstacle_radius = 1.0
+        self.grid_size = 10
+        self.obstacle_hit_probability = 0.3
+        self.obstacle_reward = -10.0
+        self.goal_reward = 100.0
+        self.fuel_cost = 1.0
+
+        self.model = ContinuousLightDarkRewardModel(
+            goal_state=self.goal_state,
+            obstacles=self.obstacles,
+            goal_state_radius=self.goal_state_radius,
+            obstacle_radius=self.obstacle_radius,
+            grid_size=self.grid_size,
+            obstacle_hit_probability=self.obstacle_hit_probability,
+            obstacle_reward=self.obstacle_reward,
+            goal_reward=self.goal_reward,
+            fuel_cost=self.fuel_cost,
+        )
+
+        self.dangerous_model = ContinuousLDDangerousStatesRewardModel(
+            goal_state=self.goal_state,
+            obstacles=self.obstacles,
+            goal_state_radius=self.goal_state_radius,
+            obstacle_radius=self.obstacle_radius,
+            grid_size=self.grid_size,
+            obstacle_hit_probability=self.obstacle_hit_probability,
+            obstacle_reward=self.obstacle_reward,
+            goal_reward=self.goal_reward,
+            fuel_cost=self.fuel_cost,
+        )
+
+        self.decaying_model = ContinuousLightDarkDecayingHitProbabilityRewardModel(
+            goal_state=self.goal_state,
+            obstacles=self.obstacles,
+            goal_state_radius=self.goal_state_radius,
+            obstacle_radius=self.obstacle_radius,
+            grid_size=self.grid_size,
+            obstacle_hit_probability=self.obstacle_hit_probability,
+            obstacle_reward=self.obstacle_reward,
+            goal_reward=self.goal_reward,
+            fuel_cost=self.fuel_cost,
+            penalty_decay=2.0,
+        )
+
+    def test_continuous_reward_batch_matches_scalar(self):
+        """Test ContinuousLightDarkRewardModel batch matches scalar with same seed.
+
+        Purpose: Validates vectorized compute_reward_batch matches per-element compute_reward
+
+        Given: A ContinuousLightDarkRewardModel and 100 random states
+        When: compute_reward_batch is called with a fixed seed, and scalar calls are made with same seed
+        Then: Both produce identical reward arrays
+
+        Test type: unit
+        """
+        states = np.random.RandomState(0).uniform(0, 10, (100, 2))
+        action = np.array([0.5, 0.5])
+
+        np.random.seed(99)
+        batch_rewards = self.model.compute_reward_batch(states, action)
+        assert batch_rewards.shape == (100,)
+
+        np.random.seed(99)
+        expected = np.array([self.model.compute_reward(states[i], action) for i in range(100)])
+        np.testing.assert_allclose(batch_rewards, expected)
+
+    def test_dangerous_model_batch_matches_scalar(self):
+        """Test ContinuousLDDangerousStatesRewardModel batch matches scalar with same seed.
+
+        Purpose: Validates vectorized compute_reward_batch matches per-element compute_reward
+
+        Given: A ContinuousLDDangerousStatesRewardModel and 100 random states
+        When: compute_reward_batch and scalar calls are made with same seed
+        Then: Both produce identical reward arrays
+
+        Test type: unit
+        """
+        states = np.random.RandomState(0).uniform(0, 10, (100, 2))
+        action = np.array([0.5, 0.5])
+
+        np.random.seed(99)
+        batch_rewards = self.dangerous_model.compute_reward_batch(states, action)
+        assert batch_rewards.shape == (100,)
+
+        np.random.seed(99)
+        expected = np.array(
+            [self.dangerous_model.compute_reward(states[i], action) for i in range(100)]
+        )
+        np.testing.assert_allclose(batch_rewards, expected)
+
+    def test_decaying_model_batch_matches_scalar(self):
+        """Test ContinuousLightDarkDecayingHitProbabilityRewardModel batch matches scalar with same seed.
+
+        Purpose: Validates vectorized compute_reward_batch matches per-element compute_reward
+
+        Given: A ContinuousLightDarkDecayingHitProbabilityRewardModel and 100 random states
+        When: compute_reward_batch and scalar calls are made with same seed
+        Then: Both produce identical reward arrays
+
+        Test type: unit
+        """
+        states = np.random.RandomState(0).uniform(0, 10, (100, 2))
+        action = np.array([0.5, 0.5])
+
+        np.random.seed(99)
+        batch_rewards = self.decaying_model.compute_reward_batch(states, action)
+        assert batch_rewards.shape == (100,)
+
+        np.random.seed(99)
+        expected = np.array(
+            [self.decaying_model.compute_reward(states[i], action) for i in range(100)]
+        )
+        np.testing.assert_allclose(batch_rewards, expected)
+
+    def test_batch_single_element(self):
+        """Test compute_reward_batch with a single state.
+
+        Purpose: Validates batch method works correctly with N=1
+
+        Given: A ContinuousLightDarkRewardModel and a single state
+        When: compute_reward_batch is called with shape (1, 2) states
+        Then: Output shape is (1,) and value matches scalar reward
+
+        Test type: unit
+        """
+        state = np.array([[5.0, 5.0]])
+        action = np.array([0.5, 0.5])
+
+        np.random.seed(42)
+        batch_reward = self.model.compute_reward_batch(state, action)
+        assert batch_reward.shape == (1,)
+
+        np.random.seed(42)
+        scalar_reward = self.model.compute_reward(state[0], action)
+        np.testing.assert_allclose(batch_reward[0], scalar_reward)
