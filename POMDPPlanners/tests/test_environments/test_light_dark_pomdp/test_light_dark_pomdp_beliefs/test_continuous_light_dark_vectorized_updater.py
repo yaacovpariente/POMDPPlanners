@@ -10,6 +10,7 @@ import pytest
 
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
     ContinuousLightDarkPOMDP,
+    ContinuousLightDarkPOMDPDiscreteActions,
 )
 from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_beliefs import (
     ContinuousLightDarkVectorizedUpdater,
@@ -333,3 +334,161 @@ class TestEquivalenceWithPerParticleLoop:
             w_updated.normalized_weights,
             atol=1e-6,
         )
+
+
+# ---------------------------------------------------------------------------
+# Discrete action support tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def discrete_env():
+    return ContinuousLightDarkPOMDPDiscreteActions(discount_factor=0.95)
+
+
+@pytest.fixture
+def discrete_updater(discrete_env):
+    return ContinuousLightDarkVectorizedUpdater.from_environment(discrete_env)
+
+
+class TestDiscreteActionFromEnvironment:
+    def test_from_environment_detects_action_mapping(self, discrete_env):
+        """Test that from_environment picks up action_to_vector from discrete env.
+
+        Purpose: Validates that the factory classmethod auto-detects the
+                 action_to_vector attribute on the discrete variant.
+
+        Given: A ContinuousLightDarkPOMDPDiscreteActions instance.
+        When: from_environment is called.
+        Then: The updater stores a non-None _action_to_vector mapping.
+
+        Test type: unit
+        """
+        updater = ContinuousLightDarkVectorizedUpdater.from_environment(discrete_env)
+        assert updater._action_to_vector is not None
+        assert "right" in updater._action_to_vector
+
+    def test_from_environment_continuous_has_no_mapping(self, env):
+        """Test that from_environment leaves _action_to_vector as None for continuous env.
+
+        Purpose: Validates that the continuous variant does not get an action mapping.
+
+        Given: A ContinuousLightDarkPOMDP instance.
+        When: from_environment is called.
+        Then: The updater has _action_to_vector == None.
+
+        Test type: unit
+        """
+        updater = ContinuousLightDarkVectorizedUpdater.from_environment(env)
+        assert updater._action_to_vector is None
+
+
+class TestDiscreteActionBatchTransition:
+    def test_string_action_output_shape(self, discrete_updater):
+        """Test that batch_transition works with string actions.
+
+        Purpose: Validates that string actions are resolved via the mapping
+                 and produce correct output shape.
+
+        Given: 30 particles and a string action 'right'.
+        When: batch_transition is called.
+        Then: Result has shape (30, 2).
+
+        Test type: unit
+        """
+        np.random.seed(0)
+        particles = np.random.rand(30, 2) * 10
+        result = discrete_updater.batch_transition(particles, "right")
+        assert result.shape == (30, 2)
+
+    def test_string_action_mean_shift(self, discrete_updater):
+        """Test that string action 'right' shifts mean by [1, 0].
+
+        Purpose: Validates that the resolved vector produces the expected
+                 mean state shift.
+
+        Given: Identical particles at [5, 5] and action 'right'.
+        When: batch_transition is called on many particles.
+        Then: The mean result is close to [6, 5].
+
+        Test type: unit
+        """
+        np.random.seed(42)
+        n = 5000
+        particles = np.tile([5.0, 5.0], (n, 1))
+        results = discrete_updater.batch_transition(particles, "right")
+        mean_result = results.mean(axis=0)
+        np.testing.assert_allclose(mean_result, [6.0, 5.0], atol=0.1)
+
+    def test_string_action_matches_vector_action(self, discrete_updater):
+        """Test that string 'right' produces same result as vector [1, 0].
+
+        Purpose: Validates equivalence between string and vector action paths.
+
+        Given: Same particles and random seed.
+        When: batch_transition is called with 'right' and with np.array([1, 0]).
+        Then: Results are identical.
+
+        Test type: unit
+        """
+        np.random.seed(0)
+        particles = np.random.rand(20, 2) * 10
+
+        np.random.seed(42)
+        result_string = discrete_updater.batch_transition(particles, "right")
+
+        np.random.seed(42)
+        result_vector = discrete_updater.batch_transition(particles, np.array([1.0, 0.0]))
+
+        np.testing.assert_array_equal(result_string, result_vector)
+
+
+class TestDiscreteActionFullUpdate:
+    def test_vectorized_belief_update_with_string_action(self, discrete_updater):
+        """Test full VectorizedWeightedParticleBelief.update() with a string action.
+
+        Purpose: End-to-end test that the belief update path works when
+                 the action is a string rather than a numeric array.
+
+        Given: A VectorizedWeightedParticleBelief with the discrete updater.
+        When: update() is called with action='right'.
+        Then: A new belief is returned with valid particles and weights.
+
+        Test type: integration
+        """
+        from POMDPPlanners.core.belief.vectorized_weighted_particle_belief import (
+            VectorizedWeightedParticleBelief,
+        )
+
+        np.random.seed(42)
+        n = 30
+        particles = np.random.rand(n, 2) * 10
+        log_w = np.full(n, -np.log(n))
+
+        belief = VectorizedWeightedParticleBelief(
+            particles=particles,
+            log_weights=log_w,
+            updater=discrete_updater,
+            resampling=False,
+        )
+        updated = belief.update(action="right", observation=np.array([5.0, 5.0]), pomdp=None)
+
+        assert updated.particles.shape == (n, 2)
+        assert np.all(np.isfinite(updated.log_weights))
+
+
+class TestDiscreteActionConfigId:
+    def test_config_id_differs_discrete_vs_continuous(self, env, discrete_env):
+        """Test that config_id differs between discrete and continuous updaters.
+
+        Purpose: Validates that the action mapping is reflected in config_id.
+
+        Given: Updaters built from continuous and discrete environments.
+        When: config_id is compared.
+        Then: The IDs differ.
+
+        Test type: unit
+        """
+        u_continuous = ContinuousLightDarkVectorizedUpdater.from_environment(env)
+        u_discrete = ContinuousLightDarkVectorizedUpdater.from_environment(discrete_env)
+        assert u_continuous.config_id != u_discrete.config_id

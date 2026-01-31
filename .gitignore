@@ -100,3 +100,10 @@ CLAUDE_VIOLATION_REMINDER.md
 
 # Sphinx documentation
 docs/_build/
+
+# Ralph (autonomous Claude Code loop)
+.ralph/
+.ralphrc
+
+# Claude task queue
+claude_tasks/

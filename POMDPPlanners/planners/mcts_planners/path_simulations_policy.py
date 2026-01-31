@@ -12,6 +12,7 @@ from POMDPPlanners.core.belief import (
     WeightedParticleBeliefStateUpdate,
     GaussianBelief,
     GaussianMixtureBelief,
+    VectorizedWeightedParticleBelief,
 )
 from POMDPPlanners.core.environment import Environment, SpaceType
 from POMDPPlanners.core.policy import Policy, PolicyRunData, PolicySpaceInfo
@@ -150,6 +151,7 @@ class PathSimulationPolicy(Policy):
             (
                 WeightedParticleBelief,
                 WeightedParticleBeliefStateUpdate,
+                VectorizedWeightedParticleBelief,
                 GaussianBelief,
                 GaussianMixtureBelief,
             ),
