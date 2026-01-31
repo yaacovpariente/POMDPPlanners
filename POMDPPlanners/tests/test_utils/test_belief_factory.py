@@ -196,13 +196,13 @@ class TestCartPole:
         Purpose: Validates error handling for unsupported types.
 
         Given: A CartPolePOMDP environment.
-        When: create_environment_belief is called with GAUSSIAN.
+        When: create_environment_belief is called with GAUSSIAN_MIXTURE.
         Then: A ValueError is raised.
 
         Test type: unit
         """
         with pytest.raises(ValueError, match="does not support"):
-            create_environment_belief(cartpole_env, belief_type=BeliefType.GAUSSIAN)
+            create_environment_belief(cartpole_env, belief_type=BeliefType.GAUSSIAN_MIXTURE)
 
     def test_sample_shape(self, cartpole_env):
         """Test CartPole belief sample has correct shape.
