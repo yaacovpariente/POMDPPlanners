@@ -26,7 +26,7 @@ Classes:
 
 from enum import Enum
 from pathlib import Path
-from typing import Any, List, Optional, Tuple
+from typing import Any, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
@@ -440,7 +440,8 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
 
         return float(reward)
 
-    def reward_batch(self, states: np.ndarray, action: int) -> np.ndarray:
+    def reward_batch(self, states: Union[np.ndarray, Sequence[Any]], action: int) -> np.ndarray:
+        states = np.asarray(states)
         speeds = np.linalg.norm(states[:, 2:4], axis=1)
         rewards = speeds * self.movement_reward_scale
         rewards[speeds > self.safe_velocity_threshold] += self.safety_violation_penalty

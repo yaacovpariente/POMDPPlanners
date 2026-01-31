@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Any, List, Tuple
+from typing import Any, List, Sequence, Tuple, Union
 
 import numpy as np
 
@@ -239,7 +239,8 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
 
         return float(reward)
 
-    def reward_batch(self, states: np.ndarray, action: str) -> np.ndarray:
+    def reward_batch(self, states: Union[np.ndarray, Sequence[Any]], action: str) -> np.ndarray:
+        states = np.asarray(states)
         next_states = states + self.action_to_vector[action]
         dists_to_goal = np.linalg.norm(next_states - self.goal_state, axis=1)
         rewards = -self.fuel_cost - dists_to_goal

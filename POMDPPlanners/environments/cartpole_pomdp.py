@@ -20,7 +20,7 @@ Classes:
 import math
 from enum import Enum
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Sequence, Union
 
 import numpy as np
 from numpy.typing import NDArray
@@ -370,7 +370,8 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
 
         return reward
 
-    def reward_batch(self, states: np.ndarray, action: int) -> np.ndarray:
+    def reward_batch(self, states: Union[np.ndarray, Sequence[Any]], action: int) -> np.ndarray:
+        states = np.asarray(states)
         x = states[:, 0]
         theta = states[:, 2]
         terminated = (
