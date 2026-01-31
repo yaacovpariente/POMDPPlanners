@@ -557,6 +557,9 @@ class TestGaussianBeliefCostDispatch:
             def reward(self, state, action):
                 return float(np.sum(state))
 
+            def reward_batch(self, states, action):
+                return np.array([self.reward(states[i], action) for i in range(len(states))])
+
         return _MockEnv()
 
     def test_belief_expectation_cost(self):

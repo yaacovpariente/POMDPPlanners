@@ -12,7 +12,11 @@ import random
 import numpy as np
 import pytest
 
-from POMDPPlanners.core.belief import Belief, WeightedParticleBelief
+from POMDPPlanners.core.belief import (
+    Belief,
+    WeightedParticleBelief,
+    VectorizedWeightedParticleBelief,
+)
 from POMDPPlanners.core.cost import (
     belief_expectation_cost,
     belief_expectation_cost_particle_belief,
@@ -651,3 +655,77 @@ def test_belief_expectation_cost_weights_normalization():
 
     # Verify normalized weights are being used
     assert np.allclose(belief.normalized_weights, [0.5, 0.5])
+
+
+class TestVectorizedBeliefCost:
+    """Test cases for VectorizedWeightedParticleBelief cost calculations."""
+
+    def test_vectorized_belief_expectation_cost(self):
+        """Test belief_expectation_cost with VectorizedWeightedParticleBelief.
+
+        Purpose: Validates that belief_expectation_cost correctly handles
+        VectorizedWeightedParticleBelief and returns the expected weighted cost.
+
+        Given: A CartPolePOMDP env and a VectorizedWeightedParticleBelief with numeric particles
+        When: belief_expectation_cost is called
+        Then: Returns the same cost as a WeightedParticleBelief with identical data
+
+        Test type: unit
+        """
+        from unittest.mock import MagicMock
+        from POMDPPlanners.core.belief.vectorized_particle_belief_updater import (
+            VectorizedParticleBeliefUpdater,
+        )
+        from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
+
+        env = CartPolePOMDP(discount_factor=0.95, noise_cov=np.diag([0.1] * 4))
+        np.random.seed(42)
+        particles_arr = np.random.randn(50, 4)
+        weights = np.random.dirichlet(np.ones(50))
+        log_weights = np.log(weights)
+        action = 1
+
+        mock_updater = MagicMock(spec=VectorizedParticleBeliefUpdater)
+
+        vec_belief = VectorizedWeightedParticleBelief(
+            particles=particles_arr,
+            log_weights=log_weights,
+            updater=mock_updater,
+        )
+        vec_cost = belief_expectation_cost(belief=vec_belief, action=action, env=env)
+
+        particle_belief = WeightedParticleBelief(
+            particles=list(particles_arr),
+            log_weights=log_weights,
+        )
+        particle_cost = belief_expectation_cost(belief=particle_belief, action=action, env=env)
+
+        np.testing.assert_allclose(vec_cost, particle_cost, rtol=1e-10)
+
+    def test_reward_batch_used_in_particle_belief_cost(self):
+        """Test that updated belief_expectation_cost_particle_belief uses reward_batch.
+
+        Purpose: Regression test verifying the refactored cost function returns same values
+
+        Given: A TigerPOMDP environment and a WeightedParticleBelief with known particles
+        When: belief_expectation_cost_particle_belief is called
+        Then: Returns same result as manually computed weighted cost
+
+        Test type: unit
+        """
+        env = TigerPOMDP(discount_factor=0.95)
+        particles = ["tiger_left", "tiger_right"]
+        weights = np.array([0.7, 0.3])
+        log_weights = np.log(weights)
+
+        belief = WeightedParticleBelief(particles=particles, log_weights=log_weights)
+
+        cost = belief_expectation_cost_particle_belief(belief=belief, action="listen", env=env)
+
+        # Manually compute expected cost
+        r0 = env.reward("tiger_left", "listen")
+        r1 = env.reward("tiger_right", "listen")
+        nw = weights / weights.sum()
+        expected_cost = float(np.sum(np.array([-r0, -r1]) * nw))
+
+        np.testing.assert_allclose(cost, expected_cost, rtol=1e-10)
