@@ -18,6 +18,7 @@ from POMDPPlanners.core.belief import (
     WeightedParticleBeliefStateUpdate,
     GaussianBelief,
     GaussianMixtureBelief,
+    VectorizedWeightedParticleBelief,
 )
 from POMDPPlanners.core.environment import Environment
 
@@ -46,9 +47,8 @@ def belief_expectation_cost_particle_belief(
     Returns:
         Expected immediate cost (negative of expected reward)
     """
-    costs = np.array(
-        [-env.reward(belief.particles[i], action) for i in range(len(belief.particles))]
-    )
+    states = np.array(belief.particles)
+    costs = -env.reward_batch(states, action)
     cost_: float = float(np.sum(costs * belief.normalized_weights))
 
     return cost_
@@ -110,7 +110,7 @@ def belief_expectation_cost_gaussian_belief(
     belief: GaussianBelief, action: Any, env: Environment, n_samples: int = 100
 ) -> float:
     samples = belief._mvn.sample(belief.mean, n_samples=n_samples)
-    costs = np.array([-env.reward(samples[i], action) for i in range(n_samples)])
+    costs = -env.reward_batch(samples, action)
     return float(np.mean(costs))
 
 
@@ -118,7 +118,7 @@ def belief_expectation_cost_gaussian_mixture_belief(
     belief: GaussianMixtureBelief, action: Any, env: Environment, n_samples: int = 100
 ) -> float:
     samples = np.array([belief.sample() for _ in range(n_samples)])
-    costs = np.array([-env.reward(samples[i], action) for i in range(n_samples)])
+    costs = -env.reward_batch(samples, action)
     return float(np.mean(costs))
 
 
@@ -136,7 +136,10 @@ def belief_expectation_cost(belief: Belief, action: Any, env: Environment) -> fl
     Returns:
         Expected immediate cost
     """
-    if isinstance(belief, WeightedParticleBelief):
+    if isinstance(belief, VectorizedWeightedParticleBelief):
+        costs = -env.reward_batch(belief.particles, action)
+        return float(np.sum(costs * belief.normalized_weights))
+    elif isinstance(belief, WeightedParticleBelief):
         return belief_expectation_cost_particle_belief(belief=belief, action=action, env=env)
     elif isinstance(belief, GaussianBelief):
         return belief_expectation_cost_gaussian_belief(belief=belief, action=action, env=env)
@@ -173,7 +176,10 @@ def belief_expectation_cost_entropy_penalty(
     lower_clip: float = -np.inf,
     upper_clip: float = np.inf,
 ) -> float:
-    if isinstance(belief, WeightedParticleBelief):
+    if isinstance(belief, VectorizedWeightedParticleBelief):
+        cost_ = belief_expectation_cost(belief=belief, action=action, env=env)
+        return float(np.clip(cost_, lower_clip, upper_clip))
+    elif isinstance(belief, WeightedParticleBelief):
         return particle_belief_expectation_cost_entropy_penalty(
             belief=belief,
             action=action,
@@ -209,7 +215,10 @@ def belief_expectation_cost_belief_information_gain(
     lower_clip: float = -np.inf,
     upper_clip: float = np.inf,
 ) -> float:
-    if isinstance(belief, WeightedParticleBelief) and isinstance(
+    if isinstance(belief, VectorizedWeightedParticleBelief):
+        cost_ = belief_expectation_cost(belief=belief, action=action, env=env)
+        return float(np.clip(cost_, lower_clip, upper_clip))
+    elif isinstance(belief, WeightedParticleBelief) and isinstance(
         next_belief, WeightedParticleBelief
     ):
         return particle_belief_expectation_cost_information_gain(
