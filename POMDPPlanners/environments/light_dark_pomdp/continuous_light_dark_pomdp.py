@@ -401,6 +401,9 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
     def reward(self, state: np.ndarray, action: np.ndarray) -> float:
         return self.reward_model.compute_reward(state, action)
 
+    def reward_batch(self, states: np.ndarray, action: np.ndarray) -> np.ndarray:
+        return self.reward_model.compute_reward_batch(states, action)
+
     def is_terminal(self, state: np.ndarray) -> bool:
         if state.shape != (2,):
             raise ValueError("state must be a 2D vector")
@@ -649,6 +652,9 @@ class ContinuousLightDarkPOMDPDiscreteActions(ContinuousLightDarkPOMDP, Discrete
     def reward(self, state: np.ndarray, action: Any) -> float:
         action_vector = self.action_to_vector[action]
         return super().reward(state, action_vector)
+
+    def reward_batch(self, states: np.ndarray, action: Any) -> np.ndarray:
+        return super().reward_batch(states, self.action_to_vector[action])
 
     def __eq__(self, other):
         if not isinstance(other, ContinuousLightDarkPOMDPDiscreteActions):

@@ -16,6 +16,9 @@ class BaseLightDarkRewardModel(ABC):
 
         return self._compute_reward(state, action)
 
+    def compute_reward_batch(self, states: np.ndarray, action: np.ndarray) -> np.ndarray:
+        return np.array([self.compute_reward(states[i], action) for i in range(len(states))])
+
 
 class ContinuousLightDarkRewardModel(BaseLightDarkRewardModel):
     def __init__(
@@ -78,6 +81,30 @@ class ContinuousLightDarkRewardModel(BaseLightDarkRewardModel):
     def _obstacle_reward(self, state: np.ndarray) -> float:
         return self.obstacle_reward if np.random.rand() < self.obstacle_hit_probability else 0.0
 
+    def compute_reward_batch(self, states: np.ndarray, action: np.ndarray) -> np.ndarray:
+        next_states = states + action
+        dists_to_goal = np.linalg.norm(next_states - self.goal_state, axis=1)
+        rewards = -self.fuel_cost - dists_to_goal
+
+        goal_mask = dists_to_goal <= self.goal_state_radius
+        rewards[goal_mask] += self.goal_reward
+
+        diffs = next_states[:, :, np.newaxis] - self.obstacles[np.newaxis, :, :]
+        obs_dists = np.linalg.norm(diffs, axis=1)
+        in_range = np.any(obs_dists <= self.obstacle_radius, axis=1)
+        obstacle_mask = in_range & ~goal_mask
+        n_obs = int(np.sum(obstacle_mask))
+        if n_obs > 0:
+            rewards[obstacle_mask] += self._obstacle_reward_batch(n_obs)
+
+        oob = np.any(next_states < 0, axis=1) | np.any(next_states > self.grid_size, axis=1)
+        rewards[oob & ~goal_mask & ~in_range] += self.obstacle_reward
+        return rewards
+
+    def _obstacle_reward_batch(self, n: int) -> np.ndarray:
+        hits = np.random.rand(n) < self.obstacle_hit_probability
+        return np.where(hits, self.obstacle_reward, 0.0)
+
 
 class ContinuousLDDangerousStatesRewardModel(ContinuousLightDarkRewardModel):
     def __init__(
@@ -107,6 +134,10 @@ class ContinuousLDDangerousStatesRewardModel(ContinuousLightDarkRewardModel):
     def _obstacle_reward(self, state: np.ndarray) -> float:
         """The expected reward is 0.0, but the variance is high."""
         return self.obstacle_reward if np.random.rand() < 0.5 else -self.obstacle_reward
+
+    def _obstacle_reward_batch(self, n: int) -> np.ndarray:
+        signs = np.where(np.random.rand(n) < 0.5, 1.0, -1.0)
+        return self.obstacle_reward * signs
 
 
 class ContinuousLightDarkDecayingHitProbabilityRewardModel(BaseLightDarkRewardModel):
@@ -162,3 +193,20 @@ class ContinuousLightDarkDecayingHitProbabilityRewardModel(BaseLightDarkRewardMo
 
         # Return obstacle reward if random value is less than probability
         return self.obstacle_reward if np.random.rand() < p else 0.0
+
+    def compute_reward_batch(self, states: np.ndarray, action: np.ndarray) -> np.ndarray:
+        next_states = states + action
+        dists_to_goal = np.linalg.norm(next_states - self.goal_state, axis=1)
+        rewards = -self.fuel_cost - dists_to_goal
+
+        goal_mask = dists_to_goal <= self.goal_state_radius
+        rewards[goal_mask] += self.goal_reward
+
+        oob = np.any(next_states < 0, axis=1) | np.any(next_states > self.grid_size, axis=1)
+        rewards[oob & ~goal_mask] += self.obstacle_reward
+
+        diffs = next_states[:, :, np.newaxis] - self.obstacles[np.newaxis, :, :]
+        min_dists = np.min(np.linalg.norm(diffs, axis=1), axis=1)
+        probs = np.exp(-min_dists / self.penalty_decay)
+        rewards[np.random.rand(len(next_states)) < probs] += self.obstacle_reward
+        return rewards

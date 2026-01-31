@@ -239,6 +239,29 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
 
         return float(reward)
 
+    def reward_batch(self, states: np.ndarray, action: str) -> np.ndarray:
+        next_states = states + self.action_to_vector[action]
+        dists_to_goal = np.linalg.norm(next_states - self.goal_state, axis=1)
+        rewards = -self.fuel_cost - dists_to_goal
+
+        goal_mask = np.all(next_states == self.goal_state, axis=1)
+        rewards[goal_mask] += self.goal_reward
+
+        obs_match = np.all(
+            next_states[:, :, np.newaxis] == self.obstacles[np.newaxis, :, :],
+            axis=1,
+        )
+        in_obstacle = np.any(obs_match, axis=1)
+        obstacle_mask = in_obstacle & ~goal_mask
+        n_obs = int(np.sum(obstacle_mask))
+        if n_obs > 0:
+            hits = np.random.rand(n_obs) < self.obstacle_hit_probability
+            rewards[obstacle_mask] += np.where(hits, self.obstacle_reward, 0.0)
+
+        oob = np.any(next_states < 0, axis=1) | np.any(next_states > self.grid_size, axis=1)
+        rewards[oob & ~goal_mask & ~in_obstacle] += self.obstacle_reward
+        return rewards
+
     def is_terminal(self, state: np.ndarray) -> bool:
         if state.shape != (2,):
             raise ValueError("state must be a 2D vector")
