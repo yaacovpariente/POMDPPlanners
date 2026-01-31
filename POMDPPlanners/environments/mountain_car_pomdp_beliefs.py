@@ -15,12 +15,16 @@ Functions:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
 from POMDPPlanners.core.belief.vectorized_particle_belief_updater import (
     VectorizedParticleBeliefUpdater,
+)
+from POMDPPlanners.environments.mountain_car_pomdp_gaussian_beliefs import (
+    GaussianBeliefUpdaterType,
+    create_mountain_car_gaussian_belief,
 )
 from POMDPPlanners.utils.belief_factory import BeliefType
 from POMDPPlanners.utils.config_to_id import config_to_id
@@ -167,7 +171,7 @@ class MountainCarVectorizedUpdater(VectorizedParticleBeliefUpdater):
 # Belief factory
 # ---------------------------------------------------------------------------
 
-_SUPPORTED_TYPES = {BeliefType.PARTICLE, BeliefType.VECTORIZED_PARTICLE}
+_SUPPORTED_TYPES = {BeliefType.PARTICLE, BeliefType.VECTORIZED_PARTICLE, BeliefType.GAUSSIAN}
 _DEFAULT_TYPE = BeliefType.VECTORIZED_PARTICLE
 
 
@@ -175,14 +179,27 @@ def create_mountain_car_belief(
     env: "MountainCarPOMDP",
     belief_type: BeliefType = _DEFAULT_TYPE,
     n_particles: int = 200,
+    **kwargs: Any,
 ) -> "Belief":
     """Create a ready-to-use belief for the Mountain Car POMDP.
+
+    For ``BeliefType.GAUSSIAN``, the following keyword arguments are
+    forwarded to
+    :func:`create_mountain_car_gaussian_belief`:
+
+    - ``updater_type`` (:class:`GaussianBeliefUpdaterType`): defaults to
+      ``GaussianBeliefUpdaterType.UKF``.
+    - ``initial_covariance`` (``np.ndarray``): defaults to
+      ``np.diag([0.2**2 / 12, 1e-4])``.
+    - ``process_noise_scale`` (``float``): defaults to ``1e-4``.
 
     Args:
         env: MountainCarPOMDP environment instance.
         belief_type: Desired belief representation.
             Defaults to ``BeliefType.VECTORIZED_PARTICLE``.
-        n_particles: Number of particles. Defaults to 200.
+        n_particles: Number of particles (ignored for GAUSSIAN).
+            Defaults to 200.
+        **kwargs: Extra arguments forwarded to the Gaussian factory.
 
     Returns:
         A configured :class:`Belief` object.
@@ -205,6 +222,8 @@ def create_mountain_car_belief(
         )
     if belief_type == BeliefType.PARTICLE:
         return _create_particle_belief(env, n_particles)
+    if belief_type == BeliefType.GAUSSIAN:
+        return _create_gaussian_belief(env, **kwargs)
     return _create_vectorized_belief(env, n_particles)
 
 
@@ -212,6 +231,18 @@ def _create_particle_belief(env: "MountainCarPOMDP", n_particles: int) -> "Belie
     from POMDPPlanners.core.belief.belief_utils import get_initial_belief
 
     return get_initial_belief(env, n_particles)
+
+
+def _create_gaussian_belief(env: "MountainCarPOMDP", **kwargs: Any) -> "Belief":
+    updater_type = kwargs.pop("updater_type", GaussianBeliefUpdaterType.UKF)
+    initial_covariance = kwargs.pop("initial_covariance", None)
+    process_noise_scale = kwargs.pop("process_noise_scale", 1e-4)
+    return create_mountain_car_gaussian_belief(
+        env=env,
+        updater_type=updater_type,
+        initial_covariance=initial_covariance,
+        process_noise_scale=process_noise_scale,
+    )
 
 
 def _create_vectorized_belief(env: "MountainCarPOMDP", n_particles: int) -> "Belief":
