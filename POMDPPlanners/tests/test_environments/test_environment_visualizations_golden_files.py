@@ -16,6 +16,8 @@ Directory Structure:
         ├── light_dark_visualization.gif
         ├── push_visualization.gif
         ├── laser_tag_visualization.gif
+        ├── continuous_laser_tag_visualization.gif
+        ├── continuous_push_visualization.gif
         └── safety_ant_velocity_visualization.gif
 """
 
@@ -23,7 +25,7 @@ import hashlib
 import shutil
 import warnings
 from pathlib import Path
-from typing import Any, List, cast
+from typing import Any, List
 
 import numpy as np
 import pytest
@@ -51,6 +53,18 @@ from POMDPPlanners.environments.push_pomdp.push_pomdp_visualizer import (
 from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp import LaserTagPOMDP
 from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_visualizer import (
     LaserTagVisualizer,
+)
+from POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_pomdp import (
+    ContinuousLaserTagPOMDP,
+)
+from POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_visualizer import (
+    ContinuousLaserTagVisualizer,
+)
+from POMDPPlanners.environments.push_pomdp.continuous_push_pomdp import (
+    ContinuousPushPOMDP,
+)
+from POMDPPlanners.environments.push_pomdp.continuous_push_pomdp_visualizer import (
+    ContinuousPushPOMDPVisualizer,
 )
 from POMDPPlanners.environments.safety_ant_velocity_pomdp.safety_ant_velocity_pomdp import (
     SafeAntVelocityPOMDP,
@@ -483,6 +497,131 @@ def create_deterministic_safety_ant_velocity_episode(seed: int = 42) -> List[Ste
     return history
 
 
+def create_deterministic_continuous_laser_tag_episode(seed: int = 42) -> List[StepData]:
+    """Create deterministic Continuous LaserTag episode for testing.
+
+    Args:
+        seed: Random seed for reproducibility
+
+    Returns:
+        List of StepData objects representing episode history
+    """
+    np.random.seed(seed)
+    env = ContinuousLaserTagPOMDP(
+        discount_factor=0.95,
+        robot_transition_cov_matrix=np.eye(2) * 0.01,
+        opponent_transition_cov_matrix=np.eye(2) * 0.01,
+    )
+
+    state = env.initial_state_dist().sample()[0]
+    history = []
+
+    # Execute fixed action sequence (continuous 3D: [dx, dy, tag_flag])
+    action_sequence = [
+        np.array([1.0, 0.0, 0.0]),
+        np.array([0.0, 1.0, 0.0]),
+        np.array([-1.0, 0.0, 0.0]),
+        np.array([0.0, -1.0, 0.0]),
+        np.array([0.5, 0.5, 0.0]),
+        np.array([-0.5, 0.5, 0.0]),
+        np.array([1.0, 0.0, 0.0]),
+        np.array([0.0, 0.0, 1.0]),  # tag attempt
+    ]
+
+    for action in action_sequence:
+        next_state, obs, reward = env.sample_next_step(state, action)
+        history.append(
+            StepData(
+                state=state,
+                action=action,
+                next_state=next_state,
+                observation=obs,
+                reward=reward,
+                belief=_create_mock_belief(state),
+            )
+        )
+        state = next_state
+        if env.is_terminal(state):
+            break
+
+    # Add terminal state
+    history.append(
+        StepData(
+            state=state,
+            action=None,
+            next_state=state,
+            observation=None,
+            reward=0.0,
+            belief=_create_mock_belief(state),
+        )
+    )
+
+    return history
+
+
+def create_deterministic_continuous_push_episode(seed: int = 42) -> List[StepData]:
+    """Create deterministic Continuous Push episode for testing.
+
+    Args:
+        seed: Random seed for reproducibility
+
+    Returns:
+        List of StepData objects representing episode history
+    """
+    np.random.seed(seed)
+    env = ContinuousPushPOMDP(
+        discount_factor=0.99,
+        grid_size=10,
+        obstacles=[(3.0, 3.0, 0.5), (6.0, 6.0, 0.5)],
+        state_transition_cov_matrix=np.eye(2) * 0.01,
+    )
+
+    state = env.initial_state_dist().sample()[0]
+    history = []
+
+    # Execute fixed action sequence (continuous 2D vectors)
+    action_sequence = [
+        np.array([1.0, 0.0]),
+        np.array([1.0, 0.0]),
+        np.array([0.0, 1.0]),
+        np.array([0.0, 1.0]),
+        np.array([-1.0, 0.0]),
+        np.array([-1.0, 0.0]),
+        np.array([0.0, -1.0]),
+        np.array([0.5, 0.5]),
+    ]
+
+    for action in action_sequence:
+        next_state, obs, reward = env.sample_next_step(state, action)
+        history.append(
+            StepData(
+                state=state,
+                action=action,
+                next_state=next_state,
+                observation=obs,
+                reward=reward,
+                belief=_create_mock_belief(state),
+            )
+        )
+        state = next_state
+        if env.is_terminal(state):
+            break
+
+    # Add terminal state
+    history.append(
+        StepData(
+            state=state,
+            action=None,
+            next_state=state,
+            observation=None,
+            reward=0.0,
+            belief=_create_mock_belief(state),
+        )
+    )
+
+    return history
+
+
 @pytest.fixture
 def temp_output_dir(tmp_path):
     """Create temporary directory for test outputs."""
@@ -666,6 +805,80 @@ class TestVisualizationConsistency:
             output_path,
             "laser_tag_visualization.gif",
             "test_laser_tag_visualization_consistency",
+        )
+
+    def test_continuous_laser_tag_visualization_consistency(self, temp_output_dir):
+        """Test Continuous LaserTag visualization produces consistent output.
+
+        Purpose: Validates that Continuous LaserTag visualizations are deterministic
+
+        Given: A deterministic Continuous LaserTag episode with fixed seed
+        When: Visualization is created from the episode
+        Then: Output matches golden file hash (or creates golden if missing)
+
+        Test type: integration
+        """
+        # Create deterministic episode
+        history = create_deterministic_continuous_laser_tag_episode(seed=42)
+
+        # Create environment and visualizer
+        env = ContinuousLaserTagPOMDP(
+            discount_factor=0.95,
+            robot_transition_cov_matrix=np.eye(2) * 0.01,
+            opponent_transition_cov_matrix=np.eye(2) * 0.01,
+        )
+        visualizer = ContinuousLaserTagVisualizer(
+            grid_size=env.grid_size,
+            walls=env.walls,
+            robot_radius=env.robot_radius,
+            opponent_radius=env.opponent_radius,
+            dangerous_areas=env.dangerous_areas,
+            dangerous_area_radius=env.dangerous_area_radius,
+        )
+
+        # Generate visualization
+        output_path = temp_output_dir / "continuous_laser_tag_test.gif"
+        visualizer.create_visualization(history, output_path)
+
+        # Compare against golden file
+        compare_or_create_golden_file(
+            output_path,
+            "continuous_laser_tag_visualization.gif",
+            "test_continuous_laser_tag_visualization_consistency",
+        )
+
+    def test_continuous_push_visualization_consistency(self, temp_output_dir):
+        """Test Continuous Push visualization produces consistent output.
+
+        Purpose: Validates that Continuous Push visualizations are deterministic
+
+        Given: A deterministic Continuous Push episode with fixed seed
+        When: Visualization is created from the episode
+        Then: Output matches golden file hash (or creates golden if missing)
+
+        Test type: integration
+        """
+        # Create deterministic episode
+        history = create_deterministic_continuous_push_episode(seed=42)
+
+        # Create environment and visualizer
+        env = ContinuousPushPOMDP(
+            discount_factor=0.99,
+            grid_size=10,
+            obstacles=[(3.0, 3.0, 0.5), (6.0, 6.0, 0.5)],
+            state_transition_cov_matrix=np.eye(2) * 0.01,
+        )
+        visualizer = ContinuousPushPOMDPVisualizer(env)
+
+        # Generate visualization
+        output_path = temp_output_dir / "continuous_push_test.gif"
+        visualizer.create_visualization(history, output_path)
+
+        # Compare against golden file
+        compare_or_create_golden_file(
+            output_path,
+            "continuous_push_visualization.gif",
+            "test_continuous_push_visualization_consistency",
         )
 
     def test_safety_ant_velocity_visualization_consistency(self, temp_output_dir):
