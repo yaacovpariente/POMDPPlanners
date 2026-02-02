@@ -7,7 +7,11 @@ from POMDPPlanners.utils.belief_factory import create_environment_belief
 from POMDPPlanners.core.environment import Environment, DiscreteActionsEnvironment, SpaceType
 from POMDPPlanners.core.policy import PolicySpaceInfo
 from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
-from POMDPPlanners.environments.laser_tag_pomdp import LaserTagPOMDP
+from POMDPPlanners.environments.laser_tag_pomdp import (
+    LaserTagPOMDP,
+    ContinuousLaserTagPOMDP,
+    ContinuousLaserTagPOMDPDiscreteActions,
+)
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
     ContinuousLightDarkPOMDP,
     ContinuousLightDarkPOMDPDiscreteActions,
@@ -296,6 +300,26 @@ class EnvironmentConfigsAPI:
         belief = create_environment_belief(pomdp, n_particles=n_particles)
         return pomdp, belief
 
+    def continuous_laser_tag_pomdp_config(
+        self, n_particles: int = 20
+    ) -> Tuple[Environment, Belief]:
+        pomdp = ContinuousLaserTagPOMDP(
+            discount_factor=self.discount_factor,
+            name="ContinuousLaserTagPOMDP",
+        )
+        belief = create_environment_belief(pomdp, n_particles=n_particles)
+        return pomdp, belief
+
+    def continuous_laser_tag_pomdp_discrete_actions_config(
+        self, n_particles: int = 20
+    ) -> Tuple[DiscreteActionsEnvironment, Belief]:
+        pomdp = ContinuousLaserTagPOMDPDiscreteActions(
+            discount_factor=self.discount_factor,
+            name="ContinuousLaserTagPOMDPDiscreteActions",
+        )
+        belief = create_environment_belief(pomdp, n_particles=n_particles)
+        return pomdp, belief
+
     def safety_ant_velocity_pomdp_config(self, n_particles: int = 20) -> Tuple[Environment, Belief]:
         pomdp = SafeAntVelocityPOMDP(
             discount_factor=self.discount_factor, name="SafeAntVelocityPOMDP"
@@ -477,6 +501,26 @@ class RiskAverseEnvironmentConfigsAPI:
 
     def laser_tag_pomdp_config(self, n_particles: int = 20) -> Tuple[Environment, Belief]:
         pomdp = LaserTagPOMDP(discount_factor=self.discount_factor, name="LaserTagPOMDP")
+        belief = create_environment_belief(pomdp, n_particles=n_particles)
+        return pomdp, belief
+
+    def continuous_laser_tag_pomdp_config(
+        self, n_particles: int = 20
+    ) -> Tuple[Environment, Belief]:
+        pomdp = ContinuousLaserTagPOMDP(
+            discount_factor=self.discount_factor,
+            name="ContinuousLaserTagPOMDP",
+        )
+        belief = create_environment_belief(pomdp, n_particles=n_particles)
+        return pomdp, belief
+
+    def continuous_laser_tag_pomdp_discrete_actions_config(
+        self, n_particles: int = 20
+    ) -> Tuple[DiscreteActionsEnvironment, Belief]:
+        pomdp = ContinuousLaserTagPOMDPDiscreteActions(
+            discount_factor=self.discount_factor,
+            name="ContinuousLaserTagPOMDPDiscreteActions",
+        )
         belief = create_environment_belief(pomdp, n_particles=n_particles)
         return pomdp, belief
 
