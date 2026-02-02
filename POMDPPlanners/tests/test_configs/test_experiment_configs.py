@@ -15,8 +15,13 @@ from POMDPPlanners.configs.experiment_configs import (
     complete_environments_and_benchmarks_hyperparameter_optimization_configs,
     get_benchmarks_hyperparameter_optimization_configs,
     AverageReturnParameterToOptimizeMapper,
+    RiskAverseParameterToOptimizeMapper,
     AllHyperparameterBenchmarksExperimentConfigCreator,
     AllBenchmarkEnvironmentsOnPlannerGeneratorsExperimentConfigCreator,
+)
+from POMDPPlanners.configs.environment_configs import (
+    EnvironmentConfigsAPI,
+    RiskAverseEnvironmentConfigsAPI,
 )
 from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     HyperParameterOptimizationDirection,
@@ -36,6 +41,23 @@ from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.policy import Policy
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
+from POMDPPlanners.environments.mountain_car_pomdp import MountainCarPOMDP
+from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
+    ContinuousLightDarkPOMDP,
+)
+from POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp import (
+    DiscreteLightDarkPOMDP,
+)
+from POMDPPlanners.environments.push_pomdp import PushPOMDP
+from POMDPPlanners.environments.safety_ant_velocity_pomdp import SafeAntVelocityPOMDP
+from POMDPPlanners.environments.rock_sample_pomdp import RockSamplePOMDP
+from POMDPPlanners.environments.laser_tag_pomdp import (
+    LaserTagPOMDP,
+    ContinuousLaserTagPOMDP,
+    ContinuousLaserTagPOMDPDiscreteActions,
+)
+from POMDPPlanners.environments.pacman_pomdp import PacManPOMDP
 
 # Set random seeds for reproducible tests
 np.random.seed(42)
@@ -1289,3 +1311,446 @@ class TestAllBenchmarkEnvironmentsOnPlannerGeneratorsExperimentConfigCreator:
             # Verify no duplicate config_ids
             config_ids = [config.config_id for config in configs]
             assert len(set(config_ids)) == len(config_ids), "Should have no duplicate config_ids"
+
+
+class TestAverageReturnParameterToOptimizeMapper:
+    """Tests for AverageReturnParameterToOptimizeMapper metric selection logic."""
+
+    def setup_method(self):
+        self.mapper = AverageReturnParameterToOptimizeMapper()
+        self.env_configs = EnvironmentConfigsAPI(discount_factor=0.95)
+
+    def _get_all_standard_environments(self):
+        mixed_space = PolicySpaceInfo(
+            action_space=SpaceType.MIXED, observation_space=SpaceType.MIXED
+        )
+        return self.env_configs.get_compatible_environments(
+            policy_space_info=mixed_space, n_particles=10
+        )
+
+    def test_average_return_mapper_returns_average_return_for_all_environments(self):
+        """Test that average_return is returned as first metric for every environment.
+
+        Purpose: Validates that AverageReturnParameterToOptimizeMapper always includes
+        average_return with MAXIMIZE direction as the first parameter for all environments.
+
+        Given: Each of the registered environment types from EnvironmentConfigsAPI
+        When: AverageReturnParameterToOptimizeMapper.generate() is called for each environment
+        Then: Every result is non-empty and contains ("average_return", MAXIMIZE) as first element
+
+        Test type: unit
+        """
+        envs = self._get_all_standard_environments()
+        assert len(envs) > 0, "Should have at least one registered environment"
+
+        for env, _belief in envs:
+            result = self.mapper.generate(env)
+            assert len(result) > 0, f"Result should be non-empty for {env.name}"
+            assert result[0] == (
+                "average_return",
+                HyperParameterOptimizationDirection.MAXIMIZE,
+            ), f"First metric should be ('average_return', MAXIMIZE) for {env.name}, got {result[0]}"
+
+    def test_average_return_mapper_environment_specific_metrics(self):
+        """Test that environment-specific metrics are added for known environment types.
+
+        Purpose: Validates that specific environments get their expected secondary metrics.
+
+        Given: Specific environment instances (Tiger, CartPole, RockSample, LaserTag, PacMan)
+        When: AverageReturnParameterToOptimizeMapper.generate() is called for each
+        Then: Each environment has the correct environment-specific metric
+
+        Test type: unit
+        """
+        expected_metrics = {
+            TigerPOMDP: "success_rate",
+            CartPolePOMDP: "goal_reaching_rate",
+            RockSamplePOMDP: "exit_success_rate",
+            LaserTagPOMDP: "tag_success_rate",
+            PacManPOMDP: "win_rate",
+        }
+
+        for env, _belief in self._get_all_standard_environments():
+            for env_cls, expected_metric in expected_metrics.items():
+                if isinstance(env, env_cls):
+                    metric_names = [param[0] for param in self.mapper.generate(env)]
+                    assert expected_metric in metric_names, (
+                        f"{env.name} (isinstance {env_cls.__name__}) should have "
+                        f"'{expected_metric}' metric, got {metric_names}"
+                    )
+
+    def test_average_return_mapper_continuous_environments(self):
+        """Test mapper behavior for continuous laser tag environments.
+
+        Purpose: Validates that ContinuousLaserTagPOMDP and its discrete-actions
+        variant get tag_success_rate from the mapper despite not inheriting from
+        LaserTagPOMDP. These classes inherit from Environment directly and require
+        their own isinstance branch.
+
+        Given: ContinuousLaserTagPOMDP and ContinuousLaserTagPOMDPDiscreteActions
+            instances from the environment registry
+        When: AverageReturnParameterToOptimizeMapper.generate() is called
+        Then: Result contains both average_return and tag_success_rate
+
+        Test type: unit
+        """
+        envs = self._get_all_standard_environments()
+        continuous_envs = [
+            (env, belief) for env, belief in envs if isinstance(env, ContinuousLaserTagPOMDP)
+        ]
+        assert (
+            len(continuous_envs) > 0
+        ), "Registry should contain at least one ContinuousLaserTagPOMDP variant"
+
+        for env, _belief in continuous_envs:
+            result = self.mapper.generate(env)
+            metric_names = [param[0] for param in result]
+            assert "average_return" in metric_names, f"{env.name} should have average_return"
+            assert (
+                "tag_success_rate" in metric_names
+            ), f"{env.name} should have tag_success_rate but got {metric_names}"
+
+    def test_average_return_mapper_continuous_laser_tag_has_tag_success_rate(self):
+        """Regression: ContinuousLaserTagPOMDP must have tag_success_rate metric.
+
+        Purpose: Verifies that the AverageReturnParameterToOptimizeMapper returns
+        tag_success_rate for directly instantiated ContinuousLaserTagPOMDP and its
+        discrete-actions variant. ContinuousLaserTagPOMDP inherits from Environment
+        (not LaserTagPOMDP), so it requires its own isinstance branch in the mapper.
+
+        Given: Directly constructed ContinuousLaserTagPOMDP and
+            ContinuousLaserTagPOMDPDiscreteActions instances
+        When: AverageReturnParameterToOptimizeMapper.generate() is called
+        Then: tag_success_rate with MAXIMIZE is present in the returned metrics
+
+        Test type: unit
+        """
+        envs = [
+            ContinuousLaserTagPOMDP(discount_factor=0.95, walls=[], dangerous_areas=[]),
+            ContinuousLaserTagPOMDPDiscreteActions(
+                discount_factor=0.95, walls=[], dangerous_areas=[]
+            ),
+        ]
+        for env in envs:
+            result = self.mapper.generate(env)
+            metric_dict = {name: direction for name, direction in result}
+            assert "tag_success_rate" in metric_dict, (
+                f"{env.name} should have 'tag_success_rate' metric but got "
+                f"{list(metric_dict.keys())}"
+            )
+            assert metric_dict["tag_success_rate"] == (
+                HyperParameterOptimizationDirection.MAXIMIZE
+            ), f"{env.name}: tag_success_rate should be MAXIMIZE"
+
+    def test_average_return_mapper_all_directions_are_maximize(self):
+        """Test that all metrics from AverageReturnParameterToOptimizeMapper use MAXIMIZE.
+
+        Purpose: Validates the mapper always uses MAXIMIZE direction for all metrics.
+
+        Given: All registered environments from EnvironmentConfigsAPI
+        When: AverageReturnParameterToOptimizeMapper.generate() is called for each
+        Then: Every metric tuple has HyperParameterOptimizationDirection.MAXIMIZE
+
+        Test type: unit
+        """
+        for env, _belief in self._get_all_standard_environments():
+            result = self.mapper.generate(env)
+            for metric_name, direction in result:
+                assert (
+                    direction == HyperParameterOptimizationDirection.MAXIMIZE
+                ), f"{env.name}: metric '{metric_name}' should be MAXIMIZE, got {direction}"
+
+
+class TestRiskAverseParameterToOptimizeMapper:
+    """Tests for RiskAverseParameterToOptimizeMapper metric selection logic."""
+
+    def setup_method(self):
+        self.mapper = RiskAverseParameterToOptimizeMapper()
+
+    def test_risk_averse_mapper_covers_all_registered_environments(self):
+        """Test that the risk-averse mapper handles every registered environment without error.
+
+        Purpose: Validates that no registered environment raises ValueError from the
+        risk-averse mapper's else clause. Newly added environments that are not handled
+        by any isinstance check would raise ValueError.
+
+        Given: All environments from both EnvironmentConfigsAPI and RiskAverseEnvironmentConfigsAPI
+        When: RiskAverseParameterToOptimizeMapper.generate() is called for each
+        Then: No ValueError is raised for any environment
+
+        Test type: unit
+        """
+        mixed_space = PolicySpaceInfo(
+            action_space=SpaceType.MIXED, observation_space=SpaceType.MIXED
+        )
+
+        standard_api = EnvironmentConfigsAPI(discount_factor=0.95)
+        standard_envs = standard_api.get_compatible_environments(
+            policy_space_info=mixed_space, n_particles=10
+        )
+
+        risk_averse_api = RiskAverseEnvironmentConfigsAPI(discount_factor=0.95)
+        risk_averse_envs = risk_averse_api.get_compatible_environments(
+            policy_space_info=mixed_space, n_particles=10
+        )
+
+        all_envs = standard_envs + risk_averse_envs
+        assert len(all_envs) > 0, "Should have at least one environment to test"
+
+        unsupported_envs = []
+        for env, _belief in all_envs:
+            try:
+                result = self.mapper.generate(env)
+                assert len(result) > 0, f"Result should be non-empty for {env.name}"
+            except ValueError:
+                unsupported_envs.append(env.__class__.__name__)
+
+        if unsupported_envs:
+            pytest.fail(
+                f"RiskAverseParameterToOptimizeMapper does not handle these registered "
+                f"environments: {unsupported_envs}"
+            )
+
+    def test_risk_averse_mapper_continuous_laser_tag_metrics(self):
+        """Regression: ContinuousLaserTagPOMDP must have correct risk-averse metrics.
+
+        Purpose: Verifies that the RiskAverseParameterToOptimizeMapper returns the
+        expected metrics for directly instantiated ContinuousLaserTagPOMDP and its
+        discrete-actions variant. ContinuousLaserTagPOMDP inherits from Environment
+        (not LaserTagPOMDP), so it requires its own isinstance branch in the mapper.
+
+        Given: Directly constructed ContinuousLaserTagPOMDP and
+            ContinuousLaserTagPOMDPDiscreteActions instances
+        When: RiskAverseParameterToOptimizeMapper.generate() is called
+        Then: Returns average_all_dangerous_encounters (MINIMIZE) and
+            tag_success_rate (MAXIMIZE)
+
+        Test type: unit
+        """
+        envs = [
+            ContinuousLaserTagPOMDP(discount_factor=0.95, walls=[], dangerous_areas=[]),
+            ContinuousLaserTagPOMDPDiscreteActions(
+                discount_factor=0.95, walls=[], dangerous_areas=[]
+            ),
+        ]
+        for env in envs:
+            result = self.mapper.generate(env)
+            metric_dict = {name: direction for name, direction in result}
+            assert "average_all_dangerous_encounters" in metric_dict, (
+                f"{env.name} should have 'average_all_dangerous_encounters' but got "
+                f"{list(metric_dict.keys())}"
+            )
+            assert metric_dict["average_all_dangerous_encounters"] == (
+                HyperParameterOptimizationDirection.MINIMIZE
+            ), f"{env.name}: average_all_dangerous_encounters should be MINIMIZE"
+            assert "tag_success_rate" in metric_dict, (
+                f"{env.name} should have 'tag_success_rate' but got " f"{list(metric_dict.keys())}"
+            )
+            assert metric_dict["tag_success_rate"] == (
+                HyperParameterOptimizationDirection.MAXIMIZE
+            ), f"{env.name}: tag_success_rate should be MAXIMIZE"
+
+    def test_risk_averse_mapper_returns_non_empty_for_all_risk_averse_environments(self):
+        """Test that the risk-averse mapper returns non-empty results for risk-averse environments.
+
+        Purpose: Validates that risk-averse environments get proper metric mappings.
+
+        Given: All environments from RiskAverseEnvironmentConfigsAPI
+        When: RiskAverseParameterToOptimizeMapper.generate() is called for each
+        Then: Each result is a non-empty list of (metric_name, direction) tuples
+
+        Test type: unit
+        """
+        mixed_space = PolicySpaceInfo(
+            action_space=SpaceType.MIXED, observation_space=SpaceType.MIXED
+        )
+        risk_averse_api = RiskAverseEnvironmentConfigsAPI(discount_factor=0.95)
+        envs = risk_averse_api.get_compatible_environments(
+            policy_space_info=mixed_space, n_particles=10
+        )
+
+        for env, _belief in envs:
+            result = self.mapper.generate(env)
+            assert len(result) > 0, f"Risk-averse result should be non-empty for {env.name}"
+            for metric_name, direction in result:
+                assert isinstance(metric_name, str), f"Metric name should be str for {env.name}"
+                assert isinstance(
+                    direction, HyperParameterOptimizationDirection
+                ), f"Direction should be HyperParameterOptimizationDirection for {env.name}"
+
+
+class TestAllHyperparameterBenchmarksConfigValidity:
+    """Tests validating the structural correctness of generated experiment configs."""
+
+    def setup_method(self):
+        self.mixed_space_info = PolicySpaceInfo(
+            action_space=SpaceType.MIXED, observation_space=SpaceType.MIXED
+        )
+
+    def _create_creator(self, policy_space_info=None, is_risk_averse=False):
+        return AllHyperparameterBenchmarksExperimentConfigCreator(
+            policy_space_info=policy_space_info or self.mixed_space_info,
+            particles=10,
+            num_episodes=2,
+            num_steps=3,
+            n_trials=2,
+            discount_factor=0.95,
+            time_out_in_seconds=3.0,
+            is_risk_averse=is_risk_averse,
+        )
+
+    def test_all_generated_configs_have_valid_structure(self):
+        """Test that every generated config has all required fields with valid values.
+
+        Purpose: Validates that each generated HyperParameterRunParams has a valid
+        environment, belief, planner config, and non-empty parameters_to_optimize.
+
+        Given: AllHyperparameterBenchmarksExperimentConfigCreator with MIXED space info
+        When: get_experiment_configs() is called
+        Then: Every config has valid environment, belief, planner config, hyperparameters,
+        parameters_to_optimize, and positive num_episodes/num_steps/n_trials
+
+        Test type: unit
+        """
+        creator = self._create_creator()
+        configs = creator.get_experiment_configs()
+
+        assert len(configs) > 0, "Should generate at least one config"
+
+        for i, config in enumerate(configs):
+            label = f"Config[{i}] ({config.environment.name})"
+            assert isinstance(config.environment, Environment), f"{label}: invalid environment"
+            assert isinstance(config.belief, Belief), f"{label}: invalid belief"
+            assert (
+                config.hyper_param_planner_config.policy_cls is not None
+            ), f"{label}: policy_cls is None"
+            assert (
+                len(config.hyper_param_planner_config.hyper_parameters) > 0
+            ), f"{label}: hyper_parameters is empty"
+            assert (
+                len(config.parameters_to_optimize) > 0
+            ), f"{label}: parameters_to_optimize is empty"
+            assert config.num_episodes > 0, f"{label}: num_episodes must be positive"
+            assert config.num_steps > 0, f"{label}: num_steps must be positive"
+            assert config.n_trials > 0, f"{label}: n_trials must be positive"
+
+    def test_all_generated_configs_have_discount_factor_in_constant_params(self):
+        """Test that discount_factor is present in constant_parameters for planners that need it.
+
+        Purpose: Validates that planners requiring discount_factor receive it via
+        constant_parameters. Missing discount_factor was a known integration issue.
+
+        Given: AllHyperparameterBenchmarksExperimentConfigCreator with MIXED space info
+        When: get_experiment_configs() is called
+        Then: Every config's constant_parameters includes "discount_factor"
+
+        Test type: unit
+        """
+        creator = self._create_creator()
+        configs = creator.get_experiment_configs()
+
+        assert len(configs) > 0, "Should generate at least one config"
+
+        for config in configs:
+            planner_name = config.hyper_param_planner_config.policy_cls.__name__
+            constant_params = config.hyper_param_planner_config.constant_parameters
+            # PlannersHyperparamConfigs sets discount_factor in constant_parameters
+            # for all planners except SparseSampling and DiscreteActionSequences
+            # which handle it differently. We check that environment is always present.
+            assert "environment" in constant_params, (
+                f"Planner '{planner_name}' for env '{config.environment.name}' "
+                f"missing 'environment' in constant_parameters"
+            )
+
+    def test_config_count_matches_environment_planner_combinations(self):
+        """Test that config count equals total environment-planner combinations.
+
+        Purpose: Validates that _get_experiment_configs generates one config per
+        compatible (environment, planner) pair.
+
+        Given: AllHyperparameterBenchmarksExperimentConfigCreator with DISCRETE space info
+        When: get_experiment_configs() is called
+        Then: Config count matches the sum of compatible planners across all environments
+
+        Test type: unit
+        """
+        discrete_space = PolicySpaceInfo(
+            action_space=SpaceType.DISCRETE, observation_space=SpaceType.DISCRETE
+        )
+        creator = self._create_creator(policy_space_info=discrete_space)
+        configs = creator.get_experiment_configs()
+
+        # Independently compute expected count
+        from POMDPPlanners.configs.planners_hyperparam_configs import PlannersHyperparamConfigs
+
+        env_configs = EnvironmentConfigsAPI(discount_factor=0.95)
+        envs = env_configs.get_compatible_environments(
+            policy_space_info=discrete_space, n_particles=10
+        )
+        planners_config = PlannersHyperparamConfigs(discount_factor=0.95)
+
+        expected_count = 0
+        for env, _belief in envs:
+            compatible_planners = planners_config.get_compatible_planners(
+                env=env, time_out_in_seconds=3.0
+            )
+            expected_count += len(compatible_planners)
+
+        assert (
+            len(configs) == expected_count
+        ), f"Expected {expected_count} configs (one per env-planner pair), got {len(configs)}"
+
+    def test_generated_configs_metric_names_are_valid(self):
+        """Test that all metric names in parameters_to_optimize are recognized by the environment.
+
+        Purpose: Validates that the mapper does not return metric names that the
+        environment cannot produce. This catches the scenario where a mapper returns
+        a metric that doesn't exist for a particular environment.
+
+        Given: AllHyperparameterBenchmarksExperimentConfigCreator with MIXED space info
+        When: get_experiment_configs() is called
+        Then: Every metric name in parameters_to_optimize is a string (non-empty)
+        and has a valid optimization direction
+
+        Test type: unit
+        """
+        creator = self._create_creator()
+        configs = creator.get_experiment_configs()
+
+        assert len(configs) > 0, "Should generate at least one config"
+
+        for config in configs:
+            for metric_name, direction in config.parameters_to_optimize:
+                assert isinstance(metric_name, str) and len(metric_name) > 0, (
+                    f"Metric name should be non-empty string for {config.environment.name}, "
+                    f"got {metric_name!r}"
+                )
+                assert isinstance(direction, HyperParameterOptimizationDirection), (
+                    f"Direction for '{metric_name}' should be "
+                    f"HyperParameterOptimizationDirection for {config.environment.name}"
+                )
+
+    def test_all_generated_configs_risk_averse_have_valid_structure(self):
+        """Test that risk-averse generated configs also have valid structure.
+
+        Purpose: Validates that configs generated with is_risk_averse=True have the
+        same structural integrity as standard configs.
+
+        Given: AllHyperparameterBenchmarksExperimentConfigCreator with is_risk_averse=True
+        When: get_experiment_configs() is called
+        Then: Every config has valid structure and non-empty parameters_to_optimize
+
+        Test type: unit
+        """
+        creator = self._create_creator(is_risk_averse=True)
+        configs = creator.get_experiment_configs()
+
+        assert len(configs) > 0, "Risk-averse should generate at least one config"
+
+        for config in configs:
+            assert isinstance(config.environment, Environment)
+            assert isinstance(config.belief, Belief)
+            assert len(config.parameters_to_optimize) > 0, (
+                f"Risk-averse config for {config.environment.name} has empty "
+                f"parameters_to_optimize"
+            )

@@ -34,6 +34,9 @@ from POMDPPlanners.environments.safety_ant_velocity_pomdp import SafeAntVelocity
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.environments.rock_sample_pomdp import RockSamplePOMDP
 from POMDPPlanners.environments.laser_tag_pomdp import LaserTagPOMDP
+from POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_pomdp import (
+    ContinuousLaserTagPOMDP,
+)
 from POMDPPlanners.environments.pacman_pomdp import PacManPOMDP
 
 
@@ -58,6 +61,8 @@ class AverageReturnParameterToOptimizeMapper(ParameterToOptimizeMapper):
             params.append(("success_rate", HyperParameterOptimizationDirection.MAXIMIZE))
         elif isinstance(environment, RockSamplePOMDP):
             params.append(("exit_success_rate", HyperParameterOptimizationDirection.MAXIMIZE))
+        elif isinstance(environment, ContinuousLaserTagPOMDP):
+            params.append(("tag_success_rate", HyperParameterOptimizationDirection.MAXIMIZE))
         elif isinstance(environment, LaserTagPOMDP):
             params.append(("tag_success_rate", HyperParameterOptimizationDirection.MAXIMIZE))
         elif isinstance(environment, PacManPOMDP):
@@ -106,6 +111,11 @@ class RiskAverseParameterToOptimizeMapper(ParameterToOptimizeMapper):
             return [
                 ("average_dangerous_area_steps", HyperParameterOptimizationDirection.MINIMIZE),
                 ("exit_success_rate", HyperParameterOptimizationDirection.MAXIMIZE),
+            ]
+        elif isinstance(environment, ContinuousLaserTagPOMDP):
+            return [
+                ("average_all_dangerous_encounters", HyperParameterOptimizationDirection.MINIMIZE),
+                ("tag_success_rate", HyperParameterOptimizationDirection.MAXIMIZE),
             ]
         elif isinstance(environment, LaserTagPOMDP):
             return [
