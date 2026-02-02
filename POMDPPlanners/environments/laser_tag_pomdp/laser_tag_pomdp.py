@@ -547,7 +547,7 @@ class LaserTagObservation(ObservationModel):
             # Terminal state case
             terminal_obs = (-1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0)
             for i, obs in enumerate(values):
-                if obs == terminal_obs:
+                if np.array_equal(obs, terminal_obs):
                     result[i] = 1.0
         else:
             # Get true laser measurements
@@ -562,7 +562,7 @@ class LaserTagObservation(ObservationModel):
             variance = self.measurement_noise**2
 
             for i, obs in enumerate(values):
-                if isinstance(obs, (tuple, list)) and len(obs) == 8:
+                if isinstance(obs, (tuple, list, np.ndarray)) and len(obs) == 8:
                     # Product of independent Gaussian PDFs for each direction
                     prob = 1.0
                     for j, (true_measure, observed_measure) in enumerate(
@@ -864,13 +864,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
 
         Observations are 8-dimensional laser measurements or terminal observations.
         """
-        if isinstance(observation1, (tuple, list)) and isinstance(observation2, (tuple, list)):
-            if len(observation1) == len(observation2) == 8:
-                # Compare 8-dimensional laser measurements with tolerance
-                return all(
-                    abs(obs1 - obs2) < 1e-10 for obs1, obs2 in zip(observation1, observation2)
-                )
-        return observation1 == observation2
+        return np.array_equal(observation1, observation2)
 
     def _count_episode_metrics(
         self, history: History, action_dirs: Dict[int, Tuple[int, int]]

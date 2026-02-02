@@ -67,6 +67,7 @@ class PushVectorizedUpdater(VectorizedParticleBeliefUpdater):
     """
 
     ACTION_VECTORS = np.array([[0, 1], [0, -1], [1, 0], [-1, 0]], dtype=float)
+    ACTION_NAME_TO_INDEX = {"up": 0, "down": 1, "right": 2, "left": 3}
 
     def __init__(
         self,
@@ -126,7 +127,7 @@ class PushVectorizedUpdater(VectorizedParticleBeliefUpdater):
 
     def batch_transition(self, particles: np.ndarray, action: np.ndarray) -> np.ndarray:
         # particles: (N, 6) = [robot_x, robot_y, obj_x, obj_y, target_x, target_y]
-        action_idx = int(action)
+        action_idx = self.ACTION_NAME_TO_INDEX[action] if isinstance(action, str) else int(action)
         if self.transition_error_prob > 0:
             return self._batch_transition_with_error(particles, action_idx)
         return self._transition_for_action(particles, action_idx)
