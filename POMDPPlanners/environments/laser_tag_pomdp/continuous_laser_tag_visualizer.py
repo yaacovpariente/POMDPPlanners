@@ -360,6 +360,13 @@ class ContinuousLaserTagVisualizer:
             visible=False,
         )
 
+        action_arrow = ax.annotate(
+            "",
+            xy=(0, 0),
+            xytext=(0, 0),
+            arrowprops={"arrowstyle": "->", "color": "red", "lw": 2},
+        )
+
         opp_belief = ax.scatter([], [], c="lightblue", alpha=0.6, s=30)
         robot_belief = ax.scatter([], [], c="lightcoral", alpha=0.6, s=30)
 
@@ -376,6 +383,7 @@ class ContinuousLaserTagVisualizer:
             "step_text": step_text,
             "action_text": action_text,
             "tag_text": tag_text,
+            "action_arrow": action_arrow,
             "opp_belief": opp_belief,
             "robot_belief": robot_belief,
             "laser_lines": laser_lines,
@@ -410,8 +418,11 @@ class ContinuousLaserTagVisualizer:
             [], [], marker="o", color="w", markerfacecolor="lightblue", markersize=8, label="Belief"
         )
         proxy_laser = Line2D([], [], color="g", alpha=0.4, linewidth=1, label="Laser")
+        proxy_action = Line2D(
+            [], [], color="red", linewidth=2, marker=">", markersize=8, label="Action"
+        )
         ax.legend(
-            handles=[proxy_robot, proxy_opponent, proxy_belief, proxy_laser],
+            handles=[proxy_robot, proxy_opponent, proxy_belief, proxy_laser, proxy_action],
             loc="upper right",
             bbox_to_anchor=(0.98, 0.98),
             framealpha=0.9,
@@ -425,6 +436,9 @@ class ContinuousLaserTagVisualizer:
         e["step_text"].set_text("")
         e["action_text"].set_text("")
         e["tag_text"].set_visible(False)
+        e["action_arrow"].set_position((0, 0))
+        e["action_arrow"].xy = (0, 0)
+        e["action_arrow"].set_visible(False)
         e["opp_belief"].set_offsets(np.empty((0, 2)))
         e["robot_belief"].set_offsets(np.empty((0, 2)))
         for line in e["laser_lines"]:
@@ -448,6 +462,14 @@ class ContinuousLaserTagVisualizer:
 
         return self._all_artists(e)
 
+    _STRING_ACTION_DIRS = {
+        "up": np.array([0.0, 1.0]),
+        "down": np.array([0.0, -1.0]),
+        "right": np.array([1.0, 0.0]),
+        "left": np.array([-1.0, 0.0]),
+        "tag": np.array([0.0, 0.0]),
+    }
+
     def _update_action_info(self, frame, actions, rp, op, e) -> None:
         if frame >= len(actions):
             return
@@ -455,12 +477,16 @@ class ContinuousLaserTagVisualizer:
         if isinstance(action, str):
             e["action_text"].set_text(f"Action: {action}")
             is_tag = action == "tag"
+            direction = self._STRING_ACTION_DIRS.get(action, np.array([0.0, 0.0]))
         else:
             a = np.asarray(action, dtype=float).ravel()
             is_tag = a.size > 2 and a[2] > 0.5
             e["action_text"].set_text(
                 f"Action: [{a[0]:.1f}, {a[1]:.1f}, {a[2]:.1f}]" if a.size > 2 else ""
             )
+            direction = a[:2] if a.size >= 2 else np.array([0.0, 0.0])
+
+        self._update_action_arrow(e["action_arrow"], rp, direction)
 
         if is_tag:
             dist = np.linalg.norm(rp - op)
@@ -473,6 +499,20 @@ class ContinuousLaserTagVisualizer:
             e["tag_text"].set_visible(True)
         else:
             e["tag_text"].set_visible(False)
+
+    def _update_action_arrow(self, action_arrow, position, direction) -> None:
+        mag = float(np.linalg.norm(direction))
+        if mag > 1e-12:
+            unit = direction / mag
+            arrow_scale = 0.6
+            action_arrow.set_position((position[0], position[1]))
+            action_arrow.xy = (
+                position[0] + unit[0] * arrow_scale,
+                position[1] + unit[1] * arrow_scale,
+            )
+            action_arrow.set_visible(True)
+        else:
+            action_arrow.set_visible(False)
 
     def _update_belief_scatter(self, frame, beliefs, e) -> None:
         if frame < len(beliefs) and beliefs[frame] is not None:
@@ -517,6 +557,7 @@ class ContinuousLaserTagVisualizer:
             e["step_text"],
             e["action_text"],
             e["tag_text"],
+            e["action_arrow"],
             e["opp_belief"],
             e["robot_belief"],
         ] + e["laser_lines"]

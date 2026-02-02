@@ -51,6 +51,35 @@ from POMDPPlanners.simulations.simulations_deployment.tasks import (
     HyperParameterTuningSimulationTask,
 )
 from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
+from POMDPPlanners.planners.mcts_planners.pft_dpw import PFT_DPW
+from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
+from POMDPPlanners.utils.action_samplers import (
+    DiscreteActionSampler,
+    UnitCircleActionSampler,
+)
+from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
+from POMDPPlanners.environments.mountain_car_pomdp import MountainCarPOMDP
+from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
+from POMDPPlanners.environments.push_pomdp import PushPOMDP
+from POMDPPlanners.environments.laser_tag_pomdp import LaserTagPOMDP
+from POMDPPlanners.environments.rock_sample_pomdp import RockSamplePOMDP
+from POMDPPlanners.environments.pacman_pomdp import PacManPOMDP
+from POMDPPlanners.environments.safety_ant_velocity_pomdp import SafeAntVelocityPOMDP
+from POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp import (
+    DiscreteLightDarkPOMDP,
+)
+from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
+    ContinuousLightDarkPOMDP,
+    ContinuousLightDarkPOMDPDiscreteActions,
+)
+from POMDPPlanners.environments.push_pomdp.continuous_push_pomdp import (
+    ContinuousPushPOMDP,
+    ContinuousPushPOMDPDiscreteActions,
+)
+from POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_pomdp import (
+    ContinuousLaserTagPOMDP,
+    ContinuousLaserTagPOMDPDiscreteActions,
+)
 import warnings
 
 np.random.seed(42)
@@ -642,6 +671,23 @@ class PolicyRequiringConstants(StandardSparseSamplingDiscreteActionsPlanner):
             )
         super().__init__(environment, branching_factor, depth, **kwargs)
         self.required_constant = required_constant
+
+
+# Defined at module level so it can be pickled by the multiprocessing backend
+class LaserTagContinuousActionSampler(ActionSampler):
+    """Samples 3D continuous actions [dx, dy, tag_flag] for LaserTag."""
+
+    def __init__(self, max_move: float = 1.0, tag_probability: float = 0.2):
+        self.max_move = max_move
+        self.tag_probability = tag_probability
+
+    def sample(self, belief_node=None):
+        theta = np.random.uniform(0, 2 * np.pi)
+        r = np.sqrt(np.random.uniform(0, 1)) * self.max_move
+        dx = r * np.cos(theta)
+        dy = r * np.sin(theta)
+        tag_flag = 1.0 if np.random.random() < self.tag_probability else 0.0
+        return np.array([dx, dy, tag_flag])
 
 
 class TestHyperParameterOptimizerMLFlowIntegration:
@@ -1999,6 +2045,762 @@ class TestSingleEnvironmentOptimizationSmoke:
                 constant_parameters={
                     "environment": env,
                     "name": "SparseSampling_Tiger_smoke",
+                },
+            ),
+            num_episodes=1,
+            num_steps=2,
+            n_trials=2,
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
+        )
+
+        optimizer = HyperParameterOptimizer(cache_dir_path=temp_cache_dir)
+        result = optimizer.optimize([config])
+        assert isinstance(result, list)
+
+    def test_single_environment_optimization_continuous_light_dark_pft_dpw(self, temp_cache_dir):
+        """Test optimization with ContinuousLightDarkPOMDP + PFT-DPW (continuous).
+
+        Purpose: Validates that the full optimization pipeline works for
+        ContinuousLightDarkPOMDP with PFT-DPW planner.
+
+        Given: ContinuousLightDarkPOMDP environment with PFT-DPW planner config
+            (1 episode, 2 steps, 2 trials)
+        When: HyperParameterOptimizer.optimize() is called with this single config
+        Then: Returns a list result without crashing
+
+        Test type: integration
+        """
+        env = ContinuousLightDarkPOMDP(discount_factor=0.95)
+        belief = get_initial_belief(env, n_particles=10)
+        action_sampler = UnitCircleActionSampler()
+
+        config = HyperParameterRunParams(
+            environment=env,
+            belief=belief,
+            hyper_param_planner_config=HyperParamPlannerConfig(
+                policy_cls=PFT_DPW,
+                hyper_parameters=[
+                    NumericalHyperParameter(0.1, 1.0, "exploration_constant"),
+                    NumericalHyperParameter(2, 4, "depth"),
+                    NumericalHyperParameter(1.0, 5.0, "k_a"),
+                    NumericalHyperParameter(0.1, 0.5, "alpha_a"),
+                    NumericalHyperParameter(1.0, 5.0, "k_o"),
+                    NumericalHyperParameter(0.1, 0.5, "alpha_o"),
+                ],
+                constant_parameters={
+                    "discount_factor": env.discount_factor,
+                    "name": "PFT_DPW_LightDark_smoke",
+                    "environment": env,
+                    "action_sampler": action_sampler,
+                    "time_out_in_seconds": 3.0,
+                },
+            ),
+            num_episodes=1,
+            num_steps=2,
+            n_trials=2,
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
+        )
+
+        optimizer = HyperParameterOptimizer(cache_dir_path=temp_cache_dir)
+        result = optimizer.optimize([config])
+        assert isinstance(result, list)
+
+    def test_single_environment_optimization_continuous_push_pft_dpw(self, temp_cache_dir):
+        """Test optimization with ContinuousPushPOMDP + PFT-DPW (continuous).
+
+        Purpose: Validates that the full optimization pipeline works for
+        ContinuousPushPOMDP with PFT-DPW planner.
+
+        Given: ContinuousPushPOMDP environment with PFT-DPW planner config
+            (1 episode, 2 steps, 2 trials)
+        When: HyperParameterOptimizer.optimize() is called with this single config
+        Then: Returns a list result without crashing
+
+        Test type: integration
+        """
+        env = ContinuousPushPOMDP(discount_factor=0.95)
+        belief = get_initial_belief(env, n_particles=10)
+        action_sampler = UnitCircleActionSampler()
+
+        config = HyperParameterRunParams(
+            environment=env,
+            belief=belief,
+            hyper_param_planner_config=HyperParamPlannerConfig(
+                policy_cls=PFT_DPW,
+                hyper_parameters=[
+                    NumericalHyperParameter(0.1, 1.0, "exploration_constant"),
+                    NumericalHyperParameter(2, 4, "depth"),
+                    NumericalHyperParameter(1.0, 5.0, "k_a"),
+                    NumericalHyperParameter(0.1, 0.5, "alpha_a"),
+                    NumericalHyperParameter(1.0, 5.0, "k_o"),
+                    NumericalHyperParameter(0.1, 0.5, "alpha_o"),
+                ],
+                constant_parameters={
+                    "discount_factor": env.discount_factor,
+                    "name": "PFT_DPW_Push_smoke",
+                    "environment": env,
+                    "action_sampler": action_sampler,
+                    "time_out_in_seconds": 3.0,
+                },
+            ),
+            num_episodes=1,
+            num_steps=2,
+            n_trials=2,
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
+        )
+
+        optimizer = HyperParameterOptimizer(cache_dir_path=temp_cache_dir)
+        result = optimizer.optimize([config])
+        assert isinstance(result, list)
+
+    def test_single_environment_optimization_continuous_laser_tag_pft_dpw(self, temp_cache_dir):
+        """Test optimization with ContinuousLaserTagPOMDP + PFT-DPW (continuous 3D actions).
+
+        Purpose: Validates that the full optimization pipeline works for
+        ContinuousLaserTagPOMDP with PFT-DPW planner using a custom 3D action sampler.
+
+        Given: ContinuousLaserTagPOMDP environment with PFT-DPW planner config and
+            LaserTagContinuousActionSampler (1 episode, 2 steps, 2 trials)
+        When: HyperParameterOptimizer.optimize() is called with this single config
+        Then: Returns a list result without crashing
+
+        Test type: integration
+        """
+        env = ContinuousLaserTagPOMDP(discount_factor=0.95)
+        belief = get_initial_belief(env, n_particles=10)
+        action_sampler = LaserTagContinuousActionSampler()
+
+        config = HyperParameterRunParams(
+            environment=env,
+            belief=belief,
+            hyper_param_planner_config=HyperParamPlannerConfig(
+                policy_cls=PFT_DPW,
+                hyper_parameters=[
+                    NumericalHyperParameter(0.1, 1.0, "exploration_constant"),
+                    NumericalHyperParameter(2, 4, "depth"),
+                    NumericalHyperParameter(1.0, 5.0, "k_a"),
+                    NumericalHyperParameter(0.1, 0.5, "alpha_a"),
+                    NumericalHyperParameter(1.0, 5.0, "k_o"),
+                    NumericalHyperParameter(0.1, 0.5, "alpha_o"),
+                ],
+                constant_parameters={
+                    "discount_factor": env.discount_factor,
+                    "name": "PFT_DPW_LaserTag_smoke",
+                    "environment": env,
+                    "action_sampler": action_sampler,
+                    "time_out_in_seconds": 3.0,
+                },
+            ),
+            num_episodes=1,
+            num_steps=2,
+            n_trials=2,
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
+        )
+
+        optimizer = HyperParameterOptimizer(cache_dir_path=temp_cache_dir)
+        result = optimizer.optimize([config])
+        assert isinstance(result, list)
+
+    def test_single_environment_optimization_cartpole_pft_dpw(self, temp_cache_dir):
+        """Test optimization with CartPolePOMDP + PFT-DPW (discrete actions).
+
+        Purpose: Validates that the full optimization pipeline works for
+        CartPolePOMDP with PFT-DPW planner using DiscreteActionSampler.
+
+        Given: CartPolePOMDP environment with PFT-DPW planner config
+            (1 episode, 2 steps, 2 trials)
+        When: HyperParameterOptimizer.optimize() is called with this single config
+        Then: Returns a list result without crashing
+
+        Test type: integration
+        """
+        env = CartPolePOMDP(discount_factor=0.95, noise_cov=np.eye(4) * 0.1)
+        belief = get_initial_belief(env, n_particles=10)
+        action_sampler = DiscreteActionSampler(env.get_actions())
+
+        config = HyperParameterRunParams(
+            environment=env,
+            belief=belief,
+            hyper_param_planner_config=HyperParamPlannerConfig(
+                policy_cls=PFT_DPW,
+                hyper_parameters=[
+                    NumericalHyperParameter(0.1, 1.0, "exploration_constant"),
+                    NumericalHyperParameter(2, 4, "depth"),
+                    NumericalHyperParameter(1.0, 5.0, "k_a"),
+                    NumericalHyperParameter(0.1, 0.5, "alpha_a"),
+                    NumericalHyperParameter(1.0, 5.0, "k_o"),
+                    NumericalHyperParameter(0.1, 0.5, "alpha_o"),
+                ],
+                constant_parameters={
+                    "discount_factor": env.discount_factor,
+                    "name": "PFT_DPW_CartPole_smoke",
+                    "environment": env,
+                    "action_sampler": action_sampler,
+                    "time_out_in_seconds": 3.0,
+                },
+            ),
+            num_episodes=1,
+            num_steps=2,
+            n_trials=2,
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
+        )
+
+        optimizer = HyperParameterOptimizer(cache_dir_path=temp_cache_dir)
+        result = optimizer.optimize([config])
+        assert isinstance(result, list)
+
+    def test_single_environment_optimization_mountain_car_pft_dpw(self, temp_cache_dir):
+        """Test optimization with MountainCarPOMDP + PFT-DPW (discrete actions).
+
+        Purpose: Validates that the full optimization pipeline works for
+        MountainCarPOMDP with PFT-DPW planner using DiscreteActionSampler.
+
+        Given: MountainCarPOMDP environment with PFT-DPW planner config
+            (1 episode, 2 steps, 2 trials)
+        When: HyperParameterOptimizer.optimize() is called with this single config
+        Then: Returns a list result without crashing
+
+        Test type: integration
+        """
+        env = MountainCarPOMDP(discount_factor=0.95)
+        belief = get_initial_belief(env, n_particles=10)
+        action_sampler = DiscreteActionSampler(env.get_actions())
+
+        config = HyperParameterRunParams(
+            environment=env,
+            belief=belief,
+            hyper_param_planner_config=HyperParamPlannerConfig(
+                policy_cls=PFT_DPW,
+                hyper_parameters=[
+                    NumericalHyperParameter(0.1, 1.0, "exploration_constant"),
+                    NumericalHyperParameter(2, 4, "depth"),
+                    NumericalHyperParameter(1.0, 5.0, "k_a"),
+                    NumericalHyperParameter(0.1, 0.5, "alpha_a"),
+                    NumericalHyperParameter(1.0, 5.0, "k_o"),
+                    NumericalHyperParameter(0.1, 0.5, "alpha_o"),
+                ],
+                constant_parameters={
+                    "discount_factor": env.discount_factor,
+                    "name": "PFT_DPW_MountainCar_smoke",
+                    "environment": env,
+                    "action_sampler": action_sampler,
+                    "time_out_in_seconds": 3.0,
+                },
+            ),
+            num_episodes=1,
+            num_steps=2,
+            n_trials=2,
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
+        )
+
+        optimizer = HyperParameterOptimizer(cache_dir_path=temp_cache_dir)
+        result = optimizer.optimize([config])
+        assert isinstance(result, list)
+
+    def test_single_environment_optimization_sanity_pft_dpw(self, temp_cache_dir):
+        """Test optimization with SanityPOMDP + PFT-DPW (discrete actions).
+
+        Purpose: Validates that the full optimization pipeline works for
+        SanityPOMDP with PFT-DPW planner using DiscreteActionSampler.
+
+        Given: SanityPOMDP environment with PFT-DPW planner config
+            (1 episode, 2 steps, 2 trials)
+        When: HyperParameterOptimizer.optimize() is called with this single config
+        Then: Returns a list result without crashing
+
+        Test type: integration
+        """
+        env = SanityPOMDP(discount_factor=0.95)
+        belief = get_initial_belief(env, n_particles=10)
+        action_sampler = DiscreteActionSampler(env.get_actions())
+
+        config = HyperParameterRunParams(
+            environment=env,
+            belief=belief,
+            hyper_param_planner_config=HyperParamPlannerConfig(
+                policy_cls=PFT_DPW,
+                hyper_parameters=[
+                    NumericalHyperParameter(0.1, 1.0, "exploration_constant"),
+                    NumericalHyperParameter(2, 4, "depth"),
+                    NumericalHyperParameter(1.0, 5.0, "k_a"),
+                    NumericalHyperParameter(0.1, 0.5, "alpha_a"),
+                    NumericalHyperParameter(1.0, 5.0, "k_o"),
+                    NumericalHyperParameter(0.1, 0.5, "alpha_o"),
+                ],
+                constant_parameters={
+                    "discount_factor": env.discount_factor,
+                    "name": "PFT_DPW_Sanity_smoke",
+                    "environment": env,
+                    "action_sampler": action_sampler,
+                    "time_out_in_seconds": 3.0,
+                },
+            ),
+            num_episodes=1,
+            num_steps=2,
+            n_trials=2,
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
+        )
+
+        optimizer = HyperParameterOptimizer(cache_dir_path=temp_cache_dir)
+        result = optimizer.optimize([config])
+        assert isinstance(result, list)
+
+    def test_single_environment_optimization_push_pft_dpw(self, temp_cache_dir):
+        """Test optimization with PushPOMDP + PFT-DPW (discrete actions).
+
+        Purpose: Validates that the full optimization pipeline works for
+        PushPOMDP with PFT-DPW planner using DiscreteActionSampler.
+
+        Given: PushPOMDP environment with PFT-DPW planner config
+            (1 episode, 2 steps, 2 trials)
+        When: HyperParameterOptimizer.optimize() is called with this single config
+        Then: Returns a list result without crashing
+
+        Test type: integration
+        """
+        env = PushPOMDP(discount_factor=0.95)
+        belief = get_initial_belief(env, n_particles=10)
+        action_sampler = DiscreteActionSampler(env.get_actions())
+
+        config = HyperParameterRunParams(
+            environment=env,
+            belief=belief,
+            hyper_param_planner_config=HyperParamPlannerConfig(
+                policy_cls=PFT_DPW,
+                hyper_parameters=[
+                    NumericalHyperParameter(0.1, 1.0, "exploration_constant"),
+                    NumericalHyperParameter(2, 4, "depth"),
+                    NumericalHyperParameter(1.0, 5.0, "k_a"),
+                    NumericalHyperParameter(0.1, 0.5, "alpha_a"),
+                    NumericalHyperParameter(1.0, 5.0, "k_o"),
+                    NumericalHyperParameter(0.1, 0.5, "alpha_o"),
+                ],
+                constant_parameters={
+                    "discount_factor": env.discount_factor,
+                    "name": "PFT_DPW_Push_smoke",
+                    "environment": env,
+                    "action_sampler": action_sampler,
+                    "time_out_in_seconds": 3.0,
+                },
+            ),
+            num_episodes=1,
+            num_steps=2,
+            n_trials=2,
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
+        )
+
+        optimizer = HyperParameterOptimizer(cache_dir_path=temp_cache_dir)
+        result = optimizer.optimize([config])
+        assert isinstance(result, list)
+
+    def test_single_environment_optimization_laser_tag_pft_dpw(self, temp_cache_dir):
+        """Test optimization with LaserTagPOMDP + PFT-DPW (discrete actions).
+
+        Purpose: Validates that the full optimization pipeline works for
+        LaserTagPOMDP with PFT-DPW planner using DiscreteActionSampler.
+
+        Given: LaserTagPOMDP environment with PFT-DPW planner config
+            (1 episode, 2 steps, 2 trials)
+        When: HyperParameterOptimizer.optimize() is called with this single config
+        Then: Returns a list result without crashing
+
+        Test type: integration
+        """
+        env = LaserTagPOMDP(discount_factor=0.95)
+        belief = get_initial_belief(env, n_particles=10)
+        action_sampler = DiscreteActionSampler(env.get_actions())
+
+        config = HyperParameterRunParams(
+            environment=env,
+            belief=belief,
+            hyper_param_planner_config=HyperParamPlannerConfig(
+                policy_cls=PFT_DPW,
+                hyper_parameters=[
+                    NumericalHyperParameter(0.1, 1.0, "exploration_constant"),
+                    NumericalHyperParameter(2, 4, "depth"),
+                    NumericalHyperParameter(1.0, 5.0, "k_a"),
+                    NumericalHyperParameter(0.1, 0.5, "alpha_a"),
+                    NumericalHyperParameter(1.0, 5.0, "k_o"),
+                    NumericalHyperParameter(0.1, 0.5, "alpha_o"),
+                ],
+                constant_parameters={
+                    "discount_factor": env.discount_factor,
+                    "name": "PFT_DPW_LaserTag_smoke",
+                    "environment": env,
+                    "action_sampler": action_sampler,
+                    "time_out_in_seconds": 3.0,
+                },
+            ),
+            num_episodes=1,
+            num_steps=2,
+            n_trials=2,
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
+        )
+
+        optimizer = HyperParameterOptimizer(cache_dir_path=temp_cache_dir)
+        result = optimizer.optimize([config])
+        assert isinstance(result, list)
+
+    def test_single_environment_optimization_rock_sample_pft_dpw(self, temp_cache_dir):
+        """Test optimization with RockSamplePOMDP + PFT-DPW (discrete actions).
+
+        Purpose: Validates that the full optimization pipeline works for
+        RockSamplePOMDP with PFT-DPW planner using DiscreteActionSampler.
+
+        Given: RockSamplePOMDP environment with PFT-DPW planner config
+            (1 episode, 2 steps, 2 trials)
+        When: HyperParameterOptimizer.optimize() is called with this single config
+        Then: Returns a list result without crashing
+
+        Test type: integration
+        """
+        env = RockSamplePOMDP(discount_factor=0.95)
+        belief = get_initial_belief(env, n_particles=10)
+        action_sampler = DiscreteActionSampler(env.get_actions())
+
+        config = HyperParameterRunParams(
+            environment=env,
+            belief=belief,
+            hyper_param_planner_config=HyperParamPlannerConfig(
+                policy_cls=PFT_DPW,
+                hyper_parameters=[
+                    NumericalHyperParameter(0.1, 1.0, "exploration_constant"),
+                    NumericalHyperParameter(2, 4, "depth"),
+                    NumericalHyperParameter(1.0, 5.0, "k_a"),
+                    NumericalHyperParameter(0.1, 0.5, "alpha_a"),
+                    NumericalHyperParameter(1.0, 5.0, "k_o"),
+                    NumericalHyperParameter(0.1, 0.5, "alpha_o"),
+                ],
+                constant_parameters={
+                    "discount_factor": env.discount_factor,
+                    "name": "PFT_DPW_RockSample_smoke",
+                    "environment": env,
+                    "action_sampler": action_sampler,
+                    "time_out_in_seconds": 3.0,
+                },
+            ),
+            num_episodes=1,
+            num_steps=2,
+            n_trials=2,
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
+        )
+
+        optimizer = HyperParameterOptimizer(cache_dir_path=temp_cache_dir)
+        result = optimizer.optimize([config])
+        assert isinstance(result, list)
+
+    def test_single_environment_optimization_pacman_pft_dpw(self, temp_cache_dir):
+        """Test optimization with PacManPOMDP + PFT-DPW (discrete actions).
+
+        Purpose: Validates that the full optimization pipeline works for
+        PacManPOMDP with PFT-DPW planner using DiscreteActionSampler.
+
+        Given: PacManPOMDP environment with PFT-DPW planner config
+            (1 episode, 2 steps, 2 trials)
+        When: HyperParameterOptimizer.optimize() is called with this single config
+        Then: Returns a list result without crashing
+
+        Test type: integration
+        """
+        env = PacManPOMDP(discount_factor=0.95)
+        belief = get_initial_belief(env, n_particles=10)
+        action_sampler = DiscreteActionSampler(env.get_actions())
+
+        config = HyperParameterRunParams(
+            environment=env,
+            belief=belief,
+            hyper_param_planner_config=HyperParamPlannerConfig(
+                policy_cls=PFT_DPW,
+                hyper_parameters=[
+                    NumericalHyperParameter(0.1, 1.0, "exploration_constant"),
+                    NumericalHyperParameter(2, 4, "depth"),
+                    NumericalHyperParameter(1.0, 5.0, "k_a"),
+                    NumericalHyperParameter(0.1, 0.5, "alpha_a"),
+                    NumericalHyperParameter(1.0, 5.0, "k_o"),
+                    NumericalHyperParameter(0.1, 0.5, "alpha_o"),
+                ],
+                constant_parameters={
+                    "discount_factor": env.discount_factor,
+                    "name": "PFT_DPW_PacMan_smoke",
+                    "environment": env,
+                    "action_sampler": action_sampler,
+                    "time_out_in_seconds": 3.0,
+                },
+            ),
+            num_episodes=1,
+            num_steps=2,
+            n_trials=2,
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
+        )
+
+        optimizer = HyperParameterOptimizer(cache_dir_path=temp_cache_dir)
+        result = optimizer.optimize([config])
+        assert isinstance(result, list)
+
+    def test_single_environment_optimization_safe_ant_velocity_pft_dpw(self, temp_cache_dir):
+        """Test optimization with SafeAntVelocityPOMDP + PFT-DPW (discrete actions).
+
+        Purpose: Validates that the full optimization pipeline works for
+        SafeAntVelocityPOMDP with PFT-DPW planner using DiscreteActionSampler.
+
+        Given: SafeAntVelocityPOMDP environment with PFT-DPW planner config
+            (1 episode, 2 steps, 2 trials)
+        When: HyperParameterOptimizer.optimize() is called with this single config
+        Then: Returns a list result without crashing
+
+        Test type: integration
+        """
+        env = SafeAntVelocityPOMDP(discount_factor=0.95)
+        belief = get_initial_belief(env, n_particles=10)
+        action_sampler = DiscreteActionSampler(env.get_actions())
+
+        config = HyperParameterRunParams(
+            environment=env,
+            belief=belief,
+            hyper_param_planner_config=HyperParamPlannerConfig(
+                policy_cls=PFT_DPW,
+                hyper_parameters=[
+                    NumericalHyperParameter(0.1, 1.0, "exploration_constant"),
+                    NumericalHyperParameter(2, 4, "depth"),
+                    NumericalHyperParameter(1.0, 5.0, "k_a"),
+                    NumericalHyperParameter(0.1, 0.5, "alpha_a"),
+                    NumericalHyperParameter(1.0, 5.0, "k_o"),
+                    NumericalHyperParameter(0.1, 0.5, "alpha_o"),
+                ],
+                constant_parameters={
+                    "discount_factor": env.discount_factor,
+                    "name": "PFT_DPW_SafeAntVelocity_smoke",
+                    "environment": env,
+                    "action_sampler": action_sampler,
+                    "time_out_in_seconds": 3.0,
+                },
+            ),
+            num_episodes=1,
+            num_steps=2,
+            n_trials=2,
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
+        )
+
+        optimizer = HyperParameterOptimizer(cache_dir_path=temp_cache_dir)
+        result = optimizer.optimize([config])
+        assert isinstance(result, list)
+
+    def test_single_environment_optimization_discrete_light_dark_pft_dpw(self, temp_cache_dir):
+        """Test optimization with DiscreteLightDarkPOMDP + PFT-DPW (discrete actions).
+
+        Purpose: Validates that the full optimization pipeline works for
+        DiscreteLightDarkPOMDP with PFT-DPW planner using DiscreteActionSampler.
+
+        Given: DiscreteLightDarkPOMDP environment with PFT-DPW planner config
+            (1 episode, 2 steps, 2 trials)
+        When: HyperParameterOptimizer.optimize() is called with this single config
+        Then: Returns a list result without crashing
+
+        Test type: integration
+        """
+        env = DiscreteLightDarkPOMDP(discount_factor=0.95)
+        belief = get_initial_belief(env, n_particles=10)
+        action_sampler = DiscreteActionSampler(env.get_actions())
+
+        config = HyperParameterRunParams(
+            environment=env,
+            belief=belief,
+            hyper_param_planner_config=HyperParamPlannerConfig(
+                policy_cls=PFT_DPW,
+                hyper_parameters=[
+                    NumericalHyperParameter(0.1, 1.0, "exploration_constant"),
+                    NumericalHyperParameter(2, 4, "depth"),
+                    NumericalHyperParameter(1.0, 5.0, "k_a"),
+                    NumericalHyperParameter(0.1, 0.5, "alpha_a"),
+                    NumericalHyperParameter(1.0, 5.0, "k_o"),
+                    NumericalHyperParameter(0.1, 0.5, "alpha_o"),
+                ],
+                constant_parameters={
+                    "discount_factor": env.discount_factor,
+                    "name": "PFT_DPW_DiscreteLightDark_smoke",
+                    "environment": env,
+                    "action_sampler": action_sampler,
+                    "time_out_in_seconds": 3.0,
+                },
+            ),
+            num_episodes=1,
+            num_steps=2,
+            n_trials=2,
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
+        )
+
+        optimizer = HyperParameterOptimizer(cache_dir_path=temp_cache_dir)
+        result = optimizer.optimize([config])
+        assert isinstance(result, list)
+
+    def test_single_environment_optimization_continuous_light_dark_discrete_actions_pft_dpw(
+        self, temp_cache_dir
+    ):
+        """Test optimization with ContinuousLightDarkPOMDPDiscreteActions + PFT-DPW.
+
+        Purpose: Validates that the full optimization pipeline works for
+        ContinuousLightDarkPOMDPDiscreteActions with PFT-DPW planner.
+
+        Given: ContinuousLightDarkPOMDPDiscreteActions environment with PFT-DPW
+            planner config (1 episode, 2 steps, 2 trials)
+        When: HyperParameterOptimizer.optimize() is called with this single config
+        Then: Returns a list result without crashing
+
+        Test type: integration
+        """
+        env = ContinuousLightDarkPOMDPDiscreteActions(discount_factor=0.95)
+        belief = get_initial_belief(env, n_particles=10)
+        action_sampler = DiscreteActionSampler(env.get_actions())
+
+        config = HyperParameterRunParams(
+            environment=env,
+            belief=belief,
+            hyper_param_planner_config=HyperParamPlannerConfig(
+                policy_cls=PFT_DPW,
+                hyper_parameters=[
+                    NumericalHyperParameter(0.1, 1.0, "exploration_constant"),
+                    NumericalHyperParameter(2, 4, "depth"),
+                    NumericalHyperParameter(1.0, 5.0, "k_a"),
+                    NumericalHyperParameter(0.1, 0.5, "alpha_a"),
+                    NumericalHyperParameter(1.0, 5.0, "k_o"),
+                    NumericalHyperParameter(0.1, 0.5, "alpha_o"),
+                ],
+                constant_parameters={
+                    "discount_factor": env.discount_factor,
+                    "name": "PFT_DPW_ContinuousLightDarkDiscrete_smoke",
+                    "environment": env,
+                    "action_sampler": action_sampler,
+                    "time_out_in_seconds": 3.0,
+                },
+            ),
+            num_episodes=1,
+            num_steps=2,
+            n_trials=2,
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
+        )
+
+        optimizer = HyperParameterOptimizer(cache_dir_path=temp_cache_dir)
+        result = optimizer.optimize([config])
+        assert isinstance(result, list)
+
+    def test_single_environment_optimization_continuous_push_discrete_actions_pft_dpw(
+        self, temp_cache_dir
+    ):
+        """Test optimization with ContinuousPushPOMDPDiscreteActions + PFT-DPW.
+
+        Purpose: Validates that the full optimization pipeline works for
+        ContinuousPushPOMDPDiscreteActions with PFT-DPW planner.
+
+        Given: ContinuousPushPOMDPDiscreteActions environment with PFT-DPW planner
+            config (1 episode, 2 steps, 2 trials)
+        When: HyperParameterOptimizer.optimize() is called with this single config
+        Then: Returns a list result without crashing
+
+        Test type: integration
+        """
+        env = ContinuousPushPOMDPDiscreteActions(discount_factor=0.95)
+        belief = get_initial_belief(env, n_particles=10)
+        action_sampler = DiscreteActionSampler(env.get_actions())
+
+        config = HyperParameterRunParams(
+            environment=env,
+            belief=belief,
+            hyper_param_planner_config=HyperParamPlannerConfig(
+                policy_cls=PFT_DPW,
+                hyper_parameters=[
+                    NumericalHyperParameter(0.1, 1.0, "exploration_constant"),
+                    NumericalHyperParameter(2, 4, "depth"),
+                    NumericalHyperParameter(1.0, 5.0, "k_a"),
+                    NumericalHyperParameter(0.1, 0.5, "alpha_a"),
+                    NumericalHyperParameter(1.0, 5.0, "k_o"),
+                    NumericalHyperParameter(0.1, 0.5, "alpha_o"),
+                ],
+                constant_parameters={
+                    "discount_factor": env.discount_factor,
+                    "name": "PFT_DPW_ContinuousPushDiscrete_smoke",
+                    "environment": env,
+                    "action_sampler": action_sampler,
+                    "time_out_in_seconds": 3.0,
+                },
+            ),
+            num_episodes=1,
+            num_steps=2,
+            n_trials=2,
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
+        )
+
+        optimizer = HyperParameterOptimizer(cache_dir_path=temp_cache_dir)
+        result = optimizer.optimize([config])
+        assert isinstance(result, list)
+
+    def test_single_environment_optimization_continuous_laser_tag_discrete_actions_pft_dpw(
+        self, temp_cache_dir
+    ):
+        """Test optimization with ContinuousLaserTagPOMDPDiscreteActions + PFT-DPW.
+
+        Purpose: Validates that the full optimization pipeline works for
+        ContinuousLaserTagPOMDPDiscreteActions with PFT-DPW planner.
+
+        Given: ContinuousLaserTagPOMDPDiscreteActions environment with PFT-DPW
+            planner config (1 episode, 2 steps, 2 trials)
+        When: HyperParameterOptimizer.optimize() is called with this single config
+        Then: Returns a list result without crashing
+
+        Test type: integration
+        """
+        env = ContinuousLaserTagPOMDPDiscreteActions(discount_factor=0.95)
+        belief = get_initial_belief(env, n_particles=10)
+        action_sampler = DiscreteActionSampler(env.get_actions())
+
+        config = HyperParameterRunParams(
+            environment=env,
+            belief=belief,
+            hyper_param_planner_config=HyperParamPlannerConfig(
+                policy_cls=PFT_DPW,
+                hyper_parameters=[
+                    NumericalHyperParameter(0.1, 1.0, "exploration_constant"),
+                    NumericalHyperParameter(2, 4, "depth"),
+                    NumericalHyperParameter(1.0, 5.0, "k_a"),
+                    NumericalHyperParameter(0.1, 0.5, "alpha_a"),
+                    NumericalHyperParameter(1.0, 5.0, "k_o"),
+                    NumericalHyperParameter(0.1, 0.5, "alpha_o"),
+                ],
+                constant_parameters={
+                    "discount_factor": env.discount_factor,
+                    "name": "PFT_DPW_ContinuousLaserTagDiscrete_smoke",
+                    "environment": env,
+                    "action_sampler": action_sampler,
+                    "time_out_in_seconds": 3.0,
                 },
             ),
             num_episodes=1,

@@ -71,10 +71,18 @@ class PushPOMDPVisualizer:
         robot_scatter, object_scatter, target_scatter = self._initialize_entity_scatters(ax)
         self._initialize_obstacles(ax)
         push_arrow, connection_line = self._initialize_push_visuals(ax)
+        action_arrow = self._initialize_action_arrow(ax)
         step_text, distance_text, reward_text, success_text, collision_text = (
             self._initialize_text_displays(ax)
         )
-        ax.legend(bbox_to_anchor=(1.05, 1), loc="upper left")
+        proxy_action = Line2D(
+            [], [], color="red", linewidth=2, marker=">", markersize=8, label="Action"
+        )
+        ax.legend(
+            handles=ax.get_legend_handles_labels()[0] + [proxy_action],
+            bbox_to_anchor=(1.05, 1),
+            loc="upper left",
+        )
         animate = self._create_animate_function(
             states,
             actions,
@@ -84,6 +92,7 @@ class PushPOMDPVisualizer:
             target_scatter,
             push_arrow,
             connection_line,
+            action_arrow,
             step_text,
             distance_text,
             reward_text,
@@ -194,6 +203,43 @@ class PushPOMDPVisualizer:
         )
         connection_line = cast(Line2D, ax.plot([], [], "r-", alpha=0.6, linewidth=2, zorder=1)[0])
         return push_arrow, connection_line
+
+    def _initialize_action_arrow(self, ax: Axes) -> Any:
+        action_arrow = ax.annotate(
+            "",
+            xy=(0, 0),
+            xytext=(0, 0),
+            arrowprops={"arrowstyle": "->", "color": "red", "lw": 2},
+            zorder=7,
+        )
+        return action_arrow
+
+    _ACTION_DIRS = {
+        "up": np.array([0.0, 1.0]),
+        "down": np.array([0.0, -1.0]),
+        "right": np.array([1.0, 0.0]),
+        "left": np.array([-1.0, 0.0]),
+    }
+
+    def _update_action_arrow(
+        self, action_arrow: Any, actions: List[Any], frame: int, robot_pos: np.ndarray
+    ) -> None:
+        if frame >= len(actions):
+            action_arrow.set_visible(False)
+            return
+        action = actions[frame]
+        direction = self._ACTION_DIRS.get(action, np.array([0.0, 0.0]))
+        mag = float(np.linalg.norm(direction))
+        if mag > 1e-12:
+            arrow_scale = 0.6
+            action_arrow.set_position((robot_pos[0], robot_pos[1]))
+            action_arrow.xy = (
+                robot_pos[0] + direction[0] * arrow_scale,
+                robot_pos[1] + direction[1] * arrow_scale,
+            )
+            action_arrow.set_visible(True)
+        else:
+            action_arrow.set_visible(False)
 
     def _initialize_text_displays(self, ax: Axes) -> Tuple[Any, Any, Any, Any, Any]:
         step_text = ax.text(
@@ -364,6 +410,7 @@ class PushPOMDPVisualizer:
         target_scatter: Any,
         push_arrow: Any,
         connection_line: Line2D,
+        action_arrow: Any,
         step_text: Any,
         distance_text: Any,
         reward_text: Any,
@@ -378,6 +425,7 @@ class PushPOMDPVisualizer:
                     target_scatter,
                     push_arrow,
                     connection_line,
+                    action_arrow,
                     step_text,
                     distance_text,
                     reward_text,
@@ -401,6 +449,7 @@ class PushPOMDPVisualizer:
                 object_pos,
                 robot_to_object_dist,
             )
+            self._update_action_arrow(action_arrow, actions, frame, robot_pos)
             self._update_text_displays(
                 step_text,
                 distance_text,
@@ -422,6 +471,7 @@ class PushPOMDPVisualizer:
                 target_scatter,
                 push_arrow,
                 connection_line,
+                action_arrow,
                 step_text,
                 distance_text,
                 reward_text,
