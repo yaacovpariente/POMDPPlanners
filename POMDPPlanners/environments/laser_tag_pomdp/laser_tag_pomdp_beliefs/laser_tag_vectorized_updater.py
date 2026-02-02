@@ -277,27 +277,59 @@ class LaserTagVectorizedUpdater(VectorizedParticleBeliefUpdater):
         k = robot_pos.shape[0]
         new_opp = opp_pos.copy()
 
-        # Horizontal movement: toward robot column
-        h_delta = np.sign(robot_pos[:, 1] - opp_pos[:, 1]).astype(int)
-        h_target = np.column_stack([opp_pos[:, 0], opp_pos[:, 1] + h_delta])
-        h_valid = (h_delta != 0) & self._batch_is_valid(h_target)
-        h_prob = np.where(h_valid, 0.4, 0.0)
+        # All 4 cardinal direction targets
+        right_target = np.column_stack([opp_pos[:, 0], opp_pos[:, 1] + 1])
+        left_target = np.column_stack([opp_pos[:, 0], opp_pos[:, 1] - 1])
+        up_target = np.column_stack([opp_pos[:, 0] - 1, opp_pos[:, 1]])
+        down_target = np.column_stack([opp_pos[:, 0] + 1, opp_pos[:, 1]])
 
-        # Vertical movement: toward robot row
-        v_delta = np.sign(robot_pos[:, 0] - opp_pos[:, 0]).astype(int)
-        v_target = np.column_stack([opp_pos[:, 0] + v_delta, opp_pos[:, 1]])
-        v_valid = (v_delta != 0) & self._batch_is_valid(v_target)
-        v_prob = np.where(v_valid, 0.4, 0.0)
+        right_valid = self._batch_is_valid(right_target)
+        left_valid = self._batch_is_valid(left_target)
+        up_valid = self._batch_is_valid(up_target)
+        down_valid = self._batch_is_valid(down_target)
 
-        # Stay probability absorbs any blocked probability
-        # 3-way categorical sampling
+        # Horizontal: 0.4 toward robot, or 0.2/0.2 split when same column
+        same_col = robot_pos[:, 1] == opp_pos[:, 1]
+        right_prob = np.where(
+            same_col & right_valid,
+            0.2,
+            np.where((robot_pos[:, 1] > opp_pos[:, 1]) & right_valid, 0.4, 0.0),
+        )
+        left_prob = np.where(
+            same_col & left_valid,
+            0.2,
+            np.where((robot_pos[:, 1] < opp_pos[:, 1]) & left_valid, 0.4, 0.0),
+        )
+
+        # Vertical: 0.4 toward robot, or 0.2/0.2 split when same row
+        same_row = robot_pos[:, 0] == opp_pos[:, 0]
+        up_prob = np.where(
+            same_row & up_valid,
+            0.2,
+            np.where((robot_pos[:, 0] < opp_pos[:, 0]) & up_valid, 0.4, 0.0),
+        )
+        down_prob = np.where(
+            same_row & down_valid,
+            0.2,
+            np.where((robot_pos[:, 0] > opp_pos[:, 0]) & down_valid, 0.4, 0.0),
+        )
+
+        # 5-way categorical sampling (stay absorbs blocked mass)
+        cum1 = right_prob
+        cum2 = cum1 + left_prob
+        cum3 = cum2 + up_prob
+        cum4 = cum3 + down_prob
+
         u = np.random.random(k)
-        choose_h = u < h_prob
-        choose_v = ~choose_h & (u < h_prob + v_prob)
+        choose_right = u < cum1
+        choose_left = ~choose_right & (u < cum2)
+        choose_up = ~choose_right & ~choose_left & (u < cum3)
+        choose_down = ~choose_right & ~choose_left & ~choose_up & (u < cum4)
 
-        new_opp[choose_h] = h_target[choose_h]
-        new_opp[choose_v] = v_target[choose_v]
-        # Remaining particles stay at opp_pos (already copied)
+        new_opp[choose_right] = right_target[choose_right]
+        new_opp[choose_left] = left_target[choose_left]
+        new_opp[choose_up] = up_target[choose_up]
+        new_opp[choose_down] = down_target[choose_down]
 
         return new_opp
 

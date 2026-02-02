@@ -12,6 +12,7 @@ The LaserTag problem features:
 - Positive reward for successful tagging, negative reward for failed tag attempts
 - Step cost for each movement action
 - Opponent moves with 0.4 prob toward robot in x-dir, 0.4 prob toward robot in y-dir, 0.2 prob stay
+- When aligned on an axis, the 0.4 budget is split equally (0.2/0.2) between both directions
 
 Classes:
     LaserTagState: State representation with robot and opponent positions
@@ -189,10 +190,10 @@ class LaserTagStateTransition(StateTransitionModel):
             toward_pos = self._create_position(fixed_coord, opponent_coord - 1, is_horizontal)
             away_pos = self._create_position(fixed_coord, opponent_coord + 1, is_horizontal)
             toward_prob, away_prob = 0.4, 0.0
-        else:  # Same position on this axis
+        else:  # Same position on this axis — split 0.4 equally between both directions
             toward_pos = self._create_position(fixed_coord, opponent_coord + 1, is_horizontal)
             away_pos = self._create_position(fixed_coord, opponent_coord - 1, is_horizontal)
-            toward_prob, away_prob = 0.0, 0.0
+            toward_prob, away_prob = 0.2, 0.2
 
         if self._is_valid_position(toward_pos):
             moves.append((toward_pos, toward_prob))
@@ -251,9 +252,14 @@ class LaserTagStateTransition(StateTransitionModel):
         """Get opponent's movement probabilities based on robot position.
 
         Uses the following movement model:
-        - 0.4 probability to move in x-direction (toward/away from robot)
-        - 0.4 probability to move in y-direction (toward/away from robot)
+        - 0.4 probability budget for x-direction movement
+        - 0.4 probability budget for y-direction movement
         - 0.2 probability to stay in place
+
+        When robot and opponent differ on an axis, the full 0.4 goes toward
+        the robot.  When they share the same coordinate on an axis, the 0.4
+        is split equally (0.2 / 0.2) between both directions on that axis.
+        Blocked moves redistribute their mass to staying.
         """
         current_opp = (int(self.state[2]), int(self.state[3]))
         robot_row, robot_col = robot_pos
@@ -1141,7 +1147,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         """Cache visualization of the LaserTag episode as an animated GIF.
 
         Creates an animated visualization showing:
-        - Robot movement (red circle with path trail)
+        - Robot movement (red circle)
         - Opponent movement (blue circle)
         - Walls (black squares)
         - Dangerous areas (red circles)

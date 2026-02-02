@@ -428,7 +428,7 @@ class LaserTagVisualizer:
             line.set_data([robot_pos[0], end_x], [robot_pos[1], end_y])
 
     def _update_tag_text_success(self, tag_text):
-        tag_text.set_text("🏷️ TAGGED! 🏷️")
+        tag_text.set_text("\U0001f3f7\ufe0f TAGGED! \U0001f3f7\ufe0f")
         tag_text.set_bbox(
             {
                 "boxstyle": "round,pad=0.5",
@@ -442,7 +442,7 @@ class LaserTagVisualizer:
         tag_text.set_visible(True)
 
     def _update_tag_text_failure(self, tag_text):
-        tag_text.set_text("❌ MISSED! ❌")
+        tag_text.set_text("\u274c MISSED! \u274c")
         tag_text.set_bbox(
             {
                 "boxstyle": "round,pad=0.5",
