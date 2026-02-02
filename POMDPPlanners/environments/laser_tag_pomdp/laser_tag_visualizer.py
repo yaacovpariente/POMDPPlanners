@@ -305,6 +305,9 @@ class LaserTagVisualizer:
             [], [], marker="o", color="w", markerfacecolor="lightblue", markersize=8, label="Belief"
         )
         proxy_laser = Line2D([], [], color="g", alpha=0.4, linewidth=1, label="Laser")
+        proxy_action = Line2D(
+            [], [], color="red", linewidth=2, marker=">", markersize=8, label="Action"
+        )
         ax.legend(
             handles=[
                 proxy_robot,
@@ -313,6 +316,7 @@ class LaserTagVisualizer:
                 proxy_opponent_path,
                 proxy_belief,
                 proxy_laser,
+                proxy_action,
             ],
             loc="upper right",
             bbox_to_anchor=(0.98, 0.98),
@@ -516,7 +520,7 @@ class LaserTagVisualizer:
 
         dr, dc = action_dirs[action]
         action_arrow.set_position((robot_pos[0], robot_pos[1]))
-        action_arrow.xy = (robot_pos[0] + dr * 0.3, robot_pos[1] + dc * 0.3)
+        action_arrow.xy = (robot_pos[0] + dr * 0.45, robot_pos[1] + dc * 0.45)
 
         step_text.set_text(f"Step: {frame + 1}/{len(robot_path)}")
         action_text.set_text(f'Action: {action_names.get(action, "Unknown")}')

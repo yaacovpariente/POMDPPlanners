@@ -674,7 +674,11 @@ class ContinuousPushPOMDPDiscreteActions(ContinuousPushPOMDP, DiscreteActionsEnv
         return super().observation_model(next_state, self.action_to_vector[action])
 
     def reward(self, state: np.ndarray, action: Any) -> float:
-        return super().reward(state, self.action_to_vector[action])
+        if isinstance(action, str):
+            action = self.action_to_vector[action]
+        return super().reward(state, action)
 
     def reward_batch(self, states: Union[np.ndarray, Sequence[Any]], action: Any) -> np.ndarray:
-        return super().reward_batch(np.asarray(states), self.action_to_vector[action])
+        if isinstance(action, str):
+            action = self.action_to_vector[action]
+        return super().reward_batch(np.asarray(states), action)
