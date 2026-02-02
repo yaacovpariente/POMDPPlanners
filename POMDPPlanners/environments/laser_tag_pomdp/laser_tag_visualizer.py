@@ -5,16 +5,21 @@ creating animated GIF visualizations of episodes.
 """
 
 from pathlib import Path
-from typing import List, Set, Tuple, cast
+from typing import List, Set, Tuple
 
 import matplotlib.pyplot as plt
 from matplotlib import animation
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
+from matplotlib.offsetbox import AnnotationBbox, OffsetImage
 import numpy as np
 
 from POMDPPlanners.core.simulation import StepData
+from POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_visualizer import (
+    _render_robot_image,
+    _render_opponent_image,
+)
 
 
 class LaserTagVisualizer:
@@ -49,6 +54,8 @@ class LaserTagVisualizer:
         self.walls = walls
         self.dangerous_areas = dangerous_areas
         self.dangerous_area_radius = dangerous_area_radius
+        self._robot_img = _render_robot_image()
+        self._opponent_img = _render_opponent_image()
 
     def create_visualization(self, history: List[StepData], cache_path: Path) -> None:
         """Create animated GIF visualization of a LaserTag episode.
@@ -106,8 +113,10 @@ class LaserTagVisualizer:
         ]
 
         def init():
-            robot_agent.set_data([], [])
-            opponent_agent.set_data([], [])
+            robot_agent.xyann = (0, 0)
+            robot_agent.set_visible(False)
+            opponent_agent.xyann = (0, 0)
+            opponent_agent.set_visible(False)
             robot_path_line.set_data([], [])
             opponent_path_line.set_data([], [])
             action_arrow.set_position((0, 0))
@@ -136,8 +145,10 @@ class LaserTagVisualizer:
             robot_pos = robot_path[frame]
             opponent_pos = opponent_path[frame]
 
-            robot_agent.set_data([robot_pos[0]], [robot_pos[1]])
-            opponent_agent.set_data([opponent_pos[0]], [opponent_pos[1]])
+            robot_agent.xyann = (robot_pos[0], robot_pos[1])
+            robot_agent.set_visible(True)
+            opponent_agent.xyann = (opponent_pos[0], opponent_pos[1])
+            opponent_agent.set_visible(True)
 
             robot_rows = [pos[0] for pos in robot_path[: frame + 1]]
             robot_cols = [pos[1] for pos in robot_path[: frame + 1]]
@@ -183,7 +194,7 @@ class LaserTagVisualizer:
             update,
             frames=len(robot_path),
             init_func=init,
-            blit=True,
+            blit=False,
             repeat=False,
             interval=1000,
         )
@@ -273,16 +284,53 @@ class LaserTagVisualizer:
             )
             ax.add_patch(circle)
 
+    def _add_legend(self, ax: Axes) -> None:
+        proxy_robot = Line2D(
+            [], [], marker="s", color="w", markerfacecolor="#D32F2F", markersize=10, label="Robot"
+        )
+        proxy_opponent = Line2D(
+            [],
+            [],
+            marker="s",
+            color="w",
+            markerfacecolor="#1976D2",
+            markersize=10,
+            label="Opponent",
+        )
+        proxy_robot_path = Line2D([], [], color="r", alpha=0.5, linewidth=2, label="Robot Path")
+        proxy_opponent_path = Line2D(
+            [], [], color="b", alpha=0.5, linewidth=2, label="Opponent Path"
+        )
+        proxy_belief = Line2D(
+            [], [], marker="o", color="w", markerfacecolor="lightblue", markersize=8, label="Belief"
+        )
+        proxy_laser = Line2D([], [], color="g", alpha=0.4, linewidth=1, label="Laser")
+        ax.legend(
+            handles=[
+                proxy_robot,
+                proxy_opponent,
+                proxy_robot_path,
+                proxy_opponent_path,
+                proxy_belief,
+                proxy_laser,
+            ],
+            loc="upper right",
+            bbox_to_anchor=(0.98, 0.98),
+            framealpha=0.9,
+        )
+
+    def _make_annotation_box(self, img: np.ndarray, ax: Axes, zoom: float = 1.0) -> AnnotationBbox:
+        offset_img = OffsetImage(img, zoom=zoom)
+        ab = AnnotationBbox(offset_img, (0, 0), frameon=False, pad=0, zorder=5)
+        ax.add_artist(ab)
+        return ab
+
     def _create_animated_elements(self, ax: Axes) -> Tuple:
 
-        robot_agent = cast(Line2D, ax.plot([], [], "ro", markersize=12, label="Robot")[0])
-        opponent_agent = cast(Line2D, ax.plot([], [], "bo", markersize=12, label="Opponent")[0])
-        robot_path_line = cast(
-            Line2D, ax.plot([], [], "r-", alpha=0.5, linewidth=2, label="Robot Path")[0]
-        )
-        opponent_path_line = cast(
-            Line2D, ax.plot([], [], "b-", alpha=0.5, linewidth=2, label="Opponent Path")[0]
-        )
+        robot_agent = self._make_annotation_box(self._robot_img, ax)
+        opponent_agent = self._make_annotation_box(self._opponent_img, ax)
+        (robot_path_line,) = ax.plot([], [], "r-", alpha=0.5, linewidth=2)
+        (opponent_path_line,) = ax.plot([], [], "b-", alpha=0.5, linewidth=2)
 
         action_arrow = ax.annotate(
             "",
@@ -331,26 +379,15 @@ class LaserTagVisualizer:
             visible=False,
         )
 
-        opponent_belief_scatter = ax.scatter(
-            [], [], c="lightblue", alpha=0.6, s=30, label="Opponent Belief Particles"
-        )
-        robot_belief_scatter = ax.scatter(
-            [], [], c="lightcoral", alpha=0.6, s=30, label="Robot Belief Particles"
-        )
+        opponent_belief_scatter = ax.scatter([], [], c="lightblue", alpha=0.6, s=30)
+        robot_belief_scatter = ax.scatter([], [], c="lightcoral", alpha=0.6, s=30)
 
         laser_lines = []
-        for i in range(8):
-            (line,) = ax.plot(
-                [],
-                [],
-                "g-",
-                alpha=0.4,
-                linewidth=1,
-                label="Laser Rays" if i == 0 else "",
-            )
+        for _ in range(8):
+            (line,) = ax.plot([], [], "g-", alpha=0.4, linewidth=1)
             laser_lines.append(line)
 
-        ax.legend(loc="upper right", bbox_to_anchor=(0.98, 0.98), framealpha=0.9)
+        self._add_legend(ax)
 
         return (
             robot_agent,
