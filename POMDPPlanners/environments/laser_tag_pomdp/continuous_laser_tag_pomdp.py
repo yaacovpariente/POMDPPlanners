@@ -793,6 +793,15 @@ class ContinuousLaserTagPOMDPDiscreteActions(ContinuousLaserTagPOMDP, DiscreteAc
     ) -> np.ndarray:
         return super().reward_batch(np.asarray(states), self.action_to_vector[action])
 
+    def _count_episode_metrics(self, steps: List[StepData]) -> Tuple[int, int, int]:
+        converted = []
+        for step in steps:
+            if step.action is not None and isinstance(step.action, str):
+                converted.append(step._replace(action=self.action_to_vector[step.action]))
+            else:
+                converted.append(step)
+        return super()._count_episode_metrics(converted)
+
 
 class _ContinuousLaserTagInitialDist(Distribution):
     """Rejection-sampling initial state distribution."""
