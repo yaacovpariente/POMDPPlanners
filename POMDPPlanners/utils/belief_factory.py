@@ -87,6 +87,26 @@ _ENV_FACTORY_REGISTRY: dict[str, tuple[str, str, BeliefType]] = {
         "create_continuous_light_dark_belief",
         BeliefType.VECTORIZED_PARTICLE,
     ),
+    "ContinuousLaserTagPOMDP": (
+        "POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_beliefs",
+        "create_continuous_laser_tag_belief",
+        BeliefType.VECTORIZED_PARTICLE,
+    ),
+    "ContinuousLaserTagPOMDPDiscreteActions": (
+        "POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_beliefs",
+        "create_continuous_laser_tag_belief",
+        BeliefType.VECTORIZED_PARTICLE,
+    ),
+    "ContinuousPushPOMDP": (
+        "POMDPPlanners.environments.push_pomdp.push_pomdp_beliefs",
+        "create_continuous_push_belief",
+        BeliefType.VECTORIZED_PARTICLE,
+    ),
+    "ContinuousPushPOMDPDiscreteActions": (
+        "POMDPPlanners.environments.push_pomdp.push_pomdp_beliefs",
+        "create_continuous_push_belief",
+        BeliefType.VECTORIZED_PARTICLE,
+    ),
 }
 
 

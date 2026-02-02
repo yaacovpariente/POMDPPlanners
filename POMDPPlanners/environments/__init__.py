@@ -25,6 +25,10 @@ from typing import Any, Dict, Type
 
 from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
 from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp import LaserTagPOMDP
+from POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_pomdp import (
+    ContinuousLaserTagPOMDP,
+    ContinuousLaserTagPOMDPDiscreteActions,
+)
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
     ContinuousLightDarkPOMDP,
     ContinuousLightDarkPOMDPDiscreteActions,
@@ -53,6 +57,8 @@ __all__ = [
     "CartPolePOMDP",
     "MountainCarPOMDP",
     "LaserTagPOMDP",
+    "ContinuousLaserTagPOMDP",
+    "ContinuousLaserTagPOMDPDiscreteActions",
     "RockSamplePOMDP",
     "PacManPOMDP",
 ]
@@ -69,6 +75,8 @@ ENVIRONMENT_REGISTRY: Dict[str, Type] = {
     "ContinuousLightDarkPOMDP": ContinuousLightDarkPOMDP,
     "ContinuousLightDarkPOMDPDiscreteActions": ContinuousLightDarkPOMDPDiscreteActions,
     "LaserTagPOMDP": LaserTagPOMDP,
+    "ContinuousLaserTagPOMDP": ContinuousLaserTagPOMDP,
+    "ContinuousLaserTagPOMDPDiscreteActions": ContinuousLaserTagPOMDPDiscreteActions,
     "RockSamplePOMDP": RockSamplePOMDP,
     "PacManPOMDP": PacManPOMDP,
 }
