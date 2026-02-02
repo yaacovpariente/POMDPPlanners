@@ -9,9 +9,15 @@ registry integration.
 import numpy as np
 import pytest
 
+from POMDPPlanners.core.belief import WeightedParticleBelief
+from POMDPPlanners.core.policy import PolicyRunData
+from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_pomdp import (
     ContinuousLaserTagPOMDP,
     ContinuousLaserTagPOMDPDiscreteActions,
+)
+from POMDPPlanners.tests.test_utils.confidence_interval_utils import (
+    verify_metrics_within_confidence_intervals,
 )
 
 
@@ -577,6 +583,351 @@ class TestMetrics:
         Test type: unit
         """
         assert env.compute_metrics([]) == []
+
+    def test_compute_metrics_discrete_actions(self, env_discrete):
+        """Test compute_metrics with discrete string actions.
+
+        Purpose: Validates that compute_metrics handles string actions from
+        ContinuousLaserTagPOMDPDiscreteActions without raising an error.
+
+        Given: A ContinuousLaserTagPOMDPDiscreteActions environment and a history
+            containing discrete string actions (e.g. 'left', 'tag').
+        When: compute_metrics() is called on the history.
+        Then: Returns a non-empty list of MetricValue without raising ValueError.
+
+        Test type: unit
+        """
+        np.random.seed(42)
+        initial_state = env_discrete.initial_state_dist().sample()[0]
+        dummy_belief = WeightedParticleBelief(
+            particles=[initial_state], log_weights=np.array([1.0])
+        )
+
+        steps = []
+        state = initial_state
+        for action in ["left", "right", "tag"]:
+            next_state, obs, reward = env_discrete.sample_next_step(state, action)
+            steps.append(
+                StepData(
+                    state=state,
+                    action=action,
+                    next_state=next_state,
+                    observation=obs,
+                    reward=reward,
+                    belief=dummy_belief,
+                )
+            )
+            state = next_state
+
+        history = History(
+            history=steps,
+            discount_factor=0.95,
+            average_state_sampling_time=0.0,
+            average_action_time=0.0,
+            average_observation_time=0.0,
+            average_belief_update_time=0.0,
+            average_reward_time=0.0,
+            actual_num_steps=len(steps),
+            reach_terminal_state=False,
+            policy_run_data=[PolicyRunData(info_variables=[])],
+        )
+
+        metrics = env_discrete.compute_metrics([history])
+        assert len(metrics) > 0
+        metrics_dict = {m.name: m for m in metrics}
+        assert "tag_success_rate" in metrics_dict
+
+    def test_compute_metrics_with_episode_data(self, env):
+        """Test compute_metrics with a multi-step continuous-action history.
+
+        Purpose: Validates that compute_metrics returns all 7 metric names with
+        finite float values when given a history with continuous numeric actions.
+
+        Given: A ContinuousLaserTagPOMDP environment and a History containing
+            movement steps and a successful tag step.
+        When: compute_metrics() is called on the history.
+        Then: All 7 expected metric names are present and values are finite.
+
+        Test type: integration
+        """
+        np.random.seed(42)
+        dummy_belief = WeightedParticleBelief(
+            particles=[np.array([5.0, 3.0, 8.0, 5.0, 0.0])],
+            log_weights=np.array([1.0]),
+        )
+
+        steps = []
+        # Movement step
+        state = np.array([5.0, 3.0, 8.0, 5.0, 0.0])
+        action = np.array([1.0, 0.0, 0.0])
+        ns, obs, r = env.sample_next_step(state, action)
+        steps.append(
+            StepData(
+                state=state,
+                action=action,
+                next_state=ns,
+                observation=obs,
+                reward=r,
+                belief=dummy_belief,
+            )
+        )
+
+        # Another movement step
+        state = ns
+        action = np.array([0.0, 1.0, 0.0])
+        ns, obs, r = env.sample_next_step(state, action)
+        steps.append(
+            StepData(
+                state=state,
+                action=action,
+                next_state=ns,
+                observation=obs,
+                reward=r,
+                belief=dummy_belief,
+            )
+        )
+
+        # Successful tag: place robot at opponent position, then tag
+        state = np.array([5.0, 3.0, 5.0, 3.0, 0.0])
+        action = np.array([0.0, 0.0, 1.0])
+        r = env.reward(state, action)
+        ns = np.array([5.0, 3.0, 5.0, 3.0, 1.0])
+        obs = np.full(8, -1.0)
+        steps.append(
+            StepData(
+                state=state,
+                action=action,
+                next_state=ns,
+                observation=obs,
+                reward=r,
+                belief=dummy_belief,
+            )
+        )
+
+        history = History(
+            history=steps,
+            discount_factor=0.95,
+            average_state_sampling_time=0.0,
+            average_action_time=0.0,
+            average_observation_time=0.0,
+            average_belief_update_time=0.0,
+            average_reward_time=0.0,
+            actual_num_steps=len(steps),
+            reach_terminal_state=True,
+            policy_run_data=[PolicyRunData(info_variables=[])],
+        )
+
+        metrics = env.compute_metrics([history])
+        expected_names = env.get_metric_names()
+        assert len(expected_names) == 7
+        metrics_dict = {m.name: m for m in metrics}
+        for name in expected_names:
+            assert name in metrics_dict, f"Missing metric: {name}"
+            assert np.isfinite(
+                metrics_dict[name].value
+            ), f"Non-finite value for {name}: {metrics_dict[name].value}"
+
+    def test_compute_metrics_discrete_actions_tag_detection(self, env_discrete):
+        """Test that discrete 'tag' action is correctly detected as a failed tag.
+
+        Purpose: Validates that _count_episode_metrics in the discrete variant
+        correctly converts the 'tag' string action to [0, 0, 1] and detects
+        the tag flag, resulting in average_failed_tag_attempts > 0.
+
+        Given: A ContinuousLaserTagPOMDPDiscreteActions environment and a
+            History where the robot is far from the opponent and uses 'tag'.
+        When: compute_metrics() is called on the history.
+        Then: average_failed_tag_attempts metric value is > 0.
+
+        Test type: unit
+        """
+        np.random.seed(42)
+        dummy_belief = WeightedParticleBelief(
+            particles=[np.array([1.0, 1.0, 9.0, 5.0, 0.0])],
+            log_weights=np.array([1.0]),
+        )
+
+        # Robot far from opponent — tag will fail
+        state = np.array([1.0, 1.0, 9.0, 5.0, 0.0])
+        ns, obs, r = env_discrete.sample_next_step(state, "tag")
+        steps = [
+            StepData(
+                state=state,
+                action="tag",
+                next_state=ns,
+                observation=obs,
+                reward=r,
+                belief=dummy_belief,
+            ),
+        ]
+
+        history = History(
+            history=steps,
+            discount_factor=0.95,
+            average_state_sampling_time=0.0,
+            average_action_time=0.0,
+            average_observation_time=0.0,
+            average_belief_update_time=0.0,
+            average_reward_time=0.0,
+            actual_num_steps=1,
+            reach_terminal_state=False,
+            policy_run_data=[PolicyRunData(info_variables=[])],
+        )
+
+        metrics = env_discrete.compute_metrics([history])
+        metrics_dict = {m.name: m for m in metrics}
+        assert metrics_dict["average_failed_tag_attempts"].value > 0
+
+    def test_compute_metrics_dangerous_area_steps(self):
+        """Test that dangerous area steps are counted in metrics.
+
+        Purpose: Validates that average_dangerous_area_steps is > 0 when the
+        robot state is inside a known dangerous area.
+
+        Given: An environment with a dangerous area at (5.0, 3.0) with radius 1.0
+            and a History where the robot is at that position.
+        When: compute_metrics() is called.
+        Then: average_dangerous_area_steps > 0.
+
+        Test type: unit
+        """
+        np.random.seed(42)
+        env = ContinuousLaserTagPOMDP(
+            discount_factor=0.95,
+            walls=[],
+            dangerous_areas=[(5.0, 3.0)],
+            dangerous_area_radius=1.0,
+            dangerous_area_penalty=5.0,
+        )
+        dummy_belief = WeightedParticleBelief(
+            particles=[np.array([5.0, 3.0, 8.0, 5.0, 0.0])],
+            log_weights=np.array([1.0]),
+        )
+
+        # Robot inside the dangerous area at (5.0, 3.0)
+        state = np.array([5.0, 3.0, 8.0, 5.0, 0.0])
+        action = np.array([0.5, 0.0, 0.0])
+        ns, obs, r = env.sample_next_step(state, action)
+        steps = [
+            StepData(
+                state=state,
+                action=action,
+                next_state=ns,
+                observation=obs,
+                reward=r,
+                belief=dummy_belief,
+            ),
+        ]
+
+        history = History(
+            history=steps,
+            discount_factor=0.95,
+            average_state_sampling_time=0.0,
+            average_action_time=0.0,
+            average_observation_time=0.0,
+            average_belief_update_time=0.0,
+            average_reward_time=0.0,
+            actual_num_steps=1,
+            reach_terminal_state=False,
+            policy_run_data=[PolicyRunData(info_variables=[])],
+        )
+
+        metrics = env.compute_metrics([history])
+        metrics_dict = {m.name: m for m in metrics}
+        assert metrics_dict["average_dangerous_area_steps"].value > 0
+
+    def test_compute_metrics_multiple_episodes(self, env):
+        """Test compute_metrics averages across multiple episodes with CIs.
+
+        Purpose: Validates that metric values are averages across episodes and
+        that confidence bounds are finite (not -inf/inf) when multiple episodes
+        are provided.
+
+        Given: A ContinuousLaserTagPOMDP environment with 3 episodes having
+            different outcomes (movement only, failed tag, successful tag).
+        When: compute_metrics() is called with all 3 histories.
+        Then: Metric values are averages, and confidence bounds are finite.
+
+        Test type: integration
+        """
+        np.random.seed(42)
+        dummy_belief = WeightedParticleBelief(
+            particles=[np.array([5.0, 3.0, 8.0, 5.0, 0.0])],
+            log_weights=np.array([1.0]),
+        )
+
+        def _make_history(steps, terminal):
+            return History(
+                history=steps,
+                discount_factor=0.95,
+                average_state_sampling_time=0.0,
+                average_action_time=0.0,
+                average_observation_time=0.0,
+                average_belief_update_time=0.0,
+                average_reward_time=0.0,
+                actual_num_steps=len(steps),
+                reach_terminal_state=terminal,
+                policy_run_data=[PolicyRunData(info_variables=[])],
+            )
+
+        # Episode 1: movement only (2 steps)
+        s1 = np.array([5.0, 3.0, 8.0, 5.0, 0.0])
+        a1 = np.array([1.0, 0.0, 0.0])
+        ns1, obs1, r1 = env.sample_next_step(s1, a1)
+        s2 = ns1
+        a2 = np.array([0.0, 1.0, 0.0])
+        ns2, obs2, r2 = env.sample_next_step(s2, a2)
+        h1 = _make_history(
+            [
+                StepData(s1, a1, ns1, obs1, r1, dummy_belief),
+                StepData(s2, a2, ns2, obs2, r2, dummy_belief),
+            ],
+            terminal=False,
+        )
+
+        # Episode 2: failed tag (robot far from opponent)
+        s3 = np.array([1.0, 1.0, 9.0, 5.0, 0.0])
+        a3 = np.array([0.0, 0.0, 1.0])
+        r3 = env.reward(s3, a3)  # failed tag → negative reward
+        ns3, obs3, _ = env.sample_next_step(s3, a3)
+        h2 = _make_history(
+            [
+                StepData(s3, a3, ns3, obs3, r3, dummy_belief),
+            ],
+            terminal=False,
+        )
+
+        # Episode 3: successful tag (robot at opponent)
+        s4 = np.array([5.0, 3.0, 5.0, 3.0, 0.0])
+        a4 = np.array([0.0, 0.0, 1.0])
+        r4 = env.reward(s4, a4)  # successful tag → positive reward
+        ns4 = np.array([5.0, 3.0, 5.0, 3.0, 1.0])
+        obs4 = np.full(8, -1.0)
+        h3 = _make_history(
+            [
+                StepData(s4, a4, ns4, obs4, r4, dummy_belief),
+            ],
+            terminal=True,
+        )
+
+        metrics = env.compute_metrics([h1, h2, h3])
+        assert len(metrics) == 7
+
+        metrics_dict = {m.name: m for m in metrics}
+
+        # Values should be averages
+        avg_length = metrics_dict["average_episode_length"].value
+        assert avg_length == pytest.approx((2 + 1 + 1) / 3.0)
+
+        # With 3 episodes, confidence bounds should be finite (not -inf/inf)
+        verify_metrics_within_confidence_intervals(metrics)
+        for m in metrics:
+            assert np.isfinite(
+                m.lower_confidence_bound
+            ), f"{m.name} has non-finite lower bound: {m.lower_confidence_bound}"
+            assert np.isfinite(
+                m.upper_confidence_bound
+            ), f"{m.name} has non-finite upper bound: {m.upper_confidence_bound}"
 
 
 class TestIsEqualObservation:

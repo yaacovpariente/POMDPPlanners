@@ -1919,3 +1919,96 @@ class TestHyperParameterOptimizationPBSIntegration:
             assert task_manager_config.cores == 1
             assert task_manager_config.memory == "1GB"
             assert task_manager_config.walltime == "00:10:00"
+
+
+class TestSingleEnvironmentOptimizationSmoke:
+    """Per-environment optimization smoke tests to isolate which env+planner combinations work.
+
+    These tests create a single HyperParameterRunParams for a specific environment+planner
+    pair and run HyperParameterOptimizer.optimize() with minimal settings (1 episode,
+    2 steps, 2 trials) to verify the full pipeline works end-to-end.
+    """
+
+    def test_single_environment_optimization_tiger_pomcp(self, temp_cache_dir):
+        """Test optimization with TigerPOMDP + POMCP (discrete/discrete).
+
+        Purpose: Validates that the full optimization pipeline works for
+        TigerPOMDP with POMCP planner.
+
+        Given: TigerPOMDP environment with POMCP planner config (1 episode, 2 steps, 2 trials)
+        When: HyperParameterOptimizer.optimize() is called with this single config
+        Then: Returns a list result without crashing
+
+        Test type: integration
+        """
+        env = TigerPOMDP(discount_factor=0.95, name="Tiger_smoke")
+        belief = get_initial_belief(env, n_particles=10)
+
+        config = HyperParameterRunParams(
+            environment=env,
+            belief=belief,
+            hyper_param_planner_config=HyperParamPlannerConfig(
+                policy_cls=POMCP,
+                hyper_parameters=[
+                    NumericalHyperParameter(0.1, 1.0, "exploration_constant"),
+                    NumericalHyperParameter(2, 4, "depth"),
+                ],
+                constant_parameters={
+                    "discount_factor": env.discount_factor,
+                    "name": "POMCP_Tiger_smoke",
+                    "environment": env,
+                    "time_out_in_seconds": 3.0,
+                },
+            ),
+            num_episodes=1,
+            num_steps=2,
+            n_trials=2,
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
+        )
+
+        optimizer = HyperParameterOptimizer(cache_dir_path=temp_cache_dir)
+        result = optimizer.optimize([config])
+        assert isinstance(result, list)
+
+    def test_single_environment_optimization_tiger_sparse_sampling(self, temp_cache_dir):
+        """Test optimization with TigerPOMDP + SparseSampling (discrete/discrete).
+
+        Purpose: Validates that SparseSampling planner works through the full
+        optimization pipeline with TigerPOMDP.
+
+        Given: TigerPOMDP environment with SparseSampling planner config
+        When: HyperParameterOptimizer.optimize() is called with this single config
+        Then: Returns a list result without crashing
+
+        Test type: integration
+        """
+        env = TigerPOMDP(discount_factor=0.95, name="Tiger_ss_smoke")
+        belief = get_initial_belief(env, n_particles=10)
+
+        config = HyperParameterRunParams(
+            environment=env,
+            belief=belief,
+            hyper_param_planner_config=HyperParamPlannerConfig(
+                policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+                hyper_parameters=[
+                    NumericalHyperParameter(1, 3, "branching_factor"),
+                    NumericalHyperParameter(1, 2, "depth"),
+                ],
+                constant_parameters={
+                    "environment": env,
+                    "name": "SparseSampling_Tiger_smoke",
+                },
+            ),
+            num_episodes=1,
+            num_steps=2,
+            n_trials=2,
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
+        )
+
+        optimizer = HyperParameterOptimizer(cache_dir_path=temp_cache_dir)
+        result = optimizer.optimize([config])
+        assert isinstance(result, list)
