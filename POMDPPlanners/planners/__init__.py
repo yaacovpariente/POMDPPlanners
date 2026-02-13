@@ -10,6 +10,10 @@ from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
 from POMDPPlanners.planners.mcts_planners.pomcp_dpw import POMCP_DPW
 from POMDPPlanners.planners.mcts_planners.pomcpow import POMCPOW
 from POMDPPlanners.planners.mcts_planners.sparse_pft import SparsePFT
+from POMDPPlanners.planners.mcts_planners.beta_zero.beta_zero import BetaZero
+from POMDPPlanners.planners.mcts_planners.constrained_zero.constrained_zero import (
+    ConstrainedZero,
+)
 from POMDPPlanners.planners.open_loop_planners.discrete_action_sequences_planner import (
     DiscreteActionSequencesPlanner,
 )
@@ -26,6 +30,8 @@ __all__ = [
     "PFT_DPW",
     "POMCP_DPW",
     "DiscreteActionSequencesPlanner",
+    "BetaZero",
+    "ConstrainedZero",
 ]
 
 # Registry of available policies
@@ -38,6 +44,8 @@ POLICY_REGISTRY: Dict[str, Type] = {
     "PFT_DPW": PFT_DPW,
     "POMCP_DPW": POMCP_DPW,
     "DiscreteActionSequencesPlanner": DiscreteActionSequencesPlanner,
+    "BetaZero": BetaZero,
+    "ConstrainedZero": ConstrainedZero,
 }
 
 
