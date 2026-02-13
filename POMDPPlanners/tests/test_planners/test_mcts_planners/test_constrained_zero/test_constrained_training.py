@@ -164,6 +164,7 @@ class TestTrainConstrainedNetwork:
 
         Test type: integration
         """
+        np.random.seed(42)
         torch.manual_seed(42)
         network = _make_discrete_network()
         buffer = ConstrainedTrainingBuffer(capacity=1000)
