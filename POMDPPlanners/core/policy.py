@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, NamedTuple, Optional, Tuple, Union
 
 import numpy as np
 
@@ -614,3 +614,70 @@ class Policy(ABC):
 
         except Exception as e:
             raise ValueError(f"Failed to load policy from {filepath}: {str(e)}") from e
+
+
+class TrainablePolicy(ABC):
+    """Abstract mixin defining hooks for policies that support offline training.
+
+    This mixin separates the **model** (what to compute) from the **trainer**
+    (how to run the training loop), following the PyTorch Lightning pattern.
+    Concrete trainable policies implement these hooks, and
+    :class:`~POMDPPlanners.training.PolicyTrainer` orchestrates the loop.
+
+    Note:
+        This is a pure mixin — it has no ``__init__`` and no instance state.
+        It is safe to add alongside any ``Policy`` subclass via multiple
+        inheritance without MRO conflicts.
+    """
+
+    @abstractmethod
+    def begin_collecting(self) -> None:
+        """Signal the start of a data-collection phase."""
+
+    @abstractmethod
+    def end_collecting(self) -> None:
+        """Signal the end of a data-collection phase."""
+
+    @abstractmethod
+    def prepare_episode(self) -> None:
+        """Reset per-episode scratch state before an episode begins."""
+
+    @abstractmethod
+    def finalize_episode(self, history: Any) -> None:
+        """Process a completed episode into the replay buffer.
+
+        Args:
+            history: The :class:`~POMDPPlanners.core.simulation.History`
+                returned by the episode runner.
+        """
+
+    @abstractmethod
+    def train_step(self) -> Dict[str, List[float]]:
+        """Train the network on the current replay buffer.
+
+        Returns:
+            Per-key lists of loss values produced during training.
+        """
+
+    @abstractmethod
+    def buffer_size(self) -> int:
+        """Return the number of examples currently in the replay buffer."""
+
+    @abstractmethod
+    def collect_episodes_batched(
+        self,
+        initial_belief_fn: Callable[[], Any],
+        n_episodes: int,
+        episode_length: int,
+    ) -> None:
+        """Collect training data using fast batched (network-only) rollouts.
+
+        Args:
+            initial_belief_fn: Callable returning a fresh initial belief.
+            n_episodes: Number of episodes to collect.
+            episode_length: Maximum steps per episode.
+        """
+
+    @abstractmethod
+    def get_metric_keys(self) -> List[str]:
+        """Return the loss-metric key names produced by :meth:`train_step`."""

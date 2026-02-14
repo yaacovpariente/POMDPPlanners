@@ -82,9 +82,14 @@ class HyperParamPlannerConfig:
     policy_cls: Type["Policy"]
     hyper_parameters: Sequence[HyperParameterFeature]
     constant_parameters: Dict[str, Any]
+    training_hyper_parameters: Sequence[HyperParameterFeature] = ()
+    training_constant_parameters: Dict[str, Any] = None  # type: ignore[assignment]
 
     def __post_init__(self) -> None:
         """Validate input types and hyperparameter names."""
+        # Frozen dataclass requires object.__setattr__ for defaults
+        if self.training_constant_parameters is None:
+            object.__setattr__(self, "training_constant_parameters", {})
         self._validate_types()
         self._validate_hyperparameter_names()
 
@@ -113,6 +118,25 @@ class HyperParamPlannerConfig:
         if not isinstance(self.constant_parameters, dict):
             raise TypeError(
                 f"constant_parameters must be a dict, got {type(self.constant_parameters).__name__}"
+            )
+
+        # Validate training_hyper_parameters
+        if not isinstance(self.training_hyper_parameters, (list, tuple)):
+            raise TypeError(
+                f"training_hyper_parameters must be a Sequence, "
+                f"got {type(self.training_hyper_parameters).__name__}"
+            )
+        for i, param in enumerate(self.training_hyper_parameters):
+            if not isinstance(param, (CategoricalHyperParameter, NumericalHyperParameter)):
+                raise TypeError(
+                    f"training_hyper_parameters[{i}] must be a HyperParameterFeature, "
+                    f"got {type(param).__name__}"
+                )
+
+        if not isinstance(self.training_constant_parameters, dict):
+            raise TypeError(
+                f"training_constant_parameters must be a dict, "
+                f"got {type(self.training_constant_parameters).__name__}"
             )
 
     def _validate_hyperparameter_names(self) -> None:
@@ -146,6 +170,34 @@ class HyperParamPlannerConfig:
                     f"Valid parameters are: {sorted(valid_param_names)}"
                 )
 
+        # Validate training hyperparameters against PolicyTrainer.__init__
+        if self.training_hyper_parameters or self.training_constant_parameters:
+            self._validate_training_parameter_names()
+
+    def _validate_training_parameter_names(self) -> None:
+        from POMDPPlanners.training.policy_trainer import (  # pylint: disable=import-outside-toplevel
+            PolicyTrainer,
+        )
+
+        try:
+            sig = signature(PolicyTrainer.__init__)
+        except (ValueError, TypeError) as e:
+            raise ValueError(f"Cannot inspect PolicyTrainer signature: {e}") from e
+
+        valid_names = set(sig.parameters.keys()) - {"self"}
+        for param in self.training_hyper_parameters:
+            if param.name not in valid_names:
+                raise ValueError(
+                    f"Training hyperparameter '{param.name}' is not a valid parameter of "
+                    f"PolicyTrainer.__init__(). Valid parameters are: {sorted(valid_names)}"
+                )
+        for param_name in self.training_constant_parameters.keys():
+            if param_name not in valid_names:
+                raise ValueError(
+                    f"Training constant parameter '{param_name}' is not a valid parameter of "
+                    f"PolicyTrainer.__init__(). Valid parameters are: {sorted(valid_names)}"
+                )
+
     @property
     def config_id(self) -> str:
         return config_to_id(
@@ -153,6 +205,10 @@ class HyperParamPlannerConfig:
                 "policy_cls": self.policy_cls.__name__,
                 "hyper_parameters": sorted([param.id() for param in self.hyper_parameters]),
                 "constant_parameters": self.constant_parameters,
+                "training_hyper_parameters": sorted(
+                    [param.id() for param in self.training_hyper_parameters]
+                ),
+                "training_constant_parameters": self.training_constant_parameters,
             }
         )
 
