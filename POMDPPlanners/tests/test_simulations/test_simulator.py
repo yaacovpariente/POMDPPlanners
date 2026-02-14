@@ -9,6 +9,7 @@ This module tests the simulator functionality, focusing on:
 
 # pylint: disable=protected-access  # Tests need to access protected members
 
+import os
 import random
 import shutil
 import sys
@@ -95,7 +96,9 @@ def simulator(temp_cache_dir):
     )
 
 
-def test_pomdp_simulator_initialization_default_parameters_creates_configured_instance():
+def test_pomdp_simulator_initialization_default_parameters_creates_configured_instance(
+    tmp_path,
+):
     """
     Purpose: Validates POMDPSimulator initializes correctly with default and custom configurations
 
@@ -107,28 +110,35 @@ def test_pomdp_simulator_initialization_default_parameters_creates_configured_in
     """
     # ARRANGE: Define expected default and custom configuration values
     expected_default_name = "POMDP_Planning_Comparison"
-    custom_cache_dir = Path("/tmp/test_cache")
+    custom_cache_dir = tmp_path / "custom_cache"
+    custom_cache_dir.mkdir(parents=True, exist_ok=True)
     custom_experiment_name = "Custom_Experiment"
 
-    # ACT: Create simulator instances with different configurations
-    default_simulator = POMDPSimulator(task_manager_config=JoblibConfig())
-    custom_simulator = POMDPSimulator(
-        task_manager_config=JoblibConfig(),
-        cache_dir_path=custom_cache_dir,
-        experiment_name=custom_experiment_name,
-        debug=True,
-    )
+    # Run in tmp_path so default_simulator's JoblibConfig does not create ./cache in project root
+    old_cwd = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        # ACT: Create simulator instances with different configurations
+        default_simulator = POMDPSimulator(task_manager_config=JoblibConfig())
+        custom_simulator = POMDPSimulator(
+            task_manager_config=JoblibConfig(),
+            cache_dir_path=custom_cache_dir,
+            experiment_name=custom_experiment_name,
+            debug=True,
+        )
 
-    # ASSERT: Verify correct initialization of both configurations
-    # Default configuration
-    assert default_simulator.cache_dir_path is None
-    assert default_simulator.experiment_name == expected_default_name
-    assert isinstance(default_simulator.experiment_name, str)
+        # ASSERT: Verify correct initialization of both configurations
+        # Default configuration
+        assert default_simulator.cache_dir_path is None
+        assert default_simulator.experiment_name == expected_default_name
+        assert isinstance(default_simulator.experiment_name, str)
 
-    # Custom configuration
-    assert custom_simulator.cache_dir_path == custom_cache_dir
-    assert custom_simulator.experiment_name == custom_experiment_name
-    assert hasattr(custom_simulator, "debug")  # Debug mode enabled
+        # Custom configuration
+        assert custom_simulator.cache_dir_path == custom_cache_dir
+        assert custom_simulator.experiment_name == custom_experiment_name
+        assert hasattr(custom_simulator, "debug")  # Debug mode enabled
+    finally:
+        os.chdir(old_cwd)
 
 
 def test_pomdp_simulator_parallel_execution_completes_multiple_policy_episodes(
@@ -3466,7 +3476,7 @@ def test_memory_leak_full_simulator_integration_reduced_scale():
     ), f"Full simulator integration leaked {results['final_growth']:.1f} MB"
 
 
-def test_get_output_metric_names_basic():
+def test_get_output_metric_names_basic(tmp_path):
     """Test get_output_metric_names returns correct metric names for single environment-policy pair.
 
     Purpose: Validates that get_output_metric_names returns all expected metric names for a single environment-policy pair
@@ -3480,7 +3490,9 @@ def test_get_output_metric_names_basic():
     # Create environment and simulator
     tiger_env = TigerPOMDP(discount_factor=0.95)
     simulator = POMDPSimulator(
-        task_manager_config=JoblibConfig(n_jobs=1), experiment_name="Metric_Names_Test_Basic"
+        task_manager_config=JoblibConfig(n_jobs=1),
+        cache_dir_path=tmp_path,
+        experiment_name="Metric_Names_Test_Basic",
     )
 
     try:
@@ -3517,7 +3529,7 @@ def test_get_output_metric_names_basic():
         simulator.cleanup_mlflow_runs()
 
 
-def test_get_output_metric_names_multiple_policies():
+def test_get_output_metric_names_multiple_policies(tmp_path):
     """Test get_output_metric_names with multiple policy classes for same environment.
 
     Purpose: Validates that get_output_metric_names correctly handles multiple policy classes with different info variables
@@ -3530,7 +3542,9 @@ def test_get_output_metric_names_multiple_policies():
     """
     tiger_env = TigerPOMDP(discount_factor=0.95)
     simulator = POMDPSimulator(
-        task_manager_config=JoblibConfig(n_jobs=1), experiment_name="Metric_Names_Multiple_Policies"
+        task_manager_config=JoblibConfig(n_jobs=1),
+        cache_dir_path=tmp_path,
+        experiment_name="Metric_Names_Multiple_Policies",
     )
 
     try:
@@ -3565,7 +3579,7 @@ def test_get_output_metric_names_multiple_policies():
         simulator.cleanup_mlflow_runs()
 
 
-def test_get_output_metric_names_multiple_environments():
+def test_get_output_metric_names_multiple_environments(tmp_path):
     """Test get_output_metric_names with multiple environments.
 
     Purpose: Validates that get_output_metric_names correctly handles multiple different environments
@@ -3583,6 +3597,7 @@ def test_get_output_metric_names_multiple_environments():
 
     simulator = POMDPSimulator(
         task_manager_config=JoblibConfig(n_jobs=1),
+        cache_dir_path=tmp_path,
         experiment_name="Metric_Names_Multiple_Environments",
     )
 
@@ -3623,7 +3638,7 @@ def test_get_output_metric_names_multiple_environments():
         simulator.cleanup_mlflow_runs()
 
 
-def test_get_output_metric_names_input_validation():
+def test_get_output_metric_names_input_validation(tmp_path):
     """Test get_output_metric_names validates inputs correctly.
 
     Purpose: Validates that get_output_metric_names performs comprehensive input validation
@@ -3636,7 +3651,9 @@ def test_get_output_metric_names_input_validation():
     """
     tiger_env = TigerPOMDP(discount_factor=0.95)
     simulator = POMDPSimulator(
-        task_manager_config=JoblibConfig(n_jobs=1), experiment_name="Metric_Names_Validation"
+        task_manager_config=JoblibConfig(n_jobs=1),
+        cache_dir_path=tmp_path,
+        experiment_name="Metric_Names_Validation",
     )
 
     try:
@@ -3680,7 +3697,7 @@ def test_get_output_metric_names_input_validation():
         simulator.cleanup_mlflow_runs()
 
 
-def test_get_output_metric_names_consistency():
+def test_get_output_metric_names_consistency(tmp_path):
     """Test get_output_metric_names returns consistent results.
 
     Purpose: Validates that get_output_metric_names is deterministic and returns same results on repeated calls
@@ -3693,7 +3710,9 @@ def test_get_output_metric_names_consistency():
     """
     tiger_env = TigerPOMDP(discount_factor=0.95)
     simulator = POMDPSimulator(
-        task_manager_config=JoblibConfig(n_jobs=1), experiment_name="Metric_Names_Consistency"
+        task_manager_config=JoblibConfig(n_jobs=1),
+        cache_dir_path=tmp_path,
+        experiment_name="Metric_Names_Consistency",
     )
 
     try:
@@ -3715,7 +3734,7 @@ def test_get_output_metric_names_consistency():
         simulator.cleanup_mlflow_runs()
 
 
-def test_get_output_metric_names_metric_order():
+def test_get_output_metric_names_metric_order(tmp_path):
     """Test get_output_metric_names returns metrics in correct order.
 
     Purpose: Validates that metrics are returned in the expected order (environment, policy info, standard)
@@ -3728,7 +3747,9 @@ def test_get_output_metric_names_metric_order():
     """
     tiger_env = TigerPOMDP(discount_factor=0.95)
     simulator = POMDPSimulator(
-        task_manager_config=JoblibConfig(n_jobs=1), experiment_name="Metric_Names_Order"
+        task_manager_config=JoblibConfig(n_jobs=1),
+        cache_dir_path=tmp_path,
+        experiment_name="Metric_Names_Order",
     )
 
     try:

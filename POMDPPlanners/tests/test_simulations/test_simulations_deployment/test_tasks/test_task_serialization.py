@@ -775,7 +775,7 @@ class TestComplexHyperparameterTuningTaskSerialization:
         assert unpickled_task.parameters_to_optimize[0][0] == "average_return"
         assert unpickled_task.parameters_to_optimize[1][0] == "avg_episode_length"
 
-    def test_pomcpow_task_with_cache_dir_serialization(self):
+    def test_pomcpow_task_with_cache_dir_serialization(self, tmp_path: Path):
         """Test HyperParameterTuningSimulationTask with cache directory.
 
         Purpose: Validates that POMCPOW task with cache_dir can be pickled
@@ -799,7 +799,7 @@ class TestComplexHyperparameterTuningTaskSerialization:
             "n_simulations": 10,
         }
 
-        cache_dir = Path("icvar_hyperparameter_tuning_experiment_cache")
+        cache_dir = tmp_path / "pomcpow_cache"
 
         task = HyperParameterTuningSimulationTask(
             environment=self.env,
