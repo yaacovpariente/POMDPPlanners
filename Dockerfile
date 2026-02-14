@@ -1,8 +1,8 @@
 # Use a standard Python base image (for example, python:3.10-slim) as the base.
-FROM python:3.10-slim as base
+FROM python:3.10-slim AS base
 
 # Test stage
-FROM base as test
+FROM base AS test
 
 WORKDIR /app
 
