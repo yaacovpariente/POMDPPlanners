@@ -685,7 +685,7 @@ class TestLocalSimulationsAPIIntegration:
             num_steps=2,
             n_trials=2,  # Minimal for fast execution
             discount_factor=0.95,
-            time_out_in_seconds=0.1,
+            time_out_in_seconds=0.01,
             evaluation_episodes=1,
             evaluation_steps=2,
             evaluation_n_jobs=1,
