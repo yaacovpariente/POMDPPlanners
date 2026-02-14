@@ -85,7 +85,7 @@ class TestPOMDPSimulatorSerialization:
         assert unpickled_simulator.debug == simulator.debug
         assert unpickled_simulator.enable_profiling == simulator.enable_profiling
 
-    def test_pomdp_simulator_serialization_with_joblib(self):
+    def test_pomdp_simulator_serialization_with_joblib(self, tmp_path):
         """Test POMDPSimulator serialization with Joblib task manager.
 
         Purpose: Validates that POMDPSimulator with JoblibConfig can be pickled
@@ -102,7 +102,7 @@ class TestPOMDPSimulatorSerialization:
             POMDPSimulator,
             {
                 "task_manager_config": task_manager_config,
-                "cache_dir_path": None,
+                "cache_dir_path": tmp_path,
                 "experiment_name": "Test_Joblib_Simulation",
                 "debug": False,
                 "enable_profiling": False,
@@ -158,7 +158,7 @@ class TestPOMDPSimulatorSerialization:
             assert unpickled_simulator.cache_dir_path == simulator.cache_dir_path
             assert unpickled_simulator.experiment_name == simulator.experiment_name
 
-    def test_pomdp_simulator_serialization_with_debug_enabled(self):
+    def test_pomdp_simulator_serialization_with_debug_enabled(self, tmp_path):
         """Test POMDPSimulator serialization with debug mode enabled.
 
         Purpose: Validates that POMDPSimulator with debug flag can be pickled
@@ -173,7 +173,7 @@ class TestPOMDPSimulatorSerialization:
 
         simulator = POMDPSimulator(
             task_manager_config=task_manager_config,
-            cache_dir_path=None,
+            cache_dir_path=tmp_path,
             experiment_name="Test_Debug_Simulation",
             debug=True,
             enable_profiling=False,
@@ -186,7 +186,7 @@ class TestPOMDPSimulatorSerialization:
         assert unpickled_simulator.debug is True
         assert unpickled_simulator.experiment_name == simulator.experiment_name
 
-    def test_pomdp_simulator_serialization_with_profiling_enabled(self):
+    def test_pomdp_simulator_serialization_with_profiling_enabled(self, tmp_path):
         """Test POMDPSimulator serialization with profiling enabled.
 
         Purpose: Validates that POMDPSimulator with profiling can be pickled
@@ -201,7 +201,7 @@ class TestPOMDPSimulatorSerialization:
 
         simulator = POMDPSimulator(
             task_manager_config=task_manager_config,
-            cache_dir_path=None,
+            cache_dir_path=tmp_path,
             experiment_name="Test_Profiling_Simulation",
             debug=False,
             enable_profiling=True,
@@ -224,7 +224,7 @@ class TestSimulatorSerializationEdgeCases:
         """Set up test environment for each test."""
         self.env = TigerPOMDP(discount_factor=0.95)
 
-    def test_simulator_serialization_with_no_initialization(self):
+    def test_simulator_serialization_with_no_initialization(self, tmp_path):
         """Test simulator serialization immediately after creation.
 
         Purpose: Validates that fresh simulators can be pickled without use
@@ -238,7 +238,7 @@ class TestSimulatorSerializationEdgeCases:
         task_manager_config = JoblibConfig(n_jobs=1)
         simulator = POMDPSimulator(
             task_manager_config=task_manager_config,
-            cache_dir_path=None,
+            cache_dir_path=tmp_path,
             experiment_name="Test_Fresh_Simulation",
             debug=False,
             enable_profiling=False,
@@ -252,7 +252,7 @@ class TestSimulatorSerializationEdgeCases:
         assert unpickled_simulator.experiment_name == simulator.experiment_name
         assert unpickled_simulator.debug == simulator.debug
 
-    def test_multiple_simulators_serialization(self):
+    def test_multiple_simulators_serialization(self, tmp_path):
         """Test serialization of multiple simulators together.
 
         Purpose: Validates that multiple simulators can be pickled in same structure
@@ -266,7 +266,7 @@ class TestSimulatorSerializationEdgeCases:
         simulators_dict = {
             "joblib_sim_1": POMDPSimulator(
                 task_manager_config=JoblibConfig(n_jobs=1),
-                cache_dir_path=None,
+                cache_dir_path=tmp_path,
                 experiment_name="Multi_Joblib_Test_1",
                 debug=False,
                 enable_profiling=False,
@@ -274,7 +274,7 @@ class TestSimulatorSerializationEdgeCases:
             ),
             "joblib_sim_2": POMDPSimulator(
                 task_manager_config=JoblibConfig(n_jobs=2, verbose=1),
-                cache_dir_path=None,
+                cache_dir_path=tmp_path,
                 experiment_name="Multi_Joblib_Test_2",
                 debug=True,
                 enable_profiling=False,
@@ -291,7 +291,7 @@ class TestSimulatorSerializationEdgeCases:
         assert unpickled_dict["joblib_sim_1"].experiment_name == "Multi_Joblib_Test_1"
         assert unpickled_dict["joblib_sim_2"].experiment_name == "Multi_Joblib_Test_2"
 
-    def test_simulator_serialization_with_different_configs(self):
+    def test_simulator_serialization_with_different_configs(self, tmp_path):
         """Test serialization of simulators with various configurations.
 
         Purpose: Validates that diverse simulator configurations can be pickled
@@ -324,7 +324,7 @@ class TestSimulatorSerializationEdgeCases:
         ]
 
         for config in configs_to_test:
-            simulator = POMDPSimulator(cache_dir_path=None, console_output=False, **config)
+            simulator = POMDPSimulator(cache_dir_path=tmp_path, console_output=False, **config)
 
             pickled = pickle.dumps(simulator)
             unpickled_simulator = pickle.loads(pickled)
