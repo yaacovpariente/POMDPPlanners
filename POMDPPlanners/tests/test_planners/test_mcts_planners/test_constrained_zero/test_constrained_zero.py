@@ -27,6 +27,7 @@ from POMDPPlanners.planners.mcts_planners.constrained_zero.constrained_zero impo
 from POMDPPlanners.planners.mcts_planners.constrained_zero.constrained_zero_network import (
     ConstrainedZeroNetwork,
 )
+from POMDPPlanners.training import PolicyTrainer
 from POMDPPlanners.utils.action_samplers import DiscreteActionSampler
 
 np.random.seed(42)
@@ -495,15 +496,15 @@ class TestConstrainedZeroPolicyTarget:
 
 
 class TestConstrainedZeroFit:
-    """Tests for ConstrainedZero fit() method."""
+    """Tests for ConstrainedZero training via PolicyTrainer."""
 
     def test_fit_returns_failure_loss(self, tiger_env):
-        """Test fit() returns metrics including failure_loss.
+        """Test PolicyTrainer.train() returns metrics including failure_loss.
 
         Purpose: Validates that policy iteration tracks failure loss.
 
         Given: A ConstrainedZero planner with minimal parameters.
-        When: fit() is called for 1 iteration with 2 episodes.
+        When: PolicyTrainer.train() is called for 1 iteration with 2 episodes.
         Then: Returned metrics dict contains "failure_loss".
 
         Test type: integration
@@ -528,12 +529,14 @@ class TestConstrainedZeroFit:
         def initial_belief_fn():
             return _make_initial_belief(tiger_env)
 
-        metrics = planner.fit(
+        trainer = PolicyTrainer(
+            policy=planner,
             initial_belief_fn=initial_belief_fn,
             num_iterations=1,
             episodes_per_iteration=2,
             episode_length=5,
             verbose=False,
         )
+        metrics = trainer.train()
 
         assert "failure_loss" in metrics

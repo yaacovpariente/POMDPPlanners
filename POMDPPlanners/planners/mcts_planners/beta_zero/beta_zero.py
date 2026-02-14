@@ -2,8 +2,9 @@
 
 This module implements the BetaZero algorithm (Moss et al., 2024 — arXiv:2306.00249),
 which adapts AlphaZero to POMDPs by planning in belief space. It combines online MCTS
-with PUCT and neural network priors for both action selection and leaf value estimation,
-and provides a ``fit()`` method for offline policy-iteration training.
+with PUCT and neural network priors for both action selection and leaf value estimation.
+Offline policy-iteration training is orchestrated via
+:class:`~POMDPPlanners.training.PolicyTrainer`.
 
 Classes:
     BetaZero: Main planner extending ``DoubleProgressiveWideningMCTSPolicy``.
@@ -19,7 +20,7 @@ import numpy as np
 from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.core.cost import belief_expectation_reward
 from POMDPPlanners.core.environment import Environment, SpaceType
-from POMDPPlanners.core.policy import PolicyRunData, PolicySpaceInfo
+from POMDPPlanners.core.policy import PolicyRunData, PolicySpaceInfo, TrainablePolicy
 from POMDPPlanners.core.tree import ActionNode, BeliefNode
 from POMDPPlanners.planners.mcts_planners.beta_zero.belief_representation import (
     BeliefRepresentation,
@@ -61,7 +62,7 @@ class _BatchedEpisodeState:
     active: bool
 
 
-class BetaZero(DoubleProgressiveWideningMCTSPolicy):
+class BetaZero(DoubleProgressiveWideningMCTSPolicy, TrainablePolicy):
     """BetaZero: Neural MCTS for POMDPs.
 
     Extends ``DoubleProgressiveWideningMCTSPolicy`` with three key innovations
@@ -462,94 +463,38 @@ class BetaZero(DoubleProgressiveWideningMCTSPolicy):
             full /= total
         return full
 
-    # ── fit(): policy iteration ───────────────────────────────────────
+    # ── TrainablePolicy hooks ────────────────────────────────────────
 
-    def fit(
-        self,
-        initial_belief_fn: Callable[[], Belief],
-        num_iterations: int = 10,
-        episodes_per_iteration: int = 50,
-        episode_length: int = 100,
-        verbose: bool = True,
-        batched_collection: bool = False,
-    ) -> Dict[str, List[float]]:
-        """Run BetaZero policy iteration.
+    def begin_collecting(self) -> None:
+        self._collecting_data = True
 
-        Alternates between (1) collecting episodes using the current policy
-        and (2) training the network on the collected data.
+    def end_collecting(self) -> None:
+        self._collecting_data = False
 
-        Args:
-            initial_belief_fn: Callable returning a fresh initial belief.
-            num_iterations: Number of collect-then-train iterations.
-            episodes_per_iteration: Episodes to collect per iteration.
-            episode_length: Max steps per episode.
-            verbose: Log progress information.
-            batched_collection: When ``True``, use network-only batched episode
-                collection instead of MCTS-based collection. Eliminates MCTS
-                during data collection for ~200x speedup per step. Actions come
-                directly from the network's policy head.
+    def prepare_episode(self) -> None:
+        self._pending_examples.clear()
 
-        Returns:
-            Dictionary with per-iteration loss metrics:
-            ``"total_loss"``, ``"value_loss"``, ``"policy_loss"``.
-        """
-        all_metrics: Dict[str, List[float]] = {
-            "total_loss": [],
-            "value_loss": [],
-            "policy_loss": [],
-        }
+    def finalize_episode(self, history) -> None:
+        self._finalize_episode_data(history)
 
-        collect_fn = (
-            self._collect_episodes_batched if batched_collection else self._collect_episodes
-        )
+    def train_step(self) -> Dict[str, List[float]]:
+        return self._train_network_on_buffer()
 
-        for iteration in range(num_iterations):
-            collect_fn(initial_belief_fn, episodes_per_iteration, episode_length)
+    def buffer_size(self) -> int:
+        return len(self._buffer)
 
-            if len(self._buffer) == 0:
-                if verbose:
-                    self.logger.info(
-                        "Iteration %d: no training data collected, skipping training",
-                        iteration,
-                    )
-                continue
-
-            metrics = self._train_network_on_buffer()
-            self._append_metrics(all_metrics, metrics)
-
-            if verbose:
-                self.logger.info(
-                    "Iteration %d: total_loss=%.4f, value_loss=%.4f, policy_loss=%.4f",
-                    iteration,
-                    metrics["total_loss"][-1] if metrics["total_loss"] else float("nan"),
-                    metrics["value_loss"][-1] if metrics["value_loss"] else float("nan"),
-                    metrics["policy_loss"][-1] if metrics["policy_loss"] else float("nan"),
-                )
-
-        return all_metrics
-
-    def _collect_episodes(
+    def collect_episodes_batched(
         self,
         initial_belief_fn: Callable[[], Belief],
         n_episodes: int,
         episode_length: int,
     ) -> None:
-        from POMDPPlanners.simulations.episodes import (
-            EpisodeRunner,
-        )  # pylint: disable=import-outside-toplevel
+        self._collect_episodes_batched(initial_belief_fn, n_episodes, episode_length)
 
-        self._collecting_data = True
-        for _ in range(n_episodes):
-            self._pending_examples.clear()
-            runner = EpisodeRunner(
-                environment=self.environment,
-                policy=self,
-                initial_belief=initial_belief_fn(),
-                num_steps=episode_length,
-            )
-            history = runner.run()
-            self._finalize_episode_data(history)
-        self._collecting_data = False
+    def get_metric_keys(self) -> List[str]:
+        return ["total_loss", "value_loss", "policy_loss"]
+
+    # ── Episode data helpers ─────────────────────────────────────────
 
     def _finalize_episode_data(self, history) -> None:
         rewards = [step.reward for step in history.history if step.reward is not None]
@@ -694,12 +639,6 @@ class BetaZero(DoubleProgressiveWideningMCTSPolicy):
             learning_rate=self.learning_rate,
             weight_decay=self.weight_decay,
         )
-
-    @staticmethod
-    def _append_metrics(all_metrics: Dict[str, List[float]], new: Dict[str, List[float]]) -> None:
-        for key in all_metrics:
-            if key in new and new[key]:
-                all_metrics[key].append(new[key][-1])
 
     # ── Serialisation ─────────────────────────────────────────────────
 

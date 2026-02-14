@@ -414,69 +414,12 @@ class ConstrainedZero(BetaZero):
             return self._map_to_full_action_vector(children, probs)
         return self._compute_continuous_policy_target(children, probs)
 
-    # ── fit() and training overrides ──────────────────────────────────
+    # ── TrainablePolicy overrides ────────────────────────────────────
 
-    def fit(
-        self,
-        initial_belief_fn: Callable[[], Belief],
-        num_iterations: int = 10,
-        episodes_per_iteration: int = 50,
-        episode_length: int = 100,
-        verbose: bool = True,
-        batched_collection: bool = False,
-    ) -> Dict[str, List[float]]:
-        """Run ConstrainedZero policy iteration.
+    def get_metric_keys(self) -> List[str]:
+        return ["total_loss", "value_loss", "policy_loss", "failure_loss"]
 
-        Alternates between (1) collecting episodes using the current policy
-        and (2) training the 3-head network on the collected data.
-
-        Args:
-            initial_belief_fn: Callable returning a fresh initial belief.
-            num_iterations: Number of collect-then-train iterations.
-            episodes_per_iteration: Episodes to collect per iteration.
-            episode_length: Max steps per episode.
-            verbose: Log progress information.
-
-        Returns:
-            Dictionary with per-iteration loss metrics:
-            ``"total_loss"``, ``"value_loss"``, ``"policy_loss"``, ``"failure_loss"``.
-        """
-        all_metrics: Dict[str, List[float]] = {
-            "total_loss": [],
-            "value_loss": [],
-            "policy_loss": [],
-            "failure_loss": [],
-        }
-
-        collect_fn = (
-            self._collect_episodes_batched if batched_collection else self._collect_episodes
-        )
-
-        for iteration in range(num_iterations):
-            collect_fn(initial_belief_fn, episodes_per_iteration, episode_length)
-
-            if len(self._buffer) == 0:
-                if verbose:
-                    self.logger.info(
-                        "Iteration %d: no training data collected, skipping training",
-                        iteration,
-                    )
-                continue
-
-            metrics = self._train_network_on_buffer()
-            self._append_metrics(all_metrics, metrics)
-
-            if verbose:
-                self.logger.info(
-                    "Iteration %d: total=%.4f, value=%.4f, policy=%.4f, failure=%.4f",
-                    iteration,
-                    metrics["total_loss"][-1] if metrics["total_loss"] else float("nan"),
-                    metrics["value_loss"][-1] if metrics["value_loss"] else float("nan"),
-                    metrics["policy_loss"][-1] if metrics["policy_loss"] else float("nan"),
-                    metrics["failure_loss"][-1] if metrics["failure_loss"] else float("nan"),
-                )
-
-        return all_metrics
+    # ── Episode data / training overrides ─────────────────────────────
 
     def _finalize_episode_data(self, history) -> None:
         rewards = [step.reward for step in history.history if step.reward is not None]

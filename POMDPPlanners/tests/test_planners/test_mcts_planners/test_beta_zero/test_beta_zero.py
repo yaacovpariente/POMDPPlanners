@@ -16,6 +16,7 @@ from POMDPPlanners.core.policy import PolicyRunData
 from POMDPPlanners.core.tree import ActionNode, BeliefNode
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.planners.mcts_planners.beta_zero.beta_zero import BetaZero
+from POMDPPlanners.training import PolicyTrainer
 from POMDPPlanners.utils.action_samplers import DiscreteActionSampler
 
 np.random.seed(42)
@@ -437,14 +438,14 @@ class TestBetaZero:
         np.testing.assert_allclose(returns[0], expected_g0, atol=1e-10)
 
     def test_fit_reduces_or_produces_loss(self, tiger_env):
-        """Test that fit() with 2 iterations returns loss metrics.
+        """Test that PolicyTrainer.train() with 2 iterations returns loss metrics.
 
-        Purpose: Validates that the fit() policy iteration loop successfully
-        collects data and trains the network, producing loss values.
+        Purpose: Validates that the policy iteration loop via PolicyTrainer
+        successfully collects data and trains the network, producing loss values.
 
         Given: A BetaZero planner configured for TigerPOMDP with small parameters
                for fast execution (2 iterations, 2 episodes, 5 steps).
-        When: fit() is called with a lambda returning initial beliefs.
+        When: PolicyTrainer.train() is called.
         Then: The returned metrics dictionary contains total_loss, value_loss,
               and policy_loss keys with at least one entry each.
 
@@ -467,13 +468,15 @@ class TestBetaZero:
             pomdp=tiger_env, n_particles=5, resampling=True
         )
 
-        metrics = planner.fit(
+        trainer = PolicyTrainer(
+            policy=planner,
             initial_belief_fn=initial_belief_fn,
             num_iterations=2,
             episodes_per_iteration=2,
             episode_length=5,
             verbose=False,
         )
+        metrics = trainer.train()
 
         assert "total_loss" in metrics
         assert "value_loss" in metrics
@@ -485,10 +488,10 @@ class TestBetaZero:
         """Test that _collecting_data is False by default and _buffer is empty.
 
         Purpose: Validates that the planner does not collect training data
-        unless explicitly in fit() mode.
+        unless explicitly in training mode.
 
         Given: A freshly constructed BetaZero planner.
-        When: The internal training state is inspected without calling fit().
+        When: The internal training state is inspected without training.
         Then: _collecting_data is False and _buffer has length 0.
 
         Test type: unit

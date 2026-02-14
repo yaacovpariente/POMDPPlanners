@@ -58,6 +58,8 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         alpha: float = 0.1,
         seed: int = 42,
         use_queue_logger: bool = False,
+        training_hyper_parameters: Optional[Sequence[HyperParameterFeature]] = None,
+        training_constant_parameters: Optional[Dict[str, Any]] = None,
     ):
         """Initialize a hyperparameter tuning simulation task.
 
@@ -80,6 +82,10 @@ class HyperParameterTuningSimulationTask(SimulationTask):
             alpha: Alpha parameter for statistics (0-1)
             seed: Random seed for reproducibility
             use_queue_logger: Whether to use queue-based logging
+            training_hyper_parameters: Hyperparameter definitions for PolicyTrainer
+                (only used when policy implements TrainablePolicy)
+            training_constant_parameters: Constant parameters for PolicyTrainer
+                (only used when policy implements TrainablePolicy)
 
         Raises:
             ValueError: If any input parameter is invalid
@@ -124,6 +130,8 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         self.alpha = alpha
         self.seed = seed
         self.use_queue_logger = use_queue_logger
+        self.training_hyper_parameters = training_hyper_parameters or ()
+        self.training_constant_parameters = training_constant_parameters or {}
         # Create task manager config for joblib
         task_manager_config = JoblibConfig(n_jobs=n_jobs, console_output=False, no_logs=True)
 
@@ -390,6 +398,25 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         # Log the configured number of trials
         self.logger.info("Running optimization with %d trials", self.n_trials)
 
+    @staticmethod
+    def _suggest_hyperparameters(
+        trial: FrozenTrial, hyperparameters: Sequence[HyperParameterFeature]
+    ) -> Dict[str, Any]:
+        params: Dict[str, Any] = {}
+        for param in hyperparameters:
+            if isinstance(param, CategoricalHyperParameter):
+                params[param.name] = trial.suggest_categorical(param.name, param.choices)
+            elif isinstance(param, NumericalHyperParameter):
+                if isinstance(param.low, float) and isinstance(param.high, float):
+                    params[param.name] = trial.suggest_float(param.name, param.low, param.high)
+                elif isinstance(param.low, int) and isinstance(param.high, int):
+                    params[param.name] = trial.suggest_int(param.name, param.low, param.high)
+                else:
+                    raise ValueError(
+                        f"Invalid parameter type: {type(param.low)} or {type(param.high)}"
+                    )
+        return params
+
     def _create_policy_parameter_suggestions(
         self, trial: FrozenTrial, hyperparameters: Sequence[HyperParameterFeature]
     ) -> Dict[str, Any]:
@@ -405,24 +432,8 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         policy_params: Dict[str, Any] = {
             "environment": self.environment,
         }
-
         policy_params.update(self.constant_parameters)
-        # Add optimization parameters based on their types
-        for param in hyperparameters:
-            if isinstance(param, CategoricalHyperParameter):
-                policy_params[param.name] = trial.suggest_categorical(param.name, param.choices)
-            elif isinstance(param, NumericalHyperParameter):
-                if isinstance(param.low, float) and isinstance(param.high, float):
-                    policy_params[param.name] = trial.suggest_float(
-                        param.name, param.low, param.high
-                    )
-                elif isinstance(param.low, int) and isinstance(param.high, int):
-                    policy_params[param.name] = trial.suggest_int(param.name, param.low, param.high)
-                else:
-                    raise ValueError(
-                        f"Invalid parameter type: {type(param.low)} or {type(param.high)}"
-                    )
-
+        policy_params.update(self._suggest_hyperparameters(trial, hyperparameters))
         return policy_params
 
     def _evaluate_policy_configuration(
@@ -575,6 +586,59 @@ class HyperParameterTuningSimulationTask(SimulationTask):
 
         return pareto_scores
 
+    def _train_policy_if_trainable(self, policy: Policy, trial: FrozenTrial) -> None:
+        from POMDPPlanners.core.policy import (  # pylint: disable=import-outside-toplevel
+            TrainablePolicy,
+        )
+
+        if not isinstance(policy, TrainablePolicy):
+            return
+
+        from POMDPPlanners.training.callbacks import (  # pylint: disable=import-outside-toplevel
+            OptunaPruning,
+        )
+        from POMDPPlanners.training.policy_trainer import (  # pylint: disable=import-outside-toplevel
+            PolicyTrainer,
+        )
+
+        training_params = self._suggest_hyperparameters(trial, self.training_hyper_parameters)
+        training_params.update(self.training_constant_parameters)
+
+        trainer = PolicyTrainer(
+            policy=policy,
+            initial_belief_fn=lambda: deepcopy(self.belief),
+            callbacks=[OptunaPruning(trial)],
+            **training_params,
+        )
+        trainer.train()
+
+    def _train_best_policy(self, policy: Policy, best_trial: FrozenTrial) -> None:
+        from POMDPPlanners.core.policy import (  # pylint: disable=import-outside-toplevel
+            TrainablePolicy,
+        )
+
+        if not isinstance(policy, TrainablePolicy):
+            return
+
+        from POMDPPlanners.training.policy_trainer import (  # pylint: disable=import-outside-toplevel
+            PolicyTrainer,
+        )
+
+        training_params: Dict[str, Any] = {}
+        training_params.update(self.training_constant_parameters)
+
+        # Use best trial's training params if they were tuned
+        for param in self.training_hyper_parameters:
+            if param.name in best_trial.params:
+                training_params[param.name] = best_trial.params[param.name]
+
+        trainer = PolicyTrainer(
+            policy=policy,
+            initial_belief_fn=lambda: deepcopy(self.belief),
+            **training_params,
+        )
+        trainer.train()
+
     def _create_optuna_objective_function(self):
         """Create the Optuna objective function for multi-objective optimization.
 
@@ -599,6 +663,9 @@ class HyperParameterTuningSimulationTask(SimulationTask):
 
                 # Create policy instance with suggested parameters
                 policy = self.policy_cls(**policy_params)
+
+                # Train the policy if it implements TrainablePolicy
+                self._train_policy_if_trainable(policy, trial)
 
                 # Evaluate and store metrics - actual values stored in trial.user_attrs
                 metric_values = self._evaluate_policy_configuration(policy, trial)
@@ -701,6 +768,9 @@ class HyperParameterTuningSimulationTask(SimulationTask):
             best_policy_params[param_name] = param_value
 
         optimized_policy = self.policy_cls(**best_policy_params)
+
+        # Train the best policy if it implements TrainablePolicy
+        self._train_best_policy(optimized_policy, best_trial)
 
         # Store metadata
         self._last_optimization_metadata = {
@@ -920,6 +990,8 @@ class HyperParameterTuningSimulationTask(SimulationTask):
             "n_trials": self.n_trials,
             "seed": self.seed,
             "use_queue_logger": self.use_queue_logger,
+            "training_hyper_parameters": list(self.training_hyper_parameters),
+            "training_constant_parameters": self.training_constant_parameters,
         }
 
     def __eq__(self, other: object) -> bool:
