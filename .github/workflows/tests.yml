@@ -15,6 +15,20 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: Free up disk space
+      run: |
+        echo "Disk space before cleanup:"
+        df -h
+        # Remove unnecessary pre-installed software
+        sudo rm -rf /usr/share/dotnet
+        sudo rm -rf /usr/local/lib/android
+        sudo rm -rf /opt/ghc
+        sudo rm -rf /opt/hostedtoolcache/CodeQL
+        sudo docker image prune --all --force
+        sudo apt-get clean
+        echo "Disk space after cleanup:"
+        df -h
+
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v2
 
@@ -85,6 +99,16 @@ jobs:
       run: |
         docker run --rm --entrypoint sphinx-build pomdpplanners-test:latest -b html docs docs/_build/html
       continue-on-error: true  # Don't fail the build if docs have warnings
+
+    - name: Clean up Docker space before production build
+      run: |
+        echo "Disk space before cleanup:"
+        df -h
+        # Remove dangling images and build cache
+        docker system prune -f
+        docker builder prune -f --keep-storage 5GB
+        echo "Disk space after cleanup:"
+        df -h
 
     - name: Build and push production image
       if: github.event_name == 'push'
