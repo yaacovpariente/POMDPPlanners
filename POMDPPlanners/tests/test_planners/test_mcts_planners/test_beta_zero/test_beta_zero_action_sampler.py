@@ -4,11 +4,11 @@ This module tests the BetaZeroActionSampler class including fallback behaviour,
 discrete and continuous network-guided sampling, and pickle serialisation.
 """
 
+# pylint: disable=protected-access  # Tests need to verify internal state
+
 import pickle
-from typing import Any, Optional
 
 import numpy as np
-import pytest
 
 from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.tree import BeliefNode
@@ -30,7 +30,7 @@ np.random.seed(42)
 
 
 class SimpleFallbackSampler(ActionSampler):
-    def sample(self, belief_node=None):
+    def sample(self, belief_node=None):  # noqa: ARG002
         return "fallback_action"
 
 
@@ -272,3 +272,109 @@ def test_pickle_serialization():
     assert (
         result == "fallback_action"
     ), f"Restored sampler without network should use fallback, got {result}"
+
+
+def test_pickle_round_trip():
+    """Test full pickle.dumps → pickle.loads round trip for BetaZeroActionSampler.
+
+    Purpose: Validates that BetaZeroActionSampler can be successfully pickled
+        and unpickled using the full pickle protocol, which is critical for
+        joblib/multiprocessing compatibility.
+
+    Given: A BetaZeroActionSampler with network and representation attached.
+    When: The sampler is pickled with pickle.dumps and then unpickled with
+        pickle.loads (simulating joblib/multiprocessing serialization).
+    Then: The unpickled sampler retains all non-network attributes (fallback,
+        actions, noise_scale), has network and representation set to None,
+        and correctly delegates to fallback when used.
+
+    Test type: unit
+    """
+    state_dim = 2
+    actions = ["a", "b", "c"]
+    belief_dim = 2 * state_dim
+
+    network = BetaZeroNetwork(
+        belief_dim=belief_dim,
+        action_space_type="discrete",
+        n_actions=len(actions),
+        hidden_sizes=(32, 32),
+    )
+    representation = ParticleMeanStdRepresentation(state_dim=state_dim)
+
+    fallback = SimpleFallbackSampler()
+    sampler = BetaZeroActionSampler(fallback_sampler=fallback, actions=actions, noise_scale=0.25)
+    sampler.set_network_and_representation(network, representation)
+
+    # Full pickle round trip (what joblib/multiprocessing actually does)
+    pickled_data = pickle.dumps(sampler)
+    restored = pickle.loads(pickled_data)
+
+    # Verify attributes are preserved
+    assert restored._network is None, "Network should be None after pickle.loads"
+    assert (
+        restored._belief_representation is None
+    ), "Belief representation should be None after pickle.loads"
+    assert restored.actions == actions, f"Actions should be preserved, got {restored.actions}"
+    assert (
+        restored.noise_scale == 0.25
+    ), f"noise_scale should be preserved, got {restored.noise_scale}"
+    assert isinstance(
+        restored.fallback_sampler, SimpleFallbackSampler
+    ), "Fallback sampler should be preserved and of correct type"
+
+    # Verify functionality: without network, should use fallback
+    belief_node = _make_belief_node(state_dim=state_dim)
+    result = restored.sample(belief_node=belief_node)
+    assert (
+        result == "fallback_action"
+    ), f"Restored sampler should use fallback after pickle.loads, got {result}"
+
+
+def test_pickle_round_trip_continuous():
+    """Test full pickle round trip for BetaZeroActionSampler with continuous actions.
+
+    Purpose: Validates that BetaZeroActionSampler for continuous action spaces
+        can be successfully pickled and unpickled.
+
+    Given: A BetaZeroActionSampler configured for continuous actions with
+        network and representation attached.
+    When: The sampler is pickled and unpickled via pickle.dumps/loads.
+    Then: The unpickled sampler preserves all attributes and functions correctly.
+
+    Test type: unit
+    """
+    state_dim = 2
+    action_dim = 2
+    belief_dim = 2 * state_dim
+
+    network = BetaZeroNetwork(
+        belief_dim=belief_dim,
+        action_space_type="continuous",
+        action_dim=action_dim,
+        hidden_sizes=(32, 32),
+    )
+    representation = ParticleMeanStdRepresentation(state_dim=state_dim)
+
+    fallback = SimpleFallbackSampler()
+    sampler = BetaZeroActionSampler(fallback_sampler=fallback, actions=None, noise_scale=0.15)
+    sampler.set_network_and_representation(network, representation)
+
+    # Full pickle round trip
+    pickled_data = pickle.dumps(sampler)
+    restored = pickle.loads(pickled_data)
+
+    # Verify attributes
+    assert restored._network is None, "Network should be None after pickle.loads"
+    assert (
+        restored._belief_representation is None
+    ), "Belief representation should be None after pickle.loads"
+    assert restored.actions is None, "Actions should be None for continuous space"
+    assert (
+        restored.noise_scale == 0.15
+    ), f"noise_scale should be preserved, got {restored.noise_scale}"
+
+    # Verify functionality
+    belief_node = _make_belief_node(state_dim=state_dim)
+    result = restored.sample(belief_node=belief_node)
+    assert result == "fallback_action", f"Restored sampler should use fallback, got {result}"

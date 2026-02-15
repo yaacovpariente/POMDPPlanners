@@ -29,6 +29,8 @@ class BetaZeroActionSampler(ActionSampler):
 
     Args:
         fallback_sampler: Sampler used when the network is not available.
+            Optional for pickle deserialization compatibility; should always
+            be provided during normal construction.
         actions: List of discrete actions (required for discrete spaces).
         noise_scale: Standard deviation of exploration noise added to
             continuous action samples.
@@ -36,10 +38,11 @@ class BetaZeroActionSampler(ActionSampler):
 
     def __init__(
         self,
-        fallback_sampler: ActionSampler,
+        fallback_sampler: Optional[ActionSampler] = None,
         actions: Optional[List[Any]] = None,
         noise_scale: float = 0.1,
     ):
+        # For compatibility with pickle deserialization via __reduce__
         self.fallback_sampler = fallback_sampler
         self.actions = actions
         self.noise_scale = noise_scale
@@ -104,11 +107,19 @@ class BetaZeroActionSampler(ActionSampler):
     # ── Serialisation ─────────────────────────────────────────────────
 
     def __getstate__(self) -> Dict[str, Any]:
+        """Get state for pickle serialization."""
         state = self.__dict__.copy()
         state["_network"] = None
         state["_belief_representation"] = None
         return state
 
     def __setstate__(self, state: Dict[str, Any]) -> None:
+        """Set state for pickle deserialization."""
         for key, value in state.items():
-            object.__setattr__(self, key, value)
+            setattr(self, key, value)
+
+    def __reduce__(self):
+        """Support for pickle serialization via __reduce__."""
+        cls = self.__class__
+        state = self.__getstate__()
+        return (cls, (), state)
