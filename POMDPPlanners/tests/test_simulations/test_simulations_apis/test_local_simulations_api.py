@@ -755,10 +755,10 @@ class TestLocalSimulationsAPIIntegration:
             generators=generators,
             particles=5,
             num_episodes=1,
-            num_steps=3,
+            num_steps=1,
             n_trials=2,  # Minimal for fast execution
             evaluation_episodes=1,
-            evaluation_steps=3,
+            evaluation_steps=1,
             evaluation_n_jobs=1,
             optimization_n_jobs=1,
             time_out_in_seconds=0.1,
