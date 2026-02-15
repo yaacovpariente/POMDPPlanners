@@ -57,27 +57,9 @@ jobs:
       run: |
         docker run --rm --entrypoint black pomdpplanners-test:latest --check POMDPPlanners/core/ POMDPPlanners/environments/ POMDPPlanners/planners/ POMDPPlanners/simulations/ POMDPPlanners/utils/ POMDPPlanners/configs/
 
-    - name: Set up Python for pyright
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.12'
-
-    - name: Install Python dependencies for pyright
+    - name: Run pyright type checking inside Docker
       run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install -e .
-
-    - name: Install Node.js for pyright
-      uses: actions/setup-node@v4
-      with:
-        node-version: '18'
-
-    - name: Install pyright
-      run: npm install -g pyright
-
-    - name: Run pyright type checking
-      run: pyright POMDPPlanners/
+        docker run --rm --entrypoint pyright pomdpplanners-test:latest POMDPPlanners/
 
     - name: Run unit tests inside Docker (excluding slow tests)
       run: |
