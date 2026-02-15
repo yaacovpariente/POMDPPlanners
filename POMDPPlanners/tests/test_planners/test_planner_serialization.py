@@ -8,6 +8,8 @@ and deserialized using pickle. Serialization is crucial for:
 - Multi-processing applications
 """
 
+# pylint: disable=attribute-defined-outside-init  # pytest setup_method pattern
+
 import pickle
 from typing import Any, Dict
 
@@ -22,10 +24,14 @@ from POMDPPlanners.planners import (
     POMCPOW,
     PFT_DPW,
     DiscreteActionSequencesPlanner,
-    PathSimulationPolicy,
     SparsePFT,
     StandardSparseSamplingDiscreteActionsPlanner,
 )
+from POMDPPlanners.planners.mcts_planners.beta_zero import BetaZero
+from POMDPPlanners.planners.mcts_planners.beta_zero.beta_zero_action_sampler import (
+    BetaZeroActionSampler,
+)
+from POMDPPlanners.utils.action_samplers import DiscreteActionSampler
 
 # Set seeds for reproducible tests
 np.random.seed(42)
@@ -217,6 +223,58 @@ class TestPlannerSerialization:
                 "name": "SparseSampling_Test",
             },
         )
+
+    def test_beta_zero_serialization(self):
+        """Test BetaZero planner serialization.
+
+        Purpose: Validates that BetaZero can be pickled and unpickled correctly,
+            including its network-guided action sampler components.
+
+        Given: BetaZero planner instance with TigerPOMDP environment and
+            BetaZeroActionSampler with fallback
+        When: Planner is pickled and unpickled
+        Then: Unpickled planner maintains all properties and functionality
+
+        Test type: unit
+        """
+        # Create action sampler with fallback for BetaZero
+        actions = self.tiger_env.get_actions()
+        fallback_sampler = DiscreteActionSampler(actions)
+        action_sampler = BetaZeroActionSampler(
+            fallback_sampler=fallback_sampler,
+            actions=actions,
+        )
+
+        # Create BetaZero planner
+        planner = BetaZero(
+            environment=self.tiger_env,
+            discount_factor=0.95,
+            depth=10,
+            name="BetaZero_Test",
+            action_sampler=action_sampler,
+            n_simulations=50,
+            state_dim=1,  # Tiger POMDP has 1D state
+            k_a=1.0,
+            alpha_a=0.5,
+            k_o=1.0,
+            alpha_o=0.5,
+            exploration_constant=1.0,
+        )
+
+        # Pickle the planner
+        pickled = pickle.dumps(planner)
+
+        # Unpickle the planner
+        unpickled_planner = pickle.loads(pickled)
+
+        # Verify basic properties are preserved
+        assert unpickled_planner.name == planner.name
+        assert unpickled_planner.discount_factor == planner.discount_factor
+        assert unpickled_planner.depth == planner.depth
+        assert unpickled_planner.n_simulations == planner.n_simulations
+
+        # Verify environment is preserved
+        assert unpickled_planner.environment.name == planner.environment.name
 
 
 class TestPlannerSerializationWithBeliefs:
@@ -490,3 +548,234 @@ class TestPlannerSerializationEdgeCases:
         assert "sparse_pft" in unpickled_dict
         assert unpickled_dict["pomcp"].name == "POMCP_Multi_Test"
         assert unpickled_dict["sparse_pft"].name == "SparsePFT_Multi_Test"
+
+
+class TestAllPlannersPicklable:
+    """Comprehensive test to ensure all planners are picklable.
+
+    This test class validates that all available POMDP planners, including
+    those with complex components like action samplers, can be successfully
+    pickled and unpickled. This is critical for:
+    - Joblib/multiprocessing compatibility
+    - Distributed computing scenarios
+    - Checkpointing and model persistence
+    """
+
+    def setup_method(self):
+        """Set up test environment for each test."""
+        self.env = TigerPOMDP(discount_factor=0.95)
+        self.actions = self.env.get_actions()
+
+    def test_all_basic_planners_picklable(self):
+        """Test that all basic planners (without action samplers) are picklable.
+
+        Purpose: Validates comprehensive pickle support for basic planners
+
+        Given: Instances of POMCP, SparsePFT, DiscreteActionSequencesPlanner,
+            and StandardSparseSamplingDiscreteActionsPlanner
+        When: Each planner is pickled and unpickled via pickle.dumps/loads
+        Then: All planners successfully round-trip and maintain their properties
+
+        Test type: integration
+        """
+        planners = [
+            POMCP(
+                environment=self.env,
+                discount_factor=0.95,
+                depth=10,
+                exploration_constant=10.0,
+                name="POMCP_AllTest",
+                n_simulations=50,
+            ),
+            SparsePFT(
+                environment=self.env,
+                discount_factor=0.95,
+                gamma=0.95,
+                depth=10,
+                c_ucb=10.0,
+                beta_ucb=0.5,
+                belief_child_num=5,
+                name="SparsePFT_AllTest",
+                n_simulations=50,
+            ),
+            DiscreteActionSequencesPlanner(
+                environment=self.env,
+                discount_factor=0.95,
+                name="DiscreteActionSeq_AllTest",
+                depth=3,
+                n_return_samples=5,
+            ),
+            StandardSparseSamplingDiscreteActionsPlanner(
+                environment=self.env,
+                branching_factor=5,
+                depth=3,
+                name="SparseSampling_AllTest",
+            ),
+        ]
+
+        for planner in planners:
+            # Full pickle round trip
+            pickled = pickle.dumps(planner)
+            unpickled = pickle.loads(pickled)
+
+            # Verify properties preserved
+            assert unpickled.name == planner.name, f"Name mismatch for {planner.name}"
+            assert (
+                unpickled.discount_factor == planner.discount_factor
+            ), f"Discount factor mismatch for {planner.name}"
+            assert (
+                unpickled.environment.name == planner.environment.name
+            ), f"Environment mismatch for {planner.name}"
+
+    def test_all_action_sampler_planners_picklable(self):
+        """Test that all planners with action samplers are picklable.
+
+        Purpose: Validates pickle support for planners with ActionSampler components,
+            which are critical for parallel execution with joblib
+
+        Given: Instances of BetaZero, POMCP_DPW, POMCPOW, and PFT_DPW planners,
+            each configured with appropriate action samplers
+        When: Each planner is pickled and unpickled via pickle.dumps/loads
+        Then: All planners successfully round-trip and maintain their properties,
+            including action sampler configuration
+
+        Test type: integration
+        """
+        # BetaZero with BetaZeroActionSampler
+        fallback = DiscreteActionSampler(self.actions)
+        beta_zero_sampler = BetaZeroActionSampler(
+            fallback_sampler=fallback,
+            actions=self.actions,
+        )
+        beta_zero = BetaZero(
+            environment=self.env,
+            discount_factor=0.95,
+            depth=10,
+            name="BetaZero_AllTest",
+            action_sampler=beta_zero_sampler,
+            n_simulations=50,
+            state_dim=1,
+            k_a=1.0,
+            alpha_a=0.5,
+            k_o=1.0,
+            alpha_o=0.5,
+            exploration_constant=1.0,
+        )
+
+        # POMCP_DPW with DiscreteActionSampler
+        pomcp_dpw_sampler = DiscreteActionSampler(self.actions)
+        pomcp_dpw = POMCP_DPW(
+            environment=self.env,
+            discount_factor=0.95,
+            depth=10,
+            name="POMCP_DPW_AllTest",
+            action_sampler=pomcp_dpw_sampler,
+            n_simulations=50,
+            k_a=1.0,
+            alpha_a=0.5,
+            k_o=1.0,
+            alpha_o=0.5,
+            exploration_constant=1.0,
+        )
+
+        # PFT_DPW with DiscreteActionSampler
+        pft_dpw_sampler = DiscreteActionSampler(self.actions)
+        pft_dpw = PFT_DPW(
+            environment=self.env,
+            discount_factor=0.95,
+            depth=10,
+            name="PFT_DPW_AllTest",
+            action_sampler=pft_dpw_sampler,
+            n_simulations=50,
+            k_a=1.0,
+            alpha_a=0.5,
+            k_o=1.0,
+            alpha_o=0.5,
+            exploration_constant=1.0,
+        )
+
+        # POMCPOW with DiscreteActionSampler
+        pomcpow_sampler = DiscreteActionSampler(self.actions)
+        pomcpow = POMCPOW(
+            environment=self.env,
+            discount_factor=0.95,
+            depth=10,
+            name="POMCPOW_AllTest",
+            action_sampler=pomcpow_sampler,
+            n_simulations=50,
+            k_a=1.0,
+            alpha_a=0.5,
+            k_o=1.0,
+            alpha_o=0.5,
+            exploration_constant=1.0,
+        )
+
+        planners = [beta_zero, pomcp_dpw, pft_dpw, pomcpow]
+
+        for planner in planners:
+            # Full pickle round trip (what joblib does for parallel execution)
+            pickled = pickle.dumps(planner)
+            unpickled = pickle.loads(pickled)
+
+            # Verify properties preserved
+            assert unpickled.name == planner.name, f"Name mismatch for {planner.name}"
+            assert (
+                unpickled.discount_factor == planner.discount_factor
+            ), f"Discount factor mismatch for {planner.name}"
+            assert (
+                unpickled.environment.name == planner.environment.name
+            ), f"Environment mismatch for {planner.name}"
+
+    def test_planner_picklable_for_joblib_parallel(self):
+        """Test that planners can be used with joblib.Parallel.
+
+        Purpose: Validates real-world joblib compatibility by simulating
+            joblib.Parallel serialization pattern
+
+        Given: A BetaZero planner instance with action sampler
+        When: Planner is pickled, unpickled, and used for action selection
+            (simulating joblib worker process)
+        Then: Unpickled planner functions correctly and produces valid actions
+
+        Test type: integration
+        """
+        # Create BetaZero planner with action sampler
+        fallback = DiscreteActionSampler(self.actions)
+        action_sampler = BetaZeroActionSampler(
+            fallback_sampler=fallback,
+            actions=self.actions,
+        )
+        planner = BetaZero(
+            environment=self.env,
+            discount_factor=0.95,
+            depth=10,
+            name="BetaZero_Joblib_Test",
+            action_sampler=action_sampler,
+            n_simulations=20,  # Small for fast test
+            state_dim=1,
+            k_a=1.0,
+            alpha_a=0.5,
+            k_o=1.0,
+            alpha_o=0.5,
+            exploration_constant=1.0,
+        )
+
+        # Create a belief for action selection
+        initial_state = self.env.initial_state_dist().sample()[0]
+        belief = WeightedParticleBelief(
+            particles=[initial_state] * 50,
+            log_weights=np.log(np.ones(50) / 50),
+            resampling=True,
+        )
+
+        # Simulate joblib serialization (what happens in parallel execution)
+        pickled = pickle.dumps(planner)
+        unpickled_planner = pickle.loads(pickled)
+
+        # Test that unpickled planner can select actions
+        action_list, _ = unpickled_planner.action(belief)
+
+        # Verify action is valid
+        assert action_list is not None, "Action list should not be None"
+        assert len(action_list) > 0, "Action list should not be empty"
+        assert action_list[0] in self.actions, f"Action {action_list[0]} not in valid actions"
