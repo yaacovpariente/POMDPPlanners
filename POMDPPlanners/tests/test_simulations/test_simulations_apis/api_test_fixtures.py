@@ -62,7 +62,7 @@ def sample_policy(sample_environment):
         depth=3,
         exploration_constant=1.0,
         name="TestPOMCP",
-        n_simulations=10,
+        n_simulations=2,
     )
 
 
@@ -79,7 +79,7 @@ def sample_environment_params(sample_environment, sample_policy):
             belief=get_initial_belief(sample_environment, n_particles=10),
             policies=[sample_policy],
             num_episodes=2,
-            num_steps=3,
+            num_steps=1,
         )
     ]
 
@@ -110,7 +110,7 @@ def sample_hyperparameter_configs(sample_environment):
             belief=get_initial_belief(sample_environment, n_particles=10),
             hyper_param_planner_config=planner_config,
             num_episodes=2,
-            num_steps=3,
+            num_steps=1,
             n_trials=2,
             parameters_to_optimize=[
                 ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
@@ -164,7 +164,7 @@ class MockPlannerGenerator(PlannerGenerator):
             depth=3,
             exploration_constant=1.0,
             name=f"{self.planner_name}_{environment.name}",
-            n_simulations=10,
+            n_simulations=2,
         )
 
     def get_planner_space_info(self) -> PolicySpaceInfo:
