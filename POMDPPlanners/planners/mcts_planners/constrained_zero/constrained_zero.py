@@ -23,7 +23,7 @@ from POMDPPlanners.planners.mcts_planners.beta_zero.belief_representation import
 )
 from POMDPPlanners.planners.mcts_planners.beta_zero.beta_zero import BetaZero
 from POMDPPlanners.planners.mcts_planners.beta_zero.beta_zero_network import (
-    BetaZeroNetwork,
+    AbstractBetaZeroNetwork,
 )
 from POMDPPlanners.planners.mcts_planners.constrained_zero.constrained_puct import (
     spuct_action_progressive_widening,
@@ -109,7 +109,7 @@ class ConstrainedZero(BetaZero):
         time_out_in_seconds: Optional[int] = None,
         n_simulations: Optional[int] = None,
         min_visit_count_per_action: int = 1,
-        network: Optional[BetaZeroNetwork] = None,
+        network: Optional[AbstractBetaZeroNetwork] = None,
         belief_representation: Optional[BeliefRepresentation] = None,
         state_dim: Optional[int] = None,
         z_q: float = 1.0,
@@ -121,6 +121,7 @@ class ConstrainedZero(BetaZero):
         learning_rate: float = 1e-3,
         weight_decay: float = 1e-4,
         hidden_sizes: Tuple[int, ...] = (128, 128),
+        track_gradients: bool = False,
         log_path: Optional[Path] = None,
         debug: bool = False,
         use_queue_logger: bool = False,
@@ -159,6 +160,10 @@ class ConstrainedZero(BetaZero):
             learning_rate: Adam learning rate.
             weight_decay: L2 regularisation weight.
             hidden_sizes: Widths of hidden layers in the network trunk.
+            track_gradients: When ``True``, gradient and weight norms are
+                computed during training and included in the metrics dict.
+                Includes an additional ``"grad_norm/failure_head"`` key
+                compared to ``BetaZero``.
             log_path: Optional log directory.
             debug: Enable debug logging.
             use_queue_logger: Use queue-based logging.
@@ -194,6 +199,7 @@ class ConstrainedZero(BetaZero):
             learning_rate=learning_rate,
             weight_decay=weight_decay,
             hidden_sizes=hidden_sizes,
+            track_gradients=track_gradients,
             log_path=log_path,
             debug=debug,
             use_queue_logger=use_queue_logger,
@@ -417,7 +423,17 @@ class ConstrainedZero(BetaZero):
     # ── TrainablePolicy overrides ────────────────────────────────────
 
     def get_metric_keys(self) -> List[str]:
-        return ["total_loss", "value_loss", "policy_loss", "failure_loss"]
+        keys = ["total_loss", "value_loss", "policy_loss", "failure_loss"]
+        if self.track_gradients:
+            keys += [
+                "grad_norm/global",
+                "grad_norm/trunk",
+                "grad_norm/policy_head",
+                "grad_norm/value_head",
+                "grad_norm/failure_head",
+                "weight_norm/global",
+            ]
+        return keys
 
     # ── Episode data / training overrides ─────────────────────────────
 
@@ -453,4 +469,5 @@ class ConstrainedZero(BetaZero):
             batch_size=self.training_batch_size,
             learning_rate=self.learning_rate,
             weight_decay=self.weight_decay,
+            track_gradients=self.track_gradients,
         )

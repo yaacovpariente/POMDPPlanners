@@ -20,6 +20,7 @@ distributed>=2023.3.0
 dask_jobqueue>=0.8.0
 cachey>=0.2.1
 torch>=2.0.0
+tensorboard>=2.0.0
 # Profiling packages
 line_profiler>=4.0.0
 memory_profiler>=0.60.0

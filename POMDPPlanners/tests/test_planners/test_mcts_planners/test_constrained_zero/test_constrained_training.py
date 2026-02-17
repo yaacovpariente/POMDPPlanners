@@ -229,3 +229,93 @@ class TestTrainConstrainedNetwork:
 
         expected_keys = {"total_loss", "value_loss", "policy_loss", "failure_loss"}
         assert set(metrics.keys()) == expected_keys
+
+    def test_track_gradients_adds_norm_keys(self):
+        """Test track_gradients=True adds gradient and weight norm keys.
+
+        Purpose: Validates that enabling track_gradients returns all five
+        gradient norm metrics plus the global weight norm.
+
+        Given: A discrete network and buffer with 20 examples.
+        When: train_constrained_network is called with track_gradients=True.
+        Then: Metrics dict contains all _CONSTRAINED_GRAD_NORM_KEYS and
+              'weight_norm/global', each with one value per epoch.
+
+        Test type: unit
+        """
+        network = _make_discrete_network()
+        buffer = ConstrainedTrainingBuffer(capacity=1000)
+        _fill_buffer(buffer, 20, N_ACTIONS)
+
+        metrics = train_constrained_network(
+            network=network,
+            buffer=buffer,
+            n_epochs=2,
+            batch_size=16,
+            track_gradients=True,
+        )
+
+        expected_grad_keys = {
+            "grad_norm/global",
+            "grad_norm/trunk",
+            "grad_norm/policy_head",
+            "grad_norm/value_head",
+            "grad_norm/failure_head",
+            "weight_norm/global",
+        }
+        assert expected_grad_keys.issubset(set(metrics.keys()))
+        for key in expected_grad_keys:
+            assert len(metrics[key]) == 2
+
+    def test_track_gradients_includes_failure_head(self):
+        """Test that grad_norm/failure_head is present when track_gradients=True.
+
+        Purpose: Validates the failure_head gradient norm is tracked separately,
+        which is unique to ConstrainedZero vs BetaZero.
+
+        Given: A discrete network and buffer.
+        When: train_constrained_network is called with track_gradients=True.
+        Then: 'grad_norm/failure_head' is in the metrics and is non-negative.
+
+        Test type: unit
+        """
+        network = _make_discrete_network()
+        buffer = ConstrainedTrainingBuffer(capacity=1000)
+        _fill_buffer(buffer, 20, N_ACTIONS)
+
+        metrics = train_constrained_network(
+            network=network,
+            buffer=buffer,
+            n_epochs=1,
+            batch_size=16,
+            track_gradients=True,
+        )
+
+        assert "grad_norm/failure_head" in metrics
+        assert metrics["grad_norm/failure_head"][0] >= 0.0
+
+    def test_track_gradients_false_excludes_norm_keys(self):
+        """Test track_gradients=False returns only the four base loss keys.
+
+        Purpose: Validates that the default (track_gradients=False) behaviour
+        is unchanged — no extra keys are added to the metrics dict.
+
+        Given: A discrete network and buffer.
+        When: train_constrained_network is called with track_gradients=False.
+        Then: Metrics dict contains exactly the four base loss keys.
+
+        Test type: unit
+        """
+        network = _make_discrete_network()
+        buffer = ConstrainedTrainingBuffer(capacity=1000)
+        _fill_buffer(buffer, 20, N_ACTIONS)
+
+        metrics = train_constrained_network(
+            network=network,
+            buffer=buffer,
+            n_epochs=2,
+            batch_size=16,
+            track_gradients=False,
+        )
+
+        assert set(metrics.keys()) == {"total_loss", "value_loss", "policy_loss", "failure_loss"}

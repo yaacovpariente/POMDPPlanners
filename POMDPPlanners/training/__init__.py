@@ -10,12 +10,14 @@ Classes:
     EarlyStopping: Stop training when a metric stops improving.
     ModelCheckpoint: Save the policy on metric improvement.
     OptunaPruning: Report metrics to Optuna and prune unpromising trials.
+    TensorBoardCallback: Log training metrics and weight histograms to TensorBoard.
 """
 
 from POMDPPlanners.training.callbacks import (
     EarlyStopping,
     ModelCheckpoint,
     OptunaPruning,
+    TensorBoardCallback,
     TrainerCallback,
 )
 from POMDPPlanners.training.policy_trainer import PolicyTrainer
@@ -26,4 +28,5 @@ __all__ = [
     "EarlyStopping",
     "ModelCheckpoint",
     "OptunaPruning",
+    "TensorBoardCallback",
 ]

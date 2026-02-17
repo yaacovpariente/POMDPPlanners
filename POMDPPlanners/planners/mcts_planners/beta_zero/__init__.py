@@ -5,6 +5,7 @@ AlphaZero to POMDPs by planning in belief space with learned neural network prio
 
 Classes:
     BetaZero: Main planner combining MCTS with neural network value/policy estimates
+    AbstractBetaZeroNetwork: Abstract base class for BetaZero policy and value networks
     BetaZeroNetwork: Dual-head neural network for policy and value prediction
     BetaZeroActionSampler: Network-guided action sampling for progressive widening
     BeliefRepresentation: Abstract belief-to-feature mapping
@@ -18,6 +19,7 @@ from POMDPPlanners.planners.mcts_planners.beta_zero.belief_representation import
     ParticleMeanStdRepresentation,
 )
 from POMDPPlanners.planners.mcts_planners.beta_zero.beta_zero_network import (
+    AbstractBetaZeroNetwork,
     BetaZeroNetwork,
 )
 from POMDPPlanners.planners.mcts_planners.beta_zero.training_buffer import (
@@ -31,6 +33,7 @@ from POMDPPlanners.planners.mcts_planners.beta_zero.beta_zero import BetaZero
 
 __all__ = [
     "BetaZero",
+    "AbstractBetaZeroNetwork",
     "BetaZeroNetwork",
     "BetaZeroActionSampler",
     "BeliefRepresentation",

@@ -8,18 +8,29 @@ Functions:
     train_network: Run multiple epochs of training on a replay buffer.
 """
 
-from typing import Dict, List, Tuple
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Dict, List, Tuple
 
 import numpy as np
 import torch
 from torch import nn
 
-from POMDPPlanners.planners.mcts_planners.beta_zero.beta_zero_network import (
-    BetaZeroNetwork,
-)
 from POMDPPlanners.planners.mcts_planners.beta_zero.training_buffer import (
     TrainingBuffer,
 )
+
+if TYPE_CHECKING:
+    from POMDPPlanners.planners.mcts_planners.beta_zero.beta_zero_network import (
+        BetaZeroNetwork,
+    )
+
+_GRAD_NORM_KEYS = [
+    "grad_norm/global",
+    "grad_norm/trunk",
+    "grad_norm/policy_head",
+    "grad_norm/value_head",
+]
 
 
 def compute_beta_zero_loss(
@@ -79,6 +90,33 @@ def _continuous_policy_loss(raw_output: torch.Tensor, targets: torch.Tensor) -> 
     return nll.mean()
 
 
+def _compute_gradient_norms(network: BetaZeroNetwork) -> Dict[str, float]:
+    module_sq: Dict[str, float] = {"trunk": 0.0, "policy_head": 0.0, "value_head": 0.0}
+    global_sq = 0.0
+    for name, param in network.named_parameters():
+        if param.grad is None:
+            continue
+        sq = param.grad.detach().norm(2).item() ** 2
+        global_sq += sq
+        for mod in module_sq:
+            if name.startswith(mod):
+                module_sq[mod] += sq
+                break
+    return {
+        "grad_norm/global": global_sq**0.5,
+        "grad_norm/trunk": module_sq["trunk"] ** 0.5,
+        "grad_norm/policy_head": module_sq["policy_head"] ** 0.5,
+        "grad_norm/value_head": module_sq["value_head"] ** 0.5,
+    }
+
+
+def _compute_weight_norms(network: BetaZeroNetwork) -> Dict[str, float]:
+    total_sq = 0.0
+    for param in network.parameters():
+        total_sq += param.detach().norm(2).item() ** 2
+    return {"weight_norm/global": total_sq**0.5}
+
+
 def train_network(
     network: BetaZeroNetwork,
     buffer: TrainingBuffer,
@@ -86,6 +124,7 @@ def train_network(
     batch_size: int = 256,
     learning_rate: float = 1e-3,
     weight_decay: float = 1e-4,
+    track_gradients: bool = False,
 ) -> Dict[str, List[float]]:
     """Train the network for multiple epochs on buffered data.
 
@@ -99,7 +138,10 @@ def train_network(
 
     Returns:
         Dictionary with per-epoch loss lists: ``"total_loss"``,
-        ``"value_loss"``, ``"policy_loss"``.
+        ``"value_loss"``, ``"policy_loss"``. When ``track_gradients`` is
+        ``True``, also includes ``"grad_norm/global"``,
+        ``"grad_norm/trunk"``, ``"grad_norm/policy_head"``,
+        ``"grad_norm/value_head"``, and ``"weight_norm/global"``.
     """
     optimizer = torch.optim.Adam(network.parameters(), lr=learning_rate, weight_decay=weight_decay)
     metrics: Dict[str, List[float]] = {
@@ -107,11 +149,17 @@ def train_network(
         "value_loss": [],
         "policy_loss": [],
     }
+    if track_gradients:
+        for key in _GRAD_NORM_KEYS + ["weight_norm/global"]:
+            metrics[key] = []
 
     n_batches = max(len(buffer) // batch_size, 1)
 
     for _ in range(n_epochs):
         epoch_totals = {"total": 0.0, "value": 0.0, "policy": 0.0}
+        epoch_grad_totals: Dict[str, float] = (
+            {k: 0.0 for k in _GRAD_NORM_KEYS} if track_gradients else {}
+        )
 
         for _ in range(n_batches):
             beliefs_np, policies_np, values_np = buffer.sample_batch(batch_size)
@@ -123,6 +171,11 @@ def train_network(
 
             optimizer.zero_grad()
             loss.backward()
+
+            if track_gradients:
+                for key, val in _compute_gradient_norms(network).items():
+                    epoch_grad_totals[key] = epoch_grad_totals.get(key, 0.0) + val
+
             optimizer.step()
 
             epoch_totals["total"] += loss.item()
@@ -132,5 +185,11 @@ def train_network(
         metrics["total_loss"].append(epoch_totals["total"] / n_batches)
         metrics["value_loss"].append(epoch_totals["value"] / n_batches)
         metrics["policy_loss"].append(epoch_totals["policy"] / n_batches)
+
+        if track_gradients:
+            for key in _GRAD_NORM_KEYS:
+                metrics[key].append(epoch_grad_totals[key] / n_batches)
+            for key, val in _compute_weight_norms(network).items():
+                metrics[key].append(val)
 
     return metrics

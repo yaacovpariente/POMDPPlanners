@@ -15,6 +15,7 @@ import torch
 from torch import nn
 
 from POMDPPlanners.planners.mcts_planners.beta_zero.training import (
+    _compute_weight_norms,
     _continuous_policy_loss,
     _discrete_policy_loss,
 )
@@ -24,6 +25,40 @@ from POMDPPlanners.planners.mcts_planners.constrained_zero.constrained_training_
 from POMDPPlanners.planners.mcts_planners.constrained_zero.constrained_zero_network import (
     ConstrainedZeroNetwork,
 )
+
+_CONSTRAINED_GRAD_NORM_KEYS = [
+    "grad_norm/global",
+    "grad_norm/trunk",
+    "grad_norm/policy_head",
+    "grad_norm/value_head",
+    "grad_norm/failure_head",
+]
+
+
+def _compute_gradient_norms_constrained(network: ConstrainedZeroNetwork) -> Dict[str, float]:
+    module_sq: Dict[str, float] = {
+        "trunk": 0.0,
+        "policy_head": 0.0,
+        "value_head": 0.0,
+        "failure_head": 0.0,
+    }
+    global_sq = 0.0
+    for name, param in network.named_parameters():
+        if param.grad is None:
+            continue
+        sq = param.grad.detach().norm(2).item() ** 2
+        global_sq += sq
+        for mod in module_sq:
+            if name.startswith(mod):
+                module_sq[mod] += sq
+                break
+    return {
+        "grad_norm/global": global_sq**0.5,
+        "grad_norm/trunk": module_sq["trunk"] ** 0.5,
+        "grad_norm/policy_head": module_sq["policy_head"] ** 0.5,
+        "grad_norm/value_head": module_sq["value_head"] ** 0.5,
+        "grad_norm/failure_head": module_sq["failure_head"] ** 0.5,
+    }
 
 
 def compute_constrained_zero_loss(
@@ -78,6 +113,7 @@ def train_constrained_network(
     batch_size: int = 256,
     learning_rate: float = 1e-3,
     weight_decay: float = 1e-4,
+    track_gradients: bool = False,
 ) -> Dict[str, List[float]]:
     """Train the 3-head network for multiple epochs on buffered data.
 
@@ -88,10 +124,16 @@ def train_constrained_network(
         batch_size: Mini-batch size.
         learning_rate: Adam learning rate.
         weight_decay: L2 regularisation coefficient.
+        track_gradients: When ``True``, gradient and weight norms are
+            computed per-batch/epoch and included in the returned metrics.
 
     Returns:
         Dictionary with per-epoch loss lists: ``"total_loss"``,
-        ``"value_loss"``, ``"policy_loss"``, ``"failure_loss"``.
+        ``"value_loss"``, ``"policy_loss"``, ``"failure_loss"``. When
+        ``track_gradients`` is ``True``, also includes
+        ``"grad_norm/global"``, ``"grad_norm/trunk"``,
+        ``"grad_norm/policy_head"``, ``"grad_norm/value_head"``,
+        ``"grad_norm/failure_head"``, and ``"weight_norm/global"``.
     """
     optimizer = torch.optim.Adam(network.parameters(), lr=learning_rate, weight_decay=weight_decay)
     metrics: Dict[str, List[float]] = {
@@ -100,11 +142,17 @@ def train_constrained_network(
         "policy_loss": [],
         "failure_loss": [],
     }
+    if track_gradients:
+        for key in _CONSTRAINED_GRAD_NORM_KEYS + ["weight_norm/global"]:
+            metrics[key] = []
 
     n_batches = max(len(buffer) // batch_size, 1)
 
     for _ in range(n_epochs):
         epoch_totals = {"total": 0.0, "value": 0.0, "policy": 0.0, "failure": 0.0}
+        epoch_grad_totals: Dict[str, float] = (
+            {k: 0.0 for k in _CONSTRAINED_GRAD_NORM_KEYS} if track_gradients else {}
+        )
 
         for _ in range(n_batches):
             beliefs_np, policies_np, values_np, failures_np = buffer.sample_batch(batch_size)
@@ -119,6 +167,11 @@ def train_constrained_network(
 
             optimizer.zero_grad()
             loss.backward()
+
+            if track_gradients:
+                for key, val in _compute_gradient_norms_constrained(network).items():
+                    epoch_grad_totals[key] = epoch_grad_totals.get(key, 0.0) + val
+
             optimizer.step()
 
             epoch_totals["total"] += loss.item()
@@ -130,5 +183,11 @@ def train_constrained_network(
         metrics["value_loss"].append(epoch_totals["value"] / n_batches)
         metrics["policy_loss"].append(epoch_totals["policy"] / n_batches)
         metrics["failure_loss"].append(epoch_totals["failure"] / n_batches)
+
+        if track_gradients:
+            for key in _CONSTRAINED_GRAD_NORM_KEYS:
+                metrics[key].append(epoch_grad_totals[key] / n_batches)
+            for key, val in _compute_weight_norms(network).items():
+                metrics[key].append(val)
 
     return metrics
