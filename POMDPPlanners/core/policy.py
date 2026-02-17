@@ -616,18 +616,13 @@ class Policy(ABC):
             raise ValueError(f"Failed to load policy from {filepath}: {str(e)}") from e
 
 
-class TrainablePolicy(ABC):
-    """Abstract mixin defining hooks for policies that support offline training.
+class TrainablePolicy(Policy):
+    """Abstract base class for policies that support offline training.
 
-    This mixin separates the **model** (what to compute) from the **trainer**
-    (how to run the training loop), following the PyTorch Lightning pattern.
-    Concrete trainable policies implement these hooks, and
-    :class:`~POMDPPlanners.training.PolicyTrainer` orchestrates the loop.
-
-    Note:
-        This is a pure mixin — it has no ``__init__`` and no instance state.
-        It is safe to add alongside any ``Policy`` subclass via multiple
-        inheritance without MRO conflicts.
+    Extends :class:`Policy` with hooks that separate the **model** (what to
+    compute) from the **trainer** (how to run the training loop), following
+    the PyTorch Lightning pattern.  Concrete subclasses implement these hooks,
+    and :class:`~POMDPPlanners.training.PolicyTrainer` orchestrates the loop.
     """
 
     @abstractmethod
@@ -681,3 +676,11 @@ class TrainablePolicy(ABC):
     @abstractmethod
     def get_metric_keys(self) -> List[str]:
         """Return the loss-metric key names produced by :meth:`train_step`."""
+
+    def get_network(self) -> Optional[Any]:
+        """Return the underlying trainable network, or ``None`` if not applicable.
+
+        Override in concrete policies to enable weight-histogram logging in
+        :class:`~POMDPPlanners.training.callbacks.TensorBoardCallback`.
+        """
+        return None
