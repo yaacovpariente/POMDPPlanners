@@ -30,12 +30,12 @@ from POMDPPlanners.planners.mcts_planners.beta_zero.beta_zero_action_sampler imp
     BetaZeroActionSampler,
 )
 from POMDPPlanners.planners.mcts_planners.beta_zero.beta_zero_network import (
+    AbstractBetaZeroNetwork,
     BetaZeroNetwork,
 )
 from POMDPPlanners.planners.mcts_planners.beta_zero.puct import (
     puct_action_progressive_widening,
 )
-from POMDPPlanners.planners.mcts_planners.beta_zero.training import train_network
 from POMDPPlanners.planners.mcts_planners.beta_zero.training_buffer import (
     TrainingBuffer,
     TrainingExample,
@@ -127,7 +127,7 @@ class BetaZero(DoubleProgressiveWideningMCTSPolicy, TrainablePolicy):
         n_simulations: Optional[int] = None,
         min_visit_count_per_action: int = 1,
         # BetaZero-specific
-        network: Optional[BetaZeroNetwork] = None,
+        network: Optional[AbstractBetaZeroNetwork] = None,
         belief_representation: Optional[BeliefRepresentation] = None,
         state_dim: Optional[int] = None,
         z_q: float = 1.0,
@@ -139,6 +139,7 @@ class BetaZero(DoubleProgressiveWideningMCTSPolicy, TrainablePolicy):
         learning_rate: float = 1e-3,
         weight_decay: float = 1e-4,
         hidden_sizes: Tuple[int, ...] = (128, 128),
+        track_gradients: bool = False,
         log_path: Optional[Path] = None,
         debug: bool = False,
         use_queue_logger: bool = False,
@@ -173,6 +174,8 @@ class BetaZero(DoubleProgressiveWideningMCTSPolicy, TrainablePolicy):
             learning_rate: Adam learning rate.
             weight_decay: L2 regularisation weight λ.
             hidden_sizes: Widths of hidden layers in the network trunk.
+            track_gradients: When ``True``, gradient and weight norms are
+                computed during training and included in the metrics dict.
             log_path: Optional log directory.
             debug: Enable debug logging.
             use_queue_logger: Use queue-based logging.
@@ -205,6 +208,7 @@ class BetaZero(DoubleProgressiveWideningMCTSPolicy, TrainablePolicy):
         self.z_n = z_n
         self.temperature = temperature
         self.hidden_sizes = hidden_sizes
+        self.track_gradients = track_gradients
 
         # Training hyper-parameters
         self.training_buffer_capacity = training_buffer_capacity
@@ -491,8 +495,20 @@ class BetaZero(DoubleProgressiveWideningMCTSPolicy, TrainablePolicy):
     ) -> None:
         self._collect_episodes_batched(initial_belief_fn, n_episodes, episode_length)
 
+    def get_network(self) -> AbstractBetaZeroNetwork:
+        return self.network
+
     def get_metric_keys(self) -> List[str]:
-        return ["total_loss", "value_loss", "policy_loss"]
+        keys = ["total_loss", "value_loss", "policy_loss"]
+        if self.track_gradients:
+            keys += [
+                "grad_norm/global",
+                "grad_norm/trunk",
+                "grad_norm/policy_head",
+                "grad_norm/value_head",
+                "weight_norm/global",
+            ]
+        return keys
 
     # ── Episode data helpers ─────────────────────────────────────────
 
@@ -631,13 +647,13 @@ class BetaZero(DoubleProgressiveWideningMCTSPolicy, TrainablePolicy):
         return returns
 
     def _train_network_on_buffer(self) -> Dict[str, List[float]]:
-        return train_network(
-            network=self.network,
+        return self.network.fit(
             buffer=self._buffer,
             n_epochs=self.training_epochs,
             batch_size=self.training_batch_size,
             learning_rate=self.learning_rate,
             weight_decay=self.weight_decay,
+            track_gradients=self.track_gradients,
         )
 
     # ── Serialisation ─────────────────────────────────────────────────

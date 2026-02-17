@@ -9,6 +9,7 @@ Classes:
     EarlyStopping: Stops training after ``patience`` iterations without improvement.
     ModelCheckpoint: Saves the policy on metric improvement (or every iteration).
     OptunaPruning: Reports metrics to an Optuna trial and prunes when appropriate.
+    TensorBoardCallback: Logs training metrics and weight histograms to TensorBoard.
 """
 
 from abc import ABC
@@ -196,3 +197,103 @@ class OptunaPruning(TrainerCallback):
         if self.trial.should_prune():
             raise optuna.TrialPruned()
         return None
+
+
+class TensorBoardCallback(TrainerCallback):
+    """Log training metrics to TensorBoard.
+
+    The ``torch.utils.tensorboard`` package is imported lazily so it is not
+    a hard startup dependency of the training module.
+
+    Attributes:
+        log_dir: Directory for TensorBoard event files.
+        comment: Suffix appended to the auto-generated run directory name.
+        flush_secs: How often the writer flushes to disk (seconds).
+        log_histograms: When ``True`` and the policy exposes
+            ``get_network()``, logs per-parameter weight histograms each
+            iteration.
+
+    Example:
+        >>> from unittest.mock import MagicMock, patch
+        >>> with patch("torch.utils.tensorboard.SummaryWriter"):
+        ...     cb = TensorBoardCallback(log_dir="/tmp/tb_test")
+        ...     trainer = MagicMock()
+        ...     cb.on_train_begin(trainer)
+        ...     cb.on_train_end(trainer, {})
+    """
+
+    def __init__(
+        self,
+        log_dir: Optional[str] = None,
+        comment: str = "",
+        flush_secs: int = 120,
+        log_histograms: bool = False,
+    ):
+        """Initialize TensorBoardCallback.
+
+        Args:
+            log_dir: Directory for TensorBoard event files.
+                Defaults to a timestamped subdirectory of ``runs/``.
+            comment: Suffix appended to the auto-generated run directory.
+            flush_secs: How often (in seconds) the writer flushes to disk.
+            log_histograms: When ``True`` and the policy exposes
+                ``get_network()``, log weight histograms each iteration.
+        """
+        self.log_dir = log_dir
+        self.comment = comment
+        self.flush_secs = flush_secs
+        self.log_histograms = log_histograms
+        self._writer: Optional[Any] = None
+        self._global_step: int = 0
+
+    def on_train_begin(self, trainer: "PolicyTrainer") -> None:
+        from torch.utils.tensorboard import SummaryWriter  # pylint: disable=import-outside-toplevel
+
+        self._writer = SummaryWriter(
+            log_dir=self.log_dir,
+            comment=self.comment,
+            flush_secs=self.flush_secs,
+        )
+        self._global_step = 0
+
+    def on_collection_end(  # pylint: disable=unused-argument
+        self, trainer: "PolicyTrainer", iteration: int
+    ) -> None:
+        if self._writer is None:
+            return
+        self._writer.add_scalar(
+            "train/buffer_size",
+            trainer.policy.buffer_size(),  # type: ignore[attr-defined]
+            self._global_step,
+        )
+
+    def on_iteration_end(  # pylint: disable=unused-argument
+        self,
+        trainer: "PolicyTrainer",
+        iteration: int,
+        metrics: Dict[str, List[float]],
+    ) -> Optional[bool]:
+        if self._writer is None:
+            return None
+        for key, values in metrics.items():
+            if values:
+                self._writer.add_scalar(f"train/{key}", values[-1], self._global_step)
+        if self.log_histograms:
+            self._log_weight_histograms(trainer)
+        self._global_step += 1
+        return None
+
+    def on_train_end(self, trainer: "PolicyTrainer", all_metrics: Dict[str, List[float]]) -> None:
+        if self._writer is None:
+            return
+        self._writer.flush()
+        self._writer.close()
+
+    def _log_weight_histograms(self, trainer: "PolicyTrainer") -> None:
+        if self._writer is None:
+            return
+        network = trainer.policy.get_network()  # type: ignore[attr-defined]
+        if network is None:
+            return
+        for name, param in network.named_parameters():
+            self._writer.add_histogram(f"weights/{name}", param.detach(), self._global_step)

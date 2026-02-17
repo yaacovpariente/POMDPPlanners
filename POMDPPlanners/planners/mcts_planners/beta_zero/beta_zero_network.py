@@ -6,18 +6,79 @@ probabilities (discrete) or Gaussian parameters (continuous), and a value head
 that estimates the state value V(φ(b)).
 
 Classes:
+    AbstractBetaZeroNetwork: Abstract base class for BetaZero policy and value networks.
     BetaZeroNetwork: Shared-trunk network with policy and value heads.
 """
 
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 import torch
 from torch import nn
 
+from POMDPPlanners.planners.mcts_planners.beta_zero.training_buffer import TrainingBuffer
+from POMDPPlanners.planners.mcts_planners.beta_zero.training import train_network
 
-class BetaZeroNetwork(nn.Module):
+
+class AbstractBetaZeroNetwork(ABC):
+    """Abstract base class for BetaZero policy and value networks.
+
+    Defines the inference and training interface required by the BetaZero
+    planner. Concrete subclasses provide the underlying model architecture.
+
+    Note:
+        This is an abstract base class and cannot be instantiated directly.
+    """
+
+    @property
+    @abstractmethod
+    def action_space_type(self) -> str:
+        """Action space type: ``"discrete"`` or ``"continuous"``."""
+
+    @property
+    def n_actions(self) -> Optional[int]:
+        """Number of discrete actions. ``None`` for continuous spaces."""
+        return None
+
+    @property
+    def action_dim(self) -> Optional[int]:
+        """Dimensionality of continuous actions. ``None`` for discrete spaces."""
+        return None
+
+    @abstractmethod
+    def predict(self, belief_features: np.ndarray) -> Tuple[np.ndarray, float]:
+        """Single-sample inference returning (policy, value)."""
+
+    @abstractmethod
+    def predict_batch(self, belief_features_batch: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        """Batched inference returning (policies, values)."""
+
+    @abstractmethod
+    def fit(
+        self,
+        buffer: TrainingBuffer,
+        n_epochs: int,
+        batch_size: int,
+        learning_rate: float,
+        weight_decay: float,
+        track_gradients: bool,
+    ) -> Dict[str, List[float]]:
+        """Train on replay buffer and return per-epoch loss metrics."""
+
+    @abstractmethod
+    def save_weights(self, filepath: Path) -> None:
+        """Persist network weights to disk."""
+
+    @abstractmethod
+    def load_weights(self, filepath: Path) -> None:
+        """Load network weights from disk."""
+
+
+class BetaZeroNetwork(AbstractBetaZeroNetwork, nn.Module):
     """Dual-head neural network for BetaZero.
 
     Architecture:
@@ -59,14 +120,28 @@ class BetaZeroNetwork(nn.Module):
         self._validate_params(action_space_type, n_actions, action_dim)
 
         self.belief_dim = belief_dim
-        self.action_space_type = action_space_type
-        self.n_actions = n_actions
-        self.action_dim = action_dim
+        self._action_space_type = action_space_type
+        self._n_actions = n_actions
+        self._action_dim = action_dim
         self.hidden_sizes = tuple(hidden_sizes)
 
         self._build_trunk(belief_dim, hidden_sizes)
         self._build_policy_head(hidden_sizes[-1])
         self._build_value_head(hidden_sizes[-1])
+
+    # ── Properties ────────────────────────────────────────────────────
+
+    @property
+    def action_space_type(self) -> str:
+        return self._action_space_type
+
+    @property
+    def n_actions(self) -> Optional[int]:
+        return self._n_actions
+
+    @property
+    def action_dim(self) -> Optional[int]:
+        return self._action_dim
 
     # ── Construction helpers ──────────────────────────────────────────
 
@@ -95,20 +170,20 @@ class BetaZeroNetwork(nn.Module):
 
     def _build_policy_head(self, trunk_out: int) -> None:
         mid = max(trunk_out // 2, 1)
-        if self.action_space_type == "discrete":
-            assert self.n_actions is not None  # validated in _validate_params
+        if self._action_space_type == "discrete":
+            assert self._n_actions is not None  # validated in _validate_params
             self.policy_head = nn.Sequential(
                 nn.Linear(trunk_out, mid),
                 nn.ReLU(),
-                nn.Linear(mid, self.n_actions),
+                nn.Linear(mid, self._n_actions),
                 nn.LogSoftmax(dim=-1),
             )
         else:
-            assert self.action_dim is not None  # validated in _validate_params
+            assert self._action_dim is not None  # validated in _validate_params
             self.policy_head = nn.Sequential(
                 nn.Linear(trunk_out, mid),
                 nn.ReLU(),
-                nn.Linear(mid, 2 * self.action_dim),
+                nn.Linear(mid, 2 * self._action_dim),
             )
 
     def _build_value_head(self, trunk_out: int) -> None:
@@ -161,7 +236,7 @@ class BetaZeroNetwork(nn.Module):
         if log_policy.is_cuda:
             log_policy = log_policy.cpu()
         policy_np = log_policy.numpy()
-        if self.action_space_type == "discrete":
+        if self._action_space_type == "discrete":
             policy_np = np.exp(policy_np)
         return policy_np, float(value.item())
 
@@ -191,9 +266,44 @@ class BetaZeroNetwork(nn.Module):
         if value.is_cuda:
             value = value.cpu()
         policy_np = log_policy.numpy()
-        if self.action_space_type == "discrete":
+        if self._action_space_type == "discrete":
             policy_np = np.exp(policy_np)
         return policy_np, value.numpy()
+
+    # ── Training ──────────────────────────────────────────────────────
+
+    def fit(
+        self,
+        buffer: TrainingBuffer,
+        n_epochs: int,
+        batch_size: int,
+        learning_rate: float,
+        weight_decay: float,
+        track_gradients: bool,
+    ) -> Dict[str, List[float]]:
+        """Train the network on a replay buffer.
+
+        Args:
+            buffer: Replay buffer with training examples.
+            n_epochs: Number of full passes over the buffer.
+            batch_size: Mini-batch size.
+            learning_rate: Adam learning rate.
+            weight_decay: L2 regularisation coefficient.
+            track_gradients: When ``True``, gradient and weight norms are
+                included in the returned metrics.
+
+        Returns:
+            Dictionary with per-epoch loss lists.
+        """
+        return train_network(
+            network=self,
+            buffer=buffer,
+            n_epochs=n_epochs,
+            batch_size=batch_size,
+            learning_rate=learning_rate,
+            weight_decay=weight_decay,
+            track_gradients=track_gradients,
+        )
 
     # ── Serialisation ─────────────────────────────────────────────────
 

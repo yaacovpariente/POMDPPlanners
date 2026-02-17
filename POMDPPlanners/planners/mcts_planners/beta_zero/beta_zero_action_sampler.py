@@ -14,6 +14,12 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 
 from POMDPPlanners.core.tree import BeliefNode
+from POMDPPlanners.planners.mcts_planners.beta_zero.belief_representation import (
+    BeliefRepresentation,
+)
+from POMDPPlanners.planners.mcts_planners.beta_zero.beta_zero_network import (
+    AbstractBetaZeroNetwork,
+)
 from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
 
 
@@ -47,14 +53,16 @@ class BetaZeroActionSampler(ActionSampler):
         self.actions = actions
         self.noise_scale = noise_scale
         # Set externally by BetaZero planner once network + representation exist
-        self._network = None
+        self._network: Optional[AbstractBetaZeroNetwork] = None
         self._belief_representation = None
 
-    def set_network_and_representation(self, network, belief_representation) -> None:
+    def set_network_and_representation(
+        self, network: AbstractBetaZeroNetwork, belief_representation: BeliefRepresentation
+    ) -> None:
         """Attach the network and belief representation after construction.
 
         Args:
-            network: ``BetaZeroNetwork`` instance.
+            network: ``AbstractBetaZeroNetwork`` instance.
             belief_representation: ``BeliefRepresentation`` instance.
         """
         self._network = network
