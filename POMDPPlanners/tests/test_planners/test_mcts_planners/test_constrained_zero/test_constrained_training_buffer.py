@@ -83,7 +83,7 @@ class TestConstrainedTrainingBuffer:
 
         Test type: unit
         """
-        buf = ConstrainedTrainingBuffer(capacity=10)
+        buf = ConstrainedTrainingBuffer(n_buffer=1)
         assert isinstance(buf, TrainingBuffer)
 
     def test_add_and_length(self):
@@ -91,13 +91,14 @@ class TestConstrainedTrainingBuffer:
 
         Purpose: Validates basic add/length functionality.
 
-        Given: An empty ConstrainedTrainingBuffer.
+        Given: An empty ConstrainedTrainingBuffer after begin_iteration().
         When: Adding 3 examples.
         Then: Length is 3.
 
         Test type: unit
         """
-        buf = ConstrainedTrainingBuffer(capacity=100)
+        buf = ConstrainedTrainingBuffer(n_buffer=1)
+        buf.begin_iteration()
         for _ in range(3):
             buf.add(_make_example())
         assert len(buf) == 3
@@ -113,7 +114,8 @@ class TestConstrainedTrainingBuffer:
 
         Test type: unit
         """
-        buf = ConstrainedTrainingBuffer(capacity=100)
+        buf = ConstrainedTrainingBuffer(n_buffer=1)
+        buf.begin_iteration()
         for _ in range(10):
             buf.add(_make_example())
 
@@ -136,7 +138,8 @@ class TestConstrainedTrainingBuffer:
 
         Test type: unit
         """
-        buf = ConstrainedTrainingBuffer(capacity=100)
+        buf = ConstrainedTrainingBuffer(n_buffer=1)
+        buf.begin_iteration()
         for _ in range(5):
             buf.add(_make_example(failure=1.0))
 
@@ -154,7 +157,8 @@ class TestConstrainedTrainingBuffer:
 
         Test type: unit
         """
-        buf = ConstrainedTrainingBuffer(capacity=100)
+        buf = ConstrainedTrainingBuffer(n_buffer=1)
+        buf.begin_iteration()
         for i in range(10):
             buf.add(_make_example(failure=float(i % 2)))
 
@@ -166,21 +170,28 @@ class TestConstrainedTrainingBuffer:
         assert 0.0 in all_failures
         assert 1.0 in all_failures
 
-    def test_capacity_circular_overflow(self):
-        """Test circular buffer overwrites oldest entries.
+    def test_begin_iteration_discards_old_data_with_n_buffer_1(self):
+        """Test begin_iteration evicts previous iteration's data when n_buffer=1.
 
-        Purpose: Validates capacity enforcement.
+        Purpose: Validates on-policy behaviour: with n_buffer=1 only the current
+        iteration's data is retained after begin_iteration() is called.
 
-        Given: A buffer with capacity=5.
-        When: 8 examples are added.
-        Then: Buffer length remains 5.
+        Given: A ConstrainedTrainingBuffer(n_buffer=1) with 5 examples from iter 0.
+        When: begin_iteration() is called and 2 new examples are added.
+        Then: Buffer length equals 2 (only the new iteration's examples).
 
         Test type: unit
         """
-        buf = ConstrainedTrainingBuffer(capacity=5)
-        for i in range(8):
-            buf.add(_make_example(value=float(i)))
-        assert len(buf) == 5
+        buf = ConstrainedTrainingBuffer(n_buffer=1)
+        buf.begin_iteration()
+        for _ in range(5):
+            buf.add(_make_example())
+
+        buf.begin_iteration()
+        for _ in range(2):
+            buf.add(_make_example())
+
+        assert len(buf) == 2
 
     def test_clear(self):
         """Test clear empties the buffer.
@@ -193,7 +204,8 @@ class TestConstrainedTrainingBuffer:
 
         Test type: unit
         """
-        buf = ConstrainedTrainingBuffer(capacity=100)
+        buf = ConstrainedTrainingBuffer(n_buffer=1)
+        buf.begin_iteration()
         for _ in range(5):
             buf.add(_make_example())
         buf.clear()

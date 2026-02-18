@@ -115,7 +115,7 @@ class ConstrainedZero(BetaZero):
         z_q: float = 1.0,
         z_n: float = 1.0,
         temperature: float = 1.0,
-        training_buffer_capacity: int = 100_000,
+        n_buffer: int = 1,
         training_batch_size: int = 256,
         training_epochs: int = 10,
         learning_rate: float = 1e-3,
@@ -154,7 +154,8 @@ class ConstrainedZero(BetaZero):
             z_q: Q-value exponent in policy target.
             z_n: Visit-count exponent in policy target.
             temperature: Temperature tau for policy target.
-            training_buffer_capacity: Replay buffer capacity.
+            n_buffer: Number of policy-iteration slots to retain in the
+                replay buffer (default 1 = on-policy, current iteration only).
             training_batch_size: Mini-batch size during training.
             training_epochs: Epochs per ``fit()`` iteration.
             learning_rate: Adam learning rate.
@@ -193,7 +194,7 @@ class ConstrainedZero(BetaZero):
             z_q=z_q,
             z_n=z_n,
             temperature=temperature,
-            training_buffer_capacity=training_buffer_capacity,
+            n_buffer=n_buffer,
             training_batch_size=training_batch_size,
             training_epochs=training_epochs,
             learning_rate=learning_rate,
@@ -206,7 +207,7 @@ class ConstrainedZero(BetaZero):
         )
 
         # Replace the buffer with a constrained version
-        self._buffer = ConstrainedTrainingBuffer(capacity=training_buffer_capacity)
+        self._buffer = ConstrainedTrainingBuffer(n_buffer=n_buffer)
 
         # External dicts for failure and adaptive delta storage
         self._failure_dict: Dict[int, float] = {}

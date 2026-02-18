@@ -1,4 +1,4 @@
-"""Circular replay buffer for ConstrainedZero training examples.
+"""Iteration-slot replay buffer for ConstrainedZero training examples.
 
 This module extends the BetaZero training buffer with an additional failure
 target, used for training the 3-head ConstrainedZero network.
@@ -9,7 +9,7 @@ Classes:
 """
 
 from dataclasses import dataclass
-from typing import Tuple
+from typing import List, Tuple
 
 import numpy as np
 
@@ -36,21 +36,24 @@ class ConstrainedTrainingExample:
 
 
 class ConstrainedTrainingBuffer(TrainingBuffer):
-    """Fixed-capacity circular replay buffer for ConstrainedZero training.
+    """Iteration-slot replay buffer for ConstrainedZero training.
 
     Extends ``TrainingBuffer`` to store and sample ``ConstrainedTrainingExample``
     instances, returning a 4-tuple from ``sample_batch()`` that includes failure
     targets.
 
     Args:
-        capacity: Maximum number of stored examples.
+        n_buffer: Number of policy-iteration slots to retain.  With the default
+            ``n_buffer=1`` only the current iteration's data is used for
+            training (on-policy).
 
     Example:
         >>> import numpy as np
         >>> from POMDPPlanners.planners.mcts_planners.constrained_zero.constrained_training_buffer import (
         ...     ConstrainedTrainingBuffer, ConstrainedTrainingExample,
         ... )
-        >>> buf = ConstrainedTrainingBuffer(capacity=100)
+        >>> buf = ConstrainedTrainingBuffer(n_buffer=1)
+        >>> buf.begin_iteration()
         >>> buf.add(ConstrainedTrainingExample(np.zeros(4), np.array([0.5, 0.5]), 1.0, 0.0))
         >>> len(buf)
         1
@@ -62,8 +65,8 @@ class ConstrainedTrainingBuffer(TrainingBuffer):
     """
 
     def add(self, example: ConstrainedTrainingExample) -> None:  # type: ignore[override]
-        """Append a constrained example, overwriting the oldest if at capacity."""
-        super().add(example)  # type: ignore[arg-type]
+        """Append a constrained example to the current iteration slot."""
+        self._current.append(example)  # type: ignore[arg-type]
 
     def sample_batch(  # type: ignore[override]
         self, batch_size: int
@@ -81,9 +84,12 @@ class ConstrainedTrainingBuffer(TrainingBuffer):
             - value_targets: shape ``(batch_size,)``
             - failure_targets: shape ``(batch_size,)``
         """
-        indices = np.random.choice(len(self._buffer), size=batch_size, replace=True)
-        beliefs = np.array([self._buffer[i].belief_features for i in indices])
-        policies = np.array([self._buffer[i].policy_target for i in indices])
-        values = np.array([self._buffer[i].value_target for i in indices])
-        failures = np.array([self._buffer[i].failure_target for i in indices])
+        all_examples: List[ConstrainedTrainingExample] = [
+            ex for slot in self._historical for ex in slot  # type: ignore[misc]
+        ] + self._current  # type: ignore[assignment]
+        indices = np.random.choice(len(all_examples), size=batch_size, replace=True)
+        beliefs = np.array([all_examples[i].belief_features for i in indices])
+        policies = np.array([all_examples[i].policy_target for i in indices])
+        values = np.array([all_examples[i].value_target for i in indices])
+        failures = np.array([all_examples[i].failure_target for i in indices])
         return beliefs, policies, values, failures
