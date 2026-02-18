@@ -72,7 +72,7 @@ class TestBetaZero:
         assert tiger_planner.network is not None
         assert tiger_planner.belief_representation is not None
         assert tiger_planner.n_simulations == 20
-        assert tiger_planner.training_buffer_capacity == 100_000
+        assert tiger_planner.n_buffer == 1
         assert tiger_planner.training_batch_size == 256
         assert tiger_planner.training_epochs == 10
         assert tiger_planner.learning_rate == 1e-3

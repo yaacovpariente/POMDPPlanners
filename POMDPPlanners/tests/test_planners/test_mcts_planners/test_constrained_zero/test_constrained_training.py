@@ -50,6 +50,7 @@ def _make_continuous_network():
 
 
 def _fill_buffer(buffer, n_examples, policy_dim, belief_dim=BELIEF_DIM):
+    buffer.begin_iteration()
     for _ in range(n_examples):
         belief = np.random.randn(belief_dim).astype(np.float32)
         raw_policy = np.random.rand(policy_dim).astype(np.float32)
@@ -167,7 +168,7 @@ class TestTrainConstrainedNetwork:
         np.random.seed(42)
         torch.manual_seed(42)
         network = _make_discrete_network()
-        buffer = ConstrainedTrainingBuffer(capacity=1000)
+        buffer = ConstrainedTrainingBuffer(n_buffer=1)
         _fill_buffer(buffer, 50, N_ACTIONS)
 
         metrics = train_constrained_network(
@@ -192,7 +193,7 @@ class TestTrainConstrainedNetwork:
         Test type: unit
         """
         network = _make_discrete_network()
-        buffer = ConstrainedTrainingBuffer(capacity=1000)
+        buffer = ConstrainedTrainingBuffer(n_buffer=1)
         _fill_buffer(buffer, 20, N_ACTIONS)
 
         metrics = train_constrained_network(
@@ -217,7 +218,7 @@ class TestTrainConstrainedNetwork:
         Test type: unit
         """
         network = _make_discrete_network()
-        buffer = ConstrainedTrainingBuffer(capacity=1000)
+        buffer = ConstrainedTrainingBuffer(n_buffer=1)
         _fill_buffer(buffer, 20, N_ACTIONS)
 
         metrics = train_constrained_network(
@@ -244,7 +245,7 @@ class TestTrainConstrainedNetwork:
         Test type: unit
         """
         network = _make_discrete_network()
-        buffer = ConstrainedTrainingBuffer(capacity=1000)
+        buffer = ConstrainedTrainingBuffer(n_buffer=1)
         _fill_buffer(buffer, 20, N_ACTIONS)
 
         metrics = train_constrained_network(
@@ -280,7 +281,7 @@ class TestTrainConstrainedNetwork:
         Test type: unit
         """
         network = _make_discrete_network()
-        buffer = ConstrainedTrainingBuffer(capacity=1000)
+        buffer = ConstrainedTrainingBuffer(n_buffer=1)
         _fill_buffer(buffer, 20, N_ACTIONS)
 
         metrics = train_constrained_network(
@@ -307,7 +308,7 @@ class TestTrainConstrainedNetwork:
         Test type: unit
         """
         network = _make_discrete_network()
-        buffer = ConstrainedTrainingBuffer(capacity=1000)
+        buffer = ConstrainedTrainingBuffer(n_buffer=1)
         _fill_buffer(buffer, 20, N_ACTIONS)
 
         metrics = train_constrained_network(

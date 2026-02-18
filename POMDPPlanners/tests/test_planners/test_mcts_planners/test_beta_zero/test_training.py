@@ -204,7 +204,8 @@ class TestTrainNetwork:
         network = _make_discrete_network()
 
         # Fill buffer with consistent data: constant policy + value for similar beliefs
-        buffer = TrainingBuffer(capacity=1000)
+        buffer = TrainingBuffer(n_buffer=1)
+        buffer.begin_iteration()
         fixed_policy = np.array([0.7, 0.2, 0.1], dtype=np.float32)
         fixed_value = 5.0
 

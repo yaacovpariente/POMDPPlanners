@@ -1,15 +1,25 @@
-"""Circular replay buffer for BetaZero training examples.
+"""Iteration-slot replay buffer for BetaZero training examples.
 
-This module provides a fixed-capacity buffer that stores training tuples
-(φ(b), π_qw, g_t) collected during BetaZero policy iteration.
+This module provides a buffer that stores training tuples (φ(b), π_qw, g_t)
+collected during BetaZero policy iteration.  The buffer is partitioned into
+*iteration slots*: each call to :meth:`TrainingBuffer.begin_iteration` commits
+the current slot to history and opens a fresh one.  At most ``n_buffer``
+iteration slots are retained; older slots are evicted automatically, which
+mirrors the ``CircularBuffer`` design used in the reference Julia implementation
+(BetaZero.jl, ``n_buffer`` parameter).
+
+With the default ``n_buffer=1`` only the current iteration's data is ever in
+the buffer, keeping training fully on-policy.  Set ``n_buffer > 1`` to retain
+a rolling window of recent iterations.
 
 Classes:
     TrainingExample: A single training datum.
-    TrainingBuffer: Fixed-capacity circular buffer with batch sampling.
+    TrainingBuffer: Iteration-slot buffer with uniform batch sampling.
 """
 
+from collections import deque
 from dataclasses import dataclass
-from typing import Tuple
+from typing import Deque, List, Tuple
 
 import numpy as np
 
@@ -30,19 +40,29 @@ class TrainingExample:
 
 
 class TrainingBuffer:
-    """Fixed-capacity circular replay buffer for BetaZero training.
+    """Iteration-slot replay buffer for BetaZero training.
 
-    When the buffer is full, new examples overwrite the oldest ones.
+    Examples are grouped into *iteration slots*.  Calling
+    :meth:`begin_iteration` commits the current slot to a fixed-length history
+    deque (capacity ``n_buffer - 1`` past slots) and opens a fresh slot for the
+    new iteration.  Training samples uniformly from all examples across all
+    retained slots plus the current slot.
+
+    With ``n_buffer=1`` (the default) the history deque has capacity 0, so
+    only the current iteration's data is ever visible to training — matching
+    the on-policy behaviour of the Julia reference implementation.
 
     Args:
-        capacity: Maximum number of stored examples.
+        n_buffer: Number of iteration slots to retain (including the current
+            slot).  Must be >= 1.
 
     Example:
         >>> import numpy as np
         >>> from POMDPPlanners.planners.mcts_planners.beta_zero.training_buffer import (
         ...     TrainingBuffer, TrainingExample,
         ... )
-        >>> buf = TrainingBuffer(capacity=100)
+        >>> buf = TrainingBuffer(n_buffer=1)
+        >>> buf.begin_iteration()
         >>> buf.add(TrainingExample(np.zeros(4), np.array([0.5, 0.5]), 1.0))
         >>> len(buf)
         1
@@ -51,28 +71,39 @@ class TrainingBuffer:
         (1, 4)
     """
 
-    def __init__(self, capacity: int = 100_000):
-        self._capacity = capacity
-        self._buffer: list = []
-        self._position = 0
+    def __init__(self, n_buffer: int = 1):
+        if n_buffer < 1:
+            raise ValueError(f"n_buffer must be >= 1, got {n_buffer}")
+        self._n_buffer = n_buffer
+        # History holds at most n_buffer-1 committed past iterations.
+        self._historical: Deque[List[TrainingExample]] = deque(maxlen=n_buffer - 1)
+        self._current: List[TrainingExample] = []
 
     def __len__(self) -> int:
-        return len(self._buffer)
+        return sum(len(slot) for slot in self._historical) + len(self._current)
 
     @property
-    def capacity(self) -> int:
-        return self._capacity
+    def n_buffer(self) -> int:
+        """Number of iteration slots retained (including the current slot)."""
+        return self._n_buffer
+
+    def begin_iteration(self) -> None:
+        """Commit the current slot and open a fresh one for the new iteration.
+
+        If the current slot contains examples it is pushed into the history
+        deque (oldest slot evicted automatically when the deque is full), then
+        the current slot is reset to empty.
+        """
+        if self._current:
+            self._historical.append(self._current)
+        self._current = []
 
     def add(self, example: TrainingExample) -> None:
-        """Append an example, overwriting the oldest if at capacity."""
-        if len(self._buffer) < self._capacity:
-            self._buffer.append(example)
-        else:
-            self._buffer[self._position] = example
-        self._position = (self._position + 1) % self._capacity
+        """Append an example to the current iteration slot."""
+        self._current.append(example)
 
     def sample_batch(self, batch_size: int) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """Sample a random mini-batch from the buffer.
+        """Sample a random mini-batch uniformly from all retained examples.
 
         Args:
             batch_size: Number of examples to sample (with replacement if
@@ -84,13 +115,16 @@ class TrainingBuffer:
             - policy_targets: shape ``(batch_size, policy_dim)``
             - value_targets: shape ``(batch_size,)``
         """
-        indices = np.random.choice(len(self._buffer), size=batch_size, replace=True)
-        beliefs = np.array([self._buffer[i].belief_features for i in indices])
-        policies = np.array([self._buffer[i].policy_target for i in indices])
-        values = np.array([self._buffer[i].value_target for i in indices])
+        all_examples: List[TrainingExample] = [
+            ex for slot in self._historical for ex in slot
+        ] + self._current
+        indices = np.random.choice(len(all_examples), size=batch_size, replace=True)
+        beliefs = np.array([all_examples[i].belief_features for i in indices])
+        policies = np.array([all_examples[i].policy_target for i in indices])
+        values = np.array([all_examples[i].value_target for i in indices])
         return beliefs, policies, values
 
     def clear(self) -> None:
-        """Remove all stored examples."""
-        self._buffer.clear()
-        self._position = 0
+        """Remove all stored examples from all slots."""
+        self._historical.clear()
+        self._current.clear()

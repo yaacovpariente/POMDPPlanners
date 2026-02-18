@@ -133,7 +133,7 @@ class BetaZero(DoubleProgressiveWideningMCTSPolicy, TrainablePolicy):
         z_q: float = 1.0,
         z_n: float = 1.0,
         temperature: float = 1.0,
-        training_buffer_capacity: int = 100_000,
+        n_buffer: int = 1,
         training_batch_size: int = 256,
         training_epochs: int = 10,
         learning_rate: float = 1e-3,
@@ -168,7 +168,10 @@ class BetaZero(DoubleProgressiveWideningMCTSPolicy, TrainablePolicy):
             z_q: Q-value exponent in policy target.
             z_n: Visit-count exponent in policy target.
             temperature: Temperature τ for policy target.
-            training_buffer_capacity: Replay buffer capacity.
+            n_buffer: Number of policy-iteration slots to retain in the
+                replay buffer.  With the default ``n_buffer=1`` only the
+                current iteration's data is used for training (on-policy).
+                Set ``n_buffer > 1`` for a rolling window of recent iterations.
             training_batch_size: Mini-batch size during training.
             training_epochs: Epochs per ``fit()`` iteration.
             learning_rate: Adam learning rate.
@@ -211,7 +214,7 @@ class BetaZero(DoubleProgressiveWideningMCTSPolicy, TrainablePolicy):
         self.track_gradients = track_gradients
 
         # Training hyper-parameters
-        self.training_buffer_capacity = training_buffer_capacity
+        self.n_buffer = n_buffer
         self.training_batch_size = training_batch_size
         self.training_epochs = training_epochs
         self.learning_rate = learning_rate
@@ -232,7 +235,7 @@ class BetaZero(DoubleProgressiveWideningMCTSPolicy, TrainablePolicy):
             )
 
         # Training state
-        self._buffer = TrainingBuffer(capacity=training_buffer_capacity)
+        self._buffer = TrainingBuffer(n_buffer=n_buffer)
         self._collecting_data = False
         self._pending_examples: List[_PendingExample] = []
         self._last_tree: Optional[BeliefNode] = None
@@ -470,6 +473,7 @@ class BetaZero(DoubleProgressiveWideningMCTSPolicy, TrainablePolicy):
     # ── TrainablePolicy hooks ────────────────────────────────────────
 
     def begin_collecting(self) -> None:
+        self._buffer.begin_iteration()
         self._collecting_data = True
 
     def end_collecting(self) -> None:
@@ -534,6 +538,7 @@ class BetaZero(DoubleProgressiveWideningMCTSPolicy, TrainablePolicy):
         n_episodes: int,
         episode_length: int,
     ) -> None:
+        self._buffer.begin_iteration()
         episodes = self._init_batched_episodes(initial_belief_fn, n_episodes)
 
         for _ in range(episode_length):
