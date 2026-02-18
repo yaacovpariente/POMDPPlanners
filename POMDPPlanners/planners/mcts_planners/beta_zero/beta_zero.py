@@ -248,7 +248,7 @@ class BetaZero(DoubleProgressiveWideningMCTSPolicy, TrainablePolicy):
         # Wire network into action sampler if it's a BetaZeroActionSampler
         if isinstance(self.action_sampler, BetaZeroActionSampler):
             self.action_sampler.set_network_and_representation(
-                self.network, self.belief_representation
+                self.network, self.belief_representation, self._get_normalized_features
             )
 
         # Training state
@@ -765,6 +765,26 @@ class BetaZero(DoubleProgressiveWideningMCTSPolicy, TrainablePolicy):
                 json.dump(stats, f, indent=2)
 
         return filepath
+
+    def load_normalization_stats(self, filepath) -> None:
+        """Restore normalization statistics from a saved directory.
+
+        Should be called after ``network.load_weights()`` when loading a
+        checkpoint that was saved with normalisation enabled.
+
+        Args:
+            filepath: Directory previously returned by :meth:`save`.
+        """
+        stats_path = Path(filepath) / "normalization_stats.json"
+        if not stats_path.exists():
+            return
+        with open(stats_path, encoding="utf-8") as f:
+            stats = json.load(f)
+        if stats.get("input_mean") is not None:
+            self._input_mean = np.array(stats["input_mean"])
+            self._input_std = np.array(stats["input_std"])
+        self._value_mean = stats.get("value_mean")
+        self._value_std = stats.get("value_std")
 
     @classmethod
     def get_space_info(cls) -> PolicySpaceInfo:

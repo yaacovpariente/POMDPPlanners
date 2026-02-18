@@ -9,7 +9,7 @@ Classes:
     BetaZeroActionSampler: Samples actions from the BetaZero policy network.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 import numpy as np
 
@@ -55,18 +55,27 @@ class BetaZeroActionSampler(ActionSampler):
         # Set externally by BetaZero planner once network + representation exist
         self._network: Optional[AbstractBetaZeroNetwork] = None
         self._belief_representation = None
+        self._normalize_fn: Callable[[np.ndarray], np.ndarray] = lambda x: x
 
     def set_network_and_representation(
-        self, network: AbstractBetaZeroNetwork, belief_representation: BeliefRepresentation
+        self,
+        network: AbstractBetaZeroNetwork,
+        belief_representation: BeliefRepresentation,
+        normalize_fn: Optional[Callable[[np.ndarray], np.ndarray]] = None,
     ) -> None:
-        """Attach the network and belief representation after construction.
+        """Attach the network, belief representation, and optional normalizer.
 
         Args:
             network: ``AbstractBetaZeroNetwork`` instance.
             belief_representation: ``BeliefRepresentation`` instance.
+            normalize_fn: Optional callable that normalizes raw belief features
+                before passing them to the network. When ``None``, features are
+                passed through unchanged. Pass ``planner._get_normalized_features``
+                to keep the sampler in sync with BetaZero's normalization stats.
         """
         self._network = network
         self._belief_representation = belief_representation
+        self._normalize_fn = normalize_fn if normalize_fn is not None else (lambda x: x)
 
     def sample(self, belief_node: Optional[BeliefNode] = None) -> Any:
         """Sample a new action for progressive widening.
@@ -80,7 +89,7 @@ class BetaZeroActionSampler(ActionSampler):
         if not self._can_use_network(belief_node):
             return self.fallback_sampler.sample(belief_node)
 
-        features = self._belief_representation(belief_node.belief)
+        features = self._normalize_fn(self._belief_representation(belief_node.belief))
         policy, _ = self._network.predict(features)
 
         if self.actions is not None:
@@ -119,12 +128,15 @@ class BetaZeroActionSampler(ActionSampler):
         state = self.__dict__.copy()
         state["_network"] = None
         state["_belief_representation"] = None
+        state["_normalize_fn"] = None  # lambdas/bound methods are not picklable
         return state
 
     def __setstate__(self, state: Dict[str, Any]) -> None:
         """Set state for pickle deserialization."""
         for key, value in state.items():
             setattr(self, key, value)
+        if self._normalize_fn is None:
+            self._normalize_fn = lambda x: x
 
     def __reduce__(self):
         """Support for pickle serialization via __reduce__."""
