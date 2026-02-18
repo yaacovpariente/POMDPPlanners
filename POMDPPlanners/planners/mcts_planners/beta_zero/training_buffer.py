@@ -124,6 +124,14 @@ class TrainingBuffer:
         values = np.array([all_examples[i].value_target for i in indices])
         return beliefs, policies, values
 
+    def get_all_examples(self) -> List[TrainingExample]:
+        """Return all examples across all buffer slots (historical + current)."""
+        all_examples: List[TrainingExample] = []
+        for slot in self._historical:
+            all_examples.extend(slot)
+        all_examples.extend(self._current)
+        return all_examples
+
     def clear(self) -> None:
         """Remove all stored examples from all slots."""
         self._historical.clear()

@@ -10,7 +10,7 @@ Functions:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Dict, List, Tuple
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
 import numpy as np
 import torch
@@ -125,6 +125,10 @@ def train_network(
     learning_rate: float = 1e-3,
     weight_decay: float = 1e-4,
     track_gradients: bool = False,
+    input_mean: Optional[np.ndarray] = None,
+    input_std: Optional[np.ndarray] = None,
+    value_mean: Optional[float] = None,
+    value_std: Optional[float] = None,
 ) -> Dict[str, List[float]]:
     """Train the network for multiple epochs on buffered data.
 
@@ -135,6 +139,10 @@ def train_network(
         batch_size: Mini-batch size.
         learning_rate: Adam learning rate.
         weight_decay: L2 regularisation coefficient (λ in Eq. 7).
+        input_mean: Per-feature mean for input normalisation (``None`` = disabled).
+        input_std: Per-feature std for input normalisation (``None`` = disabled).
+        value_mean: Scalar mean for value normalisation (``None`` = disabled).
+        value_std: Scalar std for value normalisation (``None`` = disabled).
 
     Returns:
         Dictionary with per-epoch loss lists: ``"total_loss"``,
@@ -163,6 +171,10 @@ def train_network(
 
         for _ in range(n_batches):
             beliefs_np, policies_np, values_np = buffer.sample_batch(batch_size)
+            if input_mean is not None:
+                beliefs_np = (beliefs_np - input_mean) / (input_std + 1e-8)
+            if value_mean is not None:
+                values_np = (values_np - value_mean) / (value_std + 1e-8)
             beliefs_t = torch.as_tensor(beliefs_np, dtype=torch.float32)
             policies_t = torch.as_tensor(policies_np, dtype=torch.float32)
             values_t = torch.as_tensor(values_np, dtype=torch.float32)
