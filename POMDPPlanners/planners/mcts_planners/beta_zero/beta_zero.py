@@ -36,6 +36,7 @@ from POMDPPlanners.planners.mcts_planners.beta_zero.beta_zero_network import (
 from POMDPPlanners.planners.mcts_planners.beta_zero.puct import (
     puct_action_progressive_widening,
 )
+from POMDPPlanners.planners.mcts_planners.beta_zero.training import train_network
 from POMDPPlanners.planners.mcts_planners.beta_zero.training_buffer import (
     TrainingBuffer,
     TrainingExample,
@@ -140,6 +141,8 @@ class BetaZero(DoubleProgressiveWideningMCTSPolicy, TrainablePolicy):
         weight_decay: float = 1e-4,
         hidden_sizes: Tuple[int, ...] = (128, 128),
         track_gradients: bool = False,
+        normalize_inputs: bool = True,
+        normalize_values: bool = True,
         log_path: Optional[Path] = None,
         debug: bool = False,
         use_queue_logger: bool = False,
@@ -179,6 +182,12 @@ class BetaZero(DoubleProgressiveWideningMCTSPolicy, TrainablePolicy):
             hidden_sizes: Widths of hidden layers in the network trunk.
             track_gradients: When ``True``, gradient and weight norms are
                 computed during training and included in the metrics dict.
+            normalize_inputs: When ``True``, belief features are z-scored
+                before being fed to the network. Stats are recomputed from
+                the full buffer before each training pass.
+            normalize_values: When ``True``, value targets are z-scored
+                during training and the predicted value is de-normalised at
+                inference time.
             log_path: Optional log directory.
             debug: Enable debug logging.
             use_queue_logger: Use queue-based logging.
@@ -212,6 +221,14 @@ class BetaZero(DoubleProgressiveWideningMCTSPolicy, TrainablePolicy):
         self.temperature = temperature
         self.hidden_sizes = hidden_sizes
         self.track_gradients = track_gradients
+
+        # Normalisation flags and running statistics
+        self.normalize_inputs = normalize_inputs
+        self.normalize_values = normalize_values
+        self._input_mean: Optional[np.ndarray] = None
+        self._input_std: Optional[np.ndarray] = None
+        self._value_mean: Optional[float] = None
+        self._value_std: Optional[float] = None
 
         # Training hyper-parameters
         self.n_buffer = n_buffer
@@ -274,6 +291,31 @@ class BetaZero(DoubleProgressiveWideningMCTSPolicy, TrainablePolicy):
     def _infer_action_dim(self) -> int:
         sample = self.action_sampler.sample()
         return int(np.asarray(sample).shape[0])
+
+    # ── Normalisation helpers ─────────────────────────────────────────
+
+    def _update_normalization_stats(self) -> None:
+        examples = self._buffer.get_all_examples()
+        if not examples:
+            return
+        if self.normalize_inputs:
+            beliefs = np.stack([ex.belief_features for ex in examples])
+            self._input_mean = beliefs.mean(axis=0)
+            self._input_std = beliefs.std(axis=0)
+        if self.normalize_values:
+            values = np.array([ex.value_target for ex in examples])
+            self._value_mean = float(values.mean())
+            self._value_std = float(values.std())
+
+    def _get_normalized_features(self, features: np.ndarray) -> np.ndarray:
+        if self.normalize_inputs and self._input_mean is not None:
+            return (features - self._input_mean) / (self._input_std + 1e-8)
+        return features
+
+    def _get_denormalized_value(self, value: float) -> float:
+        if self.normalize_values and self._value_mean is not None:
+            return value * (self._value_std + 1e-8) + self._value_mean
+        return value
 
     # ── MCTS overrides ────────────────────────────────────────────────
 
@@ -385,9 +427,9 @@ class BetaZero(DoubleProgressiveWideningMCTSPolicy, TrainablePolicy):
     # ── Network helpers ───────────────────────────────────────────────
 
     def _network_leaf_value(self, belief_node: BeliefNode) -> float:
-        features = self.belief_representation(belief_node.belief)
+        features = self._get_normalized_features(self.belief_representation(belief_node.belief))
         _, value = self.network.predict(features)
-        return value
+        return self._get_denormalized_value(value)
 
     def _get_action_priors(self, belief_node: BeliefNode) -> Optional[np.ndarray]:
         if not belief_node.children:
@@ -397,7 +439,7 @@ class BetaZero(DoubleProgressiveWideningMCTSPolicy, TrainablePolicy):
         return None
 
     def _discrete_action_priors(self, belief_node: BeliefNode) -> np.ndarray:
-        features = self.belief_representation(belief_node.belief)
+        features = self._get_normalized_features(self.belief_representation(belief_node.belief))
         policy, _ = self.network.predict(features)
         actions = self.environment.get_actions()  # type: ignore[attr-defined]
         child_actions = [child.action for child in belief_node.children]
@@ -547,7 +589,8 @@ class BetaZero(DoubleProgressiveWideningMCTSPolicy, TrainablePolicy):
                 break
 
             features_batch = self._build_feature_batch(episodes, active_indices)
-            policies, _ = self.network.predict_batch(features_batch)
+            norm_features_batch = self._get_normalized_features(features_batch)
+            policies, _ = self.network.predict_batch(norm_features_batch)
 
             for batch_idx, ep_idx in enumerate(active_indices):
                 ep = episodes[ep_idx]
@@ -652,13 +695,20 @@ class BetaZero(DoubleProgressiveWideningMCTSPolicy, TrainablePolicy):
         return returns
 
     def _train_network_on_buffer(self) -> Dict[str, List[float]]:
-        return self.network.fit(
+        if self.normalize_inputs or self.normalize_values:
+            self._update_normalization_stats()
+        return train_network(
+            network=self.network,
             buffer=self._buffer,
             n_epochs=self.training_epochs,
             batch_size=self.training_batch_size,
             learning_rate=self.learning_rate,
             weight_decay=self.weight_decay,
             track_gradients=self.track_gradients,
+            input_mean=self._input_mean if self.normalize_inputs else None,
+            input_std=self._input_std if self.normalize_inputs else None,
+            value_mean=self._value_mean if self.normalize_values else None,
+            value_std=self._value_std if self.normalize_values else None,
         )
 
     # ── Serialisation ─────────────────────────────────────────────────
@@ -696,11 +746,24 @@ class BetaZero(DoubleProgressiveWideningMCTSPolicy, TrainablePolicy):
             "action_space_type": self.network.action_space_type,
             "n_actions": self.network.n_actions,
             "action_dim": self.network.action_dim,
+            "normalize_inputs": self.normalize_inputs,
+            "normalize_values": self.normalize_values,
         }
         with open(config_path, "w", encoding="utf-8") as f:
             json.dump(config_data, f, indent=2)
 
         self.network.save_weights(filepath / "network_weights.pt")
+
+        if self.normalize_inputs or self.normalize_values:
+            stats = {
+                "input_mean": self._input_mean.tolist() if self._input_mean is not None else None,
+                "input_std": self._input_std.tolist() if self._input_std is not None else None,
+                "value_mean": self._value_mean,
+                "value_std": self._value_std,
+            }
+            with open(filepath / "normalization_stats.json", "w", encoding="utf-8") as f:
+                json.dump(stats, f, indent=2)
+
         return filepath
 
     @classmethod
