@@ -72,13 +72,13 @@ class Belief(ABC):
             """Serialize values in a deterministic way."""
             if isinstance(value, np.ndarray):
                 return value.tolist()
-            elif isinstance(value, (str, int, float, bool)):
+            if isinstance(value, (str, int, float, bool)):
                 return value
-            elif isinstance(value, (list, tuple)):
+            if isinstance(value, (list, tuple)):
                 return [serialize_value(v) for v in value]
-            elif isinstance(value, dict):
+            if isinstance(value, dict):
                 return {str(k): serialize_value(v) for k, v in sorted(value.items())}
-            elif hasattr(value, "__dict__"):
+            if hasattr(value, "__dict__"):
                 return serialize_value(value.__dict__)
             return str(value)
 

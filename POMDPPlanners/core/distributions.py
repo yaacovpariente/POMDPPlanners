@@ -40,7 +40,6 @@ class Distribution(ABC):
             Subclasses must implement this method according to their
             specific distribution type and parameters.
         """
-        pass
 
     def probability(self, values: List[Any]) -> np.ndarray:
         """Calculate probabilities for given values.

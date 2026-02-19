@@ -92,8 +92,6 @@ def ray_aabb_distances(
 
 
 def _slab_intersect(ox, oy, dx, dy, min_x, max_x, min_y, max_y):
-    m = len(min_x)
-
     # X slab
     if abs(dx) > 1e-12:
         inv_dx = 1.0 / dx

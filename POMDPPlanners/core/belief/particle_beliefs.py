@@ -210,13 +210,13 @@ class WeightedParticleBelief(Belief):
             """Serialize values in a deterministic way."""
             if isinstance(value, np.ndarray):
                 return value.tolist()
-            elif isinstance(value, (str, int, float, bool)):
+            if isinstance(value, (str, int, float, bool)):
                 return value
-            elif isinstance(value, (list, tuple)):
+            if isinstance(value, (list, tuple)):
                 return [serialize_value(v) for v in value]
-            elif isinstance(value, dict):
+            if isinstance(value, dict):
                 return {str(k): serialize_value(v) for k, v in sorted(value.items())}
-            elif hasattr(value, "__dict__"):
+            if hasattr(value, "__dict__"):
                 return serialize_value(value.__dict__)
             return str(value)
 
@@ -622,13 +622,13 @@ class WeightedParticleBeliefStateUpdate(Belief):
             """Serialize values in a deterministic way."""
             if isinstance(value, np.ndarray):
                 return value.tolist()
-            elif isinstance(value, (str, int, float, bool)):
+            if isinstance(value, (str, int, float, bool)):
                 return value
-            elif isinstance(value, (list, tuple)):
+            if isinstance(value, (list, tuple)):
                 return [serialize_value(v) for v in value]
-            elif isinstance(value, dict):
+            if isinstance(value, dict):
                 return {str(k): serialize_value(v) for k, v in sorted(value.items())}
-            elif hasattr(value, "__dict__"):
+            if hasattr(value, "__dict__"):
                 return serialize_value(value.__dict__)
             return str(value)
 
@@ -835,13 +835,13 @@ class UnweightedParticleBeliefStateUpdate(Belief):
             """Serialize values in a deterministic way."""
             if isinstance(value, np.ndarray):
                 return value.tolist()
-            elif isinstance(value, (str, int, float, bool)):
+            if isinstance(value, (str, int, float, bool)):
                 return value
-            elif isinstance(value, (list, tuple)):
+            if isinstance(value, (list, tuple)):
                 return [serialize_value(v) for v in value]
-            elif isinstance(value, dict):
+            if isinstance(value, dict):
                 return {str(k): serialize_value(v) for k, v in sorted(value.items())}
-            elif hasattr(value, "__dict__"):
+            if hasattr(value, "__dict__"):
                 return serialize_value(value.__dict__)
             return str(value)
 
@@ -905,12 +905,11 @@ def get_unique_support(
         if isinstance(value, np.ndarray):
             # Recursively convert nested arrays to tuples
             return tuple(_make_hashable(item) for item in value.tolist())
-        elif isinstance(value, (list, tuple)):
+        if isinstance(value, (list, tuple)):
             # Convert lists to tuples, recursively handle nested structures
             return tuple(_make_hashable(item) for item in value)
-        else:
-            # Shouldn't reach here if hash check worked, but fallback
-            return value
+        # Shouldn't reach here if hash check worked, but fallback
+        return value
 
     # Create dictionaries to store unique particles and their combined probabilities
     # We need to store both the hashable key and the original particle
