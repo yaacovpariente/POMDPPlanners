@@ -13,7 +13,7 @@ Classes:
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple, cast
 
 import numpy as np
 
@@ -698,7 +698,7 @@ class BetaZero(DoubleProgressiveWideningMCTSPolicy, TrainablePolicy):
         if self.normalize_inputs or self.normalize_values:
             self._update_normalization_stats()
         return train_network(
-            network=self.network,
+            network=cast(BetaZeroNetwork, self.network),
             buffer=self._buffer,
             n_epochs=self.training_epochs,
             batch_size=self.training_batch_size,
