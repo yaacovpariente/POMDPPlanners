@@ -122,6 +122,8 @@ class ConstrainedZero(BetaZero):
         weight_decay: float = 1e-4,
         hidden_sizes: Tuple[int, ...] = (128, 128),
         track_gradients: bool = False,
+        normalize_inputs: bool = True,
+        normalize_values: bool = True,
         log_path: Optional[Path] = None,
         debug: bool = False,
         use_queue_logger: bool = False,
@@ -165,6 +167,11 @@ class ConstrainedZero(BetaZero):
                 computed during training and included in the metrics dict.
                 Includes an additional ``"grad_norm/failure_head"`` key
                 compared to ``BetaZero``.
+            normalize_inputs: When ``True``, belief features are z-scored
+                before being fed to the network during training and inference.
+            normalize_values: When ``True``, value targets are z-scored
+                during training and predicted values are de-normalised at
+                inference time.
             log_path: Optional log directory.
             debug: Enable debug logging.
             use_queue_logger: Use queue-based logging.
@@ -201,6 +208,8 @@ class ConstrainedZero(BetaZero):
             weight_decay=weight_decay,
             hidden_sizes=hidden_sizes,
             track_gradients=track_gradients,
+            normalize_inputs=normalize_inputs,
+            normalize_values=normalize_values,
             log_path=log_path,
             debug=debug,
             use_queue_logger=use_queue_logger,
@@ -330,7 +339,7 @@ class ConstrainedZero(BetaZero):
         return value
 
     def _discrete_action_priors(self, belief_node: BeliefNode) -> np.ndarray:
-        features = self.belief_representation(belief_node.belief)
+        features = self._get_normalized_features(self.belief_representation(belief_node.belief))
         policy, _, _ = self.network.predict(features)
         actions = self.environment.get_actions()  # type: ignore[attr-defined]
         child_actions = [child.action for child in belief_node.children]
@@ -369,13 +378,20 @@ class ConstrainedZero(BetaZero):
 
     def _update_adaptive_delta(self, belief_node: BeliefNode, action_node: ActionNode) -> None:
         f = self._failure_dict.get(id(action_node), 0.0)
-        err = 1.0 if f > self.delta_0 else 0.0
         node_id = id(belief_node)
         current_delta = self._delta_dict.get(node_id, self.delta_0)
+        err = 1.0 if f > current_delta else 0.0
         new_delta = current_delta + self.eta * (err - self.delta_0)
-        lb = self.delta_0 * 0.1
-        ub = min(1.0, self.delta_0 * 10.0)
+        lb, ub = self._compute_delta_bounds(belief_node)
         self._delta_dict[node_id] = float(np.clip(new_delta, lb, ub))
+
+    def _compute_delta_bounds(self, belief_node: BeliefNode) -> Tuple[float, float]:
+        child_failures = [
+            self._failure_dict[id(c)] for c in belief_node.children if id(c) in self._failure_dict
+        ]
+        if not child_failures:
+            return self.delta_0 * 0.1, min(1.0, self.delta_0 * 10.0)
+        return min(child_failures), max(child_failures)
 
     def _get_subtree_failure(self, belief_node: BeliefNode) -> float:
         if not belief_node.children:
@@ -441,26 +457,47 @@ class ConstrainedZero(BetaZero):
     def _finalize_episode_data(self, history) -> None:
         rewards = [step.reward for step in history.history if step.reward is not None]
         discounted_returns = self._compute_discounted_returns(rewards)
-        episode_failure = self._compute_episode_failure(history)
+        failure_targets = self._compute_per_timestep_failures(history)
 
         for i, pending in enumerate(self._pending_examples):
             if i < len(discounted_returns):
+                failure_target = failure_targets[i] if i < len(failure_targets) else 0.0
                 self._buffer.add(
                     ConstrainedTrainingExample(
                         belief_features=pending.belief_features,
                         policy_target=pending.policy_target,
                         value_target=discounted_returns[i],
-                        failure_target=episode_failure,
+                        failure_target=failure_target,
                     )
                 )
 
-    def _compute_episode_failure(self, history) -> float:
+    def _compute_per_timestep_failures(self, history) -> List[float]:
+        per_step_failure = self._extract_per_step_failure_flags(history)
+        return self._backward_accumulate_failures(per_step_failure)
+
+    def _extract_per_step_failure_flags(self, history) -> List[bool]:
+        flags: List[bool] = []
         for step in history.history:
+            failed = False
             if step.state is not None and self.failure_fn(step.state):
-                return 1.0
+                failed = True
             if step.next_state is not None and self.failure_fn(step.next_state):
-                return 1.0
-        return 0.0
+                failed = True
+            flags.append(failed)
+        return flags
+
+    def _backward_accumulate_failures(self, per_step_failure: List[bool]) -> List[float]:
+        n = len(per_step_failure)
+        if n == 0:
+            return []
+        targets = [0.0] * n
+        targets[-1] = 1.0 if per_step_failure[-1] else 0.0
+        for t in range(n - 2, -1, -1):
+            if per_step_failure[t] or targets[t + 1] > 0.0:
+                targets[t] = 1.0
+            else:
+                targets[t] = 0.0
+        return targets
 
     def _train_network_on_buffer(self) -> Dict[str, List[float]]:
         if self.normalize_inputs or self.normalize_values:

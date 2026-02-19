@@ -355,28 +355,29 @@ class TestConstrainedZeroHelpers:
         expected = 0.6 + (0.2 - 0.6) / 2
         assert abs(tiger_planner._failure_dict[id(action_node)] - expected) < 1e-10
 
-    def test_compute_episode_failure_no_failure(self, tiger_planner):
-        """Test _compute_episode_failure returns 0 when no failure states.
+    def test_compute_per_timestep_failures_no_failure(self, tiger_planner):
+        """Test _compute_per_timestep_failures returns all zeros when no failure states.
 
-        Purpose: Validates episode failure detection with trivial failure_fn.
+        Purpose: Validates per-timestep failure detection with trivial failure_fn.
 
         Given: A history where failure_fn returns False for all states.
-        When: _compute_episode_failure is called.
-        Then: Returns 0.0.
+        When: _compute_per_timestep_failures is called.
+        Then: Returns [0.0] for each timestep.
 
         Test type: unit
         """
         history = _make_history([_make_step_data()])
-        assert tiger_planner._compute_episode_failure(history) == 0.0
+        result = tiger_planner._compute_per_timestep_failures(history)
+        assert result == [0.0]
 
-    def test_compute_episode_failure_with_failure(self, tiger_env):
-        """Test _compute_episode_failure returns 1 when a failure state exists.
+    def test_compute_per_timestep_failures_with_failure(self, tiger_env):
+        """Test _compute_per_timestep_failures returns 1.0 for timesteps at or before a failure.
 
-        Purpose: Validates episode failure detection with a failing state.
+        Purpose: Validates per-timestep failure detection with a failing state.
 
         Given: A planner with failure_fn that fails on "tiger_left".
-        When: _compute_episode_failure is called on history containing "tiger_left".
-        Then: Returns 1.0.
+        When: _compute_per_timestep_failures is called on history containing "tiger_left".
+        Then: Returns [1.0] for the single timestep where failure occurs.
 
         Test type: unit
         """
@@ -397,7 +398,8 @@ class TestConstrainedZeroHelpers:
                 _make_step_data(state="tiger_left", next_state="tiger_right"),
             ]
         )
-        assert planner._compute_episode_failure(history) == 1.0
+        result = planner._compute_per_timestep_failures(history)
+        assert result == [1.0]
 
 
 class TestConstrainedZeroPolicyTarget:
