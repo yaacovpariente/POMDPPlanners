@@ -9,8 +9,9 @@ Functions:
     train_constrained_network: Multi-epoch training on a replay buffer.
 """
 
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
+import numpy as np
 import torch
 from torch import nn
 
@@ -114,6 +115,10 @@ def train_constrained_network(
     learning_rate: float = 1e-3,
     weight_decay: float = 1e-4,
     track_gradients: bool = False,
+    input_mean: Optional[np.ndarray] = None,
+    input_std: Optional[np.ndarray] = None,
+    value_mean: Optional[float] = None,
+    value_std: Optional[float] = None,
 ) -> Dict[str, List[float]]:
     """Train the 3-head network for multiple epochs on buffered data.
 
@@ -126,6 +131,10 @@ def train_constrained_network(
         weight_decay: L2 regularisation coefficient.
         track_gradients: When ``True``, gradient and weight norms are
             computed per-batch/epoch and included in the returned metrics.
+        input_mean: Per-feature mean for input normalisation (``None`` = disabled).
+        input_std: Per-feature std for input normalisation (``None`` = disabled).
+        value_mean: Scalar mean for value normalisation (``None`` = disabled).
+        value_std: Scalar std for value normalisation (``None`` = disabled).
 
     Returns:
         Dictionary with per-epoch loss lists: ``"total_loss"``,
@@ -156,6 +165,10 @@ def train_constrained_network(
 
         for _ in range(n_batches):
             beliefs_np, policies_np, values_np, failures_np = buffer.sample_batch(batch_size)
+            if input_mean is not None:
+                beliefs_np = (beliefs_np - input_mean) / (input_std + 1e-8)
+            if value_mean is not None:
+                values_np = (values_np - value_mean) / (value_std + 1e-8)
             beliefs_t = torch.as_tensor(beliefs_np, dtype=torch.float32)
             policies_t = torch.as_tensor(policies_np, dtype=torch.float32)
             values_t = torch.as_tensor(values_np, dtype=torch.float32)
