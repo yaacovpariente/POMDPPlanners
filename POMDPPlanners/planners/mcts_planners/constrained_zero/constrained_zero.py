@@ -321,9 +321,9 @@ class ConstrainedZero(BetaZero):
     # ── Network helpers ───────────────────────────────────────────────
 
     def _network_leaf_value_and_failure(self, belief_node: BeliefNode) -> Tuple[float, float]:
-        features = self.belief_representation(belief_node.belief)
+        features = self._get_normalized_features(self.belief_representation(belief_node.belief))
         _, value, failure_prob = self.network.predict(features)
-        return value, failure_prob
+        return self._get_denormalized_value(value), failure_prob
 
     def _network_leaf_value(self, belief_node: BeliefNode) -> float:
         value, _ = self._network_leaf_value_and_failure(belief_node)
@@ -463,6 +463,8 @@ class ConstrainedZero(BetaZero):
         return 0.0
 
     def _train_network_on_buffer(self) -> Dict[str, List[float]]:
+        if self.normalize_inputs or self.normalize_values:
+            self._update_normalization_stats()
         return train_constrained_network(
             network=self.network,
             buffer=self._buffer,
@@ -471,4 +473,8 @@ class ConstrainedZero(BetaZero):
             learning_rate=self.learning_rate,
             weight_decay=self.weight_decay,
             track_gradients=self.track_gradients,
+            input_mean=self._input_mean if self.normalize_inputs else None,
+            input_std=self._input_std if self.normalize_inputs else None,
+            value_mean=self._value_mean if self.normalize_values else None,
+            value_std=self._value_std if self.normalize_values else None,
         )
