@@ -97,8 +97,8 @@ class ConstrainedZero(BetaZero):
         name: str,
         action_sampler: ActionSampler,
         failure_fn: Callable[[Any], bool],
-        delta_0: float = 0.1,
-        eta: float = 0.1,
+        delta_0: float = 0.01,
+        eta: float = 0.00001,
         delta_compounding: float = 1.0,
         # Inherited BetaZero params
         k_a: float = 1.0,
@@ -121,6 +121,8 @@ class ConstrainedZero(BetaZero):
         learning_rate: float = 1e-3,
         weight_decay: float = 1e-4,
         hidden_sizes: Tuple[int, ...] = (128, 128),
+        use_dropout: bool = True,
+        p_dropout: float = 0.2,
         track_gradients: bool = False,
         normalize_inputs: bool = True,
         normalize_values: bool = True,
@@ -138,8 +140,8 @@ class ConstrainedZero(BetaZero):
             action_sampler: Action sampling strategy for progressive widening.
             failure_fn: Function ``state -> bool`` that returns True if the
                 state is a failure state.
-            delta_0: Nominal failure probability threshold (default 0.1).
-            eta: Learning rate for adaptive Delta calibration (default 0.1).
+            delta_0: Nominal failure probability threshold (default 0.01).
+            eta: Learning rate for adaptive Delta calibration (default 0.00001).
             delta_compounding: Discount factor for failure propagation (default 1.0).
             k_a: Action widening coefficient.
             alpha_a: Action widening exponent.
@@ -163,6 +165,8 @@ class ConstrainedZero(BetaZero):
             learning_rate: Adam learning rate.
             weight_decay: L2 regularisation weight.
             hidden_sizes: Widths of hidden layers in the network trunk.
+            use_dropout: If True, apply dropout in the shared network trunk (default True).
+            p_dropout: Dropout probability passed to ConstrainedZeroNetwork (default 0.2).
             track_gradients: When ``True``, gradient and weight norms are
                 computed during training and included in the metrics dict.
                 Includes an additional ``"grad_norm/failure_head"`` key
@@ -180,6 +184,8 @@ class ConstrainedZero(BetaZero):
         self.delta_0 = delta_0
         self.eta = eta
         self.delta_compounding = delta_compounding
+        self.use_dropout = use_dropout
+        self.p_dropout = p_dropout
 
         super().__init__(
             environment=environment,
@@ -234,12 +240,16 @@ class ConstrainedZero(BetaZero):
                 action_space_type="discrete",
                 n_actions=len(self.environment.get_actions()),  # type: ignore[attr-defined]
                 hidden_sizes=hidden_sizes,
+                use_dropout=self.use_dropout,
+                p_dropout=self.p_dropout,
             )
         return ConstrainedZeroNetwork(
             belief_dim=belief_dim,
             action_space_type="continuous",
             action_dim=self._infer_action_dim(),
             hidden_sizes=hidden_sizes,
+            use_dropout=self.use_dropout,
+            p_dropout=self.p_dropout,
         )
 
     # ── MCTS overrides ────────────────────────────────────────────────

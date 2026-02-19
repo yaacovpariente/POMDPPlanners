@@ -23,7 +23,7 @@ class ConstrainedZeroNetwork(BetaZeroNetwork):
     """Three-head neural network for ConstrainedZero.
 
     Architecture:
-      - **Shared trunk**: inherited from ``BetaZeroNetwork``
+      - **Shared trunk**: ``Linear(belief_dim, h) → ReLU → [Dropout] → ... → Linear(h, h) → ReLU → [Dropout]``
       - **Policy head**: inherited from ``BetaZeroNetwork``
       - **Value head**: inherited from ``BetaZeroNetwork``
       - **Failure head**: ``Linear(h, h//2) -> ReLU -> Linear(h//2, 1)``
@@ -37,11 +37,13 @@ class ConstrainedZeroNetwork(BetaZeroNetwork):
         n_actions: Number of discrete actions (required when ``action_space_type="discrete"``).
         action_dim: Dimensionality of continuous actions (required when ``action_space_type="continuous"``).
         hidden_sizes: Tuple of hidden layer widths for the shared trunk.
+        use_dropout: If True, apply dropout after each ReLU in the shared trunk (default True).
+        p_dropout: Dropout probability for trunk layers (default 0.2).
 
     Example:
-        >>> import torch, numpy as np
+        >>> import numpy as np
         >>> from POMDPPlanners.planners.mcts_planners.constrained_zero.constrained_zero_network import ConstrainedZeroNetwork
-        >>> net = ConstrainedZeroNetwork(belief_dim=4, action_space_type="discrete", n_actions=3)
+        >>> net = ConstrainedZeroNetwork(belief_dim=4, action_space_type="discrete", n_actions=3, use_dropout=False)
         >>> policy, value, failure_prob = net.predict(np.zeros(4, dtype=np.float32))
         >>> policy.shape
         (3,)
@@ -58,7 +60,11 @@ class ConstrainedZeroNetwork(BetaZeroNetwork):
         n_actions: Optional[int] = None,
         action_dim: Optional[int] = None,
         hidden_sizes: Sequence[int] = (128, 128),
+        use_dropout: bool = True,
+        p_dropout: float = 0.2,
     ):
+        self.use_dropout = use_dropout
+        self.p_dropout = p_dropout
         super().__init__(
             belief_dim=belief_dim,
             action_space_type=action_space_type,
@@ -67,6 +73,17 @@ class ConstrainedZeroNetwork(BetaZeroNetwork):
             hidden_sizes=hidden_sizes,
         )
         self._build_failure_head(hidden_sizes[-1])
+
+    def _build_trunk(self, input_dim: int, hidden_sizes: Sequence[int]) -> None:
+        if not self.use_dropout:
+            super()._build_trunk(input_dim, hidden_sizes)
+            return
+        layers = []
+        prev = input_dim
+        for h in hidden_sizes:
+            layers.extend([nn.Linear(prev, h), nn.ReLU(), nn.Dropout(self.p_dropout)])
+            prev = h
+        self.trunk = nn.Sequential(*layers)
 
     def _build_failure_head(self, trunk_out: int) -> None:
         mid = max(trunk_out // 2, 1)
@@ -95,6 +112,9 @@ class ConstrainedZeroNetwork(BetaZeroNetwork):
     ) -> Tuple[np.ndarray, float, float]:
         """Single-sample inference returning numpy policy, value, and failure probability.
 
+        Switches to eval mode before inference to disable dropout, then restores
+        the original training mode.
+
         Args:
             belief_features: 1-D array of shape ``(belief_dim,)``.
 
@@ -105,11 +125,51 @@ class ConstrainedZeroNetwork(BetaZeroNetwork):
             - value is a Python float.
             - failure_prob is a Python float in [0, 1].
         """
-        x = torch.as_tensor(belief_features, dtype=torch.float32).unsqueeze(0)
-        with torch.no_grad():
-            log_policy, value, failure_logit = self.forward(x)
-        policy_np = log_policy.squeeze(0).numpy()
-        if self.action_space_type == "discrete":
-            policy_np = np.exp(policy_np)
-        failure_prob = float(torch.sigmoid(failure_logit).item())
-        return policy_np, float(value.item()), failure_prob
+        was_training = self.training
+        self.eval()
+        try:
+            x = torch.as_tensor(belief_features, dtype=torch.float32).unsqueeze(0)
+            with torch.no_grad():
+                log_policy, value, failure_logit = self.forward(x)
+            policy_np = log_policy.squeeze(0).numpy()
+            if self.action_space_type == "discrete":
+                policy_np = np.exp(policy_np)
+            failure_prob = float(torch.sigmoid(failure_logit).item())
+            return policy_np, float(value.item()), failure_prob
+        finally:
+            if was_training:
+                self.train()
+
+    def predict_batch(  # type: ignore[override]
+        self, belief_features_batch: np.ndarray
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Batched inference returning numpy policy, value, and failure probability arrays.
+
+        Switches to eval mode before inference to disable dropout, then restores
+        the original training mode.
+
+        Args:
+            belief_features_batch: 2-D array of shape ``(N, belief_dim)``.
+
+        Returns:
+            Tuple of (policies, values, failure_probs).
+            - Discrete: policies is ``(N, n_actions)`` probability matrix.
+            - Continuous: policies is ``(N, 2*action_dim)`` with ``[mean, log_std]``.
+            - values is ``(N,)`` array of floats.
+            - failure_probs is ``(N,)`` array of floats in [0, 1].
+        """
+        was_training = self.training
+        self.eval()
+        try:
+            x = torch.as_tensor(belief_features_batch, dtype=torch.float32)
+            with torch.no_grad():
+                log_policy, value, failure_logit = self.forward(x)
+            value = value.squeeze(-1)
+            failure_prob = torch.sigmoid(failure_logit).squeeze(-1)
+            policy_np = log_policy.numpy()
+            if self.action_space_type == "discrete":
+                policy_np = np.exp(policy_np)
+            return policy_np, value.numpy(), failure_prob.numpy()
+        finally:
+            if was_training:
+                self.train()
