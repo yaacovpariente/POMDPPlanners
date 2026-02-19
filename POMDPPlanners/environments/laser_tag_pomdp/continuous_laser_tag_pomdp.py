@@ -48,6 +48,9 @@ from POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_geometry im
     compute_laser_measurements,
     resolve_wall_collision,
 )
+from POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_visualizer import (
+    ContinuousLaserTagVisualizer,
+)
 from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
 from POMDPPlanners.utils.statistics_utils import confidence_interval
 
@@ -387,7 +390,7 @@ class ContinuousLaserTagPOMDP(Environment):
             use_queue_logger: Use queue-based logger.
             initial_state: Fixed initial state (if provided).
         """
-        if not (0.0 <= discount_factor <= 1.0):
+        if not 0.0 <= discount_factor <= 1.0:
             raise ValueError("discount_factor must be between 0 and 1 (inclusive)")
 
         space_info = SpaceInfo(
@@ -564,10 +567,6 @@ class ContinuousLaserTagPOMDP(Environment):
     # ------------------------------------------------------------------
 
     def cache_visualization(self, history: List[StepData], cache_path: Path) -> None:
-        from POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_visualizer import (
-            ContinuousLaserTagVisualizer,
-        )
-
         visualizer = ContinuousLaserTagVisualizer(
             grid_size=self._grid_size,
             walls=self._walls,

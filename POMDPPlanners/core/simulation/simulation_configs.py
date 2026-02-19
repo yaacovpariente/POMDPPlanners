@@ -19,9 +19,11 @@ def _get_environment_run_params_validation_dependencies():
     Returns:
         Tuple containing Environment, Belief, Policy classes
     """
-    from POMDPPlanners.core.environment import Environment
-    from POMDPPlanners.core.belief import Belief
-    from POMDPPlanners.core.policy import Policy
+    from POMDPPlanners.core.environment import (
+        Environment,
+    )  # pylint: disable=import-outside-toplevel
+    from POMDPPlanners.core.belief import Belief  # pylint: disable=import-outside-toplevel
+    from POMDPPlanners.core.policy import Policy  # pylint: disable=import-outside-toplevel
 
     return Environment, Belief, Policy
 
@@ -133,7 +135,7 @@ class EvaluationExperimentConfigCreator(ABC):
 
     def get_experiment_configs(self) -> List[EnvironmentRunParams]:
         configs = self._get_experiment_configs()
-        config_ids = set([config.config_id for config in configs])
+        config_ids = {config.config_id for config in configs}
 
         if len(config_ids) != len(configs):
             raise ValueError("Duplicate configs found")
@@ -148,7 +150,7 @@ class HyperparameterOptimizationExperimentConfigCreator(ABC):
 
     def get_experiment_configs(self) -> List[HyperParameterRunParams]:
         configs = self._get_experiment_configs()
-        config_ids = set([config.config_id for config in configs])
+        config_ids = {config.config_id for config in configs}
 
         if len(config_ids) != len(configs):
             raise ValueError("Duplicate configs found")

@@ -93,7 +93,7 @@ class DiscreteActionSequencesPlanner(Policy):
             raise ValueError("depth must be greater than 0")
         if n_return_samples <= 0:
             raise ValueError("n_return_samples must be greater than 0")
-        if not (1 >= discount_factor >= 0):
+        if not 1 >= discount_factor >= 0:
             raise ValueError("discount_factor must be between 0 and 1")
 
         self.depth = depth
@@ -139,7 +139,7 @@ class DiscreteActionSequencesPlanner(Policy):
             return_sample = 0.0
 
             for i, action in enumerate(action_sequence):
-                state, observation, reward = self.environment.sample_next_step(state, action)
+                state, _, reward = self.environment.sample_next_step(state, action)
                 return_sample += reward * (self.discount_factor**i)
 
             return_estimator += return_sample

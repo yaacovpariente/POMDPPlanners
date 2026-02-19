@@ -65,10 +65,8 @@ class DaskTaskManager(TaskManager):
                 self.client = Client(self.scheduler_address, timeout=0.1)
             except Exception as e:
                 raise RuntimeError(
-                    "Failed to connect to Dask scheduler at {}. Error: {}".format(
-                        self.scheduler_address, e
-                    )
-                )
+                    f"Failed to connect to Dask scheduler at {self.scheduler_address}. Error: {e}"
+                ) from e
         else:
             # Create local cluster with persistent storage
             cluster = LocalCluster(n_workers=self.n_workers, local_directory="./dask-worker-space")
@@ -307,7 +305,9 @@ class JoblibTaskManager(TaskManagerExternalDB):
 
         return tqdm_logger_callback
 
-    def _execute_tasks_parallel(self, tasks: List[SimulationTask], start_time: float) -> list:
+    def _execute_tasks_parallel(
+        self, tasks: List[SimulationTask], start_time: float
+    ) -> list:  # pylint: disable=unused-argument
         """Execute tasks in parallel using joblib with progress tracking."""
 
         # Use tqdm with conditional disabling based on no_logs
@@ -353,7 +353,7 @@ class JoblibTaskManager(TaskManagerExternalDB):
         try:
             get_reusable_executor().shutdown(wait=True, kill_workers=True)
             self.logger.debug("Shut down loky worker pool")
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             self.logger.warning("Error shutting down loky executor: %s", e)
 
         # Clear joblib Memory cache to free cached function results
@@ -361,7 +361,7 @@ class JoblibTaskManager(TaskManagerExternalDB):
             try:
                 self.memory.clear()
                 self.logger.debug("Cleared joblib Memory cache")
-            except Exception as e:
+            except Exception as e:  # pylint: disable=broad-exception-caught
                 self.logger.warning("Error clearing joblib Memory cache: %s", e)
 
         # Force garbage collection to clean up joblib parallel backend resources
@@ -391,7 +391,7 @@ class JoblibTaskManager(TaskManagerExternalDB):
             )
         except ImportError:
             self.logger.warning("psutil not available - skipping system info logging")
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             self.logger.warning("Could not log system info: %s", str(e))
 
     def _log_cache_statistics(self):
@@ -411,7 +411,7 @@ class JoblibTaskManager(TaskManagerExternalDB):
                 hit_rate = cache_stats.get("hits", 0) / total_requests * 100
                 self.logger.info("Cache hit rate: %.1f%%", hit_rate)
 
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             self.logger.warning("Could not log cache statistics: %s", str(e))
 
 
@@ -539,7 +539,7 @@ class PBSTaskManager(DaskTaskManager):
                 except Exception as e:
                     raise RuntimeError(
                         f"Failed to connect to Dask scheduler at {self.scheduler_address}. Error: {e}"
-                    )
+                    ) from e
 
             # Prepare scheduler options for dashboard configuration
             scheduler_options = {}
@@ -613,7 +613,7 @@ class PBSTaskManager(DaskTaskManager):
                         return f"{base_url}/{self.dashboard_prefix.lstrip('/')}"
                     return base_url
 
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught
             # Silently handle any exceptions in URL construction
             pass
 
@@ -631,7 +631,7 @@ class PBSTaskManager(DaskTaskManager):
         try:
             # Simple check - if we can get the dashboard URL, it's likely running
             return self.get_dashboard_url() is not None
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught
             return False
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -641,7 +641,7 @@ class PBSTaskManager(DaskTaskManager):
             try:
                 print("Closing Dask client...")
                 self.client.close()
-            except Exception as e:
+            except Exception as e:  # pylint: disable=broad-exception-caught
                 print(f"Warning: Error closing Dask client: {e}")
             finally:
                 self.client = None
@@ -651,7 +651,7 @@ class PBSTaskManager(DaskTaskManager):
             try:
                 print("Closing PBS cluster and dashboard...")
                 self.cluster.close()
-            except Exception as e:
+            except Exception as e:  # pylint: disable=broad-exception-caught
                 print(f"Warning: Error closing PBS cluster: {e}")
             finally:
                 self.cluster = None
@@ -660,7 +660,7 @@ class PBSTaskManager(DaskTaskManager):
         if self.cache and self.cache_registered:
             try:
                 self.cache.unregister()
-            except Exception as e:
+            except Exception as e:  # pylint: disable=broad-exception-caught
                 print(f"Warning: Error unregistering cache: {e}")
             finally:
                 self.cache = None

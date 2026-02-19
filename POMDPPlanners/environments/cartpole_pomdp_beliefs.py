@@ -19,8 +19,12 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from POMDPPlanners.core.belief.belief_utils import get_initial_belief
 from POMDPPlanners.core.belief.vectorized_particle_belief_updater import (
     VectorizedParticleBeliefUpdater,
+)
+from POMDPPlanners.core.belief.vectorized_weighted_particle_belief import (
+    VectorizedWeightedParticleBelief,
 )
 from POMDPPlanners.environments.cartpole_pomdp_gaussian_beliefs import (
     GaussianBeliefUpdaterType,
@@ -265,8 +269,6 @@ def create_cartpole_belief(
 
 
 def _create_particle_belief(env: "CartPolePOMDP", n_particles: int) -> "Belief":
-    from POMDPPlanners.core.belief.belief_utils import get_initial_belief
-
     return get_initial_belief(env, n_particles)
 
 
@@ -283,10 +285,6 @@ def _create_gaussian_belief(env: "CartPolePOMDP", **kwargs: Any) -> "Belief":
 
 
 def _create_vectorized_belief(env: "CartPolePOMDP", n_particles: int) -> "Belief":
-    from POMDPPlanners.core.belief.vectorized_weighted_particle_belief import (
-        VectorizedWeightedParticleBelief,
-    )
-
     updater = CartPoleVectorizedUpdater.from_environment(env)
     particles = np.array(env.initial_state_dist().sample(n_samples=n_particles))
     log_weights = np.log(np.ones(n_particles) / n_particles)

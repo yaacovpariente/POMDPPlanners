@@ -11,6 +11,10 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from POMDPPlanners.core.belief.belief_utils import get_initial_belief
+from POMDPPlanners.core.belief.vectorized_weighted_particle_belief import (
+    VectorizedWeightedParticleBelief,
+)
 from POMDPPlanners.environments.push_pomdp.push_pomdp_beliefs.continuous_push_vectorized_updater import (
     ContinuousPushVectorizedUpdater,
 )
@@ -55,16 +59,10 @@ def create_continuous_push_belief(
 
 
 def _create_particle_belief(env: "ContinuousPushPOMDP", n_particles: int) -> "Belief":
-    from POMDPPlanners.core.belief.belief_utils import get_initial_belief
-
     return get_initial_belief(env, n_particles)
 
 
 def _create_vectorized_belief(env: "ContinuousPushPOMDP", n_particles: int) -> "Belief":
-    from POMDPPlanners.core.belief.vectorized_weighted_particle_belief import (
-        VectorizedWeightedParticleBelief,
-    )
-
     updater = ContinuousPushVectorizedUpdater.from_environment(env)
     particles = np.array(env.initial_state_dist().sample(n_samples=n_particles))
     log_weights = np.log(np.ones(n_particles) / n_particles)

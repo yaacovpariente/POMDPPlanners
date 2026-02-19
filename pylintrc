@@ -16,6 +16,8 @@ disable=C0111,  # missing-docstring
            R0902,  # too-many-instance-attributes
            W0621,  # redefined-outer-name
            E0110,  # abstract-class-instantiated (false positives in factory methods and tests)
+           R0801,  # duplicate-code (cross-file similarity, architectural pattern)
+           R0401,  # cyclic-import (intentional, resolved via local imports)
 
 [REPORTS]
 output-format=text

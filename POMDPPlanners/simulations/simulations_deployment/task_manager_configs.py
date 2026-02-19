@@ -12,7 +12,6 @@ class TaskManagerConfig(ABC):
     @abstractmethod
     def create_task_manager(self, cache_dir: Optional[str] = None) -> TaskManager:
         """Create and return the configured task manager."""
-        pass
 
 
 @dataclass

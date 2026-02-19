@@ -167,7 +167,7 @@ class QueueLoggerManager:
 
         return logging.getLogger(logger_name)
 
-    def _log_writer_worker(self):
+    def _log_writer_worker(self):  # pylint: disable=too-many-branches
         """Background thread that processes log queue and writes to individual task files."""
 
         console_handler = None
@@ -196,7 +196,7 @@ class QueueLoggerManager:
                         try:
                             file_handler.emit(record)
                             file_handler.flush()  # Ensure immediate write
-                        except Exception:
+                        except Exception:  # pylint: disable=broad-exception-caught
                             pass  # Don't let handler errors crash writer thread
 
                     # Write to shared console handler if enabled
@@ -208,7 +208,7 @@ class QueueLoggerManager:
 
                         try:
                             console_handler.emit(record)
-                        except Exception:
+                        except Exception:  # pylint: disable=broad-exception-caught
                             pass
 
                     self._log_queue.task_done()
@@ -216,7 +216,7 @@ class QueueLoggerManager:
                 except queue.Empty:
                     continue  # Timeout, check shutdown event
 
-                except Exception:
+                except Exception:  # pylint: disable=broad-exception-caught
                     # Don't let logging errors crash the writer thread
                     pass
 
@@ -225,13 +225,13 @@ class QueueLoggerManager:
             for handler in self._task_handlers.values():
                 try:
                     handler.close()
-                except:
+                except:  # pylint: disable=bare-except
                     pass
 
             if console_handler:
                 try:
                     console_handler.close()
-                except:
+                except:  # pylint: disable=bare-except
                     pass
 
     def _get_or_create_task_handler(self, task_id: str, config: dict) -> Optional[logging.Handler]:
@@ -320,7 +320,7 @@ class QueueLoggerManager:
                     del self._handler_ref_count[handler]
                 if handler in self._handler_last_used:
                     del self._handler_last_used[handler]
-            except Exception:
+            except Exception:  # pylint: disable=broad-exception-caught
                 pass  # Don't let cleanup errors affect logging
 
     def _emergency_cleanup(self):
@@ -345,7 +345,7 @@ class QueueLoggerManager:
                         del self._handler_ref_count[handler]
                     if handler in self._handler_last_used:
                         del self._handler_last_used[handler]
-                except Exception:
+                except Exception:  # pylint: disable=broad-exception-caught
                     pass
 
     def _setup_cleanup_handlers(self):
@@ -365,7 +365,7 @@ _queue_logger_manager = None
 
 def get_queue_logger_manager() -> QueueLoggerManager:
     """Get the global queue logger manager instance."""
-    global _queue_logger_manager
+    global _queue_logger_manager  # pylint: disable=global-statement
     if _queue_logger_manager is None:
         _queue_logger_manager = QueueLoggerManager()
     return _queue_logger_manager
@@ -452,9 +452,8 @@ def get_logger(
             debug=debug,
             console_output=console_output,
         )
-    else:
-        # Original individual logger implementation
-        return _create_individual_logger(name, level, output_dir, debug, console_output)
+    # Original individual logger implementation
+    return _create_individual_logger(name, level, output_dir, debug, console_output)
 
 
 def _create_individual_logger(
@@ -537,7 +536,7 @@ def get_queue_logger_diagnostics() -> Dict[str, Any]:
     try:
         manager = get_queue_logger_manager()
 
-        return {
+        return {  # pylint: disable=protected-access
             "queue_size": manager._log_queue.qsize(),
             "writer_thread_alive": manager._writer_thread and manager._writer_thread.is_alive(),
             "registered_loggers": len(manager._loggers),
@@ -545,7 +544,7 @@ def get_queue_logger_diagnostics() -> Dict[str, Any]:
             "max_handlers": manager._max_handlers,
             "shutdown_event_set": manager._shutdown_event.is_set(),
         }
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         return {"error": str(e)}
 
 
@@ -556,7 +555,7 @@ def cleanup_all_loggers():
     to ensure all logging resources are properly cleaned up.
     """
 
-    global _queue_logger_manager
+    global _queue_logger_manager  # pylint: disable=global-statement
     if _queue_logger_manager is not None:
         _queue_logger_manager.stop()
         _queue_logger_manager = None
@@ -571,7 +570,7 @@ def reset_logger_state():
     - Resetting the task logger manager
     - Removing all Python loggers created by this module
     """
-    global _queue_logger_manager, _task_logger_manager
+    global _queue_logger_manager, _task_logger_manager  # pylint: disable=global-statement
 
     # Stop and clear the queue manager
     if _queue_logger_manager is not None:
@@ -585,7 +584,7 @@ def reset_logger_state():
     # Clear all loggers that start with "queue." to reset state
 
     loggers_to_clear = []
-    for name in logging.Logger.manager.loggerDict.keys():
+    for name in logging.Logger.manager.loggerDict:
         if name.startswith("queue."):
             loggers_to_clear.append(name)
 
@@ -596,7 +595,7 @@ def reset_logger_state():
             try:
                 handler.close()
                 logger.removeHandler(handler)
-            except:
+            except:  # pylint: disable=bare-except
                 pass
         # Remove from manager
         if name in logging.Logger.manager.loggerDict:
@@ -707,7 +706,7 @@ class TaskLoggerManager:
                     for handler in self._memory_handlers[logger_name]:
                         if isinstance(handler, ConditionalMemoryHandler):
                             handler.trigger_flush()
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught
             # Don't let flush errors affect the main task
             pass
 
@@ -735,7 +734,7 @@ class TaskLoggerManager:
 
             with self._lock:
                 # Check if we have buffered handlers for this logger
-                has_buffered_handlers = logger_name in self._memory_handlers
+                _ = logger_name in self._memory_handlers
 
             for handler in logger.handlers:
                 if isinstance(handler, ConditionalMemoryHandler):
@@ -749,7 +748,7 @@ class TaskLoggerManager:
                 elif hasattr(handler, "flush"):
                     # Always flush non-buffered handlers
                     handler.flush()
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught
             # Don't let cleanup errors affect the main task
             pass
 
@@ -760,7 +759,7 @@ _task_logger_manager: Optional[TaskLoggerManager] = None
 
 def get_task_logger_manager() -> TaskLoggerManager:
     """Get the global task logger manager instance."""
-    global _task_logger_manager
+    global _task_logger_manager  # pylint: disable=global-statement
     if _task_logger_manager is None:
         _task_logger_manager = TaskLoggerManager()
     return _task_logger_manager

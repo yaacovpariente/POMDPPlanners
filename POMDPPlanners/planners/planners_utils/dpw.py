@@ -169,7 +169,6 @@ class ActionSampler(ABC):
         Returns:
             A sampled action compatible with the environment's action space
         """
-        pass
 
     def __getstate__(self):
         """Return state for serialization.

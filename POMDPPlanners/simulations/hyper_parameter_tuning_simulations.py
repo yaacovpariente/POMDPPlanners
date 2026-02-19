@@ -140,9 +140,6 @@ from POMDPPlanners.simulations.simulations_deployment.task_manager_configs impor
 from POMDPPlanners.simulations.simulations_deployment.tasks.hyper_parameter_tuning_simulation_task import (
     HyperParameterTuningSimulationTask,
 )
-from POMDPPlanners.simulations.simulation_statistics import (
-    get_metric_names_from_environment_policy_pair,
-)
 from POMDPPlanners.simulations.simulator import POMDPSimulator
 from POMDPPlanners.utils.logger import cleanup_all_loggers, get_logger
 
@@ -317,20 +314,20 @@ class HyperParameterOptimizer:
         if hasattr(self, "task_manager"):
             try:
                 self.task_manager.__exit__(None, None, None)
-            except Exception:
+            except Exception:  # pylint: disable=broad-exception-caught
                 pass
 
         # Clean up any active MLflow runs
         try:
             if mlflow.active_run() is not None:
                 mlflow.end_run()
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught
             pass
 
         # Clean up logger resources to prevent hanging
         try:
             cleanup_all_loggers()
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught
             pass
 
     def _create_tasks(
@@ -432,7 +429,7 @@ class HyperParameterOptimizer:
         # Prepare MLflow session and execute optimization tasks
         self._prepare_mlflow_session()
 
-        with mlflow.start_run(run_name="optimize_batch_%s_configs" % len(configs)):
+        with mlflow.start_run(run_name=f"optimize_batch_{len(configs)}_configs"):
             # Log batch-level information
             self._log_batch_level_parameters(configs)
 
@@ -539,7 +536,7 @@ class HyperParameterOptimizer:
         task_result: "OptimizedPolicyResult",
     ) -> "OptimizedPolicyResult":  # type: ignore
         # Get parameters as a string for logging
-        params_str = ", ".join(
+        _params_str = ", ".join(  # pylint: disable=unused-variable
             [
                 f"{param_name}({direction.value})"
                 for param_name, direction in config.parameters_to_optimize
@@ -729,11 +726,13 @@ class HyperParameterOptimizer:
         ]
 
         # Use the simulator's _run_simulations_and_compute_metrics method
-        results, metrics = simulator._run_simulations_and_compute_metrics(
-            environment_run_params=env_run_params,
-            alpha=self.alpha,
-            confidence_interval_level=self.confidence_interval_level,
-            n_jobs=self.n_jobs,
+        _, metrics = (
+            simulator._run_simulations_and_compute_metrics(  # pylint: disable=protected-access
+                environment_run_params=env_run_params,
+                alpha=self.alpha,
+                confidence_interval_level=self.confidence_interval_level,
+                n_jobs=self.n_jobs,
+            )
         )
 
         # Extract final statistics from metrics
