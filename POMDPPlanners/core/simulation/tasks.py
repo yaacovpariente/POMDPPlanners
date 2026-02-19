@@ -37,7 +37,6 @@ class SimulationTask(ABC):
         Returns:
             Any: The result of the simulation task
         """
-        pass
 
     @abstractmethod
     def get_config_id(self) -> str:
@@ -46,7 +45,6 @@ class SimulationTask(ABC):
         Returns:
             str: Unique configuration identifier for caching
         """
-        pass
 
 
 class DataBaseInterface(ABC):
@@ -90,7 +88,6 @@ class DataBaseInterface(ABC):
         Returns:
             Any: The stored value
         """
-        pass
 
     @abstractmethod
     def is_key_in_cache(self, key: str) -> bool:
@@ -102,7 +99,6 @@ class DataBaseInterface(ABC):
         Returns:
             bool: True if key exists, False otherwise
         """
-        pass
 
     @abstractmethod
     def set(self, key: str, value: Any):
@@ -112,12 +108,10 @@ class DataBaseInterface(ABC):
             key: The key to store under
             value: The value to store
         """
-        pass
 
     @abstractmethod
     def clear(self):
         """Clear all data from the database."""
-        pass
 
 
 class TaskManager(ABC):
@@ -164,7 +158,6 @@ class TaskManager(ABC):
         Returns:
             Tuple[List[Any], list]: Results and successful task identifiers
         """
-        pass
 
     def __enter__(self):
         """Context manager entry."""
@@ -172,7 +165,6 @@ class TaskManager(ABC):
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Context manager exit."""
-        pass
 
 
 class TaskManagerExternalDB(TaskManager):
@@ -266,7 +258,6 @@ class TaskManagerExternalDB(TaskManager):
         Returns:
             List[Any]: Results from executing the tasks
         """
-        pass
 
     def run_tasks(
         self, tasks: List[SimulationTask], task_identifiers: list
@@ -377,4 +368,3 @@ class TaskManagerExternalDB(TaskManager):
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Context manager exit."""
-        pass

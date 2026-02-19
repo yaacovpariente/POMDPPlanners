@@ -107,13 +107,12 @@ def is_terminal_belief(belief: Belief, env: Environment) -> bool:
         ),
     ):
         return is_terminal_particle_belief(belief=belief, env=env)
-    elif isinstance(belief, VectorizedWeightedParticleBelief):
+    if isinstance(belief, VectorizedWeightedParticleBelief):
         return all(env.is_terminal(belief.particles[i]) for i in range(belief.n_particles))
-    elif isinstance(belief, GaussianBelief):
+    if isinstance(belief, GaussianBelief):
         samples = [belief.sample() for _ in range(belief.n_terminal_check_samples)]
         return all(env.is_terminal(s) for s in samples)
-    elif isinstance(belief, GaussianMixtureBelief):
+    if isinstance(belief, GaussianMixtureBelief):
         samples = [belief.sample() for _ in range(belief.n_terminal_check_samples)]
         return all(env.is_terminal(s) for s in samples)
-    else:
-        raise NotImplementedError("is_terminal_belief is not implemented for this belief type")
+    raise NotImplementedError("is_terminal_belief is not implemented for this belief type")

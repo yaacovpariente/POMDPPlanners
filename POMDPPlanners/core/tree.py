@@ -147,7 +147,7 @@ class BeliefNode(BaseNode):
 
 
 def print_tree(tree: Union[BeliefNode, ActionNode]):
-    for pre, fill, node in RenderTree(tree):
+    for pre, _, node in RenderTree(tree):
         if isinstance(node, BeliefNode):
             name = node.spec
         elif isinstance(node, ActionNode):
