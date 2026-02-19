@@ -167,7 +167,7 @@ def _figure_to_rgba(fig, size_px: int) -> np.ndarray:
     plt.close(fig)
     h, w = rgba.shape[:2]
     if h != size_px or w != size_px:
-        from PIL import Image
+        from PIL import Image  # pylint: disable=import-outside-toplevel
 
         img = Image.fromarray(rgba).resize((size_px, size_px), Image.Resampling.LANCZOS)
         rgba = np.asarray(img)
@@ -515,7 +515,9 @@ class ContinuousLaserTagVisualizer:
             action_arrow.set_visible(False)
 
     def _update_belief_scatter(self, frame, beliefs, e) -> None:
-        if frame < len(beliefs) and beliefs[frame] is not None:
+        if (
+            frame < len(beliefs) and beliefs[frame] is not None
+        ):  # pylint: disable=too-many-nested-blocks
             try:
                 belief = beliefs[frame]
                 if hasattr(belief, "to_unique_support_distribution"):
@@ -532,7 +534,7 @@ class ContinuousLaserTagVisualizer:
                         if rob_pts:
                             e["robot_belief"].set_offsets(np.array(rob_pts))
                         return
-            except Exception:
+            except Exception:  # pylint: disable=broad-exception-caught
                 pass
         e["opp_belief"].set_offsets(np.empty((0, 2)))
         e["robot_belief"].set_offsets(np.empty((0, 2)))

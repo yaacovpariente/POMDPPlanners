@@ -28,9 +28,9 @@ from POMDPPlanners.simulations.simulations_deployment.task_manager_configs impor
 from POMDPPlanners.configs.experiment_configs import (
     complete_environments_and_benchmarks_hyperparameter_optimization_configs,
 )
-from POMDPPlanners.simulations.simulator import POMDPSimulator
+import pandas as pd  # pylint: disable=wrong-import-order
+from POMDPPlanners.simulations.simulator import POMDPSimulator  # pylint: disable=ungrouped-imports
 from POMDPPlanners.utils.logger import get_logger
-import pandas as pd
 from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import TaskManagerConfig
 
 logger = get_logger(__name__)

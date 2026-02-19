@@ -49,7 +49,6 @@ class SimulationsAPIInterface(ABC):
             cache_dir_path: Optional path for storing simulation results and logs
             debug: Whether to enable debug-level logging output
         """
-        pass
 
     @abstractmethod
     def run_multiple_environments_and_policies(
@@ -106,7 +105,6 @@ class SimulationsAPIInterface(ABC):
                 - pd.DataFrame: Statistical summary with confidence intervals, performance
                   metrics, and policy configuration details for analysis and comparison.
         """
-        pass
 
     @abstractmethod
     def run_all_benchmark_environments_on_planner_generators(
@@ -152,7 +150,6 @@ class SimulationsAPIInterface(ABC):
                 - pd.DataFrame: Statistical summary with confidence intervals, performance
                   metrics, and policy configuration details for analysis and comparison.
         """
-        pass
 
     @abstractmethod
     def run_hyperparameter_optimization(
@@ -215,7 +212,6 @@ class SimulationsAPIInterface(ABC):
             TypeError: If policy classes are not Policy subclasses.
             RuntimeError: If optimization fails for any configuration.
         """
-        pass
 
     @abstractmethod
     def run_hyperparameter_tuning_experiment_with_benchmarks(
@@ -271,7 +267,6 @@ class SimulationsAPIInterface(ABC):
                   and policy names.
                 - pd.DataFrame: Statistical summary with performance metrics and comparisons.
         """
-        pass
 
     @abstractmethod
     def run_optimize_and_evaluate(
@@ -312,7 +307,6 @@ class SimulationsAPIInterface(ABC):
                   and policy names.
                 - pd.DataFrame: Statistical summary with performance metrics and comparisons.
         """
-        pass
 
     @abstractmethod
     def run_all_hyperparameter_benchmarks(
@@ -368,4 +362,3 @@ class SimulationsAPIInterface(ABC):
                   and policy names.
                 - pd.DataFrame: Statistical summary with performance metrics and comparisons.
         """
-        pass

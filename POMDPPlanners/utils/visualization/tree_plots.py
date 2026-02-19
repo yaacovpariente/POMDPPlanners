@@ -45,7 +45,7 @@ def _create_edge_trace(all_nodes: List[Any], pos: Dict[Any, Tuple[float, float]]
     return go.Scatter(
         x=edge_x,
         y=edge_y,
-        line=dict(width=1, color="#888"),
+        line={"width": 1, "color": "#888"},
         hoverinfo="none",
         mode="lines",
     )
@@ -162,15 +162,15 @@ def _create_node_trace(
         hoverinfo="text",
         text=node_labels,
         textposition="middle center",
-        textfont=dict(size=10, color="white"),
-        marker=dict(
-            size=node_sizes,
-            color=node_values,
-            colorscale=colorscale,
-            showscale=True,
-            colorbar=dict(title=colorbar_title, x=colorbar_x),
-            line_width=2,
-        ),
+        textfont={"size": 10, "color": "white"},
+        marker={
+            "size": node_sizes,
+            "color": node_values,
+            "colorscale": colorscale,
+            "showscale": True,
+            "colorbar": {"title": colorbar_title, "x": colorbar_x},
+            "line_width": 2,
+        },
         name=name,
         customdata=node_text,
         hovertemplate="%{customdata}<extra></extra>",
@@ -228,7 +228,7 @@ def plot_tree_graphs(root_node: BeliefNode):
         root_node: Root node of the belief tree
     """
     # Create custom hierarchical layout
-    all_nodes = [node for node in root_node.descendants] + [root_node]
+    all_nodes = list(root_node.descendants) + [root_node]
     pos = _create_hierarchical_layout(all_nodes)
 
     # Create edge trace

@@ -10,6 +10,10 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from POMDPPlanners.core.belief.belief_utils import get_initial_belief
+from POMDPPlanners.core.belief.vectorized_weighted_particle_belief import (
+    VectorizedWeightedParticleBelief,
+)
 from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_beliefs.laser_tag_vectorized_updater import (
     LaserTagVectorizedUpdater,
 )
@@ -54,16 +58,10 @@ def create_laser_tag_belief(
 
 
 def _create_particle_belief(env: "LaserTagPOMDP", n_particles: int) -> "Belief":
-    from POMDPPlanners.core.belief.belief_utils import get_initial_belief
-
     return get_initial_belief(env, n_particles)
 
 
 def _create_vectorized_belief(env: "LaserTagPOMDP", n_particles: int) -> "Belief":
-    from POMDPPlanners.core.belief.vectorized_weighted_particle_belief import (
-        VectorizedWeightedParticleBelief,
-    )
-
     updater = LaserTagVectorizedUpdater.from_environment(env)
     particles = np.array(env.initial_state_dist().sample(n_samples=n_particles))
     log_weights = np.log(np.ones(n_particles) / n_particles)

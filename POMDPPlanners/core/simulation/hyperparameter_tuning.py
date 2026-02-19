@@ -257,10 +257,12 @@ class HyperParameterRunParams:
     def __post_init__(self) -> None:
         """Validate all parameters at construction time."""
         # Import validation dependencies at runtime to avoid circular imports
-        from POMDPPlanners.core.environment import Environment
-        from POMDPPlanners.core.belief import Belief
-        from POMDPPlanners.core.policy import Policy
-        from POMDPPlanners.simulations.simulation_statistics import (
+        from POMDPPlanners.core.environment import (
+            Environment,
+        )  # pylint: disable=import-outside-toplevel
+        from POMDPPlanners.core.belief import Belief  # pylint: disable=import-outside-toplevel
+        from POMDPPlanners.core.policy import Policy  # pylint: disable=import-outside-toplevel
+        from POMDPPlanners.simulations.simulation_statistics import (  # pylint: disable=import-outside-toplevel
             get_metric_names_from_environment_policy_pair,
         )
 
@@ -308,7 +310,7 @@ class HyperParameterRunParams:
         available_metrics = get_metric_names_from_environment_policy_pair(
             self.environment, policy_cls
         )
-        for metric_name, direction in self.parameters_to_optimize:
+        for metric_name, _ in self.parameters_to_optimize:
             if metric_name not in available_metrics:
                 raise ValueError(
                     f"Invalid metric name '{metric_name}' in parameters_to_optimize. "
@@ -366,12 +368,14 @@ class OptimizedPolicyResult:
         str, Optional[float]
     ]  # Actual metric values achieved (None if not found)
 
-    def __post_init__(self) -> None:
+    def __post_init__(self) -> None:  # pylint: disable=too-many-branches
         """Validate all parameters at construction time."""
         # Import validation dependencies at runtime to avoid circular imports
-        from POMDPPlanners.core.environment import Environment
-        from POMDPPlanners.core.policy import Policy
-        from POMDPPlanners.simulations.simulation_statistics import (
+        from POMDPPlanners.core.environment import (
+            Environment,
+        )  # pylint: disable=import-outside-toplevel
+        from POMDPPlanners.core.policy import Policy  # pylint: disable=import-outside-toplevel
+        from POMDPPlanners.simulations.simulation_statistics import (  # pylint: disable=import-outside-toplevel
             get_metric_names_from_environment_policy_pair,
         )
 

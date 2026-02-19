@@ -148,8 +148,7 @@ class PushStateTransition(StateTransitionModel):
             # Select uniformly from available actions excluding the intended action
             error_actions = [a for a in self.available_actions if a != self.action]
             return np.random.choice(error_actions)
-        else:
-            return self.action
+        return self.action
 
     def sample(self, n_samples: int = 1) -> List[Any]:
         next_states = []
@@ -409,7 +408,9 @@ class RandomInitialStateDistribution(Distribution):
         max_attempts = 100
         for _ in range(max_attempts):
             robot_pos = np.random.uniform(0, self.grid_size - 1, size=2)
-            if not self.parent._is_colliding_with_obstacle(robot_pos):
+            if not self.parent._is_colliding_with_obstacle(
+                robot_pos
+            ):  # pylint: disable=protected-access
                 return robot_pos
         return np.random.uniform(0, self.grid_size - 1, size=2)
 
@@ -419,7 +420,9 @@ class RandomInitialStateDistribution(Distribution):
             object_pos = np.random.uniform(0, self.grid_size - 1, size=2)
             if np.linalg.norm(
                 object_pos - self.target_pos
-            ) >= 2.0 and not self.parent._is_colliding_with_obstacle(object_pos):
+            ) >= 2.0 and not self.parent._is_colliding_with_obstacle(
+                object_pos
+            ):  # pylint: disable=protected-access
                 return object_pos
         return np.random.uniform(0, self.grid_size - 1, size=2)
 
@@ -581,7 +584,6 @@ class PushPOMDP(DiscreteActionsEnvironment):
         next_state = self.state_transition_model(state, action).sample()[0]
 
         # State components: [robot_x, robot_y, object_x, object_y, target_x, target_y]
-        next_robot_pos = next_state[:2]
         next_object_pos = next_state[2:4]
         target_pos = next_state[4:6]
 

@@ -27,7 +27,7 @@ Classes:
 """
 
 from enum import Enum
-from typing import Any, List, Sequence, Tuple, Union
+from typing import Any, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
@@ -375,7 +375,7 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
                 beacons=self.beacons,
                 beacon_radius=self.beacon_radius,
             )
-        elif self.observation_model_type == ObservationModelType.NORMAL_NOISE_NO_OBS_IN_DARK:
+        if self.observation_model_type == ObservationModelType.NORMAL_NOISE_NO_OBS_IN_DARK:
             return ContinuousLightDarkNormalNoiseNoObsInDarkObservationModel(
                 next_state=next_state,
                 action=action,
@@ -385,7 +385,7 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
                 beacons=self.beacons,
                 beacon_radius=self.beacon_radius,
             )
-        elif self.observation_model_type == ObservationModelType.DISTANCE_BASED:
+        if self.observation_model_type == ObservationModelType.DISTANCE_BASED:
             return ContinuousLightDarkDistanceBasedObservationModel(
                 next_state=next_state,
                 action=action,
@@ -395,8 +395,7 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
                 beacons=self.beacons,
                 beacon_radius=self.beacon_radius,
             )
-        else:
-            raise ValueError(f"Unknown observation model type: {self.observation_model_type}")
+        raise ValueError(f"Unknown observation model type: {self.observation_model_type}")
 
     def reward(self, state: np.ndarray, action: np.ndarray) -> float:
         return self.reward_model.compute_reward(state, action)
@@ -445,7 +444,7 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
             out_of_grid_in_history = False
             out_of_grid_counter_in_history = 0
 
-            for i, step in enumerate(history.history):
+            for _, step in enumerate(history.history):
                 if np.linalg.norm(step.state - self.goal_state) <= self.goal_state_radius:
                     goal_reached_in_history = True
                     break
@@ -682,7 +681,7 @@ class ContinuousLightDarkPOMDPDiscreteActions(ContinuousLightDarkPOMDP, Discrete
             and self.penalty_decay == other.penalty_decay
             and self.actions == other.actions
             and all(
-                np.array_equal(self.action_to_vector[k], other.action_to_vector[k])
-                for k in self.action_to_vector
+                np.array_equal(value, other.action_to_vector[k])
+                for k, value in self.action_to_vector.items()
             )
         )

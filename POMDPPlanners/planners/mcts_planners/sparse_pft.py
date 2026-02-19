@@ -124,7 +124,7 @@ class SparsePFT(PathSimulationPolicy):
             raise TypeError("beta_ucb must be a float")
         if not isinstance(belief_child_num, int):
             raise TypeError("belief_child_num must be an int")
-        if not (1 >= discount_factor >= 0):
+        if not 1 >= discount_factor >= 0:
             raise ValueError("discount_factor must be between 0 and 1")
 
         super().__init__(
@@ -248,9 +248,7 @@ class SparsePFT(PathSimulationPolicy):
             return 0
 
         action = random.choice(self.environment.get_actions())  # type: ignore
-        next_state, next_observation, reward = self.environment.sample_next_step(
-            state=state, action=action
-        )
+        next_state, _, reward = self.environment.sample_next_step(state=state, action=action)
 
         return reward + self.discount_factor * self.random_rollout(
             state=next_state, depth=depth + 1

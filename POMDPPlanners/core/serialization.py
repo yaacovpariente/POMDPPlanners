@@ -105,9 +105,9 @@ def serialize_value(value: Any) -> Any:  # pylint: disable=too-many-return-state
     return {"__type__": "str_fallback", "value": str(value)}
 
 
-def deserialize_value(
+def deserialize_value(  # pylint: disable=too-many-return-statements,too-many-branches
     value: Any, target_type: Optional[Any] = None
-) -> Any:  # pylint: disable=too-many-return-statements
+) -> Any:
     """Deserialize JSON-compatible value to Python type.
 
     Args:

@@ -1,3 +1,4 @@
+# pylint: disable=too-many-lines
 import logging
 import random
 import time
@@ -11,7 +12,9 @@ from optuna.trial import FrozenTrial
 
 from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.core.environment import Environment
-from POMDPPlanners.core.policy import Policy
+from POMDPPlanners.core.policy import Policy, TrainablePolicy
+from POMDPPlanners.training.callbacks import OptunaPruning
+from POMDPPlanners.training.policy_trainer import PolicyTrainer
 from POMDPPlanners.core.simulation import (
     CategoricalHyperParameter,
     History,
@@ -152,7 +155,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
             self.study_storage = None
 
     @staticmethod
-    def _validate_inputs(
+    def _validate_inputs(  # pylint: disable=too-many-branches,too-many-statements
         environment: Environment,
         belief: Belief,
         policy_cls: Type[Policy],
@@ -451,7 +454,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         Raises:
             ValueError: If target optimization parameters not found in statistics
         """
-        trial_id = str(trial._trial_id)
+        trial_id = str(trial._trial_id)  # pylint: disable=protected-access
         if self.study_storage is not None and self.study_storage.is_key_in_cache(trial_id):
             stored_params = self.study_storage.get(trial_id)
             metric_values = stored_params["metric_values"]
@@ -556,7 +559,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         # Compute mean and std for each metric across trials to score
         metric_stats = {}
         for param_name, _ in self.parameters_to_optimize:
-            values = [trial_metrics[trial_num][param_name] for trial_num in trial_metrics.keys()]
+            values = [trial_data[param_name] for trial_data in trial_metrics.values()]
             metric_stats[param_name] = {
                 "mean": np.mean(values),
                 "std": np.std(values) if np.std(values) > 0 else 1.0,  # Avoid division by zero
@@ -587,19 +590,8 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         return pareto_scores
 
     def _train_policy_if_trainable(self, policy: Policy, trial: FrozenTrial) -> None:
-        from POMDPPlanners.core.policy import (  # pylint: disable=import-outside-toplevel
-            TrainablePolicy,
-        )
-
         if not isinstance(policy, TrainablePolicy):
             return
-
-        from POMDPPlanners.training.callbacks import (  # pylint: disable=import-outside-toplevel
-            OptunaPruning,
-        )
-        from POMDPPlanners.training.policy_trainer import (  # pylint: disable=import-outside-toplevel
-            PolicyTrainer,
-        )
 
         training_params = self._suggest_hyperparameters(trial, self.training_hyper_parameters)
         training_params.update(self.training_constant_parameters)
@@ -613,16 +605,8 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         trainer.train()
 
     def _train_best_policy(self, policy: Policy, best_trial: FrozenTrial) -> None:
-        from POMDPPlanners.core.policy import (  # pylint: disable=import-outside-toplevel
-            TrainablePolicy,
-        )
-
         if not isinstance(policy, TrainablePolicy):
             return
-
-        from POMDPPlanners.training.policy_trainer import (  # pylint: disable=import-outside-toplevel
-            PolicyTrainer,
-        )
 
         training_params: Dict[str, Any] = {}
         training_params.update(self.training_constant_parameters)
@@ -773,7 +757,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         self._train_best_policy(optimized_policy, best_trial)
 
         # Store metadata
-        self._last_optimization_metadata = {
+        self._last_optimization_metadata = {  # pylint: disable=attribute-defined-outside-init
             "best_pareto_score": best_score,
             "best_trial_metrics": {
                 param_name: best_trial.user_attrs.get(f"metric_{param_name}")
@@ -805,7 +789,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
             optimized_metric_values=optimized_metric_values,
         )
 
-        self._last_optimization_result = result
+        self._last_optimization_result = result  # pylint: disable=attribute-defined-outside-init
         return result
 
     def _handle_optimization_failure(self, exception: Exception, start_time: float) -> None:

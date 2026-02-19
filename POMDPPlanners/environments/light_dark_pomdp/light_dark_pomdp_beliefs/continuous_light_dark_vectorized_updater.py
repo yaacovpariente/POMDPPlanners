@@ -207,16 +207,16 @@ class ContinuousLightDarkVectorizedUpdater(VectorizedParticleBeliefUpdater):
         self._obs_near_2P01 = float(2.0 * P_near[0, 1])
         self._obs_near_P11 = float(P_near[1, 1])
         self._obs_near_log_norm = float(
-            near_dist._log_normalization
-        )  # pylint: disable=protected-access
+            near_dist._log_normalization  # pylint: disable=protected-access
+        )
 
         P_far = np.linalg.inv(far_dist.covariance)
         self._obs_far_P00 = float(P_far[0, 0])
         self._obs_far_2P01 = float(2.0 * P_far[0, 1])
         self._obs_far_P11 = float(P_far[1, 1])
         self._obs_far_log_norm = float(
-            far_dist._log_normalization
-        )  # pylint: disable=protected-access
+            far_dist._log_normalization  # pylint: disable=protected-access
+        )
 
     def _precompute_beacon_arrays(self):
         self._beacon_x = np.ascontiguousarray(self.beacons[0])

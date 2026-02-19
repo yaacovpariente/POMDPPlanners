@@ -104,7 +104,7 @@ class MemoryTracker:
                 tracemalloc.start()
                 self.tracemalloc_enabled = True
                 self._log_info("Memory tracking ENABLED with tracemalloc (expect 10-30% slowdown)")
-            except Exception as e:
+            except Exception as e:  # pylint: disable=broad-exception-caught
                 self._log_warning(f"Failed to start tracemalloc: {e}")
         elif self.enable_tracking:
             self._log_info("Memory tracking ENABLED (lightweight mode, minimal overhead)")
@@ -177,7 +177,7 @@ class MemoryTracker:
                         "percent": self.process.memory_percent(),
                     }
                 )
-            except Exception as e:
+            except Exception as e:  # pylint: disable=broad-exception-caught
                 self._log_warning(f"Failed to get memory info: {e}")
 
         # Handle different tracking modes
@@ -194,7 +194,7 @@ class MemoryTracker:
             try:
                 snapshot = tracemalloc.take_snapshot()
                 self.snapshots.append((label, snapshot, checkpoint["rss_mb"]))
-            except Exception as e:
+            except Exception as e:  # pylint: disable=broad-exception-caught
                 self._log_warning(f"Failed to take tracemalloc snapshot: {e}")
 
         # Only record checkpoint if we should record
@@ -282,7 +282,7 @@ class MemoryTracker:
             self._log_info(f"Memory differences between {label1} and {label2}:")
             for i, stat in enumerate(top_stats[:limit], 1):
                 self._log_info(f"  #{i}: {stat}")
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             self._log_warning(f"Failed to compare snapshots: {e}")
 
     def save_report(self, filepath: Path) -> None:
@@ -297,7 +297,7 @@ class MemoryTracker:
             return
 
         try:
-            with open(filepath, "w") as f:
+            with open(filepath, "w", encoding="utf-8") as f:
                 f.write("Memory Tracking Report\n")
                 f.write("=" * 50 + "\n\n")
 
@@ -321,7 +321,7 @@ class MemoryTracker:
                 f.write(f"Leak Detected: {self.detect_memory_leak()}\n")
 
             self._log_info(f"Memory report saved to: {filepath}")
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             self._log_warning(f"Failed to save memory report: {e}")
 
     def cleanup(self) -> None:
@@ -330,7 +330,7 @@ class MemoryTracker:
             try:
                 tracemalloc.stop()
                 self.tracemalloc_enabled = False
-            except Exception as e:
+            except Exception as e:  # pylint: disable=broad-exception-caught
                 self._log_warning(f"Failed to stop tracemalloc: {e}")
 
         # Clear stored data
@@ -376,8 +376,10 @@ def memory_monitor(
             try:
                 current_mb = tracker.process.memory_info().rss / 1024 / 1024
                 if current_mb > threshold_mb:
-                    tracker._log_warning(f"High memory usage: {current_mb:.1f} MB")
-            except Exception:
+                    tracker._log_warning(
+                        f"High memory usage: {current_mb:.1f} MB"
+                    )  # pylint: disable=protected-access
+            except Exception:  # pylint: disable=broad-exception-caught
                 pass
 
         tracker.log_summary()
@@ -413,7 +415,7 @@ if __name__ == "__main__":
     tracker.checkpoint("initial")
 
     # Create some objects
-    data = [i for i in range(100000)]
+    data = list(range(100000))
     tracker.checkpoint("after_data_creation")
 
     # Clear data
@@ -439,5 +441,5 @@ if __name__ == "__main__":
     with memory_monitor(threshold_mb=100) as monitor:
         if monitor:
             monitor.checkpoint("context_test")
-            test_data = [i for i in range(50000)]
+            test_data = list(range(50000))
             monitor.checkpoint("context_test_end")

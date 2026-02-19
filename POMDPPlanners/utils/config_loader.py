@@ -171,15 +171,7 @@ def load_config(config_path: str) -> Dict[str, Any]:
         - Automatically handles standard YAML data types safely
         - Does not support custom Python object instantiation
     """
-    """
-    Load a YAML configuration file.
-    
-    Args:
-        config_path: Path to the YAML configuration file
-        
-    Returns:
-        Dictionary containing the configuration
-    """
-    with open(config_path, "r") as f:
+    # Load a YAML configuration file.
+    with open(config_path, "r", encoding="utf-8") as f:
         config = yaml.safe_load(f)
     return config

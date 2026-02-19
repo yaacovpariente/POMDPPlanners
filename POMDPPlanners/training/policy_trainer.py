@@ -14,6 +14,7 @@ import logging
 from typing import Any, Callable, Dict, List, Optional, Sequence
 
 from POMDPPlanners.core.policy import TrainablePolicy
+from POMDPPlanners.simulations.episodes import EpisodeRunner
 from POMDPPlanners.training.callbacks import TrainerCallback
 from POMDPPlanners.utils.logger import get_logger
 
@@ -141,10 +142,6 @@ class PolicyTrainer:
             self._collect_episodes_mcts()
 
     def _collect_episodes_mcts(self) -> None:
-        from POMDPPlanners.simulations.episodes import (  # pylint: disable=import-outside-toplevel
-            EpisodeRunner,
-        )
-
         self.policy.begin_collecting()
         for _ in range(self.episodes_per_iteration):
             self.policy.prepare_episode()

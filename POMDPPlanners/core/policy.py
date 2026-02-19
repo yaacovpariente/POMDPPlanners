@@ -15,6 +15,7 @@ import importlib
 import inspect
 import json
 import logging
+import warnings
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
@@ -23,6 +24,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, NamedTuple, Optional, Tuple, Union
 
 import numpy as np
+import pkg_resources
 
 from POMDPPlanners.utils.config_to_id import config_to_id, NumpyEncoder
 from POMDPPlanners.utils.logger import get_logger
@@ -82,7 +84,7 @@ class PolicyRunData(NamedTuple):
 # Module-level helper functions for Policy save/load
 
 
-def _serialize_value(value: Any) -> Any:
+def _serialize_value(value: Any) -> Any:  # pylint: disable=too-many-return-statements
     """Serialize value for JSON compatibility.
 
     Args:
@@ -93,25 +95,24 @@ def _serialize_value(value: Any) -> Any:
     """
     if value is None:
         return None
-    elif isinstance(value, Path):
+    if isinstance(value, Path):
         return str(value)
-    elif isinstance(value, np.ndarray):
+    if isinstance(value, np.ndarray):
         return value.tolist()
-    elif isinstance(value, (np.integer, np.floating)):
+    if isinstance(value, (np.integer, np.floating)):
         return value.item()
-    elif isinstance(value, Enum):
+    if isinstance(value, Enum):
         return value.value
-    elif isinstance(value, (str, int, float, bool)):
+    if isinstance(value, (str, int, float, bool)):
         return value
-    elif isinstance(value, (list, tuple)):
+    if isinstance(value, (list, tuple)):
         return [_serialize_value(v) for v in value]
-    elif isinstance(value, dict):
+    if isinstance(value, dict):
         return {str(k): _serialize_value(v) for k, v in value.items()}
-    elif isinstance(value, logging.Logger):
+    if isinstance(value, logging.Logger):
         return None  # Skip loggers
-    else:
-        # For unknown types, try to convert to string
-        return str(value)
+    # For unknown types, try to convert to string
+    return str(value)
 
 
 def _deserialize_value(value: Any, target_type: type) -> Any:
@@ -134,7 +135,9 @@ def _deserialize_value(value: Any, target_type: type) -> Any:
     # Handle Optional types
     if hasattr(target_type, "__origin__") and target_type.__origin__ is Union:
         # Get the non-None type from Optional[T]
-        args = [arg for arg in target_type.__args__ if arg is not type(None)]
+        args = [
+            arg for arg in target_type.__args__ if arg is not type(None)
+        ]  # pylint: disable=unidiomatic-typecheck
         if args:
             return _deserialize_value(value, args[0])
 
@@ -247,8 +250,6 @@ def _get_package_version() -> str:
         Package version string or "unknown"
     """
     try:
-        import pkg_resources
-
         return pkg_resources.get_distribution("POMDPPlanners").version
     except Exception:  # pylint: disable=broad-exception-caught
         # Catch all exceptions to ensure function always returns a version string
@@ -347,26 +348,25 @@ class Policy(ABC):
     def config_id(self) -> str:
         """Generate a deterministic identifier based on policy configuration."""
 
-        def serialize_value(value):
+        def serialize_value(value):  # pylint: disable=too-many-return-statements
             """Helper function to serialize values in a deterministic way."""
             if isinstance(value, np.ndarray):
                 return value.tolist()
-            elif isinstance(value, (str, int, float, bool)):
+            if isinstance(value, (str, int, float, bool)):
                 return value
-            elif isinstance(value, (list, tuple)):
+            if isinstance(value, (list, tuple)):
                 return [serialize_value(v) for v in value]
-            elif isinstance(value, dict):
+            if isinstance(value, dict):
                 return {str(k): serialize_value(v) for k, v in sorted(value.items())}
-            elif isinstance(value, logging.Logger):
+            if isinstance(value, logging.Logger):
                 # Exclude logger from config serialization
                 return None
-            elif hasattr(value, "__dict__"):
+            if hasattr(value, "__dict__"):
                 # Skip logger objects in __dict__ to avoid recursion
                 if isinstance(value, logging.Logger):
                     return serialize_value(value.name)
                 return serialize_value(value.__dict__)
-            else:
-                return str(value)
+            return str(value)
 
         config_dict = {}
         for key, value in self.__dict__.items():
@@ -401,7 +401,6 @@ class Policy(ABC):
             Subclasses must implement this method with their specific planning
             or decision-making algorithm.
         """
-        pass
 
     @classmethod
     @abstractmethod
@@ -419,7 +418,6 @@ class Policy(ABC):
             Subclasses must implement this method to declare their space compatibility.
             This is used for validation when pairing policies with environments.
         """
-        pass
 
     @classmethod
     @abstractmethod
@@ -439,7 +437,6 @@ class Policy(ABC):
             Use an Enum to ensure consistency between the names returned here and
             the names used when creating PolicyInfoVariable objects in the action() method.
         """
-        pass
 
     def save(self, filepath: Optional[Union[str, Path]] = None) -> Path:
         """Save policy configuration to JSON file.
@@ -603,8 +600,6 @@ class Policy(ABC):
             saved_config_id = data["metadata"].get("policy_config_id")
 
             if loaded_config_id != saved_config_id:
-                import warnings
-
                 warnings.warn(
                     f"Loaded policy config_id ({loaded_config_id}) differs from saved "
                     f"config_id ({saved_config_id}). This may indicate parameter mismatch."

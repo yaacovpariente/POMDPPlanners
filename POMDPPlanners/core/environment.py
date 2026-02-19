@@ -21,7 +21,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
@@ -32,9 +32,11 @@ from POMDPPlanners.core.serialization import (
     register_serializer,
     serialize_value as serialize_value_base,
 )
-from POMDPPlanners.core.simulation import History, MetricValue, StepData
 from POMDPPlanners.utils.config_to_id import config_to_id
 from POMDPPlanners.utils.logger import get_logger
+
+if TYPE_CHECKING:
+    from POMDPPlanners.core.simulation import History, MetricValue, StepData
 
 
 def _serialize_space_info(space_info: Any) -> dict:
@@ -167,7 +169,6 @@ class ObservationModel(Distribution, ABC):
             Subclasses must implement this method according to their
             specific observation generation logic.
         """
-        pass
 
     def probability(self, values: List[Any]) -> np.ndarray:
         """Calculate observation probabilities for given values.
@@ -225,7 +226,6 @@ class StateTransitionModel(Distribution, ABC):
             Subclasses must implement this method according to their
             specific state transition dynamics.
         """
-        pass
 
     def probability(self, values: List[Any]) -> np.ndarray:
         """Calculate transition probabilities for given next states.
@@ -370,22 +370,21 @@ class Environment(ABC):
         if self.__class__ != other.__class__:
             return False
 
-        def _compare_values(v1, v2):
+        def _compare_values(v1, v2):  # pylint: disable=too-many-return-statements
             """Helper function to compare values, handling numpy arrays specially."""
             if isinstance(v1, np.ndarray) or isinstance(v2, np.ndarray):
                 if not (isinstance(v1, np.ndarray) and isinstance(v2, np.ndarray)):
                     return False
                 return np.array_equal(v1, v2)
-            elif isinstance(v1, (list, tuple)) and isinstance(v2, (list, tuple)):
+            if isinstance(v1, (list, tuple)) and isinstance(v2, (list, tuple)):
                 if len(v1) != len(v2):
                     return False
                 return all(_compare_values(x1, x2) for x1, x2 in zip(v1, v2))
-            elif isinstance(v1, dict) and isinstance(v2, dict):
+            if isinstance(v1, dict) and isinstance(v2, dict):
                 if v1.keys() != v2.keys():
                     return False
                 return all(_compare_values(v1[k], v2[k]) for k in v1)
-            else:
-                return v1 == v2
+            return v1 == v2
 
         # Compare all public attributes (excluding callables and private)
         for key, value in self.__dict__.items():
@@ -418,29 +417,28 @@ class Environment(ABC):
             Changing this serialization format would invalidate all cached results.
         """
 
-        def serialize_value(value):
+        def serialize_value(value):  # pylint: disable=too-many-return-statements
             if isinstance(value, np.ndarray):
                 return value.tolist()
-            elif isinstance(value, (str, int, float, bool)):
+            if isinstance(value, (str, int, float, bool)):
                 return value
-            elif isinstance(value, (list, tuple)):
+            if isinstance(value, (list, tuple)):
                 return [serialize_value(v) for v in value]
-            elif isinstance(value, dict):
+            if isinstance(value, dict):
                 return {str(k): serialize_value(v) for k, v in sorted(value.items())}
-            elif isinstance(value, SpaceInfo):
+            if isinstance(value, SpaceInfo):
                 return {
                     "action_space": serialize_value(value.action_space),
                     "observation_space": serialize_value(value.observation_space),
                 }
-            elif isinstance(value, Enum):
+            if isinstance(value, Enum):
                 return value.value
-            elif hasattr(value, "__dict__"):
+            if hasattr(value, "__dict__"):
                 # Skip logger objects
                 if isinstance(value, logging.Logger):
                     return None
                 return serialize_value(value.__dict__)
-            else:
-                return str(value)
+            return str(value)
 
         config_dict = {}
         for key, value in self.__dict__.items():
@@ -470,7 +468,6 @@ class Environment(ABC):
         Note:
             Subclasses must implement this method to define state dynamics.
         """
-        pass
 
     @abstractmethod
     def observation_model(self, next_state: Any, action: Any) -> ObservationModel:
@@ -486,7 +483,6 @@ class Environment(ABC):
         Note:
             Subclasses must implement this method to define observation generation.
         """
-        pass
 
     @abstractmethod
     def reward(self, state: Any, action: Any) -> float:
@@ -502,7 +498,6 @@ class Environment(ABC):
         Note:
             Subclasses must implement this method to define reward structure.
         """
-        pass
 
     def reward_batch(self, states: Union[np.ndarray, Sequence[Any]], action: Any) -> np.ndarray:
         """Calculate rewards for a batch of states given a single action.
@@ -532,7 +527,6 @@ class Environment(ABC):
         Note:
             Subclasses must implement this method to define terminal conditions.
         """
-        pass
 
     @abstractmethod
     def initial_state_dist(self) -> Distribution:
@@ -544,7 +538,6 @@ class Environment(ABC):
         Note:
             Subclasses must implement this method to define the starting distribution.
         """
-        pass
 
     @abstractmethod
     def initial_observation_dist(self) -> Distribution:
@@ -556,7 +549,6 @@ class Environment(ABC):
         Note:
             Subclasses must implement this method to define initial observations.
         """
-        pass
 
     @abstractmethod
     def is_equal_observation(self, observation1: Any, observation2: Any) -> bool:
@@ -573,7 +565,6 @@ class Environment(ABC):
             Subclasses must implement this method to define observation equality.
             This is particularly important for discrete observation spaces.
         """
-        pass
 
     def sample_next_step(self, state: Any, action: Any) -> Tuple[Any, Any, float]:
         """Sample a complete state transition step.
@@ -597,7 +588,7 @@ class Environment(ABC):
 
         return next_state, next_observation, reward
 
-    def cache_visualization(self, history: List[StepData], cache_path: Path) -> None:
+    def cache_visualization(self, history: "List[StepData]", cache_path: Path) -> None:
         """Cache visualization data for an episode history.
 
         This method can be overridden by subclasses to provide environment-specific
@@ -607,7 +598,6 @@ class Environment(ABC):
             history: List of step data from an episode
             cache_path: Path where visualization data should be cached
         """
-        pass
 
     def get_metric_names(self) -> List[str]:
         """Get names of environment-specific metrics.
@@ -627,7 +617,9 @@ class Environment(ABC):
         """
         return []
 
-    def compute_metrics(self, histories: List[History]) -> List[MetricValue]:
+    def compute_metrics(
+        self, histories: "List[History]"
+    ) -> "List[MetricValue]":  # pylint: disable=unused-argument
         """Compute environment-specific metrics from episode histories.
 
         This method can be overridden by subclasses to provide custom
@@ -718,7 +710,9 @@ class Environment(ABC):
             0.95
         """
 
-        def deserialize_value(value, target_type, param_name=""):
+        def deserialize_value(
+            value, target_type, param_name=""
+        ):  # pylint: disable=too-many-branches
             """Deserialize value with environment-specific handling.
 
             Handles environment-specific patterns before delegating to centralized system:
@@ -910,7 +904,6 @@ class DiscreteActionsEnvironment(Environment):
             Subclasses must implement this method to enumerate all possible actions.
             This is used by planning algorithms that need to iterate over actions.
         """
-        pass
 
     @abstractmethod
     def is_equal_observation(self, observation1: Any, observation2: Any) -> bool:
@@ -951,4 +944,3 @@ class EnvironmentGenerator(ABC):
             Subclasses must implement this method to define environment creation logic.
             This may involve randomization, parameter sampling, or deterministic generation.
         """
-        pass
