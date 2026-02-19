@@ -68,7 +68,7 @@ def _safe_histplot(
             label=label,
         )
         return True
-    except Exception:
+    except Exception:  # pylint: disable=broad-exception-caught
         return False
 
 
