@@ -371,9 +371,9 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
         return reward
 
     def reward_batch(self, states: Union[np.ndarray, Sequence[Any]], action: int) -> np.ndarray:
-        states = np.asarray(states)
-        x = states[:, 0]
-        theta = states[:, 2]
+        states_arr = np.asarray(states)
+        x = states_arr[:, 0]
+        theta = states_arr[:, 2]
         terminated = (
             (x < -self.x_threshold)
             | (x > self.x_threshold)

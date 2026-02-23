@@ -23,26 +23,6 @@ matplotlib.use("Agg")  # Use non-interactive backend
 logger = logging.getLogger(__name__)
 
 
-def plot_reward_comparison(
-    histories: List[History],
-    environments: List[Environment],
-    policies: List[Policy],
-    cache_dir_path: Path,
-) -> None:
-    """
-    Plot reward comparison across environments and policies.
-
-    Args:
-        histories: List of History objects containing episode data
-        environments: List of environments
-        policies: List of policies
-        cache_dir_path: Path to save the plots
-    """
-    history_discounted_returns = [
-        history_to_discounted_return_value(history) for history in histories
-    ]
-
-
 def plot_discounted_returns_histogram(
     histories: List[History],
     policy: Policy,

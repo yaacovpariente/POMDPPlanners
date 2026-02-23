@@ -30,7 +30,7 @@ class StandardMetrics(Enum):
     AVERAGE_REACH_TERMINAL_STATE = "average_reach_terminal_state"
 
 
-def compute_statistics_environment_policy_pair(
+def compute_statistics_environment_policy_pair(  # pylint: disable=too-many-statements
     env: Environment,
     histories: List[History],
     alpha: float,
@@ -148,7 +148,7 @@ def compute_statistics_environment_policy_pair(
     # Dictionary to store policy info variables by name
     policy_info_variables: Dict[str, List[float]] = {}
 
-    for i, h in enumerate(histories):
+    for _, h in enumerate(histories):
         return_ = sum(
             h.history[j].reward * h.discount_factor**j  # type: ignore
             for j in range(len(h.history))
@@ -186,14 +186,15 @@ def compute_statistics_environment_policy_pair(
 
     average_return = sum(return_samples) / len(return_samples)
 
-    return_cvar = cvar_estimator(np.array(return_samples), alpha)
-    return_value_at_risk = np.percentile(return_samples, (1 - alpha) * 100)
+    return_cvar = -cvar_estimator(-np.array(return_samples), alpha)
+    return_value_at_risk = np.percentile(return_samples, alpha * 100)
 
-    cvar_return_confidence_interval = cvar_confidence_interval(
-        data=return_samples, alpha=alpha, delta=1 - confidence_interval_level
+    neg_ci = cvar_confidence_interval(
+        data=list(-np.array(return_samples)), alpha=alpha, delta=1 - confidence_interval_level
     )
+    cvar_return_confidence_interval = (-neg_ci[1], -neg_ci[0])
     return_value_at_risk_confidence_interval = quantile_confidence_interval(
-        data=return_samples, alpha=1 - alpha, conf_level=1 - confidence_interval_level
+        data=return_samples, alpha=alpha, conf_level=1 - confidence_interval_level
     )
     average_return_confidence_interval = confidence_interval(
         data=return_samples, confidence=confidence_interval_level

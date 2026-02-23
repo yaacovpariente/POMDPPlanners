@@ -441,8 +441,8 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
         return float(reward)
 
     def reward_batch(self, states: Union[np.ndarray, Sequence[Any]], action: int) -> np.ndarray:
-        states = np.asarray(states)
-        speeds = np.linalg.norm(states[:, 2:4], axis=1)
+        states_arr = np.asarray(states)
+        speeds = np.linalg.norm(states_arr[:, 2:4], axis=1)
         rewards = speeds * self.movement_reward_scale
         rewards[speeds > self.safe_velocity_threshold] += self.safety_violation_penalty
         return rewards

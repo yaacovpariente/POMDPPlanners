@@ -35,9 +35,8 @@ from POMDPPlanners.core.environment import (
     SpaceInfo,
     SpaceType,
     StateTransitionModel,
-    StepData,
 )
-from POMDPPlanners.core.simulation import History, MetricValue
+from POMDPPlanners.core.simulation import History, MetricValue, StepData
 from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
 from POMDPPlanners.utils.statistics_utils import confidence_interval
 
@@ -310,8 +309,8 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
         return -1.0
 
     def reward_batch(self, states: Union[np.ndarray, Sequence[Any]], action: int) -> np.ndarray:
-        states = np.asarray(states)
-        positions = states[:, 0]
+        states_arr = np.asarray(states)
+        positions = states_arr[:, 0]
         return np.where(positions >= self.goal_position, 0.0, -1.0)
 
     def is_terminal(self, state: Tuple[float, float]) -> bool:
