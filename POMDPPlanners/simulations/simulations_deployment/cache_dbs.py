@@ -49,7 +49,7 @@ class DiskCacheDB(DataBaseInterface):
             if data is None:
                 return None
             return data
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             self.logger.error("Error retrieving from cache: %s", e)
             return None
 
@@ -73,7 +73,7 @@ class DiskCacheDB(DataBaseInterface):
         """
         try:
             self.cache.set(key, value)
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             self.logger.error("Error storing in cache: %s", e)
 
     def clear(self):

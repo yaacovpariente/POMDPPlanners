@@ -579,7 +579,8 @@ class LocalSimulationsAPI(SimulationsAPIInterface):
             len(environment_run_params),
         )
         self.logger.debug(
-            "Parameters: experiment_name=%s, n_jobs=%s, " "confidence_interval=%s, alpha=%s",
+            "Parameters: experiment_name=%s, n_jobs=%s, "  # pylint: disable=implicit-str-concat
+            "confidence_interval=%s, alpha=%s",
             experiment_name,
             n_jobs,
             confidence_interval_level,
@@ -621,7 +622,9 @@ class LocalSimulationsAPI(SimulationsAPIInterface):
             # Log summary of results
             for i, result in enumerate(results):
                 self.logger.info(
-                    "Configuration %s: %s " "with %s - " "Best parameters: %s",
+                    "Configuration %s: %s "  # pylint: disable=implicit-str-concat
+                    "with %s - "
+                    "Best parameters: %s",
                     i + 1,
                     result.environment.__class__.__name__,
                     result.policy.__class__.__name__,
@@ -638,7 +641,7 @@ class LocalSimulationsAPI(SimulationsAPIInterface):
             # Clean up optimizer resources
             try:
                 optimizer.cleanup()
-            except Exception as cleanup_error:
+            except Exception as cleanup_error:  # pylint: disable=broad-exception-caught
                 self.logger.warning("Error during optimizer cleanup: %s", cleanup_error)
 
     def run_hyperparameter_tuning_experiment_with_benchmarks(

@@ -1,7 +1,9 @@
+# pylint: disable=fixme
+from typing import Optional, Tuple
+
 import numpy as np
 from scipy import stats
 from scipy.stats import binom
-from typing import Tuple
 
 from POMDPPlanners.core.distributions import Distribution
 
@@ -80,21 +82,9 @@ def cvar_estimator(vec: np.ndarray, alpha: float) -> float:
         - **Tail Sensitivity**: Lower α values emphasize extreme outcomes more
         - **Computational**: More stable than VaR, especially for small samples
     """
-    """
-    Calculate the Conditional Value at Risk (CVaR) for a given vector of values.
-    CVaR is the expected value of the worst (1-alpha)% of cases, where "worst"
-    means the highest values (assuming these represent costs or risks).
-
-    Args:
-        vec: Array of values
-        alpha: Confidence level (between 0 and 1)
-
-    Returns:
-        float: The CVaR value
-
-    Raises:
-        ValueError: If alpha is not between 0 and 1 or if vec is empty
-    """
+    # Calculate the Conditional Value at Risk (CVaR) for a given vector of values.
+    # CVaR is the expected value of the worst (1-alpha)% of cases, where "worst"
+    # means the highest values (assuming these represent costs or risks).
     if not 0 <= alpha <= 1:
         raise ValueError("alpha must be between 0 and 1")
     if len(vec) == 0:
@@ -215,13 +205,24 @@ def confidence_interval(data, confidence=0.95) -> Tuple[float, float]:
     return (float(ci[0]), float(ci[1]))
 
 
-def cvar_confidence_interval(data, alpha=0.95, delta=0.05):
+def cvar_confidence_interval(
+    data,
+    alpha=0.95,
+    delta=0.05,
+    dist_lower_bound: Optional[float] = None,
+    dist_upper_bound: Optional[float] = None,
+):
     """
     Calculate the confidence interval for the CVaR of a dataset using the t-distribution.
 
     Args:
         data: Array of values
-        confidence: Confidence level (default 0.95 for 95%)
+        alpha: Confidence level (default 0.95 for 95%)
+        delta: Significance level for the probabilistic bounds (default 0.05)
+        dist_lower_bound: Known lower bound of the distribution support.
+            If None, uses min(data) as a conservative data-driven fallback.
+        dist_upper_bound: Known upper bound of the distribution support.
+            If None, uses max(data) as a conservative data-driven fallback.
 
     Returns:
         tuple: (lower_bound, upper_bound) of the confidence interval
@@ -240,11 +241,15 @@ def cvar_confidence_interval(data, alpha=0.95, delta=0.05):
         cvar_value = cvar_estimator(data, alpha)
         return (cvar_value, cvar_value)
 
+    data_arr = np.asarray(data)
+    effective_lower = dist_lower_bound if dist_lower_bound is not None else float(np.min(data_arr))
+    effective_upper = dist_upper_bound if dist_upper_bound is not None else float(np.max(data_arr))
+
     lower_bound = cvar_probabilistic_lower_bound_thomas(
-        vec=data, alpha=alpha, delta=delta / 2, dist_lower_bound=0
+        vec=data, alpha=alpha, delta=delta / 2, dist_lower_bound=effective_lower
     )
     upper_bound = cvar_probabilistic_upper_bound_thomas(
-        vec=data, alpha=alpha, delta=delta / 2, dist_upper_bound=0
+        vec=data, alpha=alpha, delta=delta / 2, dist_upper_bound=effective_upper
     )
     return lower_bound, upper_bound
 
@@ -506,7 +511,7 @@ def aggregate_weights_for_duplicate_values(
         raise ValueError("Values and weights arrays must have the same length")
 
     # Get unique values and aggregate weights for each
-    unique_values, inverse_indices = np.unique(values, return_inverse=True)
+    unique_values = np.unique(values)
     aggregated_weights = np.zeros(len(unique_values))
     for i, unique_val in enumerate(unique_values):
         # Handle NaN values specially since NaN != NaN
@@ -776,20 +781,19 @@ def tv_distance(
         n_points = kwargs.get("n_points", n_samples)
         return tv_distance_grid(p, q, x_min, x_max, n_points)
 
-    elif method == "averaged":
+    if method == "averaged":
         # Use multiple runs averaging
         n_runs = kwargs.get("n_runs", 10)
         return tv_distance_averaged(p, q, n_samples, n_runs)
 
-    elif method == "mixture":
+    if method == "mixture":
         # Use mixture sampling
         return tv_distance_mixture_sampling(p, q, n_samples)
 
-    elif method == "monte_carlo":
+    if method == "monte_carlo":
         # Original implementation
         return tv_distance_monte_carlo(p, q, n_samples)
 
-    else:
-        raise ValueError(
-            f"Unknown method '{method}'. Choose from: 'grid', 'monte_carlo', 'averaged', 'mixture'"
-        )
+    raise ValueError(
+        f"Unknown method '{method}'. Choose from: 'grid', 'monte_carlo', 'averaged', 'mixture'"
+    )

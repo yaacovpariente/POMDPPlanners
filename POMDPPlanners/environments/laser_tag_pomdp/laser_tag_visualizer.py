@@ -541,7 +541,7 @@ class LaserTagVisualizer:
                 self._update_belief_particles(
                     beliefs[frame], opponent_belief_scatter, robot_belief_scatter
                 )
-            except Exception:
+            except Exception:  # pylint: disable=broad-exception-caught
                 opponent_belief_scatter.set_offsets(np.empty((0, 2)))
                 robot_belief_scatter.set_offsets(np.empty((0, 2)))
         else:

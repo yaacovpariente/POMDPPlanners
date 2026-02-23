@@ -296,6 +296,6 @@ class POMCP_DPW(DoubleProgressiveWideningMCTSPolicy):
         belief_node.visit_count += 1
         action_node.visit_count += 1
         action_node.q_value += (total - action_node.q_value) / action_node.visit_count
-        belief_node.v_value = max([child.q_value for child in belief_node.children])
+        belief_node.v_value = max(child.q_value for child in belief_node.children)
 
         return total

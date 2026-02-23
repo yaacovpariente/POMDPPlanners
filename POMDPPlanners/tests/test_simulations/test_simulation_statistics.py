@@ -780,3 +780,50 @@ def test_get_metric_names_from_environment_policy_pair_consistency():
 
     # All results should be identical
     assert result1 == result2 == result3
+
+
+def test_metric_estimates_within_confidence_intervals():
+    """Test that point estimates fall within their confidence intervals for all metrics.
+
+    Purpose: Validates that every computed metric satisfies lower_confidence_bound <= value <= upper_confidence_bound
+
+    Given: TigerPOMDP environment, 10 histories with varying reward sequences to produce
+           non-degenerate confidence intervals, alpha=0.1, confidence_interval_level=0.95
+    When: compute_statistics_environment_policy_pair processes the histories
+    Then: For every returned MetricValue, value is between lower_confidence_bound and
+          upper_confidence_bound (inclusive), covering average_return, return_cvar,
+          return_value_at_risk, timing metrics, and policy info metrics
+
+    Test type: unit
+    """
+    histories = [
+        create_test_history([1.0, 2.0, 3.0]),
+        create_test_history([4.0, 5.0, 6.0]),
+        create_test_history([-1.0, -2.0, -3.0]),
+        create_test_history([0.5, 1.5, 2.5]),
+        create_test_history([10.0, -5.0, 3.0]),
+        create_test_history([-4.0, 0.0, 4.0]),
+        create_test_history([2.0, 2.0, 2.0]),
+        create_test_history([7.0, -1.0, 1.0]),
+        create_test_history([-2.0, -2.0, -2.0]),
+        create_test_history([3.0, 3.0, 3.0]),
+    ]
+
+    environment = TigerPOMDP(discount_factor=0.95)
+    stats = compute_statistics_environment_policy_pair(
+        env=environment,
+        histories=histories,
+        alpha=0.1,
+        confidence_interval_level=0.95,
+    )
+
+    tol = 1e-9
+    for metric in stats:
+        assert (
+            metric.lower_confidence_bound - tol
+            <= metric.value
+            <= metric.upper_confidence_bound + tol
+        ), (
+            f"Metric '{metric.name}': value {metric.value} not within CI "
+            f"[{metric.lower_confidence_bound}, {metric.upper_confidence_bound}]"
+        )

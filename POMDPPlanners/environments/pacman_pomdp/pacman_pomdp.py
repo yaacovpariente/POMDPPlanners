@@ -1,3 +1,4 @@
+# pylint: disable=too-many-lines
 """Module for PacMan POMDP environment.
 
 This module provides the PacMan POMDP environment implementation inspired by the
@@ -208,8 +209,7 @@ class PacManStateTransitionModel(StateTransitionModel):
         # Check if new position is valid (not a wall and within bounds)
         if self._is_valid_position(new_pos):
             return new_pos
-        else:
-            return self.state.pacman_pos  # Stay in current position
+        return self.state.pacman_pos  # Stay in current position
 
     def _move_ghosts(self) -> Tuple[Tuple[int, int], ...]:
         """Move all ghosts with their respective policies."""
@@ -247,7 +247,7 @@ class PacManStateTransitionModel(StateTransitionModel):
             strategy = self.pomdp.ghost_strategies[ghost_id]
             if strategy == "patrol":
                 return self._move_patrol_ghost(ghost_pos, possible_moves, ghost_id)
-            elif strategy == "ambush":
+            if strategy == "ambush":
                 return self._move_ambush_ghost(ghost_pos, possible_moves, pacman_pos)
 
         # Default aggressive behavior - move toward PacMan
@@ -288,7 +288,7 @@ class PacManStateTransitionModel(StateTransitionModel):
 
         return self._move_toward_target(ghost_pos, target, possible_moves)
 
-    def _move_patrol_ghost(
+    def _move_patrol_ghost(  # pylint: disable=protected-access
         self,
         ghost_pos: Tuple[int, int],
         possible_moves: List[Tuple[int, int]],
@@ -311,11 +311,10 @@ class PacManStateTransitionModel(StateTransitionModel):
 
         if preferred_pos in possible_moves:
             return preferred_pos
-        else:
-            # Change direction if blocked
-            self.pomdp._ghost_patrol_directions[ghost_id] = (current_dir + 1) % 4
-            # Try new direction or just pick randomly
-            return np.random.choice(possible_moves) if possible_moves else ghost_pos
+        # Change direction if blocked
+        self.pomdp._ghost_patrol_directions[ghost_id] = (current_dir + 1) % 4
+        # Try new direction or just pick randomly
+        return np.random.choice(possible_moves) if possible_moves else ghost_pos
 
     def _move_ambush_ghost(
         self,
@@ -463,21 +462,20 @@ class PacManStateTransitionModel(StateTransitionModel):
             return self._independent_ghost_move_probability(
                 current_pos, target_pos, possible_moves, ghost_id
             )
-        elif self.pomdp.ghost_coordination == "coordinated":
+        if self.pomdp.ghost_coordination == "coordinated":
             return self._coordinated_ghost_move_probability(
                 current_pos, target_pos, possible_moves, ghost_id
             )
-        else:  # "mixed"
-            if ghost_id % 2 == 0:
-                return self._coordinated_ghost_move_probability(
-                    current_pos, target_pos, possible_moves, ghost_id
-                )
-            else:
-                return self._independent_ghost_move_probability(
-                    current_pos, target_pos, possible_moves, ghost_id
-                )
+        # "mixed"
+        if ghost_id % 2 == 0:
+            return self._coordinated_ghost_move_probability(
+                current_pos, target_pos, possible_moves, ghost_id
+            )
+        return self._independent_ghost_move_probability(
+            current_pos, target_pos, possible_moves, ghost_id
+        )
 
-    def _independent_ghost_move_probability(
+    def _independent_ghost_move_probability(  # pylint: disable=unused-argument
         self,
         current_pos: Tuple[int, int],
         target_pos: Tuple[int, int],
@@ -509,7 +507,7 @@ class PacManStateTransitionModel(StateTransitionModel):
         target_idx = possible_moves.index(target_pos)
         return float(probabilities[target_idx])
 
-    def _coordinated_ghost_move_probability(
+    def _coordinated_ghost_move_probability(  # pylint: disable=unused-argument
         self,
         current_pos: Tuple[int, int],
         target_pos: Tuple[int, int],
@@ -536,9 +534,8 @@ class PacManStateTransitionModel(StateTransitionModel):
                 set(next_state.pellets) == set(expected_pellets)
                 and next_state.score == expected_score
             )
-        else:
-            # No pellet collected - pellets and score should remain the same
-            return next_state.pellets == self.state.pellets and next_state.score == self.state.score
+        # No pellet collected - pellets and score should remain the same
+        return next_state.pellets == self.state.pellets and next_state.score == self.state.score
 
     def _is_valid_terminal_status(
         self, next_state: PacManState, pacman_next_pos: Tuple[int, int]
@@ -668,7 +665,7 @@ class PacManObservationModel(ObservationModel):
             else:
                 # Calculate probability as product of individual ghost observation probabilities
                 total_prob = 1.0
-                for i, (obs_pos, true_ghost_pos) in enumerate(zip(obs_tuple, true_ghost_positions)):
+                for _, (obs_pos, true_ghost_pos) in enumerate(zip(obs_tuple, true_ghost_positions)):
                     # Distance-based noise for this ghost
                     distance = abs(true_ghost_pos[0] - pacman_pos[0]) + abs(
                         true_ghost_pos[1] - pacman_pos[1]
@@ -744,8 +741,8 @@ class PacManPOMDP(DiscreteActionsEnvironment):
     def __init__(
         self,
         maze_size: Tuple[int, int] = (7, 7),
-        walls: Set[Tuple[int, int]] = {(2, 2), (2, 3), (3, 2), (4, 4), (3, 5)},
-        initial_pellets: List[Tuple[int, int]] = [(1, 1), (1, 5), (5, 1), (5, 5)],
+        walls: Optional[Set[Tuple[int, int]]] = None,
+        initial_pellets: Optional[List[Tuple[int, int]]] = None,
         initial_pacman_pos: Tuple[int, int] = (0, 0),
         num_ghosts: int = 1,
         initial_ghost_positions: Optional[List[Tuple[int, int]]] = None,
@@ -805,8 +802,10 @@ class PacManPOMDP(DiscreteActionsEnvironment):
             debug=debug,
         )
 
+        if walls is None:
+            walls = {(2, 2), (2, 3), (3, 2), (4, 4), (3, 5)}
         self.maze_size = maze_size
-        self.walls = walls if walls is not None else set()
+        self.walls = walls
         self.initial_pacman_pos = initial_pacman_pos
         self.num_ghosts = num_ghosts
         self.pellet_reward = pellet_reward
@@ -910,7 +909,7 @@ class PacManPOMDP(DiscreteActionsEnvironment):
 
         return available_positions[:num_ghosts]
 
-    def _validate_parameters(self):
+    def _validate_parameters(self):  # pylint: disable=too-many-branches
         """Validate environment parameters."""
         if self.maze_size[0] <= 0 or self.maze_size[1] <= 0:
             raise ValueError("Maze size must be positive")
@@ -1276,7 +1275,9 @@ class PacManPOMDP(DiscreteActionsEnvironment):
             actions: List of actions taken at each step
             cache_path: Path where the GIF should be saved
         """
-        from POMDPPlanners.environments.pacman_pomdp.pacman_visualizer import PacManVisualizer
+        from POMDPPlanners.environments.pacman_pomdp.pacman_visualizer import (
+            PacManVisualizer,
+        )  # pylint: disable=import-outside-toplevel
 
         visualizer = PacManVisualizer(self)
         visualizer.visualize_path(path, actions, cache_path)
@@ -1288,7 +1289,9 @@ class PacManPOMDP(DiscreteActionsEnvironment):
             history: List of StepData objects representing the episode
             cache_path: Path where the GIF should be saved
         """
-        from POMDPPlanners.environments.pacman_pomdp.pacman_visualizer import PacManVisualizer
+        from POMDPPlanners.environments.pacman_pomdp.pacman_visualizer import (
+            PacManVisualizer,
+        )  # pylint: disable=import-outside-toplevel
 
         visualizer = PacManVisualizer(self)
         visualizer.cache_visualization(history, cache_path)
@@ -1335,8 +1338,7 @@ def create_simple_maze_pacman(
     all_positions = [(r, c) for r in range(1, maze_size - 1) for c in range(1, maze_size - 1)]
     available_positions = [pos for pos in all_positions if pos not in avoid_positions]
 
-    if len(available_positions) < num_walls:
-        num_walls = len(available_positions)
+    num_walls = min(num_walls, len(available_positions))
 
     if num_walls > 0:
         wall_indices = np.random.choice(len(available_positions), size=num_walls, replace=False)

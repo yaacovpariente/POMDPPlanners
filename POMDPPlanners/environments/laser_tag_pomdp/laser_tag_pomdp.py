@@ -1,3 +1,4 @@
+# pylint: disable=too-many-lines
 """LaserTag POMDP Environment Implementation.
 
 This module implements the LaserTag problem, a pursuit-evasion POMDP environment
@@ -37,6 +38,9 @@ from POMDPPlanners.core.environment import (
 )
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
 from POMDPPlanners.utils.statistics_utils import confidence_interval
+from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_visualizer import (  # pylint: disable=import-outside-toplevel
+    LaserTagVisualizer,
+)
 
 
 class LaserTagPOMDPMetrics(Enum):
@@ -164,8 +168,7 @@ class LaserTagStateTransition(StateTransitionModel):
         # If new position is invalid, stay at current position
         if self._is_valid_position(new_pos):
             return new_pos
-        else:
-            return (int(self.state[0]), int(self.state[1]))
+        return (int(self.state[0]), int(self.state[1]))
 
     def _create_position(
         self, fixed_coord: int, moving_coord: int, is_horizontal: bool
@@ -173,8 +176,7 @@ class LaserTagStateTransition(StateTransitionModel):
         """Create a position tuple based on axis orientation."""
         if is_horizontal:
             return (fixed_coord, moving_coord)  # (row, col)
-        else:
-            return (moving_coord, fixed_coord)  # (row, col)
+        return (moving_coord, fixed_coord)  # (row, col)
 
     def _calculate_directional_moves(
         self, opponent_coord: int, robot_coord: int, fixed_coord: int, is_horizontal: bool
@@ -290,8 +292,7 @@ class LaserTagStateTransition(StateTransitionModel):
             # Select uniformly from {0,1,2,3} excluding the intended action
             available_actions = [a for a in [0, 1, 2, 3] if a != self.action]
             return np.random.choice(available_actions)
-        else:
-            return self.action
+        return self.action
 
     def sample(self, n_samples: int = 1) -> List[np.ndarray]:
         """Sample next states from the transition model."""
@@ -367,17 +368,15 @@ class LaserTagStateTransition(StateTransitionModel):
             # Successful tag case
             if next_robot == robot_next and next_opponent == opponent_current and next_terminal:
                 return 1.0
-            else:
-                return 0.0
-        else:
-            # Regular transition case
-            if next_robot == robot_next and not next_terminal:
-                opp_moves = self._get_opponent_move_probabilities(robot_next)
-                # Find probability for this opponent position
-                for opp_pos, prob in opp_moves:
-                    if next_opponent == opp_pos:
-                        return prob
             return 0.0
+        # Regular transition case
+        if next_robot == robot_next and not next_terminal:
+            opp_moves = self._get_opponent_move_probabilities(robot_next)
+            # Find probability for this opponent position
+            for opp_pos, prob in opp_moves:
+                if next_opponent == opp_pos:
+                    return prob
+        return 0.0
 
     def probability(self, values: List[Any]) -> np.ndarray:
         """Calculate transition probabilities for given next states."""
@@ -571,7 +570,7 @@ class LaserTagObservation(ObservationModel):
                 if isinstance(obs, (tuple, list, np.ndarray)) and len(obs) == 8:
                     # Product of independent Gaussian PDFs for each direction
                     prob = 1.0
-                    for j, (true_measure, observed_measure) in enumerate(
+                    for _, (true_measure, observed_measure) in enumerate(
                         zip(true_measurements, obs)
                     ):
                         if observed_measure >= 0:  # Valid measurement
@@ -686,9 +685,9 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
             ValueError: If discount_factor is not in valid range [0, 1] or if transition_error_prob
                 is not in valid range [0, 1]
         """
-        if not (0.0 <= discount_factor <= 1.0):
+        if not 0.0 <= discount_factor <= 1.0:
             raise ValueError("discount_factor must be between 0 and 1 (inclusive)")
-        if not (0.0 <= transition_error_prob <= 1.0):
+        if not 0.0 <= transition_error_prob <= 1.0:
             raise ValueError("transition_error_prob must be between 0 and 1 (inclusive)")
 
         space_info = SpaceInfo(
@@ -706,15 +705,17 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
             use_queue_logger=use_queue_logger,
         )
 
+        if walls is None:
+            walls = {(1, 2), (3, 0), (3, 4), (5, 0), (6, 4), (9, 1), (9, 4), (10, 6)}
+        if dangerous_areas is None:
+            dangerous_areas = {(5, 3), (7, 1), (2, 5)}
         self.floor_shape: Tuple[int, int] = floor_shape
-        self.walls: Set[Tuple[int, int]] = walls if walls is not None else set()
+        self.walls: Set[Tuple[int, int]] = walls
         self.tag_reward = tag_reward
         self.tag_penalty = tag_penalty
         self.step_cost = step_cost
         self.measurement_noise = measurement_noise
-        self.dangerous_areas: List[Tuple[int, int]] = (
-            list(dangerous_areas) if dangerous_areas is not None else []
-        )
+        self.dangerous_areas: List[Tuple[int, int]] = list(dangerous_areas)
         self.dangerous_area_radius = dangerous_area_radius
         self.dangerous_area_penalty = dangerous_area_penalty
         self.initial_state = initial_state
@@ -1165,10 +1166,6 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
             TypeError: If cache_path is not a Path object or doesn't end with .gif
         """
         # Lazy import to avoid circular dependency
-        from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_visualizer import (
-            LaserTagVisualizer,
-        )
-
         visualizer = LaserTagVisualizer(
             floor_shape=self.floor_shape,
             walls=self.walls,

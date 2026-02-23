@@ -60,13 +60,12 @@ class PacManVisualizer:
 
         if pacman_head_path.exists():
             return Image.open(pacman_head_path).convert("RGBA").resize((tile_size, tile_size))
-        elif pacman_png_path.exists():
+        if pacman_png_path.exists():
             return Image.open(pacman_png_path).convert("RGBA").resize((tile_size, tile_size))
-        else:
-            img = Image.new("RGBA", (tile_size, tile_size), (0, 0, 0, 0))  # type: ignore[arg-type]
-            draw = ImageDraw.Draw(img)
-            draw.ellipse([4, 4, tile_size - 4, tile_size - 4], fill=(255, 255, 0, 255))
-            return img
+        img = Image.new("RGBA", (tile_size, tile_size), (0, 0, 0, 0))  # type: ignore[arg-type]
+        draw = ImageDraw.Draw(img)
+        draw.ellipse([4, 4, tile_size - 4, tile_size - 4], fill=(255, 255, 0, 255))
+        return img
 
     def _load_ghost_sprites(self, sprite_dir: Path, tile_size: int) -> dict:
         """Load or generate ghost sprites with different colors."""

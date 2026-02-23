@@ -8,7 +8,7 @@ import numpy as np
 class NumpyEncoder(json.JSONEncoder):
     """Custom JSON encoder for handling NumPy arrays and other NumPy types"""
 
-    def default(self, o):
+    def default(self, o):  # pylint: disable=too-many-return-statements
         if isinstance(o, np.ndarray):
             return o.tolist()
         if isinstance(o, np.integer):
@@ -28,7 +28,7 @@ class NumpyEncoder(json.JSONEncoder):
                     "__module__": o.__class__.__module__,
                     "__config_id__": o.config_id,
                 }
-            except Exception:
+            except Exception:  # pylint: disable=broad-exception-caught
                 # If config_id fails, fall through to other methods
                 pass
 
@@ -43,7 +43,7 @@ class NumpyEncoder(json.JSONEncoder):
                     "__module__": o.__class__.__module__,
                     "__state__": state,
                 }
-            except Exception:
+            except Exception:  # pylint: disable=broad-exception-caught
                 # If serialization fails, use string representation
                 return str(o)
 

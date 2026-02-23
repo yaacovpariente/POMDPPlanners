@@ -19,6 +19,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from POMDPPlanners.core.simulation import StepData
+from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp import (
+    get_robot_pos,
+    get_rocks,
+)
 
 if TYPE_CHECKING:
     from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp import (
@@ -181,7 +185,7 @@ class RockSampleVisualizer:
 
     def _create_rock_scatters(self, ax: Axes) -> List[Any]:
         rock_scatters = []
-        for i, rock_pos in enumerate(self.rock_positions):
+        for i in range(len(self.rock_positions)):
             scatter = ax.scatter([], [], s=200, marker="s", alpha=0.7, label=f"Rock {i}")
             rock_scatters.append(scatter)
         return rock_scatters
@@ -243,8 +247,6 @@ class RockSampleVisualizer:
         return animate
 
     def _update_rock_displays(self, state: "RockSampleState", rock_scatters: List[Any]) -> None:
-        from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp import get_rocks
-
         rocks = get_rocks(state)
         for i, rock_pos in enumerate(self.rock_positions):
             if i < len(rocks):
@@ -260,8 +262,6 @@ class RockSampleVisualizer:
         actions: List[int],
         elements: Dict[str, Any],
     ) -> None:
-        from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp import get_robot_pos
-
         robot_pos = get_robot_pos(state)
         if robot_pos == (-1, -1):
             elements["robot_scatter"].set_offsets(np.empty((0, 2)))
@@ -297,8 +297,6 @@ class RockSampleVisualizer:
     def _update_path_line(
         self, path: List["RockSampleState"], frame: int, elements: Dict[str, Any]
     ) -> None:
-        from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp import get_robot_pos
-
         valid_positions = [
             pos for pos in [get_robot_pos(p) for p in path[: frame + 1]] if pos != (-1, -1)
         ]
@@ -337,11 +335,6 @@ class RockSampleVisualizer:
             elements["sample_text"].set_visible(False)
 
     def _check_sample_success(self, state: "RockSampleState") -> bool:
-        from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp import (
-            get_robot_pos,
-            get_rocks,
-        )
-
         robot_row, robot_col = get_robot_pos(state)
         rocks = get_rocks(state)
         for i, rock_pos in enumerate(self.rock_positions):

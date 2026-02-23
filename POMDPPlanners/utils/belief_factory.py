@@ -17,6 +17,7 @@ Functions:
 
 from __future__ import annotations
 
+import importlib
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
@@ -183,7 +184,5 @@ def _fallback_belief(
 
 
 def _lazy_import(module_path: str, attr_name: str):
-    import importlib
-
     module = importlib.import_module(module_path)
     return getattr(module, attr_name)

@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 import diskcache
 
@@ -67,6 +67,5 @@ def load_episode_simulation_results(
 
     if key in cache:
         return cache[key]  # type: ignore
-    else:
-        logger.debug("Simulation results for %s not found in cache", key)
-        return []
+    logger.debug("Simulation results for %s not found in cache", key)
+    return []

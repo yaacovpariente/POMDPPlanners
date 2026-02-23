@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Dict, List, Type, Union
+from typing import Dict, List, Optional, Tuple, Type, Union
 
 import numpy as np
 import pandas as pd
@@ -28,6 +28,20 @@ class StandardMetrics(Enum):
     AVERAGE_REWARD_TIME = "average_reward_time"
     AVERAGE_ACTUAL_NUM_STEPS = "average_actual_num_steps"
     AVERAGE_REACH_TERMINAL_STATE = "average_reach_terminal_state"
+
+
+def _cvar_return_bounds(
+    env: Environment,
+) -> Tuple[Optional[float], Optional[float]]:
+    if env.reward_range is None:
+        return None, None
+    gamma = env.discount_factor
+    if gamma >= 1.0:
+        return None, None
+    r_min, r_max = env.reward_range
+    return_lower = r_min / (1 - gamma)
+    return_upper = r_max / (1 - gamma)
+    return -return_upper, -return_lower
 
 
 def compute_statistics_environment_policy_pair(  # pylint: disable=too-many-statements
@@ -189,12 +203,17 @@ def compute_statistics_environment_policy_pair(  # pylint: disable=too-many-stat
     return_cvar = -cvar_estimator(-np.array(return_samples), alpha)
     return_value_at_risk = np.percentile(return_samples, alpha * 100)
 
+    neg_lower, neg_upper = _cvar_return_bounds(env)
     neg_ci = cvar_confidence_interval(
-        data=list(-np.array(return_samples)), alpha=alpha, delta=1 - confidence_interval_level
+        data=list(-np.array(return_samples)),
+        alpha=alpha,
+        delta=1 - confidence_interval_level,
+        dist_lower_bound=neg_lower,
+        dist_upper_bound=neg_upper,
     )
     cvar_return_confidence_interval = (-neg_ci[1], -neg_ci[0])
     return_value_at_risk_confidence_interval = quantile_confidence_interval(
-        data=return_samples, alpha=alpha, conf_level=1 - confidence_interval_level
+        data=return_samples, alpha=alpha, conf_level=confidence_interval_level
     )
     average_return_confidence_interval = confidence_interval(
         data=return_samples, confidence=confidence_interval_level

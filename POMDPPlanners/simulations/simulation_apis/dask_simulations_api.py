@@ -425,7 +425,7 @@ class DaskSimulationsAPI(SimulationsAPIInterface):
         finally:
             try:
                 optimizer.cleanup()
-            except Exception as cleanup_error:
+            except Exception as cleanup_error:  # pylint: disable=broad-exception-caught
                 self.logger.warning("Error during optimizer cleanup: %s", cleanup_error)
 
     def run_hyperparameter_tuning_experiment_with_benchmarks(
