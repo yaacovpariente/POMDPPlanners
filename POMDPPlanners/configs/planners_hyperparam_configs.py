@@ -134,9 +134,7 @@ class PlannersHyperparamConfigs:
             constant_parameters=constant_parameters,
         )
 
-    def sparse_sampling_config(
-        self, env: Environment, name: str, time_out_in_seconds: float = 3
-    ) -> HyperParamPlannerConfig:
+    def sparse_sampling_config(self, env: Environment, name: str) -> HyperParamPlannerConfig:
         hyper_parameters = [
             NumericalHyperParameter(3, 10, "branching_factor"),  # Number of samples at each node
             NumericalHyperParameter(2, 3, "depth"),  # Search depth
@@ -309,7 +307,7 @@ class PlannersHyperparamConfigs:
 
             # Sparse Sampling - requires DISCRETE actions, supports MIXED observations
             compatible_planners.append(
-                self.sparse_sampling_config(env, f"SparseSampling_{env.name}", time_out_in_seconds)
+                self.sparse_sampling_config(env, f"SparseSampling_{env.name}")
             )
 
             # Discrete Action Sequences - requires DISCRETE actions, supports MIXED observations
@@ -332,13 +330,12 @@ class PlannersHyperparamConfigs:
             # For discrete action spaces, use DiscreteActionSampler
             if isinstance(env, DiscreteActionsEnvironment):
                 return DiscreteActionSampler(env.get_actions())
-            else:
-                # If environment doesn't have get_actions method, can't create sampler
-                return None
-        elif env.space_info.action_space == SpaceType.CONTINUOUS:
+            # If environment doesn't have get_actions method, can't create sampler
+            return None
+        if env.space_info.action_space == SpaceType.CONTINUOUS:
             # For continuous action spaces, use UnitCircleActionSampler
             return UnitCircleActionSampler()
-        elif env.space_info.action_space == SpaceType.MIXED:
+        if env.space_info.action_space == SpaceType.MIXED:
             # For mixed action spaces, prefer continuous sampler if available
             # This is a reasonable default for mixed spaces
             return UnitCircleActionSampler()

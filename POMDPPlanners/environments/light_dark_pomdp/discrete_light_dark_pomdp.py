@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Any, List, Sequence, Tuple, Union
+from typing import Any, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
@@ -129,20 +129,10 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
         name: str = "DiscreteLightDarkPOMDP",
         transition_error_prob: float = 0.05,
         observation_error_prob: float = 0.05,
-        beacons: List[Tuple[float, float]] = [
-            (0, 0),
-            (0, 5),
-            (0, 10),
-            (5, 0),
-            (5, 5),
-            (5, 10),
-            (10, 0),
-            (10, 5),
-            (10, 10),
-        ],
+        beacons: Optional[List[Tuple[float, float]]] = None,
         goal_state: np.ndarray = np.array([10, 5]),
         start_state: np.ndarray = np.array([0, 5]),
-        obstacles: List[Tuple[float, float]] = [(3, 7), (5, 5)],
+        obstacles: Optional[List[Tuple[float, float]]] = None,
         obstacle_hit_probability: float = 0.2,
         obstacle_reward: float = -10.0,
         goal_reward: float = 10.0,
@@ -152,6 +142,10 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
         is_stochastic_reward: bool = True,
         observation_model_type: ObservationModelType = ObservationModelType.NORMAL,
     ):
+        if beacons is None:
+            beacons = [(0, 0), (0, 5), (0, 10), (5, 0), (5, 5), (5, 10), (10, 0), (10, 5), (10, 10)]
+        if obstacles is None:
+            obstacles = [(3, 7), (5, 5)]
         self.transition_error_prob = transition_error_prob
         self.observation_error_prob = observation_error_prob
         self.is_stochastic_reward = is_stochastic_reward
@@ -195,7 +189,7 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
                 beacon_radius=self.beacon_radius,
                 observation_error_prob=self.observation_error_prob,
             )
-        elif self.observation_model_type == ObservationModelType.NO_OBS_IN_DARK:
+        if self.observation_model_type == ObservationModelType.NO_OBS_IN_DARK:
             return DiscreteLDObservationModelNoObsInDark(
                 next_state=next_state,
                 action=action,
@@ -204,7 +198,7 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
                 beacon_radius=self.beacon_radius,
                 observation_error_prob=self.observation_error_prob,
             )
-        elif self.observation_model_type == ObservationModelType.DISTANCE_BASED:
+        if self.observation_model_type == ObservationModelType.DISTANCE_BASED:
             return DiscreteLDDistanceBasedObservationModel(
                 next_state=next_state,
                 action=action,
@@ -213,8 +207,7 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
                 beacon_radius=self.beacon_radius,
                 observation_error_prob=self.observation_error_prob,
             )
-        else:
-            raise ValueError(f"Unknown observation model type: {self.observation_model_type}")
+        raise ValueError(f"Unknown observation model type: {self.observation_model_type}")
 
     def reward(self, state: np.ndarray, action: Any) -> float:
         if state.shape != (2,):
@@ -296,7 +289,7 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
             out_of_grid_in_history = False
             out_of_grid_counter_in_history = 0
 
-            for i, step in enumerate(history.history):
+            for _, step in enumerate(history.history):
                 if np.array_equal(step.state, self.goal_state):
                     goal_reached_in_history = True
                     break

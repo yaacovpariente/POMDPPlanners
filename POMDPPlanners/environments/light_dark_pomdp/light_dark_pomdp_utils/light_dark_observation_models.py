@@ -80,7 +80,7 @@ class ContinuousLightDarkNormalNoiseObservationModel(BaseContinuousLightDarkObse
         observations = np.clip(observations, 0, self.grid_size)
 
         # Convert to list of arrays
-        return [obs for obs in observations]
+        return list(observations)
 
     def probability(self, values: List[np.ndarray]) -> np.ndarray:
         # Convert list to numpy array for vectorized computation
@@ -124,9 +124,8 @@ class ContinuousLightDarkNormalNoiseNoObsInDarkObservationModel(
             # Sample using pre-computed Cholesky decomposition
             observations = self._active_dist.sample(self.next_state, n_samples)
             observations = np.clip(observations, 0, self.grid_size)
-            return [obs for obs in observations]
-        else:
-            return ["None"] * n_samples
+            return list(observations)
+        return ["None"] * n_samples
 
     def probability(self, values: List[Union[np.ndarray, str]]) -> np.ndarray:
         res = np.zeros(len(values))
@@ -193,7 +192,7 @@ class ContinuousLightDarkDistanceBasedObservationModel(BaseContinuousLightDarkOb
         observations = np.clip(observations, 0, self.grid_size)
 
         # Convert to list of arrays
-        return [obs for obs in observations]
+        return list(observations)
 
     def probability(self, values: List[Union[np.ndarray, str]]) -> np.ndarray:
         res = np.zeros(len(values))
@@ -302,7 +301,6 @@ class BaseDiscreteLightDarkObservationModel(ObservationModel):
         Returns:
             List of sampled observations
         """
-        pass
 
     @abstractmethod
     def probability(self, values: List[Any]) -> np.ndarray:
@@ -314,7 +312,6 @@ class BaseDiscreteLightDarkObservationModel(ObservationModel):
         Returns:
             Array of probabilities for each value
         """
-        pass
 
 
 class DiscreteLDDistanceBasedObservationModel(BaseDiscreteLightDarkObservationModel):
@@ -413,8 +410,7 @@ class DiscreteLDDistanceBasedObservationModel(BaseDiscreteLightDarkObservationMo
         """
         if self.min_distance_to_beacon <= self.beacon_radius:
             return self.distribution.sample(n_samples)  # type: ignore[union-attr]
-        else:
-            return ["None"] * n_samples
+        return ["None"] * n_samples
 
     def probability(self, values: List[Union[Any, str]]) -> np.ndarray:
         """Calculate probability of given observation values.
@@ -553,8 +549,7 @@ class DiscreteLDObservationModelNoObsInDark(BaseDiscreteLightDarkObservationMode
         """
         if self.near_beacon:
             return self.distribution.sample(n_samples)  # type: ignore[union-attr]
-        else:
-            return ["None"] * n_samples
+        return ["None"] * n_samples
 
     def probability(self, values: List[Union[Any, str]]) -> np.ndarray:
         """Calculate probability of given observation values.

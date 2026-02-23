@@ -16,7 +16,6 @@ from POMDPPlanners.utils.visualization.returns_plots import (
     plot_discounted_returns_histogram,
     plot_discounted_returns_histogram_multiple_policies,
     plot_environment_policy_pair_comparison,
-    plot_reward_comparison,
 )
 
 # Import from tree_plots
@@ -36,7 +35,6 @@ __all__ = [
     "plot_metrics_comparison",
     "plot_policies_comparison_on_environment",
     # Returns plotting
-    "plot_reward_comparison",
     "plot_discounted_returns_histogram",
     "plot_discounted_returns_histogram_multiple_policies",
     "plot_environment_policy_pair_comparison",

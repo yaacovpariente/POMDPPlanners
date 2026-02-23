@@ -28,20 +28,10 @@ class BaseLightDarkPOMDP(Environment, ABC):
         name: str,
         space_info: SpaceInfo,
         reward_range: Optional[Tuple[float, float]] = None,
-        beacons: List[Tuple[float, float]] = [
-            (0, 0),
-            (0, 5),
-            (0, 10),
-            (5, 0),
-            (5, 5),
-            (5, 10),
-            (10, 0),
-            (10, 5),
-            (10, 10),
-        ],
+        beacons: Optional[List[Tuple[float, float]]] = None,
         goal_state: np.ndarray = np.array([10, 5]),
         start_state: np.ndarray = np.array([0, 5]),
-        obstacles: List[Tuple[float, float]] = [(3, 7), (5, 5)],
+        obstacles: Optional[List[Tuple[float, float]]] = None,
         obstacle_hit_probability: float = 0.2,
         obstacle_reward: float = -10.0,
         obstacle_radius: float = 1.0,
@@ -50,6 +40,10 @@ class BaseLightDarkPOMDP(Environment, ABC):
         fuel_cost: float = 2.0,
         grid_size: int = 11,
     ):
+        if beacons is None:
+            beacons = [(0, 0), (0, 5), (0, 10), (5, 0), (5, 5), (5, 10), (10, 0), (10, 5), (10, 10)]
+        if obstacles is None:
+            obstacles = [(3, 7), (5, 5)]
         self.__type_check(
             discount_factor=discount_factor,
             name=name,
@@ -181,9 +175,9 @@ class BaseLightDarkPOMDP(Environment, ABC):
     ):
         """Validate parameter value ranges."""
         # Probability ranges
-        if not (0 <= discount_factor <= 1):
+        if not 0 <= discount_factor <= 1:
             raise ValueError("discount_factor must be between 0 and 1")
-        if not (0 <= obstacle_hit_probability <= 1):
+        if not 0 <= obstacle_hit_probability <= 1:
             raise ValueError("obstacle_hit_probability must be between 0 and 1")
 
         # Positive value checks
@@ -339,7 +333,7 @@ class BaseLightDarkPOMDP(Environment, ABC):
         This implementation ensures that the config_id is invariant to the order of beacons and obstacles.
         """
 
-        def serialize_value(value, key=None):
+        def serialize_value(value, key=None):  # pylint: disable=too-many-return-statements
             if isinstance(value, np.ndarray):
                 if key in ["beacons", "obstacles"] and value.shape[0] == 2:
                     # This is beacons or obstacles in 2xN format
@@ -351,28 +345,26 @@ class BaseLightDarkPOMDP(Environment, ABC):
                     sorted_array = transposed[sorted_indices].T  # Back to 2xN format
                     # Convert to float to ensure consistent data types
                     return sorted_array.astype(float).tolist()
-                else:
-                    return value.tolist()
-            elif isinstance(value, (str, int, float, bool)):
+                return value.tolist()
+            if isinstance(value, (str, int, float, bool)):
                 return value
-            elif isinstance(value, (list, tuple)):
+            if isinstance(value, (list, tuple)):
                 return [serialize_value(v) for v in value]
-            elif isinstance(value, dict):
+            if isinstance(value, dict):
                 return {str(k): serialize_value(v) for k, v in sorted(value.items())}
-            elif isinstance(value, SpaceInfo):
+            if isinstance(value, SpaceInfo):
                 return {
                     "action_space": serialize_value(value.action_space),
                     "observation_space": serialize_value(value.observation_space),
                 }
-            elif isinstance(value, Enum):
+            if isinstance(value, Enum):
                 return value.value
-            elif hasattr(value, "__dict__"):
+            if hasattr(value, "__dict__"):
                 # Skip logger objects
                 if isinstance(value, logging.Logger):
                     return None
                 return serialize_value(value.__dict__)
-            else:
-                return str(value)
+            return str(value)
 
         config_dict = {}
         for key, value in self.__dict__.items():
@@ -393,20 +385,10 @@ class BaseLightDarkPOMDPDiscreteActions(BaseLightDarkPOMDP):
         name: str,
         is_discrete_observations: bool,
         reward_range: Optional[Tuple[float, float]] = None,
-        beacons: List[Tuple[float, float]] = [
-            (0, 0),
-            (0, 5),
-            (0, 10),
-            (5, 0),
-            (5, 5),
-            (5, 10),
-            (10, 0),
-            (10, 5),
-            (10, 10),
-        ],
+        beacons: Optional[List[Tuple[float, float]]] = None,
         goal_state: np.ndarray = np.array([10, 5]),
         start_state: np.ndarray = np.array([0, 5]),
-        obstacles: List[Tuple[float, float]] = [(3, 7), (5, 5)],
+        obstacles: Optional[List[Tuple[float, float]]] = None,
         obstacle_hit_probability: float = 0.2,
         obstacle_reward: float = -10.0,
         goal_reward: float = 10.0,
@@ -414,6 +396,10 @@ class BaseLightDarkPOMDPDiscreteActions(BaseLightDarkPOMDP):
         fuel_cost: float = 2.0,
         grid_size: int = 11,
     ):
+        if beacons is None:
+            beacons = [(0, 0), (0, 5), (0, 10), (5, 0), (5, 5), (5, 10), (10, 0), (10, 5), (10, 10)]
+        if obstacles is None:
+            obstacles = [(3, 7), (5, 5)]
         space_info = SpaceInfo(
             action_space=SpaceType.DISCRETE,
             observation_space=(
