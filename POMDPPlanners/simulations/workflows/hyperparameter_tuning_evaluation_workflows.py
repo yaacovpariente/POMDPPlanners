@@ -19,15 +19,19 @@ if TYPE_CHECKING:
     from POMDPPlanners.core.environment import Environment
     from POMDPPlanners.core.belief import Belief
     from POMDPPlanners.core.policy import Policy
-from POMDPPlanners.simulations.hyper_parameter_tuning_simulations import HyperParameterOptimizer
-from POMDPPlanners.simulations.simulator import POMDPSimulator
-from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import (
+from POMDPPlanners.simulations.hyper_parameter_tuning_simulations import (
+    HyperParameterOptimizer,
+)  # pylint: disable=wrong-import-position
+from POMDPPlanners.simulations.simulator import (
+    POMDPSimulator,
+)  # pylint: disable=wrong-import-position
+from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import (  # pylint: disable=wrong-import-position
     DaskConfig,
     JoblibConfig,
     PBSConfig,
     TaskManagerConfig,
 )
-from POMDPPlanners.utils.logger import get_logger
+from POMDPPlanners.utils.logger import get_logger  # pylint: disable=wrong-import-position
 
 logger = get_logger(__name__)
 
@@ -99,7 +103,6 @@ class OptimizationEvaluationWorkflow(ABC):
         Returns:
             Task manager configuration for optimization phase.
         """
-        pass
 
     @abstractmethod
     def _get_task_manager_config_evaluation(self) -> TaskManagerConfig:
@@ -108,7 +111,6 @@ class OptimizationEvaluationWorkflow(ABC):
         Returns:
             Task manager configuration for evaluation phase.
         """
-        pass
 
     def _validate_configs(self, configs: List[HyperParameterRunParams]) -> None:
         """Validate workflow configurations before execution.
@@ -418,7 +420,7 @@ class OptimizationEvaluationPBSWorkflow(OptimizationEvaluationWorkflow):
         evaluation_episodes: int = 2,
         evaluation_steps: int = 6,
         evaluation_n_jobs: int = 1,
-        is_risk_averse: bool = False,
+        is_risk_averse: bool = False,  # pylint: disable=unused-argument
         confidence_interval_level: float = 0.95,
         alpha: float = 0.05,
         debug: bool = False,

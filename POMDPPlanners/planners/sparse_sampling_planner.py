@@ -161,7 +161,7 @@ class SparseSamplingDiscreteActionsPlanner(Policy, ABC):
         pass
 
     def _update_belief_node_statistics(self, node: BeliefNode):
-        node.visit_count = sum([child.visit_count for child in node.children])
+        node.visit_count = sum(child.visit_count for child in node.children)
         self._update_belief_node_v_value(node)
 
     @abstractmethod
@@ -259,4 +259,4 @@ class StandardSparseSamplingDiscreteActionsPlanner(SparseSamplingDiscreteActions
         )
 
     def _update_belief_node_v_value(self, node: BeliefNode):
-        node.v_value = min([child.q_value for child in node.children])
+        node.v_value = min(child.q_value for child in node.children)

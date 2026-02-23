@@ -105,7 +105,7 @@ def _test_environment_reward_function(
             _log_or_print(
                 logger, f"Environment reward function returned extreme value: {test_reward}"
             )
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         _log_or_print(logger, f"Environment reward function failed: {e}")
 
 
@@ -118,7 +118,7 @@ def _validate_and_clip_reward(
     if not np.isfinite(reward):
         _log_or_print(logger, f"Invalid reward {reward}{step_info} for path {path_name}")
         return 0.0
-    elif abs(reward) > 1e6:
+    if abs(reward) > 1e6:
         _log_or_print(logger, f"Extreme reward {reward}{step_info} for path {path_name}")
         return float(np.clip(reward, -1e6, 1e6))
 
@@ -185,7 +185,7 @@ def plot_policy_returns(
     def simulate_sequence(agent_path: AgentPath):
         total_reward: float = 0.0
 
-        for i in range(len(agent_path.action_sequence)):
+        for i, _ in enumerate(agent_path.action_sequence):
             # Create a weighted particle belief centered on the current state
             particles = [
                 agent_path.state_sequence[i]
@@ -262,7 +262,7 @@ def plot_policy_returns(
                 bins=50,
             )
             valid_paths_plotted += 1
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             _log_or_print(
                 logger, f"Failed to plot histogram for {agent_path.name}: {e}. Skipping this path."
             )

@@ -1,3 +1,4 @@
+# pylint: disable=duplicate-code,cyclic-import
 from typing import List, Tuple, Optional, Sequence, Type
 from POMDPPlanners.core.simulation.simulation_configs import PlannerGenerator, EnvironmentRunParams
 from POMDPPlanners.core.policy import Policy
@@ -73,62 +74,61 @@ class AverageReturnParameterToOptimizeMapper(ParameterToOptimizeMapper):
 
 
 class RiskAverseParameterToOptimizeMapper(ParameterToOptimizeMapper):
-    def generate(
+    def generate(  # pylint: disable=too-many-return-statements
         self, environment: Environment, policy_cls: Optional[Type[Policy]] = None
     ) -> List[Tuple[str, HyperParameterOptimizationDirection]]:
         if isinstance(environment, CartPolePOMDP):
             return [
                 ("goal_reaching_rate", HyperParameterOptimizationDirection.MAXIMIZE),
             ]
-        elif isinstance(environment, MountainCarPOMDP):
+        if isinstance(environment, MountainCarPOMDP):
             return [
                 ("goal_reaching_rate", HyperParameterOptimizationDirection.MAXIMIZE),
             ]
-        elif isinstance(environment, ContinuousLightDarkPOMDP):
-            return [
-                ("avg_obstacle_hit_counter", HyperParameterOptimizationDirection.MINIMIZE),
-                ("goal_reaching_rate", HyperParameterOptimizationDirection.MAXIMIZE),
-            ]
-        elif isinstance(environment, DiscreteLightDarkPOMDP):
+        if isinstance(environment, ContinuousLightDarkPOMDP):
             return [
                 ("avg_obstacle_hit_counter", HyperParameterOptimizationDirection.MINIMIZE),
                 ("goal_reaching_rate", HyperParameterOptimizationDirection.MAXIMIZE),
             ]
-        elif isinstance(environment, PushPOMDP):
+        if isinstance(environment, DiscreteLightDarkPOMDP):
+            return [
+                ("avg_obstacle_hit_counter", HyperParameterOptimizationDirection.MINIMIZE),
+                ("goal_reaching_rate", HyperParameterOptimizationDirection.MAXIMIZE),
+            ]
+        if isinstance(environment, PushPOMDP):
             return [
                 ("total_all_obstacle_collisions", HyperParameterOptimizationDirection.MINIMIZE),
                 ("goal_reaching_rate", HyperParameterOptimizationDirection.MAXIMIZE),
             ]
-        elif isinstance(environment, SafeAntVelocityPOMDP):
+        if isinstance(environment, SafeAntVelocityPOMDP):
             return [
                 ("total_safety_violations", HyperParameterOptimizationDirection.MINIMIZE),
             ]
-        elif isinstance(environment, TigerPOMDP):
+        if isinstance(environment, TigerPOMDP):
             return [
                 ("success_rate", HyperParameterOptimizationDirection.MAXIMIZE),
             ]
-        elif isinstance(environment, RockSamplePOMDP):
+        if isinstance(environment, RockSamplePOMDP):
             return [
                 ("average_dangerous_area_steps", HyperParameterOptimizationDirection.MINIMIZE),
                 ("exit_success_rate", HyperParameterOptimizationDirection.MAXIMIZE),
             ]
-        elif isinstance(environment, ContinuousLaserTagPOMDP):
+        if isinstance(environment, ContinuousLaserTagPOMDP):
             return [
                 ("average_all_dangerous_encounters", HyperParameterOptimizationDirection.MINIMIZE),
                 ("tag_success_rate", HyperParameterOptimizationDirection.MAXIMIZE),
             ]
-        elif isinstance(environment, LaserTagPOMDP):
+        if isinstance(environment, LaserTagPOMDP):
             return [
                 ("average_all_dangerous_encounters", HyperParameterOptimizationDirection.MINIMIZE),
                 ("tag_success_rate", HyperParameterOptimizationDirection.MAXIMIZE),
             ]
-        elif isinstance(environment, PacManPOMDP):
+        if isinstance(environment, PacManPOMDP):
             return [
                 ("avg_collision_encounters", HyperParameterOptimizationDirection.MINIMIZE),
                 ("win_rate", HyperParameterOptimizationDirection.MAXIMIZE),
             ]
-        else:
-            raise ValueError(f"Environment {environment.__class__.__name__} is not supported")
+        raise ValueError(f"Environment {environment.__class__.__name__} is not supported")
 
 
 def get_hyperparameter_benchmarks(
@@ -410,7 +410,7 @@ def complete_environments_and_benchmarks_hyperparameter_optimization_configs(
     else:
         env_configs = EnvironmentConfigsAPI(discount_factor=discount_factor)
 
-    planners_hyperparam_configs = PlannersHyperparamConfigs(discount_factor=discount_factor)
+    _ = PlannersHyperparamConfigs(discount_factor=discount_factor)
 
     planner_configs_for_each_environment: List[HyperParamPlannerConfig] = []
     all_envs = []

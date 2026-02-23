@@ -28,10 +28,20 @@ class BaseLightDarkPOMDP(Environment, ABC):
         name: str,
         space_info: SpaceInfo,
         reward_range: Optional[Tuple[float, float]] = None,
-        beacons: Optional[List[Tuple[float, float]]] = None,
+        beacons: List[Tuple[float, float]] = [
+            (0, 0),
+            (0, 5),
+            (0, 10),
+            (5, 0),
+            (5, 5),
+            (5, 10),
+            (10, 0),
+            (10, 5),
+            (10, 10),
+        ],
         goal_state: np.ndarray = np.array([10, 5]),
         start_state: np.ndarray = np.array([0, 5]),
-        obstacles: Optional[List[Tuple[float, float]]] = None,
+        obstacles: List[Tuple[float, float]] = [(3, 7), (5, 5)],
         obstacle_hit_probability: float = 0.2,
         obstacle_reward: float = -10.0,
         obstacle_radius: float = 1.0,
@@ -40,10 +50,6 @@ class BaseLightDarkPOMDP(Environment, ABC):
         fuel_cost: float = 2.0,
         grid_size: int = 11,
     ):
-        if beacons is None:
-            beacons = [(0, 0), (0, 5), (0, 10), (5, 0), (5, 5), (5, 10), (10, 0), (10, 5), (10, 10)]
-        if obstacles is None:
-            obstacles = [(3, 7), (5, 5)]
         self.__type_check(
             discount_factor=discount_factor,
             name=name,
@@ -385,10 +391,20 @@ class BaseLightDarkPOMDPDiscreteActions(BaseLightDarkPOMDP):
         name: str,
         is_discrete_observations: bool,
         reward_range: Optional[Tuple[float, float]] = None,
-        beacons: Optional[List[Tuple[float, float]]] = None,
+        beacons: List[Tuple[float, float]] = [
+            (0, 0),
+            (0, 5),
+            (0, 10),
+            (5, 0),
+            (5, 5),
+            (5, 10),
+            (10, 0),
+            (10, 5),
+            (10, 10),
+        ],
         goal_state: np.ndarray = np.array([10, 5]),
         start_state: np.ndarray = np.array([0, 5]),
-        obstacles: Optional[List[Tuple[float, float]]] = None,
+        obstacles: List[Tuple[float, float]] = [(3, 7), (5, 5)],
         obstacle_hit_probability: float = 0.2,
         obstacle_reward: float = -10.0,
         goal_reward: float = 10.0,
@@ -396,10 +412,6 @@ class BaseLightDarkPOMDPDiscreteActions(BaseLightDarkPOMDP):
         fuel_cost: float = 2.0,
         grid_size: int = 11,
     ):
-        if beacons is None:
-            beacons = [(0, 0), (0, 5), (0, 10), (5, 0), (5, 5), (5, 10), (10, 0), (10, 5), (10, 10)]
-        if obstacles is None:
-            obstacles = [(3, 7), (5, 5)]
         space_info = SpaceInfo(
             action_space=SpaceType.DISCRETE,
             observation_space=(

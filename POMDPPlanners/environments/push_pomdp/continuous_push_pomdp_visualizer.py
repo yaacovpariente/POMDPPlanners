@@ -516,10 +516,14 @@ class ContinuousPushPOMDPVisualizer:
             )
             distance_to_target = float(np.linalg.norm(object_pos - target_pos))
             robot_to_object_dist = float(np.linalg.norm(robot_pos - object_pos))
-            robot_collision = self.env._is_circle_colliding_with_obstacle(
-                robot_pos, self.robot_radius
+            robot_collision = (
+                self.env._is_circle_colliding_with_obstacle(  # pylint: disable=protected-access
+                    robot_pos, self.robot_radius
+                )
             )
-            object_collision = self.env._is_point_colliding_with_obstacle(object_pos)
+            object_collision = self.env._is_point_colliding_with_obstacle(
+                object_pos
+            )  # pylint: disable=protected-access
             self._update_push_visualization(
                 push_arrow,
                 connection_line,

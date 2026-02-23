@@ -109,7 +109,9 @@ def belief_expectation_reward_particle_belief(
 def belief_expectation_cost_gaussian_belief(
     belief: GaussianBelief, action: Any, env: Environment, n_samples: int = 100
 ) -> float:
-    samples = belief._mvn.sample(belief.mean, n_samples=n_samples)
+    samples = belief._mvn.sample(
+        belief.mean, n_samples=n_samples
+    )  # pylint: disable=protected-access
     costs = -env.reward_batch(samples, action)
     return float(np.mean(costs))
 
@@ -139,16 +141,15 @@ def belief_expectation_cost(belief: Belief, action: Any, env: Environment) -> fl
     if isinstance(belief, VectorizedWeightedParticleBelief):
         costs = -env.reward_batch(belief.particles, action)
         return float(np.sum(costs * belief.normalized_weights))
-    elif isinstance(belief, WeightedParticleBelief):
+    if isinstance(belief, WeightedParticleBelief):
         return belief_expectation_cost_particle_belief(belief=belief, action=action, env=env)
-    elif isinstance(belief, GaussianBelief):
+    if isinstance(belief, GaussianBelief):
         return belief_expectation_cost_gaussian_belief(belief=belief, action=action, env=env)
-    elif isinstance(belief, GaussianMixtureBelief):
+    if isinstance(belief, GaussianMixtureBelief):
         return belief_expectation_cost_gaussian_mixture_belief(
             belief=belief, action=action, env=env
         )
-    else:
-        raise NotImplementedError("Belief expectation cost is not implemented for this belief type")
+    raise NotImplementedError("Belief expectation cost is not implemented for this belief type")
 
 
 def belief_expectation_reward(belief: Belief, action: Any, env: Environment) -> float:
@@ -179,7 +180,7 @@ def belief_expectation_cost_entropy_penalty(
     if isinstance(belief, VectorizedWeightedParticleBelief):
         cost_ = belief_expectation_cost(belief=belief, action=action, env=env)
         return float(np.clip(cost_, lower_clip, upper_clip))
-    elif isinstance(belief, WeightedParticleBelief):
+    if isinstance(belief, WeightedParticleBelief):
         return particle_belief_expectation_cost_entropy_penalty(
             belief=belief,
             action=action,
@@ -188,22 +189,21 @@ def belief_expectation_cost_entropy_penalty(
             lower_clip=lower_clip,
             upper_clip=upper_clip,
         )
-    elif isinstance(belief, GaussianBelief):
+    if isinstance(belief, GaussianBelief):
         cost_ = belief_expectation_cost_gaussian_belief(belief=belief, action=action, env=env)
         if entropy_weight > 0.0:
             cost_ += entropy_weight * belief.entropy()
         return float(np.clip(cost_, lower_clip, upper_clip))
-    elif isinstance(belief, GaussianMixtureBelief):
+    if isinstance(belief, GaussianMixtureBelief):
         cost_ = belief_expectation_cost_gaussian_mixture_belief(
             belief=belief, action=action, env=env
         )
         if entropy_weight > 0.0:
             cost_ += entropy_weight * belief.entropy()
         return float(np.clip(cost_, lower_clip, upper_clip))
-    else:
-        raise NotImplementedError(
-            "Belief expectation cost entropy penalty is not implemented for this belief type"
-        )
+    raise NotImplementedError(
+        "Belief expectation cost entropy penalty is not implemented for this belief type"
+    )
 
 
 def belief_expectation_cost_belief_information_gain(
@@ -218,7 +218,7 @@ def belief_expectation_cost_belief_information_gain(
     if isinstance(belief, VectorizedWeightedParticleBelief):
         cost_ = belief_expectation_cost(belief=belief, action=action, env=env)
         return float(np.clip(cost_, lower_clip, upper_clip))
-    elif isinstance(belief, WeightedParticleBelief) and isinstance(
+    if isinstance(belief, WeightedParticleBelief) and isinstance(
         next_belief, WeightedParticleBelief
     ):
         return particle_belief_expectation_cost_information_gain(
@@ -230,21 +230,18 @@ def belief_expectation_cost_belief_information_gain(
             lower_clip=lower_clip,
             upper_clip=upper_clip,
         )
-    elif isinstance(belief, GaussianBelief) and isinstance(next_belief, GaussianBelief):
+    if isinstance(belief, GaussianBelief) and isinstance(next_belief, GaussianBelief):
         cost_ = belief_expectation_cost_gaussian_belief(belief=belief, action=action, env=env)
         information_gain = next_belief.entropy() - belief.entropy()
         total_cost = cost_ + entropy_weight * information_gain
         return float(np.clip(total_cost, lower_clip, upper_clip))
-    elif isinstance(belief, GaussianMixtureBelief) and isinstance(
-        next_belief, GaussianMixtureBelief
-    ):
+    if isinstance(belief, GaussianMixtureBelief) and isinstance(next_belief, GaussianMixtureBelief):
         cost_ = belief_expectation_cost_gaussian_mixture_belief(
             belief=belief, action=action, env=env
         )
         information_gain = next_belief.entropy() - belief.entropy()
         total_cost = cost_ + entropy_weight * information_gain
         return float(np.clip(total_cost, lower_clip, upper_clip))
-    else:
-        raise NotImplementedError(
-            "Belief expectation cost information gain is not implemented for this belief type"
-        )
+    raise NotImplementedError(
+        "Belief expectation cost information gain is not implemented for this belief type"
+    )

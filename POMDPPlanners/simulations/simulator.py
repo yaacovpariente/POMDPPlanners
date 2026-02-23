@@ -1,3 +1,4 @@
+# pylint: disable=too-many-lines
 import cProfile
 import gc
 import hashlib
@@ -65,11 +66,11 @@ def _validate_environment_policy_comparison_parameters(
         raise ValueError("All elements in environment_run_params must be EnvironmentRunParams")
     if not isinstance(alpha, float):
         raise ValueError("alpha must be a float")
-    if not (0 <= alpha <= 1):
+    if not 0 <= alpha <= 1:
         raise ValueError("alpha must be between 0 and 1")
     if not isinstance(confidence_interval_level, float):
         raise ValueError("confidence_interval_level must be a float")
-    if not (0 < confidence_interval_level < 1):
+    if not 0 < confidence_interval_level < 1:
         raise ValueError("confidence_interval_level must be between 0 and 1")
     if not isinstance(n_jobs, int):
         raise ValueError("n_jobs must be an integer")
@@ -190,7 +191,7 @@ class BaseSimulator(ABC):
 
             if mlflow.active_run() is not None:
                 mlflow.end_run()
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught
             # Ignore any errors during MLflow cleanup
             pass
 
@@ -200,7 +201,7 @@ class BaseSimulator(ABC):
         # Clean up logger resources to prevent hanging
         try:
             cleanup_all_loggers()
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught
             # Ignore any errors during logger cleanup
             pass
 
@@ -258,7 +259,7 @@ class BaseSimulator(ABC):
         # Save profiling results to file if cache directory is available
         if self.cache_dir_path:
             profiling_file = self.cache_dir_path / "profiling_results.txt"
-            with open(profiling_file, "w") as f:
+            with open(profiling_file, "w", encoding="utf-8") as f:
                 ps = pstats.Stats(self.profiler, stream=f).sort_stats("cumulative")
                 ps.print_stats(self.profiling_output_limit)  # Show all functions, no restriction
             self.logger.info("Detailed profiling results saved to: %s", profiling_file)
@@ -274,7 +275,7 @@ class BaseSimulator(ABC):
 
             if mlflow.active_run() is not None:
                 mlflow.end_run()
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught
             # Ignore any errors during MLflow cleanup
             pass
 
@@ -460,7 +461,7 @@ class BaseSimulator(ABC):
     ) -> None:
         """Create environment-specific visualizations in parallel and log them to MLflow."""
 
-        def create_and_log_env_viz(
+        def create_and_log_env_viz(  # pylint: disable=unused-argument
             env_name: str,
             policy_results_dict: Dict[str, list],
             tracking_uri: str,
@@ -546,7 +547,7 @@ class BaseSimulator(ABC):
     ) -> pd.DataFrame:
         """Create a DataFrame containing policy configurations for all environment-policy pairs."""
         policy_configs = []
-        for env, belief, policies in environment_belief_policy_tuples:
+        for env, _, policies in environment_belief_policy_tuples:
             for policy in policies:
                 # Get policy parameters
                 policy_params = {
@@ -609,7 +610,7 @@ class BaseSimulator(ABC):
                 result = results[env.name][policy.name]
                 if len(result) != num_episodes:
                     self.logger.warning(
-                        "Policy %s in environment %s has %s results, " "expected %s",
+                        "Policy %s in environment %s has %s results, expected %s",
                         policy.name,
                         env.name,
                         len(result),
@@ -659,7 +660,7 @@ class BaseSimulator(ABC):
             task_identifiers=task_identifiers,
         )
 
-    def _validate_parallel_simulation_inputs(
+    def _validate_parallel_simulation_inputs(  # pylint: disable=too-many-branches
         self,
         environment_run_params: List[EnvironmentRunParams],
         alpha: float,
@@ -700,7 +701,7 @@ class BaseSimulator(ABC):
             raise ValueError("alpha must be a float")
         if not isinstance(confidence_interval_level, float):
             raise ValueError("confidence_interval_level must be a float")
-        if not (0 <= confidence_interval_level <= 1):
+        if not 0 <= confidence_interval_level <= 1:
             raise ValueError("confidence_interval_level must be between 0 and 1")
         if not (isinstance(n_jobs, int) and (n_jobs > 0 or n_jobs == -1)):
             raise ValueError("n_jobs must be a positive integer or -1")
@@ -717,7 +718,6 @@ class BaseSimulator(ABC):
             - List of simulation tasks
             - List of (env_name, policy_name) identifiers matching the tasks
         """
-        pass
 
     @abstractmethod
     def _compute_metrics(
@@ -728,7 +728,6 @@ class BaseSimulator(ABC):
         confidence_interval_level: float,
     ) -> Dict[str, Dict[str, List[MetricValue]]]:
         """Compute metrics for the simulation results."""
-        pass
 
     def _log_metrics_to_mlflow(self, metrics: Dict[str, Dict[str, List[MetricValue]]]) -> None:
         """Log all metrics to MLflow for tracking and comparison.
@@ -938,7 +937,7 @@ class POMDPSimulator(BaseSimulator):
                     total_tasks += 1
 
         self.logger.info(
-            "Created %s simulation tasks across %s " "environments and %s policies",
+            "Created %s simulation tasks across %s environments and %s policies",
             total_tasks,
             len(set(params.environment.name for params in environment_run_params)),
             len(set(p.name for params in environment_run_params for p in params.policies)),
@@ -1127,7 +1126,7 @@ class POMDPSimulator(BaseSimulator):
             cache_visualizations=cache_visualizations,
         )
 
-    def _create_environment_visualizations_custom(
+    def _create_environment_visualizations_custom(  # pylint: disable=unused-argument
         self,
         env_name: str,
         environment: Environment,
@@ -1215,5 +1214,5 @@ class POMDPSimulator(BaseSimulator):
                     history=history.history,  # Pass List[StepData] as per base Environment interface
                     cache_path=cache_path,
                 )
-            except Exception as e:
+            except Exception as e:  # pylint: disable=broad-exception-caught
                 self.logger.warning("Visualization failed for episode %s: %s", episode_idx, str(e))

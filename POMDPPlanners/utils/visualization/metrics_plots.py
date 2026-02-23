@@ -147,17 +147,17 @@ def _customize_plot_labels(
 
 def _add_value_labels_to_bars(bars, metric_values: List[float], yerr: np.ndarray):
     """Add value labels on top of bars."""
-    for i, (bar, value) in enumerate(zip(bars, metric_values)):
-        height = bar.get_height()
+    for i, (bar_artist, value) in enumerate(zip(bars, metric_values)):
+        height = bar_artist.get_height()
         plt.text(
-            bar.get_x() + bar.get_width() / 2.0,
+            bar_artist.get_x() + bar_artist.get_width() / 2.0,
             height + yerr[1][i] + 0.01,
             f"{value:.3f}",
             ha="center",
             va="bottom",
             fontsize=28,
             fontweight="bold",
-            bbox=dict(boxstyle="round,pad=0.2", facecolor="white", alpha=0.8),
+            bbox={"boxstyle": "round,pad=0.2", "facecolor": "white", "alpha": 0.8},
         )
 
 
@@ -325,7 +325,7 @@ def plot_policies_comparison_on_environment(
                 plt.savefig(plots_dir / plot_filename, dpi=300, bbox_inches="tight")
                 plt.close()
 
-            except Exception as e:
+            except Exception as e:  # pylint: disable=broad-exception-caught
                 logger.warning("Error creating plot for %s - %s: %s", env_name, metric_name, str(e))
                 plt.close()  # Make sure to close the figure even if there's an error
                 continue

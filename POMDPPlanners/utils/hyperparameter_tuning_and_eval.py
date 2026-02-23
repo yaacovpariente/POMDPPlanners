@@ -1,3 +1,4 @@
+# pylint: disable=too-many-lines
 """Utility functions for hyperparameter tuning and evaluation of POMDP planners.
 
 This module provides high-level functions for conducting hyperparameter optimization
@@ -936,7 +937,7 @@ def optimize_and_evaluate_multiple_environments_and_policies_pbs(
     return results
 
 
-def optimize_planner_hyperparameters(
+def optimize_planner_hyperparameters(  # pylint: disable=too-many-branches
     environment: Environment,
     initial_belief: Belief,
     planner_configs: List[HyperParamPlannerConfig],
@@ -1061,12 +1062,11 @@ def optimize_planner_hyperparameters(
         if debug:
             logger.debug("Returning %d optimization results", len(optimization_results))
         return optimization_results
-    else:
-        if verbose:
-            logger.warning("Warning: No optimization results returned")
-        if debug:
-            logger.debug("No optimization results to return")
-        return []
+    if verbose:
+        logger.warning("Warning: No optimization results returned")
+    if debug:
+        logger.debug("No optimization results to return")
+    return []
 
 
 def _log_pbs_hyperparameter_optimization_setup(
@@ -1195,12 +1195,11 @@ def _process_pbs_optimization_results(
         if debug:
             logger.debug("Returning %d optimization results", len(optimization_results))
         return optimization_results
-    else:
-        if verbose:
-            logger.warning("Warning: No optimization results returned from PBS cluster")
-        if debug:
-            logger.debug("No optimization results to return")
-        return []
+    if verbose:
+        logger.warning("Warning: No optimization results returned from PBS cluster")
+    if debug:
+        logger.debug("No optimization results to return")
+    return []
 
 
 def optimize_planner_hyperparameters_pbs(
@@ -1414,7 +1413,9 @@ def _log_evaluation_results(results: Dict, statistics_df: pd.DataFrame, debug: b
             logger.debug("Statistics DataFrame shape: %s", statistics_df.shape)
 
 
-def _display_key_metrics(policy_stats: pd.DataFrame, verbose: bool, debug: bool) -> None:
+def _display_key_metrics(
+    policy_stats: pd.DataFrame, verbose: bool, debug: bool
+) -> None:  # pylint: disable=unused-argument
     """Display key metrics from policy statistics."""
     if "metric" in policy_stats.columns:
         key_metrics = ["average_return", "return_cvar", "average_actual_num_steps"]
@@ -1974,7 +1975,7 @@ def get_benchmark_hyperparameter_planners(
             >>> env = TigerPOMDP(discount_factor=0.95)
             >>> compatible_planners = get_benchmark_hyperparameter_planners(env)
             >>> print(f"Compatible planners: {[p.__name__ for p in compatible_planners]}")
-            Compatible planners: ['POMCP', 'StandardSparseSamplingDiscreteActionsPlanner', 'SparsePFT', 'POMCPOW', 'PFT_DPW', 'POMCP_DPW', 'DiscreteActionSequencesPlanner']
+            Compatible planners: ['POMCP', 'StandardSparseSamplingDiscreteActionsPlanner', 'SparsePFT', 'POMCPOW', 'PFT_DPW', 'POMCP_DPW', 'DiscreteActionSequencesPlanner', 'BetaZero', 'ConstrainedZero']
     """
     if debug:
         logger.debug("Finding compatible planners for environment: %s", env.name)
@@ -2031,7 +2032,7 @@ def get_benchmark_hyperparameter_planners(
                         obs_compatible,
                     )
 
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             if debug:
                 logger.debug("Skipping %s due to error: %s", planner_name, e)
             continue

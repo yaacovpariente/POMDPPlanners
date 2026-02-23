@@ -139,7 +139,7 @@ class EpisodeSimulationTask(SimulationTask):
         )
 
     @staticmethod
-    def _validate_inputs(
+    def _validate_inputs(  # pylint: disable=too-many-branches
         environment: Any,
         policy: Any,
         initial_belief: Any,
@@ -287,7 +287,7 @@ class EpisodeSimulationTask(SimulationTask):
                 episode_failed = True
                 self._flush_buffered_logs()
 
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             episode_failed = True
             self._log_episode_error(e)
             self._flush_buffered_logs()
@@ -345,7 +345,7 @@ class EpisodeSimulationTask(SimulationTask):
                     try:
                         handler.close()
                         logger.removeHandler(handler)
-                    except Exception:
+                    except Exception:  # pylint: disable=broad-exception-caught
                         pass
 
             # Step 3: Clear references to large objects
@@ -354,14 +354,14 @@ class EpisodeSimulationTask(SimulationTask):
             self.initial_belief = None
             # Note: Don't clear _cache_key as get_config_id() must return str
 
-        except Exception as e:
+        except Exception:  # pylint: disable=broad-exception-caught
             # Don't let cleanup errors affect the main task
             pass
 
     def _log_episode_start(self) -> None:
         """Log episode start information."""
         self.logger.info(
-            "[EPISODE_%03d] Starting episode simulation " "(num=%s, steps=%s, seed=%s)",
+            "[EPISODE_%03d] Starting episode simulation (num=%s, steps=%s, seed=%s)",
             self.episode_id,
             self.episode_number,
             self.num_steps,
@@ -505,7 +505,7 @@ class EpisodeSimulationTask(SimulationTask):
             total_reward, actual_steps, reached_terminal = self._extract_episode_metrics(result)
 
             self.logger.info(
-                "[EPISODE_%03d] Completed successfully " "(reward=%.4f, steps=%s, terminal=%s)",
+                "[EPISODE_%03d] Completed successfully (reward=%.4f, steps=%s, terminal=%s)",
                 self.episode_id,
                 total_reward,
                 actual_steps,

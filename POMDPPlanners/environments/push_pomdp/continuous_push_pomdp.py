@@ -46,6 +46,9 @@ from POMDPPlanners.environments.push_pomdp.continuous_push_geometry import (
 )
 from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
 from POMDPPlanners.utils.statistics_utils import confidence_interval
+from POMDPPlanners.environments.push_pomdp.continuous_push_pomdp_visualizer import (  # pylint: disable=import-outside-toplevel
+    ContinuousPushPOMDPVisualizer,
+)
 
 
 class ContinuousPushPOMDPMetrics(Enum):
@@ -255,7 +258,9 @@ class _RandomInitialStateDistribution(Distribution):
         p = self._parent
         for _ in range(100):
             pos = np.random.uniform(p.robot_radius, p.grid_size - 1 - p.robot_radius, size=2)
-            if not p._is_circle_colliding_with_obstacle(pos, p.robot_radius):
+            if not p._is_circle_colliding_with_obstacle(
+                pos, p.robot_radius
+            ):  # pylint: disable=protected-access
                 return pos
         return np.random.uniform(p.robot_radius, p.grid_size - 1 - p.robot_radius, size=2)
 
@@ -264,7 +269,9 @@ class _RandomInitialStateDistribution(Distribution):
         for _ in range(100):
             pos = np.random.uniform(0, p.grid_size - 1, size=2)
             far_from_target = np.linalg.norm(pos - p.target_pos) >= 2.0
-            if far_from_target and not p._is_point_colliding_with_obstacle(pos):
+            if far_from_target and not p._is_point_colliding_with_obstacle(
+                pos
+            ):  # pylint: disable=protected-access
                 return pos
         return np.random.uniform(0, p.grid_size - 1, size=2)
 
@@ -459,9 +466,6 @@ class ContinuousPushPOMDP(Environment):
             ValueError: If history is empty or cache_path doesn't end with .gif.
             TypeError: If cache_path is not a Path object.
         """
-        from POMDPPlanners.environments.push_pomdp.continuous_push_pomdp_visualizer import (
-            ContinuousPushPOMDPVisualizer,
-        )
 
         visualizer = ContinuousPushPOMDPVisualizer(self)
         visualizer.create_visualization(history, cache_path)

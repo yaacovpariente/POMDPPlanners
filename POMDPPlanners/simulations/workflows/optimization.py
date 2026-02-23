@@ -24,8 +24,6 @@ def run_hyperparameter_optimization_local_run(
     experiment_name: str = "POMDP_Hyperparameter_Optimization",
     n_jobs: int = -1,
     cache_dir_path: Optional[Path] = None,
-    clear_cache_on_start: bool = False,
-    debug: bool = False,
     confidence_interval_level: float = 0.95,
     alpha: float = 0.05,
     use_queue_logger: bool = False,
@@ -54,10 +52,6 @@ def run_hyperparameter_optimization_local_run(
         cache_dir_path: Optional path for storing optimization results, logs,
             and MLflow artifacts. If None, results are stored in the current
             working directory.
-        clear_cache_on_start: Whether to clear existing cache before starting
-            optimization. Useful for ensuring clean runs when debugging or testing.
-        debug: Whether to enable debug-level logging output. When True, provides
-            detailed information about optimization progress and internal operations.
         confidence_interval_level: Confidence level for statistical analysis
             (between 0.0 and 1.0). Used for computing confidence intervals in
             performance statistics. Defaults to 0.95 for 95% confidence intervals.
@@ -153,7 +147,8 @@ def run_hyperparameter_optimization_local_run(
         len(environment_run_params),
     )
     logger.debug(
-        "Parameters: experiment_name=%s, n_jobs=%s, " "confidence_interval=%s, alpha=%s",
+        "Parameters: experiment_name=%s, n_jobs=%s, "  # pylint: disable=implicit-str-concat
+        "confidence_interval=%s, alpha=%s",
         experiment_name,
         n_jobs,
         confidence_interval_level,
@@ -195,7 +190,9 @@ def run_hyperparameter_optimization_local_run(
         # Log summary of results
         for i, result in enumerate(results):
             logger.info(
-                "Configuration %s: %s " "with %s - " "Best parameters: %s",
+                "Configuration %s: %s "  # pylint: disable=implicit-str-concat
+                "with %s - "
+                "Best parameters: %s",
                 i + 1,
                 result.environment.__class__.__name__,
                 result.policy.__class__.__name__,
@@ -204,7 +201,7 @@ def run_hyperparameter_optimization_local_run(
 
         return results
 
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         logger.error("Hyperparameter optimization failed: %s", e)
         raise RuntimeError(f"Hyperparameter optimization failed: {e}") from e
 
@@ -212,7 +209,7 @@ def run_hyperparameter_optimization_local_run(
         # Clean up optimizer resources
         try:
             optimizer.cleanup()
-        except Exception as cleanup_error:
+        except Exception as cleanup_error:  # pylint: disable=broad-exception-caught
             logger.warning("Error during optimizer cleanup: %s", cleanup_error)
 
 
@@ -229,7 +226,6 @@ def run_hyperparameter_optimization_pbs(
     n_jobs: int = -1,
     cache_dir_path: Optional[Path] = None,
     clear_cache_on_start: bool = False,
-    debug: bool = False,
     confidence_interval_level: float = 0.95,
     alpha: float = 0.05,
     use_queue_logger: bool = True,
@@ -270,8 +266,6 @@ def run_hyperparameter_optimization_pbs(
             working directory.
         clear_cache_on_start: Whether to clear existing cache before starting
             optimization. Useful for ensuring clean runs when debugging or testing.
-        debug: Whether to enable debug-level logging output. When True, provides
-            detailed information about optimization progress and internal operations.
         confidence_interval_level: Confidence level for statistical analysis
             (between 0.0 and 1.0). Used for computing confidence intervals in
             performance statistics. Defaults to 0.95 for 95% confidence intervals.
@@ -372,7 +366,8 @@ def run_hyperparameter_optimization_pbs(
         len(environment_run_params),
     )
     logger.debug(
-        "PBS Parameters: queue=%s, n_workers=%s, cores=%s, " "memory=%s, walltime=%s",
+        "PBS Parameters: queue=%s, n_workers=%s, cores=%s, "  # pylint: disable=implicit-str-concat
+        "memory=%s, walltime=%s",
         queue,
         n_workers,
         cores,
@@ -440,7 +435,9 @@ def run_hyperparameter_optimization_pbs(
         # Log summary of results
         for i, result in enumerate(results):
             logger.info(
-                "Configuration %s: %s " "with %s - " "Best parameters: %s",
+                "Configuration %s: %s "  # pylint: disable=implicit-str-concat
+                "with %s - "
+                "Best parameters: %s",
                 i + 1,
                 result.environment.__class__.__name__,
                 result.policy.__class__.__name__,
@@ -449,7 +446,7 @@ def run_hyperparameter_optimization_pbs(
 
         return results
 
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         logger.error("PBS hyperparameter optimization failed: %s", e)
         raise RuntimeError(f"PBS hyperparameter optimization failed: {e}") from e
 
@@ -457,5 +454,5 @@ def run_hyperparameter_optimization_pbs(
         # Clean up optimizer resources
         try:
             optimizer.cleanup()
-        except Exception as cleanup_error:
+        except Exception as cleanup_error:  # pylint: disable=broad-exception-caught
             logger.warning("Error during optimizer cleanup: %s", cleanup_error)

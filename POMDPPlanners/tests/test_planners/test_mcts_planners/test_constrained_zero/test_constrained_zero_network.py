@@ -227,3 +227,134 @@ class TestConstrainedZeroNetwork:
         assert log_policy.shape == (3,)
         assert value.shape == (1,)
         assert failure_logit.shape == (1,)
+
+    def test_dropout_applied_in_train_mode(self):
+        """Test that dropout produces stochastic outputs in training mode.
+
+        Purpose: Validates that use_dropout=True causes non-deterministic trunk
+            outputs during training, confirming dropout is active.
+
+        Given: A ConstrainedZeroNetwork with use_dropout=True, p_dropout=0.5 in train mode.
+        When: Twenty forward passes are run with the same input tensor.
+        Then: At least two outputs differ (dropout is stochastic in train mode).
+
+        Test type: unit
+        """
+        net = ConstrainedZeroNetwork(
+            belief_dim=4,
+            action_space_type="discrete",
+            n_actions=3,
+            hidden_sizes=(64, 64),
+            use_dropout=True,
+            p_dropout=0.5,
+        )
+        net.train()
+        x = torch.ones(1, 4)
+        outputs = []
+        for _ in range(20):
+            log_policy, _, _ = net(x)
+            outputs.append(log_policy.detach().clone())
+        any_differ = any(not torch.allclose(outputs[0], outputs[i]) for i in range(1, len(outputs)))
+        assert any_differ, "Expected stochastic outputs with dropout in train mode"
+
+    def test_no_dropout_in_eval_mode(self):
+        """Test that predict() produces deterministic outputs (eval mode disables dropout).
+
+        Purpose: Validates that predict() switches to eval mode so dropout is
+            inactive, yielding identical results for repeated calls.
+
+        Given: A ConstrainedZeroNetwork with use_dropout=True.
+        When: predict() is called twice with the same input.
+        Then: Both outputs are identical.
+
+        Test type: unit
+        """
+        net = ConstrainedZeroNetwork(
+            belief_dim=4,
+            action_space_type="discrete",
+            n_actions=3,
+            hidden_sizes=(64, 64),
+            use_dropout=True,
+            p_dropout=0.5,
+        )
+        features = np.ones(4, dtype=np.float32)
+        policy1, value1, fp1 = net.predict(features)
+        policy2, value2, fp2 = net.predict(features)
+        np.testing.assert_array_equal(policy1, policy2)
+        assert value1 == value2
+        assert fp1 == fp2
+
+    def test_use_dropout_false_disables_dropout(self):
+        """Test that use_dropout=False yields deterministic outputs in train mode.
+
+        Purpose: Validates that setting use_dropout=False removes all dropout
+            layers from the trunk, making forward passes deterministic.
+
+        Given: A ConstrainedZeroNetwork with use_dropout=False in train mode.
+        When: Two forward passes are run with the same input.
+        Then: Outputs are identical (no dropout regardless of training mode).
+
+        Test type: unit
+        """
+        net = ConstrainedZeroNetwork(
+            belief_dim=4,
+            action_space_type="discrete",
+            n_actions=3,
+            hidden_sizes=(64, 64),
+            use_dropout=False,
+        )
+        net.train()
+        x = torch.ones(1, 4)
+        log_policy1, _, _ = net(x)
+        log_policy2, _, _ = net(x)
+        assert torch.allclose(
+            log_policy1, log_policy2
+        ), "Expected identical outputs with use_dropout=False in train mode"
+
+    def test_predict_restores_training_mode(self):
+        """Test that predict() restores training mode after inference.
+
+        Purpose: Validates that predict() restores the network to train mode
+            after temporarily switching to eval mode for dropout suppression.
+
+        Given: A ConstrainedZeroNetwork put into train mode.
+        When: predict() is called.
+        Then: network.training is True after the call.
+
+        Test type: unit
+        """
+        net = ConstrainedZeroNetwork(
+            belief_dim=4,
+            action_space_type="discrete",
+            n_actions=3,
+            hidden_sizes=(64, 64),
+            use_dropout=True,
+        )
+        net.train()
+        features = np.zeros(4, dtype=np.float32)
+        net.predict(features)
+        assert net.training, "Expected network to be in train mode after predict()"
+
+    def test_predict_batch_restores_training_mode(self):
+        """Test that predict_batch() restores training mode after inference.
+
+        Purpose: Validates that predict_batch() restores the network to train
+            mode after temporarily switching to eval mode for dropout suppression.
+
+        Given: A ConstrainedZeroNetwork put into train mode.
+        When: predict_batch() is called.
+        Then: network.training is True after the call.
+
+        Test type: unit
+        """
+        net = ConstrainedZeroNetwork(
+            belief_dim=4,
+            action_space_type="discrete",
+            n_actions=3,
+            hidden_sizes=(64, 64),
+            use_dropout=True,
+        )
+        net.train()
+        features_batch = np.zeros((3, 4), dtype=np.float32)
+        net.predict_batch(features_batch)
+        assert net.training, "Expected network to be in train mode after predict_batch()"

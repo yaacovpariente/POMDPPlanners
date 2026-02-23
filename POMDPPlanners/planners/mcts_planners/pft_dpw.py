@@ -28,8 +28,7 @@ from typing import Any, Optional, Tuple
 import numpy as np
 
 from POMDPPlanners.core.cost import belief_expectation_reward
-from POMDPPlanners.core.environment import Environment, SpaceType
-from POMDPPlanners.core.policy import PolicySpaceInfo
+from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.tree import ActionNode, BeliefNode
 from POMDPPlanners.planners.mcts_planners.path_simulations_policy import (
     DoubleProgressiveWideningMCTSPolicy,
