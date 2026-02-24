@@ -43,6 +43,7 @@ jobs:
       uses: docker/build-push-action@v4
       with:
         context: .
+        file: docker/Dockerfile
         target: test
         load: true
         tags: pomdpplanners-test:latest
@@ -97,6 +98,7 @@ jobs:
       uses: docker/build-push-action@v4
       with:
         context: .
+        file: docker/Dockerfile
         push: true
         tags: |
           ghcr.io/${{ github.repository_owner }}/pomdpplanners:latest

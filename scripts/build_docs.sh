@@ -17,19 +17,15 @@ if [[ "$VIRTUAL_ENV" == "" ]]; then
 fi
 
 # Check if we're in the right directory
-if [[ ! -f "setup.py" ]]; then
-    echo "❌ Error: setup.py not found."
+if [[ ! -f "pyproject.toml" ]]; then
+    echo "❌ Error: pyproject.toml not found."
     echo "   Please run this script from the project root directory."
     exit 1
 fi
 
-# Install documentation dependencies
-echo "📦 Installing documentation dependencies..."
-pip install -r docs/requirements.txt
-
-# Install the package in development mode if not already installed
-echo "📦 Installing POMDPPlanners in development mode..."
-pip install -e .
+# Install the package with documentation dependencies
+echo "📦 Installing POMDPPlanners with documentation dependencies..."
+pip install -e ".[docs]"
 
 # Navigate to docs directory
 cd docs

@@ -9,8 +9,7 @@
     "**/build",
     "**/dist",
     "docs/_build",
-    "type_hints.py",
-    "setup.py"
+    "type_hints.py"
   ],
   "pythonVersion": "3.12",
   "typeCheckingMode": "basic",
