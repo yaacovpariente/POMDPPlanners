@@ -11,8 +11,7 @@ RUN apt-get update && apt-get install -y libatomic1 && rm -rf /var/lib/apt/lists
 COPY . .
 
 RUN pip install --upgrade pip
-RUN pip install -r requirements.txt -r requirements-dev.txt
-RUN pip install -e .[docs]
+RUN pip install -e ".[dev,docs]"
 
 # Production stage
 FROM base
@@ -22,7 +21,6 @@ WORKDIR /app
 COPY . .
 
 RUN pip install --upgrade pip
-RUN pip install -r requirements.txt
 RUN pip install -e .
 
 ENTRYPOINT ["python"] 
