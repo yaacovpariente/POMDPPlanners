@@ -85,19 +85,11 @@ class POMCP_DPW(DoubleProgressiveWideningMCTSPolicy):
         debug: Enable debug logging if True
 
     Example:
-        >>> import random
         >>> import numpy as np
         >>> from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
         >>> from POMDPPlanners.core.belief import get_initial_belief
-        >>> from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
+        >>> from POMDPPlanners.utils.action_samplers import DiscreteActionSampler
         >>> np.random.seed(42)  # For reproducible results
-        >>>
-        >>> # Create action sampler
-        >>> class DiscreteActionSampler(ActionSampler):
-        ...     def __init__(self, actions):
-        ...         self.actions = actions
-        ...     def sample(self, belief_node=None):
-        ...         return random.choice(self.actions)
         >>>
         >>> # Create environment and planner
         >>> tiger = TigerPOMDP(discount_factor=0.95)
