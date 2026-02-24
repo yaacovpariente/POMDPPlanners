@@ -203,11 +203,13 @@ class VectorizedWeightedParticleBelief(Belief):
             )
         if not isinstance(resampling, bool):
             raise TypeError("resampling must be a boolean")
-        if not np.all(np.isfinite(log_weights)):
-            raise ValueError("log_weights must be finite")
+        if np.any(np.isnan(log_weights)) or np.any(np.isposinf(log_weights)):
+            raise ValueError("log_weights must not contain NaN or +inf values")
 
     @staticmethod
     def _normalize(log_weights: np.ndarray) -> np.ndarray:
+        if np.all(np.isneginf(log_weights)):
+            return np.ones(len(log_weights)) / len(log_weights)
         shifted = log_weights - np.max(log_weights)
         weights = np.exp(shifted)
         return weights / weights.sum()
