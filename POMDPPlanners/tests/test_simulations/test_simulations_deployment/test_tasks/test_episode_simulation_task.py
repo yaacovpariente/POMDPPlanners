@@ -1,6 +1,5 @@
-# pylint: disable=protected-access  # Tests need to access protected members
+# pylint: disable=protected-access,too-many-lines  # Tests need to access protected members
 from unittest.mock import patch
-from pathlib import Path
 
 import numpy as np
 import pytest
@@ -15,11 +14,41 @@ from POMDPPlanners.planners.mcts_planners.pomcpow import POMCPOW
 from POMDPPlanners.simulations.simulations_deployment.tasks import EpisodeSimulationTask
 from POMDPPlanners.utils.action_samplers import DiscreteActionSampler, UnitCircleActionSampler
 from POMDPPlanners.utils.logger import ConditionalMemoryHandler
-from experiments.configs.environments_configs import (
-    environment_instances,
-    belief_instances,
-    EnvironmentConfigsAPI,
+from POMDPPlanners.configs.environment_configs import EnvironmentConfigsAPI
+from POMDPPlanners.core.belief import get_initial_belief
+from POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp import (
+    DiscreteLightDarkPOMDP,
 )
+
+
+def _build_environment_and_belief_instances():
+    api = EnvironmentConfigsAPI(discount_factor=0.95)
+    n_particles = 20
+    envs = {}
+    beliefs = {}
+    for key, config_method in [
+        ("tiger", api.tiger_pomdp_config),
+        ("cartpole", api.cartpole_pomdp_config),
+        ("mountain_car", api.mountain_car_pomdp_config),
+        ("push", api.push_pomdp_config),
+        ("safety_ant_velocity", api.safety_ant_velocity_pomdp_config),
+        (
+            "continuous_light_dark",
+            api.continuous_observations_continuous_actions_light_dark_pomdp_config,
+        ),
+    ]:
+        env, belief = config_method(n_particles=n_particles)
+        envs[key] = env
+        beliefs[key] = belief
+    discrete_ld = DiscreteLightDarkPOMDP(discount_factor=0.95)
+    beliefs["discrete_light_dark"] = get_initial_belief(
+        pomdp=discrete_ld, n_particles=n_particles, resampling=True
+    )
+    envs["discrete_light_dark"] = discrete_ld
+    return envs, beliefs
+
+
+environment_instances, belief_instances = _build_environment_and_belief_instances()
 
 
 def create_test_belief():
@@ -306,7 +335,7 @@ def test_episode_simulation_task_execution(environment, policy):
         assert hasattr(result, "actual_num_steps")
 
 
-def test_episode_simulation_task_value_error_logging(tmp_path, environment, policy):
+def test_episode_simulation_task_value_error_logging(tmp_path, policy):
     """Test that EpisodeSimulationTask logs ValueError exceptions properly.
 
     Purpose: Validates that EpisodeSimulationTask logs ValueError exceptions with appropriate detail
@@ -365,7 +394,7 @@ def test_episode_simulation_task_value_error_logging(tmp_path, environment, poli
     assert error_found, f"Error message not found in any log file. Checked {len(log_files)} files."
 
 
-def test_episode_simulation_task_runtime_error_logging(tmp_path, environment, policy):
+def test_episode_simulation_task_runtime_error_logging(tmp_path, policy):
     """Test that EpisodeSimulationTask logs RuntimeError exceptions properly.
 
     Purpose: Validates that EpisodeSimulationTask logs RuntimeError exceptions with appropriate detail
@@ -424,7 +453,7 @@ def test_episode_simulation_task_runtime_error_logging(tmp_path, environment, po
     assert error_found, f"Error message not found in any log file. Checked {len(log_files)} files."
 
 
-def test_episode_simulation_task_type_error_logging(tmp_path, environment, policy):
+def test_episode_simulation_task_type_error_logging(tmp_path, policy):
     """Test that EpisodeSimulationTask logs TypeError exceptions properly.
 
     Purpose: Validates that EpisodeSimulationTask logs TypeError exceptions with appropriate detail
@@ -481,7 +510,7 @@ def test_episode_simulation_task_type_error_logging(tmp_path, environment, polic
     assert error_found, f"Error message not found in any log file. Checked {len(log_files)} files."
 
 
-def test_episode_simulation_task_custom_exception_logging(tmp_path, environment, policy):
+def test_episode_simulation_task_custom_exception_logging(tmp_path, policy):
     """Test that EpisodeSimulationTask logs custom exceptions properly.
 
     Purpose: Validates that EpisodeSimulationTask logs custom exceptions with appropriate detail
@@ -547,7 +576,7 @@ def test_episode_simulation_task_custom_exception_logging(tmp_path, environment,
     assert error_found, f"Error message not found in any log file. Checked {len(log_files)} files."
 
 
-def test_episode_simulation_task_logging_includes_traceback(tmp_path, environment, policy):
+def test_episode_simulation_task_logging_includes_traceback(tmp_path, policy):
     """Test that EpisodeSimulationTask logs include full traceback information.
 
     Purpose: Validates that EpisodeSimulationTask logs include full exception traceback for debugging
@@ -613,7 +642,7 @@ def test_episode_simulation_task_logging_includes_traceback(tmp_path, environmen
     ), f"Traceback information not found in any log file. Checked {len(log_files)} files."
 
 
-def test_episode_simulation_task_error_written_to_log_file(tmp_path, environment, policy):
+def test_episode_simulation_task_error_written_to_log_file(tmp_path, policy):
     """Test that EpisodeSimulationTask errors are written to the actual log file on disk.
 
     Purpose: Validates that error messages are persisted to log files, not just captured in memory
@@ -680,9 +709,7 @@ def test_episode_simulation_task_error_written_to_log_file(tmp_path, environment
 # Failure-Only Logging Tests
 
 
-def test_episode_simulation_task_log_only_on_failure_successful_episode_no_logs(
-    tmp_path, environment, policy
-):
+def test_episode_simulation_task_log_only_on_failure_successful_episode_no_logs(tmp_path):
     """Test that successful episodes with log_only_on_failure=True produce no log output.
 
     Purpose: Validates that buffered logging discards logs for successful episodes
@@ -693,8 +720,6 @@ def test_episode_simulation_task_log_only_on_failure_successful_episode_no_logs(
 
     Test type: integration
     """
-    import logging
-
     belief = create_test_belief()
 
     # Create a temporary cache directory
@@ -747,9 +772,7 @@ def test_episode_simulation_task_log_only_on_failure_successful_episode_no_logs(
         assert size == 0, f"Log file {log_file.name} should be empty but has {size} bytes"
 
 
-def test_episode_simulation_task_log_only_on_failure_failed_episode_has_logs(
-    tmp_path, environment, policy
-):
+def test_episode_simulation_task_log_only_on_failure_failed_episode_has_logs(tmp_path, policy):
     """Test that failed episodes with log_only_on_failure=True produce complete logs.
 
     Purpose: Validates that buffered logging flushes all logs when episode fails
@@ -817,9 +840,7 @@ def test_episode_simulation_task_log_only_on_failure_failed_episode_has_logs(
     assert error_found, "Error message should be found in log files"
 
 
-def test_episode_simulation_task_log_only_on_failure_false_always_logs(
-    tmp_path, environment, policy
-):
+def test_episode_simulation_task_log_only_on_failure_false_always_logs(tmp_path):
     """Test that log_only_on_failure=False maintains backward compatibility with normal logging.
 
     Purpose: Validates that disabling log_only_on_failure produces logs for all episodes
@@ -830,8 +851,7 @@ def test_episode_simulation_task_log_only_on_failure_false_always_logs(
 
     Test type: integration
     """
-    import logging
-    import time
+    import time  # pylint: disable=import-outside-toplevel
 
     belief = create_test_belief()
 
@@ -948,7 +968,7 @@ def test_episode_simulation_task_conditional_memory_handler_setup(environment, p
     )
 
     # Access logger to trigger setup
-    import logging
+    import logging  # pylint: disable=import-outside-toplevel
 
     logger = logging.getLogger(task._get_env_policy_logger_name())
 
@@ -1447,15 +1467,15 @@ def test_episode_simulation_task_pomcpow_all_compatible_environments():
     """
     # Get all compatible environments
     policy_space_info = POMCPOW.get_space_info()
-    compatible_envs = EnvironmentConfigsAPI.get_compatible_environments(policy_space_info)
+    compatible_env_belief_pairs = EnvironmentConfigsAPI().get_compatible_environments(
+        policy_space_info
+    )
 
     # Track results
     results = {}
 
-    for env_name in compatible_envs:
-        # Get environment and belief
-        environment = environment_instances[env_name]
-        initial_belief = belief_instances[env_name]
+    for environment, initial_belief in compatible_env_belief_pairs:
+        env_name = environment.name
 
         # Create action sampler
         action_sampler = create_pomcpow_action_sampler(environment)
@@ -1502,10 +1522,12 @@ def test_episode_simulation_task_pomcpow_all_compatible_environments():
         ), f"Result for {env_name} missing 'actual_num_steps' attribute"
 
     # Final verification: all environments returned non-None results
-    none_results = [env for env, res in results.items() if res is None]
+    none_results = [env_name for env_name, res in results.items() if res is None]
     assert len(none_results) == 0, f"The following environments returned None: {none_results}"
 
     # Report success
-    print(f"\nSuccessfully tested POMCPOW on {len(compatible_envs)} compatible environments:")
-    for env_name in compatible_envs:
+    print(
+        f"\nSuccessfully tested POMCPOW on {len(compatible_env_belief_pairs)} compatible environments:"
+    )
+    for env_name in results:
         print(f"  ✓ {env_name}")

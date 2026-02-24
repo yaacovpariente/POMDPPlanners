@@ -28,9 +28,6 @@ from POMDPPlanners.core.environment import (
     StateTransitionModel,
 )
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
-from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_visualizer import (
-    RockSampleVisualizer,
-)
 from POMDPPlanners.utils.statistics_utils import confidence_interval
 
 
@@ -599,6 +596,10 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
             history: Episode history containing states, actions, and rewards
             cache_path: Path where to save the visualization (must end with .gif)
         """
+        from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_visualizer import (  # pylint: disable=import-outside-toplevel
+            RockSampleVisualizer,
+        )
+
         visualizer = RockSampleVisualizer(self)
         visualizer.create_visualization(history, cache_path)
 
@@ -612,6 +613,10 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
             actions: List of actions taken at each state
             cache_path: Path where to save the animation (must end with .gif)
         """
+        from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_visualizer import (  # pylint: disable=import-outside-toplevel
+            RockSampleVisualizer,
+        )
+
         visualizer = RockSampleVisualizer(self)
         visualizer.visualize_path(path, actions, cache_path)
 

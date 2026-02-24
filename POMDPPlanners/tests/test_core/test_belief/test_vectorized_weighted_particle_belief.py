@@ -164,20 +164,21 @@ class TestConstruction:
             )
 
     def test_non_finite_log_weights_raise(self):
-        """Test that non-finite log_weights raise ValueError.
+        """Test that NaN log_weights raise ValueError.
 
-        Purpose: Validates finiteness checking on log_weights.
+        Purpose: Validates that NaN values in log_weights are rejected.
+        Note: -inf is allowed (represents zero-weight particles in log-space).
 
-        Given: log_weights contain -inf.
+        Given: log_weights contain NaN.
         When: Construction is attempted.
         Then: ValueError is raised.
 
         Test type: unit
         """
-        with pytest.raises(ValueError, match="log_weights must be finite"):
+        with pytest.raises(ValueError, match="log_weights must not contain NaN or"):
             VectorizedWeightedParticleBelief(
                 particles=np.zeros((2, 2)),
-                log_weights=np.array([0.0, -np.inf]),
+                log_weights=np.array([0.0, np.nan]),
                 updater=_MockUpdater(),
             )
 

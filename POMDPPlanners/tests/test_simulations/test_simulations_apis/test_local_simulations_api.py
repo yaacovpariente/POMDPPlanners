@@ -689,7 +689,7 @@ class TestLocalSimulationsAPIIntegration:
             evaluation_episodes=1,
             evaluation_steps=2,
             evaluation_n_jobs=1,
-            optimization_n_jobs=-1,
+            optimization_n_jobs=1,
             is_risk_averse=False,
             confidence_interval_level=0.95,
             alpha=0.05,
