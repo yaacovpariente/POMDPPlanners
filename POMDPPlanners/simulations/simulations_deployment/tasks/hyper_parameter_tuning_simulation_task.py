@@ -14,7 +14,6 @@ from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.policy import Policy, TrainablePolicy
 from POMDPPlanners.training.callbacks import OptunaPruning
-from POMDPPlanners.training.policy_trainer import PolicyTrainer
 from POMDPPlanners.core.simulation import (
     CategoricalHyperParameter,
     History,
@@ -593,6 +592,10 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         if not isinstance(policy, TrainablePolicy):
             return
 
+        from POMDPPlanners.training.policy_trainer import (
+            PolicyTrainer,
+        )  # pylint: disable=import-outside-toplevel
+
         training_params = self._suggest_hyperparameters(trial, self.training_hyper_parameters)
         training_params.update(self.training_constant_parameters)
 
@@ -607,6 +610,10 @@ class HyperParameterTuningSimulationTask(SimulationTask):
     def _train_best_policy(self, policy: Policy, best_trial: FrozenTrial) -> None:
         if not isinstance(policy, TrainablePolicy):
             return
+
+        from POMDPPlanners.training.policy_trainer import (
+            PolicyTrainer,
+        )  # pylint: disable=import-outside-toplevel
 
         training_params: Dict[str, Any] = {}
         training_params.update(self.training_constant_parameters)
