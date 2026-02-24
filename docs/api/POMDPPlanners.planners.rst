@@ -19,10 +19,6 @@ Subpackages
 Submodules
 ----------
 
-POMDPPlanners.planners.sparse\_sampling\_planner module
--------------------------------------------------------
+.. toctree::
 
-.. automodule:: POMDPPlanners.planners.sparse_sampling_planner
-   :members:
-   :show-inheritance:
-   :undoc-members:
+   POMDPPlanners.planners.sparse_sampling_planner

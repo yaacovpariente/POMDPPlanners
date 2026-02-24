@@ -17,18 +17,7 @@ Subpackages
 Submodules
 ----------
 
-POMDPPlanners.environments.light\_dark\_pomdp.continuous\_light\_dark\_pomdp module
------------------------------------------------------------------------------------
+.. toctree::
 
-.. automodule:: POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
-POMDPPlanners.environments.light\_dark\_pomdp.discrete\_light\_dark\_pomdp module
----------------------------------------------------------------------------------
-
-.. automodule:: POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp
-   :members:
-   :show-inheritance:
-   :undoc-members:
+   POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp
+   POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp

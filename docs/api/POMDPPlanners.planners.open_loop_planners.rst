@@ -9,10 +9,6 @@ POMDPPlanners.planners.open\_loop\_planners package
 Submodules
 ----------
 
-POMDPPlanners.planners.open\_loop\_planners.discrete\_action\_sequences\_planner module
----------------------------------------------------------------------------------------
+.. toctree::
 
-.. automodule:: POMDPPlanners.planners.open_loop_planners.discrete_action_sequences_planner
-   :members:
-   :show-inheritance:
-   :undoc-members:
+   POMDPPlanners.planners.open_loop_planners.discrete_action_sequences_planner
