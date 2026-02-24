@@ -3,6 +3,7 @@
 import importlib
 import importlib.metadata
 import random
+import tomllib
 from pathlib import Path
 
 import numpy as np
@@ -33,18 +34,18 @@ def test_package_installed():
 def test_required_packages():
     """Test that all required packages are installed with correct versions.
 
-    Purpose: Validates that all dependencies listed in requirements.txt are properly installed with compatible versions
+    Purpose: Validates that all dependencies declared in pyproject.toml are properly installed with compatible versions
 
-    Given: requirements.txt file containing package dependencies with version constraints
+    Given: pyproject.toml file containing package dependencies under [project.dependencies]
     When: Each required package is checked against installed packages using importlib.metadata
     Then: All requirements are satisfied without PackageNotFoundError or version conflicts
 
     Test type: unit
     """
-    # Get the requirements from requirements.txt
-    requirements_file = Path(__file__).parent.parent.parent / "requirements.txt"
-    with open(requirements_file) as f:
-        requirements = [line.strip() for line in f if line.strip() and not line.startswith("#")]
+    pyproject_file = Path(__file__).parent.parent.parent / "pyproject.toml"
+    with open(pyproject_file, "rb") as f:
+        pyproject = tomllib.load(f)
+    requirements = pyproject["project"]["dependencies"]
 
     # Check each requirement
     for req in requirements:
