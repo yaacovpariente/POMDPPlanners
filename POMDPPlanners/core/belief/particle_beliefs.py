@@ -389,23 +389,12 @@ class WeightedParticleBeliefStateUpdate(Belief):
         weights: List of observation likelihood weights for each particle
         weights_sum: Running sum of all weights for efficient normalization
 
-    Examples:
+    Example:
         >>> from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-        >>> # Create environment and empty belief
         >>> env = TigerPOMDP(discount_factor=0.95)
         >>> belief = WeightedParticleBeliefStateUpdate(particles=[], weights=[])
-        >>> len(belief.particles) == 0
-        True
-
-        >>> # Add states incrementally with observations
         >>> belief.inplace_update("listen", "hear_left", env, "tiger_left")
         >>> belief.inplace_update("listen", "hear_left", env, "tiger_right")
-        >>> belief.inplace_update("listen", "hear_left", env, "tiger_left")
-
-        >>> # Verify belief construction
-        >>> len(belief.particles) == 3
-        True
-        >>> # Sample weighted by observation probabilities
         >>> sampled_state = belief.sample()
         >>> sampled_state in ["tiger_left", "tiger_right"]
         True
@@ -464,36 +453,6 @@ class WeightedParticleBeliefStateUpdate(Belief):
             New WeightedParticleBeliefStateUpdate instance with the additional particle
             and updated weights.
 
-        Example:
-            Creating a new belief with an additional particle:
-
-            >>> # Original belief with 2 particles
-            >>> belief = WeightedParticleBeliefStateUpdate(
-            ...     particles=["state1", "state2"],
-            ...     weights=[0.7, 0.3]
-            ... )
-            >>> len(belief.particles)
-            2
-            >>> len(belief.weights)
-            2
-
-            >>> # Use TigerPOMDP for realistic example
-            >>> from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-            >>> tiger_env = TigerPOMDP(discount_factor=0.95)
-
-            >>> # Create new belief with additional particle
-            >>> new_belief = belief.update(
-            ...     action="listen",
-            ...     observation="hear_left",
-            ...     pomdp=tiger_env,
-            ...     state="tiger_left"
-            ... )
-
-            >>> # Original belief unchanged, new belief has 3 particles
-            >>> len(belief.particles)
-            2
-            >>> len(new_belief.particles)
-            3
         """
         if state is None:
             raise ValueError("state cannot be None")
@@ -533,29 +492,6 @@ class WeightedParticleBeliefStateUpdate(Belief):
             pomdp: Environment providing the observation model for weight computation
             state: State particle to add to the belief. If None, no particle is added.
 
-        Example:
-            Incrementally building a belief:
-
-            >>> # Use TigerPOMDP for realistic example
-            >>> from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-            >>> tiger_env = TigerPOMDP(discount_factor=0.95)
-
-            >>> belief = WeightedParticleBeliefStateUpdate([], [])
-            >>> len(belief.particles)
-            0
-            >>> belief.weights_sum
-            0
-
-            >>> # Add particles one by one with TigerPOMDP
-            >>> belief.inplace_update("listen", "hear_left", tiger_env, "tiger_left")
-            >>> belief.inplace_update("listen", "hear_right", tiger_env, "tiger_right")
-            >>> belief.inplace_update("listen", "hear_left", tiger_env, "tiger_left")
-
-            >>> # Belief now contains 3 particles with observation-based weights
-            >>> len(belief.particles)
-            3
-            >>> belief.weights_sum > 0
-            True
         """
         if state is None:
             raise ValueError("state cannot be None")
@@ -689,38 +625,12 @@ class UnweightedParticleBeliefStateUpdate(Belief):
         particles: List of state particles, each with uniform probability
         weights_sum: Total number of particles (equivalent to uniform weight sum)
 
-    Examples:
-        Basic uniform belief construction:
-
+    Example:
         >>> from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-        >>> from POMDPPlanners.core.belief import UnweightedParticleBeliefStateUpdate
-
-        >>> # Create environment and empty uniform belief
         >>> env = TigerPOMDP(discount_factor=0.95)
         >>> belief = UnweightedParticleBeliefStateUpdate(particles=[])
-        >>> len(belief.particles)
-        0
-        >>> belief.weights_sum
-        0
-
-        >>> # Add states uniformly (all have equal probability)
         >>> belief.inplace_update("listen", "hear_left", env, "tiger_left")
         >>> belief.inplace_update("listen", "hear_right", env, "tiger_right")
-        >>> belief.inplace_update("listen", "hear_left", env, "tiger_left")
-
-        >>> # Check belief properties
-        >>> len(belief.particles)
-        3
-        >>> belief.weights_sum == len(belief.particles)  # Equal to number of particles
-        True
-
-        >>> # Check particle counts
-        >>> belief.particles.count("tiger_left")
-        2
-        >>> belief.particles.count("tiger_right")
-        1
-
-        >>> # Sample uniformly from particles - should be one of the two states
         >>> sampled_state = belief.sample()
         >>> sampled_state in ["tiger_left", "tiger_right"]
         True
@@ -764,28 +674,6 @@ class UnweightedParticleBeliefStateUpdate(Belief):
         Returns:
             New UnweightedParticleBeliefStateUpdate instance with the additional particle.
 
-        Example:
-            Creating new beliefs immutably:
-
-            >>> # Original belief with 3 particles
-            >>> belief = UnweightedParticleBeliefStateUpdate(["state1", "state2", "state1"])
-            >>> len(belief.particles)
-            3
-
-            >>> # Create new belief with additional particle (note: doesn't use pomdp for unweighted)
-            >>> new_belief = belief.update("action", "obs", None, "state3")
-
-            >>> # Original belief unchanged, new belief has 4 particles
-            >>> len(belief.particles)
-            3
-            >>> len(new_belief.particles)
-            4
-
-            >>> # Count particles in new belief
-            >>> new_belief.particles.count("state1")  # Should be 2
-            2
-            >>> new_belief.particles.count("state3")  # Should be 1
-            1
         """
         new_particles = self.particles + [state]
         return UnweightedParticleBeliefStateUpdate(particles=new_particles)

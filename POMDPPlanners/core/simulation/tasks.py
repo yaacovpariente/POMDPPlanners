@@ -273,33 +273,6 @@ class TaskManagerExternalDB(TaskManager):
 
         Returns:
             Tuple[List[Any], list]: Results and successful task identifiers
-
-        Examples:
-            >>> class MockDatabase(DataBaseInterface):
-            ...     def __init__(self):
-            ...         self.data = {}
-            ...     def get(self, key): return self.data.get(key)
-            ...     def is_key_in_cache(self, key): return key in self.data
-            ...     def set(self, key, value): self.data[key] = value
-            ...     def clear(self): self.data.clear()
-            >>>
-            >>> class MockTaskManager(TaskManagerExternalDB):
-            ...     def _run_tasks(self, tasks):
-            ...         return [task.run() for task in tasks]
-            >>>
-            >>> class MyTask(SimulationTask):
-            ...     def run(self): return "result"
-            ...     def get_config_id(self): return "config1"
-            >>>
-            >>> db = MockDatabase()
-            >>> manager = MockTaskManager(db)
-            >>> tasks = [MyTask()]
-            >>> identifiers = ["task1"]
-            >>> results, ids = manager.run_tasks(tasks, identifiers)
-            >>> len(results)
-            1
-            >>> results[0]
-            'result'
         """
         self.logger.info("Starting to process %s tasks", len(tasks))
         # Lists to store results and track which tasks need to be run

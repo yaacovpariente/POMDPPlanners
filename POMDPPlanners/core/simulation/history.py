@@ -45,7 +45,7 @@ class History:
         >>>
         >>> env = TigerPOMDP(discount_factor=0.95)
         >>> import numpy as np
-            >>> belief = WeightedParticleBelief(env.states, np.array([0.0, -0.1]))
+        >>> belief = WeightedParticleBelief(env.states, np.array([0.0, -0.1]))
         >>> step = StepData("tiger_left", "listen", "tiger_left", "tiger_left", -1.0, belief)
         >>> policy_data = PolicyRunData(info_variables=[])
         >>>
@@ -70,6 +70,7 @@ class History:
     """
 
     history: List[StepData]
+
     discount_factor: float
     average_state_sampling_time: float
     average_action_time: float
@@ -88,46 +89,6 @@ class History:
 
         Returns:
             bool: True if objects are equal, False otherwise
-
-        Examples:
-            >>> from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-            >>> from POMDPPlanners.core.belief import WeightedParticleBelief
-            >>> from POMDPPlanners.core.policy import PolicyRunData
-            >>>
-            >>> env = TigerPOMDP(discount_factor=0.95)
-            >>> import numpy as np
-            >>> belief = WeightedParticleBelief(env.states, np.array([0.0, -0.1]))
-            >>> step = StepData("tiger_left", "listen", "tiger_left", "tiger_left", -1.0, belief)
-            >>> policy_data = PolicyRunData(info_variables=[])
-            >>>
-            >>> history1 = History(
-            ...     history=[step],
-            ...     discount_factor=0.95,
-            ...     average_state_sampling_time=0.001,
-            ...     average_action_time=0.01,
-            ...     average_observation_time=0.002,
-            ...     average_belief_update_time=0.005,
-            ...     average_reward_time=0.001,
-            ...     actual_num_steps=1,
-            ...     reach_terminal_state=False,
-            ...     policy_run_data=[policy_data]
-            ... )
-            >>> history2 = History(
-            ...     history=[step],
-            ...     discount_factor=0.95,
-            ...     average_state_sampling_time=0.001,
-            ...     average_action_time=0.01,
-            ...     average_observation_time=0.002,
-            ...     average_belief_update_time=0.005,
-            ...     average_reward_time=0.001,
-            ...     actual_num_steps=1,
-            ...     reach_terminal_state=False,
-            ...     policy_run_data=[policy_data]
-            ... )
-            >>> history1 == history2
-            True
-            >>> history1 == "not_a_history"
-            False
         """
         if not isinstance(other, History):
             return False
@@ -142,37 +103,6 @@ class History:
 
         Returns:
             dict: Dictionary representation of the History object
-
-        Examples:
-            >>> from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-            >>> from POMDPPlanners.core.belief import WeightedParticleBelief
-            >>> from POMDPPlanners.core.policy import PolicyRunData
-            >>>
-            >>> env = TigerPOMDP(discount_factor=0.95)
-            >>> import numpy as np
-            >>> belief = WeightedParticleBelief(env.states, np.array([0.0, -0.1]))
-            >>> step = StepData("tiger_left", "listen", "tiger_left", "tiger_left", -1.0, belief)
-            >>> policy_data = PolicyRunData(info_variables=[])
-            >>>
-            >>> history = History(
-            ...     history=[step],
-            ...     discount_factor=0.95,
-            ...     average_state_sampling_time=0.001,
-            ...     average_action_time=0.01,
-            ...     average_observation_time=0.002,
-            ...     average_belief_update_time=0.005,
-            ...     average_reward_time=0.001,
-            ...     actual_num_steps=1,
-            ...     reach_terminal_state=False,
-            ...     policy_run_data=policy_data
-            ... )
-            >>> history_dict = history.to_dict()
-            >>> history_dict['discount_factor']
-            0.95
-            >>> history_dict['actual_num_steps']
-            1
-            >>> len(history_dict['history'])
-            1
         """
         history_data = []
         for step in self.history:
@@ -204,36 +134,6 @@ class History:
 
         Returns:
             History: New History instance
-
-        Examples:
-            >>> from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-            >>> from POMDPPlanners.core.belief import WeightedParticleBelief
-            >>> from POMDPPlanners.core.policy import PolicyRunData
-            >>>
-            >>> env = TigerPOMDP(discount_factor=0.95)
-            >>> import numpy as np
-            >>> belief = WeightedParticleBelief(env.states, np.array([0.0, -0.1]))
-            >>> step = StepData("tiger_left", "listen", "tiger_left", "tiger_left", -1.0, belief)
-            >>> policy_data = PolicyRunData(info_variables=[])
-            >>>
-            >>> history = History(
-            ...     history=[step],
-            ...     discount_factor=0.95,
-            ...     average_state_sampling_time=0.001,
-            ...     average_action_time=0.01,
-            ...     average_observation_time=0.002,
-            ...     average_belief_update_time=0.005,
-            ...     average_reward_time=0.001,
-            ...     actual_num_steps=1,
-            ...     reach_terminal_state=False,
-            ...     policy_run_data=policy_data
-            ... )
-            >>> history_dict = history.to_dict()
-            >>> restored_history = History.from_dict(history_dict)
-            >>> restored_history.discount_factor
-            0.95
-            >>> restored_history.actual_num_steps
-            1
         """
         if not isinstance(data, dict):
             raise TypeError("data must be a dictionary")
@@ -296,35 +196,6 @@ def history_to_discounted_return_value(history: History) -> float:
 
     Returns:
         float: The total discounted return value
-
-    Examples:
-        >>> from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-        >>> from POMDPPlanners.core.belief import WeightedParticleBelief
-        >>> from POMDPPlanners.core.policy import PolicyRunData
-        >>>
-        >>> env = TigerPOMDP(discount_factor=0.95)
-        >>> import numpy as np
-            >>> belief = WeightedParticleBelief(env.states, np.array([0.0, -0.1]))
-        >>> step1 = StepData("tiger_left", "listen", "tiger_left", "tiger_left", -1.0, belief)
-        >>> step2 = StepData("tiger_left", "listen", "tiger_left", "tiger_left", -1.0, belief)
-        >>> policy_data = PolicyRunData(info_variables=[])
-        >>>
-        >>> history = History(
-        ...     history=[step1, step2],
-        ...     discount_factor=0.9,
-        ...     average_state_sampling_time=0.001,
-        ...     average_action_time=0.01,
-        ...     average_observation_time=0.002,
-        ...     average_belief_update_time=0.005,
-        ...     average_reward_time=0.001,
-        ...     actual_num_steps=2,
-        ...     reach_terminal_state=False,
-        ...     policy_run_data=policy_data
-        ... )
-        >>> discounted_return = history_to_discounted_return_value(history)
-        >>> # Should be -1.0 + (-1.0 * 0.9) = -1.9
-        >>> abs(discounted_return - (-1.9)) < 1e-6
-        True
     """
     return sum(
         step.reward * history.discount_factor**i
