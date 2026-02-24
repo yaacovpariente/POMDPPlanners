@@ -63,8 +63,8 @@ services:
   # Your application test container
   pomdp-test:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: docker/Dockerfile
       target: test
       network: host
     container_name: pomdp-test

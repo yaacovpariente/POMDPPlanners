@@ -4,10 +4,11 @@ services:
   # Mock the CI/CD test environment
   cicd-tests:
     build:
-      context: .
+      context: ..
+      dockerfile: docker/Dockerfile
       target: test
     volumes:
-      - .:/app
+      - ..:/app
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - CI=true
@@ -16,44 +17,41 @@ services:
     command: |
       bash -c "
         echo '🐳 Running CI/CD tests in Docker container...'
-        
+
         # Run linting
         echo '📝 Running pylint...'
         pylint POMDPPlanners/ --exit-zero
-        
+
         # Run formatting check
         echo '🎨 Running black check...'
         black --check POMDPPlanners/
-        
+
         # Type checking removed
-        
+
         # Run unit tests
         echo '🧪 Running pytest...'
         pytest POMDPPlanners/tests/ -v --cov=POMDPPlanners --cov-report=xml --cov-report=term-missing
-        
+
         # Run doctests
         echo '📚 Running doctests...'
         pytest --doctest-modules POMDPPlanners/ -v
-        
-        # Visualization examples removed - legacy files not available
-        
+
         # Build documentation
         echo '📖 Building documentation...'
         cd docs && sphinx-build -b html . _build/html && cd .. || echo 'Documentation build failed (continuing...)'
-        
+
         echo '✅ All CI/CD tests completed!'
       "
 
   # Mock multi-Python version tests
   python38-tests:
     build:
-      context: .
+      context: ..
       dockerfile_inline: |
         FROM python:3.8-slim
         WORKDIR /app
         COPY . .
-        RUN pip install -r requirements.txt -r requirements-dev.txt
-        RUN pip install -e .
+        RUN pip install -e ".[dev]"
     environment:
       - CI=true
       - GITHUB_ACTIONS=true
@@ -67,13 +65,12 @@ services:
 
   python39-tests:
     build:
-      context: .
+      context: ..
       dockerfile_inline: |
         FROM python:3.9-slim
         WORKDIR /app
         COPY . .
-        RUN pip install -r requirements.txt -r requirements-dev.txt
-        RUN pip install -e .
+        RUN pip install -e ".[dev]"
     environment:
       - CI=true
       - GITHUB_ACTIONS=true
@@ -87,13 +84,12 @@ services:
 
   python310-tests:
     build:
-      context: .
+      context: ..
       dockerfile_inline: |
         FROM python:3.10-slim
         WORKDIR /app
         COPY . .
-        RUN pip install -r requirements.txt -r requirements-dev.txt
-        RUN pip install -e .
+        RUN pip install -e ".[dev]"
     environment:
       - CI=true
       - GITHUB_ACTIONS=true
@@ -107,13 +103,12 @@ services:
 
   python311-tests:
     build:
-      context: .
+      context: ..
       dockerfile_inline: |
         FROM python:3.11-slim
         WORKDIR /app
         COPY . .
-        RUN pip install -r requirements.txt -r requirements-dev.txt
-        RUN pip install -e .
+        RUN pip install -e ".[dev]"
     environment:
       - CI=true
       - GITHUB_ACTIONS=true
@@ -127,13 +122,12 @@ services:
 
   python312-tests:
     build:
-      context: .
+      context: ..
       dockerfile_inline: |
         FROM python:3.12-slim
         WORKDIR /app
         COPY . .
-        RUN pip install -r requirements.txt -r requirements-dev.txt
-        RUN pip install -e .
+        RUN pip install -e ".[dev]"
     environment:
       - CI=true
       - GITHUB_ACTIONS=true
