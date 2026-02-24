@@ -3,8 +3,6 @@
 import importlib
 import importlib.metadata
 import random
-import tomllib
-from pathlib import Path
 
 import numpy as np
 import POMDPPlanners
@@ -36,16 +34,15 @@ def test_required_packages():
 
     Purpose: Validates that all dependencies declared in pyproject.toml are properly installed with compatible versions
 
-    Given: pyproject.toml file containing package dependencies under [project.dependencies]
+    Given: POMDPPlanners package installed with dependencies declared in pyproject.toml
     When: Each required package is checked against installed packages using importlib.metadata
     Then: All requirements are satisfied without PackageNotFoundError or version conflicts
 
     Test type: unit
     """
-    pyproject_file = Path(__file__).parent.parent.parent / "pyproject.toml"
-    with open(pyproject_file, "rb") as f:
-        pyproject = tomllib.load(f)
-    requirements = pyproject["project"]["dependencies"]
+    requirements = importlib.metadata.requires("POMDPPlanners") or []
+    # Filter to direct dependencies only (exclude extras like dev/docs)
+    requirements = [r for r in requirements if "; extra ==" not in r]
 
     # Check each requirement
     for req in requirements:
