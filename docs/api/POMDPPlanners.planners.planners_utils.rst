@@ -9,18 +9,7 @@ POMDPPlanners.planners.planners\_utils package
 Submodules
 ----------
 
-POMDPPlanners.planners.planners\_utils.dpw module
--------------------------------------------------
+.. toctree::
 
-.. automodule:: POMDPPlanners.planners.planners_utils.dpw
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
-POMDPPlanners.planners.planners\_utils.rollout module
------------------------------------------------------
-
-.. automodule:: POMDPPlanners.planners.planners_utils.rollout
-   :members:
-   :show-inheritance:
-   :undoc-members:
+   POMDPPlanners.planners.planners_utils.dpw
+   POMDPPlanners.planners.planners_utils.rollout

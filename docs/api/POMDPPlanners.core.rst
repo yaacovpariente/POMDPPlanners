@@ -17,58 +17,12 @@ Subpackages
 Submodules
 ----------
 
-POMDPPlanners.core.belief module
---------------------------------
+.. toctree::
 
-.. automodule:: POMDPPlanners.core.belief
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
-POMDPPlanners.core.config\_types module
----------------------------------------
-
-.. automodule:: POMDPPlanners.core.config_types
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
-POMDPPlanners.core.cost module
-------------------------------
-
-.. automodule:: POMDPPlanners.core.cost
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
-POMDPPlanners.core.distributions module
----------------------------------------
-
-.. automodule:: POMDPPlanners.core.distributions
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
-POMDPPlanners.core.environment module
--------------------------------------
-
-.. automodule:: POMDPPlanners.core.environment
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
-POMDPPlanners.core.policy module
---------------------------------
-
-.. automodule:: POMDPPlanners.core.policy
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
-POMDPPlanners.core.tree module
-------------------------------
-
-.. automodule:: POMDPPlanners.core.tree
-   :members:
-   :show-inheritance:
-   :undoc-members:
+   POMDPPlanners.core.belief
+   POMDPPlanners.core.config_types
+   POMDPPlanners.core.cost
+   POMDPPlanners.core.distributions
+   POMDPPlanners.core.environment
+   POMDPPlanners.core.policy
+   POMDPPlanners.core.tree

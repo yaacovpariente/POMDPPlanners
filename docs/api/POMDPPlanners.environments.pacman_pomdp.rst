@@ -9,10 +9,6 @@ POMDPPlanners.environments.pacman\_pomdp package
 Submodules
 ----------
 
-POMDPPlanners.environments.pacman\_pomdp.pacman\_pomdp module
--------------------------------------------------------------
+.. toctree::
 
-.. automodule:: POMDPPlanners.environments.pacman_pomdp.pacman_pomdp
-   :members:
-   :show-inheritance:
-   :undoc-members:
+   POMDPPlanners.environments.pacman_pomdp.pacman_pomdp

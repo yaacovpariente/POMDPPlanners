@@ -9,10 +9,6 @@ POMDPPlanners.tests.test\_planners.test\_open\_loop\_planners package
 Submodules
 ----------
 
-POMDPPlanners.tests.test\_planners.test\_open\_loop\_planners.test\_discrete\_action\_sequences\_planner module
----------------------------------------------------------------------------------------------------------------
+.. toctree::
 
-.. automodule:: POMDPPlanners.tests.test_planners.test_open_loop_planners.test_discrete_action_sequences_planner
-   :members:
-   :show-inheritance:
-   :undoc-members:
+   POMDPPlanners.tests.test_planners.test_open_loop_planners.test_discrete_action_sequences_planner

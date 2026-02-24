@@ -9,18 +9,7 @@ POMDPPlanners.configs package
 Submodules
 ----------
 
-POMDPPlanners.configs.environment\_configs module
--------------------------------------------------
+.. toctree::
 
-.. automodule:: POMDPPlanners.configs.environment_configs
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
-POMDPPlanners.configs.planners\_hyperparam\_configs module
-----------------------------------------------------------
-
-.. automodule:: POMDPPlanners.configs.planners_hyperparam_configs
-   :members:
-   :show-inheritance:
-   :undoc-members:
+   POMDPPlanners.configs.environment_configs
+   POMDPPlanners.configs.planners_hyperparam_configs

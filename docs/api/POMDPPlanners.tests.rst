@@ -23,18 +23,7 @@ Subpackages
 Submodules
 ----------
 
-POMDPPlanners.tests.conftest module
------------------------------------
+.. toctree::
 
-.. automodule:: POMDPPlanners.tests.conftest
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
-POMDPPlanners.tests.test\_setup module
---------------------------------------
-
-.. automodule:: POMDPPlanners.tests.test_setup
-   :members:
-   :show-inheritance:
-   :undoc-members:
+   POMDPPlanners.tests.conftest
+   POMDPPlanners.tests.test_setup
