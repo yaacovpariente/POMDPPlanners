@@ -12,7 +12,7 @@ repos:
         name: pylint
         entry: .venv/bin/python -m pylint
         language: system
-        args: [--rcfile=pylintrc, --errors-only]
+        args: [--errors-only]
         files: ^POMDPPlanners/.*\.py$
         exclude: ^POMDPPlanners/tests/.*$
         pass_filenames: true
@@ -23,7 +23,7 @@ repos:
       - id: pyright
         files: ^docs/examples/.*\.ipynb$
         args: [docs/examples/]
-        exclude: ^(type_hints\.py|setup\.py)$
+        exclude: ^type_hints\.py$
 
       - id: pyright
         name: pyright (POMDPPlanners)
