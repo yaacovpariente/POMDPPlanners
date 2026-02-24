@@ -4,9 +4,11 @@ import tempfile
 import time
 import warnings
 from pathlib import Path
+from unittest.mock import Mock, patch
 
 import numpy as np
 import pytest
+from dask.distributed import LocalCluster
 
 from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.simulation import History
@@ -21,7 +23,6 @@ from POMDPPlanners.simulations.simulations_deployment.task_managers import (
     TaskManagerType,
 )
 from POMDPPlanners.simulations.simulations_deployment.tasks import EpisodeSimulationTask
-from unittest.mock import Mock, patch
 
 
 def create_test_belief():
@@ -1421,6 +1422,126 @@ def test_pbs_task_manager_cluster_storage():
         # Check that cluster attribute exists and is initialized
         assert hasattr(manager, "cluster")
         assert manager.cluster is not None  # Cluster is created automatically
+
+
+# Tests for PBSTaskManager Task Execution
+# These tests use scheduler_address pointing to a LocalCluster to execute tasks
+# without requiring a real PBS environment.
+
+
+@pytest.fixture
+def local_dask_cluster():
+    """Fixture to create a local Dask cluster for PBS task execution tests."""
+    cluster = LocalCluster(n_workers=1, threads_per_worker=1)
+    yield cluster
+    cluster.close()
+
+
+def test_pbs_task_manager_run_tasks(environment, policy, local_dask_cluster):
+    """Test running tasks with PBSTaskManager connected to a local Dask cluster.
+
+    Purpose: Validates that PBSTaskManager can successfully run multiple EpisodeSimulationTask
+        instances when connected to an existing Dask scheduler via scheduler_address
+
+    Given: A TigerPOMDP environment, SparsePFT policy, local Dask cluster, and 2 EpisodeSimulationTask instances
+    When: PBSTaskManager.run_tasks() is called with scheduler_address pointing to the local cluster
+    Then: Returns 2 successful results and 2 successful IDs, with each result being a valid History object
+
+    Test type: unit
+    """
+    with PBSTaskManager(
+        queue="default", scheduler_address=local_dask_cluster.scheduler_address
+    ) as task_manager:
+        tasks = []
+        task_identifiers = []
+        for i in range(2):
+            belief = create_test_belief()
+            task = EpisodeSimulationTask(
+                environment=environment,
+                policy=policy,
+                initial_belief=belief,
+                num_steps=2,
+                episode_id=i,
+                seed=42 + i,
+                console_output=False,
+            )
+            tasks.append(task)
+            task_identifiers.append(f"episode_{i}")
+
+        results, successful_ids = task_manager.run_tasks(tasks, task_identifiers)
+
+        assert len(results) == 2
+        assert len(successful_ids) == 2
+        assert all(id in successful_ids for id in task_identifiers)
+        for result in results:
+            assert isinstance(result, History)
+            assert len(result.history) <= 2
+
+
+def test_pbs_task_manager_task_status(environment, policy, local_dask_cluster):
+    """Test getting task status with PBSTaskManager connected to a local Dask cluster.
+
+    Purpose: Validates that PBSTaskManager can submit tasks and retrieve their status
+
+    Given: A TigerPOMDP environment, SparsePFT policy, local Dask cluster, and an EpisodeSimulationTask
+    When: Task is submitted via submit_tasks() and status is retrieved via get_task_status()
+    Then: Returns status dictionary with task cache key and valid status (pending, running, or finished)
+
+    Test type: unit
+    """
+    with PBSTaskManager(
+        queue="default", scheduler_address=local_dask_cluster.scheduler_address
+    ) as task_manager:
+        belief = create_test_belief()
+        task = EpisodeSimulationTask(
+            environment=environment,
+            policy=policy,
+            initial_belief=belief,
+            num_steps=2,
+            episode_id=1,
+            seed=42,
+            console_output=False,
+        )
+
+        futures = task_manager.submit_tasks([task])
+        status = task_manager.get_task_status(futures)
+
+        assert len(status) == 1
+        assert task._cache_key in status
+        assert status[task._cache_key] in ["pending", "running", "finished"]
+
+
+def test_pbs_task_manager_failed_tasks_not_cached(environment, policy, local_dask_cluster):
+    """Test that PBSTaskManager does not cache results from failed tasks.
+
+    Purpose: Validates that failed tasks are not cached and subsequent runs retry execution for PBS
+
+    Given: PBSTaskManager connected to a local Dask cluster and a task that always raises RuntimeError
+    When: The failing task is run multiple times via run_tasks()
+    Then: Each run raises RuntimeError (not returning cached results), proving failures are not cached
+
+    Test type: unit
+    """
+    with PBSTaskManager(
+        queue="default", scheduler_address=local_dask_cluster.scheduler_address
+    ) as task_manager:
+        belief = create_test_belief()
+        failing_task = FailingEpisodeSimulationTask(
+            environment=environment,
+            policy=policy,
+            initial_belief=belief,
+            num_steps=2,
+            episode_id=999,
+            seed=42,
+            console_output=False,
+        )
+        task_identifier = "failing_pbs_episode"
+
+        with pytest.raises(RuntimeError, match="Simulated task failure for testing"):
+            task_manager.run_tasks([failing_task], [task_identifier])
+
+        with pytest.raises(RuntimeError, match="Simulated task failure for testing"):
+            task_manager.run_tasks([failing_task], [task_identifier])
 
 
 # Tests for _log_cache_statistics method
