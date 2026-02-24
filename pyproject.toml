@@ -1,5 +1,92 @@
-[tool.pylint.messages_control]
-disable = ["cyclic-import", "duplicate-code"]
+[build-system]
+requires = ["setuptools>=65.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "POMDPPlanners"
+version = "0.1.0"
+description = "A Python package for POMDP planning algorithms and environments"
+readme = "README.md"
+license = {file = "LICENSE.md"}
+authors = [{name = "Yaacov Pariente", email = "yaacovpar@gmail.com"}]
+requires-python = ">=3.10"
+keywords = ["pomdp", "planning", "reinforcement-learning", "monte-carlo-tree-search", "artificial-intelligence"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "numpy>=1.21.0",
+    "ray>=2.0.0",
+    "pandas>=1.3.0",
+    "matplotlib>=3.4.0",
+    "scipy>=1.7.0",
+    "gymnasium>=0.29.0",
+    "anytree>=2.8.0",
+    "mlflow>=2.0.0",
+    "redis>=4.0.0",
+    "seaborn>=0.11.0",
+    "plotly>=5.0.0",
+    "diskcache>=5.0.0",
+    "joblib>=1.0.0",
+    "tqdm>=4.62.0",
+    "optuna>=2.0.0",
+    "pyyaml>=6.0.0",
+    "dask>=2023.3.0",
+    "distributed>=2023.3.0",
+    "dask_jobqueue>=0.8.0",
+    "cachey>=0.2.1",
+    "torch>=2.0.0",
+    "tensorboard>=2.0.0",
+    "line_profiler>=4.0.0",
+    "memory_profiler>=0.60.0",
+    "psutil>=5.8.0",
+    "bokeh>=3.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pylint>=2.17.0",
+    "black==23.12.1",
+    "pyright>=1.1.0",
+    "pre-commit>=3.0.0",
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "pytest-asyncio>=0.21.0",
+    "nbval>=0.9.6",
+    "papermill>=2.6.0",
+    "setuptools>=65.0.0",
+    "ipykernel>=6.0.0",
+    "jupyter-client>=7.0.0",
+    "nbformat>=5.0.0",
+]
+docs = [
+    "sphinx>=5.0.0",
+    "sphinx-rtd-theme>=1.0.0",
+    "sphinx-autodoc-typehints>=1.17.0",
+    "myst-parser>=0.18.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/yaacovpariente/POMDPPlanners"
+"Bug Reports" = "https://github.com/yaacovpariente/POMDPPlanners/issues"
+Documentation = "https://yaacovpariente.github.io/POMDPPlanners/"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["POMDPPlanners*"]
+
+# ---------------------------------------------------------------------------
+# Tool configuration
+# ---------------------------------------------------------------------------
 
 [tool.black]
 line-length = 100
@@ -19,6 +106,91 @@ exclude = '''
 )
 '''
 
+[tool.pytest.ini_options]
+testpaths = ["POMDPPlanners/tests"]
+python_files = "test_*.py"
+python_classes = "Test*"
+python_functions = "test_*"
+addopts = "-v"
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "smoke: marks tests as smoke tests (quick tests for basic functionality)",
+    "pbs_cluster: marks tests that require PBS cluster environment and dask-jobqueue dependency",
+]
 
+[tool.pylint.master]
+ignore = "CVS"
+persistent = true
 
+[tool.pylint.messages_control]
+disable = [
+    "missing-docstring",
+    "invalid-name",
+    "trailing-whitespace",
+    "line-too-long",
+    "bad-indentation",
+    "too-few-public-methods",
+    "too-many-arguments",
+    "too-many-locals",
+    "too-many-positional-arguments",
+    "too-many-instance-attributes",
+    "redefined-outer-name",
+    "abstract-class-instantiated",
+    "duplicate-code",
+    "cyclic-import",
+]
 
+[tool.pylint.reports]
+output-format = "text"
+reports = false
+evaluation = "10.0 - ((float(5 * error + warning + refactor + convention) / statement) * 10)"
+
+[tool.pylint.basic]
+good-names = ["i", "j", "k", "ex", "Run", "_", "id", "x", "y"]
+bad-names = ["foo", "bar", "baz", "toto", "tutu", "tata"]
+function-rgx = '[a-z_][a-z0-9_]{2,30}$'
+variable-rgx = '[a-z_][a-z0-9_]{2,30}$'
+const-rgx = '(([A-Z_][A-Z0-9_]*)|(__.*__))$'
+attr-rgx = '[a-z_][a-z0-9_]{2,30}$'
+argument-rgx = '[a-z_][a-z0-9_]{2,30}$'
+class-attribute-rgx = '([A-Za-z_][A-Za-z0-9_]{2,30}|(__.*__))$'
+class-rgx = '[A-Z_][a-zA-Z0-9]+$'
+module-rgx = '(([a-z_][a-z0-9_]*)|([A-Z][a-zA-Z0-9]+))$'
+method-rgx = '[a-z_][a-z0-9_]{2,30}$'
+no-docstring-rgx = '__.*__'
+docstring-min-length = -1
+
+[tool.pylint.format]
+max-line-length = 100
+max-module-lines = 1000
+indent-string = "    "
+
+[tool.pylint.miscellaneous]
+notes = ["FIXME", "XXX", "TODO"]
+
+[tool.pylint.similarities]
+min-similarity-lines = 8
+ignore-comments = true
+ignore-docstrings = true
+ignore-imports = false
+
+[tool.pylint.typecheck]
+ignored-modules = ["numpy", "cvxopt"]
+ignored-classes = ["SQLObject"]
+
+[tool.pylint.variables]
+dummy-variables-rgx = '_$|dummy'
+
+[tool.pylint.design]
+max-args = 5
+max-locals = 15
+max-returns = 6
+max-branches = 12
+max-statements = 50
+max-parents = 7
+max-attributes = 7
+min-public-methods = 2
+max-public-methods = 20
+
+[tool.pylint.exceptions]
+overgeneral-exceptions = ["builtins.Exception"]
