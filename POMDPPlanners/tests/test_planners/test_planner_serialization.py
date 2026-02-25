@@ -25,7 +25,7 @@ from POMDPPlanners.planners import (
     PFT_DPW,
     DiscreteActionSequencesPlanner,
     SparsePFT,
-    StandardSparseSamplingDiscreteActionsPlanner,
+    SparseSamplingDiscreteActionsPlanner,
 )
 from POMDPPlanners.planners.mcts_planners.beta_zero import BetaZero
 from POMDPPlanners.planners.mcts_planners.beta_zero.beta_zero_action_sampler import (
@@ -204,18 +204,18 @@ class TestPlannerSerialization:
         )
 
     def test_sparse_sampling_planner_serialization(self):
-        """Test StandardSparseSamplingDiscreteActionsPlanner serialization.
+        """Test SparseSamplingDiscreteActionsPlanner serialization.
 
-        Purpose: Validates that StandardSparseSamplingDiscreteActionsPlanner can be pickled and unpickled
+        Purpose: Validates that SparseSamplingDiscreteActionsPlanner can be pickled and unpickled
 
-        Given: StandardSparseSamplingDiscreteActionsPlanner instance with TigerPOMDP environment
+        Given: SparseSamplingDiscreteActionsPlanner instance with TigerPOMDP environment
         When: Planner is pickled and unpickled
         Then: Unpickled planner maintains all properties and functionality
 
         Test type: unit
         """
         self._test_planner_serialization(
-            StandardSparseSamplingDiscreteActionsPlanner,
+            SparseSamplingDiscreteActionsPlanner,
             {
                 "environment": self.tiger_env,
                 "branching_factor": 10,
@@ -572,7 +572,7 @@ class TestAllPlannersPicklable:
         Purpose: Validates comprehensive pickle support for basic planners
 
         Given: Instances of POMCP, SparsePFT, DiscreteActionSequencesPlanner,
-            and StandardSparseSamplingDiscreteActionsPlanner
+            and SparseSamplingDiscreteActionsPlanner
         When: Each planner is pickled and unpickled via pickle.dumps/loads
         Then: All planners successfully round-trip and maintain their properties
 
@@ -605,7 +605,7 @@ class TestAllPlannersPicklable:
                 depth=3,
                 n_return_samples=5,
             ),
-            StandardSparseSamplingDiscreteActionsPlanner(
+            SparseSamplingDiscreteActionsPlanner(
                 environment=self.env,
                 branching_factor=5,
                 depth=3,

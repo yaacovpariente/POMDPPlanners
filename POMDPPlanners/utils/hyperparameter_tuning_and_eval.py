@@ -296,7 +296,7 @@ def optimize_and_evaluate_planners(
             >>> from pathlib import Path
             >>> from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
             >>> from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
-            >>> from POMDPPlanners.planners.sparse_sampling_planner import StandardSparseSamplingDiscreteActionsPlanner
+            >>> from POMDPPlanners.planners.sparse_sampling_planners.sparse_sampling_planner import SparseSamplingDiscreteActionsPlanner
             >>> from POMDPPlanners.core.simulation import NumericalHyperParameter
             >>> from POMDPPlanners.core.belief import get_initial_belief
             >>>
@@ -1975,7 +1975,7 @@ def get_benchmark_hyperparameter_planners(
             >>> env = TigerPOMDP(discount_factor=0.95)
             >>> compatible_planners = get_benchmark_hyperparameter_planners(env)
             >>> print(f"Compatible planners: {[p.__name__ for p in compatible_planners]}")
-            Compatible planners: ['POMCP', 'StandardSparseSamplingDiscreteActionsPlanner', 'SparsePFT', 'POMCPOW', 'PFT_DPW', 'POMCP_DPW', 'DiscreteActionSequencesPlanner', 'BetaZero', 'ConstrainedZero']
+            Compatible planners: ['POMCP', 'SparseSamplingDiscreteActionsPlanner', 'SparsePFT', 'POMCPOW', 'PFT_DPW', 'POMCP_DPW', 'DiscreteActionSequencesPlanner', 'BetaZero', 'ConstrainedZero']
     """
     if debug:
         logger.debug("Finding compatible planners for environment: %s", env.name)
