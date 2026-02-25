@@ -16,7 +16,11 @@ from POMDPPlanners.core.belief import (
 )
 from POMDPPlanners.core.environment import Environment, SpaceType
 from POMDPPlanners.core.policy import Policy, PolicyRunData, PolicySpaceInfo
-from POMDPPlanners.core.tree import BeliefNode, get_optimal_action_reward_setting
+from POMDPPlanners.core.tree import (
+    BeliefNode,
+    get_optimal_action_reward_setting,
+    get_optimal_action_cost_setting,
+)
 from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
 from POMDPPlanners.utils.tree_statistics import TreeMetrics, compute_tree_metrics
 
@@ -363,3 +367,41 @@ class DoubleProgressiveWideningMCTSPolicy(PathSimulationPolicy):
             PolicySpaceInfo with MIXED space types for both actions and observations
         """
         return PolicySpaceInfo(action_space=SpaceType.MIXED, observation_space=SpaceType.MIXED)
+
+
+class PathSimulationPolicyCostSetting(PathSimulationPolicy):
+    def __init__(
+        self,
+        environment: Environment,
+        discount_factor: float,
+        name: str,
+        action_sampler: Optional[ActionSampler] = None,
+        n_simulations: Optional[int] = None,
+        time_out_in_seconds: Optional[int] = None,
+        log_path: Optional[Path] = None,
+        debug: bool = False,
+    ):
+        super().__init__(
+            environment=environment,
+            discount_factor=discount_factor,
+            name=name,
+            n_simulations=n_simulations,
+            action_sampler=action_sampler,
+            time_out_in_seconds=time_out_in_seconds,
+            log_path=log_path,
+            debug=debug,
+        )
+
+    def action(self, belief: Belief) -> Tuple[List[Any], PolicyRunData]:
+        if is_terminal_belief(belief=belief, env=self.environment):
+            return [self._sample_random_action(belief=belief)], PolicyRunData(info_variables=[])
+
+        tree = self._learn_tree(belief=belief)
+        tree_metrics = compute_tree_metrics(tree=tree)
+
+        if tree.is_leaf:
+            action = self._sample_random_action(belief=belief)
+        else:
+            action = get_optimal_action_cost_setting(belief_node=tree)
+
+        return [action], PolicyRunData(info_variables=tree_metrics)

@@ -41,7 +41,7 @@ from POMDPPlanners.planners.mcts_planners.beta_zero.training_buffer import (
     TrainingBuffer,
     TrainingExample,
 )
-from POMDPPlanners.planners.mcts_planners.path_simulations_policy import (
+from POMDPPlanners.planners.planners_utils.path_simulations_policy import (
     DoubleProgressiveWideningMCTSPolicy,
 )
 from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
