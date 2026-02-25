@@ -172,7 +172,7 @@ Comparing Multiple Algorithms
 
 .. code-block:: python
 
-   from POMDPPlanners.planners.sparse_sampling_planner import StandardSparseSamplingDiscreteActionsPlanner
+   from POMDPPlanners.planners.sparse_sampling_planners.sparse_sampling_planner import SparseSamplingDiscreteActionsPlanner
 
    # Test multiple algorithms on the same problem
    algorithms = {
@@ -181,7 +181,7 @@ Comparing Multiple Algorithms
            num_simulations=1000,
            exploration_constant=50.0
        ),
-       'Sparse Sampling': StandardSparseSamplingDiscreteActionsPlanner(
+       'Sparse Sampling': SparseSamplingDiscreteActionsPlanner(
            environment=env,
            branching_factor=3,
            depth=10

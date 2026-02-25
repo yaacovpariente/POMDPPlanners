@@ -15,10 +15,4 @@ Subpackages
    POMDPPlanners.planners.mcts_planners
    POMDPPlanners.planners.open_loop_planners
    POMDPPlanners.planners.planners_utils
-
-Submodules
-----------
-
-.. toctree::
-
-   POMDPPlanners.planners.sparse_sampling_planner
+   POMDPPlanners.planners.sparse_sampling_planners

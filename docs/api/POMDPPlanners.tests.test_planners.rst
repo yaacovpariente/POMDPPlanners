@@ -15,10 +15,4 @@ Subpackages
    POMDPPlanners.tests.test_planners.test_mcts_planners
    POMDPPlanners.tests.test_planners.test_open_loop_planners
    POMDPPlanners.tests.test_planners.test_planners_utils
-
-Submodules
-----------
-
-.. toctree::
-
-   POMDPPlanners.tests.test_planners.test_sparse_sampling_planner
+   POMDPPlanners.tests.test_planners.test_sparse_sampling_planners

@@ -12,4 +12,5 @@ Submodules
 .. toctree::
 
    POMDPPlanners.planners.planners_utils.dpw
+   POMDPPlanners.planners.planners_utils.path_simulations_policy
    POMDPPlanners.planners.planners_utils.rollout
