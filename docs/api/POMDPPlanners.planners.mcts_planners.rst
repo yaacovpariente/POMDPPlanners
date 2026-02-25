@@ -11,7 +11,6 @@ Submodules
 
 .. toctree::
 
-   POMDPPlanners.planners.mcts_planners.path_simulations_policy
    POMDPPlanners.planners.mcts_planners.pft_dpw
    POMDPPlanners.planners.mcts_planners.pomcp
    POMDPPlanners.planners.mcts_planners.pomcp_dpw

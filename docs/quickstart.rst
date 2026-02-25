@@ -372,8 +372,8 @@ Available Planners
                      n_simulations=1500, name="pft_dpw")
 
    # Sparse Sampling — simple model-based baseline (depth=2, branching_factor=10)
-   from POMDPPlanners.planners.sparse_sampling_planner import StandardSparseSamplingDiscreteActionsPlanner
-   planner = StandardSparseSamplingDiscreteActionsPlanner(env, branching_factor=10, depth=2)
+   from POMDPPlanners.planners.sparse_sampling_planners.sparse_sampling_planner import SparseSamplingDiscreteActionsPlanner
+   planner = SparseSamplingDiscreteActionsPlanner(env, branching_factor=10, depth=2)
 
 
 Next Steps
