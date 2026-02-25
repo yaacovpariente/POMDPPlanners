@@ -32,7 +32,7 @@ from typing import Any, Optional
 from POMDPPlanners.core.belief import UnweightedParticleBeliefStateUpdate
 from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.tree import BeliefNode
-from POMDPPlanners.planners.mcts_planners.path_simulations_policy import (
+from POMDPPlanners.planners.planners_utils.path_simulations_policy import (
     DoubleProgressiveWideningMCTSPolicy,
 )
 from POMDPPlanners.planners.planners_utils.dpw import (

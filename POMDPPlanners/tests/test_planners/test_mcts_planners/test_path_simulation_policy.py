@@ -27,7 +27,7 @@ from POMDPPlanners.core.environment import (
 )
 from POMDPPlanners.core.policy import PolicyInfoVariable, PolicyRunData, PolicySpaceInfo
 from POMDPPlanners.core.tree import ActionNode, BeliefNode
-from POMDPPlanners.planners.mcts_planners.path_simulations_policy import (
+from POMDPPlanners.planners.planners_utils.path_simulations_policy import (
     PathSimulationPolicy,
 )
 from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
@@ -359,7 +359,7 @@ class TestPathSimulationPolicyInitialization:
 class TestPathSimulationPolicyTerminalBeliefHandling:
     """Test terminal belief handling in PathSimulationPolicy action method."""
 
-    @patch("POMDPPlanners.planners.mcts_planners.path_simulations_policy.is_terminal_belief")
+    @patch("POMDPPlanners.planners.planners_utils.path_simulations_policy.is_terminal_belief")
     def test_terminal_belief_returns_random_action_discrete(
         self, mock_is_terminal, discrete_environment
     ):
@@ -395,7 +395,7 @@ class TestPathSimulationPolicyTerminalBeliefHandling:
         assert policy_data.info_variables == []
         mock_is_terminal.assert_called_once_with(belief=terminal_belief, env=discrete_environment)
 
-    @patch("POMDPPlanners.planners.mcts_planners.path_simulations_policy.is_terminal_belief")
+    @patch("POMDPPlanners.planners.planners_utils.path_simulations_policy.is_terminal_belief")
     def test_terminal_belief_returns_random_action_continuous(
         self, mock_is_terminal, continuous_environment, action_sampler
     ):
@@ -437,10 +437,10 @@ class TestPathSimulationPolicyTerminalBeliefHandling:
             )
             mock_sample.assert_called_once()
 
-    @patch("POMDPPlanners.planners.mcts_planners.path_simulations_policy.is_terminal_belief")
-    @patch("POMDPPlanners.planners.mcts_planners.path_simulations_policy.compute_tree_metrics")
+    @patch("POMDPPlanners.planners.planners_utils.path_simulations_policy.is_terminal_belief")
+    @patch("POMDPPlanners.planners.planners_utils.path_simulations_policy.compute_tree_metrics")
     @patch(
-        "POMDPPlanners.planners.mcts_planners.path_simulations_policy.get_optimal_action_reward_setting"
+        "POMDPPlanners.planners.planners_utils.path_simulations_policy.get_optimal_action_reward_setting"
     )
     def test_non_terminal_belief_builds_tree(
         self,

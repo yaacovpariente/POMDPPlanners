@@ -33,7 +33,7 @@ from POMDPPlanners.core.tree import (
     ActionNode,
     BeliefNode,
 )
-from POMDPPlanners.planners.mcts_planners.path_simulations_policy import (
+from POMDPPlanners.planners.planners_utils.path_simulations_policy import (
     PathSimulationPolicy,
 )
 

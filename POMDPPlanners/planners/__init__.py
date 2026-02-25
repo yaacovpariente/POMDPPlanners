@@ -2,8 +2,9 @@
 
 from typing import Any, Dict, Type
 
-from POMDPPlanners.planners.mcts_planners.path_simulations_policy import (
+from POMDPPlanners.planners.planners_utils.path_simulations_policy import (
     PathSimulationPolicy,
+    PathSimulationPolicyCostSetting,
 )
 from POMDPPlanners.planners.mcts_planners.pft_dpw import PFT_DPW
 from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
@@ -14,6 +15,8 @@ from POMDPPlanners.planners.mcts_planners.beta_zero.beta_zero import BetaZero
 from POMDPPlanners.planners.mcts_planners.constrained_zero.constrained_zero import (
     ConstrainedZero,
 )
+from POMDPPlanners.planners.mcts_planners.icvar_pft_dpw import ICVaR_PFT_DPW
+from POMDPPlanners.planners.mcts_planners.icvar_pomcpow import ICVaR_POMCPOW
 from POMDPPlanners.planners.open_loop_planners.discrete_action_sequences_planner import (
     DiscreteActionSequencesPlanner,
 )
@@ -32,6 +35,9 @@ __all__ = [
     "DiscreteActionSequencesPlanner",
     "BetaZero",
     "ConstrainedZero",
+    "ICVaR_PFT_DPW",
+    "ICVaR_POMCPOW",
+    "PathSimulationPolicyCostSetting",
 ]
 
 # Registry of available policies
@@ -46,6 +52,8 @@ POLICY_REGISTRY: Dict[str, Type] = {
     "DiscreteActionSequencesPlanner": DiscreteActionSequencesPlanner,
     "BetaZero": BetaZero,
     "ConstrainedZero": ConstrainedZero,
+    "ICVaR_PFT_DPW": ICVaR_PFT_DPW,
+    "ICVaR_POMCPOW": ICVaR_POMCPOW,
 }
 
 
