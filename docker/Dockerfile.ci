@@ -1,0 +1,13 @@
+# CI test image - uses CPU-only PyTorch to reduce image size (~8GB smaller)
+FROM python:3.10-slim
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y libatomic1 && rm -rf /var/lib/apt/lists/*
+
+COPY . .
+
+RUN pip install --upgrade pip
+RUN pip install torch --index-url https://download.pytorch.org/whl/cpu
+RUN pip freeze | grep -i torch > /tmp/torch-constraints.txt
+RUN PIP_CONSTRAINT=/tmp/torch-constraints.txt pip install -e ".[dev,docs]"
