@@ -1975,7 +1975,7 @@ def get_benchmark_hyperparameter_planners(
             >>> env = TigerPOMDP(discount_factor=0.95)
             >>> compatible_planners = get_benchmark_hyperparameter_planners(env)
             >>> print(f"Compatible planners: {[p.__name__ for p in compatible_planners]}")
-            Compatible planners: ['POMCP', 'SparseSamplingDiscreteActionsPlanner', 'SparsePFT', 'POMCPOW', 'PFT_DPW', 'POMCP_DPW', 'DiscreteActionSequencesPlanner', 'BetaZero', 'ConstrainedZero']
+            Compatible planners: ['POMCP', 'SparseSamplingDiscreteActionsPlanner', 'SparsePFT', 'POMCPOW', 'PFT_DPW', 'POMCP_DPW', 'DiscreteActionSequencesPlanner', 'BetaZero', 'ConstrainedZero', 'ICVaR_PFT_DPW', 'ICVaR_POMCPOW', 'ICVaRSparseSampling']
     """
     if debug:
         logger.debug("Finding compatible planners for environment: %s", env.name)
