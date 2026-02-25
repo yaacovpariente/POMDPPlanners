@@ -20,13 +20,16 @@ from POMDPPlanners.planners.mcts_planners.icvar_pomcpow import ICVaR_POMCPOW
 from POMDPPlanners.planners.open_loop_planners.discrete_action_sequences_planner import (
     DiscreteActionSequencesPlanner,
 )
-from POMDPPlanners.planners.sparse_sampling_planner import (
-    StandardSparseSamplingDiscreteActionsPlanner,
+from POMDPPlanners.planners.sparse_sampling_planners.sparse_sampling_planner import (
+    SparseSamplingDiscreteActionsPlanner,
+)
+from POMDPPlanners.planners.sparse_sampling_planners.icvar_sparse_sampling_planner import (
+    ICVaRSparseSampling,
 )
 
 __all__ = [
     "POMCP",
-    "StandardSparseSamplingDiscreteActionsPlanner",
+    "SparseSamplingDiscreteActionsPlanner",
     "SparsePFT",
     "PathSimulationPolicy",
     "POMCPOW",
@@ -38,12 +41,13 @@ __all__ = [
     "ICVaR_PFT_DPW",
     "ICVaR_POMCPOW",
     "PathSimulationPolicyCostSetting",
+    "ICVaRSparseSampling",
 ]
 
 # Registry of available policies
 POLICY_REGISTRY: Dict[str, Type] = {
     "POMCP": POMCP,
-    "StandardSparseSamplingDiscreteActionsPlanner": StandardSparseSamplingDiscreteActionsPlanner,
+    "SparseSamplingDiscreteActionsPlanner": SparseSamplingDiscreteActionsPlanner,
     "SparsePFT": SparsePFT,
     "PathSimulationPolicy": PathSimulationPolicy,
     "POMCPOW": POMCPOW,
@@ -54,6 +58,7 @@ POLICY_REGISTRY: Dict[str, Type] = {
     "ConstrainedZero": ConstrainedZero,
     "ICVaR_PFT_DPW": ICVaR_PFT_DPW,
     "ICVaR_POMCPOW": ICVaR_POMCPOW,
+    "ICVaRSparseSampling": ICVaRSparseSampling,
 }
 
 

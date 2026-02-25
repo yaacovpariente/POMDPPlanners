@@ -11,8 +11,8 @@ The sparse sampling approach works by:
 4. Selecting the action with the best estimated value
 
 Classes:
-    SparseSamplingDiscreteActionsPlanner: Abstract base class for sparse sampling algorithms
-    StandardSparseSamplingDiscreteActionsPlanner: Concrete implementation with standard value updates
+    BaseSparseSamplingDiscreteActionsPlanner: Abstract base class for sparse sampling algorithms
+    SparseSamplingDiscreteActionsPlanner: Concrete implementation with standard value updates
 """
 
 from abc import ABC, abstractmethod
@@ -33,7 +33,7 @@ from POMDPPlanners.core.tree import (
 )
 
 
-class SparseSamplingDiscreteActionsPlanner(Policy, ABC):
+class BaseSparseSamplingDiscreteActionsPlanner(Policy, ABC):
     """Abstract base class for sparse sampling POMDP planners.
 
     This class implements the core sparse sampling algorithm for POMDP planning.
@@ -63,7 +63,7 @@ class SparseSamplingDiscreteActionsPlanner(Policy, ABC):
         branching_factor: int,
         depth: int,
         resampling: bool = False,
-        name: str = "SparseSamplingDiscreteActionsPlanner",
+        name: str = "BaseSparseSamplingDiscreteActionsPlanner",
         log_path: Optional[Path] = None,
         debug: bool = False,
     ):
@@ -188,7 +188,7 @@ class SparseSamplingDiscreteActionsPlanner(Policy, ABC):
         return []
 
 
-class StandardSparseSamplingDiscreteActionsPlanner(SparseSamplingDiscreteActionsPlanner):
+class SparseSamplingDiscreteActionsPlanner(BaseSparseSamplingDiscreteActionsPlanner):
     """Standard implementation of sparse sampling for POMDP planning.
 
     This concrete implementation of sparse sampling uses standard value updates:
@@ -207,7 +207,7 @@ class StandardSparseSamplingDiscreteActionsPlanner(SparseSamplingDiscreteActions
         >>>
         >>> # Create environment and planner
         >>> tiger = TigerPOMDP(discount_factor=0.95)
-        >>> planner = StandardSparseSamplingDiscreteActionsPlanner(
+        >>> planner = SparseSamplingDiscreteActionsPlanner(
         ...     environment=tiger,
         ...     branching_factor=2,
         ...     depth=2,
@@ -223,7 +223,7 @@ class StandardSparseSamplingDiscreteActionsPlanner(SparseSamplingDiscreteActions
         >>> actions, run_data = planner.action(initial_belief)
         >>>
         >>> # Planner space information
-        >>> space_info = StandardSparseSamplingDiscreteActionsPlanner.get_space_info()
+        >>> space_info = SparseSamplingDiscreteActionsPlanner.get_space_info()
         >>> space_info.action_space.name
         'DISCRETE'
     """
@@ -233,7 +233,7 @@ class StandardSparseSamplingDiscreteActionsPlanner(SparseSamplingDiscreteActions
         environment: DiscreteActionsEnvironment,
         branching_factor: int,
         depth: int,
-        name: str = "StandardSparseSamplingDiscreteActionsPlanner",
+        name: str = "SparseSamplingDiscreteActionsPlanner",
     ):
         super().__init__(
             environment=environment,
