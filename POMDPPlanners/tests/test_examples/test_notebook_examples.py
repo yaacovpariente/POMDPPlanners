@@ -23,6 +23,12 @@ except ImportError:
     pm = None
 
 
+def _strip_ipython_magics(source: str) -> str:
+    """Remove IPython magic lines (e.g. %matplotlib, !pip) before syntax checking."""
+    lines = source.splitlines(keepends=True)
+    return "".join(line for line in lines if not line.lstrip().startswith(("%", "!")))
+
+
 class TestNotebookExamples:
     """Test cases for Jupyter notebook examples."""
 
@@ -209,11 +215,13 @@ class TestNotebookExamples:
         first_code_cell = code_cells[0]
         cell_source = "".join(first_code_cell.get("source", []))
 
-        # Basic syntax validation
-        try:
-            compile(cell_source, "<notebook_cell>", "exec")
-        except SyntaxError as e:
-            pytest.fail(f"Syntax error in first code cell: {e}")
+        # Basic syntax validation (strip IPython magics before compiling)
+        clean_source = _strip_ipython_magics(cell_source)
+        if clean_source.strip():
+            try:
+                compile(clean_source, "<notebook_cell>", "exec")
+            except SyntaxError as e:
+                pytest.fail(f"Syntax error in first code cell: {e}")
 
         # Quick execution test with timeout
         with tempfile.NamedTemporaryFile(suffix=".ipynb", delete=False) as tmp:
@@ -271,9 +279,10 @@ class TestNotebookExamples:
         # Check syntax of first few code cells
         for i, cell in enumerate(code_cells[:3]):  # Check first 3 code cells
             cell_source = "".join(cell.get("source", []))
-            if cell_source.strip():  # Skip empty cells
+            clean_source = _strip_ipython_magics(cell_source)
+            if clean_source.strip():  # Skip empty cells
                 try:
-                    compile(cell_source, f"<notebook_cell_{i}>", "exec")
+                    compile(clean_source, f"<notebook_cell_{i}>", "exec")
                 except SyntaxError as e:
                     pytest.fail(f"Syntax error in code cell {i}: {e}")
 
@@ -316,9 +325,10 @@ class TestNotebookExamples:
         # Check syntax of first few code cells
         for i, cell in enumerate(code_cells[:3]):  # Check first 3 code cells
             cell_source = "".join(cell.get("source", []))
-            if cell_source.strip():  # Skip empty cells
+            clean_source = _strip_ipython_magics(cell_source)
+            if clean_source.strip():  # Skip empty cells
                 try:
-                    compile(cell_source, f"<notebook_cell_{i}>", "exec")
+                    compile(clean_source, f"<notebook_cell_{i}>", "exec")
                 except SyntaxError as e:
                     pytest.fail(f"Syntax error in code cell {i}: {e}")
 
