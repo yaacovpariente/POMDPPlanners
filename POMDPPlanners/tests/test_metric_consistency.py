@@ -17,8 +17,8 @@ from POMDPPlanners.core.simulation import StepData
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.environments.push_pomdp.push_pomdp import PushPOMDP
 from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
-from POMDPPlanners.planners.sparse_sampling_planner import (
-    StandardSparseSamplingDiscreteActionsPlanner,
+from POMDPPlanners.planners.sparse_sampling_planners.sparse_sampling_planner import (
+    SparseSamplingDiscreteActionsPlanner,
 )
 from POMDPPlanners.planners.open_loop_planners.discrete_action_sequences_planner import (
     DiscreteActionSequencesPlanner,
@@ -154,7 +154,7 @@ class TestPolicyMetricConsistency:
         Test type: unit
         """
         env = TigerPOMDP(discount_factor=0.95)
-        planner = StandardSparseSamplingDiscreteActionsPlanner(
+        planner = SparseSamplingDiscreteActionsPlanner(
             environment=env,
             branching_factor=2,
             depth=2,
@@ -222,7 +222,7 @@ class TestMetricConsistencyEdgeCases:
         Test type: unit
         """
         env = TigerPOMDP(discount_factor=0.95)
-        planner = StandardSparseSamplingDiscreteActionsPlanner(
+        planner = SparseSamplingDiscreteActionsPlanner(
             environment=env,
             branching_factor=2,
             depth=2,

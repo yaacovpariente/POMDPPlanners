@@ -8,8 +8,8 @@ import pytest
 
 from POMDPPlanners.core.simulation import MetricValue
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-from POMDPPlanners.planners.sparse_sampling_planner import (
-    StandardSparseSamplingDiscreteActionsPlanner,
+from POMDPPlanners.planners.sparse_sampling_planners.sparse_sampling_planner import (
+    SparseSamplingDiscreteActionsPlanner,
 )
 from POMDPPlanners.utils.visualization import (
     plot_metrics_comparison,
@@ -55,7 +55,7 @@ def test_plot_statistics_comparison():
     with tempfile.TemporaryDirectory() as temp_cache_dir:
         temp_cache_dir = Path(temp_cache_dir)
         environment = TigerPOMDP(discount_factor=0.95)
-        policy = StandardSparseSamplingDiscreteActionsPlanner(
+        policy = SparseSamplingDiscreteActionsPlanner(
             environment=environment, branching_factor=2, depth=1
         )
         # Create mock statistics using MetricValue objects
@@ -125,10 +125,10 @@ def test_plot_statistics_comparison_multiple_envs_policies():
         temp_cache_dir = Path(temp_cache_dir)
         environment1 = TigerPOMDP(discount_factor=0.95)
         environment2 = TigerPOMDP(discount_factor=0.99)
-        policy1 = StandardSparseSamplingDiscreteActionsPlanner(
+        policy1 = SparseSamplingDiscreteActionsPlanner(
             environment=environment1, branching_factor=2, depth=1
         )
-        policy2 = StandardSparseSamplingDiscreteActionsPlanner(
+        policy2 = SparseSamplingDiscreteActionsPlanner(
             environment=environment2, branching_factor=3, depth=4
         )
 
@@ -246,7 +246,7 @@ def test_plot_statistics_comparison_empty_statistics(temp_cache_dir):
     """
     # Setup
     environment = TigerPOMDP(discount_factor=0.95)
-    policy = StandardSparseSamplingDiscreteActionsPlanner(
+    policy = SparseSamplingDiscreteActionsPlanner(
         environment=environment, branching_factor=2, depth=1
     )
 

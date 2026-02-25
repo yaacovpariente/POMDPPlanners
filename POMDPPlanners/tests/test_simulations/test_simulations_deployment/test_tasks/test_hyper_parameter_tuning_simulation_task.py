@@ -19,8 +19,8 @@ from POMDPPlanners.core.simulation.hyperparameter_tuning import (
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.simulations.simulations_deployment.cache_dbs import DiskCacheDB
 from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
-from POMDPPlanners.planners.sparse_sampling_planner import (
-    StandardSparseSamplingDiscreteActionsPlanner,
+from POMDPPlanners.planners.sparse_sampling_planners.sparse_sampling_planner import (
+    SparseSamplingDiscreteActionsPlanner,
 )
 from POMDPPlanners.simulations.simulations_deployment.tasks import (
     HyperParameterTuningSimulationTask,
@@ -87,7 +87,7 @@ def test_hyper_parameter_tuning_task_creation(environment, hyper_parameters, tem
 
     Purpose: Validates that HyperParameterTuningSimulationTask can be created with correct attributes
 
-    Given: A TigerPOMDP environment, StandardSparseSamplingDiscreteActionsPlanner policy class, and test hyperparameters
+    Given: A TigerPOMDP environment, SparseSamplingDiscreteActionsPlanner policy class, and test hyperparameters
     When: HyperParameterTuningSimulationTask is created with specific parameters
     Then: Task has correct attributes matching input parameters and generates valid config ID
 
@@ -98,7 +98,7 @@ def test_hyper_parameter_tuning_task_creation(environment, hyper_parameters, tem
     task = HyperParameterTuningSimulationTask(
         environment=environment,
         belief=belief,
-        policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+        policy_cls=SparseSamplingDiscreteActionsPlanner,
         hyper_parameters=hyper_parameters,
         constant_parameters={},  # No constant parameters needed for this planner
         num_episodes=2,  # Smaller for fast tests
@@ -115,7 +115,7 @@ def test_hyper_parameter_tuning_task_creation(environment, hyper_parameters, tem
 
     assert task.environment == environment
     assert task.belief == belief
-    assert task.policy_cls == StandardSparseSamplingDiscreteActionsPlanner
+    assert task.policy_cls == SparseSamplingDiscreteActionsPlanner
     assert task.hyper_parameters == hyper_parameters
     assert task.num_episodes == 2
     assert task.num_steps == 3
@@ -157,7 +157,7 @@ def test_hyper_parameter_tuning_task_creation_with_default_seed(environment, hyp
     task = HyperParameterTuningSimulationTask(
         environment=environment,
         belief=belief,
-        policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+        policy_cls=SparseSamplingDiscreteActionsPlanner,
         hyper_parameters=hyper_parameters,
         constant_parameters={},  # No constant parameters needed for this planner
         num_episodes=2,  # Smaller for fast tests
@@ -186,7 +186,7 @@ def test_hyper_parameter_tuning_task_creation_with_custom_seed(environment, hype
     task = HyperParameterTuningSimulationTask(
         environment=environment,
         belief=belief,
-        policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+        policy_cls=SparseSamplingDiscreteActionsPlanner,
         hyper_parameters=hyper_parameters,
         constant_parameters={},  # No constant parameters needed for this planner
         num_episodes=2,  # Smaller for fast tests
@@ -216,7 +216,7 @@ def test_hyper_parameter_tuning_task_equality(environment, hyper_parameters):
     task1 = HyperParameterTuningSimulationTask(
         environment=environment,
         belief=belief,
-        policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+        policy_cls=SparseSamplingDiscreteActionsPlanner,
         hyper_parameters=hyper_parameters,
         constant_parameters={},  # No constant parameters needed for this planner
         num_episodes=2,  # Smaller for fast tests
@@ -229,7 +229,7 @@ def test_hyper_parameter_tuning_task_equality(environment, hyper_parameters):
     task2 = HyperParameterTuningSimulationTask(
         environment=environment,
         belief=belief,
-        policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+        policy_cls=SparseSamplingDiscreteActionsPlanner,
         hyper_parameters=hyper_parameters,
         constant_parameters={},  # No constant parameters needed for this planner
         num_episodes=2,  # Smaller for fast tests
@@ -243,7 +243,7 @@ def test_hyper_parameter_tuning_task_equality(environment, hyper_parameters):
     task3 = HyperParameterTuningSimulationTask(
         environment=environment,
         belief=belief,
-        policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+        policy_cls=SparseSamplingDiscreteActionsPlanner,
         hyper_parameters=hyper_parameters,
         constant_parameters={},  # No constant parameters needed for this planner
         num_episodes=3,  # Different, smaller for fast tests
@@ -257,7 +257,7 @@ def test_hyper_parameter_tuning_task_equality(environment, hyper_parameters):
     task4 = HyperParameterTuningSimulationTask(
         environment=environment,
         belief=belief,
-        policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+        policy_cls=SparseSamplingDiscreteActionsPlanner,
         hyper_parameters=hyper_parameters,
         constant_parameters={},  # No constant parameters needed for this planner
         num_episodes=2,  # Smaller for fast tests
@@ -300,7 +300,7 @@ def test_hyper_parameter_tuning_task_to_dict(environment, hyper_parameters):
     task = HyperParameterTuningSimulationTask(
         environment=environment,
         belief=belief,
-        policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+        policy_cls=SparseSamplingDiscreteActionsPlanner,
         hyper_parameters=hyper_parameters,
         constant_parameters={},  # No constant parameters needed for this planner
         num_episodes=2,  # Smaller for fast tests
@@ -314,7 +314,7 @@ def test_hyper_parameter_tuning_task_to_dict(environment, hyper_parameters):
     assert isinstance(task_dict, dict)
     assert task_dict["environment"] == environment.config_id
     assert task_dict["belief"] == belief.config_id
-    assert task_dict["policy_cls"] == str(StandardSparseSamplingDiscreteActionsPlanner)
+    assert task_dict["policy_cls"] == str(SparseSamplingDiscreteActionsPlanner)
     assert task_dict["hyper_parameters"] == hyper_parameters
     assert task_dict["num_episodes"] == 2
     assert task_dict["num_steps"] == 3
@@ -339,7 +339,7 @@ def test_hyper_parameter_tuning_task_to_dict_with_default_seed(environment, hype
     task = HyperParameterTuningSimulationTask(
         environment=environment,
         belief=belief,
-        policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+        policy_cls=SparseSamplingDiscreteActionsPlanner,
         hyper_parameters=hyper_parameters,
         constant_parameters={},  # No constant parameters needed for this planner
         num_episodes=2,  # Smaller for fast tests
@@ -371,7 +371,7 @@ def test_hyper_parameter_tuning_task_run_multiple_episodes_validation(
     task = HyperParameterTuningSimulationTask(
         environment=environment,
         belief=belief,
-        policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+        policy_cls=SparseSamplingDiscreteActionsPlanner,
         hyper_parameters=hyper_parameters,
         constant_parameters={},  # No constant parameters needed for this planner
         num_episodes=2,  # Smaller for fast tests
@@ -382,7 +382,7 @@ def test_hyper_parameter_tuning_task_run_multiple_episodes_validation(
     )
 
     # Create a valid policy for testing
-    policy = StandardSparseSamplingDiscreteActionsPlanner(
+    policy = SparseSamplingDiscreteActionsPlanner(
         environment=environment, branching_factor=2, depth=2
     )
 
@@ -464,7 +464,7 @@ def test_hyper_parameter_tuning_task_run_success(environment, hyper_parameters):
     task = HyperParameterTuningSimulationTask(
         environment=environment,
         belief=belief,
-        policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+        policy_cls=SparseSamplingDiscreteActionsPlanner,
         hyper_parameters=hyper_parameters,
         constant_parameters={},  # No constant parameters needed for this planner
         num_episodes=2,  # Need at least 2 episodes for statistics computation
@@ -522,7 +522,7 @@ def test_hyper_parameter_tuning_task_run_with_categorical_params(
     belief = create_test_belief(environment)
 
     # For this test we need to use numerical hyperparameters because categorical ones
-    # don't apply to StandardSparseSamplingDiscreteActionsPlanner
+    # don't apply to SparseSamplingDiscreteActionsPlanner
     numerical_hyper_parameters = [
         NumericalHyperParameter(name="branching_factor", low=1, high=2),
         NumericalHyperParameter(name="depth", low=1, high=2),
@@ -531,7 +531,7 @@ def test_hyper_parameter_tuning_task_run_with_categorical_params(
     task = HyperParameterTuningSimulationTask(
         environment=environment,
         belief=belief,
-        policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+        policy_cls=SparseSamplingDiscreteActionsPlanner,
         hyper_parameters=cast(List[HyperParameterFeature], numerical_hyper_parameters),
         constant_parameters={},  # No constant parameters needed for this planner
         num_episodes=2,  # Need at least 2 episodes for statistics computation
@@ -576,7 +576,7 @@ def test_hyper_parameter_tuning_task_run_failure_logging(environment, hyper_para
     task = HyperParameterTuningSimulationTask(
         environment=environment,
         belief=belief,
-        policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+        policy_cls=SparseSamplingDiscreteActionsPlanner,
         hyper_parameters=hyper_parameters,
         constant_parameters={},  # No constant parameters needed for this planner
         num_episodes=2,  # Need at least 2 episodes for statistics computation
@@ -634,7 +634,7 @@ def test_hyper_parameter_tuning_task_run_missing_parameter_logging(environment, 
     task = HyperParameterTuningSimulationTask(
         environment=environment,
         belief=belief,
-        policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+        policy_cls=SparseSamplingDiscreteActionsPlanner,
         hyper_parameters=hyper_parameters,
         constant_parameters={},  # No constant parameters needed for this planner
         num_episodes=2,  # Need at least 2 episodes for statistics computation
@@ -681,7 +681,7 @@ def test_hyper_parameter_tuning_task_custom_n_trials(environment, hyper_paramete
     task = HyperParameterTuningSimulationTask(
         environment=environment,
         belief=belief,
-        policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+        policy_cls=SparseSamplingDiscreteActionsPlanner,
         hyper_parameters=hyper_parameters,
         constant_parameters={},  # No constant parameters needed for this planner
         num_episodes=2,  # Smaller for fast tests
@@ -712,7 +712,7 @@ def test_hyper_parameter_tuning_task_logger_property(environment, hyper_paramete
     task = HyperParameterTuningSimulationTask(
         environment=environment,
         belief=belief,
-        policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+        policy_cls=SparseSamplingDiscreteActionsPlanner,
         hyper_parameters=hyper_parameters,
         constant_parameters={},  # No constant parameters needed for this planner
         num_episodes=2,  # Smaller for fast tests
@@ -725,10 +725,7 @@ def test_hyper_parameter_tuning_task_logger_property(environment, hyper_paramete
     # Test logger property
     logger = task.logger
     assert logger is not None
-    assert (
-        logger.name
-        == f"task.{environment.name}.{StandardSparseSamplingDiscreteActionsPlanner.__name__}"
-    )
+    assert logger.name == f"task.{environment.name}.{SparseSamplingDiscreteActionsPlanner.__name__}"
 
 
 def test_hyper_parameter_tuning_task_seed_in_config_id(environment, hyper_parameters):
@@ -748,7 +745,7 @@ def test_hyper_parameter_tuning_task_seed_in_config_id(environment, hyper_parame
     task1 = HyperParameterTuningSimulationTask(
         environment=environment,
         belief=belief,
-        policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+        policy_cls=SparseSamplingDiscreteActionsPlanner,
         hyper_parameters=hyper_parameters,
         constant_parameters={},  # No constant parameters needed for this planner
         num_episodes=2,  # Smaller for fast tests
@@ -762,7 +759,7 @@ def test_hyper_parameter_tuning_task_seed_in_config_id(environment, hyper_parame
     task2 = HyperParameterTuningSimulationTask(
         environment=environment,
         belief=belief,
-        policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+        policy_cls=SparseSamplingDiscreteActionsPlanner,
         hyper_parameters=hyper_parameters,
         constant_parameters={},  # No constant parameters needed for this planner
         num_episodes=2,  # Smaller for fast tests
@@ -794,7 +791,7 @@ def test_hyper_parameter_tuning_task_seed_in_optimization_results(environment, h
     task = HyperParameterTuningSimulationTask(
         environment=environment,
         belief=belief,
-        policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+        policy_cls=SparseSamplingDiscreteActionsPlanner,
         hyper_parameters=hyper_parameters,
         constant_parameters={},  # No constant parameters needed for this planner
         num_episodes=2,  # Need at least 2 episodes for statistics computation
@@ -822,7 +819,7 @@ def test_run_function_return_type_explicitly(environment, hyper_parameters):
     task = HyperParameterTuningSimulationTask(
         environment=environment,
         belief=belief,
-        policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+        policy_cls=SparseSamplingDiscreteActionsPlanner,
         hyper_parameters=hyper_parameters,
         constant_parameters={},  # No constant parameters needed for this planner
         num_episodes=2,  # Need at least 2 episodes for statistics computation
@@ -871,7 +868,7 @@ def test_hyper_parameter_tuning_task_with_constant_parameters(environment, hyper
     task = HyperParameterTuningSimulationTask(
         environment=environment,
         belief=belief,
-        policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+        policy_cls=SparseSamplingDiscreteActionsPlanner,
         hyper_parameters=hyper_parameters,
         constant_parameters=constant_parameters,  # Use actual constant parameters
         num_episodes=2,  # Need at least 2 episodes for statistics computation
@@ -903,7 +900,7 @@ def test_hyper_parameter_tuning_task_with_constant_parameters(environment, hyper
     assert policy.name == "CustomSparseSamplingPlanner"
 
     # Verify the policy was created with the correct hyperparameters
-    sparse_policy = cast(StandardSparseSamplingDiscreteActionsPlanner, policy)
+    sparse_policy = cast(SparseSamplingDiscreteActionsPlanner, policy)
     assert sparse_policy.branching_factor == result.chosen_hyper_parameters["branching_factor"]
     assert sparse_policy.depth == result.chosen_hyper_parameters["depth"]
 
@@ -1178,17 +1175,17 @@ class TestHyperParameterTuningSimulationTaskMLFlowIntegration:
     def test_sparse_sampling_planner_with_correct_parameters(
         self, temp_cache_dir, real_environment, real_belief
     ):
-        """Test StandardSparseSamplingDiscreteActionsPlanner with correct required parameters.
+        """Test SparseSamplingDiscreteActionsPlanner with correct required parameters.
 
-        Purpose: Validates that StandardSparseSamplingDiscreteActionsPlanner works when all required parameters are provided
+        Purpose: Validates that SparseSamplingDiscreteActionsPlanner works when all required parameters are provided
 
-        Given: A HyperParameterTuningSimulationTask with StandardSparseSamplingDiscreteActionsPlanner and required parameters
+        Given: A HyperParameterTuningSimulationTask with SparseSamplingDiscreteActionsPlanner and required parameters
         When: Task is executed with branching_factor and depth hyperparameters
         Then: Task executes successfully and returns valid optimization results
 
         Test type: integration
         """
-        # Create hyperparameters for StandardSparseSamplingDiscreteActionsPlanner
+        # Create hyperparameters for SparseSamplingDiscreteActionsPlanner
         hyper_parameters = [
             NumericalHyperParameter(
                 1, 3, "branching_factor"
@@ -1198,11 +1195,11 @@ class TestHyperParameterTuningSimulationTaskMLFlowIntegration:
             ),  # Required parameter, correct order: low, high, name
         ]
 
-        # Create task with correct configuration for StandardSparseSamplingDiscreteActionsPlanner
+        # Create task with correct configuration for SparseSamplingDiscreteActionsPlanner
         task = HyperParameterTuningSimulationTask(
             environment=real_environment,
             belief=real_belief,
-            policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+            policy_cls=SparseSamplingDiscreteActionsPlanner,
             hyper_parameters=cast(List[HyperParameterFeature], hyper_parameters),
             constant_parameters={},  # No constant parameters needed for this planner
             num_episodes=2,
@@ -1256,7 +1253,7 @@ class TestHyperParameterTuningSimulationTaskMLFlowIntegration:
         task = HyperParameterTuningSimulationTask(
             environment=real_environment,
             belief=real_belief,
-            policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+            policy_cls=SparseSamplingDiscreteActionsPlanner,
             hyper_parameters=cast(List[HyperParameterFeature], hyper_parameters),
             constant_parameters={},
             num_episodes=2,
@@ -1324,7 +1321,7 @@ def test_multi_objective_optimization_with_multiple_metrics(environment, hyper_p
     task = HyperParameterTuningSimulationTask(
         environment=environment,
         belief=belief,
-        policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+        policy_cls=SparseSamplingDiscreteActionsPlanner,
         hyper_parameters=hyper_parameters,
         constant_parameters={},
         num_episodes=2,
@@ -1371,7 +1368,7 @@ def test_multi_objective_optimization_with_mixed_directions(environment, hyper_p
     task = HyperParameterTuningSimulationTask(
         environment=environment,
         belief=belief,
-        policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+        policy_cls=SparseSamplingDiscreteActionsPlanner,
         hyper_parameters=hyper_parameters,
         constant_parameters={},
         num_episodes=2,
@@ -1421,7 +1418,7 @@ def test_objective_function_returns_tuple_of_metrics(environment, hyper_paramete
     task = HyperParameterTuningSimulationTask(
         environment=environment,
         belief=belief,
-        policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+        policy_cls=SparseSamplingDiscreteActionsPlanner,
         hyper_parameters=hyper_parameters,
         constant_parameters={},
         num_episodes=2,
@@ -1462,7 +1459,7 @@ def test_pareto_optimal_trials_identified(environment, hyper_parameters):
     task = HyperParameterTuningSimulationTask(
         environment=environment,
         belief=belief,
-        policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+        policy_cls=SparseSamplingDiscreteActionsPlanner,
         hyper_parameters=hyper_parameters,
         constant_parameters={},
         num_episodes=2,
@@ -1509,7 +1506,7 @@ def test_compute_pareto_scores_with_subset_of_trials(environment, hyper_paramete
     task = HyperParameterTuningSimulationTask(
         environment=environment,
         belief=belief,
-        policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+        policy_cls=SparseSamplingDiscreteActionsPlanner,
         hyper_parameters=hyper_parameters,
         constant_parameters={},
         num_episodes=2,
@@ -1549,7 +1546,7 @@ def test_multi_objective_optimization_single_objective_still_works(environment, 
     task = HyperParameterTuningSimulationTask(
         environment=environment,
         belief=belief,
-        policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+        policy_cls=SparseSamplingDiscreteActionsPlanner,
         hyper_parameters=hyper_parameters,
         constant_parameters={},
         num_episodes=2,
@@ -1597,7 +1594,7 @@ def test_study_storage_initialization(environment, hyper_parameters, temp_cache_
     task = HyperParameterTuningSimulationTask(
         environment=environment,
         belief=belief,
-        policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+        policy_cls=SparseSamplingDiscreteActionsPlanner,
         hyper_parameters=hyper_parameters,
         constant_parameters={},
         num_episodes=2,
@@ -1635,7 +1632,7 @@ def test_trial_results_cached_between_runs(environment, hyper_parameters, temp_c
     task1 = HyperParameterTuningSimulationTask(
         environment=environment,
         belief=belief,
-        policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+        policy_cls=SparseSamplingDiscreteActionsPlanner,
         hyper_parameters=hyper_parameters,
         constant_parameters={},
         num_episodes=2,
@@ -1654,7 +1651,7 @@ def test_trial_results_cached_between_runs(environment, hyper_parameters, temp_c
     task2 = HyperParameterTuningSimulationTask(
         environment=environment,
         belief=belief,
-        policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+        policy_cls=SparseSamplingDiscreteActionsPlanner,
         hyper_parameters=hyper_parameters,
         constant_parameters={},
         num_episodes=2,
@@ -1718,7 +1715,7 @@ def test_cache_isolation_between_different_configs(environment, hyper_parameters
     task1 = HyperParameterTuningSimulationTask(
         environment=environment,
         belief=belief,
-        policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+        policy_cls=SparseSamplingDiscreteActionsPlanner,
         hyper_parameters=hyper_parameters,
         constant_parameters={},
         num_episodes=2,
@@ -1734,7 +1731,7 @@ def test_cache_isolation_between_different_configs(environment, hyper_parameters
     task2 = HyperParameterTuningSimulationTask(
         environment=environment,
         belief=belief,
-        policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+        policy_cls=SparseSamplingDiscreteActionsPlanner,
         hyper_parameters=hyper_parameters,
         constant_parameters={},
         num_episodes=3,  # Different!
@@ -1778,7 +1775,7 @@ def test_cache_survives_task_recreation(environment, hyper_parameters, temp_cach
     task1 = HyperParameterTuningSimulationTask(
         environment=environment,
         belief=belief,
-        policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+        policy_cls=SparseSamplingDiscreteActionsPlanner,
         hyper_parameters=hyper_parameters,
         constant_parameters={},
         num_episodes=2,
@@ -1801,7 +1798,7 @@ def test_cache_survives_task_recreation(environment, hyper_parameters, temp_cach
     task2 = HyperParameterTuningSimulationTask(
         environment=environment,
         belief=belief,
-        policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+        policy_cls=SparseSamplingDiscreteActionsPlanner,
         hyper_parameters=hyper_parameters,
         constant_parameters={},
         num_episodes=2,

@@ -38,8 +38,8 @@ from POMDPPlanners.simulations.simulations_deployment.task_managers import (
 from POMDPPlanners.simulations.workflows.optimization import (
     run_hyperparameter_optimization_pbs,
 )
-from POMDPPlanners.planners.sparse_sampling_planner import (
-    StandardSparseSamplingDiscreteActionsPlanner,
+from POMDPPlanners.planners.sparse_sampling_planners.sparse_sampling_planner import (
+    SparseSamplingDiscreteActionsPlanner,
 )
 from POMDPPlanners.simulations.hyper_parameter_tuning_simulations import (
     HyperParameterOptimizer,
@@ -109,7 +109,7 @@ def real_environment():
 @pytest.fixture
 def real_policy_class():
     """Create a real policy class for testing."""
-    return StandardSparseSamplingDiscreteActionsPlanner
+    return SparseSamplingDiscreteActionsPlanner
 
 
 @pytest.fixture
@@ -426,7 +426,7 @@ class TestHyperParameterOptimizerHelperMethods:
         # Check specific values
         assert params["config_index"] == 1  # original_index + 1
         assert params["environment_type"] == "TigerPOMDP"
-        assert params["policy_type"] == "StandardSparseSamplingDiscreteActionsPlanner"
+        assert params["policy_type"] == "SparseSamplingDiscreteActionsPlanner"
         assert params["num_episodes"] == config.num_episodes
         assert params["num_steps"] == config.num_steps
         assert params["parameters_to_optimize"] == str(
@@ -471,7 +471,7 @@ class TestHyperParameterOptimizerHelperMethods:
         task = HyperParameterTuningSimulationTask(
             environment=real_environment,
             belief=get_initial_belief(real_environment, n_particles=10),
-            policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+            policy_cls=SparseSamplingDiscreteActionsPlanner,
             hyper_parameters=[
                 NumericalHyperParameter(1, 2, "branching_factor"),
             ],
@@ -663,7 +663,7 @@ class TestHyperParameterOptimizerEdgeCases:
 
 # Create a test policy class that requires specific constant parameters
 # This needs to be defined outside the test method to avoid pickling issues
-class PolicyRequiringConstants(StandardSparseSamplingDiscreteActionsPlanner):
+class PolicyRequiringConstants(SparseSamplingDiscreteActionsPlanner):
     def __init__(self, environment, branching_factor, depth, required_constant=None, **kwargs):
         if required_constant is None:
             raise TypeError(
@@ -716,7 +716,7 @@ class TestHyperParameterOptimizerMLFlowIntegration:
             environment=real_environment,
             belief=real_belief,
             hyper_param_planner_config=HyperParamPlannerConfig(
-                policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+                policy_cls=SparseSamplingDiscreteActionsPlanner,
                 hyper_parameters=[
                     NumericalHyperParameter(1, 2, "branching_factor"),
                     NumericalHyperParameter(1, 2, "depth"),
@@ -768,9 +768,7 @@ class TestHyperParameterOptimizerMLFlowIntegration:
             # Verify configuration parameters were logged
             assert config_run["params.config_index"] == "1"
             assert config_run["params.environment_type"] == "TigerPOMDP"
-            assert (
-                config_run["params.policy_type"] == "StandardSparseSamplingDiscreteActionsPlanner"
-            )
+            assert config_run["params.policy_type"] == "SparseSamplingDiscreteActionsPlanner"
 
             # Verify optimization results were logged
             assert "metrics.optimization_success" in config_run
@@ -810,7 +808,7 @@ class TestHyperParameterOptimizerMLFlowIntegration:
             environment=real_environment,
             belief=real_belief,
             hyper_param_planner_config=HyperParamPlannerConfig(
-                policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+                policy_cls=SparseSamplingDiscreteActionsPlanner,
                 hyper_parameters=correct_hyperparams,
                 constant_parameters={},
             ),
@@ -851,7 +849,7 @@ class TestHyperParameterOptimizerMLFlowIntegration:
                 environment=real_environment,
                 belief=real_belief,
                 hyper_param_planner_config=HyperParamPlannerConfig(
-                    policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+                    policy_cls=SparseSamplingDiscreteActionsPlanner,
                     hyper_parameters=cast(List[HyperParameterFeature], incorrect_hyperparams),
                     constant_parameters={},
                 ),
@@ -971,7 +969,7 @@ class TestHyperParameterOptimizerMLFlowIntegration:
             environment=real_environment,
             belief=real_belief,
             hyper_param_planner_config=HyperParamPlannerConfig(
-                policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+                policy_cls=SparseSamplingDiscreteActionsPlanner,
                 hyper_parameters=[
                     NumericalHyperParameter(1, 2, "branching_factor"),
                     NumericalHyperParameter(1, 2, "depth"),
@@ -1165,7 +1163,7 @@ class TestHyperParameterOptimizerWithTaskManagerConfigs:
             environment=real_environment,
             belief=real_belief,
             hyper_param_planner_config=HyperParamPlannerConfig(
-                policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+                policy_cls=SparseSamplingDiscreteActionsPlanner,
                 hyper_parameters=[
                     NumericalHyperParameter(1, 2, "branching_factor"),
                     NumericalHyperParameter(1, 2, "depth"),
@@ -1265,7 +1263,7 @@ class TestHyperParameterOptimizerWithTaskManagerConfigs:
             environment=real_environment,
             belief=real_belief,
             hyper_param_planner_config=HyperParamPlannerConfig(
-                policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+                policy_cls=SparseSamplingDiscreteActionsPlanner,
                 hyper_parameters=[
                     NumericalHyperParameter(1, 2, "branching_factor"),
                     NumericalHyperParameter(1, 2, "depth"),
@@ -1290,7 +1288,7 @@ class TestHyperParameterOptimizerWithTaskManagerConfigs:
         # Verify task parameters
         task = tasks[0]
         assert task.environment == real_environment
-        assert task.policy_cls == StandardSparseSamplingDiscreteActionsPlanner
+        assert task.policy_cls == SparseSamplingDiscreteActionsPlanner
         assert len(task.hyper_parameters) == 2
         assert task.num_episodes == 2
         assert task.num_steps == 2
@@ -2037,7 +2035,7 @@ class TestSingleEnvironmentOptimizationSmoke:
             environment=env,
             belief=belief,
             hyper_param_planner_config=HyperParamPlannerConfig(
-                policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+                policy_cls=SparseSamplingDiscreteActionsPlanner,
                 hyper_parameters=[
                     NumericalHyperParameter(1, 3, "branching_factor"),
                     NumericalHyperParameter(1, 2, "depth"),

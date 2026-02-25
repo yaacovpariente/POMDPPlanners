@@ -10,8 +10,8 @@ from POMDPPlanners.core.policy import PolicyRunData
 from POMDPPlanners.core.tree import ActionNode, BeliefNode
 from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-from POMDPPlanners.planners.sparse_sampling_planner import (
-    StandardSparseSamplingDiscreteActionsPlanner,
+from POMDPPlanners.planners.sparse_sampling_planners.sparse_sampling_planner import (
+    SparseSamplingDiscreteActionsPlanner,
 )
 
 np.random.seed(42)
@@ -34,7 +34,7 @@ def initial_belief(tiger_pomdp):
 
 @pytest.fixture
 def planner(tiger_pomdp):
-    return StandardSparseSamplingDiscreteActionsPlanner(
+    return SparseSamplingDiscreteActionsPlanner(
         environment=tiger_pomdp, branching_factor=2, depth=2
     )
 
@@ -58,9 +58,9 @@ def test_initialization(planner, tiger_pomdp):
 def test_action_selection(planner, initial_belief):
     """Test that action selection returns a valid action
 
-    Purpose: Validates that StandardSparseSamplingDiscreteActionsPlanner returns valid TigerPOMDP actions through sparse sampling
+    Purpose: Validates that SparseSamplingDiscreteActionsPlanner returns valid TigerPOMDP actions through sparse sampling
 
-    Given: StandardSparseSamplingDiscreteActionsPlanner with branching_factor=2, depth=2, TigerPOMDP environment, uniform initial belief
+    Given: SparseSamplingDiscreteActionsPlanner with branching_factor=2, depth=2, TigerPOMDP environment, uniform initial belief
     When: action method performs sparse sampling tree construction and action selection
     Then: Returns list with single valid tiger action, PolicyRunData with no info_variables (as expected)
 
@@ -229,14 +229,14 @@ def test_invalid_branching_factor():
     Purpose: Validates that StandardSparseSamplingPlanner rejects invalid branching_factor parameters
 
     Given: TigerPOMDP environment, invalid branching_factor=0, valid depth=1
-    When: StandardSparseSamplingDiscreteActionsPlanner constructor is called with branching_factor=0
+    When: SparseSamplingDiscreteActionsPlanner constructor is called with branching_factor=0
     Then: ValueError is raised for non-positive branching factor parameter
 
     Test type: unit
     """
     env = TigerPOMDP(discount_factor=0.95)
     with pytest.raises(ValueError):
-        StandardSparseSamplingDiscreteActionsPlanner(environment=env, branching_factor=0, depth=1)
+        SparseSamplingDiscreteActionsPlanner(environment=env, branching_factor=0, depth=1)
 
 
 def test_invalid_depth():
@@ -245,14 +245,14 @@ def test_invalid_depth():
     Purpose: Validates that StandardSparseSamplingPlanner rejects invalid depth parameters
 
     Given: TigerPOMDP environment, valid branching_factor=2, invalid depth=0
-    When: StandardSparseSamplingDiscreteActionsPlanner constructor is called with depth=0
+    When: SparseSamplingDiscreteActionsPlanner constructor is called with depth=0
     Then: ValueError is raised for non-positive depth parameter
 
     Test type: unit
     """
     env = TigerPOMDP(discount_factor=0.95)
     with pytest.raises(ValueError):
-        StandardSparseSamplingDiscreteActionsPlanner(environment=env, branching_factor=2, depth=0)
+        SparseSamplingDiscreteActionsPlanner(environment=env, branching_factor=2, depth=0)
 
 
 def test_sanity_pomdp_action_selection():
@@ -268,7 +268,7 @@ def test_sanity_pomdp_action_selection():
     """
     # Create environment and planner with higher branching factor and depth for better accuracy
     environment = SanityPOMDP()
-    planner = StandardSparseSamplingDiscreteActionsPlanner(
+    planner = SparseSamplingDiscreteActionsPlanner(
         environment=environment,
         branching_factor=4,  # Higher branching factor for better exploration
         depth=3,  # Deeper tree for better planning
@@ -312,14 +312,14 @@ def test_sparse_sampling_config_id_consistency_identical_parameters(tiger_pomdp)
     Test type: unit
     """
     # Create two StandardSparseSamplingPlanner instances with identical parameters
-    planner1 = StandardSparseSamplingDiscreteActionsPlanner(
+    planner1 = SparseSamplingDiscreteActionsPlanner(
         environment=tiger_pomdp,
         branching_factor=5,
         depth=8,
         name="SparseSampling_Test1",
     )
 
-    planner2 = StandardSparseSamplingDiscreteActionsPlanner(
+    planner2 = SparseSamplingDiscreteActionsPlanner(
         environment=tiger_pomdp,
         branching_factor=5,
         depth=8,
@@ -346,14 +346,14 @@ def test_sparse_sampling_config_id_different_branching_factor(tiger_pomdp):
 
     Test type: unit
     """
-    planner1 = StandardSparseSamplingDiscreteActionsPlanner(
+    planner1 = SparseSamplingDiscreteActionsPlanner(
         environment=tiger_pomdp,
         branching_factor=3,
         depth=8,
         name="SparseSampling_Test",
     )
 
-    planner2 = StandardSparseSamplingDiscreteActionsPlanner(
+    planner2 = SparseSamplingDiscreteActionsPlanner(
         environment=tiger_pomdp,
         branching_factor=6,  # Different branching factor
         depth=8,
@@ -377,14 +377,14 @@ def test_sparse_sampling_config_id_different_depth(tiger_pomdp):
 
     Test type: unit
     """
-    planner1 = StandardSparseSamplingDiscreteActionsPlanner(
+    planner1 = SparseSamplingDiscreteActionsPlanner(
         environment=tiger_pomdp,
         branching_factor=5,
         depth=5,
         name="SparseSampling_Test",
     )
 
-    planner2 = StandardSparseSamplingDiscreteActionsPlanner(
+    planner2 = SparseSamplingDiscreteActionsPlanner(
         environment=tiger_pomdp,
         branching_factor=5,
         depth=12,  # Different depth
@@ -408,7 +408,7 @@ def test_sparse_sampling_config_id_consistency_across_evaluations(tiger_pomdp):
 
     Test type: integration
     """
-    planner = StandardSparseSamplingDiscreteActionsPlanner(
+    planner = SparseSamplingDiscreteActionsPlanner(
         environment=tiger_pomdp,
         branching_factor=3,  # Reduced for testing
         depth=3,  # Reduced for testing
@@ -451,7 +451,7 @@ def test_sparse_sampling_config_id_hash_properties(tiger_pomdp):
 
     Test type: unit
     """
-    planner = StandardSparseSamplingDiscreteActionsPlanner(
+    planner = SparseSamplingDiscreteActionsPlanner(
         environment=tiger_pomdp,
         branching_factor=5,
         depth=8,

@@ -13,8 +13,8 @@ from POMDPPlanners.planners.open_loop_planners.discrete_action_sequences_planner
     DiscreteActionSequencesPlanner,
 )
 from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
-from POMDPPlanners.planners.sparse_sampling_planner import (
-    StandardSparseSamplingDiscreteActionsPlanner,
+from POMDPPlanners.planners.sparse_sampling_planners.sparse_sampling_planner import (
+    SparseSamplingDiscreteActionsPlanner,
 )
 from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     HyperParamPlannerConfig,
@@ -146,7 +146,7 @@ class PlannersHyperparamConfigs:
         }
 
         return HyperParamPlannerConfig(
-            policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+            policy_cls=SparseSamplingDiscreteActionsPlanner,
             hyper_parameters=hyper_parameters,
             constant_parameters=constant_parameters,
         )

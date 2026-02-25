@@ -8,8 +8,8 @@ import pytest
 from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-from POMDPPlanners.planners.sparse_sampling_planner import (
-    StandardSparseSamplingDiscreteActionsPlanner,
+from POMDPPlanners.planners.sparse_sampling_planners.sparse_sampling_planner import (
+    SparseSamplingDiscreteActionsPlanner,
 )
 from POMDPPlanners.utils.visualization import (
     plot_discounted_returns_histogram,
@@ -102,9 +102,7 @@ def test_plot_discounted_returns_histogram(temp_cache_dir):
     """
     # Setup
     env = TigerPOMDP(discount_factor=0.95)
-    policy = StandardSparseSamplingDiscreteActionsPlanner(
-        environment=env, branching_factor=2, depth=1
-    )
+    policy = SparseSamplingDiscreteActionsPlanner(environment=env, branching_factor=2, depth=1)
 
     # Create mock histories with discounted returns
     mock_histories = []
@@ -135,12 +133,8 @@ def test_plot_discounted_returns_histogram_multiple_policies(temp_cache_dir):
     """
     # Setup
     env = TigerPOMDP(discount_factor=0.95)
-    policy1 = StandardSparseSamplingDiscreteActionsPlanner(
-        environment=env, branching_factor=2, depth=1
-    )
-    policy2 = StandardSparseSamplingDiscreteActionsPlanner(
-        environment=env, branching_factor=3, depth=2
-    )
+    policy1 = SparseSamplingDiscreteActionsPlanner(environment=env, branching_factor=2, depth=1)
+    policy2 = SparseSamplingDiscreteActionsPlanner(environment=env, branching_factor=3, depth=2)
 
     # Create mock histories for each policy
     histories_dict = {}
@@ -185,9 +179,7 @@ def test_plot_environment_policy_pair_comparison(temp_cache_dir):
     """
     # Setup
     env = TigerPOMDP(discount_factor=0.95)
-    policy = StandardSparseSamplingDiscreteActionsPlanner(
-        environment=env, branching_factor=2, depth=1
-    )
+    policy = SparseSamplingDiscreteActionsPlanner(environment=env, branching_factor=2, depth=1)
 
     # Create mock histories
     mock_histories = []
@@ -218,9 +210,7 @@ def test_plot_discounted_returns_histogram_empty_histories(temp_cache_dir):
     """
     # Setup
     env = TigerPOMDP(discount_factor=0.95)
-    policy = StandardSparseSamplingDiscreteActionsPlanner(
-        environment=env, branching_factor=2, depth=1
-    )
+    policy = SparseSamplingDiscreteActionsPlanner(environment=env, branching_factor=2, depth=1)
 
     # Execute with empty histories
     output_path = temp_cache_dir / "empty_histogram.png"
@@ -247,12 +237,8 @@ def test_plot_discounted_returns_histogram_multiple_policies_empty_histories(
     """
     # Setup
     env = TigerPOMDP(discount_factor=0.95)
-    policy1 = StandardSparseSamplingDiscreteActionsPlanner(
-        environment=env, branching_factor=2, depth=1
-    )
-    policy2 = StandardSparseSamplingDiscreteActionsPlanner(
-        environment=env, branching_factor=3, depth=2
-    )
+    policy1 = SparseSamplingDiscreteActionsPlanner(environment=env, branching_factor=2, depth=1)
+    policy2 = SparseSamplingDiscreteActionsPlanner(environment=env, branching_factor=3, depth=2)
 
     # Create empty histories dictionary
     histories_dict = {policy1.name: [], policy2.name: []}
@@ -283,9 +269,7 @@ def test_plot_discounted_returns_histogram_single_history(temp_cache_dir):
     """
     # Setup
     env = TigerPOMDP(discount_factor=0.95)
-    policy = StandardSparseSamplingDiscreteActionsPlanner(
-        environment=env, branching_factor=2, depth=1
-    )
+    policy = SparseSamplingDiscreteActionsPlanner(environment=env, branching_factor=2, depth=1)
 
     # Create single history
     single_history = create_mock_history([-1.0, -2.0, 5.0])
@@ -316,9 +300,7 @@ def test_plot_discounted_returns_histogram_two_histories(temp_cache_dir):
     """
     # Setup
     env = TigerPOMDP(discount_factor=0.95)
-    policy = StandardSparseSamplingDiscreteActionsPlanner(
-        environment=env, branching_factor=2, depth=1
-    )
+    policy = SparseSamplingDiscreteActionsPlanner(environment=env, branching_factor=2, depth=1)
 
     # Create two histories with different rewards
     history1 = create_mock_history([-1.0, -2.0, 5.0])
@@ -352,12 +334,8 @@ def test_plot_discounted_returns_histogram_multiple_policies_single_history_per_
     """
     # Setup
     env = TigerPOMDP(discount_factor=0.95)
-    policy1 = StandardSparseSamplingDiscreteActionsPlanner(
-        environment=env, branching_factor=2, depth=1
-    )
-    policy2 = StandardSparseSamplingDiscreteActionsPlanner(
-        environment=env, branching_factor=3, depth=2
-    )
+    policy1 = SparseSamplingDiscreteActionsPlanner(environment=env, branching_factor=2, depth=1)
+    policy2 = SparseSamplingDiscreteActionsPlanner(environment=env, branching_factor=3, depth=2)
 
     # Create histories dictionary with single history per policy
     histories_dict = {
@@ -391,9 +369,7 @@ def test_plot_discounted_returns_histogram_zero_rewards(temp_cache_dir):
     """
     # Setup
     env = TigerPOMDP(discount_factor=0.95)
-    policy = StandardSparseSamplingDiscreteActionsPlanner(
-        environment=env, branching_factor=2, depth=1
-    )
+    policy = SparseSamplingDiscreteActionsPlanner(environment=env, branching_factor=2, depth=1)
 
     # Create histories with zero rewards
     mock_histories = []
@@ -424,9 +400,7 @@ def test_plot_discounted_returns_histogram_negative_rewards(temp_cache_dir):
     """
     # Setup
     env = TigerPOMDP(discount_factor=0.95)
-    policy = StandardSparseSamplingDiscreteActionsPlanner(
-        environment=env, branching_factor=2, depth=1
-    )
+    policy = SparseSamplingDiscreteActionsPlanner(environment=env, branching_factor=2, depth=1)
 
     # Create histories with negative rewards
     mock_histories = []
@@ -457,9 +431,7 @@ def test_plot_discounted_returns_histogram_large_rewards(temp_cache_dir):
     """
     # Setup
     env = TigerPOMDP(discount_factor=0.95)
-    policy = StandardSparseSamplingDiscreteActionsPlanner(
-        environment=env, branching_factor=2, depth=1
-    )
+    policy = SparseSamplingDiscreteActionsPlanner(environment=env, branching_factor=2, depth=1)
 
     # Create histories with large rewards
     mock_histories = []
