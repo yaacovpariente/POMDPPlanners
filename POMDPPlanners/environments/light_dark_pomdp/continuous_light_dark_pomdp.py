@@ -182,8 +182,8 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         self,
         discount_factor: float,
         name: str = "ContinuousLightDarkPOMDP",
-        state_transition_cov_matrix: np.ndarray = np.eye(2),
-        observation_cov_matrix: np.ndarray = np.eye(2),
+        state_transition_cov_matrix: np.ndarray = np.eye(2) * 0.05,
+        observation_cov_matrix: np.ndarray = np.eye(2) * 0.05,
         beacons: List[Tuple[float, float]] = [
             (0, 0),
             (0, 5),
