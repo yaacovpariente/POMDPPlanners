@@ -43,8 +43,7 @@ jobs:
       uses: docker/build-push-action@v4
       with:
         context: .
-        file: docker/Dockerfile
-        target: test
+        file: docker/Dockerfile.ci
         load: true
         tags: pomdpplanners-test:latest
         cache-from: type=gha
