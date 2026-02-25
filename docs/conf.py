@@ -70,8 +70,6 @@ html_theme_options = {
     "prev_next_buttons_location": "bottom",
     "style_external_links": False,
     "vcs_pageview_mode": "",
-    "display_version": True,
-    "navigation_expand": True,
 }
 
 # Suppress certain warnings to reduce noise
@@ -84,7 +82,6 @@ suppress_warnings = [
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
-html_static_path = ["_static"]
 
 # Ensure consistent navigation across all pages
 html_use_smartypants = True
