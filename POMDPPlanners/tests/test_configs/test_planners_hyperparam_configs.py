@@ -28,8 +28,8 @@ from POMDPPlanners.planners.open_loop_planners.discrete_action_sequences_planner
     DiscreteActionSequencesPlanner,
 )
 from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
-from POMDPPlanners.planners.sparse_sampling_planner import (
-    StandardSparseSamplingDiscreteActionsPlanner,
+from POMDPPlanners.planners.sparse_sampling_planners.sparse_sampling_planner import (
+    SparseSamplingDiscreteActionsPlanner,
 )
 from POMDPPlanners.utils.hyperparameter_tuning_and_eval import (
     HyperParamPlannerConfig,
@@ -172,7 +172,7 @@ class TestPlannersHyperparamConfigs:
         config = self.config_api.sparse_sampling_config(env=self.mock_env, name=self.planner_name)
 
         assert isinstance(config, HyperParamPlannerConfig)
-        assert config.policy_cls == StandardSparseSamplingDiscreteActionsPlanner
+        assert config.policy_cls == SparseSamplingDiscreteActionsPlanner
         assert len(config.hyper_parameters) == 2
 
         # Check parameter types
@@ -181,7 +181,7 @@ class TestPlannersHyperparamConfigs:
         assert isinstance(param_dict["depth"], NumericalHyperParameter)
 
         # Check that time_out_in_seconds is not in constant parameters
-        # (StandardSparseSamplingDiscreteActionsPlanner doesn't accept it)
+        # (SparseSamplingDiscreteActionsPlanner doesn't accept it)
         assert "time_out_in_seconds" not in config.constant_parameters
 
     def test_pomcp_config(self):
@@ -516,7 +516,7 @@ class TestPlannersHyperparamConfigs:
             "POMCP_DPW",
             "POMCP",
             "SparsePFT",
-            "StandardSparseSamplingDiscreteActionsPlanner",
+            "SparseSamplingDiscreteActionsPlanner",
             "DiscreteActionSequencesPlanner",
         }
 
@@ -682,7 +682,7 @@ class TestPlannersHyperparamConfigs:
         expected_planners = {
             "POMCP",
             "SparsePFT",
-            "StandardSparseSamplingDiscreteActionsPlanner",
+            "SparseSamplingDiscreteActionsPlanner",
             "DiscreteActionSequencesPlanner",
         }
 

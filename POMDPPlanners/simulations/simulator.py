@@ -803,7 +803,7 @@ class POMDPSimulator(BaseSimulator):
         >>> from POMDPPlanners.simulations.simulator import POMDPSimulator
         >>> from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
         >>> from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
-        >>> from POMDPPlanners.planners.sparse_sampling_planner import StandardSparseSamplingDiscreteActionsPlanner
+        >>> from POMDPPlanners.planners.sparse_sampling_planners.sparse_sampling_planner import SparseSamplingDiscreteActionsPlanner
         >>> from POMDPPlanners.core.belief import get_initial_belief
         >>> from POMDPPlanners.core.simulation import EnvironmentRunParams
         >>> from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import JoblibConfig
@@ -823,7 +823,7 @@ class POMDPSimulator(BaseSimulator):
         ...     n_simulations=10       # Reduced for testing
         ... )
 
-        >>> sparse_sampling = StandardSparseSamplingDiscreteActionsPlanner(
+        >>> sparse_sampling = SparseSamplingDiscreteActionsPlanner(
         ...     environment=tiger_env,
         ...     branching_factor=2,    # Reduced for testing
         ...     depth=3,               # Reduced for testing
@@ -1021,7 +1021,7 @@ class POMDPSimulator(BaseSimulator):
             >>> from POMDPPlanners.simulations.simulator import POMDPSimulator
             >>> from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
             >>> from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
-            >>> from POMDPPlanners.planners.sparse_sampling_planner import SparseSamplingDiscreteActionsPlanner
+            >>> from POMDPPlanners.planners.sparse_sampling_planners.sparse_sampling_planner import SparseSamplingDiscreteActionsPlanner
             >>> from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import JoblibConfig
             >>>
             >>> # Create environment
