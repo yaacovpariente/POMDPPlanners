@@ -12,6 +12,11 @@ With the default ``n_buffer=1`` only the current iteration's data is ever in
 the buffer, keeping training fully on-policy.  Set ``n_buffer > 1`` to retain
 a rolling window of recent iterations.
 
+Reference:
+    Moss, R. J., Corso, A., Caers, J., & Kochenderfer, M. J. (2024). BetaZero:
+    Belief-State Planning for Long-Horizon POMDPs using Learned Approximations.
+    Reinforcement Learning Conference (RLC).
+
 Classes:
     TrainingExample: A single training datum.
     TrainingBuffer: Iteration-slot buffer with uniform batch sampling.

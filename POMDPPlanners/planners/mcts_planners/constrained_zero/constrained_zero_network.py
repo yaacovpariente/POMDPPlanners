@@ -4,6 +4,13 @@ This module extends the BetaZero dual-head network with an additional failure
 probability head. The failure head outputs a raw logit; sigmoid is applied
 during prediction to produce a probability in [0, 1].
 
+Reference:
+    Moss, R. J., Jamgochian, A., Fischer, J., Corso, A., & Kochenderfer, M. J. (2024).
+    ConstrainedZero: Chance-Constrained POMDP Planning Using Learned Probabilistic Failure
+    Surrogates and Adaptive Safety Constraints. Proceedings of the Thirty-Third International
+    Joint Conference on Artificial Intelligence (IJCAI), 6752-6760.
+    https://www.ijcai.org/proceedings/2024/746
+
 Classes:
     ConstrainedZeroNetwork: Shared-trunk network with policy, value, and failure heads.
 """

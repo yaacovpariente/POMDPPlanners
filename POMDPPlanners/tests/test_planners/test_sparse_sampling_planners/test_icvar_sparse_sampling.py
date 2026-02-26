@@ -9,7 +9,7 @@ from POMDPPlanners.core.policy import PolicyRunData
 from POMDPPlanners.core.environment import SpaceType
 from POMDPPlanners.core.tree import ActionNode, BeliefNode
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-from POMDPPlanners.planners.sparse_sampling_planners.icvar_sparse_sampling_planner import (
+from POMDPPlanners.planners.sparse_sampling_planners.icvar_sparse_sampling import (
     ICVaRSparseSampling,
 )
 from POMDPPlanners.utils.statistics_utils import cvar_estimator_from_dist

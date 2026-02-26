@@ -5,6 +5,11 @@ for POMDP planning. Instead of using the expected value (mean) for Bellman backu
 it uses the Conditional Value at Risk (CVaR) to focus on the worst-alpha fraction
 of outcomes.
 
+Reference:
+    Pariente, Y., & Indelman, V. (2026). Online Risk-Averse Planning in POMDPs Using
+    Iterated CVaR Value Function. arXiv preprint arXiv:2601.20554.
+    https://arxiv.org/abs/2601.20554
+
 Classes:
     ICVaRSparseSampling: Risk-sensitive sparse sampling with CVaR-based value updates
 """
@@ -17,7 +22,7 @@ from POMDPPlanners.core.cost import belief_expectation_cost
 from POMDPPlanners.core.environment import DiscreteActionsEnvironment, SpaceType
 from POMDPPlanners.core.policy import PolicySpaceInfo
 from POMDPPlanners.core.tree import ActionNode
-from POMDPPlanners.planners.sparse_sampling_planners.sparse_sampling_planner import (
+from POMDPPlanners.planners.sparse_sampling_planners.sparse_sampling import (
     SparseSamplingDiscreteActionsPlanner,
 )
 from POMDPPlanners.utils.statistics_utils import cvar_estimator_from_dist

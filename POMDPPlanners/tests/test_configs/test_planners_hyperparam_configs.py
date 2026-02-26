@@ -28,7 +28,7 @@ from POMDPPlanners.planners.open_loop_planners.discrete_action_sequences_planner
     DiscreteActionSequencesPlanner,
 )
 from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
-from POMDPPlanners.planners.sparse_sampling_planners.sparse_sampling_planner import (
+from POMDPPlanners.planners.sparse_sampling_planners.sparse_sampling import (
     SparseSamplingDiscreteActionsPlanner,
 )
 from POMDPPlanners.utils.hyperparameter_tuning_and_eval import (

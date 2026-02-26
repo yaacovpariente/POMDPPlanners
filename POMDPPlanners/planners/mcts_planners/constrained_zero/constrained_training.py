@@ -4,6 +4,13 @@ This module provides the loss function and training loop for the 3-head
 ConstrainedZero network. It extends the BetaZero training with an additional
 binary cross-entropy loss for the failure head.
 
+Reference:
+    Moss, R. J., Jamgochian, A., Fischer, J., Corso, A., & Kochenderfer, M. J. (2024).
+    ConstrainedZero: Chance-Constrained POMDP Planning Using Learned Probabilistic Failure
+    Surrogates and Adaptive Safety Constraints. Proceedings of the Thirty-Third International
+    Joint Conference on Artificial Intelligence (IJCAI), 6752-6760.
+    https://www.ijcai.org/proceedings/2024/746
+
 Functions:
     compute_constrained_zero_loss: Combined value + policy + failure loss.
     train_constrained_network: Multi-epoch training on a replay buffer.

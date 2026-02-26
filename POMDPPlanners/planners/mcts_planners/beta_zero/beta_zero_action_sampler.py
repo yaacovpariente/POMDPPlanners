@@ -5,6 +5,11 @@ actions from the policy network's output distribution, enabling the progressive
 widening mechanism to propose actions guided by learned priors rather than
 uniform random sampling.
 
+Reference:
+    Moss, R. J., Corso, A., Caers, J., & Kochenderfer, M. J. (2024). BetaZero:
+    Belief-State Planning for Long-Horizon POMDPs using Learned Approximations.
+    Reinforcement Learning Conference (RLC).
+
 Classes:
     BetaZeroActionSampler: Samples actions from the BetaZero policy network.
 """

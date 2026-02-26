@@ -16,6 +16,11 @@ Key features:
 - Can be configured with time limits or simulation count limits
 - Provides theoretical convergence guarantees to optimal policy
 
+Reference:
+    Silver, D., & Veness, J. (2010). Monte-Carlo Planning in Large POMDPs.
+    Advances in Neural Information Processing Systems, 23.
+    https://papers.nips.cc/paper_files/paper/2010/hash/edfbe1afcf9246bb0d40eb4d8027d90f-Abstract.html
+
 Classes:
     POMCP: Monte Carlo Tree Search planner for POMDPs with UCB1 action selection
 """

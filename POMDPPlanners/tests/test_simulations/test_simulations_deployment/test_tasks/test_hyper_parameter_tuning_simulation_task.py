@@ -19,7 +19,7 @@ from POMDPPlanners.core.simulation.hyperparameter_tuning import (
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.simulations.simulations_deployment.cache_dbs import DiskCacheDB
 from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
-from POMDPPlanners.planners.sparse_sampling_planners.sparse_sampling_planner import (
+from POMDPPlanners.planners.sparse_sampling_planners.sparse_sampling import (
     SparseSamplingDiscreteActionsPlanner,
 )
 from POMDPPlanners.simulations.simulations_deployment.tasks import (

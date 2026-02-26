@@ -803,7 +803,7 @@ class POMDPSimulator(BaseSimulator):
         >>> from POMDPPlanners.simulations.simulator import POMDPSimulator
         >>> from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
         >>> from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
-        >>> from POMDPPlanners.planners.sparse_sampling_planners.sparse_sampling_planner import SparseSamplingDiscreteActionsPlanner
+        >>> from POMDPPlanners.planners.sparse_sampling_planners.sparse_sampling import SparseSamplingDiscreteActionsPlanner
         >>> from POMDPPlanners.core.belief import get_initial_belief
         >>> from POMDPPlanners.core.simulation import EnvironmentRunParams
         >>> from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import JoblibConfig
@@ -1021,7 +1021,7 @@ class POMDPSimulator(BaseSimulator):
             >>> from POMDPPlanners.simulations.simulator import POMDPSimulator
             >>> from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
             >>> from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
-            >>> from POMDPPlanners.planners.sparse_sampling_planners.sparse_sampling_planner import SparseSamplingDiscreteActionsPlanner
+            >>> from POMDPPlanners.planners.sparse_sampling_planners.sparse_sampling import SparseSamplingDiscreteActionsPlanner
             >>> from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import JoblibConfig
             >>>
             >>> # Create environment

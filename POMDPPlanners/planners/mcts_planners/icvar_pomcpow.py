@@ -1,3 +1,19 @@
+"""ICVaR POMCPOW (Iterated CVaR POMCPOW) Algorithm.
+
+This module implements a risk-sensitive variant of POMCPOW that uses the Iterated Conditional
+Value at Risk (ICVaR) for value backups instead of the expected value. This makes the planner
+focus on the worst-alpha fraction of outcomes, enabling risk-averse planning in POMDPs with
+continuous state, action, and observation spaces.
+
+Reference:
+    Pariente, Y., & Indelman, V. (2026). Online Risk-Averse Planning in POMDPs Using
+    Iterated CVaR Value Function. arXiv preprint arXiv:2601.20554.
+    https://arxiv.org/abs/2601.20554
+
+Classes:
+    ICVaR_POMCPOW: Risk-sensitive POMCPOW planner with CVaR-based value updates
+"""
+
 from pathlib import Path
 from typing import Any, Optional, Tuple
 

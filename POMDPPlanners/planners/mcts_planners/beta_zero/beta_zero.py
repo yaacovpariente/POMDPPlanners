@@ -1,10 +1,14 @@
 """BetaZero planner: neural MCTS for POMDPs.
 
-This module implements the BetaZero algorithm (Moss et al., 2024 — arXiv:2306.00249),
-which adapts AlphaZero to POMDPs by planning in belief space. It combines online MCTS
-with PUCT and neural network priors for both action selection and leaf value estimation.
-Offline policy-iteration training is orchestrated via
-:class:`~POMDPPlanners.training.PolicyTrainer`.
+This module implements the BetaZero algorithm, which adapts AlphaZero to POMDPs by
+planning in belief space. It combines online MCTS with PUCT and neural network priors
+for both action selection and leaf value estimation. Offline policy-iteration training
+is orchestrated via :class:`~POMDPPlanners.training.PolicyTrainer`.
+
+Reference:
+    Moss, R. J., Corso, A., Caers, J., & Kochenderfer, M. J. (2024). BetaZero:
+    Belief-State Planning for Long-Horizon POMDPs using Learned Approximations.
+    Reinforcement Learning Conference (RLC).
 
 Classes:
     BetaZero: Main planner extending ``DoubleProgressiveWideningMCTSPolicy``.
