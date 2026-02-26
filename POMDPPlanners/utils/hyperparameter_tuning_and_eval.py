@@ -296,7 +296,7 @@ def optimize_and_evaluate_planners(
             >>> from pathlib import Path
             >>> from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
             >>> from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
-            >>> from POMDPPlanners.planners.sparse_sampling_planners.sparse_sampling_planner import SparseSamplingDiscreteActionsPlanner
+            >>> from POMDPPlanners.planners.sparse_sampling_planners.sparse_sampling import SparseSamplingDiscreteActionsPlanner
             >>> from POMDPPlanners.core.simulation import NumericalHyperParameter
             >>> from POMDPPlanners.core.belief import get_initial_belief
             >>>

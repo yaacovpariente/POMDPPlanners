@@ -4,6 +4,11 @@ Implements the Predictor Upper Confidence Trees (PUCT) selection rule used
 in BetaZero, replacing the standard UCB1 criterion. PUCT biases exploration
 towards actions favoured by the policy network.
 
+Reference:
+    Moss, R. J., Corso, A., Caers, J., & Kochenderfer, M. J. (2024). BetaZero:
+    Belief-State Planning for Long-Horizon POMDPs using Learned Approximations.
+    Reinforcement Learning Conference (RLC).
+
 Functions:
     puct_selection: Select among existing children using PUCT.
     puct_action_progressive_widening: Progressive widening with PUCT selection.

@@ -1,10 +1,16 @@
 """ConstrainedZero planner: neural MCTS for Chance-Constrained POMDPs.
 
-This module implements the ConstrainedZero algorithm (Moss et al., IJCAI 2024,
-arXiv:2405.00644), which extends BetaZero to solve CC-POMDPs. It adds a 3-head
-network with a failure probability head, safety-constrained PUCT (SPUCT),
-adaptive failure threshold calibration via conformal inference, and constrained
-policy targets for training.
+This module implements the ConstrainedZero algorithm, which extends BetaZero to solve
+CC-POMDPs. It adds a 3-head network with a failure probability head, safety-constrained
+PUCT (SPUCT), adaptive failure threshold calibration via conformal inference, and
+constrained policy targets for training.
+
+Reference:
+    Moss, R. J., Jamgochian, A., Fischer, J., Corso, A., & Kochenderfer, M. J. (2024).
+    ConstrainedZero: Chance-Constrained POMDP Planning Using Learned Probabilistic Failure
+    Surrogates and Adaptive Safety Constraints. Proceedings of the Thirty-Third International
+    Joint Conference on Artificial Intelligence (IJCAI), 6752-6760.
+    https://www.ijcai.org/proceedings/2024/746
 
 Classes:
     ConstrainedZero: Main planner extending ``BetaZero``.

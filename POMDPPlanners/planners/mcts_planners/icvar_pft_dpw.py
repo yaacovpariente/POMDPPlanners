@@ -1,3 +1,18 @@
+"""ICVaR PFT-DPW (Iterated CVaR Particle Filter Tree with Double Progressive Widening) Algorithm.
+
+This module implements a risk-sensitive variant of PFT-DPW that uses the Iterated Conditional
+Value at Risk (ICVaR) for value backups instead of the expected value. This makes the planner
+focus on the worst-alpha fraction of outcomes, enabling risk-averse planning in POMDPs.
+
+Reference:
+    Pariente, Y., & Indelman, V. (2026). Online Risk-Averse Planning in POMDPs Using
+    Iterated CVaR Value Function. arXiv preprint arXiv:2601.20554.
+    https://arxiv.org/abs/2601.20554
+
+Classes:
+    ICVaR_PFT_DPW: Risk-sensitive PFT-DPW planner with CVaR-based value updates
+"""
+
 from typing import Tuple, Optional
 import numpy as np
 

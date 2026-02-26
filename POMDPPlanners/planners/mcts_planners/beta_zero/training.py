@@ -3,6 +3,11 @@
 This module provides the loss function and training loop used during
 BetaZero policy iteration to update the dual-head network.
 
+Reference:
+    Moss, R. J., Corso, A., Caers, J., & Kochenderfer, M. J. (2024). BetaZero:
+    Belief-State Planning for Long-Horizon POMDPs using Learned Approximations.
+    Reinforcement Learning Conference (RLC).
+
 Functions:
     compute_beta_zero_loss: Combined value + policy + L2 loss (Eq. 7 in paper).
     train_network: Run multiple epochs of training on a replay buffer.

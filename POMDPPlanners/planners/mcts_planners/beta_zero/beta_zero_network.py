@@ -5,6 +5,11 @@ has a shared trunk with two output heads: a policy head that produces action
 probabilities (discrete) or Gaussian parameters (continuous), and a value head
 that estimates the state value V(φ(b)).
 
+Reference:
+    Moss, R. J., Corso, A., Caers, J., & Kochenderfer, M. J. (2024). BetaZero:
+    Belief-State Planning for Long-Horizon POMDPs using Learned Approximations.
+    Reinforcement Learning Conference (RLC).
+
 Classes:
     AbstractBetaZeroNetwork: Abstract base class for BetaZero policy and value networks.
     BetaZeroNetwork: Shared-trunk network with policy and value heads.

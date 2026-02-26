@@ -4,6 +4,11 @@ This module provides abstractions for converting POMDP belief states into
 fixed-size feature vectors suitable for neural network input. The default
 implementation extracts particle statistics (mean and standard deviation).
 
+Reference:
+    Moss, R. J., Corso, A., Caers, J., & Kochenderfer, M. J. (2024). BetaZero:
+    Belief-State Planning for Long-Horizon POMDPs using Learned Approximations.
+    Reinforcement Learning Conference (RLC).
+
 Classes:
     BeliefRepresentation: Abstract base for belief feature extraction
     ParticleMeanStdRepresentation: Default φ(b) = [mean(particles), std(particles)]

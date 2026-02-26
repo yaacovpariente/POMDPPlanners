@@ -19,6 +19,12 @@ The algorithm progressively expands the tree by:
 4. Balancing exploration of new actions with exploitation of promising ones
 5. Performing random rollouts from leaf nodes for value estimation
 
+Reference:
+    Sunberg, Z. N., & Kochenderfer, M. J. (2018). Online Algorithms for POMDPs with
+    Continuous State, Action, and Observation Spaces. Proceedings of the International
+    Conference on Automated Planning and Scheduling, 28(1), 259-263.
+    https://ojs.aaai.org/index.php/ICAPS/article/view/13882
+
 Classes:
     POMCPOW: Monte Carlo Tree Search planner with double progressive widening
 """

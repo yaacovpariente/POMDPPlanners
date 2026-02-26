@@ -3,6 +3,11 @@
 This package implements the BetaZero algorithm (Moss et al., 2024), which adapts
 AlphaZero to POMDPs by planning in belief space with learned neural network priors.
 
+Reference:
+    Moss, R. J., Corso, A., Caers, J., & Kochenderfer, M. J. (2024). BetaZero:
+    Belief-State Planning for Long-Horizon POMDPs using Learned Approximations.
+    Reinforcement Learning Conference (RLC).
+
 Classes:
     BetaZero: Main planner combining MCTS with neural network value/policy estimates
     AbstractBetaZeroNetwork: Abstract base class for BetaZero policy and value networks

@@ -38,7 +38,7 @@ from POMDPPlanners.simulations.simulations_deployment.task_managers import (
 from POMDPPlanners.simulations.workflows.optimization import (
     run_hyperparameter_optimization_pbs,
 )
-from POMDPPlanners.planners.sparse_sampling_planners.sparse_sampling_planner import (
+from POMDPPlanners.planners.sparse_sampling_planners.sparse_sampling import (
     SparseSamplingDiscreteActionsPlanner,
 )
 from POMDPPlanners.simulations.hyper_parameter_tuning_simulations import (

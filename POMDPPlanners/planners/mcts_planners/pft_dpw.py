@@ -17,6 +17,12 @@ The algorithm progressively expands the tree by:
 3. Balancing exploration of new actions with exploitation of promising ones
 4. Performing random rollouts from leaf nodes for value estimation
 
+Reference:
+    Sunberg, Z. N., & Kochenderfer, M. J. (2018). Online Algorithms for POMDPs with
+    Continuous State, Action, and Observation Spaces. Proceedings of the International
+    Conference on Automated Planning and Scheduling, 28(1), 259-263.
+    https://ojs.aaai.org/index.php/ICAPS/article/view/13882
+
 Classes:
     ActionSampler: Abstract base class for action sampling strategies
     PFT_DPW: Main PFT-DPW planner with progressive widening for continuous actions

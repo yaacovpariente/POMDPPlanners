@@ -8,7 +8,7 @@ from POMDPPlanners.core.policy import PolicyInfoVariable, PolicyRunData
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
-from POMDPPlanners.planners.sparse_sampling_planners.sparse_sampling_planner import (
+from POMDPPlanners.planners.sparse_sampling_planners.sparse_sampling import (
     SparseSamplingDiscreteActionsPlanner,
 )
 from POMDPPlanners.simulations.simulation_statistics import (

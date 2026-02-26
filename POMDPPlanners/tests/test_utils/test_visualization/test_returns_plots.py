@@ -8,7 +8,7 @@ import pytest
 from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-from POMDPPlanners.planners.sparse_sampling_planners.sparse_sampling_planner import (
+from POMDPPlanners.planners.sparse_sampling_planners.sparse_sampling import (
     SparseSamplingDiscreteActionsPlanner,
 )
 from POMDPPlanners.utils.visualization import (

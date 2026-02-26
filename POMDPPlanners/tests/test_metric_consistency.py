@@ -17,7 +17,7 @@ from POMDPPlanners.core.simulation import StepData
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.environments.push_pomdp.push_pomdp import PushPOMDP
 from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
-from POMDPPlanners.planners.sparse_sampling_planners.sparse_sampling_planner import (
+from POMDPPlanners.planners.sparse_sampling_planners.sparse_sampling import (
     SparseSamplingDiscreteActionsPlanner,
 )
 from POMDPPlanners.planners.open_loop_planners.discrete_action_sequences_planner import (
