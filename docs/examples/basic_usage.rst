@@ -172,7 +172,7 @@ Comparing Multiple Algorithms
 
 .. code-block:: python
 
-   from POMDPPlanners.planners.sparse_sampling_planners.sparse_sampling_planner import SparseSamplingDiscreteActionsPlanner
+   from POMDPPlanners.planners.sparse_sampling_planners.sparse_sampling import SparseSamplingDiscreteActionsPlanner
 
    # Test multiple algorithms on the same problem
    algorithms = {

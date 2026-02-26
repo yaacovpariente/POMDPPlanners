@@ -364,7 +364,7 @@ You can also use categorical parameters for algorithm selection:
 .. code-block:: python
 
    from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
-   from POMDPPlanners.planners.sparse_sampling_planners.sparse_sampling_planner import SparseSamplingDiscreteActionsPlanner
+   from POMDPPlanners.planners.sparse_sampling_planners.sparse_sampling import SparseSamplingDiscreteActionsPlanner
 
    # Define optimization with categorical parameters
    categorical_optimization_configs = [

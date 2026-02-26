@@ -11,5 +11,5 @@ Submodules
 
 .. toctree::
 
-   POMDPPlanners.planners.sparse_sampling_planners.sparse_sampling_planner
-   POMDPPlanners.planners.sparse_sampling_planners.icvar_sparse_sampling_planner
+   POMDPPlanners.planners.sparse_sampling_planners.sparse_sampling
+   POMDPPlanners.planners.sparse_sampling_planners.icvar_sparse_sampling
