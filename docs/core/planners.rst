@@ -20,7 +20,7 @@ Planning Algorithm Categories
 .. autosummary::
    :toctree: ../api/
 
-   POMDPPlanners.planners.sparse_sampling_planners.sparse_sampling_planner.SparseSamplingDiscreteActionsPlanner
+   POMDPPlanners.planners.sparse_sampling_planners.sparse_sampling.SparseSamplingDiscreteActionsPlanner
 
 **Open Loop Planning**
 
