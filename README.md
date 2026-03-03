@@ -263,17 +263,6 @@ python -m http.server 8000 -d _build/html
 
 Visit the documentation at: [Project Documentation](https://yaacovpariente.github.io/POMDPPlanners/) *(available when repository becomes public)*
 
-## 🤝 Contributing
-
-We welcome contributions of all kinds! Please see our [Contributing Guide](CONTRIBUTING.md) for details on:
-
-- Setting up the development environment
-- Coding guidelines and standards
-- Submitting pull requests
-- Reporting bugs and requesting features
-
-Please also read our [Code of Conduct](CODE_OF_CONDUCT.md).
-
 ## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details.
