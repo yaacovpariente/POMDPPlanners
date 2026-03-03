@@ -273,13 +273,13 @@ If you use POMDPPlanners in your research, please cite:
 
 ```bibtex
 @misc{pariente2026pomdpplannersopensourcepackagepomdp,
-      title={POMDPPlanners: Open-Source Package for POMDP Planning},
+      title={POMDPPlanners: Open-Source Package for POMDP Planning}, 
       author={Yaacov Pariente and Vadim Indelman},
       year={2026},
       eprint={2602.20810},
       archivePrefix={arXiv},
       primaryClass={cs.AI},
-      url={https://arxiv.org/abs/2602.20810},
+      url={https://arxiv.org/abs/2602.20810}, 
 }
 ```
 
