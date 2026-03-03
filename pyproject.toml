@@ -7,14 +7,14 @@ name = "POMDPPlanners"
 version = "0.1.0"
 description = "A Python package for POMDP planning algorithms and environments"
 readme = "README.md"
-license = {file = "LICENSE.md"}
+license = "MIT"
+license-files = ["LICENSE.md"]
 authors = [{name = "Yaacov Pariente", email = "yaacovpar@gmail.com"}]
 requires-python = ">=3.10"
 keywords = ["pomdp", "planning", "reinforcement-learning", "monte-carlo-tree-search", "artificial-intelligence"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",

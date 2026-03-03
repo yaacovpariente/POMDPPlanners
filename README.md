@@ -283,11 +283,14 @@ This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md
 If you use POMDPPlanners in your research, please cite:
 
 ```bibtex
-@software{pomdpplanners2025,
-  title={POMDPPlanners: A Python Package for POMDP Planning Algorithms},
-  author={Pariente, Yaacov},
-  year={2025},
-  url={https://github.com/yaacovpariente/POMDPPlanners}
+@misc{pariente2026pomdpplannersopensourcepackagepomdp,
+      title={POMDPPlanners: Open-Source Package for POMDP Planning},
+      author={Yaacov Pariente and Vadim Indelman},
+      year={2026},
+      eprint={2602.20810},
+      archivePrefix={arXiv},
+      primaryClass={cs.AI},
+      url={https://arxiv.org/abs/2602.20810},
 }
 ```
 
