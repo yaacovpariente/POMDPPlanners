@@ -26,7 +26,7 @@ from POMDPPlanners.core.belief.vectorized_particle_belief_updater import (
 from POMDPPlanners.core.belief.vectorized_weighted_particle_belief import (
     VectorizedWeightedParticleBelief,
 )
-from POMDPPlanners.environments.cartpole_pomdp_gaussian_beliefs import (
+from POMDPPlanners.environments.cartpole_pomdp.cartpole_pomdp_gaussian_beliefs import (
     GaussianBeliefUpdaterType,
     create_cartpole_gaussian_belief,
 )
