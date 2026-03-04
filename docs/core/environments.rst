@@ -19,8 +19,8 @@ Core Environment Types
 .. autosummary::
    :toctree: ../api/
 
-   POMDPPlanners.environments.cartpole_pomdp.CartPolePOMDP
-   POMDPPlanners.environments.mountain_car_pomdp.MountainCarPOMDP
+   POMDPPlanners.environments.cartpole_pomdp.cartpole_pomdp.CartPolePOMDP
+   POMDPPlanners.environments.mountain_car_pomdp.mountain_car_pomdp.MountainCarPOMDP
    POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.ContinuousLightDarkPOMDP
    POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp.DiscreteLightDarkPOMDP
 

@@ -54,12 +54,12 @@ class BeliefType(Enum):
 _ENV_FACTORY_REGISTRY: dict[str, tuple[str, str, BeliefType]] = {
     # (module_path, function_name, default_belief_type)
     "CartPolePOMDP": (
-        "POMDPPlanners.environments.cartpole_pomdp_beliefs",
+        "POMDPPlanners.environments.cartpole_pomdp.cartpole_pomdp_beliefs",
         "create_cartpole_belief",
         BeliefType.VECTORIZED_PARTICLE,
     ),
     "MountainCarPOMDP": (
-        "POMDPPlanners.environments.mountain_car_pomdp_beliefs",
+        "POMDPPlanners.environments.mountain_car_pomdp.mountain_car_pomdp_beliefs",
         "create_mountain_car_belief",
         BeliefType.VECTORIZED_PARTICLE,
     ),

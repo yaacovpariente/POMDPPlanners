@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 
 from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
-from POMDPPlanners.environments.cartpole_pomdp_beliefs import (
+from POMDPPlanners.environments.cartpole_pomdp.cartpole_pomdp_beliefs import (
     CartPoleVectorizedUpdater,
 )
 

@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 
 from POMDPPlanners.environments.mountain_car_pomdp import MountainCarPOMDP
-from POMDPPlanners.environments.mountain_car_pomdp_beliefs import (
+from POMDPPlanners.environments.mountain_car_pomdp.mountain_car_pomdp_beliefs import (
     MountainCarVectorizedUpdater,
 )
 

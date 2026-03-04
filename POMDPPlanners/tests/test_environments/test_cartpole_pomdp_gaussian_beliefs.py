@@ -13,7 +13,7 @@ from POMDPPlanners.core.belief.gaussian_belief_updaters import (
     UnscentedKalmanFilterUpdater,
 )
 from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
-from POMDPPlanners.environments.cartpole_pomdp_gaussian_beliefs import (
+from POMDPPlanners.environments.cartpole_pomdp.cartpole_pomdp_gaussian_beliefs import (
     GaussianBeliefUpdaterType,
     create_cartpole_gaussian_belief,
 )
@@ -583,7 +583,9 @@ class TestBeliefFactoryIntegration:
 
         Test type: integration
         """
-        from POMDPPlanners.environments.cartpole_pomdp_beliefs import create_cartpole_belief
+        from POMDPPlanners.environments.cartpole_pomdp.cartpole_pomdp_beliefs import (
+            create_cartpole_belief,
+        )
         from POMDPPlanners.utils.belief_factory import BeliefType
 
         belief = create_cartpole_belief(env, belief_type=BeliefType.GAUSSIAN)
@@ -602,7 +604,9 @@ class TestBeliefFactoryIntegration:
 
         Test type: integration
         """
-        from POMDPPlanners.environments.cartpole_pomdp_beliefs import create_cartpole_belief
+        from POMDPPlanners.environments.cartpole_pomdp.cartpole_pomdp_beliefs import (
+            create_cartpole_belief,
+        )
         from POMDPPlanners.utils.belief_factory import BeliefType
 
         custom_cov = np.eye(4) * 2.0
