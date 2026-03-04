@@ -297,5 +297,3 @@ If you use POMDPPlanners in your research, please cite:
 - **Discussions**: https://github.com/yaacovpariente/POMDPPlanners/discussions
 
 ---
-
-**Made with ❤️ for the POMDP research community**
