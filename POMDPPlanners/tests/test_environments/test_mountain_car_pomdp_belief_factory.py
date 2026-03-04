@@ -1,7 +1,7 @@
 """Tests for the Mountain Car belief factory.
 
 This module tests :func:`create_mountain_car_belief` from
-:mod:`POMDPPlanners.environments.mountain_car_pomdp_beliefs`.
+:mod:`POMDPPlanners.environments.mountain_car_pomdp.mountain_car_pomdp_beliefs`.
 """
 
 import numpy as np
@@ -12,7 +12,7 @@ from POMDPPlanners.core.belief.vectorized_weighted_particle_belief import (
     VectorizedWeightedParticleBelief,
 )
 from POMDPPlanners.environments.mountain_car_pomdp import MountainCarPOMDP
-from POMDPPlanners.environments.mountain_car_pomdp_beliefs import (
+from POMDPPlanners.environments.mountain_car_pomdp.mountain_car_pomdp_beliefs import (
     create_mountain_car_belief,
 )
 from POMDPPlanners.utils.belief_factory import BeliefType

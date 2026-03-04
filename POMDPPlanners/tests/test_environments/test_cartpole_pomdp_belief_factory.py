@@ -1,7 +1,7 @@
 """Tests for the CartPole belief factory.
 
 This module tests :func:`create_cartpole_belief` from
-:mod:`POMDPPlanners.environments.cartpole_pomdp_beliefs`.
+:mod:`POMDPPlanners.environments.cartpole_pomdp.cartpole_pomdp_beliefs`.
 """
 
 import numpy as np
@@ -12,7 +12,7 @@ from POMDPPlanners.core.belief.vectorized_weighted_particle_belief import (
     VectorizedWeightedParticleBelief,
 )
 from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
-from POMDPPlanners.environments.cartpole_pomdp_beliefs import create_cartpole_belief
+from POMDPPlanners.environments.cartpole_pomdp.cartpole_pomdp_beliefs import create_cartpole_belief
 from POMDPPlanners.utils.belief_factory import BeliefType
 
 

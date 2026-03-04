@@ -13,7 +13,7 @@ from POMDPPlanners.core.belief.gaussian_belief_updaters import (
     UnscentedKalmanFilterUpdater,
 )
 from POMDPPlanners.environments.mountain_car_pomdp import MountainCarPOMDP
-from POMDPPlanners.environments.mountain_car_pomdp_gaussian_beliefs import (
+from POMDPPlanners.environments.mountain_car_pomdp.mountain_car_pomdp_gaussian_beliefs import (
     GaussianBeliefUpdaterType,
     create_mountain_car_gaussian_belief,
 )
@@ -585,7 +585,7 @@ class TestBeliefFactoryIntegration:
 
         Test type: integration
         """
-        from POMDPPlanners.environments.mountain_car_pomdp_beliefs import (
+        from POMDPPlanners.environments.mountain_car_pomdp.mountain_car_pomdp_beliefs import (
             create_mountain_car_belief,
         )
         from POMDPPlanners.utils.belief_factory import BeliefType
@@ -606,7 +606,7 @@ class TestBeliefFactoryIntegration:
 
         Test type: integration
         """
-        from POMDPPlanners.environments.mountain_car_pomdp_beliefs import (
+        from POMDPPlanners.environments.mountain_car_pomdp.mountain_car_pomdp_beliefs import (
             create_mountain_car_belief,
         )
         from POMDPPlanners.utils.belief_factory import BeliefType
