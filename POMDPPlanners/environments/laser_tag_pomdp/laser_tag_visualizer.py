@@ -308,6 +308,16 @@ class LaserTagVisualizer:
         proxy_action = Line2D(
             [], [], color="red", linewidth=2, marker=">", markersize=8, label="Action"
         )
+        proxy_dangerous = Line2D(
+            [],
+            [],
+            marker="o",
+            color="w",
+            markerfacecolor="red",
+            markersize=10,
+            alpha=0.3,
+            label="Dangerous Area",
+        )
         ax.legend(
             handles=[
                 proxy_robot,
@@ -317,6 +327,7 @@ class LaserTagVisualizer:
                 proxy_belief,
                 proxy_laser,
                 proxy_action,
+                proxy_dangerous,
             ],
             loc="upper right",
             bbox_to_anchor=(0.98, 0.98),
