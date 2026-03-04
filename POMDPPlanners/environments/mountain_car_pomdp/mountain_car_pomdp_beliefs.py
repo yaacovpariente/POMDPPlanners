@@ -26,7 +26,7 @@ from POMDPPlanners.core.belief.vectorized_particle_belief_updater import (
 from POMDPPlanners.core.belief.vectorized_weighted_particle_belief import (
     VectorizedWeightedParticleBelief,
 )
-from POMDPPlanners.environments.mountain_car_pomdp_gaussian_beliefs import (
+from POMDPPlanners.environments.mountain_car_pomdp.mountain_car_pomdp_gaussian_beliefs import (
     GaussianBeliefUpdaterType,
     create_mountain_car_gaussian_belief,
 )
