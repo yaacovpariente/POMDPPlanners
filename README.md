@@ -261,7 +261,7 @@ sphinx-build -b html . _build/html
 python -m http.server 8000 -d _build/html
 ```
 
-Visit the documentation at: [Project Documentation](https://yaacovpariente.github.io/POMDPPlanners/) *(available when repository becomes public)*
+Visit the documentation at: [Project Documentation](https://yaacovpariente.github.io/POMDPPlanners/)
 
 ## 📄 License
 
@@ -288,12 +288,5 @@ If you use POMDPPlanners in your research, please cite:
 - Python 3.10 or higher
 - Core dependencies managed via `pyproject.toml` (`pip install -e .`)
 - Development dependencies: `pip install -e ".[dev]"`
-
-## 🔗 Links
-
-- **Repository**: https://github.com/yaacovpariente/POMDPPlanners
-- **Documentation**: https://yaacovpariente.github.io/POMDPPlanners/ *(available when repository becomes public)*
-- **Issues**: https://github.com/yaacovpariente/POMDPPlanners/issues
-- **Discussions**: https://github.com/yaacovpariente/POMDPPlanners/discussions
 
 ---
