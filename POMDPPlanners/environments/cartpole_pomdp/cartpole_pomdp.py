@@ -47,9 +47,10 @@ class CartPolePOMDPMetrics(Enum):
 class CartPoleStateTransition(StateTransitionModel):
     """Physics-based state transition model for CartPole POMDP.
 
-    This model implements the classical cart-pole dynamics with deterministic
-    physics simulation. The cart experiences forces that affect both cart
-    acceleration and pole angular acceleration through coupled equations of motion.
+    This model implements the classical cart-pole dynamics with Gaussian
+    process noise. The cart experiences forces that affect both cart
+    acceleration and pole angular acceleration through coupled equations
+    of motion, with additive Normal noise on the resulting next state.
 
     Attributes:
         state: Current state [cart_position, cart_velocity, pole_angle, pole_velocity]
@@ -66,11 +67,14 @@ class CartPoleStateTransition(StateTransitionModel):
     Example:
         >>> import numpy as np
         >>> np.random.seed(42)  # For reproducible results
+        >>> from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
         >>> # Define initial state [position, velocity, angle, angular_velocity]
         >>> state = np.array([0.0, 0.0, 0.1, 0.0])
         >>> action = 1  # Apply right force
 
-        >>> # Create transition model with physics parameters
+        >>> # Create transition model with physics parameters and noise
+        >>> state_transition_cov = np.diag([1e-4, 1e-4, 2.5e-5, 1e-4])
+        >>> state_transition_dist = CovarianceParameterizedMultivariateNormal(state_transition_cov)
         >>> transition = CartPoleStateTransition(
         ...     state=state,
         ...     action=action,
@@ -81,7 +85,8 @@ class CartPoleStateTransition(StateTransitionModel):
         ...     length=0.5,
         ...     kinematics_integrator="euler",
         ...     tau=0.02,
-        ...     masspole=0.1
+        ...     masspole=0.1,
+        ...     state_transition_dist=state_transition_dist
         ... )
 
         >>> # Simulate physics step
@@ -104,6 +109,7 @@ class CartPoleStateTransition(StateTransitionModel):
         kinematics_integrator: str,
         tau: float,
         masspole: float,
+        state_transition_dist: CovarianceParameterizedMultivariateNormal,
     ):
         super().__init__(state, action)
 
@@ -115,8 +121,14 @@ class CartPoleStateTransition(StateTransitionModel):
         self.kinematics_integrator = kinematics_integrator
         self.tau = tau
         self.masspole = masspole
+        self._state_transition_dist = state_transition_dist
 
     def sample(self, n_samples: int = 1) -> List[np.ndarray]:
+        deterministic_next_state = self._compute_deterministic_next_state()
+        noise_samples = self._state_transition_dist.sample(np.zeros(4), n_samples=n_samples)
+        return [deterministic_next_state + noise_samples[i] for i in range(n_samples)]
+
+    def _compute_deterministic_next_state(self) -> np.ndarray:
         x, x_dot, theta, theta_dot = self.state
         force = self.force_mag if self.action == 1 else -self.force_mag
         costheta = math.cos(theta)
@@ -141,17 +153,12 @@ class CartPoleStateTransition(StateTransitionModel):
             theta_dot = theta_dot + self.tau * thetaacc
             theta = theta + self.tau * theta_dot
 
-        next_state = np.array([x, x_dot, theta, theta_dot])
-        return [next_state] * n_samples
+        return np.array([x, x_dot, theta, theta_dot])
 
     def probability(self, values: List[np.ndarray]) -> np.ndarray:
-        # Deterministic transition - probability is 1.0 for the exact next state, 0.0 otherwise
-        result = np.zeros(len(values))
-        expected_next_state = self.sample()[0]  # Get the deterministic next state
-        for i, value in enumerate(values):
-            if np.array_equal(value, expected_next_state):
-                result[i] = 1.0
-        return result
+        deterministic_next_state = self._compute_deterministic_next_state()
+        values_array = np.array(values)
+        return self._state_transition_dist.pdf(values_array, deterministic_next_state)
 
 
 class CartPoleObservation(ObservationModel):
@@ -297,10 +304,13 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
         False
     """
 
+    DEFAULT_STATE_TRANSITION_COV = np.diag([1e-4, 1e-4, 2.5e-5, 1e-4])
+
     def __init__(
         self,
         discount_factor: float,
         noise_cov: NDArray[np.floating[Any]],
+        state_transition_cov: Optional[NDArray[np.floating[Any]]] = None,
         name: str = "CartPolePOMDP",
         output_dir: Optional[Path] = None,
         debug: bool = False,
@@ -309,6 +319,14 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
         # Set all configuration parameters first
         self.noise_cov = noise_cov
         self._obs_dist = CovarianceParameterizedMultivariateNormal(noise_cov)
+        self.state_transition_cov = (
+            state_transition_cov
+            if state_transition_cov is not None
+            else self.DEFAULT_STATE_TRANSITION_COV
+        )
+        self._state_transition_dist = CovarianceParameterizedMultivariateNormal(
+            self.state_transition_cov
+        )
         self.gravity = 9.8
         self.masscart = 1.0
         self.masspole = 0.1
@@ -355,6 +373,7 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
             kinematics_integrator=self.kinematics_integrator,
             tau=self.tau,
             masspole=self.masspole,
+            state_transition_dist=self._state_transition_dist,
         )
 
     def observation_model(self, next_state: np.ndarray, action: int) -> ObservationModel:
