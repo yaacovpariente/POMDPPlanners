@@ -277,14 +277,14 @@ class TestConfigId:
 
 class TestEquivalenceWithPerParticleLoop:
     def test_batch_transition_matches_per_particle_loop(self, env, updater):
-        """Test vectorized batch_transition matches per-particle state_transition_model.
+        """Test vectorized batch_transition matches per-particle deterministic physics.
 
-        Purpose: Verifies that batch_transition produces the same results as calling
-                 the environment's state_transition_model per particle.
+        Purpose: Verifies that batch_transition produces the same deterministic
+                 next states as the environment's state_transition_model physics.
 
         Given: A set of particles, an action, and a fixed random seed.
-        When: batch_transition is called, and the same transitions are computed
-              per-particle using the environment's state_transition_model.
+        When: batch_transition is called, and the same deterministic transitions
+              are computed per-particle using the environment's state_transition_model.
         Then: Results match within floating-point tolerance.
 
         Test type: integration
@@ -303,10 +303,8 @@ class TestEquivalenceWithPerParticleLoop:
 
         per_particle_result = np.empty_like(particles)
         for i in range(n):
-            next_state = env.state_transition_model(
-                state=tuple(particles[i]), action=action
-            ).sample()[0]
-            per_particle_result[i] = next_state
+            transition = env.state_transition_model(state=tuple(particles[i]), action=action)
+            per_particle_result[i] = transition._compute_deterministic_next_state()
 
         np.testing.assert_allclose(vectorized_result, per_particle_result, atol=1e-10)
 
