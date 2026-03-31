@@ -416,25 +416,24 @@ class TestCartPolePOMDPProbability:
     """Test probability method for CartPole POMDP."""
 
     def test_cartpole_transition_probability(self):
-        """Test CartPole POMDP probability method with physics-based transition.
+        """Test CartPole POMDP probability() returns valid continuous PDF values.
 
-        Purpose: Validates that probability() method matches empirical distribution
+        Purpose: Validates that probability() method returns valid PDF values
+        for the stochastic state transition with Gaussian process noise
 
         Given: CartPole POMDP with basic configuration and action
-        When: Comparing computed probabilities to empirical sampling
-        Then: Probabilities match within tolerance and are properly normalized
+        When: PDF values are computed for sampled next states
+        Then: PDF values are non-negative, deterministic, and higher for
+        states closer to the deterministic next state
 
         Test type: unit
         """
         noise_cov = np.diag([0.1, 0.1, 0.1, 0.1])
         pomdp = CartPolePOMDP(discount_factor=0.95, noise_cov=noise_cov)
 
-        # Get initial state
         initial_state = pomdp.initial_state_dist().sample()[0]
-
-        # Get a valid action
         actions = pomdp.get_actions()
-        action = actions[0]  # Left force
+        action = actions[0]
 
         transition = CartPoleStateTransition(
             state=initial_state,
@@ -447,38 +446,44 @@ class TestCartPolePOMDPProbability:
             kinematics_integrator=pomdp.kinematics_integrator,
             tau=pomdp.tau,
             masspole=pomdp.masspole,
-        )
-        results = validate_probability_matches_empirical_distribution(
-            transition, num_samples=1000, max_js_divergence=0.01
+            state_transition_dist=pomdp._state_transition_dist,  # pylint: disable=protected-access
         )
 
-        assert results["probabilities_normalized"]
-        assert results["distance"] < 0.01  # Should be nearly perfect (deterministic)
-        assert results["num_unique_states"] == 1  # Deterministic transition
+        samples = transition.sample(n_samples=100)
+        pdf_values = transition.probability(samples)
+
+        assert np.all(pdf_values >= 0), "PDF values must be non-negative"
+        assert np.allclose(pdf_values, transition.probability(samples)), "PDF must be deterministic"
+
+        # pylint: disable=protected-access
+        det_state = transition._compute_deterministic_next_state()
+        close_state = det_state + np.array([0.001, 0.001, 0.001, 0.001])
+        far_state = det_state + np.array([1.0, 1.0, 1.0, 1.0])
+        probs = transition.probability([close_state, far_state])
+        assert probs[0] > probs[1], "Closer states should have higher PDF"
 
 
 class TestMountainCarPOMDPProbability:
     """Test probability method for Mountain Car POMDP."""
 
     def test_mountain_car_transition_probability(self):
-        """Test Mountain Car POMDP probability method with physics-based transition.
+        """Test Mountain Car POMDP probability() returns valid continuous PDF values.
 
-        Purpose: Validates that probability() method matches empirical distribution
+        Purpose: Validates that probability() method returns valid PDF values
+        for the stochastic state transition with Gaussian process noise
 
         Given: Mountain Car POMDP with basic configuration and action
-        When: Comparing computed probabilities to empirical sampling
-        Then: Probabilities match within tolerance and are properly normalized
+        When: PDF values are computed for sampled next states
+        Then: PDF values are non-negative, deterministic, and higher for
+        states closer to the deterministic next state
 
         Test type: unit
         """
         pomdp = MountainCarPOMDP(discount_factor=0.95)
 
-        # Get initial state
         initial_state = pomdp.initial_state_dist().sample()[0]
-
-        # Get a valid action
         actions = pomdp.get_actions()
-        action = actions[0]  # Reverse
+        action = actions[0]
 
         transition = MountainCarTransition(
             state=initial_state,
@@ -488,14 +493,21 @@ class TestMountainCarPOMDPProbability:
             max_speed=pomdp.max_speed,
             min_position=pomdp.min_position,
             max_position=pomdp.max_position,
-        )
-        results = validate_probability_matches_empirical_distribution(
-            transition, num_samples=1000, max_js_divergence=0.01
+            state_transition_dist=pomdp._state_transition_dist,  # pylint: disable=protected-access
         )
 
-        assert results["probabilities_normalized"]
-        assert results["distance"] < 0.01  # Should be nearly perfect (deterministic)
-        assert results["num_unique_states"] == 1  # Deterministic transition
+        samples = transition.sample(n_samples=100)
+        pdf_values = transition.probability(samples)
+
+        assert np.all(pdf_values >= 0), "PDF values must be non-negative"
+        assert np.allclose(pdf_values, transition.probability(samples)), "PDF must be deterministic"
+
+        # pylint: disable=protected-access
+        det_state = transition._compute_deterministic_next_state()
+        close_state = det_state + np.array([0.0001, 0.0001])
+        far_state = det_state + np.array([0.5, 0.05])
+        probs = transition.probability([close_state, far_state])
+        assert probs[0] > probs[1], "Closer states should have higher PDF"
 
 
 class TestSafetyAntVelocityPOMDPProbability:
