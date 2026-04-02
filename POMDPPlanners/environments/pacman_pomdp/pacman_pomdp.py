@@ -15,7 +15,6 @@ Classes:
 """
 
 import math
-import random
 from bisect import bisect_left
 from dataclasses import dataclass
 from enum import Enum
@@ -1174,7 +1173,7 @@ class PacManPOMDP(DiscreteActionsEnvironment):
         total = sum(exp_scores)
 
         # Build cumulative distribution and sample with bisect
-        r = random.random() * total
+        r = np.random.rand() * total
         cumulative = 0.0
         for idx in range(n):
             cumulative += exp_scores[idx]
@@ -1247,7 +1246,7 @@ class PacManPOMDP(DiscreteActionsEnvironment):
             return preferred_pos
         self._ghost_patrol_directions[ghost_id] = (current_dir + 1) % 4
         return (
-            possible_moves[int(random.random() * len(possible_moves))]
+            possible_moves[int(np.random.rand() * len(possible_moves))]
             if possible_moves
             else ghost_pos
         )
@@ -1286,9 +1285,8 @@ class PacManPOMDP(DiscreteActionsEnvironment):
             distance = abs(ghost_pos[0] - pacman_pos[0]) + abs(ghost_pos[1] - pacman_pos[1])
             noise_std = min(distance * obs_noise_factor, max_noise)
 
-            # Use Python random.gauss instead of np.random.normal
-            noise_row = random.gauss(0, noise_std) if noise_std > 0 else 0.0
-            noise_col = random.gauss(0, noise_std) if noise_std > 0 else 0.0
+            noise_row = np.random.normal(0, noise_std) if noise_std > 0 else 0.0
+            noise_col = np.random.normal(0, noise_std) if noise_std > 0 else 0.0
 
             observed_row = max(0, min(max_row, round(ghost_pos[0] + noise_row)))
             observed_col = max(0, min(max_col, round(ghost_pos[1] + noise_col)))
