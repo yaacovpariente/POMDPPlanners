@@ -200,6 +200,14 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
         self._obs_probs_far = np.ones(n_obs) * (far_error / (n_obs - 1))
         self._obs_probs_far[-1] = 1 - far_error
 
+        # Precompute reward helpers: obstacle positions as set of tuples for O(1) lookup
+        self._obstacle_tuples = {
+            (int(self.obstacles[0, j]), int(self.obstacles[1, j]))
+            for j in range(self.obstacles.shape[1])
+        }
+        self._goal_x = int(self.goal_state[0])
+        self._goal_y = int(self.goal_state[1])
+
     def sample_next_step(self, state: np.ndarray, action: Any) -> Tuple[Any, Any, float]:
         if self.observation_model_type != ObservationModelType.NORMAL:
             return super().sample_next_step(state, action)
@@ -218,8 +226,30 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
         else:
             observation = next_state
 
-        reward = self.reward(state=state, action=action)
+        # Inline reward — pure Python math avoids numpy overhead on 2-element arrays
+        reward = self._compute_reward_fast(state, action)
         return next_state, observation, reward
+
+    def _compute_reward_fast(self, state: np.ndarray, action: Any) -> float:
+        av = self.action_to_vector[action]
+        nx = int(state[0]) + int(av[0])
+        ny = int(state[1]) + int(av[1])
+
+        dx = nx - self._goal_x
+        dy = ny - self._goal_y
+        dist_to_goal = (dx * dx + dy * dy) ** 0.5
+
+        reward = -self.fuel_cost - dist_to_goal
+
+        if dx == 0 and dy == 0:
+            reward += self.goal_reward
+        elif (nx, ny) in self._obstacle_tuples:
+            if np.random.rand() < self.obstacle_hit_probability:
+                reward += self.obstacle_reward
+        elif nx < 0 or ny < 0 or nx > self.grid_size or ny > self.grid_size:
+            reward += self.obstacle_reward
+
+        return reward
 
     def state_transition_model(self, state: np.ndarray, action: Any) -> StateTransitionModel:
         action_index = self.actions.index(action)
