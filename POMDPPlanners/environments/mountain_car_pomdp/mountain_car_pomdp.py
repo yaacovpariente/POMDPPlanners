@@ -21,6 +21,7 @@ Classes:
     MountainCarPOMDP: Main Mountain Car environment with POMDP formulation
 """
 
+import math
 from enum import Enum
 from pathlib import Path
 from typing import Any, List, Optional, Sequence, Tuple, Union
@@ -268,6 +269,9 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
         # Pre-compute Cholesky decomposition for efficient sampling and PDF
         self._obs_dist = CovarianceParameterizedMultivariateNormal(self.cov_matrix)
 
+        # Cache Cholesky factor transpose for fast inline observation sampling
+        self._cholesky_L_T = self._obs_dist._cholesky_L.T.copy()  # pylint: disable=protected-access
+
         space_info = SpaceInfo(
             action_space=SpaceType.DISCRETE,  # Action space is [-1, 0, 1]
             observation_space=SpaceType.CONTINUOUS,  # Observation space is position and velocity
@@ -297,6 +301,30 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
 
     def observation_model(self, next_state: Tuple[float, float], action: int) -> ObservationModel:
         return MountainCarObservation(next_state=next_state, action=action, obs_dist=self._obs_dist)
+
+    def sample_next_step(
+        self, state: Tuple[float, float], action: int
+    ) -> Tuple[np.ndarray, np.ndarray, float]:
+        position, velocity = state
+
+        # Inline state transition (avoids MountainCarTransition object creation)
+        v = velocity + action * self.power + math.cos(3.0 * position) * (-self.gravity)
+        v = max(-self.max_speed, min(v, self.max_speed))
+        p = position + v
+        p = max(self.min_position, min(p, self.max_position))
+        if p == self.min_position and v < 0:
+            v = 0.0
+
+        next_state = np.array([p, v])
+
+        # Inline observation sampling (avoids MountainCarObservation object creation)
+        z = np.random.standard_normal(2)
+        observation = next_state + z @ self._cholesky_L_T
+
+        # Inline reward
+        reward = 0.0 if position >= self.goal_position else -1.0
+
+        return next_state, observation, reward
 
     def reward(self, state: Tuple[float, float], action: int) -> float:
         position, _ = state
