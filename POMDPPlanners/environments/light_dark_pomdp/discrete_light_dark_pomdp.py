@@ -173,6 +173,54 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
             grid_size=grid_size,
         )
 
+        self._precompute_sampling_tables()
+
+    def _precompute_sampling_tables(self) -> None:
+        n_actions = len(self.actions)
+        # Precompute transition probability array per action
+        self._transition_probs = {}
+        for i, act in enumerate(self.actions):
+            probs = np.ones(n_actions) * (self.transition_error_prob / (n_actions - 1))
+            probs[i] = 1 - self.transition_error_prob
+            probs[0] += 1 - probs.sum()
+            self._transition_probs[act] = probs
+
+        # Precompute action vectors as a list for index-based access
+        self._action_vectors = [self.action_to_vector[a] for a in self.actions]
+
+        # Precompute observation probability arrays (near vs far beacon)
+        n_obs = n_actions + 1
+        self._n_obs_values = n_obs
+
+        near_error = self.observation_error_prob * 0.2
+        self._obs_probs_near = np.ones(n_obs) * (near_error / (n_obs - 1))
+        self._obs_probs_near[-1] = 1 - near_error
+
+        far_error = self.observation_error_prob * 1.0
+        self._obs_probs_far = np.ones(n_obs) * (far_error / (n_obs - 1))
+        self._obs_probs_far[-1] = 1 - far_error
+
+    def sample_next_step(self, state: np.ndarray, action: Any) -> Tuple[Any, Any, float]:
+        if self.observation_model_type != ObservationModelType.NORMAL:
+            return super().sample_next_step(state, action)
+
+        # Inline state transition — avoids DiscreteDistribution creation
+        chosen_idx = int(np.random.choice(len(self.actions), p=self._transition_probs[action]))
+        next_state = state + self._action_vectors[chosen_idx]
+
+        # Inline observation — avoids DiscreteDistribution creation
+        distances = np.linalg.norm(self.beacons - next_state[:, np.newaxis], axis=0)
+        near_beacon = float(np.min(distances)) < self.beacon_radius
+        obs_probs = self._obs_probs_near if near_beacon else self._obs_probs_far
+        obs_idx = int(np.random.choice(self._n_obs_values, p=obs_probs))
+        if obs_idx < len(self.actions):
+            observation = next_state + self._action_vectors[obs_idx]
+        else:
+            observation = next_state
+
+        reward = self.reward(state=state, action=action)
+        return next_state, observation, reward
+
     def state_transition_model(self, state: np.ndarray, action: Any) -> StateTransitionModel:
         action_index = self.actions.index(action)
         values = [state + self.action_to_vector[action] for action in self.actions]
