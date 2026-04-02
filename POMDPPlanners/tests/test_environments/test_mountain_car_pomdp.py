@@ -1043,3 +1043,52 @@ def test_reward_batch_matches_scalar_reward():
     single = env.reward_batch(states[:1], action)
     assert single.shape == (1,)
     assert single[0] == env.reward(states[0], action)
+
+
+class TestSampleNextStepEquivalence:
+    """Test that the optimized sample_next_step produces identical results to the base class."""
+
+    def test_sample_next_step_matches_base_class(self):
+        """Test optimized sample_next_step agrees with base Environment.sample_next_step.
+
+        Purpose: Validates that the inlined sample_next_step override produces
+        identical results to the original base class implementation.
+
+        Given: A MountainCarPOMDP environment and a valid (state, action) pair
+        When: Both the optimized and base class sample_next_step are called
+              with the same numpy RNG seed
+        Then: next_state, observation, and reward are identical
+
+        Test type: unit
+        """
+        from POMDPPlanners.core.environment import Environment
+
+        env = MountainCarPOMDP(discount_factor=0.99)
+        state = (-0.5, 0.0)
+
+        for action in [-1, 0, 1]:
+            for _ in range(50):
+                seed = np.random.randint(0, 2**31)
+
+                np.random.seed(seed)
+                opt_next, opt_obs, opt_reward = env.sample_next_step(state, action)
+
+                np.random.seed(seed)
+                base_next, base_obs, base_reward = Environment.sample_next_step(env, state, action)
+
+                np.testing.assert_array_almost_equal(
+                    opt_next,
+                    base_next,
+                    decimal=10,
+                    err_msg=f"next_state mismatch for action={action}, seed={seed}",
+                )
+                np.testing.assert_array_almost_equal(
+                    opt_obs,
+                    base_obs,
+                    decimal=10,
+                    err_msg=f"observation mismatch for action={action}, seed={seed}",
+                )
+                assert opt_reward == base_reward, (
+                    f"reward mismatch for action={action}, seed={seed}: "
+                    f"{opt_reward} != {base_reward}"
+                )
