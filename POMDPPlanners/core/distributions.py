@@ -104,14 +104,21 @@ class DiscreteDistribution(Distribution):
             raise TypeError("probs must be a numpy.ndarray")
         if len(values) != len(probs):
             raise ValueError("values and probs must have the same length")
-        if not np.isclose(np.sum(probs), 1.0, rtol=1e-10):
+        if abs(float(probs.sum()) - 1.0) > 1e-6:
             raise ValueError("probs must sum to 1.0 (within tolerance)")
 
         self.values = values
         self.probs = probs
+        self._cumprobs = np.cumsum(probs)
 
     def sample(self, n_samples: int = 1) -> List[Any]:
-        indices = np.random.choice(len(self.values), size=n_samples, p=self.probs)
+        if n_samples == 1:
+            idx = int(np.searchsorted(self._cumprobs, np.random.rand()))
+            if idx >= len(self.values):
+                idx = len(self.values) - 1
+            return [self.values[idx]]
+        indices = np.searchsorted(self._cumprobs, np.random.rand(n_samples))
+        np.clip(indices, 0, len(self.values) - 1, out=indices)
         return [self.values[idx] for idx in indices]
 
     def probability(self, values: List[Any]) -> np.ndarray:
