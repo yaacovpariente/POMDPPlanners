@@ -321,9 +321,7 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
         z = np.random.standard_normal(2)
         observation = next_state + z @ self._cholesky_L_T
 
-        # Inline reward
-        reward = 0.0 if position >= self.goal_position else -1.0
-
+        reward = self.reward(state, action)
         return next_state, observation, reward
 
     def reward(self, state: Tuple[float, float], action: int) -> float:
