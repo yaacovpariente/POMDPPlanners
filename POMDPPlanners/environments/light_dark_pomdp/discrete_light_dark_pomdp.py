@@ -207,6 +207,7 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
         }
         self._goal_x = int(self.goal_state[0])
         self._goal_y = int(self.goal_state[1])
+        self._beacon_radius_sq = self.beacon_radius * self.beacon_radius
 
     def sample_next_step(self, state: np.ndarray, action: Any) -> Tuple[Any, Any, float]:
         if self.observation_model_type != ObservationModelType.NORMAL:
@@ -216,9 +217,10 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
         chosen_idx = int(np.random.choice(len(self.actions), p=self._transition_probs[action]))
         next_state = state + self._action_vectors[chosen_idx]
 
-        # Inline observation — avoids DiscreteDistribution creation
-        distances = np.linalg.norm(self.beacons - next_state[:, np.newaxis], axis=0)
-        near_beacon = float(np.min(distances)) < self.beacon_radius
+        # Inline observation — squared distance avoids np.linalg.norm overhead
+        diff = self.beacons - next_state[:, np.newaxis]
+        sq_distances = diff[0] * diff[0] + diff[1] * diff[1]
+        near_beacon = float(sq_distances.min()) < self._beacon_radius_sq
         obs_probs = self._obs_probs_near if near_beacon else self._obs_probs_far
         obs_idx = int(np.random.choice(self._n_obs_values, p=obs_probs))
         if obs_idx < len(self.actions):
