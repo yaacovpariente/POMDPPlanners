@@ -13,6 +13,7 @@ Classes:
 """
 
 import math
+import random
 from enum import Enum
 from pathlib import Path
 from typing import Any, List, Optional, Tuple
@@ -395,6 +396,20 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
         for i in range(5, len(self.action_names)):
             self.action_to_vector[i] = (0, 0)
 
+        # Precomputed data for fast sample_next_step
+        self._n_rocks = len(self.rock_positions)
+        self._state_size = 2 + self._n_rocks
+        self._max_row = map_size[0] - 1
+        self._max_col = map_size[1] - 1
+        self._grid_cols = map_size[1]
+        # Rock position lookup: (row, col) -> rock_index
+        self._rock_pos_to_idx: dict[Tuple[int, int], int] = {
+            pos: i for i, pos in enumerate(self.rock_positions)
+        }
+        # Precompute dangerous area squared radius
+        self._dangerous_area_radius_sq = dangerous_area_radius * dangerous_area_radius
+        self._has_dangerous_areas = len(self.dangerous_areas) > 0
+
     def _validate_parameters(self):
         """Validate environment parameters."""
         if self.map_size[0] <= 0 or self.map_size[1] <= 0:
@@ -447,6 +462,137 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
         """Get observation model."""
         return RockSampleObservationModel(next_state, action, self)
 
+    def sample_next_step(
+        self, state: RockSampleState, action: int
+    ) -> Tuple[RockSampleState, str, float]:
+        """Sample a complete state transition step (optimized override).
+
+        Inlines state transition, observation, and reward computation to avoid
+        redundant object creation and duplicate next-state calculation.
+
+        Args:
+            state: Current state
+            action: Action to execute
+
+        Returns:
+            Tuple of (next_state, observation, reward)
+        """
+        next_state, new_row, new_col, is_exit = self._compute_next_state_inline(state, action)
+        observation = self._sample_observation_inline(next_state, action, new_row, new_col)
+        reward = self._compute_reward_inline(state, action, new_row, new_col, is_exit)
+        return next_state, observation, reward
+
+    def _compute_next_state_inline(
+        self, state: RockSampleState, action: int
+    ) -> Tuple[RockSampleState, int, int, bool]:
+        robot_row = int(state[0])
+        robot_col = int(state[1])
+
+        # Terminal state check
+        if robot_col >= self._grid_cols:
+            ns = state.copy()
+            ns[0] = -1.0
+            ns[1] = -1.0
+            return ns, -1, -1, True
+
+        sampled_rock_idx = -1
+
+        if action == 1:  # North
+            new_row = robot_row - 1 if robot_row > 0 else 0
+            new_col = robot_col
+        elif action == 2:  # East
+            new_row = robot_row
+            new_col = robot_col + 1
+        elif action == 3:  # South
+            new_row = robot_row + 1 if robot_row < self._max_row else self._max_row
+            new_col = robot_col
+        elif action == 4:  # West
+            new_row = robot_row
+            new_col = robot_col - 1 if robot_col > 0 else 0
+        elif action == 0:  # Sample
+            new_row = robot_row
+            new_col = robot_col
+            rock_idx = self._rock_pos_to_idx.get((robot_row, robot_col), -1)
+            if rock_idx >= 0:
+                sampled_rock_idx = rock_idx
+        else:  # Check actions (5+)
+            new_row = robot_row
+            new_col = robot_col
+
+        # Exit condition
+        if new_col >= self._grid_cols:
+            ns = state.copy()
+            ns[0] = -1.0
+            ns[1] = -1.0
+            if sampled_rock_idx >= 0:
+                ns[2 + sampled_rock_idx] = 0.0
+            return ns, -1, -1, True
+
+        ns = state.copy()
+        ns[0] = float(new_row)
+        ns[1] = float(new_col)
+        if sampled_rock_idx >= 0:
+            ns[2 + sampled_rock_idx] = 0.0
+        return ns, new_row, new_col, False
+
+    def _sample_observation_inline(
+        self, next_state: RockSampleState, action: int, new_row: int, new_col: int
+    ) -> str:
+        if action <= 4:
+            return "none"
+
+        rock_idx = action - 5
+        if rock_idx >= self._n_rocks:
+            return "none"
+
+        rock_pos = self.rock_positions[rock_idx]
+        rock_quality = next_state[2 + rock_idx] > 0.5
+
+        dr = new_row - rock_pos[0]
+        dc = new_col - rock_pos[1]
+        distance = math.sqrt(dr * dr + dc * dc)
+
+        efficiency = math.exp(-distance / self.sensor_efficiency)
+
+        if random.random() < efficiency:
+            return "good" if rock_quality else "bad"
+        return "bad" if rock_quality else "good"
+
+    def _compute_reward_inline(
+        self, state: RockSampleState, action: int, new_row: int, new_col: int, is_exit: bool
+    ) -> float:
+        total_reward = self.step_penalty
+
+        robot_row = int(state[0])
+        robot_col = int(state[1])
+
+        if action == 2 and robot_col == self._max_col:
+            total_reward += self.exit_reward
+            return total_reward
+
+        if action == 0:
+            rock_idx = self._rock_pos_to_idx.get((robot_row, robot_col))
+            if rock_idx is not None:
+                if state[2 + rock_idx] > 0.5:
+                    total_reward += self.good_rock_reward
+                else:
+                    total_reward += self.bad_rock_penalty
+
+        if action >= 5:
+            total_reward += self.sensor_use_penalty
+
+        # Dangerous area check on next state position
+        if self._has_dangerous_areas and not is_exit:
+            radius_sq = self._dangerous_area_radius_sq
+            for danger_row, danger_col in self.dangerous_areas:
+                dr = new_row - danger_row
+                dc = new_col - danger_col
+                if dr * dr + dc * dc <= radius_sq:
+                    total_reward += self.dangerous_area_penalty
+                    break
+
+        return total_reward
+
     def reward(self, state: RockSampleState, action: int) -> float:
         """Calculate immediate reward."""
         total_reward = self.step_penalty
@@ -481,8 +627,7 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
 
     def is_terminal(self, state: RockSampleState) -> bool:
         """Check if state is terminal."""
-        robot_pos = get_robot_pos(state)
-        return robot_pos == (-1, -1)
+        return int(state[0]) == -1 and int(state[1]) == -1
 
     def initial_state_dist(self) -> DiscreteDistribution:
         """Get initial state distribution."""
