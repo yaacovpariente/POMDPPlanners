@@ -449,35 +449,45 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
 
     def reward(self, state: RockSampleState, action: int) -> float:
         """Calculate immediate reward."""
+        next_state = self.state_transition_model(state, action).sample()[0]
+        return self._reward_from_next_state(state, action, next_state)
+
+    def _reward_from_next_state(
+        self, state: RockSampleState, action: int, next_state: RockSampleState
+    ) -> float:
         total_reward = self.step_penalty
 
-        # Check if robot exits the grid
         robot_row, robot_col = get_robot_pos(state)
-        if action == 2 and robot_col == self.map_size[1] - 1:  # East at right edge
+        if action == 2 and robot_col == self.map_size[1] - 1:
             total_reward += self.exit_reward
             return total_reward
 
-        # Sample action rewards
-        if action == 0:  # Sample
+        if action == 0:
             rocks = get_rocks(state)
             for i, rock_pos in enumerate(self.rock_positions):
                 if (robot_row, robot_col) == rock_pos:
-                    if rocks[i]:  # Good rock
+                    if rocks[i]:
                         total_reward += self.good_rock_reward
-                    else:  # Bad rock
+                    else:
                         total_reward += self.bad_rock_penalty
                     break
 
-        # Sensor use penalty
-        if action >= 5:  # Check actions
+        if action >= 5:
             total_reward += self.sensor_use_penalty
 
-        next_state = self.state_transition_model(state, action).sample()[0]
-        # Add dangerous area penalty (always applied to create risk)
         if self._is_in_dangerous_area(get_robot_pos(next_state)):
             total_reward += self.dangerous_area_penalty
 
         return total_reward
+
+    def sample_next_step(
+        self, state: RockSampleState, action: int
+    ) -> Tuple[RockSampleState, str, float]:
+        """Override to avoid reward() recomputing next state."""
+        next_state = self.state_transition_model(state, action).sample()[0]
+        observation = self.observation_model(next_state, action).sample()[0]
+        reward = self._reward_from_next_state(state, action, next_state)
+        return next_state, observation, reward
 
     def is_terminal(self, state: RockSampleState) -> bool:
         """Check if state is terminal."""
