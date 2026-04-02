@@ -20,7 +20,7 @@ Classes:
 import math
 from enum import Enum
 from pathlib import Path
-from typing import Any, List, Optional, Sequence, Tuple, Union
+from typing import Any, List, Optional, Sequence, Union
 
 import numpy as np
 from numpy.typing import NDArray
@@ -309,8 +309,6 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
         # Set all configuration parameters first
         self.noise_cov = noise_cov
         self._obs_dist = CovarianceParameterizedMultivariateNormal(noise_cov)
-        # Cache transposed Cholesky factor for fast inline observation sampling
-        self._obs_cholesky_LT = self._obs_dist._cholesky_L.T.copy()
         self.gravity = 9.8
         self.masscart = 1.0
         self.masspole = 0.1
@@ -383,47 +381,6 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
             | (theta > self.theta_threshold_radians)
         )
         return np.where(terminated, 0.0, 1.0)
-
-    def sample_next_step(
-        self, state: np.ndarray, action: int
-    ) -> Tuple[np.ndarray, np.ndarray, float]:
-        # Inline physics: avoid creating CartPoleStateTransition object
-        x, x_dot, theta, theta_dot = (
-            float(state[0]),
-            float(state[1]),
-            float(state[2]),
-            float(state[3]),
-        )
-        force = self.force_mag if action == 1 else -self.force_mag
-        costheta = math.cos(theta)
-        sintheta = math.sin(theta)
-
-        temp = (force + self.polemass_length * theta_dot * theta_dot * sintheta) / self.total_mass
-        thetaacc = (self.gravity * sintheta - costheta * temp) / (
-            self.length * (4.0 / 3.0 - self.masspole * costheta * costheta / self.total_mass)
-        )
-        xacc = temp - self.polemass_length * thetaacc * costheta / self.total_mass
-
-        tau = self.tau
-        if self.kinematics_integrator == "euler":
-            x = x + tau * x_dot
-            x_dot = x_dot + tau * xacc
-            theta = theta + tau * theta_dot
-            theta_dot = theta_dot + tau * thetaacc
-        else:  # semi-implicit euler
-            x_dot = x_dot + tau * xacc
-            x = x + tau * x_dot
-            theta_dot = theta_dot + tau * thetaacc
-            theta = theta + tau * theta_dot
-
-        next_state = np.array([x, x_dot, theta, theta_dot])
-
-        # Inline observation sampling: avoid creating CartPoleObservation object
-        z = np.random.standard_normal(4)
-        observation = next_state + z @ self._obs_cholesky_LT
-
-        reward = self.reward(state, action)
-        return next_state, observation, reward
 
     def is_terminal(self, state: np.ndarray) -> bool:
         x, theta = state[0], state[2]
