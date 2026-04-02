@@ -422,18 +422,7 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
         z = np.random.standard_normal(4)
         observation = next_state + z @ self._obs_cholesky_LT
 
-        # Inline reward: avoid is_terminal call overhead
-        sx, stheta = float(state[0]), float(state[2])
-        if (
-            sx < -self.x_threshold
-            or sx > self.x_threshold
-            or stheta < -self.theta_threshold_radians
-            or stheta > self.theta_threshold_radians
-        ):
-            reward = 0.0
-        else:
-            reward = 1.0
-
+        reward = self.reward(state, action)
         return next_state, observation, reward
 
     def is_terminal(self, state: np.ndarray) -> bool:
