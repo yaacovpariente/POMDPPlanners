@@ -14,8 +14,6 @@ Classes:
     PacManPOMDP: The main POMDP environment implementation
 """
 
-import math
-from bisect import bisect_left
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -1006,294 +1004,36 @@ class PacManPOMDP(DiscreteActionsEnvironment):
     def reward(self, state: PacManState, action: int) -> float:
         """Calculate immediate reward."""
         if state.terminal:
-            return 0.0  # No reward for terminal states
-
-        # Base step penalty
-        total_reward = self.step_penalty
-
-        # Simulate next state to check for events
+            return 0.0
         next_state = self.state_transition_model(state, action).sample()[0]
+        return self._reward_from_next_state(state, next_state)
 
-        # Ghost collision penalty
+    def _reward_from_next_state(self, state: PacManState, next_state: PacManState) -> float:
+        total_reward = self.step_penalty
         if next_state.pacman_pos in next_state.ghost_positions:
             total_reward += self.ghost_collision_penalty
-
-        # Pellet collection reward
         if next_state.score > state.score:
             total_reward += self.pellet_reward
-
-        # Win condition bonus
         if next_state.terminal and len(next_state.pellets) == 0:
             total_reward += self.win_reward
-
         return total_reward
 
-    def sample_next_step(  # pylint: disable=too-many-locals,too-many-branches,too-many-statements
+    def sample_next_step(
         self, state: PacManState, action: int
     ) -> Tuple[PacManState, Tuple[Tuple[int, int], ...], float]:
-        """Sample a complete state transition step with inlined logic for performance.
+        """Sample a complete state transition step.
 
-        This overrides the base class method to avoid redundant state sampling
-        (reward() was resampling the next state), eliminate model object creation
-        overhead, and use pure Python math instead of numpy for small arrays.
-
-        Args:
-            state: Current state
-            action: Action to execute
-
-        Returns:
-            Tuple containing:
-                - next_state: Sampled next state
-                - next_observation: Sampled observation (tuple of ghost position tuples)
-                - reward: Immediate reward
+        Overrides base class to avoid reward() recomputing the next state.
+        Uses the already-sampled next_state for reward calculation.
         """
         if state.terminal:
             terminal_obs = tuple([(-1, -1)] * len(state.ghost_positions))
             return state, terminal_obs, 0.0
 
-        # --- Inline state transition ---
-        next_state = self._compute_next_state_fast(state, action)
-
-        # --- Inline reward computation (using already-computed next_state) ---
-        total_reward = self.step_penalty
-        if next_state.pacman_pos in next_state.ghost_positions:
-            total_reward += self.ghost_collision_penalty
-        if next_state.score > state.score:
-            total_reward += self.pellet_reward
-        if next_state.terminal and len(next_state.pellets) == 0:
-            total_reward += self.win_reward
-
-        # --- Inline observation sampling ---
-        observation = self._sample_observation_fast(next_state)
-
-        return next_state, observation, total_reward
-
-    def _compute_next_state_fast(self, state: PacManState, action: int) -> PacManState:
-        # Move PacMan
-        pacman_pos = self._move_pacman_fast(state.pacman_pos, action)
-
-        # Move ghosts
-        ghost_positions = self._move_ghosts_fast(state)
-
-        # Check collision
-        if pacman_pos in ghost_positions:
-            return PacManState(
-                pacman_pos=pacman_pos,
-                ghost_positions=ghost_positions,
-                pellets=state.pellets,
-                score=state.score,
-                terminal=True,
-            )
-
-        # Check pellet collection
-        pellets = state.pellets
-        score = state.score
-        if pacman_pos in pellets:
-            pellets = tuple(p for p in pellets if p != pacman_pos)
-            score = score + self.pellet_reward
-
-        terminal = len(pellets) == 0
-
-        return PacManState(
-            pacman_pos=pacman_pos,
-            ghost_positions=ghost_positions,
-            pellets=pellets,
-            score=score,
-            terminal=terminal,
-        )
-
-    def _move_pacman_fast(self, pacman_pos: Tuple[int, int], action: int) -> Tuple[int, int]:
-        row, col = pacman_pos
-        if action == 0:
-            new_pos = (row - 1, col)
-        elif action == 1:
-            new_pos = (row, col + 1)
-        elif action == 2:
-            new_pos = (row + 1, col)
-        elif action == 3:
-            new_pos = (row, col - 1)
-        else:
-            return pacman_pos
-
-        if new_pos in self._valid_positions:
-            return new_pos
-        return pacman_pos
-
-    def _move_ghosts_fast(self, state: PacManState) -> Tuple[Tuple[int, int], ...]:
-        new_positions = []
-        for i, ghost_pos in enumerate(state.ghost_positions):
-            if self.ghost_coordination == "independent":
-                new_pos = self._move_single_ghost_fast(ghost_pos, i, state.pacman_pos)
-            elif self.ghost_coordination == "coordinated":
-                new_pos = self._move_coordinated_ghost_fast(
-                    ghost_pos, i, state.ghost_positions, state.pacman_pos
-                )
-            else:  # "mixed"
-                if i % 2 == 0:
-                    new_pos = self._move_coordinated_ghost_fast(
-                        ghost_pos, i, state.ghost_positions, state.pacman_pos
-                    )
-                else:
-                    new_pos = self._move_single_ghost_fast(ghost_pos, i, state.pacman_pos)
-            new_positions.append(new_pos)
-        return tuple(new_positions)
-
-    def _move_single_ghost_fast(
-        self,
-        ghost_pos: Tuple[int, int],
-        ghost_id: int,
-        pacman_pos: Tuple[int, int],
-    ) -> Tuple[int, int]:
-        possible_moves = self._valid_ghost_moves_cache.get(ghost_pos)
-        if not possible_moves:
-            return ghost_pos
-
-        # Check for special strategies
-        if ghost_id < len(self.ghost_strategies):
-            strategy = self.ghost_strategies[ghost_id]
-            if strategy == "patrol":
-                return self._move_patrol_ghost_fast(ghost_pos, possible_moves, ghost_id)
-            if strategy == "ambush":
-                return self._move_ambush_ghost_fast(ghost_pos, possible_moves, pacman_pos)
-
-        # Default aggressive behavior - softmax with pure Python math
-        temperature = self.ghost_aggressiveness
-        inv_temp = 1.0 / temperature
-        n = len(possible_moves)
-
-        # Compute scores and softmax in pure Python
-        scores = []
-        for move_pos in possible_moves:
-            distance = abs(move_pos[0] - pacman_pos[0]) + abs(move_pos[1] - pacman_pos[1])
-            scores.append(-distance * inv_temp)
-
-        # Numerically stable softmax
-        max_score = max(scores)
-        exp_scores = [math.exp(s - max_score) for s in scores]
-        total = sum(exp_scores)
-
-        # Build cumulative distribution and sample with bisect
-        r = np.random.rand() * total
-        cumulative = 0.0
-        for idx in range(n):
-            cumulative += exp_scores[idx]
-            if r <= cumulative:
-                return possible_moves[idx]
-        return possible_moves[-1]
-
-    def _move_coordinated_ghost_fast(
-        self,
-        ghost_pos: Tuple[int, int],
-        ghost_id: int,
-        all_ghost_positions: Tuple[Tuple[int, int], ...],
-        pacman_pos: Tuple[int, int],
-    ) -> Tuple[int, int]:
-        possible_moves = self._valid_ghost_moves_cache.get(ghost_pos)
-        if not possible_moves:
-            return ghost_pos
-
-        if ghost_id == 0:
-            target = pacman_pos
-        else:
-            target = self._predict_escape_fast(pacman_pos, all_ghost_positions, ghost_id)
-
-        # Move toward target
-        best_move = ghost_pos
-        min_distance = float("inf")
-        for move_pos in possible_moves:
-            distance = abs(move_pos[0] - target[0]) + abs(move_pos[1] - target[1])
-            if distance < min_distance:
-                min_distance = distance
-                best_move = move_pos
-        return best_move
-
-    def _predict_escape_fast(
-        self,
-        pacman_pos: Tuple[int, int],
-        ghost_positions: Tuple[Tuple[int, int], ...],
-        current_ghost_id: int,
-    ) -> Tuple[int, int]:
-        possible_pacman_moves = self._valid_moves_cache.get(pacman_pos, [])
-        best_escape_pos = pacman_pos
-        max_min_distance = -1
-
-        for pacman_move in possible_pacman_moves:
-            min_dist = min(
-                abs(pacman_move[0] - gp[0]) + abs(pacman_move[1] - gp[1])
-                for i, gp in enumerate(ghost_positions)
-                if i != current_ghost_id
-            )
-            if min_dist > max_min_distance:
-                max_min_distance = min_dist
-                best_escape_pos = pacman_move
-        return best_escape_pos
-
-    def _move_patrol_ghost_fast(
-        self,
-        ghost_pos: Tuple[int, int],
-        possible_moves: List[Tuple[int, int]],
-        ghost_id: int,
-    ) -> Tuple[int, int]:
-        if ghost_id not in self._ghost_patrol_directions:
-            self._ghost_patrol_directions[ghost_id] = 0
-
-        directions = [(0, -1), (1, 0), (0, 1), (-1, 0)]
-        current_dir = self._ghost_patrol_directions[ghost_id]
-        dr, dc = directions[current_dir]
-        preferred_pos = (ghost_pos[0] + dr, ghost_pos[1] + dc)
-
-        if preferred_pos in possible_moves:
-            return preferred_pos
-        self._ghost_patrol_directions[ghost_id] = (current_dir + 1) % 4
-        return (
-            possible_moves[int(np.random.rand() * len(possible_moves))]
-            if possible_moves
-            else ghost_pos
-        )
-
-    def _move_ambush_ghost_fast(
-        self,
-        ghost_pos: Tuple[int, int],
-        possible_moves: List[Tuple[int, int]],
-        pacman_pos: Tuple[int, int],
-    ) -> Tuple[int, int]:
-        best_pos = ghost_pos
-        best_score = float("inf")
-        for move_pos in possible_moves:
-            distance_to_pacman = abs(move_pos[0] - pacman_pos[0]) + abs(move_pos[1] - pacman_pos[1])
-            if 2 <= distance_to_pacman <= 4:
-                score = distance_to_pacman
-            else:
-                score = distance_to_pacman + 10
-            if score < best_score:
-                best_score = score
-                best_pos = move_pos
-        return best_pos
-
-    def _sample_observation_fast(self, next_state: PacManState) -> Tuple[Tuple[int, int], ...]:
-        if next_state.terminal:
-            return tuple([(-1, -1)] * len(next_state.ghost_positions))
-
-        pacman_pos = next_state.pacman_pos
-        max_row = self.maze_size[0] - 1
-        max_col = self.maze_size[1] - 1
-        obs_noise_factor = self.observation_noise_factor
-        max_noise = self.max_observation_noise
-
-        ghost_obs = []
-        for ghost_pos in next_state.ghost_positions:
-            distance = abs(ghost_pos[0] - pacman_pos[0]) + abs(ghost_pos[1] - pacman_pos[1])
-            noise_std = min(distance * obs_noise_factor, max_noise)
-
-            noise_row = np.random.normal(0, noise_std) if noise_std > 0 else 0.0
-            noise_col = np.random.normal(0, noise_std) if noise_std > 0 else 0.0
-
-            observed_row = max(0, min(max_row, round(ghost_pos[0] + noise_row)))
-            observed_col = max(0, min(max_col, round(ghost_pos[1] + noise_col)))
-
-            ghost_obs.append((observed_row, observed_col))
-
-        return tuple(ghost_obs)
+        next_state = self.state_transition_model(state, action).sample()[0]
+        observation = self.observation_model(next_state, action).sample()[0]
+        reward = self._reward_from_next_state(state, next_state)
+        return next_state, observation, reward
 
     def is_terminal(self, state: PacManState) -> bool:
         """Check if state is terminal."""
