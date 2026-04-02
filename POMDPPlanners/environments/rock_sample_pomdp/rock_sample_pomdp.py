@@ -13,7 +13,6 @@ Classes:
 """
 
 import math
-import random
 from enum import Enum
 from pathlib import Path
 from typing import Any, List, Optional, Tuple
@@ -477,9 +476,9 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
         Returns:
             Tuple of (next_state, observation, reward)
         """
-        next_state, new_row, new_col, is_exit = self._compute_next_state_inline(state, action)
+        next_state, new_row, new_col, _ = self._compute_next_state_inline(state, action)
         observation = self._sample_observation_inline(next_state, action, new_row, new_col)
-        reward = self._compute_reward_inline(state, action, new_row, new_col, is_exit)
+        reward = self.reward(state, action)
         return next_state, observation, reward
 
     def _compute_next_state_inline(
@@ -554,44 +553,9 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
 
         efficiency = math.exp(-distance / self.sensor_efficiency)
 
-        if random.random() < efficiency:
+        if np.random.rand() < efficiency:
             return "good" if rock_quality else "bad"
         return "bad" if rock_quality else "good"
-
-    def _compute_reward_inline(
-        self, state: RockSampleState, action: int, new_row: int, new_col: int, is_exit: bool
-    ) -> float:
-        total_reward = self.step_penalty
-
-        robot_row = int(state[0])
-        robot_col = int(state[1])
-
-        if action == 2 and robot_col == self._max_col:
-            total_reward += self.exit_reward
-            return total_reward
-
-        if action == 0:
-            rock_idx = self._rock_pos_to_idx.get((robot_row, robot_col))
-            if rock_idx is not None:
-                if state[2 + rock_idx] > 0.5:
-                    total_reward += self.good_rock_reward
-                else:
-                    total_reward += self.bad_rock_penalty
-
-        if action >= 5:
-            total_reward += self.sensor_use_penalty
-
-        # Dangerous area check on next state position
-        if self._has_dangerous_areas and not is_exit:
-            radius_sq = self._dangerous_area_radius_sq
-            for danger_row, danger_col in self.dangerous_areas:
-                dr = new_row - danger_row
-                dc = new_col - danger_col
-                if dr * dr + dc * dc <= radius_sq:
-                    total_reward += self.dangerous_area_penalty
-                    break
-
-        return total_reward
 
     def reward(self, state: RockSampleState, action: int) -> float:
         """Calculate immediate reward."""
