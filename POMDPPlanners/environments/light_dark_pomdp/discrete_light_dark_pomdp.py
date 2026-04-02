@@ -1,3 +1,5 @@
+import random
+from bisect import bisect
 from enum import Enum
 from typing import Any, List, Optional, Sequence, Tuple, Union
 
@@ -177,28 +179,40 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
 
     def _precompute_sampling_tables(self) -> None:
         n_actions = len(self.actions)
-        # Precompute transition probability array per action
+        # Precompute transition cumulative sums per action for bisect sampling
         self._transition_probs = {}
+        self._transition_cum: dict[str, list[float]] = {}
         for i, act in enumerate(self.actions):
             probs = np.ones(n_actions) * (self.transition_error_prob / (n_actions - 1))
             probs[i] = 1 - self.transition_error_prob
             probs[0] += 1 - probs.sum()
             self._transition_probs[act] = probs
+            cum = []
+            running = 0.0
+            for p in probs:
+                running += float(p)
+                cum.append(running)
+            self._transition_cum[act] = cum
 
         # Precompute action vectors as a list for index-based access
         self._action_vectors = [self.action_to_vector[a] for a in self.actions]
 
-        # Precompute observation probability arrays (near vs far beacon)
+        # Precompute observation cumulative sums (near vs far beacon)
         n_obs = n_actions + 1
         self._n_obs_values = n_obs
 
         near_error = self.observation_error_prob * 0.2
-        self._obs_probs_near = np.ones(n_obs) * (near_error / (n_obs - 1))
-        self._obs_probs_near[-1] = 1 - near_error
+        obs_probs_near = np.ones(n_obs) * (near_error / (n_obs - 1))
+        obs_probs_near[-1] = 1 - near_error
+        self._obs_probs_near = obs_probs_near
 
         far_error = self.observation_error_prob * 1.0
-        self._obs_probs_far = np.ones(n_obs) * (far_error / (n_obs - 1))
-        self._obs_probs_far[-1] = 1 - far_error
+        obs_probs_far = np.ones(n_obs) * (far_error / (n_obs - 1))
+        obs_probs_far[-1] = 1 - far_error
+        self._obs_probs_far = obs_probs_far
+
+        self._obs_cum_near = list(np.cumsum(obs_probs_near))
+        self._obs_cum_far = list(np.cumsum(obs_probs_far))
 
         # Precompute reward helpers: obstacle positions as set of tuples for O(1) lookup
         self._obstacle_tuples = {
@@ -209,21 +223,31 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
         self._goal_y = int(self.goal_state[1])
         self._beacon_radius_sq = self.beacon_radius * self.beacon_radius
 
+        # Precompute beacon positions as list of (x, y) tuples for pure Python loop
+        self._beacon_tuples = [
+            (float(self.beacons[0, j]), float(self.beacons[1, j]))
+            for j in range(self.beacons.shape[1])
+        ]
+        self._n_actions = n_actions
+
     def sample_next_step(self, state: np.ndarray, action: Any) -> Tuple[Any, Any, float]:
         if self.observation_model_type != ObservationModelType.NORMAL:
             return super().sample_next_step(state, action)
 
-        # Inline state transition — avoids DiscreteDistribution creation
-        chosen_idx = int(np.random.choice(len(self.actions), p=self._transition_probs[action]))
+        # Inline state transition — bisect on precomputed cumsums
+        chosen_idx = bisect(self._transition_cum[action], random.random())
         next_state = state + self._action_vectors[chosen_idx]
 
-        # Inline observation — squared distance avoids np.linalg.norm overhead
-        diff = self.beacons - next_state[:, np.newaxis]
-        sq_distances = diff[0] * diff[0] + diff[1] * diff[1]
-        near_beacon = float(sq_distances.min()) < self._beacon_radius_sq
-        obs_probs = self._obs_probs_near if near_beacon else self._obs_probs_far
-        obs_idx = int(np.random.choice(self._n_obs_values, p=obs_probs))
-        if obs_idx < len(self.actions):
+        # Inline observation — pure Python beacon check + bisect sampling
+        sx = float(next_state[0])
+        sy = float(next_state[1])
+        br_sq = self._beacon_radius_sq
+        near_beacon = any(
+            (sx - bx) * (sx - bx) + (sy - by) * (sy - by) < br_sq for bx, by in self._beacon_tuples
+        )
+        obs_cum = self._obs_cum_near if near_beacon else self._obs_cum_far
+        obs_idx = bisect(obs_cum, random.random())
+        if obs_idx < self._n_actions:
             observation = next_state + self._action_vectors[obs_idx]
         else:
             observation = next_state
@@ -246,7 +270,7 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
         if dx == 0 and dy == 0:
             reward += self.goal_reward
         elif (nx, ny) in self._obstacle_tuples:
-            if np.random.rand() < self.obstacle_hit_probability:
+            if random.random() < self.obstacle_hit_probability:
                 reward += self.obstacle_reward
         elif nx < 0 or ny < 0 or nx > self.grid_size or ny > self.grid_size:
             reward += self.obstacle_reward
