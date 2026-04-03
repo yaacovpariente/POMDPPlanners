@@ -386,6 +386,7 @@ def test_tree_structure_construction(planner, initial_belief, environment):
     assert all(node.visit_count > 0 for node in root_action_nodes)
 
 
+@pytest.mark.slow
 def test_sanity_pomdp_action_selection():
     """Test that SparsePFT correctly identifies the better action in SanityPOMDP
 

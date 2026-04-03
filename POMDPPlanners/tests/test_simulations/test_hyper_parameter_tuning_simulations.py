@@ -17,6 +17,8 @@ import mlflow
 import numpy as np
 import pytest
 
+pytestmark = [pytest.mark.slow]
+
 from POMDPPlanners.core.belief import get_initial_belief
 from POMDPPlanners.core.simulation import (
     NumericalHyperParameter,
