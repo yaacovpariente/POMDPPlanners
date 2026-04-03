@@ -183,6 +183,7 @@ class TestComputeBetaZeroLoss:
 class TestTrainNetwork:
     """Tests for the train_network function."""
 
+    @pytest.mark.slow
     def test_training_reduces_loss(self):
         """Verify that training on consistent data reduces the total loss.
 

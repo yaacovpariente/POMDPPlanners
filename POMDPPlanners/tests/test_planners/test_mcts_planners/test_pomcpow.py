@@ -642,6 +642,7 @@ def test_belief_node_data_structure(planner, belief):
             assert isinstance(child_belief_node.belief.weights, list)
 
 
+@pytest.mark.slow
 def test_sanity_pomdp_action_selection():
     """Test POMCPOW action selection with SanityPOMDP environment.
 

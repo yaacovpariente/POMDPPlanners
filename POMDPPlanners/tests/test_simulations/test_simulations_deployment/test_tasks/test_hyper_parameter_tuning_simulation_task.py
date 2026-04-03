@@ -1101,6 +1101,7 @@ class TestHyperParameterTuningSimulationTaskMLFlowIntegration:
         assert simulations_param.high == 500
         assert simulations_param.name == "n_simulations"
 
+    @pytest.mark.slow
     def test_hyper_param_runner_configuration_replication(
         self, temp_cache_dir, real_environment, real_belief
     ):
