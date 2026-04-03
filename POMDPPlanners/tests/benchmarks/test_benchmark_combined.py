@@ -7,6 +7,8 @@ Measures realistic end-to-end planning performance. Compare with Layer 1
 import numpy as np
 import pytest
 
+pytestmark = [pytest.mark.slow]
+
 from POMDPPlanners.core.belief import get_initial_belief
 from POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp import (
     DiscreteLightDarkPOMDP,

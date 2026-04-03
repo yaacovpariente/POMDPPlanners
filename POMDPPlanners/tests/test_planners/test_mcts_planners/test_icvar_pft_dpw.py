@@ -457,6 +457,7 @@ class TestICVaR_PFT_DPWEpisodeTests:
             # Check that planner's alpha was used
             assert planner.alpha == alpha
 
+    @pytest.mark.slow
     def test_run_episode_timeout_vs_n_simulations(self, env, action_sampler):
         """Test running episodes with timeout vs n_simulations configurations."""
         logger = getLogger(__name__)
@@ -533,6 +534,7 @@ class TestICVaR_PFT_DPWEpisodeTests:
         assert planner_timeout.n_simulations is None
         assert planner_timeout.time_out_in_seconds == 2
 
+    @pytest.mark.slow
     def test_run_episode_early_termination(self, env, action_sampler):
         """Test that episode terminates early when reaching terminal state."""
         logger = getLogger(__name__)

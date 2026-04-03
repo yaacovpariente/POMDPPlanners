@@ -7,6 +7,8 @@ regressions can be attributed to environment code, not planner code.
 import numpy as np
 import pytest
 
+pytestmark = [pytest.mark.slow]
+
 
 # ---------------------------------------------------------------------------
 # TigerPOMDP benchmarks

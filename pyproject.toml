@@ -112,7 +112,7 @@ testpaths = ["POMDPPlanners/tests"]
 python_files = "test_*.py"
 python_classes = "Test*"
 python_functions = "test_*"
-addopts = "-v -m 'not benchmark'"
+addopts = "-v -m 'not slow and not benchmark'"
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "smoke: marks tests as smoke tests (quick tests for basic functionality)",
