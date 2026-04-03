@@ -1,13 +1,13 @@
-# CI test image - uses CPU-only PyTorch to reduce image size (~8GB smaller)
-FROM python:3.10-slim
+# CI test image — pulls the pre-built base (with all deps) and adds code.
+# Rebuilds in seconds on code-only changes.
+ARG BASE_IMAGE=ghcr.io/yaacovpariente/pomdpplanners-base:latest
+FROM ${BASE_IMAGE}
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y libatomic1 && rm -rf /var/lib/apt/lists/*
-
+# Copy the full source tree (the only layer that changes on code pushes)
 COPY . .
 
-RUN pip install --upgrade pip
-RUN pip install torch --index-url https://download.pytorch.org/whl/cpu
-RUN pip freeze | grep -i torch > /tmp/torch-constraints.txt
-RUN PIP_CONSTRAINT=/tmp/torch-constraints.txt pip install -e ".[dev,docs]"
+# Re-install the package in editable mode so entry-points pick up new code.
+# Dependencies are already installed in the base image, so this is fast.
+RUN pip install --no-deps -e ".[dev,docs]"
