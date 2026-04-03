@@ -7,7 +7,7 @@ on:
 
 permissions:
   contents: read
-  packages: read
+  packages: write
 
 jobs:
   slow-tests:
@@ -36,6 +36,26 @@ jobs:
         registry: ghcr.io
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Check if base image exists
+      id: base-check
+      run: |
+        if docker pull ghcr.io/${{ github.repository_owner }}/pomdpplanners-base:latest; then
+          echo "exists=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "exists=false" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Build and push base image (first time or when missing)
+      if: steps.base-check.outputs.exists == 'false'
+      uses: docker/build-push-action@v4
+      with:
+        context: .
+        file: docker/Dockerfile.base
+        push: true
+        tags: ghcr.io/${{ github.repository_owner }}/pomdpplanners-base:latest
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
 
     - name: Build test Docker image
       uses: docker/build-push-action@v4
