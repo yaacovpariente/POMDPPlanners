@@ -69,6 +69,7 @@ class CovarianceParameterizedMultivariateNormal:
         self._covariance = covariance.copy()
         self._dim = covariance.shape[0]
         self._cholesky_L = np.linalg.cholesky(covariance)
+        self._cholesky_L_T = self._cholesky_L.T.copy()
         self._log_det = 2.0 * np.sum(np.log(np.diag(self._cholesky_L)))
         self._log_normalization = -0.5 * (self._dim * np.log(2.0 * np.pi) + self._log_det)
 
@@ -112,7 +113,7 @@ class CovarianceParameterizedMultivariateNormal:
         self._validate_mean_dimension(mean)
 
         z = np.random.standard_normal((n_samples, self._dim))
-        samples = mean + z @ self._cholesky_L.T
+        samples = mean + z @ self._cholesky_L_T
 
         return samples
 
