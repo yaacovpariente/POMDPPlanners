@@ -24,6 +24,7 @@ Classes:
     PushPOMDP: Main push task environment with POMDP formulation
 """
 
+import math
 from enum import Enum
 from pathlib import Path
 from typing import Any, List, Optional, Tuple
@@ -100,6 +101,22 @@ class PushStateTransition(StateTransitionModel):
         True
     """
 
+    # Class-level constants shared across all instances
+    _AVAILABLE_ACTIONS = ["up", "down", "right", "left"]
+    _ACTION_TO_DXY = {
+        "up": (0, 1),
+        "down": (0, -1),
+        "right": (1, 0),
+        "left": (-1, 0),
+    }
+    # Keep numpy version for compatibility with code that uses action_to_vector
+    _ACTION_TO_VECTOR = {
+        "up": np.array([0, 1]),
+        "down": np.array([0, -1]),
+        "right": np.array([1, 0]),
+        "left": np.array([-1, 0]),
+    }
+
     def __init__(
         self,
         state: np.ndarray,
@@ -117,6 +134,7 @@ class PushStateTransition(StateTransitionModel):
         self.friction_coefficient = friction_coefficient
         self.obstacles = obstacles if obstacles is not None else []
         self.obstacle_radius = obstacle_radius
+        self.obstacle_radius_sq = obstacle_radius * obstacle_radius
         self.transition_error_prob = transition_error_prob
 
         # State components: [robot_x, robot_y, object_x, object_y, target_x, target_y]
@@ -125,15 +143,14 @@ class PushStateTransition(StateTransitionModel):
         self.target_pos = state[4:6]
 
         # Available actions
-        self.available_actions = ["up", "down", "right", "left"]
+        self.available_actions = self._AVAILABLE_ACTIONS
 
-        # Action to movement mapping
-        self.action_to_vector = {
-            "up": np.array([0, 1]),
-            "down": np.array([0, -1]),
-            "right": np.array([1, 0]),
-            "left": np.array([-1, 0]),
-        }
+        # Action to movement mapping (reference class-level constant)
+        self.action_to_vector = self._ACTION_TO_VECTOR
+
+        # Pre-compute grid bounds
+        self._grid_max = grid_size - 1
+        self._push_threshold_sq = push_threshold * push_threshold
 
     def _get_actual_action(self) -> str:
         """Get the actual action to execute, accounting for transition errors.
@@ -205,63 +222,70 @@ class PushStateTransition(StateTransitionModel):
         return np.array(probabilities)
 
     def _compute_next_state_for_action(self, action: str) -> np.ndarray:
-        """Compute the next state for a given action (without error probability).
+        dx, dy = self._ACTION_TO_DXY[action]
 
-        Args:
-            action: Action to compute next state for
-
-        Returns:
-            Next state array
-        """
-        # Get movement vector for the action
-        movement = self.action_to_vector[action]
+        # Extract scalar positions
+        rx, ry = float(self.robot_pos[0]), float(self.robot_pos[1])
+        ox, oy = float(self.object_pos[0]), float(self.object_pos[1])
+        tx, ty = float(self.target_pos[0]), float(self.target_pos[1])
 
         # Calculate intended new robot position
-        intended_robot_pos = self.robot_pos + movement
+        irx, iry = rx + dx, ry + dy
 
         # Check for collision with obstacles - if colliding, robot doesn't move
-        if self._is_colliding_with_obstacle(intended_robot_pos):
-            new_robot_pos = self.robot_pos  # Robot stays in place
+        if self._is_colliding_with_obstacle_scalar(irx, iry):
+            nrx, nry = rx, ry
         else:
-            new_robot_pos = intended_robot_pos
+            nrx, nry = irx, iry
 
-        # Check if robot is close enough to push object
-        distance_to_object = np.linalg.norm(new_robot_pos - self.object_pos)
+        # Check if robot is close enough to push object (squared distance)
+        ddx, ddy = nrx - ox, nry - oy
+        dist_sq = ddx * ddx + ddy * ddy
 
-        if distance_to_object < self.push_threshold:
-            # Calculate intended object position after push
-            push_force = movement * (1 - self.friction_coefficient)
-            intended_object_pos = self.object_pos + push_force
+        if dist_sq < self._push_threshold_sq:
+            push_scale = 1.0 - self.friction_coefficient
+            iox = ox + dx * push_scale
+            ioy = oy + dy * push_scale
 
-            # Check for obstacle collision for object - if colliding, object doesn't move
-            if self._is_colliding_with_obstacle(intended_object_pos):
-                new_object_pos = self.object_pos  # Object stays in place
+            if self._is_colliding_with_obstacle_scalar(iox, ioy):
+                nox, noy = ox, oy
             else:
-                new_object_pos = intended_object_pos
+                nox, noy = iox, ioy
         else:
-            new_object_pos = self.object_pos
+            nox, noy = ox, oy
 
-        # Ensure positions stay within grid bounds
-        new_robot_pos = np.clip(new_robot_pos, 0, self.grid_size - 1)
-        new_object_pos = np.clip(new_object_pos, 0, self.grid_size - 1)
+        # Clip to grid bounds using min/max (faster than np.clip for scalars)
+        gmax = self._grid_max
+        nrx = max(0.0, min(nrx, gmax))
+        nry = max(0.0, min(nry, gmax))
+        nox = max(0.0, min(nox, gmax))
+        noy = max(0.0, min(noy, gmax))
 
-        # Combine all state components
-        next_state = np.concatenate([new_robot_pos, new_object_pos, self.target_pos])
-        return next_state
+        # Build result array directly
+        result = np.empty(6)
+        result[0] = nrx
+        result[1] = nry
+        result[2] = nox
+        result[3] = noy
+        result[4] = tx
+        result[5] = ty
+        return result
 
     def _is_colliding_with_obstacle(self, position: np.ndarray) -> bool:
         """Check if a position collides with any obstacle."""
         if not self.obstacles:
             return False
 
-        pos_x, pos_y = position
+        pos_x, pos_y = float(position[0]), float(position[1])
+        return self._is_colliding_with_obstacle_scalar(pos_x, pos_y)
 
+    def _is_colliding_with_obstacle_scalar(self, pos_x: float, pos_y: float) -> bool:
+        obs_r_sq = self.obstacle_radius_sq
         for obs_x, obs_y in self.obstacles:
-            # Calculate Euclidean distance
-            distance = np.sqrt((pos_x - obs_x) ** 2 + (pos_y - obs_y) ** 2)
-            if distance <= self.obstacle_radius:
+            ddx = pos_x - obs_x
+            ddy = pos_y - obs_y
+            if ddx * ddx + ddy * ddy <= obs_r_sq:
                 return True
-
         return False
 
 
@@ -333,13 +357,24 @@ class PushObservation(ObservationModel):
 
     def sample(self, n_samples: int = 1) -> List[Any]:
         observations = []
+        gmax = self.grid_size - 1
+        rx, ry = float(self.robot_pos[0]), float(self.robot_pos[1])
+        ox, oy = float(self.object_pos[0]), float(self.object_pos[1])
+        tx, ty = float(self.target_pos[0]), float(self.target_pos[1])
+        noise_std = self.observation_noise
+
         for _ in range(n_samples):
             # Add noise to object position observation
-            noisy_object_pos = self.object_pos + np.random.normal(0, self.observation_noise, size=2)
-            noisy_object_pos = np.clip(noisy_object_pos, 0, self.grid_size - 1)
+            nox = max(0.0, min(ox + np.random.normal(0, noise_std), gmax))
+            noy = max(0.0, min(oy + np.random.normal(0, noise_std), gmax))
 
-            # Combine observations (robot position is known exactly, target position is known)
-            observation = np.concatenate([self.robot_pos, noisy_object_pos, self.target_pos])
+            observation = np.empty(6)
+            observation[0] = rx
+            observation[1] = ry
+            observation[2] = nox
+            observation[3] = noy
+            observation[4] = tx
+            observation[5] = ty
             observations.append(observation)
         return observations
 
@@ -545,16 +580,18 @@ class PushPOMDP(DiscreteActionsEnvironment):
             return False
 
         if action is not None:
-            # Check collision at next position after taking action
-            check_pos_x, check_pos_y = position + self.action_to_vector[action]
+            dx, dy = PushStateTransition._ACTION_TO_DXY[action]
+            check_x = float(position[0]) + dx
+            check_y = float(position[1]) + dy
         else:
-            # Check collision at current position
-            check_pos_x, check_pos_y = position
+            check_x = float(position[0])
+            check_y = float(position[1])
 
+        obs_r_sq = self.obstacle_radius * self.obstacle_radius
         for obs_x, obs_y in self.obstacles:
-            # Calculate Euclidean distance
-            distance = np.sqrt((check_pos_x - obs_x) ** 2 + (check_pos_y - obs_y) ** 2)
-            if distance <= self.obstacle_radius:
+            ddx = check_x - obs_x
+            ddy = check_y - obs_y
+            if ddx * ddx + ddy * ddy <= obs_r_sq:
                 return True
 
         return False
@@ -579,16 +616,24 @@ class PushPOMDP(DiscreteActionsEnvironment):
             grid_size=self.grid_size,
         )
 
+    def sample_next_step(self, state: Any, action: Any) -> Tuple[Any, Any, float]:
+        next_state = self.state_transition_model(state=state, action=action).sample()[0]
+        next_observation = self.observation_model(next_state=next_state, action=action).sample()[0]
+        r = self._reward_from_next_state(state, action, next_state)
+        return next_state, next_observation, r
+
     def reward(self, state: np.ndarray, action: str) -> float:
         # Compute next state to evaluate reward based on action result
         next_state = self.state_transition_model(state, action).sample()[0]
+        return self._reward_from_next_state(state, action, next_state)
 
+    def _reward_from_next_state(
+        self, state: np.ndarray, action: str, next_state: np.ndarray
+    ) -> float:
         # State components: [robot_x, robot_y, object_x, object_y, target_x, target_y]
-        next_object_pos = next_state[2:4]
-        target_pos = next_state[4:6]
-
-        # Calculate distance to target using next state (after action is applied)
-        distance_to_target = np.linalg.norm(next_object_pos - target_pos)
+        dx = next_state[2] - next_state[4]
+        dy = next_state[3] - next_state[5]
+        distance_to_target = math.sqrt(dx * dx + dy * dy)
 
         # Base reward is negative distance to encourage moving closer to target
         reward = -distance_to_target
@@ -603,12 +648,10 @@ class PushPOMDP(DiscreteActionsEnvironment):
         return float(reward)
 
     def is_terminal(self, state: np.ndarray) -> bool:
-        object_pos = state[2:4]
-        target_pos = state[4:6]
-
         # Episode ends when object is close to target
-        # Ensure builtins.bool return (mypy compatibility)
-        return bool(np.linalg.norm(object_pos - target_pos) < 0.5)
+        dx = float(state[2] - state[4])
+        dy = float(state[3] - state[5])
+        return dx * dx + dy * dy < 0.25  # 0.5^2 = 0.25
 
     def initial_state_dist(self) -> Distribution:
         # If a fixed initial state is provided, return a deterministic distribution

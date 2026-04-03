@@ -87,13 +87,13 @@ class TestFactoryDispatch:
 
 class TestEKFFunctions:
     def test_ekf_transition_fn_matches_environment(self, env, initial_cov):
-        """Test that the EKF transition function matches CartPole physics.
+        """Test that the EKF transition function matches CartPole deterministic physics.
 
         Purpose: Validates that the EKF transition function produces the
-                 same next state as the environment's state transition model.
+                 same deterministic next state as the environment's physics.
 
         Given: An EKF-based belief and a known state-action pair.
-        When: transition_fn is called and compared to environment transition.
+        When: transition_fn is called and compared to deterministic environment transition.
         Then: Results match.
 
         Test type: unit
@@ -108,7 +108,8 @@ class TestEKFFunctions:
 
         state = np.array([0.01, -0.02, 0.03, -0.01])
         for action_val in [0, 1]:
-            env_next = env.state_transition_model(state, action_val).sample()[0]
+            transition = env.state_transition_model(state, action_val)
+            env_next = transition._compute_deterministic_next_state()
             ekf_next = updater.transition_fn(state, np.array([float(action_val)]))
             np.testing.assert_allclose(ekf_next, env_next, atol=1e-12)
 
@@ -199,13 +200,14 @@ class TestEKFFunctions:
 
 class TestUKFFunctions:
     def test_ukf_transition_fn_matches_environment(self, env, initial_cov):
-        """Test that the UKF transition function matches CartPole physics.
+        """Test that the UKF transition function matches CartPole deterministic physics.
 
-        Purpose: Validates UKF transition function equivalence with environment.
+        Purpose: Validates UKF transition function equivalence with environment
+                 deterministic physics.
 
         Given: A UKF-based belief and a known state-action pair.
         When: transition_fn is called.
-        Then: Result matches the environment's state_transition_model output.
+        Then: Result matches the environment's deterministic transition output.
 
         Test type: unit
         """
@@ -219,7 +221,8 @@ class TestUKFFunctions:
 
         state = np.array([0.01, -0.02, 0.03, -0.01])
         for action_val in [0, 1]:
-            env_next = env.state_transition_model(state, action_val).sample()[0]
+            transition = env.state_transition_model(state, action_val)
+            env_next = transition._compute_deterministic_next_state()
             ukf_next = updater.transition_fn(state, np.array([float(action_val)]))
             np.testing.assert_allclose(ukf_next, env_next, atol=1e-12)
 
