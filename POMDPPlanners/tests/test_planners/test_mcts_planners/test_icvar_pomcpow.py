@@ -1259,6 +1259,7 @@ class TestICVaR_POMCPOWEpisodeTests:
             # Check that planner's alpha was used
             assert planner.alpha == alpha
 
+    @pytest.mark.slow
     def test_run_episode_timeout_vs_n_simulations(
         self,
         environment,

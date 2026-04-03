@@ -200,6 +200,7 @@ class TestLocalSimulationsAPI(
         assert api is not None
         assert hasattr(api, "logger")
 
+    @pytest.mark.slow
     def test_local_api_multiple_n_jobs_values(self, sample_environment_params, tmp_path):
         """Test different n_jobs values.
 

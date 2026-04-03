@@ -7,6 +7,8 @@ timing changes are attributable to planner code, not environment code.
 import numpy as np
 import pytest
 
+pytestmark = [pytest.mark.slow]
+
 from POMDPPlanners.core.belief import get_initial_belief
 
 SEED = 42

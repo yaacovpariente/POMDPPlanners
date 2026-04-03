@@ -546,6 +546,7 @@ def test_belief_node_data_structure(planner, belief):
             assert isinstance(child_belief_node.belief.particles, list)
 
 
+@pytest.mark.slow
 def test_sanity_pomdp_action_selection():
     """Test POMCP_DPW with SanityPOMDP to verify correct action selection."""
     environment = SanityPOMDP()
@@ -654,6 +655,7 @@ def test_visit_count_consistency(planner, belief):
     )  # Allow for some variance due to tree structure
 
 
+@pytest.mark.slow
 def test_pomcp_dpw_vs_pomcp_differences(planner, belief):
     """Test that POMCP_DPW has distinct behavior from standard POMCP due to progressive widening."""
     belief_node = BeliefNode(belief=belief, observation=None)
@@ -699,6 +701,7 @@ def test_unweighted_particle_belief_usage(planner, belief):
             assert isinstance(observation_node.belief.particles, list)
 
 
+@pytest.mark.slow
 def test_double_progressive_widening_integration(planner, belief):
     """Test that both action and observation progressive widening work together."""
     belief_node = BeliefNode(belief=belief, observation=None)

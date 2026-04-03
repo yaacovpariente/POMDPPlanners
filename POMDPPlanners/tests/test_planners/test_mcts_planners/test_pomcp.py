@@ -370,6 +370,7 @@ def test_tree_structure_construction(environment, discount_factor, depth, explor
     assert root_belief_node.v_value is not None
 
 
+@pytest.mark.slow
 def test_sanity_pomdp_action_selection():
     """Test sanity pomdp action selection.
 
