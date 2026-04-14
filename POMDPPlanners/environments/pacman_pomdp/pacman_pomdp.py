@@ -863,10 +863,123 @@ class PacManPOMDP(DiscreteActionsEnvironment):
         # Initialize ghost patrol directions for patrol strategy
         self._ghost_patrol_directions: Dict[int, int] = {}
 
+        # Precompute array state layout for vectorized belief support
+        self._all_pellet_positions = tuple(self.initial_pellets)
+        self._num_initial_pellets = len(self._all_pellet_positions)
+        self._pellet_to_index = {pos: i for i, pos in enumerate(self._all_pellet_positions)}
+
+        self._idx_pac_row = 0
+        self._idx_pac_col = 1
+        self._idx_ghosts_start = 2
+        self._idx_ghosts_end = 2 + 2 * self.num_ghosts
+        self._idx_pellets_start = self._idx_ghosts_end
+        self._idx_pellets_end = self._idx_pellets_start + self._num_initial_pellets
+        self._idx_score = self._idx_pellets_end
+        self._idx_terminal = self._idx_pellets_end + 1
+        self._state_dim = self._idx_terminal + 1
+        self._cached_neighbor_table: Optional[np.ndarray] = None
+
     @property
     def initial_ghost_pos(self) -> Tuple[int, int]:
         """Backward compatibility: returns first ghost position."""
         return self.initial_ghost_positions[0] if self.initial_ghost_positions else (0, 0)
+
+    # ------------------------------------------------------------------
+    # Array state conversion (for vectorized belief support)
+    # ------------------------------------------------------------------
+
+    def state_to_array(self, state: PacManState) -> np.ndarray:
+        """Convert a PacManState to a fixed-size numpy array.
+
+        The array layout is:
+        ``[pac_row, pac_col, g0_row, g0_col, ..., pellet_mask[0..P-1], score, terminal]``
+
+        Args:
+            state: A PacManState instance.
+
+        Returns:
+            1-D float array of shape ``(self._state_dim,)``.
+        """
+        arr = np.zeros(self._state_dim, dtype=np.float64)
+        arr[self._idx_pac_row] = state.pacman_pos[0]
+        arr[self._idx_pac_col] = state.pacman_pos[1]
+        for g, gpos in enumerate(state.ghost_positions):
+            arr[self._idx_ghosts_start + 2 * g] = gpos[0]
+            arr[self._idx_ghosts_start + 2 * g + 1] = gpos[1]
+        pellet_set = set(state.pellets)
+        for pos, idx in self._pellet_to_index.items():
+            if pos in pellet_set:
+                arr[self._idx_pellets_start + idx] = 1.0
+        arr[self._idx_score] = state.score
+        arr[self._idx_terminal] = 1.0 if state.terminal else 0.0
+        return arr
+
+    def array_to_state(self, arr: np.ndarray) -> PacManState:
+        """Convert a numpy array back to a PacManState.
+
+        Args:
+            arr: 1-D array of shape ``(self._state_dim,)`` produced by
+                :meth:`state_to_array`.
+
+        Returns:
+            Reconstructed PacManState.
+        """
+        pacman_pos = (int(arr[self._idx_pac_row]), int(arr[self._idx_pac_col]))
+        ghost_positions = tuple(
+            (
+                int(arr[self._idx_ghosts_start + 2 * g]),
+                int(arr[self._idx_ghosts_start + 2 * g + 1]),
+            )
+            for g in range(self.num_ghosts)
+        )
+        pellets = tuple(
+            pos
+            for pos, idx in self._pellet_to_index.items()
+            if arr[self._idx_pellets_start + idx] > 0.5
+        )
+        score = float(arr[self._idx_score])
+        terminal = arr[self._idx_terminal] > 0.5
+        return PacManState(
+            pacman_pos=pacman_pos,
+            ghost_positions=ghost_positions,
+            pellets=pellets,
+            score=score,
+            terminal=terminal,
+        )
+
+    def states_to_array(self, states: List[PacManState]) -> np.ndarray:
+        """Batch-convert a list of PacManState to a 2-D numpy array.
+
+        Args:
+            states: List of PacManState instances.
+
+        Returns:
+            Array of shape ``(len(states), self._state_dim)``.
+        """
+        return np.array([self.state_to_array(s) for s in states])
+
+    def observation_to_array(self, obs: Tuple[Tuple[int, int], ...]) -> np.ndarray:
+        """Convert a PacMan observation tuple to a flat numpy array.
+
+        Args:
+            obs: Observation as tuple of ghost (row, col) positions.
+
+        Returns:
+            1-D array of shape ``(2 * num_ghosts,)``.
+        """
+        return np.array([coord for gpos in obs for coord in gpos], dtype=np.float64)
+
+    def array_to_observation(self, arr: np.ndarray) -> Tuple[Tuple[int, int], ...]:
+        """Convert a flat numpy array back to a PacMan observation tuple.
+
+        Args:
+            arr: 1-D array of shape ``(2 * num_ghosts,)``.
+
+        Returns:
+            Observation as tuple of (row, col) tuples.
+        """
+        flat = arr.ravel()
+        return tuple((int(flat[2 * g]), int(flat[2 * g + 1])) for g in range(self.num_ghosts))
 
     def _generate_ghost_positions(self, num_ghosts: int) -> List[Tuple[int, int]]:
         """Generate ghost starting positions automatically."""
@@ -1001,6 +1114,90 @@ class PacManPOMDP(DiscreteActionsEnvironment):
             total_reward += self.win_reward
 
         return total_reward
+
+    def reward_batch(  # type: ignore[override]
+        self, states: Union[np.ndarray, Sequence[Any]], action: int
+    ) -> np.ndarray:
+        """Calculate rewards for a batch of states.
+
+        Accepts either a 2-D numpy array of shape ``(N, state_dim)``
+        (vectorized path) or a sequence of PacManState objects (falls back
+        to the loop-based default).
+
+        Computes deterministic reward components only: step penalty, pellet
+        collection, and win bonus. Ghost collision penalty is excluded because
+        it depends on stochastic ghost movement.
+
+        Args:
+            states: Array of shape ``(N, state_dim)`` or sequence of states.
+            action: Discrete action index (0-3).
+
+        Returns:
+            1-D array of reward values with shape ``(N,)``.
+        """
+        states_arr = np.asarray(states)
+        if states_arr.dtype.kind == "f":
+            if states_arr.ndim == 1:
+                states_arr = states_arr.reshape(1, -1)
+            return self._compute_reward_batch(states_arr, action)
+        # Fallback for PacManState sequences (non-vectorized beliefs)
+        return np.array([self.reward(states[i], action) for i in range(len(states))])
+
+    def _compute_reward_batch(self, states_arr: np.ndarray, action: int) -> np.ndarray:
+        terminal = states_arr[:, self._idx_terminal] > 0.5
+        rewards = np.where(terminal, 0.0, self.step_penalty)
+
+        new_pac_rows, new_pac_cols = self._batch_move_pacman(states_arr, action)
+        pellet_collected, all_collected = self._batch_check_pellets(
+            states_arr, new_pac_rows, new_pac_cols
+        )
+        rewards += np.where(~terminal & pellet_collected, self.pellet_reward, 0.0)
+        rewards += np.where(~terminal & all_collected, self.win_reward, 0.0)
+        return rewards
+
+    def _batch_move_pacman(
+        self, states_arr: np.ndarray, action: int
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        pac_rows = states_arr[:, self._idx_pac_row].astype(np.int32)
+        pac_cols = states_arr[:, self._idx_pac_col].astype(np.int32)
+        table = self._get_neighbor_table()
+        new_positions = table[pac_rows, pac_cols, action]
+        return new_positions[:, 0], new_positions[:, 1]
+
+    def _batch_check_pellets(
+        self,
+        states_arr: np.ndarray,
+        pac_rows: np.ndarray,
+        pac_cols: np.ndarray,
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        n = states_arr.shape[0]
+        pellet_mask = states_arr[:, self._idx_pellets_start : self._idx_pellets_end]
+        pellet_pos = np.array(self._all_pellet_positions, dtype=np.int32)
+
+        if len(pellet_pos) == 0:
+            return np.zeros(n, dtype=bool), np.ones(n, dtype=bool)
+
+        # Check if new pacman position matches any active pellet
+        row_match = pac_rows[:, None] == pellet_pos[None, :, 0]
+        col_match = pac_cols[:, None] == pellet_pos[None, :, 1]
+        pos_match = row_match & col_match
+        active_match = pos_match & (pellet_mask > 0.5)
+        collected = active_match.any(axis=1)
+
+        remaining_after = pellet_mask.sum(axis=1) - collected.astype(np.float64)
+        all_collected = collected & (remaining_after < 0.5)
+        return collected, all_collected
+
+    def _get_neighbor_table(self) -> np.ndarray:
+        if self._cached_neighbor_table is None:
+            from POMDPPlanners.environments.pacman_pomdp.pacman_pomdp_beliefs.pacman_grid_utils import (  # pylint: disable=import-outside-toplevel
+                precompute_neighbor_table,
+                precompute_valid_cell_mask,
+            )
+
+            valid_mask = precompute_valid_cell_mask(self.maze_size, self.walls)
+            self._cached_neighbor_table = precompute_neighbor_table(self.maze_size, valid_mask)
+        return self._cached_neighbor_table
 
     def is_terminal(self, state: PacManState) -> bool:
         """Check if state is terminal."""
