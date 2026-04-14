@@ -1082,16 +1082,22 @@ class PacManPOMDP(DiscreteActionsEnvironment):
         """Get all available actions."""
         return list(range(len(self.action_names)))
 
-    def state_transition_model(self, state: PacManState, action: int) -> PacManStateTransitionModel:
+    def _ensure_pacman_state(self, state: Any) -> PacManState:
+        if isinstance(state, np.ndarray):
+            return self.array_to_state(state)
+        return state
+
+    def state_transition_model(self, state: Any, action: int) -> PacManStateTransitionModel:
         """Get state transition model."""
-        return PacManStateTransitionModel(state, action, self)
+        return PacManStateTransitionModel(self._ensure_pacman_state(state), action, self)
 
-    def observation_model(self, next_state: PacManState, action: int) -> PacManObservationModel:
+    def observation_model(self, next_state: Any, action: int) -> PacManObservationModel:
         """Get observation model."""
-        return PacManObservationModel(next_state, action, self)
+        return PacManObservationModel(self._ensure_pacman_state(next_state), action, self)
 
-    def reward(self, state: PacManState, action: int) -> float:
+    def reward(self, state: Any, action: int) -> float:
         """Calculate immediate reward."""
+        state = self._ensure_pacman_state(state)
         if state.terminal:
             return 0.0  # No reward for terminal states
 
@@ -1199,8 +1205,9 @@ class PacManPOMDP(DiscreteActionsEnvironment):
             self._cached_neighbor_table = precompute_neighbor_table(self.maze_size, valid_mask)
         return self._cached_neighbor_table
 
-    def is_terminal(self, state: PacManState) -> bool:
+    def is_terminal(self, state: Any) -> bool:
         """Check if state is terminal."""
+        state = self._ensure_pacman_state(state)
         return state.terminal
 
     def initial_state_dist(self) -> DiscreteDistribution:
