@@ -77,6 +77,20 @@ class HyperParameterOptimizationDirection(Enum):
     MINIMIZE = "minimize"
 
 
+class ParallelizationLevel(Enum):
+    """Level at which parallelization is applied during hyperparameter tuning.
+
+    Attributes:
+        OPTUNA_TRIALS: Parallelize across Optuna trials. Multiple trials run
+            concurrently while episodes within each trial run sequentially.
+        EPISODES: Parallelize across episodes within each trial. Optuna trials
+            run sequentially while episodes within each trial run concurrently.
+    """
+
+    OPTUNA_TRIALS = "optuna_trials"
+    EPISODES = "episodes"
+
+
 @dataclass(frozen=True)
 class HyperParamPlannerConfig:
     policy_cls: Type["Policy"]
