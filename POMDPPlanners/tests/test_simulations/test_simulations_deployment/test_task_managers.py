@@ -310,7 +310,18 @@ def test_joblib_task_manager_cache(cache_db, environment, policy):
             # If we can't clear the cache, log a warning but continue with the test
             warnings.warn("Could not clear cache due to file being in use, continuing with test")
 
-        result3, ids3 = task_manager.run_tasks([task], [task_identifier])
+        # Create a fresh task because cleanup() nullifies environment/policy/belief
+        # on the original task object after the first run
+        task_fresh = EpisodeSimulationTask(
+            environment=environment,
+            policy=policy,
+            initial_belief=create_test_belief(),
+            num_steps=2,
+            episode_id=1,
+            seed=42,
+            console_output=False,
+        )
+        result3, ids3 = task_manager.run_tasks([task_fresh], [task_identifier])
 
         # Compare main fields again
         assert result1[0].discount_factor == result3[0].discount_factor
