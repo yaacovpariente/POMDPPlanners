@@ -23,6 +23,7 @@ from POMDPPlanners.core.simulation import (
 from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     HyperParameterOptimizationDirection,
     OptimizedPolicyResult,
+    ParallelizationLevel,
 )
 from POMDPPlanners.core.simulation.simulation_configs import EnvironmentRunParams
 from POMDPPlanners.simulations.simulation_statistics import (
@@ -56,6 +57,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         debug: bool = False,
         console_output: bool = True,
         n_jobs: int = 1,
+        parallelization_level: ParallelizationLevel = ParallelizationLevel.OPTUNA_TRIALS,
         confidence_interval_level: float = 0.95,
         alpha: float = 0.1,
         seed: int = 42,
@@ -80,6 +82,10 @@ class HyperParameterTuningSimulationTask(SimulationTask):
             debug: Whether to enable debug logging
             console_output: Whether to enable console output
             n_jobs: Number of parallel jobs
+            parallelization_level: Controls where parallelization is applied.
+                OPTUNA_TRIALS (default) parallelizes across Optuna trials while
+                running episodes sequentially. EPISODES parallelizes across
+                episodes within each trial while running trials sequentially.
             confidence_interval_level: Confidence interval level (0-1)
             alpha: Alpha parameter for statistics (0-1)
             seed: Random seed for reproducibility
@@ -108,6 +114,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
             debug=debug,
             console_output=console_output,
             n_jobs=n_jobs,
+            parallelization_level=parallelization_level,
             confidence_interval_level=confidence_interval_level,
             alpha=alpha,
             seed=seed,
@@ -128,6 +135,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         self.debug = debug
         self.console_output = console_output
         self.n_jobs = n_jobs
+        self.parallelization_level = parallelization_level
         self.confidence_interval_level = confidence_interval_level
         self.alpha = alpha
         self.seed = seed
@@ -169,6 +177,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         debug: bool,
         console_output: bool,
         n_jobs: int,
+        parallelization_level: ParallelizationLevel,
         confidence_interval_level: float,
         alpha: float,
         seed: int,
@@ -255,6 +264,11 @@ class HyperParameterTuningSimulationTask(SimulationTask):
             raise ValueError("n_trials must be a positive integer")
         if not isinstance(n_jobs, int) or (n_jobs <= 0 and n_jobs != -1):
             raise ValueError("n_jobs must be a positive integer or -1 (for all cores)")
+        if not isinstance(parallelization_level, ParallelizationLevel):
+            raise TypeError(
+                f"parallelization_level must be a ParallelizationLevel instance, "
+                f"got {type(parallelization_level)}"
+            )
         if not isinstance(seed, int):
             raise TypeError("seed must be an integer")
 
@@ -347,8 +361,13 @@ class HyperParameterTuningSimulationTask(SimulationTask):
             objective_function = self._create_optuna_objective_function()
 
             # Execute the optimization study
+            optuna_n_jobs = (
+                self.n_jobs
+                if self.parallelization_level == ParallelizationLevel.OPTUNA_TRIALS
+                else 1
+            )
             study = self._execute_optimization_study(
-                objective_function, n_trials=self.n_trials, n_jobs=self.n_jobs
+                objective_function, n_trials=self.n_trials, n_jobs=optuna_n_jobs
             )
 
             # Calculate optimization time
@@ -949,11 +968,14 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         ]
 
         # Use simulator's direct parallel execution method to avoid MLflow experiment creation
+        episode_n_jobs = (
+            self.n_jobs if self.parallelization_level == ParallelizationLevel.EPISODES else 1
+        )
         results = self.simulator.simulate_multiple_environments_and_policies_parallel(
             environment_run_params=env_run_params,
             alpha=self.alpha,  # Default alpha for intermediate results
             confidence_interval_level=self.confidence_interval_level,
-            n_jobs=1,
+            n_jobs=episode_n_jobs,
         )
 
         # Extract histories from results
@@ -979,6 +1001,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
                 for param_name, direction in self.parameters_to_optimize
             ],
             "n_trials": self.n_trials,
+            "parallelization_level": self.parallelization_level.value,
             "seed": self.seed,
             "use_queue_logger": self.use_queue_logger,
             "training_hyper_parameters": list(self.training_hyper_parameters),

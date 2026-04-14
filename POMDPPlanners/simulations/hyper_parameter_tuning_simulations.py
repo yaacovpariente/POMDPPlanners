@@ -132,6 +132,7 @@ from POMDPPlanners.core.simulation import (
 from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     HyperParameterRunParams,
     OptimizedPolicyResult,
+    ParallelizationLevel,
 )
 from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import (
     JoblibConfig,
@@ -244,6 +245,7 @@ class HyperParameterOptimizer:
         alpha: float = 0.05,
         mlflow_tracking_uri: Optional[Path] = None,
         use_queue_logger: bool = False,
+        parallelization_level: ParallelizationLevel = ParallelizationLevel.OPTUNA_TRIALS,
     ):
         """Initialize the hyperparameter optimizer.
 
@@ -272,6 +274,10 @@ class HyperParameterOptimizer:
                 If provided, must be a Path object pointing to the desired MLflow
                 tracking directory on the local filesystem.
             use_queue_logger: Whether to use queue-based logging. Defaults to True.
+            parallelization_level: Controls where parallelization is applied.
+                OPTUNA_TRIALS (default) parallelizes across Optuna trials while
+                running episodes sequentially. EPISODES parallelizes across
+                episodes within each trial while running trials sequentially.
         Raises:
             TypeError: If cache_dir_path is not a Path object
         """
@@ -282,6 +288,7 @@ class HyperParameterOptimizer:
         self.confidence_interval_level = confidence_interval_level
         self.alpha = alpha
         self.use_queue_logger = use_queue_logger
+        self.parallelization_level = parallelization_level
         # Set up MLFlow tracking
         if mlflow_tracking_uri is None:
             # Use local file storage in cache_dir_path/mlruns
@@ -352,6 +359,7 @@ class HyperParameterOptimizer:
                 n_jobs=self.n_jobs,
                 confidence_interval_level=self.confidence_interval_level,
                 alpha=self.alpha,
+                parallelization_level=self.parallelization_level,
             )
             tasks.append(task)
             task_identifiers.append(task.get_config_id())
