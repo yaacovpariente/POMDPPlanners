@@ -12,6 +12,10 @@ from POMDPPlanners.environments.mountain_car_pomdp import MountainCarPOMDP
 from POMDPPlanners.environments.mountain_car_pomdp.mountain_car_pomdp_beliefs import (
     MountainCarVectorizedUpdater,
 )
+from POMDPPlanners.tests.test_core.test_belief.vectorized_updater_test_utils import (
+    assert_batch_obs_log_likelihood_matches_loop,
+    assert_batch_transition_matches_loop,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -290,23 +294,23 @@ class TestEquivalenceWithPerParticleLoop:
         Test type: integration
         """
         np.random.seed(123)
-        n = 50
         particles = np.column_stack(
             [
-                np.random.uniform(-0.6, -0.4, n),
-                np.random.uniform(-0.02, 0.02, n),
+                np.random.uniform(-0.6, -0.4, 50),
+                np.random.uniform(-0.02, 0.02, 50),
             ]
         )
-        action = 1
 
-        vectorized_result = updater.batch_transition(particles, action)
+        def per_particle_fn(particle, action):
+            transition = env.state_transition_model(state=tuple(particle), action=action)
+            return transition._compute_deterministic_next_state()
 
-        per_particle_result = np.empty_like(particles)
-        for i in range(n):
-            transition = env.state_transition_model(state=tuple(particles[i]), action=action)
-            per_particle_result[i] = transition._compute_deterministic_next_state()
-
-        np.testing.assert_allclose(vectorized_result, per_particle_result, atol=1e-10)
+        assert_batch_transition_matches_loop(
+            updater=updater,
+            particles=particles,
+            action=1,
+            per_particle_transition_fn=per_particle_fn,
+        )
 
     def test_batch_observation_log_likelihood_matches_per_particle_loop(self, env, updater):
         """Test vectorized log-likelihood matches per-particle observation_model.probability.
@@ -322,22 +326,22 @@ class TestEquivalenceWithPerParticleLoop:
         Test type: integration
         """
         np.random.seed(42)
-        n = 50
-        action = 0
-        observation = np.array([-0.5, 0.0])
         particles = np.column_stack(
             [
-                np.random.uniform(-0.6, -0.4, n),
-                np.random.uniform(-0.02, 0.02, n),
+                np.random.uniform(-0.6, -0.4, 50),
+                np.random.uniform(-0.02, 0.02, 50),
             ]
         )
+        observation = np.array([-0.5, 0.0])
 
-        vectorized_ll = updater.batch_observation_log_likelihood(particles, action, observation)
+        def per_particle_ll_fn(particle, action, obs):
+            obs_model = env.observation_model(next_state=tuple(particle), action=action)
+            return np.log(obs_model.probability([obs])[0])
 
-        per_particle_ll = np.empty(n)
-        for i in range(n):
-            obs_model = env.observation_model(next_state=tuple(particles[i]), action=action)
-            prob = obs_model.probability([observation])[0]
-            per_particle_ll[i] = np.log(prob)
-
-        np.testing.assert_allclose(vectorized_ll, per_particle_ll, atol=1e-10)
+        assert_batch_obs_log_likelihood_matches_loop(
+            updater=updater,
+            particles=particles,
+            action=0,
+            observation=observation,
+            per_particle_ll_fn=per_particle_ll_fn,
+        )
