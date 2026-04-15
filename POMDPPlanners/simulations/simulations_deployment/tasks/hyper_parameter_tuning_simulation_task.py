@@ -136,6 +136,12 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         self.console_output = console_output
         self.n_jobs = n_jobs
         self.parallelization_level = parallelization_level
+        self.optuna_n_jobs = (
+            n_jobs if parallelization_level == ParallelizationLevel.OPTUNA_TRIALS else 1
+        )
+        self.episode_n_jobs = (
+            n_jobs if parallelization_level == ParallelizationLevel.EPISODES else 1
+        )
         self.confidence_interval_level = confidence_interval_level
         self.alpha = alpha
         self.seed = seed
@@ -361,13 +367,8 @@ class HyperParameterTuningSimulationTask(SimulationTask):
             objective_function = self._create_optuna_objective_function()
 
             # Execute the optimization study
-            optuna_n_jobs = (
-                self.n_jobs
-                if self.parallelization_level == ParallelizationLevel.OPTUNA_TRIALS
-                else 1
-            )
             study = self._execute_optimization_study(
-                objective_function, n_trials=self.n_trials, n_jobs=optuna_n_jobs
+                objective_function, n_trials=self.n_trials, n_jobs=self.optuna_n_jobs
             )
 
             # Calculate optimization time
@@ -968,14 +969,11 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         ]
 
         # Use simulator's direct parallel execution method to avoid MLflow experiment creation
-        episode_n_jobs = (
-            self.n_jobs if self.parallelization_level == ParallelizationLevel.EPISODES else 1
-        )
         results = self.simulator.simulate_multiple_environments_and_policies_parallel(
             environment_run_params=env_run_params,
             alpha=self.alpha,  # Default alpha for intermediate results
             confidence_interval_level=self.confidence_interval_level,
-            n_jobs=episode_n_jobs,
+            n_jobs=self.episode_n_jobs,
         )
 
         # Extract histories from results
