@@ -18,6 +18,9 @@ from POMDPPlanners.environments.laser_tag_pomdp import LaserTagPOMDP
 from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_beliefs import (
     LaserTagVectorizedUpdater,
 )
+from POMDPPlanners.tests.test_core.test_belief.vectorized_updater_test_utils import (
+    assert_batch_obs_log_likelihood_matches_loop,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -452,10 +455,13 @@ class TestEquivalenceWithPerParticleLoop:
 
         Purpose: Verifies that robot movement (deterministic part) in
                  batch_transition matches the per-particle loop exactly.
+                 Only robot positions (columns 0:2) are compared because
+                 opponent movement uses different RNG primitives between
+                 the vectorized and per-particle paths.
 
         Given: A set of non-terminal particles with transition_error_prob=0.
         When: batch_transition is called and the per-particle loop is run.
-        Then: Robot positions match exactly.
+        Then: Robot positions match exactly for all 5 actions.
 
         Test type: integration
         """
@@ -480,7 +486,6 @@ class TestEquivalenceWithPerParticleLoop:
                 ).sample()[0]
                 per_particle[i] = next_state
 
-            # Robot positions should match exactly
             np.testing.assert_array_equal(
                 vectorized[:, :2],
                 per_particle[:, :2],
@@ -545,30 +550,22 @@ class TestEquivalenceWithPerParticleLoop:
                 op = valid_positions[np.random.randint(len(valid_positions))]
             particles[i] = [rp[0], rp[1], op[0], op[1], 0.0]
 
-        # Use a representative observation
         obs_tuple = (1.5, 2.0, 1.0, 2.5, 1.5, 1.0, 2.0, 1.5)
         obs_array = np.array(obs_tuple, dtype=float)
 
-        vectorized_ll = updater_no_walls.batch_observation_log_likelihood(
-            particles, action=0, observation=obs_array
-        )
-
-        per_particle_ll = np.empty(n)
-        for i in range(n):
-            obs_model = env_no_walls.observation_model(next_state=particles[i], action=0)
+        def per_particle_ll_fn(particle, action, _observation):
+            obs_model = env_no_walls.observation_model(next_state=particle, action=action)
             prob = obs_model.probability([obs_tuple])[0]
             if prob > 0:
-                per_particle_ll[i] = np.log(prob)
-            else:
-                per_particle_ll[i] = -np.inf
+                return np.log(prob)
+            return -np.inf
 
-        # Both should be finite for non-terminal particles with
-        # reasonable observations
-        finite_mask = np.isfinite(per_particle_ll)
-        np.testing.assert_allclose(
-            vectorized_ll[finite_mask],
-            per_particle_ll[finite_mask],
-            atol=1e-10,
+        assert_batch_obs_log_likelihood_matches_loop(
+            updater=updater_no_walls,
+            particles=particles,
+            action=0,
+            observation=obs_array,
+            per_particle_ll_fn=per_particle_ll_fn,
         )
 
     def test_terminal_observation_equivalence(self, env_no_walls, updater_no_walls):
