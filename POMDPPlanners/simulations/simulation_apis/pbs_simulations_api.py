@@ -10,6 +10,7 @@ from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     HyperParameterRunParams,
     HyperParamPlannerConfigGenerator,
     OptimizedPolicyResult,
+    ParallelizationLevel,
 )
 from POMDPPlanners.simulations.workflows.hyperparameter_tuning_evaluation_workflows import (
     OptimizationEvaluationPBSWorkflow,
@@ -371,6 +372,7 @@ class PBSSimulationsAPI(SimulationsAPIInterface):
         confidence_interval_level: float = 0.95,
         alpha: float = 0.05,
         use_queue_logger: bool = False,
+        parallelization_level: ParallelizationLevel = ParallelizationLevel.OPTUNA_TRIALS,
     ) -> List[OptimizedPolicyResult]:
         """Run hyperparameter optimization for POMDP policies using Optuna on PBS cluster.
 
@@ -426,6 +428,7 @@ class PBSSimulationsAPI(SimulationsAPIInterface):
             confidence_interval_level=confidence_interval_level,
             alpha=alpha,
             use_queue_logger=use_queue_logger,
+            parallelization_level=parallelization_level,
         )
 
         self.logger.info("Running PBS cluster hyperparameter optimization")
