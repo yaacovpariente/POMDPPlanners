@@ -1751,3 +1751,72 @@ class TestOptimizedPolicyResultValidation:
         assert len(result.optimized_metric_values) == 2
         assert result.optimized_metric_values["average_return"] == 42.5
         assert result.optimized_metric_values["return_cvar"] == 38.2
+
+
+# ===== ParallelizationLevel Tests =====
+
+from POMDPPlanners.core.simulation.hyperparameter_tuning import ParallelizationLevel
+
+
+class TestParallelizationLevelEnum:
+    """Tests for the ParallelizationLevel enum."""
+
+    def test_enum_values(self):
+        """Test ParallelizationLevel enum values.
+
+        Purpose: Validates enum has correct string values
+
+        Given: The ParallelizationLevel enum
+        When: Accessing enum values
+        Then: OPTUNA_TRIALS is "optuna_trials" and EPISODES is "episodes"
+
+        Test type: unit
+        """
+        assert ParallelizationLevel.OPTUNA_TRIALS.value == "optuna_trials"
+        assert ParallelizationLevel.EPISODES.value == "episodes"
+
+    def test_enum_members(self):
+        """Test ParallelizationLevel has exactly two members.
+
+        Purpose: Validates enum membership
+
+        Given: The ParallelizationLevel enum
+        When: Listing all members
+        Then: There are exactly two members
+
+        Test type: unit
+        """
+        members = list(ParallelizationLevel)
+        assert len(members) == 2
+        assert ParallelizationLevel.OPTUNA_TRIALS in members
+        assert ParallelizationLevel.EPISODES in members
+
+    def test_enum_from_value(self):
+        """Test ParallelizationLevel can be constructed from string values.
+
+        Purpose: Validates enum can be created from string values
+
+        Given: String values matching enum values
+        When: Constructing enum instances from strings
+        Then: Correct enum members are returned
+
+        Test type: unit
+        """
+        assert ParallelizationLevel("optuna_trials") == ParallelizationLevel.OPTUNA_TRIALS
+        assert ParallelizationLevel("episodes") == ParallelizationLevel.EPISODES
+
+    def test_enum_invalid_value_raises_error(self):
+        """Test that invalid string raises ValueError.
+
+        Purpose: Validates that invalid values are rejected
+
+        Given: An invalid string value
+        When: Constructing a ParallelizationLevel from it
+        Then: ValueError is raised
+
+        Test type: unit
+        """
+        import pytest
+
+        with pytest.raises(ValueError):
+            ParallelizationLevel("invalid")
