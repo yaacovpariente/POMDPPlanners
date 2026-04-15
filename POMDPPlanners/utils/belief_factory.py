@@ -113,6 +113,11 @@ _ENV_FACTORY_REGISTRY: dict[str, tuple[str, str, BeliefType]] = {
         "create_pacman_belief",
         BeliefType.VECTORIZED_PARTICLE,
     ),
+    "RockSamplePOMDP": (
+        "POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp_beliefs",
+        "create_rocksample_belief",
+        BeliefType.VECTORIZED_PARTICLE,
+    ),
 }
 
 
