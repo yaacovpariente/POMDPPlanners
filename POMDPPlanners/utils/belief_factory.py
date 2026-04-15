@@ -108,6 +108,11 @@ _ENV_FACTORY_REGISTRY: dict[str, tuple[str, str, BeliefType]] = {
         "create_continuous_push_belief",
         BeliefType.VECTORIZED_PARTICLE,
     ),
+    "PacManPOMDP": (
+        "POMDPPlanners.environments.pacman_pomdp.pacman_pomdp_beliefs",
+        "create_pacman_belief",
+        BeliefType.VECTORIZED_PARTICLE,
+    ),
 }
 
 

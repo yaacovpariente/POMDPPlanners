@@ -1883,3 +1883,241 @@ class TestMultiGhostFeatures:
 
         assert pomdp_legacy.num_ghosts == 1
         assert pomdp_legacy.initial_ghost_positions == [(4, 4)]
+
+
+# ---------------------------------------------------------------------------
+# Array state conversion tests
+# ---------------------------------------------------------------------------
+
+
+class TestStateToArrayConversion:
+    """Tests for state_to_array and array_to_state conversion methods."""
+
+    @pytest.fixture()
+    def env(self):
+        return PacManPOMDP(
+            maze_size=(5, 5),
+            walls={(2, 2)},
+            initial_pellets=[(1, 1), (3, 3)],
+            initial_pacman_pos=(0, 0),
+            num_ghosts=1,
+            initial_ghost_positions=[(4, 4)],
+            discount_factor=0.95,
+        )
+
+    def test_state_to_array_shape(self, env):
+        """Test that state_to_array returns correct shape.
+
+        Purpose: Validates output shape equals env._state_dim.
+
+        Given: A PacManState from the initial distribution.
+        When: state_to_array is called.
+        Then: Output is 1-D with length state_dim.
+
+        Test type: unit
+        """
+        state = env.initial_state_dist().sample()[0]
+        arr = env.state_to_array(state)
+        assert arr.shape == (env._state_dim,)
+
+    def test_roundtrip(self, env):
+        """Test that state -> array -> state roundtrip preserves the state.
+
+        Purpose: Validates lossless conversion.
+
+        Given: Various PacManStates (initial, mid-game, terminal).
+        When: state_to_array then array_to_state is applied.
+        Then: The reconstructed state equals the original.
+
+        Test type: unit
+        """
+        initial_state = env.initial_state_dist().sample()[0]
+        roundtripped = env.array_to_state(env.state_to_array(initial_state))
+        assert roundtripped == initial_state
+
+        mid_state = PacManState(
+            pacman_pos=(1, 1),
+            ghost_positions=((3, 3),),
+            pellets=((3, 3),),  # One pellet eaten
+            score=10,
+            terminal=False,
+        )
+        roundtripped = env.array_to_state(env.state_to_array(mid_state))
+        assert roundtripped.pacman_pos == mid_state.pacman_pos
+        assert roundtripped.ghost_positions == mid_state.ghost_positions
+        assert roundtripped.score == mid_state.score
+        assert roundtripped.terminal == mid_state.terminal
+
+    def test_pellet_bitmask(self, env):
+        """Test pellet bitmask encoding.
+
+        Purpose: Validates eaten pellets produce 0s, remaining produce 1s.
+
+        Given: A state with one pellet eaten.
+        When: state_to_array is called.
+        Then: Bitmask has 0 for eaten pellet and 1 for remaining.
+
+        Test type: unit
+        """
+        # All pellets present
+        full_state = PacManState(
+            pacman_pos=(0, 0),
+            ghost_positions=((4, 4),),
+            pellets=((1, 1), (3, 3)),
+            score=0,
+            terminal=False,
+        )
+        arr = env.state_to_array(full_state)
+        assert arr[env._idx_pellets_start] == 1.0
+        assert arr[env._idx_pellets_start + 1] == 1.0
+
+        # One pellet eaten
+        partial_state = PacManState(
+            pacman_pos=(0, 0),
+            ghost_positions=((4, 4),),
+            pellets=((3, 3),),
+            score=10,
+            terminal=False,
+        )
+        arr = env.state_to_array(partial_state)
+        assert arr[env._idx_pellets_start] == 0.0  # (1,1) eaten
+        assert arr[env._idx_pellets_start + 1] == 1.0  # (3,3) remains
+
+    def test_terminal_flag(self, env):
+        """Test terminal flag encoding.
+
+        Purpose: Validates terminal=True produces 1 in array.
+
+        Given: A terminal PacManState.
+        When: state_to_array is called.
+        Then: Terminal index is 1.0.
+
+        Test type: unit
+        """
+        state = PacManState(
+            pacman_pos=(0, 0),
+            ghost_positions=((0, 0),),
+            pellets=((1, 1), (3, 3)),
+            score=0,
+            terminal=True,
+        )
+        arr = env.state_to_array(state)
+        assert arr[env._idx_terminal] == 1.0
+
+    def test_states_to_array_batch(self, env):
+        """Test batch conversion matches individual conversions.
+
+        Purpose: Validates batch and individual conversions agree.
+
+        Given: Multiple PacManStates.
+        When: states_to_array is called.
+        Then: Each row matches individual state_to_array output.
+
+        Test type: unit
+        """
+        np.random.seed(42)
+        states = env.initial_state_dist().sample(n_samples=5)
+        batch = env.states_to_array(states)
+        assert batch.shape == (5, env._state_dim)
+        for i, s in enumerate(states):
+            np.testing.assert_array_equal(batch[i], env.state_to_array(s))
+
+
+class TestRewardBatch:
+    """Tests for vectorized reward_batch on PacManPOMDP."""
+
+    @pytest.fixture()
+    def env(self):
+        return PacManPOMDP(
+            maze_size=(5, 5),
+            walls={(2, 2)},
+            initial_pellets=[(1, 1), (3, 3)],
+            initial_pacman_pos=(0, 0),
+            num_ghosts=1,
+            initial_ghost_positions=[(4, 4)],
+            discount_factor=0.95,
+        )
+
+    def test_shape(self, env):
+        """Test reward_batch output shape.
+
+        Purpose: Validates output shape is (N,).
+
+        Given: 5 array-encoded states.
+        When: reward_batch is called.
+        Then: Output has shape (5,).
+
+        Test type: unit
+        """
+        np.random.seed(42)
+        states = env.initial_state_dist().sample(n_samples=5)
+        arr = env.states_to_array(states)
+        rewards = env.reward_batch(arr, 2)
+        assert rewards.shape == (5,)
+
+    def test_terminal_zero(self, env):
+        """Test that terminal states return 0 reward.
+
+        Purpose: Validates terminal state reward is zero.
+
+        Given: A terminal PacManState encoded as array.
+        When: reward_batch is called.
+        Then: Reward is 0.0.
+
+        Test type: unit
+        """
+        state = PacManState(
+            pacman_pos=(0, 0),
+            ghost_positions=((0, 0),),
+            pellets=((1, 1), (3, 3)),
+            score=0,
+            terminal=True,
+        )
+        arr = env.state_to_array(state).reshape(1, -1)
+        rewards = env.reward_batch(arr, 2)
+        assert rewards[0] == 0.0
+
+    def test_step_penalty_included(self, env):
+        """Test that non-terminal non-event states include step penalty.
+
+        Purpose: Validates base step penalty is applied.
+
+        Given: A non-terminal state far from pellets and ghosts.
+        When: reward_batch is called with an action that doesn't collect pellets.
+        Then: Reward equals step_penalty.
+
+        Test type: unit
+        """
+        state = PacManState(
+            pacman_pos=(0, 0),
+            ghost_positions=((4, 4),),
+            pellets=((3, 3),),
+            score=0,
+            terminal=False,
+        )
+        arr = env.state_to_array(state).reshape(1, -1)
+        # Move South from (0,0) to (1,0) - no pellet there
+        rewards = env.reward_batch(arr, 2)
+        assert rewards[0] == env.step_penalty
+
+    def test_pellet_collection_reward(self, env):
+        """Test that pellet collection adds pellet_reward.
+
+        Purpose: Validates pellet collection reward component.
+
+        Given: PacMan at (1,0) with pellet at (1,1).
+        When: Action East moves PacMan onto the pellet.
+        Then: Reward includes step_penalty + pellet_reward.
+
+        Test type: unit
+        """
+        state = PacManState(
+            pacman_pos=(1, 0),
+            ghost_positions=((4, 4),),
+            pellets=((1, 1), (3, 3)),
+            score=0,
+            terminal=False,
+        )
+        arr = env.state_to_array(state).reshape(1, -1)
+        rewards = env.reward_batch(arr, 1)  # East -> (1,1)
+        assert rewards[0] == env.step_penalty + env.pellet_reward
