@@ -23,7 +23,7 @@ Functions:
     assert_sample_distributions_match: Empirical ``sample`` histograms agree.
 """
 
-from typing import Any, List, Optional, Sequence, Tuple
+from typing import Any, Callable, List, Optional, Sequence, Tuple
 
 import numpy as np
 
@@ -36,6 +36,7 @@ from POMDPPlanners.core.environment import Environment
 
 BeliefPair = Tuple[WeightedParticleBelief, VectorizedWeightedParticleBelief]
 ActionObservationStep = Tuple[Any, Any]
+ParticleToArray = Callable[[Any], np.ndarray]
 
 
 # ---------------------------------------------------------------------------
@@ -51,6 +52,7 @@ def assert_update_particles_match(
     pomdp: Environment,
     atol: float = 1e-10,
     seed: Optional[int] = None,
+    particle_to_array: Optional[ParticleToArray] = None,
 ) -> BeliefPair:
     """Run one update on both beliefs and assert next particles agree.
 
@@ -64,12 +66,16 @@ def assert_update_particles_match(
         seed: If provided, ``numpy``'s global RNG is seeded to this value
             before each path so stochastic transitions consume identical
             random sequences.
+        particle_to_array: Optional callable converting a baseline particle
+            to a 1-D ``np.ndarray``. Needed when ``base.particles`` holds
+            non-ndarray objects (e.g. dataclasses) whose layout matches
+            ``vec.particles`` rows. Defaults to :func:`np.asarray`.
 
     Returns:
         The updated ``(base, vec)`` belief pair so callers can chain asserts.
     """
     base_next, vec_next = _run_updates(base, vec, action, observation, pomdp, seed)
-    _check_particles(base_next, vec_next, atol=atol)
+    _check_particles(base_next, vec_next, atol=atol, particle_to_array=particle_to_array)
     return base_next, vec_next
 
 
@@ -151,6 +157,7 @@ def assert_update_equivalence(
     significance_threshold: Optional[float] = 1e-4,
     top_k: int = 5,
     seed: Optional[int] = None,
+    particle_to_array: Optional[ParticleToArray] = None,
 ) -> BeliefPair:
     """Run one update and assert particles, weights, and top-``k`` all agree.
 
@@ -177,7 +184,7 @@ def assert_update_equivalence(
         The updated ``(base, vec)`` belief pair.
     """
     base_next, vec_next = _run_updates(base, vec, action, observation, pomdp, seed)
-    _check_particles(base_next, vec_next, atol=atol_particles)
+    _check_particles(base_next, vec_next, atol=atol_particles, particle_to_array=particle_to_array)
     _check_weights(
         base_next,
         vec_next,
@@ -196,6 +203,7 @@ def assert_chained_update_equivalence(
     atol_particles: float = 1e-10,
     atol_weights: float = 1e-5,
     seed: Optional[int] = None,
+    particle_to_array: Optional[ParticleToArray] = None,
 ) -> BeliefPair:
     """Run a sequence of updates and assert final particles and weights agree.
 
@@ -214,7 +222,7 @@ def assert_chained_update_equivalence(
     """
     for action, observation in steps:
         base, vec = _run_updates(base, vec, action, observation, pomdp, seed)
-    _check_particles(base, vec, atol=atol_particles)
+    _check_particles(base, vec, atol=atol_particles, particle_to_array=particle_to_array)
     _check_weights(base, vec, atol=atol_weights, significance_threshold=None)
     return base, vec
 
@@ -248,6 +256,7 @@ def assert_sample_distributions_match(
     tol: float = 0.03,
     atol_weights: float = 0.03,
     seed: Optional[int] = None,
+    particle_to_array: Optional[ParticleToArray] = None,
 ) -> None:
     """Assert ``sample`` output distributions agree across beliefs and match weights.
 
@@ -277,10 +286,10 @@ def assert_sample_distributions_match(
         seed: If provided, ``numpy``'s global RNG is seeded to this value
             before each sampling path so the test is deterministic.
     """
-    reference = _stack_particles(base.particles)
+    reference = _stack_particles(base.particles, particle_to_array=particle_to_array)
     first_of = _canonical_group_indices(reference)
-    base_hist = _sample_histogram(base, reference, n_samples, seed)
-    vec_hist = _sample_histogram(vec, reference, n_samples, seed)
+    base_hist = _sample_histogram(base, reference, n_samples, seed, particle_to_array)
+    vec_hist = _sample_histogram(vec, reference, n_samples, seed, particle_to_array=None)
     base_weights_agg = _aggregate_by_groups(base.normalized_weights, first_of)
     vec_weights_agg = _aggregate_by_groups(vec.normalized_weights, first_of)
 
@@ -319,8 +328,9 @@ def _check_particles(
     base: WeightedParticleBelief,
     vec: VectorizedWeightedParticleBelief,
     atol: float,
+    particle_to_array: Optional[ParticleToArray] = None,
 ) -> None:
-    base_particles = _stack_particles(base.particles)
+    base_particles = _stack_particles(base.particles, particle_to_array=particle_to_array)
     np.testing.assert_allclose(
         vec.particles,
         base_particles,
@@ -375,8 +385,12 @@ def _build_significance_mask(
     return mask
 
 
-def _stack_particles(particles: List[Any]) -> np.ndarray:
-    return np.stack([np.asarray(p) for p in particles])
+def _stack_particles(
+    particles: List[Any],
+    particle_to_array: Optional[ParticleToArray] = None,
+) -> np.ndarray:
+    converter = particle_to_array or np.asarray
+    return np.stack([converter(p) for p in particles])
 
 
 def _sample_histogram(
@@ -384,20 +398,26 @@ def _sample_histogram(
     reference_particles: np.ndarray,
     n_samples: int,
     seed: Optional[int],
+    particle_to_array: Optional[ParticleToArray] = None,
 ) -> np.ndarray:
     if seed is not None:
         np.random.seed(seed)
     n_particles = reference_particles.shape[0]
     hist = np.zeros(n_particles, dtype=float)
     for _ in range(n_samples):
-        idx = _locate_first_match_index(belief.sample(), reference_particles)
+        idx = _locate_first_match_index(belief.sample(), reference_particles, particle_to_array)
         hist[idx] += 1.0
     hist /= n_samples
     return hist
 
 
-def _locate_first_match_index(sample: Any, reference_particles: np.ndarray) -> int:
-    sample_array = np.asarray(sample)
+def _locate_first_match_index(
+    sample: Any,
+    reference_particles: np.ndarray,
+    particle_to_array: Optional[ParticleToArray] = None,
+) -> int:
+    converter = particle_to_array or np.asarray
+    sample_array = converter(sample)
     matches = np.where(np.all(reference_particles == sample_array, axis=1))[0]
     if len(matches) == 0:
         raise AssertionError(
