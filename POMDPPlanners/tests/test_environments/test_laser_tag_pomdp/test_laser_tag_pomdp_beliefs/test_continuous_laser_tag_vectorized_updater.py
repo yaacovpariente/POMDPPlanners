@@ -14,6 +14,9 @@ from POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_pomdp impor
 from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_beliefs.continuous_laser_tag_vectorized_updater import (
     ContinuousLaserTagVectorizedUpdater,
 )
+from POMDPPlanners.tests.test_core.test_belief.vectorized_updater_test_utils import (
+    assert_batch_obs_log_likelihood_matches_loop,
+)
 
 
 @pytest.fixture
@@ -260,6 +263,105 @@ class TestBatchObservationLogLikelihood:
         action = np.array([1.0, 0.0, 0.0])
         ll = updater.batch_observation_log_likelihood(particles, action, obs)
         assert np.all(np.isfinite(ll))
+
+
+# ---------------------------------------------------------------------------
+# Equivalence test: vectorized vs per-particle loop
+# ---------------------------------------------------------------------------
+
+
+class TestEquivalenceWithPerParticleLoop:
+    def test_batch_transition_matches_per_particle_loop(self, env, updater):
+        """Test vectorized batch_transition matches per-particle state_transition_model.
+
+        Purpose: Verifies that batch_transition produces the same results as
+                 calling the environment's state_transition_model per particle.
+                 Because the vectorized path batches robot noise then opponent
+                 noise (different RNG order from the per-particle path which
+                 interleaves them), we compare each particle individually with
+                 its own seed.
+
+        Given: A set of non-terminal continuous-space particles.
+        When: For each particle, batch_transition is called on a single
+              particle, and the per-particle state_transition_model is called
+              with the same seed.
+        Then: Results match within floating-point tolerance.
+
+        Test type: integration
+        """
+        np.random.seed(123)
+        n = 30
+        particles = np.column_stack(
+            [
+                np.random.rand(n) * 10,
+                np.random.rand(n) * 6,
+                np.random.rand(n) * 10,
+                np.random.rand(n) * 6,
+                np.zeros(n),
+            ]
+        )
+        action = np.array([1.0, 0.5, 0.0])
+
+        for i in range(n):
+            single = particles[i : i + 1]
+
+            np.random.seed(1000 + i)
+            vec_result = updater.batch_transition(single, action)
+
+            np.random.seed(1000 + i)
+            scalar_result = env.state_transition_model(state=particles[i], action=action).sample()[
+                0
+            ]
+
+            np.testing.assert_allclose(
+                vec_result[0],
+                scalar_result,
+                atol=1e-10,
+                err_msg=f"Mismatch for particle {i}",
+            )
+
+    def test_batch_obs_log_likelihood_matches_per_particle_loop(self, env, updater):
+        """Test vectorized log-likelihood matches per-particle observation_model.probability.
+
+        Purpose: Verifies that batch_observation_log_likelihood matches the
+                 per-particle log(observation_model.probability) from the
+                 environment.
+
+        Given: A set of non-terminal particles and a valid observation.
+        When: batch_observation_log_likelihood is called, and per-particle
+              log-probabilities are computed.
+        Then: Results match within floating-point tolerance.
+
+        Test type: integration
+        """
+        np.random.seed(42)
+        n = 30
+        particles = np.column_stack(
+            [
+                np.random.rand(n) * 10,
+                np.random.rand(n) * 6,
+                np.random.rand(n) * 10,
+                np.random.rand(n) * 6,
+                np.zeros(n),
+            ]
+        )
+        obs = np.random.rand(8) * 5
+        action = np.array([1.0, 0.0, 0.0])
+
+        def per_particle_ll_fn(particle, act, observation):
+            obs_model = env.observation_model(next_state=particle, action=act)
+            prob = obs_model.probability([observation])[0]
+            if prob > 0:
+                return np.log(prob)
+            return -np.inf
+
+        assert_batch_obs_log_likelihood_matches_loop(
+            updater=updater,
+            particles=particles,
+            action=action,
+            observation=obs,
+            per_particle_ll_fn=per_particle_ll_fn,
+        )
 
 
 class TestConfigId:

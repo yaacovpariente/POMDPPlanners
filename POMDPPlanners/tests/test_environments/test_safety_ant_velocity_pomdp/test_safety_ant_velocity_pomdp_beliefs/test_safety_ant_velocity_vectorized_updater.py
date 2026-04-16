@@ -14,6 +14,10 @@ from POMDPPlanners.environments.safety_ant_velocity_pomdp import (
 from POMDPPlanners.environments.safety_ant_velocity_pomdp.safety_ant_velocity_pomdp_beliefs import (
     SafetyAntVelocityVectorizedUpdater,
 )
+from POMDPPlanners.tests.test_core.test_belief.vectorized_updater_test_utils import (
+    assert_batch_obs_log_likelihood_matches_loop,
+    assert_batch_transition_matches_loop,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -301,27 +305,23 @@ class TestEquivalenceWithPerParticleLoop:
         Test type: integration
         """
         np.random.seed(123)
-        n = 50
         particles = np.column_stack(
             [
-                np.random.uniform(-1, 1, (n, 2)),
-                np.random.uniform(-0.5, 0.5, (n, 2)),
+                np.random.uniform(-1, 1, (50, 2)),
+                np.random.uniform(-0.5, 0.5, (50, 2)),
             ]
         )
-        action = 2
 
-        # Vectorized path
-        np.random.seed(999)
-        vectorized_result = updater.batch_transition(particles, action)
+        def per_particle_fn(particle, action):
+            return env.state_transition_model(state=particle, action=action).sample()[0]
 
-        # Per-particle path: same random seed, same noise sequence
-        np.random.seed(999)
-        per_particle_result = np.empty_like(particles)
-        for i in range(n):
-            next_state = env.state_transition_model(state=particles[i], action=action).sample()[0]
-            per_particle_result[i] = next_state
-
-        np.testing.assert_allclose(vectorized_result, per_particle_result, atol=1e-10)
+        assert_batch_transition_matches_loop(
+            updater=updater,
+            particles=particles,
+            action=2,
+            per_particle_transition_fn=per_particle_fn,
+            seed=999,
+        )
 
     def test_batch_observation_log_likelihood_matches_per_particle_loop(self, env, updater):
         """Test vectorized log-likelihood matches per-particle observation probability up to constant.
@@ -342,27 +342,23 @@ class TestEquivalenceWithPerParticleLoop:
         Test type: integration
         """
         np.random.seed(42)
-        n = 50
-        action = 1
-        observation = np.array([0.1, -0.1, 0.5, 0.2])
         particles = np.column_stack(
             [
-                np.random.uniform(-1, 1, (n, 2)),
-                np.random.uniform(-0.5, 0.5, (n, 2)),
+                np.random.uniform(-1, 1, (50, 2)),
+                np.random.uniform(-0.5, 0.5, (50, 2)),
             ]
         )
+        observation = np.array([0.1, -0.1, 0.5, 0.2])
 
-        vectorized_ll = updater.batch_observation_log_likelihood(particles, action, observation)
+        def per_particle_ll_fn(particle, action, obs):
+            obs_model = env.observation_model(next_state=particle, action=action)
+            return np.log(obs_model.probability([obs])[0])
 
-        per_particle_ll = np.empty(n)
-        for i in range(n):
-            obs_model = env.observation_model(next_state=particles[i], action=action)
-            prob = obs_model.probability([observation])[0]
-            per_particle_ll[i] = np.log(prob)
-
-        # The environment's probability() omits the Gaussian normalisation
-        # constant, so the two arrays differ by a constant offset.  Compare
-        # pairwise differences to verify the relative structure is identical.
-        vectorized_diff = vectorized_ll - vectorized_ll[0]
-        per_particle_diff = per_particle_ll - per_particle_ll[0]
-        np.testing.assert_allclose(vectorized_diff, per_particle_diff, atol=1e-10)
+        assert_batch_obs_log_likelihood_matches_loop(
+            updater=updater,
+            particles=particles,
+            action=1,
+            observation=observation,
+            per_particle_ll_fn=per_particle_ll_fn,
+            compare_mode="pairwise_diff",
+        )
