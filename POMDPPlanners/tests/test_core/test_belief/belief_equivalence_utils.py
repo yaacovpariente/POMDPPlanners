@@ -227,6 +227,102 @@ def assert_chained_update_equivalence(
     return base, vec
 
 
+def assert_update_particles_match_per_particle_seeded(
+    base: WeightedParticleBelief,
+    vec: VectorizedWeightedParticleBelief,
+    action: Any,
+    observation: Any,
+    pomdp: Environment,
+    atol: float = 1e-10,
+    base_seed: int = 0,
+    particle_to_array: Optional[ParticleToArray] = None,
+) -> BeliefPair:
+    """Per-particle-seeded variant of :func:`assert_update_particles_match`.
+
+    See :func:`assert_update_equivalence_per_particle_seeded` for why
+    bulk-vs-interleaved RNG ordering forces per-particle seeding. This
+    helper only checks the next-particle array -- use it when weight
+    agreement is blocked by the ``log(eps + prob)`` floor in
+    ``WeightedParticleBelief._update_weights`` for observations that
+    underflow the Gaussian PDF across every particle.
+
+    Args:
+        base: Baseline ``WeightedParticleBelief`` with aligned particles.
+        vec: Vectorized belief holding the same particles as ``base``.
+        action: Action passed to both ``update`` calls.
+        observation: Observation passed to both ``update`` calls.
+        pomdp: Environment used by the baseline's per-particle transition loop.
+        atol: Absolute tolerance for the particle array comparison.
+        base_seed: Seed for particle ``i`` is ``base_seed + i``.
+        particle_to_array: Optional converter passed through to the
+            particle comparison. See :func:`assert_update_particles_match`.
+
+    Returns:
+        The updated ``(base, vec)`` belief pair.
+    """
+    new_base, new_vec = _run_per_particle_updates(base, vec, action, observation, pomdp, base_seed)
+    _check_particles(new_base, new_vec, atol=atol, particle_to_array=particle_to_array)
+    return new_base, new_vec
+
+
+def assert_update_equivalence_per_particle_seeded(
+    base: WeightedParticleBelief,
+    vec: VectorizedWeightedParticleBelief,
+    action: Any,
+    observation: Any,
+    pomdp: Environment,
+    atol_particles: float = 1e-10,
+    atol_weights: float = 1e-6,
+    significance_threshold: Optional[float] = None,
+    top_k: int = 5,
+    base_seed: int = 0,
+    particle_to_array: Optional[ParticleToArray] = None,
+) -> BeliefPair:
+    """Per-particle-seeded variant of :func:`assert_update_equivalence`.
+
+    For each particle index ``i``, build a single-particle belief on both
+    sides, seed ``numpy``'s global RNG to ``base_seed + i``, run one
+    ``update``, and stitch the per-particle results back into aggregate
+    beliefs before running the usual particle / weight / top-K checks.
+
+    Use this helper for environments whose vectorized ``batch_transition``
+    consumes the RNG in a different *order* than the baseline per-particle
+    loop (e.g. LaserTag, which bulk-samples robot noise then opponent
+    noise while the standard path interleaves them per particle). Under
+    bulk-vs-interleaved ordering, a single shared seed cannot make the
+    two paths agree for ``N > 1``; per-particle seeding restores
+    bit-for-bit equivalence at the cost of ``O(N)`` update calls.
+
+    Args:
+        base: Baseline ``WeightedParticleBelief`` with aligned particles.
+        vec: Vectorized belief holding the same particles as ``base``.
+        action: Action passed to both ``update`` calls.
+        observation: Observation passed to both ``update`` calls.
+        pomdp: Environment used by the baseline's per-particle transition loop.
+        atol_particles: Absolute tolerance for the next-particle comparison.
+        atol_weights: Absolute tolerance for the normalized-weight comparison.
+        significance_threshold: Weight-masking threshold; ``None`` disables.
+        top_k: Number of top particles by weight compared for ranking agreement.
+        base_seed: Seed for particle ``i`` is ``base_seed + i``.
+        particle_to_array: Optional converter passed through to the particle
+            comparison. See :func:`assert_update_particles_match`.
+
+    Returns:
+        The updated ``(base, vec)`` belief pair built by aggregating the
+        per-particle results.
+    """
+    new_base, new_vec = _run_per_particle_updates(base, vec, action, observation, pomdp, base_seed)
+    _check_particles(new_base, new_vec, atol=atol_particles, particle_to_array=particle_to_array)
+    _check_weights(
+        new_base,
+        new_vec,
+        atol=atol_weights,
+        significance_threshold=significance_threshold,
+    )
+    _check_top_k_ranking(new_base, new_vec, k=top_k)
+    return new_base, new_vec
+
+
 def assert_normalized_weights_match(
     base: WeightedParticleBelief,
     vec: VectorizedWeightedParticleBelief,
@@ -322,6 +418,70 @@ def _run_updates(
         np.random.seed(seed)
     base_next = base.update(action=action, observation=observation, pomdp=pomdp)
     return base_next, vec_next
+
+
+def _run_per_particle_updates(
+    base: WeightedParticleBelief,
+    vec: VectorizedWeightedParticleBelief,
+    action: Any,
+    observation: Any,
+    pomdp: Environment,
+    base_seed: int,
+) -> BeliefPair:
+    n = vec.particles.shape[0]
+    next_vec_particles = np.empty_like(vec.particles)
+    next_vec_log_weights = np.empty(n)
+    next_base_particles: List[Any] = []
+    next_base_log_weights = np.empty(n)
+
+    for i in range(n):
+        next_base_step, next_vec_step = _single_particle_update_step(
+            base, vec, i, action, observation, pomdp, base_seed + i
+        )
+        next_vec_particles[i] = next_vec_step.particles[0]
+        next_vec_log_weights[i] = next_vec_step.log_weights[0]
+        next_base_particles.append(next_base_step.particles[0])
+        next_base_log_weights[i] = next_base_step.log_weights[0]
+
+    new_vec = VectorizedWeightedParticleBelief(
+        particles=next_vec_particles,
+        log_weights=next_vec_log_weights,
+        updater=vec.updater,
+        resampling=False,
+    )
+    new_base = WeightedParticleBelief(
+        particles=next_base_particles,
+        log_weights=next_base_log_weights,
+        resampling=False,
+    )
+    return new_base, new_vec
+
+
+def _single_particle_update_step(
+    base: WeightedParticleBelief,
+    vec: VectorizedWeightedParticleBelief,
+    i: int,
+    action: Any,
+    observation: Any,
+    pomdp: Environment,
+    seed: int,
+) -> BeliefPair:
+    single_vec = VectorizedWeightedParticleBelief(
+        particles=vec.particles[i : i + 1].copy(),
+        log_weights=vec.log_weights[i : i + 1].copy(),
+        updater=vec.updater,
+        resampling=False,
+    )
+    single_base = WeightedParticleBelief(
+        particles=[base.particles[i]],
+        log_weights=np.array([base.log_weights[i]]),
+        resampling=False,
+    )
+    np.random.seed(seed)
+    next_vec_step = single_vec.update(action=action, observation=observation, pomdp=pomdp)
+    np.random.seed(seed)
+    next_base_step = single_base.update(action=action, observation=observation, pomdp=pomdp)
+    return next_base_step, next_vec_step
 
 
 def _check_particles(
