@@ -78,6 +78,11 @@ _ENV_FACTORY_REGISTRY: dict[str, tuple[str, str, BeliefType]] = {
         "create_safety_ant_velocity_belief",
         BeliefType.VECTORIZED_PARTICLE,
     ),
+    "DiscreteLightDarkPOMDP": (
+        "POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_beliefs",
+        "create_discrete_light_dark_belief",
+        BeliefType.VECTORIZED_PARTICLE,
+    ),
     "ContinuousLightDarkPOMDP": (
         "POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_beliefs",
         "create_continuous_light_dark_belief",

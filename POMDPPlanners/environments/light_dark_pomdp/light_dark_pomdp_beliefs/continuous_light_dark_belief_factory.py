@@ -19,7 +19,12 @@ from POMDPPlanners.core.belief.belief_utils import get_initial_belief
 from POMDPPlanners.core.belief.vectorized_weighted_particle_belief import (
     VectorizedWeightedParticleBelief,
 )
+from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
+    ObservationModelType,
+)
 from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_beliefs.continuous_light_dark_vectorized_updater import (
+    ContinuousLightDarkDistanceBasedVectorizedUpdater,
+    ContinuousLightDarkNoObsInDarkVectorizedUpdater,
     ContinuousLightDarkVectorizedUpdater,
 )
 from POMDPPlanners.utils.belief_factory import BeliefType
@@ -97,8 +102,16 @@ def _create_gaussian_belief(env: "ContinuousLightDarkPOMDP", **kwargs: Any) -> "
     )
 
 
+_CONTINUOUS_UPDATER_MAP = {
+    ObservationModelType.NORMAL_NOISE: ContinuousLightDarkVectorizedUpdater,
+    ObservationModelType.NORMAL_NOISE_NO_OBS_IN_DARK: ContinuousLightDarkNoObsInDarkVectorizedUpdater,
+    ObservationModelType.DISTANCE_BASED: ContinuousLightDarkDistanceBasedVectorizedUpdater,
+}
+
+
 def _create_vectorized_belief(env: "ContinuousLightDarkPOMDP", n_particles: int) -> "Belief":
-    updater = ContinuousLightDarkVectorizedUpdater.from_environment(env)
+    updater_cls = _CONTINUOUS_UPDATER_MAP[env.observation_model_type]
+    updater = updater_cls.from_environment(env)
     particles = np.array(env.initial_state_dist().sample(n_samples=n_particles))
     log_weights = np.log(np.ones(n_particles) / n_particles)
     return VectorizedWeightedParticleBelief(particles, log_weights, updater)
