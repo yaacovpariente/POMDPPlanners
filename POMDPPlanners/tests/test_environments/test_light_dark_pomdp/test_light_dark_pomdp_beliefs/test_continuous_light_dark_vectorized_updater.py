@@ -1,4 +1,4 @@
-"""Tests for ContinuousLightDarkVectorizedUpdater.
+"""Tests for ContinuousLightDarkVectorizedUpdater and observation model variants.
 
 This module tests the vectorized batch transition and observation
 log-likelihood methods, including an equivalence test that verifies
@@ -11,8 +11,11 @@ import pytest
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
     ContinuousLightDarkPOMDP,
     ContinuousLightDarkPOMDPDiscreteActions,
+    ObservationModelType,
 )
 from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_beliefs import (
+    ContinuousLightDarkDistanceBasedVectorizedUpdater,
+    ContinuousLightDarkNoObsInDarkVectorizedUpdater,
     ContinuousLightDarkVectorizedUpdater,
 )
 from POMDPPlanners.tests.test_core.test_belief.vectorized_updater_test_utils import (
@@ -502,3 +505,467 @@ class TestDiscreteActionConfigId:
         u_continuous = ContinuousLightDarkVectorizedUpdater.from_environment(env)
         u_discrete = ContinuousLightDarkVectorizedUpdater.from_environment(discrete_env)
         assert u_continuous.config_id != u_discrete.config_id
+
+
+# ---------------------------------------------------------------------------
+# NoObsInDark updater tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def no_obs_env():
+    return ContinuousLightDarkPOMDP(
+        discount_factor=0.95,
+        observation_model_type=ObservationModelType.NORMAL_NOISE_NO_OBS_IN_DARK,
+    )
+
+
+@pytest.fixture
+def no_obs_updater(no_obs_env):
+    return ContinuousLightDarkNoObsInDarkVectorizedUpdater.from_environment(no_obs_env)
+
+
+class TestNoObsInDarkFromEnvironment:
+    def test_creates_correct_subclass(self, no_obs_env):
+        """Test that from_environment returns the correct subclass.
+
+        Purpose: Validates that the factory creates the right type.
+
+        Given: A ContinuousLightDarkPOMDP with NORMAL_NOISE_NO_OBS_IN_DARK.
+        When: from_environment is called.
+        Then: The updater is a ContinuousLightDarkNoObsInDarkVectorizedUpdater.
+
+        Test type: unit
+        """
+        updater = ContinuousLightDarkNoObsInDarkVectorizedUpdater.from_environment(no_obs_env)
+        assert isinstance(updater, ContinuousLightDarkNoObsInDarkVectorizedUpdater)
+
+
+class TestNoObsInDarkObservationLogLikelihood:
+    def test_none_obs_near_beacon_returns_neg_inf(self, no_obs_updater):
+        """Test that 'None' observation near a beacon gives -inf log-likelihood.
+
+        Purpose: Validates that 'None' is impossible near beacons.
+
+        Given: A particle at (0, 0) near the origin beacon.
+        When: Log-likelihood is computed for observation 'None'.
+        Then: The result is -inf.
+
+        Test type: unit
+        """
+        particles = np.array([[0.0, 0.0]])  # at beacon (0, 0)
+        ll = no_obs_updater.batch_observation_log_likelihood(particles, np.zeros(2), "None")
+        assert ll[0] == -np.inf
+
+    def test_none_obs_far_from_beacon_returns_zero(self, no_obs_updater):
+        """Test that 'None' observation far from beacons gives 0 log-likelihood.
+
+        Purpose: Validates that 'None' is certain when far from beacons.
+
+        Given: A particle at (2.5, 2.5) far from all beacons.
+        When: Log-likelihood is computed for observation 'None'.
+        Then: The result is 0.0 (log(1)).
+
+        Test type: unit
+        """
+        particles = np.array([[2.5, 2.5]])  # far from all beacons
+        ll = no_obs_updater.batch_observation_log_likelihood(particles, np.zeros(2), "None")
+        assert ll[0] == 0.0
+
+    def test_array_obs_near_beacon_returns_finite(self, no_obs_updater):
+        """Test that array observation near a beacon gives finite log-likelihood.
+
+        Purpose: Validates that real observations work near beacons.
+
+        Given: A particle at (0, 0) near the origin beacon.
+        When: Log-likelihood is computed for a nearby array observation.
+        Then: The result is finite.
+
+        Test type: unit
+        """
+        particles = np.array([[0.0, 0.0]])
+        obs = np.array([0.1, 0.1])
+        ll = no_obs_updater.batch_observation_log_likelihood(particles, np.zeros(2), obs)
+        assert np.isfinite(ll[0])
+
+    def test_array_obs_far_from_beacon_returns_finite(self, no_obs_updater):
+        """Test that array observation far from beacons gives finite log-likelihood.
+
+        Purpose: Validates that the NoObsInDark model uses the far-beacon
+                 distribution for non-None observations when far from beacons,
+                 matching the non-vectorized model behaviour.
+
+        Given: A particle at (2.5, 2.5) far from all beacons.
+        When: Log-likelihood is computed for an array observation.
+        Then: The result is finite (using the far-beacon distribution).
+
+        Test type: unit
+        """
+        particles = np.array([[2.5, 2.5]])
+        obs = np.array([2.5, 2.5])
+        ll = no_obs_updater.batch_observation_log_likelihood(particles, np.zeros(2), obs)
+        assert np.isfinite(ll[0])
+
+    def test_batch_transition_inherited(self, no_obs_updater, updater):
+        """Test that batch_transition is inherited from parent.
+
+        Purpose: Validates that the transition logic is shared.
+
+        Given: Same particles and seed for both updaters.
+        When: batch_transition is called on both.
+        Then: Results are identical.
+
+        Test type: unit
+        """
+        np.random.seed(42)
+        particles = np.random.rand(20, 2) * 10
+        action = np.array([1.0, 0.0])
+
+        np.random.seed(99)
+        result_no_obs = no_obs_updater.batch_transition(particles, action)
+        np.random.seed(99)
+        result_normal = updater.batch_transition(particles, action)
+
+        np.testing.assert_array_equal(result_no_obs, result_normal)
+
+    def test_equivalence_with_per_particle_loop(self, no_obs_env, no_obs_updater):
+        """Test vectorized log-likelihood matches per-particle computation.
+
+        Purpose: Verifies equivalence against the non-vectorized observation model.
+
+        Given: Particles and an observation (both array and 'None').
+        When: Vectorized and per-particle log-likelihoods are computed.
+        Then: Results match within floating-point tolerance.  For array
+              observations, the per-particle path uses log_pdf directly
+              (not log(pdf())) to avoid underflow divergence.
+
+        Test type: integration
+        """
+        np.random.seed(42)
+        n = 30
+        action = np.array([1.0, 0.0])
+        particles = np.random.rand(n, 2) * 10
+
+        # Test with array observation — use log_pdf directly to match
+        observation = np.array([5.0, 5.0])
+        vectorized_ll = no_obs_updater.batch_observation_log_likelihood(
+            particles, action, observation
+        )
+        per_particle_ll = np.empty(n)
+        for i in range(n):
+            obs_model = no_obs_env.observation_model(next_state=particles[i], action=action)
+            per_particle_ll[i] = obs_model._active_dist.log_pdf(
+                np.array([observation]), particles[i]
+            )[0]
+
+        np.testing.assert_allclose(vectorized_ll, per_particle_ll, atol=1e-10)
+
+        # Test with "None" observation
+        vectorized_ll_none = no_obs_updater.batch_observation_log_likelihood(
+            particles, action, "None"
+        )
+        per_particle_ll_none = np.empty(n)
+        for i in range(n):
+            obs_model = no_obs_env.observation_model(next_state=particles[i], action=action)
+            prob = obs_model.probability(["None"])[0]
+            per_particle_ll_none[i] = np.log(prob) if prob > 0 else -np.inf
+
+        np.testing.assert_allclose(vectorized_ll_none, per_particle_ll_none, atol=1e-10)
+
+
+class TestNoObsInDarkConfigId:
+    def test_config_id_differs_from_parent(self, updater, no_obs_updater):
+        """Test that config_id differs between NORMAL_NOISE and NO_OBS_IN_DARK updaters.
+
+        Purpose: Validates distinct configuration IDs for different observation models.
+
+        Given: Updaters for NORMAL_NOISE and NO_OBS_IN_DARK.
+        When: config_id is compared.
+        Then: The IDs differ.
+
+        Test type: unit
+        """
+        assert updater.config_id != no_obs_updater.config_id
+
+
+# ---------------------------------------------------------------------------
+# DistanceBased updater tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def dist_env():
+    return ContinuousLightDarkPOMDP(
+        discount_factor=0.95,
+        observation_model_type=ObservationModelType.DISTANCE_BASED,
+    )
+
+
+@pytest.fixture
+def dist_updater(dist_env):
+    return ContinuousLightDarkDistanceBasedVectorizedUpdater.from_environment(dist_env)
+
+
+class TestDistanceBasedFromEnvironment:
+    def test_creates_correct_subclass(self, dist_env):
+        """Test that from_environment returns the correct subclass.
+
+        Purpose: Validates that the factory creates the right type.
+
+        Given: A ContinuousLightDarkPOMDP with DISTANCE_BASED.
+        When: from_environment is called.
+        Then: The updater is a ContinuousLightDarkDistanceBasedVectorizedUpdater.
+
+        Test type: unit
+        """
+        updater = ContinuousLightDarkDistanceBasedVectorizedUpdater.from_environment(dist_env)
+        assert isinstance(updater, ContinuousLightDarkDistanceBasedVectorizedUpdater)
+
+
+class TestDistanceBasedObservationLogLikelihood:
+    def test_none_obs_near_beacon_returns_neg_inf(self, dist_updater):
+        """Test that 'None' observation near a beacon gives -inf.
+
+        Purpose: Validates that 'None' is impossible within beacon_radius.
+
+        Given: A particle at (0, 0) near the origin beacon.
+        When: Log-likelihood is computed for observation 'None'.
+        Then: The result is -inf.
+
+        Test type: unit
+        """
+        particles = np.array([[0.0, 0.0]])
+        ll = dist_updater.batch_observation_log_likelihood(particles, np.zeros(2), "None")
+        assert ll[0] == -np.inf
+
+    def test_none_obs_far_from_beacon_returns_zero(self, dist_updater):
+        """Test that 'None' observation beyond beacon_radius gives 0.
+
+        Purpose: Validates that 'None' is certain when beyond all beacons.
+
+        Given: A particle at (2.5, 2.5) far from all beacons.
+        When: Log-likelihood is computed for observation 'None'.
+        Then: The result is 0.0.
+
+        Test type: unit
+        """
+        particles = np.array([[2.5, 2.5]])
+        ll = dist_updater.batch_observation_log_likelihood(particles, np.zeros(2), "None")
+        assert ll[0] == 0.0
+
+    def test_array_obs_far_from_beacon_returns_neg_inf(self, dist_updater):
+        """Test that array observation beyond beacon_radius gives -inf.
+
+        Purpose: Validates that real observations are impossible beyond beacons.
+
+        Given: A particle at (2.5, 2.5) far from all beacons.
+        When: Log-likelihood is computed for an array observation.
+        Then: The result is -inf.
+
+        Test type: unit
+        """
+        particles = np.array([[2.5, 2.5]])
+        obs = np.array([2.5, 2.5])
+        ll = dist_updater.batch_observation_log_likelihood(particles, np.zeros(2), obs)
+        assert ll[0] == -np.inf
+
+    def test_equivalence_with_per_particle_loop(self, dist_env, dist_updater):
+        """Test vectorized log-likelihood matches per-particle computation.
+
+        Purpose: Verifies equivalence against the non-vectorized observation model.
+
+        Given: Particles and both array and 'None' observations.
+        When: Vectorized and per-particle log-likelihoods are computed.
+        Then: Results match within floating-point tolerance.
+
+        Test type: integration
+        """
+        np.random.seed(42)
+        n = 30
+        action = np.array([1.0, 0.0])
+        particles = np.random.rand(n, 2) * 10
+
+        # Test with "None" observation
+        vectorized_ll = dist_updater.batch_observation_log_likelihood(particles, action, "None")
+        per_particle_ll = np.empty(n)
+        for i in range(n):
+            obs_model = dist_env.observation_model(next_state=particles[i], action=action)
+            prob = obs_model.probability(["None"])[0]
+            per_particle_ll[i] = np.log(prob) if prob > 0 else -np.inf
+
+        np.testing.assert_allclose(vectorized_ll, per_particle_ll, atol=1e-10)
+
+    def test_array_obs_equivalence_with_per_particle_loop(self, dist_env, dist_updater):
+        """Test vectorized array-obs log-likelihood matches per-particle computation.
+
+        Purpose: Verifies equivalence for array observations against the
+                 non-vectorized observation model (which returns 0 for
+                 particles beyond beacon_radius).
+
+        Given: Particles near beacons and a matching array observation.
+        When: Vectorized and per-particle log-likelihoods are computed.
+        Then: Results match within floating-point tolerance.
+
+        Test type: integration
+        """
+        np.random.seed(42)
+        n = 30
+        action = np.array([1.0, 0.0])
+        # Place particles near beacon at (5,5) so some are within radius
+        particles = np.random.rand(n, 2) * 2 + 4.0
+        observation = np.array([5.0, 5.0])
+
+        vectorized_ll = dist_updater.batch_observation_log_likelihood(
+            particles, action, observation
+        )
+        per_particle_ll = np.empty(n)
+        for i in range(n):
+            obs_model = dist_env.observation_model(next_state=particles[i], action=action)
+            prob = obs_model.probability([observation])[0]
+            if prob > 0:
+                per_particle_ll[i] = obs_model._active_dist.log_pdf(
+                    np.array([observation]), particles[i]
+                )[0]
+            else:
+                per_particle_ll[i] = -np.inf
+
+        np.testing.assert_allclose(vectorized_ll, per_particle_ll, atol=1e-10)
+
+
+class TestDistanceBasedConfigId:
+    def test_config_id_differs_from_other_variants(self, updater, no_obs_updater, dist_updater):
+        """Test that all three updater variants have different config_ids.
+
+        Purpose: Validates that each observation model variant is uniquely identified.
+
+        Given: Updaters for NORMAL_NOISE, NO_OBS_IN_DARK, and DISTANCE_BASED.
+        When: config_ids are compared.
+        Then: All three IDs are different.
+
+        Test type: unit
+        """
+        ids = {updater.config_id, no_obs_updater.config_id, dist_updater.config_id}
+        assert len(ids) == 3
+
+
+# ---------------------------------------------------------------------------
+# Full update equivalence tests (vectorized vs standard particle belief)
+# ---------------------------------------------------------------------------
+
+
+class TestNoObsInDarkFullUpdateEquivalence:
+    def test_full_update_equivalence_with_array_observation(self, no_obs_env, no_obs_updater):
+        """Test full vectorized update matches WeightedParticleBelief for array observation.
+
+        Purpose: End-to-end equivalence test for the NO_OBS_IN_DARK model.
+
+        Given: Identical initial particles and weights.
+        When: One step of update with an array observation via both paths.
+        Then: Next particles match exactly, and normalized weights agree
+              for significant particles.
+
+        Note: VectorizedWeightedParticleBelief.update() does not yet support
+              string observations (e.g. 'None'). Per-observation-level
+              equivalence for 'None' is tested separately above.
+
+        Test type: integration
+        """
+        from POMDPPlanners.core.belief.particle_beliefs import WeightedParticleBelief
+        from POMDPPlanners.core.belief.vectorized_weighted_particle_belief import (
+            VectorizedWeightedParticleBelief,
+        )
+
+        np.random.seed(77)
+        n = 40
+        action = np.array([0.5, -0.5])
+        observation = np.array([3.0, 4.0])
+
+        particles_array = np.random.rand(n, 2) * 10
+        particles_list = [particles_array[i].copy() for i in range(n)]
+        log_w = np.full(n, -np.log(n))
+
+        np.random.seed(200)
+        v_belief = VectorizedWeightedParticleBelief(
+            particles=particles_array.copy(),
+            log_weights=log_w.copy(),
+            updater=no_obs_updater,
+            resampling=False,
+        )
+        v_updated = v_belief.update(action=action, observation=observation, pomdp=None)
+
+        np.random.seed(200)
+        w_belief = WeightedParticleBelief(
+            particles=particles_list,
+            log_weights=log_w.copy(),
+            resampling=False,
+        )
+        w_updated = w_belief.update(action=action, observation=observation, pomdp=no_obs_env)
+
+        w_particles = np.array(w_updated.particles)
+        np.testing.assert_allclose(v_updated.particles, w_particles, atol=1e-10)
+
+        v_nw = v_updated.normalized_weights
+        w_nw = w_updated.normalized_weights
+        significant = w_nw > 1e-4
+        if np.any(significant):
+            np.testing.assert_allclose(v_nw[significant], w_nw[significant], atol=1e-3)
+
+
+class TestDistanceBasedFullUpdateEquivalence:
+    def test_full_update_equivalence_with_array_observation(self, dist_env, dist_updater):
+        """Test full vectorized update matches WeightedParticleBelief for array observation.
+
+        Purpose: End-to-end equivalence test for the DISTANCE_BASED model.
+
+        Given: Particles placed near a beacon so the array observation
+               gives non-trivial weight to some particles.
+        When: One step of update with an array observation via both paths.
+        Then: Next particles match exactly, and normalized weights agree.
+
+        Note: VectorizedWeightedParticleBelief.update() does not yet support
+              string observations (e.g. 'None'). Per-observation-level
+              equivalence for 'None' is tested separately above.
+
+        Test type: integration
+        """
+        from POMDPPlanners.core.belief.particle_beliefs import WeightedParticleBelief
+        from POMDPPlanners.core.belief.vectorized_weighted_particle_belief import (
+            VectorizedWeightedParticleBelief,
+        )
+
+        np.random.seed(77)
+        n = 40
+        action = np.array([0.1, 0.0])
+        # Observation near beacon at (5, 5) so some particles get real weight
+        observation = np.array([5.0, 5.0])
+
+        # Place particles near beacons so they can receive array observations
+        particles_array = np.random.rand(n, 2) * 2 + 4.0  # range [4, 6]
+        particles_list = [particles_array[i].copy() for i in range(n)]
+        log_w = np.full(n, -np.log(n))
+
+        np.random.seed(200)
+        v_belief = VectorizedWeightedParticleBelief(
+            particles=particles_array.copy(),
+            log_weights=log_w.copy(),
+            updater=dist_updater,
+            resampling=False,
+        )
+        v_updated = v_belief.update(action=action, observation=observation, pomdp=None)
+
+        np.random.seed(200)
+        w_belief = WeightedParticleBelief(
+            particles=particles_list,
+            log_weights=log_w.copy(),
+            resampling=False,
+        )
+        w_updated = w_belief.update(action=action, observation=observation, pomdp=dist_env)
+
+        w_particles = np.array(w_updated.particles)
+        np.testing.assert_allclose(v_updated.particles, w_particles, atol=1e-10)
+
+        v_nw = v_updated.normalized_weights
+        w_nw = w_updated.normalized_weights
+        significant = w_nw > 1e-4
+        if np.any(significant):
+            np.testing.assert_allclose(v_nw[significant], w_nw[significant], atol=1e-3)
