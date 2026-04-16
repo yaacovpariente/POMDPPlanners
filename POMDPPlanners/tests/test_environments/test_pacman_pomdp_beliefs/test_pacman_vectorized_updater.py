@@ -5,14 +5,56 @@
 import numpy as np
 import pytest
 
+from POMDPPlanners.core.belief.particle_beliefs import WeightedParticleBelief
+from POMDPPlanners.core.belief.vectorized_weighted_particle_belief import (
+    VectorizedWeightedParticleBelief,
+)
 from POMDPPlanners.environments.pacman_pomdp import PacManPOMDP, PacManState
 from POMDPPlanners.environments.pacman_pomdp.pacman_pomdp_beliefs.pacman_vectorized_updater import (
     PacManVectorizedUpdater,
+)
+from POMDPPlanners.tests.test_core.test_belief.belief_equivalence_utils import (
+    assert_sample_distributions_match,
+    assert_update_particles_match,
+    assert_update_weights_match,
 )
 from POMDPPlanners.tests.test_core.test_belief.vectorized_updater_test_utils import (
     assert_batch_obs_log_likelihood_matches_loop,
     assert_batch_transition_matches_loop,
 )
+
+
+def _make_aligned_beliefs(env, updater, n_particles=50):
+    """Create baseline + vectorized beliefs with identical initial particles."""
+    np.random.seed(42)
+    states = env.initial_state_dist().sample(n_samples=n_particles)
+    particles_array = env.states_to_array(states)
+    particles_list = [particles_array[i].copy() for i in range(n_particles)]
+    log_weights = np.log(np.ones(n_particles) / n_particles)
+
+    base = WeightedParticleBelief(
+        particles=particles_list,
+        log_weights=log_weights.copy(),
+        resampling=False,
+    )
+    vec = VectorizedWeightedParticleBelief(
+        particles=particles_array.copy(),
+        log_weights=log_weights.copy(),
+        updater=updater,
+        resampling=False,
+    )
+    return base, vec
+
+
+def _make_particle_to_array(env):
+    """Build a PacManState-or-ndarray → state-array converter bound to env."""
+
+    def convert(particle):
+        if isinstance(particle, np.ndarray):
+            return particle
+        return env.state_to_array(particle)
+
+    return convert
 
 
 @pytest.fixture()
@@ -325,6 +367,90 @@ class TestEquivalenceWithPerParticleLoop:
             action=0,
             observation=obs_array,
             per_particle_ll_fn=per_particle_ll_fn,
+        )
+
+
+class TestBeliefEquivalenceWithBaseline:
+    def test_update_particles_match(self, simple_env, updater):
+        """Test vectorized belief update produces identical next particles.
+
+        Purpose: Validates that VectorizedWeightedParticleBelief.update and
+            WeightedParticleBelief.update agree on next-state particles. The
+            baseline belief stores particles as ndarray rows on initialization
+            but WeightedParticleBelief.update stores returned PacManState
+            instances after the step, so particle comparison is routed
+            through env.state_to_array via particle_to_array.
+
+        Given: 50 aligned particles in both beliefs.
+        When: Both beliefs are updated with action=0 and a fixed observation.
+        Then: Next-particle arrays agree within floating-point tolerance.
+
+        Test type: integration
+        """
+        base, vec = _make_aligned_beliefs(simple_env, updater)
+        obs = ((3, 3),)
+        assert_update_particles_match(
+            base=base,
+            vec=vec,
+            action=0,
+            observation=obs,
+            pomdp=simple_env,
+            seed=999,
+            particle_to_array=_make_particle_to_array(simple_env),
+        )
+
+    def test_update_weights_match(self, simple_env, updater):
+        """Test vectorized and baseline beliefs produce identical normalized weights.
+
+        Purpose: Validates observation-reweighting consistency on PacMan's
+            ghost-position observations.
+
+        Given: 50 aligned particles.
+        When: Both beliefs are updated with action=0 under a shared seed.
+        Then: Normalized weights agree within 1e-6 L-infinity.
+
+        Test type: integration
+        """
+        base, vec = _make_aligned_beliefs(simple_env, updater)
+        obs = ((3, 3),)
+        assert_update_weights_match(
+            base=base,
+            vec=vec,
+            action=0,
+            observation=obs,
+            pomdp=simple_env,
+            atol=1e-6,
+            seed=999,
+        )
+
+    def test_sample_distributions_match_post_update(self, simple_env, updater):
+        """Test sample() on both beliefs draws unbiased from normalized_weights.
+
+        Purpose: Validates sample() unbiasedness and cross-belief agreement.
+            PacMan particles duplicate heavily (small grid), so aggregation by
+            particle identity inside the helper handles discrete duplicates.
+
+        Given: 50 aligned particles; one update step seeded identically.
+        When: 20,000 samples are drawn from each belief.
+        Then: Empirical histograms agree and each matches its normalized_weights.
+
+        Test type: integration
+        """
+        base, vec = _make_aligned_beliefs(simple_env, updater)
+        obs = ((3, 3),)
+        np.random.seed(999)
+        vec = vec.update(action=0, observation=obs, pomdp=simple_env)
+        np.random.seed(999)
+        base = base.update(action=0, observation=obs, pomdp=simple_env)
+
+        assert_sample_distributions_match(
+            base=base,
+            vec=vec,
+            n_samples=20_000,
+            tol=0.03,
+            atol_weights=0.03,
+            seed=400,
+            particle_to_array=_make_particle_to_array(simple_env),
         )
 
 
