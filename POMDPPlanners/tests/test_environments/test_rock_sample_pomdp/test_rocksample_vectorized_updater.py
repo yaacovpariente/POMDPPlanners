@@ -10,6 +10,10 @@ from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp_beliefs.rock
     OBS_NONE,
     RockSampleVectorizedUpdater,
 )
+from POMDPPlanners.tests.test_core.test_belief.vectorized_updater_test_utils import (
+    assert_batch_obs_log_likelihood_matches_loop,
+    assert_batch_transition_matches_loop,
+)
 
 
 @pytest.fixture()
@@ -399,6 +403,85 @@ class TestBatchObservationLogLikelihood:
             sample_particles, np.array(5), np.array(OBS_NONE)
         )
         assert np.all(np.isneginf(log_ll))
+
+
+# ---------------------------------------------------------------------------
+# Equivalence test: vectorized vs per-particle loop
+# ---------------------------------------------------------------------------
+
+
+class TestEquivalenceWithPerParticleLoop:
+    def test_batch_transition_matches_per_particle_loop(self, simple_env, updater):
+        """Test vectorized batch_transition matches per-particle state_transition_model.
+
+        Purpose: Verifies that batch_transition produces the same results as
+                 calling the environment's state_transition_model per particle.
+
+        Given: A set of particles sampled from the initial distribution.
+        When: batch_transition is called for movement, sample, and check actions,
+              and the same transitions are computed per-particle.
+        Then: Results match exactly (deterministic transitions).
+
+        Test type: integration
+        """
+        np.random.seed(42)
+        states = simple_env.initial_state_dist().sample(n_samples=50)
+        particles = np.stack(states)
+
+        def per_particle_fn(particle, action):
+            return simple_env.state_transition_model(state=particle, action=action).sample()[0]
+
+        for action in [0, 1, 2, 3, 4, 5, 6]:  # Sample, N, E, S, W, Check0, Check1
+            assert_batch_transition_matches_loop(
+                updater=updater,
+                particles=particles,
+                action=action,
+                per_particle_transition_fn=per_particle_fn,
+                err_msg=f"Mismatch for action {action}",
+            )
+
+    def test_batch_obs_log_likelihood_matches_per_particle_loop(self, simple_env, updater):
+        """Test vectorized log-likelihood matches per-particle observation_model.probability.
+
+        Purpose: Verifies that batch_observation_log_likelihood matches the
+                 per-particle observation probability from the environment.
+
+        Given: A set of particles and a sensor observation.
+        When: batch_observation_log_likelihood is called, and per-particle
+              log(observation_model.probability) is computed.
+        Then: Results match within floating-point tolerance.
+
+        Test type: integration
+        """
+        np.random.seed(42)
+        states = simple_env.initial_state_dist().sample(n_samples=50)
+        particles = np.stack(states)
+
+        def per_particle_ll_fn(particle, action, obs):
+            obs_model = simple_env.observation_model(next_state=particle, action=action)
+            obs_str = {OBS_NONE: "none", OBS_GOOD: "good", OBS_BAD: "bad"}[int(obs)]
+            prob = obs_model.probability([obs_str])[0]
+            if prob > 0:
+                return np.log(prob)
+            return -np.inf
+
+        # Check rock 0 with "good" observation
+        assert_batch_obs_log_likelihood_matches_loop(
+            updater=updater,
+            particles=particles,
+            action=5,
+            observation=np.array(OBS_GOOD),
+            per_particle_ll_fn=per_particle_ll_fn,
+        )
+
+        # Check rock 1 with "bad" observation
+        assert_batch_obs_log_likelihood_matches_loop(
+            updater=updater,
+            particles=particles,
+            action=6,
+            observation=np.array(OBS_BAD),
+            per_particle_ll_fn=per_particle_ll_fn,
+        )
 
 
 class TestConfigId:

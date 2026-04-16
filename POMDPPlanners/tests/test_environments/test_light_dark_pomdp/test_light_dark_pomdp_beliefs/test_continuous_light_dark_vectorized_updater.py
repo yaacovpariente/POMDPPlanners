@@ -18,6 +18,10 @@ from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_beliefs import
     ContinuousLightDarkNoObsInDarkVectorizedUpdater,
     ContinuousLightDarkVectorizedUpdater,
 )
+from POMDPPlanners.tests.test_core.test_belief.vectorized_updater_test_utils import (
+    assert_batch_obs_log_likelihood_matches_loop,
+    assert_batch_transition_matches_loop,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -230,24 +234,20 @@ class TestEquivalenceWithPerParticleLoop:
 
         Test type: integration
         """
-        n = 50
+        np.random.seed(123)
+        particles = np.random.rand(50, 2) * 10
         action = np.array([1.0, 0.5])
 
-        np.random.seed(123)
-        particles = np.random.rand(n, 2) * 10
+        def per_particle_fn(particle, act):
+            return env.state_transition_model(state=particle, action=act).sample()[0]
 
-        # Vectorized path
-        np.random.seed(999)
-        vectorized_result = updater.batch_transition(particles, action)
-
-        # Per-particle path: use the same noise generation logic
-        np.random.seed(999)
-        per_particle_result = np.empty_like(particles)
-        for i in range(n):
-            next_state = env.state_transition_model(state=particles[i], action=action).sample()[0]
-            per_particle_result[i] = next_state
-
-        np.testing.assert_allclose(vectorized_result, per_particle_result, atol=1e-10)
+        assert_batch_transition_matches_loop(
+            updater=updater,
+            particles=particles,
+            action=action,
+            per_particle_transition_fn=per_particle_fn,
+            seed=999,
+        )
 
     def test_batch_observation_log_likelihood_matches_per_particle_loop(self, env, updater):
         """Test vectorized log-likelihood matches per-particle log_pdf computation.
@@ -264,23 +264,21 @@ class TestEquivalenceWithPerParticleLoop:
         Test type: integration
         """
         np.random.seed(42)
-        n = 50
-        action = np.array([1.0, 0.0])
+        particles = np.random.rand(50, 2) * 10
         observation = np.array([5.0, 5.0])
-        particles = np.random.rand(n, 2) * 10
+        action = np.array([1.0, 0.0])
 
-        # Vectorized path
-        vectorized_ll = updater.batch_observation_log_likelihood(particles, action, observation)
+        def per_particle_ll_fn(particle, act, obs):
+            obs_model = env.observation_model(next_state=particle, action=act)
+            return obs_model._active_dist.log_pdf(np.array([obs]), particle)[0]
 
-        # Per-particle path: use log_pdf directly to avoid exp→log underflow
-        per_particle_ll = np.empty(n)
-        for i in range(n):
-            obs_model = env.observation_model(next_state=particles[i], action=action)
-            per_particle_ll[i] = obs_model._active_dist.log_pdf(
-                np.array([observation]), particles[i]
-            )[0]
-
-        np.testing.assert_allclose(vectorized_ll, per_particle_ll, atol=1e-10)
+        assert_batch_obs_log_likelihood_matches_loop(
+            updater=updater,
+            particles=particles,
+            action=action,
+            observation=observation,
+            per_particle_ll_fn=per_particle_ll_fn,
+        )
 
     def test_full_update_equivalence(self, env, updater):
         """Test that a full vectorized update matches WeightedParticleBelief._update_weights.

@@ -12,6 +12,10 @@ from POMDPPlanners.environments.push_pomdp import PushPOMDP
 from POMDPPlanners.environments.push_pomdp.push_pomdp_beliefs import (
     PushVectorizedUpdater,
 )
+from POMDPPlanners.tests.test_core.test_belief.vectorized_updater_test_utils import (
+    assert_batch_obs_log_likelihood_matches_loop,
+    assert_batch_transition_matches_loop,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -437,32 +441,28 @@ class TestEquivalenceWithPerParticleLoop:
         Given: A set of particles, an integer action index, and transition_error_prob=0.
         When: batch_transition is called and the same transitions are computed
               per-particle using the environment's state_transition_model
-              (mapping int→string action).
+              (mapping int to string action).
         Then: Results match within floating-point tolerance.
 
         Test type: integration
         """
         np.random.seed(123)
-        n = 50
-        particles = np.random.uniform(1, 8, (n, 6))
-        # Fix target position columns to be consistent
+        particles = np.random.uniform(1, 8, (50, 6))
         particles[:, 4:6] = [9.0, 9.0]
 
         for action_idx in range(4):
-            vectorized_result = updater_no_obstacles.batch_transition(particles, action=action_idx)
-
-            per_particle_result = np.empty_like(particles)
             action_str = ACTION_STRINGS[action_idx]
-            for i in range(n):
-                next_state = env_no_obstacles.state_transition_model(
-                    state=particles[i], action=action_str
-                ).sample()[0]
-                per_particle_result[i] = next_state
 
-            np.testing.assert_allclose(
-                vectorized_result,
-                per_particle_result,
-                atol=1e-10,
+            def per_particle_fn(particle, _action, _str=action_str):
+                return env_no_obstacles.state_transition_model(
+                    state=particle, action=_str
+                ).sample()[0]
+
+            assert_batch_transition_matches_loop(
+                updater=updater_no_obstacles,
+                particles=particles,
+                action=action_idx,
+                per_particle_transition_fn=per_particle_fn,
                 err_msg=f"Mismatch for action {action_idx} ({action_str})",
             )
 
@@ -483,34 +483,29 @@ class TestEquivalenceWithPerParticleLoop:
         Test type: integration
         """
         np.random.seed(42)
-        n = 50
         action_idx = 2
         action_str = ACTION_STRINGS[action_idx]
 
-        # Keep object positions close to avoid underflow: the env computes
-        # exp(…) then we take log, which fails when exp underflows to 0.
         base_obj = np.array([4.0, 4.0])
-        particles = np.empty((n, 6))
-        particles[:, :2] = np.random.uniform(1, 8, (n, 2))
-        particles[:, 2:4] = base_obj + np.random.normal(0, 0.05, (n, 2))
+        particles = np.empty((50, 6))
+        particles[:, :2] = np.random.uniform(1, 8, (50, 2))
+        particles[:, 2:4] = base_obj + np.random.normal(0, 0.05, (50, 2))
         particles[:, 4:6] = [9.0, 9.0]
 
         observation = particles[0].copy()
         observation[2:4] = base_obj + 0.02
 
-        vectorized_ll = updater_no_obstacles.batch_observation_log_likelihood(
-            particles, action=action_idx, observation=observation
+        def per_particle_ll_fn(particle, _action, obs):
+            obs_model = env_no_obstacles.observation_model(next_state=particle, action=action_str)
+            return np.log(obs_model.probability([obs])[0])
+
+        assert_batch_obs_log_likelihood_matches_loop(
+            updater=updater_no_obstacles,
+            particles=particles,
+            action=action_idx,
+            observation=observation,
+            per_particle_ll_fn=per_particle_ll_fn,
         )
-
-        per_particle_ll = np.empty(n)
-        for i in range(n):
-            obs_model = env_no_obstacles.observation_model(
-                next_state=particles[i], action=action_str
-            )
-            prob = obs_model.probability([observation])[0]
-            per_particle_ll[i] = np.log(prob)
-
-        np.testing.assert_allclose(vectorized_ll, per_particle_ll, atol=1e-10)
 
     def test_batch_transition_with_obstacles_matches_per_particle(self, env, updater):
         """Test vectorized transition with obstacles matches per-particle loop.
@@ -525,24 +520,19 @@ class TestEquivalenceWithPerParticleLoop:
         Test type: integration
         """
         np.random.seed(77)
-        n = 50
-        particles = np.random.uniform(0, 9, (n, 6))
+        particles = np.random.uniform(0, 9, (50, 6))
         particles[:, 4:6] = [9.0, 9.0]
 
         for action_idx in range(4):
-            vectorized_result = updater.batch_transition(particles, action=action_idx)
-
-            per_particle_result = np.empty_like(particles)
             action_str = ACTION_STRINGS[action_idx]
-            for i in range(n):
-                next_state = env.state_transition_model(
-                    state=particles[i], action=action_str
-                ).sample()[0]
-                per_particle_result[i] = next_state
 
-            np.testing.assert_allclose(
-                vectorized_result,
-                per_particle_result,
-                atol=1e-10,
+            def per_particle_fn(particle, _action, _str=action_str):
+                return env.state_transition_model(state=particle, action=_str).sample()[0]
+
+            assert_batch_transition_matches_loop(
+                updater=updater,
+                particles=particles,
+                action=action_idx,
+                per_particle_transition_fn=per_particle_fn,
                 err_msg=f"Obstacle mismatch for action {action_idx} ({action_str})",
             )
