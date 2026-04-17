@@ -48,12 +48,15 @@ class CartPoleVectorizedUpdater(VectorizedParticleBeliefUpdater):
     evaluations using vectorized NumPy operations, replacing per-particle
     Python loops with batched array operations.
 
-    The CartPole transition is deterministic (no process noise), so
-    ``batch_transition`` applies the exact same physics to all particles
-    simultaneously.  Observations follow a single Gaussian centred on the
-    true state.
+    ``batch_transition`` applies the deterministic cart-pole physics to
+    all particles and then adds a per-particle Gaussian process-noise
+    sample drawn from ``state_transition_dist`` (mirroring
+    :meth:`CartPoleTransition.sample`).  Observations follow a single
+    Gaussian centred on the true state.
 
     Attributes:
+        state_transition_dist: Process-noise distribution added after the
+            deterministic physics step.
         obs_dist: Observation noise distribution.
         force_mag: Magnitude of force applied to the cart.
         gravity: Gravitational acceleration constant.
@@ -85,6 +88,7 @@ class CartPoleVectorizedUpdater(VectorizedParticleBeliefUpdater):
 
     def __init__(
         self,
+        state_transition_dist: CovarianceParameterizedMultivariateNormal,
         obs_dist: CovarianceParameterizedMultivariateNormal,
         force_mag: float,
         gravity: float,
@@ -99,6 +103,8 @@ class CartPoleVectorizedUpdater(VectorizedParticleBeliefUpdater):
         """Initialize the vectorized updater.
 
         Args:
+            state_transition_dist: Pre-built MVN for process noise added on
+                top of the deterministic next-state physics.
             obs_dist: Pre-built MVN for observation noise.
             force_mag: Magnitude of applied force.
             gravity: Gravitational acceleration constant.
@@ -110,6 +116,7 @@ class CartPoleVectorizedUpdater(VectorizedParticleBeliefUpdater):
             tau: Integration time step.
             kinematics_integrator: Integration method.
         """
+        self.state_transition_dist = state_transition_dist
         self.obs_dist = obs_dist
         self.force_mag = force_mag
         self.gravity = gravity
@@ -133,6 +140,7 @@ class CartPoleVectorizedUpdater(VectorizedParticleBeliefUpdater):
         """
         # pylint: disable=protected-access
         return cls(
+            state_transition_dist=env._state_transition_dist,
             obs_dist=env._obs_dist,
             force_mag=env.force_mag,
             gravity=env.gravity,
@@ -152,6 +160,11 @@ class CartPoleVectorizedUpdater(VectorizedParticleBeliefUpdater):
 
     def batch_transition(self, particles: np.ndarray, action: np.ndarray) -> np.ndarray:
         # particles: (N, 4) = [x, x_dot, theta, theta_dot]
+        next_particles = self._deterministic_next_state(particles, action)
+        noise = self.state_transition_dist.sample(np.zeros(4), n_samples=particles.shape[0])
+        return next_particles + noise
+
+    def _deterministic_next_state(self, particles: np.ndarray, action: np.ndarray) -> np.ndarray:
         force = self.force_mag if action == 1 else -self.force_mag
 
         theta = particles[:, 2]
@@ -193,6 +206,7 @@ class CartPoleVectorizedUpdater(VectorizedParticleBeliefUpdater):
     def config_id(self) -> str:
         config_dict = {
             "class": "CartPoleVectorizedUpdater",
+            "state_transition_cov": self.state_transition_dist.covariance.tolist(),
             "obs_cov": self.obs_dist.covariance.tolist(),
             "force_mag": self.force_mag,
             "gravity": self.gravity,

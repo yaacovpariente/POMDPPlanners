@@ -8,16 +8,51 @@ the vectorized results match the per-particle loop.
 import numpy as np
 import pytest
 
+from POMDPPlanners.core.belief.particle_beliefs import WeightedParticleBelief
+from POMDPPlanners.core.belief.vectorized_weighted_particle_belief import (
+    VectorizedWeightedParticleBelief,
+)
 from POMDPPlanners.environments.safety_ant_velocity_pomdp import (
     SafeAntVelocityPOMDP,
 )
 from POMDPPlanners.environments.safety_ant_velocity_pomdp.safety_ant_velocity_pomdp_beliefs import (
     SafetyAntVelocityVectorizedUpdater,
 )
+from POMDPPlanners.tests.test_core.test_belief.belief_equivalence_utils import (
+    assert_sample_distributions_match,
+    assert_update_particles_match,
+    assert_update_weights_match,
+)
 from POMDPPlanners.tests.test_core.test_belief.vectorized_updater_test_utils import (
     assert_batch_obs_log_likelihood_matches_loop,
     assert_batch_transition_matches_loop,
 )
+
+
+def _make_aligned_beliefs(updater, n_particles=60):
+    """Create baseline + vectorized beliefs with identical initial particles."""
+    np.random.seed(42)
+    particles_array = np.column_stack(
+        [
+            np.random.uniform(-1, 1, (n_particles, 2)),
+            np.random.uniform(-0.5, 0.5, (n_particles, 2)),
+        ]
+    )
+    particles_list = [particles_array[i].copy() for i in range(n_particles)]
+    log_weights = np.log(np.ones(n_particles) / n_particles)
+
+    base = WeightedParticleBelief(
+        particles=particles_list,
+        log_weights=log_weights.copy(),
+        resampling=False,
+    )
+    vec = VectorizedWeightedParticleBelief(
+        particles=particles_array.copy(),
+        log_weights=log_weights.copy(),
+        updater=updater,
+        resampling=False,
+    )
+    return base, vec
 
 
 # ---------------------------------------------------------------------------
@@ -361,4 +396,80 @@ class TestEquivalenceWithPerParticleLoop:
             observation=observation,
             per_particle_ll_fn=per_particle_ll_fn,
             compare_mode="pairwise_diff",
+        )
+
+
+class TestBeliefEquivalenceWithBaseline:
+    def test_update_particles_match(self, env, updater):
+        """Test vectorized belief update produces identical next particles.
+
+        Purpose: Validates that VectorizedWeightedParticleBelief.update and
+            WeightedParticleBelief.update agree on next-state particles when
+            both paths are seeded identically. SafetyAnt's stochastic force
+            direction is consumed in the same order by both paths.
+
+        Given: 60 aligned particles.
+        When: Both beliefs are updated with action=2 and a fixed observation,
+            seed=999 on both paths.
+        Then: Next particles agree within floating-point tolerance.
+
+        Test type: integration
+        """
+        base, vec = _make_aligned_beliefs(updater)
+        obs = np.array([0.1, -0.1, 0.5, 0.2])
+        assert_update_particles_match(
+            base=base, vec=vec, action=2, observation=obs, pomdp=env, seed=999
+        )
+
+    def test_update_weights_match(self, env, updater):
+        """Test vectorized and baseline beliefs produce identical normalized weights.
+
+        Purpose: Validates observation-reweighting consistency. The two paths
+            compute log-likelihoods that differ by a constant normalization
+            offset, which cancels out in the softmax-normalized weight vector.
+
+        Given: 60 aligned particles.
+        When: Both beliefs are updated with action=1 and a fixed observation.
+        Then: Normalized weights agree within 1e-6 L-infinity.
+
+        Test type: integration
+        """
+        base, vec = _make_aligned_beliefs(updater)
+        obs = np.array([0.1, -0.1, 0.5, 0.2])
+        assert_update_weights_match(
+            base=base,
+            vec=vec,
+            action=1,
+            observation=obs,
+            pomdp=env,
+            atol=1e-3,
+            significance_threshold=1e-4,
+            seed=999,
+        )
+
+    def test_sample_distributions_match_post_update(self, env, updater):
+        """Test sample() on both beliefs draws unbiased from normalized_weights.
+
+        Purpose: Validates sample() unbiasedness and cross-belief agreement.
+
+        Given: 60 aligned particles; one update step seeded identically.
+        When: 20,000 samples are drawn from each belief.
+        Then: Empirical histograms agree and each matches its normalized_weights.
+
+        Test type: integration
+        """
+        base, vec = _make_aligned_beliefs(updater)
+        obs = np.array([0.1, -0.1, 0.5, 0.2])
+        np.random.seed(999)
+        vec = vec.update(action=1, observation=obs, pomdp=env)
+        np.random.seed(999)
+        base = base.update(action=1, observation=obs, pomdp=env)
+
+        assert_sample_distributions_match(
+            base=base,
+            vec=vec,
+            n_samples=20_000,
+            tol=0.02,
+            atol_weights=0.02,
+            seed=400,
         )

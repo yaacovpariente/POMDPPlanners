@@ -48,12 +48,16 @@ class MountainCarVectorizedUpdater(VectorizedParticleBeliefUpdater):
     evaluations using vectorized NumPy operations, replacing per-particle
     Python loops with batched array operations.
 
-    The Mountain Car transition is deterministic (no process noise), so
-    ``batch_transition`` applies the exact same physics to all particles
-    simultaneously.  Observations follow a single Gaussian centred on the
-    true state.
+    ``batch_transition`` applies the deterministic cart physics to all
+    particles, then adds a per-particle Gaussian process-noise sample drawn
+    from ``state_transition_dist`` (mirroring
+    :meth:`MountainCarTransition.sample`), and finally re-applies the
+    position/velocity clipping and wall-stop boundary rule. Observations
+    follow a single Gaussian centred on the true state.
 
     Attributes:
+        state_transition_dist: Process-noise distribution added after the
+            deterministic physics step.
         obs_dist: Observation noise distribution.
         power: Engine power scaling factor.
         gravity: Gravitational force constant.
@@ -83,6 +87,7 @@ class MountainCarVectorizedUpdater(VectorizedParticleBeliefUpdater):
 
     def __init__(
         self,
+        state_transition_dist: CovarianceParameterizedMultivariateNormal,
         obs_dist: CovarianceParameterizedMultivariateNormal,
         power: float,
         gravity: float,
@@ -93,6 +98,8 @@ class MountainCarVectorizedUpdater(VectorizedParticleBeliefUpdater):
         """Initialize the vectorized updater.
 
         Args:
+            state_transition_dist: Pre-built MVN for process noise added on
+                top of the deterministic next-state physics.
             obs_dist: Pre-built MVN for observation noise.
             power: Engine power scaling factor.
             gravity: Gravitational force constant.
@@ -100,6 +107,7 @@ class MountainCarVectorizedUpdater(VectorizedParticleBeliefUpdater):
             min_position: Minimum position boundary.
             max_position: Maximum position boundary.
         """
+        self.state_transition_dist = state_transition_dist
         self.obs_dist = obs_dist
         self.power = power
         self.gravity = gravity
@@ -119,6 +127,7 @@ class MountainCarVectorizedUpdater(VectorizedParticleBeliefUpdater):
         """
         # pylint: disable=protected-access
         return cls(
+            state_transition_dist=env._state_transition_dist,
             obs_dist=env._obs_dist,
             power=env.power,
             gravity=env.gravity,
@@ -134,19 +143,35 @@ class MountainCarVectorizedUpdater(VectorizedParticleBeliefUpdater):
 
     def batch_transition(self, particles: np.ndarray, action: np.ndarray) -> np.ndarray:
         # particles: (N, 2) = [position, velocity]
+        position, velocity = self._deterministic_next_state(particles, action)
+        position, velocity = self._add_transition_noise(position, velocity, particles.shape[0])
+        position, velocity = self._apply_clipping_and_wall_stop(position, velocity)
+        return np.column_stack([position, velocity])
+
+    def _deterministic_next_state(
+        self, particles: np.ndarray, action: np.ndarray
+    ) -> tuple[np.ndarray, np.ndarray]:
         position = particles[:, 0]
         velocity = particles[:, 1]
-
         velocity = velocity + action * self.power + np.cos(3.0 * position) * (-self.gravity)
         velocity = np.clip(velocity, -self.max_speed, self.max_speed)
         position = position + velocity
-        position = np.clip(position, self.min_position, self.max_position)
+        return self._apply_clipping_and_wall_stop(position, velocity)
 
-        # Boundary condition: if hit left wall, zero out velocity
+    def _add_transition_noise(
+        self, position: np.ndarray, velocity: np.ndarray, n: int
+    ) -> tuple[np.ndarray, np.ndarray]:
+        noise = self.state_transition_dist.sample(np.zeros(2), n_samples=n)
+        return position + noise[:, 0], velocity + noise[:, 1]
+
+    def _apply_clipping_and_wall_stop(
+        self, position: np.ndarray, velocity: np.ndarray
+    ) -> tuple[np.ndarray, np.ndarray]:
+        velocity = np.clip(velocity, -self.max_speed, self.max_speed)
+        position = np.clip(position, self.min_position, self.max_position)
         at_min = position == self.min_position
         velocity = np.where(at_min & (velocity < 0), 0.0, velocity)
-
-        return np.column_stack([position, velocity])
+        return position, velocity
 
     def batch_observation_log_likelihood(
         self,
@@ -161,6 +186,7 @@ class MountainCarVectorizedUpdater(VectorizedParticleBeliefUpdater):
     def config_id(self) -> str:
         config_dict = {
             "class": "MountainCarVectorizedUpdater",
+            "state_transition_cov": self.state_transition_dist.covariance.tolist(),
             "obs_cov": self.obs_dist.covariance.tolist(),
             "power": self.power,
             "gravity": self.gravity,
