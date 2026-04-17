@@ -1,24 +1,34 @@
-"""Vectorized particle belief updater for the Continuous Light-Dark POMDP.
+"""Vectorized particle belief updaters for the Continuous Light-Dark POMDP.
 
-This module implements a concrete
+This module implements concrete
 :class:`~POMDPPlanners.core.belief.vectorized_particle_belief_updater.VectorizedParticleBeliefUpdater`
-that performs batched state transitions and observation log-likelihood
-evaluations for the Continuous Light-Dark environment, replacing
-per-particle Python loops with NumPy array operations.
+subclasses that perform batched state transitions and observation
+log-likelihood evaluations for the Continuous Light-Dark environment,
+replacing per-particle Python loops with NumPy array operations.
 
 Because the state dimension is always 2, all linear-algebra operations
 (Cholesky sampling, Mahalanobis distance, beacon distance) are expanded
 into closed-form scalar arithmetic at init time, avoiding per-call
 ``solve_triangular`` / ``np.linalg.norm`` dispatch overhead.
 
+Three updaters correspond to the three
+:class:`~POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.ObservationModelType`
+variants:
+
 Classes:
-    ContinuousLightDarkVectorizedUpdater: Batched updater for the
-        Continuous Light-Dark POMDP.
+    ContinuousLightDarkVectorizedUpdater: ``NORMAL_NOISE`` — always
+        returns Gaussian log-likelihoods with binary near/far noise.
+    ContinuousLightDarkNoObsInDarkVectorizedUpdater:
+        ``NORMAL_NOISE_NO_OBS_IN_DARK`` — handles ``"None"``
+        observations when far from beacons.
+    ContinuousLightDarkDistanceBasedVectorizedUpdater:
+        ``DISTANCE_BASED`` — handles ``"None"`` observations when
+        beyond beacon radius.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Dict, Optional
+from typing import TYPE_CHECKING, Dict, Optional, Union
 
 import numpy as np
 
@@ -176,20 +186,7 @@ class ContinuousLightDarkVectorizedUpdater(VectorizedParticleBeliefUpdater):
 
     @property
     def config_id(self) -> str:
-        config_dict = {
-            "class": "ContinuousLightDarkVectorizedUpdater",
-            "state_transition_cov": self.state_transition_dist.covariance.tolist(),
-            "obs_cov_near": self.obs_dist_near_beacon.covariance.tolist(),
-            "obs_cov_far": self.obs_dist_far_from_beacon.covariance.tolist(),
-            "beacons": self.beacons.tolist(),
-            "beacon_radius": self.beacon_radius,
-            "grid_size": self.grid_size,
-        }
-        if self._action_to_vector is not None:
-            config_dict["action_to_vector"] = {
-                k: v.tolist() for k, v in self._action_to_vector.items()
-            }
-        return config_to_id(config_dict)
+        return config_to_id(self._build_config_dict("ContinuousLightDarkVectorizedUpdater"))
 
     # ------------------------------------------------------------------
     # Private helpers — pre-computation
@@ -240,3 +237,170 @@ class ContinuousLightDarkVectorizedUpdater(VectorizedParticleBeliefUpdater):
         by = py[:, np.newaxis] - self._beacon_y
         sq_distances = bx**2 + by**2
         return sq_distances.min(axis=1) <= self.beacon_radius_sq
+
+    # ------------------------------------------------------------------
+    # Config-id helpers used by subclasses
+    # ------------------------------------------------------------------
+
+    def _build_config_dict(self, class_name: str) -> dict:
+        config_dict: dict = {
+            "class": class_name,
+            "state_transition_cov": self.state_transition_dist.covariance.tolist(),
+            "obs_cov_near": self.obs_dist_near_beacon.covariance.tolist(),
+            "obs_cov_far": self.obs_dist_far_from_beacon.covariance.tolist(),
+            "beacons": self.beacons.tolist(),
+            "beacon_radius": self.beacon_radius,
+            "grid_size": self.grid_size,
+        }
+        if self._action_to_vector is not None:
+            config_dict["action_to_vector"] = {
+                k: v.tolist() for k, v in self._action_to_vector.items()
+            }
+        return config_dict
+
+
+class ContinuousLightDarkNoObsInDarkVectorizedUpdater(
+    ContinuousLightDarkVectorizedUpdater,
+):
+    """Vectorized updater for the ``NORMAL_NOISE_NO_OBS_IN_DARK`` observation model.
+
+    Particles far from all beacons receive ``"None"`` observations
+    (log-likelihood 0 for ``"None"``, ``-inf`` for any array observation).
+    Particles near a beacon use the near-beacon Gaussian distribution.
+
+    Inherits transition logic and all precomputation from
+    :class:`ContinuousLightDarkVectorizedUpdater`.
+
+    Example:
+        >>> import numpy as np
+        >>> np.random.seed(42)
+        >>> from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
+        ...     ContinuousLightDarkPOMDP, ObservationModelType,
+        ... )
+        >>> env = ContinuousLightDarkPOMDP(
+        ...     discount_factor=0.95,
+        ...     observation_model_type=ObservationModelType.NORMAL_NOISE_NO_OBS_IN_DARK,
+        ... )
+        >>> updater = ContinuousLightDarkNoObsInDarkVectorizedUpdater.from_environment(env)
+        >>> particles = np.random.rand(50, 2) * 10
+        >>> action = np.array([1.0, 0.0])
+        >>> next_p = updater.batch_transition(particles, action)
+        >>> ll = updater.batch_observation_log_likelihood(next_p, action, "None")
+        >>> ll.shape
+        (50,)
+    """
+
+    def batch_observation_log_likelihood(
+        self,
+        next_particles: np.ndarray,
+        action: np.ndarray,  # noqa: ARG002
+        observation: Union[np.ndarray, str],
+    ) -> np.ndarray:
+        px = next_particles[:, 0]
+        py = next_particles[:, 1]
+        near_mask = self._batch_near_beacon_scalar(px, py)
+
+        if isinstance(observation, str):
+            return np.where(near_mask, -np.inf, 0.0)
+
+        # For array observations, use the active distribution (near or far)
+        # matching the non-vectorized model's behavior.
+        return self._log_lik_near_far(px, py, near_mask, observation)
+
+    @property
+    def config_id(self) -> str:
+        return config_to_id(
+            self._build_config_dict("ContinuousLightDarkNoObsInDarkVectorizedUpdater")
+        )
+
+    # ------------------------------------------------------------------
+    # Private helpers
+    # ------------------------------------------------------------------
+
+    def _log_lik_near_far(
+        self,
+        px: np.ndarray,
+        py: np.ndarray,
+        near_mask: np.ndarray,
+        observation: np.ndarray,
+    ) -> np.ndarray:
+        obs = np.asarray(observation, dtype=float).ravel()
+        dx = px - obs[0]
+        dy = py - obs[1]
+        maha_near = (
+            self._obs_near_P00 * dx**2 + self._obs_near_2P01 * dx * dy + self._obs_near_P11 * dy**2
+        )
+        maha_far = (
+            self._obs_far_P00 * dx**2 + self._obs_far_2P01 * dx * dy + self._obs_far_P11 * dy**2
+        )
+        return np.where(
+            near_mask,
+            self._obs_near_log_norm - 0.5 * maha_near,
+            self._obs_far_log_norm - 0.5 * maha_far,
+        )
+
+
+class ContinuousLightDarkDistanceBasedVectorizedUpdater(
+    ContinuousLightDarkVectorizedUpdater,
+):
+    """Vectorized updater for the ``DISTANCE_BASED`` observation model.
+
+    Unlike :class:`ContinuousLightDarkNoObsInDarkVectorizedUpdater`,
+    this model assigns probability 0 (``-inf`` in log space) to array
+    observations when the particle is beyond ``beacon_radius`` from all
+    beacons, matching the non-vectorized
+    :class:`ContinuousLightDarkDistanceBasedObservationModel` behaviour.
+
+    Inherits transition logic from
+    :class:`ContinuousLightDarkVectorizedUpdater`.
+
+    Example:
+        >>> import numpy as np
+        >>> np.random.seed(42)
+        >>> from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
+        ...     ContinuousLightDarkPOMDP, ObservationModelType,
+        ... )
+        >>> env = ContinuousLightDarkPOMDP(
+        ...     discount_factor=0.95,
+        ...     observation_model_type=ObservationModelType.DISTANCE_BASED,
+        ... )
+        >>> updater = ContinuousLightDarkDistanceBasedVectorizedUpdater.from_environment(env)
+        >>> particles = np.random.rand(50, 2) * 10
+        >>> action = np.array([1.0, 0.0])
+        >>> next_p = updater.batch_transition(particles, action)
+        >>> ll = updater.batch_observation_log_likelihood(next_p, action, "None")
+        >>> ll.shape
+        (50,)
+    """
+
+    def batch_observation_log_likelihood(
+        self,
+        next_particles: np.ndarray,
+        action: np.ndarray,  # noqa: ARG002
+        observation: Union[np.ndarray, str],
+    ) -> np.ndarray:
+        px = next_particles[:, 0]
+        py = next_particles[:, 1]
+        near_mask = self._batch_near_beacon_scalar(px, py)
+
+        if isinstance(observation, str):
+            return np.where(near_mask, -np.inf, 0.0)
+
+        # Array observations: near-beacon uses near dist, far returns -inf
+        obs = np.asarray(observation, dtype=float).ravel()
+        dx = px - obs[0]
+        dy = py - obs[1]
+        maha_near = (
+            self._obs_near_P00 * dx**2 + self._obs_near_2P01 * dx * dy + self._obs_near_P11 * dy**2
+        )
+        return np.where(
+            near_mask,
+            self._obs_near_log_norm - 0.5 * maha_near,
+            -np.inf,
+        )
+
+    @property
+    def config_id(self) -> str:
+        return config_to_id(
+            self._build_config_dict("ContinuousLightDarkDistanceBasedVectorizedUpdater")
+        )
