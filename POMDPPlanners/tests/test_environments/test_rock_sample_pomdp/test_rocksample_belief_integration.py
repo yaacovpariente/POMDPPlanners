@@ -9,6 +9,15 @@ from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp_beliefs.rock
     RockSampleVectorizedWeightedParticleBelief,
     create_rocksample_belief,
 )
+from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp_beliefs.rocksample_vectorized_updater import (
+    RockSampleVectorizedUpdater,
+)
+from POMDPPlanners.tests.test_core.test_belief.belief_equivalence_utils import (
+    assert_chained_update_equivalence,
+    assert_sample_distributions_match,
+    assert_update_particles_match,
+    assert_update_weights_match,
+)
 from POMDPPlanners.utils.belief_factory import BeliefType
 
 
@@ -159,10 +168,6 @@ def _make_aligned_beliefs(env, n_particles=200):
     particles_array = np.stack(states)
     log_weights = np.log(np.ones(n_particles) / n_particles)
 
-    from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp_beliefs.rocksample_vectorized_updater import (
-        RockSampleVectorizedUpdater,
-    )
-
     base = WeightedParticleBelief(
         particles=particles_list,
         log_weights=log_weights.copy(),
@@ -193,14 +198,9 @@ class TestVectorizedMatchesBaseline:
         Test type: integration
         """
         base, vec = _make_aligned_beliefs(simple_env)
-        action = 2  # East
-        obs = "none"
-
-        base_updated = base.update(action=action, observation=obs, pomdp=simple_env)
-        vec_updated = vec.update(action=action, observation=obs)
-
-        base_particles = np.stack(base_updated.particles)
-        np.testing.assert_array_equal(vec_updated.particles, base_particles)
+        assert_update_particles_match(
+            base=base, vec=vec, action=2, observation="none", pomdp=simple_env, atol=0.0
+        )
 
     def test_transition_particles_match_for_sample_action(self, simple_env):
         """Test that transitioned particles match for sample action.
@@ -215,14 +215,9 @@ class TestVectorizedMatchesBaseline:
         Test type: integration
         """
         base, vec = _make_aligned_beliefs(simple_env)
-        action = 0  # Sample
-        obs = "none"
-
-        base_updated = base.update(action=action, observation=obs, pomdp=simple_env)
-        vec_updated = vec.update(action=action, observation=obs)
-
-        base_particles = np.stack(base_updated.particles)
-        np.testing.assert_array_equal(vec_updated.particles, base_particles)
+        assert_update_particles_match(
+            base=base, vec=vec, action=0, observation="none", pomdp=simple_env, atol=0.0
+        )
 
     def test_transition_particles_match_for_check_action(self, simple_env):
         """Test that transitioned particles match for check actions.
@@ -237,14 +232,9 @@ class TestVectorizedMatchesBaseline:
         Test type: integration
         """
         base, vec = _make_aligned_beliefs(simple_env)
-        action = 5  # Check rock 0
-        obs = "good"
-
-        base_updated = base.update(action=action, observation=obs, pomdp=simple_env)
-        vec_updated = vec.update(action=action, observation=obs)
-
-        base_particles = np.stack(base_updated.particles)
-        np.testing.assert_array_equal(vec_updated.particles, base_particles)
+        assert_update_particles_match(
+            base=base, vec=vec, action=5, observation="good", pomdp=simple_env, atol=0.0
+        )
 
     def test_normalized_weights_match_for_movement(self, simple_env):
         """Test that normalized weights match for movement actions.
@@ -259,16 +249,8 @@ class TestVectorizedMatchesBaseline:
         Test type: integration
         """
         base, vec = _make_aligned_beliefs(simple_env)
-        action = 1  # North
-        obs = "none"
-
-        base_updated = base.update(action=action, observation=obs, pomdp=simple_env)
-        vec_updated = vec.update(action=action, observation=obs)
-
-        np.testing.assert_allclose(
-            vec_updated.normalized_weights,
-            base_updated.normalized_weights,
-            atol=1e-6,
+        assert_update_weights_match(
+            base=base, vec=vec, action=1, observation="none", pomdp=simple_env, atol=1e-6
         )
 
     def test_normalized_weights_close_for_check_action(self, simple_env):
@@ -285,16 +267,8 @@ class TestVectorizedMatchesBaseline:
         Test type: integration
         """
         base, vec = _make_aligned_beliefs(simple_env)
-        action = 5  # Check rock 0
-        obs = "good"
-
-        base_updated = base.update(action=action, observation=obs, pomdp=simple_env)
-        vec_updated = vec.update(action=action, observation=obs)
-
-        np.testing.assert_allclose(
-            vec_updated.normalized_weights,
-            base_updated.normalized_weights,
-            atol=1e-6,
+        assert_update_weights_match(
+            base=base, vec=vec, action=5, observation="good", pomdp=simple_env, atol=1e-6
         )
 
     def test_weights_match_after_multiple_updates(self, simple_env):
@@ -310,7 +284,6 @@ class TestVectorizedMatchesBaseline:
         Test type: integration
         """
         base, vec = _make_aligned_beliefs(simple_env, n_particles=500)
-
         steps = [
             (5, "good"),  # check rock 0
             (2, "none"),  # move east
@@ -318,15 +291,43 @@ class TestVectorizedMatchesBaseline:
             (1, "none"),  # move north
             (5, "good"),  # check rock 0 again
         ]
+        assert_chained_update_equivalence(
+            base=base,
+            vec=vec,
+            steps=steps,
+            pomdp=simple_env,
+            atol_particles=0.0,
+            atol_weights=1e-5,
+        )
 
-        for action, obs in steps:
-            base = base.update(action=action, observation=obs, pomdp=simple_env)
-            vec = vec.update(action=action, observation=obs)
+    def test_sample_distributions_match_post_update(self, simple_env):
+        """Test sample() on both beliefs draws from normalized_weights post-update.
 
-        base_particles = np.stack(base.particles)
-        np.testing.assert_array_equal(vec.particles, base_particles)
-        np.testing.assert_allclose(
-            vec.normalized_weights,
-            base.normalized_weights,
-            atol=1e-5,
+        Purpose: Validates that WeightedParticleBelief.sample() and
+            RockSampleVectorizedWeightedParticleBelief.sample() are unbiased
+            draws from their updated belief distributions after a non-trivial
+            check action that re-weights particles, and that the two
+            distributions agree.
+
+        Given: 200 aligned particles in both beliefs, updated with Check
+            rock 0 and 'good' observation.
+        When: 20,000 samples are drawn from each belief.
+        Then: The two empirical histograms agree in L-infinity, and each
+            histogram agrees with its belief's normalized_weights. Duplicate
+            particles (common in RockSample) are aggregated by particle
+            identity before comparison.
+
+        Test type: integration
+        """
+        base, vec = _make_aligned_beliefs(simple_env)
+        base = base.update(action=5, observation="good", pomdp=simple_env)
+        vec = vec.update(action=5, observation="good")
+
+        assert_sample_distributions_match(
+            base=base,
+            vec=vec,
+            n_samples=20_000,
+            tol=0.02,
+            atol_weights=0.02,
+            seed=400,
         )

@@ -8,6 +8,10 @@ the vectorized results match the per-particle loop in WeightedParticleBelief.
 import numpy as np
 import pytest
 
+from POMDPPlanners.core.belief.particle_beliefs import WeightedParticleBelief
+from POMDPPlanners.core.belief.vectorized_weighted_particle_belief import (
+    VectorizedWeightedParticleBelief,
+)
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
     ContinuousLightDarkPOMDP,
     ContinuousLightDarkPOMDPDiscreteActions,
@@ -17,6 +21,10 @@ from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_beliefs import
     ContinuousLightDarkDistanceBasedVectorizedUpdater,
     ContinuousLightDarkNoObsInDarkVectorizedUpdater,
     ContinuousLightDarkVectorizedUpdater,
+)
+from POMDPPlanners.tests.test_core.test_belief.belief_equivalence_utils import (
+    assert_sample_distributions_match,
+    assert_update_equivalence,
 )
 from POMDPPlanners.tests.test_core.test_belief.vectorized_updater_test_utils import (
     assert_batch_obs_log_likelihood_matches_loop,
@@ -295,11 +303,6 @@ class TestEquivalenceWithPerParticleLoop:
 
         Test type: integration
         """
-        from POMDPPlanners.core.belief.particle_beliefs import WeightedParticleBelief
-        from POMDPPlanners.core.belief.vectorized_weighted_particle_belief import (
-            VectorizedWeightedParticleBelief,
-        )
-
         np.random.seed(77)
         n = 40
         action = np.array([0.5, -0.5])
@@ -309,44 +312,81 @@ class TestEquivalenceWithPerParticleLoop:
         particles_list = [particles_array[i].copy() for i in range(n)]
         log_w = np.full(n, -np.log(n))
 
-        # Vectorized path
-        np.random.seed(200)
         v_belief = VectorizedWeightedParticleBelief(
             particles=particles_array.copy(),
             log_weights=log_w.copy(),
             updater=updater,
             resampling=False,
         )
-        v_updated = v_belief.update(action=action, observation=observation, pomdp=None)
-
-        # Per-particle path (WeightedParticleBelief)
-        np.random.seed(200)
         w_belief = WeightedParticleBelief(
             particles=particles_list,
             log_weights=log_w.copy(),
             resampling=False,
         )
+
+        assert_update_equivalence(
+            base=w_belief,
+            vec=v_belief,
+            action=action,
+            observation=observation,
+            pomdp=env,
+            atol_particles=1e-10,
+            atol_weights=1e-3,
+            significance_threshold=1e-4,
+            top_k=5,
+            seed=200,
+        )
+
+    def test_sample_distributions_match_post_update(self, env, updater):
+        """Test sample() on both beliefs draws from normalized_weights post-update.
+
+        Purpose: Validates that WeightedParticleBelief.sample() and
+                 VectorizedWeightedParticleBelief.sample() are unbiased draws
+                 from their respective updated belief distributions, and that
+                 the two distributions agree.
+
+        Given: Identical initial particles/weights; one update step applied
+               via both paths with the same seed.
+        When: 20,000 samples are drawn from each belief.
+        Then: The two empirical histograms agree in L-infinity, and each
+              histogram agrees with its belief's normalized_weights.
+
+        Test type: integration
+        """
+        np.random.seed(77)
+        n = 40
+        action = np.array([0.5, -0.5])
+        observation = np.array([3.0, 4.0])
+
+        particles_array = np.random.rand(n, 2) * 10
+        particles_list = [particles_array[i].copy() for i in range(n)]
+        log_w = np.full(n, -np.log(n))
+
+        v_belief = VectorizedWeightedParticleBelief(
+            particles=particles_array.copy(),
+            log_weights=log_w.copy(),
+            updater=updater,
+            resampling=False,
+        )
+        w_belief = WeightedParticleBelief(
+            particles=particles_list,
+            log_weights=log_w.copy(),
+            resampling=False,
+        )
+
+        np.random.seed(200)
+        v_updated = v_belief.update(action=action, observation=observation, pomdp=None)
+        np.random.seed(200)
         w_updated = w_belief.update(action=action, observation=observation, pomdp=env)
 
-        # Compare next particles
-        w_particles = np.array(w_updated.particles)
-        np.testing.assert_allclose(v_updated.particles, w_particles, atol=1e-10)
-
-        # Compare normalized weights for particles with non-negligible weight.
-        # WeightedParticleBelief uses log(eps + prob), vectorized uses log_pdf directly.
-        # When prob underflows to 0.0, the eps floor creates divergent normalized
-        # weights for low-probability particles. We restrict comparison to particles
-        # where the per-particle path assigns meaningful weight (above eps-floor level).
-        v_nw = v_updated.normalized_weights
-        w_nw = w_updated.normalized_weights
-        significant = w_nw > 1e-4
-        assert np.any(significant), "No particles have significant weight"
-        np.testing.assert_allclose(v_nw[significant], w_nw[significant], atol=1e-3)
-
-        # Verify both paths agree on the ranking of top particles
-        v_top = np.argsort(v_nw)[::-1][:5]
-        w_top = np.argsort(w_nw)[::-1][:5]
-        np.testing.assert_array_equal(v_top, w_top)
+        assert_sample_distributions_match(
+            base=w_updated,
+            vec=v_updated,
+            n_samples=20_000,
+            tol=0.02,
+            atol_weights=0.02,
+            seed=400,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -469,10 +509,6 @@ class TestDiscreteActionFullUpdate:
 
         Test type: integration
         """
-        from POMDPPlanners.core.belief.vectorized_weighted_particle_belief import (
-            VectorizedWeightedParticleBelief,
-        )
-
         np.random.seed(42)
         n = 30
         particles = np.random.rand(n, 2) * 10
