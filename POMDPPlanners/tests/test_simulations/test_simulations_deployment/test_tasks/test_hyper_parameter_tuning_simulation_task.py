@@ -1101,6 +1101,7 @@ class TestHyperParameterTuningSimulationTaskMLFlowIntegration:
         assert simulations_param.high == 500
         assert simulations_param.name == "n_simulations"
 
+    @pytest.mark.slow
     def test_hyper_param_runner_configuration_replication(
         self, temp_cache_dir, real_environment, real_belief
     ):
@@ -1833,3 +1834,221 @@ def test_cache_survives_task_recreation(environment, hyper_parameters, temp_cach
     assert "average_return" in result2.optimized_metric_values
     assert isinstance(result1.optimized_metric_values["average_return"], float)
     assert isinstance(result2.optimized_metric_values["average_return"], float)
+
+
+# ===== ParallelizationLevel Tests =====
+
+from POMDPPlanners.core.simulation.hyperparameter_tuning import ParallelizationLevel
+
+
+class TestParallelizationLevel:
+    """Tests for the ParallelizationLevel parameter in HyperParameterTuningSimulationTask."""
+
+    def test_default_parallelization_level_is_optuna_trials(
+        self, environment, hyper_parameters, temp_cache_dir
+    ):
+        """Test that default parallelization_level is OPTUNA_TRIALS.
+
+        Purpose: Validates backward compatibility — default is OPTUNA_TRIALS
+
+        Given: A task created without specifying parallelization_level
+        When: The task is instantiated
+        Then: parallelization_level defaults to OPTUNA_TRIALS
+
+        Test type: unit
+        """
+        belief = create_test_belief(environment)
+        task = HyperParameterTuningSimulationTask(
+            environment=environment,
+            belief=belief,
+            policy_cls=SparseSamplingDiscreteActionsPlanner,
+            hyper_parameters=hyper_parameters,
+            constant_parameters={},
+            num_episodes=2,
+            num_steps=3,
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
+            cache_dir=temp_cache_dir,
+            n_jobs=2,
+        )
+        assert task.parallelization_level == ParallelizationLevel.OPTUNA_TRIALS
+
+    def test_explicit_optuna_trials_parallelization(
+        self, environment, hyper_parameters, temp_cache_dir
+    ):
+        """Test explicit OPTUNA_TRIALS parallelization_level.
+
+        Purpose: Validates that OPTUNA_TRIALS can be set explicitly
+
+        Given: A task created with parallelization_level=OPTUNA_TRIALS
+        When: The task is instantiated
+        Then: parallelization_level is OPTUNA_TRIALS
+
+        Test type: unit
+        """
+        belief = create_test_belief(environment)
+        task = HyperParameterTuningSimulationTask(
+            environment=environment,
+            belief=belief,
+            policy_cls=SparseSamplingDiscreteActionsPlanner,
+            hyper_parameters=hyper_parameters,
+            constant_parameters={},
+            num_episodes=2,
+            num_steps=3,
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
+            cache_dir=temp_cache_dir,
+            n_jobs=2,
+            parallelization_level=ParallelizationLevel.OPTUNA_TRIALS,
+        )
+        assert task.parallelization_level == ParallelizationLevel.OPTUNA_TRIALS
+
+    def test_episodes_parallelization(self, environment, hyper_parameters, temp_cache_dir):
+        """Test EPISODES parallelization_level.
+
+        Purpose: Validates that EPISODES parallelization_level can be set
+
+        Given: A task created with parallelization_level=EPISODES
+        When: The task is instantiated
+        Then: parallelization_level is EPISODES
+
+        Test type: unit
+        """
+        belief = create_test_belief(environment)
+        task = HyperParameterTuningSimulationTask(
+            environment=environment,
+            belief=belief,
+            policy_cls=SparseSamplingDiscreteActionsPlanner,
+            hyper_parameters=hyper_parameters,
+            constant_parameters={},
+            num_episodes=2,
+            num_steps=3,
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
+            cache_dir=temp_cache_dir,
+            n_jobs=2,
+            parallelization_level=ParallelizationLevel.EPISODES,
+        )
+        assert task.parallelization_level == ParallelizationLevel.EPISODES
+
+    def test_invalid_parallelization_level_raises_type_error(
+        self, environment, hyper_parameters, temp_cache_dir
+    ):
+        """Test that invalid parallelization_level raises TypeError.
+
+        Purpose: Validates input validation for parallelization_level
+
+        Given: An invalid value for parallelization_level (a string)
+        When: HyperParameterTuningSimulationTask is created with the invalid value
+        Then: TypeError is raised
+
+        Test type: unit
+        """
+        belief = create_test_belief(environment)
+        with pytest.raises(TypeError, match="parallelization_level must be a ParallelizationLevel"):
+            HyperParameterTuningSimulationTask(
+                environment=environment,
+                belief=belief,
+                policy_cls=SparseSamplingDiscreteActionsPlanner,
+                hyper_parameters=hyper_parameters,
+                constant_parameters={},
+                num_episodes=2,
+                num_steps=3,
+                parameters_to_optimize=[
+                    ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+                ],
+                cache_dir=temp_cache_dir,
+                n_jobs=2,
+                parallelization_level="invalid",  # type: ignore[arg-type]
+            )
+
+    def test_to_dict_includes_parallelization_level(
+        self, environment, hyper_parameters, temp_cache_dir
+    ):
+        """Test that to_dict includes parallelization_level.
+
+        Purpose: Validates that parallelization_level is included in serialized dict
+
+        Given: Tasks with different parallelization levels
+        When: to_dict() is called on each task
+        Then: The dict includes the parallelization_level value as a string
+
+        Test type: unit
+        """
+        belief = create_test_belief(environment)
+        task_optuna = HyperParameterTuningSimulationTask(
+            environment=environment,
+            belief=belief,
+            policy_cls=SparseSamplingDiscreteActionsPlanner,
+            hyper_parameters=hyper_parameters,
+            constant_parameters={},
+            num_episodes=2,
+            num_steps=3,
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
+            cache_dir=temp_cache_dir,
+            parallelization_level=ParallelizationLevel.OPTUNA_TRIALS,
+        )
+        task_episodes = HyperParameterTuningSimulationTask(
+            environment=environment,
+            belief=belief,
+            policy_cls=SparseSamplingDiscreteActionsPlanner,
+            hyper_parameters=hyper_parameters,
+            constant_parameters={},
+            num_episodes=2,
+            num_steps=3,
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
+            cache_dir=temp_cache_dir,
+            parallelization_level=ParallelizationLevel.EPISODES,
+        )
+
+        dict_optuna = task_optuna.to_dict()
+        dict_episodes = task_episodes.to_dict()
+
+        assert dict_optuna["parallelization_level"] == "optuna_trials"
+        assert dict_episodes["parallelization_level"] == "episodes"
+
+    def test_different_parallelization_levels_produce_different_config_ids(
+        self, environment, hyper_parameters, temp_cache_dir
+    ):
+        """Test that different parallelization levels produce different config IDs.
+
+        Purpose: Validates that cache keys differ by parallelization level
+
+        Given: Two tasks identical except for parallelization_level
+        When: get_config_id() is called on each
+        Then: The config IDs are different
+
+        Test type: unit
+        """
+        belief = create_test_belief(environment)
+        common_params = dict(
+            environment=environment,
+            belief=belief,
+            policy_cls=SparseSamplingDiscreteActionsPlanner,
+            hyper_parameters=hyper_parameters,
+            constant_parameters={},
+            num_episodes=2,
+            num_steps=3,
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
+            cache_dir=temp_cache_dir,
+            n_jobs=2,
+        )
+        task_optuna = HyperParameterTuningSimulationTask(
+            **common_params,
+            parallelization_level=ParallelizationLevel.OPTUNA_TRIALS,
+        )
+        task_episodes = HyperParameterTuningSimulationTask(
+            **common_params,
+            parallelization_level=ParallelizationLevel.EPISODES,
+        )
+
+        assert task_optuna.get_config_id() != task_episodes.get_config_id()

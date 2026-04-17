@@ -27,6 +27,7 @@ from typing import Any, List, Optional, Sequence, Tuple, Union
 
 import matplotlib
 import numpy as np
+from numpy.typing import NDArray
 
 from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.core.environment import (
@@ -52,13 +53,18 @@ class MountainCarPOMDPMetrics(Enum):
 class MountainCarTransition(StateTransitionModel):
     """Physics-based state transition model for Mountain Car POMDP.
 
-    This model implements the deterministic physics of a car on a sinusoidal
-    hill surface. The car's velocity is affected by both the applied action
-    (engine force) and gravitational force that depends on the slope of the hill.
+    This model implements the physics of a car on a sinusoidal hill surface
+    with additive Gaussian process noise. The car's velocity is affected by
+    both the applied action (engine force) and gravitational force that depends
+    on the slope of the hill.
 
     The physics equations are:
     - velocity += action * power + cos(3 * position) * (-gravity)
     - position += velocity
+
+    After computing the deterministic next state, Normal noise is sampled
+    from the provided distribution and added. The result is then clipped
+    to respect position and velocity bounds.
 
     Attributes:
         state: Current state (position, velocity) tuple
@@ -74,12 +80,15 @@ class MountainCarTransition(StateTransitionModel):
 
             >>> import numpy as np
             >>> np.random.seed(42)  # For reproducible results
+            >>> from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
             >>>
             >>> # Define car state: position=-0.5 (in valley), velocity=0.0
             >>> state = (-0.5, 0.0)
             >>> action = 1  # Accelerate right/forward
             >>>
-            >>> # Create transition model
+            >>> # Create transition model with noise
+            >>> state_transition_cov = np.diag([2.5e-5, 1e-6])
+            >>> state_transition_dist = CovarianceParameterizedMultivariateNormal(state_transition_cov)
             >>> transition = MountainCarTransition(
             ...     state=state,
             ...     action=action,
@@ -87,15 +96,15 @@ class MountainCarTransition(StateTransitionModel):
             ...     gravity=0.0025,
             ...     max_speed=0.07,
             ...     min_position=-1.2,
-            ...     max_position=0.6
+            ...     max_position=0.6,
+            ...     state_transition_dist=state_transition_dist
             ... )
             >>>
             >>> # Simulate physics step
             >>> next_state = transition.sample()[0]
-            >>> # Returns new [position, velocity] with physics applied
-            >>> new_pos, new_vel = next_state
-            >>> print(f"New position: {new_pos:.3f}, New velocity: {new_vel:.3f}")
-            New position: -0.499, New velocity: 0.001
+            >>> # Returns new [position, velocity] with physics and noise applied
+            >>> len(next_state) == 2
+            True
     """
 
     def __init__(
@@ -107,6 +116,7 @@ class MountainCarTransition(StateTransitionModel):
         max_speed: float,
         min_position: float,
         max_position: float,
+        state_transition_dist: CovarianceParameterizedMultivariateNormal,
     ):
         super().__init__(state, action)
 
@@ -115,8 +125,19 @@ class MountainCarTransition(StateTransitionModel):
         self.max_speed = max_speed
         self.min_position = min_position
         self.max_position = max_position
+        self._state_transition_dist = state_transition_dist
 
     def sample(self, n_samples: int = 1) -> List[np.ndarray]:
+        deterministic_next_state = self._compute_deterministic_next_state()
+        noise_samples = self._state_transition_dist.sample(np.zeros(2), n_samples=n_samples)
+        results = []
+        for i in range(n_samples):
+            noisy_state = deterministic_next_state + noise_samples[i]
+            noisy_state = self._clip_state(noisy_state)
+            results.append(noisy_state)
+        return results
+
+    def _compute_deterministic_next_state(self) -> np.ndarray:
         position, velocity = self.state
         v = velocity + self.action * self.power + np.cos(3 * position) * (-self.gravity)
         v = np.clip(v, -self.max_speed, self.max_speed)
@@ -124,16 +145,20 @@ class MountainCarTransition(StateTransitionModel):
         p = np.clip(p, self.min_position, self.max_position)
         if p == self.min_position and v < 0:
             v = 0
-        next_state = np.array([p, v])
-        return [next_state] * n_samples
+        return np.array([p, v])
+
+    def _clip_state(self, state: np.ndarray) -> np.ndarray:
+        p, v = state
+        v = np.clip(v, -self.max_speed, self.max_speed)
+        p = np.clip(p, self.min_position, self.max_position)
+        if p == self.min_position and v < 0:
+            v = 0
+        return np.array([p, v])
 
     def probability(self, values: List[np.ndarray]) -> np.ndarray:
-        result = np.zeros(len(values))
-        expected_next_state = self.sample()[0]
-        for i, value in enumerate(values):
-            if np.array_equal(value, expected_next_state):
-                result[i] = 1.0
-        return result
+        deterministic_next_state = self._compute_deterministic_next_state()
+        values_array = np.array(values)
+        return self._state_transition_dist.pdf(values_array, deterministic_next_state)
 
 
 class MountainCarObservation(ObservationModel):
@@ -240,9 +265,12 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
         False
     """
 
+    DEFAULT_STATE_TRANSITION_COV = np.diag([2.5e-5, 1e-6])
+
     def __init__(
         self,
         discount_factor: float,
+        state_transition_cov: Optional[NDArray[np.floating[Any]]] = None,
         name: str = "MountainCarPOMDP",
         output_dir: Optional[Path] = None,
         debug: bool = False,
@@ -267,6 +295,16 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
 
         # Pre-compute Cholesky decomposition for efficient sampling and PDF
         self._obs_dist = CovarianceParameterizedMultivariateNormal(self.cov_matrix)
+
+        # State transition noise
+        self.state_transition_cov = (
+            state_transition_cov
+            if state_transition_cov is not None
+            else self.DEFAULT_STATE_TRANSITION_COV
+        )
+        self._state_transition_dist = CovarianceParameterizedMultivariateNormal(
+            self.state_transition_cov
+        )
 
         space_info = SpaceInfo(
             action_space=SpaceType.DISCRETE,  # Action space is [-1, 0, 1]
@@ -293,6 +331,7 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
             max_speed=self.max_speed,
             min_position=self.min_position,
             max_position=self.max_position,
+            state_transition_dist=self._state_transition_dist,
         )
 
     def observation_model(self, next_state: Tuple[float, float], action: int) -> ObservationModel:
