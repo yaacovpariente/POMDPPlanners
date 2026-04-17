@@ -67,6 +67,7 @@ dev = [
     "ipykernel>=6.0.0",
     "jupyter-client>=7.0.0",
     "nbformat>=5.0.0",
+    "pytest-benchmark>=4.0.0",
 ]
 docs = [
     "sphinx>=5.0.0",
@@ -111,11 +112,12 @@ testpaths = ["POMDPPlanners/tests"]
 python_files = "test_*.py"
 python_classes = "Test*"
 python_functions = "test_*"
-addopts = "-v"
+addopts = "-v -m 'not slow and not benchmark'"
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "smoke: marks tests as smoke tests (quick tests for basic functionality)",
     "pbs_cluster: marks tests that require PBS cluster environment and dask-jobqueue dependency",
+    "benchmark: marks tests as performance benchmarks (deselect with '-m \"not benchmark\"')",
 ]
 
 [tool.pylint.master]

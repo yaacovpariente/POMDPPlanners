@@ -11,6 +11,7 @@ from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     HyperParameterRunParams,
     HyperParamPlannerConfigGenerator,
     OptimizedPolicyResult,
+    ParallelizationLevel,
 )
 from POMDPPlanners.simulations.workflows.planner_evaluation_workflow import (
     PlannerEvaluationLocalWorkflow,
@@ -453,6 +454,7 @@ class LocalSimulationsAPI(SimulationsAPIInterface):
         confidence_interval_level: float = 0.95,
         alpha: float = 0.05,
         use_queue_logger: bool = False,
+        parallelization_level: ParallelizationLevel = ParallelizationLevel.OPTUNA_TRIALS,
     ) -> List[OptimizedPolicyResult]:
         """Run hyperparameter optimization for POMDP policies using Optuna.
 
@@ -490,6 +492,10 @@ class LocalSimulationsAPI(SimulationsAPIInterface):
                 Defaults to 0.05 for 5% significance level.
             use_queue_logger: Whether to use queue-based logging for distributed
                 execution scenarios. Defaults to False for local execution.
+            parallelization_level: Controls where parallelization is applied.
+                OPTUNA_TRIALS (default) parallelizes across Optuna trials while
+                running episodes sequentially. EPISODES parallelizes across
+                episodes within each trial while running trials sequentially.
 
         Returns:
             List[OptimizedPolicyResult]: List of optimization results, each containing
@@ -604,6 +610,7 @@ class LocalSimulationsAPI(SimulationsAPIInterface):
             task_manager_config=task_manager_config,
             confidence_interval_level=confidence_interval_level,
             alpha=alpha,
+            parallelization_level=parallelization_level,
             use_queue_logger=use_queue_logger,
         )
 

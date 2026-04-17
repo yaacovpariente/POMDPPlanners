@@ -294,6 +294,101 @@ def test_state_transition_model(base_cartpole_environment):
     assert next_state.shape == (4,)
 
 
+def test_state_transition_produces_varying_samples(base_cartpole_environment):
+    """Test that state transition with noise produces varying samples.
+
+    Purpose: Validates that the stochastic state transition model produces
+    different samples due to Gaussian process noise
+
+    Given: A CartPolePOMDP environment and initial state [0.0, 0.0, 0.1, 0.0] with action 1
+    When: Multiple samples are drawn from the state transition model
+    Then: Not all samples are identical, confirming stochastic behavior
+
+    Test type: unit
+    """
+    state = np.array([0.0, 0.0, 0.1, 0.0])
+    action = 1
+    transition = base_cartpole_environment.state_transition_model(state, action)
+    samples = transition.sample(n_samples=50)
+
+    assert len(samples) == 50
+    assert all(s.shape == (4,) for s in samples)
+
+    # With noise, samples should not all be identical
+    sample_array = np.array(samples)
+    assert not np.all(
+        sample_array == sample_array[0]
+    ), "All samples are identical — noise is not being applied"
+
+
+def test_state_transition_noise_magnitude(base_cartpole_environment):
+    """Test that state transition noise magnitude is reasonable.
+
+    Purpose: Validates that noisy samples cluster around the deterministic next state
+
+    Given: A CartPolePOMDP environment with default noise covariance
+    When: Many samples are drawn from the state transition model
+    Then: Sample mean is close to deterministic next state and standard deviations
+    match the expected noise levels from the covariance matrix
+
+    Test type: unit
+    """
+    state = np.array([0.0, 0.0, 0.1, 0.0])
+    action = 1
+    transition = base_cartpole_environment.state_transition_model(state, action)
+    samples = np.array(transition.sample(n_samples=5000))
+
+    # The mean of many samples should be close to the deterministic next state
+    # pylint: disable=protected-access
+    deterministic = transition._compute_deterministic_next_state()
+    sample_mean = samples.mean(axis=0)
+    np.testing.assert_allclose(sample_mean, deterministic, atol=0.01)
+
+    # Standard deviations should roughly match sqrt of diagonal of cov matrix
+    expected_std = np.sqrt(np.diag(base_cartpole_environment.state_transition_cov))
+    sample_std = samples.std(axis=0)
+    np.testing.assert_allclose(sample_std, expected_std, rtol=0.3)
+
+
+def test_state_transition_default_covariance():
+    """Test that default state transition covariance is used when not specified.
+
+    Purpose: Validates that CartPolePOMDP uses the default state transition
+    covariance matrix when none is provided
+
+    Given: A CartPolePOMDP environment created without explicit state_transition_cov
+    When: The state_transition_cov attribute is checked
+    Then: It matches the class-level DEFAULT_STATE_TRANSITION_COV
+
+    Test type: unit
+    """
+    env = CartPolePOMDP(discount_factor=0.95, noise_cov=np.eye(4) * 0.1)
+    np.testing.assert_array_equal(
+        env.state_transition_cov, CartPolePOMDP.DEFAULT_STATE_TRANSITION_COV
+    )
+
+
+def test_state_transition_custom_covariance():
+    """Test that custom state transition covariance is applied correctly.
+
+    Purpose: Validates that a custom state transition covariance matrix is
+    stored and used when explicitly provided
+
+    Given: A CartPolePOMDP environment created with a custom state_transition_cov
+    When: The state_transition_cov attribute is checked
+    Then: It matches the custom covariance matrix provided at construction
+
+    Test type: unit
+    """
+    custom_cov = np.diag([1e-3, 1e-3, 1e-4, 1e-3])
+    env = CartPolePOMDP(
+        discount_factor=0.95,
+        noise_cov=np.eye(4) * 0.1,
+        state_transition_cov=custom_cov,
+    )
+    np.testing.assert_array_equal(env.state_transition_cov, custom_cov)
+
+
 def test_observation_model(base_cartpole_environment):
     """Test observation model.
 

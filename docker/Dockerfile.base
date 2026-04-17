@@ -1,0 +1,16 @@
+# Base CI image — contains all dependencies, rebuilt only when deps change.
+# Code is NOT included here; it is added by Dockerfile.ci at test time.
+FROM python:3.10-slim
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y libatomic1 && rm -rf /var/lib/apt/lists/*
+
+# Copy only dependency-defining files so this layer is cached
+# unless dependencies actually change.
+COPY pyproject.toml ./
+
+RUN pip install --upgrade pip
+RUN pip install torch --index-url https://download.pytorch.org/whl/cpu
+RUN pip freeze | grep -i torch > /tmp/torch-constraints.txt
+RUN PIP_CONSTRAINT=/tmp/torch-constraints.txt pip install ".[dev,docs]"

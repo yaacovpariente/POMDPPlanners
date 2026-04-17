@@ -255,6 +255,7 @@ def test_invalid_depth():
         SparseSamplingDiscreteActionsPlanner(environment=env, branching_factor=2, depth=0)
 
 
+@pytest.mark.slow
 def test_sanity_pomdp_action_selection():
     """Test that the sparse sampling planner correctly identifies the better action in SanityPOMDP
 

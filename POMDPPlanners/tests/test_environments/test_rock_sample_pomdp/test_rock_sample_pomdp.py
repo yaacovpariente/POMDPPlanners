@@ -1278,5 +1278,51 @@ class TestIntegration:
         assert rock_configs == expected_configs
 
 
+class TestSampleNextStepEquivalence:
+    """Test that the optimized sample_next_step produces identical results to the base class."""
+
+    def test_sample_next_step_matches_base_class(self):
+        """Test optimized sample_next_step agrees with base Environment.sample_next_step.
+
+        Purpose: Validates that the inlined sample_next_step override produces
+        identical results to the original base class implementation.
+
+        Given: A RockSamplePOMDP environment and valid (state, action) pairs
+        When: Both the optimized and base class sample_next_step are called
+              with the same numpy RNG seed
+        Then: next_state, observation, and reward are identical
+
+        Test type: unit
+        """
+        from POMDPPlanners.core.environment import Environment
+
+        env = RockSamplePOMDP(discount_factor=0.95)
+        state = env.initial_state_dist().sample()[0]
+
+        for action in [0, 1, 2, 3, 4, 5]:
+            for _ in range(30):
+                seed = np.random.randint(0, 2**31)
+
+                np.random.seed(seed)
+                opt_next, opt_obs, opt_reward = env.sample_next_step(state, action)
+
+                np.random.seed(seed)
+                base_next, base_obs, base_reward = Environment.sample_next_step(env, state, action)
+
+                np.testing.assert_array_almost_equal(
+                    opt_next,
+                    base_next,
+                    decimal=10,
+                    err_msg=f"next_state mismatch for action={action}, seed={seed}",
+                )
+                assert (
+                    opt_obs == base_obs
+                ), f"observation mismatch for action={action}, seed={seed}: {opt_obs} != {base_obs}"
+                assert opt_reward == base_reward, (
+                    f"reward mismatch for action={action}, seed={seed}: "
+                    f"{opt_reward} != {base_reward}"
+                )
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

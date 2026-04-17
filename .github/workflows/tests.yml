@@ -2,9 +2,9 @@ name: Docker Tests
 
 on:
   push:
-    branches: [ "master" ]
+    branches: [ "master", "develop" ]
   pull_request:
-    branches: [ "master" ]
+    branches: [ "master", "develop" ]
 
 permissions:
   contents: read
@@ -41,6 +41,26 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
 
+    - name: Check if base image exists
+      id: base-check
+      run: |
+        if docker pull ghcr.io/${{ github.repository_owner }}/pomdpplanners-base:latest; then
+          echo "exists=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "exists=false" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Build and push base image (first time or when missing)
+      if: steps.base-check.outputs.exists == 'false'
+      uses: docker/build-push-action@v4
+      with:
+        context: .
+        file: docker/Dockerfile.base
+        push: true
+        tags: ghcr.io/${{ github.repository_owner }}/pomdpplanners-base:latest
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
     - name: Build test Docker image
       uses: docker/build-push-action@v4
       with:
@@ -48,8 +68,8 @@ jobs:
         file: docker/Dockerfile.ci
         load: true
         tags: pomdpplanners-test:latest
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
+        build-args: |
+          BASE_IMAGE=ghcr.io/${{ github.repository_owner }}/pomdpplanners-base:latest
 
     - name: Run linting inside Docker
       run: |
@@ -63,9 +83,13 @@ jobs:
       run: |
         docker run --rm --entrypoint pyright pomdpplanners-test:latest POMDPPlanners/
 
-    - name: Run unit tests inside Docker (excluding slow tests)
+    - name: Run unit tests inside Docker
       run: |
-        docker run --rm --entrypoint pytest pomdpplanners-test:latest POMDPPlanners/tests/ -v --cov=POMDPPlanners --cov-report=xml --cov-report=term-missing -m "not slow"
+        if [ "${{ github.ref }}" = "refs/heads/master" ]; then
+          docker run --rm --entrypoint pytest pomdpplanners-test:latest POMDPPlanners/tests/ -v --cov=POMDPPlanners --cov-report=xml --cov-report=term-missing
+        else
+          docker run --rm --entrypoint pytest pomdpplanners-test:latest POMDPPlanners/tests/ -v --cov=POMDPPlanners --cov-report=xml --cov-report=term-missing -m "not slow"
+        fi
 
     - name: Run notebook smoke tests inside Docker
       run: |

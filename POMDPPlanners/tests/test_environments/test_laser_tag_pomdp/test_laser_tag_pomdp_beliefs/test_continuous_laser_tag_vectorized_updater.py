@@ -7,6 +7,10 @@ from_environment construction, and config_id generation.
 import numpy as np
 import pytest
 
+from POMDPPlanners.core.belief.particle_beliefs import WeightedParticleBelief
+from POMDPPlanners.core.belief.vectorized_weighted_particle_belief import (
+    VectorizedWeightedParticleBelief,
+)
 from POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_pomdp import (
     ContinuousLaserTagPOMDP,
     ContinuousLaserTagPOMDPDiscreteActions,
@@ -14,6 +18,41 @@ from POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_pomdp impor
 from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_beliefs.continuous_laser_tag_vectorized_updater import (
     ContinuousLaserTagVectorizedUpdater,
 )
+from POMDPPlanners.tests.test_core.test_belief.belief_equivalence_utils import (
+    assert_update_particles_match_per_particle_seeded,
+)
+from POMDPPlanners.tests.test_core.test_belief.vectorized_updater_test_utils import (
+    assert_batch_obs_log_likelihood_matches_loop,
+)
+
+
+def _make_aligned_beliefs(updater, n_particles=20):
+    """Create baseline + vectorized beliefs with identical initial particles."""
+    np.random.seed(42)
+    particles_array = np.column_stack(
+        [
+            np.random.rand(n_particles) * 10,
+            np.random.rand(n_particles) * 6,
+            np.random.rand(n_particles) * 10,
+            np.random.rand(n_particles) * 6,
+            np.zeros(n_particles),
+        ]
+    )
+    particles_list = [particles_array[i].copy() for i in range(n_particles)]
+    log_weights = np.log(np.ones(n_particles) / n_particles)
+
+    base = WeightedParticleBelief(
+        particles=particles_list,
+        log_weights=log_weights.copy(),
+        resampling=False,
+    )
+    vec = VectorizedWeightedParticleBelief(
+        particles=particles_array.copy(),
+        log_weights=log_weights.copy(),
+        updater=updater,
+        resampling=False,
+    )
+    return base, vec
 
 
 @pytest.fixture
@@ -262,6 +301,105 @@ class TestBatchObservationLogLikelihood:
         assert np.all(np.isfinite(ll))
 
 
+# ---------------------------------------------------------------------------
+# Equivalence test: vectorized vs per-particle loop
+# ---------------------------------------------------------------------------
+
+
+class TestEquivalenceWithPerParticleLoop:
+    def test_batch_transition_matches_per_particle_loop(self, env, updater):
+        """Test vectorized batch_transition matches per-particle state_transition_model.
+
+        Purpose: Verifies that batch_transition produces the same results as
+                 calling the environment's state_transition_model per particle.
+                 Because the vectorized path batches robot noise then opponent
+                 noise (different RNG order from the per-particle path which
+                 interleaves them), we compare each particle individually with
+                 its own seed.
+
+        Given: A set of non-terminal continuous-space particles.
+        When: For each particle, batch_transition is called on a single
+              particle, and the per-particle state_transition_model is called
+              with the same seed.
+        Then: Results match within floating-point tolerance.
+
+        Test type: integration
+        """
+        np.random.seed(123)
+        n = 30
+        particles = np.column_stack(
+            [
+                np.random.rand(n) * 10,
+                np.random.rand(n) * 6,
+                np.random.rand(n) * 10,
+                np.random.rand(n) * 6,
+                np.zeros(n),
+            ]
+        )
+        action = np.array([1.0, 0.5, 0.0])
+
+        for i in range(n):
+            single = particles[i : i + 1]
+
+            np.random.seed(1000 + i)
+            vec_result = updater.batch_transition(single, action)
+
+            np.random.seed(1000 + i)
+            scalar_result = env.state_transition_model(state=particles[i], action=action).sample()[
+                0
+            ]
+
+            np.testing.assert_allclose(
+                vec_result[0],
+                scalar_result,
+                atol=1e-10,
+                err_msg=f"Mismatch for particle {i}",
+            )
+
+    def test_batch_obs_log_likelihood_matches_per_particle_loop(self, env, updater):
+        """Test vectorized log-likelihood matches per-particle observation_model.probability.
+
+        Purpose: Verifies that batch_observation_log_likelihood matches the
+                 per-particle log(observation_model.probability) from the
+                 environment.
+
+        Given: A set of non-terminal particles and a valid observation.
+        When: batch_observation_log_likelihood is called, and per-particle
+              log-probabilities are computed.
+        Then: Results match within floating-point tolerance.
+
+        Test type: integration
+        """
+        np.random.seed(42)
+        n = 30
+        particles = np.column_stack(
+            [
+                np.random.rand(n) * 10,
+                np.random.rand(n) * 6,
+                np.random.rand(n) * 10,
+                np.random.rand(n) * 6,
+                np.zeros(n),
+            ]
+        )
+        obs = np.random.rand(8) * 5
+        action = np.array([1.0, 0.0, 0.0])
+
+        def per_particle_ll_fn(particle, act, observation):
+            obs_model = env.observation_model(next_state=particle, action=act)
+            prob = obs_model.probability([observation])[0]
+            if prob > 0:
+                return np.log(prob)
+            return -np.inf
+
+        assert_batch_obs_log_likelihood_matches_loop(
+            updater=updater,
+            particles=particles,
+            action=action,
+            observation=obs,
+            per_particle_ll_fn=per_particle_ll_fn,
+        )
+
+
 class TestConfigId:
     """Tests for the config_id property."""
 
@@ -294,3 +432,44 @@ class TestConfigId:
         u1 = ContinuousLaserTagVectorizedUpdater.from_environment(env)
         u2 = ContinuousLaserTagVectorizedUpdater.from_environment(env)
         assert u1.config_id == u2.config_id
+
+
+class TestBeliefEquivalenceWithBaseline:
+    def test_update_particles_match_per_particle_seeded(self, env, updater):
+        """Test vectorized and baseline beliefs agree on particles under per-particle seeding.
+
+        Purpose: Validates that VectorizedWeightedParticleBelief.update and
+            WeightedParticleBelief.update produce identical next particles
+            when each particle's update is seeded independently. The
+            vectorized path samples robot and opponent continuous Gaussian
+            noise in bulk, which differs in RNG order from the baseline
+            per-particle loop. Per-particle seeding restores bit-for-bit
+            equivalence on the particle array (mirroring the updater-level
+            workaround in this file's TestEquivalenceWithPerParticleLoop).
+
+            Weights are not compared here: for out-of-distribution
+            observations (like the random one used here) every particle's
+            Gaussian PDF underflows to zero, which the baseline floors via
+            ``log(eps + prob)`` and the vectorized preserves exactly via
+            ``log_pdf``. The resulting softmax distributions differ even
+            when particles match.
+
+        Given: 20 aligned continuous-space particles.
+        When: Each particle is updated individually with a shared
+            per-particle seed (base_seed + i) on both paths.
+        Then: Aggregate next-particle arrays agree within floating-point
+            tolerance.
+
+        Test type: integration
+        """
+        base, vec = _make_aligned_beliefs(updater)
+        obs = np.random.rand(8) * 5
+        assert_update_particles_match_per_particle_seeded(
+            base=base,
+            vec=vec,
+            action=np.array([1.0, 0.5, 0.0]),
+            observation=obs,
+            pomdp=env,
+            atol=1e-10,
+            base_seed=1000,
+        )

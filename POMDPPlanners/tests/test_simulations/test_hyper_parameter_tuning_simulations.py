@@ -17,6 +17,8 @@ import mlflow
 import numpy as np
 import pytest
 
+pytestmark = [pytest.mark.slow]
+
 from POMDPPlanners.core.belief import get_initial_belief
 from POMDPPlanners.core.simulation import (
     NumericalHyperParameter,
@@ -1533,7 +1535,6 @@ class TestHyperParameterOptimizerWithTaskManagerConfigs:
             # (e.g., PBS not available, which is expected in CI/CD)
             error_str = str(e).lower()
             if "pbs" in error_str or "qsub" in error_str or "scheduler" in error_str:
-
                 warnings.warn(
                     f"PBS cluster creation skipped - PBS environment not available: {e}",
                     UserWarning,
@@ -1584,7 +1585,6 @@ class TestHyperParameterOptimizerWithTaskManagerConfigs:
             # Handle PBS environment not being available
             error_str = str(e).lower()
             if "pbs" in error_str or "qsub" in error_str or "scheduler" in error_str:
-
                 warnings.warn(
                     f"PBS cluster creation skipped - PBS environment not available: {e}",
                     UserWarning,
@@ -2812,3 +2812,80 @@ class TestSingleEnvironmentOptimizationSmoke:
         optimizer = HyperParameterOptimizer(cache_dir_path=temp_cache_dir)
         result = optimizer.optimize([config])
         assert isinstance(result, list)
+
+
+# ===== ParallelizationLevel Tests =====
+
+from POMDPPlanners.core.simulation.hyperparameter_tuning import ParallelizationLevel
+
+
+class TestHyperParameterOptimizerParallelizationLevel:
+    """Tests for ParallelizationLevel parameter in HyperParameterOptimizer."""
+
+    def test_default_parallelization_level(self, temp_cache_dir):
+        """Test that default parallelization_level is OPTUNA_TRIALS.
+
+        Purpose: Validates backward compatibility of optimizer default
+
+        Given: An optimizer created without specifying parallelization_level
+        When: The optimizer is instantiated
+        Then: parallelization_level defaults to OPTUNA_TRIALS
+
+        Test type: unit
+        """
+        optimizer = HyperParameterOptimizer(cache_dir_path=temp_cache_dir)
+        assert optimizer.parallelization_level == ParallelizationLevel.OPTUNA_TRIALS
+
+    def test_custom_parallelization_level(self, temp_cache_dir):
+        """Test setting EPISODES parallelization_level on optimizer.
+
+        Purpose: Validates that EPISODES can be set on the optimizer
+
+        Given: An optimizer created with parallelization_level=EPISODES
+        When: The optimizer is instantiated
+        Then: parallelization_level is EPISODES
+
+        Test type: unit
+        """
+        optimizer = HyperParameterOptimizer(
+            cache_dir_path=temp_cache_dir,
+            parallelization_level=ParallelizationLevel.EPISODES,
+        )
+        assert optimizer.parallelization_level == ParallelizationLevel.EPISODES
+
+    def test_parallelization_level_passed_to_tasks(self, temp_cache_dir, sample_configs):
+        """Test that parallelization_level is threaded through to created tasks.
+
+        Purpose: Validates that the optimizer passes parallelization_level to tasks
+
+        Given: An optimizer with parallelization_level=EPISODES and sample configs
+        When: _create_tasks is called
+        Then: Each created task has parallelization_level=EPISODES
+
+        Test type: unit
+        """
+        optimizer = HyperParameterOptimizer(
+            cache_dir_path=temp_cache_dir,
+            parallelization_level=ParallelizationLevel.EPISODES,
+        )
+        tasks, _ = optimizer._create_tasks(sample_configs)
+
+        for task in tasks:
+            assert task.parallelization_level == ParallelizationLevel.EPISODES
+
+    def test_default_parallelization_level_passed_to_tasks(self, temp_cache_dir, sample_configs):
+        """Test that default parallelization_level is threaded through to tasks.
+
+        Purpose: Validates that the default OPTUNA_TRIALS is passed to tasks
+
+        Given: An optimizer with default parallelization_level and sample configs
+        When: _create_tasks is called
+        Then: Each created task has parallelization_level=OPTUNA_TRIALS
+
+        Test type: unit
+        """
+        optimizer = HyperParameterOptimizer(cache_dir_path=temp_cache_dir)
+        tasks, _ = optimizer._create_tasks(sample_configs)
+
+        for task in tasks:
+            assert task.parallelization_level == ParallelizationLevel.OPTUNA_TRIALS
