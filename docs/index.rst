@@ -5,9 +5,9 @@ POMDPPlanners Documentation
    :target: https://opensource.org/licenses/MIT
    :alt: License: MIT
 
-.. image:: https://img.shields.io/badge/python-3.8+-blue.svg
-   :target: https://www.python.org/downloads/release/python-380/
-   :alt: Python 3.8+
+.. image:: https://img.shields.io/badge/python-3.10+-blue.svg
+   :target: https://www.python.org/downloads/release/python-3100/
+   :alt: Python 3.10+
 
 .. image:: https://img.shields.io/badge/code%20style-black-000000.svg
    :target: https://github.com/psf/black
@@ -20,7 +20,7 @@ POMDPPlanners is a comprehensive Python package for **POMDP (Partially Observabl
 
 - **Comprehensive Algorithm Library**: State-of-the-art POMDP planning algorithms including POMCP, PFT-DPW, Sparse PFT, and more
 - **Rich Environment Collection**: Classic and modern POMDP environments (Tiger, Light-Dark, CartPole, Push, Safety-Ant-Velocity, etc.)
-- **Flexible Belief Representations**: Particle filters, weighted beliefs, and custom belief state implementations
+- **Flexible Belief Representations**: Particle filters (weighted and unweighted), vectorized particle beliefs with batched NumPy updates, Gaussian beliefs, and custom belief state implementations
 - **Simulation Framework**: Complete experiment management with hyperparameter tuning and distributed computing support
 - **Visualization Tools**: Built-in plotting and visualization capabilities for analysis and debugging
 - **Production Ready**: Designed for both research experiments and industrial applications
@@ -128,10 +128,13 @@ Basic Usage
 **Available Environments**
 
 - **Tiger POMDP**: Classic two-door problem
-- **Light-Dark POMDP**: Navigation with position-dependent observation noise
+- **Light-Dark POMDP**: Navigation with position-dependent observation noise (continuous and discrete variants)
 - **CartPole POMDP**: Partially observable cart-pole balancing
 - **Mountain Car POMDP**: Partially observable mountain car
-- **Push POMDP**: Object manipulation environment
+- **Push POMDP**: Object manipulation environment (discrete and continuous variants)
+- **RockSample POMDP**: Classic rock-sampling benchmark with long-horizon information gathering
+- **PacMan POMDP**: Partially observable PacMan domain
+- **Continuous LaserTag POMDP**: Laser-based pursuit-evasion with continuous state
 - **Safety Ant Velocity**: Safety-constrained locomotion task
 
 🤝 Contributing
