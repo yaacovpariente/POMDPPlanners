@@ -22,7 +22,7 @@ copyright = "2024, POMDPPlanners Team"
 author = "POMDPPlanners Team"
 
 # The full version, including alpha/beta/rc tags
-release = "1.0"
+release = "0.2.0"
 
 # -- General configuration ---------------------------------------------------
 
