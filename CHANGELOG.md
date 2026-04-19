@@ -5,7 +5,7 @@ All notable changes to POMDPPlanners are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.2.0] - 2026-04-17
+## [0.2.0] - 2026-04-20
 
 ### Added
 - Vectorized belief updaters for RockSample, PacMan, LightDark (continuous and discrete), CartPole, MountainCar, Push, Continuous Push, Continuous LaserTag, and SafetyAnt POMDPs, with batched NumPy updates for significant throughput gains.
@@ -35,6 +35,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - CartPole and MountainCar vectorized updaters now correctly add process transition noise.
 - Removed duplicated reward logic and fixed an RNG-stream divergence in `sample_next_step` paths.
+- Post-run visualization no longer crashes Dask runs with `cannot pickle '_asyncio.Task'`. Visualization is now dispatched through the simulator's task manager as `EnvironmentVisualizationTask`s, scaling across the full cluster instead of being capped by a local joblib pool.
+- Distributed task pipeline is OS-agnostic. Workers on a different OS than the client (e.g. a Linux scheduler with Windows workers over a Tailscale/meshnet) no longer die unpickling `pathlib.PosixPath`. `EnvironmentVisualizationTask` now returns `Dict[str, bytes]` from a worker-private scratch directory, and `EpisodeSimulationTask`/`HyperParameterTuningSimulationTask` ship `cache_dir` as `str` with a graceful fallback to console-only logging when the path doesn't resolve on the worker's OS.
 
 ## [0.1.0] - Initial release
 
