@@ -16,6 +16,9 @@ from POMDPPlanners.utils.logger import (
 )
 
 
+_CACHE_DIR_LOG_WARNING_EMITTED = False
+
+
 class EpisodeSimulationTask(SimulationTask):
     """A class to represent a single simulation task with caching capabilities."""
 
@@ -29,7 +32,7 @@ class EpisodeSimulationTask(SimulationTask):
         seed: int,
         discount_factor: float = 1.0,
         episode_number: int = 0,
-        cache_dir: Optional[Path] = None,
+        cache_dir: Union[Path, str, None] = None,
         debug: bool = False,
         console_output: bool = True,
         use_queue_logger: bool = False,
@@ -46,7 +49,10 @@ class EpisodeSimulationTask(SimulationTask):
             seed: Random seed for reproducibility
             discount_factor: Discount factor for reward calculation
             episode_number: The episode number for this simulation
-            cache_dir: Directory for caching results
+            cache_dir: Directory for caching results. Accepted as ``Path`` or
+                ``str`` for caller convenience and stored internally as ``str``
+                so the pickled task is OS-agnostic and can be unpickled on a
+                worker whose OS differs from the client's.
             debug: Whether to enable debug logging
             console_output: Whether to enable console output (default: True).
                           Set to False to disable console output while keeping file logging.
@@ -87,7 +93,8 @@ class EpisodeSimulationTask(SimulationTask):
         self.episode_number = episode_number
         self.debug = debug
         self.console_output = console_output
-        self.cache_dir = cache_dir
+        # Always store cache_dir as str so the pickled task is OS-agnostic.
+        self.cache_dir: Optional[str] = str(cache_dir) if cache_dir is not None else None
         self.use_queue_logger = use_queue_logger
         self.log_only_on_failure = log_only_on_failure
         # Cache logger name to avoid issues after cleanup sets environment/policy to None
@@ -123,19 +130,57 @@ class EpisodeSimulationTask(SimulationTask):
         """
         logger_name = self._get_env_policy_logger_name()
 
-        # Configure output directory
-        output_dir = None
+        # Reconstruct a Path on the worker side. cache_dir is stored as a string
+        # to keep the pickled task OS-agnostic; the resulting Path may not be
+        # valid on this worker's OS (e.g. Windows path on Linux), so the logger
+        # setup is wrapped in a try/except that falls back to console-only
+        # logging instead of crashing the whole task.
+        output_dir: Optional[Path] = None
         if self.cache_dir is not None:
-            output_dir = self.cache_dir / "env_policy"
+            try:
+                output_dir = Path(self.cache_dir) / "env_policy"
+            except (TypeError, ValueError):
+                output_dir = None
 
-        # Use helper function to set up logger with buffering
-        return setup_task_logger_with_buffering(
-            logger_name=logger_name,
-            output_dir=output_dir,
-            debug=self.debug,
-            console_output=self.console_output,
-            use_queue=self.use_queue_logger,
-            log_only_on_failure=self.log_only_on_failure,
+        try:
+            return setup_task_logger_with_buffering(
+                logger_name=logger_name,
+                output_dir=output_dir,
+                debug=self.debug,
+                console_output=self.console_output,
+                use_queue=self.use_queue_logger,
+                log_only_on_failure=self.log_only_on_failure,
+            )
+        except (OSError, RuntimeError) as exc:
+            self._warn_cache_dir_unusable_once(exc)
+            return setup_task_logger_with_buffering(
+                logger_name=logger_name,
+                output_dir=None,
+                debug=self.debug,
+                console_output=self.console_output,
+                use_queue=self.use_queue_logger,
+                log_only_on_failure=self.log_only_on_failure,
+            )
+
+    def _warn_cache_dir_unusable_once(self, exc: BaseException) -> None:
+        """Emit a single warning when ``cache_dir`` is unusable on this worker.
+
+        The cache_dir string is set by the client and may not resolve on the
+        worker's OS (e.g. a POSIX path on a Windows worker, or a path the
+        worker has no permission to create). We swallow the underlying
+        OSError/RuntimeError and degrade to console-only logging; one warning
+        per worker is enough to surface the misconfiguration.
+        """
+        global _CACHE_DIR_LOG_WARNING_EMITTED  # pylint: disable=global-statement
+        if _CACHE_DIR_LOG_WARNING_EMITTED:
+            return
+        _CACHE_DIR_LOG_WARNING_EMITTED = True
+        logging.getLogger(__name__).warning(
+            "cache_dir=%r unusable on this worker (%s: %s); "
+            "falling back to console-only logging.",
+            self.cache_dir,
+            type(exc).__name__,
+            exc,
         )
 
     @staticmethod
@@ -148,7 +193,7 @@ class EpisodeSimulationTask(SimulationTask):
         seed: int,
         discount_factor: float,
         episode_number: int,
-        cache_dir: Optional[Path],
+        cache_dir: Union[Path, str, None],
         debug: bool,
         console_output: bool,
         use_queue_logger: bool,
@@ -200,8 +245,8 @@ class EpisodeSimulationTask(SimulationTask):
             raise ValueError("discount_factor must be between 0 and 1")
 
         # Validate cache_dir
-        if cache_dir is not None and not isinstance(cache_dir, Path):
-            raise TypeError("cache_dir must be a Path object or None")
+        if cache_dir is not None and not isinstance(cache_dir, (Path, str)):
+            raise TypeError("cache_dir must be a Path, str, or None")
 
         # Validate boolean parameters
         if not isinstance(debug, bool):
