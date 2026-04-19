@@ -436,9 +436,11 @@ class BaseSimulator(ABC):
     ) -> None:
         """Build per-environment visualization tasks and dispatch via the task manager.
 
-        Tasks are independent ``EnvironmentVisualizationTask`` instances whose
-        ``run()`` invokes ``self.visualizer.render(...)`` on a worker. The parent
-        process owns all MLflow artifact logging — workers only write files.
+        Each ``EnvironmentVisualizationTask`` runs on a worker, renders into a
+        worker-local scratch directory, and returns a ``Dict[str, bytes]``
+        keyed by POSIX-style relative path. The parent process materializes
+        those bytes locally and uploads them to MLflow. No filesystem path
+        crosses the wire — workers and clients can run on different OSes.
         """
         if not results:
             return
@@ -454,8 +456,6 @@ class BaseSimulator(ABC):
         tasks: List[SimulationTask] = []
         identifiers: List[str] = []
         for env_name, policy_results in results.items():
-            output_dir = viz_cache_dir / "viz_artifacts" / env_name
-            output_dir.mkdir(parents=True, exist_ok=True)
             policies_for_env = [p for p in policies_by_env[env_name] if p.name in policy_results]
             tasks.append(
                 EnvironmentVisualizationTask(
@@ -464,18 +464,24 @@ class BaseSimulator(ABC):
                     environment=env_lookup[env_name],
                     policy_results=policy_results,
                     policies=policies_for_env,
-                    output_dir=output_dir,
                     cache_visualizations=cache_visualizations,
                 )
             )
             identifiers.append(env_name)
 
-        viz_dirs, returned_env_names = self.task_manager.run_tasks(tasks, identifiers)
+        artifact_bundles, returned_env_names = self.task_manager.run_tasks(tasks, identifiers)
 
-        for env_name, env_viz_dir in zip(returned_env_names, viz_dirs):
-            if env_viz_dir and env_viz_dir.exists():
-                for item in env_viz_dir.iterdir():
-                    mlflow.log_artifact(str(item), env_name)
+        for env_name, artifacts in zip(returned_env_names, artifact_bundles):
+            if not artifacts:
+                continue
+            env_dir = viz_cache_dir / "viz_artifacts" / env_name
+            env_dir.mkdir(parents=True, exist_ok=True)
+            for rel_key, data in artifacts.items():
+                target = env_dir / Path(rel_key)
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(data)
+            for item in env_dir.iterdir():
+                mlflow.log_artifact(str(item), env_name)
 
         if self.cache_dir_path:
             viz_artifacts_dir = self.cache_dir_path / "viz_artifacts"

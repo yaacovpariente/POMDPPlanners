@@ -53,7 +53,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         parameters_to_optimize: List[Tuple[str, HyperParameterOptimizationDirection]],
         experiment_name: str = "hyperparameter_optimization",
         n_trials: int = 50,
-        cache_dir: Optional[Path] = None,
+        cache_dir: Union[Path, str, None] = None,
         debug: bool = False,
         console_output: bool = True,
         n_jobs: int = 1,
@@ -131,7 +131,8 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         self.parameters_to_optimize = parameters_to_optimize
         self.n_trials = n_trials
 
-        self.cache_dir = cache_dir
+        # Always store cache_dir as str so the pickled task is OS-agnostic.
+        self.cache_dir: Optional[str] = str(cache_dir) if cache_dir is not None else None
         self.debug = debug
         self.console_output = console_output
         self.n_jobs = n_jobs
@@ -161,8 +162,8 @@ class HyperParameterTuningSimulationTask(SimulationTask):
             no_logs=True,
         )
 
-        if cache_dir is not None:
-            storage_dir = cache_dir / "study_storage" / self.get_config_id()
+        if self.cache_dir is not None:
+            storage_dir = Path(self.cache_dir) / "study_storage" / self.get_config_id()
             self.study_storage = DiskCacheDB(cache_dir=str(storage_dir))
         else:
             self.study_storage = None
@@ -179,7 +180,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         parameters_to_optimize: List[Tuple[str, HyperParameterOptimizationDirection]],
         experiment_name: str,
         n_trials: int,
-        cache_dir: Optional[Path],
+        cache_dir: Union[Path, str, None],
         debug: bool,
         console_output: bool,
         n_jobs: int,
@@ -295,8 +296,8 @@ class HyperParameterTuningSimulationTask(SimulationTask):
             raise ValueError("alpha must be between 0 and 1")
 
         # Validate cache_dir
-        if cache_dir is not None and not isinstance(cache_dir, Path):
-            raise TypeError("cache_dir must be a Path object or None")
+        if cache_dir is not None and not isinstance(cache_dir, (Path, str)):
+            raise TypeError("cache_dir must be a Path, str, or None")
 
         # Validate boolean parameters
         if not isinstance(debug, bool):
@@ -309,17 +310,33 @@ class HyperParameterTuningSimulationTask(SimulationTask):
     @property
     def logger(self) -> logging.Logger:
         """All tasks should remain pickable and therefore the logger should be a property"""
-        output_dir = None
+        # Reconstruct a Path on the worker side. cache_dir is stored as a string
+        # to keep the pickled task OS-agnostic; the resulting Path may not be
+        # valid on this worker's OS, so the logger setup falls back to
+        # console-only logging instead of crashing the whole task.
+        output_dir: Optional[Path] = None
         if self.cache_dir is not None:
-            output_dir = self.cache_dir / "logs" / "hyper_parameter_tuning"
+            try:
+                output_dir = Path(self.cache_dir) / "logs" / "hyper_parameter_tuning"
+            except (TypeError, ValueError):
+                output_dir = None
 
-        return get_logger(
-            name=f"task.{self.environment.name}.{self.policy_cls.__name__}",
-            debug=self.debug,
-            output_dir=output_dir,
-            console_output=self.console_output,
-            use_queue=self.use_queue_logger,
-        )
+        try:
+            return get_logger(
+                name=f"task.{self.environment.name}.{self.policy_cls.__name__}",
+                debug=self.debug,
+                output_dir=output_dir,
+                console_output=self.console_output,
+                use_queue=self.use_queue_logger,
+            )
+        except (OSError, RuntimeError):
+            return get_logger(
+                name=f"task.{self.environment.name}.{self.policy_cls.__name__}",
+                debug=self.debug,
+                output_dir=None,
+                console_output=self.console_output,
+                use_queue=self.use_queue_logger,
+            )
 
     def run(self) -> Union[OptimizedPolicyResult, None]:
         """Run the hyperparameter optimization task using multi-objective optimization.
