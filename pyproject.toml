@@ -85,6 +85,16 @@ Documentation = "https://yaacovpariente.github.io/POMDPPlanners/"
 where = ["."]
 include = ["POMDPPlanners*"]
 
+[tool.setuptools.package-data]
+# PacMan visualizer loads these sprites at runtime via
+# pacman_visualizer.py: `sprite_dir / "<file>"`. Bundle them so PyPI
+# installs include the assets, not just the .py files.
+"POMDPPlanners.environments.pacman_pomdp" = ["img/*"]
+# Golden visualization GIFs used by the bundled test suite to validate
+# environment renderings. ~1.2MB total; ships so installed-package smoke
+# tests can run without re-downloading fixtures.
+"POMDPPlanners.tests.test_environments" = ["golden_visualizations/*"]
+
 # ---------------------------------------------------------------------------
 # Tool configuration
 # ---------------------------------------------------------------------------
