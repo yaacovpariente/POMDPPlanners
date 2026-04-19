@@ -1,7 +1,6 @@
 from unittest.mock import MagicMock, Mock, patch
 
 import pandas as pd
-import pytest
 
 from POMDPPlanners.core.policy import PolicySpaceInfo
 from POMDPPlanners.core.environment import SpaceType
@@ -339,3 +338,58 @@ class TestDaskSimulationsAPIHyperparameterOptimization:
 # Note: Integration tests for DaskSimulationsAPI would require an actual Dask cluster
 # or local Dask setup, which may not be suitable for unit test environments.
 # The tests above use mocking to verify the correct configuration and API usage.
+
+
+class TestDaskSimulationsAPIVisualizationRegression:
+    """End-to-end regression for the post-run visualization pickle bug.
+
+    A previous version of the simulator parallelized per-environment
+    visualization with a closure that captured ``self`` (and thereby the
+    live ``dask.distributed.Client`` plus its ``_asyncio.Task``). The closure
+    failed to pickle and the run aborted *after* the simulation phase had
+    already succeeded. The current implementation dispatches viz through
+    ``EnvironmentVisualizationTask`` instances via the simulator's task
+    manager, which carry no live state. This test guards against
+    regressions of that bug by running the full pipeline on a local Dask
+    cluster.
+    """
+
+    def test_run_completes_and_logs_viz_artifacts_with_local_dask_cluster(
+        self, temp_cache_dir, sample_environment_run_params
+    ):
+        """Full DaskSimulationsAPI run produces MLflow artifacts without pickle errors.
+
+        Purpose: Validates the post-run visualization step survives Dask
+            dispatch end-to-end (regression for the ``cannot pickle
+            '_asyncio.Task'`` failure observed under the old joblib-based
+            viz pass).
+
+        Given: A DaskSimulationsAPI configured to spin up a local Dask cluster
+            with two workers and a single TigerPOMDP environment-policy run.
+        When: ``run_multiple_environments_and_policies`` is executed.
+        Then: The call returns without raising any pickle error, the results
+            dict carries one environment, and at least one MLflow artifact
+            is logged under ``mlruns/``.
+
+        Test type: integration
+        """
+        api = DaskSimulationsAPI(scheduler_address=None)
+        results, stats_df = api.run_multiple_environments_and_policies(
+            environment_run_params=sample_environment_run_params,
+            alpha=0.1,
+            confidence_interval_level=0.95,
+            experiment_name="dask_viz_regression",
+            scheduler_address=None,  # local cluster spun up for this run
+            n_jobs=2,
+            cache_dir_path=temp_cache_dir,
+            clear_cache_on_start=True,
+        )
+
+        assert isinstance(results, dict)
+        assert len(results) == 1
+        assert isinstance(stats_df, pd.DataFrame)
+
+        mlruns_dir = temp_cache_dir / "mlruns"
+        assert mlruns_dir.exists(), f"mlruns dir not created at {mlruns_dir}"
+        artifact_files = list(mlruns_dir.rglob("artifacts/**/*"))
+        assert artifact_files, "expected at least one MLflow artifact under mlruns/"
