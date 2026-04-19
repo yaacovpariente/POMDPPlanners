@@ -30,7 +30,18 @@ Core Environment Types
    :toctree: ../api/
 
    POMDPPlanners.environments.push_pomdp.PushPOMDP
+   POMDPPlanners.environments.push_pomdp.ContinuousPushPOMDP
    POMDPPlanners.environments.safety_ant_velocity_pomdp.SafeAntVelocityPOMDP
+
+**Information Gathering & Pursuit**
+
+.. autosummary::
+   :toctree: ../api/
+
+   POMDPPlanners.environments.rock_sample_pomdp.RockSamplePOMDP
+   POMDPPlanners.environments.pacman_pomdp.PacManPOMDP
+   POMDPPlanners.environments.laser_tag_pomdp.LaserTagPOMDP
+   POMDPPlanners.environments.laser_tag_pomdp.ContinuousLaserTagPOMDP
 
 Environment Interface
 ---------------------
