@@ -1,4 +1,6 @@
 # pylint: disable=protected-access,too-many-lines  # Tests need to access protected members
+import pickle
+from pathlib import Path
 from unittest.mock import patch
 
 import numpy as np
@@ -1531,3 +1533,39 @@ def test_episode_simulation_task_pomcpow_all_compatible_environments():
     )
     for env_name in results:
         print(f"  ✓ {env_name}")
+
+
+def test_episode_simulation_task_pickle_is_os_agnostic(environment, policy):
+    """The pickled task must not embed OS-specific Path class names.
+
+    Purpose: Regression for cross-OS worker crashes. Workers on a different
+        OS than the client cannot unpickle ``pathlib.PosixPath`` /
+        ``pathlib.WindowsPath`` shipped from the other side. The pickled
+        task payload must therefore not reference either class.
+
+    Given: An EpisodeSimulationTask constructed with a Path-typed
+        ``cache_dir`` (PosixPath on Linux runners; WindowsPath on Windows).
+    When: ``pickle.dumps`` serializes the task.
+    Then: The byte stream contains neither ``b"PosixPath"`` nor
+        ``b"WindowsPath"`` anywhere.
+
+    Test type: unit
+    """
+    initial_belief = create_test_belief()
+    task = EpisodeSimulationTask(
+        environment=environment,
+        policy=policy,
+        initial_belief=initial_belief,
+        num_steps=2,
+        episode_id=0,
+        seed=42,
+        cache_dir=Path("/tmp/some_cache"),
+    )
+    blob = pickle.dumps(task)
+    assert b"PosixPath" not in blob, (
+        "EpisodeSimulationTask pickle stream embeds pathlib.PosixPath. "
+        "Foreign-OS workers cannot unpickle this. Use str on the wire."
+    )
+    assert (
+        b"WindowsPath" not in blob
+    ), "EpisodeSimulationTask pickle stream embeds pathlib.WindowsPath."
