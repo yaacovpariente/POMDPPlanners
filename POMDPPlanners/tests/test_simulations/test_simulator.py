@@ -9,31 +9,28 @@ This module tests the simulator functionality, focusing on:
 
 # pylint: disable=protected-access  # Tests need to access protected members
 
+import gc
+import logging
 import os
 import random
 import shutil
-import sys
 import tempfile
-import gc
-import psutil
-import mlflow
-import logging
 import time
-import inspect
 from inspect import signature
 from pathlib import Path
+from typing import cast
+from unittest.mock import Mock, patch
 
+import mlflow
 import numpy as np
 import pandas as pd
+import psutil
 import pytest
 
-from POMDPPlanners.core.belief import get_initial_belief
-from POMDPPlanners.core.simulation import EnvironmentRunParams, History, StepData
-from POMDPPlanners.core.policy import PolicyRunData
-from POMDPPlanners.core.belief import Belief, WeightedParticleBelief
+from POMDPPlanners.core.belief import Belief, WeightedParticleBelief, get_initial_belief
 from POMDPPlanners.core.environment import DiscreteActionsEnvironment
-from unittest.mock import Mock, patch
-from typing import cast
+from POMDPPlanners.core.policy import PolicyRunData
+from POMDPPlanners.core.simulation import EnvironmentRunParams, History, StepData
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
     ContinuousLightDarkPOMDPDiscreteActions,
 )
@@ -1603,11 +1600,11 @@ def test_simulator_caches_visualizations_with_continuous_light_dark_pomdp(
         policy_run_data=[PolicyRunData(info_variables=[])],
     )
 
-    # ACT: Test the integration by calling the simulator's visualization caching method
-    # This tests the full integration: simulator -> environment.cache_visualization -> visualize_path
+    # ACT: Test the integration by calling the visualizer's per-episode cache hook
+    # This tests the full integration: visualizer -> environment.cache_visualization -> visualize_path
     integration_error = ""  # Initialize to avoid unbound variable error
     try:
-        simulator._cache_episode_visualizations(
+        simulator.visualizer._cache_episodes(  # type: ignore[attr-defined]
             environment=cast(DiscreteActionsEnvironment, environment),
             policy_histories=[test_history],
             policy_dir=test_policy_dir,
@@ -1899,8 +1896,8 @@ def test_simulator_cache_episode_visualizations_method_integration(temp_cache_di
         ),
     ]
 
-    # ACT: Call _cache_episode_visualizations method directly
-    simulator._cache_episode_visualizations(
+    # ACT: Call the visualizer's per-episode cache hook directly
+    simulator.visualizer._cache_episodes(  # type: ignore[attr-defined]
         environment=cast(DiscreteActionsEnvironment, environment),
         policy_histories=test_histories,
         policy_dir=test_policy_dir,
@@ -2002,15 +1999,17 @@ def test_simulator_visualization_error_handling_with_continuous_light_dark(
     )
 
     # ACT & ASSERT: Test error handling during visualization
+    from POMDPPlanners.simulations.simulator import episode_returns_visualizer as _erv
+
     with patch.object(
         environment,
         "cache_visualization",
         side_effect=Exception("Test visualization error"),
     ):
         # This should not raise an exception, but should log a warning
-        with patch.object(simulator.logger, "warning") as mock_warning:
-            # Call the visualization method - should handle error gracefully
-            simulator._cache_episode_visualizations(
+        with patch.object(_erv.logger, "warning") as mock_warning:
+            # Call the visualizer's per-episode cache hook - should handle error gracefully
+            simulator.visualizer._cache_episodes(  # type: ignore[attr-defined]
                 environment=cast(DiscreteActionsEnvironment, environment),
                 policy_histories=[test_history],
                 policy_dir=test_policy_dir,
@@ -2619,111 +2618,11 @@ def test_create_and_log_environment_visualizations_disabled_caching(temp_cache_d
     assert True, "Function should complete successfully without creating visualization cache"
 
 
-def test_create_and_log_environment_visualizations_error_handling(temp_cache_dir):
-    """
-    Purpose: Validates that _create_and_log_environment_visualizations handles errors gracefully
-
-    Given: POMDPSimulator with problematic environment that fails visualization
-    When: _create_and_log_environment_visualizations encounters visualization errors
-    Then: Function continues execution and logs warnings without crashing
-
-    Test type: unit
-    """
-    # ARRANGE: Setup simulator with logging capture
-
-    simulator = POMDPSimulator(
-        task_manager_config=JoblibConfig(n_jobs=1),
-        cache_dir_path=temp_cache_dir,
-        experiment_name="ErrorHandlingTest",
-        debug=True,
-    )
-
-    environment = ContinuousLightDarkPOMDPDiscreteActions(
-        discount_factor=0.95,
-        goal_state=np.array([3, 3]),
-        start_state=np.array([0, 0]),
-        beacons=[(1, 2), (1, 2)],
-        obstacles=[(2, 1)],
-        grid_size=4,
-        name="ErrorTestEnv",
-    )
-
-    action_sampler = DiscreteActionSampler(environment.get_actions())
-    policy = PFT_DPW(
-        environment=environment,
-        discount_factor=0.95,
-        depth=2,
-        action_sampler=action_sampler,
-        k_a=2.0,
-        alpha_a=0.5,
-        name="ErrorTestPolicy",
-        n_simulations=2,
-    )
-
-    # Create test results
-
-    sample_state = np.array([0.0, 0.0])
-    belief = WeightedParticleBelief(particles=[sample_state], log_weights=np.array([0.5]))
-
-    history_entry = StepData(
-        state=sample_state,
-        action="right",
-        next_state=np.array([1.0, 0.0]),
-        observation=np.array([1.1, 0.1]),
-        reward=1.0,
-        belief=belief,
-    )
-
-    test_history = History(
-        history=[history_entry],
-        actual_num_steps=1,
-        reach_terminal_state=False,
-        discount_factor=0.95,
-        average_state_sampling_time=0.01,
-        average_action_time=0.02,
-        average_observation_time=0.01,
-        average_belief_update_time=0.03,
-        average_reward_time=0.001,
-        policy_run_data=[PolicyRunData(info_variables=[])],
-    )
-
-    results = {environment.name: {policy.name: [test_history]}}
-
-    env_run_params = [
-        EnvironmentRunParams(
-            environment=environment,
-            belief=belief,
-            policies=[policy],
-            num_episodes=1,
-            num_steps=1,
-        )
-    ]
-
-    # ACT & ASSERT: Test error handling during visualization
-    with patch.object(
-        environment,
-        "cache_visualization",
-        side_effect=Exception("Test visualization error"),
-    ):
-        # This should not raise an exception, but should handle errors gracefully
-
-        with patch.object(simulator.logger, "warning") as mock_warning:
-            with simulator:
-                with mlflow.start_run(run_name="error_handling_test"):
-                    # Call the function - should handle error gracefully
-                    simulator._create_and_log_environment_visualizations(
-                        results=results,
-                        environment_run_params=env_run_params,
-                        cache_visualizations=True,
-                        n_jobs=1,
-                    )
-
-            # Verify warning was logged (if the error handling works correctly)
-            # Note: The exact warning message depends on the implementation
-            assert mock_warning.call_count >= 0, "Function should handle errors without crashing"
-
-    # Verify function completed successfully despite errors
-    assert True, "Function should complete successfully even with visualization errors"
+# NOTE: The previous test_create_and_log_environment_visualizations_error_handling
+# verified in-process error handling on the simulator. After the refactor that
+# moved per-episode error handling into EpisodeReturnsVisualizer._cache_episodes
+# (and dispatch into a separate task), the equivalent unit-level coverage lives
+# in tests/test_simulations/test_episode_returns_visualizer.py.
 
 
 def test_create_and_log_environment_visualizations_empty_results(temp_cache_dir):

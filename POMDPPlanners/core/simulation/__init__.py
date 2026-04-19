@@ -21,6 +21,7 @@ from POMDPPlanners.core.simulation.tasks import (
     TaskManager,
     TaskManagerExternalDB,
 )
+from POMDPPlanners.core.simulation.visualizers import ExperimentVisualizer
 
 __all__ = [
     "StepData",
@@ -36,5 +37,6 @@ __all__ = [
     "DataBaseInterface",
     "TaskManager",
     "TaskManagerExternalDB",
+    "ExperimentVisualizer",
     "history_to_discounted_return_value",
 ]

@@ -7,7 +7,12 @@ Both task classes support pickling for distributed computing via __getstate__
 and __setstate__ methods.
 """
 
+from .environment_visualization_task import EnvironmentVisualizationTask
 from .episode_simulation_task import EpisodeSimulationTask
 from .hyper_parameter_tuning_simulation_task import HyperParameterTuningSimulationTask
 
-__all__ = ["EpisodeSimulationTask", "HyperParameterTuningSimulationTask"]
+__all__ = [
+    "EnvironmentVisualizationTask",
+    "EpisodeSimulationTask",
+    "HyperParameterTuningSimulationTask",
+]
