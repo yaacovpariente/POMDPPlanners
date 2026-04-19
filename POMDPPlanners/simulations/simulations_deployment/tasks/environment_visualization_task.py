@@ -2,16 +2,20 @@
 
 The task wraps an :class:`ExperimentVisualizer` along with the per-environment
 inputs it needs. Dispatched via the simulator's task manager (Dask, Joblib,
-PBS, Sequential), it runs on a worker process and returns the path of the
-directory it wrote to. The simulator (parent process) handles the subsequent
-MLflow artifact logging.
+PBS, Sequential), it runs on a worker process. The worker writes artifacts
+into a local scratch directory it creates itself, then returns a mapping from
+POSIX-style relative path to file bytes. The simulator (parent process)
+materializes those bytes on its own filesystem and handles MLflow logging.
 
-Each task instance carries a unique config id so it never matches the cache
-of a previous run — the rendered output directories are deleted once their
-contents are uploaded to MLflow, so cached return values would point to
-non-existent paths on a re-run.
+This contract is OS-agnostic: no filesystem path crosses the wire, so a
+Linux client can dispatch tasks to Windows workers and vice versa.
+
+Each task instance carries a unique config id so the cache-backed managers
+(Joblib, PBS) never serve a stale return from a previous run.
 """
 
+import shutil
+import tempfile
 import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Sequence
@@ -24,14 +28,31 @@ if TYPE_CHECKING:
     from POMDPPlanners.core.policy import Policy
 
 
+def _read_artifacts_to_bytes(root: Path) -> Dict[str, bytes]:
+    """Read every file under ``root`` and return ``{posix_relative_path: bytes}``.
+
+    Keys use ``/`` separators regardless of the worker OS so the parent process
+    can recreate the same layout cross-platform via ``Path(key)``.
+    """
+    artifacts: Dict[str, bytes] = {}
+    for file_path in sorted(root.rglob("*")):
+        if not file_path.is_file():
+            continue
+        rel_key = file_path.relative_to(root).as_posix()
+        artifacts[rel_key] = file_path.read_bytes()
+    return artifacts
+
+
 class EnvironmentVisualizationTask(SimulationTask):
     """Per-environment visualization unit dispatched through the task manager.
 
     The task is intentionally a self-contained value object: it holds the
-    visualizer, the environment, the per-policy results, and the destination
-    directory. Workers pickle and execute it without needing a back-reference
-    to the simulator (which would drag the live task-manager client into the
-    pickle stream and break Dask dispatch).
+    visualizer, the environment, and the per-policy results. Workers pickle
+    and execute it without needing a back-reference to the simulator (which
+    would drag the live task-manager client into the pickle stream and break
+    Dask dispatch) and without any client-supplied filesystem path (which
+    would either fail to unpickle on a foreign OS or point at a directory the
+    worker cannot reach).
 
     Attributes:
         visualizer: Strategy that renders the artifacts.
@@ -39,7 +60,6 @@ class EnvironmentVisualizationTask(SimulationTask):
         environment: Environment instance for which artifacts are rendered.
         policy_results: Mapping from policy name to histories.
         policies: Policy instances corresponding to ``policy_results`` keys.
-        output_dir: Directory where the visualizer writes its artifacts.
         cache_visualizations: Whether to render per-episode env-specific caches.
     """
 
@@ -50,7 +70,6 @@ class EnvironmentVisualizationTask(SimulationTask):
         environment: "Environment",
         policy_results: Dict[str, List[History]],
         policies: Sequence["Policy"],
-        output_dir: Path,
         cache_visualizations: bool,
     ):
         """Initialize a visualization task.
@@ -61,7 +80,6 @@ class EnvironmentVisualizationTask(SimulationTask):
             environment: Environment instance to render.
             policy_results: Per-policy histories produced by the simulation phase.
             policies: Policy instances matching the keys of ``policy_results``.
-            output_dir: Existing directory under which artifacts are written.
             cache_visualizations: Whether to render per-episode env caches.
         """
         self.visualizer = visualizer
@@ -69,7 +87,6 @@ class EnvironmentVisualizationTask(SimulationTask):
         self.environment = environment
         self.policy_results = policy_results
         self.policies = list(policies)
-        self.output_dir = output_dir
         self.cache_visualizations = cache_visualizations
         self._config_id = self._generate_config_id()
 
@@ -87,25 +104,33 @@ class EnvironmentVisualizationTask(SimulationTask):
         """Return a unique identifier for this visualization task.
 
         The id includes a per-instance UUID so the cached managers
-        (Joblib, PBS) never serve a stale ``Path`` from a previous run; the
-        artifact directory itself is deleted after upload.
+        (Joblib, PBS) never serve a stale return from a previous run.
         """
         return self._config_id
 
-    def run(self) -> Path:
+    def run(self) -> Dict[str, bytes]:
         """Render the environment's visualization artifacts on the worker.
 
+        The worker creates a private scratch directory via ``tempfile.mkdtemp``,
+        invokes the visualizer there, reads every produced file into memory,
+        cleans up the scratch directory, and returns the bytes dict.
+
         Returns:
-            Path to the directory containing the rendered artifacts.
+            Mapping from POSIX-style relative file path to file bytes.
         """
-        return self.visualizer.render(
-            env_name=self.env_name,
-            environment=self.environment,
-            policy_results=self.policy_results,
-            policies=self.policies,
-            output_dir=self.output_dir,
-            cache_visualizations=self.cache_visualizations,
-        )
+        tmp = Path(tempfile.mkdtemp(prefix="env_viz_"))
+        try:
+            self.visualizer.render(
+                env_name=self.env_name,
+                environment=self.environment,
+                policy_results=self.policy_results,
+                policies=self.policies,
+                output_dir=tmp,
+                cache_visualizations=self.cache_visualizations,
+            )
+            return _read_artifacts_to_bytes(tmp)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
 
     def __getstate__(self) -> Dict[str, Any]:
         return {
@@ -114,7 +139,6 @@ class EnvironmentVisualizationTask(SimulationTask):
             "environment": self.environment,
             "policy_results": self.policy_results,
             "policies": self.policies,
-            "output_dir": self.output_dir,
             "cache_visualizations": self.cache_visualizations,
             "_config_id": self._config_id,
         }
@@ -125,6 +149,5 @@ class EnvironmentVisualizationTask(SimulationTask):
         self.environment = state["environment"]
         self.policy_results = state["policy_results"]
         self.policies = state["policies"]
-        self.output_dir = state["output_dir"]
         self.cache_visualizations = state["cache_visualizations"]
         self._config_id = state["_config_id"]

@@ -122,7 +122,8 @@ def test_hyper_parameter_tuning_task_creation(environment, hyper_parameters, tem
     assert task.parameters_to_optimize == [
         ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
     ]
-    assert task.cache_dir == temp_cache_dir
+    # cache_dir is stored as str so the pickled task is OS-agnostic.
+    assert task.cache_dir == str(temp_cache_dir)
     assert task.debug is False
     assert task.console_output is False
     assert task.n_jobs == 1
