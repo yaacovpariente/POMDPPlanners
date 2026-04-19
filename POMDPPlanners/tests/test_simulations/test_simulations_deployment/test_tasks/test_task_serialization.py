@@ -134,7 +134,9 @@ class TestEpisodeSimulationTaskSerialization:
         pickled = pickle.dumps(task)
         unpickled_task = pickle.loads(pickled)
 
-        assert unpickled_task.cache_dir == cache_dir
+        # cache_dir is normalized to str on the wire so the pickled task is
+        # OS-agnostic (a Linux client can dispatch to a Windows worker, etc.).
+        assert unpickled_task.cache_dir == str(cache_dir)
 
     def test_episode_simulation_task_serialization_with_debug(self):
         """Test EpisodeSimulationTask serialization with debug enabled.
@@ -402,7 +404,8 @@ class TestHyperParameterTuningSimulationTaskSerialization:
         pickled = pickle.dumps(task)
         unpickled_task = pickle.loads(pickled)
 
-        assert unpickled_task.cache_dir == cache_dir
+        # cache_dir is normalized to str on the wire so the pickled task is OS-agnostic.
+        assert unpickled_task.cache_dir == str(cache_dir)
 
     def test_hyperparameter_tuning_task_serialization_with_multiple_optimization_params(
         self,
@@ -823,7 +826,8 @@ class TestComplexHyperparameterTuningTaskSerialization:
         pickled = pickle.dumps(task)
         unpickled_task = pickle.loads(pickled)
 
-        assert unpickled_task.cache_dir == cache_dir
+        # cache_dir is normalized to str on the wire so the pickled task is OS-agnostic.
+        assert unpickled_task.cache_dir == str(cache_dir)
 
 
 class TestTaskSerializationEdgeCases:
