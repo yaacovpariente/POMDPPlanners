@@ -36,6 +36,10 @@ ext_modules = [
         name="POMDPPlanners.environments.mountain_car_pomdp._native",
         sources=["POMDPPlanners/environments/mountain_car_pomdp/_cpp/mountain_car.cpp"],
     ),
+    _make_ext(
+        name="POMDPPlanners.environments.cartpole_pomdp._native",
+        sources=["POMDPPlanners/environments/cartpole_pomdp/_cpp/cartpole.cpp"],
+    ),
 ]
 
 setup(ext_modules=ext_modules, cmdclass={"build_ext": build_ext})
