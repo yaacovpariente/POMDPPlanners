@@ -4,7 +4,7 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y libatomic1 && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y libatomic1 g++ && rm -rf /var/lib/apt/lists/*
 
 # Copy only dependency-defining files so this layer is cached
 # unless dependencies actually change.
