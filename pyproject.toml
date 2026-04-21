@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=65.0.0", "wheel"]
+requires = ["setuptools>=65.0.0", "wheel", "pybind11>=2.12"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -69,6 +69,7 @@ dev = [
     "jupyter-client>=7.0.0",
     "nbformat>=5.0.0",
     "pytest-benchmark>=4.0.0",
+    "pybind11>=2.12",
 ]
 docs = [
     "sphinx>=5.0.0",
@@ -134,6 +135,7 @@ markers = [
 [tool.pylint.master]
 ignore = "CVS"
 persistent = true
+extension-pkg-allow-list = ["POMDPPlanners.environments.mountain_car_pomdp._native"]
 
 [tool.pylint.messages_control]
 disable = [
