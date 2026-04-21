@@ -3,10 +3,18 @@
 //
 // These classes are NOT exposed to Python. Per-env pybind11 extensions
 // instantiate the base at their dimension (e.g. MountainCar uses
-// ``TransitionModelCpp<2>``), override the env-specific ``compute_mean``
-// (and optional ``post_sample_transform``) hook, and bind the concrete
-// subclass. The sample() / probability() loops, RNG selection, and
-// stack-allocated scratch all live here.
+// ``TransitionModelCpp<2>``), override the env-specific
+// ``compute_mean_from_state`` (transition) /
+// ``compute_mean_from_next_state`` (observation) hook (plus optional
+// ``post_sample_transform``), and bind the concrete subclass. The
+// sample() / probability() loops, RNG selection, and stack-allocated
+// scratch all live here.
+//
+// The ``compute_mean_from_*`` hooks take the state / next_state as an
+// explicit argument so batched entry points (see Layer 2) can vary it
+// across rows without mutating the model's ``state_`` / ``next_state_``
+// members. Single-instance ``sample()`` / ``probability()`` simply pass
+// ``state_.data()`` / ``next_state_.data()`` through.
 
 #ifndef POMDP_NATIVE_MODELS_HPP_
 #define POMDP_NATIVE_MODELS_HPP_
@@ -40,7 +48,7 @@ class TransitionModelCpp {
             throw std::invalid_argument("n_samples must be non-negative");
         }
         double mean[Dim];  // NOLINT(modernize-avoid-c-arrays)
-        compute_mean(mean);
+        compute_mean_from_state(state_.data(), mean);
 
         double buf[Dim];  // NOLINT(modernize-avoid-c-arrays)
         pybind11::list out;
@@ -55,7 +63,7 @@ class TransitionModelCpp {
 
     pybind11::array_t<double> probability(const pybind11::object &values) const {
         double mean[Dim];  // NOLINT(modernize-avoid-c-arrays)
-        compute_mean(mean);
+        compute_mean_from_state(state_.data(), mean);
 
         auto batch = extract_rows_nd(values, Dim);
         auto out = pybind11::array_t<double>(static_cast<pybind11::ssize_t>(batch.n));
@@ -71,9 +79,13 @@ class TransitionModelCpp {
     const pybind11::object &action_obj() const noexcept { return action_; }
 
   protected:
-    // Env-specific deterministic next-state computation. Writes Dim doubles
-    // to out. Called once per sample() / probability() call.
-    virtual void compute_mean(double *out) const = 0;
+    // Env-specific deterministic next-state computation. Given a state vector
+    // (length Dim) and the model's stored action, writes the deterministic
+    // next-state mean into out (also length Dim). Called once per sample() /
+    // probability() invocation; called N times per batch_sample() call with
+    // varying state. env-specific params (power, gravity, ...) stay as
+    // members on the subclass.
+    virtual void compute_mean_from_state(const double *state, double *out) const = 0;
 
     // Optional hook, called after each additive Gaussian draw so envs can
     // clip, wrap, or otherwise project the sample onto their feasible set.
@@ -98,7 +110,7 @@ class ObservationModelCpp {
             throw std::invalid_argument("n_samples must be non-negative");
         }
         double mean[Dim];  // NOLINT(modernize-avoid-c-arrays)
-        compute_mean(mean);
+        compute_mean_from_next_state(next_state_.data(), mean);
 
         double buf[Dim];  // NOLINT(modernize-avoid-c-arrays)
         pybind11::list out;
@@ -112,7 +124,7 @@ class ObservationModelCpp {
 
     pybind11::array_t<double> probability(const pybind11::object &values) const {
         double mean[Dim];  // NOLINT(modernize-avoid-c-arrays)
-        compute_mean(mean);
+        compute_mean_from_next_state(next_state_.data(), mean);
 
         auto batch = extract_rows_nd(values, Dim);
         auto out = pybind11::array_t<double>(static_cast<pybind11::ssize_t>(batch.n));
@@ -130,9 +142,11 @@ class ObservationModelCpp {
   protected:
     // Default behavior: observation mean equals the input next_state. Envs
     // with state-dependent observation means (e.g. light-dark) can override.
-    virtual void compute_mean(double *out) const {
+    // Called once per sample() / probability() invocation; called N times
+    // per batch_log_likelihood() call with varying next_state.
+    virtual void compute_mean_from_next_state(const double *next_state, double *out) const {
         for (std::size_t i = 0; i < Dim; ++i) {
-            out[i] = next_state_[i];
+            out[i] = next_state[i];
         }
     }
 
