@@ -1,18 +1,21 @@
 """Benchmarks for WeightedParticleBelief / VectorizedWeightedParticleBelief
-update paths across natively-ported (MountainCar, CartPole, LaserTag) envs.
+update paths across natively-ported envs (MountainCar, CartPole,
+Light-Dark, LaserTag).
 
 Measures the cases laid out in the pomdp_native port plan:
 
-    | Case                    | Env        | Belief class                        | Path            |
-    |-------------------------|------------|-------------------------------------|-----------------|
-    | MC-generic-cpp          | MountainCar| WeightedParticleBelief.update       | C++ batch       |
-    | MC-vectorized-cpp       | MountainCar| VectorizedWeightedParticleBelief    | C++ batch       |
-    | CP-generic-python       | CartPole   | WeightedParticleBelief.update       | pre-port Python |
-    | CP-vectorized-numpy     | CartPole   | VectorizedWeightedParticleBelief    | pre-port numpy  |
-    | CP-generic-cpp          | CartPole   | WeightedParticleBelief.update       | C++ batch       |
-    | CP-vectorized-cpp       | CartPole   | VectorizedWeightedParticleBelief    | C++ batch       |
-    | LaserTag-generic-cpp    | LaserTag   | WeightedParticleBelief.update       | C++ batch       |
-    | LaserTag-vectorized-cpp | LaserTag   | VectorizedWeightedParticleBelief    | C++ batch       |
+    | Case                     | Env         | Belief class                        | Path            |
+    |--------------------------|-------------|-------------------------------------|-----------------|
+    | MC-generic-cpp           | MountainCar | WeightedParticleBelief.update       | C++ batch       |
+    | MC-vectorized-cpp        | MountainCar | VectorizedWeightedParticleBelief    | C++ batch       |
+    | CP-generic-python        | CartPole    | WeightedParticleBelief.update       | pre-port Python |
+    | CP-vectorized-numpy      | CartPole    | VectorizedWeightedParticleBelief    | pre-port numpy  |
+    | CP-generic-cpp           | CartPole    | WeightedParticleBelief.update       | C++ batch       |
+    | CP-vectorized-cpp        | CartPole    | VectorizedWeightedParticleBelief    | C++ batch       |
+    | lightdark-generic-cpp    | Light-Dark  | WeightedParticleBelief.update       | C++ batch       |
+    | lightdark-vectorized-cpp | Light-Dark  | VectorizedWeightedParticleBelief    | C++ batch       |
+    | lasertag-generic-cpp     | LaserTag    | WeightedParticleBelief.update       | C++ batch       |
+    | lasertag-vectorized-cpp  | LaserTag    | VectorizedWeightedParticleBelief    | C++ batch       |
 
 Same N=100 particles, same action, same observation within each env. The
 two CartPole "python" / "numpy" cases snapshot the pre-port implementations
@@ -34,7 +37,7 @@ Use ``pytest-benchmark compare`` across the cases to report:
 Run::
 
     pytest POMDPPlanners/tests/benchmarks/test_benchmark_particle_belief_update.py \\
-        -m benchmark --benchmark-save=layer2_batch_dispatch -v
+        -m benchmark --benchmark-save=particle_belief_update -v
 """
 
 import math
@@ -58,6 +61,12 @@ from POMDPPlanners.environments.cartpole_pomdp.cartpole_pomdp_beliefs import (
 from POMDPPlanners.environments.laser_tag_pomdp import ContinuousLaserTagPOMDP
 from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_beliefs.continuous_laser_tag_vectorized_updater import (
     ContinuousLaserTagVectorizedUpdater,
+)
+from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
+    ContinuousLightDarkPOMDP,
+)
+from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_beliefs import (
+    ContinuousLightDarkVectorizedUpdater,
 )
 from POMDPPlanners.environments.mountain_car_pomdp import MountainCarPOMDP
 from POMDPPlanners.environments.mountain_car_pomdp.mountain_car_pomdp_beliefs import (
@@ -469,6 +478,75 @@ def test_bench_cp_vectorized_belief_update_cpp(benchmark):
     )
     action = env.get_actions()[0]
     observation = env.initial_observation_dist().sample(n_samples=1)[0]
+
+    def run():
+        return belief.update(action=action, observation=observation, pomdp=env)
+
+    benchmark(run)
+
+
+# ---------------------------------------------------------------------------
+# Continuous Light-Dark (native) cases
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.benchmark(group="belief-update-lightdark-generic-cpp")
+def test_bench_lightdark_generic_belief_update(benchmark):
+    """Benchmark WeightedParticleBelief.update on Continuous Light-Dark.
+
+    Purpose: Measures the generic per-particle-looking belief update path
+    on an env whose transition/observation models expose native batch
+    entry points. WeightedParticleBelief._update_weights sniffs the batch
+    interface and dispatches to C++ batch_sample / batch_log_likelihood
+    in a single round-trip per update.
+
+    Given: ContinuousLightDarkPOMDP + WeightedParticleBelief with N=100
+        particles.
+    When: belief.update(action, observation, pomdp) is called repeatedly.
+    Then: Execution time is recorded.
+
+    Test type: performance
+    """
+    env = ContinuousLightDarkPOMDP(discount_factor=0.95)
+    particles = list(env.initial_state_dist().sample(n_samples=_N_PARTICLES))
+    log_weights = np.log(np.ones(_N_PARTICLES) / _N_PARTICLES)
+    belief = WeightedParticleBelief(particles=particles, log_weights=log_weights)
+    action = np.array([1.0, 0.0])
+    observation = np.array([5.0, 5.0])
+
+    def run():
+        return belief.update(action=action, observation=observation, pomdp=env)
+
+    benchmark(run)
+
+
+@pytest.mark.benchmark(group="belief-update-lightdark-vectorized-cpp")
+def test_bench_lightdark_vectorized_belief_update(benchmark):
+    """Benchmark VectorizedWeightedParticleBelief.update on Continuous Light-Dark.
+
+    Purpose: Measures the explicit vectorized belief path. Its updater
+    (ContinuousLightDarkVectorizedUpdater) delegates batch_transition and
+    batch_observation_log_likelihood directly to the native C++ batch
+    methods.
+
+    Given: ContinuousLightDarkPOMDP + VectorizedWeightedParticleBelief with
+        N=100 particles.
+    When: belief.update(action, observation, pomdp) is called repeatedly.
+    Then: Execution time is recorded.
+
+    Test type: performance
+    """
+    env = ContinuousLightDarkPOMDP(discount_factor=0.95)
+    updater = ContinuousLightDarkVectorizedUpdater.from_environment(env)
+    particles = np.array(env.initial_state_dist().sample(n_samples=_N_PARTICLES))
+    log_weights = np.log(np.ones(_N_PARTICLES) / _N_PARTICLES)
+    belief = VectorizedWeightedParticleBelief(
+        particles=particles,
+        log_weights=log_weights,
+        updater=updater,
+    )
+    action = np.array([1.0, 0.0])
+    observation = np.array([5.0, 5.0])
 
     def run():
         return belief.update(action=action, observation=observation, pomdp=env)

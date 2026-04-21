@@ -41,6 +41,10 @@ ext_modules = [
         sources=["POMDPPlanners/environments/cartpole_pomdp/_cpp/cartpole.cpp"],
     ),
     _make_ext(
+        name="POMDPPlanners.environments.light_dark_pomdp._native",
+        sources=["POMDPPlanners/environments/light_dark_pomdp/_cpp/continuous_light_dark.cpp"],
+    ),
+    _make_ext(
         name="POMDPPlanners.environments.laser_tag_pomdp._native",
         sources=["POMDPPlanners/environments/laser_tag_pomdp/_cpp/continuous_laser_tag.cpp"],
     ),
