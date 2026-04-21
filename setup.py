@@ -37,6 +37,10 @@ ext_modules = [
         sources=["POMDPPlanners/environments/mountain_car_pomdp/_cpp/mountain_car.cpp"],
     ),
     _make_ext(
+        name="POMDPPlanners.environments.cartpole_pomdp._native",
+        sources=["POMDPPlanners/environments/cartpole_pomdp/_cpp/cartpole.cpp"],
+    ),
+    _make_ext(
         name="POMDPPlanners.environments.laser_tag_pomdp._native",
         sources=["POMDPPlanners/environments/laser_tag_pomdp/_cpp/continuous_laser_tag.cpp"],
     ),
