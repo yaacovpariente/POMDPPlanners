@@ -5,8 +5,9 @@ import importlib.metadata
 import random
 
 import numpy as np
+from packaging.requirements import Requirement
+
 import POMDPPlanners
-from packaging import version
 
 np.random.seed(42)
 random.seed(42)
@@ -44,30 +45,20 @@ def test_required_packages():
     # Filter to direct dependencies only (exclude extras like dev/docs)
     requirements = [r for r in requirements if "; extra ==" not in r]
 
-    # Check each requirement
-    for req in requirements:
+    # Check each requirement using packaging.requirements.Requirement, which
+    # correctly parses any PEP 508 version spec (including compound specs
+    # like ">=0.59,<0.62").
+    for req_str in requirements:
+        req = Requirement(req_str)
         try:
-            # Parse package name and version constraint
-            if "==" in req:
-                package_name, expected_version = req.split("==")
-                installed_version = importlib.metadata.version(package_name.strip())
-                if installed_version != expected_version.strip():
-                    raise AssertionError(
-                        f"Package {package_name} version mismatch: expected {expected_version}, got {installed_version}"
-                    )
-            elif ">=" in req:
-                package_name, min_version = req.split(">=")
-                installed_version = importlib.metadata.version(package_name.strip())
-                # Proper semantic version comparison
-                if version.parse(installed_version) < version.parse(min_version.strip()):
-                    raise AssertionError(
-                        f"Package {package_name} version too old: expected >= {min_version}, got {installed_version}"
-                    )
-            else:
-                # Just check if package is installed
-                importlib.metadata.version(req.strip())
+            installed_version = importlib.metadata.version(req.name)
         except importlib.metadata.PackageNotFoundError as e:
-            raise AssertionError(f"Package requirement not met: {req} - {e}")
+            raise AssertionError(f"Package requirement not met: {req_str} - {e}") from e
+        if req.specifier and not req.specifier.contains(installed_version, prereleases=True):
+            raise AssertionError(
+                f"Package {req.name} version mismatch: expected {req.specifier}, "
+                f"got {installed_version}"
+            )
 
 
 def test_imports():

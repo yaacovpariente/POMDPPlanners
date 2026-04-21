@@ -6,6 +6,11 @@ import numpy as np
 from POMDPPlanners.core.distributions import DiscreteDistribution
 from POMDPPlanners.core.environment import ObservationModel
 from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
+from POMDPPlanners.utils.numba_kernels import (
+    any_point_within_radius_kernel,
+    min_distance_to_points_kernel,
+    mvn_sample_2d_kernel,
+)
 
 __all__ = [
     "BaseContinuousLightDarkObservationModel",
@@ -39,10 +44,7 @@ class BaseContinuousLightDarkObservationModel(ObservationModel):
         self.near_beacon = self._near_beacon(next_state)
 
     def _near_beacon(self, next_state: np.ndarray) -> bool:
-        next_state = next_state.reshape(2, 1)
-        distances = np.linalg.norm(next_state - self.beacons, axis=0)
-        # Cast to builtins.bool for mypy compatibility (np.bool_ -> bool)
-        return bool(np.any(distances <= self.beacon_radius))
+        return any_point_within_radius_kernel(next_state, self.beacons, self.beacon_radius)
 
     @abstractmethod
     def sample(self, n_samples: int = 1) -> List[Any]:
@@ -75,11 +77,10 @@ class ContinuousLightDarkNormalNoiseObservationModel(BaseContinuousLightDarkObse
         )
 
     def sample(self, n_samples: int = 1) -> List[np.ndarray]:
-        # Sample using pre-computed Cholesky decomposition
-        observations = self._active_dist.sample(self.next_state, n_samples)
+        z = np.random.standard_normal((n_samples, 2))
+        chol_L_T = self._active_dist._cholesky_L_T  # pylint: disable=protected-access
+        observations = mvn_sample_2d_kernel(self.next_state, z, chol_L_T)
         observations = np.clip(observations, 0, self.grid_size)
-
-        # Convert to list of arrays
         return list(observations)
 
     def probability(self, values: List[np.ndarray]) -> np.ndarray:
@@ -121,8 +122,9 @@ class ContinuousLightDarkNormalNoiseNoObsInDarkObservationModel(
 
     def sample(self, n_samples: int = 1) -> List[Union[np.ndarray, str]]:
         if self._near_beacon(self.next_state):
-            # Sample using pre-computed Cholesky decomposition
-            observations = self._active_dist.sample(self.next_state, n_samples)
+            z = np.random.standard_normal((n_samples, 2))
+            chol_L_T = self._active_dist._cholesky_L_T  # pylint: disable=protected-access
+            observations = mvn_sample_2d_kernel(self.next_state, z, chol_L_T)
             observations = np.clip(observations, 0, self.grid_size)
             return list(observations)
         return ["None"] * n_samples
@@ -172,10 +174,7 @@ class ContinuousLightDarkDistanceBasedObservationModel(BaseContinuousLightDarkOb
             beacons=beacons,
             beacon_radius=beacon_radius,
         )
-        # Compute distance to nearest beacon
-        next_state_reshaped = next_state.reshape(2, 1)
-        distances = np.linalg.norm(next_state_reshaped - self.beacons, axis=0)
-        self.min_distance_to_beacon: float = float(np.min(distances))
+        self.min_distance_to_beacon: float = min_distance_to_points_kernel(next_state, self.beacons)
 
         # Select distribution based on beacon proximity
         self._active_dist = (
@@ -183,15 +182,13 @@ class ContinuousLightDarkDistanceBasedObservationModel(BaseContinuousLightDarkOb
         )
 
     def sample(self, n_samples: int = 1) -> List[Union[np.ndarray, str]]:
-        # If beyond beacon_radius, return "None" observations
         if self.min_distance_to_beacon > self.beacon_radius:
             return ["None"] * n_samples
 
-        # Sample using pre-computed Cholesky decomposition
-        observations = self._active_dist.sample(self.next_state, n_samples)
+        z = np.random.standard_normal((n_samples, 2))
+        chol_L_T = self._active_dist._cholesky_L_T  # pylint: disable=protected-access
+        observations = mvn_sample_2d_kernel(self.next_state, z, chol_L_T)
         observations = np.clip(observations, 0, self.grid_size)
-
-        # Convert to list of arrays
         return list(observations)
 
     def probability(self, values: List[Union[np.ndarray, str]]) -> np.ndarray:

@@ -9,5 +9,6 @@ WORKDIR /app
 COPY . .
 
 # Re-install the package in editable mode so entry-points pick up new code.
-# Dependencies are already installed in the base image, so this is fast.
-RUN pip install --no-deps -e ".[dev,docs]"
+# Base image has most deps pre-installed; pip install reuses the cache for those
+# and picks up any newly-added deps on top.
+RUN pip install -e ".[dev,docs]"
