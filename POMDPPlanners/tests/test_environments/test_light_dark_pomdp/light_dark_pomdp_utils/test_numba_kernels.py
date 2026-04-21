@@ -1,10 +1,10 @@
-"""Numerical-equivalence tests for the light-dark Numba kernels.
+"""Numerical-equivalence tests for the light-dark-specific Numba kernels.
 
 Each test pairs a kernel against a pure-NumPy reference implementation
-assembled from the pre-refactor class methods, and asserts bit-identical
-(or ``np.isclose``) results over a mix of representative and edge-case
-inputs. Running these before wiring the kernels into the env classes
-catches any kernel-logic drift in isolation.
+assembled from the pre-refactor class methods, and asserts results agree
+within floating-point tolerance. Covers only kernels whose signature /
+logic hardcodes light-dark concepts (goal+obstacles+reward shape); tests
+for shared generic kernels live under ``POMDPPlanners/tests/test_utils/``.
 """
 
 import numpy as np
@@ -14,9 +14,6 @@ from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.numba_ke
     compute_reward_base_kernel,
     compute_reward_decaying_hit_prob_kernel,
     is_terminal_kernel,
-    min_distance_to_beacon_kernel,
-    mvn_sample_2d_kernel,
-    near_beacon_kernel,
 )
 
 
@@ -35,16 +32,6 @@ def _ref_is_terminal(
         return False
     distances = np.linalg.norm(state.reshape(-1, 1) - obstacles, axis=0)
     return bool(np.any(distances <= obstacle_radius))
-
-
-def _ref_near_beacon(next_state: np.ndarray, beacons: np.ndarray, beacon_radius: float) -> bool:
-    distances = np.linalg.norm(next_state.reshape(2, 1) - beacons, axis=0)
-    return bool(np.any(distances <= beacon_radius))
-
-
-def _ref_min_distance_to_beacon(next_state: np.ndarray, beacons: np.ndarray) -> float:
-    distances = np.linalg.norm(next_state.reshape(2, 1) - beacons, axis=0)
-    return float(np.min(distances))
 
 
 def _ref_compute_reward_standard(
@@ -119,14 +106,6 @@ def default_obstacles() -> np.ndarray:
 
 
 @pytest.fixture
-def default_beacons() -> np.ndarray:
-    """3x3 grid of beacons in 2xN layout."""
-    xs = [0.0, 0.0, 0.0, 5.0, 5.0, 5.0, 10.0, 10.0, 10.0]
-    ys = [0.0, 5.0, 10.0, 0.0, 5.0, 10.0, 0.0, 5.0, 10.0]
-    return np.array([xs, ys])
-
-
-@pytest.fixture
 def default_goal() -> np.ndarray:
     return np.array([10.0, 5.0])
 
@@ -196,95 +175,6 @@ def test_is_terminal_kernel_empty_obstacles():
     empty_obs = np.empty((2, 0))
     state = np.array([5.0, 5.0])
     assert not is_terminal_kernel(state, np.array([10.0, 5.0]), empty_obs, 1.5, 1.5, True)
-
-
-# ---------------------------------------------------------------------------
-# near_beacon_kernel / min_distance_to_beacon_kernel
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize(
-    "state",
-    [
-        np.array([0.0, 5.0]),
-        np.array([2.5, 2.5]),
-        np.array([5.0, 5.0]),
-        np.array([5.4, 5.0]),
-        np.array([10.0, 10.0]),
-    ],
-)
-def test_near_beacon_kernel_matches_reference(state, default_beacons):
-    """Validates near_beacon_kernel against NumPy reference.
-
-    Purpose: Ensure boolean proximity checks match for representative states.
-
-    Given: States covering directly-on-beacon, inside-radius, outside-radius.
-    When: Both the kernel and the reference are evaluated.
-    Then: They return the same boolean across a range of beacon radii.
-
-    Test type: unit
-    """
-    for radius in (0.5, 1.0, 2.0):
-        got = near_beacon_kernel(state, default_beacons, radius)
-        expected = _ref_near_beacon(state, default_beacons, radius)
-        assert got == expected, f"state={state} radius={radius}"
-
-
-@pytest.mark.parametrize(
-    "state",
-    [
-        np.array([0.0, 5.0]),
-        np.array([2.5, 2.5]),
-        np.array([5.0, 5.0]),
-        np.array([7.5, 2.5]),
-    ],
-)
-def test_min_distance_to_beacon_kernel_matches_reference(state, default_beacons):
-    """Validates min_distance_to_beacon_kernel numerical equivalence.
-
-    Purpose: Ensure scalar min-distance output agrees with NumPy reference
-        to within floating-point tolerance.
-
-    Given: A state and a 3x3 beacon grid.
-    When: Both min_distance_to_beacon_kernel and its reference are evaluated.
-    Then: Results agree within 1e-12.
-
-    Test type: unit
-    """
-    got = min_distance_to_beacon_kernel(state, default_beacons)
-    expected = _ref_min_distance_to_beacon(state, default_beacons)
-    assert np.isclose(got, expected, atol=1e-12)
-
-
-# ---------------------------------------------------------------------------
-# mvn_sample_2d_kernel
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize("n_samples", [1, 5, 64])
-def test_mvn_sample_2d_kernel_matches_reference(n_samples):
-    """Validates mvn_sample_2d_kernel matches mean + z @ L.T.
-
-    Purpose: Confirm the hand-rolled 2D matmul agrees with NumPy's @ operator
-        to machine precision on representative covariance matrices.
-
-    Given: Pre-drawn standard-normal z and a 2x2 Cholesky upper factor.
-    When: The kernel and a NumPy reference both compute mean + z @ L.T.
-    Then: Outputs are bit-identical within 1e-12 atol.
-
-    Test type: unit
-    """
-    rng = np.random.default_rng(0)
-    cov = np.array([[1.0, 0.3], [0.3, 2.0]])
-    chol_L = np.linalg.cholesky(cov)
-    chol_L_T = chol_L.T.copy()
-    mean = np.array([1.5, -0.25])
-    z = rng.standard_normal((n_samples, 2))
-
-    got = mvn_sample_2d_kernel(mean, z, chol_L_T)
-    expected = mean + z @ chol_L_T
-    assert got.shape == (n_samples, 2)
-    assert np.allclose(got, expected, atol=1e-12)
 
 
 # ---------------------------------------------------------------------------
