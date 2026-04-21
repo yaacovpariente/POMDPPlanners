@@ -27,7 +27,7 @@ Classes:
 """
 
 from enum import Enum
-from typing import Any, List, Optional, Sequence, Tuple, Union
+from typing import Any, List, Sequence, Tuple, Union
 
 import numpy as np
 
@@ -39,6 +39,9 @@ from POMDPPlanners.core.environment import (
     StateTransitionModel,
 )
 from POMDPPlanners.core.simulation import History, MetricValue
+from POMDPPlanners.environments.light_dark_pomdp import (
+    _native,  # pylint: disable=no-name-in-module
+)
 from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp import (
     BaseLightDarkPOMDP,
 )
@@ -46,7 +49,6 @@ from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.numba_ke
     is_terminal_kernel,
 )
 from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
-from POMDPPlanners.utils.numba_kernels import mvn_sample_2d_kernel
 
 # pylint: disable=no-name-in-module
 from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_observation_models import (
@@ -87,17 +89,23 @@ class ObservationModelType(Enum):
     DISTANCE_BASED = "distance_based"
 
 
-class ContinuousLightDarkStateTransitionModel(StateTransitionModel):
+class ContinuousLightDarkStateTransitionModel(_native.ContinuousLightDarkTransitionCpp):
     """State transition model for Continuous Light-Dark POMDP.
 
-    This model implements continuous movement in 2D space with Gaussian noise.
-    The agent's next position is determined by adding the action vector to the
-    current position, with additional Gaussian noise to model uncertainty.
+    This model implements continuous movement in 2D space with Gaussian
+    noise. The agent's next position is the sum of the current position,
+    the action vector, and an additive Gaussian draw parameterized by
+    ``state_dist``.
+
+    The ``sample`` / ``probability`` / ``batch_sample`` methods execute
+    entirely in C++ via the ``_native`` extension; this Python subclass
+    only wraps the constructor so existing call sites that pass a
+    :class:`CovarianceParameterizedMultivariateNormal` keep working.
 
     Attributes:
-        state: Current 2D position [x, y]
-        action: Movement vector [dx, dy]
-        mean: Expected next position (state + action)
+        state: Current 2D position ``[x, y]``.
+        action: Movement vector ``[dx, dy]``.
+        mean: Expected next position (``state + action``).
 
     Example:
         >>> import numpy as np
@@ -131,19 +139,18 @@ class ContinuousLightDarkStateTransitionModel(StateTransitionModel):
         action: np.ndarray,
         state_dist: CovarianceParameterizedMultivariateNormal,
     ):
-        super().__init__(state=state, action=action)
+        action_array = np.asarray(action, dtype=float).ravel()
+        state_array = np.asarray(state, dtype=float).ravel()
+        super().__init__(
+            state=state_array,
+            action=action_array,
+            covariance=state_dist.covariance,
+        )
         self._state_dist = state_dist
-        self.mean = state + action
+        self.mean = state_array + action_array
 
-    def sample(self, n_samples: int = 1) -> List[np.ndarray]:
-        z = np.random.standard_normal((n_samples, 2))
-        chol_L_T = self._state_dist._cholesky_L_T  # pylint: disable=protected-access
-        samples = mvn_sample_2d_kernel(self.mean, z, chol_L_T)
-        return list(samples)
 
-    def probability(self, values: List[np.ndarray]) -> np.ndarray:
-        values_array = np.array(values)
-        return self._state_dist.pdf(values_array, self.mean)
+StateTransitionModel.register(ContinuousLightDarkStateTransitionModel)
 
 
 class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
@@ -184,6 +191,7 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         False
     """
 
+    # pylint: disable=dangerous-default-value
     def __init__(
         self,
         discount_factor: float,
@@ -372,14 +380,20 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
             raise ValueError("action must be a 2D vector")
 
         if self.observation_model_type == ObservationModelType.NORMAL_NOISE:
-            return ContinuousLightDarkNormalNoiseObservationModel(
-                next_state=next_state,
-                action=action,
-                obs_dist_near_beacon=self._obs_dist_near_beacon,
-                obs_dist_far_from_beacon=self._obs_dist_far_from_beacon,
-                grid_size=self.grid_size,
-                beacons=self.beacons,
-                beacon_radius=self.beacon_radius,
+            # Subclass of _native.ContinuousLightDarkObservationCpp +
+            # ObservationModel.register() makes isinstance(ObservationModel)
+            # True at runtime, but pyright does not follow the register()
+            # call — suppress the spurious return-type mismatch.
+            return (
+                ContinuousLightDarkNormalNoiseObservationModel(  # pyright: ignore[reportReturnType]
+                    next_state=next_state,
+                    action=action,
+                    obs_dist_near_beacon=self._obs_dist_near_beacon,
+                    obs_dist_far_from_beacon=self._obs_dist_far_from_beacon,
+                    grid_size=self.grid_size,
+                    beacons=self.beacons,
+                    beacon_radius=self.beacon_radius,
+                )
             )
         if self.observation_model_type == ObservationModelType.NORMAL_NOISE_NO_OBS_IN_DARK:
             return ContinuousLightDarkNormalNoiseNoObsInDarkObservationModel(
@@ -571,6 +585,7 @@ class ContinuousLightDarkPOMDPDiscreteActions(ContinuousLightDarkPOMDP, Discrete
         False
     """
 
+    # pylint: disable=dangerous-default-value
     def __init__(
         self,
         discount_factor: float,
