@@ -44,6 +44,10 @@ ext_modules = [
         name="POMDPPlanners.environments.light_dark_pomdp._native",
         sources=["POMDPPlanners/environments/light_dark_pomdp/_cpp/continuous_light_dark.cpp"],
     ),
+    _make_ext(
+        name="POMDPPlanners.environments.laser_tag_pomdp._native",
+        sources=["POMDPPlanners/environments/laser_tag_pomdp/_cpp/continuous_laser_tag.cpp"],
+    ),
 ]
 
 setup(ext_modules=ext_modules, cmdclass={"build_ext": build_ext})

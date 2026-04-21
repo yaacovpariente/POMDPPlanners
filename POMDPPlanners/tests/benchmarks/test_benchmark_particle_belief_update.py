@@ -1,5 +1,6 @@
 """Benchmarks for WeightedParticleBelief / VectorizedWeightedParticleBelief
-update paths across natively-ported (MountainCar, CartPole, Light-Dark) envs.
+update paths across natively-ported envs (MountainCar, CartPole,
+Light-Dark, LaserTag).
 
 Measures the cases laid out in the pomdp_native port plan:
 
@@ -13,13 +14,15 @@ Measures the cases laid out in the pomdp_native port plan:
     | CP-vectorized-cpp        | CartPole    | VectorizedWeightedParticleBelief    | C++ batch       |
     | lightdark-generic-cpp    | Light-Dark  | WeightedParticleBelief.update       | C++ batch       |
     | lightdark-vectorized-cpp | Light-Dark  | VectorizedWeightedParticleBelief    | C++ batch       |
+    | lasertag-generic-cpp     | LaserTag    | WeightedParticleBelief.update       | C++ batch       |
+    | lasertag-vectorized-cpp  | LaserTag    | VectorizedWeightedParticleBelief    | C++ batch       |
 
-Same N=100 particles, same action, same observation across all cases of
-the same env. The two CartPole "python" / "numpy" cases snapshot the
-pre-port implementations (reproduced inline below) so they keep running
-the pure-Python reference code even after the native port replaces the
-shipped CartPole model classes. They give the baseline numbers the port
-replaces; the two "cpp" cases sit on the shipped (post-port) module path.
+Same N=100 particles, same action, same observation within each env. The
+two CartPole "python" / "numpy" cases snapshot the pre-port implementations
+(reproduced inline below) so they keep running the pure-Python reference
+code even after the native port replaces the shipped CartPole model
+classes. They give the baseline numbers the port replaces; the "cpp"
+cases sit on the shipped (post-port) module path.
 
 Use ``pytest-benchmark compare`` across the cases to report:
     1. <env>-generic-cpp vs <env>-vectorized-cpp -- auto-dispatch parity
@@ -54,6 +57,10 @@ from POMDPPlanners.core.environment import ObservationModel, StateTransitionMode
 from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
 from POMDPPlanners.environments.cartpole_pomdp.cartpole_pomdp_beliefs import (
     CartPoleVectorizedUpdater,
+)
+from POMDPPlanners.environments.laser_tag_pomdp import ContinuousLaserTagPOMDP
+from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_beliefs.continuous_laser_tag_vectorized_updater import (
+    ContinuousLaserTagVectorizedUpdater,
 )
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
     ContinuousLightDarkPOMDP,
@@ -540,6 +547,79 @@ def test_bench_lightdark_vectorized_belief_update(benchmark):
     )
     action = np.array([1.0, 0.0])
     observation = np.array([5.0, 5.0])
+
+    def run():
+        return belief.update(action=action, observation=observation, pomdp=env)
+
+    benchmark(run)
+
+
+# ---------------------------------------------------------------------------
+# Continuous LaserTag (native) cases
+# ---------------------------------------------------------------------------
+
+
+def _lasertag_initial_particles(env: ContinuousLaserTagPOMDP, n: int) -> Any:
+    """Draw n initial ContinuousLaserTag state particles as (N, 5) array / list."""
+    return env.initial_state_dist().sample(n_samples=n)
+
+
+@pytest.mark.benchmark(group="belief-update-lasertag-generic-cpp")
+def test_bench_lasertag_generic_belief_update(benchmark):
+    """Benchmark WeightedParticleBelief.update on Continuous LaserTag (auto-dispatch).
+
+    Purpose: Measures the generic per-particle-looking belief update path on
+    the Continuous LaserTag env after its transition/observation models
+    expose native batch entry points. WeightedParticleBelief._update_weights
+    sniffs the batch interface and dispatches to the C++ batch_sample /
+    batch_log_likelihood in a single round-trip per update.
+
+    Given: ContinuousLaserTagPOMDP + WeightedParticleBelief with N=100 particles.
+    When: belief.update(action, observation, pomdp) is called repeatedly.
+    Then: Execution time is recorded.
+
+    Test type: performance
+    """
+    env = ContinuousLaserTagPOMDP(discount_factor=0.95)
+    particles = list(_lasertag_initial_particles(env, _N_PARTICLES))
+    log_weights = np.log(np.ones(_N_PARTICLES) / _N_PARTICLES)
+    belief = WeightedParticleBelief(particles=particles, log_weights=log_weights)
+    action = np.array([1.0, 0.0, 0.0])
+    observation = env.initial_observation_dist().sample(n_samples=1)[0]
+
+    def run():
+        return belief.update(action=action, observation=observation, pomdp=env)
+
+    benchmark(run)
+
+
+@pytest.mark.benchmark(group="belief-update-lasertag-vectorized-cpp")
+def test_bench_lasertag_vectorized_belief_update(benchmark):
+    """Benchmark VectorizedWeightedParticleBelief.update on Continuous LaserTag.
+
+    Purpose: Measures the explicit vectorized belief path on Continuous
+    LaserTag after the updater (ContinuousLaserTagVectorizedUpdater)
+    delegates batch_transition and batch_observation_log_likelihood
+    directly to the native C++ batch methods.
+
+    Given: ContinuousLaserTagPOMDP + VectorizedWeightedParticleBelief with
+    N=100 particles.
+    When: belief.update(action, observation, pomdp) is called repeatedly.
+    Then: Execution time is recorded.
+
+    Test type: performance
+    """
+    env = ContinuousLaserTagPOMDP(discount_factor=0.95)
+    updater = ContinuousLaserTagVectorizedUpdater.from_environment(env)
+    particles = np.array(_lasertag_initial_particles(env, _N_PARTICLES))
+    log_weights = np.log(np.ones(_N_PARTICLES) / _N_PARTICLES)
+    belief = VectorizedWeightedParticleBelief(
+        particles=particles,
+        log_weights=log_weights,
+        updater=updater,
+    )
+    action = np.array([1.0, 0.0, 0.0])
+    observation = env.initial_observation_dist().sample(n_samples=1)[0]
 
     def run():
         return belief.update(action=action, observation=observation, pomdp=env)
