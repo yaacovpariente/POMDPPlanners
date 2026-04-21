@@ -4,7 +4,7 @@ This module tests the vectorized batch transition and observation
 log-likelihood methods for the Continuous Push POMDP.
 """
 
-# pylint: disable=protected-access
+# pylint: disable=protected-access,attribute-defined-outside-init
 
 import numpy as np
 
@@ -12,6 +12,7 @@ from POMDPPlanners.core.belief.particle_beliefs import WeightedParticleBelief
 from POMDPPlanners.core.belief.vectorized_weighted_particle_belief import (
     VectorizedWeightedParticleBelief,
 )
+from POMDPPlanners.environments.push_pomdp import _native
 from POMDPPlanners.environments.push_pomdp.continuous_push_pomdp import (
     ContinuousPushPOMDP,
     ContinuousPushPOMDPDiscreteActions,
@@ -200,6 +201,7 @@ class TestContinuousPushVectorizedUpdater:
             action=action,
             per_particle_transition_fn=per_particle_fn,
             seed=999,
+            seed_fn=_native.set_seed,
         )
 
     def test_batch_obs_log_likelihood_matches_per_particle_loop(self):
@@ -291,8 +293,18 @@ class TestBeliefEquivalenceWithBaseline:
         base, vec = _make_aligned_beliefs(self.updater)
         action = np.array([0.5, 0.3])
         obs = np.array([2.0, 2.0, 2.0, 2.0, 3.5, 3.5])
+        # Both paths now consume noise from the native C++ RNG (the baseline
+        # auto-dispatches to ContinuousPushTransitionCpp.batch_sample via
+        # hasattr, and the vectorized updater delegates there directly); seed
+        # the native RNG to align the two sample sequences.
         assert_update_particles_match(
-            base=base, vec=vec, action=action, observation=obs, pomdp=self.env, seed=999
+            base=base,
+            vec=vec,
+            action=action,
+            observation=obs,
+            pomdp=self.env,
+            seed=999,
+            seed_fn=_native.set_seed,
         )
 
     def test_update_weights_match(self):
@@ -318,6 +330,7 @@ class TestBeliefEquivalenceWithBaseline:
             pomdp=self.env,
             atol=1e-6,
             seed=999,
+            seed_fn=_native.set_seed,
         )
 
     def test_sample_distributions_match_post_update(self):
@@ -334,8 +347,13 @@ class TestBeliefEquivalenceWithBaseline:
         base, vec = _make_aligned_beliefs(self.updater)
         action = np.array([0.5, 0.3])
         obs = np.array([2.0, 2.0, 2.0, 2.0, 3.5, 3.5])
+        # Seed both the native C++ RNG (governs batch_sample) and numpy's
+        # (belief.sample() still uses numpy); without the native seed the
+        # two beliefs hold different post-update particle sets.
+        _native.set_seed(999)
         np.random.seed(999)
         vec = vec.update(action=action, observation=obs, pomdp=self.env)
+        _native.set_seed(999)
         np.random.seed(999)
         base = base.update(action=action, observation=obs, pomdp=self.env)
 
