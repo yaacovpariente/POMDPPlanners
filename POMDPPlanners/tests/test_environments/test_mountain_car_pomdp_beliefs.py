@@ -12,7 +12,7 @@ from POMDPPlanners.core.belief.particle_beliefs import WeightedParticleBelief
 from POMDPPlanners.core.belief.vectorized_weighted_particle_belief import (
     VectorizedWeightedParticleBelief,
 )
-from POMDPPlanners.environments.mountain_car_pomdp import MountainCarPOMDP
+from POMDPPlanners.environments.mountain_car_pomdp import MountainCarPOMDP, _native
 from POMDPPlanners.environments.mountain_car_pomdp.mountain_car_pomdp_beliefs import (
     MountainCarVectorizedUpdater,
 )
@@ -125,20 +125,21 @@ class TestBatchTransition:
         """Test that batch_transition is deterministic under a fixed seed.
 
         Purpose: Validates that the stochastic batch_transition produces
-                 identical output when the global numpy RNG is seeded
+                 identical output when the module-level C++ RNG (now the
+                 source of randomness for the updater) is seeded
                  identically before each call.
 
-        Given: A set of particles and an action, with np.random.seed fixed
-               before each call.
+        Given: A set of particles and an action, with ``_native.set_seed``
+               fixed before each call.
         When: batch_transition is called twice.
         Then: Both results are identical.
 
         Test type: unit
         """
         particles = np.array([[-0.5, 0.0], [-0.6, 0.01]])
-        np.random.seed(7)
+        _native.set_seed(7)
         result_a = updater.batch_transition(particles, action=1)
-        np.random.seed(7)
+        _native.set_seed(7)
         result_b = updater.batch_transition(particles, action=1)
         np.testing.assert_array_equal(result_a, result_b)
 
@@ -305,6 +306,7 @@ class TestConfigId:
         Test type: unit
         """
         u1 = MountainCarVectorizedUpdater.from_environment(env)
+        # pylint: disable=protected-access
         u2 = MountainCarVectorizedUpdater(
             state_transition_dist=env._state_transition_dist,
             obs_dist=env._obs_dist,
@@ -314,6 +316,7 @@ class TestConfigId:
             min_position=env.min_position,
             max_position=env.max_position,
         )
+        # pylint: enable=protected-access
         assert u1.config_id != u2.config_id
 
 

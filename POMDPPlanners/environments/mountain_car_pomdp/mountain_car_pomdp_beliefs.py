@@ -26,6 +26,7 @@ from POMDPPlanners.core.belief.vectorized_particle_belief_updater import (
 from POMDPPlanners.core.belief.vectorized_weighted_particle_belief import (
     VectorizedWeightedParticleBelief,
 )
+from POMDPPlanners.environments.mountain_car_pomdp import _native
 from POMDPPlanners.environments.mountain_car_pomdp.mountain_car_pomdp_gaussian_beliefs import (
     GaussianBeliefUpdaterType,
     create_mountain_car_gaussian_belief,
@@ -114,6 +115,11 @@ class MountainCarVectorizedUpdater(VectorizedParticleBeliefUpdater):
         self.max_speed = max_speed
         self.min_position = min_position
         self.max_position = max_position
+        # Cached covariance arrays for the native batch entry points. The
+        # MVN objects' ``covariance`` property returns a copy, so we pay the
+        # allocation once instead of on every batch_transition call.
+        self._state_transition_cov: np.ndarray = state_transition_dist.covariance
+        self._obs_cov: np.ndarray = obs_dist.covariance
 
     @classmethod
     def from_environment(cls, env: "MountainCarPOMDP") -> "MountainCarVectorizedUpdater":
@@ -142,27 +148,36 @@ class MountainCarVectorizedUpdater(VectorizedParticleBeliefUpdater):
     # ------------------------------------------------------------------
 
     def batch_transition(self, particles: np.ndarray, action: np.ndarray) -> np.ndarray:
-        # particles: (N, 2) = [position, velocity]
-        position, velocity = self._deterministic_next_state(particles, action)
-        position, velocity = self._add_transition_noise(position, velocity, particles.shape[0])
-        position, velocity = self._apply_clipping_and_wall_stop(position, velocity)
-        return np.column_stack([position, velocity])
+        # particles: (N, 2) = [position, velocity]. Delegates to the native
+        # C++ batch sampler so both this path and the per-particle
+        # MountainCarTransition.sample() share the same C++ RNG (closes the
+        # cross-path divergence that used to skip the equivalence tests).
+        # The `state=particles[0]` passed to the ctor is unused on the
+        # batch path; only the ctor signature requires it.
+        transition = _native.MountainCarTransitionCpp(
+            state=tuple(particles[0]),
+            action=int(action),
+            power=self.power,
+            gravity=self.gravity,
+            max_speed=self.max_speed,
+            min_position=self.min_position,
+            max_position=self.max_position,
+            covariance=self._state_transition_cov,
+        )
+        return transition.batch_sample(particles)
 
     def _deterministic_next_state(
         self, particles: np.ndarray, action: np.ndarray
     ) -> tuple[np.ndarray, np.ndarray]:
+        # Retained as a public-via-tests helper; mirrors the C++
+        # deterministic path so unit tests of physics don't depend on
+        # constructing a native object.
         position = particles[:, 0]
         velocity = particles[:, 1]
         velocity = velocity + action * self.power + np.cos(3.0 * position) * (-self.gravity)
         velocity = np.clip(velocity, -self.max_speed, self.max_speed)
         position = position + velocity
         return self._apply_clipping_and_wall_stop(position, velocity)
-
-    def _add_transition_noise(
-        self, position: np.ndarray, velocity: np.ndarray, n: int
-    ) -> tuple[np.ndarray, np.ndarray]:
-        noise = self.state_transition_dist.sample(np.zeros(2), n_samples=n)
-        return position + noise[:, 0], velocity + noise[:, 1]
 
     def _apply_clipping_and_wall_stop(
         self, position: np.ndarray, velocity: np.ndarray
@@ -179,8 +194,15 @@ class MountainCarVectorizedUpdater(VectorizedParticleBeliefUpdater):
         action: np.ndarray,
         observation: np.ndarray,
     ) -> np.ndarray:
-        observation = np.asarray(observation, dtype=float).ravel()
-        return self.obs_dist.log_pdf(next_particles, observation)
+        observation_arr = np.asarray(observation, dtype=float).ravel()
+        # Delegate to the native C++ observation likelihood. `next_state`
+        # passed to the ctor is unused on the batch path.
+        obs_model = _native.MountainCarObservationCpp(
+            next_state=tuple(next_particles[0]),
+            action=int(action),
+            covariance=self._obs_cov,
+        )
+        return obs_model.batch_log_likelihood(next_particles, observation_arr)
 
     @property
     def config_id(self) -> str:
