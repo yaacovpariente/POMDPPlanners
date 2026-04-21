@@ -138,6 +138,7 @@ persistent = true
 extension-pkg-allow-list = [
     "POMDPPlanners.core._native",
     "POMDPPlanners.environments.mountain_car_pomdp._native",
+    "POMDPPlanners.environments.push_pomdp._native",
 ]
 
 [tool.pylint.messages_control]
