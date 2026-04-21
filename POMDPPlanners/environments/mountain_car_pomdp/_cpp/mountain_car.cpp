@@ -124,6 +124,7 @@ PYBIND11_MODULE(_native, m) {
              py::arg("covariance"))
         .def("sample", &MountainCarTransitionCpp::sample, py::arg("n_samples") = 1)
         .def("probability", &MountainCarTransitionCpp::probability, py::arg("values"))
+        .def("batch_sample", &MountainCarTransitionCpp::batch_sample, py::arg("particles"))
         .def("_compute_deterministic_next_state",
              &MountainCarTransitionCpp::compute_deterministic_next_state_py)
         .def_property_readonly("state", &MountainCarTransitionCpp::state_property)
@@ -139,6 +140,8 @@ PYBIND11_MODULE(_native, m) {
              py::arg("next_state"), py::arg("action"), py::arg("covariance"))
         .def("sample", &MountainCarObservationCpp::sample, py::arg("n_samples") = 1)
         .def("probability", &MountainCarObservationCpp::probability, py::arg("values"))
+        .def("batch_log_likelihood", &MountainCarObservationCpp::batch_log_likelihood,
+             py::arg("next_particles"), py::arg("observation"))
         .def_property_readonly("next_state", &MountainCarObservationCpp::next_state_property)
         .def_property_readonly("action", &MountainCarObservationCpp::action_property)
         .def_property_readonly("mean", &MountainCarObservationCpp::mean_property);

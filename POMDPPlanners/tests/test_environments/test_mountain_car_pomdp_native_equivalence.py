@@ -312,3 +312,123 @@ def test_sample_returns_list_of_1d_ndarrays(transition):
         n_samples=3,
         expected_dim=2,
     )
+
+
+# ---------------------------------------------------------------------------
+# Batch entry points
+# ---------------------------------------------------------------------------
+
+
+def test_transition_batch_sample_matches_per_particle_sample(env):
+    """batch_sample(P) is bit-identical to sample(1) per row under fixed seed.
+
+    Purpose: Validates that the new TransitionModelCpp<Dim>.batch_sample
+    produces the same noise sequence as N per-particle sample(1) calls when
+    both consume the same module-level C++ RNG seeded once.
+
+    Given: 64 particles spanning the valid MountainCar state range.
+    When: batch_sample runs under seed=777; then for each particle a fresh
+        MountainCarTransition is built and sample(1) is called in the same
+        order under the same seed.
+    Then: The two (64, 2) arrays are array_equal.
+
+    Test type: unit
+    """
+    rng = np.random.default_rng(123)
+    particles = np.column_stack(
+        [
+            rng.uniform(-1.0, 0.5, 64),
+            rng.uniform(-0.05, 0.05, 64),
+        ]
+    )
+    action = 1
+
+    _native.set_seed(777)
+    transition = env.state_transition_model(state=(-0.5, 0.0), action=action)
+    batch_result = transition.batch_sample(particles)
+
+    _native.set_seed(777)
+    per_particle_rows = []
+    for row in particles:
+        model = env.state_transition_model(state=tuple(row.tolist()), action=action)
+        per_particle_rows.append(model.sample(1)[0])
+    per_particle_result = np.stack(per_particle_rows, axis=0)
+
+    np.testing.assert_array_equal(batch_result, per_particle_result)
+
+
+def test_observation_batch_log_likelihood_matches_per_particle(env):
+    """batch_log_likelihood matches np.log(probability([observation])) per row.
+
+    Purpose: Validates the observation batch path against the per-particle
+    reference (C++ probability() uses the same log_pdf internally, then
+    exp's it; we take log to invert).
+
+    Given: 64 random next-state particles and a single observation.
+    When: batch_log_likelihood(next_particles, observation) is called, and
+        for each particle a fresh MountainCarObservation is built and
+        probability([observation]) is computed.
+    Then: The batch log-likelihoods equal np.log of the per-particle
+        probabilities within atol=1e-12.
+
+    Test type: unit
+    """
+    rng = np.random.default_rng(456)
+    next_particles = np.column_stack(
+        [
+            rng.uniform(-1.0, 0.5, 64),
+            rng.uniform(-0.05, 0.05, 64),
+        ]
+    )
+    observation = np.array([-0.3, 0.015])
+    action = 0
+
+    obs_model = env.observation_model(next_state=(-0.5, 0.0), action=action)
+    batch_log_ll = obs_model.batch_log_likelihood(next_particles, observation)
+
+    per_particle_log_ll = np.empty(len(next_particles))
+    for i, next_state in enumerate(next_particles):
+        model = env.observation_model(next_state=tuple(next_state.tolist()), action=action)
+        per_particle_log_ll[i] = np.log(model.probability([observation])[0])
+
+    np.testing.assert_allclose(batch_log_ll, per_particle_log_ll, atol=1e-12, rtol=0.0)
+
+
+def test_transition_batch_sample_shape_contract(env):
+    """batch_sample returns a 2-D ndarray matching the input shape.
+
+    Purpose: Guards the shape contract used by belief-level callers.
+
+    Given: A MountainCarTransition and a (37, 2) particles ndarray.
+    When: batch_sample is called.
+    Then: The result is an ndarray of shape (37, 2) and dtype float64.
+
+    Test type: unit
+    """
+    transition = env.state_transition_model(state=(-0.5, 0.0), action=1)
+    particles = np.zeros((37, 2), dtype=np.float64)
+    _native.set_seed(0)
+    result = transition.batch_sample(particles)
+    assert isinstance(result, np.ndarray)
+    assert result.shape == (37, 2)
+    assert result.dtype == np.float64
+
+
+def test_observation_batch_log_likelihood_shape_contract(env):
+    """batch_log_likelihood returns a 1-D ndarray of length N.
+
+    Purpose: Guards the shape contract used by belief-level callers.
+
+    Given: A MountainCarObservation, 37 next-particles, and one observation.
+    When: batch_log_likelihood is called.
+    Then: The result is an ndarray of shape (37,) and dtype float64.
+
+    Test type: unit
+    """
+    obs_model = env.observation_model(next_state=(-0.5, 0.0), action=1)
+    next_particles = np.zeros((37, 2), dtype=np.float64)
+    observation = np.array([-0.5, 0.0])
+    result = obs_model.batch_log_likelihood(next_particles, observation)
+    assert isinstance(result, np.ndarray)
+    assert result.shape == (37,)
+    assert result.dtype == np.float64
