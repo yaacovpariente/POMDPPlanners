@@ -44,9 +44,9 @@ from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_lig
 )
 from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.numba_kernels import (
     is_terminal_kernel,
-    mvn_sample_2d_kernel,
 )
 from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
+from POMDPPlanners.utils.numba_kernels import mvn_sample_2d_kernel
 
 # pylint: disable=no-name-in-module
 from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_observation_models import (

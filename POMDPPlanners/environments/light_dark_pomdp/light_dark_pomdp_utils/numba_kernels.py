@@ -1,30 +1,18 @@
-"""Numba-JIT kernels for the Continuous Light-Dark POMDP hot paths.
+"""Light-Dark-specific Numba-JIT kernels.
 
-This module holds pure numeric kernels that replace the NumPy-overhead-bound
-inner loops of the continuous Light-Dark environment. Each kernel is decorated
-with ``@njit(cache=True)`` so the LLVM-compiled version is cached to disk
-between runs.
+Holds kernels whose signatures or logic hardcode light-dark concepts
+(goal+obstacles+out-of-grid shape, standard / dangerous-states / decaying-
+hit-probability reward formulas). Generic geometric / numerical primitives
+used here also by other envs live in
+``POMDPPlanners.utils.numba_kernels`` instead.
 
-Conventions
------------
-- **All inputs are plain numeric arrays / scalars.** No Python objects, no
-  class instances. Callers hand in ``float64`` arrays (contiguous) and
-  ``float``/``int``/``bool`` scalars.
-- **RNG stays in Python.** Any stochastic draw (``np.random.standard_normal``,
-  ``np.random.rand``) happens in the Python caller and is passed in as ``z``
-  or ``u``. This preserves the seed semantics of the pre-refactor code and
-  guarantees bit-identical results under seeded tests.
-- **Obstacle / beacon arrays are shape (2, N).** This matches the
-  internal representation produced by ``_convert_*_to_array`` in
-  ``base_light_dark_pomdp.py``.
+Conventions match the shared module: contiguous ``float64`` arrays, scalar
+floats/ints/bools, no Python objects, all RNG draws happen in the caller and
+are passed in as parameters.
 
 Public kernels
 --------------
 - :func:`is_terminal_kernel` — replaces ``ContinuousLightDarkPOMDP.is_terminal``.
-- :func:`near_beacon_kernel` — replaces ``_near_beacon`` proximity check.
-- :func:`min_distance_to_beacon_kernel` — distance to the nearest beacon.
-- :func:`mvn_sample_2d_kernel` — 2-D multivariate-normal sample given
-  pre-drawn standard normals and a Cholesky upper factor.
 - :func:`compute_reward_base_kernel` — deterministic part of the Standard /
   DangerousStates reward model plus an ``is_obstacle_hit_region`` flag so the
   Python caller can decide whether to draw a uniform.
@@ -65,67 +53,6 @@ def is_terminal_kernel(
         if ox * ox + oy * oy <= radius_sq:
             return True
     return False
-
-
-@njit(cache=True)  # type: ignore[misc]
-def near_beacon_kernel(
-    next_state: np.ndarray,
-    beacons: np.ndarray,
-    beacon_radius: float,
-) -> bool:
-    n_beacons = beacons.shape[1]
-    radius_sq = beacon_radius * beacon_radius
-    for i in range(n_beacons):
-        dx = next_state[0] - beacons[0, i]
-        dy = next_state[1] - beacons[1, i]
-        if dx * dx + dy * dy <= radius_sq:
-            return True
-    return False
-
-
-@njit(cache=True)  # type: ignore[misc]
-def min_distance_to_beacon_kernel(
-    next_state: np.ndarray,
-    beacons: np.ndarray,
-) -> float:
-    n_beacons = beacons.shape[1]
-    min_sq = np.inf
-    for i in range(n_beacons):
-        dx = next_state[0] - beacons[0, i]
-        dy = next_state[1] - beacons[1, i]
-        d_sq = dx * dx + dy * dy
-        min_sq = min(min_sq, d_sq)
-    return min_sq**0.5
-
-
-@njit(cache=True)  # type: ignore[misc]
-def mvn_sample_2d_kernel(
-    mean: np.ndarray,
-    z: np.ndarray,
-    cholesky_L_T: np.ndarray,
-) -> np.ndarray:
-    """Sample n points from a 2-D Gaussian with fixed Cholesky factor.
-
-    Given pre-drawn standard-normal ``z`` of shape ``(n, 2)`` and the
-    transposed Cholesky factor ``L.T`` of shape ``(2, 2)``, compute
-    ``mean + z @ L.T`` and return samples of shape ``(n, 2)``. The
-    hand-rolled matmul avoids NumPy's per-call dispatch cost for the tiny
-    ``(n, 2) @ (2, 2)`` product.
-    """
-    n_samples = z.shape[0]
-    out = np.empty((n_samples, 2), dtype=np.float64)
-    m0 = mean[0]
-    m1 = mean[1]
-    lt00 = cholesky_L_T[0, 0]
-    lt01 = cholesky_L_T[0, 1]
-    lt10 = cholesky_L_T[1, 0]
-    lt11 = cholesky_L_T[1, 1]
-    for i in range(n_samples):
-        z0 = z[i, 0]
-        z1 = z[i, 1]
-        out[i, 0] = m0 + z0 * lt00 + z1 * lt10
-        out[i, 1] = m1 + z0 * lt01 + z1 * lt11
-    return out
 
 
 @njit(cache=True)  # type: ignore[misc]

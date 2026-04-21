@@ -5,12 +5,12 @@ import numpy as np
 
 from POMDPPlanners.core.distributions import DiscreteDistribution
 from POMDPPlanners.core.environment import ObservationModel
-from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.numba_kernels import (
-    min_distance_to_beacon_kernel,
-    mvn_sample_2d_kernel,
-    near_beacon_kernel,
-)
 from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
+from POMDPPlanners.utils.numba_kernels import (
+    any_point_within_radius_kernel,
+    min_distance_to_points_kernel,
+    mvn_sample_2d_kernel,
+)
 
 __all__ = [
     "BaseContinuousLightDarkObservationModel",
@@ -44,7 +44,7 @@ class BaseContinuousLightDarkObservationModel(ObservationModel):
         self.near_beacon = self._near_beacon(next_state)
 
     def _near_beacon(self, next_state: np.ndarray) -> bool:
-        return near_beacon_kernel(next_state, self.beacons, self.beacon_radius)
+        return any_point_within_radius_kernel(next_state, self.beacons, self.beacon_radius)
 
     @abstractmethod
     def sample(self, n_samples: int = 1) -> List[Any]:
@@ -174,7 +174,7 @@ class ContinuousLightDarkDistanceBasedObservationModel(BaseContinuousLightDarkOb
             beacons=beacons,
             beacon_radius=beacon_radius,
         )
-        self.min_distance_to_beacon: float = min_distance_to_beacon_kernel(next_state, self.beacons)
+        self.min_distance_to_beacon: float = min_distance_to_points_kernel(next_state, self.beacons)
 
         # Select distribution based on beacon proximity
         self._active_dist = (
