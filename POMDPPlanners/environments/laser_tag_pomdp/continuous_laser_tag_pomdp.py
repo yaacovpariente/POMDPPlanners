@@ -43,11 +43,7 @@ from POMDPPlanners.core.environment import (
     StateTransitionModel,
 )
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
-from POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_geometry import (
-    clamp_to_grid,
-    compute_laser_measurements,
-    resolve_wall_collision,
-)
+from POMDPPlanners.environments.laser_tag_pomdp import _native
 from POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_visualizer import (
     ContinuousLaserTagVisualizer,
 )
@@ -84,8 +80,6 @@ _DEFAULT_DANGEROUS_AREAS: List[Tuple[float, float]] = [
     (2.0, 5.0),
 ]
 
-_TERMINAL_OBSERVATION = np.full(8, -1.0)
-
 
 class ContinuousLaserTagPOMDPMetrics(Enum):
     """Metric names for Continuous LaserTag POMDP."""
@@ -99,11 +93,20 @@ class ContinuousLaserTagPOMDPMetrics(Enum):
     AVERAGE_ALL_DANGEROUS_ENCOUNTERS = "average_all_dangerous_encounters"
 
 
-class ContinuousLaserTagStateTransitionModel(StateTransitionModel):
+class ContinuousLaserTagStateTransitionModel(_native.ContinuousLaserTagTransitionCpp):
     """State transition model for the Continuous LaserTag POMDP.
 
     Robot movement: ``next_pos = pos + action[:2] + noise`` where noise is
-    sampled from a 2-D Gaussian.  Opponent pursues the robot stochastically.
+    sampled from a 2-D Gaussian. Opponent pursues the robot stochastically
+    (mean step of ``pursuit_speed`` along ``(robot - opponent)`` unit vector,
+    plus a separate 2-D Gaussian). Wall collisions are resolved via
+    circle-AABB minimum translation vector and the final position is
+    clamped to the grid.
+
+    The ``sample()``, ``probability()`` and ``batch_sample()`` methods
+    execute entirely in C++ via the ``_native`` extension; this Python
+    subclass only wraps the constructor so existing call sites that pass
+    :class:`CovarianceParameterizedMultivariateNormal` keep working.
 
     Example:
         >>> import numpy as np
@@ -111,6 +114,8 @@ class ContinuousLaserTagStateTransitionModel(StateTransitionModel):
         >>> from POMDPPlanners.utils.multivariate_normal import (
         ...     CovarianceParameterizedMultivariateNormal,
         ... )
+        >>> from POMDPPlanners.environments.laser_tag_pomdp import _native
+        >>> _native.set_seed(42)
         >>> state = np.array([3.0, 3.0, 8.0, 5.0, 0.0])
         >>> action = np.array([1.0, 0.0, 0.0])
         >>> robot_dist = CovarianceParameterizedMultivariateNormal(np.eye(2) * 0.1)
@@ -143,105 +148,38 @@ class ContinuousLaserTagStateTransitionModel(StateTransitionModel):
         opponent_radius: float,
         tag_radius: float,
     ):
-        super().__init__(state=state, action=action)
+        super().__init__(
+            state=state,
+            action=action,
+            robot_covariance=robot_transition_dist.covariance,
+            opponent_covariance=opponent_transition_dist.covariance,
+            pursuit_speed=pursuit_speed,
+            walls=np.asarray(walls, dtype=float).reshape(-1, 4),
+            grid_size=np.asarray(grid_size, dtype=float),
+            robot_radius=robot_radius,
+            opponent_radius=opponent_radius,
+            tag_radius=tag_radius,
+        )
         self._robot_dist = robot_transition_dist
         self._opponent_dist = opponent_transition_dist
-        self._pursuit_speed = pursuit_speed
-        self._walls = walls
-        self._grid_size = grid_size
-        self._robot_radius = robot_radius
-        self._opponent_radius = opponent_radius
-        self._tag_radius = tag_radius
-
-    def sample(self, n_samples: int = 1) -> List[np.ndarray]:
-        samples: List[np.ndarray] = []
-        for _ in range(n_samples):
-            samples.append(self._sample_single())
-        return samples
-
-    def probability(self, values: List[Any]) -> np.ndarray:
-        # Continuous transition – exact probability is not tractable in
-        # closed form; return density placeholder for compatibility.
-        return np.zeros(len(values))
-
-    def _sample_single(self) -> np.ndarray:
-        if bool(self.state[4]):
-            return self.state.copy()
-
-        robot_pos = self.state[:2]
-        opp_pos = self.state[2:4]
-        action = np.asarray(self.action, dtype=float)
-
-        tag_flag = action[2] if len(action) > 2 else 0.0
-
-        # Tag action: no robot movement or noise (matches discrete LaserTag)
-        if tag_flag > 0.5:
-            dist = float(np.linalg.norm(robot_pos - opp_pos))
-            if dist <= self._tag_radius:
-                return np.array(
-                    [
-                        robot_pos[0],
-                        robot_pos[1],
-                        opp_pos[0],
-                        opp_pos[1],
-                        1.0,
-                    ]
-                )
-            new_opp = self._move_opponent(robot_pos, opp_pos)
-            return np.array(
-                [
-                    robot_pos[0],
-                    robot_pos[1],
-                    new_opp[0],
-                    new_opp[1],
-                    0.0,
-                ]
-            )
-
-        # Robot movement
-        movement = action[:2]
-        mean_robot = robot_pos + movement
-        new_robot = self._robot_dist.sample(mean_robot, 1)[0]
-        new_robot = resolve_wall_collision(new_robot, self._robot_radius, self._walls)
-        new_robot = clamp_to_grid(new_robot, self._robot_radius, self._grid_size)
-
-        # Opponent pursuit
-        new_opp = self._move_opponent(new_robot, opp_pos)
-
-        return np.array(
-            [
-                new_robot[0],
-                new_robot[1],
-                new_opp[0],
-                new_opp[1],
-                0.0,
-            ]
-        )
-
-    def _move_opponent(self, robot_pos: np.ndarray, opp_pos: np.ndarray) -> np.ndarray:
-        diff = robot_pos - opp_pos
-        dist = float(np.linalg.norm(diff))
-        if dist < 1e-9:
-            direction = np.random.randn(2)
-            direction /= max(float(np.linalg.norm(direction)), 1e-9)
-        else:
-            direction = diff / dist
-
-        mean_opp = opp_pos + self._pursuit_speed * direction
-        new_opp = self._opponent_dist.sample(mean_opp, 1)[0]
-        new_opp = resolve_wall_collision(new_opp, self._opponent_radius, self._walls)
-        new_opp = clamp_to_grid(new_opp, self._opponent_radius, self._grid_size)
-        return new_opp
 
 
-class ContinuousLaserTagObservationModel(ObservationModel):
+StateTransitionModel.register(ContinuousLaserTagStateTransitionModel)
+
+
+class ContinuousLaserTagObservationModel(_native.ContinuousLaserTagObservationCpp):
     """Observation model for the Continuous LaserTag POMDP.
 
-    Provides 8-direction laser range measurements with Gaussian noise.
+    Provides 8-direction laser range measurements with Gaussian noise. The
+    ``sample()``, ``probability()`` and ``batch_log_likelihood()`` methods
+    execute entirely in C++ via the ``_native`` extension; this Python
+    subclass only wraps the constructor.
 
     Example:
         >>> import numpy as np
         >>> np.random.seed(42)
+        >>> from POMDPPlanners.environments.laser_tag_pomdp import _native
+        >>> _native.set_seed(42)
         >>> state = np.array([3.0, 3.0, 8.0, 5.0, 0.0])
         >>> walls = np.empty((0, 4))
         >>> grid_size = np.array([11.0, 7.0])
@@ -264,55 +202,18 @@ class ContinuousLaserTagObservationModel(ObservationModel):
         grid_size: np.ndarray,
         opponent_radius: float,
     ):
-        super().__init__(next_state=next_state, action=action)
+        super().__init__(
+            next_state=next_state,
+            action=action,
+            measurement_noise=measurement_noise,
+            walls=np.asarray(walls, dtype=float).reshape(-1, 4),
+            grid_size=np.asarray(grid_size, dtype=float),
+            opponent_radius=opponent_radius,
+        )
         self._measurement_noise = measurement_noise
-        self._walls = walls
-        self._grid_size = grid_size
-        self._opponent_radius = opponent_radius
 
-    def sample(self, n_samples: int = 1) -> List[np.ndarray]:
-        if bool(self.next_state[4]):
-            return [_TERMINAL_OBSERVATION.copy() for _ in range(n_samples)]
 
-        true_meas = compute_laser_measurements(
-            self.next_state[:2],
-            self.next_state[2:4],
-            self._opponent_radius,
-            self._walls,
-            self._grid_size,
-        )
-        results: List[np.ndarray] = []
-        for _ in range(n_samples):
-            noise = np.random.normal(0.0, self._measurement_noise, size=8)
-            obs = np.maximum(0.0, true_meas + noise)
-            results.append(obs)
-        return results
-
-    def probability(self, values: List[Any]) -> np.ndarray:
-        result = np.zeros(len(values))
-        if bool(self.next_state[4]):
-            for i, obs in enumerate(values):
-                obs_arr = np.asarray(obs, dtype=float).ravel()
-                if np.allclose(obs_arr, _TERMINAL_OBSERVATION):
-                    result[i] = 1.0
-            return result
-
-        true_meas = compute_laser_measurements(
-            self.next_state[:2],
-            self.next_state[2:4],
-            self._opponent_radius,
-            self._walls,
-            self._grid_size,
-        )
-        variance = self._measurement_noise**2
-        for i, obs in enumerate(values):
-            obs_arr = np.asarray(obs, dtype=float).ravel()
-            if len(obs_arr) != 8:
-                continue
-            diff = obs_arr - true_meas
-            log_prob = -0.5 * np.sum(diff**2 / variance) - 4.0 * np.log(2.0 * np.pi * variance)
-            result[i] = np.exp(log_prob)
-        return result
+ObservationModel.register(ContinuousLaserTagObservationModel)
 
 
 class ContinuousLaserTagPOMDP(Environment):
@@ -441,7 +342,7 @@ class ContinuousLaserTagPOMDP(Environment):
     # ------------------------------------------------------------------
 
     def state_transition_model(self, state: np.ndarray, action: np.ndarray) -> StateTransitionModel:
-        return ContinuousLaserTagStateTransitionModel(
+        return ContinuousLaserTagStateTransitionModel(  # pyright: ignore[reportReturnType]
             state=state,
             action=np.asarray(action, dtype=float),
             robot_transition_dist=self._robot_transition_dist,
@@ -455,7 +356,7 @@ class ContinuousLaserTagPOMDP(Environment):
         )
 
     def observation_model(self, next_state: np.ndarray, action: np.ndarray) -> ObservationModel:
-        return ContinuousLaserTagObservationModel(
+        return ContinuousLaserTagObservationModel(  # pyright: ignore[reportReturnType]
             next_state=next_state,
             action=np.asarray(action, dtype=float),
             measurement_noise=self.measurement_noise,

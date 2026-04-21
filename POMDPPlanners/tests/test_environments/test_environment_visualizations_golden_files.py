@@ -54,6 +54,9 @@ from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp import LaserTagP
 from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_visualizer import (
     LaserTagVisualizer,
 )
+from POMDPPlanners.environments.laser_tag_pomdp import (
+    _native as _laser_tag_native,
+)
 from POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_pomdp import (
     ContinuousLaserTagPOMDP,
 )
@@ -515,6 +518,10 @@ def create_deterministic_continuous_laser_tag_episode(seed: int = 42) -> List[St
         List of StepData objects representing episode history
     """
     np.random.seed(seed)
+    # Continuous LaserTag transitions now execute in C++ via _native; seed
+    # that RNG too so the episode is fully deterministic. numpy's RNG is
+    # still used for initial state rejection sampling.
+    _laser_tag_native.set_seed(seed)
     env = ContinuousLaserTagPOMDP(
         discount_factor=0.95,
         robot_transition_cov_matrix=np.eye(2) * 0.01,

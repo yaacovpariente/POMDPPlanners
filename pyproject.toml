@@ -140,6 +140,7 @@ extension-pkg-allow-list = [
     "POMDPPlanners.environments.mountain_car_pomdp._native",
     "POMDPPlanners.environments.cartpole_pomdp._native",
     "POMDPPlanners.environments.light_dark_pomdp._native",
+    "POMDPPlanners.environments.laser_tag_pomdp._native",
     "POMDPPlanners.environments.push_pomdp._native",
 ]
 
