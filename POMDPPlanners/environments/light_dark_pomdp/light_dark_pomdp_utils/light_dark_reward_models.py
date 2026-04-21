@@ -2,6 +2,11 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 
+from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.numba_kernels import (
+    compute_reward_base_kernel,
+    compute_reward_decaying_hit_prob_kernel,
+)
+
 
 class BaseLightDarkRewardModel(ABC):
     @abstractmethod
@@ -61,22 +66,30 @@ class ContinuousLightDarkRewardModel(BaseLightDarkRewardModel):
         return bool(np.any(state < 0) or np.any(state > self.grid_size))
 
     def _compute_reward(self, state: np.ndarray, action: np.ndarray) -> float:
-        next_state = state + action
+        reward, in_obstacle_region = compute_reward_base_kernel(
+            state,
+            action,
+            self.goal_state,
+            self.obstacles,
+            self.goal_state_radius,
+            self.obstacle_radius,
+            float(self.grid_size),
+            self.fuel_cost,
+            self.goal_reward,
+            self.obstacle_reward,
+        )
+        if in_obstacle_region:
+            reward += self._obstacle_reward_scalar()
+        return float(reward)
 
-        is_goal_state = self._is_goal_state(next_state)
-        is_in_obstacle_range = self._is_in_obstacle_range(next_state)
-        is_out_of_grid = self._is_out_of_grid(next_state)
+    def _obstacle_reward_scalar(self) -> float:
+        """Stochastic obstacle-hit contribution.
 
-        reward = float(-self.fuel_cost - np.linalg.norm(next_state - self.goal_state))
-
-        if is_goal_state:
-            reward += self.goal_reward
-        elif is_in_obstacle_range:
-            reward += self._obstacle_reward(next_state)
-        elif is_out_of_grid:
-            reward += self.obstacle_reward
-
-        return reward
+        Called by ``_compute_reward`` only when the Numba kernel reports the
+        next state landed in an obstacle region but was not at goal / out-of-grid,
+        preserving the pre-refactor RNG call pattern.
+        """
+        return self.obstacle_reward if np.random.rand() < self.obstacle_hit_probability else 0.0
 
     def _obstacle_reward(self, state: np.ndarray) -> float:  # pylint: disable=unused-argument
         return self.obstacle_reward if np.random.rand() < self.obstacle_hit_probability else 0.0
@@ -107,6 +120,10 @@ class ContinuousLightDarkRewardModel(BaseLightDarkRewardModel):
 
 
 class ContinuousLDDangerousStatesRewardModel(ContinuousLightDarkRewardModel):
+    def _obstacle_reward_scalar(self) -> float:
+        """The expected reward is 0.0, but the variance is high."""
+        return self.obstacle_reward if np.random.rand() < 0.5 else -self.obstacle_reward
+
     def _obstacle_reward(self, state: np.ndarray) -> float:
         """The expected reward is 0.0, but the variance is high."""
         return self.obstacle_reward if np.random.rand() < 0.5 else -self.obstacle_reward
@@ -142,22 +159,22 @@ class ContinuousLightDarkDecayingHitProbabilityRewardModel(BaseLightDarkRewardMo
         self.penalty_decay = penalty_decay
 
     def _compute_reward(self, state: np.ndarray, action: np.ndarray) -> float:
-        next_state = state + action
-
-        is_goal_state = bool(np.linalg.norm(next_state - self.goal_state) <= self.goal_state_radius)
-
-        is_out_of_grid = bool(np.any(next_state < 0) or np.any(next_state > self.grid_size))
-
-        reward = float(-self.fuel_cost - np.linalg.norm(next_state - self.goal_state))
-
-        if is_goal_state:
-            reward += self.goal_reward
-        elif is_out_of_grid:
-            reward += self.obstacle_reward
-
-        reward += self._obstacle_reward(next_state)
-
-        return reward
+        uniform = float(np.random.rand())
+        return float(
+            compute_reward_decaying_hit_prob_kernel(
+                state,
+                action,
+                self.goal_state,
+                self.obstacles,
+                self.goal_state_radius,
+                float(self.grid_size),
+                self.fuel_cost,
+                self.goal_reward,
+                self.obstacle_reward,
+                self.penalty_decay,
+                uniform,
+            )
+        )
 
     def _obstacle_reward(self, state: np.ndarray) -> float:
         # Calculate distance to nearest obstacle

@@ -42,6 +42,10 @@ from POMDPPlanners.core.simulation import History, MetricValue
 from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp import (
     BaseLightDarkPOMDP,
 )
+from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.numba_kernels import (
+    is_terminal_kernel,
+    mvn_sample_2d_kernel,
+)
 from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
 
 # pylint: disable=no-name-in-module
@@ -132,7 +136,9 @@ class ContinuousLightDarkStateTransitionModel(StateTransitionModel):
         self.mean = state + action
 
     def sample(self, n_samples: int = 1) -> List[np.ndarray]:
-        samples = self._state_dist.sample(self.mean, n_samples)
+        z = np.random.standard_normal((n_samples, 2))
+        chol_L_T = self._state_dist._cholesky_L_T  # pylint: disable=protected-access
+        samples = mvn_sample_2d_kernel(self.mean, z, chol_L_T)
         return list(samples)
 
     def probability(self, values: List[np.ndarray]) -> np.ndarray:
@@ -408,19 +414,14 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
     def is_terminal(self, state: np.ndarray) -> bool:
         if state.shape != (2,):
             raise ValueError("state must be a 2D vector")
-
-        is_goal_state = np.linalg.norm(state - self.goal_state) <= self.goal_state_radius
-
-        if self.is_obstacle_hit_terminal:
-            # Calculate distance to each obstacle (obstacles are 2xN format)
-            distances = np.linalg.norm(state.reshape(-1, 1) - self.obstacles, axis=0)
-            is_obstacle_hit = bool(np.any(distances <= self.obstacle_radius))
-        else:
-            is_obstacle_hit = False
-
-        is_terminal = is_goal_state or is_obstacle_hit
-
-        return bool(is_terminal)
+        return is_terminal_kernel(
+            state,
+            self.goal_state,
+            self.obstacles,
+            self.goal_state_radius,
+            self.obstacle_radius,
+            self.is_obstacle_hit_terminal,
+        )
 
     def get_metric_names(self) -> List[str]:
         """Get names of Continuous Light-Dark POMDP specific metrics.
