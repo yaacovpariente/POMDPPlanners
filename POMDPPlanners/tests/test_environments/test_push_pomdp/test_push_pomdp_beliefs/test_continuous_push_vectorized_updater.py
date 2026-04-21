@@ -4,7 +4,9 @@ This module tests the vectorized batch transition and observation
 log-likelihood methods for the Continuous Push POMDP.
 """
 
-# pylint: disable=protected-access,attribute-defined-outside-init
+# pylint: disable=protected-access,attribute-defined-outside-init,unsubscriptable-object
+# ``unsubscriptable-object``: pylint can't infer that .sample() returns list
+# and .probability() / batch_transition return ndarray; both support [i].
 
 import numpy as np
 
