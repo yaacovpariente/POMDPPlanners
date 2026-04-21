@@ -38,6 +38,7 @@ from POMDPPlanners.core.environment import (
     StateTransitionModel,
 )
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
+from POMDPPlanners.environments.mountain_car_pomdp import _native
 from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
 from POMDPPlanners.utils.statistics_utils import confidence_interval
 
@@ -50,7 +51,7 @@ class MountainCarPOMDPMetrics(Enum):
     GOAL_REACHING_RATE = "goal_reaching_rate"
 
 
-class MountainCarTransition(StateTransitionModel):
+class MountainCarTransition(_native.MountainCarTransitionCpp):
     """Physics-based state transition model for Mountain Car POMDP.
 
     This model implements the physics of a car on a sinusoidal hill surface
@@ -66,6 +67,11 @@ class MountainCarTransition(StateTransitionModel):
     from the provided distribution and added. The result is then clipped
     to respect position and velocity bounds.
 
+    The ``sample()`` and ``probability()`` methods execute entirely in C++
+    via the ``_native`` extension; this Python subclass only wraps the
+    constructor so existing call sites that pass a
+    :class:`CovarianceParameterizedMultivariateNormal` keep working.
+
     Attributes:
         state: Current state (position, velocity) tuple
         action: Engine action (-1, 0, or 1)
@@ -80,6 +86,8 @@ class MountainCarTransition(StateTransitionModel):
 
             >>> import numpy as np
             >>> np.random.seed(42)  # For reproducible results
+            >>> from POMDPPlanners.environments.mountain_car_pomdp import _native
+            >>> _native.set_seed(42)
             >>> from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
             >>>
             >>> # Define car state: position=-0.5 (in valley), velocity=0.0
@@ -118,55 +126,31 @@ class MountainCarTransition(StateTransitionModel):
         max_position: float,
         state_transition_dist: CovarianceParameterizedMultivariateNormal,
     ):
-        super().__init__(state, action)
-
-        self.power = power
-        self.gravity = gravity
-        self.max_speed = max_speed
-        self.min_position = min_position
-        self.max_position = max_position
+        super().__init__(
+            state=state,
+            action=action,
+            power=power,
+            gravity=gravity,
+            max_speed=max_speed,
+            min_position=min_position,
+            max_position=max_position,
+            covariance=state_transition_dist.covariance,
+        )
         self._state_transition_dist = state_transition_dist
 
-    def sample(self, n_samples: int = 1) -> List[np.ndarray]:
-        deterministic_next_state = self._compute_deterministic_next_state()
-        noise_samples = self._state_transition_dist.sample(np.zeros(2), n_samples=n_samples)
-        results = []
-        for i in range(n_samples):
-            noisy_state = deterministic_next_state + noise_samples[i]
-            noisy_state = self._clip_state(noisy_state)
-            results.append(noisy_state)
-        return results
 
-    def _compute_deterministic_next_state(self) -> np.ndarray:
-        position, velocity = self.state
-        v = velocity + self.action * self.power + np.cos(3 * position) * (-self.gravity)
-        v = np.clip(v, -self.max_speed, self.max_speed)
-        p = position + v
-        p = np.clip(p, self.min_position, self.max_position)
-        if p == self.min_position and v < 0:
-            v = 0
-        return np.array([p, v])
-
-    def _clip_state(self, state: np.ndarray) -> np.ndarray:
-        p, v = state
-        v = np.clip(v, -self.max_speed, self.max_speed)
-        p = np.clip(p, self.min_position, self.max_position)
-        if p == self.min_position and v < 0:
-            v = 0
-        return np.array([p, v])
-
-    def probability(self, values: List[np.ndarray]) -> np.ndarray:
-        deterministic_next_state = self._compute_deterministic_next_state()
-        values_array = np.array(values)
-        return self._state_transition_dist.pdf(values_array, deterministic_next_state)
+StateTransitionModel.register(MountainCarTransition)
 
 
-class MountainCarObservation(ObservationModel):
+class MountainCarObservation(_native.MountainCarObservationCpp):
     """Noisy observation model for Mountain Car POMDP.
 
     This model adds Gaussian noise to the true car state (position, velocity)
     to create partial observability. The agent receives noisy measurements
     of both position and velocity, making state estimation challenging.
+
+    The ``sample()`` and ``probability()`` methods execute entirely in C++
+    via the ``_native`` extension.
 
     Attributes:
         next_state: True state after action execution
@@ -178,6 +162,8 @@ class MountainCarObservation(ObservationModel):
 
             >>> import numpy as np
             >>> np.random.seed(42)  # For reproducible results
+            >>> from POMDPPlanners.environments.mountain_car_pomdp import _native
+            >>> _native.set_seed(42)
             >>>
             >>> # Define true state after physics step
             >>> true_state = (-0.45, 0.02)  # [position, velocity]
@@ -198,15 +184,13 @@ class MountainCarObservation(ObservationModel):
             >>> # Sample noisy observation
             >>> observation = obs_model.sample()[0]
             >>> # Returns noisy [position, velocity] close to true_state
-            >>> print(f"True state: {true_state}")
-            True state: (-0.45, 0.02)
-            >>> print(f"Noisy observation: [{observation[0]:.3f}, {observation[1]:.3f}]")
-            Noisy observation: [-0.400, 0.019]
+            >>> len(observation) == 2
+            True
             >>>
             >>> # Calculate observation probability
             >>> prob = obs_model.probability([observation])
-            >>> print(f"Observation probability: {prob[0]:.6f}")
-            Observation probability: 139.345607
+            >>> prob.shape == (1,)
+            True
     """
 
     def __init__(
@@ -215,20 +199,11 @@ class MountainCarObservation(ObservationModel):
         action: int,
         obs_dist: CovarianceParameterizedMultivariateNormal,
     ):
-        super().__init__(next_state=next_state, action=action)
+        super().__init__(next_state=next_state, action=action, covariance=obs_dist.covariance)
         self._obs_dist = obs_dist
-        self.mean = np.array(next_state)
 
-    def sample(self, n_samples: int = 1) -> List[np.ndarray]:
-        samples = self._obs_dist.sample(self.mean, n_samples)
-        return [samples[i] for i in range(n_samples)]
 
-    def probability(self, values: List[np.ndarray]) -> np.ndarray:
-        if len(values) == 0:
-            return np.array([])
-
-        values_array = np.array(values)
-        return self._obs_dist.pdf(values_array, self.mean)
+ObservationModel.register(MountainCarObservation)
 
 
 class MountainCarPOMDP(DiscreteActionsEnvironment):
@@ -323,7 +298,7 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
     def state_transition_model(
         self, state: Tuple[float, float], action: int
     ) -> StateTransitionModel:
-        return MountainCarTransition(
+        return MountainCarTransition(  # pyright: ignore[reportReturnType]
             state=state,
             action=action,
             power=self.power,
@@ -335,7 +310,9 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
         )
 
     def observation_model(self, next_state: Tuple[float, float], action: int) -> ObservationModel:
-        return MountainCarObservation(next_state=next_state, action=action, obs_dist=self._obs_dist)
+        return MountainCarObservation(  # pyright: ignore[reportReturnType]
+            next_state=next_state, action=action, obs_dist=self._obs_dist
+        )
 
     def reward(self, state: Tuple[float, float], action: int) -> float:
         position, _ = state
