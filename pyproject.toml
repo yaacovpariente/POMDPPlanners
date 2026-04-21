@@ -135,7 +135,10 @@ markers = [
 [tool.pylint.master]
 ignore = "CVS"
 persistent = true
-extension-pkg-allow-list = ["POMDPPlanners.environments.mountain_car_pomdp._native"]
+extension-pkg-allow-list = [
+    "POMDPPlanners.core._native",
+    "POMDPPlanners.environments.mountain_car_pomdp._native",
+]
 
 [tool.pylint.messages_control]
 disable = [
