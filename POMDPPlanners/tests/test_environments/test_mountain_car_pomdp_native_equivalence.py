@@ -5,7 +5,8 @@ Python reference (``CovarianceParameterizedMultivariateNormal``) up to
 statistical noise in the samples and up to floating-point tolerance in
 the PDF. Complements ``test_mountain_car_pomdp.py`` which exercises the
 shipped API; this module focuses on the port-specific invariants called
-out in the implementation plan.
+out in the implementation plan. Generic assertion mechanics live in
+``_native_parity.py`` so other native env ports can reuse them.
 """
 
 import numpy as np
@@ -18,6 +19,7 @@ from POMDPPlanners.environments.mountain_car_pomdp import (
     MountainCarTransition,
     _native,
 )
+from POMDPPlanners.tests.test_environments import _native_parity
 from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
 
 
@@ -54,7 +56,7 @@ def test_transition_is_registered_as_state_transition_model(transition):
 
     Test type: unit
     """
-    assert isinstance(transition, StateTransitionModel)
+    _native_parity.assert_abc_registration(transition, StateTransitionModel)
 
 
 def test_observation_is_registered_as_observation_model(observation):
@@ -68,7 +70,7 @@ def test_observation_is_registered_as_observation_model(observation):
 
     Test type: unit
     """
-    assert isinstance(observation, ObservationModel)
+    _native_parity.assert_abc_registration(observation, ObservationModel)
 
 
 def test_transition_is_not_abstract():
@@ -126,19 +128,21 @@ def test_transition_sample_empirical_moments_match_spec(env):
 
     Test type: integration
     """
-    _native.set_seed(12345)
     transition = env.state_transition_model(state=(-0.5, 0.0), action=0)
     det = np.asarray(
-        transition._compute_deterministic_next_state()
-    )  # pylint: disable=protected-access
+        transition._compute_deterministic_next_state()  # pylint: disable=protected-access
+    )
 
-    samples = np.asarray(transition.sample(200_000))
-    empirical_mean = samples.mean(axis=0)
-    empirical_cov = np.cov(samples, rowvar=False)
-
-    np.testing.assert_allclose(empirical_mean, det, atol=5e-3)
-    frob_err = np.linalg.norm(empirical_cov - env.state_transition_cov, ord="fro")
-    assert frob_err < 1e-5, f"Covariance Frobenius error {frob_err:.3e} >= 1e-5"
+    _native_parity.assert_sample_moments_match(
+        model=transition,
+        seed_fn=_native.set_seed,
+        expected_mean=det,
+        expected_cov=env.state_transition_cov,
+        n_samples=200_000,
+        seed=12345,
+        mean_atol=5e-3,
+        cov_frobenius_atol=1e-5,
+    )
 
 
 def test_observation_sample_empirical_moments_match_spec(env):
@@ -156,17 +160,19 @@ def test_observation_sample_empirical_moments_match_spec(env):
 
     Test type: integration
     """
-    _native.set_seed(7777)
     next_state = (-0.2, 0.01)
     observation = env.observation_model(next_state=next_state, action=0)
 
-    samples = np.asarray(observation.sample(200_000))
-    empirical_mean = samples.mean(axis=0)
-    empirical_cov = np.cov(samples, rowvar=False)
-
-    np.testing.assert_allclose(empirical_mean, np.array(next_state), atol=5e-3)
-    frob_err = np.linalg.norm(empirical_cov - env.cov_matrix, ord="fro")
-    assert frob_err < 1e-3, f"Covariance Frobenius error {frob_err:.3e} >= 1e-3"
+    _native_parity.assert_sample_moments_match(
+        model=observation,
+        seed_fn=_native.set_seed,
+        expected_mean=np.array(next_state),
+        expected_cov=env.cov_matrix,
+        n_samples=200_000,
+        seed=7777,
+        mean_atol=5e-3,
+        cov_frobenius_atol=1e-3,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -191,18 +197,21 @@ def test_transition_probability_matches_python_reference_on_grid(env):
     """
     transition = env.state_transition_model(state=(-0.5, 0.0), action=1)
     det = np.asarray(
-        transition._compute_deterministic_next_state()
-    )  # pylint: disable=protected-access
+        transition._compute_deterministic_next_state()  # pylint: disable=protected-access
+    )
 
     rng = np.random.default_rng(42)
     offsets = rng.normal(size=(1000, 2)) * np.array([0.01, 0.005])
     grid = det[np.newaxis, :] + offsets
 
-    cpp_pdf = transition.probability(grid)
     py_ref = CovarianceParameterizedMultivariateNormal(env.state_transition_cov)
-    py_pdf = py_ref.pdf(grid, det)
-
-    np.testing.assert_allclose(cpp_pdf, py_pdf, atol=1e-10, rtol=0.0)
+    _native_parity.assert_logpdf_bitwise(
+        model=transition,
+        reference_dist=py_ref,
+        mean=det,
+        points=grid,
+        atol=1e-10,
+    )
 
 
 def test_observation_probability_matches_python_reference_on_grid(env):
@@ -223,11 +232,14 @@ def test_observation_probability_matches_python_reference_on_grid(env):
     offsets = rng.normal(size=(1000, 2)) * np.array([0.1, 0.01])
     grid = next_state[np.newaxis, :] + offsets
 
-    cpp_pdf = observation.probability(grid)
     py_ref = CovarianceParameterizedMultivariateNormal(env.cov_matrix)
-    py_pdf = py_ref.pdf(grid, next_state)
-
-    np.testing.assert_allclose(cpp_pdf, py_pdf, atol=1e-10, rtol=0.0)
+    _native_parity.assert_logpdf_bitwise(
+        model=observation,
+        reference_dist=py_ref,
+        mean=next_state,
+        points=grid,
+        atol=1e-10,
+    )
 
 
 def test_transition_probability_accepts_list_and_ndarray_inputs(transition):
@@ -273,13 +285,12 @@ def test_sample_is_deterministic_under_set_seed(env):
     Test type: unit
     """
     transition = env.state_transition_model(state=(-0.4, 0.01), action=1)
-
-    _native.set_seed(2024)
-    first = np.asarray(transition.sample(50))
-    _native.set_seed(2024)
-    second = np.asarray(transition.sample(50))
-
-    np.testing.assert_array_equal(first, second)
+    _native_parity.assert_determinism_under_seed(
+        model=transition,
+        seed_fn=_native.set_seed,
+        n_samples=50,
+        seed=2024,
+    )
 
 
 def test_sample_returns_list_of_1d_ndarrays(transition):
@@ -295,11 +306,9 @@ def test_sample_returns_list_of_1d_ndarrays(transition):
 
     Test type: unit
     """
-    _native.set_seed(0)
-    out = transition.sample(3)
-    assert isinstance(out, list)
-    assert len(out) == 3
-    for item in out:
-        assert isinstance(item, np.ndarray)
-        assert item.ndim == 1
-        assert item.shape == (2,)
+    _native_parity.assert_sample_shape_contract(
+        model=transition,
+        seed_fn=_native.set_seed,
+        n_samples=3,
+        expected_dim=2,
+    )
