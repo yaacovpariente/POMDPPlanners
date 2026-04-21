@@ -9,6 +9,9 @@ import pytest
 
 from POMDPPlanners.core.belief import get_initial_belief
 from POMDPPlanners.environments.laser_tag_pomdp import LaserTagPOMDP
+from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
+    ContinuousLightDarkPOMDPDiscreteActions,
+)
 from POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp import (
     DiscreteLightDarkPOMDP,
 )
@@ -43,6 +46,12 @@ def tiger_env():
 def discrete_ld_env():
     """DiscreteLightDarkPOMDP environment for benchmarking."""
     return DiscreteLightDarkPOMDP(discount_factor=DISCOUNT_FACTOR)
+
+
+@pytest.fixture
+def continuous_ld_env():
+    """ContinuousLightDarkPOMDPDiscreteActions environment for benchmarking."""
+    return ContinuousLightDarkPOMDPDiscreteActions(discount_factor=DISCOUNT_FACTOR)
 
 
 @pytest.fixture
@@ -81,6 +90,15 @@ def discrete_ld_state_action(discrete_ld_env):
 
 
 @pytest.fixture
+def continuous_ld_state_action(continuous_ld_env):
+    """Initial state and action for ContinuousLightDarkPOMDPDiscreteActions."""
+    np.random.seed(SEED)
+    state = continuous_ld_env.initial_state_dist().sample()[0]
+    action = continuous_ld_env.get_actions()[0]
+    return continuous_ld_env, state, action
+
+
+@pytest.fixture
 def rock_sample_state_action(rock_sample_env):
     """Initial state and action for RockSamplePOMDP."""
     np.random.seed(SEED)
@@ -115,6 +133,13 @@ def discrete_ld_belief(discrete_ld_env):
     """Initial belief for DiscreteLightDarkPOMDP."""
     np.random.seed(SEED)
     return get_initial_belief(pomdp=discrete_ld_env, n_particles=N_PARTICLES)
+
+
+@pytest.fixture
+def continuous_ld_belief(continuous_ld_env):
+    """Initial belief for ContinuousLightDarkPOMDPDiscreteActions."""
+    np.random.seed(SEED)
+    return get_initial_belief(pomdp=continuous_ld_env, n_particles=N_PARTICLES)
 
 
 @pytest.fixture
