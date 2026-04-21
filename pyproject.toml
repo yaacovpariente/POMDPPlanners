@@ -50,6 +50,7 @@ dependencies = [
     "memory_profiler>=0.60.0",
     "psutil>=5.8.0",
     "bokeh>=3.0.0",
+    "numba>=0.59,<0.62",
 ]
 
 [project.optional-dependencies]
