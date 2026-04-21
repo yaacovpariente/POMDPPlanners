@@ -5,12 +5,23 @@ log-likelihood methods, including an equivalence test that verifies
 the vectorized results match the per-particle loop in WeightedParticleBelief.
 """
 
+# protected-access: tests intentionally reach into belief/updater internals
+#   (e.g. _active_dist, _action_to_vector) to assert parity with the
+#   non-vectorized observation models.
+# import-outside-toplevel / reimport: a couple of equivalence test methods
+#   re-import WeightedParticleBelief inside their bodies for readability;
+#   pre-existing pattern in this file.
+# pylint: disable=protected-access,import-outside-toplevel,reimported,too-many-lines
+
 import numpy as np
 import pytest
 
 from POMDPPlanners.core.belief.particle_beliefs import WeightedParticleBelief
 from POMDPPlanners.core.belief.vectorized_weighted_particle_belief import (
     VectorizedWeightedParticleBelief,
+)
+from POMDPPlanners.environments.light_dark_pomdp import (
+    _native,  # pylint: disable=no-name-in-module
 )
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
     ContinuousLightDarkPOMDP,
@@ -24,7 +35,8 @@ from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_beliefs import
 )
 from POMDPPlanners.tests.test_core.test_belief.belief_equivalence_utils import (
     assert_sample_distributions_match,
-    assert_update_equivalence,
+    assert_update_particles_match,
+    assert_update_weights_match,
 )
 from POMDPPlanners.tests.test_core.test_belief.vectorized_updater_test_utils import (
     assert_batch_obs_log_likelihood_matches_loop,
@@ -255,6 +267,7 @@ class TestEquivalenceWithPerParticleLoop:
             action=action,
             per_particle_transition_fn=per_particle_fn,
             seed=999,
+            seed_fn=_native.set_seed,
         )
 
     def test_batch_observation_log_likelihood_matches_per_particle_loop(self, env, updater):
@@ -324,17 +337,30 @@ class TestEquivalenceWithPerParticleLoop:
             resampling=False,
         )
 
-        assert_update_equivalence(
+        # Use the per-helper APIs so we can pass seed_fn=_native.set_seed:
+        # both paths now share the C++ RNG via the native transition / obs
+        # batch entry points, and assert_update_equivalence does not expose
+        # seed_fn.
+        assert_update_particles_match(
             base=w_belief,
             vec=v_belief,
             action=action,
             observation=observation,
             pomdp=env,
-            atol_particles=1e-10,
-            atol_weights=1e-3,
-            significance_threshold=1e-4,
-            top_k=5,
+            atol=1e-10,
             seed=200,
+            seed_fn=_native.set_seed,
+        )
+        assert_update_weights_match(
+            base=w_belief,
+            vec=v_belief,
+            action=action,
+            observation=observation,
+            pomdp=env,
+            atol=1e-3,
+            significance_threshold=1e-4,
+            seed=200,
+            seed_fn=_native.set_seed,
         )
 
     def test_sample_distributions_match_post_update(self, env, updater):
@@ -374,9 +400,9 @@ class TestEquivalenceWithPerParticleLoop:
             resampling=False,
         )
 
-        np.random.seed(200)
+        _native.set_seed(200)
         v_updated = v_belief.update(action=action, observation=observation, pomdp=None)
-        np.random.seed(200)
+        _native.set_seed(200)
         w_updated = w_belief.update(action=action, observation=observation, pomdp=env)
 
         assert_sample_distributions_match(
@@ -487,10 +513,10 @@ class TestDiscreteActionBatchTransition:
         np.random.seed(0)
         particles = np.random.rand(20, 2) * 10
 
-        np.random.seed(42)
+        _native.set_seed(42)
         result_string = discrete_updater.batch_transition(particles, "right")
 
-        np.random.seed(42)
+        _native.set_seed(42)
         result_vector = discrete_updater.batch_transition(particles, np.array([1.0, 0.0]))
 
         np.testing.assert_array_equal(result_string, result_vector)
@@ -657,9 +683,9 @@ class TestNoObsInDarkObservationLogLikelihood:
         particles = np.random.rand(20, 2) * 10
         action = np.array([1.0, 0.0])
 
-        np.random.seed(99)
+        _native.set_seed(99)
         result_no_obs = no_obs_updater.batch_transition(particles, action)
-        np.random.seed(99)
+        _native.set_seed(99)
         result_normal = updater.batch_transition(particles, action)
 
         np.testing.assert_array_equal(result_no_obs, result_normal)
@@ -920,7 +946,7 @@ class TestNoObsInDarkFullUpdateEquivalence:
         particles_list = [particles_array[i].copy() for i in range(n)]
         log_w = np.full(n, -np.log(n))
 
-        np.random.seed(200)
+        _native.set_seed(200)
         v_belief = VectorizedWeightedParticleBelief(
             particles=particles_array.copy(),
             log_weights=log_w.copy(),
@@ -929,7 +955,7 @@ class TestNoObsInDarkFullUpdateEquivalence:
         )
         v_updated = v_belief.update(action=action, observation=observation, pomdp=None)
 
-        np.random.seed(200)
+        _native.set_seed(200)
         w_belief = WeightedParticleBelief(
             particles=particles_list,
             log_weights=log_w.copy(),
@@ -980,7 +1006,7 @@ class TestDistanceBasedFullUpdateEquivalence:
         particles_list = [particles_array[i].copy() for i in range(n)]
         log_w = np.full(n, -np.log(n))
 
-        np.random.seed(200)
+        _native.set_seed(200)
         v_belief = VectorizedWeightedParticleBelief(
             particles=particles_array.copy(),
             log_weights=log_w.copy(),
@@ -989,7 +1015,7 @@ class TestDistanceBasedFullUpdateEquivalence:
         )
         v_updated = v_belief.update(action=action, observation=observation, pomdp=None)
 
-        np.random.seed(200)
+        _native.set_seed(200)
         w_belief = WeightedParticleBelief(
             particles=particles_list,
             log_weights=log_w.copy(),

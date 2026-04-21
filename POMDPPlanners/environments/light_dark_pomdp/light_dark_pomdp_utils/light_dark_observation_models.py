@@ -5,6 +5,9 @@ import numpy as np
 
 from POMDPPlanners.core.distributions import DiscreteDistribution
 from POMDPPlanners.core.environment import ObservationModel
+from POMDPPlanners.environments.light_dark_pomdp import (
+    _native,  # pylint: disable=no-name-in-module
+)
 from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
 from POMDPPlanners.utils.numba_kernels import (
     any_point_within_radius_kernel,
@@ -51,7 +54,22 @@ class BaseContinuousLightDarkObservationModel(ObservationModel):
         pass
 
 
-class ContinuousLightDarkNormalNoiseObservationModel(BaseContinuousLightDarkObservationModel):
+class ContinuousLightDarkNormalNoiseObservationModel(_native.ContinuousLightDarkObservationCpp):
+    """Gaussian-noise observation model with state-dependent covariance.
+
+    Observations are sampled from a 2-D Gaussian centred on ``next_state``;
+    the covariance is the tighter ``obs_dist_near_beacon`` when the state
+    lies within ``beacon_radius`` of any beacon, otherwise the wider
+    ``obs_dist_far_from_beacon``. Samples are clipped to
+    ``[0, grid_size]``.
+
+    The ``sample`` / ``probability`` methods execute entirely in C++ via
+    the ``_native`` extension; this Python subclass only wraps the
+    constructor so existing call sites that pass
+    :class:`CovarianceParameterizedMultivariateNormal` instances keep
+    working.
+    """
+
     def __init__(
         self,
         next_state: np.ndarray,
@@ -62,35 +80,31 @@ class ContinuousLightDarkNormalNoiseObservationModel(BaseContinuousLightDarkObse
         beacons: np.ndarray,
         beacon_radius: float,
     ):
+        beacons_array = np.ascontiguousarray(beacons, dtype=float)
         super().__init__(
             next_state=next_state,
-            action=action,
-            obs_dist_near_beacon=obs_dist_near_beacon,
-            obs_dist_far_from_beacon=obs_dist_far_from_beacon,
-            grid_size=grid_size,
-            beacons=beacons,
-            beacon_radius=beacon_radius,
+            action=np.asarray(action, dtype=float).ravel(),
+            covariance_near=obs_dist_near_beacon.covariance,
+            covariance_far=obs_dist_far_from_beacon.covariance,
+            beacons=beacons_array,
+            beacon_radius=float(beacon_radius),
+            grid_size=float(grid_size),
         )
-        # Select distribution based on beacon proximity
-        self._active_dist = (
-            self.obs_dist_near_beacon if self.near_beacon else self.obs_dist_far_from_beacon
+        # Preserve the pre-port Python attribute surface expected by tests
+        # and downstream callers. The native extension handles all hot-path
+        # work; these fields are purely informational.
+        self.obs_dist_near_beacon = obs_dist_near_beacon
+        self.obs_dist_far_from_beacon = obs_dist_far_from_beacon
+        self.grid_size = grid_size
+        self.beacons = beacons_array
+        self.beacon_radius = beacon_radius
+        self.near_beacon = any_point_within_radius_kernel(
+            np.asarray(next_state, dtype=float), beacons_array, beacon_radius
         )
+        self._active_dist = obs_dist_near_beacon if self.near_beacon else obs_dist_far_from_beacon
 
-    def sample(self, n_samples: int = 1) -> List[np.ndarray]:
-        z = np.random.standard_normal((n_samples, 2))
-        chol_L_T = self._active_dist._cholesky_L_T  # pylint: disable=protected-access
-        observations = mvn_sample_2d_kernel(self.next_state, z, chol_L_T)
-        observations = np.clip(observations, 0, self.grid_size)
-        return list(observations)
 
-    def probability(self, values: List[np.ndarray]) -> np.ndarray:
-        # Convert list to numpy array for vectorized computation
-        values_array = np.array(values)
-        res = self._active_dist.pdf(values_array, self.next_state)
-        if not isinstance(res, np.ndarray):
-            res = np.array([res])
-
-        return res
+ObservationModel.register(ContinuousLightDarkNormalNoiseObservationModel)
 
 
 class ContinuousLightDarkNormalNoiseNoObsInDarkObservationModel(
