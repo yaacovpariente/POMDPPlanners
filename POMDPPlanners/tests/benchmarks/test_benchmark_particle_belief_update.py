@@ -72,6 +72,10 @@ from POMDPPlanners.environments.mountain_car_pomdp import MountainCarPOMDP
 from POMDPPlanners.environments.mountain_car_pomdp.mountain_car_pomdp_beliefs import (
     MountainCarVectorizedUpdater,
 )
+from POMDPPlanners.environments.push_pomdp import ContinuousPushPOMDP
+from POMDPPlanners.environments.push_pomdp.push_pomdp_beliefs.continuous_push_vectorized_updater import (
+    ContinuousPushVectorizedUpdater,
+)
 from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
 
 pytestmark = [pytest.mark.slow]
@@ -619,6 +623,82 @@ def test_bench_lasertag_vectorized_belief_update(benchmark):
         updater=updater,
     )
     action = np.array([1.0, 0.0, 0.0])
+    observation = env.initial_observation_dist().sample(n_samples=1)[0]
+
+    def run():
+        return belief.update(action=action, observation=observation, pomdp=env)
+
+    benchmark(run)
+
+
+# ---------------------------------------------------------------------------
+# ContinuousPush (native) cases
+# ---------------------------------------------------------------------------
+
+
+def _push_env() -> ContinuousPushPOMDP:
+    return ContinuousPushPOMDP(
+        discount_factor=0.99,
+        state_transition_cov_matrix=np.eye(2) * 0.01,
+        robot_radius=0.3,
+    )
+
+
+@pytest.mark.benchmark(group="belief-update-push-generic-cpp")
+def test_bench_push_generic_belief_update(benchmark):
+    """Benchmark WeightedParticleBelief.update on ContinuousPush (auto-dispatch).
+
+    Purpose: Measures the generic per-particle-looking belief update path
+    on the Continuous Push env after its transition/observation models
+    grew native batch entry points. ``WeightedParticleBelief._update_weights``
+    sniffs the batch interface and dispatches to the C++
+    ``batch_sample`` / ``batch_log_likelihood`` in a single round-trip.
+
+    Given: ContinuousPushPOMDP + WeightedParticleBelief with N=100 particles.
+    When: belief.update(action, observation, pomdp) is called repeatedly.
+    Then: Execution time is recorded.
+
+    Test type: performance
+    """
+    env = _push_env()
+    particles = list(env.initial_state_dist().sample(n_samples=_N_PARTICLES))
+    log_weights = np.log(np.ones(_N_PARTICLES) / _N_PARTICLES)
+    belief = WeightedParticleBelief(particles=particles, log_weights=log_weights)
+    action = np.array([1.0, 0.0])
+    observation = env.initial_observation_dist().sample(n_samples=1)[0]
+
+    def run():
+        return belief.update(action=action, observation=observation, pomdp=env)
+
+    benchmark(run)
+
+
+@pytest.mark.benchmark(group="belief-update-push-vectorized-cpp")
+def test_bench_push_vectorized_belief_update(benchmark):
+    """Benchmark VectorizedWeightedParticleBelief.update on ContinuousPush.
+
+    Purpose: Measures the explicit vectorized belief path on ContinuousPush
+    after the port. Its updater (``ContinuousPushVectorizedUpdater``)
+    delegates ``batch_transition`` and ``batch_observation_log_likelihood``
+    directly to the native C++ batch methods (contact geometry + Gaussian
+    noise all in one round-trip).
+
+    Given: ContinuousPushPOMDP + VectorizedWeightedParticleBelief with N=100.
+    When: belief.update(action, observation, pomdp) is called repeatedly.
+    Then: Execution time is recorded.
+
+    Test type: performance
+    """
+    env = _push_env()
+    updater = ContinuousPushVectorizedUpdater.from_environment(env)
+    particles = np.array(env.initial_state_dist().sample(n_samples=_N_PARTICLES))
+    log_weights = np.log(np.ones(_N_PARTICLES) / _N_PARTICLES)
+    belief = VectorizedWeightedParticleBelief(
+        particles=particles,
+        log_weights=log_weights,
+        updater=updater,
+    )
+    action = np.array([1.0, 0.0])
     observation = env.initial_observation_dist().sample(n_samples=1)[0]
 
     def run():

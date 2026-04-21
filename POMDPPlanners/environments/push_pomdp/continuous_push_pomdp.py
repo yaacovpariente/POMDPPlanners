@@ -37,12 +37,10 @@ from POMDPPlanners.core.environment import (
     StateTransitionModel,
 )
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
+from POMDPPlanners.environments.push_pomdp import _native
 from POMDPPlanners.environments.push_pomdp.continuous_push_geometry import (
     circle_aabb_overlap,
-    clamp_circle_to_grid,
-    clamp_point_to_grid,
     point_inside_aabb,
-    resolve_circle_wall_collision,
 )
 from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
 from POMDPPlanners.utils.statistics_utils import confidence_interval
@@ -63,7 +61,7 @@ class ContinuousPushPOMDPMetrics(Enum):
     TOTAL_ALL_OBSTACLE_COLLISIONS = "total_all_obstacle_collisions"
 
 
-class ContinuousPushStateTransitionModel(StateTransitionModel):
+class ContinuousPushStateTransitionModel(_native.ContinuousPushTransitionCpp):
     """State transition model for Continuous Push POMDP.
 
     Implements continuous robot movement with Gaussian noise and capped
@@ -71,6 +69,11 @@ class ContinuousPushStateTransitionModel(StateTransitionModel):
     interact with axis-aligned square obstacles.
 
     State representation: [robot_x, robot_y, object_x, object_y, target_x, target_y]
+
+    The ``sample()``, ``probability()`` and ``batch_sample()`` methods
+    execute entirely in C++ via the ``_native`` extension; this Python
+    subclass only wraps the constructor so existing call sites that pass a
+    :class:`CovarianceParameterizedMultivariateNormal` keep working.
 
     Attributes:
         state: Current state vector.
@@ -113,69 +116,47 @@ class ContinuousPushStateTransitionModel(StateTransitionModel):
         obstacles: np.ndarray,
         robot_radius: float,
     ):
-        super().__init__(state, action)
+        action_arr = np.asarray(action, dtype=float).ravel()
+        super().__init__(
+            state=np.asarray(state, dtype=float).ravel(),
+            action=action_arr,
+            grid_size=float(grid_size),
+            push_threshold=float(push_threshold),
+            friction_coefficient=float(friction_coefficient),
+            max_push=float(max_push),
+            robot_radius=float(robot_radius),
+            obstacles=np.asarray(obstacles, dtype=float),
+            covariance=state_transition_dist.covariance,
+        )
+        # Python-visible attributes match the pre-port contract. The C++
+        # base exposes ``state`` / ``action`` read-only properties; other
+        # attributes live here only for downstream introspection.
         self._state_transition_dist = state_transition_dist
-        self.grid_size = grid_size
-        self.push_threshold = push_threshold
-        self.friction_coefficient = friction_coefficient
-        self.max_push = max_push
-        self.obstacles = obstacles
-        self.robot_radius = robot_radius
+        self.grid_size = float(grid_size)
+        self.push_threshold = float(push_threshold)
+        self.friction_coefficient = float(friction_coefficient)
+        self.max_push = float(max_push)
+        self.obstacles = np.asarray(obstacles, dtype=float)
+        self.robot_radius = float(robot_radius)
 
-        self.robot_pos = state[:2].copy()
-        self.object_pos = state[2:4].copy()
-        self.target_pos = state[4:6].copy()
-
-    def sample(self, n_samples: int = 1) -> List[np.ndarray]:
-        results = []
-        for _ in range(n_samples):
-            results.append(self._sample_single())
-        return results
-
-    def _sample_single(self) -> np.ndarray:
-        noise = self._state_transition_dist.sample(np.zeros(2), n_samples=1)[0]
-        new_robot = self.robot_pos + self.action + noise
-        new_robot = resolve_circle_wall_collision(new_robot, self.robot_radius, self.obstacles)
-        new_robot = clamp_circle_to_grid(new_robot, self.robot_radius, self.grid_size)
-
-        new_object = self._apply_push(new_robot, self.object_pos.copy())
-        return np.concatenate([new_robot, new_object, self.target_pos])
-
-    def _apply_push(self, robot_pos: np.ndarray, object_pos: np.ndarray) -> np.ndarray:
-        dist_to_obj = np.linalg.norm(robot_pos - object_pos)
-        if dist_to_obj >= self.push_threshold:
-            return object_pos
-
-        action_norm = np.linalg.norm(self.action)
-        if action_norm < 1e-12:
-            return object_pos
-
-        direction = self.action / action_norm
-        force_mag = min(float(action_norm), self.max_push) * (1.0 - self.friction_coefficient)
-        intended_obj = object_pos + direction * force_mag
-
-        if self.obstacles.shape[0] > 0:
-            for i in range(self.obstacles.shape[0]):
-                if point_inside_aabb(intended_obj, self.obstacles[i]):
-                    return object_pos
-
-        intended_obj = clamp_point_to_grid(intended_obj, self.grid_size)
-        return intended_obj
-
-    def probability(self, values: List[np.ndarray]) -> np.ndarray:
-        values_array = np.array(values)
-        robot_next = values_array[:, :2]
-        means = self.robot_pos + self.action
-        return self._state_transition_dist.pdf(robot_next, means)
+        self.robot_pos = np.asarray(state, dtype=float)[:2].copy()
+        self.object_pos = np.asarray(state, dtype=float)[2:4].copy()
+        self.target_pos = np.asarray(state, dtype=float)[4:6].copy()
 
 
-class ContinuousPushObservationModel(ObservationModel):
+StateTransitionModel.register(ContinuousPushStateTransitionModel)
+
+
+class ContinuousPushObservationModel(_native.ContinuousPushObservationCpp):
     """Noisy observation model for Continuous Push POMDP.
 
     Robot and target positions are observed exactly; object position is
     observed with additive Gaussian noise.
 
     Observation format: [robot_x, robot_y, noisy_obj_x, noisy_obj_y, target_x, target_y]
+
+    The ``sample()``, ``probability()`` and ``batch_log_likelihood()``
+    methods execute entirely in C++ via the ``_native`` extension.
 
     Attributes:
         next_state: True state after action.
@@ -206,32 +187,20 @@ class ContinuousPushObservationModel(ObservationModel):
         observation_noise: float,
         grid_size: float,
     ):
-        super().__init__(next_state=next_state, action=action)
-        self.observation_noise = observation_noise
-        self.grid_size = grid_size
-        self.robot_pos = next_state[:2]
-        self.object_pos = next_state[2:4]
-        self.target_pos = next_state[4:6]
+        super().__init__(
+            next_state=np.asarray(next_state, dtype=float).ravel(),
+            action=np.asarray(action, dtype=float).ravel(),
+            observation_noise=float(observation_noise),
+            grid_size=float(grid_size),
+        )
+        self.observation_noise = float(observation_noise)
+        self.grid_size = float(grid_size)
+        self.robot_pos = np.asarray(next_state, dtype=float)[:2]
+        self.object_pos = np.asarray(next_state, dtype=float)[2:4]
+        self.target_pos = np.asarray(next_state, dtype=float)[4:6]
 
-    def sample(self, n_samples: int = 1) -> List[np.ndarray]:
-        observations = []
-        for _ in range(n_samples):
-            noisy_obj = self.object_pos + np.random.normal(0, self.observation_noise, size=2)
-            noisy_obj = np.clip(noisy_obj, 0, self.grid_size - 1)
-            observation = np.concatenate([self.robot_pos, noisy_obj, self.target_pos])
-            observations.append(observation)
-        return observations
 
-    def probability(self, values: List[Any]) -> np.ndarray:
-        variance = self.observation_noise**2
-        normalization = 1.0 / (2.0 * np.pi * variance)
-        probabilities = []
-        for observation in values:
-            obs = np.asarray(observation)
-            diff = obs[2:4] - self.object_pos
-            log_prob = -0.5 * np.sum(diff**2) / variance
-            probabilities.append(normalization * np.exp(log_prob))
-        return np.array(probabilities)
+ObservationModel.register(ContinuousPushObservationModel)
 
 
 class _FixedStateDistribution(Distribution):
@@ -254,13 +223,12 @@ class _RandomInitialStateDistribution(Distribution):
             states.append(np.concatenate([robot, obj, self._parent.target_pos]))
         return states
 
+    # pylint: disable=protected-access
     def _generate_robot_position(self) -> np.ndarray:
         p = self._parent
         for _ in range(100):
             pos = np.random.uniform(p.robot_radius, p.grid_size - 1 - p.robot_radius, size=2)
-            if not p._is_circle_colliding_with_obstacle(
-                pos, p.robot_radius
-            ):  # pylint: disable=protected-access
+            if not p._is_circle_colliding_with_obstacle(pos, p.robot_radius):
                 return pos
         return np.random.uniform(p.robot_radius, p.grid_size - 1 - p.robot_radius, size=2)
 
@@ -269,11 +237,11 @@ class _RandomInitialStateDistribution(Distribution):
         for _ in range(100):
             pos = np.random.uniform(0, p.grid_size - 1, size=2)
             far_from_target = np.linalg.norm(pos - p.target_pos) >= 2.0
-            if far_from_target and not p._is_point_colliding_with_obstacle(
-                pos
-            ):  # pylint: disable=protected-access
+            if far_from_target and not p._is_point_colliding_with_obstacle(pos):
                 return pos
         return np.random.uniform(0, p.grid_size - 1, size=2)
+
+    # pylint: enable=protected-access
 
 
 class ContinuousPushPOMDP(Environment):
@@ -374,7 +342,7 @@ class ContinuousPushPOMDP(Environment):
     # ------------------------------------------------------------------
 
     def state_transition_model(self, state: np.ndarray, action: np.ndarray) -> StateTransitionModel:
-        return ContinuousPushStateTransitionModel(
+        return ContinuousPushStateTransitionModel(  # pyright: ignore[reportReturnType]
             state=state,
             action=np.asarray(action, dtype=float),
             state_transition_dist=self._state_transition_dist,
@@ -387,7 +355,7 @@ class ContinuousPushPOMDP(Environment):
         )
 
     def observation_model(self, next_state: np.ndarray, action: np.ndarray) -> ObservationModel:
-        return ContinuousPushObservationModel(
+        return ContinuousPushObservationModel(  # pyright: ignore[reportReturnType]
             next_state=next_state,
             action=np.asarray(action, dtype=float),
             observation_noise=self.observation_noise,

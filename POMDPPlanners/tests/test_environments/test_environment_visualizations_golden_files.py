@@ -63,6 +63,7 @@ from POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_pomdp impor
 from POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_visualizer import (
     ContinuousLaserTagVisualizer,
 )
+from POMDPPlanners.environments.push_pomdp import _native as _push_native
 from POMDPPlanners.environments.push_pomdp.continuous_push_pomdp import (
     ContinuousPushPOMDP,
 )
@@ -583,6 +584,11 @@ def create_deterministic_continuous_push_episode(seed: int = 42) -> List[StepDat
         List of StepData objects representing episode history
     """
     np.random.seed(seed)
+    # Continuous Push transition/observation sampling runs through the
+    # native C++ module's std::mt19937_64, so seeding numpy alone no
+    # longer fixes the sample sequence. Seed both to keep the golden
+    # visualization reproducible.
+    _push_native.set_seed(seed)
     env = ContinuousPushPOMDP(
         discount_factor=0.99,
         grid_size=10,
