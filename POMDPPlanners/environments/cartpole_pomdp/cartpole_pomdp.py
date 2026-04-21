@@ -34,6 +34,7 @@ from POMDPPlanners.core.environment import (
     StateTransitionModel,
 )
 from POMDPPlanners.core.simulation import History, MetricValue
+from POMDPPlanners.environments.cartpole_pomdp import _native
 from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
 from POMDPPlanners.utils.statistics_utils import confidence_interval
 
@@ -44,13 +45,18 @@ class CartPolePOMDPMetrics(Enum):
     GOAL_REACHING_RATE = "goal_reaching_rate"
 
 
-class CartPoleStateTransition(StateTransitionModel):
+class CartPoleStateTransition(_native.CartPoleTransitionCpp):
     """Physics-based state transition model for CartPole POMDP.
 
     This model implements the classical cart-pole dynamics with Gaussian
     process noise. The cart experiences forces that affect both cart
     acceleration and pole angular acceleration through coupled equations
     of motion, with additive Normal noise on the resulting next state.
+
+    The ``sample()`` and ``probability()`` methods execute entirely in C++
+    via the ``_native`` extension; this Python subclass only wraps the
+    constructor so existing call sites that pass a
+    :class:`CovarianceParameterizedMultivariateNormal` keep working.
 
     Attributes:
         state: Current state [cart_position, cart_velocity, pole_angle, pole_velocity]
@@ -65,36 +71,41 @@ class CartPoleStateTransition(StateTransitionModel):
         masspole: Mass of the pole
 
     Example:
-        >>> import numpy as np
-        >>> np.random.seed(42)  # For reproducible results
-        >>> from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
-        >>> # Define initial state [position, velocity, angle, angular_velocity]
-        >>> state = np.array([0.0, 0.0, 0.1, 0.0])
-        >>> action = 1  # Apply right force
+        Using the CartPole transition model::
 
-        >>> # Create transition model with physics parameters and noise
-        >>> state_transition_cov = np.diag([1e-4, 1e-4, 2.5e-5, 1e-4])
-        >>> state_transition_dist = CovarianceParameterizedMultivariateNormal(state_transition_cov)
-        >>> transition = CartPoleStateTransition(
-        ...     state=state,
-        ...     action=action,
-        ...     force_mag=10.0,
-        ...     total_mass=1.1,
-        ...     polemass_length=0.05,
-        ...     gravity=9.8,
-        ...     length=0.5,
-        ...     kinematics_integrator="euler",
-        ...     tau=0.02,
-        ...     masspole=0.1,
-        ...     state_transition_dist=state_transition_dist
-        ... )
-
-        >>> # Simulate physics step
-        >>> next_state = transition.sample()[0]
-        >>> len(next_state) == 4  # [pos, vel, angle, ang_vel]
-        True
-        >>> isinstance(next_state, np.ndarray)
-        True
+            >>> import numpy as np
+            >>> np.random.seed(42)  # For reproducible results
+            >>> from POMDPPlanners.environments.cartpole_pomdp import _native
+            >>> _native.set_seed(42)
+            >>> from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
+            >>>
+            >>> # Define initial state [position, velocity, angle, angular_velocity]
+            >>> state = np.array([0.0, 0.0, 0.1, 0.0])
+            >>> action = 1  # Apply right force
+            >>>
+            >>> # Create transition model with physics parameters and noise
+            >>> state_transition_cov = np.diag([1e-4, 1e-4, 2.5e-5, 1e-4])
+            >>> state_transition_dist = CovarianceParameterizedMultivariateNormal(state_transition_cov)
+            >>> transition = CartPoleStateTransition(
+            ...     state=state,
+            ...     action=action,
+            ...     force_mag=10.0,
+            ...     total_mass=1.1,
+            ...     polemass_length=0.05,
+            ...     gravity=9.8,
+            ...     length=0.5,
+            ...     kinematics_integrator="euler",
+            ...     tau=0.02,
+            ...     masspole=0.1,
+            ...     state_transition_dist=state_transition_dist
+            ... )
+            >>>
+            >>> # Simulate physics step
+            >>> next_state = transition.sample()[0]
+            >>> len(next_state) == 4  # [pos, vel, angle, ang_vel]
+            True
+            >>> isinstance(next_state, np.ndarray)
+            True
     """
 
     def __init__(
@@ -111,98 +122,75 @@ class CartPoleStateTransition(StateTransitionModel):
         masspole: float,
         state_transition_dist: CovarianceParameterizedMultivariateNormal,
     ):
-        super().__init__(state, action)
-
-        self.force_mag = force_mag
-        self.total_mass = total_mass
-        self.polemass_length = polemass_length
-        self.gravity = gravity
-        self.length = length
-        self.kinematics_integrator = kinematics_integrator
-        self.tau = tau
-        self.masspole = masspole
+        super().__init__(
+            state=state,
+            action=action,
+            force_mag=force_mag,
+            total_mass=total_mass,
+            polemass_length=polemass_length,
+            gravity=gravity,
+            length=length,
+            kinematics_integrator=kinematics_integrator,
+            tau=tau,
+            masspole=masspole,
+            covariance=state_transition_dist.covariance,
+        )
         self._state_transition_dist = state_transition_dist
 
-    def sample(self, n_samples: int = 1) -> List[np.ndarray]:
-        deterministic_next_state = self._compute_deterministic_next_state()
-        noise_samples = self._state_transition_dist.sample(np.zeros(4), n_samples=n_samples)
-        return [deterministic_next_state + noise_samples[i] for i in range(n_samples)]
 
-    def _compute_deterministic_next_state(self) -> np.ndarray:
-        x, x_dot, theta, theta_dot = self.state
-        force = self.force_mag if self.action == 1 else -self.force_mag
-        costheta = math.cos(theta)
-        sintheta = math.sin(theta)
-
-        # For the interested reader:
-        # https://coneural.org/florian/papers/05_cart_pole.pdf
-        temp = (force + self.polemass_length * theta_dot**2 * sintheta) / self.total_mass
-        thetaacc = (self.gravity * sintheta - costheta * temp) / (
-            self.length * (4.0 / 3.0 - self.masspole * costheta**2 / self.total_mass)
-        )
-        xacc = temp - self.polemass_length * thetaacc * costheta / self.total_mass
-
-        if self.kinematics_integrator == "euler":
-            x = x + self.tau * x_dot
-            x_dot = x_dot + self.tau * xacc
-            theta = theta + self.tau * theta_dot
-            theta_dot = theta_dot + self.tau * thetaacc
-        else:  # semi-implicit euler
-            x_dot = x_dot + self.tau * xacc
-            x = x + self.tau * x_dot
-            theta_dot = theta_dot + self.tau * thetaacc
-            theta = theta + self.tau * theta_dot
-
-        return np.array([x, x_dot, theta, theta_dot])
-
-    def probability(self, values: List[np.ndarray]) -> np.ndarray:
-        deterministic_next_state = self._compute_deterministic_next_state()
-        values_array = np.array(values)
-        return self._state_transition_dist.pdf(values_array, deterministic_next_state)
+StateTransitionModel.register(CartPoleStateTransition)
 
 
-class CartPoleObservation(ObservationModel):
+class CartPoleObservation(_native.CartPoleObservationCpp):
     """Noisy observation model for CartPole POMDP.
 
     This model adds Gaussian noise to the true state to create partial observability.
     The agent receives a noisy version of the full state vector, making it challenging
     to determine the exact cart-pole configuration.
 
+    The ``sample()`` and ``probability()`` methods execute entirely in C++
+    via the ``_native`` extension.
+
     Attributes:
         next_state: True state after action execution
         action: Action that was taken (not used in observation generation)
-        obs_dist: Pre-computed multivariate normal distribution for efficient sampling/PDF
+        mean: Expected observation (equals ``next_state``)
 
     Example:
-        >>> import numpy as np
-        >>> np.random.seed(42)  # For reproducible results
-        >>> from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
-        >>> # Define true state after action
-        >>> true_state = np.array([0.1, 0.05, 0.02, -0.1])
-        >>> action = 1
+        Using the CartPole observation model::
 
-        >>> # Define observation noise covariance and create distribution
-        >>> noise_cov = np.diag([0.1, 0.1, 0.1, 0.1])
-        >>> obs_dist = CovarianceParameterizedMultivariateNormal(noise_cov)
-
-        >>> # Create observation model
-        >>> obs_model = CartPoleObservation(
-        ...     next_state=true_state,
-        ...     action=action,
-        ...     obs_dist=obs_dist
-        ... )
-
-        >>> # Sample noisy observation
-        >>> observation = obs_model.sample()[0]
-        >>> len(observation) == 4  # Same dimensionality as state
-        True
-        >>> isinstance(observation, np.ndarray)
-        True
-
-        >>> # Calculate probability of specific observation
-        >>> prob = obs_model.probability([observation])
-        >>> len(prob) == 1
-        True
+            >>> import numpy as np
+            >>> np.random.seed(42)  # For reproducible results
+            >>> from POMDPPlanners.environments.cartpole_pomdp import _native
+            >>> _native.set_seed(42)
+            >>> from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
+            >>>
+            >>> # Define true state after action
+            >>> true_state = np.array([0.1, 0.05, 0.02, -0.1])
+            >>> action = 1
+            >>>
+            >>> # Define observation noise covariance and create distribution
+            >>> noise_cov = np.diag([0.1, 0.1, 0.1, 0.1])
+            >>> obs_dist = CovarianceParameterizedMultivariateNormal(noise_cov)
+            >>>
+            >>> # Create observation model
+            >>> obs_model = CartPoleObservation(
+            ...     next_state=true_state,
+            ...     action=action,
+            ...     obs_dist=obs_dist
+            ... )
+            >>>
+            >>> # Sample noisy observation
+            >>> observation = obs_model.sample()[0]
+            >>> len(observation) == 4  # Same dimensionality as state
+            True
+            >>> isinstance(observation, np.ndarray)
+            True
+            >>>
+            >>> # Calculate probability of specific observation
+            >>> prob = obs_model.probability([observation])
+            >>> len(prob) == 1
+            True
     """
 
     def __init__(
@@ -211,19 +199,11 @@ class CartPoleObservation(ObservationModel):
         action: int,
         obs_dist: CovarianceParameterizedMultivariateNormal,
     ):
-        super().__init__(next_state=next_state, action=action)
-        self.obs_dist = obs_dist
+        super().__init__(next_state=next_state, action=action, covariance=obs_dist.covariance)
+        self._obs_dist = obs_dist
 
-    def sample(self, n_samples: int = 1) -> List[np.ndarray]:
-        samples = self.obs_dist.sample(self.next_state, n_samples)
-        return [samples[i] for i in range(n_samples)]
 
-    def probability(self, values: List[np.ndarray]) -> np.ndarray:
-        if len(values) == 0:
-            return np.array([])
-
-        values_array = np.array(values)
-        return self.obs_dist.pdf(values_array, self.next_state)
+ObservationModel.register(CartPoleObservation)
 
 
 class CartPoleInitialStateDistribution(Distribution):
@@ -362,7 +342,7 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
         )
 
     def state_transition_model(self, state: np.ndarray, action: int) -> StateTransitionModel:
-        return CartPoleStateTransition(
+        return CartPoleStateTransition(  # pyright: ignore[reportReturnType]
             state=state,
             action=action,
             force_mag=self.force_mag,
@@ -377,7 +357,9 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
         )
 
     def observation_model(self, next_state: np.ndarray, action: int) -> ObservationModel:
-        return CartPoleObservation(next_state=next_state, action=action, obs_dist=self._obs_dist)
+        return CartPoleObservation(  # pyright: ignore[reportReturnType]
+            next_state=next_state, action=action, obs_dist=self._obs_dist
+        )
 
     def reward(self, state: np.ndarray, action: int) -> float:
         terminated = self.is_terminal(state)

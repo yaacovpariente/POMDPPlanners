@@ -49,16 +49,16 @@ class MountainCarTransitionCpp : public pomdp_native::TransitionModelCpp<kMounta
 
     py::array_t<double> compute_deterministic_next_state_py() const {
         double out[kMountainCarStateDim];
-        compute_mean(out);
+        compute_mean_from_state(state_.data(), out);
         return pomdp_native::array_from_vector(out, kMountainCarStateDim);
     }
 
   protected:
-    void compute_mean(double *out) const override {
-        double v = state_[1] + static_cast<double>(action_int_) * power_ +
-                   std::cos(3.0 * state_[0]) * (-gravity_);
+    void compute_mean_from_state(const double *state, double *out) const override {
+        double v = state[1] + static_cast<double>(action_int_) * power_ +
+                   std::cos(3.0 * state[0]) * (-gravity_);
         v = std::clamp(v, -max_speed_, max_speed_);
-        double p = state_[0] + v;
+        double p = state[0] + v;
         p = std::clamp(p, min_position_, max_position_);
         if (p == min_position_ && v < 0.0) {
             v = 0.0;
@@ -124,6 +124,7 @@ PYBIND11_MODULE(_native, m) {
              py::arg("covariance"))
         .def("sample", &MountainCarTransitionCpp::sample, py::arg("n_samples") = 1)
         .def("probability", &MountainCarTransitionCpp::probability, py::arg("values"))
+        .def("batch_sample", &MountainCarTransitionCpp::batch_sample, py::arg("particles"))
         .def("_compute_deterministic_next_state",
              &MountainCarTransitionCpp::compute_deterministic_next_state_py)
         .def_property_readonly("state", &MountainCarTransitionCpp::state_property)
@@ -139,6 +140,8 @@ PYBIND11_MODULE(_native, m) {
              py::arg("next_state"), py::arg("action"), py::arg("covariance"))
         .def("sample", &MountainCarObservationCpp::sample, py::arg("n_samples") = 1)
         .def("probability", &MountainCarObservationCpp::probability, py::arg("values"))
+        .def("batch_log_likelihood", &MountainCarObservationCpp::batch_log_likelihood,
+             py::arg("next_particles"), py::arg("observation"))
         .def_property_readonly("next_state", &MountainCarObservationCpp::next_state_property)
         .def_property_readonly("action", &MountainCarObservationCpp::action_property)
         .def_property_readonly("mean", &MountainCarObservationCpp::mean_property);

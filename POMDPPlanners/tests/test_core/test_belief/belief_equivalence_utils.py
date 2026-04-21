@@ -52,6 +52,7 @@ def assert_update_particles_match(
     pomdp: Environment,
     atol: float = 1e-10,
     seed: Optional[int] = None,
+    seed_fn: Optional[Callable[[int], None]] = None,
     particle_to_array: Optional[ParticleToArray] = None,
 ) -> BeliefPair:
     """Run one update on both beliefs and assert next particles agree.
@@ -74,7 +75,7 @@ def assert_update_particles_match(
     Returns:
         The updated ``(base, vec)`` belief pair so callers can chain asserts.
     """
-    base_next, vec_next = _run_updates(base, vec, action, observation, pomdp, seed)
+    base_next, vec_next = _run_updates(base, vec, action, observation, pomdp, seed, seed_fn)
     _check_particles(base_next, vec_next, atol=atol, particle_to_array=particle_to_array)
     return base_next, vec_next
 
@@ -88,6 +89,7 @@ def assert_update_weights_match(
     atol: float = 1e-6,
     significance_threshold: Optional[float] = None,
     seed: Optional[int] = None,
+    seed_fn: Optional[Callable[[int], None]] = None,
 ) -> BeliefPair:
     """Run one update on both beliefs and assert normalized weights agree.
 
@@ -112,7 +114,7 @@ def assert_update_weights_match(
     Returns:
         The updated ``(base, vec)`` belief pair.
     """
-    base_next, vec_next = _run_updates(base, vec, action, observation, pomdp, seed)
+    base_next, vec_next = _run_updates(base, vec, action, observation, pomdp, seed, seed_fn)
     _check_weights(base_next, vec_next, atol=atol, significance_threshold=significance_threshold)
     return base_next, vec_next
 
@@ -410,12 +412,14 @@ def _run_updates(
     observation: Any,
     pomdp: Environment,
     seed: Optional[int],
+    seed_fn: Optional[Callable[[int], None]] = None,
 ) -> BeliefPair:
+    effective_seed_fn = seed_fn if seed_fn is not None else np.random.seed
     if seed is not None:
-        np.random.seed(seed)
+        effective_seed_fn(seed)
     vec_next = vec.update(action=action, observation=observation, pomdp=pomdp)
     if seed is not None:
-        np.random.seed(seed)
+        effective_seed_fn(seed)
     base_next = base.update(action=action, observation=observation, pomdp=pomdp)
     return base_next, vec_next
 

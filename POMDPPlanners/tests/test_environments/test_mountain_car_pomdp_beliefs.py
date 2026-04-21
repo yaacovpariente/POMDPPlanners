@@ -12,7 +12,7 @@ from POMDPPlanners.core.belief.particle_beliefs import WeightedParticleBelief
 from POMDPPlanners.core.belief.vectorized_weighted_particle_belief import (
     VectorizedWeightedParticleBelief,
 )
-from POMDPPlanners.environments.mountain_car_pomdp import MountainCarPOMDP
+from POMDPPlanners.environments.mountain_car_pomdp import MountainCarPOMDP, _native
 from POMDPPlanners.environments.mountain_car_pomdp.mountain_car_pomdp_beliefs import (
     MountainCarVectorizedUpdater,
 )
@@ -125,20 +125,21 @@ class TestBatchTransition:
         """Test that batch_transition is deterministic under a fixed seed.
 
         Purpose: Validates that the stochastic batch_transition produces
-                 identical output when the global numpy RNG is seeded
+                 identical output when the module-level C++ RNG (now the
+                 source of randomness for the updater) is seeded
                  identically before each call.
 
-        Given: A set of particles and an action, with np.random.seed fixed
-               before each call.
+        Given: A set of particles and an action, with ``_native.set_seed``
+               fixed before each call.
         When: batch_transition is called twice.
         Then: Both results are identical.
 
         Test type: unit
         """
         particles = np.array([[-0.5, 0.0], [-0.6, 0.01]])
-        np.random.seed(7)
+        _native.set_seed(7)
         result_a = updater.batch_transition(particles, action=1)
-        np.random.seed(7)
+        _native.set_seed(7)
         result_b = updater.batch_transition(particles, action=1)
         np.testing.assert_array_equal(result_a, result_b)
 
@@ -305,6 +306,7 @@ class TestConfigId:
         Test type: unit
         """
         u1 = MountainCarVectorizedUpdater.from_environment(env)
+        # pylint: disable=protected-access
         u2 = MountainCarVectorizedUpdater(
             state_transition_dist=env._state_transition_dist,
             obs_dist=env._obs_dist,
@@ -314,6 +316,7 @@ class TestConfigId:
             min_position=env.min_position,
             max_position=env.max_position,
         )
+        # pylint: enable=protected-access
         assert u1.config_id != u2.config_id
 
 
@@ -322,27 +325,18 @@ class TestConfigId:
 # ---------------------------------------------------------------------------
 
 
-_CPP_RNG_SKIP_REASON = (
-    "Bit-exact equivalence between the vectorized numpy path and the per-particle "
-    "path is no longer achievable: MountainCarTransition.sample() now uses the "
-    "_native C++ std::mt19937_64 RNG while MountainCarVectorizedUpdater.batch_transition "
-    "still consumes numpy's RNG. A follow-up can route batch_transition through "
-    "_native to restore cross-path bit-exactness; distributional correctness of "
-    "each path is still covered by the other tests in this module."
-)
-
-
 class TestBeliefEquivalenceWithBaseline:
-    @pytest.mark.skip(reason=_CPP_RNG_SKIP_REASON)
     def test_update_particles_match(self, env, updater):
         """Test vectorized belief update produces identical next particles.
 
         Purpose: Validates that VectorizedWeightedParticleBelief.update and
             WeightedParticleBelief.update agree on next-state particles once
-            the vectorized updater mirrors the standard transition noise.
+            both paths route through the shared pomdp_native batch methods
+            (and therefore share the module-level C++ RNG).
 
         Given: 60 aligned particles.
-        When: Both beliefs are updated with action=1 under a shared seed.
+        When: Both beliefs are updated with action=1 under a shared seed
+            applied via ``_native.set_seed``.
         Then: Next particles agree within floating-point tolerance.
 
         Test type: integration
@@ -350,10 +344,15 @@ class TestBeliefEquivalenceWithBaseline:
         base, vec = _make_aligned_beliefs(updater)
         obs = np.array([-0.5, 0.0])
         assert_update_particles_match(
-            base=base, vec=vec, action=1, observation=obs, pomdp=env, seed=999
+            base=base,
+            vec=vec,
+            action=1,
+            observation=obs,
+            pomdp=env,
+            seed=999,
+            seed_fn=_native.set_seed,
         )
 
-    @pytest.mark.skip(reason=_CPP_RNG_SKIP_REASON)
     def test_update_weights_match(self, env, updater):
         """Test vectorized and baseline beliefs produce identical normalized weights.
 
@@ -375,15 +374,17 @@ class TestBeliefEquivalenceWithBaseline:
             pomdp=env,
             atol=1e-6,
             seed=999,
+            seed_fn=_native.set_seed,
         )
 
-    @pytest.mark.skip(reason=_CPP_RNG_SKIP_REASON)
     def test_sample_distributions_match_post_update(self, env, updater):
         """Test sample() on both beliefs draws unbiased from normalized_weights.
 
         Purpose: Validates sample() unbiasedness and cross-belief agreement.
 
-        Given: 60 aligned particles; one update step seeded identically.
+        Given: 60 aligned particles; one update step seeded identically
+            via ``_native.set_seed`` (for the C++ transition batch) and
+            ``np.random.seed`` (for particle resampling -- still numpy).
         When: 20,000 samples are drawn from each belief.
         Then: Empirical histograms agree and each matches its normalized_weights.
 
@@ -391,9 +392,9 @@ class TestBeliefEquivalenceWithBaseline:
         """
         base, vec = _make_aligned_beliefs(updater)
         obs = np.array([-0.5, 0.0])
-        np.random.seed(999)
+        _native.set_seed(999)
         vec = vec.update(action=1, observation=obs, pomdp=env)
-        np.random.seed(999)
+        _native.set_seed(999)
         base = base.update(action=1, observation=obs, pomdp=env)
 
         assert_sample_distributions_match(
@@ -412,13 +413,12 @@ class TestBeliefEquivalenceWithBaseline:
 
 
 class TestEquivalenceWithPerParticleLoop:
-    @pytest.mark.skip(reason=_CPP_RNG_SKIP_REASON)
     def test_batch_transition_matches_per_particle_loop(self, env, updater):
         """Test vectorized batch_transition matches per-particle state_transition_model.sample.
 
         Purpose: Verifies that batch_transition produces the same stochastic
                  next states as the environment's state_transition_model.sample
-                 when the global RNG is seeded identically on both paths.
+                 when the shared C++ RNG is seeded identically on both paths.
 
         Given: A set of particles, an action, and a fixed random seed.
         When: batch_transition is called, and the same transitions are computed
@@ -444,6 +444,7 @@ class TestEquivalenceWithPerParticleLoop:
             action=1,
             per_particle_transition_fn=per_particle_fn,
             seed=999,
+            seed_fn=_native.set_seed,
         )
 
     def test_batch_observation_log_likelihood_matches_per_particle_loop(self, env, updater):
