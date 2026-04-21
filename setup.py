@@ -1,21 +1,40 @@
 """Setuptools entry point for native C++ extensions.
 
 Project metadata lives in pyproject.toml; this file exists only to register
-the pybind11 C++ extension modules that ship with the package. The
-extension (``MountainCarPOMDP`` sampling hot path) is built automatically
-by ``pip install`` / ``pip install -e .`` as long as a C++17 compiler is
-available on the system.
+the pybind11 C++ extension modules that ship with the package. Extensions
+are built automatically by ``pip install`` / ``pip install -e .`` as long
+as a C++17 compiler is available on the system.
+
+The shared ``POMDPPlanners.core._native`` extension provides the
+``pomdp_native`` header-only library (Cholesky-factored Gaussian, RNG state,
+Python <-> C++ marshalling, transition/observation base classes) that
+per-environment extensions include via ``#include <pomdp_native/...>``.
 """
 
 from pybind11.setup_helpers import Pybind11Extension, build_ext
 from setuptools import setup
 
-ext_modules = [
-    Pybind11Extension(
-        name="POMDPPlanners.environments.mountain_car_pomdp._native",
-        sources=["POMDPPlanners/environments/mountain_car_pomdp/_cpp/mountain_car.cpp"],
+POMDP_NATIVE_INCLUDE = "POMDPPlanners/core/_cpp/include"
+
+
+def _make_ext(name: str, sources: list) -> Pybind11Extension:
+    return Pybind11Extension(
+        name=name,
+        sources=sources,
+        include_dirs=[POMDP_NATIVE_INCLUDE],
         cxx_std=17,
         extra_compile_args=["-O3", "-fno-math-errno"],
+    )
+
+
+ext_modules = [
+    _make_ext(
+        name="POMDPPlanners.core._native",
+        sources=["POMDPPlanners/core/_cpp/module.cpp"],
+    ),
+    _make_ext(
+        name="POMDPPlanners.environments.mountain_car_pomdp._native",
+        sources=["POMDPPlanners/environments/mountain_car_pomdp/_cpp/mountain_car.cpp"],
     ),
 ]
 
