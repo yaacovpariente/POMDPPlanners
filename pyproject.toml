@@ -139,6 +139,7 @@ extension-pkg-allow-list = [
     "POMDPPlanners.core._native",
     "POMDPPlanners.environments.mountain_car_pomdp._native",
     "POMDPPlanners.environments.cartpole_pomdp._native",
+    "POMDPPlanners.environments.light_dark_pomdp._native",
 ]
 
 [tool.pylint.messages_control]

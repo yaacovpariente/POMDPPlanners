@@ -36,6 +36,9 @@ from POMDPPlanners.core.belief.vectorized_particle_belief_updater import (
     VectorizedParticleBeliefUpdater,
 )
 from POMDPPlanners.core.environment import SpaceType
+from POMDPPlanners.environments.light_dark_pomdp import (
+    _native,  # pylint: disable=no-name-in-module
+)
 from POMDPPlanners.utils.config_to_id import config_to_id
 from POMDPPlanners.utils.multivariate_normal import (
     CovarianceParameterizedMultivariateNormal,
@@ -113,6 +116,13 @@ class ContinuousLightDarkVectorizedUpdater(VectorizedParticleBeliefUpdater):
         self.grid_size = grid_size
         self._action_to_vector = action_to_vector
 
+        # Cached covariance arrays for the native batch entry points. The
+        # MVN objects' ``covariance`` property returns a copy, so we pay
+        # the allocation once instead of on every batch call.
+        self._state_transition_cov: np.ndarray = state_transition_dist.covariance
+        self._obs_cov_near: np.ndarray = obs_dist_near_beacon.covariance
+        self._obs_cov_far: np.ndarray = obs_dist_far_from_beacon.covariance
+
         self._precompute_cholesky_scalars(state_transition_dist)
         self._precompute_precision_scalars(obs_dist_near_beacon, obs_dist_far_from_beacon)
         self._precompute_beacon_arrays()
@@ -150,39 +160,36 @@ class ContinuousLightDarkVectorizedUpdater(VectorizedParticleBeliefUpdater):
     # ------------------------------------------------------------------
 
     def batch_transition(self, particles: np.ndarray, action: np.ndarray) -> np.ndarray:
-        action = self._resolve_action(action)
-        n = particles.shape[0]
-        z = np.random.standard_normal((n, 2))
-        noise_x = z[:, 0] * self._trans_L00
-        noise_y = z[:, 0] * self._trans_L10 + z[:, 1] * self._trans_L11
-        result = particles + action
-        result[:, 0] += noise_x
-        result[:, 1] += noise_y
-        return result
+        # Delegate to the native C++ batch sampler so both this path and the
+        # per-particle ContinuousLightDarkStateTransitionModel.sample()
+        # share the same C++ RNG (closes the cross-path divergence that
+        # used to fail the equivalence tests).
+        action_vec = self._resolve_action(action)
+        transition = _native.ContinuousLightDarkTransitionCpp(
+            state=particles[0],
+            action=action_vec,
+            covariance=self._state_transition_cov,
+        )
+        return transition.batch_sample(particles)
 
     def batch_observation_log_likelihood(
         self, next_particles: np.ndarray, action: np.ndarray, observation: np.ndarray
     ) -> np.ndarray:
-        observation = np.asarray(observation, dtype=float).ravel()
-        px = next_particles[:, 0]
-        py = next_particles[:, 1]
-
-        near_mask = self._batch_near_beacon_scalar(px, py)
-        dx = px - observation[0]
-        dy = py - observation[1]
-
-        maha_near = (
-            self._obs_near_P00 * dx**2 + self._obs_near_2P01 * dx * dy + self._obs_near_P11 * dy**2
+        # Delegate to the native C++ observation log-likelihood. The
+        # per-row near/far decision is made inside C++ using the same
+        # beacon-distance test as the per-particle model.
+        observation_arr = np.asarray(observation, dtype=float).ravel()
+        action_vec = self._resolve_action(action)
+        obs_model = _native.ContinuousLightDarkObservationCpp(
+            next_state=next_particles[0],
+            action=action_vec,
+            covariance_near=self._obs_cov_near,
+            covariance_far=self._obs_cov_far,
+            beacons=self.beacons,
+            beacon_radius=float(self.beacon_radius),
+            grid_size=float(self.grid_size),
         )
-        maha_far = (
-            self._obs_far_P00 * dx**2 + self._obs_far_2P01 * dx * dy + self._obs_far_P11 * dy**2
-        )
-
-        return np.where(
-            near_mask,
-            self._obs_near_log_norm - 0.5 * maha_near,
-            self._obs_far_log_norm - 0.5 * maha_far,
-        )
+        return obs_model.batch_log_likelihood(next_particles, observation_arr)
 
     @property
     def config_id(self) -> str:
