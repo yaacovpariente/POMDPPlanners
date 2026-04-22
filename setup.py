@@ -56,6 +56,10 @@ ext_modules = [
         name="POMDPPlanners.environments.pacman_pomdp._native",
         sources=["POMDPPlanners/environments/pacman_pomdp/_cpp/pacman.cpp"],
     ),
+    _make_ext(
+        name="POMDPPlanners.environments.rock_sample_pomdp._native",
+        sources=["POMDPPlanners/environments/rock_sample_pomdp/_cpp/rock_sample.cpp"],
+    ),
 ]
 
 setup(ext_modules=ext_modules, cmdclass={"build_ext": build_ext})
