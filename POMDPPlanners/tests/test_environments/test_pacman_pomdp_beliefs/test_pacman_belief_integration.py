@@ -54,25 +54,28 @@ class TestBeliefUpdateCycle:
 
 
 class TestBeliefSampleValidState:
-    def test_sample_converts_to_valid_state(self, env):
-        """Test that sampled array state converts to valid PacManState.
+    def test_sample_has_valid_fields(self, env):
+        """Test that a sampled particle exposes valid state fields via readers.
 
-        Purpose: Validates end-to-end sample -> state conversion.
+        Purpose: Validates end-to-end sample produces a usable state array.
 
         Given: A vectorized belief created from the environment.
-        When: A state is sampled and converted to PacManState.
-        Then: The PacManState has valid fields.
+        When: A state array is sampled and inspected via env reader methods.
+        Then: The reader outputs have valid shapes and types.
 
         Test type: integration
         """
         np.random.seed(42)
         belief = create_pacman_belief(env, n_particles=50)
         arr = belief.sample()
-        state = env.array_to_state(arr)
-        assert isinstance(state.pacman_pos, tuple)
-        assert len(state.pacman_pos) == 2
-        assert isinstance(state.ghost_positions, tuple)
-        assert len(state.ghost_positions) == env.num_ghosts
+        assert isinstance(arr, np.ndarray)
+        assert arr.shape == (env._state_dim,)
+        pacman_pos = env.get_pacman_pos(arr)
+        ghost_positions = env.get_ghost_positions(arr)
+        assert isinstance(pacman_pos, tuple)
+        assert len(pacman_pos) == 2
+        assert isinstance(ghost_positions, tuple)
+        assert len(ghost_positions) == env.num_ghosts
 
 
 class TestBeliefExpectationReward:

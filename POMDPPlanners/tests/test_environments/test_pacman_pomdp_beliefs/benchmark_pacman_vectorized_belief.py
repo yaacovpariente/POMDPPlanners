@@ -106,7 +106,7 @@ def _benchmark_reward_batch(env: PacManPOMDP, particle_counts: List[int]) -> Non
     for n in particle_counts:
         np.random.seed(42)
         states = env.initial_state_dist().sample(n_samples=n)
-        arr = env.states_to_array(states)
+        arr = np.stack(states)
 
         # Baseline: loop
         mean_base, _ = _time_fn(
@@ -161,7 +161,7 @@ def _benchmark_batch_transition(env: PacManPOMDP, particle_counts: List[int]) ->
     for n in particle_counts:
         np.random.seed(42)
         states = env.initial_state_dist().sample(n_samples=n)
-        arr = env.states_to_array(states)
+        arr = np.stack(states)
         mean_t, _ = _time_fn(
             lambda a=arr: updater.batch_transition(a, np.array(action)),  # type: ignore[arg-type]
             n_runs=100,

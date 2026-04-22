@@ -17,7 +17,6 @@ from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp import (
 )
 from POMDPPlanners.environments.pacman_pomdp.pacman_pomdp import (
     PacManPOMDP,
-    PacManState,
     PacManStateTransitionModel,
 )
 from POMDPPlanners.environments.push_pomdp.push_pomdp import (
@@ -115,8 +114,11 @@ class TestPacManPOMDPProbability:
             ghost_aggressiveness=2.0,
         )
 
-        state = PacManState(
-            pacman_pos=(0, 0), ghost_positions=((3, 3),), pellets=((2, 2),), score=0
+        state = pomdp.make_state(
+            pacman_pos=(0, 0),
+            ghost_positions=((3, 3),),
+            pellets=((2, 2),),
+            score=0.0,
         )
 
         transition = PacManStateTransitionModel(state, action=1, pomdp=pomdp)  # Move east

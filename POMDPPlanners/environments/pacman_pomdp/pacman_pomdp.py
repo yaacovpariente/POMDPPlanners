@@ -7,14 +7,19 @@ collect pellets while avoiding ghosts, with partial observability of ghost posit
 
 The environment involves PacMan navigating a maze with walls, collecting pellets,
 and avoiding ghosts that move according to stochastic policies. PacMan receives
-noisy observations about nearby ghost positions.
+noisy observations about nearby ghost positions. The state is a flat float64
+ndarray in the canonical layout
+``[pac_row, pac_col, g0_row, g0_col, ..., pellet_mask[0..P-1], score, terminal]``;
+build states via :meth:`PacManPOMDP.make_state` and read fields back with
+``get_pacman_pos`` / ``get_ghost_positions`` / ``get_pellets`` / ``get_score`` /
+``get_terminal``.
 
 Classes:
-    PacManState: Represents the state of the environment
     PacManPOMDP: The main POMDP environment implementation
+    PacManStateTransitionModel: Per-state transition model
+    PacManObservationModel: Per-state observation model
 """
 
-from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
@@ -43,156 +48,125 @@ class PacManPOMDPMetrics(Enum):
     AVG_COLLISION_ENCOUNTERS = "avg_collision_encounters"
 
 
-@dataclass(frozen=True)
-class PacManState:
-    """State representation for PacMan POMDP.
-
-    Attributes:
-        pacman_pos: PacMan position as (row, col) tuple
-        ghost_positions: Tuple of ghost positions as (row, col) tuples
-        pellets: Tuple of remaining pellet positions as (row, col) tuples
-        score: Current game score
-        terminal: Whether the game has ended
-    """
-
-    pacman_pos: Tuple[int, int]
-    ghost_positions: Tuple[Tuple[int, int], ...]  # Multiple ghost positions
-    pellets: Tuple[Tuple[int, int], ...]  # Tuple for immutability
-    score: Union[int, float] = 0
-    terminal: bool = False
-
-    @property
-    def ghost_pos(self) -> Tuple[int, int]:
-        """Backward compatibility: returns first ghost position."""
-        return self.ghost_positions[0] if self.ghost_positions else (0, 0)
-
-    @property
-    def num_ghosts(self) -> int:
-        """Number of ghosts in the game."""
-        return len(self.ghost_positions)
-
-    def __post_init__(self):
-        """Validate state components."""
-        if not isinstance(self.pacman_pos, tuple) or len(self.pacman_pos) != 2:
-            raise ValueError("pacman_pos must be a tuple of two integers")
-        if not isinstance(self.ghost_positions, tuple):
-            raise ValueError("ghost_positions must be a tuple of position tuples")
-        for i, ghost_pos in enumerate(self.ghost_positions):
-            if not isinstance(ghost_pos, tuple) or len(ghost_pos) != 2:
-                raise ValueError(f"ghost_positions[{i}] must be a tuple of two integers")
-        if not isinstance(self.pellets, tuple):
-            raise ValueError("pellets must be a tuple of position tuples")
-
-
 class PacManStateTransitionModel(StateTransitionModel):
     """State transition model for PacMan POMDP."""
 
-    def __init__(self, state: PacManState, action: int, pomdp: "PacManPOMDP"):
+    def __init__(self, state: np.ndarray, action: int, pomdp: "PacManPOMDP"):
         """Initialize transition model.
 
         Args:
-            state: Current state
-            action: Action to execute
-            pomdp: Reference to the POMDP environment
+            state: Current state as the env's canonical ndarray.
+            action: Action to execute.
+            pomdp: Reference to the POMDP environment.
         """
         super().__init__(state=state, action=action)
         self.pomdp = pomdp
+        idx_pac_row = pomdp._idx_pac_row  # pylint: disable=protected-access
+        idx_pac_col = pomdp._idx_pac_col  # pylint: disable=protected-access
+        idx_ghosts_start = pomdp._idx_ghosts_start  # pylint: disable=protected-access
+        idx_pellets_start = pomdp._idx_pellets_start  # pylint: disable=protected-access
+        idx_pellets_end = pomdp._idx_pellets_end  # pylint: disable=protected-access
+        self._pacman_pos = (int(state[idx_pac_row]), int(state[idx_pac_col]))
+        self._ghost_positions = tuple(
+            (
+                int(state[idx_ghosts_start + 2 * g]),
+                int(state[idx_ghosts_start + 2 * g + 1]),
+            )
+            for g in range(pomdp.num_ghosts)
+        )
+        mask = state[idx_pellets_start:idx_pellets_end]
+        self._pellets = tuple(
+            pos
+            for pos, idx in pomdp._pellet_to_index.items()  # pylint: disable=protected-access
+            if mask[idx] > 0.5
+        )
+        self._score = float(state[pomdp._idx_score])  # pylint: disable=protected-access
+        self._terminal = bool(state[pomdp._idx_terminal] > 0.5)  # pylint: disable=protected-access
 
-    def sample(self, n_samples: int = 1) -> List[PacManState]:
-        """Sample next states."""
-        next_state = self._compute_next_state()
-        return [next_state] * n_samples
+    def sample(self, n_samples: int = 1) -> List[np.ndarray]:
+        """Sample next states as ndarrays."""
+        next_state = self._compute_next_state_array()
+        if n_samples == 1:
+            return [next_state]
+        return [next_state.copy() for _ in range(n_samples)]
 
-    def probability(self, values: List[PacManState]) -> np.ndarray:
+    def probability(self, values: List[np.ndarray]) -> np.ndarray:
         """Calculate transition probabilities to next states.
 
         Args:
-            values: List of potential next states
+            values: List of potential next states as ndarrays.
 
         Returns:
-            Array of probabilities for each state in values
+            Array of probabilities for each state in values.
         """
-        if self.state.terminal:
-            # Terminal states only transition to themselves with probability 1
-            return np.array([1.0 if s == self.state else 0.0 for s in values])
+        if self._terminal:
+            return np.array([1.0 if np.array_equal(s, self.state) else 0.0 for s in values])
 
-        # Determine PacMan's next position (deterministic)
         pacman_next_pos = self._move_pacman()
-
-        probs = []
-        for next_state in values:
-            # Check if this is a valid next state
-            if next_state.pacman_pos != pacman_next_pos:
-                # PacMan position doesn't match - impossible transition
-                probs.append(0.0)
-                continue
-
-            # Calculate probability of ghost movements
-            ghost_prob = self._calculate_ghost_transition_probability(next_state.ghost_positions)
-
-            # Verify pellet and score consistency
-            if not self._is_valid_pellet_configuration(next_state):
-                probs.append(0.0)
-                continue
-
-            # Verify terminal status consistency
-            if not self._is_valid_terminal_status(next_state, pacman_next_pos):
-                probs.append(0.0)
-                continue
-
-            probs.append(ghost_prob)
-
-        # Normalize probabilities
-        probs = np.array(probs)
-        total = np.sum(probs)
+        probs = [
+            self._transition_probability_for_candidate(candidate, pacman_next_pos)
+            for candidate in values
+        ]
+        probs_arr = np.array(probs)
+        total = float(np.sum(probs_arr))
         if total > 0:
-            probs = probs / total
+            probs_arr = probs_arr / total
+        return probs_arr
 
-        return probs
+    def _transition_probability_for_candidate(
+        self, candidate: np.ndarray, pacman_next_pos: Tuple[int, int]
+    ) -> float:
+        if self.pomdp.get_pacman_pos(candidate) != pacman_next_pos:
+            return 0.0
+        cand_ghost_positions = self.pomdp.get_ghost_positions(candidate)
+        ghost_prob = self._calculate_ghost_transition_probability(cand_ghost_positions)
+        if not self._is_valid_pellet_configuration(candidate):
+            return 0.0
+        if not self._is_valid_terminal_status(candidate, pacman_next_pos):
+            return 0.0
+        return ghost_prob
 
-    def _compute_next_state(self) -> PacManState:
-        """Compute the next state."""
-        if self.state.terminal:
-            return self.state
+    def _compute_next_state_array(self) -> np.ndarray:
+        if self._terminal:
+            return self.state.copy()
 
-        # Move PacMan based on action
+        pomdp = self.pomdp
         pacman_pos = self._move_pacman()
-
-        # Move all ghosts stochastically
         ghost_positions = self._move_ghosts()
 
-        # Check for collision with any ghost
+        next_state = self.state.copy()
+        next_state[pomdp._idx_pac_row] = pacman_pos[0]  # pylint: disable=protected-access
+        next_state[pomdp._idx_pac_col] = pacman_pos[1]  # pylint: disable=protected-access
+        for g, gpos in enumerate(ghost_positions):
+            next_state[pomdp._idx_ghosts_start + 2 * g] = gpos[
+                0
+            ]  # pylint: disable=protected-access
+            next_state[pomdp._idx_ghosts_start + 2 * g + 1] = gpos[
+                1
+            ]  # pylint: disable=protected-access
+
         if pacman_pos in ghost_positions:
-            return PacManState(
-                pacman_pos=pacman_pos,
-                ghost_positions=ghost_positions,
-                pellets=self.state.pellets,
-                score=self.state.score,
-                terminal=True,
+            next_state[pomdp._idx_terminal] = 1.0  # pylint: disable=protected-access
+            return next_state
+
+        if pacman_pos in self._pellets:
+            pellet_idx = pomdp._pellet_to_index[pacman_pos]  # pylint: disable=protected-access
+            next_state[pomdp._idx_pellets_start + pellet_idx] = (
+                0.0  # pylint: disable=protected-access
             )
+            next_state[pomdp._idx_score] += pomdp.pellet_reward  # pylint: disable=protected-access
 
-        # Check for pellet collection
-        pellets = list(self.state.pellets)
-        score = self.state.score
+        pellet_mask = next_state[
+            pomdp._idx_pellets_start : pomdp._idx_pellets_end  # pylint: disable=protected-access
+        ]
+        if not np.any(pellet_mask > 0.5):
+            next_state[pomdp._idx_terminal] = 1.0  # pylint: disable=protected-access
 
-        if pacman_pos in pellets:
-            pellets.remove(pacman_pos)
-            score = score + self.pomdp.pellet_reward
-
-        # Check for winning condition (all pellets collected)
-        terminal = len(pellets) == 0
-
-        return PacManState(
-            pacman_pos=pacman_pos,
-            ghost_positions=ghost_positions,
-            pellets=tuple(pellets),
-            score=score,
-            terminal=terminal,
-        )
+        return next_state
 
     def _move_pacman(self) -> Tuple[int, int]:
         """Move PacMan based on action."""
-        row, col = self.state.pacman_pos
+        row, col = self._pacman_pos
 
         # Actions: 0=North, 1=East, 2=South, 3=West
         if self.action == 0:  # North
@@ -209,23 +183,23 @@ class PacManStateTransitionModel(StateTransitionModel):
         # Check if new position is valid (not a wall and within bounds)
         if self._is_valid_position(new_pos):
             return new_pos
-        return self.state.pacman_pos  # Stay in current position
+        return self._pacman_pos  # Stay in current position
 
     def _move_ghosts(self) -> Tuple[Tuple[int, int], ...]:
         """Move all ghosts with their respective policies."""
         new_positions = []
 
-        for i, ghost_pos in enumerate(self.state.ghost_positions):
+        for i, ghost_pos in enumerate(self._ghost_positions):
             if self.pomdp.ghost_coordination == "independent":
                 # Each ghost acts independently
                 new_pos = self._move_single_ghost(ghost_pos, i)
             elif self.pomdp.ghost_coordination == "coordinated":
                 # Ghosts coordinate to surround PacMan
-                new_pos = self._move_coordinated_ghost(ghost_pos, i, self.state.ghost_positions)
+                new_pos = self._move_coordinated_ghost(ghost_pos, i, self._ghost_positions)
             else:  # "mixed"
                 # Alternate between coordinated and independent behavior
                 if i % 2 == 0:
-                    new_pos = self._move_coordinated_ghost(ghost_pos, i, self.state.ghost_positions)
+                    new_pos = self._move_coordinated_ghost(ghost_pos, i, self._ghost_positions)
                 else:
                     new_pos = self._move_single_ghost(ghost_pos, i)
 
@@ -240,7 +214,7 @@ class PacManStateTransitionModel(StateTransitionModel):
         if not possible_moves:
             return ghost_pos  # Can't move, stay in place
 
-        pacman_pos = self.state.pacman_pos
+        pacman_pos = self._pacman_pos
 
         # Apply ghost-specific strategy if defined
         if hasattr(self.pomdp, "ghost_strategies") and ghost_id < len(self.pomdp.ghost_strategies):
@@ -276,7 +250,7 @@ class PacManStateTransitionModel(StateTransitionModel):
         if not possible_moves:
             return ghost_pos
 
-        pacman_pos = self.state.pacman_pos
+        pacman_pos = self._pacman_pos
 
         # Lead ghost (id=0) chases directly, others try to cut off escape routes
         if ghost_id == 0:
@@ -431,13 +405,13 @@ class PacManStateTransitionModel(StateTransitionModel):
         self, target_ghost_positions: Tuple[Tuple[int, int], ...]
     ) -> float:
         """Calculate probability of ghosts moving to target positions."""
-        if len(target_ghost_positions) != len(self.state.ghost_positions):
+        if len(target_ghost_positions) != len(self._ghost_positions):
             return 0.0
 
         total_prob = 1.0
 
         for i, (current_ghost_pos, target_ghost_pos) in enumerate(
-            zip(self.state.ghost_positions, target_ghost_positions)
+            zip(self._ghost_positions, target_ghost_positions)
         ):
             ghost_prob = self._single_ghost_move_probability(current_ghost_pos, target_ghost_pos, i)
             total_prob *= ghost_prob
@@ -491,7 +465,7 @@ class PacManStateTransitionModel(StateTransitionModel):
                 return 1.0 / len(possible_moves)
 
         # Default aggressive behavior - softmax based on distance to PacMan
-        pacman_pos = self.state.pacman_pos
+        pacman_pos = self._pacman_pos
         move_scores = []
 
         for move_pos in possible_moves:
@@ -520,63 +494,69 @@ class PacManStateTransitionModel(StateTransitionModel):
         # but complex to compute probability for
         return 1.0 / len(possible_moves)
 
-    def _is_valid_pellet_configuration(self, next_state: PacManState) -> bool:
-        """Check if pellet configuration is consistent with transition."""
+    def _is_valid_pellet_configuration(self, next_state: np.ndarray) -> bool:
         pacman_next_pos = self._move_pacman()
-
-        # Check if pellets were collected correctly
-        if pacman_next_pos in self.state.pellets:
-            # PacMan moved to a pellet position - pellet should be removed
-            expected_pellets = [p for p in self.state.pellets if p != pacman_next_pos]
-            expected_score = self.state.score + self.pomdp.pellet_reward
-
-            return (
-                set(next_state.pellets) == set(expected_pellets)
-                and next_state.score == expected_score
-            )
-        # No pellet collected - pellets and score should remain the same
-        return next_state.pellets == self.state.pellets and next_state.score == self.state.score
+        cand_pellets = self.pomdp.get_pellets(next_state)
+        cand_score = self.pomdp.get_score(next_state)
+        if pacman_next_pos in self._pellets:
+            expected_pellets = [p for p in self._pellets if p != pacman_next_pos]
+            expected_score = self._score + self.pomdp.pellet_reward
+            return set(cand_pellets) == set(expected_pellets) and cand_score == expected_score
+        return cand_pellets == self._pellets and cand_score == self._score
 
     def _is_valid_terminal_status(
-        self, next_state: PacManState, pacman_next_pos: Tuple[int, int]
+        self, next_state: np.ndarray, pacman_next_pos: Tuple[int, int]
     ) -> bool:
-        """Check if terminal status is consistent with the transition."""
-        # Terminal if collision or all pellets collected
-        collision = pacman_next_pos in next_state.ghost_positions
-        all_pellets_collected = len(next_state.pellets) == 0
-
-        expected_terminal = collision or all_pellets_collected
-
-        return next_state.terminal == expected_terminal
+        cand_ghost_positions = self.pomdp.get_ghost_positions(next_state)
+        cand_pellets = self.pomdp.get_pellets(next_state)
+        cand_terminal = self.pomdp.get_terminal(next_state)
+        collision = pacman_next_pos in cand_ghost_positions
+        all_pellets_collected = len(cand_pellets) == 0
+        return cand_terminal == (collision or all_pellets_collected)
 
 
 class PacManObservationModel(ObservationModel):
     """Observation model for PacMan POMDP."""
 
-    def __init__(self, next_state: PacManState, action: int, pomdp: "PacManPOMDP"):
+    def __init__(self, next_state: np.ndarray, action: int, pomdp: "PacManPOMDP"):
         """Initialize observation model.
 
         Args:
-            next_state: Next state after transition
-            action: Action that was executed
-            pomdp: Reference to the POMDP environment
+            next_state: Next state as the env's canonical ndarray.
+            action: Action that was executed.
+            pomdp: Reference to the POMDP environment.
         """
         super().__init__(next_state=next_state, action=action)
         self.pomdp = pomdp
+        idx_ghosts_start = pomdp._idx_ghosts_start  # pylint: disable=protected-access
+        self._pacman_pos = (
+            int(next_state[pomdp._idx_pac_row]),  # pylint: disable=protected-access
+            int(next_state[pomdp._idx_pac_col]),  # pylint: disable=protected-access
+        )
+        self._ghost_positions = tuple(
+            (
+                int(next_state[idx_ghosts_start + 2 * g]),
+                int(next_state[idx_ghosts_start + 2 * g + 1]),
+            )
+            for g in range(pomdp.num_ghosts)
+        )
+        self._terminal = bool(
+            next_state[pomdp._idx_terminal] > 0.5  # pylint: disable=protected-access
+        )
 
     def sample(self, n_samples: int = 1) -> List[Tuple[Tuple[int, int], ...]]:
         """Sample observations of all ghost positions with noise."""
-        if self.next_state.terminal:
+        if self._terminal:
             # Terminal observation: return (-1, -1) for each ghost
-            terminal_obs = tuple([(-1, -1)] * len(self.next_state.ghost_positions))
+            terminal_obs = tuple([(-1, -1)] * len(self._ghost_positions))
             return [terminal_obs] * n_samples
 
-        pacman_pos = self.next_state.pacman_pos
+        pacman_pos = self._pacman_pos
 
         observations = []
         for _ in range(n_samples):
             ghost_obs = []
-            for ghost_pos in self.next_state.ghost_positions:
+            for ghost_pos in self._ghost_positions:
                 # Add noise based on distance from PacMan to each ghost
                 distance = abs(ghost_pos[0] - pacman_pos[0]) + abs(ghost_pos[1] - pacman_pos[1])
                 noise_std = min(
@@ -605,11 +585,11 @@ class PacManObservationModel(ObservationModel):
         self, max_ghosts: int = 2, n_samples: int = 1
     ) -> List[Tuple[Tuple[int, int], ...]]:
         """Sample observations of only the closest ghosts."""
-        if self.next_state.terminal:
-            terminal_obs = tuple([(-1, -1)] * min(max_ghosts, len(self.next_state.ghost_positions)))
+        if self._terminal:
+            terminal_obs = tuple([(-1, -1)] * min(max_ghosts, len(self._ghost_positions)))
             return [terminal_obs] * n_samples
 
-        pacman_pos = self.next_state.pacman_pos
+        pacman_pos = self._pacman_pos
 
         # Calculate distances and sort ghosts by proximity
         ghost_distances = [
@@ -617,7 +597,7 @@ class PacManObservationModel(ObservationModel):
                 ghost_pos,
                 abs(ghost_pos[0] - pacman_pos[0]) + abs(ghost_pos[1] - pacman_pos[1]),
             )
-            for ghost_pos in self.next_state.ghost_positions
+            for ghost_pos in self._ghost_positions
         ]
         closest_ghosts = sorted(ghost_distances, key=lambda x: x[1])[:max_ghosts]
 
@@ -647,12 +627,12 @@ class PacManObservationModel(ObservationModel):
 
     def probability(self, values: List[Tuple[Tuple[int, int], ...]]) -> np.ndarray:
         """Calculate observation probabilities for multi-ghost observations."""
-        if self.next_state.terminal:
-            terminal_obs = tuple([(-1, -1)] * len(self.next_state.ghost_positions))
+        if self._terminal:
+            terminal_obs = tuple([(-1, -1)] * len(self._ghost_positions))
             return np.array([1.0 if obs == terminal_obs else 0.0 for obs in values])
 
-        pacman_pos = self.next_state.pacman_pos
-        true_ghost_positions = self.next_state.ghost_positions
+        pacman_pos = self._pacman_pos
+        true_ghost_positions = self._ghost_positions
 
         probs = []
         for obs_tuple in values:
@@ -699,7 +679,7 @@ class PacManObservationModel(ObservationModel):
         return np.array(probs)
 
 
-class PacManPOMDP(DiscreteActionsEnvironment):
+class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-methods
     """PacMan POMDP environment inspired by the classic arcade game.
 
     This environment implements a simplified PacMan game where PacMan must collect
@@ -884,80 +864,6 @@ class PacManPOMDP(DiscreteActionsEnvironment):
         """Backward compatibility: returns first ghost position."""
         return self.initial_ghost_positions[0] if self.initial_ghost_positions else (0, 0)
 
-    # ------------------------------------------------------------------
-    # Array state conversion (for vectorized belief support)
-    # ------------------------------------------------------------------
-
-    def state_to_array(self, state: PacManState) -> np.ndarray:
-        """Convert a PacManState to a fixed-size numpy array.
-
-        The array layout is:
-        ``[pac_row, pac_col, g0_row, g0_col, ..., pellet_mask[0..P-1], score, terminal]``
-
-        Args:
-            state: A PacManState instance.
-
-        Returns:
-            1-D float array of shape ``(self._state_dim,)``.
-        """
-        arr = np.zeros(self._state_dim, dtype=np.float64)
-        arr[self._idx_pac_row] = state.pacman_pos[0]
-        arr[self._idx_pac_col] = state.pacman_pos[1]
-        for g, gpos in enumerate(state.ghost_positions):
-            arr[self._idx_ghosts_start + 2 * g] = gpos[0]
-            arr[self._idx_ghosts_start + 2 * g + 1] = gpos[1]
-        pellet_set = set(state.pellets)
-        for pos, idx in self._pellet_to_index.items():
-            if pos in pellet_set:
-                arr[self._idx_pellets_start + idx] = 1.0
-        arr[self._idx_score] = state.score
-        arr[self._idx_terminal] = 1.0 if state.terminal else 0.0
-        return arr
-
-    def array_to_state(self, arr: np.ndarray) -> PacManState:
-        """Convert a numpy array back to a PacManState.
-
-        Args:
-            arr: 1-D array of shape ``(self._state_dim,)`` produced by
-                :meth:`state_to_array`.
-
-        Returns:
-            Reconstructed PacManState.
-        """
-        pacman_pos = (int(arr[self._idx_pac_row]), int(arr[self._idx_pac_col]))
-        ghost_positions = tuple(
-            (
-                int(arr[self._idx_ghosts_start + 2 * g]),
-                int(arr[self._idx_ghosts_start + 2 * g + 1]),
-            )
-            for g in range(self.num_ghosts)
-        )
-        pellets = tuple(
-            pos
-            for pos, idx in self._pellet_to_index.items()
-            if arr[self._idx_pellets_start + idx] > 0.5
-        )
-        score = float(arr[self._idx_score])
-        terminal = arr[self._idx_terminal] > 0.5
-        return PacManState(
-            pacman_pos=pacman_pos,
-            ghost_positions=ghost_positions,
-            pellets=pellets,
-            score=score,
-            terminal=terminal,
-        )
-
-    def states_to_array(self, states: List[PacManState]) -> np.ndarray:
-        """Batch-convert a list of PacManState to a 2-D numpy array.
-
-        Args:
-            states: List of PacManState instances.
-
-        Returns:
-            Array of shape ``(len(states), self._state_dim)``.
-        """
-        return np.array([self.state_to_array(s) for s in states])
-
     def observation_to_array(self, obs: Tuple[Tuple[int, int], ...]) -> np.ndarray:
         """Convert a PacMan observation tuple to a flat numpy array.
 
@@ -980,6 +886,119 @@ class PacManPOMDP(DiscreteActionsEnvironment):
         """
         flat = arr.ravel()
         return tuple((int(flat[2 * g]), int(flat[2 * g + 1])) for g in range(self.num_ghosts))
+
+    # ------------------------------------------------------------------
+    # Array-state factory and readers
+    # ------------------------------------------------------------------
+
+    def make_state(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+        self,
+        *,
+        pacman_pos: Tuple[int, int],
+        ghost_positions: Tuple[Tuple[int, int], ...],
+        pellets: Optional[Tuple[Tuple[int, int], ...]] = None,
+        score: float = 0.0,
+        terminal: bool = False,
+    ) -> np.ndarray:
+        """Build a PacMan state array in the canonical layout.
+
+        The array layout is
+        ``[pac_row, pac_col, g0_row, g0_col, ..., pellet_mask[0..P-1], score, terminal]``.
+
+        Args:
+            pacman_pos: PacMan grid position ``(row, col)``.
+            ghost_positions: Per-ghost positions as a tuple of length ``num_ghosts``.
+            pellets: Active pellet positions. ``None`` means every initial pellet
+                is active (useful for constructing initial states).
+            score: Current game score.
+            terminal: Whether the state is terminal.
+
+        Returns:
+            1-D ``float64`` array of shape ``(self._state_dim,)``.
+
+        Raises:
+            ValueError: If any argument has the wrong type or length, or if a
+                pellet position was not registered at env construction.
+        """
+        self._validate_make_state_args(pacman_pos, ghost_positions, pellets)
+        arr = np.zeros(self._state_dim, dtype=np.float64)
+        arr[self._idx_pac_row] = pacman_pos[0]
+        arr[self._idx_pac_col] = pacman_pos[1]
+        for g, gpos in enumerate(ghost_positions):
+            arr[self._idx_ghosts_start + 2 * g] = gpos[0]
+            arr[self._idx_ghosts_start + 2 * g + 1] = gpos[1]
+        active_positions = self._all_pellet_positions if pellets is None else pellets
+        for pos in active_positions:
+            idx = self._pellet_to_index.get(pos)
+            if idx is not None:
+                arr[self._idx_pellets_start + idx] = 1.0
+        arr[self._idx_score] = float(score)
+        arr[self._idx_terminal] = 1.0 if terminal else 0.0
+        return arr
+
+    def _validate_make_state_args(
+        self,
+        pacman_pos: Tuple[int, int],
+        ghost_positions: Tuple[Tuple[int, int], ...],
+        pellets: Optional[Tuple[Tuple[int, int], ...]],
+    ) -> None:
+        if not isinstance(pacman_pos, tuple) or len(pacman_pos) != 2:
+            raise ValueError("pacman_pos must be a tuple of two integers")
+        if not isinstance(ghost_positions, tuple):
+            raise ValueError("ghost_positions must be a tuple of position tuples")
+        if len(ghost_positions) != self.num_ghosts:
+            raise ValueError(
+                f"ghost_positions length ({len(ghost_positions)}) must equal "
+                f"num_ghosts ({self.num_ghosts})"
+            )
+        for i, gpos in enumerate(ghost_positions):
+            if not isinstance(gpos, tuple) or len(gpos) != 2:
+                raise ValueError(f"ghost_positions[{i}] must be a tuple of two integers")
+        if pellets is None:
+            return
+        if not isinstance(pellets, tuple):
+            raise ValueError("pellets must be a tuple of position tuples")
+        for i, pos in enumerate(pellets):
+            if not isinstance(pos, tuple) or len(pos) != 2:
+                raise ValueError(f"pellets[{i}] must be a tuple of two integers")
+
+    def get_pacman_pos(self, state: np.ndarray) -> Tuple[int, int]:
+        """Return PacMan's ``(row, col)`` position from a state array."""
+        return int(state[self._idx_pac_row]), int(state[self._idx_pac_col])
+
+    def get_ghost_positions(self, state: np.ndarray) -> Tuple[Tuple[int, int], ...]:
+        """Return ghost positions as a tuple of ``(row, col)`` pairs."""
+        return tuple(
+            (
+                int(state[self._idx_ghosts_start + 2 * g]),
+                int(state[self._idx_ghosts_start + 2 * g + 1]),
+            )
+            for g in range(self.num_ghosts)
+        )
+
+    def get_pellets(self, state: np.ndarray) -> Tuple[Tuple[int, int], ...]:
+        """Return the tuple of active pellet positions."""
+        mask = state[self._idx_pellets_start : self._idx_pellets_end]
+        return self._pellet_mask_to_positions(mask)
+
+    def _pellet_mask_to_positions(self, mask: np.ndarray) -> Tuple[Tuple[int, int], ...]:
+        return tuple(pos for pos, idx in self._pellet_to_index.items() if mask[idx] > 0.5)
+
+    def get_score(self, state: np.ndarray) -> float:
+        """Return the state's score as a Python float."""
+        return float(state[self._idx_score])
+
+    def get_terminal(self, state: np.ndarray) -> bool:
+        """Return whether the state is terminal."""
+        return bool(state[self._idx_terminal] > 0.5)
+
+    def _require_state_array(self, state: Any) -> np.ndarray:
+        if not isinstance(state, np.ndarray) or state.shape != (self._state_dim,):
+            raise TypeError(
+                f"expected np.ndarray of shape ({self._state_dim},); "
+                f"use PacManPOMDP.make_state(...) to build a state"
+            )
+        return state
 
     def _generate_ghost_positions(self, num_ghosts: int) -> List[Tuple[int, int]]:
         """Generate ghost starting positions automatically."""
@@ -1082,42 +1101,39 @@ class PacManPOMDP(DiscreteActionsEnvironment):
         """Get all available actions."""
         return list(range(len(self.action_names)))
 
-    def _ensure_pacman_state(self, state: Any) -> PacManState:
-        if isinstance(state, np.ndarray):
-            return self.array_to_state(state)
-        return state
-
-    def state_transition_model(self, state: Any, action: int) -> PacManStateTransitionModel:
+    def state_transition_model(self, state: np.ndarray, action: int) -> PacManStateTransitionModel:
         """Get state transition model."""
-        return PacManStateTransitionModel(self._ensure_pacman_state(state), action, self)
+        return PacManStateTransitionModel(self._require_state_array(state), action, self)
 
-    def observation_model(self, next_state: Any, action: int) -> PacManObservationModel:
+    def observation_model(self, next_state: np.ndarray, action: int) -> PacManObservationModel:
         """Get observation model."""
-        return PacManObservationModel(self._ensure_pacman_state(next_state), action, self)
+        return PacManObservationModel(self._require_state_array(next_state), action, self)
 
-    def reward(self, state: Any, action: int) -> float:
+    def reward(self, state: np.ndarray, action: int) -> float:
         """Calculate immediate reward."""
-        state = self._ensure_pacman_state(state)
-        if state.terminal:
-            return 0.0  # No reward for terminal states
+        state = self._require_state_array(state)
+        if state[self._idx_terminal] > 0.5:
+            return 0.0
 
-        # Base step penalty
         total_reward = self.step_penalty
-
-        # Simulate next state to check for events
         next_state = self.state_transition_model(state, action).sample()[0]
 
-        # Ghost collision penalty
-        if next_state.pacman_pos in next_state.ghost_positions:
-            total_reward += self.ghost_collision_penalty
+        next_pac_row = int(next_state[self._idx_pac_row])
+        next_pac_col = int(next_state[self._idx_pac_col])
+        for g in range(self.num_ghosts):
+            g_row = int(next_state[self._idx_ghosts_start + 2 * g])
+            g_col = int(next_state[self._idx_ghosts_start + 2 * g + 1])
+            if next_pac_row == g_row and next_pac_col == g_col:
+                total_reward += self.ghost_collision_penalty
+                break
 
-        # Pellet collection reward
-        if next_state.score > state.score:
+        if next_state[self._idx_score] > state[self._idx_score]:
             total_reward += self.pellet_reward
 
-        # Win condition bonus
-        if next_state.terminal and len(next_state.pellets) == 0:
-            total_reward += self.win_reward
+        if next_state[self._idx_terminal] > 0.5:
+            pellet_mask = next_state[self._idx_pellets_start : self._idx_pellets_end]
+            if not np.any(pellet_mask > 0.5):
+                total_reward += self.win_reward
 
         return total_reward
 
@@ -1126,16 +1142,17 @@ class PacManPOMDP(DiscreteActionsEnvironment):
     ) -> np.ndarray:
         """Calculate rewards for a batch of states.
 
-        Accepts either a 2-D numpy array of shape ``(N, state_dim)``
-        (vectorized path) or a sequence of PacManState objects (falls back
-        to the loop-based default).
+        Accepts a 2-D numpy array of shape ``(N, state_dim)`` on the fast
+        vectorized path, or a sequence of 1-D state arrays on the fallback
+        per-particle path.
 
         Computes deterministic reward components only: step penalty, pellet
         collection, and win bonus. Ghost collision penalty is excluded because
         it depends on stochastic ghost movement.
 
         Args:
-            states: Array of shape ``(N, state_dim)`` or sequence of states.
+            states: Array of shape ``(N, state_dim)`` or sequence of 1-D
+                state arrays.
             action: Discrete action index (0-3).
 
         Returns:
@@ -1146,7 +1163,6 @@ class PacManPOMDP(DiscreteActionsEnvironment):
             if states_arr.ndim == 1:
                 states_arr = states_arr.reshape(1, -1)
             return self._compute_reward_batch(states_arr, action)
-        # Fallback for PacManState sequences (non-vectorized beliefs)
         return np.array([self.reward(states[i], action) for i in range(len(states))])
 
     def _compute_reward_batch(self, states_arr: np.ndarray, action: int) -> np.ndarray:
@@ -1205,22 +1221,19 @@ class PacManPOMDP(DiscreteActionsEnvironment):
             self._cached_neighbor_table = precompute_neighbor_table(self.maze_size, valid_mask)
         return self._cached_neighbor_table
 
-    def is_terminal(self, state: Any) -> bool:
+    def is_terminal(self, state: np.ndarray) -> bool:
         """Check if state is terminal."""
-        state = self._ensure_pacman_state(state)
-        return state.terminal
+        return self.get_terminal(self._require_state_array(state))
 
     def initial_state_dist(self) -> DiscreteDistribution:
         """Get initial state distribution."""
-        # Single deterministic initial state
-        initial_state = PacManState(
+        initial_state = self.make_state(
             pacman_pos=self.initial_pacman_pos,
             ghost_positions=tuple(self.initial_ghost_positions),
             pellets=tuple(self.initial_pellets),
-            score=0,
+            score=0.0,
             terminal=False,
         )
-
         return DiscreteDistribution(values=[initial_state], probs=np.array([1.0]))
 
     def initial_observation_dist(self) -> DiscreteDistribution:
@@ -1236,16 +1249,15 @@ class PacManPOMDP(DiscreteActionsEnvironment):
         """Check if two observations are equal."""
         return observation1 == observation2
 
-    def _check_episode_win_status(self, final_state: PacManState) -> int:
-        """Check if the episode was won (all pellets collected and terminal)."""
-        won = final_state.terminal and len(final_state.pellets) == 0
+    def _check_episode_win_status(self, final_state: np.ndarray) -> int:
+        pellet_mask = final_state[self._idx_pellets_start : self._idx_pellets_end]
+        won = self.get_terminal(final_state) and not bool(np.any(pellet_mask > 0.5))
         return 1 if won else 0
 
-    def _count_pellets_collected(self, final_state: PacManState) -> int:
-        """Count the number of pellets collected during the episode."""
-        initial_pellets = len(self.initial_pellets)
-        remaining_pellets = len(final_state.pellets)
-        return initial_pellets - remaining_pellets
+    def _count_pellets_collected(self, final_state: np.ndarray) -> int:
+        pellet_mask = final_state[self._idx_pellets_start : self._idx_pellets_end]
+        remaining_pellets = int(np.sum(pellet_mask > 0.5))
+        return len(self.initial_pellets) - remaining_pellets
 
     def _calculate_manhattan_distance(self, pos1: Tuple[int, int], pos2: Tuple[int, int]) -> float:
         """Calculate Manhattan distance between two positions."""
@@ -1276,18 +1288,18 @@ class PacManPOMDP(DiscreteActionsEnvironment):
         episode_collisions = 0
 
         for step_data in history.history:
-            if isinstance(step_data.state, PacManState):
-                pacman_pos = step_data.state.pacman_pos
-                ghost_positions = step_data.state.ghost_positions
+            state = step_data.state
+            if not isinstance(state, np.ndarray) or state.shape != (self._state_dim,):
+                continue
+            pacman_pos = self.get_pacman_pos(state)
+            ghost_positions = self.get_ghost_positions(state)
 
-                # Track distance to closest ghost
-                closest_distance = self._get_closest_ghost_distance(pacman_pos, ghost_positions)
-                if closest_distance is not None:
-                    episode_distances.append(closest_distance)
+            closest_distance = self._get_closest_ghost_distance(pacman_pos, ghost_positions)
+            if closest_distance is not None:
+                episode_distances.append(closest_distance)
 
-                # Count collisions
-                if self._is_collision(pacman_pos, ghost_positions):
-                    episode_collisions += 1
+            if self._is_collision(pacman_pos, ghost_positions):
+                episode_collisions += 1
 
         return episode_distances, episode_collisions
 
@@ -1306,7 +1318,7 @@ class PacManPOMDP(DiscreteActionsEnvironment):
 
         final_state = history.history[-1].state
 
-        if not isinstance(final_state, PacManState):
+        if not isinstance(final_state, np.ndarray) or final_state.shape != (self._state_dim,):
             return metrics_data
 
         # Calculate win status and pellets collected
@@ -1344,12 +1356,14 @@ class PacManPOMDP(DiscreteActionsEnvironment):
         ghost_distances_per_episode: List[List[float]] = [[] for _ in range(self.num_ghosts)]
 
         for step_data in history.history:
-            if isinstance(step_data.state, PacManState):
-                pacman_pos = step_data.state.pacman_pos
-                for ghost_id, ghost_pos in enumerate(step_data.state.ghost_positions):
-                    if ghost_id < len(ghost_distances_per_episode):
-                        distance = self._calculate_manhattan_distance(pacman_pos, ghost_pos)
-                        ghost_distances_per_episode[ghost_id].append(distance)
+            state = step_data.state
+            if not isinstance(state, np.ndarray) or state.shape != (self._state_dim,):
+                continue
+            pacman_pos = self.get_pacman_pos(state)
+            for ghost_id, ghost_pos in enumerate(self.get_ghost_positions(state)):
+                if ghost_id < len(ghost_distances_per_episode):
+                    distance = self._calculate_manhattan_distance(pacman_pos, ghost_pos)
+                    ghost_distances_per_episode[ghost_id].append(distance)
 
         return ghost_distances_per_episode
 
@@ -1471,13 +1485,13 @@ class PacManPOMDP(DiscreteActionsEnvironment):
 
         return metrics
 
-    def visualize_path(self, path: List[PacManState], actions: List[int], cache_path: Path):
+    def visualize_path(self, path: List[np.ndarray], actions: List[int], cache_path: Path):
         """Visualize PacMan path through the maze using sprite-based rendering.
 
         Args:
-            path: List of states representing the path through the maze
-            actions: List of actions taken at each step
-            cache_path: Path where the GIF should be saved
+            path: List of state arrays representing the path through the maze.
+            actions: List of actions taken at each step.
+            cache_path: Path where the GIF should be saved.
         """
         from POMDPPlanners.environments.pacman_pomdp.pacman_visualizer import (
             PacManVisualizer,
