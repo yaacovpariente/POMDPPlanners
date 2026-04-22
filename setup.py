@@ -52,6 +52,10 @@ ext_modules = [
         name="POMDPPlanners.environments.push_pomdp._native",
         sources=["POMDPPlanners/environments/push_pomdp/_cpp/continuous_push.cpp"],
     ),
+    _make_ext(
+        name="POMDPPlanners.environments.pacman_pomdp._native",
+        sources=["POMDPPlanners/environments/pacman_pomdp/_cpp/pacman.cpp"],
+    ),
 ]
 
 setup(ext_modules=ext_modules, cmdclass={"build_ext": build_ext})
