@@ -1,5 +1,7 @@
 """Type stubs for the PacMan POMDP native C++ extension."""
 
+# pylint: disable=unused-argument,unnecessary-ellipsis
+
 from typing import List, Sequence, Union
 
 import numpy as np
