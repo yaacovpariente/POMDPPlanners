@@ -28,6 +28,7 @@ from POMDPPlanners.core.environment import (
     StateTransitionModel,
 )
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
+from POMDPPlanners.environments.rock_sample_pomdp import _native
 from POMDPPlanners.utils.statistics_utils import confidence_interval
 
 
@@ -100,8 +101,18 @@ def states_equal(state1: RockSampleState, state2: RockSampleState) -> bool:
     return np.array_equal(state1, state2)
 
 
-class RockSampleStateTransitionModel(StateTransitionModel):
-    """State transition model for RockSample POMDP."""
+_OBS_CODE_TO_STR = ("none", "good", "bad")
+_OBS_STR_TO_CODE = {"none": 0, "good": 1, "bad": 2}
+
+
+class RockSampleStateTransitionModel(_native.RockSampleTransitionCpp):
+    """State transition model for RockSample POMDP.
+
+    Thin Python wrapper around the native C++ class. Deterministic dynamics:
+    movement clamps to grid boundaries (East is unclamped to allow exit),
+    sample flips the colocated rock to bad, and check actions leave the
+    state unchanged. Terminal sentinel ``[-1, -1, ...]`` is absorbing.
+    """
 
     def __init__(self, state: RockSampleState, action: int, pomdp: "RockSamplePOMDP"):
         """Initialize transition model.
@@ -111,76 +122,34 @@ class RockSampleStateTransitionModel(StateTransitionModel):
             action: Action to execute
             pomdp: Reference to the POMDP environment
         """
-        super().__init__(state=state, action=action)
+        super().__init__(
+            state=np.asarray(state, dtype=float),
+            action=int(action),
+            map_rows=pomdp.map_size[0],
+            map_cols=pomdp.map_size[1],
+            num_rocks=len(pomdp.rock_positions),
+            rock_positions=np.asarray(pomdp.rock_positions, dtype=np.int32),
+            sensor_efficiency=pomdp.sensor_efficiency,
+        )
         self.pomdp = pomdp
 
-    def sample(self, n_samples: int = 1) -> List[RockSampleState]:
-        """Sample next states (deterministic transitions)."""
-        next_state = self._compute_next_state()
-        return [next_state] * n_samples
 
-    def probability(self, values: List[RockSampleState]) -> np.ndarray:
-        """Calculate transition probabilities for given next states.
-
-        Since RockSample has deterministic transitions, the probability is 1.0
-        for the correct next state and 0.0 for all others.
-
-        Args:
-            values: List of next state values to calculate probabilities for
-
-        Returns:
-            Array of transition probabilities (1.0 for correct state, 0.0 otherwise)
-        """
-        # Compute the deterministic next state
-        expected_next_state = self._compute_next_state()
-
-        # Check which states match the expected next state
-        probs = np.array(
-            [1.0 if states_equal(state, expected_next_state) else 0.0 for state in values]
-        )
-
-        return probs
-
-    def _compute_next_state(self) -> RockSampleState:
-        """Compute the deterministic next state."""
-        robot_row, robot_col = get_robot_pos(self.state)
-        rocks = list(get_rocks(self.state))
-
-        # Handle terminal state
-        if robot_col >= self.pomdp.map_size[1]:
-            return create_rock_sample_state((-1, -1), tuple(rocks))
-
-        # Movement actions
-        if self.action == 1:  # North
-            new_pos = (max(0, robot_row - 1), robot_col)
-        elif self.action == 2:  # East
-            new_pos = (
-                robot_row,
-                robot_col + 1,
-            )  # Allow moving beyond boundary for exit
-        elif self.action == 3:  # South
-            new_pos = (min(self.pomdp.map_size[0] - 1, robot_row + 1), robot_col)
-        elif self.action == 4:  # West
-            new_pos = (robot_row, max(0, robot_col - 1))
-        elif self.action == 0:  # Sample
-            new_pos = (robot_row, robot_col)
-            # Check if robot is at a rock position and sample it
-            for i, rock_pos in enumerate(self.pomdp.rock_positions):
-                if (robot_row, robot_col) == rock_pos:
-                    rocks[i] = False  # Rock becomes bad after sampling
-                    break
-        else:  # Check actions (5 and above)
-            new_pos = (robot_row, robot_col)  # Stay in place for checking
-
-        # Handle exit condition - robot must move beyond right boundary to exit
-        if new_pos[1] >= self.pomdp.map_size[1]:
-            return create_rock_sample_state((-1, -1), tuple(rocks))
-
-        return create_rock_sample_state(new_pos, tuple(rocks))
+StateTransitionModel.register(RockSampleStateTransitionModel)
 
 
 class RockSampleObservationModel(ObservationModel):
-    """Observation model for RockSample POMDP."""
+    """Observation model for RockSample POMDP.
+
+    Uses the native C++ sampler via composition (not inheritance) so the
+    string-typed public observation API stays decoupled from the
+    integer-coded C++ batch interface: callers exchange ``"none" / "good"
+    / "bad"`` with this class, which translates to/from the C++ integer
+    codes (0=none, 1=good, 2=bad) and delegates ``sample`` / ``probability``
+    to the native implementation. The core belief update's batch path
+    (which assumes numeric observations) therefore does not pick this
+    class up via ``hasattr(..., "batch_log_likelihood")``; the vectorized
+    updater calls the native extension directly for its batched path.
+    """
 
     def __init__(self, next_state: RockSampleState, action: int, pomdp: "RockSamplePOMDP"):
         """Initialize observation model.
@@ -192,75 +161,24 @@ class RockSampleObservationModel(ObservationModel):
         """
         super().__init__(next_state=next_state, action=action)
         self.pomdp = pomdp
+        self._native = _native.RockSampleObservationCpp(
+            next_state=np.asarray(next_state, dtype=float),
+            action=int(action),
+            map_rows=pomdp.map_size[0],
+            map_cols=pomdp.map_size[1],
+            num_rocks=len(pomdp.rock_positions),
+            rock_positions=np.asarray(pomdp.rock_positions, dtype=np.int32),
+            sensor_efficiency=pomdp.sensor_efficiency,
+        )
 
     def sample(self, n_samples: int = 1) -> List[str]:
-        """Sample observations."""
-        if self.action <= 4:  # Movement or sample actions
-            return ["none"] * n_samples
-
-        # Check actions (5 and above)
-        rock_idx = self.action - 5
-        if rock_idx >= len(self.pomdp.rock_positions):
-            return ["none"] * n_samples
-
-        # Calculate observation probabilities based on distance and rock quality
-        robot_pos = get_robot_pos(self.next_state)
-        rock_pos = self.pomdp.rock_positions[rock_idx]
-        rocks = get_rocks(self.next_state)
-        rock_quality = rocks[rock_idx]
-
-        # Calculate Euclidean distance
-        distance = math.sqrt((robot_pos[0] - rock_pos[0]) ** 2 + (robot_pos[1] - rock_pos[1]) ** 2)
-
-        # Sensor efficiency decreases exponentially with distance
-        efficiency = math.exp(-distance / self.pomdp.sensor_efficiency)
-
-        observations = []
-        for _ in range(n_samples):
-            if np.random.random() < efficiency:
-                # Correct observation with high probability
-                obs = "good" if rock_quality else "bad"
-            else:
-                # Incorrect observation
-                obs = "bad" if rock_quality else "good"
-            observations.append(obs)
-
-        return observations
+        """Sample observations as string labels."""
+        return [_OBS_CODE_TO_STR[c] for c in self._native.sample(n_samples)]
 
     def probability(self, values: List[str]) -> np.ndarray:
-        """Calculate observation probabilities."""
-        if self.action <= 4:  # Movement or sample actions
-            probs = np.array([1.0 if obs == "none" else 0.0 for obs in values])
-            return probs
-
-        # Check actions
-        rock_idx = self.action - 5
-        if rock_idx >= len(self.pomdp.rock_positions):
-            probs = np.array([1.0 if obs == "none" else 0.0 for obs in values])
-            return probs
-
-        robot_pos = get_robot_pos(self.next_state)
-        rock_pos = self.pomdp.rock_positions[rock_idx]
-        rocks = get_rocks(self.next_state)
-        rock_quality = rocks[rock_idx]
-
-        distance = math.sqrt((robot_pos[0] - rock_pos[0]) ** 2 + (robot_pos[1] - rock_pos[1]) ** 2)
-
-        efficiency = math.exp(-distance / self.pomdp.sensor_efficiency)
-
-        probs = []
-        for obs in values:
-            if obs == "none":
-                prob = 0.0
-            elif obs == "good":
-                prob = efficiency if rock_quality else (1.0 - efficiency)
-            elif obs == "bad":
-                prob = (1.0 - efficiency) if rock_quality else efficiency
-            else:
-                prob = 0.0
-            probs.append(prob)
-
-        return np.array(probs)
+        """Calculate observation probabilities for string observations."""
+        codes = np.array([_OBS_STR_TO_CODE.get(v, -1) for v in values], dtype=np.int32)
+        return self._native.probability(codes)
 
 
 class RockSamplePOMDP(DiscreteActionsEnvironment):
@@ -435,17 +353,17 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
         """Get all available actions."""
         return list(range(len(self.action_names)))
 
-    def state_transition_model(
-        self, state: RockSampleState, action: int
-    ) -> RockSampleStateTransitionModel:
+    def state_transition_model(self, state: RockSampleState, action: int) -> StateTransitionModel:
         """Get state transition model."""
-        return RockSampleStateTransitionModel(state, action, self)
+        return RockSampleStateTransitionModel(  # pyright: ignore[reportReturnType]
+            state, action, self
+        )
 
-    def observation_model(
-        self, next_state: RockSampleState, action: int
-    ) -> RockSampleObservationModel:
+    def observation_model(self, next_state: RockSampleState, action: int) -> ObservationModel:
         """Get observation model."""
-        return RockSampleObservationModel(next_state, action, self)
+        return RockSampleObservationModel(  # pyright: ignore[reportReturnType]
+            next_state, action, self
+        )
 
     def reward(self, state: RockSampleState, action: int) -> float:
         """Calculate immediate reward."""
