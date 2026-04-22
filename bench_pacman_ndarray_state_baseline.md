@@ -1,23 +1,33 @@
-# pacman ndarray-state refactor: runtime comparison
+# pacman native C++ port: runtime comparison
 
-Measurement setup: numpy seed 0, warmup=100, measure=1000, rollout episodes=1000 cap=50, belief particles=200 updates=50. Run from the worktree with:
+Measurement setup (same as PR #87): numpy seed 0 + `_native.set_seed(0)`, warmup=100, measure=1000, rollout episodes=1000 cap=50, belief particles=200 updates=50, POMCPOW budget=30s. 7x7 maze, 2 ghosts, 4 pellets (`ghost_coordination="independent"`, `ghost_aggressiveness=2.0`).
+
+Run from the worktree with:
 
 ```
 source .venv/bin/activate
-PYTHONPATH=. python bench_pacman_ndarray_state.py
+python bench_pacman_ndarray_state.py
 ```
 
-| case | before (`origin/develop`) | after (`refactor/pacman-ndarray-state`) | Δ |
-|---|---|---|---|
-| `reward` per-call | 37.07 µs | 44.45 µs | **+19.9%** |
-| `state_transition_model.sample()` per-call | 35.84 µs | 44.10 µs | **+23.0%** |
-| random-policy rollout median / total (1000 eps) | 0.767 ms / 0.884 s | 0.855 ms / 0.981 s | **+11.0%** |
-| `VectorizedWeightedParticleBelief.update` per-call | 0.199 ms | 0.187 ms | **−6.0%** |
-| `make_state` per-call | n/a | 1.95 µs | (new API) |
+## Full history (develop → ndarray → native)
+
+| case | Python (pre-#87) | ndarray (post-#87) | native (this PR) | native vs Python | native vs ndarray |
+|---|---|---|---|---|---|
+| `reward` per-call | 37.07 µs | 44.45 µs | **5.36 µs** | **6.9× faster** | 8.3× faster |
+| `state_transition_model.sample()` per-call | 35.84 µs | 44.10 µs | **3.94 µs** | **9.1× faster** | 11.2× faster |
+| `observation_model.sample()` per-call | n/a | n/a | **3.87 µs** | new | new |
+| random-policy rollout median / total (1000 eps) | 0.767 ms / 0.884 s | 0.855 ms / 0.981 s | **0.105 ms / 0.121 s** | **7.3× faster** | 8.1× faster |
+| `VectorizedWeightedParticleBelief.update` per-call | 0.199 ms | 0.187 ms | **0.030 ms** | **6.6× faster** | 6.2× faster |
+| `make_state` per-call | n/a | 1.95 µs | 1.85 µs | new | ~same |
+| POMCPOW sims/sec (30s budget, 200 particles) | n/a | n/a | **3,817 sims/s** | new | new |
+| mixed-strategy `sample()` per-call | n/a | n/a | **3.77 µs** | new | new |
+| mixed-strategy belief.update per-call | n/a | n/a | **0.024 ms** | new | new |
 
 ## Reading the numbers
 
-- **Vectorized belief update is ~6% faster** — the env's canonical state representation now matches the particle-array layout, so the update path no longer needs the old `state_to_array` / `array_to_state` conversion at the env↔belief boundary. This is the headline improvement.
-- **Scalar paths (`reward`, `sample`, random-policy rollout) regressed 11–23%** — pure-Python numpy scalar indexing (`int(state[idx])`, `float(state[idx])`) is inherently slower than Python-native tuple/dataclass attribute reads. This tax is expected and unavoidable without either numba/cython or, more directly, the planned C++ port of the PacMan env (the actual motivation for this refactor).
+- **Every scalar per-call hot path drops ~7–11×** — the Python-scalar ndarray indexing tax from PR #87 is erased. `reward`, `state_transition_model.sample()`, `observation_model.sample()` all finish in ~4–5 µs where they previously took 35–44 µs. Random-policy rollouts drop from ~0.9 ms/episode to ~0.1 ms/episode (7.3× faster than pre-#87).
+- **Vectorized belief update drops 6.6×** — the batched kernel (`PacManVectorizedUpdater.batch_transition` / `batch_observation_log_likelihood`) dispatches straight into `PacManTransitionCpp.batch_sample` / `PacManObservationCpp.batch_log_likelihood`. Each 200-particle update is ~30 µs vs 200 µs before.
+- **POMCPOW sims/sec = 3,817** on a 30-second budget with the default Julia-POMCPOW.jl hyperparameters (`k_a = k_o = 10.0`, `α = 0.5`, `c = 1.0`, `depth = 20`, `γ = 0.95`, 200 particles). This is a number that can now be directly compared against Julia `POMCPOW.jl`'s throughput on matched environments.
+- Mixed-strategy rows confirm that the non-independent + patrol branches in C++ do not regress vs. the independent + aggressive configuration (both ~4 µs / sample, ~25 µs / belief update).
 
-The trade-off is intentional: the structural alignment with the vectorized belief and the C++ port path is worth the temporary scalar-path slowdown.
+The `make_state` row is unchanged from PR #87 since it's purely a ndarray builder (no transition work).
