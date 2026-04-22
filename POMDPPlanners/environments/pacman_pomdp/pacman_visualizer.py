@@ -10,12 +10,13 @@ Classes:
 from pathlib import Path
 from typing import TYPE_CHECKING, List, Tuple
 
+import numpy as np
 from PIL import Image, ImageDraw
 
 from POMDPPlanners.core.simulation import StepData
 
 if TYPE_CHECKING:
-    from POMDPPlanners.environments.pacman_pomdp.pacman_pomdp import PacManPOMDP, PacManState
+    from POMDPPlanners.environments.pacman_pomdp.pacman_pomdp import PacManPOMDP
 
 
 class PacManVisualizer:
@@ -115,14 +116,13 @@ class PacManVisualizer:
                 else:
                     draw.rectangle([x, y, x + tile_size, y + tile_size], fill=(0, 0, 0, 255))
 
-    def _draw_pellets(
-        self, state: "PacManState", draw: ImageDraw.ImageDraw, tile_size: int
-    ) -> None:
+    def _draw_pellets(self, state: np.ndarray, draw: ImageDraw.ImageDraw, tile_size: int) -> None:
         """Draw pellets on the maze."""
         rows, cols = self.env.maze_size
+        pellets = self.env.get_pellets(state)
         for r in range(rows):
             for c in range(cols):
-                if (r, c) in state.pellets:
+                if (r, c) in pellets:
                     x, y = c * tile_size, r * tile_size
                     cx, cy = x + tile_size // 2, y + tile_size // 2
                     rdot = 4
@@ -132,11 +132,11 @@ class PacManVisualizer:
                     )
 
     def _draw_ghosts(
-        self, state: "PacManState", canvas: Image.Image, sprites: dict, tile_size: int
+        self, state: np.ndarray, canvas: Image.Image, sprites: dict, tile_size: int
     ) -> None:
         """Draw ghosts on the canvas."""
         rows, cols = self.env.maze_size
-        for i, ghost_pos in enumerate(state.ghost_positions):
+        for i, ghost_pos in enumerate(self.env.get_ghost_positions(state)):
             gr, gc = ghost_pos
             if 0 <= gr < rows and 0 <= gc < cols:
                 ghost_x, ghost_y = gc * tile_size, gr * tile_size
@@ -150,7 +150,7 @@ class PacManVisualizer:
 
     def _draw_pacman(
         self,
-        state: "PacManState",
+        state: np.ndarray,
         canvas: Image.Image,
         draw: ImageDraw.ImageDraw,
         sprites: dict,
@@ -158,10 +158,12 @@ class PacManVisualizer:
     ) -> None:
         """Draw PacMan on the canvas."""
         rows, cols = self.env.maze_size
-        pr, pc = state.pacman_pos
+        pacman_pos = self.env.get_pacman_pos(state)
+        ghost_positions = self.env.get_ghost_positions(state)
+        pr, pc = pacman_pos
         if 0 <= pr < rows and 0 <= pc < cols:
             pacman_x, pacman_y = pc * tile_size, pr * tile_size
-            if state.pacman_pos in state.ghost_positions:
+            if pacman_pos in ghost_positions:
                 draw.ellipse(
                     [
                         pacman_x,
@@ -172,7 +174,7 @@ class PacManVisualizer:
                     fill=(255, 0, 0, 200),
                 )
                 num_colliding_ghosts = sum(
-                    1 for ghost_pos in state.ghost_positions if ghost_pos == state.pacman_pos
+                    1 for ghost_pos in ghost_positions if ghost_pos == pacman_pos
                 )
                 explosion_text = "💥" * min(num_colliding_ghosts, 3)
                 draw.text(
@@ -185,7 +187,7 @@ class PacManVisualizer:
 
     def _draw_text_overlay(
         self,
-        state: "PacManState",
+        state: np.ndarray,
         draw: ImageDraw.ImageDraw,
         step_num: int,
         action_name: str,
@@ -194,21 +196,24 @@ class PacManVisualizer:
         """Draw text overlay with game state information."""
         rows, _ = self.env.maze_size
         text_y = rows * tile_size + 5
+        pellets = self.env.get_pellets(state)
         draw.text((5, text_y), f"Step {step_num}: {action_name}", fill=(255, 255, 255))
+        score = self.env.get_score(state)
+        score_display = int(score) if float(score).is_integer() else score
         draw.text(
             (5, text_y + 15),
-            f"Score: {state.score}, Pellets: {len(state.pellets)}",
+            f"Score: {score_display}, Pellets: {len(pellets)}",
             fill=(255, 255, 255),
         )
 
-        if state.terminal:
-            if len(state.pellets) == 0:
+        if self.env.get_terminal(state):
+            if len(pellets) == 0:
                 draw.text((5, text_y + 30), "🎉 YOU WIN! 🎉", fill=(0, 255, 0))
             else:
                 draw.text((5, text_y + 30), "👻 GAME OVER! 👻", fill=(255, 0, 0))
 
     def _render_frame(
-        self, state: "PacManState", step_num: int, action_name: str, sprites: dict, tile_size: int
+        self, state: np.ndarray, step_num: int, action_name: str, sprites: dict, tile_size: int
     ) -> Image.Image:
         """Render a single frame of the visualization."""
         rows, cols = self.env.maze_size
@@ -224,7 +229,7 @@ class PacManVisualizer:
         return canvas
 
     def _generate_frames(
-        self, path: List["PacManState"], actions: List[int], sprites: dict, tile_size: int
+        self, path: List[np.ndarray], actions: List[int], sprites: dict, tile_size: int
     ) -> List[Image.Image]:
         """Generate all frames for the visualization."""
         frames = []
@@ -255,18 +260,16 @@ class PacManVisualizer:
         else:
             print("No frames generated for visualization")
 
-    def visualize_path(
-        self, path: List["PacManState"], actions: List[int], cache_path: Path
-    ) -> None:
+    def visualize_path(self, path: List[np.ndarray], actions: List[int], cache_path: Path) -> None:
         """Visualize PacMan path through the maze using sprite-based rendering.
 
         Args:
-            path: List of states representing the path through the maze
-            actions: List of actions taken at each step
-            cache_path: Path where the GIF should be saved
+            path: List of state arrays representing the path through the maze.
+            actions: List of actions taken at each step.
+            cache_path: Path where the GIF should be saved.
 
         Raises:
-            TypeError: If cache_path is not a Path object
+            TypeError: If cache_path is not a Path object.
         """
         if not isinstance(cache_path, Path):
             raise TypeError("cache_path must be a Path object")

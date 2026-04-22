@@ -24,7 +24,6 @@ from POMDPPlanners.environments.mountain_car_pomdp import MountainCarObservation
 from POMDPPlanners.environments.pacman_pomdp.pacman_pomdp import (
     PacManObservationModel,
     PacManPOMDP,
-    PacManState,
 )
 from POMDPPlanners.environments.push_pomdp.push_pomdp import PushObservation
 from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp import (
@@ -574,8 +573,11 @@ class TestPacManObservationProbability:
             ghost_aggressiveness=2.0,
         )
 
-        state = PacManState(
-            pacman_pos=(0, 0), ghost_positions=((3, 3),), pellets=((2, 2),), score=0
+        state = pomdp.make_state(
+            pacman_pos=(0, 0),
+            ghost_positions=((3, 3),),
+            pellets=((2, 2),),
+            score=0.0,
         )
 
         obs_model = PacManObservationModel(next_state=state, action=1, pomdp=pomdp)
@@ -614,7 +616,9 @@ class TestPacManObservationProbability:
             ghost_aggressiveness=2.0,
         )
 
-        state = PacManState(pacman_pos=(2, 2), ghost_positions=((2, 3),), pellets=(), score=10)
+        state = pomdp.make_state(
+            pacman_pos=(2, 2), ghost_positions=((2, 3),), pellets=(), score=10.0
+        )
 
         obs_model = PacManObservationModel(next_state=state, action=0, pomdp=pomdp)
         results = validate_continuous_observation_model_pdf_consistency(obs_model, num_samples=1000)
@@ -646,11 +650,11 @@ class TestPacManObservationProbability:
             ghost_aggressiveness=1.5,
         )
 
-        state = PacManState(
+        state = pomdp.make_state(
             pacman_pos=(0, 0),
             ghost_positions=((2, 2), (5, 5)),
             pellets=((3, 3),),
-            score=0,
+            score=0.0,
         )
 
         obs_model = PacManObservationModel(next_state=state, action=1, pomdp=pomdp)
@@ -681,8 +685,11 @@ class TestPacManObservationProbability:
             ghost_aggressiveness=2.0,
         )
 
-        state = PacManState(
-            pacman_pos=(0, 0), ghost_positions=((4, 4),), pellets=((3, 3),), score=0
+        state = pomdp.make_state(
+            pacman_pos=(0, 0),
+            ghost_positions=((4, 4),),
+            pellets=((3, 3),),
+            score=0.0,
         )
 
         obs_model = PacManObservationModel(next_state=state, action=2, pomdp=pomdp)

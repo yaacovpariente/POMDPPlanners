@@ -9,7 +9,7 @@ from POMDPPlanners.core.belief.particle_beliefs import WeightedParticleBelief
 from POMDPPlanners.core.belief.vectorized_weighted_particle_belief import (
     VectorizedWeightedParticleBelief,
 )
-from POMDPPlanners.environments.pacman_pomdp import PacManPOMDP, PacManState
+from POMDPPlanners.environments.pacman_pomdp import PacManPOMDP
 from POMDPPlanners.environments.pacman_pomdp.pacman_pomdp_beliefs.pacman_vectorized_updater import (
     PacManVectorizedUpdater,
 )
@@ -28,7 +28,7 @@ def _make_aligned_beliefs(env, updater, n_particles=50):
     """Create baseline + vectorized beliefs with identical initial particles."""
     np.random.seed(42)
     states = env.initial_state_dist().sample(n_samples=n_particles)
-    particles_array = env.states_to_array(states)
+    particles_array = np.stack(states)
     particles_list = [particles_array[i].copy() for i in range(n_particles)]
     log_weights = np.log(np.ones(n_particles) / n_particles)
 
@@ -46,13 +46,11 @@ def _make_aligned_beliefs(env, updater, n_particles=50):
     return base, vec
 
 
-def _make_particle_to_array(env):
-    """Build a PacManState-or-ndarray → state-array converter bound to env."""
+def _make_particle_to_array(env):  # pylint: disable=unused-argument
+    """Particles are ndarrays; identity converter kept for helper-signature parity."""
 
     def convert(particle):
-        if isinstance(particle, np.ndarray):
-            return particle
-        return env.state_to_array(particle)
+        return particle
 
     return convert
 
@@ -81,7 +79,7 @@ def updater(simple_env):
 def sample_particles(simple_env):
     np.random.seed(42)
     states = simple_env.initial_state_dist().sample(n_samples=10)
-    return simple_env.states_to_array(states)
+    return np.stack(states)
 
 
 class TestFromEnvironmentConstruction:
@@ -129,14 +127,13 @@ class TestBatchTransition:
 
         Test type: unit
         """
-        state = PacManState(
+        arr = simple_env.make_state(
             pacman_pos=(0, 0),
             ghost_positions=((4, 4),),
             pellets=((1, 1), (3, 3)),
-            score=0,
+            score=0.0,
             terminal=True,
-        )
-        arr = simple_env.state_to_array(state).reshape(1, -1)
+        ).reshape(1, -1)
         result = updater.batch_transition(arr, 2)
         np.testing.assert_array_equal(result, arr)
 
@@ -151,15 +148,14 @@ class TestBatchTransition:
 
         Test type: unit
         """
-        state = PacManState(
+        np.random.seed(42)
+        arr = simple_env.make_state(
             pacman_pos=(0, 0),
             ghost_positions=((4, 4),),
             pellets=((1, 1), (3, 3)),
-            score=0,
+            score=0.0,
             terminal=False,
-        )
-        np.random.seed(42)
-        arr = simple_env.state_to_array(state).reshape(1, -1)
+        ).reshape(1, -1)
         result = updater.batch_transition(arr, 2)  # South
         assert result[0, updater._idx_pac_row] == 1
         assert result[0, updater._idx_pac_col] == 0
@@ -175,15 +171,14 @@ class TestBatchTransition:
 
         Test type: unit
         """
-        state = PacManState(
+        np.random.seed(42)
+        arr = simple_env.make_state(
             pacman_pos=(1, 0),
             ghost_positions=((4, 4),),
             pellets=((1, 1), (3, 3)),
-            score=0,
+            score=0.0,
             terminal=False,
-        )
-        np.random.seed(42)
-        arr = simple_env.state_to_array(state).reshape(1, -1)
+        ).reshape(1, -1)
         result = updater.batch_transition(arr, 1)  # East -> (1,1)
         # Pellet at index 0 ((1,1)) should be collected
         assert result[0, updater._idx_pellets_start] == 0.0
@@ -200,15 +195,14 @@ class TestBatchTransition:
 
         Test type: unit
         """
-        state = PacManState(
+        np.random.seed(123)
+        arr = simple_env.make_state(
             pacman_pos=(3, 4),
             ghost_positions=((4, 4),),
             pellets=((1, 1), (3, 3)),
-            score=0,
+            score=0.0,
             terminal=False,
-        )
-        np.random.seed(123)
-        arr = simple_env.state_to_array(state).reshape(1, -1)
+        ).reshape(1, -1)
         # Move south to (4,4) where ghost might be
         result = updater.batch_transition(arr, 2)
         # PacMan should be at (4,4)
@@ -248,14 +242,13 @@ class TestBatchObservationLogLikelihood:
 
         Test type: unit
         """
-        state = PacManState(
+        arr = simple_env.make_state(
             pacman_pos=(0, 0),
             ghost_positions=((4, 4),),
             pellets=(),
-            score=20,
+            score=20.0,
             terminal=True,
-        )
-        arr = simple_env.state_to_array(state).reshape(1, -1)
+        ).reshape(1, -1)
         obs = np.array([-1.0, -1.0])
         ll = updater.batch_observation_log_likelihood(arr, 0, obs)
         assert ll[0] == 0.0
@@ -271,22 +264,20 @@ class TestBatchObservationLogLikelihood:
 
         Test type: unit
         """
-        close_state = PacManState(
+        close_arr = simple_env.make_state(
             pacman_pos=(0, 0),
             ghost_positions=((0, 1),),
             pellets=((1, 1), (3, 3)),
-            score=0,
+            score=0.0,
             terminal=False,
-        )
-        far_state = PacManState(
+        ).reshape(1, -1)
+        far_arr = simple_env.make_state(
             pacman_pos=(0, 0),
             ghost_positions=((4, 4),),
             pellets=((1, 1), (3, 3)),
-            score=0,
+            score=0.0,
             terminal=False,
-        )
-        close_arr = simple_env.state_to_array(close_state).reshape(1, -1)
-        far_arr = simple_env.state_to_array(far_state).reshape(1, -1)
+        ).reshape(1, -1)
         particles = np.vstack([close_arr, far_arr])
 
         # Observation matches close ghost exactly
@@ -317,13 +308,10 @@ class TestEquivalenceWithPerParticleLoop:
         """
         np.random.seed(123)
         states = simple_env.initial_state_dist().sample(n_samples=20)
-        particles = simple_env.states_to_array(states)
+        particles = np.stack(states)
 
         def per_particle_fn(particle, action):
-            next_state = simple_env.state_transition_model(state=particle, action=action).sample()[
-                0
-            ]
-            return simple_env.state_to_array(next_state)
+            return simple_env.state_transition_model(state=particle, action=action).sample()[0]
 
         for action in range(4):
             assert_batch_transition_matches_loop(
@@ -350,7 +338,7 @@ class TestEquivalenceWithPerParticleLoop:
         """
         np.random.seed(42)
         states = simple_env.initial_state_dist().sample(n_samples=20)
-        particles = simple_env.states_to_array(states)
+        particles = np.stack(states)
         obs_array = np.array([3.0, 3.0])
         obs_tuple = ((3, 3),)
 

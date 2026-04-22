@@ -286,11 +286,8 @@ class TestEnvironmentStateSerialization:
         pickled_state = pickle.dumps(state)
         unpickled_state = pickle.loads(pickled_state)
 
-        assert unpickled_state.pacman_pos == state.pacman_pos
-        assert unpickled_state.ghost_positions == state.ghost_positions
-        assert unpickled_state.pellets == state.pellets
-        assert unpickled_state.score == state.score
-        assert unpickled_state.terminal == state.terminal
+        # State is a numpy array, not an object with position attribute
+        np.testing.assert_array_equal(unpickled_state, state)
 
     def test_discrete_light_dark_state_serialization(self):
         """Test DiscreteLightDarkPOMDP state serialization.
@@ -382,9 +379,10 @@ class TestEnvironmentTransitionModelSerialization:
 
         # Test that unpickled model can sample states
         next_state = unpickled_model.sample()[0]
-        assert next_state is not None
-        assert hasattr(next_state, "pacman_pos")
-        assert hasattr(next_state, "ghost_positions")
+        assert isinstance(next_state, np.ndarray)
+        assert next_state.shape == (env._state_dim,)  # pylint: disable=protected-access
+        env.get_pacman_pos(next_state)
+        env.get_ghost_positions(next_state)
 
 
 class TestEnvironmentObservationModelSerialization:
