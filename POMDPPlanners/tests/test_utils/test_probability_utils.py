@@ -12,11 +12,10 @@ from scipy.spatial.distance import jensenshannon
 from scipy.stats import kstest, wasserstein_distance
 
 from POMDPPlanners.core.distributions import Distribution
-from POMDPPlanners.core.environment import ObservationModel, StateTransitionModel
 
 
 def validate_probability_matches_empirical_distribution(
-    transition_model: StateTransitionModel,
+    transition_model: Any,
     num_samples: int = 1000,
     max_js_divergence: float = 0.05,
     max_wasserstein_distance: float = 0.1,
@@ -314,7 +313,7 @@ def validate_distribution_probability_matches_empirical(
 
 
 def validate_observation_probability_matches_empirical_distribution(
-    observation_model: ObservationModel,
+    observation_model: Any,
     num_samples: int = 1000,
     max_js_divergence: float = 0.05,
     max_wasserstein_distance: float = 0.1,
@@ -466,7 +465,7 @@ def validate_observation_probability_matches_empirical_distribution(
 
 
 def validate_continuous_observation_model_with_ks_test(
-    observation_model: ObservationModel,
+    observation_model: Any,
     num_samples: int = 1000,
     significance_level: float = 0.05,
     seed: int = 42,
@@ -584,7 +583,7 @@ def validate_continuous_observation_model_with_ks_test(
 
 
 def validate_continuous_observation_model_pdf_consistency(
-    observation_model: ObservationModel,
+    observation_model: Any,
     num_samples: int = 1000,
     seed: int = 42,
 ) -> dict:
