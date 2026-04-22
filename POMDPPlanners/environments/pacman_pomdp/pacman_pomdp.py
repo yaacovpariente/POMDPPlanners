@@ -80,8 +80,14 @@ class PacManStateTransitionModel(_native.PacManTransitionCpp):
 StateTransitionModel.register(PacManStateTransitionModel)
 
 
-class PacManObservationModel(ObservationModel):
-    """Observation model for PacMan POMDP."""
+class PacManObservationModel(_native.PacManObservationCpp):
+    """Observation model for PacMan POMDP, backed by the C++ native kernel.
+
+    The native kernel samples and evaluates observation log-likelihoods for
+    all ghosts as flat float64 ndarrays ``[g0_row, g0_col, ..., gN_row, gN_col]``.
+    The Python shim converts between this array shape and the public
+    tuple-of-(row, col) shape for backwards compatibility.
+    """
 
     def __init__(self, next_state: np.ndarray, action: int, pomdp: "PacManPOMDP"):
         """Initialize observation model.
@@ -91,157 +97,93 @@ class PacManObservationModel(ObservationModel):
             action: Action that was executed.
             pomdp: Reference to the POMDP environment.
         """
-        super().__init__(next_state=next_state, action=action)
+        super().__init__(
+            next_state=next_state,
+            action=int(action),
+            **pomdp.get_observation_cpp_ctor_kwargs(),
+        )
         self.pomdp = pomdp
-        idx_ghosts_start = pomdp._idx_ghosts_start  # pylint: disable=protected-access
-        self._pacman_pos = (
-            int(next_state[pomdp._idx_pac_row]),  # pylint: disable=protected-access
-            int(next_state[pomdp._idx_pac_col]),  # pylint: disable=protected-access
-        )
-        self._ghost_positions = tuple(
-            (
-                int(next_state[idx_ghosts_start + 2 * g]),
-                int(next_state[idx_ghosts_start + 2 * g + 1]),
-            )
-            for g in range(pomdp.num_ghosts)
-        )
-        self._terminal = bool(
-            next_state[pomdp._idx_terminal] > 0.5  # pylint: disable=protected-access
-        )
+        self._num_ghosts = pomdp.num_ghosts
 
-    def sample(self, n_samples: int = 1) -> List[Tuple[Tuple[int, int], ...]]:
-        """Sample observations of all ghost positions with noise."""
-        if self._terminal:
-            # Terminal observation: return (-1, -1) for each ghost
-            terminal_obs = tuple([(-1, -1)] * len(self._ghost_positions))
-            return [terminal_obs] * n_samples
+    def sample(  # type: ignore[override]
+        self, n_samples: int = 1
+    ) -> List[Tuple[Tuple[int, int], ...]]:
+        """Sample observations of all ghost positions with noise.
 
-        pacman_pos = self._pacman_pos
-
-        observations = []
-        for _ in range(n_samples):
-            ghost_obs = []
-            for ghost_pos in self._ghost_positions:
-                # Add noise based on distance from PacMan to each ghost
-                distance = abs(ghost_pos[0] - pacman_pos[0]) + abs(ghost_pos[1] - pacman_pos[1])
-                noise_std = min(
-                    distance * self.pomdp.observation_noise_factor,
-                    self.pomdp.max_observation_noise,
-                )
-
-                # Add Gaussian noise to ghost position
-                noise_row = np.random.normal(0, noise_std)
-                noise_col = np.random.normal(0, noise_std)
-
-                observed_row = int(np.round(ghost_pos[0] + noise_row))
-                observed_col = int(np.round(ghost_pos[1] + noise_col))
-
-                # Clamp to valid bounds
-                observed_row = max(0, min(self.pomdp.maze_size[0] - 1, observed_row))
-                observed_col = max(0, min(self.pomdp.maze_size[1] - 1, observed_col))
-
-                ghost_obs.append((observed_row, observed_col))
-
-            observations.append(tuple(ghost_obs))
-
-        return observations
+        Returns tuples of ``(row, col)`` pairs (public API) by post-converting
+        the native ndarray outputs. The deliberate return-type widening
+        (ndarray → tuple-of-tuples) is why this override carries a type-ignore.
+        """
+        arrays = super().sample(n_samples)
+        return [self.pomdp.array_to_observation(arr) for arr in arrays]
 
     def sample_closest_ghosts(
         self, max_ghosts: int = 2, n_samples: int = 1
     ) -> List[Tuple[Tuple[int, int], ...]]:
-        """Sample observations of only the closest ghosts."""
-        if self._terminal:
-            terminal_obs = tuple([(-1, -1)] * min(max_ghosts, len(self._ghost_positions)))
+        """Sample observations of only the closest ghosts (Python-only helper).
+
+        Not on the ObservationModel ABC; kept for backwards compatibility with
+        callers that want a reduced observation.
+        """
+        pacman_pos = self.pomdp.get_pacman_pos(self.next_state)
+        ghost_positions = self.pomdp.get_ghost_positions(self.next_state)
+        terminal = self.pomdp.get_terminal(self.next_state)
+        if terminal:
+            terminal_obs = tuple([(-1, -1)] * min(max_ghosts, len(ghost_positions)))
             return [terminal_obs] * n_samples
-
-        pacman_pos = self._pacman_pos
-
-        # Calculate distances and sort ghosts by proximity
-        ghost_distances = [
+        ghost_distances = sorted(
             (
-                ghost_pos,
-                abs(ghost_pos[0] - pacman_pos[0]) + abs(ghost_pos[1] - pacman_pos[1]),
-            )
-            for ghost_pos in self._ghost_positions
-        ]
-        closest_ghosts = sorted(ghost_distances, key=lambda x: x[1])[:max_ghosts]
-
+                (ghost_pos, abs(ghost_pos[0] - pacman_pos[0]) + abs(ghost_pos[1] - pacman_pos[1]))
+                for ghost_pos in ghost_positions
+            ),
+            key=lambda x: x[1],
+        )[:max_ghosts]
         observations = []
         for _ in range(n_samples):
             ghost_obs = []
-            for ghost_pos, distance in closest_ghosts:
+            for ghost_pos, distance in ghost_distances:
                 noise_std = min(
                     distance * self.pomdp.observation_noise_factor,
                     self.pomdp.max_observation_noise,
                 )
-
                 noise_row = np.random.normal(0, noise_std)
                 noise_col = np.random.normal(0, noise_std)
-
                 observed_row = int(np.round(ghost_pos[0] + noise_row))
                 observed_col = int(np.round(ghost_pos[1] + noise_col))
-
                 observed_row = max(0, min(self.pomdp.maze_size[0] - 1, observed_row))
                 observed_col = max(0, min(self.pomdp.maze_size[1] - 1, observed_col))
-
                 ghost_obs.append((observed_row, observed_col))
-
             observations.append(tuple(ghost_obs))
-
         return observations
 
-    def probability(self, values: List[Tuple[Tuple[int, int], ...]]) -> np.ndarray:
-        """Calculate observation probabilities for multi-ghost observations."""
-        if self._terminal:
-            terminal_obs = tuple([(-1, -1)] * len(self._ghost_positions))
-            return np.array([1.0 if obs == terminal_obs else 0.0 for obs in values])
+    def probability(  # type: ignore[override]
+        self, values: List[Tuple[Tuple[int, int], ...]]
+    ) -> np.ndarray:
+        """Calculate observation probabilities for multi-ghost observations.
 
-        pacman_pos = self._pacman_pos
-        true_ghost_positions = self._ghost_positions
+        Accepts either the public tuple-of-tuples shape or a raw ndarray of
+        shape ``(N, 2 * num_ghosts)`` / ``(2 * num_ghosts,)``. Tuples of
+        wrong length (ghost count mismatch) receive probability 0.
+        """
+        if isinstance(values, np.ndarray):
+            return super().probability(values)
+        probs = np.zeros(len(values), dtype=np.float64)
+        usable_rows: List[np.ndarray] = []
+        usable_indices: List[int] = []
+        for i, obs_tuple in enumerate(values):
+            if len(obs_tuple) != self._num_ghosts:
+                continue  # wrong ghost count → probability 0
+            usable_rows.append(self.pomdp.observation_to_array(obs_tuple))
+            usable_indices.append(i)
+        if usable_rows:
+            stacked = np.stack(usable_rows)
+            sub_probs = super().probability(stacked)
+            for idx, p in zip(usable_indices, sub_probs):
+                probs[idx] = p
+        return probs
 
-        probs = []
-        for obs_tuple in values:
-            if len(obs_tuple) != len(true_ghost_positions):
-                # Incorrect number of ghost observations
-                prob = 0.0
-            elif all(obs == (-1, -1) for obs in obs_tuple):
-                # All terminal observations in non-terminal state
-                prob = 0.0
-            else:
-                # Calculate probability as product of individual ghost observation probabilities
-                total_prob = 1.0
-                for _, (obs_pos, true_ghost_pos) in enumerate(zip(obs_tuple, true_ghost_positions)):
-                    # Distance-based noise for this ghost
-                    distance = abs(true_ghost_pos[0] - pacman_pos[0]) + abs(
-                        true_ghost_pos[1] - pacman_pos[1]
-                    )
-                    noise_std = min(
-                        distance * self.pomdp.observation_noise_factor,
-                        self.pomdp.max_observation_noise,
-                    )
 
-                    if noise_std == 0:
-                        noise_std = 1e-6  # Avoid division by zero
-
-                    if obs_pos == (-1, -1):
-                        # Terminal observation for individual ghost in non-terminal state
-                        ghost_prob = 0.0
-                    else:
-                        # 2D Gaussian PDF: (1/(2*pi*sigma^2)) * exp(-d^2/(2*sigma^2))
-                        row_diff = obs_pos[0] - true_ghost_pos[0]
-                        col_diff = obs_pos[1] - true_ghost_pos[1]
-                        distance_sq = row_diff**2 + col_diff**2
-                        variance = noise_std**2
-                        normalization = 1.0 / (2.0 * np.pi * variance)
-                        ghost_prob = normalization * np.exp(-distance_sq / (2 * variance))
-
-                    total_prob *= ghost_prob
-
-                prob = total_prob
-
-            probs.append(prob)
-
-        return np.array(probs)
+ObservationModel.register(PacManObservationModel)
 
 
 class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-methods
@@ -801,6 +743,20 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
         valid_mask = precompute_valid_cell_mask(self.maze_size, self.walls)
         self._cached_neighbor_table = precompute_neighbor_table(self.maze_size, valid_mask)
         self._cached_neighbor_validity = precompute_neighbor_validity(self.maze_size, valid_mask)
+
+    def get_observation_cpp_ctor_kwargs(self) -> Dict[str, Any]:
+        """Return the kwargs dict passed to PacManObservationCpp."""
+        return {
+            "num_ghosts": int(self.num_ghosts),
+            "maze_rows": int(self.maze_size[0]),
+            "maze_cols": int(self.maze_size[1]),
+            "observation_noise_factor": float(self.observation_noise_factor),
+            "max_observation_noise": float(self.max_observation_noise),
+            "idx_pac_row": self._idx_pac_row,
+            "idx_pac_col": self._idx_pac_col,
+            "idx_ghosts_start": self._idx_ghosts_start,
+            "idx_terminal": self._idx_terminal,
+        }
 
     def get_transition_cpp_ctor_kwargs(self) -> Dict[str, Any]:
         """Return the cached per-env kwargs dict passed to PacManTransitionCpp."""

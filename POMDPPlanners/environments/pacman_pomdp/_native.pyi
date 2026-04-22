@@ -44,3 +44,34 @@ class PacManTransitionCpp:
     def state(self) -> NDArray[np.float64]: ...
     @property
     def action(self) -> int: ...
+
+class PacManObservationCpp:
+    """Native observation kernel for PacMan POMDP (pybind11-backed)."""
+
+    def __init__(
+        self,
+        next_state: NDArray[np.float64],
+        action: int,
+        num_ghosts: int,
+        maze_rows: int,
+        maze_cols: int,
+        observation_noise_factor: float,
+        max_observation_noise: float,
+        idx_pac_row: int,
+        idx_pac_col: int,
+        idx_ghosts_start: int,
+        idx_terminal: int,
+    ) -> None: ...
+    def sample(self, n_samples: int = 1) -> List[NDArray[np.float64]]: ...
+    def probability(
+        self, values: Union[NDArray[np.float64], Sequence[NDArray[np.float64]]]
+    ) -> NDArray[np.float64]: ...
+    def batch_log_likelihood(
+        self,
+        next_particles: NDArray[np.float64],
+        observation: NDArray[np.float64],
+    ) -> NDArray[np.float64]: ...
+    @property
+    def next_state(self) -> NDArray[np.float64]: ...
+    @property
+    def action(self) -> int: ...

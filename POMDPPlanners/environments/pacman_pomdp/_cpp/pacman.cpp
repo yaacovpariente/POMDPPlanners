@@ -789,6 +789,223 @@ class PacManTransitionCpp {
     TransitionEnv env_{};
 };
 
+// ===========================================================================
+// Observation model
+// ===========================================================================
+//
+// Per-ghost 2-D isotropic Gaussian observation noise. noise_std scales with
+// Manhattan(pacman, ghost) and is clamped to ``max_observation_noise``;
+// variance floor = (1e-6)^2 to match the Python reference's division-by-zero
+// guard. Observations are stored as flat float64 arrays of length
+// ``2 * num_ghosts`` ([g0_row, g0_col, g1_row, g1_col, ...]). A fully-minus-
+// one observation (every coord == -1) marks a terminal state's observation.
+
+struct ObservationEnv {
+    int num_ghosts;
+    int maze_rows;
+    int maze_cols;
+    double observation_noise_factor;
+    double max_observation_noise;
+    int idx_pac_row;
+    int idx_pac_col;
+    int idx_ghosts_start;
+    int idx_terminal;
+};
+
+inline double observation_noise_std(const ObservationEnv &env, int ghost_r, int ghost_c,
+                                    int pacman_r, int pacman_c) {
+    const double dist = static_cast<double>(manhattan(ghost_r, ghost_c, pacman_r, pacman_c));
+    double noise_std = dist * env.observation_noise_factor;
+    if (noise_std > env.max_observation_noise) {
+        noise_std = env.max_observation_noise;
+    }
+    if (noise_std < 1e-6) {
+        noise_std = 1e-6;
+    }
+    return noise_std;
+}
+
+inline int clamp_coord(int v, int lo, int hi) {
+    if (v < lo) {
+        return lo;
+    }
+    if (v > hi) {
+        return hi;
+    }
+    return v;
+}
+
+// Sample a single observation ndarray into out[2 * num_ghosts].
+inline void sample_observation_into(const ObservationEnv &env, const double *next_state,
+                                    double *out, std::mt19937_64 &rng) {
+    const bool terminal = next_state[env.idx_terminal] > 0.5;
+    if (terminal) {
+        for (int g = 0; g < env.num_ghosts; ++g) {
+            out[2 * g] = -1.0;
+            out[2 * g + 1] = -1.0;
+        }
+        return;
+    }
+    const int pacman_r = static_cast<int>(next_state[env.idx_pac_row]);
+    const int pacman_c = static_cast<int>(next_state[env.idx_pac_col]);
+    for (int g = 0; g < env.num_ghosts; ++g) {
+        const int gr = static_cast<int>(next_state[env.idx_ghosts_start + 2 * g]);
+        const int gc = static_cast<int>(next_state[env.idx_ghosts_start + 2 * g + 1]);
+        const double noise_std = observation_noise_std(env, gr, gc, pacman_r, pacman_c);
+        std::normal_distribution<double> noise(0.0, noise_std);
+        const double obs_r = std::round(static_cast<double>(gr) + noise(rng));
+        const double obs_c = std::round(static_cast<double>(gc) + noise(rng));
+        out[2 * g] = static_cast<double>(
+            clamp_coord(static_cast<int>(obs_r), 0, env.maze_rows - 1));
+        out[2 * g + 1] = static_cast<double>(
+            clamp_coord(static_cast<int>(obs_c), 0, env.maze_cols - 1));
+    }
+}
+
+// Log-likelihood of an observation given a (potentially terminal) next_state.
+inline double observation_log_pdf(const ObservationEnv &env, const double *next_state,
+                                  const double *observation) {
+    const bool state_terminal = next_state[env.idx_terminal] > 0.5;
+    bool obs_all_terminal = true;
+    for (int g = 0; g < env.num_ghosts; ++g) {
+        if (observation[2 * g] >= -0.5 || observation[2 * g + 1] >= -0.5) {
+            obs_all_terminal = false;
+            break;
+        }
+    }
+    if (state_terminal) {
+        return obs_all_terminal ? 0.0 : -std::numeric_limits<double>::infinity();
+    }
+    if (obs_all_terminal) {
+        return -std::numeric_limits<double>::infinity();
+    }
+
+    const int pacman_r = static_cast<int>(next_state[env.idx_pac_row]);
+    const int pacman_c = static_cast<int>(next_state[env.idx_pac_col]);
+    double total_log = 0.0;
+    for (int g = 0; g < env.num_ghosts; ++g) {
+        const double obs_r = observation[2 * g];
+        const double obs_c = observation[2 * g + 1];
+        if (obs_r < -0.5 && obs_c < -0.5) {
+            // Per-ghost terminal observation in a non-terminal state.
+            return -std::numeric_limits<double>::infinity();
+        }
+        const int gr = static_cast<int>(next_state[env.idx_ghosts_start + 2 * g]);
+        const int gc = static_cast<int>(next_state[env.idx_ghosts_start + 2 * g + 1]);
+        const double noise_std = observation_noise_std(env, gr, gc, pacman_r, pacman_c);
+        const double variance = noise_std * noise_std;
+        const double dr = obs_r - static_cast<double>(gr);
+        const double dc = obs_c - static_cast<double>(gc);
+        const double dist_sq = dr * dr + dc * dc;
+        // Isotropic 2-D Gaussian log-PDF: -log(2 pi variance) - dist_sq / (2 variance).
+        const double log_norm = -std::log(2.0 * M_PI * variance);
+        total_log += log_norm - dist_sq / (2.0 * variance);
+    }
+    return total_log;
+}
+
+class PacManObservationCpp {
+  public:
+    PacManObservationCpp(py::array_t<double> next_state, int action, int num_ghosts, int maze_rows,
+                         int maze_cols, double observation_noise_factor,
+                         double max_observation_noise, int idx_pac_row, int idx_pac_col,
+                         int idx_ghosts_start, int idx_terminal)
+        : next_state_array_(next_state), action_(action) {
+        if (next_state.ndim() != 1) {
+            throw std::invalid_argument("next_state must be 1-D");
+        }
+        env_.num_ghosts = num_ghosts;
+        env_.maze_rows = maze_rows;
+        env_.maze_cols = maze_cols;
+        env_.observation_noise_factor = observation_noise_factor;
+        env_.max_observation_noise = max_observation_noise;
+        env_.idx_pac_row = idx_pac_row;
+        env_.idx_pac_col = idx_pac_col;
+        env_.idx_ghosts_start = idx_ghosts_start;
+        env_.idx_terminal = idx_terminal;
+    }
+
+    // sample(n_samples) -> List[ndarray(2 * num_ghosts,)]
+    py::list sample(int n_samples) const {
+        auto &rng = pomdp_native::default_rng().engine();
+        auto src = next_state_array_.unchecked<1>();
+        const int nd = static_cast<int>(src.shape(0));
+        std::vector<double> state(nd);
+        for (int i = 0; i < nd; ++i) {
+            state[i] = src(i);
+        }
+        const int obs_dim = 2 * env_.num_ghosts;
+        py::list out;
+        for (int s = 0; s < n_samples; ++s) {
+            auto obs = py::array_t<double>(static_cast<py::ssize_t>(obs_dim));
+            sample_observation_into(env_, state.data(), obs.mutable_data(), rng);
+            out.append(obs);
+        }
+        return out;
+    }
+
+    // probability(values) -> ndarray float64. values may be:
+    //   - ndarray (N, 2 * num_ghosts)
+    //   - ndarray (2 * num_ghosts,)
+    //   - sequence of those
+    py::array_t<double> probability(py::object values) const {
+        auto batch = pomdp_native::extract_rows_nd(
+            values, static_cast<std::size_t>(2 * env_.num_ghosts));
+        auto src = next_state_array_.unchecked<1>();
+        const int nd = static_cast<int>(src.shape(0));
+        std::vector<double> state(nd);
+        for (int i = 0; i < nd; ++i) {
+            state[i] = src(i);
+        }
+        auto out = py::array_t<double>(static_cast<py::ssize_t>(batch.n));
+        auto buf = out.mutable_unchecked<1>();
+        for (std::size_t i = 0; i < batch.n; ++i) {
+            const double *row = &batch.flat[i * 2 * env_.num_ghosts];
+            const double log_lp = observation_log_pdf(env_, state.data(), row);
+            buf(static_cast<py::ssize_t>(i)) = std::isfinite(log_lp) ? std::exp(log_lp) : 0.0;
+        }
+        return out;
+    }
+
+    // batch_log_likelihood(next_particles: (N, state_dim), observation: (2 * num_ghosts,)) -> (N,)
+    py::array_t<double> batch_log_likelihood(py::array_t<double> next_particles,
+                                             py::array_t<double> observation) const {
+        if (next_particles.ndim() != 2) {
+            throw std::invalid_argument("next_particles must be 2-D");
+        }
+        if (observation.ndim() != 1 || observation.shape(0) != 2 * env_.num_ghosts) {
+            throw std::invalid_argument("observation must be 1-D length 2*num_ghosts");
+        }
+        const std::size_t n = static_cast<std::size_t>(next_particles.shape(0));
+        const int nd = static_cast<int>(next_particles.shape(1));
+        auto src = next_particles.unchecked<2>();
+        auto obs_view = observation.unchecked<1>();
+        std::vector<double> obs_copy(static_cast<std::size_t>(2 * env_.num_ghosts));
+        for (int g = 0; g < 2 * env_.num_ghosts; ++g) {
+            obs_copy[g] = obs_view(g);
+        }
+        auto out = py::array_t<double>(static_cast<py::ssize_t>(n));
+        auto buf = out.mutable_unchecked<1>();
+        std::vector<double> scratch(static_cast<std::size_t>(nd));
+        for (std::size_t i = 0; i < n; ++i) {
+            for (int d = 0; d < nd; ++d) {
+                scratch[d] = src(static_cast<py::ssize_t>(i), d);
+            }
+            buf(static_cast<py::ssize_t>(i)) = observation_log_pdf(env_, scratch.data(),
+                                                                    obs_copy.data());
+        }
+        return out;
+    }
+
+    py::array_t<double> next_state_property() const { return next_state_array_; }
+    int action_property() const { return action_; }
+
+  private:
+    py::array_t<double> next_state_array_;
+    int action_;
+    ObservationEnv env_{};
+};
+
 }  // anonymous namespace
 
 PYBIND11_MODULE(_native, m) {
@@ -818,4 +1035,18 @@ PYBIND11_MODULE(_native, m) {
         .def("batch_sample", &PacManTransitionCpp::batch_sample, py::arg("particles"))
         .def_property_readonly("state", &PacManTransitionCpp::state_property)
         .def_property_readonly("action", &PacManTransitionCpp::action_property);
+
+    py::class_<PacManObservationCpp>(m, "PacManObservationCpp")
+        .def(py::init<py::array_t<double>, int, int, int, int, double, double, int, int, int,
+                      int>(),
+             py::arg("next_state"), py::arg("action"), py::arg("num_ghosts"),
+             py::arg("maze_rows"), py::arg("maze_cols"), py::arg("observation_noise_factor"),
+             py::arg("max_observation_noise"), py::arg("idx_pac_row"), py::arg("idx_pac_col"),
+             py::arg("idx_ghosts_start"), py::arg("idx_terminal"))
+        .def("sample", &PacManObservationCpp::sample, py::arg("n_samples") = 1)
+        .def("probability", &PacManObservationCpp::probability, py::arg("values"))
+        .def("batch_log_likelihood", &PacManObservationCpp::batch_log_likelihood,
+             py::arg("next_particles"), py::arg("observation"))
+        .def_property_readonly("next_state", &PacManObservationCpp::next_state_property)
+        .def_property_readonly("action", &PacManObservationCpp::action_property);
 }
