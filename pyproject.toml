@@ -142,6 +142,7 @@ extension-pkg-allow-list = [
     "POMDPPlanners.environments.light_dark_pomdp._native",
     "POMDPPlanners.environments.laser_tag_pomdp._native",
     "POMDPPlanners.environments.push_pomdp._native",
+    "POMDPPlanners.environments.pacman_pomdp._native",
 ]
 
 [tool.pylint.messages_control]
