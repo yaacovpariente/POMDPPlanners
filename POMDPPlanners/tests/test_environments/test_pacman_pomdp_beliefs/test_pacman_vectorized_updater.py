@@ -9,7 +9,10 @@ from POMDPPlanners.core.belief.particle_beliefs import WeightedParticleBelief
 from POMDPPlanners.core.belief.vectorized_weighted_particle_belief import (
     VectorizedWeightedParticleBelief,
 )
-from POMDPPlanners.environments.pacman_pomdp import PacManPOMDP
+from POMDPPlanners.environments.pacman_pomdp import (
+    PacManPOMDP,
+    _native,
+)  # pylint: disable=no-name-in-module
 from POMDPPlanners.environments.pacman_pomdp.pacman_pomdp_beliefs.pacman_vectorized_updater import (
     PacManVectorizedUpdater,
 )
@@ -320,6 +323,7 @@ class TestEquivalenceWithPerParticleLoop:
                 action=action,
                 per_particle_transition_fn=per_particle_fn,
                 seed=999,
+                seed_fn=_native.set_seed,
                 err_msg=f"Mismatch for action {action}",
             )
 
@@ -384,6 +388,7 @@ class TestBeliefEquivalenceWithBaseline:
             observation=obs,
             pomdp=simple_env,
             seed=999,
+            seed_fn=_native.set_seed,
             particle_to_array=_make_particle_to_array(simple_env),
         )
 
@@ -409,6 +414,7 @@ class TestBeliefEquivalenceWithBaseline:
             pomdp=simple_env,
             atol=1e-6,
             seed=999,
+            seed_fn=_native.set_seed,
         )
 
     def test_sample_distributions_match_post_update(self, simple_env, updater):
@@ -426,8 +432,10 @@ class TestBeliefEquivalenceWithBaseline:
         """
         base, vec = _make_aligned_beliefs(simple_env, updater)
         obs = ((3, 3),)
+        _native.set_seed(999)
         np.random.seed(999)
         vec = vec.update(action=0, observation=obs, pomdp=simple_env)
+        _native.set_seed(999)
         np.random.seed(999)
         base = base.update(action=0, observation=obs, pomdp=simple_env)
 

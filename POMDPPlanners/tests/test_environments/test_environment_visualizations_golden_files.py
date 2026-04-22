@@ -240,7 +240,14 @@ def create_deterministic_pacman_episode(seed: int = 42) -> List[StepData]:
     Returns:
         List of StepData objects representing episode history
     """
+    # pylint: disable=import-outside-toplevel,no-name-in-module
+    from POMDPPlanners.environments.pacman_pomdp import _native as _pacman_native
+
     np.random.seed(seed)
+    # Transition / observation sampling now runs on the C++ RNG (see
+    # PacManTransitionCpp / PacManObservationCpp); seeding _native keeps
+    # the episode deterministic end-to-end.
+    _pacman_native.set_seed(seed)
     env = PacManPOMDP(
         maze_size=(7, 7),
         num_ghosts=2,

@@ -53,6 +53,10 @@ ext_modules = [
         sources=["POMDPPlanners/environments/push_pomdp/_cpp/continuous_push.cpp"],
     ),
     _make_ext(
+        name="POMDPPlanners.environments.pacman_pomdp._native",
+        sources=["POMDPPlanners/environments/pacman_pomdp/_cpp/pacman.cpp"],
+    ),
+    _make_ext(
         name="POMDPPlanners.environments.rock_sample_pomdp._native",
         sources=["POMDPPlanners/environments/rock_sample_pomdp/_cpp/rock_sample.cpp"],
     ),

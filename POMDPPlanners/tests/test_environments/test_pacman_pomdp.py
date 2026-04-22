@@ -1852,18 +1852,28 @@ class TestMultiGhostFeatures:
             maze_size=(5, 5),
             walls=set(),  # No walls to avoid conflicts
             initial_pellets=[(0, 1), (1, 0)],  # Explicit pellets within bounds
-            initial_ghost_positions=[(2, 2), (3, 3)],
+            initial_ghost_positions=[(4, 4), (1, 0)],
             num_ghosts=2,
             ghost_collision_penalty=-100.0,
             step_penalty=-1.0,
+            ghost_strategies=["aggressive", "aggressive"],
+            ghost_aggressiveness=0.01,  # Very low temperature → ghosts deterministically chase
         )
 
-        # State with collision (PacMan at same position as second ghost)
+        # Force a deterministic collision: PacMan at (0, 0) trying to move
+        # North hits the top boundary and stays; the adjacent ghost at (1, 0)
+        # under aggressive+low-temperature softmax deterministically moves to
+        # (0, 0) → collision on this step.
+        from POMDPPlanners.environments.pacman_pomdp import (
+            _native,
+        )  # pylint: disable=import-outside-toplevel
+
+        _native.set_seed(0)
         collision_state = pomdp.make_state(
-            pacman_pos=(3, 3), ghost_positions=((2, 2), (3, 3)), pellets=((1, 0),)
+            pacman_pos=(0, 0), ghost_positions=((4, 4), (1, 0)), pellets=((1, 0),)
         )
 
-        reward = pomdp.reward(collision_state, action=0)
+        reward = pomdp.reward(collision_state, action=0)  # North, out-of-bounds → stay
         expected_collision_reward = pomdp.step_penalty + pomdp.ghost_collision_penalty
         assert reward == expected_collision_reward
 
