@@ -263,6 +263,34 @@ def bench_pomcp(time_budget_s: float = 1.0, repeats: int = 3) -> None:
     _bench_planner_across_envs("POMCP", make, backend_kind, time_budget_s, repeats)
 
 
+def bench_constrained_zero(time_budget_s: float = 1.0, repeats: int = 3) -> None:
+    """ConstrainedZero on multiple envs. Uses an untrained network."""
+    from POMDPPlanners.planners.mcts_planners.constrained_zero.constrained_zero import (  # pylint: disable=import-outside-toplevel
+        ConstrainedZero,
+    )
+
+    backend_kind = _detect_backend(ConstrainedZero)
+
+    def make(env: Any) -> ConstrainedZero:
+        return ConstrainedZero(
+            environment=env,
+            discount_factor=PLANNER_PARAMS["discount_factor"],
+            depth=PLANNER_PARAMS["depth"],
+            name="constrained_zero_bench",
+            action_sampler=DiscreteActionSampler(env.get_actions()),
+            failure_fn=lambda _s: False,
+            k_a=PLANNER_PARAMS["k_a"],
+            alpha_a=PLANNER_PARAMS["alpha_a"],
+            k_o=PLANNER_PARAMS["k_o"],
+            alpha_o=PLANNER_PARAMS["alpha_o"],
+            exploration_constant=PLANNER_PARAMS["exploration_constant"],
+            n_simulations=1,
+            state_dim=1,
+        )
+
+    _bench_planner_across_envs("ConstrainedZero", make, backend_kind, time_budget_s, repeats)
+
+
 def bench_beta_zero(time_budget_s: float = 1.0, repeats: int = 3) -> None:
     """BetaZero on multiple envs. Uses an untrained network."""
     from POMDPPlanners.planners.mcts_planners.beta_zero.beta_zero import (  # pylint: disable=import-outside-toplevel

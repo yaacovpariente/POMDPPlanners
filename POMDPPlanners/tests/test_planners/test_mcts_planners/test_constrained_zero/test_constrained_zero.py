@@ -15,7 +15,7 @@ import torch
 
 from POMDPPlanners.core.belief import WeightedParticleBelief, get_initial_belief
 from POMDPPlanners.core.simulation.history import History, StepData
-from POMDPPlanners.core.tree import ActionNode, BeliefNode
+from POMDPPlanners.core.tree.arena import Tree
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.planners.mcts_planners.beta_zero.beta_zero import BetaZero
 from POMDPPlanners.planners.mcts_planners.constrained_zero.constrained_training_buffer import (
@@ -320,15 +320,16 @@ class TestConstrainedZeroHelpers:
 
         Purpose: Validates default delta_prime.
 
-        Given: A belief node with no entry in delta_dict.
+        Given: A belief node ID with no entry in delta_dict.
         When: _get_delta_prime is called.
         Then: Returns delta_0.
 
         Test type: unit
         """
         belief = _make_dummy_belief()
-        node = BeliefNode(belief=belief)
-        delta = tiger_planner._get_delta_prime(node)
+        tree = Tree()
+        belief_id = tree.add_belief_node(belief)
+        delta = tiger_planner._get_delta_prime(belief_id)
         assert delta == tiger_planner.delta_0
 
     def test_update_action_failure_running_average(self, tiger_planner):
@@ -336,24 +337,25 @@ class TestConstrainedZeroHelpers:
 
         Purpose: Validates running average update formula.
 
-        Given: An action node with visit_count=3.
-        When: _update_action_failure is called with failure=0.6.
-        Then: The stored value is updated as running average.
+        Given: An action node with visit_count=1 then 2.
+        When: _update_action_failure is called with failure=0.6 then 0.2.
+        Then: The stored value follows the running-average formula.
 
         Test type: unit
         """
         belief = _make_dummy_belief()
-        parent = BeliefNode(belief=belief)
-        action_node = ActionNode(action="test", parent=parent)
-        action_node.visit_count = 1
+        tree = Tree()
+        parent_id = tree.add_belief_node(belief)
+        action_id = tree.add_action_node(action="test", parent_id=parent_id)
+        tree.visit_count[action_id] = 1
 
-        tiger_planner._update_action_failure(action_node, 0.6)
-        assert abs(tiger_planner._failure_dict[id(action_node)] - 0.6) < 1e-10
+        tiger_planner._update_action_failure(tree=tree, action_id=action_id, failure=0.6)
+        assert abs(tiger_planner._failure_dict[action_id] - 0.6) < 1e-10
 
-        action_node.visit_count = 2
-        tiger_planner._update_action_failure(action_node, 0.2)
+        tree.visit_count[action_id] = 2
+        tiger_planner._update_action_failure(tree=tree, action_id=action_id, failure=0.2)
         expected = 0.6 + (0.2 - 0.6) / 2
-        assert abs(tiger_planner._failure_dict[id(action_node)] - expected) < 1e-10
+        assert abs(tiger_planner._failure_dict[action_id] - expected) < 1e-10
 
     def test_compute_per_timestep_failures_no_failure(self, tiger_planner):
         """Test _compute_per_timestep_failures returns all zeros when no failure states.
@@ -430,33 +432,34 @@ class TestConstrainedZeroPolicyTarget:
             delta_0=0.1,
         )
 
-        # Create a tree with children
+        # Create an arena tree with children
         belief = _make_dummy_belief()
-        root = BeliefNode(belief=belief)
-        root.visit_count = 20
+        tree = Tree()
+        root_id = tree.add_belief_node(belief)
+        tree.visit_count[root_id] = 20
 
         actions = tiger_env.get_actions()
-        children = []
+        child_ids = []
         for i, a in enumerate(actions):
-            child = ActionNode(action=a, parent=root)
-            child.q_value = float(i + 1)
-            child.visit_count = 5 + i
-            children.append(child)
+            cid = tree.add_action_node(action=a, parent_id=root_id)
+            tree.q_value[cid] = float(i + 1)
+            tree.visit_count[cid] = 5 + i
+            child_ids.append(cid)
 
         # Make last action unsafe
-        for child in children[:-1]:
-            planner._failure_dict[id(child)] = 0.01  # safe
-        planner._failure_dict[id(children[-1])] = 0.5  # unsafe
+        for cid in child_ids[:-1]:
+            planner._failure_dict[cid] = 0.01  # safe
+        planner._failure_dict[child_ids[-1]] = 0.5  # unsafe
 
-        target = planner._compute_q_weighted_policy_target(root)
+        target = planner._compute_q_weighted_policy_target(tree, root_id)
 
         # Find the index of the unsafe action
-        unsafe_idx = actions.index(children[-1].action)
+        unsafe_idx = actions.index(tree.action[child_ids[-1]])
         assert target[unsafe_idx] == 0.0
 
         # Safe actions should have positive probability
-        for child in children[:-1]:
-            safe_idx = actions.index(child.action)
+        for cid in child_ids[:-1]:
+            safe_idx = actions.index(tree.action[cid])
             assert target[safe_idx] > 0.0
 
     def test_constrained_target_sums_to_one(self, tiger_env):
@@ -483,17 +486,18 @@ class TestConstrainedZeroPolicyTarget:
         )
 
         belief = _make_dummy_belief()
-        root = BeliefNode(belief=belief)
-        root.visit_count = 20
+        tree = Tree()
+        root_id = tree.add_belief_node(belief)
+        tree.visit_count[root_id] = 20
 
         actions = tiger_env.get_actions()
         for i, a in enumerate(actions):
-            child = ActionNode(action=a, parent=root)
-            child.q_value = float(i + 1)
-            child.visit_count = 5 + i
-            planner._failure_dict[id(child)] = 0.01  # all safe
+            cid = tree.add_action_node(action=a, parent_id=root_id)
+            tree.q_value[cid] = float(i + 1)
+            tree.visit_count[cid] = 5 + i
+            planner._failure_dict[cid] = 0.01  # all safe
 
-        target = planner._compute_q_weighted_policy_target(root)
+        target = planner._compute_q_weighted_policy_target(tree, root_id)
         np.testing.assert_allclose(target.sum(), 1.0, atol=1e-6)
 
 
