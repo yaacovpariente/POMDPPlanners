@@ -31,6 +31,7 @@ from POMDPPlanners.core.belief.belief_utils import (
     is_terminal_particle_belief,
     is_terminal_belief,
 )
+from POMDPPlanners.core.belief.cdf_particle_belief import CDFParticleBelief
 
 __all__ = [
     "Belief",
@@ -39,6 +40,7 @@ __all__ = [
     "WeightedParticleBeliefReinvigoration",
     "WeightedParticleBeliefStateUpdate",
     "UnweightedParticleBeliefStateUpdate",
+    "CDFParticleBelief",
     "GaussianBelief",
     "GaussianBeliefUpdater",
     "LinearKalmanFilterUpdater",
