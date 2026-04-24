@@ -19,16 +19,16 @@ from POMDPPlanners.core.belief import get_initial_belief
 from POMDPPlanners.utils.action_samplers import DiscreteActionSampler
 
 
-PLANNER_PARAMS: Dict[str, Any] = dict(
-    discount_factor=0.95,
-    depth=20,
-    exploration_constant=1.0,
-    k_o=5.0,
-    k_a=5.0,
-    alpha_o=0.5,
-    alpha_a=0.5,
-    min_visit_count_per_action=1,
-)
+PLANNER_PARAMS: Dict[str, Any] = {
+    "discount_factor": 0.95,
+    "depth": 20,
+    "exploration_constant": 1.0,
+    "k_o": 5.0,
+    "k_a": 5.0,
+    "alpha_o": 0.5,
+    "alpha_a": 0.5,
+    "min_visit_count_per_action": 1,
+}
 
 
 def _try_build_envs() -> List[Tuple[str, Any]]:
@@ -49,9 +49,9 @@ def _try_build_envs() -> List[Tuple[str, Any]]:
 
 
 def _build_tiger():
-    from POMDPPlanners.environments.tiger_pomdp import (
+    from POMDPPlanners.environments.tiger_pomdp import (  # pylint: disable=import-outside-toplevel
         TigerPOMDP,
-    )  # pylint: disable=import-outside-toplevel
+    )
 
     return TigerPOMDP(discount_factor=0.95)
 
@@ -73,9 +73,9 @@ def _build_laser_tag():
 
 
 def _build_push():
-    from POMDPPlanners.environments.push_pomdp.push_pomdp import (
+    from POMDPPlanners.environments.push_pomdp.push_pomdp import (  # pylint: disable=import-outside-toplevel
         PushPOMDP,
-    )  # pylint: disable=import-outside-toplevel
+    )
 
     return PushPOMDP(discount_factor=0.95)
 
@@ -108,9 +108,8 @@ def _time_simulate_path_arena(
     t0 = time.perf_counter()
     deadline = t0 + time_budget_s
     while time.perf_counter() < deadline:
-        planner._simulate_path(
-            tree=tree, belief_id=root_id, depth=0
-        )  # pylint: disable=protected-access
+        # pylint: disable-next=protected-access
+        planner._simulate_path(tree=tree, belief_id=root_id, depth=0)
         n += 1
     return n, time.perf_counter() - t0
 
@@ -150,19 +149,22 @@ def _bench_planner_on_env(
     return median, stdev
 
 
-def bench_pomcpow(time_budget_s: float = 1.0, repeats: int = 3) -> None:
-    """POMCPOW (current state in the codebase) on multiple envs."""
-    from POMDPPlanners.planners.mcts_planners.pomcpow import (
-        POMCPOW,
-    )  # pylint: disable=import-outside-toplevel
-
-    # Detect backend by inspecting the planner's MRO
+def _detect_backend(planner_class: Any) -> str:
+    """Return 'arena' if the planner inherits from ArenaPathSimulationPolicy, else 'legacy'."""
     from POMDPPlanners.planners.planners_utils.path_simulations_policy_arena import (  # pylint: disable=import-outside-toplevel
         ArenaPathSimulationPolicy,
     )
 
-    is_arena = issubclass(POMCPOW, ArenaPathSimulationPolicy)
-    backend_kind = "arena" if is_arena else "legacy"
+    return "arena" if issubclass(planner_class, ArenaPathSimulationPolicy) else "legacy"
+
+
+def bench_pomcpow(time_budget_s: float = 1.0, repeats: int = 3) -> None:
+    """POMCPOW on multiple envs."""
+    from POMDPPlanners.planners.mcts_planners.pomcpow import (  # pylint: disable=import-outside-toplevel
+        POMCPOW,
+    )
+
+    backend_kind = _detect_backend(POMCPOW)
 
     def make(env: Any) -> POMCPOW:
         return POMCPOW(
@@ -173,17 +175,48 @@ def bench_pomcpow(time_budget_s: float = 1.0, repeats: int = 3) -> None:
             **PLANNER_PARAMS,
         )
 
+    _bench_planner_across_envs("POMCPOW", make, backend_kind, time_budget_s, repeats)
+
+
+def bench_pomcp(time_budget_s: float = 1.0, repeats: int = 3) -> None:
+    """POMCP on multiple envs (no progressive widening — uses the simpler config subset)."""
+    from POMDPPlanners.planners.mcts_planners.pomcp import (  # pylint: disable=import-outside-toplevel
+        POMCP,
+    )
+
+    backend_kind = _detect_backend(POMCP)
+
+    def make(env: Any) -> POMCP:
+        return POMCP(
+            environment=env,
+            discount_factor=PLANNER_PARAMS["discount_factor"],
+            depth=PLANNER_PARAMS["depth"],
+            exploration_constant=PLANNER_PARAMS["exploration_constant"],
+            name="pomcp_bench",
+            n_simulations=1,
+        )
+
+    _bench_planner_across_envs("POMCP", make, backend_kind, time_budget_s, repeats)
+
+
+def _bench_planner_across_envs(
+    planner_name: str,
+    factory: Callable[[Any], Any],
+    backend_kind: str,
+    time_budget_s: float,
+    repeats: int,
+) -> None:
     print()
     print("=" * 100)
-    print(f" POMCPOW sims/sec — backend: {backend_kind}")
-    print(f" budget {time_budget_s}s × {repeats} trials per env, params={PLANNER_PARAMS}")
+    print(f" {planner_name} sims/sec — backend: {backend_kind}")
+    print(f" budget {time_budget_s}s × {repeats} trials per env")
     print("=" * 100)
     envs = _try_build_envs()
     for env_name, env in envs:
         try:
             _bench_planner_on_env(
-                planner_name="POMCPOW",
-                planner_factory=make,
+                planner_name=planner_name,
+                planner_factory=factory,
                 env_name=env_name,
                 env=env,
                 backend_kind=backend_kind,
@@ -197,6 +230,7 @@ def bench_pomcpow(time_budget_s: float = 1.0, repeats: int = 3) -> None:
 
 def main() -> None:
     bench_pomcpow(time_budget_s=1.0, repeats=3)
+    bench_pomcp(time_budget_s=1.0, repeats=3)
 
 
 if __name__ == "__main__":
