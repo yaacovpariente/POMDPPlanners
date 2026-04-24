@@ -39,10 +39,13 @@ from POMDPPlanners.core.environment import (
     StateTransitionModel,
 )
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
+from POMDPPlanners.environments.safety_ant_velocity_pomdp import _native
 from POMDPPlanners.environments.safety_ant_velocity_pomdp.safety_ant_velocity_visualizer import (
     SafeAntVelocityVisualizer,
 )
 from POMDPPlanners.utils.statistics_utils import confidence_interval
+
+DEFAULT_FORCE_SCALES: np.ndarray = np.array([0.0, 0.33, 0.67, 1.0])
 
 
 class SafeAntVelocityPOMDPMetrics(Enum):
@@ -54,7 +57,7 @@ class SafeAntVelocityPOMDPMetrics(Enum):
     TOTAL_CRITICAL_VIOLATIONS = "total_critical_violations"
 
 
-class SafeAntVelocityStateTransition(StateTransitionModel):
+class SafeAntVelocityStateTransition(_native.SafeAntVelocityTransitionCpp):
     """Physics-based state transition model for Safety Ant Velocity POMDP.
 
     This model simulates simplified physics with force application, damping, and
@@ -66,6 +69,12 @@ class SafeAntVelocityStateTransition(StateTransitionModel):
     - velocity += acceleration * dt
     - position += velocity * dt
 
+    The ``sample()`` and ``batch_sample()`` methods execute entirely in C++
+    via the ``_native`` extension. ``probability()`` remains a Python
+    override because the force-direction distribution is uniform on a ring
+    (not Gaussian) and is evaluated via a tolerance-based consistency check
+    rather than a closed-form density.
+
     Attributes:
         state: Current state [position_x, position_y, velocity_x, velocity_y]
         action: Force magnitude index (0=no force, 1=small, 2=medium, 3=large)
@@ -73,32 +82,25 @@ class SafeAntVelocityStateTransition(StateTransitionModel):
         mass: Mass of the agent (affects acceleration)
         damping: Damping coefficient (opposes velocity)
         max_force: Maximum force magnitude
-        force_scales: Force scaling factors for each action [0.0, 0.33, 0.67, 1.0]
-        position: Current position [x, y]
-        velocity: Current velocity [vx, vy]
+        force_scales: Force scaling factors for each action
 
     Example:
         >>> import numpy as np
-        >>> np.random.seed(42)  # For reproducible results
-        >>> # Define current state [pos_x, pos_y, vel_x, vel_y]
-        >>> state = np.array([0.5, -0.2, 1.0, 0.5])
-        >>> action = 2  # Apply medium force
+        >>> from POMDPPlanners.environments.safety_ant_velocity_pomdp import _native
+        >>> _native.set_seed(42)
         >>>
-        >>> # Create transition model
+        >>> state = np.array([0.5, -0.2, 1.0, 0.5])
         >>> transition = SafeAntVelocityStateTransition(
         ...     state=state,
-        ...     action=action,
+        ...     action=2,
         ...     dt=0.1,
         ...     mass=1.0,
         ...     damping=0.1,
-        ...     max_force=1.0
+        ...     max_force=1.0,
         ... )
-        >>>
-        >>> # Simulate physics step with random force direction
-        >>> next_state = transition.sample()[0]  # doctest: +SKIP
-        >>> # Returns new [pos_x, pos_y, vel_x, vel_y] after physics
-        >>> new_pos = next_state[:2]  # doctest: +SKIP
-        >>> new_vel = next_state[2:4]  # doctest: +SKIP
+        >>> next_state = transition.sample()[0]
+        >>> next_state.shape
+        (4,)
     """
 
     def __init__(
@@ -109,67 +111,47 @@ class SafeAntVelocityStateTransition(StateTransitionModel):
         mass: float = 1.0,
         damping: float = 0.1,
         max_force: float = 1.0,
+        force_scales: Optional[np.ndarray] = None,
     ):
-        super().__init__(state, action)
-        self.dt = dt
-        self.mass = mass
-        self.damping = damping
-        self.max_force = max_force
-
-        # Convert action index to force magnitude
-        self.force_scales = [0.0, 0.33, 0.67, 1.0]  # Different force magnitudes
-
-        # State components
-        self.position = state[:2]
-        self.velocity = state[2:4]
-
-    def sample(self, n_samples: int = 1) -> List[Any]:
-        next_states = []
-        for _ in range(n_samples):
-            # Get force magnitude from action
-            force_magnitude = self.force_scales[self.action] * self.max_force
-
-            # Random force direction
-            force_direction = np.random.uniform(-np.pi, np.pi)
-            force = force_magnitude * np.array([np.cos(force_direction), np.sin(force_direction)])
-
-            # Physics simulation (simplified)
-            acceleration = (force - self.damping * self.velocity) / self.mass
-            new_velocity = self.velocity + acceleration * self.dt
-            new_position = self.position + new_velocity * self.dt
-
-            # Combine into new state
-            next_state = np.concatenate([new_position, new_velocity])
-            next_states.append(next_state)
-
-        return next_states
+        effective_force_scales = (
+            DEFAULT_FORCE_SCALES if force_scales is None else np.asarray(force_scales, dtype=float)
+        )
+        super().__init__(
+            state=state,
+            action=action,
+            dt=dt,
+            mass=mass,
+            damping=damping,
+            max_force=max_force,
+            force_scales=effective_force_scales,
+        )
+        self.position = np.asarray(state, dtype=float)[:2]
+        self.velocity = np.asarray(state, dtype=float)[2:4]
 
     def probability(self, values: List[Any]) -> np.ndarray:
-        """Calculate transition probabilities for given next states.
+        """Tolerance-based transition probability over a uniformly-random ring.
 
-        Since the force direction is uniformly random over [-π, π], the probability
-        distribution is continuous and depends on the distance from expected dynamics.
-        We approximate this using a mixture of Gaussians representing the random
-        force direction uncertainty.
+        Since the force direction is uniformly random over [-π, π], the next
+        states lie on a continuous ring in state space. This method returns
+        a uniform mass over the ring-consistent subset of ``values`` (and
+        degenerates to a point mass when ``force_magnitude == 0``).
 
         Args:
-            values: List of potential next states
+            values: List of potential next states.
 
         Returns:
-            Array of (unnormalized) probabilities for each state
+            Normalized probabilities (summing to 1 if any state is consistent).
         """
-        # Get force magnitude from action
-        force_magnitude = self.force_scales[self.action] * self.max_force
+        # pylint: disable=unsubscriptable-object,invalid-unary-operand-type
+        # force_scales / damping / mass / dt / max_force / action are inherited
+        # from the C++ parent class; pylint does not trace the .pyi stub.
+        force_magnitude = float(self.force_scales[self.action]) * self.max_force
 
         if force_magnitude == 0:
-            # No force applied - deterministic transition
-            # Only damping affects the dynamics
             acceleration = -self.damping * self.velocity / self.mass
             expected_velocity = self.velocity + acceleration * self.dt
             expected_position = self.position + expected_velocity * self.dt
             expected_state = np.concatenate([expected_position, expected_velocity])
-
-            # For zero force, transition is deterministic
             probs = np.array(
                 [
                     1.0 if np.allclose(state, expected_state, rtol=1e-5, atol=1e-8) else 0.0
@@ -177,45 +159,30 @@ class SafeAntVelocityStateTransition(StateTransitionModel):
                 ]
             )
         else:
-            # Force is applied with random direction uniformly sampled from [-π, π]
-            # The resulting next states form a continuous distribution on a ring
-            # All states consistent with the force magnitude have equal probability density
-
-            # Tolerance for checking consistency
             position_tolerance = 0.01
             force_tolerance = 0.05
 
-            probs = []
+            probs_list: List[float] = []
             for next_state in values:
-                # Extract components from the next state
                 next_position = next_state[:2]
                 next_velocity = next_state[2:4]
 
-                # Check if position is consistent with velocity
-                # next_position = position + next_velocity * dt
                 expected_position = self.position + next_velocity * self.dt
                 position_error = np.linalg.norm(next_position - expected_position)
 
-                # Check if velocity is consistent with some force direction
-                # next_velocity = velocity + (force - damping * velocity) / mass * dt
-                # Solving for force: force = (next_velocity - velocity) * mass / dt + damping * velocity
                 required_force = (
                     next_velocity - self.velocity
                 ) * self.mass / self.dt + self.damping * self.velocity
                 required_force_magnitude = np.linalg.norm(required_force)
                 force_magnitude_error = abs(required_force_magnitude - force_magnitude)
 
-                # Assign uniform probability if state is consistent with physics
                 if position_error < position_tolerance and force_magnitude_error < force_tolerance:
-                    prob = 1.0  # Uniform over consistent states
+                    probs_list.append(1.0)
                 else:
-                    prob = 0.0  # Zero for inconsistent states
+                    probs_list.append(0.0)
 
-                probs.append(prob)
+            probs = np.array(probs_list)
 
-            probs = np.array(probs)
-
-        # Normalize probabilities
         total = np.sum(probs)
         if total > 0:
             probs = probs / total
@@ -223,7 +190,21 @@ class SafeAntVelocityStateTransition(StateTransitionModel):
         return probs
 
 
-class SafeAntVelocityObservation(ObservationModel):
+StateTransitionModel.register(SafeAntVelocityStateTransition)
+
+
+def _build_safe_ant_obs_covariance(position_noise: float, velocity_noise: float) -> np.ndarray:
+    return np.diag(
+        [
+            position_noise**2,
+            position_noise**2,
+            velocity_noise**2,
+            velocity_noise**2,
+        ]
+    )
+
+
+class SafeAntVelocityObservation(_native.SafeAntVelocityObservationCpp):
     """Noisy observation model for Safety Ant Velocity POMDP.
 
     This model adds Gaussian noise to both position and velocity measurements,
@@ -231,36 +212,31 @@ class SafeAntVelocityObservation(ObservationModel):
     Higher noise in velocity measurements reflects the difficulty of measuring
     velocity precisely in practice.
 
+    The ``sample()``, ``probability()``, and ``batch_log_likelihood()``
+    methods execute entirely in C++ via the ``_native`` extension
+    (``ObservationModelCpp<4>`` specialized with a diagonal covariance).
+
     Attributes:
         next_state: True state after action execution
         action: Action that was taken (not used in observation generation)
         position_noise: Standard deviation of Gaussian noise for position
         velocity_noise: Standard deviation of Gaussian noise for velocity
-        position: True position [x, y]
-        velocity: True velocity [vx, vy]
 
     Example:
         >>> import numpy as np
-        >>> np.random.seed(42)  # For reproducible results
-        >>> # True state after physics simulation
-        >>> true_state = np.array([0.6, -0.1, 1.2, 0.8])  # [x, y, vx, vy]
-        >>> action = 2
+        >>> from POMDPPlanners.environments.safety_ant_velocity_pomdp import _native
+        >>> _native.set_seed(42)
         >>>
-        >>> # Create observation model
+        >>> true_state = np.array([0.6, -0.1, 1.2, 0.8])
         >>> obs_model = SafeAntVelocityObservation(
         ...     next_state=true_state,
-        ...     action=action,
+        ...     action=2,
         ...     position_noise=0.1,
-        ...     velocity_noise=0.2
+        ...     velocity_noise=0.2,
         ... )
-        >>>
-        >>> # Sample noisy observation
-        >>> observation = obs_model.sample()[0]  # doctest: +SKIP
-        >>> # Returns [noisy_x, noisy_y, noisy_vx, noisy_vy]
-        >>> # Position noise: ±0.1, velocity noise: ±0.2
-        >>>
-        >>> # Calculate observation probability
-        >>> prob = obs_model.probability([observation])  # doctest: +SKIP
+        >>> observation = obs_model.sample()[0]
+        >>> observation.shape
+        (4,)
     """
 
     def __init__(
@@ -270,49 +246,15 @@ class SafeAntVelocityObservation(ObservationModel):
         position_noise: float = 0.1,
         velocity_noise: float = 0.2,
     ):
-        super().__init__(next_state=next_state, action=action)
+        covariance = _build_safe_ant_obs_covariance(position_noise, velocity_noise)
+        super().__init__(next_state=next_state, action=action, covariance=covariance)
         self.position_noise = position_noise
         self.velocity_noise = velocity_noise
+        self.position = np.asarray(next_state, dtype=float)[:2]
+        self.velocity = np.asarray(next_state, dtype=float)[2:4]
 
-        # State components
-        self.position = next_state[:2]
-        self.velocity = next_state[2:4]
 
-    def sample(self, n_samples: int = 1) -> List[Any]:
-        observations = []
-        for _ in range(n_samples):
-            # Add noise to position and velocity observations
-            noisy_position = self.position + np.random.normal(0, self.position_noise, size=2)
-            noisy_velocity = self.velocity + np.random.normal(0, self.velocity_noise, size=2)
-
-            # Combine observations
-            observation = np.concatenate([noisy_position, noisy_velocity])
-            observations.append(observation)
-        return observations
-
-    def probability(self, values: List[Any]) -> np.ndarray:
-        # Calculate probabilities based on Gaussian noise model for list of observations
-        probabilities = []
-        for observation in values:
-            # Ensure observation is numpy array with correct shape
-            if not isinstance(observation, np.ndarray) or observation.size == 0:
-                raise ValueError(
-                    f"Expected non-empty numpy array observation, got {type(observation)} with shape {getattr(observation, 'shape', 'unknown')}"
-                )
-
-            if observation.shape != (4,):
-                raise ValueError(f"Expected observation shape (4,), got {observation.shape}")
-
-            position_diff = observation[:2] - self.position
-            velocity_diff = observation[2:4] - self.velocity
-
-            position_log_prob = -0.5 * np.sum(position_diff**2) / (self.position_noise**2)
-            velocity_log_prob = -0.5 * np.sum(velocity_diff**2) / (self.velocity_noise**2)
-
-            prob = np.exp(position_log_prob + velocity_log_prob)
-            probabilities.append(prob)
-
-        return np.array(probabilities)
+ObservationModel.register(SafeAntVelocityObservation)
 
 
 class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
@@ -409,7 +351,7 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
         )
 
     def state_transition_model(self, state: np.ndarray, action: int) -> StateTransitionModel:
-        return SafeAntVelocityStateTransition(
+        return SafeAntVelocityStateTransition(  # pyright: ignore[reportReturnType]
             state=state,
             action=action,
             dt=self.dt,
@@ -419,7 +361,7 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
         )
 
     def observation_model(self, next_state: np.ndarray, action: int) -> ObservationModel:
-        return SafeAntVelocityObservation(
+        return SafeAntVelocityObservation(  # pyright: ignore[reportReturnType]
             next_state=next_state,
             action=action,
             position_noise=self.position_noise,
