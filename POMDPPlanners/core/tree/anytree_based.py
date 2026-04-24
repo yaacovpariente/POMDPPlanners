@@ -1,3 +1,17 @@
+"""Anytree-based implementation of the MCTS tree.
+
+Each node is a Python object (subclass of :class:`anytree.NodeMixin`) with
+parent/children references. This is the original tree implementation,
+preserved alongside the column-store ``arena`` implementation in
+:mod:`POMDPPlanners.core.tree.arena`.
+
+Use::
+
+    from POMDPPlanners.core.tree.anytree_based import (
+        ActionNode, BeliefNode, get_optimal_action_cost_setting,
+    )
+"""
+
 from typing import Any, List, Optional, Union
 
 import numpy as np
@@ -103,7 +117,10 @@ class BeliefNode(BaseNode):
         data: Any = None,
     ):
         if not isinstance(belief, Belief):
-            raise TypeError("belief must be a Belief instance")
+            # Runtime guard for callers that bypass static typing.
+            raise TypeError(
+                "belief must be a Belief instance"
+            )  # pyright: ignore[reportUnreachable]
         super().__init__(parent=parent, children=children, data=data)
 
         self.belief = belief
