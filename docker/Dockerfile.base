@@ -17,5 +17,10 @@ RUN pip install --upgrade pip
 # and break unrelated pyright checks (e.g. torch.as_tensor / torch.float32
 # being flagged reportPrivateImportUsage on newer stubs).
 RUN pip install "torch==2.11.0" --index-url https://download.pytorch.org/whl/cpu
-RUN pip freeze | grep -i torch > /tmp/torch-constraints.txt
-RUN PIP_CONSTRAINT=/tmp/torch-constraints.txt pip install ".[dev,docs]"
+# Pin pyright for the same reason: pyproject declares pyright>=1.1.0, so every
+# rebuild drifts to the latest release. 1.1.409 tightened reportPrivateImportUsage
+# and flagged existing torch.<attr> usages in beta_zero/constrained_zero that had
+# been green on 1.1.408.
+RUN pip install "pyright==1.1.408"
+RUN pip freeze | grep -iE "^(torch|pyright)==" > /tmp/pin-constraints.txt
+RUN PIP_CONSTRAINT=/tmp/pin-constraints.txt pip install ".[dev,docs]"
