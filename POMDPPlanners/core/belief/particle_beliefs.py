@@ -15,6 +15,7 @@ Functions:
     get_unique_support: Extract unique particles and their combined probabilities
 """
 
+import bisect
 import random
 from abc import ABC, abstractmethod
 from collections.abc import Hashable
@@ -482,6 +483,14 @@ class WeightedParticleBeliefStateUpdate(Belief):
         self.particles: list = list(particles)
         self.weights: list = list(weights)
         self.weights_sum = sum(weights) if weights else 0
+        # Cumulative-weight CDF, maintained in sync with `weights`. Lets
+        # `sample()` use O(log K) bisect instead of an O(K) renormalization
+        # pass each call. Updated incrementally in `inplace_update`.
+        self._cdf: List[float] = []
+        running = 0.0
+        for w in self.weights:
+            running += float(w)
+            self._cdf.append(running)
 
     def update(
         self,
@@ -559,8 +568,12 @@ class WeightedParticleBeliefStateUpdate(Belief):
         observation_probability = pomdp.observation_model(
             next_state=state, action=action
         ).probability([observation])[0]
-        self.weights.append(float(observation_probability))
-        self.weights_sum = float(self.weights_sum) + float(observation_probability)
+        weight = float(observation_probability)
+        self.weights.append(weight)
+        self.weights_sum = float(self.weights_sum) + weight
+        # Maintain CDF for O(log K) sampling.
+        prev_total = self._cdf[-1] if self._cdf else 0.0
+        self._cdf.append(prev_total + weight)
 
     def sample(self) -> Any:
         """Sample a state from the current belief distribution.
@@ -574,11 +587,13 @@ class WeightedParticleBeliefStateUpdate(Belief):
         if not self.particles or self.weights_sum == 0:
             raise ValueError("Cannot sample from empty or unnormalized belief")
 
-        # Normalize weights for sampling
-        normalized_weights = [w / float(self.weights_sum) for w in self.weights]
-
-        # Sample based on normalized weights
-        particle = random.choices(self.particles, weights=normalized_weights, k=1)[0]
+        # O(log K) sample via bisect on the maintained CDF (was an O(K)
+        # renormalization + random.choices call).
+        target = random.random() * self._cdf[-1]
+        idx = bisect.bisect_left(self._cdf, target)
+        if idx >= len(self.particles):
+            idx = len(self.particles) - 1
+        particle = self.particles[idx]
 
         # Defensive programming: ensure particle is a numpy array if it's a list
         # (fix for 'list' object has no attribute 'shape' error)
