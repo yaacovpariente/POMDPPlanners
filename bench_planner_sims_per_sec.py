@@ -178,6 +178,26 @@ def bench_pomcpow(time_budget_s: float = 1.0, repeats: int = 3) -> None:
     _bench_planner_across_envs("POMCPOW", make, backend_kind, time_budget_s, repeats)
 
 
+def bench_pomcp_dpw(time_budget_s: float = 1.0, repeats: int = 3) -> None:
+    """POMCP_DPW on multiple envs."""
+    from POMDPPlanners.planners.mcts_planners.pomcp_dpw import (  # pylint: disable=import-outside-toplevel
+        POMCP_DPW,
+    )
+
+    backend_kind = _detect_backend(POMCP_DPW)
+
+    def make(env: Any) -> POMCP_DPW:
+        return POMCP_DPW(
+            environment=env,
+            action_sampler=DiscreteActionSampler(env.get_actions()),
+            name="pomcp_dpw_bench",
+            n_simulations=1,
+            **PLANNER_PARAMS,
+        )
+
+    _bench_planner_across_envs("POMCP_DPW", make, backend_kind, time_budget_s, repeats)
+
+
 def bench_pft_dpw(time_budget_s: float = 1.0, repeats: int = 3) -> None:
     """PFT-DPW on multiple envs."""
     from POMDPPlanners.planners.mcts_planners.pft_dpw import (  # pylint: disable=import-outside-toplevel
@@ -251,6 +271,7 @@ def _bench_planner_across_envs(
 def main() -> None:
     bench_pomcpow(time_budget_s=1.0, repeats=3)
     bench_pft_dpw(time_budget_s=1.0, repeats=3)
+    bench_pomcp_dpw(time_budget_s=1.0, repeats=3)
     bench_pomcp(time_budget_s=1.0, repeats=3)
 
 
