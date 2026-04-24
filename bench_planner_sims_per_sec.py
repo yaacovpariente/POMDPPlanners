@@ -218,6 +218,30 @@ def bench_pft_dpw(time_budget_s: float = 1.0, repeats: int = 3) -> None:
     _bench_planner_across_envs("PFT_DPW", make, backend_kind, time_budget_s, repeats)
 
 
+def bench_sparse_pft(time_budget_s: float = 1.0, repeats: int = 3) -> None:
+    """SparsePFT on multiple envs."""
+    from POMDPPlanners.planners.mcts_planners.sparse_pft import (  # pylint: disable=import-outside-toplevel
+        SparsePFT,
+    )
+
+    backend_kind = _detect_backend(SparsePFT)
+
+    def make(env: Any) -> SparsePFT:
+        return SparsePFT(
+            environment=env,
+            discount_factor=PLANNER_PARAMS["discount_factor"],
+            gamma=PLANNER_PARAMS["discount_factor"],
+            depth=PLANNER_PARAMS["depth"],
+            c_ucb=1.0,
+            beta_ucb=2.0,
+            belief_child_num=5,
+            name="sparse_pft_bench",
+            n_simulations=1,
+        )
+
+    _bench_planner_across_envs("SparsePFT", make, backend_kind, time_budget_s, repeats)
+
+
 def bench_pomcp(time_budget_s: float = 1.0, repeats: int = 3) -> None:
     """POMCP on multiple envs (no progressive widening — uses the simpler config subset)."""
     from POMDPPlanners.planners.mcts_planners.pomcp import (  # pylint: disable=import-outside-toplevel
@@ -272,6 +296,7 @@ def main() -> None:
     bench_pomcpow(time_budget_s=1.0, repeats=3)
     bench_pft_dpw(time_budget_s=1.0, repeats=3)
     bench_pomcp_dpw(time_budget_s=1.0, repeats=3)
+    bench_sparse_pft(time_budget_s=1.0, repeats=3)
     bench_pomcp(time_budget_s=1.0, repeats=3)
 
 
