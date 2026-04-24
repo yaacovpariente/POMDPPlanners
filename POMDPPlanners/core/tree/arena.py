@@ -93,6 +93,42 @@ class Tree:
     def __len__(self) -> int:
         return len(self.kind)
 
+    def reserve(self, capacity: int) -> None:
+        """Pre-allocate the underlying buffer of every column for ``capacity`` nodes.
+
+        Mirrors Julia's ``sizehint!`` / ``Vector{T}(undef, n)``. After this
+        call every column still has length 0, but ``capacity`` slots are
+        reserved so subsequent ``append`` calls (up to ``capacity``) don't
+        trigger reallocation. Useful when the maximum tree size is known
+        in advance (e.g., ``2 * tree_queries`` in POMCPOW.jl).
+        """
+        # The buffer's element type doesn't matter — clear() immediately
+        # drops the elements but preserves the underlying list capacity.
+        # Annotate as Any so pyright doesn't object to extend()ing an
+        # int/float/object-typed column with a list of Nones.
+        buffer: Any = [None] * capacity
+        for column in (
+            self.kind,
+            self.parent_id,
+            self.children_ids,
+            self.visit_count,
+            self.q_value,
+            self.v_value,
+            self.lower_confidence_bound,
+            self.upper_confidence_bound,
+            self.immediate_cost,
+            self.immediate_reward,
+            self.weight,
+            self.action,
+            self.observation,
+            self.belief,
+            self.data,
+            self.sample,
+            self.children_cdf,
+        ):
+            column.extend(buffer)
+            column.clear()
+
     def _allocate(self, kind: int, parent_id: Optional[int]) -> int:
         node_id = len(self.kind)
         self.kind.append(kind)
