@@ -263,6 +263,37 @@ def bench_pomcp(time_budget_s: float = 1.0, repeats: int = 3) -> None:
     _bench_planner_across_envs("POMCP", make, backend_kind, time_budget_s, repeats)
 
 
+def bench_icvar_pft_dpw(time_budget_s: float = 1.0, repeats: int = 3) -> None:
+    """ICVaR_PFT_DPW on multiple envs."""
+    from POMDPPlanners.planners.mcts_planners.icvar_pft_dpw import (  # pylint: disable=import-outside-toplevel
+        ICVaR_PFT_DPW,
+    )
+
+    backend_kind = _detect_backend(ICVaR_PFT_DPW)
+
+    def make(env: Any) -> ICVaR_PFT_DPW:
+        return ICVaR_PFT_DPW(
+            environment=env,
+            discount_factor=PLANNER_PARAMS["discount_factor"],
+            depth=PLANNER_PARAMS["depth"],
+            exploration_constant=PLANNER_PARAMS["exploration_constant"],
+            k_o=PLANNER_PARAMS["k_o"],
+            k_a=PLANNER_PARAMS["k_a"],
+            alpha_o=PLANNER_PARAMS["alpha_o"],
+            alpha_a=PLANNER_PARAMS["alpha_a"],
+            min_immediate_cost=-100.0,
+            max_immediate_cost=100.0,
+            min_visit_count_per_action=PLANNER_PARAMS["min_visit_count_per_action"],
+            delta=0.1,
+            name="icvar_pft_dpw_bench",
+            action_sampler=DiscreteActionSampler(env.get_actions()),
+            n_simulations=1,
+            alpha=0.1,
+        )
+
+    _bench_planner_across_envs("ICVaR_PFT_DPW", make, backend_kind, time_budget_s, repeats)
+
+
 def bench_icvar_pomcpow(time_budget_s: float = 1.0, repeats: int = 3) -> None:
     """ICVaR_POMCPOW on multiple envs."""
     from POMDPPlanners.planners.mcts_planners.icvar_pomcpow import (  # pylint: disable=import-outside-toplevel
@@ -330,6 +361,7 @@ def main() -> None:
     bench_sparse_pft(time_budget_s=1.0, repeats=3)
     bench_pomcp(time_budget_s=1.0, repeats=3)
     bench_icvar_pomcpow(time_budget_s=1.0, repeats=3)
+    bench_icvar_pft_dpw(time_budget_s=1.0, repeats=3)
 
 
 if __name__ == "__main__":
