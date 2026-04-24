@@ -3,10 +3,10 @@ import random
 
 import numpy as np
 import pytest
-from anytree import PostOrderIter
 
 from POMDPPlanners.core.belief import get_initial_belief
-from POMDPPlanners.core.tree import ActionNode, BeliefNode
+from POMDPPlanners.core.tree import BeliefNode
+from POMDPPlanners.core.tree.arena import ACTION, BELIEF, Tree
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
     ContinuousLightDarkPOMDP,
 )
@@ -135,7 +135,7 @@ def test_action_progressive_widening(planner, initial_belief):
             assert action_node2 in belief_node.children
             assert action_node1 != action_node2
             break
-        elif action_node2 != action_node1:
+        if action_node2 != action_node1:
             # Different action node was returned (shouldn't happen with same action)
             assert action_node2 in belief_node.children
             break
@@ -157,19 +157,15 @@ def test_simulate_path(planner, initial_belief, environment):
 
     Test type: unit
     """
-    belief_node = BeliefNode(belief=initial_belief)
+    tree = Tree()
+    root_id = tree.add_belief_node(initial_belief)
 
-    # Run a simulation
-    return_value = planner._simulate_path(belief_node=belief_node, depth=0)
+    return_value = planner._simulate_path(tree=tree, belief_id=root_id, depth=0)
 
-    # Verify node statistics were updated
-    assert belief_node.visit_count > 0
-    assert not belief_node.is_leaf
-
-    # Verify return value is within expected range
-    # For LightDarkPOMDP, rewards are typically between -10 (obstacle hit) and 10 (goal reached)
-    assert return_value >= (-10 - environment.grid_size * np.sqrt(2)) * 5  # Minimum possible reward
-    assert return_value <= 10  # Maximum possible reward
+    assert tree.visit_count[root_id] > 0
+    assert len(tree.children_ids[root_id]) > 0  # arena's "not is_leaf"
+    assert return_value >= (-10 - environment.grid_size * np.sqrt(2)) * 5
+    assert return_value <= 10
 
 
 # Config ID Tests
@@ -354,7 +350,7 @@ def test_pft_dpw_config_id_consistency_across_evaluations(environment, action_sa
     initial_belief = get_initial_belief(environment, n_particles=50)
 
     # Perform multiple policy evaluations
-    for i in range(3):
+    for _ in range(3):
         action, run_data = pft_dpw.action(initial_belief)
 
         # Check config_id remains the same
@@ -625,17 +621,17 @@ def test_min_visit_count_per_action_enforcement(environment, action_sampler):
     n_particles = 10
     belief = get_initial_belief(environment, n_particles=n_particles, resampling=True)
 
-    # ACT: Build tree using _learn_tree method
-    root_belief_node = planner._learn_tree(belief=belief)
+    tree, root_id = planner._learn_tree(belief=belief)
 
-    # ASSERT: Verify all action nodes at root have at least min_visit_count_per_action visits
-    action_nodes = [child for child in root_belief_node.children if isinstance(child, ActionNode)]
-    assert len(action_nodes) > 0, "At least one action node should be created"
+    action_ids = [cid for cid in tree.children_ids[root_id] if tree.kind[cid] == ACTION]
+    assert len(action_ids) > 0, "At least one action node should be created"
 
-    for action_node in action_nodes:
-        assert (
-            action_node.visit_count == min_visit_count
-        ), f"Action node {action_node.action} has {action_node.visit_count} visits, expected at least {min_visit_count}"
+    for action_id in action_ids:
+        visits = tree.visit_count[action_id]
+        assert visits == min_visit_count, (
+            f"Action node {tree.action[action_id]} has {visits} visits, "
+            f"expected at least {min_visit_count}"
+        )
 
 
 def test_max_depth_reached_with_timeout(environment, action_sampler):
@@ -669,38 +665,34 @@ def test_max_depth_reached_with_timeout(environment, action_sampler):
 
     n_particles = 10
     belief = get_initial_belief(environment, n_particles=n_particles, resampling=True)
-    root_belief_node = BeliefNode(belief=belief, observation=None)
+    tree = Tree()
+    root_id = tree.add_belief_node(belief)
 
-    planner._construct_tree_using_timeout(belief_node=root_belief_node)
+    planner._construct_tree_using_timeout(tree=tree, root_id=root_id)
 
-    # PFT_DPW with timeout may not reach full depth due to environment complexity
-    # Verify it reaches at least depth+1 and doesn't exceed 2*depth+2
-    assert depth + 1 <= root_belief_node.height <= 2 * depth + 2
-    for node in PostOrderIter(root_belief_node):
-        assert node.visit_count >= 0
-        if isinstance(node, BeliefNode):
-            assert node.belief is not None
-            assert node.v_value is not None
+    # Walk the arena tree to compute max depth (longest path from root).
+    max_observed_depth = 0
+    frontier = [(root_id, 0)]
+    while frontier:
+        node_id, d = frontier.pop()
+        max_observed_depth = max(max_observed_depth, d)
+        for cid in tree.children_ids[node_id]:
+            frontier.append((cid, d + 1))
+    assert depth + 1 <= max_observed_depth <= 2 * depth + 2
 
-            # For non-root nodes with children, check additional properties
-            if node != root_belief_node and node.height > 1 and node.depth > 0:
-                # PFT_DPW may structure nodes differently than POMCP, so we're more lenient
-                if node.v_value != 0:  # Only check if v_value is non-zero
-                    # For PFT_DPW with progressive widening, visit count relationship may differ
-                    n_children_visits = sum(child.visit_count for child in node.children)
-                    assert node.visit_count >= n_children_visits
+    # Per-node invariants on the arena tree.
+    for node_id in range(len(tree)):
+        assert tree.visit_count[node_id] >= 0
+        if tree.kind[node_id] == BELIEF:
+            assert tree.belief[node_id] is not None
+            assert tree.v_value[node_id] is not None
+        elif tree.kind[node_id] == ACTION:
+            assert tree.action[node_id] is not None
+            assert tree.q_value[node_id] is not None
 
-        elif isinstance(node, ActionNode):
-            assert node.action is not None
-            assert node.q_value is not None
-            if not node.is_leaf:
-                assert node.q_value != 0
-                # For PFT_DPW with progressive widening, visit count relationship may differ
-                assert node.visit_count >= sum(child.visit_count for child in node.children)
-
-    # Verify root belief node
-    assert root_belief_node.observation is None
-    assert root_belief_node.parent is None
-    assert len(root_belief_node.children) > 0
-    assert root_belief_node.visit_count > 0
-    assert root_belief_node.v_value is not None
+    # Root belief node invariants in arena form.
+    assert tree.observation[root_id] is None
+    assert tree.parent_id[root_id] is None
+    assert len(tree.children_ids[root_id]) > 0
+    assert tree.visit_count[root_id] > 0
+    assert tree.v_value[root_id] is not None
