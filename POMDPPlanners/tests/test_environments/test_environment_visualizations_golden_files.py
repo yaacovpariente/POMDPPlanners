@@ -473,7 +473,14 @@ def create_deterministic_safety_ant_velocity_episode(seed: int = 42) -> List[Ste
     Returns:
         List of StepData objects representing episode history
     """
+    # pylint: disable=import-outside-toplevel,no-name-in-module
+    from POMDPPlanners.environments.safety_ant_velocity_pomdp import _native as _sa_native
+
     np.random.seed(seed)
+    # Transition / observation sampling now runs on the C++ RNG (see
+    # SafeAntVelocityTransitionCpp / SafeAntVelocityObservationCpp); seeding
+    # _native keeps the episode deterministic end-to-end.
+    _sa_native.set_seed(seed)
     env = SafeAntVelocityPOMDP(
         discount_factor=0.95,
     )

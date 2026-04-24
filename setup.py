@@ -60,6 +60,12 @@ ext_modules = [
         name="POMDPPlanners.environments.rock_sample_pomdp._native",
         sources=["POMDPPlanners/environments/rock_sample_pomdp/_cpp/rock_sample.cpp"],
     ),
+    _make_ext(
+        name="POMDPPlanners.environments.safety_ant_velocity_pomdp._native",
+        sources=[
+            "POMDPPlanners/environments/safety_ant_velocity_pomdp/_cpp/safety_ant_velocity.cpp"
+        ],
+    ),
 ]
 
 setup(ext_modules=ext_modules, cmdclass={"build_ext": build_ext})
