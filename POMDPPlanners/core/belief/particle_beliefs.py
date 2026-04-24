@@ -178,6 +178,12 @@ class WeightedParticleBelief(Belief):
 
         self.eps = 1e-10
 
+        # Lazy cumulative-weight CDF. Built on first `sample()` call and
+        # cached thereafter; skipped entirely for beliefs that are never
+        # sampled (e.g. intermediate update() instances used only for
+        # weight propagation).
+        self._cdf: Optional[List[float]] = None
+
     def to_dict(self) -> dict:
         """Convert the belief to a dictionary for serialization.
 
@@ -354,10 +360,15 @@ class WeightedParticleBelief(Belief):
 
     def sample(self):
         """Sample a particle from the belief."""
-        idx = np.random.choice(len(self.particles), p=self.normalized_weights)
-        particle = self.particles[idx]
-
-        return particle
+        cdf = self._cdf
+        if cdf is None:
+            cdf = np.cumsum(self.normalized_weights).tolist()
+            self._cdf = cdf
+        target = random.random() * cdf[-1]
+        idx = bisect.bisect_left(cdf, target)
+        if idx >= len(self.particles):
+            idx = len(self.particles) - 1
+        return self.particles[idx]
 
 
 class WeightedParticleBeliefReinvigoration(WeightedParticleBelief, ABC):
