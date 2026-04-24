@@ -11,6 +11,11 @@ RUN apt-get update && apt-get install -y libatomic1 g++ && rm -rf /var/lib/apt/l
 COPY pyproject.toml ./
 
 RUN pip install --upgrade pip
-RUN pip install torch --index-url https://download.pytorch.org/whl/cpu
+# Pin torch to a known-good version to stabilise type-stub behaviour; the
+# pytorch.org CPU index is unversioned in its default URL, so without this
+# pin every base-image rebuild can silently drift onto a different release
+# and break unrelated pyright checks (e.g. torch.as_tensor / torch.float32
+# being flagged reportPrivateImportUsage on newer stubs).
+RUN pip install "torch==2.11.0" --index-url https://download.pytorch.org/whl/cpu
 RUN pip freeze | grep -i torch > /tmp/torch-constraints.txt
 RUN PIP_CONSTRAINT=/tmp/torch-constraints.txt pip install ".[dev,docs]"
