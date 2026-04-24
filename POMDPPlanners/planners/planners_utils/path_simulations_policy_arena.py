@@ -262,3 +262,53 @@ class ArenaDoubleProgressiveWideningMCTSPolicy(ArenaPathSimulationPolicy):
     @classmethod
     def get_space_info(cls) -> PolicySpaceInfo:
         return PolicySpaceInfo(action_space=SpaceType.MIXED, observation_space=SpaceType.MIXED)
+
+
+class ArenaPathSimulationPolicyCostSetting(ArenaPathSimulationPolicy):
+    """Arena-tree variant of :class:`PathSimulationPolicyCostSetting`.
+
+    Same shape as :class:`ArenaPathSimulationPolicy` but selects the
+    optimal action by *minimum* q_value (cost setting) instead of maximum
+    (reward setting). Used by the ICVaR planners.
+    """
+
+    def __init__(  # pylint: disable=too-many-arguments
+        self,
+        environment: Environment,
+        discount_factor: float,
+        name: str,
+        action_sampler: Optional[ActionSampler] = None,
+        n_simulations: Optional[int] = None,
+        time_out_in_seconds: Optional[int] = None,
+        reserve_capacity: int = 0,
+        log_path: Optional[Path] = None,
+        debug: bool = False,
+        use_queue_logger: bool = False,
+    ):
+        super().__init__(
+            environment=environment,
+            discount_factor=discount_factor,
+            name=name,
+            n_simulations=n_simulations,
+            action_sampler=action_sampler,
+            time_out_in_seconds=time_out_in_seconds,
+            reserve_capacity=reserve_capacity,
+            log_path=log_path,
+            debug=debug,
+            use_queue_logger=use_queue_logger,
+        )
+
+    def action(self, belief: Belief) -> Tuple[List[Any], PolicyRunData]:
+        if is_terminal_belief(belief=belief, env=self.environment):
+            return [self._sample_random_action(belief=belief)], PolicyRunData(info_variables=[])
+
+        tree, root_id = self._learn_tree(belief=belief)
+        tree_metrics = compute_arena_tree_metrics(tree=tree, root_id=root_id)
+
+        if not tree.children_ids[root_id]:
+            action = self._sample_random_action(belief=belief)
+        else:
+            # Cost setting: pick the action with the LOWEST q_value.
+            action = tree.best_action_by_cost(root_id)
+
+        return [action], PolicyRunData(info_variables=tree_metrics)
