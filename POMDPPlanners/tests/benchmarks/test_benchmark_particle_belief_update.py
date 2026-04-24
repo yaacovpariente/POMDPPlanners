@@ -1,6 +1,7 @@
+# pylint: disable=too-many-lines
 """Benchmarks for WeightedParticleBelief / VectorizedWeightedParticleBelief
 update paths across natively-ported envs (MountainCar, CartPole,
-Light-Dark, LaserTag).
+Light-Dark, LaserTag, Push, SafetyAnt).
 
 Measures the cases laid out in the pomdp_native port plan:
 
@@ -16,6 +17,10 @@ Measures the cases laid out in the pomdp_native port plan:
     | lightdark-vectorized-cpp | Light-Dark  | VectorizedWeightedParticleBelief    | C++ batch       |
     | lasertag-generic-cpp     | LaserTag    | WeightedParticleBelief.update       | C++ batch       |
     | lasertag-vectorized-cpp  | LaserTag    | VectorizedWeightedParticleBelief    | C++ batch       |
+    | push-generic-cpp         | Push        | WeightedParticleBelief.update       | C++ batch       |
+    | push-vectorized-cpp      | Push        | VectorizedWeightedParticleBelief    | C++ batch       |
+    | safety-ant-generic-cpp   | SafetyAnt   | WeightedParticleBelief.update       | C++ batch       |
+    | safety-ant-vectorized-cpp| SafetyAnt   | VectorizedWeightedParticleBelief    | C++ batch       |
 
 Same N=100 particles, same action, same observation within each env. The
 two CartPole "python" / "numpy" cases snapshot the pre-port implementations
@@ -75,6 +80,10 @@ from POMDPPlanners.environments.mountain_car_pomdp.mountain_car_pomdp_beliefs im
 from POMDPPlanners.environments.push_pomdp import ContinuousPushPOMDP
 from POMDPPlanners.environments.push_pomdp.push_pomdp_beliefs.continuous_push_vectorized_updater import (
     ContinuousPushVectorizedUpdater,
+)
+from POMDPPlanners.environments.safety_ant_velocity_pomdp import SafeAntVelocityPOMDP
+from POMDPPlanners.environments.safety_ant_velocity_pomdp.safety_ant_velocity_pomdp_beliefs import (
+    SafetyAntVelocityVectorizedUpdater,
 )
 from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
 
@@ -700,6 +709,305 @@ def test_bench_push_vectorized_belief_update(benchmark):
     )
     action = np.array([1.0, 0.0])
     observation = env.initial_observation_dist().sample(n_samples=1)[0]
+
+    def run():
+        return belief.update(action=action, observation=observation, pomdp=env)
+
+    benchmark(run)
+
+
+# ---------------------------------------------------------------------------
+# Safety Ant Velocity (native) cases
+# ---------------------------------------------------------------------------
+#
+# The pre-port SafetyAnt "python" / "numpy" benchmarks snapshot the Python /
+# numpy implementations that used to ship before the native port, so the
+# port's speedup stays measurable after the shipped classes switched to C++.
+# These reference classes are lifted verbatim from the pre-port
+# safety_ant_velocity_pomdp.py / safety_ant_velocity_vectorized_updater.py.
+
+
+class _PrePortSafeAntVelocityTransition(StateTransitionModel):
+    # Pre-port Python reference kept for baseline benchmarking only.
+    def __init__(
+        self,
+        state: np.ndarray,
+        action: int,
+        dt: float,
+        mass: float,
+        damping: float,
+        max_force: float,
+    ):
+        super().__init__(state, action)
+        self.dt = dt
+        self.mass = mass
+        self.damping = damping
+        self.max_force = max_force
+        self.force_scales = [0.0, 0.33, 0.67, 1.0]
+        self.position = np.asarray(state, dtype=float)[:2]
+        self.velocity = np.asarray(state, dtype=float)[2:4]
+
+    def sample(self, n_samples: int = 1) -> List[np.ndarray]:
+        next_states = []
+        for _ in range(n_samples):
+            force_magnitude = self.force_scales[self.action] * self.max_force
+            force_direction = np.random.uniform(-np.pi, np.pi)
+            force = force_magnitude * np.array([np.cos(force_direction), np.sin(force_direction)])
+            acceleration = (force - self.damping * self.velocity) / self.mass
+            new_velocity = self.velocity + acceleration * self.dt
+            new_position = self.position + new_velocity * self.dt
+            next_states.append(np.concatenate([new_position, new_velocity]))
+        return next_states
+
+    def probability(self, values: List[np.ndarray]) -> np.ndarray:  # pragma: no cover
+        # Unused in the benchmark path; the generic belief update calls sample(),
+        # not probability(). Kept to satisfy the ABC.
+        return np.ones(len(values)) / max(len(values), 1)
+
+
+class _PrePortSafeAntVelocityObservation(ObservationModel):
+    # Pre-port Python reference kept for baseline benchmarking only.
+    def __init__(
+        self,
+        next_state: np.ndarray,
+        action: int,
+        position_noise: float,
+        velocity_noise: float,
+    ):
+        super().__init__(next_state=next_state, action=action)
+        self.position_noise = position_noise
+        self.velocity_noise = velocity_noise
+        self.position = np.asarray(next_state, dtype=float)[:2]
+        self.velocity = np.asarray(next_state, dtype=float)[2:4]
+
+    def sample(self, n_samples: int = 1) -> List[np.ndarray]:
+        observations = []
+        for _ in range(n_samples):
+            noisy_position = self.position + np.random.normal(0, self.position_noise, size=2)
+            noisy_velocity = self.velocity + np.random.normal(0, self.velocity_noise, size=2)
+            observations.append(np.concatenate([noisy_position, noisy_velocity]))
+        return observations
+
+    def probability(self, values: List[np.ndarray]) -> np.ndarray:
+        probabilities = []
+        for observation in values:
+            position_diff = observation[:2] - self.position
+            velocity_diff = observation[2:4] - self.velocity
+            position_log_prob = -0.5 * np.sum(position_diff**2) / (self.position_noise**2)
+            velocity_log_prob = -0.5 * np.sum(velocity_diff**2) / (self.velocity_noise**2)
+            probabilities.append(float(np.exp(position_log_prob + velocity_log_prob)))
+        return np.array(probabilities)
+
+
+class _PrePortSafeAntVelocityPOMDP(SafeAntVelocityPOMDP):
+    """Pre-port SafeAntVelocityPOMDP whose factories return the Python reference models."""
+
+    def state_transition_model(  # pyright: ignore[reportIncompatibleMethodOverride]
+        self, state: np.ndarray, action: int
+    ) -> StateTransitionModel:
+        return _PrePortSafeAntVelocityTransition(
+            state=state,
+            action=action,
+            dt=self.dt,
+            mass=self.mass,
+            damping=self.damping,
+            max_force=self.max_force,
+        )
+
+    def observation_model(  # pyright: ignore[reportIncompatibleMethodOverride]
+        self, next_state: np.ndarray, action: int
+    ) -> ObservationModel:
+        return _PrePortSafeAntVelocityObservation(
+            next_state=next_state,
+            action=action,
+            position_noise=self.position_noise,
+            velocity_noise=self.velocity_noise,
+        )
+
+
+class _PrePortSafetyAntVelocityVectorizedUpdater(VectorizedParticleBeliefUpdater):
+    """Pre-port numpy-only vectorized updater preserved for baseline benchmarks."""
+
+    def __init__(
+        self,
+        obs_dist: CovarianceParameterizedMultivariateNormal,
+        dt: float,
+        mass: float,
+        damping: float,
+        max_force: float,
+        force_scales: np.ndarray,
+    ):
+        self.obs_dist = obs_dist
+        self.dt = dt
+        self.mass = mass
+        self.damping = damping
+        self.max_force = max_force
+        self.force_scales = np.asarray(force_scales, dtype=float)
+
+    @classmethod
+    def from_environment(
+        cls, env: SafeAntVelocityPOMDP
+    ) -> "_PrePortSafetyAntVelocityVectorizedUpdater":
+        cov = np.diag(
+            [
+                env.position_noise**2,
+                env.position_noise**2,
+                env.velocity_noise**2,
+                env.velocity_noise**2,
+            ]
+        )
+        return cls(
+            obs_dist=CovarianceParameterizedMultivariateNormal(cov),
+            dt=env.dt,
+            mass=env.mass,
+            damping=env.damping,
+            max_force=env.max_force,
+            force_scales=np.array([0.0, 0.33, 0.67, 1.0]),
+        )
+
+    def batch_transition(self, particles: np.ndarray, action: np.ndarray) -> np.ndarray:
+        n = particles.shape[0]
+        force_magnitude = self.force_scales[int(action)] * self.max_force
+        directions = np.random.uniform(-np.pi, np.pi, size=n)
+        forces = force_magnitude * np.column_stack([np.cos(directions), np.sin(directions)])
+        velocity = particles[:, 2:4]
+        acceleration = (forces - self.damping * velocity) / self.mass
+        new_velocity = velocity + acceleration * self.dt
+        new_position = particles[:, :2] + new_velocity * self.dt
+        return np.column_stack([new_position, new_velocity])
+
+    def batch_observation_log_likelihood(
+        self,
+        next_particles: np.ndarray,
+        action: np.ndarray,
+        observation: np.ndarray,
+    ) -> np.ndarray:
+        observation_arr = np.asarray(observation, dtype=float).ravel()
+        return self.obs_dist.log_pdf(next_particles, observation_arr)
+
+    @property
+    def config_id(self) -> str:
+        return "_PrePortSafetyAntVelocityVectorizedUpdater"
+
+
+@pytest.mark.benchmark(group="belief-update-safety-ant-generic-python")
+def test_bench_safety_ant_generic_belief_update_python(benchmark):
+    """Benchmark WeightedParticleBelief.update on SafetyAnt (pre-port Python).
+
+    Purpose: Pre-port baseline. Measures the generic per-particle Python
+    loop using the pre-port reference SafetyAnt transition / observation
+    classes (kept inline in this module). These models do NOT expose
+    batch_sample, so WeightedParticleBelief._update_weights falls back to
+    its per-particle ``state_transition_model().sample()`` loop.
+
+    Given: Pre-port SafeAntVelocityPOMDP + WeightedParticleBelief with N=100.
+    When: belief.update(action, observation, pomdp) is called repeatedly.
+    Then: Execution time is recorded.
+
+    Test type: performance
+    """
+    env = _PrePortSafeAntVelocityPOMDP(discount_factor=0.99)
+    particles = list(env.initial_state_dist().sample(n_samples=_N_PARTICLES))
+    log_weights = np.log(np.ones(_N_PARTICLES) / _N_PARTICLES)
+    belief = WeightedParticleBelief(particles=particles, log_weights=log_weights)
+    action = env.get_actions()[2]
+    observation = np.array([0.0, 0.0, 0.0, 0.0])
+
+    def run():
+        return belief.update(action=action, observation=observation, pomdp=env)
+
+    benchmark(run)
+
+
+@pytest.mark.benchmark(group="belief-update-safety-ant-vectorized-numpy")
+def test_bench_safety_ant_vectorized_belief_update_numpy(benchmark):
+    """Benchmark VectorizedWeightedParticleBelief.update on SafetyAnt (pre-port numpy).
+
+    Purpose: Pre-port baseline. Measures the explicit vectorized belief
+    path using the numpy-only reference updater (kept inline in this
+    module). ``batch_transition`` and ``batch_observation_log_likelihood``
+    run entirely in numpy -- no C++ involved.
+
+    Given: SafeAntVelocityPOMDP + VectorizedWeightedParticleBelief with N=100.
+    When: belief.update(action, observation, pomdp) is called repeatedly.
+    Then: Execution time is recorded.
+
+    Test type: performance
+    """
+    env = SafeAntVelocityPOMDP(discount_factor=0.99)
+    updater = _PrePortSafetyAntVelocityVectorizedUpdater.from_environment(env)
+    particles = np.array(env.initial_state_dist().sample(n_samples=_N_PARTICLES))
+    log_weights = np.log(np.ones(_N_PARTICLES) / _N_PARTICLES)
+    belief = VectorizedWeightedParticleBelief(
+        particles=particles,
+        log_weights=log_weights,
+        updater=updater,
+    )
+    action = env.get_actions()[2]
+    observation = np.array([0.0, 0.0, 0.0, 0.0])
+
+    def run():
+        return belief.update(action=action, observation=observation, pomdp=env)
+
+    benchmark(run)
+
+
+@pytest.mark.benchmark(group="belief-update-safety-ant-generic-cpp")
+def test_bench_safety_ant_generic_belief_update(benchmark):
+    """Benchmark WeightedParticleBelief.update on Safety Ant Velocity (auto-dispatch).
+
+    Purpose: Measures the generic per-particle-looking belief update path on
+    the Safety Ant Velocity env after its transition/observation models grew
+    native batch entry points. ``WeightedParticleBelief._update_weights``
+    sniffs the batch interface and dispatches to the C++ ``batch_sample`` /
+    ``batch_log_likelihood`` in a single round-trip.
+
+    Given: SafeAntVelocityPOMDP + WeightedParticleBelief with N=100 particles.
+    When: belief.update(action, observation, pomdp) is called repeatedly.
+    Then: Execution time is recorded.
+
+    Test type: performance
+    """
+    env = SafeAntVelocityPOMDP(discount_factor=0.99)
+    particles = list(env.initial_state_dist().sample(n_samples=_N_PARTICLES))
+    log_weights = np.log(np.ones(_N_PARTICLES) / _N_PARTICLES)
+    belief = WeightedParticleBelief(particles=particles, log_weights=log_weights)
+    action = env.get_actions()[2]
+    observation = np.array([0.0, 0.0, 0.0, 0.0])
+
+    def run():
+        return belief.update(action=action, observation=observation, pomdp=env)
+
+    benchmark(run)
+
+
+@pytest.mark.benchmark(group="belief-update-safety-ant-vectorized-cpp")
+def test_bench_safety_ant_vectorized_belief_update(benchmark):
+    """Benchmark VectorizedWeightedParticleBelief.update on Safety Ant Velocity.
+
+    Purpose: Measures the explicit vectorized belief path on SafetyAnt after
+    the port. Its updater (``SafetyAntVelocityVectorizedUpdater``) delegates
+    ``batch_transition`` (uniform-angle + damped-force integration) and
+    ``batch_observation_log_likelihood`` (diagonal Gaussian) directly to the
+    native C++ batch methods.
+
+    Given: SafeAntVelocityPOMDP + VectorizedWeightedParticleBelief with N=100.
+    When: belief.update(action, observation, pomdp) is called repeatedly.
+    Then: Execution time is recorded.
+
+    Test type: performance
+    """
+    env = SafeAntVelocityPOMDP(discount_factor=0.99)
+    updater = SafetyAntVelocityVectorizedUpdater.from_environment(env)
+    particles = np.array(env.initial_state_dist().sample(n_samples=_N_PARTICLES))
+    log_weights = np.log(np.ones(_N_PARTICLES) / _N_PARTICLES)
+    belief = VectorizedWeightedParticleBelief(
+        particles=particles,
+        log_weights=log_weights,
+        updater=updater,
+    )
+    action = env.get_actions()[2]
+    observation = np.array([0.0, 0.0, 0.0, 0.0])
 
     def run():
         return belief.update(action=action, observation=observation, pomdp=env)
