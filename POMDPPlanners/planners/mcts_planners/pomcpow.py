@@ -25,6 +25,15 @@ Reference:
     Conference on Automated Planning and Scheduling, 28(1), 259-263.
     https://ojs.aaai.org/index.php/ICAPS/article/view/13882
 
+Implementation note:
+    This implementation operates on the column-store arena
+    :class:`POMDPPlanners.core.tree.arena.Tree` (integer node IDs, parallel
+    column lists) rather than the legacy anytree-based ``BeliefNode`` /
+    ``ActionNode`` graph. Inherits from
+    :class:`ArenaDoubleProgressiveWideningMCTSPolicy`. The external
+    constructor signature, ``action()`` interface, and behavior are
+    unchanged from earlier versions.
+
 Classes:
     POMCPOW: Monte Carlo Tree Search planner with double progressive widening
 """
@@ -32,72 +41,33 @@ Classes:
 from pathlib import Path
 from typing import Any, Optional
 
-
-# Python 3.9 compatibility - KW_ONLY was introduced in Python 3.10
-
 from POMDPPlanners.core.belief import WeightedParticleBeliefStateUpdate
 from POMDPPlanners.core.environment import Environment
-from POMDPPlanners.core.tree import BeliefNode
-from POMDPPlanners.planners.planners_utils.path_simulations_policy import (
-    DoubleProgressiveWideningMCTSPolicy,
-)
+from POMDPPlanners.core.tree.arena import Tree
 from POMDPPlanners.planners.planners_utils.dpw import (
     ActionSampler,
-    action_progressive_widening,
+    action_progressive_widening_arena,
+)
+from POMDPPlanners.planners.planners_utils.path_simulations_policy_arena import (
+    ArenaDoubleProgressiveWideningMCTSPolicy,
 )
 from POMDPPlanners.planners.planners_utils.rollout import random_rollout_action_sampler
 
 
-class POMCPOW(DoubleProgressiveWideningMCTSPolicy):
-    """POMCPOW (Partially Observable Monte Carlo Planning with Optimistic Weights) Algorithm.
+class POMCPOW(
+    ArenaDoubleProgressiveWideningMCTSPolicy
+):  # pylint: disable=too-many-instance-attributes
+    """POMCPOW operating on the arena :class:`Tree` + integer node IDs.
 
-    POMCPOW is an advanced Monte Carlo Tree Search algorithm for POMDP planning that extends
-    POMCP with double progressive widening. It combines UCB1 action selection with progressive
-    widening for both actions and observations, making it particularly effective for problems
-    with large or continuous action spaces.
-
-    Algorithm Overview:
-    The algorithm operates through double progressive expansion:
-    1. **Action Progressive Widening**: Gradually adds new actions based on visit counts and α_a
-    2. **Observation Progressive Widening**: Gradually adds new observation branches based on k_o and α_o
-    3. **Weighted Particle Beliefs**: Maintains weighted particle representations in observation nodes
-    4. **UCB1 Exploration**: Balances exploration of new actions with exploitation using UCB1
-    5. **Random Rollouts**: Estimates values from leaf nodes using random simulations
-
-    Key Features:
-    - Handles continuous and discrete action spaces through ActionSampler interface
-    - Uses double progressive widening to manage tree growth
-    - Maintains weighted particle beliefs for efficient belief approximation
-    - Balances exploration of new actions with exploitation of promising ones
-    - Supports configurable progressive widening parameters
-
-    Progressive Widening Parameters:
-    - **k_a, α_a**: Control action progressive widening (new actions added when ⌊n^α_a⌋ > ⌊(n-1)^α_a⌋)
-    - **k_o, α_o**: Control observation progressive widening (max observations ≤ k_o * n^α_o)
-
-    Attributes:
-        environment: The POMDP environment to plan for
-        discount_factor: Discount factor for future rewards (0 < γ ≤ 1)
-        depth: Maximum search depth for tree expansion
-        exploration_constant: UCB1 exploration parameter (higher = more exploration)
-        k_o: Observation progressive widening coefficient
-        k_a: Action progressive widening coefficient
-        alpha_o: Observation progressive widening exponent
-        alpha_a: Action progressive widening exponent
-        action_sampler: Action sampling strategy for progressive widening
-        time_out_in_seconds: Time limit for planning (mutually exclusive with n_simulations)
-        n_simulations: Number of simulations to run (mutually exclusive with timeout)
-        log_path: Optional path for logging policy execution
-        debug: Enable debug logging if True
+    See module docstring for algorithm details and reference.
 
     Example:
         >>> import numpy as np
         >>> from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
         >>> from POMDPPlanners.core.belief import get_initial_belief
         >>> from POMDPPlanners.utils.action_samplers import DiscreteActionSampler
-        >>> np.random.seed(42)  # For reproducible results
+        >>> np.random.seed(42)
         >>>
-        >>> # Create environment and planner
         >>> tiger = TigerPOMDP(discount_factor=0.95)
         >>> action_sampler = DiscreteActionSampler(tiger.get_actions())
         >>> planner = POMCPOW(
@@ -113,22 +83,14 @@ class POMCPOW(DoubleProgressiveWideningMCTSPolicy):
         ...     n_simulations=10,
         ...     name="ExamplePlanner"
         ... )
-        >>>
-        >>> # Basic planner interface usage
         >>> planner.name
         'ExamplePlanner'
         >>>
-        >>> # Action selection from belief
         >>> initial_belief = get_initial_belief(tiger, n_particles=10)
         >>> actions, run_data = planner.action(initial_belief)
-        >>>
-        >>> # Planner space information
-        >>> space_info = POMCPOW.get_space_info()
-        >>> space_info.action_space.name
-        'MIXED'
     """
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments
         self,
         environment: Environment,
         discount_factor: float,
@@ -143,35 +105,11 @@ class POMCPOW(DoubleProgressiveWideningMCTSPolicy):
         time_out_in_seconds: Optional[int] = None,
         n_simulations: Optional[int] = None,
         min_visit_count_per_action: int = 1,
+        reserve_capacity: int = 0,
         log_path: Optional[Path] = None,
         debug: bool = False,
         use_queue_logger: bool = False,
     ):
-        """Initialize POMCPOW planner with double progressive widening parameters.
-
-        Args:
-            environment: The POMDP environment to plan for
-            discount_factor: Discount factor for future rewards (0 < γ ≤ 1)
-            depth: Maximum search depth for tree expansion
-            exploration_constant: UCB1 exploration parameter (higher = more exploration)
-            k_o: Observation progressive widening coefficient (controls max observations)
-            k_a: Action progressive widening coefficient (controls action expansion)
-            alpha_o: Observation progressive widening exponent (0 < α_o ≤ 1)
-            alpha_a: Action progressive widening exponent (0 < α_a ≤ 1)
-            name: Identifier for the policy instance
-            action_sampler: Action sampling strategy for progressive widening
-            time_out_in_seconds: Time limit for planning in seconds (mutually exclusive with n_simulations)
-            n_simulations: Number of MCTS simulations to run (mutually exclusive with time_out_in_seconds)
-            min_visit_count_per_action: Minimum visit count per action (min_visit_count_per_action ≥ 1)
-            log_path: Optional path for logging policy execution
-            debug: Enable debug logging if True
-
-        Raises:
-            ValueError: If both time_out_in_seconds and n_simulations are provided or both are None
-            TypeError: If parameters have incorrect types
-            ValueError: If parameters have invalid values
-        """
-        # All validation and initialization is handled by the base class
         super().__init__(
             environment=environment,
             discount_factor=discount_factor,
@@ -186,95 +124,54 @@ class POMCPOW(DoubleProgressiveWideningMCTSPolicy):
             min_visit_count_per_action=min_visit_count_per_action,
             time_out_in_seconds=time_out_in_seconds,
             n_simulations=n_simulations,
+            reserve_capacity=reserve_capacity,
             log_path=log_path,
             debug=debug,
             use_queue_logger=use_queue_logger,
         )
-        # No POMCPOW-specific attributes needed
 
-    def _simulate_path(self, belief_node: BeliefNode, depth: int) -> float:
-        """Simulate a single MCTS path from belief node using sampled state.
+    def _simulate_path(self, tree: Tree, belief_id: int, depth: int) -> float:
+        """Sample a state from the belief and recurse into the tree."""
+        state = tree.belief[belief_id].sample()
+        return self._simulate_state_path(tree=tree, state=state, belief_id=belief_id, depth=depth)
 
-        This method samples a state from the belief and delegates to _simulate_state_path
-        for the actual simulation logic. This separation allows for different belief
-        sampling strategies while maintaining the core simulation algorithm.
-
-        Args:
-            belief_node: Current belief node in the search tree
-            depth: Current depth in the search tree
-
-        Returns:
-            Total discounted return from this simulation path
-        """
-        state = belief_node.belief.sample()
-        return self._simulate_state_path(state=state, belief_node=belief_node, depth=depth)
-
-    def _simulate_state_path(self, state: Any, belief_node: BeliefNode, depth: int) -> float:
-        """Simulate MCTS path from given state and belief node with progressive widening.
-
-        This is the core simulation method that implements the POMCPOW algorithm:
-        1. Check termination conditions (depth limit, terminal state)
-        2. Select/add action using action progressive widening
-        3. Sample next state and observation from environment
-        4. Select/add observation node using observation progressive widening
-        5. Update weighted particle belief in observation node
-        6. Recursively continue simulation or perform rollout
-        7. Backpropagate value updates
-
-        Args:
-            state: Current state to simulate from
-            belief_node: Current belief node in search tree
-            depth: Current depth in search tree
-
-        Returns:
-            Total discounted return from this simulation path
-        """
+    def _simulate_state_path(  # pylint: disable=too-many-locals
+        self, tree: Tree, state: Any, belief_id: int, depth: int
+    ) -> float:
+        """Core POMCPOW simulation: action PW + obs PW + belief update + rollout/recurse + backup."""
         if depth > self.depth:
-            belief_node.parent = None
-            return 0
+            return 0.0
 
         if self.environment.is_terminal(state=state):
-            belief_node.visit_count += 1
-            return 0
+            tree.visit_count[belief_id] += 1
+            return 0.0
 
-        action_node = action_progressive_widening(
-            belief_node=belief_node,
+        action_id = action_progressive_widening_arena(
+            tree=tree,
+            belief_id=belief_id,
             alpha_a=self.alpha_a,
             action_sampler=self.action_sampler,
             exploration_constant=self.exploration_constant,
             k_a=self.k_a,
             min_visit_count_per_action=self.min_visit_count_per_action,
         )
+        action = tree.action[action_id]
 
         next_state, next_observation, reward = self.environment.sample_next_step(
-            state=state, action=action_node.action
+            state=state, action=action
         )
 
-        if len(action_node.children) <= self.k_o * action_node.visit_count**self.alpha_o:
-            next_belief_node = action_node.get_belief_node_child(
-                observation=next_observation, environment=self.environment
-            )
-            if next_belief_node is None:
-                next_belief_node = BeliefNode(
-                    belief=WeightedParticleBeliefStateUpdate(),
-                    observation=next_observation,
-                    parent=action_node,
-                    weight=0,
-                )
+        next_belief_id = self._observation_widening(tree, action_id, next_observation)
 
-            next_belief_node.weight += 1
-        else:
-            next_belief_node = action_node.sample_child_node()
-
-        next_belief_node.belief.inplace_update(
-            action=action_node.action,
+        tree.belief[next_belief_id].inplace_update(
+            action=action,
             observation=next_observation,
             pomdp=self.environment,
             state=next_state,
         )
 
-        if next_belief_node.visit_count == 0:
-            next_belief_node.visit_count += 1
+        if tree.visit_count[next_belief_id] == 0:
+            tree.visit_count[next_belief_id] += 1
             total = reward + self.discount_factor * random_rollout_action_sampler(
                 state=next_state,
                 depth=depth + 1,
@@ -283,14 +180,37 @@ class POMCPOW(DoubleProgressiveWideningMCTSPolicy):
                 discount_factor=self.discount_factor,
             )
         else:
-            next_state = next_belief_node.belief.sample()
+            next_state = tree.belief[next_belief_id].sample()
             total = reward + self.discount_factor * self._simulate_state_path(
-                state=next_state, belief_node=next_belief_node, depth=depth + 1
+                tree=tree, state=next_state, belief_id=next_belief_id, depth=depth + 1
             )
 
-        belief_node.visit_count += 1
-        action_node.visit_count += 1
-        action_node.q_value += (total - action_node.q_value) / action_node.visit_count
-        belief_node.v_value = max(child.q_value for child in belief_node.children)
-
+        # Backpropagation
+        tree.visit_count[belief_id] += 1
+        tree.visit_count[action_id] += 1
+        old_q = tree.q_value[action_id]
+        tree.q_value[action_id] = old_q + (total - old_q) / tree.visit_count[action_id]
+        tree.v_value[belief_id] = max(tree.q_value[cid] for cid in tree.children_ids[belief_id])
         return total
+
+    def _observation_widening(self, tree: Tree, action_id: int, observation: Any) -> int:
+        """Get-or-add the belief child for ``observation`` under ``action_id``."""
+        children_count = len(tree.children_ids[action_id])
+        action_visits = tree.visit_count[action_id]
+        if children_count <= self.k_o * action_visits**self.alpha_o:
+            existing_id = tree.get_belief_child_indexed(action_id, observation)
+            if existing_id is None:
+                existing_id = tree.get_belief_child(action_id, observation, self.environment)
+            if existing_id is None:
+                next_belief_id = tree.add_belief_node(
+                    belief=WeightedParticleBeliefStateUpdate(),
+                    observation=observation,
+                    parent_id=action_id,
+                    weight=1.0,
+                )
+            else:
+                tree.increment_weight(existing_id, delta=1.0)
+                next_belief_id = existing_id
+        else:
+            next_belief_id = tree.sample_belief_child(action_id)
+        return next_belief_id
