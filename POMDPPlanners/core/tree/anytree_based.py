@@ -12,6 +12,8 @@ Use::
     )
 """
 
+import bisect
+import random
 from typing import Any, List, Optional, Union
 
 import numpy as np
@@ -71,6 +73,7 @@ class ActionNode(BaseNode):
         super().__init__(parent=parent, children=children, data=data)
         self.action = action
         self.q_value = 0.0
+        self._child_cdf: Optional[List[float]] = None
 
     @property
     def spec(self):
@@ -92,9 +95,41 @@ class ActionNode(BaseNode):
         print_tree(self)
 
     def sample_child_node(self) -> "BeliefNode":
-        child_weights = np.array([child.weight for child in self.children])
-        weights = child_weights / sum(child_weights)
-        return np.random.choice(self.children, p=weights)
+        if not self.children:
+            raise ValueError("ActionNode has no children to sample from")
+        cdf = self._child_cdf
+        if cdf is None:
+            cdf = []
+            running = 0.0
+            for child in self.children:
+                running += child.weight
+                cdf.append(running)
+            self._child_cdf = cdf
+        total = cdf[-1]
+        if total <= 0.0:
+            raise ValueError("ActionNode children have non-positive total weight")
+        idx = bisect.bisect_left(cdf, random.random() * total)
+        if idx >= len(self.children):
+            idx = len(self.children) - 1
+        return self.children[idx]
+
+    def invalidate_child_cdf(self) -> None:
+        """Clear the cached child sampling CDF.
+
+        Called by :class:`BeliefNode` when a child's weight mutates or it
+        detaches, forcing :meth:`sample_child_node` to rebuild from scratch.
+        """
+        self._child_cdf = None
+
+    def extend_child_cdf(self, weight: Union[float, int]) -> None:
+        """Append a newly-attached child's weight to the cached CDF.
+
+        If no CDF is cached yet, this is a no-op — the next sample will
+        rebuild the full CDF from current children.
+        """
+        cdf = self._child_cdf
+        if cdf is not None:
+            cdf.append((cdf[-1] if cdf else 0.0) + weight)
 
     def get_belief_node_child(
         self, observation: Any, environment: Environment
@@ -121,12 +156,31 @@ class BeliefNode(BaseNode):
             raise TypeError(
                 "belief must be a Belief instance"
             )  # pyright: ignore[reportUnreachable]
+        self._weight: Union[float, int] = weight
         super().__init__(parent=parent, children=children, data=data)
 
         self.belief = belief
         self.observation = observation
-        self.weight = weight
         self.v_value = 0.0
+
+    @property
+    def weight(self) -> Union[float, int]:
+        return self._weight
+
+    @weight.setter
+    def weight(self, value: Union[float, int]) -> None:
+        self._weight = value
+        parent = self.parent
+        if isinstance(parent, ActionNode):
+            parent.invalidate_child_cdf()
+
+    def _post_attach(self, parent):
+        if isinstance(parent, ActionNode):
+            parent.extend_child_cdf(self._weight)
+
+    def _post_detach(self, parent):
+        if isinstance(parent, ActionNode):
+            parent.invalidate_child_cdf()
 
     @property
     def spec(self):
