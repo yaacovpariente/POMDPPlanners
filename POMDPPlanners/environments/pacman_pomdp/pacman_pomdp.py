@@ -696,6 +696,51 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
                 probs[idx] = p
         return np.log(probs + 1e-300)
 
+    def sample_next_state_batch(self, states: Any, action: int) -> np.ndarray:
+        if isinstance(states, np.ndarray) and states.ndim == 2:
+            states_array = np.ascontiguousarray(states, dtype=np.float64)
+        else:
+            states_array = np.ascontiguousarray(
+                np.stack([self._require_state_array(s) for s in states]),
+                dtype=np.float64,
+            )
+        kernel = _native.PacManTransitionCpp(
+            state=states_array[0],
+            action=int(action),
+            **self.get_transition_cpp_ctor_kwargs(),
+            patrol_dir_state=self.ghost_patrol_directions,
+        )
+        return np.asarray(kernel.batch_sample(states_array), dtype=np.float64)
+
+    def observation_log_probability_per_state(
+        self, next_states: Any, action: int, observation: Any
+    ) -> np.ndarray:
+        if isinstance(next_states, np.ndarray) and next_states.ndim == 2:
+            next_states_array = np.ascontiguousarray(next_states, dtype=np.float64)
+        else:
+            next_states_array = np.ascontiguousarray(
+                np.stack([self._require_state_array(s) for s in next_states]),
+                dtype=np.float64,
+            )
+        if isinstance(observation, np.ndarray):
+            observation_array = np.ascontiguousarray(observation, dtype=np.float64).ravel()
+        else:
+            observation_array = np.ascontiguousarray(
+                self.observation_to_array(observation), dtype=np.float64
+            )
+        kernel = _native.PacManObservationCpp(
+            next_state=next_states_array[0],
+            action=int(action),
+            **self.get_observation_cpp_ctor_kwargs(),
+        )
+        return np.asarray(
+            kernel.batch_log_likelihood(
+                next_particles=next_states_array,
+                observation=observation_array,
+            ),
+            dtype=np.float64,
+        )
+
     def reward(self, state: np.ndarray, action: int) -> float:
         """Calculate immediate reward."""
         state = self._require_state_array(state)
