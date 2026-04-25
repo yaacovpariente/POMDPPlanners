@@ -27,10 +27,8 @@ import numpy as np
 from POMDPPlanners.core.distributions import DiscreteDistribution, Distribution
 from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
-    ObservationModel,
     SpaceInfo,
     SpaceType,
-    StateTransitionModel,
 )
 from POMDPPlanners.core.simulation import History, MetricValue
 
@@ -44,149 +42,6 @@ class TigerPOMDPMetrics(Enum):
 
     SUCCESS_RATE = "success_rate"
     AVERAGE_LISTENS = "average_listens"
-
-
-class TigerStateTransition(StateTransitionModel):
-    """State transition model for the Tiger POMDP.
-
-    The state only changes when a door is opened, after which the tiger
-    is randomly placed behind one of the two doors for the next episode.
-
-    Attributes:
-        state: Current state (tiger_left or tiger_right)
-        action: Action to be taken (listen, open_left, or open_right)
-
-    Example:
-        >>> import numpy as np
-        >>> np.random.seed(42)  # For reproducible results
-        >>> # Create transition model for listening action
-        >>> transition_listen = TigerStateTransition(state="tiger_left", action="listen")
-        >>> next_state_listen = transition_listen.sample()[0]
-        >>> next_state_listen == "tiger_left"  # No state change when listening
-        True
-
-        >>> # Create transition model for opening door
-        >>> transition_open = TigerStateTransition(state="tiger_left", action="open_left")
-        >>> next_state_open = transition_open.sample()[0]
-        >>> next_state_open in ["tiger_left", "tiger_right"]  # Random outcome
-        True
-
-        >>> # Check probabilities for different outcomes
-        >>> prob_same = transition_listen.probability(["tiger_left"])
-        >>> bool(prob_same[0] == 1.0)  # Probability remains same when listening
-        True
-        >>> prob_random = transition_open.probability(["tiger_left"])
-        >>> bool(prob_random[0] == 0.5)  # Equal probability when opening
-        True
-    """
-
-    def __init__(self, state: str, action: str):
-        """Initialize the state transition model.
-
-        Args:
-            state: Current state indicating tiger location
-            action: Action being executed
-        """
-        super().__init__(state=state, action=action)
-
-    def sample(self, n_samples: int = 1) -> List[str]:
-        samples = []
-        for _ in range(n_samples):
-            # State only changes when opening a door
-            if self.action in ("open_left", "open_right"):
-                # After opening a door, tiger is randomly placed behind either door
-                chosen_state = np.random.choice(STATES)
-                # Ensure we return a Python string, not numpy string
-                samples.append(str(chosen_state))
-            else:
-                samples.append(self.state)
-        return samples
-
-    def probability(self, values: List[Any]) -> np.ndarray:
-        result = np.zeros(len(values))
-        for i, next_state in enumerate(values):
-            if self.action in ("open_left", "open_right"):
-                result[i] = 0.5
-            else:
-                result[i] = 1.0 if next_state == self.state else 0.0
-        return result
-
-
-class TigerObservation(ObservationModel):
-    """Observation model for the Tiger POMDP.
-
-    Provides noisy acoustic feedback when listening, with 85% accuracy.
-    When doors are opened, no meaningful observation is provided.
-
-    Attributes:
-        next_state: The state after action execution
-        action: The action that was taken
-
-    Example:
-        >>> import numpy as np
-        >>> np.random.seed(42)  # For reproducible results
-        >>> # Create observation model for listening when tiger is left
-        >>> obs_listen = TigerObservation(next_state="tiger_left", action="listen")
-        >>> observation = obs_listen.sample()[0]
-        >>> observation in ["hear_left", "hear_right"]  # Listen gives acoustic feedback
-        True
-
-        >>> # Create observation model for opening door
-        >>> obs_open = TigerObservation(next_state="tiger_left", action="open_left")
-        >>> observation_open = obs_open.sample()[0]
-        >>> observation_open == "hear_nothing"  # Opening always gives no sound
-        True
-
-        >>> # Check observation probabilities
-        >>> prob_correct = obs_listen.probability(["hear_left"])
-        >>> bool(prob_correct[0] == 0.85)  # Correct observation probability
-        True
-        >>> prob_wrong = obs_listen.probability(["hear_right"])
-        >>> bool(prob_wrong[0] == 0.15)  # Wrong observation probability
-        True
-        >>> prob_nothing = obs_open.probability(["hear_nothing"])
-        >>> bool(prob_nothing[0] == 1.0)  # Opening door always gives no sound
-        True
-    """
-
-    def __init__(self, next_state: str, action: str):
-        """Initialize the observation model.
-
-        Args:
-            next_state: State after taking the action
-            action: Action that was executed
-        """
-        super().__init__(next_state=next_state, action=action)
-
-    def sample(self, n_samples: int = 1) -> List[str]:
-        samples = []
-        for _ in range(n_samples):
-            if self.action == "listen":
-                # Listen action is 85% accurate
-                if self.next_state == "tiger_left":
-                    samples.append("hear_left" if np.random.random() < 0.85 else "hear_right")
-                else:
-                    samples.append("hear_right" if np.random.random() < 0.85 else "hear_left")
-            else:
-                # When opening a door, observation is random (hearing nothing)
-                samples.append("hear_nothing")
-        return samples
-
-    def probability(self, values: List[Any]) -> np.ndarray:
-        result = np.zeros(len(values))
-        for i, next_observation in enumerate(values):
-            if next_observation not in OBSERVATIONS:
-                raise ValueError(f"Invalid observation: {next_observation}")
-
-            if self.action == "listen":
-                if self.next_state == "tiger_left":
-                    result[i] = 0.85 if next_observation == "hear_left" else 0.15
-                else:
-                    result[i] = 0.85 if next_observation == "hear_right" else 0.15
-            else:
-                # For non-listen actions, only hear_nothing has probability 1.0, others have probability 0.0
-                result[i] = 1.0 if next_observation == "hear_nothing" else 0.0
-        return result
 
 
 class TigerPOMDP(DiscreteActionsEnvironment):
@@ -266,12 +121,6 @@ class TigerPOMDP(DiscreteActionsEnvironment):
         self.states = STATES
         self.actions = ACTIONS
         self.observations = OBSERVATIONS
-
-    def state_transition_model(self, state: str, action: str) -> StateTransitionModel:
-        return TigerStateTransition(state=state, action=action)
-
-    def observation_model(self, next_state: str, action: str) -> ObservationModel:
-        return TigerObservation(next_state=next_state, action=action)
 
     # ── Hot-path sampling overrides ─────────────────────────────────
     # Inline the wrapper's sample() body to skip per-call wrapper

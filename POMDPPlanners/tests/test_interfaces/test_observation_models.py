@@ -33,7 +33,6 @@ from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp import (
     create_rock_sample_state,
 )
 from POMDPPlanners.environments.sanity_pomdp import SanityObservationModel
-from POMDPPlanners.environments.tiger_pomdp import TigerObservation
 from POMDPPlanners.tests.test_utils.test_probability_utils import (
     validate_continuous_observation_model_pdf_consistency,
     validate_observation_probability_matches_empirical_distribution,
@@ -42,50 +41,6 @@ from POMDPPlanners.tests.test_utils.test_probability_utils import (
 # Set random seed for reproducibility across all tests
 np.random.seed(42)
 random.seed(42)
-
-
-class TestTigerObservationProbability:
-    """Test probability method for Tiger ObservationModel."""
-
-    def test_tiger_listen_action_observation_probability(self):
-        """Test Tiger observation probability method with listen action.
-
-        Purpose: Validates that probability() method matches empirical distribution for listen action
-
-        Given: Tiger observation model with listen action (stochastic observations)
-        When: Comparing computed probabilities to empirical sampling
-        Then: Probabilities match within tolerance and are properly normalized
-
-        Test type: unit
-        """
-        obs_model = TigerObservation(next_state="tiger_left", action="listen")
-        results = validate_observation_probability_matches_empirical_distribution(
-            obs_model, num_samples=1000, max_js_divergence=0.05
-        )
-
-        assert results["probabilities_normalized"]
-        assert results["distance"] < 0.05
-        assert results["num_unique_observations"] == 2  # hear_left and hear_right
-
-    def test_tiger_open_door_action_observation_probability(self):
-        """Test Tiger observation probability method with open door action.
-
-        Purpose: Validates that probability() method matches empirical distribution for open action
-
-        Given: Tiger observation model with open_left action (deterministic observation)
-        When: Comparing computed probabilities to empirical sampling
-        Then: Probabilities match within tolerance (should be nearly perfect)
-
-        Test type: unit
-        """
-        obs_model = TigerObservation(next_state="tiger_left", action="open_left")
-        results = validate_observation_probability_matches_empirical_distribution(
-            obs_model, num_samples=1000, max_js_divergence=0.01
-        )
-
-        assert results["probabilities_normalized"]
-        assert results["distance"] < 0.01  # Should be nearly perfect (deterministic)
-        assert results["num_unique_observations"] == 1  # Only hear_nothing
 
 
 class TestSanityObservationProbability:

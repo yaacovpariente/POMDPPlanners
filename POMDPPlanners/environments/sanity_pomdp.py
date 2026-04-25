@@ -33,9 +33,9 @@ import numpy as np
 from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
-    ObservationModel,
     SpaceInfo,
     SpaceType,
+    ObservationModel,
     StateTransitionModel,
 )
 
