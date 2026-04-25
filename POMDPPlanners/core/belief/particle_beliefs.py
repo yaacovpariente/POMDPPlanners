@@ -286,15 +286,20 @@ class WeightedParticleBelief(Belief):
         next_particles = [
             pomdp.sample_next_state(state=particle, action=action) for particle in self.particles
         ]
-        probs = np.array(
+        # Use the env's vectorized log-probability API; one call per particle
+        # (env returns a length-1 ndarray for the single-observation query).
+        log_probs = np.array(
             [
-                pomdp.observation_model(next_state=next_particle, action=action).probability(
-                    [observation]
+                pomdp.observation_log_probability(
+                    next_state=next_particle, action=action, observations=[observation]
                 )[0]
                 for next_particle in next_particles
             ]
         )
 
+        # log(eps + p) for parity with the pre-migration behavior, but the
+        # env returns log p directly so we exp + clamp here.
+        probs = np.exp(log_probs)
         next_log_weights = self.log_weights + np.log(self.eps + probs)
 
         return next_particles, next_log_weights
@@ -530,16 +535,11 @@ class WeightedParticleBeliefStateUpdate(Belief):
             raise ValueError("state cannot be None")
 
         new_particles = self.particles + [state]
-        observation_probability = pomdp.observation_model(
-            next_state=state, action=action
-        ).probability([observation])[0]
-        new_weights = self.weights + [
-            float(
-                observation_probability.item()
-                if hasattr(observation_probability, "item")
-                else observation_probability
-            )
-        ]
+        log_p = pomdp.observation_log_probability(
+            next_state=state, action=action, observations=[observation]
+        )[0]
+        observation_probability = float(np.exp(log_p))
+        new_weights = self.weights + [observation_probability]
         new_belief = WeightedParticleBeliefStateUpdate(particles=new_particles, weights=new_weights)
 
         return new_belief
@@ -575,10 +575,10 @@ class WeightedParticleBeliefStateUpdate(Belief):
             raise TypeError("pomdp must be an instance of Environment")
 
         self.particles.append(state)
-        observation_probability = pomdp.observation_model(
-            next_state=state, action=action
-        ).probability([observation])[0]
-        weight = float(observation_probability)
+        log_p = pomdp.observation_log_probability(
+            next_state=state, action=action, observations=[observation]
+        )[0]
+        weight = float(np.exp(log_p))
         self.weights.append(weight)
         self.weights_sum = float(self.weights_sum) + weight
         # Maintain CDF for O(log K) sampling.
