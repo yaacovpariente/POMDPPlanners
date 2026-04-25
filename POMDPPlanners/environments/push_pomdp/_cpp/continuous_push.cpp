@@ -79,6 +79,12 @@ class ContinuousPushTransitionCpp {
         return pomdp_native::array_from_vector(action_.data(), kNoiseDim);
     }
 
+    // Rewrite only the state field; covariance/Cholesky, action, obstacles,
+    // and geometry params stay frozen so the cached factor remains valid.
+    void set_state(const py::object &state_obj) {
+        state_ = pomdp_native::to_array<kPushStateDim>(state_obj, "state");
+    }
+
     py::list sample(int n_samples) const {
         if (n_samples < 0) {
             throw std::invalid_argument("n_samples must be non-negative");
@@ -312,6 +318,12 @@ class ContinuousPushObservationCpp {
         return pomdp_native::array_from_vector(action_.data(), kNoiseDim);
     }
 
+    // Rewrite only the next_state field; observation_noise and grid_size
+    // stay frozen so the cached normalizer/variance remain valid.
+    void set_next_state(const py::object &next_state_obj) {
+        next_state_ = pomdp_native::to_array<kPushStateDim>(next_state_obj, "next_state");
+    }
+
     // Samples full 6-D observations: robot and target are exact; object has
     // additive isotropic Gaussian noise clipped to the grid. Mirrors
     // ContinuousPushObservationModel.sample exactly.
@@ -422,6 +434,7 @@ PYBIND11_MODULE(_native, m) {
         .def("sample", &ContinuousPushTransitionCpp::sample, py::arg("n_samples") = 1)
         .def("probability", &ContinuousPushTransitionCpp::probability, py::arg("values"))
         .def("batch_sample", &ContinuousPushTransitionCpp::batch_sample, py::arg("particles"))
+        .def("set_state", &ContinuousPushTransitionCpp::set_state, py::arg("state"))
         .def_property_readonly("state", &ContinuousPushTransitionCpp::state_property)
         .def_property_readonly("action", &ContinuousPushTransitionCpp::action_property);
 
@@ -433,6 +446,8 @@ PYBIND11_MODULE(_native, m) {
         .def("probability", &ContinuousPushObservationCpp::probability, py::arg("values"))
         .def("batch_log_likelihood", &ContinuousPushObservationCpp::batch_log_likelihood,
              py::arg("next_particles"), py::arg("observation"))
+        .def("set_next_state", &ContinuousPushObservationCpp::set_next_state,
+             py::arg("next_state"))
         .def_property_readonly("next_state", &ContinuousPushObservationCpp::next_state_property)
         .def_property_readonly("action", &ContinuousPushObservationCpp::action_property);
 }

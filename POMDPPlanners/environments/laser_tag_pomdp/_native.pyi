@@ -16,6 +16,20 @@ def set_seed(seed: int) -> None:
     """Seed the module-level RNG used by ``sample()`` / batch entry points."""
     ...
 
+def reward_batch(
+    states: NDArray[np.floating],
+    action: NDArray[np.floating],
+    tag_radius: float,
+    tag_reward: float,
+    tag_penalty: float,
+    step_cost: float,
+    dangerous_areas: NDArray[np.floating],
+    dangerous_area_radius: float,
+    dangerous_area_penalty: float,
+) -> NDArray[np.float64]:
+    """Vectorised reward kernel; see ContinuousLaserTagPOMDP.reward_batch."""
+    ...
+
 class ContinuousLaserTagTransitionCpp:
     """Native state transition sampler (robot + opponent Gaussian steps)."""
 
@@ -41,6 +55,10 @@ class ContinuousLaserTagTransitionCpp:
         values: Union[Sequence[NDArray[np.floating]], NDArray[np.floating]],
     ) -> NDArray[np.float64]: ...
     def batch_sample(self, particles: NDArray[np.floating]) -> NDArray[np.float64]: ...
+    def set_state(
+        self,
+        state: Union[Sequence[float], NDArray[np.floating]],
+    ) -> None: ...
 
 class ContinuousLaserTagObservationCpp:
     """Native 8-direction laser observation sampler."""
@@ -68,3 +86,7 @@ class ContinuousLaserTagObservationCpp:
         next_particles: NDArray[np.floating],
         observation: NDArray[np.floating],
     ) -> NDArray[np.float64]: ...
+    def set_next_state(
+        self,
+        next_state: Union[Sequence[float], NDArray[np.floating]],
+    ) -> None: ...

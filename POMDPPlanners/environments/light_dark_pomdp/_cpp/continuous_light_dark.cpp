@@ -79,6 +79,13 @@ class ContinuousLightDarkTransitionCpp
         return pomdp_native::array_from_vector(action_vec_.data(), action_vec_.size());
     }
 
+    // Rewrite only the state field; covariance/Cholesky and action stay
+    // frozen so the cached factor remains valid. Lets Python keep one
+    // kernel per (env, action) instead of rebuilding for every call.
+    void set_state(const py::object &state_obj) {
+        state_ = pomdp_native::to_array<kLightDarkStateDim>(state_obj, "state");
+    }
+
   protected:
     void compute_mean_from_state(const double *state, double *out) const override {
         for (std::size_t i = 0; i < kLightDarkStateDim; ++i) {
@@ -115,6 +122,12 @@ class ContinuousLightDarkObservationCpp
         return pomdp_native::array_from_vector(next_state_.data(), next_state_.size());
     }
     const py::object &action_property() const { return action_; }
+
+    // Rewrite only the next_state field; near/far Choleskys, action, and
+    // beacon config stay frozen so cached factors remain valid.
+    void set_next_state(const py::object &next_state_obj) {
+        next_state_ = pomdp_native::to_array<kLightDarkStateDim>(next_state_obj, "next_state");
+    }
 
   protected:
     bool is_near_next_state(const double *next_state) const override {
@@ -159,6 +172,7 @@ PYBIND11_MODULE(_native, m) {
         .def("probability", &ContinuousLightDarkTransitionCpp::probability, py::arg("values"))
         .def("batch_sample", &ContinuousLightDarkTransitionCpp::batch_sample,
              py::arg("particles"))
+        .def("set_state", &ContinuousLightDarkTransitionCpp::set_state, py::arg("state"))
         .def_property_readonly("state", &ContinuousLightDarkTransitionCpp::state_property)
         .def_property_readonly("action", &ContinuousLightDarkTransitionCpp::action_property);
 
@@ -174,6 +188,8 @@ PYBIND11_MODULE(_native, m) {
         .def("batch_log_likelihood",
              &ContinuousLightDarkObservationCpp::batch_log_likelihood,
              py::arg("next_particles"), py::arg("observation"))
+        .def("set_next_state", &ContinuousLightDarkObservationCpp::set_next_state,
+             py::arg("next_state"))
         .def_property_readonly("next_state",
                                &ContinuousLightDarkObservationCpp::next_state_property)
         .def_property_readonly("mean", &ContinuousLightDarkObservationCpp::mean_property)

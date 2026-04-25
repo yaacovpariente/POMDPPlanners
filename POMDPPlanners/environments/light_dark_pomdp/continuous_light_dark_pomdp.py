@@ -27,7 +27,7 @@ Classes:
 """
 
 from enum import Enum
-from typing import Any, List, Sequence, Tuple, Union
+from typing import Any, Dict, List, Sequence, Tuple, Union
 
 import numpy as np
 
@@ -300,6 +300,20 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
             observation_cov_matrix * 0.5
         )
 
+        # Snapshot covariance buffers without copying for the per-action
+        # kernel cache below — the Cholesky lives inside the C++ kernel
+        # and never sees these arrays again after construction.
+        self._trans_cov_view = self._state_transition_dist.covariance_view()
+        self._obs_cov_near_view = self._obs_dist_near_beacon.covariance_view()
+        self._obs_cov_far_view = self._obs_dist_far_from_beacon.covariance_view()
+
+        # Per-action kernel caches: one C++ kernel per distinct action vector.
+        # Hot-path overrides flip the (next_)state field via set_state /
+        # set_next_state instead of rebuilding (skips the per-call Cholesky).
+        # Keys are action.tobytes(); values are the long-lived C++ kernels.
+        self._trans_kernel_cache: Dict[bytes, Any] = {}
+        self._obs_kernel_cache: Dict[bytes, Any] = {}
+
         # Initialize reward model based on type
         self.reward_model: BaseLightDarkRewardModel
         if reward_model_type == RewardModelType.STANDARD:
@@ -422,17 +436,48 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
     # subclass per call (np.asarray(...).ravel() x2, side-attribute
     # storage). The actual RNG draw lives entirely inside the C++
     # _native.ContinuousLightDark{Transition,Observation}Cpp.sample()
-    # method. These overrides skip the Python subclass, construct the
-    # native kernel directly, and produce byte-identical RNG draws.
+    # method. These overrides skip the Python subclass, fetch a cached
+    # per-action C++ kernel (Cholesky factored once per action), and
+    # rewrite only the (next_)state field per call via set_state /
+    # set_next_state. The C++ RNG state lives on the kernel, so each
+    # cached kernel maintains a single RNG stream per (env, action).
+
+    def _get_trans_kernel(self, action: np.ndarray) -> Any:
+        action_arr = np.ascontiguousarray(np.asarray(action, dtype=np.float64))
+        key = action_arr.tobytes()
+        kernel = self._trans_kernel_cache.get(key)
+        if kernel is None:
+            # Use a zero placeholder state — set_state will overwrite it.
+            kernel = _native.ContinuousLightDarkTransitionCpp(
+                state=np.zeros(2, dtype=np.float64),
+                action=action_arr,
+                covariance=self._trans_cov_view,
+            )
+            self._trans_kernel_cache[key] = kernel
+        return kernel
+
+    def _get_obs_kernel(self, action: np.ndarray) -> Any:
+        action_arr = np.ascontiguousarray(np.asarray(action, dtype=np.float64))
+        key = action_arr.tobytes()
+        kernel = self._obs_kernel_cache.get(key)
+        if kernel is None:
+            kernel = _native.ContinuousLightDarkObservationCpp(
+                next_state=np.zeros(2, dtype=np.float64),
+                action=action_arr,
+                covariance_near=self._obs_cov_near_view,
+                covariance_far=self._obs_cov_far_view,
+                beacons=self.beacons,
+                beacon_radius=float(self.beacon_radius),
+                grid_size=float(self.grid_size),
+            )
+            self._obs_kernel_cache[key] = kernel
+        return kernel
 
     def sample_next_state(
         self, state: np.ndarray, action: np.ndarray, n_samples: int = 1
     ) -> np.ndarray:
-        kernel = _native.ContinuousLightDarkTransitionCpp(
-            state=state,
-            action=action,
-            covariance=self._state_transition_dist.covariance,
-        )
+        kernel = self._get_trans_kernel(action)
+        kernel.set_state(state)
         if n_samples == 1:
             return kernel.sample()[0]
         return np.asarray(kernel.sample(n_samples), dtype=np.float64)
@@ -441,15 +486,8 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         self, next_state: np.ndarray, action: np.ndarray, n_samples: int = 1
     ) -> Any:
         if self.observation_model_type == ObservationModelType.NORMAL_NOISE:
-            kernel = _native.ContinuousLightDarkObservationCpp(
-                next_state=next_state,
-                action=action,
-                covariance_near=self._obs_dist_near_beacon.covariance,
-                covariance_far=self._obs_dist_far_from_beacon.covariance,
-                beacons=self.beacons,
-                beacon_radius=float(self.beacon_radius),
-                grid_size=float(self.grid_size),
-            )
+            kernel = self._get_obs_kernel(action)
+            kernel.set_next_state(next_state)
             if n_samples == 1:
                 return kernel.sample()[0]
             return np.asarray(kernel.sample(n_samples), dtype=np.float64)
@@ -461,11 +499,8 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
     def transition_log_probability(
         self, state: np.ndarray, action: np.ndarray, next_states: Any
     ) -> np.ndarray:
-        kernel = _native.ContinuousLightDarkTransitionCpp(
-            state=state,
-            action=action,
-            covariance=self._state_transition_dist.covariance,
-        )
+        kernel = self._get_trans_kernel(action)
+        kernel.set_state(state)
         next_states_array = np.asarray(next_states, dtype=np.float64)
         if next_states_array.ndim == 1:
             next_states_array = next_states_array.reshape(1, -1)
@@ -476,15 +511,8 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         self, next_state: np.ndarray, action: np.ndarray, observations: Any
     ) -> np.ndarray:
         if self.observation_model_type == ObservationModelType.NORMAL_NOISE:
-            kernel = _native.ContinuousLightDarkObservationCpp(
-                next_state=next_state,
-                action=action,
-                covariance_near=self._obs_dist_near_beacon.covariance,
-                covariance_far=self._obs_dist_far_from_beacon.covariance,
-                beacons=self.beacons,
-                beacon_radius=float(self.beacon_radius),
-                grid_size=float(self.grid_size),
-            )
+            kernel = self._get_obs_kernel(action)
+            kernel.set_next_state(next_state)
             obs_array = np.asarray(observations, dtype=np.float64)
             if obs_array.ndim == 1:
                 obs_array = obs_array.reshape(1, -1)
@@ -501,11 +529,9 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         states_array = np.ascontiguousarray(np.asarray(states, dtype=np.float64))
         if states_array.ndim == 1:
             states_array = states_array.reshape(1, -1)
-        kernel = _native.ContinuousLightDarkTransitionCpp(
-            state=states_array[0],
-            action=action,
-            covariance=self._state_transition_dist.covariance,
-        )
+        kernel = self._get_trans_kernel(action)
+        # batch_sample reads the per-row state from the input, not the
+        # kernel's stored state, so no set_state is needed here.
         return np.asarray(kernel.batch_sample(states_array), dtype=np.float64)
 
     def observation_log_probability_per_state(
@@ -521,15 +547,9 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         if next_states_array.ndim == 1:
             next_states_array = next_states_array.reshape(1, -1)
         observation_array = np.ascontiguousarray(np.asarray(observation, dtype=np.float64))
-        kernel = _native.ContinuousLightDarkObservationCpp(
-            next_state=next_states_array[0],
-            action=action,
-            covariance_near=self._obs_dist_near_beacon.covariance,
-            covariance_far=self._obs_dist_far_from_beacon.covariance,
-            beacons=self.beacons,
-            beacon_radius=float(self.beacon_radius),
-            grid_size=float(self.grid_size),
-        )
+        kernel = self._get_obs_kernel(action)
+        # batch_log_likelihood reads next_state per row from the input;
+        # no set_next_state needed.
         return np.asarray(
             kernel.batch_log_likelihood(
                 next_particles=next_states_array,
@@ -651,6 +671,20 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
                 upper_confidence_bound=dangerous_states_counter_ci[1],
             ),
         ]
+
+    def __getstate__(self):
+        # Per-action C++ kernel cache holds pybind11 objects that aren't
+        # picklable. Drop them at serialization time; __setstate__ rebuilds
+        # empty caches so the env works after unpickling.
+        state = self.__dict__.copy()
+        state["_trans_kernel_cache"] = {}
+        state["_obs_kernel_cache"] = {}
+        return state
+
+    def __setstate__(self, state):
+        vars(self).update(state)
+        self._trans_kernel_cache = {}
+        self._obs_kernel_cache = {}
 
     def __eq__(self, other):
         if not isinstance(other, ContinuousLightDarkPOMDP):

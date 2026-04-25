@@ -88,6 +88,15 @@ class CovarianceParameterizedMultivariateNormal:
         """Return a copy of the covariance matrix."""
         return self._covariance.copy()
 
+    def covariance_view(self) -> np.ndarray:
+        """Return the underlying covariance buffer without copying.
+
+        Read-only fast path for hot-loop callers that need the covariance
+        purely as input to a C++ Cholesky factorisation. Avoid mutating the
+        returned array — it aliases the internal storage.
+        """
+        return self._covariance
+
     @property
     def dim(self) -> int:
         """Return the dimensionality of the distribution."""
