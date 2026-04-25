@@ -129,118 +129,36 @@ register_serializer(SpaceInfo, _serialize_space_info)
 register_deserializer(SpaceInfo, _deserialize_space_info)
 
 
-class ObservationModel(Distribution, ABC):
-    """Abstract base class for POMDP observation models.
-
-    This class defines the interface for observation models that generate
-    observations given a next state and action. Inherits from Distribution
-    to provide sampling and probability calculation capabilities.
-
-    Note:
-        This is an abstract base class and cannot be instantiated directly.
-        Subclasses must implement the sample() method.
-
-    Attributes:
-        next_state: The state after taking an action
-        action: The action that was taken
-    """
-
-    def __init__(self, next_state: Any, action: Any):
-        """Initialize the observation model.
-
-        Args:
-            next_state: The resulting state after taking an action
-            action: The action that was executed
-        """
-        self.next_state = next_state
-        self.action = action
-
-    @abstractmethod
-    def sample(self, n_samples: int = 1) -> List[Any]:
-        """Sample observations from the observation model.
-
-        Args:
-            n_samples: Number of observation samples to generate. Defaults to 1.
-
-        Returns:
-            List of sampled observations of length n_samples.
-
-        Note:
-            Subclasses must implement this method according to their
-            specific observation generation logic.
-        """
-
-    def probability(self, values: List[Any]) -> np.ndarray:
-        """Calculate observation probabilities for given values.
-
-        Args:
-            values: List of observation values to calculate probabilities for
-
-        Returns:
-            Array of probabilities corresponding to the input values
-
-        Raises:
-            NotImplementedError: This method is not implemented by default.
-                Subclasses should override if probability calculation is needed.
-        """
-        raise NotImplementedError("The method is not implemented for this observation model.")
-
-
 class StateTransitionModel(Distribution, ABC):
-    """Abstract base class for POMDP state transition models.
-
-    This class defines the interface for state transition models that generate
-    next states given a current state and action. Inherits from Distribution
-    to provide sampling and probability calculation capabilities.
-
-    Note:
-        This is an abstract base class and cannot be instantiated directly.
-        Subclasses must implement the sample() method.
-
-    Attributes:
-        state: The current state
-        action: The action to be taken
+    """Deprecated. Slated for deletion. Kept temporarily so legacy wrapper
+    class definitions in env files still parse during the staged migration.
+    No production code uses this class; consult the env's
+    ``sample_next_state`` / ``transition_log_probability`` methods instead.
     """
 
-    def __init__(self, state: Any, action: Any):
-        """Initialize the state transition model.
-
-        Args:
-            state: The current state
-            action: The action to be executed from the current state
-        """
+    def __init__(self, state: Any = None, action: Any = None) -> None:
         self.state = state
         self.action = action
 
-    @abstractmethod
-    def sample(self, n_samples: int = 1) -> List[Any]:
-        """Sample next states from the transition model.
+    def sample(self, n_samples: int = 1) -> List[Any]:  # pragma: no cover
+        raise NotImplementedError("Use env.sample_next_state(state, action, n_samples) instead.")
 
-        Args:
-            n_samples: Number of next state samples to generate. Defaults to 1.
 
-        Returns:
-            List of sampled next states of length n_samples.
+class ObservationModel(Distribution, ABC):
+    """Deprecated. Slated for deletion. Kept temporarily so legacy wrapper
+    class definitions in env files still parse during the staged migration.
+    No production code uses this class; consult the env's
+    ``sample_observation`` / ``observation_log_probability`` methods instead.
+    """
 
-        Note:
-            Subclasses must implement this method according to their
-            specific state transition dynamics.
-        """
+    def __init__(self, next_state: Any = None, action: Any = None) -> None:
+        self.next_state = next_state
+        self.action = action
 
-    def probability(self, values: List[Any]) -> np.ndarray:
-        """Calculate transition probabilities for given next states.
-
-        Args:
-            values: List of next state values to calculate probabilities for
-
-        Returns:
-            Array of transition probabilities corresponding to the input values
-
-        Raises:
-            NotImplementedError: This method is not implemented by default.
-                Subclasses should override if probability calculation is needed.
-        """
-        raise NotImplementedError("The method is not implemented for this state transition model.")
+    def sample(self, n_samples: int = 1) -> List[Any]:  # pragma: no cover
+        raise NotImplementedError(
+            "Use env.sample_observation(next_state, action, n_samples) instead."
+        )
 
 
 class Environment(ABC):
@@ -455,36 +373,6 @@ class Environment(ABC):
         return hash(self.config_id)
 
     @abstractmethod
-    def state_transition_model(self, state: Any, action: Any) -> StateTransitionModel:
-        """Get the state transition model for a given state-action pair.
-
-        Args:
-            state: Current state
-            action: Action to be executed
-
-        Returns:
-            State transition model that can sample next states
-
-        Note:
-            Subclasses must implement this method to define state dynamics.
-        """
-
-    @abstractmethod
-    def observation_model(self, next_state: Any, action: Any) -> ObservationModel:
-        """Get the observation model for a given next state and action.
-
-        Args:
-            next_state: The resulting state after taking an action
-            action: The action that was executed
-
-        Returns:
-            Observation model that can sample observations
-
-        Note:
-            Subclasses must implement this method to define observation generation.
-        """
-
-    @abstractmethod
     def reward(self, state: Any, action: Any) -> float:
         """Calculate the immediate reward for a state-action pair.
 
@@ -569,26 +457,13 @@ class Environment(ABC):
     def sample_next_state(self, state: Any, action: Any, n_samples: int = 1) -> Any:
         """Sample one or more next states for ``(state, action)``.
 
-        Hot-path entry point used by MCTS planners and by particle filters.
-        The default delegates to
-        ``state_transition_model(state, action).sample(n_samples)``; subclasses
-        may override to skip the per-call wrapper allocation while preserving
-        the same RNG draw sequence.
-
-        Args:
-            state: Current state.
-            action: Action to execute.
-            n_samples: Number of samples to draw. Defaults to 1.
-
-        Returns:
-            When ``n_samples == 1``: a single next state of the env's
-            native type.
-            When ``n_samples > 1``: an array-like of length ``n_samples``.
-            Numeric envs return ``np.ndarray`` of shape ``(n_samples, *dim)``;
-            structured envs (Tiger, Pacman, Sanity) return a
-            ``List[T]`` of length ``n_samples``.
+        Default implementation routes through the legacy
+        ``state_transition_model`` factory + ``.sample(n_samples)``. Envs
+        that have deleted their factory (post-PR-D3) MUST override this
+        method.
         """
-        samples = self.state_transition_model(state=state, action=action).sample(n_samples)
+        # pylint: disable=no-member
+        samples = self.state_transition_model(state=state, action=action).sample(n_samples)  # type: ignore[attr-defined]
         if n_samples == 1:
             return samples[0]
         return samples
@@ -596,25 +471,12 @@ class Environment(ABC):
     def sample_observation(self, next_state: Any, action: Any, n_samples: int = 1) -> Any:
         """Sample one or more observations for ``(next_state, action)``.
 
-        Hot-path entry point used by MCTS planners and by particle filters.
-        The default delegates to
-        ``observation_model(next_state, action).sample(n_samples)``;
-        subclasses may override to skip the per-call wrapper allocation while
-        preserving the same RNG draw sequence.
-
-        Args:
-            next_state: State after the action was executed.
-            action: Action that was executed.
-            n_samples: Number of samples to draw. Defaults to 1.
-
-        Returns:
-            When ``n_samples == 1``: a single observation of the env's
-            native type.
-            When ``n_samples > 1``: an array-like of length ``n_samples``.
-            Numeric envs return ``np.ndarray`` of shape ``(n_samples, *dim)``;
-            structured envs return a ``List[T]`` of length ``n_samples``.
+        Default implementation routes through the legacy
+        ``observation_model`` factory + ``.sample(n_samples)``. Envs that
+        have deleted their factory (post-PR-D3) MUST override this method.
         """
-        samples = self.observation_model(next_state=next_state, action=action).sample(n_samples)
+        # pylint: disable=no-member
+        samples = self.observation_model(next_state=next_state, action=action).sample(n_samples)  # type: ignore[attr-defined]
         if n_samples == 1:
             return samples[0]
         return samples
@@ -622,22 +484,12 @@ class Environment(ABC):
     def transition_log_probability(self, state: Any, action: Any, next_states: Any) -> np.ndarray:
         """Log-probability of each candidate next state under ``(state, action)``.
 
-        The default delegates to
-        ``np.log(state_transition_model(state, action).probability(next_states))``;
-        subclasses may override for vectorized native paths.
-
-        Args:
-            state: Current state.
-            action: Action that was executed.
-            next_states: A sequence (length N) or batch ndarray (shape ``(N, *dim)``)
-                of candidate next states.
-
-        Returns:
-            ndarray of shape ``(N,)`` with log-probabilities (or log-PDFs for
-            continuous envs).
+        Default implementation routes through the legacy
+        ``state_transition_model`` factory + ``.probability(next_states)``.
         """
+        # pylint: disable=no-member
         probs = np.asarray(
-            self.state_transition_model(state=state, action=action).probability(next_states)
+            self.state_transition_model(state=state, action=action).probability(next_states)  # type: ignore[attr-defined]
         )
         return np.log(probs + 1e-300)
 
@@ -646,22 +498,12 @@ class Environment(ABC):
     ) -> np.ndarray:
         """Log-probability of each candidate observation under ``(next_state, action)``.
 
-        The default delegates to
-        ``np.log(observation_model(next_state, action).probability(observations))``;
-        subclasses may override for vectorized native paths.
-
-        Args:
-            next_state: State after the action was executed.
-            action: Action that was executed.
-            observations: A sequence (length N) or batch ndarray (shape ``(N, *dim)``)
-                of candidate observations.
-
-        Returns:
-            ndarray of shape ``(N,)`` with log-probabilities (or log-PDFs for
-            continuous envs).
+        Default implementation routes through the legacy
+        ``observation_model`` factory + ``.probability(observations)``.
         """
+        # pylint: disable=no-member
         probs = np.asarray(
-            self.observation_model(next_state=next_state, action=action).probability(observations)
+            self.observation_model(next_state=next_state, action=action).probability(observations)  # type: ignore[attr-defined]
         )
         return np.log(probs + 1e-300)
 
@@ -1022,14 +864,6 @@ class DiscreteActionsEnvironment(Environment):
             use_queue_logger=use_queue_logger,
         )
         self.logger.debug("Initialized DiscreteActionsEnvironment")
-
-    @abstractmethod
-    def state_transition_model(self, state: Any, action: Any) -> StateTransitionModel:
-        pass
-
-    @abstractmethod
-    def observation_model(self, next_state: Any, action: Any) -> ObservationModel:
-        pass
 
     @abstractmethod
     def reward(self, state: Any, action: Any) -> float:

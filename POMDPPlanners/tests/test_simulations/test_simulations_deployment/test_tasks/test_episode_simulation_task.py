@@ -356,10 +356,8 @@ def test_episode_simulation_task_value_error_logging(tmp_path, policy):
 
     # Create a real environment and patch it to cause an error during execution
     test_env = TigerPOMDP(discount_factor=0.95, name="test_env")
-    # Patch the environment to fail when state_transition_model is called
-    with patch.object(
-        test_env, "state_transition_model", side_effect=ValueError("Test value error")
-    ):
+    # Patch the environment to fail when sample_next_state is called
+    with patch.object(test_env, "sample_next_state", side_effect=ValueError("Test value error")):
         # Create task using the real environment with cache_dir to enable file logging
         task = EpisodeSimulationTask(
             environment=test_env,
@@ -415,9 +413,9 @@ def test_episode_simulation_task_runtime_error_logging(tmp_path, policy):
 
     # Create a real environment and patch it to cause a RuntimeError during execution
     test_env = TigerPOMDP(discount_factor=0.95, name="test_env")
-    # Patch the environment to fail when observation_model is called
+    # Patch the environment to fail when sample_observation is called
     with patch.object(
-        test_env, "observation_model", side_effect=RuntimeError("Test runtime error")
+        test_env, "sample_observation", side_effect=RuntimeError("Test runtime error")
     ):
         # Create task using the real environment with cache_dir to enable file logging
         task = EpisodeSimulationTask(
@@ -597,10 +595,10 @@ def test_episode_simulation_task_logging_includes_traceback(tmp_path, policy):
 
     # Create a real environment and patch it to cause an exception during execution
     test_env = TigerPOMDP(discount_factor=0.95, name="test_env")
-    # Patch the environment to fail when state_transition_model is called
+    # Patch the environment to fail when sample_next_state is called
     with patch.object(
         test_env,
-        "state_transition_model",
+        "sample_next_state",
         side_effect=Exception("Test exception with traceback"),
     ):
         # Create task using the real environment with cache_dir to enable file logging
@@ -667,7 +665,7 @@ def test_episode_simulation_task_error_written_to_log_file(tmp_path, policy):
 
     with patch.object(
         test_env,
-        "state_transition_model",
+        "sample_next_state",
         side_effect=ValueError("Test error for log file verification"),
     ):
         # Create task with cache_dir to enable file logging
@@ -796,7 +794,7 @@ def test_episode_simulation_task_log_only_on_failure_failed_episode_has_logs(tmp
 
     with patch.object(
         test_env,
-        "state_transition_model",
+        "sample_next_state",
         side_effect=RuntimeError("Simulated failure for log_only_on_failure test"),
     ):
         # Create task with log_only_on_failure=True

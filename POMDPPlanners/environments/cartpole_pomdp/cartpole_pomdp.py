@@ -28,9 +28,9 @@ from numpy.typing import NDArray
 from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
-    ObservationModel,
     SpaceInfo,
     SpaceType,
+    ObservationModel,
     StateTransitionModel,
 )
 from POMDPPlanners.core.simulation import History, MetricValue
