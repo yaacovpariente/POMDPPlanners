@@ -438,6 +438,45 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
         probs = np.asarray(kernel.probability(observations))
         return np.log(probs + 1e-300)
 
+    def sample_next_state_batch(self, states: Any, action: int) -> np.ndarray:
+        states_array = np.ascontiguousarray(np.asarray(states, dtype=np.float64))
+        if states_array.ndim == 1:
+            states_array = states_array.reshape(1, -1)
+        kernel = _native.CartPoleTransitionCpp(
+            state=states_array[0],
+            action=action,
+            force_mag=self.force_mag,
+            total_mass=self.total_mass,
+            polemass_length=self.polemass_length,
+            gravity=self.gravity,
+            length=self.length,
+            kinematics_integrator=self.kinematics_integrator,
+            tau=self.tau,
+            masspole=self.masspole,
+            covariance=self._state_transition_dist.covariance,
+        )
+        return np.asarray(kernel.batch_sample(states_array), dtype=np.float64)
+
+    def observation_log_probability_per_state(
+        self, next_states: Any, action: int, observation: Any
+    ) -> np.ndarray:
+        next_states_array = np.ascontiguousarray(np.asarray(next_states, dtype=np.float64))
+        if next_states_array.ndim == 1:
+            next_states_array = next_states_array.reshape(1, -1)
+        observation_array = np.ascontiguousarray(np.asarray(observation, dtype=np.float64))
+        kernel = _native.CartPoleObservationCpp(
+            next_state=next_states_array[0],
+            action=action,
+            covariance=self._obs_dist.covariance,
+        )
+        return np.asarray(
+            kernel.batch_log_likelihood(
+                next_particles=next_states_array,
+                observation=observation_array,
+            ),
+            dtype=np.float64,
+        )
+
     def reward(self, state: np.ndarray, action: int) -> float:
         terminated = self.is_terminal(state)
 

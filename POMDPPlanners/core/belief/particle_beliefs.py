@@ -267,39 +267,28 @@ class WeightedParticleBelief(Belief):
     def _update_weights(
         self, action: Any, observation: Any, pomdp: Environment
     ) -> Tuple[List[Any], np.ndarray]:
-        # Fast path: if the env's transition model exposes a native batch
-        # entry point, process all particles in a single C++ call. When the
-        # observation model also exposes batch_log_likelihood, the
-        # per-particle Python loop is eliminated entirely and the belief
-        # update becomes O(1) Python round trips instead of O(N).
-        transition_model = pomdp.state_transition_model(state=self.particles[0], action=action)
-        if hasattr(transition_model, "batch_sample"):
-            return self._update_weights_batch(
-                action=action,
-                observation=observation,
-                pomdp=pomdp,
-                transition_model=transition_model,
-            )
-
-        # Fallback: per-particle Python loop. Byte-identical to pre-Layer-2
-        # behaviour for envs without native batch support.
-        next_particles = [
-            pomdp.sample_next_state(state=particle, action=action) for particle in self.particles
-        ]
-        # Use the env's vectorized log-probability API; one call per particle
-        # (env returns a length-1 ndarray for the single-observation query).
-        log_probs = np.array(
-            [
-                pomdp.observation_log_probability(
-                    next_state=next_particle, action=action, observations=[observation]
-                )[0]
-                for next_particle in next_particles
-            ]
+        # Vectorized fast path. Native-backed envs override
+        # sample_next_state_batch / observation_log_probability_per_state to
+        # delegate to a single C++ call; the default impl falls back to a
+        # per-state Python loop for envs that haven't been overridden.
+        next_arr = pomdp.sample_next_state_batch(states=self.particles, action=action)
+        next_arr_np = np.asarray(next_arr) if not isinstance(next_arr, list) else next_arr
+        next_particles: List[Any] = (
+            [next_arr_np[i] for i in range(len(next_arr_np))]
+            if not isinstance(next_arr_np, list)
+            else next_arr_np
         )
 
-        # log(eps + p) for parity with the pre-migration behavior, but the
-        # env returns log p directly so we exp + clamp here.
-        probs = np.exp(log_probs)
+        log_ll = pomdp.observation_log_probability_per_state(
+            next_states=next_particles, action=action, observation=observation
+        )
+
+        # Apply the eps floor for the non-native fallback path. Native envs
+        # using log_pdf (Gaussian) never produce -inf; this is a no-op there.
+        # For discrete-prob envs that may return -inf for impossible
+        # observations, the eps preserves the pre-migration weight contract
+        # (log(eps + p) instead of log(p) -> -inf).
+        probs = np.exp(log_ll)
         next_log_weights = self.log_weights + np.log(self.eps + probs)
 
         return next_particles, next_log_weights
@@ -309,36 +298,20 @@ class WeightedParticleBelief(Belief):
         action: Any,
         observation: Any,
         pomdp: Environment,
-        transition_model: Any,
+        transition_model: Any,  # pylint: disable=unused-argument
     ) -> Tuple[List[Any], np.ndarray]:
         particles_arr = np.asarray(self.particles, dtype=float)
-        next_arr = transition_model.batch_sample(particles_arr)
-        next_particles: List[Any] = [next_arr[i] for i in range(len(next_arr))]
+        next_arr = pomdp.sample_next_state_batch(states=particles_arr, action=action)
+        next_arr_np = np.asarray(next_arr)
+        next_particles: List[Any] = [next_arr_np[i] for i in range(len(next_arr_np))]
 
-        obs_model = pomdp.observation_model(next_state=next_arr[0], action=action)
-        if hasattr(obs_model, "batch_log_likelihood"):
-            observation_arr = np.asarray(observation, dtype=float).ravel()
-            # pyright cannot see through the hasattr narrowing onto a
-            # concrete native subclass (e.g. MountainCarObservationCpp);
-            # the runtime hasattr guarantees the call is safe.
-            log_ll = obs_model.batch_log_likelihood(  # type: ignore[attr-defined]
-                next_arr, observation_arr
-            )
-            # No eps clamp on the native batch path -- log_pdf is always
-            # finite for Gaussian observation models, matching the existing
-            # VectorizedWeightedParticleBelief contract.
-            next_log_weights = self.log_weights + log_ll
-            return next_particles, next_log_weights
-
-        probs = np.array(
-            [
-                pomdp.observation_model(next_state=next_particle, action=action).probability(
-                    [observation]
-                )[0]
-                for next_particle in next_particles
-            ]
+        log_ll = pomdp.observation_log_probability_per_state(
+            next_states=next_arr_np, action=action, observation=observation
         )
-        next_log_weights = self.log_weights + np.log(self.eps + probs)
+        # No eps clamp on the native batch path -- log_pdf is always
+        # finite for Gaussian observation models, matching the existing
+        # VectorizedWeightedParticleBelief contract.
+        next_log_weights = self.log_weights + log_ll
         return next_particles, next_log_weights
 
     def update(

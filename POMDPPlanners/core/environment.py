@@ -665,6 +665,61 @@ class Environment(ABC):
         )
         return np.log(probs + 1e-300)
 
+    def sample_next_state_batch(self, states: Any, action: Any) -> Any:
+        """Sample one next state per input state, all under the same action.
+
+        Used by particle filters: given N current particles and one action,
+        draw N next states (one per particle) in a single vectorized call.
+
+        The default implementation falls back to a per-state Python loop
+        delegating to :meth:`sample_next_state`. Native-backed envs (those
+        whose state-transition kernel exposes ``batch_sample(states_array)``)
+        should override to avoid the loop.
+
+        Args:
+            states: A sequence (length N) or ndarray of shape ``(N, *dim)``
+                of input particles.
+            action: A single action to apply to every particle.
+
+        Returns:
+            For numeric envs: ``np.ndarray`` of shape ``(N, *dim)``.
+            For structured envs (Tiger strings, Pacman tuples): a list of
+            length N.
+        """
+        return [self.sample_next_state(state=s, action=action) for s in states]
+
+    def observation_log_probability_per_state(
+        self, next_states: Any, action: Any, observation: Any
+    ) -> np.ndarray:
+        """Log-probability of one observation under each candidate next-state.
+
+        Used by particle filters: given N candidate next-states and ONE
+        observation, return N log-likelihoods.
+
+        The default implementation falls back to a per-state Python loop
+        delegating to :meth:`observation_log_probability`. Native-backed envs
+        (those whose observation kernel exposes
+        ``batch_log_likelihood(next_states_array, observation_array)``) should
+        override to avoid the loop.
+
+        Args:
+            next_states: A sequence (length N) or ndarray of shape ``(N, *dim)``
+                of candidate next-states.
+            action: The action that was executed.
+            observation: A single observation.
+
+        Returns:
+            ndarray of shape ``(N,)`` with log-probabilities or log-PDFs.
+        """
+        return np.asarray(
+            [
+                self.observation_log_probability(
+                    next_state=ns, action=action, observations=[observation]
+                )[0]
+                for ns in next_states
+            ]
+        )
+
     def sample_next_step(self, state: Any, action: Any) -> Tuple[Any, Any, float]:
         """Sample a complete state transition step.
 
