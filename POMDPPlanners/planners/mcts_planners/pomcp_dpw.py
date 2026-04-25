@@ -153,13 +153,11 @@ class POMCP_DPW(ArenaDoubleProgressiveWideningMCTSPolicy):
         children_count = len(tree.children_ids[action_id])
         action_visits = tree.visit_count[action_id]
         if children_count <= self.k_o * action_visits**self.alpha_o:
-            next_state = self.environment.state_transition_model(
-                state=state, action=action
-            ).sample()[0]
+            next_state = self.environment.sample_next_state(state=state, action=action)
             reward = self.environment.reward(state=state, action=action)
-            next_observation = self.environment.observation_model(
+            next_observation = self.environment.sample_observation(
                 next_state=next_state, action=action
-            ).sample()[0]
+            )
 
             next_belief_id = tree.get_belief_child_indexed(action_id, next_observation)
             if next_belief_id is None:
