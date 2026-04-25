@@ -2329,7 +2329,7 @@ def test_weighted_particle_belief_immutable_updates_usage_example():
     child_beliefs = []
     for obs in observations:
         # Generate potential next state (from docstring)
-        next_state = env.state_transition_model(initial_state, action).sample()[0]
+        next_state = env.sample_next_state(initial_state, action)
 
         # Create new belief (immutable update) (from docstring)
         child_belief = belief.update(action, obs, env, next_state)
@@ -2411,7 +2411,7 @@ def test_weighted_particle_belief_mcts_integration_usage_example():
         # Add particles based on transition model (from docstring)
         for _ in range(5):  # Multiple particles per observation
             parent_state = root_belief.sample()
-            next_state = env.state_transition_model(parent_state, action).sample()[0]
+            next_state = env.sample_next_state(parent_state, action)
             child_belief.inplace_update(action, observation, env, next_state)
 
         # Create belief node for tree (from docstring)
@@ -2573,7 +2573,7 @@ def test_unweighted_particle_belief_state_update_mcts_with_uniform_beliefs_usage
         # Add particles uniformly based on environment dynamics
         for _ in range(5):  # Multiple simulations
             parent_state = root_belief.sample()
-            next_state = env.state_transition_model(parent_state, action).sample()[0]
+            next_state = env.sample_next_state(parent_state, action)
             child_belief.inplace_update(action, observation, env, next_state)
 
         # Create belief node
@@ -2677,7 +2677,7 @@ def test_unweighted_particle_belief_state_update_immutable_belief_trees_usage_ex
         # Generate next states uniformly
         for _ in range(3):  # Reduced for test speed
             current_state = root_belief.sample()
-            next_state = env.state_transition_model(current_state, action).sample()[0]
+            next_state = env.sample_next_state(current_state, action)
             # For simplicity, assume observation equals next state (fully observable case)
             child_belief = child_belief.update(action, next_state, env, next_state)
 

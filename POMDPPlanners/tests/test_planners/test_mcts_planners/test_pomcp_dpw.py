@@ -496,8 +496,8 @@ def test_integration_with_tiger_pomdp(planner, belief, environment, n_particles)
 
         # Simulate environment step
         state = current_belief.sample()
-        next_state = environment.state_transition_model(state, action[0]).sample()[0]
-        observation = environment.observation_model(next_state, action[0]).sample()[0]
+        next_state = environment.sample_next_state(state=state, action=action[0])
+        observation = environment.sample_observation(next_state=next_state, action=action[0])
 
         # Update belief
         current_belief = current_belief.update(action[0], observation, environment)

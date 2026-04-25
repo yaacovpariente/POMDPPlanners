@@ -414,7 +414,7 @@ def test_transition_batch_sample_matches_per_particle_sample(
     updater = RockSampleVectorizedUpdater.from_environment(env)
     batch_out = updater.batch_transition(particles, np.array(action))
 
-    loop_out = np.stack([env.state_transition_model(row, action).sample()[0] for row in particles])
+    loop_out = np.stack([env.sample_next_state(state=row, action=action) for row in particles])
     np.testing.assert_array_equal(batch_out, loop_out.astype(float))
 
 
@@ -467,8 +467,7 @@ def test_observation_batch_log_likelihood_matches_per_particle(
 
     expected = np.zeros(32)
     for i, row in enumerate(particles):
-        prob = env.observation_model(row, action).probability([obs_str])[0]
-        expected[i] = np.log(max(prob, 1e-300))
+        expected[i] = env.observation_log_probability(row, action, [obs_str])[0]
 
     np.testing.assert_allclose(batch_ll, expected, atol=1e-10)
 
@@ -498,12 +497,7 @@ def test_observation_batch_log_likelihood_matches_per_particle_movement(
     updater = RockSampleVectorizedUpdater.from_environment(env)
     batch_ll = updater.batch_observation_log_likelihood(particles, np.array(2), np.array(OBS_NONE))
 
-    expected = np.array(
-        [
-            np.log(max(env.observation_model(row, 2).probability(["none"])[0], 1e-300))
-            for row in particles
-        ]
-    )
+    expected = np.array([env.observation_log_probability(row, 2, ["none"])[0] for row in particles])
     np.testing.assert_array_equal(batch_ll, np.zeros(32))
     np.testing.assert_array_equal(expected, np.zeros(32))
 
@@ -646,7 +640,7 @@ def test_batch_transition_full_parity_against_updater(env: RockSamplePOMDP, acti
     updater = RockSampleVectorizedUpdater.from_environment(env)
 
     def per_particle(particle: np.ndarray, act: int) -> np.ndarray:
-        return env.state_transition_model(particle, act).sample()[0]
+        return env.sample_next_state(state=particle, action=act)
 
     assert_batch_transition_matches_loop(
         updater=updater,

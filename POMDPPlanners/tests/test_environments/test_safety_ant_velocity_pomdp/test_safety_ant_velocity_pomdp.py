@@ -861,12 +861,12 @@ def test_sample_next_step_observation_never_empty():
                 assert np.all(np.isfinite(observation)), "All observation values should be finite"
 
                 # Verify observation can be used in probability calculation
-                obs_model = env.observation_model(next_state, action)
                 try:
-                    probs = obs_model.probability([observation])  # Now expects list
-                    assert len(probs) == 1, "Should return one probability"
-                    prob = probs[0]
-                    assert np.isfinite(prob), "Probability should be finite"
+                    log_probs = env.observation_log_probability(next_state, action, [observation])
+                    assert len(log_probs) == 1, "Should return one log-probability"
+                    log_prob = log_probs[0]
+                    assert np.isfinite(log_prob), "Log-probability should be finite"
+                    prob = float(np.exp(log_prob))
                     assert prob >= 0.0, "Probability should be non-negative"
                 except Exception as e:  # pylint: disable=broad-exception-caught
                     pytest.fail(
