@@ -442,6 +442,44 @@ class ContinuousPushPOMDP(Environment):
             )
         )
 
+    def sample_next_state_batch(self, states: Any, action: np.ndarray) -> np.ndarray:
+        states_array = np.ascontiguousarray(np.asarray(states, dtype=np.float64))
+        if states_array.ndim == 1:
+            states_array = states_array.reshape(1, -1)
+        kernel = _native.ContinuousPushTransitionCpp(
+            state=states_array[0],
+            action=action,
+            grid_size=float(self.grid_size),
+            push_threshold=float(self.push_threshold),
+            friction_coefficient=float(self.friction_coefficient),
+            max_push=float(self.max_push),
+            robot_radius=float(self.robot_radius),
+            obstacles=self.obstacles,
+            covariance=self._state_transition_dist.covariance,
+        )
+        return np.asarray(kernel.batch_sample(states_array), dtype=np.float64)
+
+    def observation_log_probability_per_state(
+        self, next_states: Any, action: np.ndarray, observation: Any
+    ) -> np.ndarray:
+        next_states_array = np.ascontiguousarray(np.asarray(next_states, dtype=np.float64))
+        if next_states_array.ndim == 1:
+            next_states_array = next_states_array.reshape(1, -1)
+        observation_array = np.ascontiguousarray(np.asarray(observation, dtype=np.float64))
+        kernel = _native.ContinuousPushObservationCpp(
+            next_state=next_states_array[0],
+            action=action,
+            observation_noise=float(self.observation_noise),
+            grid_size=float(self.grid_size),
+        )
+        return np.asarray(
+            kernel.batch_log_likelihood(
+                next_particles=next_states_array,
+                observation=observation_array,
+            ),
+            dtype=np.float64,
+        )
+
     def reward(self, state: np.ndarray, action: np.ndarray) -> float:
         action = np.asarray(action, dtype=float)
         next_state = self._sample_transition(state, action)
@@ -755,4 +793,14 @@ class ContinuousPushPOMDPDiscreteActions(ContinuousPushPOMDP, DiscreteActionsEnv
     ) -> np.ndarray:
         return super().observation_log_probability(
             next_state, self.action_to_vector[action], observations
+        )
+
+    def sample_next_state_batch(self, states: Any, action: Any) -> np.ndarray:
+        return super().sample_next_state_batch(states, self.action_to_vector[action])
+
+    def observation_log_probability_per_state(
+        self, next_states: Any, action: Any, observation: Any
+    ) -> np.ndarray:
+        return super().observation_log_probability_per_state(
+            next_states, self.action_to_vector[action], observation
         )

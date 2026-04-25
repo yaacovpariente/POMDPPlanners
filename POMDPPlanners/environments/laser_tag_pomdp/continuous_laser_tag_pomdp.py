@@ -440,6 +440,48 @@ class ContinuousLaserTagPOMDP(Environment):
         with np.errstate(divide="ignore"):
             return np.log(probs)
 
+    def sample_next_state_batch(self, states: Any, action: np.ndarray) -> np.ndarray:
+        states_array = np.ascontiguousarray(np.asarray(states, dtype=np.float64))
+        if states_array.ndim == 1:
+            states_array = states_array.reshape(1, -1)
+        kernel = _native.ContinuousLaserTagTransitionCpp(
+            state=states_array[0],
+            action=np.asarray(action, dtype=float),
+            robot_covariance=self._robot_transition_dist.covariance,
+            opponent_covariance=self._opponent_transition_dist.covariance,
+            pursuit_speed=self.pursuit_speed,
+            walls=self._walls,
+            grid_size=self._grid_size,
+            robot_radius=self.robot_radius,
+            opponent_radius=self.opponent_radius,
+            tag_radius=self.tag_radius,
+        )
+        return np.asarray(kernel.batch_sample(states_array), dtype=np.float64)
+
+    def observation_log_probability_per_state(
+        self, next_states: Any, action: np.ndarray, observation: Any
+    ) -> np.ndarray:
+        next_states_array = np.ascontiguousarray(np.asarray(next_states, dtype=np.float64))
+        if next_states_array.ndim == 1:
+            next_states_array = next_states_array.reshape(1, -1)
+        observation_array = np.ascontiguousarray(np.asarray(observation, dtype=np.float64))
+        kernel = _native.ContinuousLaserTagObservationCpp(
+            next_state=next_states_array[0],
+            action=np.asarray(action, dtype=float),
+            measurement_noise=self.measurement_noise,
+            walls=self._walls,
+            grid_size=self._grid_size,
+            opponent_radius=self.opponent_radius,
+        )
+        log_probs = np.asarray(
+            kernel.batch_log_likelihood(
+                next_particles=next_states_array,
+                observation=observation_array,
+            ),
+            dtype=np.float64,
+        )
+        return log_probs
+
     def reward(self, state: np.ndarray, action: np.ndarray) -> float:
         if bool(state[4]):
             return 0.0
@@ -776,6 +818,16 @@ class ContinuousLaserTagPOMDPDiscreteActions(ContinuousLaserTagPOMDP, DiscreteAc
     ) -> np.ndarray:
         return super().observation_log_probability(
             next_state, self.action_to_vector[action], observations
+        )
+
+    def sample_next_state_batch(self, states: Any, action: Any) -> np.ndarray:
+        return super().sample_next_state_batch(states, self.action_to_vector[action])
+
+    def observation_log_probability_per_state(
+        self, next_states: Any, action: Any, observation: Any
+    ) -> np.ndarray:
+        return super().observation_log_probability_per_state(
+            next_states, self.action_to_vector[action], observation
         )
 
     def reward(self, state: np.ndarray, action: Any) -> float:
