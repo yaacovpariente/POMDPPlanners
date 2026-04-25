@@ -444,6 +444,12 @@ class ContinuousLaserTagTransitionCpp {
         return py::make_tuple(action_[0], action_[1], action_[2]);
     }
 
+    // Rewrite only the state field; covariance / Cholesky factors, action,
+    // and env geometry stay frozen so cached Cholesky factors and the
+    // pre-built wall list remain valid. Lets Python keep one kernel per
+    // (env, action) instead of rebuilding for every call.
+    void set_state(const py::object &state_obj) { state_ = parse_state(state_obj); }
+
   private:
     void sample_into(const double *src, double *out, pomdp_native::RNGState &rng) const {
         // Terminal particles are absorbing: copy the state through unchanged.
@@ -644,6 +650,14 @@ class ContinuousLaserTagObservationCpp {
     py::tuple action_property() const {
         return py::make_tuple(action_[0], action_[1], action_[2]);
     }
+
+    // Rewrite only the next_state field; measurement_noise constants, action,
+    // and env geometry (walls / grid / opponent radius) stay frozen so the
+    // cached log-norm factor and pre-built wall list remain valid.
+    void set_next_state(const py::object &next_state_obj) {
+        next_state_ = parse_state(next_state_obj);
+    }
+
     py::array_t<double> mean_property() const {
         double mean[kObsDim];  // NOLINT(modernize-avoid-c-arrays)
         if (next_state_[4] != 0.0) {
@@ -699,6 +713,7 @@ PYBIND11_MODULE(_native, m) {
         .def("sample", &ContinuousLaserTagTransitionCpp::sample, py::arg("n_samples") = 1)
         .def("probability", &ContinuousLaserTagTransitionCpp::probability, py::arg("values"))
         .def("batch_sample", &ContinuousLaserTagTransitionCpp::batch_sample, py::arg("particles"))
+        .def("set_state", &ContinuousLaserTagTransitionCpp::set_state, py::arg("state"))
         .def_property_readonly("state", &ContinuousLaserTagTransitionCpp::state_property)
         .def_property_readonly("action", &ContinuousLaserTagTransitionCpp::action_property);
 
@@ -711,6 +726,8 @@ PYBIND11_MODULE(_native, m) {
         .def("probability", &ContinuousLaserTagObservationCpp::probability, py::arg("values"))
         .def("batch_log_likelihood", &ContinuousLaserTagObservationCpp::batch_log_likelihood,
              py::arg("next_particles"), py::arg("observation"))
+        .def("set_next_state", &ContinuousLaserTagObservationCpp::set_next_state,
+             py::arg("next_state"))
         .def_property_readonly("next_state", &ContinuousLaserTagObservationCpp::next_state_property)
         .def_property_readonly("action", &ContinuousLaserTagObservationCpp::action_property)
         .def_property_readonly("mean", &ContinuousLaserTagObservationCpp::mean_property);
