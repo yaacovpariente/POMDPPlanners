@@ -325,6 +325,14 @@ class ContinuousLaserTagPOMDP(Environment):
         )
         self.dangerous_area_radius = dangerous_area_radius
         self.dangerous_area_penalty = dangerous_area_penalty
+        # Precompute the (K, 2) C-contiguous float64 packed dangerous-area
+        # array for the C++ reward kernel; reused across every reward_batch
+        # call so the hot path doesn't repack the Python list.
+        self._dangerous_areas_arr = (
+            np.ascontiguousarray(np.asarray(self.dangerous_areas, dtype=np.float64).reshape(-1, 2))
+            if self.dangerous_areas
+            else np.empty(0, dtype=np.float64)
+        )
         self.initial_state_value = initial_state
 
         self.robot_transition_cov_matrix = np.asarray(robot_transition_cov_matrix)
@@ -457,9 +465,19 @@ class ContinuousLaserTagPOMDP(Environment):
             return np.log(probs)
 
     def sample_next_state_batch(self, states: Any, action: np.ndarray) -> np.ndarray:
-        states_array = np.ascontiguousarray(np.asarray(states, dtype=np.float64))
-        if states_array.ndim == 1:
-            states_array = states_array.reshape(1, -1)
+        # Short-circuit when the caller already hands us a C-contiguous
+        # float64 (N, 5) buffer; otherwise normalise.
+        if (
+            isinstance(states, np.ndarray)
+            and states.dtype == np.float64
+            and states.ndim == 2
+            and states.flags["C_CONTIGUOUS"]
+        ):
+            states_array = states
+        else:
+            states_array = np.ascontiguousarray(np.asarray(states, dtype=np.float64))
+            if states_array.ndim == 1:
+                states_array = states_array.reshape(1, -1)
         kernel = self._get_trans_kernel(action)
         # batch_sample reads the per-row state from the input, not the
         # kernel's stored state, so no set_state is needed here.
@@ -468,10 +486,26 @@ class ContinuousLaserTagPOMDP(Environment):
     def observation_log_probability_per_state(
         self, next_states: Any, action: np.ndarray, observation: Any
     ) -> np.ndarray:
-        next_states_array = np.ascontiguousarray(np.asarray(next_states, dtype=np.float64))
-        if next_states_array.ndim == 1:
-            next_states_array = next_states_array.reshape(1, -1)
-        observation_array = np.ascontiguousarray(np.asarray(observation, dtype=np.float64))
+        if (
+            isinstance(next_states, np.ndarray)
+            and next_states.dtype == np.float64
+            and next_states.ndim == 2
+            and next_states.flags["C_CONTIGUOUS"]
+        ):
+            next_states_array = next_states
+        else:
+            next_states_array = np.ascontiguousarray(np.asarray(next_states, dtype=np.float64))
+            if next_states_array.ndim == 1:
+                next_states_array = next_states_array.reshape(1, -1)
+        if (
+            isinstance(observation, np.ndarray)
+            and observation.dtype == np.float64
+            and observation.ndim == 1
+            and observation.flags["C_CONTIGUOUS"]
+        ):
+            observation_array = observation
+        else:
+            observation_array = np.ascontiguousarray(np.asarray(observation, dtype=np.float64))
         kernel = self._get_obs_kernel(action)
         # batch_log_likelihood reads next_state per row from the input;
         # no set_next_state needed.
@@ -485,63 +519,70 @@ class ContinuousLaserTagPOMDP(Environment):
         return log_probs
 
     def reward(self, state: np.ndarray, action: np.ndarray) -> float:
-        if bool(state[4]):
-            return 0.0
-
-        action = np.asarray(action, dtype=float)
-        robot_pos = state[:2]
-        opp_pos = state[2:4]
-        tag_flag = action[2] if len(action) > 2 else 0.0
-
-        base_reward = 0.0
-        if tag_flag > 0.5:
-            dist = float(np.linalg.norm(robot_pos - opp_pos))
-            if dist <= self.tag_radius:
-                base_reward = self.tag_reward
-            else:
-                base_reward = -self.tag_penalty
-        base_reward -= self.step_cost
-
-        # Dangerous area penalty
-        if self._is_in_dangerous_area(robot_pos):
-            base_reward -= self.dangerous_area_penalty
-
-        return base_reward
+        # Single-state reward routes through the same C++ kernel used by
+        # reward_batch — wrap the state as a (1, 5) row and unpack the
+        # scalar. Keeps ``reward`` and ``reward_batch`` semantically and
+        # numerically equivalent.
+        state_arr = np.ascontiguousarray(np.asarray(state, dtype=np.float64)).reshape(1, -1)
+        action_arr = np.ascontiguousarray(np.asarray(action, dtype=np.float64)).ravel()
+        rewards = _native.reward_batch(
+            state_arr,
+            action_arr,
+            self.tag_radius,
+            self.tag_reward,
+            self.tag_penalty,
+            self.step_cost,
+            self._dangerous_areas_arr,
+            self.dangerous_area_radius,
+            self.dangerous_area_penalty,
+        )
+        return float(rewards[0])
 
     def reward_batch(
         self,
         states: Union[np.ndarray, Sequence[Any]],
         action: np.ndarray,
     ) -> np.ndarray:
-        states_arr = np.asarray(states, dtype=float)
-        if states_arr.ndim == 1:
-            states_arr = states_arr.reshape(1, -1)
-        n = states_arr.shape[0]
-        action = np.asarray(action, dtype=float)
-        tag_flag = action[2] if len(action) > 2 else 0.0
-
-        rewards = np.full(n, -self.step_cost)
-
-        terminal_mask = states_arr[:, 4] == 1.0
-        rewards[terminal_mask] = 0.0
-
-        live = ~terminal_mask
-        if tag_flag > 0.5:
-            dists = np.linalg.norm(states_arr[live, :2] - states_arr[live, 2:4], axis=1)
-            tag_success = dists <= self.tag_radius
-            live_idx = np.where(live)[0]
-            rewards[live_idx[tag_success]] += self.tag_reward
-            rewards[live_idx[~tag_success]] -= self.tag_penalty
-
-        # Dangerous area penalty
-        if self.dangerous_areas:
-            for dx, dy in self.dangerous_areas:
-                d = np.sqrt((states_arr[live, 0] - dx) ** 2 + (states_arr[live, 1] - dy) ** 2)
-                live_idx = np.where(live)[0]
-                in_danger = d <= self.dangerous_area_radius
-                rewards[live_idx[in_danger]] -= self.dangerous_area_penalty
-
-        return rewards
+        # Skip np.asarray re-allocation when the caller already passes a
+        # C-contiguous float64 array of the right shape (the planners hot
+        # path; matches the same short-circuit used by sample_next_state_batch
+        # in PR-D follow-ups).
+        if isinstance(states, np.ndarray):
+            states_nd: np.ndarray = states
+            if (
+                states_nd.dtype == np.float64
+                and states_nd.ndim == 2
+                and states_nd.flags["C_CONTIGUOUS"]
+            ):
+                states_arr = states_nd
+            else:
+                states_arr = np.ascontiguousarray(np.asarray(states_nd, dtype=np.float64))
+                if states_arr.ndim == 1:
+                    states_arr = states_arr.reshape(1, -1)
+        else:
+            states_arr = np.ascontiguousarray(np.asarray(states, dtype=np.float64))
+            if states_arr.ndim == 1:
+                states_arr = states_arr.reshape(1, -1)
+        if (
+            isinstance(action, np.ndarray)
+            and action.dtype == np.float64
+            and action.ndim == 1
+            and action.flags["C_CONTIGUOUS"]
+        ):
+            action_arr = action
+        else:
+            action_arr = np.ascontiguousarray(np.asarray(action, dtype=np.float64)).ravel()
+        return _native.reward_batch(
+            states_arr,
+            action_arr,
+            self.tag_radius,
+            self.tag_reward,
+            self.tag_penalty,
+            self.step_cost,
+            self._dangerous_areas_arr,
+            self.dangerous_area_radius,
+            self.dangerous_area_penalty,
+        )
 
     def is_terminal(self, state: np.ndarray) -> bool:
         return bool(state[4])
@@ -803,12 +844,15 @@ class ContinuousLaserTagPOMDPDiscreteActions(ContinuousLaserTagPOMDP, DiscreteAc
         )
 
         self.actions: List[str] = ["up", "down", "right", "left", "tag"]
+        # Cache action vectors as C-contiguous float64 arrays so the hot
+        # path can hand them straight to the C++ kernels with no
+        # ``np.asarray(...).ravel()`` repacking.
         self.action_to_vector: Dict[str, np.ndarray] = {
-            "up": np.array([0.0, 1.0, 0.0]),
-            "down": np.array([0.0, -1.0, 0.0]),
-            "right": np.array([1.0, 0.0, 0.0]),
-            "left": np.array([-1.0, 0.0, 0.0]),
-            "tag": np.array([0.0, 0.0, 1.0]),
+            "up": np.ascontiguousarray([0.0, 1.0, 0.0], dtype=np.float64),
+            "down": np.ascontiguousarray([0.0, -1.0, 0.0], dtype=np.float64),
+            "right": np.ascontiguousarray([1.0, 0.0, 0.0], dtype=np.float64),
+            "left": np.ascontiguousarray([-1.0, 0.0, 0.0], dtype=np.float64),
+            "tag": np.ascontiguousarray([0.0, 0.0, 1.0], dtype=np.float64),
         }
 
     def get_actions(self) -> List[str]:
@@ -820,45 +864,67 @@ class ContinuousLaserTagPOMDPDiscreteActions(ContinuousLaserTagPOMDP, DiscreteAc
     def observation_model(self, next_state: np.ndarray, action: Any) -> ObservationModel:
         return super().observation_model(next_state, self.action_to_vector[action])
 
+    # Hot-path overrides: the discrete wrapper used to delegate every
+    # method to its parent via ``super().method(self.action_to_vector[action])``.
+    # That ``super()`` frame plus the dict lookup added ~50ms of pure
+    # attribute-traversal overhead per second on the PFT-DPW profile. We
+    # inline the cached-kernel calls directly instead, dropping the
+    # ``super()`` frame and skipping any input renormalisation since the
+    # cached action vectors are already C-contiguous float64.
+
     def sample_next_state(self, state: np.ndarray, action: Any, n_samples: int = 1) -> Any:
-        return super().sample_next_state(state, self.action_to_vector[action], n_samples=n_samples)
+        action_arr = self.action_to_vector[action]
+        kernel = self._get_trans_kernel(action_arr)
+        kernel.set_state(state)
+        samples = kernel.sample(n_samples)
+        if n_samples == 1:
+            return samples[0]
+        return samples
 
     def sample_observation(self, next_state: np.ndarray, action: Any, n_samples: int = 1) -> Any:
-        return super().sample_observation(
-            next_state, self.action_to_vector[action], n_samples=n_samples
-        )
+        action_arr = self.action_to_vector[action]
+        kernel = self._get_obs_kernel(action_arr)
+        kernel.set_next_state(next_state)
+        samples = kernel.sample(n_samples)
+        if n_samples == 1:
+            return samples[0]
+        return samples
 
     def transition_log_probability(
         self, state: np.ndarray, action: Any, next_states: Any
     ) -> np.ndarray:
-        return super().transition_log_probability(state, self.action_to_vector[action], next_states)
+        return ContinuousLaserTagPOMDP.transition_log_probability(
+            self, state, self.action_to_vector[action], next_states
+        )
 
     def observation_log_probability(
         self, next_state: np.ndarray, action: Any, observations: Any
     ) -> np.ndarray:
-        return super().observation_log_probability(
-            next_state, self.action_to_vector[action], observations
+        return ContinuousLaserTagPOMDP.observation_log_probability(
+            self, next_state, self.action_to_vector[action], observations
         )
 
     def sample_next_state_batch(self, states: Any, action: Any) -> np.ndarray:
-        return super().sample_next_state_batch(states, self.action_to_vector[action])
+        return ContinuousLaserTagPOMDP.sample_next_state_batch(
+            self, states, self.action_to_vector[action]
+        )
 
     def observation_log_probability_per_state(
         self, next_states: Any, action: Any, observation: Any
     ) -> np.ndarray:
-        return super().observation_log_probability_per_state(
-            next_states, self.action_to_vector[action], observation
+        return ContinuousLaserTagPOMDP.observation_log_probability_per_state(
+            self, next_states, self.action_to_vector[action], observation
         )
 
     def reward(self, state: np.ndarray, action: Any) -> float:
-        return super().reward(state, self.action_to_vector[action])
+        return ContinuousLaserTagPOMDP.reward(self, state, self.action_to_vector[action])
 
     def reward_batch(
         self,
         states: Union[np.ndarray, Sequence[Any]],
         action: Any,
     ) -> np.ndarray:
-        return super().reward_batch(np.asarray(states), self.action_to_vector[action])
+        return ContinuousLaserTagPOMDP.reward_batch(self, states, self.action_to_vector[action])
 
     def _count_episode_metrics(self, steps: List[StepData]) -> Tuple[int, int, int]:
         converted = []
