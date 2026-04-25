@@ -15,6 +15,7 @@ from POMDPPlanners.core.environment import (
     StateTransitionModel,
 )
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
+from POMDPPlanners.utils.numba_kernels import any_point_within_radius_kernel
 from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_visualizer import (
     LightDarkPOMDPVisualizer,
 )
@@ -286,6 +287,19 @@ class BaseLightDarkPOMDP(Environment, ABC):
     @abstractmethod
     def compute_metrics(self, histories: List[History]) -> List[MetricValue]:
         pass
+
+    def is_state_near_beacon(self, state: np.ndarray) -> bool:
+        """Return True if ``state`` lies within ``beacon_radius`` of any beacon.
+
+        Used by tests and observation-model selection logic. Replaces the
+        previous wrapper-attribute access pattern (``model.near_beacon``)
+        with an env-level method that does not require the wrapper class.
+        """
+        return bool(
+            any_point_within_radius_kernel(
+                np.asarray(state, dtype=float), self.beacons, self.beacon_radius
+            )
+        )
 
     def initial_state_dist(self) -> Distribution:
         return DiscreteDistribution(values=[self.start_state], probs=np.array([1.0]))
