@@ -333,6 +333,17 @@ class SanityPOMDP(DiscreteActionsEnvironment):
     def observation_model(self, next_state: int, action: int) -> SanityObservationModel:
         return SanityObservationModel(next_state, action)
 
+    # ── Hot-path sampling overrides ─────────────────────────────────
+    # Inline the wrapper's sample() body. Both transitions and
+    # observations are deterministic, so no RNG draws occur and the
+    # behavior is byte-identical to the wrapper-based path.
+
+    def sample_next_state(self, state: int, action: int) -> int:
+        return 0 if action == 0 else 1
+
+    def sample_observation(self, next_state: int, action: int) -> int:
+        return next_state
+
     def reward(self, state: int, action: int) -> float:
         # Higher reward for being in good state (0)
         next_state = self.state_transition_model(state, action).sample()[0]

@@ -851,3 +851,61 @@ class TestSanityPOMDPIntegration:
             assert next_state == 1
             assert next_observation == 1
             assert reward == 0.0
+
+
+def test_sample_next_state_rng_pinned_equivalence(sanity_pomdp):
+    """Test that sample_next_state matches state_transition_model().sample()[0] under fixed RNG.
+
+    Purpose: Validates that the sample_next_state override produces byte-identical results
+        to the wrapper-based path when both are seeded identically.
+
+    Given: A SanityPOMDP environment and the four (state, action) combinations covering
+        the full discrete state-action space, with both np.random and random pinned
+    When: A sample is drawn through state_transition_model(s, a).sample()[0] and again through
+        env.sample_next_state(s, a) after re-seeding
+    Then: The two draws are equal across all (state, action) combinations
+
+    Test type: unit
+    """
+    cases = [(0, 0), (0, 1), (1, 0), (1, 1)]
+    for state, action in cases:
+        np.random.seed(123)
+        random.seed(123)
+        wrapper_sample = sanity_pomdp.state_transition_model(state=state, action=action).sample()[0]
+        np.random.seed(123)
+        random.seed(123)
+        direct_sample = sanity_pomdp.sample_next_state(state=state, action=action)
+        assert wrapper_sample == direct_sample, (
+            f"sample_next_state mismatch for ({state}, {action}): "
+            f"{wrapper_sample} vs {direct_sample}"
+        )
+
+
+def test_sample_observation_rng_pinned_equivalence(sanity_pomdp):
+    """Test that sample_observation matches observation_model().sample()[0] under fixed RNG.
+
+    Purpose: Validates that the sample_observation override produces byte-identical results
+        to the wrapper-based path when both are seeded identically.
+
+    Given: A SanityPOMDP environment and the four (next_state, action) combinations
+        covering the full discrete state-action space, with both np.random and random pinned
+    When: An observation is drawn through observation_model(ns, a).sample()[0] and again
+        through env.sample_observation(ns, a) after re-seeding
+    Then: The two draws are equal across all (next_state, action) combinations
+
+    Test type: unit
+    """
+    cases = [(0, 0), (0, 1), (1, 0), (1, 1)]
+    for next_state, action in cases:
+        np.random.seed(7)
+        random.seed(7)
+        wrapper_obs = sanity_pomdp.observation_model(next_state=next_state, action=action).sample()[
+            0
+        ]
+        np.random.seed(7)
+        random.seed(7)
+        direct_obs = sanity_pomdp.sample_observation(next_state=next_state, action=action)
+        assert wrapper_obs == direct_obs, (
+            f"sample_observation mismatch for ({next_state}, {action}): "
+            f"{wrapper_obs} vs {direct_obs}"
+        )

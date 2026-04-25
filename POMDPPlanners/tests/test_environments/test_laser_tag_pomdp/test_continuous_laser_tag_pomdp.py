@@ -12,6 +12,7 @@ import pytest
 from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.policy import PolicyRunData
 from POMDPPlanners.core.simulation import History, StepData
+from POMDPPlanners.environments.laser_tag_pomdp import _native
 from POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_pomdp import (
     ContinuousLaserTagPOMDP,
     ContinuousLaserTagPOMDPDiscreteActions,
@@ -1000,3 +1001,108 @@ class TestEnvironmentRegistry:
 
         env_d = get_environment("ContinuousLaserTagPOMDPDiscreteActions", discount_factor=0.95)
         assert isinstance(env_d, ContinuousLaserTagPOMDPDiscreteActions)
+
+
+class TestContinuousLaserTagDirectSampleApiEquivalence:
+    """Equivalence tests for sample_next_state/sample_observation overrides.
+
+    The native C++ kernel uses a module-level RNG seeded via _native.set_seed.
+    Pinning that RNG before each draw produces byte-identical samples between
+    the wrapper and the override.
+    """
+
+    def test_sample_next_state_matches_wrapper_with_pinned_native_rng(self) -> None:
+        """Direct sample_next_state matches wrapper output under pinned _native RNG.
+
+        Purpose: Validates that ContinuousLaserTagPOMDP.sample_next_state
+            issues the same C++ RNG draws as the wrapper path.
+
+        Given: A ContinuousLaserTagPOMDP and a fixed (state, action) with the
+            module-level _native RNG seeded identically before each draw.
+        When: We draw via env.state_transition_model(s, a).sample(1)[0] and
+            via env.sample_next_state(s, a).
+        Then: The two next-state arrays are byte-equal.
+
+        Test type: unit
+        """
+        env = ContinuousLaserTagPOMDP(discount_factor=0.95, walls=[], dangerous_areas=[])
+        state = np.array([3.0, 3.0, 8.0, 5.0, 0.0])
+        action = np.array([1.0, 0.0, 0.0])
+
+        _native.set_seed(2024)
+        np.random.seed(2024)
+        ns_wrap = env.state_transition_model(state, action).sample(n_samples=1)[0]
+
+        _native.set_seed(2024)
+        np.random.seed(2024)
+        ns_direct = env.sample_next_state(state, action)
+
+        assert np.array_equal(ns_wrap, ns_direct)
+
+    def test_sample_observation_matches_wrapper_with_pinned_native_rng(self) -> None:
+        """Direct sample_observation matches wrapper output under pinned _native RNG.
+
+        Purpose: Validates that ContinuousLaserTagPOMDP.sample_observation
+            issues the same C++ RNG draws as the wrapper path.
+
+        Given: A ContinuousLaserTagPOMDP and a fixed (next_state, action) with
+            _native RNG seeded identically before each draw.
+        When: We draw via env.observation_model(...).sample(1)[0] and via
+            env.sample_observation(...).
+        Then: The two observation arrays are byte-equal.
+
+        Test type: unit
+        """
+        env = ContinuousLaserTagPOMDP(discount_factor=0.95, walls=[], dangerous_areas=[])
+        next_state = np.array([4.0, 3.0, 8.0, 5.0, 0.0])
+        action = np.array([1.0, 0.0, 0.0])
+
+        _native.set_seed(99)
+        np.random.seed(99)
+        o_wrap = env.observation_model(next_state, action).sample(n_samples=1)[0]
+
+        _native.set_seed(99)
+        np.random.seed(99)
+        o_direct = env.sample_observation(next_state, action)
+
+        assert np.array_equal(o_wrap, o_direct)
+
+    def test_discrete_actions_variant_translates_action_then_matches_wrapper(self) -> None:
+        """ContinuousLaserTagPOMDPDiscreteActions overrides translate the action and match.
+
+        Purpose: Validates that the discrete-actions subclass routes string
+            actions through action_to_vector before delegating to the parent
+            override, producing byte-identical samples to the wrapper.
+
+        Given: A ContinuousLaserTagPOMDPDiscreteActions and a fixed
+            (state, "up") with _native RNG seeded before each draw.
+        When: We draw via env.state_transition_model(...).sample(1)[0] and
+            via env.sample_next_state(...).
+        Then: The two next-state arrays are byte-equal.
+
+        Test type: unit
+        """
+        env = ContinuousLaserTagPOMDPDiscreteActions(
+            discount_factor=0.95, walls=[], dangerous_areas=[]
+        )
+        state = np.array([3.0, 3.0, 8.0, 5.0, 0.0])
+
+        _native.set_seed(11)
+        np.random.seed(11)
+        ns_wrap = env.state_transition_model(state, "up").sample(n_samples=1)[0]
+
+        _native.set_seed(11)
+        np.random.seed(11)
+        ns_direct = env.sample_next_state(state, "up")
+
+        assert np.array_equal(ns_wrap, ns_direct)
+
+        _native.set_seed(13)
+        np.random.seed(13)
+        o_wrap = env.observation_model(ns_wrap, "up").sample(n_samples=1)[0]
+
+        _native.set_seed(13)
+        np.random.seed(13)
+        o_direct = env.sample_observation(ns_wrap, "up")
+
+        assert np.array_equal(o_wrap, o_direct)

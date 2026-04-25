@@ -273,6 +273,22 @@ class TigerPOMDP(DiscreteActionsEnvironment):
     def observation_model(self, next_state: str, action: str) -> ObservationModel:
         return TigerObservation(next_state=next_state, action=action)
 
+    # ── Hot-path sampling overrides ─────────────────────────────────
+    # Inline the wrapper's sample() body to skip per-call wrapper
+    # allocation. The RNG draw sequence is preserved bit-for-bit.
+
+    def sample_next_state(self, state: str, action: str) -> str:
+        if action in ("open_left", "open_right"):
+            return str(np.random.choice(STATES))
+        return state
+
+    def sample_observation(self, next_state: str, action: str) -> str:
+        if action == "listen":
+            if next_state == "tiger_left":
+                return "hear_left" if np.random.random() < 0.85 else "hear_right"
+            return "hear_right" if np.random.random() < 0.85 else "hear_left"
+        return "hear_nothing"
+
     def reward(self, state: str, action: str) -> float:
         if action == "listen":
             return -1.0  # Cost of listening

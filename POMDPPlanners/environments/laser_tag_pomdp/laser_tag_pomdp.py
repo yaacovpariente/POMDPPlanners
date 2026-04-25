@@ -43,6 +43,19 @@ from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_visualizer import (  #
 )
 
 
+# 8-directional laser measurements: N, NE, E, SE, S, SW, W, NW (matches LaserTagObservation)
+_LASER_DIRECTIONS: List[Tuple[int, int]] = [
+    (-1, 0),
+    (-1, 1),
+    (0, 1),
+    (1, 1),
+    (1, 0),
+    (1, -1),
+    (0, -1),
+    (-1, -1),
+]
+
+
 class LaserTagPOMDPMetrics(Enum):
     """Metric names for LaserTag POMDP environment."""
 
@@ -752,6 +765,172 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
             floor_shape=self.floor_shape,
             walls=self.walls,
         )
+
+    # ── Hot-path sampling overrides ─────────────────────────────────
+    # Inline the body of LaserTagStateTransition.sample()/LaserTagObservation.sample()
+    # for n_samples=1 to skip the per-call wrapper allocation. Preserves the
+    # exact sequence of np.random.* calls so seeded behavior is identical.
+
+    def _is_valid_position_inline(self, pos: Tuple[int, int]) -> bool:
+        row, col = pos
+        return (
+            0 <= row < self.floor_shape[0]
+            and 0 <= col < self.floor_shape[1]
+            and pos not in self.walls
+        )
+
+    def sample_next_state(self, state: np.ndarray, action: int) -> np.ndarray:
+        # _get_actual_action: matches LaserTagStateTransition._get_actual_action
+        if action == 4:
+            actual_action = action
+        else:
+            if np.random.random() < self.transition_error_prob:
+                available_actions = [a for a in [0, 1, 2, 3] if a != action]
+                actual_action = int(np.random.choice(available_actions))
+            else:
+                actual_action = action
+
+        # _get_robot_next_position(actual_action)
+        robot_current = (int(state[0]), int(state[1]))
+        if actual_action == 4:
+            robot_next = robot_current
+        else:
+            dr, dc = self._action_directions[actual_action]
+            cand = (robot_current[0] + dr, robot_current[1] + dc)
+            robot_next = cand if self._is_valid_position_inline(cand) else robot_current
+
+        opponent_current = (int(state[2]), int(state[3]))
+
+        # Tag at same cell → terminal
+        if actual_action == 4 and robot_current == opponent_current:
+            return np.array(
+                [
+                    float(robot_next[0]),
+                    float(robot_next[1]),
+                    float(opponent_current[0]),
+                    float(opponent_current[1]),
+                    1.0,
+                ]
+            )
+
+        # Regular transition: build opponent move distribution then draw
+        opp_moves = self._opponent_move_probabilities_inline(state, robot_next)
+        positions, probabilities = zip(*opp_moves)
+        opp_indices = np.random.choice(len(positions), size=1, p=probabilities)
+        opp_next_pos = positions[opp_indices[0]]
+        return np.array(
+            [
+                float(robot_next[0]),
+                float(robot_next[1]),
+                float(opp_next_pos[0]),
+                float(opp_next_pos[1]),
+                0.0,
+            ]
+        )
+
+    def _opponent_move_probabilities_inline(
+        self, state: np.ndarray, robot_pos: Tuple[int, int]
+    ) -> List[Tuple[Tuple[int, int], float]]:
+        # Mirror of LaserTagStateTransition._get_opponent_move_probabilities,
+        # but operating on a state ndarray rather than self.state.
+        current_opp = (int(state[2]), int(state[3]))
+        robot_row, robot_col = robot_pos
+        opp_row, opp_col = current_opp
+
+        x_moves = self._directional_moves_inline(opp_col, robot_col, opp_row, True)
+        y_moves = self._directional_moves_inline(opp_row, robot_row, opp_col, False)
+
+        move_probs = x_moves + y_moves + [(current_opp, 0.2)]
+        actual_total = sum(prob for _, prob in move_probs if prob > 0)
+        if actual_total < 1.0:
+            stay_index = len(move_probs) - 1
+            current_pos, current_stay_prob = move_probs[stay_index]
+            move_probs[stay_index] = (current_pos, current_stay_prob + (1.0 - actual_total))
+        return [(pos, prob) for pos, prob in move_probs if prob > 0]
+
+    def _directional_moves_inline(
+        self, opponent_coord: int, robot_coord: int, fixed_coord: int, is_horizontal: bool
+    ) -> List[Tuple[Tuple[int, int], float]]:
+        if robot_coord > opponent_coord:
+            toward_pos = (
+                (fixed_coord, opponent_coord + 1)
+                if is_horizontal
+                else (opponent_coord + 1, fixed_coord)
+            )
+            away_pos = (
+                (fixed_coord, opponent_coord - 1)
+                if is_horizontal
+                else (opponent_coord - 1, fixed_coord)
+            )
+            toward_prob, away_prob = 0.4, 0.0
+        elif robot_coord < opponent_coord:
+            toward_pos = (
+                (fixed_coord, opponent_coord - 1)
+                if is_horizontal
+                else (opponent_coord - 1, fixed_coord)
+            )
+            away_pos = (
+                (fixed_coord, opponent_coord + 1)
+                if is_horizontal
+                else (opponent_coord + 1, fixed_coord)
+            )
+            toward_prob, away_prob = 0.4, 0.0
+        else:
+            toward_pos = (
+                (fixed_coord, opponent_coord + 1)
+                if is_horizontal
+                else (opponent_coord + 1, fixed_coord)
+            )
+            away_pos = (
+                (fixed_coord, opponent_coord - 1)
+                if is_horizontal
+                else (opponent_coord - 1, fixed_coord)
+            )
+            toward_prob, away_prob = 0.2, 0.2
+
+        moves: List[Tuple[Tuple[int, int], float]] = []
+        if self._is_valid_position_inline(toward_pos):
+            moves.append((toward_pos, toward_prob))
+        if self._is_valid_position_inline(away_pos):
+            moves.append((away_pos, away_prob))
+        return moves
+
+    def sample_observation(self, next_state: np.ndarray, action: int) -> Tuple[float, ...]:
+        if bool(next_state[4]):
+            return (-1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0)
+
+        robot_pos = (int(next_state[0]), int(next_state[1]))
+        opp_pos = (int(next_state[2]), int(next_state[3]))
+        # Compute true 8-direction laser measurements (no RNG)
+        true_measurements = [
+            self._laser_distance_inline(robot_pos, direction, opp_pos)
+            for direction in _LASER_DIRECTIONS
+        ]
+        # Add Gaussian noise to each measurement (8 np.random.normal draws, in order)
+        noisy: List[float] = []
+        for true_measure in true_measurements:
+            noise = np.random.normal(0, self.measurement_noise)
+            noisy.append(max(0.0, true_measure + noise))
+        return tuple(noisy)
+
+    def _laser_distance_inline(
+        self,
+        robot_pos: Tuple[int, int],
+        direction: Tuple[int, int],
+        opp_pos: Tuple[int, int],
+    ) -> float:
+        row, col = robot_pos
+        dr, dc = direction
+        distance = 0.0
+        while True:
+            row += dr
+            col += dc
+            distance += 1.0
+            if row < 0 or row >= self.floor_shape[0] or col < 0 or col >= self.floor_shape[1]:
+                break
+            if (row, col) in self.walls or (row, col) == opp_pos:
+                break
+        return distance - 1.0
 
     def _is_in_dangerous_area(self, position: Tuple[int, int]) -> bool:
         """Check if a position is within any dangerous area.

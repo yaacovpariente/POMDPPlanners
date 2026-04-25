@@ -654,3 +654,97 @@ def test_batch_transition_full_parity_against_updater(env: RockSamplePOMDP, acti
         action=action,
         per_particle_transition_fn=per_particle,
     )
+
+
+# ---------------------------------------------------------------------------
+# 20. Hot-path sample_next_state / sample_observation overrides
+#     (skip Python wrapper, route directly to native kernel)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "robot_pos,action,rocks",
+    [
+        ((0, 0), 1, (True, True, False, True)),  # north move
+        ((2, 2), 2, (False, True, True, False)),  # east move
+        ((3, 3), 5, (True, False, False, True)),  # check rock 0 from far
+        ((1, 1), 5, (True, True, True, True)),  # check rock 0 colocated
+        ((4, 4), 0, (False, True, False, True)),  # sample at empty cell
+    ],
+)
+def test_sample_next_state_override_matches_wrapper(
+    env: RockSamplePOMDP,
+    robot_pos: Tuple[int, int],
+    action: int,
+    rocks: Tuple[bool, ...],
+) -> None:
+    """Override sample_next_state matches the per-call wrapper bit-exactly.
+
+    Purpose: Validates that ``RockSamplePOMDP.sample_next_state`` (which
+    constructs the native kernel directly, skipping the Python wrapper)
+    produces the exact same next state as the legacy
+    ``state_transition_model(state, action).sample()[0]`` path under a
+    fixed C++ RNG seed.
+
+    Given: The shared RockSample env fixture and a parametrized
+        ``(robot_pos, action, rocks)`` triple covering movement, check,
+        and sample actions.
+    When: Both paths are invoked with ``_native.set_seed`` reset to the
+        same value before each call.
+    Then: ``np.array_equal`` holds elementwise on the returned arrays.
+
+    Test type: integration
+    """
+    state = _state(robot_pos[0], robot_pos[1], rocks)
+
+    _native.set_seed(2024)
+    via_wrapper = env.state_transition_model(state, action).sample()[0]
+
+    _native.set_seed(2024)
+    via_override = env.sample_next_state(state=state, action=action)
+
+    assert np.array_equal(via_wrapper, via_override)
+
+
+@pytest.mark.parametrize(
+    "robot_pos,action,rocks",
+    [
+        ((1, 1), 5, (True, True, False, True)),  # check rock 0 colocated
+        ((0, 0), 5, (True, False, True, False)),  # check rock 0 from corner
+        ((3, 3), 6, (False, True, False, True)),  # check rock 1 colocated
+        ((6, 2), 8, (True, True, True, False)),  # check rock 3 colocated
+        ((2, 2), 2, (True, True, True, True)),  # movement -> none
+    ],
+)
+def test_sample_observation_override_matches_wrapper(
+    env: RockSamplePOMDP,
+    robot_pos: Tuple[int, int],
+    action: int,
+    rocks: Tuple[bool, ...],
+) -> None:
+    """Override sample_observation matches the per-call wrapper bit-exactly.
+
+    Purpose: Validates that ``RockSamplePOMDP.sample_observation`` (which
+    constructs the native observation kernel directly, skipping the
+    Python wrapper) produces the exact same string observation as the
+    legacy ``observation_model(...).sample()[0]`` path under a fixed
+    C++ RNG seed.
+
+    Given: The shared env fixture plus a parametrized
+        ``(robot_pos, action, rocks)`` triple covering check actions
+        across distances and a movement action.
+    When: Both paths are invoked with ``_native.set_seed`` reset to the
+        same value before each call.
+    Then: The two string observations are equal.
+
+    Test type: integration
+    """
+    next_state = _state(robot_pos[0], robot_pos[1], rocks)
+
+    _native.set_seed(7777)
+    via_wrapper = env.observation_model(next_state, action).sample()[0]
+
+    _native.set_seed(7777)
+    via_override = env.sample_observation(next_state=next_state, action=action)
+
+    assert via_wrapper == via_override

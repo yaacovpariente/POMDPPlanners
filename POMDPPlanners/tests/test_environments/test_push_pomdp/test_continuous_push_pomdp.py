@@ -646,3 +646,199 @@ class TestContinuousPushPOMDPDiscreteActions:
 
         ns_down = env.sample_next_step(state, "down")[0]
         assert ns_down[1] < state[1]
+
+
+# ------------------------------------------------------------------
+# Hot-path sampling override equivalence
+# ------------------------------------------------------------------
+
+
+class TestSampleHotPathOverridesEquivalence:
+    """Pinned-seed equivalence for the C++-kernel sampling overrides.
+
+    Both ``state_transition_model(...).sample()[0]`` (the wrapper path) and
+    ``sample_next_state(...)`` (the override) construct the same underlying
+    ``_native.ContinuousPushTransitionCpp`` kernel and consume the same
+    module-level RNG seeded via ``_native.set_seed``. They must therefore
+    produce byte-identical samples. Same argument for the observation pair.
+    """
+
+    def test_sample_next_state_matches_state_transition_model_wrapper(self):
+        """Pinned-seed equivalence: sample_next_state vs wrapper path.
+
+        Purpose: Validates that the inlined sample_next_state override (which
+            constructs ``_native.ContinuousPushTransitionCpp`` directly) is
+            byte-identical to the ``ContinuousPushStateTransitionModel`` wrapper
+            ``.sample()[0]`` call under the same _native.set_seed().
+
+        Given: A ContinuousPushPOMDP env with non-trivial state-transition
+            covariance, several (state, action) pairs covering both
+            object-far-from-robot and object-within-push-threshold regimes,
+            and identical ``_native.set_seed`` before each path.
+        When: env.state_transition_model(s, a).sample()[0] and
+            env.sample_next_state(s, a) are each called under the same
+            re-seeded native RNG.
+        Then: For every pair, both paths yield np.array_equal next-states.
+
+        Test type: unit
+        """
+        from POMDPPlanners.environments.push_pomdp import (
+            _native,
+        )  # pylint: disable=import-outside-toplevel
+
+        env = ContinuousPushPOMDP(
+            discount_factor=0.99,
+            state_transition_cov_matrix=np.eye(2) * 0.01,
+            robot_radius=0.3,
+        )
+        test_pairs = [
+            (np.array([2.0, 3.0, 7.0, 7.0, 8.0, 8.0]), np.array([1.0, 0.0])),
+            (np.array([2.5, 3.1, 3.0, 3.0, 8.0, 8.0]), np.array([1.0, 0.0])),  # push range
+            (np.array([0.5, 0.5, 5.0, 5.0, 8.0, 8.0]), np.array([-2.0, 0.0])),  # wall
+            (np.array([5.0, 5.0, 5.5, 5.0, 8.0, 8.0]), np.array([0.5, 0.5])),  # push diag
+            (np.array([8.0, 8.0, 8.5, 7.5, 8.0, 8.0]), np.array([1.0, -1.0])),
+        ]
+        for state, action in test_pairs:
+            for seed in (12345, 67890, 314159):
+                _native.set_seed(seed)
+                wrapper_next = env.state_transition_model(state, action).sample()[0]
+                _native.set_seed(seed)
+                direct_next = env.sample_next_state(state, action)
+                np.testing.assert_array_equal(
+                    wrapper_next,
+                    direct_next,
+                    err_msg=(
+                        f"Mismatch for state={state}, action={action}, seed={seed}: "
+                        f"wrapper={wrapper_next}, direct={direct_next}"
+                    ),
+                )
+
+    def test_sample_observation_matches_observation_model_wrapper(self):
+        """Pinned-seed equivalence: sample_observation vs wrapper path.
+
+        Purpose: Validates that the inlined sample_observation override (which
+            constructs ``_native.ContinuousPushObservationCpp`` directly) is
+            byte-identical to the ``ContinuousPushObservationModel`` wrapper
+            ``.sample()[0]`` call under the same _native.set_seed().
+
+        Given: A ContinuousPushPOMDP env, several (next_state, action) pairs
+            spanning interior and boundary positions, and identical
+            ``_native.set_seed`` before each path.
+        When: env.observation_model(ns, a).sample()[0] and
+            env.sample_observation(ns, a) are each called under the same
+            re-seeded native RNG.
+        Then: For every pair, both paths yield np.array_equal observations.
+
+        Test type: unit
+        """
+        from POMDPPlanners.environments.push_pomdp import (
+            _native,
+        )  # pylint: disable=import-outside-toplevel
+
+        env = ContinuousPushPOMDP(
+            discount_factor=0.99,
+            observation_noise=0.3,
+            robot_radius=0.3,
+        )
+        test_pairs = [
+            (np.array([2.0, 3.0, 2.8, 3.2, 8.0, 8.0]), np.array([1.0, 0.0])),
+            (np.array([5.0, 5.0, 5.0, 5.0, 8.0, 8.0]), np.array([0.0, 0.0])),
+            (np.array([0.0, 0.0, 0.1, 0.0, 8.0, 8.0]), np.array([1.0, 1.0])),
+            (np.array([9.0, 9.0, 8.9, 9.0, 8.0, 8.0]), np.array([-1.0, 0.0])),
+        ]
+        for next_state, action in test_pairs:
+            for seed in (54321, 24680, 271828):
+                _native.set_seed(seed)
+                wrapper_obs = env.observation_model(next_state, action).sample()[0]
+                _native.set_seed(seed)
+                direct_obs = env.sample_observation(next_state, action)
+                np.testing.assert_array_equal(
+                    wrapper_obs,
+                    direct_obs,
+                    err_msg=(
+                        f"Mismatch for next_state={next_state}, action={action}, seed={seed}: "
+                        f"wrapper={wrapper_obs}, direct={direct_obs}"
+                    ),
+                )
+
+    def test_discrete_actions_sample_next_state_uses_action_to_vector(self):
+        """Discrete-actions wrapper resolves str action via action_to_vector and matches.
+
+        Purpose: Validates that ContinuousPushPOMDPDiscreteActions.sample_next_state
+            looks up the cached action vector and produces the same result as
+            calling the parent override with that vector directly.
+
+        Given: A ContinuousPushPOMDPDiscreteActions env, a single state, and
+            identical ``_native.set_seed`` before each path.
+        When: For each str action, env.sample_next_state(state, str_action) is
+            compared against env.sample_next_state(state, action_to_vector[a])
+            via super() (i.e. the continuous parent's override).
+        Then: Both paths produce np.array_equal next-states.
+
+        Test type: unit
+        """
+        from POMDPPlanners.environments.push_pomdp import (
+            _native,
+        )  # pylint: disable=import-outside-toplevel
+
+        env = ContinuousPushPOMDPDiscreteActions(
+            discount_factor=0.99,
+            state_transition_cov_matrix=np.eye(2) * 0.01,
+        )
+        state = np.array([5.0, 5.0, 5.5, 5.0, 9.0, 9.0])
+        for str_action in env.get_actions():
+            vec = env.action_to_vector[str_action]
+            _native.set_seed(2024)
+            via_str = env.sample_next_state(state, str_action)
+            _native.set_seed(2024)
+            via_vec = ContinuousPushPOMDP.sample_next_state(env, state, vec)
+            np.testing.assert_array_equal(via_str, via_vec)
+
+    def test_discrete_actions_sample_observation_uses_action_to_vector(self):
+        """Discrete-actions wrapper sample_observation resolves str via action_to_vector.
+
+        Purpose: Same as sample_next_state, for the observation override.
+
+        Given: A ContinuousPushPOMDPDiscreteActions env, a single next_state,
+            and identical ``_native.set_seed`` before each path.
+        When: For each str action, env.sample_observation(ns, str_action) is
+            compared against ContinuousPushPOMDP.sample_observation(env, ns,
+            action_to_vector[str_action]).
+        Then: Both paths produce np.array_equal observations.
+
+        Test type: unit
+        """
+        from POMDPPlanners.environments.push_pomdp import (
+            _native,
+        )  # pylint: disable=import-outside-toplevel
+
+        env = ContinuousPushPOMDPDiscreteActions(discount_factor=0.99)
+        next_state = np.array([5.0, 5.0, 5.5, 5.0, 9.0, 9.0])
+        for str_action in env.get_actions():
+            vec = env.action_to_vector[str_action]
+            _native.set_seed(2024)
+            via_str = env.sample_observation(next_state, str_action)
+            _native.set_seed(2024)
+            via_vec = ContinuousPushPOMDP.sample_observation(env, next_state, vec)
+            np.testing.assert_array_equal(via_str, via_vec)
+
+    def test_discrete_actions_action_to_vector_is_contiguous_float64(self):
+        """action_to_vector entries are contiguous float64 ndarrays.
+
+        Purpose: Guards the cache contract that lets the hot path skip
+            ``np.asarray(...).ravel()`` conversions inside the C++ kernel
+            constructor.
+
+        Given: A ContinuousPushPOMDPDiscreteActions env.
+        When: action_to_vector entries are inspected.
+        Then: Each value is a 1-D ndarray of shape (2,), dtype float64, and
+            C-contiguous.
+
+        Test type: unit
+        """
+        env = ContinuousPushPOMDPDiscreteActions(discount_factor=0.99)
+        for action_name, vec in env.action_to_vector.items():
+            assert isinstance(vec, np.ndarray), action_name
+            assert vec.dtype == np.float64, action_name
+            assert vec.shape == (2,), action_name
+            assert vec.flags["C_CONTIGUOUS"], action_name

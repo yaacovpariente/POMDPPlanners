@@ -617,10 +617,107 @@ class PushPOMDP(DiscreteActionsEnvironment):
         )
 
     def sample_next_step(self, state: Any, action: Any) -> Tuple[Any, Any, float]:
-        next_state = self.state_transition_model(state=state, action=action).sample()[0]
-        next_observation = self.observation_model(next_state=next_state, action=action).sample()[0]
+        next_state = self.sample_next_state(state=state, action=action)
+        next_observation = self.sample_observation(next_state=next_state, action=action)
         r = self._reward_from_next_state(state, action, next_state)
         return next_state, next_observation, r
+
+    # ── Hot-path sampling overrides ─────────────────────────────────
+    # The default base-class implementations build a PushStateTransition /
+    # PushObservation wrapper per call (constructor work, slicing, and a
+    # Python ``sample()`` loop). These overrides inline the wrapper body so
+    # the wrapper allocation is skipped while the np.random.* call sequence
+    # remains byte-identical with the wrapper path.
+
+    def sample_next_state(self, state: np.ndarray, action: str) -> np.ndarray:
+        # Inline of PushStateTransition._get_actual_action() then
+        # _compute_next_state_for_action(). RNG order: one np.random.random()
+        # call, optionally one np.random.choice() call on error_actions.
+        if self.transition_error_prob > 0.0 and np.random.random() < self.transition_error_prob:
+            error_actions = [a for a in self.actions if a != action]
+            actual_action = np.random.choice(error_actions)
+        else:
+            actual_action = action
+
+        dx, dy = PushStateTransition._ACTION_TO_DXY[
+            actual_action
+        ]  # pylint: disable=protected-access
+
+        # Extract scalar positions from the 6-D state.
+        rx, ry = float(state[0]), float(state[1])
+        ox, oy = float(state[2]), float(state[3])
+        tx, ty = float(state[4]), float(state[5])
+
+        # Intended new robot position; obstacle collision blocks movement.
+        irx, iry = rx + dx, ry + dy
+        if self._is_colliding_with_obstacle_scalar(irx, iry):
+            nrx, nry = rx, ry
+        else:
+            nrx, nry = irx, iry
+
+        # Push if robot is within push_threshold of the object.
+        ddx, ddy = nrx - ox, nry - oy
+        dist_sq = ddx * ddx + ddy * ddy
+        push_threshold_sq = self.push_threshold * self.push_threshold
+
+        if dist_sq < push_threshold_sq:
+            push_scale = 1.0 - self.friction_coefficient
+            iox = ox + dx * push_scale
+            ioy = oy + dy * push_scale
+            if self._is_colliding_with_obstacle_scalar(iox, ioy):
+                nox, noy = ox, oy
+            else:
+                nox, noy = iox, ioy
+        else:
+            nox, noy = ox, oy
+
+        # Clip to grid bounds.
+        gmax = self.grid_size - 1
+        nrx = max(0.0, min(nrx, gmax))
+        nry = max(0.0, min(nry, gmax))
+        nox = max(0.0, min(nox, gmax))
+        noy = max(0.0, min(noy, gmax))
+
+        result = np.empty(6)
+        result[0] = nrx
+        result[1] = nry
+        result[2] = nox
+        result[3] = noy
+        result[4] = tx
+        result[5] = ty
+        return result
+
+    def _is_colliding_with_obstacle_scalar(self, pos_x: float, pos_y: float) -> bool:
+        if not self.obstacles:
+            return False
+        obs_r_sq = self.obstacle_radius * self.obstacle_radius
+        for obs_x, obs_y in self.obstacles:
+            ddx = pos_x - obs_x
+            ddy = pos_y - obs_y
+            if ddx * ddx + ddy * ddy <= obs_r_sq:
+                return True
+        return False
+
+    def sample_observation(self, next_state: np.ndarray, action: str) -> np.ndarray:
+        # Inline of PushObservation.sample(1): two np.random.normal(0, sigma)
+        # draws, clamped to [0, grid_size - 1]. RNG order matches the wrapper.
+        gmax = self.grid_size - 1
+        rx, ry = float(next_state[0]), float(next_state[1])
+        ox, oy = float(next_state[2]), float(next_state[3])
+        tx, ty = float(next_state[4]), float(next_state[5])
+        noise_std = self.observation_noise
+
+        nox = max(0.0, min(ox + np.random.normal(0, noise_std), gmax))
+        noy = max(0.0, min(oy + np.random.normal(0, noise_std), gmax))
+
+        observation = np.empty(6)
+        observation[0] = rx
+        observation[1] = ry
+        observation[2] = nox
+        observation[3] = noy
+        observation[4] = tx
+        observation[5] = ty
+        return observation
 
     def reward(self, state: np.ndarray, action: str) -> float:
         # Compute next state to evaluate reward based on action result

@@ -59,8 +59,8 @@ class UnweightedParticleBelief(Belief):
         for _ in range(self.num_particles):
             # Sample a particle and simulate its transition
             s = random.choice(self.particles)
-            next_s = pomdp.state_transition_model(state=s, action=action).sample()[0]
-            obs = pomdp.observation_model(next_state=next_s, action=action).sample()[0]
+            next_s = pomdp.sample_next_state(state=s, action=action)
+            obs = pomdp.sample_observation(next_state=next_s, action=action)
             if pomdp.is_equal_observation(obs, observation):
                 new_particles.append(next_s)
 
@@ -87,8 +87,8 @@ class UnweightedParticleBelief(Belief):
             s = self._reinvigoration_pertubation(
                 action=action, observation=observation, pomdp=pomdp
             )
-            next_s = pomdp.state_transition_model(state=s, action=action).sample()[0]
-            obs = pomdp.observation_model(next_state=next_s, action=action).sample()[0]
+            next_s = pomdp.sample_next_state(state=s, action=action)
+            obs = pomdp.sample_observation(next_state=next_s, action=action)
             if pomdp.is_equal_observation(obs, observation):
                 return next_s
 
@@ -284,8 +284,7 @@ class WeightedParticleBelief(Belief):
         # Fallback: per-particle Python loop. Byte-identical to pre-Layer-2
         # behaviour for envs without native batch support.
         next_particles = [
-            pomdp.state_transition_model(state=particle, action=action).sample()[0]
-            for particle in self.particles
+            pomdp.sample_next_state(state=particle, action=action) for particle in self.particles
         ]
         probs = np.array(
             [

@@ -350,6 +350,14 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
             use_queue_logger=use_queue_logger,
         )
 
+        # Cached observation covariance — built once from env params; identical
+        # to what the per-call observation wrapper builds via
+        # ``_build_safe_ant_obs_covariance``. Reused on the hot-path native-
+        # kernel observation override to skip the per-call allocation.
+        self._observation_covariance = _build_safe_ant_obs_covariance(
+            position_noise, velocity_noise
+        )
+
     def state_transition_model(self, state: np.ndarray, action: int) -> StateTransitionModel:
         return SafeAntVelocityStateTransition(  # pyright: ignore[reportReturnType]
             state=state,
@@ -522,11 +530,39 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
             ),
         ]
 
+    # ── Hot-path sampling overrides ─────────────────────────────────
+    # The default base-class implementations build a Python wrapper
+    # subclass per call (``SafeAntVelocityStateTransition`` /
+    # ``SafeAntVelocityObservation``) that forwards to the native C++
+    # kernel. The overrides below construct the native kernel directly
+    # and skip the wrapper allocation, while preserving the identical
+    # kernel-construction sequence and arguments.
+
+    def sample_next_state(self, state: np.ndarray, action: int) -> np.ndarray:
+        kernel = _native.SafeAntVelocityTransitionCpp(
+            state=state,
+            action=action,
+            dt=self.dt,
+            mass=self.mass,
+            damping=self.damping,
+            max_force=self.max_force,
+            force_scales=DEFAULT_FORCE_SCALES,
+        )
+        return kernel.sample()[0]
+
+    def sample_observation(self, next_state: np.ndarray, action: int) -> np.ndarray:
+        kernel = _native.SafeAntVelocityObservationCpp(
+            next_state=next_state,
+            action=action,
+            covariance=self._observation_covariance,
+        )
+        return kernel.sample()[0]
+
     def sample_next_step(
         self, state: np.ndarray, action: int
     ) -> Tuple[np.ndarray, np.ndarray, float]:
-        next_state = self.state_transition_model(state=state, action=action).sample()[0]
-        next_observation = self.observation_model(next_state=next_state, action=action).sample()[0]
+        next_state = self.sample_next_state(state=state, action=action)
+        next_observation = self.sample_observation(next_state=next_state, action=action)
         reward = self.reward(state=next_state, action=action)
 
         return next_state, next_observation, reward

@@ -417,6 +417,39 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
             )
         raise ValueError(f"Unknown observation model type: {self.observation_model_type}")
 
+    # ── Hot-path sampling overrides ─────────────────────────────────
+    # The default base-class implementations build a Python-wrapper
+    # subclass per call (np.asarray(...).ravel() x2, side-attribute
+    # storage). The actual RNG draw lives entirely inside the C++
+    # _native.ContinuousLightDark{Transition,Observation}Cpp.sample()
+    # method. These overrides skip the Python subclass, construct the
+    # native kernel directly, and produce byte-identical RNG draws.
+
+    def sample_next_state(self, state: np.ndarray, action: np.ndarray) -> np.ndarray:
+        kernel = _native.ContinuousLightDarkTransitionCpp(
+            state=state,
+            action=action,
+            covariance=self._state_transition_dist.covariance,
+        )
+        return kernel.sample()[0]
+
+    def sample_observation(self, next_state: np.ndarray, action: np.ndarray) -> Any:
+        if self.observation_model_type == ObservationModelType.NORMAL_NOISE:
+            kernel = _native.ContinuousLightDarkObservationCpp(
+                next_state=next_state,
+                action=action,
+                covariance_near=self._obs_dist_near_beacon.covariance,
+                covariance_far=self._obs_dist_far_from_beacon.covariance,
+                beacons=self.beacons,
+                beacon_radius=float(self.beacon_radius),
+                grid_size=float(self.grid_size),
+            )
+            return kernel.sample()[0]
+        # NoObsInDark and DistanceBased models have Python-side sampling
+        # logic in their wrappers; fall back to the default base-class
+        # path which goes through observation_model(...).sample()[0].
+        return super().sample_observation(next_state=next_state, action=action)
+
     def reward(self, state: np.ndarray, action: np.ndarray) -> float:
         return self.reward_model.compute_reward(state, action)
 
@@ -648,11 +681,13 @@ class ContinuousLightDarkPOMDPDiscreteActions(ContinuousLightDarkPOMDP, Discrete
         )
 
         self.actions = ["up", "down", "right", "left"]
+        # Cache action vectors as contiguous float64 ndarrays so the hot
+        # path can skip np.asarray(...).ravel() conversions.
         self.action_to_vector = {
-            "up": np.array([0, 1]),
-            "down": np.array([0, -1]),
-            "right": np.array([1, 0]),
-            "left": np.array([-1, 0]),
+            "up": np.ascontiguousarray([0.0, 1.0], dtype=np.float64),
+            "down": np.ascontiguousarray([0.0, -1.0], dtype=np.float64),
+            "right": np.ascontiguousarray([1.0, 0.0], dtype=np.float64),
+            "left": np.ascontiguousarray([-1.0, 0.0], dtype=np.float64),
         }
 
     def get_actions(self) -> List[Any]:
@@ -672,6 +707,12 @@ class ContinuousLightDarkPOMDPDiscreteActions(ContinuousLightDarkPOMDP, Discrete
 
     def reward_batch(self, states: Union[np.ndarray, Sequence[Any]], action: Any) -> np.ndarray:
         return super().reward_batch(np.asarray(states), self.action_to_vector[action])
+
+    def sample_next_state(self, state: np.ndarray, action: Any) -> np.ndarray:
+        return super().sample_next_state(state, self.action_to_vector[action])
+
+    def sample_observation(self, next_state: np.ndarray, action: Any) -> Any:
+        return super().sample_observation(next_state, self.action_to_vector[action])
 
     def __eq__(self, other):
         if not isinstance(other, ContinuousLightDarkPOMDPDiscreteActions):
