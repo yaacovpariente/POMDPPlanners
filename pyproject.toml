@@ -200,7 +200,24 @@ ignore-docstrings = true
 ignore-imports = false
 
 [tool.pylint.typecheck]
-ignored-modules = ["numpy", "cvxopt"]
+# `_native` entries cover compiled pybind11 extensions whose `.so` may not be
+# built locally in every venv. The matching `.pyi` stubs satisfy pyright, but
+# pylint can only resolve the name if the extension is importable, so list
+# each environment's `_native` submodule here to silence E0611 / E0401 when
+# the binary is missing.
+ignored-modules = [
+    "numpy",
+    "cvxopt",
+    "POMDPPlanners.core._native",
+    "POMDPPlanners.environments.mountain_car_pomdp._native",
+    "POMDPPlanners.environments.cartpole_pomdp._native",
+    "POMDPPlanners.environments.light_dark_pomdp._native",
+    "POMDPPlanners.environments.laser_tag_pomdp._native",
+    "POMDPPlanners.environments.push_pomdp._native",
+    "POMDPPlanners.environments.pacman_pomdp._native",
+    "POMDPPlanners.environments.rock_sample_pomdp._native",
+    "POMDPPlanners.environments.safety_ant_velocity_pomdp._native",
+]
 ignored-classes = ["SQLObject"]
 
 [tool.pylint.variables]
