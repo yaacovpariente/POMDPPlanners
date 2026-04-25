@@ -730,8 +730,8 @@ def test_observation_model_empty_observation_error():
     with pytest.raises(ValueError) as exc_info:
         obs_model.probability([empty_observation])  # Now expects list
 
-    # The error should mention expected array format
-    assert "Expected non-empty numpy array observation" in str(exc_info.value)
+    # The error comes from the native marshalling layer and mentions the expected length.
+    assert "length 4" in str(exc_info.value)
 
 
 def test_observation_model_invalid_observation_shapes():
@@ -812,7 +812,7 @@ def test_observation_never_empty_from_sample():
                 prob = probs[0]
                 assert np.isfinite(prob), "Probability should be finite"
                 assert prob >= 0.0, "Probability should be non-negative"
-            except Exception as e:
+            except Exception as e:  # pylint: disable=broad-exception-caught
                 pytest.fail(
                     f"Valid observation {obs} with shape {obs.shape} failed probability calculation: {e}"
                 )
@@ -850,7 +850,7 @@ def test_sample_next_step_observation_never_empty():
         for action in actions:
             # Call sample_next_step multiple times to check consistency
             for _ in range(5):
-                next_state, observation, reward = env.sample_next_step(state, action)
+                next_state, observation, _ = env.sample_next_step(state, action)
 
                 # Check observation properties
                 assert isinstance(observation, np.ndarray), "Observation should be numpy array"
@@ -868,7 +868,7 @@ def test_sample_next_step_observation_never_empty():
                     prob = probs[0]
                     assert np.isfinite(prob), "Probability should be finite"
                     assert prob >= 0.0, "Probability should be non-negative"
-                except Exception as e:
+                except Exception as e:  # pylint: disable=broad-exception-caught
                     pytest.fail(
                         f"sample_next_step produced invalid observation {observation} with shape {observation.shape}: {e}"
                     )

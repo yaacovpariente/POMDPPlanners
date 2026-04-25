@@ -14,6 +14,7 @@ from POMDPPlanners.core.belief.vectorized_weighted_particle_belief import (
 )
 from POMDPPlanners.environments.safety_ant_velocity_pomdp import (
     SafeAntVelocityPOMDP,
+    _native,
 )
 from POMDPPlanners.environments.safety_ant_velocity_pomdp.safety_ant_velocity_pomdp_beliefs import (
     SafetyAntVelocityVectorizedUpdater,
@@ -26,6 +27,9 @@ from POMDPPlanners.tests.test_core.test_belief.belief_equivalence_utils import (
 from POMDPPlanners.tests.test_core.test_belief.vectorized_updater_test_utils import (
     assert_batch_obs_log_likelihood_matches_loop,
     assert_batch_transition_matches_loop,
+)
+from POMDPPlanners.utils.multivariate_normal import (
+    CovarianceParameterizedMultivariateNormal,
 )
 
 
@@ -303,10 +307,6 @@ class TestConfigId:
                 env.velocity_noise**2,
             ]
         )
-        from POMDPPlanners.utils.multivariate_normal import (
-            CovarianceParameterizedMultivariateNormal,
-        )
-
         obs_dist = CovarianceParameterizedMultivariateNormal(cov)
         u2 = SafetyAntVelocityVectorizedUpdater(
             obs_dist=obs_dist,
@@ -356,6 +356,7 @@ class TestEquivalenceWithPerParticleLoop:
             action=2,
             per_particle_transition_fn=per_particle_fn,
             seed=999,
+            seed_fn=_native.set_seed,
         )
 
     def test_batch_observation_log_likelihood_matches_per_particle_loop(self, env, updater):
@@ -418,7 +419,13 @@ class TestBeliefEquivalenceWithBaseline:
         base, vec = _make_aligned_beliefs(updater)
         obs = np.array([0.1, -0.1, 0.5, 0.2])
         assert_update_particles_match(
-            base=base, vec=vec, action=2, observation=obs, pomdp=env, seed=999
+            base=base,
+            vec=vec,
+            action=2,
+            observation=obs,
+            pomdp=env,
+            seed=999,
+            seed_fn=_native.set_seed,
         )
 
     def test_update_weights_match(self, env, updater):
@@ -445,6 +452,7 @@ class TestBeliefEquivalenceWithBaseline:
             atol=1e-3,
             significance_threshold=1e-4,
             seed=999,
+            seed_fn=_native.set_seed,
         )
 
     def test_sample_distributions_match_post_update(self, env, updater):
@@ -460,9 +468,9 @@ class TestBeliefEquivalenceWithBaseline:
         """
         base, vec = _make_aligned_beliefs(updater)
         obs = np.array([0.1, -0.1, 0.5, 0.2])
-        np.random.seed(999)
+        _native.set_seed(999)
         vec = vec.update(action=1, observation=obs, pomdp=env)
-        np.random.seed(999)
+        _native.set_seed(999)
         base = base.update(action=1, observation=obs, pomdp=env)
 
         assert_sample_distributions_match(
