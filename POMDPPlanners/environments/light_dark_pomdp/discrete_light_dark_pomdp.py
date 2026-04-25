@@ -284,7 +284,7 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
 
         return reward
 
-    def sample_next_state(self, state: np.ndarray, action: Any) -> np.ndarray:
+    def sample_next_state(self, state: np.ndarray, action: Any, n_samples: int = 1) -> Any:
         # Inlined wrapper-equivalent of
         # state_transition_model(state, action).sample()[0].
         # Wrapper builds DiscreteDistribution(values, probs) with
@@ -292,18 +292,29 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
         # idx = int(np.searchsorted(_cumprobs, np.random.rand())) clamped
         # to len(values)-1. Same RNG draw is preserved here.
         cumprobs = self._transition_cumprobs_np[action]
-        idx = int(np.searchsorted(cumprobs, np.random.rand()))
-        if idx >= self._n_actions:
-            idx = self._n_actions - 1
-        return state + self._action_vectors[idx]
+        if n_samples == 1:
+            idx = int(np.searchsorted(cumprobs, np.random.rand()))
+            if idx >= self._n_actions:
+                idx = self._n_actions - 1
+            return state + self._action_vectors[idx]
+        # Vectorize: draw N uniforms and N searchsorted calls, then
+        # gather the per-row offset vectors. Preserves RNG draw count
+        # (one np.random.rand() per sample, in order).
+        draws = np.random.rand(n_samples)
+        idxs = np.searchsorted(cumprobs, draws)
+        idxs = np.clip(idxs, 0, self._n_actions - 1)
+        offsets = np.stack([self._action_vectors[i] for i in idxs], axis=0)
+        return state + offsets
 
-    def sample_observation(self, next_state: np.ndarray, action: Any) -> Any:
+    def sample_observation(self, next_state: np.ndarray, action: Any, n_samples: int = 1) -> Any:
         # Only the NORMAL observation model is inlined — it is the only
         # path with no early-exit "None" branch and matches the wrapper's
         # RNG sequence exactly. Other model types fall back to the base
-        # class default (observation_model(...).sample()[0]).
+        # class default (observation_model(...).sample()).
         if self.observation_model_type != ObservationModelType.NORMAL:
-            return super().sample_observation(next_state=next_state, action=action)
+            return super().sample_observation(
+                next_state=next_state, action=action, n_samples=n_samples
+            )
 
         # Wrapper-equivalent near-beacon check (BaseDiscreteLightDarkObservationModel._near_beacon):
         # distances = np.linalg.norm(beacons - next_state[:, None], axis=0)
@@ -312,16 +323,86 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
         near_beacon = float(np.min(distances)) < self.beacon_radius
 
         cumprobs = self._obs_cumprobs_near_np if near_beacon else self._obs_cumprobs_far_np
-        # Wrapper builds values = [next_state + dir for dir in dirs] + [next_state],
-        # then DiscreteDistribution.sample() draws np.random.rand() and
-        # np.searchsorted; same draw replicated here.
-        idx = int(np.searchsorted(cumprobs, np.random.rand()))
         n_obs = self._n_obs_values
-        if idx >= n_obs:
-            idx = n_obs - 1
-        if idx < self._n_actions:
-            return next_state + self._action_vectors[idx]
-        return next_state
+
+        if n_samples == 1:
+            # Wrapper builds values = [next_state + dir for dir in dirs] + [next_state],
+            # then DiscreteDistribution.sample() draws np.random.rand() and
+            # np.searchsorted; same draw replicated here.
+            idx = int(np.searchsorted(cumprobs, np.random.rand()))
+            if idx >= n_obs:
+                idx = n_obs - 1
+            if idx < self._n_actions:
+                return next_state + self._action_vectors[idx]
+            return next_state
+
+        # Vectorized path: draw N uniforms in order so RNG sequence is
+        # identical to N successive single-sample draws.
+        draws = np.random.rand(n_samples)
+        idxs = np.searchsorted(cumprobs, draws)
+        idxs = np.clip(idxs, 0, n_obs - 1)
+        observations = []
+        for idx in idxs:
+            if idx < self._n_actions:
+                observations.append(next_state + self._action_vectors[idx])
+            else:
+                observations.append(next_state)
+        return np.stack(observations, axis=0)
+
+    def transition_log_probability(
+        self, state: np.ndarray, action: Any, next_states: Any
+    ) -> np.ndarray:
+        action_index = self.actions.index(action)
+        probs = self._transition_probs[action]
+        # Wrapper-equivalent values list: state + action_to_vector[a] for
+        # each action, in self.actions order. Match by exact equality.
+        candidates = np.stack(
+            [state + self._action_vectors[i] for i in range(self._n_actions)], axis=0
+        )
+        next_states_array = np.asarray(next_states)
+        if next_states_array.ndim == 1:
+            next_states_array = next_states_array.reshape(1, -1)
+        out = np.full(len(next_states_array), -np.inf, dtype=np.float64)
+        for i, ns in enumerate(next_states_array):
+            for j, candidate in enumerate(candidates):
+                if np.array_equal(ns, candidate):
+                    p = float(probs[j])
+                    out[i] = np.log(p) if p > 0.0 else -np.inf
+                    break
+        # action_index is referenced for documentation parity with
+        # state_transition_model; the per-candidate match above already
+        # uses the action-specific probs vector.
+        del action_index
+        return out
+
+    def observation_log_probability(
+        self, next_state: np.ndarray, action: Any, observations: Any
+    ) -> np.ndarray:
+        if self.observation_model_type != ObservationModelType.NORMAL:
+            return super().observation_log_probability(
+                next_state=next_state, action=action, observations=observations
+            )
+
+        distances = np.linalg.norm(self.beacons - next_state[:, np.newaxis], axis=0)
+        near_beacon = float(np.min(distances)) < self.beacon_radius
+        probs_vec = self._obs_probs_near if near_beacon else self._obs_probs_far
+
+        # Wrapper builds values = [ns + dir for dir in dirs] + [ns]
+        candidates = [next_state + self._action_vectors[i] for i in range(self._n_actions)]
+        candidates.append(next_state)
+        candidates_array = np.stack(candidates, axis=0)
+
+        observations_array = np.asarray(observations)
+        if observations_array.ndim == 1:
+            observations_array = observations_array.reshape(1, -1)
+        out = np.full(len(observations_array), -np.inf, dtype=np.float64)
+        for i, obs in enumerate(observations_array):
+            for j, candidate in enumerate(candidates_array):
+                if np.array_equal(obs, candidate):
+                    p = float(probs_vec[j])
+                    out[i] = np.log(p) if p > 0.0 else -np.inf
+                    break
+        return out
 
     def state_transition_model(self, state: np.ndarray, action: Any) -> StateTransitionModel:
         action_index = self.actions.index(action)

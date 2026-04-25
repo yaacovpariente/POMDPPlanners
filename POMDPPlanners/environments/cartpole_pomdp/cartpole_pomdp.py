@@ -368,7 +368,9 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
     # ``sample()`` produces a byte-identical RNG draw to the legacy
     # path.
 
-    def sample_next_state(self, state: np.ndarray, action: int) -> NDArray[np.float64]:
+    def sample_next_state(
+        self, state: np.ndarray, action: int, n_samples: int = 1
+    ) -> NDArray[np.float64]:
         kernel = _native.CartPoleTransitionCpp(
             state=state,
             action=action,
@@ -382,15 +384,59 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
             masspole=self.masspole,
             covariance=self._state_transition_dist.covariance,
         )
-        return kernel.sample()[0]
+        samples = kernel.sample(n_samples)
+        if n_samples == 1:
+            return samples[0]
+        return np.asarray(samples)
 
-    def sample_observation(self, next_state: np.ndarray, action: int) -> NDArray[np.float64]:
+    def sample_observation(
+        self, next_state: np.ndarray, action: int, n_samples: int = 1
+    ) -> NDArray[np.float64]:
         kernel = _native.CartPoleObservationCpp(
             next_state=next_state,
             action=action,
             covariance=self._obs_dist.covariance,
         )
-        return kernel.sample()[0]
+        samples = kernel.sample(n_samples)
+        if n_samples == 1:
+            return samples[0]
+        return np.asarray(samples)
+
+    def transition_log_probability(
+        self,
+        state: np.ndarray,
+        action: int,
+        next_states: Union[Sequence[Any], np.ndarray],
+    ) -> np.ndarray:
+        kernel = _native.CartPoleTransitionCpp(
+            state=state,
+            action=action,
+            force_mag=self.force_mag,
+            total_mass=self.total_mass,
+            polemass_length=self.polemass_length,
+            gravity=self.gravity,
+            length=self.length,
+            kinematics_integrator=self.kinematics_integrator,
+            tau=self.tau,
+            masspole=self.masspole,
+            covariance=self._state_transition_dist.covariance,
+        )
+        probs = np.asarray(kernel.probability(next_states))
+        return np.log(probs + 1e-300)
+
+    def observation_log_probability(
+        self,
+        next_state: np.ndarray,
+        action: int,
+        observations: Union[Sequence[Any], np.ndarray],
+    ) -> np.ndarray:
+        kernel = _native.CartPoleObservationCpp(
+            next_state=next_state,
+            action=action,
+            covariance=self._obs_dist.covariance,
+        )
+        probs = np.asarray(kernel.probability(observations))
+        return np.log(probs + 1e-300)
 
     def reward(self, state: np.ndarray, action: int) -> float:
         terminated = self.is_terminal(state)

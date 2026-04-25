@@ -277,17 +277,53 @@ class TigerPOMDP(DiscreteActionsEnvironment):
     # Inline the wrapper's sample() body to skip per-call wrapper
     # allocation. The RNG draw sequence is preserved bit-for-bit.
 
-    def sample_next_state(self, state: str, action: str) -> str:
+    def sample_next_state(self, state: str, action: str, n_samples: int = 1):
         if action in ("open_left", "open_right"):
-            return str(np.random.choice(STATES))
-        return state
+            samples = [str(np.random.choice(STATES)) for _ in range(n_samples)]
+        else:
+            samples = [state] * n_samples
+        if n_samples == 1:
+            return samples[0]
+        return samples
 
-    def sample_observation(self, next_state: str, action: str) -> str:
+    def sample_observation(self, next_state: str, action: str, n_samples: int = 1):
+        samples: List[str] = []
         if action == "listen":
             if next_state == "tiger_left":
-                return "hear_left" if np.random.random() < 0.85 else "hear_right"
-            return "hear_right" if np.random.random() < 0.85 else "hear_left"
-        return "hear_nothing"
+                for _ in range(n_samples):
+                    samples.append("hear_left" if np.random.random() < 0.85 else "hear_right")
+            else:
+                for _ in range(n_samples):
+                    samples.append("hear_right" if np.random.random() < 0.85 else "hear_left")
+        else:
+            samples = ["hear_nothing"] * n_samples
+        if n_samples == 1:
+            return samples[0]
+        return samples
+
+    def transition_log_probability(self, state: str, action: str, next_states) -> np.ndarray:
+        result = np.zeros(len(next_states))
+        if action in ("open_left", "open_right"):
+            for i, ns in enumerate(next_states):
+                result[i] = np.log(0.5) if ns in STATES else -np.inf
+        else:
+            for i, ns in enumerate(next_states):
+                result[i] = 0.0 if ns == state else -np.inf
+        return result
+
+    def observation_log_probability(self, next_state: str, action: str, observations) -> np.ndarray:
+        result = np.zeros(len(observations))
+        if action == "listen":
+            for i, obs in enumerate(observations):
+                if obs not in OBSERVATIONS:
+                    result[i] = -np.inf
+                    continue
+                correct = "hear_left" if next_state == "tiger_left" else "hear_right"
+                result[i] = np.log(0.85) if obs == correct else np.log(0.15)
+        else:
+            for i, obs in enumerate(observations):
+                result[i] = 0.0 if obs == "hear_nothing" else -np.inf
+        return result
 
     def reward(self, state: str, action: str) -> float:
         if action == "listen":

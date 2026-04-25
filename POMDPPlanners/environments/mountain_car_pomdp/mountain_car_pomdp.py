@@ -321,7 +321,12 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
     # ``sample()`` produces a byte-identical RNG draw to the legacy
     # path.
 
-    def sample_next_state(self, state: Tuple[float, float], action: int) -> NDArray[np.float64]:
+    def sample_next_state(
+        self,
+        state: Union[Tuple[float, float], NDArray[np.float64]],
+        action: int,
+        n_samples: int = 1,
+    ) -> NDArray[np.float64]:
         kernel = _native.MountainCarTransitionCpp(
             state=state,
             action=action,
@@ -332,17 +337,59 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
             max_position=self.max_position,
             covariance=self._state_transition_dist.covariance,
         )
-        return kernel.sample()[0]
+        samples = kernel.sample(n_samples)
+        if n_samples == 1:
+            return samples[0]
+        return np.asarray(samples)
 
     def sample_observation(
-        self, next_state: Tuple[float, float], action: int
+        self,
+        next_state: Union[Tuple[float, float], NDArray[np.float64]],
+        action: int,
+        n_samples: int = 1,
     ) -> NDArray[np.float64]:
         kernel = _native.MountainCarObservationCpp(
             next_state=next_state,
             action=action,
             covariance=self._obs_dist.covariance,
         )
-        return kernel.sample()[0]
+        samples = kernel.sample(n_samples)
+        if n_samples == 1:
+            return samples[0]
+        return np.asarray(samples)
+
+    def transition_log_probability(
+        self,
+        state: Union[Tuple[float, float], NDArray[np.float64]],
+        action: int,
+        next_states: Union[Sequence[Any], NDArray[np.float64]],
+    ) -> np.ndarray:
+        kernel = _native.MountainCarTransitionCpp(
+            state=state,
+            action=action,
+            power=self.power,
+            gravity=self.gravity,
+            max_speed=self.max_speed,
+            min_position=self.min_position,
+            max_position=self.max_position,
+            covariance=self._state_transition_dist.covariance,
+        )
+        probs = np.asarray(kernel.probability(next_states))
+        return np.log(probs + 1e-300)
+
+    def observation_log_probability(
+        self,
+        next_state: Union[Tuple[float, float], NDArray[np.float64]],
+        action: int,
+        observations: Union[Sequence[Any], NDArray[np.float64]],
+    ) -> np.ndarray:
+        kernel = _native.MountainCarObservationCpp(
+            next_state=next_state,
+            action=action,
+            covariance=self._obs_dist.covariance,
+        )
+        probs = np.asarray(kernel.probability(observations))
+        return np.log(probs + 1e-300)
 
     def reward(self, state: Tuple[float, float], action: int) -> float:
         position, _ = state

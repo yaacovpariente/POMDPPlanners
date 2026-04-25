@@ -9,6 +9,7 @@ environment, and discrete actions wrapper for the Continuous Push POMDP.
 from typing import Any
 
 import numpy as np
+import pytest
 
 from POMDPPlanners.core.environment import SpaceType
 from POMDPPlanners.environments.push_pomdp.continuous_push_pomdp import (
@@ -842,3 +843,219 @@ class TestSampleHotPathOverridesEquivalence:
             assert vec.dtype == np.float64, action_name
             assert vec.shape == (2,), action_name
             assert vec.flags["C_CONTIGUOUS"], action_name
+
+
+# ------------------------------------------------------------------
+# Batch sampling and log-probability equivalence
+# ------------------------------------------------------------------
+
+
+class TestSampleBatchAndLogProbabilityEquivalence:
+    """Pinned-seed equivalence for the new n_samples and log-probability paths."""
+
+    @pytest.mark.parametrize("n_samples", [1, 5, 100])
+    def test_sample_next_state_n_samples_equivalence(self, n_samples):
+        """Pinned-seed equivalence: sample_next_state(..., n) vs wrapper.sample(n).
+
+        Purpose: Validates that the new ``n_samples`` parameter on
+            ``sample_next_state`` preserves the kernel's RNG-draw order.
+            Both paths construct the same ``_native.ContinuousPushTransitionCpp``
+            and call ``kernel.sample(n)`` under the same module-level RNG seed,
+            so the per-sample outputs must be byte-identical.
+
+        Given: A ContinuousPushPOMDP env with non-trivial covariance and a
+            (state, action) pair, with ``_native.set_seed`` pinned before
+            each path.
+        When: state_transition_model(s, a).sample(n) and
+            sample_next_state(s, a, n_samples=n) are each called under the
+            same seed.
+        Then: For n==1 the override returns a single ndarray equal to
+            wrapper[0]; for n>1 it returns a length-n list of ndarrays
+            element-by-element equal to the wrapper output.
+
+        Test type: unit
+        """
+        from POMDPPlanners.environments.push_pomdp import (  # pylint: disable=import-outside-toplevel
+            _native,
+        )
+
+        env = ContinuousPushPOMDP(
+            discount_factor=0.99,
+            state_transition_cov_matrix=np.eye(2) * 0.01,
+            robot_radius=0.3,
+        )
+        state = np.array([2.5, 3.1, 3.0, 3.0, 8.0, 8.0])
+        action = np.array([1.0, 0.0])
+        seed = 4242
+        _native.set_seed(seed)
+        wrapper_samples = env.state_transition_model(state, action).sample(n_samples)
+        _native.set_seed(seed)
+        direct = env.sample_next_state(state, action, n_samples=n_samples)
+        if n_samples == 1:
+            assert isinstance(direct, np.ndarray)
+            np.testing.assert_array_equal(direct, wrapper_samples[0])
+        else:
+            assert len(direct) == n_samples
+            for i in range(n_samples):
+                np.testing.assert_array_equal(direct[i], wrapper_samples[i])
+
+    @pytest.mark.parametrize("n_samples", [1, 5, 100])
+    def test_sample_observation_n_samples_equivalence(self, n_samples):
+        """Pinned-seed equivalence: sample_observation(..., n) vs wrapper.sample(n).
+
+        Purpose: Validates that the new ``n_samples`` parameter on
+            ``sample_observation`` preserves the kernel's RNG-draw order.
+
+        Given: A ContinuousPushPOMDP env, a (next_state, action) pair, and
+            ``_native.set_seed`` pinned before each path.
+        When: observation_model(ns, a).sample(n) and
+            sample_observation(ns, a, n_samples=n) are each called under
+            the same seed.
+        Then: For n==1 the override returns a single ndarray; for n>1 it
+            returns a length-n list. Both match the wrapper output
+            element-by-element.
+
+        Test type: unit
+        """
+        from POMDPPlanners.environments.push_pomdp import (  # pylint: disable=import-outside-toplevel
+            _native,
+        )
+
+        env = ContinuousPushPOMDP(
+            discount_factor=0.99,
+            observation_noise=0.3,
+            robot_radius=0.3,
+        )
+        next_state = np.array([5.0, 5.0, 4.5, 5.5, 8.0, 8.0])
+        action = np.array([0.5, 0.5])
+        seed = 909090
+        _native.set_seed(seed)
+        wrapper_samples = env.observation_model(next_state, action).sample(n_samples)
+        _native.set_seed(seed)
+        direct = env.sample_observation(next_state, action, n_samples=n_samples)
+        if n_samples == 1:
+            assert isinstance(direct, np.ndarray)
+            np.testing.assert_array_equal(direct, wrapper_samples[0])
+        else:
+            assert len(direct) == n_samples
+            for i in range(n_samples):
+                np.testing.assert_array_equal(direct[i], wrapper_samples[i])
+
+    def test_transition_log_probability_equivalence(self):
+        """transition_log_probability == log(state_transition_model.probability).
+
+        Purpose: Validates that the new vectorized log-probability path
+            yields ``np.log(probability(...))`` from the wrapper for several
+            candidate next-states.
+
+        Given: A ContinuousPushPOMDP env, a (state, action) pair, and a list
+            of candidate next-states drawn from the same kernel under
+            distinct seeds (so they have non-trivial probability mass).
+        When: env.transition_log_probability(s, a, next_states) is called.
+        Then: The result equals ``np.log(probability(next_states))`` from
+            the wrapper to numerical tolerance.
+
+        Test type: unit
+        """
+        from POMDPPlanners.environments.push_pomdp import (  # pylint: disable=import-outside-toplevel
+            _native,
+        )
+
+        env = ContinuousPushPOMDP(
+            discount_factor=0.99,
+            state_transition_cov_matrix=np.eye(2) * 0.01,
+            robot_radius=0.3,
+        )
+        state = np.array([5.0, 5.0, 5.5, 5.0, 8.0, 8.0])
+        action = np.array([0.5, 0.5])
+        wrapper = env.state_transition_model(state, action)
+        candidates = []
+        for seed in (1, 2, 3, 4, 5):
+            _native.set_seed(seed)
+            candidates.append(wrapper.sample()[0])
+        wrapper_probs = np.asarray(wrapper.probability(candidates))
+        with np.errstate(divide="ignore"):
+            expected_log = np.log(wrapper_probs)
+        log_probs = env.transition_log_probability(state, action, candidates)
+        assert log_probs.shape == (len(candidates),)
+        np.testing.assert_allclose(log_probs, expected_log, rtol=1e-12, atol=1e-12)
+
+    def test_observation_log_probability_equivalence(self):
+        """observation_log_probability == log(observation_model.probability).
+
+        Purpose: Validates that the new vectorized log-probability path
+            yields ``np.log(probability(...))`` from the wrapper for several
+            candidate observations.
+
+        Given: A ContinuousPushPOMDP env, a (next_state, action) pair, and
+            a list of candidate observations spanning equal-to-truth and
+            offset positions.
+        When: env.observation_log_probability(ns, a, observations) is called.
+        Then: The result equals ``np.log(probability(observations))`` from
+            the wrapper to numerical tolerance.
+
+        Test type: unit
+        """
+        env = ContinuousPushPOMDP(
+            discount_factor=0.99,
+            observation_noise=0.3,
+            robot_radius=0.3,
+        )
+        next_state = np.array([3.0, 3.0, 5.0, 5.0, 8.0, 8.0])
+        action = np.array([1.0, 0.0])
+        wrapper = env.observation_model(next_state, action)
+        observations = [
+            next_state.copy(),  # zero-diff
+            np.array([3.0, 3.0, 5.1, 5.0, 8.0, 8.0]),
+            np.array([3.0, 3.0, 5.5, 4.6, 8.0, 8.0]),
+            np.array([3.0, 3.0, 6.0, 5.0, 8.0, 8.0]),
+        ]
+        wrapper_probs = np.asarray(wrapper.probability(observations))
+        expected_log = np.log(wrapper_probs)
+        log_probs = env.observation_log_probability(next_state, action, observations)
+        assert log_probs.shape == (len(observations),)
+        np.testing.assert_allclose(log_probs, expected_log, rtol=1e-12, atol=1e-12)
+
+    def test_discrete_actions_log_probability_resolves_action(self):
+        """Discrete-actions wrapper resolves str action via action_to_vector.
+
+        Purpose: Validates that
+            ``ContinuousPushPOMDPDiscreteActions.transition_log_probability``
+            and ``observation_log_probability`` look up the cached action
+            vector and produce the same result as calling the parent override
+            with that vector directly.
+
+        Given: A ContinuousPushPOMDPDiscreteActions env, a (state, action,
+            next_state) triple.
+        When: For each str action, env.{transition,observation}_log_probability
+            is compared against the parent override called with
+            ``action_to_vector[a]``.
+        Then: Both paths produce np.allclose results.
+
+        Test type: unit
+        """
+        env = ContinuousPushPOMDPDiscreteActions(
+            discount_factor=0.99,
+            state_transition_cov_matrix=np.eye(2) * 0.01,
+            observation_noise=0.3,
+        )
+        state = np.array([5.0, 5.0, 5.5, 5.0, 9.0, 9.0])
+        next_states = [
+            np.array([5.5, 5.0, 5.5, 5.0, 9.0, 9.0]),
+            np.array([5.0, 5.5, 5.5, 5.0, 9.0, 9.0]),
+        ]
+        observations = [
+            np.array([5.0, 5.0, 5.5, 5.0, 9.0, 9.0]),
+            np.array([5.0, 5.0, 5.6, 5.1, 9.0, 9.0]),
+        ]
+        for str_action in env.get_actions():
+            vec = env.action_to_vector[str_action]
+            via_str = env.transition_log_probability(state, str_action, next_states)
+            via_vec = ContinuousPushPOMDP.transition_log_probability(env, state, vec, next_states)
+            np.testing.assert_allclose(via_str, via_vec, rtol=1e-12, atol=1e-12)
+
+            via_str_obs = env.observation_log_probability(state, str_action, observations)
+            via_vec_obs = ContinuousPushPOMDP.observation_log_probability(
+                env, state, vec, observations
+            )
+            np.testing.assert_allclose(via_str_obs, via_vec_obs, rtol=1e-12, atol=1e-12)

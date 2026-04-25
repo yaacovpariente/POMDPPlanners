@@ -1399,3 +1399,157 @@ class TestSampleHotPathOverridesEquivalence:
                     f"Mismatch for next_state={next_state}, action={action}, seed={seed}: "
                     f"wrapper={wrapper_obs}, direct={direct_obs}"
                 )
+
+    @pytest.mark.parametrize("n_samples", [1, 5, 100])
+    def test_sample_next_state_n_samples_equivalence(self, n_samples):
+        """Pinned-seed equivalence: sample_next_state(..., n) vs wrapper.sample(n).
+
+        Purpose: Validates that the new ``n_samples`` parameter on
+            ``sample_next_state`` preserves the exact RNG-draw order of the
+            wrapper path. Each of the n inner draws is bit-identical to the
+            corresponding draw produced by ``state_transition_model(...).sample(n)``.
+
+        Given: A PushPOMDP with non-zero transition_error_prob (so the
+            np.random.choice branch fires for some draws), a fixed (state,
+            action) pair, and identical np / random seeds before each path.
+        When: state_transition_model(s, a).sample(n_samples) and
+            sample_next_state(s, a, n_samples=n_samples) are each called
+            under the same seed.
+        Then: The two outputs are equal element-by-element. For n==1 the
+            override returns a single ndarray (back-compat); for n>1 it
+            returns a length-n list of ndarrays.
+
+        Test type: unit
+        """
+        env = PushPOMDP(
+            discount_factor=0.95,
+            grid_size=10,
+            push_threshold=1.0,
+            friction_coefficient=0.3,
+            obstacles=[(3.0, 3.0), (7.0, 7.0)],
+            obstacle_radius=0.5,
+            transition_error_prob=0.3,
+        )
+        state = np.array([2.5, 3.1, 3.0, 3.0, 9.0, 9.0])
+        action = "right"
+        seed = 1234
+        np.random.seed(seed)
+        random.seed(seed)
+        wrapper_samples = env.state_transition_model(state, action).sample(n_samples)
+        np.random.seed(seed)
+        random.seed(seed)
+        direct = env.sample_next_state(state, action, n_samples=n_samples)
+        if n_samples == 1:
+            assert isinstance(direct, np.ndarray)
+            assert np.array_equal(direct, wrapper_samples[0])
+        else:
+            assert len(direct) == n_samples
+            for i in range(n_samples):
+                assert np.array_equal(
+                    direct[i], wrapper_samples[i]
+                ), f"Mismatch at i={i}: direct={direct[i]} vs wrapper={wrapper_samples[i]}"
+
+    @pytest.mark.parametrize("n_samples", [1, 5, 100])
+    def test_sample_observation_n_samples_equivalence(self, n_samples):
+        """Pinned-seed equivalence: sample_observation(..., n) vs wrapper.sample(n).
+
+        Purpose: Validates that the new ``n_samples`` parameter on
+            ``sample_observation`` preserves the wrapper's RNG-draw order
+            (two np.random.normal draws per sample, in row order).
+
+        Given: A PushPOMDP env, a fixed (next_state, action) pair, and
+            identical np / random seeds before each path.
+        When: observation_model(ns, a).sample(n_samples) and
+            sample_observation(ns, a, n_samples=n_samples) are each called
+            under the same seed.
+        Then: The two outputs are equal element-by-element.
+
+        Test type: unit
+        """
+        env = PushPOMDP(discount_factor=0.95, grid_size=10, observation_noise=0.4)
+        next_state = np.array([5.0, 5.0, 4.5, 5.5, 9.0, 9.0])
+        action = "up"
+        seed = 7777
+        np.random.seed(seed)
+        random.seed(seed)
+        wrapper_samples = env.observation_model(next_state, action).sample(n_samples)
+        np.random.seed(seed)
+        random.seed(seed)
+        direct = env.sample_observation(next_state, action, n_samples=n_samples)
+        if n_samples == 1:
+            assert isinstance(direct, np.ndarray)
+            assert np.array_equal(direct, wrapper_samples[0])
+        else:
+            assert len(direct) == n_samples
+            for i in range(n_samples):
+                assert np.array_equal(direct[i], wrapper_samples[i])
+
+    def test_transition_log_probability_equivalence(self):
+        """transition_log_probability == log(state_transition_model(..).probability(..)).
+
+        Purpose: Validates the new vectorized log-probability path matches
+            ``np.log(probability(...))`` from the wrapper.
+
+        Given: A PushPOMDP with transition_error_prob > 0 (so non-degenerate
+            probability mass over multiple candidate next-states), a fixed
+            (state, action) pair, and a list of candidate next_states drawn
+            from both the intended-action result and one error-action result.
+        When: env.transition_log_probability(s, a, next_states) is called.
+        Then: The result equals ``np.log(probability(next_states))`` from
+            the wrapper, with -inf for impossible next-states.
+
+        Test type: unit
+        """
+        env = PushPOMDP(
+            discount_factor=0.95,
+            grid_size=10,
+            transition_error_prob=0.25,
+        )
+        state = np.array([2.0, 3.0, 5.0, 5.0, 9.0, 9.0])
+        action = "right"
+        wrapper = env.state_transition_model(state, action)
+        # Candidate next-states: intended ("right" -> robot+x), one error
+        # action result, and an impossible state.
+        candidates = [
+            wrapper.sample()[0],  # intended
+            np.array([2.0, 3.0, 5.0, 5.0, 9.0, 9.0]),  # impossible / no-move
+            np.array([1.0, 3.0, 5.0, 5.0, 9.0, 9.0]),  # left-error result
+            np.array([2.0, 4.0, 5.0, 5.0, 9.0, 9.0]),  # up-error result
+        ]
+        wrapper_probs = wrapper.probability(candidates)
+        with np.errstate(divide="ignore"):
+            expected_log = np.log(wrapper_probs)
+        log_probs = env.transition_log_probability(state, action, candidates)
+        assert log_probs.shape == (len(candidates),)
+        np.testing.assert_array_equal(log_probs, expected_log)
+
+    def test_observation_log_probability_equivalence(self):
+        """observation_log_probability == log(observation_model(..).probability(..)).
+
+        Purpose: Validates the new vectorized log-probability path matches
+            ``np.log(probability(...))`` from the wrapper.
+
+        Given: A PushPOMDP env, a fixed (next_state, action) pair, and a
+            list of candidate observations spanning equal-to-truth and
+            offset positions.
+        When: env.observation_log_probability(ns, a, observations) is called.
+        Then: The result equals ``np.log(probability(observations))`` from
+            the wrapper to numerical tolerance.
+
+        Test type: unit
+        """
+        env = PushPOMDP(discount_factor=0.95, grid_size=10, observation_noise=0.5)
+        next_state = np.array([3.0, 3.0, 5.0, 5.0, 9.0, 9.0])
+        action = "up"
+        wrapper = env.observation_model(next_state, action)
+        observations = [
+            next_state.copy(),  # zero-diff -> max log-pdf
+            np.array([3.0, 3.0, 5.1, 5.0, 9.0, 9.0]),
+            np.array([3.0, 3.0, 5.5, 4.6, 9.0, 9.0]),
+            np.array([3.0, 3.0, 6.0, 5.0, 9.0, 9.0]),
+        ]
+        wrapper_probs = wrapper.probability(observations)
+        expected_log = np.log(wrapper_probs)
+        log_probs = env.observation_log_probability(next_state, action, observations)
+        assert log_probs.shape == (len(observations),)
+        np.testing.assert_allclose(log_probs, expected_log, rtol=1e-12, atol=1e-12)
