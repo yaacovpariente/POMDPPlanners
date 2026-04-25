@@ -323,8 +323,8 @@ class LaserTagStateTransition(StateTransitionModel):
             opp_moves = self._get_opponent_move_probabilities(robot_next)
             positions, probabilities = zip(*opp_moves)
 
-            for _ in range(n_samples):
-                opp_next = np.random.choice(len(positions), p=probabilities)
+            opp_indices = np.random.choice(len(positions), size=n_samples, p=probabilities)
+            for opp_next in opp_indices:
                 opp_next_pos = positions[opp_next]
                 samples.append(
                     np.array(

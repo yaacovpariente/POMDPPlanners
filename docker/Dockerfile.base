@@ -11,6 +11,16 @@ RUN apt-get update && apt-get install -y libatomic1 g++ && rm -rf /var/lib/apt/l
 COPY pyproject.toml ./
 
 RUN pip install --upgrade pip
-RUN pip install torch --index-url https://download.pytorch.org/whl/cpu
-RUN pip freeze | grep -i torch > /tmp/torch-constraints.txt
-RUN PIP_CONSTRAINT=/tmp/torch-constraints.txt pip install ".[dev,docs]"
+# Pin torch to a known-good version to stabilise type-stub behaviour; the
+# pytorch.org CPU index is unversioned in its default URL, so without this
+# pin every base-image rebuild can silently drift onto a different release
+# and break unrelated pyright checks (e.g. torch.as_tensor / torch.float32
+# being flagged reportPrivateImportUsage on newer stubs).
+RUN pip install "torch==2.11.0" --index-url https://download.pytorch.org/whl/cpu
+# Pin pyright for the same reason: pyproject declares pyright>=1.1.0, so every
+# rebuild drifts to the latest release. 1.1.409 tightened reportPrivateImportUsage
+# and flagged existing torch.<attr> usages in beta_zero/constrained_zero that had
+# been green on 1.1.408.
+RUN pip install "pyright==1.1.408"
+RUN pip freeze | grep -iE "^(torch|pyright)==" > /tmp/pin-constraints.txt
+RUN PIP_CONSTRAINT=/tmp/pin-constraints.txt pip install ".[dev,docs]"

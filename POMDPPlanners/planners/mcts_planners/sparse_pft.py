@@ -205,15 +205,21 @@ class SparsePFT(PathSimulationPolicy):
         return belief_node.children[selected_action_index]
 
     def _sample_next_existing_belief(self, action_node: ActionNode) -> Tuple[BeliefNode, float]:
-        child_visit_counts = np.array([child.visit_count for child in action_node.children])
-        if sum(child_visit_counts) == 0:
-            # If no children have been visited, randomly select one and return with its immediate cost
-            sampled_belief_node = np.random.choice(action_node.children)
-            expected_reward = -sampled_belief_node.immediate_cost
-            return sampled_belief_node, expected_reward
-
-        weights = child_visit_counts / sum(child_visit_counts)
-        sampled_belief_node = np.random.choice(action_node.children, p=weights)
+        n_children = len(action_node.children)
+        child_visit_counts = np.fromiter(
+            (child.visit_count for child in action_node.children),
+            dtype=np.float64,
+            count=n_children,
+        )
+        total = float(child_visit_counts.sum())
+        if total == 0.0:
+            idx = random.randrange(n_children)
+        else:
+            cdf = np.cumsum(child_visit_counts)
+            idx = int(np.searchsorted(cdf, np.random.random() * total))
+            if idx >= n_children:
+                idx = n_children - 1
+        sampled_belief_node = action_node.children[idx]
         expected_reward = -sampled_belief_node.immediate_cost
         return sampled_belief_node, expected_reward
 
