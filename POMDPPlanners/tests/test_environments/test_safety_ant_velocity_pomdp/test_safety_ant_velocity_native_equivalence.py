@@ -537,3 +537,132 @@ def test_sample_observation_override_matches_wrapper(env, next_state, action):
     via_override = env.sample_observation(next_state=next_state, action=action)
 
     np.testing.assert_array_equal(via_wrapper, via_override)
+
+
+# ---------------------------------------------------------------------------
+# n_samples / log-probability equivalence (PR-A)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("n", [1, 5, 100])
+def test_sample_next_state_n_samples_equivalence(env, n):
+    """env.sample_next_state(n) matches n calls of state_transition_model.sample(1).
+
+    Purpose: Validates that the env-level batched transition sampler
+    advances the native RNG in the same order as repeated wrapper
+    sample(1) calls under the same seed.
+
+    Given: A non-zero force action so the uniform-angle RNG is consumed.
+    When: Both paths are seeded identically and asked for n samples.
+    Then: Returned states are np.array_equal element-wise.
+
+    Test type: integration
+    """
+    state = np.array([0.5, -0.2, 1.0, 0.5])
+    action = 2
+
+    _native.set_seed(2024)
+    loop = [env.state_transition_model(state, action).sample()[0] for _ in range(n)]
+
+    _native.set_seed(2024)
+    if n == 1:
+        batch = [env.sample_next_state(state=state, action=action)]
+    else:
+        batch = list(env.sample_next_state(state=state, action=action, n_samples=n))
+
+    assert len(batch) == n
+    for a, b in zip(loop, batch):
+        np.testing.assert_array_equal(a, b)
+
+
+@pytest.mark.parametrize("n", [1, 5, 100])
+def test_sample_observation_n_samples_equivalence(env, n):
+    """env.sample_observation(n) matches n calls of observation_model.sample(1).
+
+    Purpose: Validates that the env-level batched observation sampler
+    advances the native RNG in the same order as repeated wrapper
+    sample(1) calls under the same seed.
+
+    Given: A representative non-zero next_state.
+    When: Both paths are seeded identically.
+    Then: All sampled observations are np.array_equal element-wise.
+
+    Test type: integration
+    """
+    next_state = np.array([0.5, -0.2, 1.0, 0.5])
+    action = 2
+
+    _native.set_seed(99)
+    loop = [env.observation_model(next_state, action).sample()[0] for _ in range(n)]
+
+    _native.set_seed(99)
+    if n == 1:
+        batch = [env.sample_observation(next_state=next_state, action=action)]
+    else:
+        batch = list(env.sample_observation(next_state=next_state, action=action, n_samples=n))
+
+    assert len(batch) == n
+    for a, b in zip(loop, batch):
+        np.testing.assert_array_equal(a, b)
+
+
+def test_transition_log_probability_equivalence(env):
+    """transition_log_probability matches log of state_transition_model.probability.
+
+    Purpose: Validates the env-level vectorized log-probability matches
+    the wrapper-based path. The transition's probability() is the
+    tolerance-based ring-consistency check (no closed-form density).
+
+    Given: A state, action with non-zero force, and a few candidate
+        next states sampled from the same kernel plus a perturbed one.
+    When: env.transition_log_probability is compared to log of wrapper
+        probability().
+    Then: Arrays agree elementwise within 1e-10.
+
+    Test type: integration
+    """
+    state = np.array([0.0, 0.0, 0.5, -0.3])
+    action = 2
+
+    _native.set_seed(11)
+    samples = list(env.state_transition_model(state, action).sample(3))
+    perturbed = samples[0].copy()
+    perturbed[0] += 5.0  # break the ring-consistency check
+    candidates = list(samples) + [perturbed]
+
+    log_p = env.transition_log_probability(state, action, candidates)
+    expected = np.log(
+        np.asarray(env.state_transition_model(state, action).probability(candidates)) + 1e-300
+    )
+
+    assert log_p.shape == (len(candidates),)
+    np.testing.assert_allclose(log_p, expected, atol=1e-10)
+
+
+def test_observation_log_probability_equivalence(env):
+    """observation_log_probability matches log of observation_model.probability.
+
+    Purpose: Validates the env-level vectorized log-density matches the
+    wrapper path on a list of candidate observations (Gaussian density).
+
+    Given: A representative next_state and a small set of candidate
+        observations near its identity-mean.
+    When: env.observation_log_probability is compared to log of wrapper
+        probability().
+    Then: Arrays agree elementwise within 1e-10.
+
+    Test type: integration
+    """
+    next_state = np.array([0.6, -0.1, 1.2, 0.8])
+    action = 2
+
+    _native.set_seed(13)
+    candidates = list(env.observation_model(next_state, action).sample(4))
+
+    log_p = env.observation_log_probability(next_state, action, candidates)
+    expected = np.log(
+        np.asarray(env.observation_model(next_state, action).probability(candidates)) + 1e-300
+    )
+
+    assert log_p.shape == (len(candidates),)
+    np.testing.assert_allclose(log_p, expected, atol=1e-10)

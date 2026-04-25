@@ -372,7 +372,7 @@ class ContinuousLaserTagPOMDP(Environment):
     # directly to skip the Python wrapper allocation, producing byte-identical
     # RNG draws (same module-level RNG, same call sequence).
 
-    def sample_next_state(self, state: np.ndarray, action: np.ndarray) -> np.ndarray:
+    def sample_next_state(self, state: np.ndarray, action: np.ndarray, n_samples: int = 1) -> Any:
         kernel = _native.ContinuousLaserTagTransitionCpp(
             state=state,
             action=np.asarray(action, dtype=float),
@@ -385,9 +385,14 @@ class ContinuousLaserTagPOMDP(Environment):
             opponent_radius=self.opponent_radius,
             tag_radius=self.tag_radius,
         )
-        return kernel.sample(1)[0]
+        samples = kernel.sample(n_samples)
+        if n_samples == 1:
+            return samples[0]
+        return samples
 
-    def sample_observation(self, next_state: np.ndarray, action: np.ndarray) -> Any:
+    def sample_observation(
+        self, next_state: np.ndarray, action: np.ndarray, n_samples: int = 1
+    ) -> Any:
         kernel = _native.ContinuousLaserTagObservationCpp(
             next_state=next_state,
             action=np.asarray(action, dtype=float),
@@ -396,7 +401,44 @@ class ContinuousLaserTagPOMDP(Environment):
             grid_size=self._grid_size,
             opponent_radius=self.opponent_radius,
         )
-        return kernel.sample(1)[0]
+        samples = kernel.sample(n_samples)
+        if n_samples == 1:
+            return samples[0]
+        return samples
+
+    def transition_log_probability(
+        self, state: np.ndarray, action: np.ndarray, next_states: Any
+    ) -> np.ndarray:
+        kernel = _native.ContinuousLaserTagTransitionCpp(
+            state=state,
+            action=np.asarray(action, dtype=float),
+            robot_covariance=self._robot_transition_dist.covariance,
+            opponent_covariance=self._opponent_transition_dist.covariance,
+            pursuit_speed=self.pursuit_speed,
+            walls=self._walls,
+            grid_size=self._grid_size,
+            robot_radius=self.robot_radius,
+            opponent_radius=self.opponent_radius,
+            tag_radius=self.tag_radius,
+        )
+        probs = np.asarray(kernel.probability(next_states))
+        with np.errstate(divide="ignore"):
+            return np.log(probs)
+
+    def observation_log_probability(
+        self, next_state: np.ndarray, action: np.ndarray, observations: Any
+    ) -> np.ndarray:
+        kernel = _native.ContinuousLaserTagObservationCpp(
+            next_state=next_state,
+            action=np.asarray(action, dtype=float),
+            measurement_noise=self.measurement_noise,
+            walls=self._walls,
+            grid_size=self._grid_size,
+            opponent_radius=self.opponent_radius,
+        )
+        probs = np.asarray(kernel.probability(observations))
+        with np.errstate(divide="ignore"):
+            return np.log(probs)
 
     def reward(self, state: np.ndarray, action: np.ndarray) -> float:
         if bool(state[4]):
@@ -716,11 +758,25 @@ class ContinuousLaserTagPOMDPDiscreteActions(ContinuousLaserTagPOMDP, DiscreteAc
     def observation_model(self, next_state: np.ndarray, action: Any) -> ObservationModel:
         return super().observation_model(next_state, self.action_to_vector[action])
 
-    def sample_next_state(self, state: np.ndarray, action: Any) -> np.ndarray:
-        return super().sample_next_state(state, self.action_to_vector[action])
+    def sample_next_state(self, state: np.ndarray, action: Any, n_samples: int = 1) -> Any:
+        return super().sample_next_state(state, self.action_to_vector[action], n_samples=n_samples)
 
-    def sample_observation(self, next_state: np.ndarray, action: Any) -> Any:
-        return super().sample_observation(next_state, self.action_to_vector[action])
+    def sample_observation(self, next_state: np.ndarray, action: Any, n_samples: int = 1) -> Any:
+        return super().sample_observation(
+            next_state, self.action_to_vector[action], n_samples=n_samples
+        )
+
+    def transition_log_probability(
+        self, state: np.ndarray, action: Any, next_states: Any
+    ) -> np.ndarray:
+        return super().transition_log_probability(state, self.action_to_vector[action], next_states)
+
+    def observation_log_probability(
+        self, next_state: np.ndarray, action: Any, observations: Any
+    ) -> np.ndarray:
+        return super().observation_log_probability(
+            next_state, self.action_to_vector[action], observations
+        )
 
     def reward(self, state: np.ndarray, action: Any) -> float:
         return super().reward(state, self.action_to_vector[action])

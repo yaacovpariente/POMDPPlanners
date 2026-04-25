@@ -370,7 +370,7 @@ class ContinuousPushPOMDP(Environment):
     # These overrides skip the Python subclass, construct the native
     # kernel directly, and produce byte-identical RNG draws.
 
-    def sample_next_state(self, state: np.ndarray, action: np.ndarray) -> np.ndarray:
+    def sample_next_state(self, state: np.ndarray, action: np.ndarray, n_samples: int = 1) -> Any:
         kernel = _native.ContinuousPushTransitionCpp(
             state=state,
             action=action,
@@ -382,16 +382,65 @@ class ContinuousPushPOMDP(Environment):
             obstacles=self.obstacles,
             covariance=self._state_transition_dist.covariance,
         )
-        return kernel.sample()[0]
+        samples = kernel.sample(n_samples)
+        if n_samples == 1:
+            return samples[0]
+        return samples
 
-    def sample_observation(self, next_state: np.ndarray, action: np.ndarray) -> Any:
+    def sample_observation(
+        self, next_state: np.ndarray, action: np.ndarray, n_samples: int = 1
+    ) -> Any:
         kernel = _native.ContinuousPushObservationCpp(
             next_state=next_state,
             action=action,
             observation_noise=float(self.observation_noise),
             grid_size=float(self.grid_size),
         )
-        return kernel.sample()[0]
+        samples = kernel.sample(n_samples)
+        if n_samples == 1:
+            return samples[0]
+        return samples
+
+    def transition_log_probability(
+        self, state: np.ndarray, action: np.ndarray, next_states: Any
+    ) -> np.ndarray:
+        kernel = _native.ContinuousPushTransitionCpp(
+            state=state,
+            action=action,
+            grid_size=float(self.grid_size),
+            push_threshold=float(self.push_threshold),
+            friction_coefficient=float(self.friction_coefficient),
+            max_push=float(self.max_push),
+            robot_radius=float(self.robot_radius),
+            obstacles=self.obstacles,
+            covariance=self._state_transition_dist.covariance,
+        )
+        probs = np.asarray(kernel.probability(next_states))
+        with np.errstate(divide="ignore"):
+            return np.log(probs)
+
+    def observation_log_probability(
+        self, next_state: np.ndarray, action: np.ndarray, observations: Any
+    ) -> np.ndarray:
+        kernel = _native.ContinuousPushObservationCpp(
+            next_state=next_state,
+            action=action,
+            observation_noise=float(self.observation_noise),
+            grid_size=float(self.grid_size),
+        )
+        # batch_log_likelihood is symmetric in the object-position slice:
+        # passing the candidate observations as ``next_particles`` and the
+        # fixed next_state as ``observation`` yields the per-row log-pdf of
+        # each observation given next_state.
+        obs_arr = np.asarray(observations, dtype=float)
+        if obs_arr.ndim == 1:
+            obs_arr = obs_arr.reshape(1, -1)
+        return np.asarray(
+            kernel.batch_log_likelihood(
+                next_particles=np.ascontiguousarray(obs_arr, dtype=np.float64),
+                observation=np.ascontiguousarray(np.asarray(next_state, dtype=np.float64)),
+            )
+        )
 
     def reward(self, state: np.ndarray, action: np.ndarray) -> float:
         action = np.asarray(action, dtype=float)
@@ -688,8 +737,22 @@ class ContinuousPushPOMDPDiscreteActions(ContinuousPushPOMDP, DiscreteActionsEnv
             action = self.action_to_vector[action]
         return super().reward_batch(np.asarray(states), action)
 
-    def sample_next_state(self, state: np.ndarray, action: Any) -> np.ndarray:
-        return super().sample_next_state(state, self.action_to_vector[action])
+    def sample_next_state(self, state: np.ndarray, action: Any, n_samples: int = 1) -> Any:
+        return super().sample_next_state(state, self.action_to_vector[action], n_samples=n_samples)
 
-    def sample_observation(self, next_state: np.ndarray, action: Any) -> Any:
-        return super().sample_observation(next_state, self.action_to_vector[action])
+    def sample_observation(self, next_state: np.ndarray, action: Any, n_samples: int = 1) -> Any:
+        return super().sample_observation(
+            next_state, self.action_to_vector[action], n_samples=n_samples
+        )
+
+    def transition_log_probability(
+        self, state: np.ndarray, action: Any, next_states: Any
+    ) -> np.ndarray:
+        return super().transition_log_probability(state, self.action_to_vector[action], next_states)
+
+    def observation_log_probability(
+        self, next_state: np.ndarray, action: Any, observations: Any
+    ) -> np.ndarray:
+        return super().observation_log_probability(
+            next_state, self.action_to_vector[action], observations
+        )
