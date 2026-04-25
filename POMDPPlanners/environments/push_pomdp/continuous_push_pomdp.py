@@ -492,45 +492,81 @@ class ContinuousPushPOMDP(Environment):
         )
 
     def reward(self, state: np.ndarray, action: np.ndarray) -> float:
-        action = np.asarray(action, dtype=float)
-        next_state = self._sample_transition(state, action)
-        return self._compute_reward_from_next_state(state, next_state, action)
+        # Single-state reward routes through the same vectorised path used
+        # by reward_batch — wrap the state as a (1, 6) row, reuse the
+        # cached kernel, and unpack the scalar.
+        state_arr = np.ascontiguousarray(np.asarray(state, dtype=np.float64)).reshape(1, -1)
+        action_arr = np.ascontiguousarray(np.asarray(action, dtype=np.float64)).ravel()
+        rewards = self._reward_batch_array(state_arr, action_arr)
+        return float(rewards[0])
 
     def reward_batch(
         self, states: Union[np.ndarray, Sequence[Any]], action: np.ndarray
     ) -> np.ndarray:
-        action = np.asarray(action, dtype=float)
-        states_arr = np.asarray(states, dtype=float)
-        rewards = np.empty(states_arr.shape[0])
-        for i in range(states_arr.shape[0]):
-            rewards[i] = self.reward(states_arr[i], action)
+        states_arr = np.ascontiguousarray(np.asarray(states, dtype=np.float64))
+        if states_arr.ndim == 1:
+            states_arr = states_arr.reshape(1, -1)
+        action_arr = np.ascontiguousarray(np.asarray(action, dtype=np.float64)).ravel()
+        return self._reward_batch_array(states_arr, action_arr)
+
+    def _reward_batch_array(self, states: np.ndarray, action: np.ndarray) -> np.ndarray:
+        """Vectorised reward computation reusing the cached transition kernel.
+
+        ``states`` must be ``(N, 6)`` C-contiguous float64 and ``action``
+        must be a 1-D float64 array; callers (``reward`` / ``reward_batch``)
+        normalise the inputs.
+
+        For each row this draws a fresh next state via the cached kernel
+        (same RNG stream as ``sample_next_state_batch``) and computes:
+        - distance penalty to target,
+        - +100 goal bonus when within 0.5 of the target,
+        - obstacle penalty when ``state[:2] + action`` would push the
+          robot into an obstacle.
+        """
+        kernel = self._get_trans_kernel(action)
+        # batch_sample reads per-row state from the input — no set_state
+        # required. C++ kernel returns shape (N, 6) float64.
+        next_states = np.asarray(kernel.batch_sample(states), dtype=np.float64)
+
+        # Distance-to-target penalty + goal bonus, computed in one pass on
+        # the (N, 2) object/target slices.
+        delta = next_states[:, 2:4] - next_states[:, 4:6]
+        dist_to_target = np.sqrt(np.einsum("ij,ij->i", delta, delta))
+        rewards = -dist_to_target
+        rewards[dist_to_target < 0.5] += 100.0
+
+        # Obstacle penalty: post-action robot position vs. obstacle AABBs.
+        if self.obstacles.shape[0] > 0:
+            robot_after = states[:, :2] + action  # (N, 2)
+            collide = self._batch_circle_obstacle_overlap(robot_after, self.robot_radius)
+            if np.any(collide):
+                rewards[collide] += self.obstacle_penalty
+
         return rewards
 
-    def _sample_transition(self, state: np.ndarray, action: np.ndarray) -> np.ndarray:
-        return ContinuousPushStateTransitionModel(
-            state=state,
-            action=action,
-            state_transition_dist=self._state_transition_dist,
-            grid_size=self.grid_size,
-            push_threshold=self.push_threshold,
-            friction_coefficient=self.friction_coefficient,
-            max_push=self.max_push,
-            obstacles=self.obstacles,
-            robot_radius=self.robot_radius,
-        ).sample()[0]
+    def _batch_circle_obstacle_overlap(self, positions: np.ndarray, radius: float) -> np.ndarray:
+        """Vectorised circle-vs-AABB overlap test against ``self.obstacles``.
 
-    def _compute_reward_from_next_state(
-        self, state: np.ndarray, next_state: np.ndarray, action: np.ndarray
-    ) -> float:
-        next_obj = next_state[2:4]
-        target = next_state[4:6]
-        dist_to_target = float(np.linalg.norm(next_obj - target))
-        rew = -dist_to_target
-        if dist_to_target < 0.5:
-            rew += 100.0
-        if self._is_circle_colliding_with_obstacle(state[:2] + action, self.robot_radius):
-            rew += self.obstacle_penalty
-        return rew
+        ``positions`` is shape ``(N, 2)``. Returns an ``(N,)`` boolean mask
+        flagging rows that overlap any obstacle. Mirrors the per-wall logic
+        of :func:`continuous_push_geometry.circle_aabb_overlap` but
+        broadcast across all walls in one shot.
+        """
+        walls = self.obstacles
+        # Broadcast positions (N, 1, 2) against walls (M, 4): closest point
+        # on each AABB to each position, then squared distance < r**2.
+        cx = walls[:, 0]
+        cy = walls[:, 1]
+        hx = walls[:, 2]
+        hy = walls[:, 3]
+        px = positions[:, 0:1]
+        py = positions[:, 1:2]
+        closest_x = np.clip(px, cx - hx, cx + hx)
+        closest_y = np.clip(py, cy - hy, cy + hy)
+        dx = px - closest_x
+        dy = py - closest_y
+        dist_sq = dx * dx + dy * dy
+        return np.any(dist_sq < radius * radius, axis=1)
 
     def __getstate__(self):
         # Per-action C++ kernel cache holds pybind11 objects that aren't
@@ -798,7 +834,7 @@ class ContinuousPushPOMDPDiscreteActions(ContinuousPushPOMDP, DiscreteActionsEnv
     def reward_batch(self, states: Union[np.ndarray, Sequence[Any]], action: Any) -> np.ndarray:
         if isinstance(action, str):
             action = self.action_to_vector[action]
-        return super().reward_batch(np.asarray(states), action)
+        return super().reward_batch(states, action)
 
     def sample_next_state(self, state: np.ndarray, action: Any, n_samples: int = 1) -> Any:
         return super().sample_next_state(state, self.action_to_vector[action], n_samples=n_samples)
