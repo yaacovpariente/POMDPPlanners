@@ -748,3 +748,135 @@ def test_sample_observation_override_matches_wrapper(
     via_override = env.sample_observation(next_state=next_state, action=action)
 
     assert via_wrapper == via_override
+
+
+# ---------------------------------------------------------------------------
+# 21. n_samples / log-probability equivalence (PR-A)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("n", [1, 5, 100])
+def test_sample_next_state_n_samples_equivalence(env: RockSamplePOMDP, n: int) -> None:
+    """env.sample_next_state(n) matches n calls of state_transition_model.sample(1).
+
+    Purpose: Validates that the env-level batched sampler advances the
+    native RNG in the same order as repeated wrapper calls of size 1, so
+    the n_samples >= 2 path is bit-equivalent to the per-call wrapper
+    path under the same seed.
+
+    Given: A live (non-terminal) state and a check action (the only
+        non-deterministic action class for transitions; in this env the
+        kernel does not consume RNG for transitions, so this also covers
+        movement actions trivially).
+    When: Both paths are seeded identically and asked for n samples.
+    Then: All returned states are np.array_equal element-wise.
+
+    Test type: integration
+    """
+    state = _state(2, 2, (True, True, False, True))
+    action = 2  # east move
+
+    _native.set_seed(2024)
+    loop = [env.state_transition_model(state, action).sample()[0] for _ in range(n)]
+
+    _native.set_seed(2024)
+    if n == 1:
+        batch = [env.sample_next_state(state=state, action=action)]
+    else:
+        batch = list(env.sample_next_state(state=state, action=action, n_samples=n))
+
+    assert len(batch) == n
+    for a, b in zip(loop, batch):
+        np.testing.assert_array_equal(a, b)
+
+
+@pytest.mark.parametrize("n", [1, 5, 100])
+def test_sample_observation_n_samples_equivalence(env: RockSamplePOMDP, n: int) -> None:
+    """env.sample_observation(n) matches n calls of observation_model.sample(1).
+
+    Purpose: Validates that the env-level batched observation sampler
+    consumes the native RNG in the same order as repeated single-sample
+    wrapper calls under the same seed.
+
+    Given: A check action against rock 0 from a far cell so the Bernoulli
+        flip actually consumes RNG (yielding non-trivial variation).
+    When: Both paths are seeded identically and asked for n samples.
+    Then: The string-coded observation sequences match exactly.
+
+    Test type: integration
+    """
+    next_state = _state(5, 5, (True, False, True, False))
+    action = 5  # check rock 0
+
+    _native.set_seed(99)
+    loop = [env.observation_model(next_state, action).sample()[0] for _ in range(n)]
+
+    _native.set_seed(99)
+    if n == 1:
+        batch = [env.sample_observation(next_state=next_state, action=action)]
+    else:
+        batch = list(env.sample_observation(next_state=next_state, action=action, n_samples=n))
+
+    assert len(batch) == n
+    assert loop == batch
+
+
+def test_transition_log_probability_equivalence(env: RockSamplePOMDP) -> None:
+    """transition_log_probability returns log of state_transition_model.probability.
+
+    Purpose: Validates the env-level vectorized log-probability matches
+    the wrapper path elementwise (after taking ``log`` with a tiny
+    floor). RockSample transitions are deterministic, so the result is
+    a vector of 0.0 for the actual deterministic next state and -inf
+    (effectively log(0+eps)) for perturbed candidates.
+
+    Given: A state and action plus a list of [actual_next, perturbed].
+    When: env.transition_log_probability is compared to log of the
+        wrapper-based probability().
+    Then: Arrays agree elementwise within 1e-10.
+
+    Test type: integration
+    """
+    state = _state(2, 2, (True, True, False, True))
+    action = 2  # east move
+
+    next_state = env.state_transition_model(state, action).sample()[0]
+    perturbed = next_state.copy()
+    perturbed[0] = perturbed[0] + 1
+    candidates = [next_state, perturbed]
+
+    log_p = env.transition_log_probability(state, action, candidates)
+    expected = np.log(
+        np.asarray(env.state_transition_model(state, action).probability(candidates)) + 1e-300
+    )
+
+    assert log_p.shape == (len(candidates),)
+    np.testing.assert_allclose(log_p, expected, atol=1e-10)
+
+
+def test_observation_log_probability_equivalence(env: RockSamplePOMDP) -> None:
+    """observation_log_probability returns log of observation_model.probability.
+
+    Purpose: Validates the env-level vectorized log-probability matches
+    the wrapper path on the canonical observation alphabet, including
+    the unknown-label case which must collapse to -inf.
+
+    Given: A check action at a far rock with known efficiency.
+    When: log-probabilities for ['good','bad','none'] are compared
+        between the env-level method and ``log(wrapper.probability(...))``.
+    Then: Arrays agree elementwise within 1e-10.
+
+    Test type: integration
+    """
+    rocks = (True, False, True, False)
+    next_state = _state(5, 5, rocks)
+    action = 5  # check rock 0
+
+    obs_list = ["good", "bad", "none"]
+    log_p = env.observation_log_probability(next_state, action, obs_list)
+
+    expected = np.log(
+        np.asarray(env.observation_model(next_state, action).probability(obs_list)) + 1e-300
+    )
+    assert log_p.shape == (len(obs_list),)
+    np.testing.assert_allclose(log_p, expected, atol=1e-10)

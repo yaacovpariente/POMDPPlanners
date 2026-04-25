@@ -22,6 +22,9 @@ from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.distributions import DiscreteDistribution
 from POMDPPlanners.core.policy import PolicyRunData
 from POMDPPlanners.core.simulation import History, StepData
+from POMDPPlanners.environments.light_dark_pomdp import (
+    _native,  # pylint: disable=no-name-in-module
+)
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
     ContinuousLightDarkPOMDP,
     ContinuousLightDarkPOMDPDiscreteActions,
@@ -2229,3 +2232,248 @@ def test_reward_batch_discrete_actions_matches_scalar(base_light_dark_environmen
     np.random.seed(99)
     expected = np.array([env.reward(states[i], action) for i in range(100)])
     np.testing.assert_allclose(batch_rewards, expected)
+
+
+# ---------------------------------------------------------------------------
+# Batch sampling and log-probability API
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("n_samples", [1, 5, 100])
+def test_continuous_sample_next_state_n_samples_equivalence(n_samples):
+    """sample_next_state(n_samples=N) matches the wrapper sample(N) under fixed C++ seed.
+
+    Purpose: Validates that the n_samples parameter on sample_next_state
+        produces byte-identical RNG draws to state_transition_model().sample(N).
+
+    Given: A ContinuousLightDarkPOMDP environment and a (state, action) pair,
+        with the native C++ RNG seeded identically before each call.
+    When: env.sample_next_state(state, action, n_samples=N) is invoked and
+        compared against env.state_transition_model(state, action).sample(N).
+    Then: For n_samples=1 a single (2,) ndarray is returned; for n_samples>1
+        a (N, 2) ndarray equal to the wrapper result is returned.
+
+    Test type: unit
+    """
+    env = ContinuousLightDarkPOMDP(discount_factor=0.95)
+    state = np.array([3.0, 4.0])
+    action = np.array([1.0, 0.5])
+
+    _native.set_seed(123)
+    direct = env.sample_next_state(state, action, n_samples=n_samples)
+    _native.set_seed(123)
+    wrapper = env.state_transition_model(state, action).sample(n_samples=n_samples)
+
+    if n_samples == 1:
+        assert isinstance(direct, np.ndarray)
+        assert direct.shape == (2,)
+        assert np.array_equal(direct, wrapper[0])
+    else:
+        assert isinstance(direct, np.ndarray)
+        assert direct.shape == (n_samples, 2)
+        wrapper_arr = np.stack(wrapper, axis=0)
+        np.testing.assert_array_equal(direct, wrapper_arr)
+
+
+@pytest.mark.parametrize("n_samples", [1, 5, 100])
+def test_continuous_sample_observation_n_samples_equivalence(n_samples):
+    """sample_observation(n_samples=N) matches the wrapper sample(N) under fixed seed.
+
+    Purpose: Validates that the n_samples parameter on sample_observation
+        produces byte-identical RNG draws to observation_model().sample(N).
+
+    Given: A ContinuousLightDarkPOMDP environment and a (next_state, action)
+        pair near a beacon, with the native C++ RNG seeded identically before
+        each call.
+    When: env.sample_observation(ns, a, n_samples=N) is invoked and compared
+        against env.observation_model(ns, a).sample(N).
+    Then: For n_samples=1 a (2,) ndarray; for n_samples>1 a (N, 2) ndarray
+        equal to the wrapper.
+
+    Test type: unit
+    """
+    env = ContinuousLightDarkPOMDP(discount_factor=0.95)
+    next_state = np.array([5.0, 5.0])  # near beacon
+    action = np.array([0.0, 0.0])
+
+    _native.set_seed(456)
+    direct = env.sample_observation(next_state, action, n_samples=n_samples)
+    _native.set_seed(456)
+    wrapper = env.observation_model(next_state, action).sample(n_samples=n_samples)
+
+    if n_samples == 1:
+        assert isinstance(direct, np.ndarray)
+        assert direct.shape == (2,)
+        assert np.array_equal(direct, wrapper[0])
+    else:
+        assert isinstance(direct, np.ndarray)
+        assert direct.shape == (n_samples, 2)
+        wrapper_arr = np.stack(wrapper, axis=0)
+        np.testing.assert_array_equal(direct, wrapper_arr)
+
+
+def test_continuous_transition_log_probability_equivalence():
+    """transition_log_probability matches np.log(state_transition_model().probability()).
+
+    Purpose: Validates that the native log-probability path returns the same
+        numbers as the wrapper-based np.log(probability(...)) path.
+
+    Given: A ContinuousLightDarkPOMDP env, a (state, action) pair, and a
+        batch of candidate next-states.
+    When: env.transition_log_probability(state, action, candidates) is invoked
+        and compared against np.log(state_transition_model.probability).
+    Then: The resulting (N,) ndarrays are allclose within 1e-12 tolerance.
+
+    Test type: unit
+    """
+    env = ContinuousLightDarkPOMDP(discount_factor=0.95)
+    state = np.array([3.0, 4.0])
+    action = np.array([1.0, 0.5])
+    candidates = np.array([[4.0, 4.5], [3.5, 4.0], [3.9, 4.6], [10.0, 0.0]])
+
+    direct = env.transition_log_probability(state, action, candidates)
+    wrapper_probs = np.asarray(
+        env.state_transition_model(state, action).probability(list(candidates))
+    )
+    expected = np.log(wrapper_probs + 1e-300)
+
+    assert direct.shape == (4,)
+    np.testing.assert_allclose(direct, expected, atol=1e-12, rtol=0.0)
+
+
+def test_continuous_observation_log_probability_equivalence():
+    """observation_log_probability matches np.log(observation_model().probability()).
+
+    Purpose: Validates the native observation log-prob path against the
+        wrapper-based reference.
+
+    Given: A ContinuousLightDarkPOMDP env (NORMAL_NOISE), a near-beacon
+        next_state, and a batch of candidate observations.
+    When: env.observation_log_probability(ns, a, candidates) is invoked and
+        compared against np.log(observation_model.probability).
+    Then: The resulting (N,) ndarrays are allclose within 1e-12 tolerance.
+
+    Test type: unit
+    """
+    env = ContinuousLightDarkPOMDP(discount_factor=0.95)
+    next_state = np.array([5.0, 5.0])
+    action = np.array([0.0, 0.0])
+    candidates = np.array([[5.0, 5.0], [5.5, 5.5], [4.5, 4.5], [10.0, 0.0]])
+
+    direct = env.observation_log_probability(next_state, action, candidates)
+    wrapper_probs = np.asarray(
+        env.observation_model(next_state, action).probability(list(candidates))
+    )
+    expected = np.log(wrapper_probs + 1e-300)
+
+    assert direct.shape == (4,)
+    np.testing.assert_allclose(direct, expected, atol=1e-12, rtol=0.0)
+
+
+@pytest.mark.parametrize("n_samples", [1, 5, 100])
+def test_continuous_discrete_actions_sample_next_state_n_samples_equivalence(n_samples):
+    """Discrete-action variant forwards n_samples to the continuous super.
+
+    Purpose: Validates that ContinuousLightDarkPOMDPDiscreteActions delegates
+        n_samples through to the continuous-action path after looking up the
+        cached action vector.
+
+    Given: A ContinuousLightDarkPOMDPDiscreteActions env, a state, and a
+        string action.
+    When: env.sample_next_state(state, action, n_samples=N) is invoked and
+        compared against env.state_transition_model(state, action).sample(N).
+    Then: For n_samples=1 a (2,) ndarray; for n_samples>1 a (N, 2) ndarray
+        equal to the wrapper-stacked result.
+
+    Test type: unit
+    """
+    env = ContinuousLightDarkPOMDPDiscreteActions(discount_factor=0.95)
+    state = np.array([2.0, 3.0])
+    action = "up"
+
+    _native.set_seed(11)
+    direct = env.sample_next_state(state, action, n_samples=n_samples)
+    _native.set_seed(11)
+    wrapper = env.state_transition_model(state, action).sample(n_samples=n_samples)
+
+    if n_samples == 1:
+        assert isinstance(direct, np.ndarray)
+        assert direct.shape == (2,)
+        assert np.array_equal(direct, wrapper[0])
+    else:
+        assert direct.shape == (n_samples, 2)
+        np.testing.assert_array_equal(direct, np.stack(wrapper, axis=0))
+
+
+def test_continuous_discrete_actions_log_probability_equivalence():
+    """Discrete-action variant forwards log-prob queries to continuous super.
+
+    Purpose: Validates that the discrete-action wrapper resolves the action
+        string to its vector and produces equivalent transition and observation
+        log-probabilities.
+
+    Given: A ContinuousLightDarkPOMDPDiscreteActions env, a state, an action,
+        and batches of candidate next-states / observations.
+    When: env.transition_log_probability and env.observation_log_probability
+        are called with the string action.
+    Then: Their outputs match the per-sample wrapper-based np.log(probability)
+        within 1e-12 tolerance.
+
+    Test type: unit
+    """
+    env = ContinuousLightDarkPOMDPDiscreteActions(discount_factor=0.95)
+    state = np.array([2.0, 3.0])
+    action = "up"
+    candidates = np.array([[2.0, 4.0], [3.0, 3.0], [1.0, 3.0]])
+
+    direct = env.transition_log_probability(state, action, candidates)
+    wrapper = np.asarray(env.state_transition_model(state, action).probability(list(candidates)))
+    np.testing.assert_allclose(direct, np.log(wrapper + 1e-300), atol=1e-12, rtol=0.0)
+
+    next_state = np.array([5.0, 5.0])
+    obs_candidates = np.array([[5.0, 5.0], [5.5, 5.5]])
+    direct_obs = env.observation_log_probability(next_state, action, obs_candidates)
+    wrapper_obs = np.asarray(
+        env.observation_model(next_state, action).probability(list(obs_candidates))
+    )
+    np.testing.assert_allclose(direct_obs, np.log(wrapper_obs + 1e-300), atol=1e-12, rtol=0.0)
+
+
+def test_continuous_sample_observation_falls_back_for_non_normal_noise():
+    """Non-NORMAL_NOISE observation models still honour n_samples via base path.
+
+    Purpose: Validates that NORMAL_NOISE_NO_OBS_IN_DARK and DISTANCE_BASED
+        observation models receive n_samples=N propagated to the wrapper's
+        sample(N) call (executed through the Python base-class fallback).
+
+    Given: ContinuousLightDarkPOMDP envs configured with the two non-native
+        observation model variants and a fixed numpy RNG seed.
+    When: env.sample_observation(next_state, action, n_samples=N) is called
+        and compared with env.observation_model(...).sample(N).
+    Then: Both paths return lists of length N with matching observations.
+
+    Test type: unit
+    """
+    for obs_type in (
+        ObservationModelType.NORMAL_NOISE_NO_OBS_IN_DARK,
+        ObservationModelType.DISTANCE_BASED,
+    ):
+        env = ContinuousLightDarkPOMDP(
+            discount_factor=0.95,
+            observation_model_type=obs_type,
+        )
+        next_state = np.array([5.0, 5.0])
+        action = np.array([0.0, 0.0])
+
+        np.random.seed(31)
+        direct = env.sample_observation(next_state, action, n_samples=4)
+        np.random.seed(31)
+        wrapper = env.observation_model(next_state, action).sample(n_samples=4)
+
+        assert len(direct) == 4
+        assert len(wrapper) == 4
+        for i in range(4):
+            if isinstance(direct[i], np.ndarray):
+                assert np.array_equal(direct[i], wrapper[i])
+            else:
+                assert direct[i] == wrapper[i]

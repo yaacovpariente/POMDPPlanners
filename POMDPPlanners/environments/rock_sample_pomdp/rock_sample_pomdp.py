@@ -411,7 +411,7 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
     # allocation while preserving the identical kernel-construction
     # sequence and arguments.
 
-    def sample_next_state(self, state: RockSampleState, action: int) -> RockSampleState:
+    def sample_next_state(self, state: RockSampleState, action: int, n_samples: int = 1) -> Any:
         kernel = _native.RockSampleTransitionCpp(
             state=np.asarray(state, dtype=float),
             action=int(action),
@@ -421,9 +421,14 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
             rock_positions=self._rock_positions_int32,
             sensor_efficiency=self.sensor_efficiency,
         )
-        return kernel.sample()[0]
+        samples = kernel.sample(n_samples)
+        if n_samples == 1:
+            return samples[0]
+        return samples
 
-    def sample_observation(self, next_state: RockSampleState, action: int) -> str:
+    def sample_observation(
+        self, next_state: RockSampleState, action: int, n_samples: int = 1
+    ) -> Any:
         kernel = _native.RockSampleObservationCpp(
             next_state=np.asarray(next_state, dtype=float),
             action=int(action),
@@ -433,7 +438,41 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
             rock_positions=self._rock_positions_int32,
             sensor_efficiency=self.sensor_efficiency,
         )
-        return _OBS_CODE_TO_STR[kernel.sample()[0]]
+        codes = kernel.sample(n_samples)
+        if n_samples == 1:
+            return _OBS_CODE_TO_STR[codes[0]]
+        return [_OBS_CODE_TO_STR[c] for c in codes]
+
+    def transition_log_probability(
+        self, state: RockSampleState, action: int, next_states: Any
+    ) -> np.ndarray:
+        kernel = _native.RockSampleTransitionCpp(
+            state=np.asarray(state, dtype=float),
+            action=int(action),
+            map_rows=self.map_size[0],
+            map_cols=self.map_size[1],
+            num_rocks=len(self.rock_positions),
+            rock_positions=self._rock_positions_int32,
+            sensor_efficiency=self.sensor_efficiency,
+        )
+        probs = np.asarray(kernel.probability(next_states))
+        return np.log(probs + 1e-300)
+
+    def observation_log_probability(
+        self, next_state: RockSampleState, action: int, observations: Any
+    ) -> np.ndarray:
+        kernel = _native.RockSampleObservationCpp(
+            next_state=np.asarray(next_state, dtype=float),
+            action=int(action),
+            map_rows=self.map_size[0],
+            map_cols=self.map_size[1],
+            num_rocks=len(self.rock_positions),
+            rock_positions=self._rock_positions_int32,
+            sensor_efficiency=self.sensor_efficiency,
+        )
+        codes = np.array([_OBS_STR_TO_CODE.get(v, -1) for v in observations], dtype=np.int32)
+        probs = np.asarray(kernel.probability(codes))
+        return np.log(probs + 1e-300)
 
     def sample_next_step(
         self, state: RockSampleState, action: int

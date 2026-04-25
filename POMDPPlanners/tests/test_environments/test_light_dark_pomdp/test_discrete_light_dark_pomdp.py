@@ -1716,3 +1716,229 @@ def test_sample_observation_falls_back_for_non_normal_model_types():
                 assert np.array_equal(wrapper_obs, direct_obs)
             else:
                 assert wrapper_obs == direct_obs
+
+
+# ---------------------------------------------------------------------------
+# Batch sampling and log-probability API
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("n_samples", [1, 5, 100])
+def test_discrete_sample_next_state_n_samples_equivalence(n_samples):
+    """sample_next_state(n_samples=N) matches the wrapper sample(N) under fixed seed.
+
+    Purpose: Validates that the n_samples parameter on sample_next_state
+        produces byte-identical RNG draws to state_transition_model().sample(N)
+        for the discrete environment, which uses np.random.rand() and
+        np.searchsorted on pre-computed cumprob tables.
+
+    Given: A DiscreteLightDarkPOMDP environment, a (state, action) pair, and
+        identical numpy RNG seeds before each call.
+    When: env.sample_next_state(state, action, n_samples=N) is invoked and
+        compared against env.state_transition_model(state, action).sample(N).
+    Then: For n_samples=1 a single (2,) ndarray; for n_samples>1 a (N, 2)
+        ndarray equal to the wrapper-stacked result.
+
+    Test type: unit
+    """
+    env = DiscreteLightDarkPOMDP(
+        discount_factor=0.95,
+        transition_error_prob=0.05,
+        observation_error_prob=0.05,
+        beacons=[(0, 0), (5, 5)],
+        beacon_radius=1.5,
+        grid_size=11,
+    )
+    state = np.array([2, 3])
+    action = "up"
+
+    np.random.seed(123)
+    direct = env.sample_next_state(state, action, n_samples=n_samples)
+    np.random.seed(123)
+    wrapper = env.state_transition_model(state, action).sample(n_samples=n_samples)
+
+    if n_samples == 1:
+        assert isinstance(direct, np.ndarray)
+        assert direct.shape == (2,)
+        assert np.array_equal(direct, wrapper[0])
+    else:
+        assert isinstance(direct, np.ndarray)
+        assert direct.shape == (n_samples, 2)
+        wrapper_arr = np.stack(wrapper, axis=0)
+        np.testing.assert_array_equal(direct, wrapper_arr)
+
+
+@pytest.mark.parametrize("n_samples", [1, 5, 100])
+def test_discrete_sample_observation_n_samples_equivalence(n_samples):
+    """sample_observation(n_samples=N) matches wrapper sample(N) for NORMAL model.
+
+    Purpose: Validates that the n_samples parameter on sample_observation
+        for the NORMAL discrete observation model produces byte-identical
+        RNG draws to observation_model().sample(N).
+
+    Given: A DiscreteLightDarkPOMDP env (NORMAL observation model), a
+        (next_state, action) pair, and identical numpy RNG seeds.
+    When: env.sample_observation(ns, a, n_samples=N) is invoked and compared
+        against env.observation_model(ns, a).sample(N).
+    Then: For n_samples=1 a (2,) ndarray; for n_samples>1 a (N, 2) ndarray
+        equal to the wrapper.
+
+    Test type: unit
+    """
+    env = DiscreteLightDarkPOMDP(
+        discount_factor=0.95,
+        transition_error_prob=0.05,
+        observation_error_prob=0.05,
+        beacons=[(0, 0), (5, 5)],
+        beacon_radius=1.5,
+        grid_size=11,
+        observation_model_type=ObservationModelType.NORMAL,
+    )
+    next_state = np.array([5, 5])  # near beacon
+    action = "up"
+
+    np.random.seed(456)
+    direct = env.sample_observation(next_state, action, n_samples=n_samples)
+    np.random.seed(456)
+    wrapper = env.observation_model(next_state, action).sample(n_samples=n_samples)
+
+    if n_samples == 1:
+        assert isinstance(direct, np.ndarray)
+        assert direct.shape == (2,)
+        assert np.array_equal(direct, wrapper[0])
+    else:
+        assert isinstance(direct, np.ndarray)
+        assert direct.shape == (n_samples, 2)
+        wrapper_arr = np.stack(wrapper, axis=0)
+        np.testing.assert_array_equal(direct, wrapper_arr)
+
+
+def test_discrete_transition_log_probability_equivalence():
+    """transition_log_probability matches np.log(state_transition_model().probability()).
+
+    Purpose: Validates that the discrete log-probability path returns the
+        same numbers as the wrapper-based np.log(probability) path.
+
+    Given: A DiscreteLightDarkPOMDP env, a (state, action) pair, and a list
+        of candidate next-states (each obtainable via one of the four moves
+        plus an off-distribution candidate).
+    When: env.transition_log_probability is invoked and compared against
+        np.log(state_transition_model().probability(...)).
+    Then: The (N,) ndarrays are allclose within 1e-12 tolerance, including
+        the -inf entry for an unreachable candidate.
+
+    Test type: unit
+    """
+    env = DiscreteLightDarkPOMDP(
+        discount_factor=0.95,
+        transition_error_prob=0.05,
+        beacons=[(0, 0), (5, 5)],
+        grid_size=11,
+    )
+    state = np.array([2, 3])
+    action = "up"
+
+    candidates = [
+        state + np.array([0, 1]),  # up   - high prob
+        state + np.array([0, -1]),  # down - low prob
+        state + np.array([1, 0]),  # right - low prob
+        state + np.array([-1, 0]),  # left - low prob
+        np.array([99, 99]),  # off-distribution
+    ]
+    candidates_arr = np.stack(candidates, axis=0)
+
+    direct = env.transition_log_probability(state, action, candidates_arr)
+    wrapper_probs = np.asarray(env.state_transition_model(state, action).probability(candidates))
+    expected = np.log(wrapper_probs + 1e-300)
+
+    assert direct.shape == (5,)
+    np.testing.assert_allclose(direct[:4], expected[:4], atol=1e-12, rtol=0.0)
+    assert direct[4] == -np.inf
+
+
+def test_discrete_observation_log_probability_equivalence():
+    """observation_log_probability matches np.log(observation_model().probability()).
+
+    Purpose: Validates the discrete observation log-prob path against the
+        wrapper-based reference for the NORMAL observation model.
+
+    Given: A DiscreteLightDarkPOMDP env (NORMAL), a near-beacon next_state,
+        and a list of candidate observations.
+    When: env.observation_log_probability is called and compared against
+        np.log(observation_model().probability).
+    Then: The (N,) ndarrays match within 1e-12 tolerance.
+
+    Test type: unit
+    """
+    env = DiscreteLightDarkPOMDP(
+        discount_factor=0.95,
+        observation_error_prob=0.1,
+        beacons=[(0, 0), (5, 5)],
+        beacon_radius=1.5,
+        grid_size=11,
+        observation_model_type=ObservationModelType.NORMAL,
+    )
+    next_state = np.array([5, 5])  # near beacon
+    action = "up"
+
+    candidates = [
+        next_state + np.array([0, 1]),
+        next_state + np.array([0, -1]),
+        next_state + np.array([1, 0]),
+        next_state + np.array([-1, 0]),
+        next_state,  # the "no-noise" observation
+        np.array([99, 99]),  # off-distribution
+    ]
+    candidates_arr = np.stack(candidates, axis=0)
+
+    direct = env.observation_log_probability(next_state, action, candidates_arr)
+    wrapper_probs = np.asarray(env.observation_model(next_state, action).probability(candidates))
+    expected = np.log(wrapper_probs + 1e-300)
+
+    assert direct.shape == (6,)
+    np.testing.assert_allclose(direct[:5], expected[:5], atol=1e-12, rtol=0.0)
+    assert direct[5] == -np.inf
+
+
+def test_discrete_sample_observation_falls_back_for_non_normal_with_n_samples():
+    """Non-NORMAL observation model variants honour n_samples via base path.
+
+    Purpose: Validates that NO_OBS_IN_DARK and DISTANCE_BASED observation
+        models receive n_samples=N propagated to the wrapper sample(N) call.
+
+    Given: DiscreteLightDarkPOMDP envs configured with the two non-NORMAL
+        observation model variants and identical numpy / random seeds.
+    When: env.sample_observation(next_state, action, n_samples=N) is called
+        and compared with env.observation_model(...).sample(N).
+    Then: Both paths return lists of length N with matching observations.
+
+    Test type: unit
+    """
+    for obs_type in (
+        ObservationModelType.NO_OBS_IN_DARK,
+        ObservationModelType.DISTANCE_BASED,
+    ):
+        env = DiscreteLightDarkPOMDP(
+            discount_factor=0.95,
+            beacons=[(0, 0), (5, 5)],
+            beacon_radius=1.5,
+            grid_size=11,
+            observation_model_type=obs_type,
+        )
+        next_state = np.array([5, 5])
+        action = "up"
+
+        np.random.seed(31)
+        random.seed(31)
+        direct = env.sample_observation(next_state, action, n_samples=4)
+        np.random.seed(31)
+        random.seed(31)
+        wrapper = env.observation_model(next_state, action).sample(n_samples=4)
+
+        assert len(direct) == 4
+        assert len(wrapper) == 4
+        for i in range(4):
+            if isinstance(direct[i], np.ndarray):
+                assert np.array_equal(direct[i], wrapper[i])
+            else:
+                assert direct[i] == wrapper[i]

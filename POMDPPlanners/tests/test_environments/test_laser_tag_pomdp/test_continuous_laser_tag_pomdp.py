@@ -1106,3 +1106,234 @@ class TestContinuousLaserTagDirectSampleApiEquivalence:
         o_direct = env.sample_observation(ns_wrap, "up")
 
         assert np.array_equal(o_wrap, o_direct)
+
+
+class TestContinuousLaserTagBatchSampleAndLogProb:
+    """Tests for n_samples batching and log-probability methods on Continuous LaserTag."""
+
+    @pytest.mark.parametrize("n", [1, 5, 100])
+    def test_sample_next_state_n_samples_equivalence(self, n: int) -> None:
+        """sample_next_state(n_samples=n) matches wrapper.sample(n) under pinned native RNG.
+
+        Purpose: Validates that the batched sample_next_state path issues the same
+            sequence of native RNG draws as the wrapper for n in {1, 5, 100}.
+
+        Given: A ContinuousLaserTagPOMDP with no walls, a fixed (state, action)
+            and the module-level _native RNG pinned identically before each call.
+        When: Drawing via env.state_transition_model(s, a).sample(n) and via
+            env.sample_next_state(s, a, n_samples=n).
+        Then: For n==1 the single ndarray equals the wrapper's first sample; for n>1
+            each row is byte-equal to the wrapper's row at the same index.
+
+        Test type: unit
+        """
+        env = ContinuousLaserTagPOMDP(discount_factor=0.95, walls=[], dangerous_areas=[])
+        state = np.array([3.0, 3.0, 8.0, 5.0, 0.0])
+        action = np.array([1.0, 0.0, 0.0])
+
+        _native.set_seed(2024)
+        np.random.seed(2024)
+        wrap_samples = env.state_transition_model(state, action).sample(n_samples=n)
+
+        _native.set_seed(2024)
+        np.random.seed(2024)
+        direct = env.sample_next_state(state, action, n_samples=n)
+
+        if n == 1:
+            assert isinstance(direct, np.ndarray)
+            assert np.array_equal(direct, wrap_samples[0])
+        else:
+            assert len(direct) == n
+            for i in range(n):
+                assert np.array_equal(direct[i], wrap_samples[i])
+
+    @pytest.mark.parametrize("n", [1, 5, 100])
+    def test_sample_observation_n_samples_equivalence(self, n: int) -> None:
+        """sample_observation(n_samples=n) matches wrapper.sample(n) under pinned native RNG.
+
+        Purpose: Validates that the batched sample_observation path issues the same
+            sequence of native RNG draws as the wrapper for n in {1, 5, 100}.
+
+        Given: A ContinuousLaserTagPOMDP and a fixed (next_state, action) with
+            the native RNG pinned identically before each call.
+        When: Drawing via env.observation_model(...).sample(n) and via
+            env.sample_observation(..., n_samples=n).
+        Then: All N observations are byte-equal between wrapper and override.
+
+        Test type: unit
+        """
+        env = ContinuousLaserTagPOMDP(discount_factor=0.95, walls=[], dangerous_areas=[])
+        next_state = np.array([4.0, 3.0, 8.0, 5.0, 0.0])
+        action = np.array([1.0, 0.0, 0.0])
+
+        _native.set_seed(99)
+        np.random.seed(99)
+        wrap_obs = env.observation_model(next_state, action).sample(n_samples=n)
+
+        _native.set_seed(99)
+        np.random.seed(99)
+        direct = env.sample_observation(next_state, action, n_samples=n)
+
+        if n == 1:
+            assert isinstance(direct, np.ndarray)
+            assert np.array_equal(direct, wrap_obs[0])
+        else:
+            assert len(direct) == n
+            for i in range(n):
+                assert np.array_equal(direct[i], wrap_obs[i])
+
+    def test_transition_log_probability_equivalence(self) -> None:
+        """transition_log_probability matches log of the wrapper's probability.
+
+        Purpose: Validates env.transition_log_probability matches the wrapper-model
+            log-probability output (the native kernel returns 0 for the continuous
+            transition density, so log -> -inf for all candidate next states).
+
+        Given: A ContinuousLaserTagPOMDP and a fixed (state, action) with a batch
+            of candidate next states sampled from the wrapper.
+        When: Computing log via wrapper.probability + np.log and via
+            env.transition_log_probability.
+        Then: The two ndarrays agree within fp tolerance (both are -inf since the
+            native probability returns 0 for the continuous density).
+
+        Test type: unit
+        """
+        env = ContinuousLaserTagPOMDP(discount_factor=0.95, walls=[], dangerous_areas=[])
+        state = np.array([3.0, 3.0, 8.0, 5.0, 0.0])
+        action = np.array([1.0, 0.0, 0.0])
+
+        _native.set_seed(2024)
+        wrap_model = env.state_transition_model(state, action)
+        next_states = wrap_model.sample(n_samples=8)
+
+        with np.errstate(divide="ignore"):
+            expected = np.log(np.asarray(wrap_model.probability(next_states)))
+        actual = env.transition_log_probability(state, action, next_states)
+
+        assert actual.shape == (len(next_states),)
+        np.testing.assert_allclose(actual, expected, atol=1e-10, equal_nan=True)
+
+    def test_observation_log_probability_equivalence(self) -> None:
+        """observation_log_probability matches log of the wrapper's PDF.
+
+        Purpose: Validates env.observation_log_probability returns log of the
+            wrapper's Gaussian-product PDF within fp tolerance.
+
+        Given: A ContinuousLaserTagPOMDP and a fixed (next_state, action) with a
+            batch of observations sampled from the wrapper.
+        When: Computing log via wrapper.probability + np.log and via
+            env.observation_log_probability.
+        Then: The two ndarrays agree within 1e-10 absolute tolerance.
+
+        Test type: unit
+        """
+        env = ContinuousLaserTagPOMDP(discount_factor=0.95, walls=[], dangerous_areas=[])
+        next_state = np.array([4.0, 3.0, 8.0, 5.0, 0.0])
+        action = np.array([1.0, 0.0, 0.0])
+
+        _native.set_seed(99)
+        wrap_model = env.observation_model(next_state, action)
+        observations = wrap_model.sample(n_samples=8)
+
+        with np.errstate(divide="ignore"):
+            expected = np.log(np.asarray(wrap_model.probability(observations)))
+        actual = env.observation_log_probability(next_state, action, observations)
+
+        assert actual.shape == (len(observations),)
+        np.testing.assert_allclose(actual, expected, atol=1e-10, equal_nan=True)
+
+    def test_observation_log_probability_terminal_state(self) -> None:
+        """observation_log_probability handles terminal next_state (-inf for non-terminal obs).
+
+        Purpose: Validates the terminal-sentinel branch of observation_log_probability
+            returns log(1)=0 for the terminal observation and -inf otherwise.
+
+        Given: A ContinuousLaserTagPOMDP and a terminal next_state.
+        When: Querying log-prob for the terminal sentinel and an arbitrary non-terminal obs.
+        Then: First entry is 0.0, second is -inf.
+
+        Test type: unit
+        """
+        env = ContinuousLaserTagPOMDP(discount_factor=0.95, walls=[], dangerous_areas=[])
+        terminal_state = np.array([3.0, 3.0, 8.0, 5.0, 1.0])
+        action = np.array([0.0, 0.0, 1.0])
+        terminal_obs = np.full(8, -1.0)
+        non_terminal_obs = np.array([3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0])
+
+        actual = env.observation_log_probability(
+            terminal_state, action, [terminal_obs, non_terminal_obs]
+        )
+
+        assert actual.shape == (2,)
+        assert actual[0] == 0.0
+        assert np.isneginf(actual[1])
+
+
+class TestContinuousLaserTagDiscreteActionsBatchSampleAndLogProb:
+    """Tests for n_samples batching and log-probability on the DiscreteActions wrapper."""
+
+    @pytest.mark.parametrize("n", [1, 5, 100])
+    def test_sample_next_state_n_samples_equivalence_discrete_actions(self, n: int) -> None:
+        """Discrete-actions sample_next_state(n_samples=n) matches wrapper under pinned RNG.
+
+        Purpose: Validates that the discrete-actions subclass routes string actions
+            through action_to_vector before delegating to the parent batched override,
+            preserving byte-identical results across all N samples.
+
+        Given: A ContinuousLaserTagPOMDPDiscreteActions and ("up" action) with the
+            native RNG pinned identically before each call.
+        When: Drawing via env.state_transition_model(state, "up").sample(n) and via
+            env.sample_next_state(state, "up", n_samples=n).
+        Then: All N samples are byte-equal between wrapper and override.
+
+        Test type: unit
+        """
+        env = ContinuousLaserTagPOMDPDiscreteActions(
+            discount_factor=0.95, walls=[], dangerous_areas=[]
+        )
+        state = np.array([3.0, 3.0, 8.0, 5.0, 0.0])
+
+        _native.set_seed(11)
+        np.random.seed(11)
+        wrap_samples = env.state_transition_model(state, "up").sample(n_samples=n)
+
+        _native.set_seed(11)
+        np.random.seed(11)
+        direct = env.sample_next_state(state, "up", n_samples=n)
+
+        if n == 1:
+            assert isinstance(direct, np.ndarray)
+            assert np.array_equal(direct, wrap_samples[0])
+        else:
+            assert len(direct) == n
+            for i in range(n):
+                assert np.array_equal(direct[i], wrap_samples[i])
+
+    def test_observation_log_probability_discrete_actions(self) -> None:
+        """observation_log_probability on the discrete-actions subclass matches wrapper.
+
+        Purpose: Validates the discrete-actions log-prob path translates string actions
+            and produces the same output as the wrapper.
+
+        Given: A ContinuousLaserTagPOMDPDiscreteActions, fixed next_state and "up" action.
+        When: Computing log via wrapper.probability + np.log and via
+            env.observation_log_probability(next_state, "up", observations).
+        Then: The two arrays agree within 1e-10 absolute tolerance.
+
+        Test type: unit
+        """
+        env = ContinuousLaserTagPOMDPDiscreteActions(
+            discount_factor=0.95, walls=[], dangerous_areas=[]
+        )
+        next_state = np.array([4.0, 3.0, 8.0, 5.0, 0.0])
+
+        _native.set_seed(57)
+        wrap_model = env.observation_model(next_state, "up")
+        observations = wrap_model.sample(n_samples=8)
+
+        with np.errstate(divide="ignore"):
+            expected = np.log(np.asarray(wrap_model.probability(observations)))
+        actual = env.observation_log_probability(next_state, "up", observations)
+
+        assert actual.shape == (len(observations),)
+        np.testing.assert_allclose(actual, expected, atol=1e-10, equal_nan=True)

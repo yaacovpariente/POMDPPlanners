@@ -26,7 +26,7 @@ Classes:
 """
 
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Sequence, Union
 
 import numpy as np
 
@@ -338,11 +338,41 @@ class SanityPOMDP(DiscreteActionsEnvironment):
     # observations are deterministic, so no RNG draws occur and the
     # behavior is byte-identical to the wrapper-based path.
 
-    def sample_next_state(self, state: int, action: int) -> int:
-        return 0 if action == 0 else 1
+    def sample_next_state(
+        self, state: int, action: int, n_samples: int = 1
+    ) -> Union[int, np.ndarray]:
+        next_state = 0 if action == 0 else 1
+        if n_samples == 1:
+            return next_state
+        return np.full(n_samples, next_state, dtype=np.int64)
 
-    def sample_observation(self, next_state: int, action: int) -> int:
-        return next_state
+    def sample_observation(
+        self, next_state: int, action: int, n_samples: int = 1
+    ) -> Union[int, np.ndarray]:
+        if n_samples == 1:
+            return next_state
+        return np.full(n_samples, next_state, dtype=np.int64)
+
+    def transition_log_probability(
+        self,
+        state: int,
+        action: int,
+        next_states: Union[Sequence[int], np.ndarray],
+    ) -> np.ndarray:
+        next_states_arr = np.asarray(next_states)
+        expected = 0 if action == 0 else 1
+        probs = np.where(next_states_arr == expected, 1.0, 0.0)
+        return np.log(probs + 1e-300)
+
+    def observation_log_probability(
+        self,
+        next_state: int,
+        action: int,
+        observations: Union[Sequence[int], np.ndarray],
+    ) -> np.ndarray:
+        observations_arr = np.asarray(observations)
+        probs = np.where(observations_arr == next_state, 1.0, 0.0)
+        return np.log(probs + 1e-300)
 
     def reward(self, state: int, action: int) -> float:
         # Higher reward for being in good state (0)

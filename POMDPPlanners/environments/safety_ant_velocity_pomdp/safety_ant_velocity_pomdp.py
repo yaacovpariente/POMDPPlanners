@@ -538,7 +538,7 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
     # and skip the wrapper allocation, while preserving the identical
     # kernel-construction sequence and arguments.
 
-    def sample_next_state(self, state: np.ndarray, action: int) -> np.ndarray:
+    def sample_next_state(self, state: np.ndarray, action: int, n_samples: int = 1) -> Any:
         kernel = _native.SafeAntVelocityTransitionCpp(
             state=state,
             action=action,
@@ -548,15 +548,51 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
             max_force=self.max_force,
             force_scales=DEFAULT_FORCE_SCALES,
         )
-        return kernel.sample()[0]
+        samples = kernel.sample(n_samples)
+        if n_samples == 1:
+            return samples[0]
+        return samples
 
-    def sample_observation(self, next_state: np.ndarray, action: int) -> np.ndarray:
+    def sample_observation(self, next_state: np.ndarray, action: int, n_samples: int = 1) -> Any:
         kernel = _native.SafeAntVelocityObservationCpp(
             next_state=next_state,
             action=action,
             covariance=self._observation_covariance,
         )
-        return kernel.sample()[0]
+        samples = kernel.sample(n_samples)
+        if n_samples == 1:
+            return samples[0]
+        return samples
+
+    def transition_log_probability(
+        self, state: np.ndarray, action: int, next_states: Any
+    ) -> np.ndarray:
+        # Re-use the Python ``probability()`` defined on the wrapper subclass:
+        # the force-direction distribution is uniform on a ring (no closed-form
+        # density), so the wrapper's tolerance-based consistency check is the
+        # canonical implementation. Wrapper construction is a thin shim over
+        # ``SafeAntVelocityTransitionCpp`` and matches the env's settings.
+        wrapper = SafeAntVelocityStateTransition(
+            state=state,
+            action=action,
+            dt=self.dt,
+            mass=self.mass,
+            damping=self.damping,
+            max_force=self.max_force,
+        )
+        probs = np.asarray(wrapper.probability(list(next_states)))
+        return np.log(probs + 1e-300)
+
+    def observation_log_probability(
+        self, next_state: np.ndarray, action: int, observations: Any
+    ) -> np.ndarray:
+        kernel = _native.SafeAntVelocityObservationCpp(
+            next_state=next_state,
+            action=action,
+            covariance=self._observation_covariance,
+        )
+        probs = np.asarray(kernel.probability(observations))
+        return np.log(probs + 1e-300)
 
     def sample_next_step(
         self, state: np.ndarray, action: int

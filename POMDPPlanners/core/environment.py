@@ -566,39 +566,104 @@ class Environment(ABC):
             This is particularly important for discrete observation spaces.
         """
 
-    def sample_next_state(self, state: Any, action: Any) -> Any:
-        """Sample a single next state for ``(state, action)``.
+    def sample_next_state(self, state: Any, action: Any, n_samples: int = 1) -> Any:
+        """Sample one or more next states for ``(state, action)``.
 
-        Hot-path entry point used by MCTS planners. The default delegates to
-        ``state_transition_model(state, action).sample()[0]``; subclasses may
-        override to skip the per-call wrapper allocation while preserving the
-        same RNG draw sequence.
+        Hot-path entry point used by MCTS planners and by particle filters.
+        The default delegates to
+        ``state_transition_model(state, action).sample(n_samples)``; subclasses
+        may override to skip the per-call wrapper allocation while preserving
+        the same RNG draw sequence.
 
         Args:
             state: Current state.
             action: Action to execute.
+            n_samples: Number of samples to draw. Defaults to 1.
 
         Returns:
-            A sampled next state.
+            When ``n_samples == 1``: a single next state of the env's
+            native type.
+            When ``n_samples > 1``: an array-like of length ``n_samples``.
+            Numeric envs return ``np.ndarray`` of shape ``(n_samples, *dim)``;
+            structured envs (Tiger, Pacman, Sanity) return a
+            ``List[T]`` of length ``n_samples``.
         """
-        return self.state_transition_model(state=state, action=action).sample()[0]
+        samples = self.state_transition_model(state=state, action=action).sample(n_samples)
+        if n_samples == 1:
+            return samples[0]
+        return samples
 
-    def sample_observation(self, next_state: Any, action: Any) -> Any:
-        """Sample a single observation for ``(next_state, action)``.
+    def sample_observation(self, next_state: Any, action: Any, n_samples: int = 1) -> Any:
+        """Sample one or more observations for ``(next_state, action)``.
 
-        Hot-path entry point used by MCTS planners. The default delegates to
-        ``observation_model(next_state, action).sample()[0]``; subclasses may
-        override to skip the per-call wrapper allocation while preserving the
-        same RNG draw sequence.
+        Hot-path entry point used by MCTS planners and by particle filters.
+        The default delegates to
+        ``observation_model(next_state, action).sample(n_samples)``;
+        subclasses may override to skip the per-call wrapper allocation while
+        preserving the same RNG draw sequence.
 
         Args:
             next_state: State after the action was executed.
             action: Action that was executed.
+            n_samples: Number of samples to draw. Defaults to 1.
 
         Returns:
-            A sampled observation.
+            When ``n_samples == 1``: a single observation of the env's
+            native type.
+            When ``n_samples > 1``: an array-like of length ``n_samples``.
+            Numeric envs return ``np.ndarray`` of shape ``(n_samples, *dim)``;
+            structured envs return a ``List[T]`` of length ``n_samples``.
         """
-        return self.observation_model(next_state=next_state, action=action).sample()[0]
+        samples = self.observation_model(next_state=next_state, action=action).sample(n_samples)
+        if n_samples == 1:
+            return samples[0]
+        return samples
+
+    def transition_log_probability(self, state: Any, action: Any, next_states: Any) -> np.ndarray:
+        """Log-probability of each candidate next state under ``(state, action)``.
+
+        The default delegates to
+        ``np.log(state_transition_model(state, action).probability(next_states))``;
+        subclasses may override for vectorized native paths.
+
+        Args:
+            state: Current state.
+            action: Action that was executed.
+            next_states: A sequence (length N) or batch ndarray (shape ``(N, *dim)``)
+                of candidate next states.
+
+        Returns:
+            ndarray of shape ``(N,)`` with log-probabilities (or log-PDFs for
+            continuous envs).
+        """
+        probs = np.asarray(
+            self.state_transition_model(state=state, action=action).probability(next_states)
+        )
+        return np.log(probs + 1e-300)
+
+    def observation_log_probability(
+        self, next_state: Any, action: Any, observations: Any
+    ) -> np.ndarray:
+        """Log-probability of each candidate observation under ``(next_state, action)``.
+
+        The default delegates to
+        ``np.log(observation_model(next_state, action).probability(observations))``;
+        subclasses may override for vectorized native paths.
+
+        Args:
+            next_state: State after the action was executed.
+            action: Action that was executed.
+            observations: A sequence (length N) or batch ndarray (shape ``(N, *dim)``)
+                of candidate observations.
+
+        Returns:
+            ndarray of shape ``(N,)`` with log-probabilities (or log-PDFs for
+            continuous envs).
+        """
+        probs = np.asarray(
+            self.observation_model(next_state=next_state, action=action).probability(observations)
+        )
+        return np.log(probs + 1e-300)
 
     def sample_next_step(self, state: Any, action: Any) -> Tuple[Any, Any, float]:
         """Sample a complete state transition step.
