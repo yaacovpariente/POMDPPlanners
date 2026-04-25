@@ -318,21 +318,19 @@ def test_beacons_and_obstacles_array_structure():
 
 
 def test_state_transition_model(pomdp):
-    # Test state transition
+    # Test state transition via the env-level sample API.
     state = np.array([0.0, 0.0])
     action = np.array([0.0, 0.0])
-    transition = pomdp.state_transition_model(state, action)
-    next_state = transition.sample()[0]
+    next_state = pomdp.sample_next_state(state, action)
     assert isinstance(next_state, np.ndarray)
     assert next_state.shape == (2,)
 
 
 def test_observation_model(pomdp):
-    # Test observation model
+    # Test observation model via the env-level sample API.
     state = np.array([0.0, 0.0])
     action = np.array([0.0, 0.0])
-    observation = pomdp.observation_model(state, action)
-    obs = observation.sample()[0]
+    obs = pomdp.sample_observation(state, action)
     assert isinstance(obs, np.ndarray)
     assert obs.shape == (2,)
 
@@ -578,10 +576,12 @@ def test_continuous_light_dark_pomdp_state_transition_model(
     env = base_continuous_light_dark_pomdp
     state = np.array([5, 5])
     action = np.array([0, 1])
-    dist = env.state_transition_model(state, action)
 
+    # The wrapper inheritance contract still exists.
+    dist = env.state_transition_model(state, action)
     assert isinstance(dist, StateTransitionModel)
-    next_state = dist.sample()
+
+    next_state = env.sample_next_state(state, action)
     expected_next_state = state + action
     # Allow for noise in state transition (3 standard deviations)
     assert np.allclose(next_state, expected_next_state, atol=3.0)

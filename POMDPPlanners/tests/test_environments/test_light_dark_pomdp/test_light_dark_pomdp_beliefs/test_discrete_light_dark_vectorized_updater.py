@@ -218,9 +218,7 @@ class TestBatchObservationLogLikelihood:
             vectorized_ll = updater.batch_observation_log_likelihood(particles, action, obs)
             per_particle_ll = np.empty(n)
             for j in range(n):
-                obs_model = env.observation_model(next_state=particles[j], action=action)
-                prob = obs_model.probability([obs])[0]
-                per_particle_ll[j] = np.log(prob) if prob > 0 else -np.inf
+                per_particle_ll[j] = env.observation_log_probability(particles[j], action, [obs])[0]
 
             np.testing.assert_allclose(vectorized_ll, per_particle_ll, atol=1e-10)
 
@@ -353,7 +351,10 @@ class TestNoObsInDarkLogLikelihood:
         action = "right"
         particles = np.random.randint(0, 10, size=(n, 2)).astype(float)
 
-        # Test "None" observation
+        # Test "None" observation. The vectorized updater uses a strict -inf
+        # floor for impossible observations, while observation_log_probability
+        # uses log(prob + 1e-300); we therefore go via the wrapper here so we
+        # can apply the matching np.log(prob) if prob > 0 else -inf rule.
         vectorized_ll = no_obs_updater.batch_observation_log_likelihood(particles, action, "None")
         per_particle_ll = np.empty(n)
         for i in range(n):
@@ -493,7 +494,10 @@ class TestDistanceBasedLogLikelihood:
         action = "right"
         particles = np.random.randint(0, 10, size=(n, 2)).astype(float)
 
-        # Test "None" observation
+        # Test "None" observation. The vectorized updater uses a strict -inf
+        # floor for impossible observations, while observation_log_probability
+        # uses log(prob + 1e-300); we therefore go via the wrapper here so we
+        # can apply the matching np.log(prob) if prob > 0 else -inf rule.
         vectorized_ll = dist_updater.batch_observation_log_likelihood(particles, action, "None")
         per_particle_ll = np.empty(n)
         for i in range(n):
