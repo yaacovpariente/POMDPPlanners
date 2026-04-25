@@ -10,14 +10,22 @@ Reference:
     Belief-State Planning for Long-Horizon POMDPs using Learned Approximations.
     Reinforcement Learning Conference (RLC).
 
+Implementation note:
+    Operates on the column-store arena
+    :class:`POMDPPlanners.core.tree.arena.Tree` (integer node IDs, parallel
+    column lists) rather than the legacy anytree-based ``BeliefNode`` /
+    ``ActionNode`` graph. Inherits from
+    :class:`ArenaDoubleProgressiveWideningMCTSPolicy`. External constructor
+    signature, ``action()`` interface, and behavior are unchanged.
+
 Classes:
-    BetaZero: Main planner extending ``DoubleProgressiveWideningMCTSPolicy``.
+    BetaZero: Main planner extending ``ArenaDoubleProgressiveWideningMCTSPolicy``.
 """
 
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple, cast
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -25,7 +33,7 @@ from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.core.cost import belief_expectation_reward
 from POMDPPlanners.core.environment import Environment, SpaceType
 from POMDPPlanners.core.policy import PolicyRunData, PolicySpaceInfo, TrainablePolicy
-from POMDPPlanners.core.tree import ActionNode, BeliefNode
+from POMDPPlanners.core.tree.arena import Tree
 from POMDPPlanners.planners.mcts_planners.beta_zero.belief_representation import (
     BeliefRepresentation,
     ParticleMeanStdRepresentation,
@@ -38,15 +46,15 @@ from POMDPPlanners.planners.mcts_planners.beta_zero.beta_zero_network import (
     BetaZeroNetwork,
 )
 from POMDPPlanners.planners.mcts_planners.beta_zero.puct import (
-    puct_action_progressive_widening,
+    puct_action_progressive_widening_arena,
 )
 from POMDPPlanners.planners.mcts_planners.beta_zero.training import train_network
 from POMDPPlanners.planners.mcts_planners.beta_zero.training_buffer import (
     TrainingBuffer,
     TrainingExample,
 )
-from POMDPPlanners.planners.planners_utils.path_simulations_policy import (
-    DoubleProgressiveWideningMCTSPolicy,
+from POMDPPlanners.planners.planners_utils.path_simulations_policy_arena import (
+    ArenaDoubleProgressiveWideningMCTSPolicy,
 )
 from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
 
@@ -67,7 +75,7 @@ class _BatchedEpisodeState:
     active: bool
 
 
-class BetaZero(DoubleProgressiveWideningMCTSPolicy, TrainablePolicy):
+class BetaZero(ArenaDoubleProgressiveWideningMCTSPolicy, TrainablePolicy):
     """BetaZero: Neural MCTS for POMDPs.
 
     Extends ``DoubleProgressiveWideningMCTSPolicy`` with three key innovations
@@ -259,7 +267,7 @@ class BetaZero(DoubleProgressiveWideningMCTSPolicy, TrainablePolicy):
         self._buffer = TrainingBuffer(n_buffer=n_buffer)
         self._collecting_data = False
         self._pending_examples: List[_PendingExample] = []
-        self._last_tree: Optional[BeliefNode] = None
+        self._last_tree: Optional[Tuple[Tree, int]] = None
 
     # ── Initialisation helpers ────────────────────────────────────────
 
@@ -323,10 +331,10 @@ class BetaZero(DoubleProgressiveWideningMCTSPolicy, TrainablePolicy):
 
     # ── MCTS overrides ────────────────────────────────────────────────
 
-    def _learn_tree(self, belief: Belief) -> BeliefNode:
-        tree = super()._learn_tree(belief)
-        self._last_tree = tree
-        return tree
+    def _learn_tree(self, belief: Belief) -> Tuple[Tree, int]:
+        tree, root_id = super()._learn_tree(belief)
+        self._last_tree = (tree, root_id)
+        return tree, root_id
 
     def action(self, belief: Belief) -> Tuple[List[Any], PolicyRunData]:
         """Select an action via MCTS with PUCT and network value estimates.
@@ -336,28 +344,30 @@ class BetaZero(DoubleProgressiveWideningMCTSPolicy, TrainablePolicy):
         """
         result = super().action(belief)
 
-        if self._collecting_data and self._last_tree and not self._last_tree.is_leaf:
-            features = self.belief_representation(belief)
-            policy_target = self._compute_q_weighted_policy_target(self._last_tree)
-            self._pending_examples.append(
-                _PendingExample(belief_features=features, policy_target=policy_target)
-            )
+        if self._collecting_data and self._last_tree is not None:
+            tree, root_id = self._last_tree
+            if tree.children_ids[root_id]:
+                features = self.belief_representation(belief)
+                policy_target = self._compute_q_weighted_policy_target(tree, root_id)
+                self._pending_examples.append(
+                    _PendingExample(belief_features=features, policy_target=policy_target)
+                )
 
         return result
 
-    def _simulate_path(self, belief_node: BeliefNode, depth: int) -> float:
+    def _simulate_path(self, tree: Tree, belief_id: int, depth: int) -> float:
         if depth > self.depth:
-            belief_node.parent = None
             return 0.0
 
-        if self.environment.is_terminal(belief_node.belief.sample()):
-            belief_node.visit_count += 1
+        if self.environment.is_terminal(tree.belief[belief_id].sample()):
+            tree.visit_count[belief_id] += 1
             return 0.0
 
-        action_priors = self._get_action_priors(belief_node)
+        action_priors = self._get_action_priors(tree=tree, belief_id=belief_id)
 
-        action_node = puct_action_progressive_widening(
-            belief_node=belief_node,
+        action_id = puct_action_progressive_widening_arena(
+            tree=tree,
+            belief_id=belief_id,
             alpha_a=self.alpha_a,
             action_sampler=self.action_sampler,
             exploration_constant=self.exploration_constant,
@@ -367,86 +377,96 @@ class BetaZero(DoubleProgressiveWideningMCTSPolicy, TrainablePolicy):
         )
 
         return_sample = self._simulate_return(
-            belief_node=belief_node, action_node=action_node, depth=depth
+            tree=tree, belief_id=belief_id, action_id=action_id, depth=depth
         )
 
         self._update_node_statistics(
-            belief_node=belief_node, action_node=action_node, total=return_sample
+            tree=tree, belief_id=belief_id, action_id=action_id, total=return_sample
         )
 
         return return_sample
 
-    def _simulate_return(
-        self, belief_node: BeliefNode, action_node: ActionNode, depth: int
-    ) -> float:
-        if len(action_node.children) <= self.k_o * action_node.visit_count**self.alpha_o:
-            next_belief_node, immediate_reward = self._sample_new_belief_node(
-                belief_node=belief_node, action_node=action_node
+    def _simulate_return(self, tree: Tree, belief_id: int, action_id: int, depth: int) -> float:
+        action_children_count = len(tree.children_ids[action_id])
+        action_visits = tree.visit_count[action_id]
+        if action_children_count <= self.k_o * action_visits**self.alpha_o:
+            next_belief_id, immediate_reward = self._sample_new_belief_node(
+                tree=tree, belief_id=belief_id, action_id=action_id
             )
-            leaf_value = self._network_leaf_value(next_belief_node)
+            leaf_value = self._network_leaf_value(tree.belief[next_belief_id])
             total = immediate_reward + self.discount_factor * leaf_value
         else:
-            next_belief_node, immediate_reward = self._sample_existing_belief_node(
-                belief_node=belief_node, action_node=action_node
+            next_belief_id, immediate_reward = self._sample_existing_belief_node(
+                tree=tree, belief_id=belief_id, action_id=action_id
             )
             total = immediate_reward + self.discount_factor * self._simulate_path(
-                belief_node=next_belief_node, depth=depth + 1
+                tree=tree, belief_id=next_belief_id, depth=depth + 1
             )
         return total
 
     def _sample_new_belief_node(
-        self, belief_node: BeliefNode, action_node: ActionNode
-    ) -> Tuple[BeliefNode, float]:
+        self, tree: Tree, belief_id: int, action_id: int
+    ) -> Tuple[int, float]:
+        belief = tree.belief[belief_id]
+        action = tree.action[action_id]
         immediate_reward = belief_expectation_reward(
-            belief=belief_node.belief, action=action_node.action, env=self.environment
+            belief=belief, action=action, env=self.environment
         )
-        belief_node.immediate_cost = -immediate_reward
+        tree.set_immediate_cost(belief_id, -immediate_reward)
 
         _, next_observation, _ = self.environment.sample_next_step(
-            state=belief_node.belief.sample(), action=action_node.action
+            state=belief.sample(), action=action
         )
-        next_belief = belief_node.belief.update(
+        next_belief = belief.update(
             observation=next_observation,
-            action=action_node.action,
+            action=action,
             pomdp=self.environment,
         )
-        next_belief_node = BeliefNode(belief=next_belief, parent=action_node)
-        return next_belief_node, immediate_reward
+        next_belief_id = tree.add_belief_node(
+            belief=next_belief, observation=next_observation, parent_id=action_id
+        )
+        return next_belief_id, immediate_reward
 
     def _sample_existing_belief_node(
-        self, belief_node: BeliefNode, action_node: ActionNode
-    ) -> Tuple[BeliefNode, float]:
-        immediate_reward = -belief_node.immediate_cost  # type: ignore[operator]
-        next_belief_node = action_node.sample_child_node()
-        return next_belief_node, immediate_reward
+        self, tree: Tree, belief_id: int, action_id: int
+    ) -> Tuple[int, float]:
+        parent_immediate_cost = tree.immediate_cost[belief_id]
+        assert parent_immediate_cost is not None, "parent belief immediate_cost must be set"
+        immediate_reward = -parent_immediate_cost
+        next_belief_id = tree.sample_belief_child(action_id)
+        return next_belief_id, immediate_reward
 
     def _update_node_statistics(
-        self, belief_node: BeliefNode, action_node: ActionNode, total: float
+        self, tree: Tree, belief_id: int, action_id: int, total: float
     ) -> None:
-        belief_node.visit_count += 1
-        action_node.visit_count += 1
-        action_node.q_value += (total - action_node.q_value) / action_node.visit_count
-        belief_node.v_value = np.max([child.q_value for child in belief_node.children])
+        tree.visit_count[belief_id] += 1
+        tree.visit_count[action_id] += 1
+        old_q = tree.q_value[action_id]
+        tree.q_value[action_id] = old_q + (total - old_q) / tree.visit_count[action_id]
+        tree.v_value[belief_id] = float(
+            np.max([tree.q_value[cid] for cid in tree.children_ids[belief_id]])
+        )
 
     # ── Network helpers ───────────────────────────────────────────────
 
-    def _network_leaf_value(self, belief_node: BeliefNode) -> float:
-        features = self._get_normalized_features(self.belief_representation(belief_node.belief))
+    def _network_leaf_value(self, belief: Belief) -> float:
+        features = self._get_normalized_features(self.belief_representation(belief))
         _, value = self.network.predict(features)
         return self._get_denormalized_value(value)
 
-    def _get_action_priors(self, belief_node: BeliefNode) -> Optional[np.ndarray]:
-        if not belief_node.children:
+    def _get_action_priors(self, tree: Tree, belief_id: int) -> Optional[np.ndarray]:
+        if not tree.children_ids[belief_id]:
             return None
         if self.network.action_space_type == "discrete":
-            return self._discrete_action_priors(belief_node)
+            return self._discrete_action_priors(tree=tree, belief_id=belief_id)
         return None
 
-    def _discrete_action_priors(self, belief_node: BeliefNode) -> np.ndarray:
-        features = self._get_normalized_features(self.belief_representation(belief_node.belief))
+    def _discrete_action_priors(self, tree: Tree, belief_id: int) -> np.ndarray:
+        features = self._get_normalized_features(self.belief_representation(tree.belief[belief_id]))
         policy, _ = self.network.predict(features)
         actions = self.environment.get_actions()  # type: ignore[attr-defined]
-        child_actions = [child.action for child in belief_node.children]
+        children = tree.children_ids[belief_id]
+        child_actions = [tree.action[cid] for cid in children]
         priors = np.array(
             [
                 policy[actions.index(a)] if a in actions else 1.0 / len(child_actions)
@@ -462,15 +482,15 @@ class BetaZero(DoubleProgressiveWideningMCTSPolicy, TrainablePolicy):
 
     # ── Q-weighted policy target ──────────────────────────────────────
 
-    def _compute_q_weighted_policy_target(self, tree: BeliefNode) -> np.ndarray:
-        """Compute π_qw(b,a) ∝ [softmax(Q)^z_q · (N(b,a)/ΣN)^z_n]^(1/τ).
+    def _compute_q_weighted_policy_target(self, tree: Tree, belief_id: int) -> np.ndarray:
+        """Compute pi_qw(b,a) propto [softmax(Q)^z_q * (N(b,a)/sum_N)^z_n]^(1/tau).
 
-        Returns a probability distribution over the tree root's child actions.
-        For discrete action spaces, maps to full action-space vector.
+        Returns a probability distribution over ``belief_id``'s child actions.
+        For discrete action spaces, maps to the full action-space vector.
         """
-        children = tree.children
-        q_values = np.array([child.q_value for child in children])
-        visit_counts = np.array([child.visit_count for child in children], dtype=np.float64)
+        children = tree.children_ids[belief_id]
+        q_values = np.array([tree.q_value[cid] for cid in children])
+        visit_counts = np.array([tree.visit_count[cid] for cid in children], dtype=np.float64)
 
         q_term = self._softmax_q_term(q_values)
         n_term = self._visit_count_term(visit_counts)
@@ -483,11 +503,13 @@ class BetaZero(DoubleProgressiveWideningMCTSPolicy, TrainablePolicy):
         probs = probs / probs.sum()
 
         if self.network.action_space_type == "discrete":
-            return self._map_to_full_action_vector(children, probs)
-        return self._compute_continuous_policy_target(children, probs)
+            return self._map_to_full_action_vector(tree, children, probs)
+        return self._compute_continuous_policy_target(tree, children, probs)
 
-    def _compute_continuous_policy_target(self, children: tuple, probs: np.ndarray) -> np.ndarray:
-        child_actions = np.array([child.action for child in children])
+    def _compute_continuous_policy_target(
+        self, tree: Tree, children: List[int], probs: np.ndarray
+    ) -> np.ndarray:
+        child_actions = np.array([tree.action[cid] for cid in children])
         weighted_mean = probs @ child_actions
         diff = child_actions - weighted_mean
         weighted_var = probs @ (diff**2)
@@ -505,12 +527,15 @@ class BetaZero(DoubleProgressiveWideningMCTSPolicy, TrainablePolicy):
             return np.ones_like(visit_counts) / len(visit_counts)
         return visit_counts / total
 
-    def _map_to_full_action_vector(self, children: tuple, probs: np.ndarray) -> np.ndarray:
+    def _map_to_full_action_vector(
+        self, tree: Tree, children: List[int], probs: np.ndarray
+    ) -> np.ndarray:
         actions = self.environment.get_actions()  # type: ignore[attr-defined]
         full = np.zeros(len(actions), dtype=np.float64)
-        for child, p in zip(children, probs):
-            if child.action in actions:
-                full[actions.index(child.action)] = p
+        for cid, p in zip(children, probs):
+            child_action = tree.action[cid]
+            if child_action in actions:
+                full[actions.index(child_action)] = p
         total = full.sum()
         if total > 0:
             full /= total
@@ -701,8 +726,11 @@ class BetaZero(DoubleProgressiveWideningMCTSPolicy, TrainablePolicy):
     def _train_network_on_buffer(self) -> Dict[str, List[float]]:
         if self.normalize_inputs or self.normalize_values:
             self._update_normalization_stats()
+        assert isinstance(
+            self.network, BetaZeroNetwork
+        ), "train_network requires a BetaZeroNetwork instance"
         return train_network(
-            network=cast(BetaZeroNetwork, self.network),
+            network=self.network,
             buffer=self._buffer,
             n_epochs=self.training_epochs,
             batch_size=self.training_batch_size,

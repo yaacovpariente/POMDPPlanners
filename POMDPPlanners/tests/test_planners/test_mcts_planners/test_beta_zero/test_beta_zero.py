@@ -1,10 +1,12 @@
 """Tests for the BetaZero planner module.
 
 This module tests the BetaZero planner, which extends
-DoubleProgressiveWideningMCTSPolicy with PUCT action selection,
+ArenaDoubleProgressiveWideningMCTSPolicy with PUCT action selection,
 network-based leaf value estimation, Q-weighted policy targets,
 and policy iteration training via fit().
 """
+
+# pylint: disable=protected-access
 
 import random
 
@@ -13,7 +15,7 @@ import pytest
 
 from POMDPPlanners.core.belief import WeightedParticleBelief, get_initial_belief
 from POMDPPlanners.core.policy import PolicyRunData
-from POMDPPlanners.core.tree import ActionNode, BeliefNode
+from POMDPPlanners.core.tree.arena import Tree
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.planners.mcts_planners.beta_zero.beta_zero import BetaZero
 from POMDPPlanners.training import PolicyTrainer
@@ -143,7 +145,7 @@ class TestBetaZero:
         # TigerPOMDP is non-terminal by default, but the planner should still
         # handle the case gracefully. Use a normal belief and verify it works.
         belief = get_initial_belief(pomdp=tiger_env, n_particles=5, resampling=True)
-        actions, run_data = planner.action(belief)
+        actions, _ = planner.action(belief)
 
         assert isinstance(actions, list)
         assert len(actions) >= 1
@@ -162,8 +164,7 @@ class TestBetaZero:
 
         Test type: unit
         """
-        belief_node = BeliefNode(belief=initial_belief)
-        value = tiger_planner._network_leaf_value(belief_node)
+        value = tiger_planner._network_leaf_value(initial_belief)
 
         assert isinstance(value, float)
 
@@ -197,17 +198,18 @@ class TestBetaZero:
         particles = [["tiger_left"], ["tiger_right"]]
         log_weights = np.log(np.array([0.5, 0.5]))
         belief = WeightedParticleBelief(particles, log_weights)
-        tree = BeliefNode(belief=belief)
+        tree = Tree()
+        root_id = tree.add_belief_node(belief)
 
-        child1 = ActionNode(action="listen", parent=tree)
-        child1.q_value = 2.0
-        child1.visit_count = 10
+        child1_id = tree.add_action_node(action="listen", parent_id=root_id)
+        tree.q_value[child1_id] = 2.0
+        tree.visit_count[child1_id] = 10
 
-        child2 = ActionNode(action="open_left", parent=tree)
-        child2.q_value = 1.0
-        child2.visit_count = 5
+        child2_id = tree.add_action_node(action="open_left", parent_id=root_id)
+        tree.q_value[child2_id] = 1.0
+        tree.visit_count[child2_id] = 5
 
-        target = planner._compute_q_weighted_policy_target(tree)
+        target = planner._compute_q_weighted_policy_target(tree, root_id)
 
         # Manual computation:
         # softmax(Q): Q = [2.0, 1.0], shifted = [1.0, 0.0],
@@ -272,17 +274,18 @@ class TestBetaZero:
         particles = [["tiger_left"], ["tiger_right"]]
         log_weights = np.log(np.array([0.5, 0.5]))
         belief = WeightedParticleBelief(particles, log_weights)
-        tree = BeliefNode(belief=belief)
+        tree = Tree()
+        root_id = tree.add_belief_node(belief)
 
-        child1 = ActionNode(action="listen", parent=tree)
-        child1.q_value = 100.0  # Extreme Q-value should not matter
-        child1.visit_count = 10
+        child1_id = tree.add_action_node(action="listen", parent_id=root_id)
+        tree.q_value[child1_id] = 100.0  # Extreme Q-value should not matter
+        tree.visit_count[child1_id] = 10
 
-        child2 = ActionNode(action="open_left", parent=tree)
-        child2.q_value = -100.0
-        child2.visit_count = 5
+        child2_id = tree.add_action_node(action="open_left", parent_id=root_id)
+        tree.q_value[child2_id] = -100.0
+        tree.visit_count[child2_id] = 5
 
-        target = planner._compute_q_weighted_policy_target(tree)
+        target = planner._compute_q_weighted_policy_target(tree, root_id)
 
         # With z_q=0, logits = 0*log(softmax_q) + 1*log(n_term)/1
         # = log([10/15, 5/15]) => probs proportional to [10, 5]
@@ -328,17 +331,18 @@ class TestBetaZero:
         particles = [["tiger_left"], ["tiger_right"]]
         log_weights = np.log(np.array([0.5, 0.5]))
         belief = WeightedParticleBelief(particles, log_weights)
-        tree = BeliefNode(belief=belief)
+        tree = Tree()
+        root_id = tree.add_belief_node(belief)
 
-        child1 = ActionNode(action="listen", parent=tree)
-        child1.q_value = 2.0
-        child1.visit_count = 1  # Very low visit count should not matter
+        child1_id = tree.add_action_node(action="listen", parent_id=root_id)
+        tree.q_value[child1_id] = 2.0
+        tree.visit_count[child1_id] = 1  # Very low visit count should not matter
 
-        child2 = ActionNode(action="open_left", parent=tree)
-        child2.q_value = 1.0
-        child2.visit_count = 1000  # Very high visit count should not matter
+        child2_id = tree.add_action_node(action="open_left", parent_id=root_id)
+        tree.q_value[child2_id] = 1.0
+        tree.visit_count[child2_id] = 1000  # Very high visit count should not matter
 
-        target = planner._compute_q_weighted_policy_target(tree)
+        target = planner._compute_q_weighted_policy_target(tree, root_id)
 
         # softmax([2.0, 1.0]): shifted = [1.0, 0.0], exp = [e, 1]
         q_vals = np.array([2.0, 1.0])
@@ -387,17 +391,18 @@ class TestBetaZero:
         particles = [["tiger_left"], ["tiger_right"]]
         log_weights = np.log(np.array([0.5, 0.5]))
         belief = WeightedParticleBelief(particles, log_weights)
-        tree = BeliefNode(belief=belief)
+        tree = Tree()
+        root_id = tree.add_belief_node(belief)
 
-        child1 = ActionNode(action="listen", parent=tree)
-        child1.q_value = 5.0
-        child1.visit_count = 20
+        child1_id = tree.add_action_node(action="listen", parent_id=root_id)
+        tree.q_value[child1_id] = 5.0
+        tree.visit_count[child1_id] = 20
 
-        child2 = ActionNode(action="open_left", parent=tree)
-        child2.q_value = 1.0
-        child2.visit_count = 5
+        child2_id = tree.add_action_node(action="open_left", parent_id=root_id)
+        tree.q_value[child2_id] = 1.0
+        tree.visit_count[child2_id] = 5
 
-        target = planner._compute_q_weighted_policy_target(tree)
+        target = planner._compute_q_weighted_policy_target(tree, root_id)
 
         assert (
             np.max(target) > 0.99
@@ -464,9 +469,8 @@ class TestBetaZero:
             training_batch_size=4,
         )
 
-        initial_belief_fn = lambda: get_initial_belief(
-            pomdp=tiger_env, n_particles=5, resampling=True
-        )
+        def initial_belief_fn():
+            return get_initial_belief(pomdp=tiger_env, n_particles=5, resampling=True)
 
         trainer = PolicyTrainer(
             policy=planner,

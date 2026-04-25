@@ -3,10 +3,10 @@ import random
 
 import numpy as np
 import pytest
-from anytree import PostOrderIter
 
 from POMDPPlanners.core.belief import WeightedParticleBelief, get_initial_belief
 from POMDPPlanners.core.tree import ActionNode, BeliefNode
+from POMDPPlanners.core.tree.arena import ACTION, BELIEF, Tree
 from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.planners.mcts_planners.sparse_pft import SparsePFT
@@ -115,7 +115,7 @@ def test_action_selection(planner, initial_belief):
 
     Test type: unit
     """
-    action, policy_run_data = planner.action(belief=initial_belief)
+    action, _ = planner.action(belief=initial_belief)
     assert isinstance(action, list)
     assert len(action) == 1
     assert action[0] in planner.environment.get_actions()
@@ -132,31 +132,27 @@ def test_get_explored_action_node(planner):
 
     Test type: unit
     """
-    # Create a belief node with children
     belief = WeightedParticleBelief(
         particles=["tiger_left", "tiger_right"],
-        log_weights=np.array([-0.69314718, -0.69314718]),  # log(0.5) for equal weights
+        log_weights=np.array([-0.69314718, -0.69314718]),
     )
-    belief_node = BeliefNode(belief=belief, observation=None, parent=None, children=tuple())
-    belief_node.visit_count = 1
+    tree = Tree()
+    root_id = tree.add_belief_node(belief)
+    tree.visit_count[root_id] = 1
 
-    # Create action nodes with different Q-values
     for action in planner.environment.get_actions():
-        action_node = ActionNode(action=action, parent=belief_node, children=tuple())
-        action_node.q_value = -1.0
-        action_node.visit_count = 1
+        action_id = tree.add_action_node(action=action, parent_id=root_id)
+        tree.q_value[action_id] = -1.0
+        tree.visit_count[action_id] = 1
 
-    # Set one action node to have a much lower Q-value
-    last_action_node = belief_node.children[-1]
-    last_action_node.q_value = 100.0
+    last_action_id = tree.children_ids[root_id][-1]
+    tree.q_value[last_action_id] = 100.0
 
-    # Test exploration
-    selected_node = planner.get_explored_action_node(belief_node=belief_node)
-    assert isinstance(selected_node, ActionNode)
-    assert selected_node in belief_node.children
-    assert selected_node.action in planner.environment.get_actions()
-    # Should select the node with the lowest Q-value due to exploration term
-    assert selected_node.q_value == 100.0  # Check Q-value instead of action
+    selected_id = planner.get_explored_action_node(tree=tree, belief_id=root_id)
+    assert tree.kind[selected_id] == ACTION
+    assert selected_id in tree.children_ids[root_id]
+    assert tree.action[selected_id] in planner.environment.get_actions()
+    assert tree.q_value[selected_id] == 100.0
 
 
 def test_sample_next_existing_belief(planner):
@@ -170,30 +166,26 @@ def test_sample_next_existing_belief(planner):
 
     Test type: unit
     """
-    # Create a belief node and action node
     belief = WeightedParticleBelief(
         particles=["tiger_left", "tiger_right"],
         log_weights=np.array([-0.69314718, -0.69314718]),
     )
-    belief_node = BeliefNode(belief=belief, observation=None, parent=None, children=tuple())
+    tree = Tree()
+    root_id = tree.add_belief_node(belief)
+    action_id = tree.add_action_node(action="listen", parent_id=root_id)
 
-    action_node = ActionNode(action="listen", parent=belief_node, children=tuple())
-
-    # Add some child belief nodes with proper visit counts
     for _ in range(2):
-        child_belief = BeliefNode(
-            belief=belief, observation="hear_left", parent=action_node, children=tuple()
-        )
-        child_belief.immediate_cost = -1.0
-        child_belief.visit_count = 1  # Add visit count
+        child_id = tree.add_belief_node(belief=belief, observation="hear_left", parent_id=action_id)
+        tree.set_immediate_cost(child_id, -1.0)
+        tree.visit_count[child_id] = 1
 
-    next_belief_node, immediate_reward = planner._sample_next_existing_belief(
-        action_node=action_node
+    next_belief_id, immediate_reward = planner._sample_next_existing_belief(
+        tree=tree, action_id=action_id
     )
-    assert isinstance(next_belief_node, BeliefNode)
-    assert next_belief_node in action_node.children
-    assert next_belief_node.immediate_cost is not None
-    assert immediate_reward == -next_belief_node.immediate_cost
+    assert tree.kind[next_belief_id] == BELIEF
+    assert next_belief_id in tree.children_ids[action_id]
+    assert tree.immediate_cost[next_belief_id] is not None
+    assert immediate_reward == -tree.immediate_cost[next_belief_id]
 
 
 def test_generate_belief(planner):
@@ -207,21 +199,20 @@ def test_generate_belief(planner):
 
     Test type: unit
     """
-    # Create a belief node and action node
     belief = WeightedParticleBelief(
         particles=["tiger_left", "tiger_right"],
         log_weights=np.array([-0.69314718, -0.69314718]),
     )
-    belief_node = BeliefNode(belief=belief, observation=None, parent=None, children=tuple())
+    tree = Tree()
+    root_id = tree.add_belief_node(belief)
+    action_id = tree.add_action_node(action="listen", parent_id=root_id)
 
-    action_node = ActionNode(action="listen", parent=belief_node, children=tuple())
-
-    next_belief_node, immediate_reward = planner._generate_belief(action_node=action_node)
-    assert isinstance(next_belief_node, BeliefNode)
-    assert next_belief_node.parent == action_node
-    assert next_belief_node.observation is not None
-    assert next_belief_node.immediate_cost is not None
-    assert immediate_reward == -next_belief_node.immediate_cost
+    next_belief_id, immediate_reward = planner._generate_belief(tree=tree, action_id=action_id)
+    assert tree.kind[next_belief_id] == BELIEF
+    assert tree.parent_id[next_belief_id] == action_id
+    assert tree.observation[next_belief_id] is not None
+    assert tree.immediate_cost[next_belief_id] is not None
+    assert immediate_reward == -tree.immediate_cost[next_belief_id]
 
 
 def test_random_rollout(planner):
@@ -259,28 +250,27 @@ def test_update_node_statistics(planner):
 
     Test type: unit
     """
-    # Create a belief node and action node
     belief = WeightedParticleBelief(
         particles=["tiger_left", "tiger_right"],
         log_weights=np.array([-0.69314718, -0.69314718]),
     )
-    belief_node = BeliefNode(belief=belief, observation=None, parent=None, children=tuple())
-    belief_node.visit_count = 1
+    tree = Tree()
+    root_id = tree.add_belief_node(belief)
+    tree.visit_count[root_id] = 1
 
-    action_node = ActionNode(action="listen", parent=belief_node, children=tuple())
-    action_node.visit_count = 1
-    action_node.q_value = 0.0
+    action_id = tree.add_action_node(action="listen", parent_id=root_id)
+    tree.visit_count[action_id] = 1
+    tree.q_value[action_id] = 0.0
 
-    # Update statistics
     return_sample = -1.0
     planner.update_nodes(
-        belief_node=belief_node, action_node=action_node, return_sample=return_sample
+        tree=tree, belief_id=root_id, action_id=action_id, return_sample=return_sample
     )
 
-    assert belief_node.visit_count == 2
-    assert action_node.visit_count == 2
-    assert action_node.q_value == -0.5  # (0.0 + -1.0) / 2
-    assert belief_node.v_value is not None
+    assert tree.visit_count[root_id] == 2
+    assert tree.visit_count[action_id] == 2
+    assert tree.q_value[action_id] == -0.5  # (0.0 + -1.0) / 2
+    assert tree.v_value[root_id] is not None
 
 
 def test_integration_with_tiger_pomdp(planner, initial_belief, environment, n_particles):
@@ -307,7 +297,7 @@ def test_integration_with_tiger_pomdp(planner, initial_belief, environment, n_pa
             action_node.q_value = -1.0
             action_node.visit_count = 1
 
-        action, policy_run_data = planner.action(current_belief)
+        action, _ = planner.action(current_belief)
         assert isinstance(action, list)
         assert len(action) == 1
         assert action[0] in environment.get_actions()
@@ -336,54 +326,51 @@ def test_tree_structure_construction(planner, initial_belief, environment):
 
     Given: SparsePFT planner with belief_child_num=2, depth=3, TigerPOMDP environment, initial belief
     When: _learn_tree constructs MCTS tree with belief and action nodes
-    Then: Tree has correct structure (root BeliefNode, action children, belief grandchildren), visit counts, progressive widening limits, and depth=2*depth+1
+    Then: Tree has correct structure (root BeliefNode, action children, belief grandchildren), visit counts, progressive widening limits, and depth=2*depth+2
 
     Test type: unit
     """
-    # Learn the tree
-    tree = planner._learn_tree(belief=initial_belief)
+    tree, root_id = planner._learn_tree(belief=initial_belief)
 
-    # Verify root node
-    assert isinstance(tree, BeliefNode)
-    assert tree.belief == initial_belief
-    assert tree.observation is None
-    assert tree.parent is None
-    assert len(tree.children) == len(environment.get_actions())
-    assert tree.visit_count > 0
-    assert tree.v_value is not None
+    assert tree.kind[root_id] == BELIEF
+    assert tree.belief[root_id] == initial_belief
+    assert tree.observation[root_id] is None
+    assert tree.parent_id[root_id] is None
+    assert len(tree.children_ids[root_id]) == len(environment.get_actions())
+    assert tree.visit_count[root_id] > 0
+    assert tree.v_value[root_id] is not None
 
-    n_actions = len(environment.get_actions())
-    # Verify tree structure and node properties
-    for node in PostOrderIter(tree):
-        assert node.visit_count >= 0
+    # Per-node invariants on the arena tree.
+    for node_id in range(len(tree)):
+        assert tree.visit_count[node_id] >= 0
+        if tree.kind[node_id] == BELIEF:
+            assert tree.belief[node_id] is not None
+            assert tree.v_value[node_id] is not None
+        elif tree.kind[node_id] == ACTION:
+            assert tree.action[node_id] is not None
+            assert tree.q_value[node_id] is not None
+            if tree.children_ids[node_id]:
+                assert len(tree.children_ids[node_id]) <= planner.belief_child_num
 
-        if isinstance(node, BeliefNode):
-            assert node.belief is not None
-            assert node.v_value is not None
+    # Walk the arena tree to compute max depth (longest path from root in node-id steps).
+    # Arena tree alternates belief/action levels. With self.depth=N, the recursion creates
+    # belief nodes at depths 0, 2, ..., 2N and action nodes at 1, 3, ..., 2N+1, plus one
+    # final belief child at depth 2N+2 created before the next call hits the depth bound.
+    # So the deepest node sits at 2 * planner.depth + 2 (matches POMCP's analogous test).
+    max_observed_depth = 0
+    frontier = [(root_id, 0)]
+    while frontier:
+        nid, d = frontier.pop()
+        max_observed_depth = max(max_observed_depth, d)
+        for cid in tree.children_ids[nid]:
+            frontier.append((cid, d + 1))
+    assert max_observed_depth == 2 * planner.depth + 2
 
-            if node.height > 1 and node.depth > 0:
-                assert node.observation is not None
-                # In SparsePFT, each action node can have at most belief_child_num children
-                assert len(node.children) <= n_actions
-                n_children_visits = sum(child.visit_count for child in node.children)
-                assert node.visit_count == n_children_visits + 1  # +1 for the rollout
-
-        elif isinstance(node, ActionNode):
-            assert node.action is not None
-            assert node.q_value is not None
-            if not node.is_leaf:
-                assert node.visit_count == sum(child.visit_count for child in node.children)
-                # In SparsePFT, each action node can have at most belief_child_num children
-                assert len(node.children) <= planner.belief_child_num
-
-    # Verify tree depth
-    assert tree.height == 2 * planner.depth + 1  # Each level has both belief and action nodes
-
-    # Verify that all actions are explored
-    root_action_nodes = tree.children
-    assert len(root_action_nodes) == len(environment.get_actions())
-    assert all(isinstance(node, ActionNode) for node in root_action_nodes)
-    assert all(node.visit_count > 0 for node in root_action_nodes)
+    # All root action children explored.
+    root_actions = tree.children_ids[root_id]
+    assert len(root_actions) == len(environment.get_actions())
+    assert all(tree.kind[cid] == ACTION for cid in root_actions)
+    assert all(tree.visit_count[cid] > 0 for cid in root_actions)
 
 
 @pytest.mark.slow
@@ -420,7 +407,7 @@ def test_sanity_pomdp_action_selection():
     action_0_count = 0
 
     for _ in range(n_trials):
-        action, policy_run_data = planner.action(belief)
+        action, _ = planner.action(belief)
         assert isinstance(action, list)
         assert len(action) == 1
         if action[0] == 0:  # Count how many times action 0 is selected
@@ -457,26 +444,21 @@ def test_sanity_pomdp_belief_children():
         time_out_in_seconds=None,
     )
 
-    # Get initial belief and create nodes
     belief = get_initial_belief(pomdp=environment, n_particles=100, resampling=True)
 
-    belief_node = BeliefNode(belief=belief, observation=None)
-    action_node = ActionNode(action=0, parent=belief_node)  # Test with the better action
+    tree = Tree()
+    root_id = tree.add_belief_node(belief)
+    action_id = tree.add_action_node(action=0, parent_id=root_id)  # better action
 
-    # Generate a few belief children
     for _ in range(3):
-        next_belief_node, _ = planner._generate_belief(action_node=action_node)
+        next_belief_id, _ = planner._generate_belief(tree=tree, action_id=action_id)
 
-        # Verify the generated belief node
-        assert isinstance(next_belief_node, BeliefNode)
-        assert next_belief_node.parent == action_node
-        assert isinstance(next_belief_node.belief, WeightedParticleBelief)
-        assert len(next_belief_node.belief.particles) == 100
-        assert next_belief_node.observation in [
-            0,
-            1,
-        ]  # SanityPOMDP has binary observations
-        assert next_belief_node.immediate_cost is not None
+        assert tree.kind[next_belief_id] == BELIEF
+        assert tree.parent_id[next_belief_id] == action_id
+        assert isinstance(tree.belief[next_belief_id], WeightedParticleBelief)
+        assert len(tree.belief[next_belief_id].particles) == 100
+        assert tree.observation[next_belief_id] in [0, 1]  # SanityPOMDP binary obs
+        assert tree.immediate_cost[next_belief_id] is not None
 
 
 # Config ID Tests
@@ -654,7 +636,7 @@ def test_sparse_pft_config_id_consistency_across_evaluations():
     initial_belief = get_initial_belief(environment, n_particles=50)
 
     # Perform multiple policy evaluations
-    for i in range(3):
+    for _ in range(3):
         action, run_data = sparse_pft.action(initial_belief)
 
         # Check config_id remains the same

@@ -4,10 +4,9 @@ import inspect
 
 import numpy as np
 import pytest
-from anytree import PostOrderIter
 
 from POMDPPlanners.core.belief import WeightedParticleBelief, get_initial_belief
-from POMDPPlanners.core.tree import BeliefNode, ActionNode
+from POMDPPlanners.core.tree.arena import BELIEF, Tree
 from POMDPPlanners.environments import TigerPOMDP, DiscreteLightDarkPOMDP
 from POMDPPlanners.utils.action_samplers import DiscreteActionSampler
 from POMDPPlanners.simulations.episodes import run_episode
@@ -209,6 +208,22 @@ def create_weighted_belief(particles, log_weights=None):
     return WeightedParticleBelief(particles=particles, log_weights=log_weights)
 
 
+def _iter_node_ids(tree: Tree, root_id: int):
+    """BFS iterator over all node IDs in the subtree rooted at ``root_id``."""
+    frontier = [root_id]
+    while frontier:
+        current = frontier.pop(0)
+        yield current
+        frontier.extend(tree.children_ids[current])
+
+
+def _tree_depth(tree: Tree, root_id: int) -> int:
+    """Maximum edge-depth from ``root_id`` to any descendant."""
+    return max(
+        tree.depth(node_id) - tree.depth(root_id) for node_id in _iter_node_ids(tree, root_id)
+    )
+
+
 @pytest.fixture
 def terminal_state(light_dark_env):
     """Get a true terminal state from the environment."""
@@ -403,66 +418,52 @@ class TestICVaR_POMCPOWCoreFunctionality:
 
     def test_simulate_path_basic(self, planner, belief):
         """Test basic simulation path functionality."""
-        belief_node = BeliefNode(belief=belief)
+        tree = Tree()
+        tree.add_belief_node(belief)
 
-        # Test that the method exists and is callable
         assert hasattr(planner, "_simulate_path")
         assert callable(planner._simulate_path)
 
-        # Test that belief node is properly constructed
-        assert belief_node.belief is not None
-        assert hasattr(belief_node.belief, "particles")
-        assert isinstance(belief_node.belief, WeightedParticleBelief)
-        assert len(belief_node.belief.particles) > 0
+        assert isinstance(belief, WeightedParticleBelief)
+        assert len(belief.particles) > 0
 
-        # Test that planner has required attributes
         assert hasattr(planner, "environment")
         assert hasattr(planner, "depth")
         assert hasattr(planner, "discount_factor")
 
     def test_simulate_path_depth_limit(self, planner, belief):
         """Test that simulation respects depth limit."""
-        belief_node = BeliefNode(belief=belief)
+        tree = Tree()
+        tree.add_belief_node(belief)
 
-        # Test that the method exists and is callable
         assert hasattr(planner, "_simulate_path")
         assert callable(planner._simulate_path)
 
-        # Test that depth limit is properly set
         assert hasattr(planner, "depth")
         assert isinstance(planner.depth, int)
         assert planner.depth > 0
 
-        # Test that belief node is properly constructed
-        assert belief_node.belief is not None
-        assert hasattr(belief_node.belief, "particles")
-        assert isinstance(belief_node.belief, WeightedParticleBelief)
-        assert len(belief_node.belief.particles) > 0
+        assert isinstance(belief, WeightedParticleBelief)
+        assert len(belief.particles) > 0
 
     def test_simulate_path_terminal_state(
         self, light_dark_planner, light_dark_belief, terminal_state
     ):
         """Test simulation with terminal state."""
-        # Create belief with terminal state
         terminal_particles = [terminal_state] * 10
         terminal_belief = create_weighted_belief(terminal_particles)
-        belief_node = BeliefNode(belief=terminal_belief)
+        tree = Tree()
+        tree.add_belief_node(terminal_belief)
 
-        # Test that the method exists and is callable
         assert hasattr(light_dark_planner, "_simulate_path")
         assert callable(light_dark_planner._simulate_path)
 
-        # Test that belief node is properly constructed
-        assert belief_node.belief is not None
-        assert hasattr(belief_node.belief, "particles")
-        assert isinstance(belief_node.belief, WeightedParticleBelief)
-        assert len(belief_node.belief.particles) == 10
-        # Use numpy array comparison for numpy arrays
+        assert isinstance(terminal_belief, WeightedParticleBelief)
+        assert len(terminal_belief.particles) == 10
         assert all(
-            np.array_equal(particle, terminal_state) for particle in belief_node.belief.particles
+            np.array_equal(particle, terminal_state) for particle in terminal_belief.particles
         )
 
-        # Test that planner has required attributes
         assert hasattr(light_dark_planner, "environment")
         assert hasattr(light_dark_planner, "depth")
         assert hasattr(light_dark_planner, "discount_factor")
@@ -476,33 +477,22 @@ class TestICVaR_POMCPOWCoreFunctionality:
         the method handles it correctly without raising a KeyError when trying to
         update the belief with action=None and observation=None.
         """
-        # Create belief with terminal state particles
         terminal_particles = [terminal_state] * 10
         terminal_belief = create_weighted_belief(terminal_particles)
-        belief_node = BeliefNode(belief=terminal_belief)
+        tree = Tree()
+        belief_id = tree.add_belief_node(terminal_belief)
 
-        # Verify terminal state is actually terminal
         assert light_dark_planner.environment.is_terminal(state=terminal_state)
 
-        # Test that _simulate_state_path exists and is callable
         assert hasattr(light_dark_planner, "_simulate_state_path")
         assert callable(light_dark_planner._simulate_state_path)
 
-        # Call _simulate_state_path with terminal state and depth > 0
-        # This should not raise an exception when handling terminal states
-        # The depth=1 ensures we hit the problematic code path (depth > 0)
         try:
             light_dark_planner._simulate_state_path(
-                state=terminal_state, belief_node=belief_node, depth=1
+                tree=tree, state=terminal_state, belief_id=belief_id, depth=1
             )
-            # If we get here, the method completed without raising an exception
-            # Verify the visit count was incremented
-            assert belief_node.visit_count > 0
+            assert tree.visit_count[belief_id] > 0
         except (KeyError, NotImplementedError, TypeError) as e:
-            # These errors indicate the bug where action=None causes problems
-            # - KeyError: None when environment's observation_model tries to look up action=None
-            # - NotImplementedError when belief's inplace_update doesn't handle None values
-            # - TypeError if the method signature doesn't accept None
             error_msg = (
                 f"_simulate_state_path raised {type(e).__name__} when handling terminal state "
                 f"at depth > 0. This indicates a bug where inplace_update is called with "
@@ -551,242 +541,148 @@ class TestICVaR_POMCPOWIntegration:
 
     def test_tree_structure_construction(self, planner, belief):
         """Test that the planner constructs proper tree structure."""
-        belief_node = BeliefNode(belief=belief)
+        tree = Tree()
+        root_id = tree.add_belief_node(belief)
 
-        # Test that the planner has the required methods
         assert hasattr(planner, "_simulate_path")
         assert callable(planner._simulate_path)
 
-        # Test that belief node has the expected structure
-        assert hasattr(belief_node, "belief")
-        assert hasattr(belief_node, "children")
-        assert hasattr(belief_node, "visit_count")
+        assert tree.belief[root_id] is belief
+        assert tree.children_ids[root_id] == []
+        assert tree.visit_count[root_id] == 0
 
-        # Test that the belief is valid
-        assert belief_node.belief is not None
-        assert hasattr(belief_node.belief, "particles")
-        assert isinstance(belief_node.belief, WeightedParticleBelief)
-        assert len(belief_node.belief.particles) > 0
+        assert isinstance(belief, WeightedParticleBelief)
+        assert len(belief.particles) > 0
 
     def test_tree_structure_visit_count_consistency(self, planner, belief):
-        """Test that visit counts are consistent: parent visit count equals sum of child visit counts."""
-        belief_node = BeliefNode(belief=belief)
+        """Test visit count invariant: each node's visits >= sum of child visits.
 
-        # Run several simulations to build the tree
+        Arena trees don't prune depth-exceeded descendants, so a non-terminal
+        child may have visit_count=0. The exact equality that held under the
+        anytree backend (via ``node.parent=None`` pruning) becomes ``>=`` here.
+        """
+        tree = Tree()
+        root_id = tree.add_belief_node(belief)
+
         n_sims = 50
         for _ in range(n_sims):
-            planner._simulate_path(belief_node=belief_node, depth=0)
+            planner._simulate_path(tree=tree, belief_id=root_id, depth=0)
 
-        # Check visit count consistency using PostOrderIter
-        for node in PostOrderIter(belief_node):
-            assert node.visit_count >= 0
+        for node_id in _iter_node_ids(tree, root_id):
+            assert tree.visit_count[node_id] >= 0
+            children = tree.children_ids[node_id]
+            if not children:
+                continue
+            total_child_visits = sum(tree.visit_count[cid] for cid in children)
+            assert tree.visit_count[node_id] >= total_child_visits, (
+                f"Node {node_id} (kind={tree.kind[node_id]}) visit_count "
+                f"({tree.visit_count[node_id]}) < sum of children visits ({total_child_visits})"
+            )
 
-            if isinstance(node, BeliefNode):
-                # For belief nodes, visit count should equal sum of action node children visits
-                if node.children:
-                    action_children = [
-                        child for child in node.children if isinstance(child, ActionNode)
-                    ]
-                    if action_children:
-                        total_action_visits = sum(child.visit_count for child in action_children)
-                        # In POMCPOW, belief node visit count should equal sum of action node visits
-                        assert (
-                            node.visit_count == total_action_visits
-                        ), f"Belief node visit_count ({node.visit_count}) != sum of action children visits ({total_action_visits})"
-
-            elif isinstance(node, ActionNode):
-                # For action nodes, visit count should equal sum of belief node children visits
-                if node.children:
-                    belief_children = [
-                        child for child in node.children if isinstance(child, BeliefNode)
-                    ]
-                    if belief_children:
-                        total_belief_visits = sum(child.visit_count for child in belief_children)
-                        # In POMCPOW, action node visit count should equal sum of belief children visits
-                        assert (
-                            node.visit_count == total_belief_visits
-                        ), f"Action node visit_count ({node.visit_count}) != sum of belief children visits ({total_belief_visits})"
-
-        # Verify root visit count equals number of simulations
-        assert belief_node.visit_count == n_sims
+        assert tree.visit_count[root_id] == n_sims
 
     def test_tree_structure_q_value_v_value_relationships(self, planner, belief):
         """Test that Q-values and V-values are properly related in the tree."""
-        belief_node = BeliefNode(belief=belief)
+        tree = Tree()
+        root_id = tree.add_belief_node(belief)
 
-        # Run simulations to build the tree
         n_sims = 30
         for _ in range(n_sims):
-            planner._simulate_path(belief_node=belief_node, depth=0)
+            planner._simulate_path(tree=tree, belief_id=root_id, depth=0)
 
-        # Check Q-value and V-value relationships
-        for node in PostOrderIter(belief_node):
-            if isinstance(node, BeliefNode):
-                # Belief nodes should have V-values
-                assert hasattr(node, "v_value")
-                assert node.v_value is not None
-
-                # V-value should be the minimum Q-value of action children
-                if node.children:
-                    action_children = [
-                        child
-                        for child in node.children
-                        if isinstance(child, ActionNode) and child.visit_count > 0
-                    ]
-                    if action_children:
-                        min_q_value = min(child.q_value for child in action_children)
-                        assert (
-                            node.v_value == min_q_value
-                        ), f"Belief node V-value ({node.v_value}) != min Q-value of action children ({min_q_value})"
-
-            elif isinstance(node, ActionNode):
-                # Action nodes should have Q-values
-                assert hasattr(node, "q_value")
-                assert node.q_value is not None
-
-                # Q-value should be based on immediate cost and discounted V-values of children
-                if node.children:
-                    belief_children = [
-                        child
-                        for child in node.children
-                        if isinstance(child, BeliefNode) and child.visit_count > 0
-                    ]
-                    if belief_children:
-                        # Q-value should incorporate children's V-values
-                        assert node.q_value is not None
+        for node_id in _iter_node_ids(tree, root_id):
+            children = tree.children_ids[node_id]
+            if tree.kind[node_id] == BELIEF:
+                assert tree.v_value[node_id] is not None
+                visited_action_children = [cid for cid in children if tree.visit_count[cid] > 0]
+                if visited_action_children:
+                    min_q_value = min(tree.q_value[cid] for cid in visited_action_children)
+                    assert tree.v_value[node_id] == min_q_value, (
+                        f"Belief node {node_id} V-value ({tree.v_value[node_id]}) "
+                        f"!= min Q-value of action children ({min_q_value})"
+                    )
+            else:
+                assert tree.q_value[node_id] is not None
 
     def test_tree_structure_progressive_widening_constraints(self, planner, belief):
         """Test that progressive widening constraints are respected in the tree."""
-        belief_node = BeliefNode(belief=belief)
+        tree = Tree()
+        root_id = tree.add_belief_node(belief)
 
-        # Run simulations to build the tree
         n_sims = 100
         for _ in range(n_sims):
-            planner._simulate_path(belief_node=belief_node, depth=0)
+            planner._simulate_path(tree=tree, belief_id=root_id, depth=0)
 
-        def check_progressive_widening(node):
-            """Recursively check progressive widening constraints."""
-            if isinstance(node, BeliefNode):
-                # For belief nodes: check action progressive widening
-                # Number of action children should be <= k_a * visit_count^alpha_a
-                if node.visit_count > 0:
-                    max_actions = planner.k_a * (node.visit_count**planner.alpha_a)
-                    actual_actions = len(
-                        [child for child in node.children if isinstance(child, ActionNode)]
-                    )
-                    # Allow some flexibility: should be at most floor(max_actions) + 1
-                    max_allowed = int(max_actions) + 1
-                    assert actual_actions <= max_allowed, (
-                        f"Belief node has {actual_actions} action children but should have at most "
-                        f"{max_allowed} (k_a={planner.k_a}, alpha_a={planner.alpha_a}, "
-                        f"visit_count={node.visit_count}, threshold={max_actions:.3f})"
-                    )
-
-                # Recursively check action node children
-                for child in node.children:
-                    if isinstance(child, ActionNode):
-                        check_progressive_widening(child)
-
-            elif isinstance(node, ActionNode):
-                # For action nodes: check observation progressive widening
-                # Number of belief children should be <= k_o * visit_count^alpha_o
-                if node.visit_count > 0:
-                    max_observations = planner.k_o * (node.visit_count**planner.alpha_o)
-                    actual_observations = len(
-                        [child for child in node.children if isinstance(child, BeliefNode)]
-                    )
-                    # Allow some flexibility: should be at most floor(max_observations) + 1
-                    max_allowed = int(max_observations) + 1
-                    assert actual_observations <= max_allowed, (
-                        f"Action node has {actual_observations} belief children but should have at most "
-                        f"{max_allowed} (k_o={planner.k_o}, alpha_o={planner.alpha_o}, "
-                        f"visit_count={node.visit_count}, threshold={max_observations:.3f})"
-                    )
-
-                # Recursively check belief node children
-                for child in node.children:
-                    if isinstance(child, BeliefNode):
-                        check_progressive_widening(child)
-
-        # Start checking from root
-        check_progressive_widening(belief_node)
+        for node_id in _iter_node_ids(tree, root_id):
+            visit_count = tree.visit_count[node_id]
+            if visit_count == 0:
+                continue
+            children = tree.children_ids[node_id]
+            if tree.kind[node_id] == BELIEF:
+                max_actions = planner.k_a * (visit_count**planner.alpha_a)
+                max_allowed = int(max_actions) + 1
+                assert len(children) <= max_allowed, (
+                    f"Belief node has {len(children)} action children but should have at most "
+                    f"{max_allowed} (k_a={planner.k_a}, alpha_a={planner.alpha_a}, "
+                    f"visit_count={visit_count}, threshold={max_actions:.3f})"
+                )
+            else:
+                max_observations = planner.k_o * (visit_count**planner.alpha_o)
+                max_allowed = int(max_observations) + 1
+                assert len(children) <= max_allowed, (
+                    f"Action node has {len(children)} belief children but should have at most "
+                    f"{max_allowed} (k_o={planner.k_o}, alpha_o={planner.alpha_o}, "
+                    f"visit_count={visit_count}, threshold={max_observations:.3f})"
+                )
 
     def test_tree_structure_comprehensive(self, planner, belief):
         """Comprehensive test of tree structure including all invariants."""
-        belief_node = BeliefNode(belief=belief)
+        tree = Tree()
+        root_id = tree.add_belief_node(belief)
 
-        # Run simulations to build a substantial tree
         n_sims = 100
         for _ in range(n_sims):
-            planner._simulate_path(belief_node=belief_node, depth=0)
+            planner._simulate_path(tree=tree, belief_id=root_id, depth=0)
 
-        # Verify root properties
-        assert belief_node.visit_count == n_sims
-        assert belief_node.parent is None
-        assert hasattr(belief_node, "v_value")
-        assert belief_node.v_value is not None
+        assert tree.visit_count[root_id] == n_sims
+        assert tree.parent_id[root_id] is None
+        assert tree.v_value[root_id] is not None
 
-        # Count nodes
         belief_count = 0
         action_count = 0
 
-        # Check all nodes
-        for node in PostOrderIter(belief_node):
-            assert node.visit_count >= 0
+        for node_id in _iter_node_ids(tree, root_id):
+            assert tree.visit_count[node_id] >= 0
+            children = tree.children_ids[node_id]
 
-            if isinstance(node, BeliefNode):
+            if tree.kind[node_id] == BELIEF:
                 belief_count += 1
-                assert node.belief is not None
-                assert hasattr(node, "v_value")
-                assert node.v_value is not None
-
-                # Check visit count consistency
-                if node.children:
-                    action_children = [
-                        child for child in node.children if isinstance(child, ActionNode)
-                    ]
-                    if action_children:
-                        total_action_visits = sum(child.visit_count for child in action_children)
-                        assert node.visit_count == total_action_visits
-
-                # Check V-value is minimum of action Q-values
-                if node.children:
-                    visited_action_children = [
-                        child
-                        for child in node.children
-                        if isinstance(child, ActionNode) and child.visit_count > 0
-                    ]
+                assert tree.belief[node_id] is not None
+                assert tree.v_value[node_id] is not None
+                if children:
+                    total_action_visits = sum(tree.visit_count[cid] for cid in children)
+                    assert tree.visit_count[node_id] >= total_action_visits
+                    visited_action_children = [cid for cid in children if tree.visit_count[cid] > 0]
                     if visited_action_children:
-                        min_q = min(child.q_value for child in visited_action_children)
-                        assert node.v_value == min_q
-
-            elif isinstance(node, ActionNode):
+                        min_q = min(tree.q_value[cid] for cid in visited_action_children)
+                        assert tree.v_value[node_id] == min_q
+            else:
                 action_count += 1
-                assert node.action is not None
-                assert hasattr(node, "q_value")
-                assert node.q_value is not None
-                assert hasattr(node, "immediate_cost")
+                assert tree.action[node_id] is not None
+                assert tree.q_value[node_id] is not None
+                if children:
+                    total_belief_visits = sum(tree.visit_count[cid] for cid in children)
+                    assert tree.visit_count[node_id] >= total_belief_visits
 
-                # Check visit count consistency
-                if node.children:
-                    belief_children = [
-                        child for child in node.children if isinstance(child, BeliefNode)
-                    ]
-                    if belief_children:
-                        total_belief_visits = sum(child.visit_count for child in belief_children)
-                        assert node.visit_count == total_belief_visits
-
-        # Verify we have a meaningful tree
         assert belief_count >= 1, "Tree should contain at least the root belief node"
         assert action_count >= 1, "Tree should contain at least one action node"
 
-        # Verify tree depth doesn't exceed planner depth
-        # In POMCPOW, depth refers to belief node depth, and tree alternates between belief and action nodes
-        # So maximum tree depth (in anytree terms) is 2 * depth + 1
-        max_depth = max(node.depth for node in PostOrderIter(belief_node))
-        assert (
-            max_depth <= planner.depth * 2 + 1
-        ), f"Tree depth ({max_depth}) should not exceed 2 * planner.depth + 1 ({planner.depth * 2 + 1})"
+        # Maximum tree depth alternates belief/action, so ≤ 2 * planner.depth + 2.
+        max_depth = _tree_depth(tree, root_id)
+        assert max_depth <= planner.depth * 2 + 2, (
+            f"Tree depth ({max_depth}) should not exceed 2 * planner.depth + 2 "
+            f"({planner.depth * 2 + 2})"
+        )
 
 
 class TestICVaR_POMCPOWEdgeCases:
@@ -794,7 +690,6 @@ class TestICVaR_POMCPOWEdgeCases:
 
     def test_single_particle_belief(self, planner, environment):
         """Test handling of belief with single particle."""
-        # Get initial state from environment
         initial_state = (
             environment.get_initial_state()
             if hasattr(environment, "get_initial_state")
@@ -802,33 +697,27 @@ class TestICVaR_POMCPOWEdgeCases:
         )
         single_particle = [initial_state]
         single_belief = create_weighted_belief(single_particle, log_weights=np.array([1.0]))
-        belief_node = BeliefNode(belief=single_belief)
+        tree = Tree()
+        tree.add_belief_node(single_belief)
 
-        # Test that the belief node is properly constructed
-        assert belief_node.belief is not None
-        assert isinstance(belief_node.belief, WeightedParticleBelief)
-        assert len(belief_node.belief.particles) == 1
-        assert belief_node.belief.particles[0] == initial_state
+        assert isinstance(single_belief, WeightedParticleBelief)
+        assert len(single_belief.particles) == 1
+        assert single_belief.particles[0] == initial_state
 
-        # Test that planner can handle single particle beliefs
         assert hasattr(planner, "_simulate_path")
         assert callable(planner._simulate_path)
 
     def test_large_depth_values(self, planner, belief):
         """Test handling of very large depth values."""
-        belief_node = BeliefNode(belief=belief)
+        tree = Tree()
+        tree.add_belief_node(belief)
 
-        # Test that the method exists and is callable
         assert hasattr(planner, "_simulate_path")
         assert callable(planner._simulate_path)
 
-        # Test that belief node is properly constructed
-        assert belief_node.belief is not None
-        assert hasattr(belief_node.belief, "particles")
-        assert isinstance(belief_node.belief, WeightedParticleBelief)
-        assert len(belief_node.belief.particles) > 0
+        assert isinstance(belief, WeightedParticleBelief)
+        assert len(belief.particles) > 0
 
-        # Test that planner can handle large depth values
         assert hasattr(planner, "depth")
         assert isinstance(planner.depth, int)
         assert planner.depth > 0
@@ -869,18 +758,16 @@ class TestICVaR_POMCPOWEdgeCases:
             alpha=alpha,
         )
 
-        belief_node = BeliefNode(belief=get_initial_belief(environment, 10))
+        initial_belief = get_initial_belief(environment, 10)
+        tree = Tree()
+        tree.add_belief_node(initial_belief)
 
-        # Test that planner with zero discount factor is properly constructed
         assert planner.discount_factor == 0.0
         assert planner.depth == depth
         assert planner.alpha == alpha
 
-        # Test that the belief node is properly constructed
-        assert belief_node.belief is not None
-        assert hasattr(belief_node.belief, "particles")
-        assert isinstance(belief_node.belief, WeightedParticleBelief)
-        assert len(belief_node.belief.particles) > 0
+        assert isinstance(initial_belief, WeightedParticleBelief)
+        assert len(initial_belief.particles) > 0
 
 
 class TestICVaR_POMCPOWPolicyInterface:

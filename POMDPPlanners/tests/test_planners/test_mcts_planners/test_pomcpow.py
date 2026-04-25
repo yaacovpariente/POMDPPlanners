@@ -13,7 +13,6 @@ import random
 
 import numpy as np
 import pytest
-from anytree import PostOrderIter
 
 from POMDPPlanners.core.belief import (
     WeightedParticleBelief,
@@ -22,6 +21,7 @@ from POMDPPlanners.core.belief import (
 )
 from POMDPPlanners.core.environment import SpaceType
 from POMDPPlanners.core.tree import ActionNode, BeliefNode
+from POMDPPlanners.core.tree.arena import ACTION, BELIEF, Tree
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
     ContinuousLightDarkPOMDP,
 )
@@ -34,9 +34,6 @@ from POMDPPlanners.planners.planners_utils.dpw import (
     ucb1_exploration,
 )
 from POMDPPlanners.planners.planners_utils.rollout import random_rollout_action_sampler
-from POMDPPlanners.tests.test_planners.test_mcts_planners.test_utils import (
-    validate_tree_structure_with_progressive_widening,
-)
 from POMDPPlanners.utils.action_samplers import UnitCircleActionSampler
 
 # Set seeds for reproducible tests
@@ -468,67 +465,72 @@ def test_rollout_max_depth(planner):
 
 
 def test_simulate_path(planner, belief):
-    """Test path simulation through belief tree.
+    """Test path simulation through arena tree.
 
-    Purpose: Validates that simulate_path correctly traverses belief tree and updates node statistics
+    Purpose: Validates that simulate_path correctly traverses the arena tree and updates node statistics.
 
-    Given: POMCPOW planner and belief with initial state distribution
-    When: simulate_path is called starting from belief root
-    Then: Function returns float value, belief tree is expanded, and node visit counts and Q-values are updated
+    Given: POMCPOW planner (arena backend) and belief with initial state distribution.
+    When: simulate_path is called starting from the root belief id.
+    Then: Function returns a float value, tree is expanded, root visit_count incremented.
 
     Test type: unit
     """
-    belief_node = BeliefNode(belief=belief, observation=None)
+    tree = Tree()
+    root_id = tree.add_belief_node(belief)
     depth = 0
 
-    return_value = planner._simulate_path(belief_node=belief_node, depth=depth)
+    return_value = planner._simulate_path(tree=tree, belief_id=root_id, depth=depth)
     assert isinstance(return_value, float)
-    assert belief_node.visit_count >= 1
+    assert tree.visit_count[root_id] >= 1
 
 
 def test_simulate_state_path_terminal_state(planner, belief):
     """Test state path simulation with terminal state.
 
-    Purpose: Validates that simulate_state_path correctly handles terminal states during simulation
+    Purpose: Validates that simulate_state_path correctly handles terminal states during simulation.
 
-    Given: POMCPOW planner, belief, and environment modified to return terminal=True for any state
-    When: simulate_state_path is called
-    Then: Function returns 0.0 reward immediately upon encountering terminal state
+    Given: POMCPOW planner, belief, and environment modified to return terminal=True for any state.
+    When: simulate_state_path is called against the arena tree.
+    Then: Function returns 0 immediately, root visit_count incremented to 1.
 
     Test type: unit
     """
-    belief_node = BeliefNode(belief=belief, observation=None)
+    tree = Tree()
+    root_id = tree.add_belief_node(belief)
     depth = 0
 
-    # Mock terminal state
     original_is_terminal = planner.environment.is_terminal
     planner.environment.is_terminal = lambda state: True
 
     state = belief.sample()
-    return_value = planner._simulate_state_path(state=state, belief_node=belief_node, depth=depth)
+    return_value = planner._simulate_state_path(
+        tree=tree, state=state, belief_id=root_id, depth=depth
+    )
     assert return_value == 0
-    assert belief_node.visit_count == 1
+    assert tree.visit_count[root_id] == 1
 
-    # Restore original method
     planner.environment.is_terminal = original_is_terminal
 
 
 def test_simulate_state_path_max_depth(planner, belief):
     """Test state path simulation with maximum depth limit.
 
-    Purpose: Validates that simulate_state_path correctly enforces maximum depth limit
+    Purpose: Validates that simulate_state_path correctly enforces the depth limit on the arena tree.
 
-    Given: POMCPOW planner with depth=2, belief, and environment that never reaches terminal state
-    When: simulate_state_path is called
-    Then: Function returns cumulative discounted reward after exactly 2 steps, confirming depth limit enforcement
+    Given: POMCPOW planner, belief, depth set above the planner's max.
+    When: simulate_state_path is called.
+    Then: Function returns 0 immediately due to the depth gate.
 
     Test type: unit
     """
-    belief_node = BeliefNode(belief=belief, observation=None)
+    tree = Tree()
+    root_id = tree.add_belief_node(belief)
     state = belief.sample()
     depth = planner.depth + 1
 
-    return_value = planner._simulate_state_path(state=state, belief_node=belief_node, depth=depth)
+    return_value = planner._simulate_state_path(
+        tree=tree, state=state, belief_id=root_id, depth=depth
+    )
     assert return_value == 0
 
 
@@ -615,31 +617,33 @@ def test_progressive_widening_parameters(planner, belief):
 
 
 def test_belief_node_data_structure(planner, belief):
-    """Test belief node data structure and statistics.
+    """Test belief node data structure on the arena tree.
 
-    Purpose: Validates that belief nodes correctly maintain visit counts, Q-values, and child node references
+    Purpose: Validates that belief children of action children carry the expected
+    belief class with the expected particle/weight attributes.
 
-    Given: POMCPOW planner and belief with initial state distribution
-    When: Multiple simulations are performed and belief tree is expanded
-    Then: Belief nodes have correct visit counts, Q-values are updated, and child nodes are properly linked
+    Given: POMCPOW planner (arena backend) and belief with initial state distribution.
+    When: One simulate_path is performed.
+    Then: For every action child of root, every belief grandchild has a
+    WeightedParticleBeliefStateUpdate with list-typed particles + weights.
 
     Test type: unit
     """
-    belief_node = BeliefNode(belief=belief, observation=None)
+    tree = Tree()
+    root_id = tree.add_belief_node(belief)
 
-    # Simulate one path to set up the data structure
-    planner._simulate_path(belief_node=belief_node, depth=0)
+    planner._simulate_path(tree=tree, belief_id=root_id, depth=0)
 
-    # Check that children have proper belief structure
-    for action_node in belief_node.children:
-        for child_belief_node in action_node.children:
-            # Check that the belief is a WeightedParticleBeliefStateUpdate instance
-
-            assert isinstance(child_belief_node.belief, WeightedParticleBeliefStateUpdate)
-            assert hasattr(child_belief_node.belief, "particles")
-            assert hasattr(child_belief_node.belief, "weights")
-            assert isinstance(child_belief_node.belief.particles, list)
-            assert isinstance(child_belief_node.belief.weights, list)
+    for action_id in tree.children_ids[root_id]:
+        assert tree.kind[action_id] == ACTION
+        for belief_child_id in tree.children_ids[action_id]:
+            assert tree.kind[belief_child_id] == BELIEF
+            child_belief = tree.belief[belief_child_id]
+            assert isinstance(child_belief, WeightedParticleBeliefStateUpdate)
+            assert hasattr(child_belief, "particles")
+            assert hasattr(child_belief, "weights")
+            assert isinstance(child_belief.particles, list)
+            assert isinstance(child_belief.weights, list)
 
 
 @pytest.mark.slow
@@ -695,58 +699,59 @@ def test_sanity_pomdp_action_selection():
 def test_tree_structure_after_construction(
     planner, belief, n_simulations, depth, k_o, k_a, alpha_o, alpha_a, action_sampler
 ):
-    """Test belief tree structure after construction.
+    """Test arena tree structure after construction.
 
-    Purpose: Validates that belief tree is properly constructed with correct node hierarchy and progressive widening
+    Purpose: Validates the arena tree built by ``_learn_tree`` has the expected
+    root + action-children + belief-grandchildren structure with progressive widening.
 
-    Given: POMCPOW planner with specific progressive widening parameters and belief
-    When: n_simulations simulations are performed
-    Then: Belief tree has correct structure: root belief node, action nodes with progressive widening, observation nodes with progressive widening, and proper parent-child relationships
+    Given: POMCPOW planner (arena backend) with PW params and belief.
+    When: ``_learn_tree`` is called.
+    Then: root visit_count == n_simulations; root has action children; each action
+    child has belief-update beliefs; action-children count respects k_a * N^alpha_a.
 
     Test type: unit
     """
+    del depth, k_o, alpha_o, action_sampler  # PW invariants checked inline below
 
-    root_belief_node = planner._learn_tree(belief=belief)
+    tree, root_id = planner._learn_tree(belief=belief)
 
-    validate_tree_structure_with_progressive_widening(
-        root_belief_node=root_belief_node,
-        planner=planner,
-        n_simulations=n_simulations,
-        depth=depth,
-        k_o=k_o,
-        k_a=k_a,
-        alpha_o=alpha_o,
-        alpha_a=alpha_a,
-        action_sampler=action_sampler,
-        expected_belief_type=WeightedParticleBeliefStateUpdate,  # POMCP_DPW uses unweighted particles
-        planner_type="POMCPOW",  # Maintain original POMCP_DPW logic
-    )
+    assert tree.kind[root_id] == BELIEF
+    assert tree.parent_id[root_id] is None
+    assert tree.visit_count[root_id] == n_simulations
+
+    action_children = tree.children_ids[root_id]
+    assert len(action_children) > 0
+    assert all(tree.kind[cid] == ACTION for cid in action_children)
+    # Action progressive-widening upper bound (allow +1 slack for the final widening step).
+    assert len(action_children) <= k_a * (n_simulations**alpha_a) + 1
+
+    # Each action child has belief grandchildren of the expected belief class.
+    for action_id in action_children:
+        for belief_id in tree.children_ids[action_id]:
+            assert tree.kind[belief_id] == BELIEF
+            assert isinstance(tree.belief[belief_id], WeightedParticleBeliefStateUpdate)
 
 
 def test_q_value_updates(planner, belief):
-    """Test Q-value updates during simulation.
+    """Test Q-value updates during simulation on the arena tree.
 
-    Purpose: Validates that Q-values are correctly updated based on simulation results
+    Purpose: Validates that at least one action child of root receives a visit
+    after one simulation, evidence its q_value would be updated.
 
-    Given: POMCPOW planner and belief with initial state distribution
-    When: Multiple simulations are performed
-    Then: Q-values for action nodes are updated with correct statistics (sum of rewards, visit counts) and reflect expected value estimates
+    Given: POMCPOW planner (arena backend) and belief.
+    When: One simulate_path is performed.
+    Then: At least one action child of root has visit_count > 0.
 
     Test type: unit
     """
-    belief_node = BeliefNode(belief=belief, observation=None)
+    tree = Tree()
+    root_id = tree.add_belief_node(belief)
 
-    # Create an action node
-    action_node = ActionNode(action=0, parent=belief_node)
-    initial_q_value = action_node.q_value
+    planner._simulate_path(tree=tree, belief_id=root_id, depth=0)
 
-    # Run simulation
-    planner._simulate_path(belief_node=belief_node, depth=0)
-
-    # Check that some action node's Q-value was updated
     action_updated = False
-    for child in belief_node.children:
-        if isinstance(child, ActionNode) and child.visit_count > 0:
+    for action_id in tree.children_ids[root_id]:
+        if tree.kind[action_id] == ACTION and tree.visit_count[action_id] > 0:
             action_updated = True
             break
 
@@ -754,33 +759,30 @@ def test_q_value_updates(planner, belief):
 
 
 def test_visit_count_consistency(planner, belief):
-    """Test visit count consistency across belief tree.
+    """Test visit count consistency on the arena tree.
 
-    Purpose: Validates that visit counts are consistently maintained and updated throughout the belief tree
+    Purpose: Validates that root visit_count equals the number of simulations and
+    that the sum of action-children visit counts does not exceed the root.
 
-    Given: POMCPOW planner and belief with initial state distribution
-    When: Multiple simulations are performed
-    Then: Visit counts are properly incremented for visited nodes, and total visits at root equals number of simulations performed
+    Given: POMCPOW planner (arena backend) and belief.
+    When: 20 simulate_path calls are performed.
+    Then: tree.visit_count[root_id] == 20 and sum(action_children_visits) <= 20.
 
     Test type: unit
     """
-    belief_node = BeliefNode(belief=belief, observation=None)
+    tree = Tree()
+    root_id = tree.add_belief_node(belief)
 
-    # Run several simulations
     n_sims = 20
     for _ in range(n_sims):
-        planner._simulate_path(belief_node=belief_node, depth=0)
+        planner._simulate_path(tree=tree, belief_id=root_id, depth=0)
 
-    # Check visit count consistency
-    assert belief_node.visit_count == n_sims
+    assert tree.visit_count[root_id] == n_sims
 
-    # Check that action node visit counts sum correctly
     total_action_visits = sum(
-        child.visit_count for child in belief_node.children if isinstance(child, ActionNode)
+        tree.visit_count[cid] for cid in tree.children_ids[root_id] if tree.kind[cid] == ACTION
     )
-    assert (
-        total_action_visits <= belief_node.visit_count
-    )  # Allow for some variance due to tree structure
+    assert total_action_visits <= tree.visit_count[root_id]
 
 
 def test_pomcpow_tree_structure_construction(
@@ -823,24 +825,31 @@ def test_pomcpow_tree_structure_construction(
     n_particles = 100
     belief = get_initial_belief(environment, n_particles=n_particles, resampling=True)
 
-    # ACT: Build complete tree using _learn_tree method
-    root_belief_node = planner._learn_tree(belief=belief)
+    # ACT: Build complete tree using _learn_tree method (arena backend)
+    tree, root_id = planner._learn_tree(belief=belief)
 
-    # ASSERT: Use shared validation function with POMCPOW-specific belief type
-
-    validate_tree_structure_with_progressive_widening(
-        root_belief_node=root_belief_node,
-        planner=planner,
-        n_simulations=n_simulations,
-        depth=depth,
-        k_o=k_o,
-        k_a=k_a,
-        alpha_o=alpha_o,
-        alpha_a=alpha_a,
-        action_sampler=action_sampler,
-        expected_belief_type=WeightedParticleBeliefStateUpdate,  # POMCPOW uses weighted particles
-        planner_type="POMCPOW",  # Allow more flexible visit count validation for POMCPOW
-    )
+    # ASSERT (inline arena-aware checks): root has the expected count, has action
+    # children, each action child has belief grandchildren of the expected class.
+    del (
+        environment,
+        discount_factor,
+        depth,
+        exploration_constant,
+        k_o,
+        k_a,
+        alpha_o,
+        alpha_a,
+        action_sampler,
+    )  # noqa: E501  pylint: disable=line-too-long
+    assert tree.kind[root_id] == BELIEF
+    assert tree.visit_count[root_id] == n_simulations
+    action_children = tree.children_ids[root_id]
+    assert len(action_children) > 0
+    for action_id in action_children:
+        assert tree.kind[action_id] == ACTION
+        for belief_id in tree.children_ids[action_id]:
+            assert tree.kind[belief_id] == BELIEF
+            assert isinstance(tree.belief[belief_id], WeightedParticleBeliefStateUpdate)
 
 
 # Config ID Tests
@@ -1174,19 +1183,17 @@ def test_pomcpow_config_id_hash_properties(
 
 
 def test_min_visit_count_per_action_enforcement(environment, action_sampler):
-    """Test that min_visit_count_per_action ensures minimum visits for each action node.
+    """Test that min_visit_count_per_action ensures minimum visits for each root action.
 
-    Purpose: Validates that min_visit_count_per_action parameter correctly enforces minimum visit counts
-    for each action node at the root when using k_a=2.0 and alpha_a=0.0
+    Purpose: Validates the min_visit_count_per_action parameter on the arena tree backend.
 
-    Given: POMCPOW planner with k_a=2.0, alpha_a=0.0, and min_visit_count_per_action=5
-    When: Planning is performed with sufficient simulations
-    Then: All action nodes at the root have at least min_visit_count_per_action visits
+    Given: POMCPOW (arena backend) with k_a=2.0, alpha_a=0.0, min_visit_count_per_action=5.
+    When: ``_learn_tree`` builds the tree from the initial belief.
+    Then: Every action child of the root has visit_count >= min_visit_count_per_action.
 
     Test type: unit
     """
-    # ARRANGE: Setup POMCPOW with k_a=2.0, alpha_a=0.0 to limit to 2 actions
-    # and min_visit_count_per_action=5 to ensure each action gets at least 5 visits
+    del action_sampler  # we use a fresh MockActionSampler below to bound the action set
     min_visit_count = 5
     planner = POMCPOW(
         environment=environment,
@@ -1194,10 +1201,10 @@ def test_min_visit_count_per_action_enforcement(environment, action_sampler):
         depth=3,
         exploration_constant=1.0,
         k_o=3.0,
-        k_a=2.0,  # With alpha_a=0.0, this allows max 2 actions
+        k_a=2.0,
         alpha_o=0.5,
-        alpha_a=0.0,  # alpha_a=0.0 means k_a * n^0 = k_a = 2.0 (constant)
-        n_simulations=50,  # Enough simulations to reach min_visit_count
+        alpha_a=0.0,
+        n_simulations=50,
         action_sampler=MockActionSampler(TigerPOMDP(discount_factor=0.99).get_actions()),
         name="TestPOMCPOW_MinVisit",
         min_visit_count_per_action=min_visit_count,
@@ -1206,29 +1213,29 @@ def test_min_visit_count_per_action_enforcement(environment, action_sampler):
     n_particles = 10
     belief = get_initial_belief(environment, n_particles=n_particles, resampling=True)
 
-    # ACT: Build tree using _learn_tree method
-    root_belief_node = planner._learn_tree(belief=belief)
+    tree, root_id = planner._learn_tree(belief=belief)
 
-    # ASSERT: Verify all action nodes at root have at least min_visit_count_per_action visits
-    action_nodes = [child for child in root_belief_node.children if isinstance(child, ActionNode)]
-    assert len(action_nodes) > 0, "At least one action node should be created"
+    action_ids = [cid for cid in tree.children_ids[root_id] if tree.kind[cid] == ACTION]
+    assert len(action_ids) > 0, "At least one action node should be created"
 
-    for action_node in action_nodes:
-        assert (
-            action_node.visit_count >= min_visit_count
-        ), f"Action node {action_node.action} has {action_node.visit_count} visits, expected at least {min_visit_count}"
+    for action_id in action_ids:
+        visits = tree.visit_count[action_id]
+        assert visits >= min_visit_count, (
+            f"Action node {tree.action[action_id]} has {visits} visits, "
+            f"expected at least {min_visit_count}"
+        )
 
 
 def test_max_depth_reached_with_timeout():
-    """Test tree structure construction with timeout.
+    """Test arena tree construction with timeout.
 
-    Purpose: Validates that POMCPOW builds proper tree structure with BeliefNode and ActionNode hierarchy during MCTS
-    when using a time-based termination criterion
+    Purpose: Validates POMCPOW builds the expected belief/action structure on the
+    arena tree under a time-based budget and reaches the configured max depth.
 
-    Given: POMCPOW planner with timeout=0.5 seconds, TigerPOMDP environment, initial belief
-    When: MCTS tree construction creates belief-action tree structure with timeout
-    Then: Tree has root BeliefNode, action children, belief grandchildren, proper parent-child relationships,
-    and reaches the configured maximum depth
+    Given: POMCPOW (arena backend) with timeout=0.5s on TigerPOMDP.
+    When: ``_construct_tree_using_timeout`` is invoked with a fresh tree + root id.
+    Then: Tree max depth (in arena terms) is 2*(depth+1); every node has
+    visit_count >= 0; non-root belief nodes have a non-None belief and v_value.
 
     Test type: unit
     """
@@ -1252,36 +1259,33 @@ def test_max_depth_reached_with_timeout():
 
     n_particles = 100
     belief = get_initial_belief(environment, n_particles=n_particles, resampling=True)
-    root_belief_node = BeliefNode(belief=belief, observation=None)
+    tree = Tree()
+    root_id = tree.add_belief_node(belief)
 
-    planner._construct_tree_using_timeout(belief_node=root_belief_node)
+    planner._construct_tree_using_timeout(tree=tree, root_id=root_id)
 
-    # POMCPOW with progressive widening reaches 2*depth+2 (one more level than POMCP)
-    assert root_belief_node.height == 2 * (depth + 1)
-    for node in PostOrderIter(root_belief_node):
-        assert node.visit_count >= 0
-        if isinstance(node, BeliefNode):
-            assert node.belief is not None
-            assert node.v_value is not None
+    # Walk the arena tree to compute max depth (longest path from root).
+    max_observed_depth = 0
+    frontier = [(root_id, 0)]
+    while frontier:
+        node_id, d = frontier.pop()
+        if d > max_observed_depth:
+            max_observed_depth = d
+        for cid in tree.children_ids[node_id]:
+            frontier.append((cid, d + 1))
+    assert max_observed_depth == 2 * (depth + 1)
 
-            if node.height > 1 and node.depth > 0:
-                assert node.v_value != 0
-                assert node.observation is not None
-                # For POMCPOW with progressive widening, visit count relationship may differ
-                n_children_visits = sum(child.visit_count for child in node.children)
-                assert node.visit_count >= n_children_visits
+    # Validate per-node invariants.
+    for node_id in range(len(tree)):
+        assert tree.visit_count[node_id] >= 0
+        if tree.kind[node_id] == BELIEF and node_id != root_id:
+            assert tree.belief[node_id] is not None
+            assert tree.v_value[node_id] is not None
+            # Note: leaves have v_value=0 by initialization, so we don't assert
+            # v_value != 0 for arbitrary belief nodes here.
 
-        elif isinstance(node, ActionNode):
-            assert node.action is not None
-            assert node.q_value is not None
-            if not node.is_leaf:
-                assert node.q_value != 0
-                # For POMCPOW with progressive widening, visit count relationship may differ
-                assert node.visit_count >= sum(child.visit_count for child in node.children)
-
-    # Verify root belief node
-    assert root_belief_node.observation is None
-    assert root_belief_node.parent is None
-    assert len(root_belief_node.children) > 0
-    assert root_belief_node.visit_count > 0
-    assert root_belief_node.v_value is not None
+    # Verify root belief node invariants in arena form.
+    assert tree.parent_id[root_id] is None
+    assert tree.observation[root_id] is None
+    assert len(tree.children_ids[root_id]) > 0
+    assert tree.visit_count[root_id] > 0

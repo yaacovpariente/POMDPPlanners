@@ -12,6 +12,8 @@ Reference:
 Functions:
     puct_selection: Select among existing children using PUCT.
     puct_action_progressive_widening: Progressive widening with PUCT selection.
+    puct_selection_arena: Arena-tree variant of puct_selection.
+    puct_action_progressive_widening_arena: Arena variant of widening+PUCT.
 """
 
 from typing import Optional
@@ -19,6 +21,7 @@ from typing import Optional
 import numpy as np
 
 from POMDPPlanners.core.tree import ActionNode, BeliefNode
+from POMDPPlanners.core.tree.arena import Tree
 from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
 
 
@@ -126,3 +129,73 @@ def _normalize_q_values(q_values: np.ndarray) -> np.ndarray:
     if q_max - q_min < 1e-8:
         return np.full_like(q_values, 0.5)
     return (q_values - q_min) / (q_max - q_min)
+
+
+def puct_selection_arena(
+    tree: Tree,
+    belief_id: int,
+    exploration_constant: float,
+    action_priors: Optional[np.ndarray] = None,
+) -> int:
+    """Arena variant of :func:`puct_selection`. Returns the action-node ID."""
+    children = tree.children_ids[belief_id]
+    n_children = len(children)
+
+    if action_priors is None:
+        priors = np.ones(n_children) / n_children
+    else:
+        priors = action_priors
+
+    q_values = np.array([tree.q_value[cid] for cid in children])
+    visit_counts = np.array([tree.visit_count[cid] for cid in children])
+
+    q_normalized = _normalize_q_values(q_values)
+
+    parent_visits = max(tree.visit_count[belief_id], 1)
+    exploration = exploration_constant * priors * np.sqrt(parent_visits) / (1.0 + visit_counts)
+
+    puct_scores = q_normalized + exploration
+    return children[int(np.argmax(puct_scores))]
+
+
+def puct_action_progressive_widening_arena(  # pylint: disable=too-many-arguments
+    tree: Tree,
+    belief_id: int,
+    alpha_a: float,
+    action_sampler: ActionSampler,
+    exploration_constant: float,
+    k_a: float,
+    action_priors: Optional[np.ndarray] = None,
+    min_visit_count_per_action: int = 1,
+) -> int:
+    """Arena variant of :func:`puct_action_progressive_widening`.
+
+    Returns the action-node ID selected by progressive widening + PUCT.
+    """
+    if tree.parent_id[belief_id] is None:
+        for cid in tree.children_ids[belief_id]:
+            if tree.visit_count[cid] < min_visit_count_per_action:
+                return cid
+
+    if _should_widen_arena(tree, belief_id, k_a, alpha_a):
+        action = action_sampler.sample()
+        existing_id = tree.get_action_child_indexed(belief_id, action)
+        if existing_id is not None:
+            return existing_id
+        existing_id = tree.get_action_child(belief_id, action)
+        if existing_id is not None:
+            return existing_id
+        return tree.add_action_node(action=action, parent_id=belief_id)
+
+    return puct_selection_arena(
+        tree=tree,
+        belief_id=belief_id,
+        exploration_constant=exploration_constant,
+        action_priors=action_priors,
+    )
+
+
+def _should_widen_arena(tree: Tree, belief_id: int, k_a: float, alpha_a: float) -> bool:
+    children = tree.children_ids[belief_id]
+    belief_visits = tree.visit_count[belief_id]
+    return len(children) == 0 or belief_visits == 0 or len(children) <= k_a * belief_visits**alpha_a

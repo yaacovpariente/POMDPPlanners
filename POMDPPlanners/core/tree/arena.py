@@ -227,6 +227,28 @@ class Tree:
             new_cdf.append(running_total)
         self.children_cdf[parent_id] = new_cdf
 
+    def increment_weight(self, child_id: int, delta: float) -> None:
+        """Increment ``weight[child_id]`` by ``delta`` and patch the parent's CDF.
+
+        Cheaper than :meth:`recompute_children_cdf` for the common case of a
+        single weight bump (e.g. POMCPOW's observation widening): walks the
+        parent's CDF only from this child's position onward, adding
+        ``delta`` to each remaining entry. O(K - position) where K is the
+        number of siblings.
+
+        If ``child_id`` is the root (no parent), only the weight is
+        updated; there is no parent CDF to patch.
+        """
+        self.weight[child_id] += delta
+        parent_id = self.parent_id[child_id]
+        if parent_id is None:
+            return
+        siblings = self.children_ids[parent_id]
+        cdf = self.children_cdf[parent_id]
+        position = siblings.index(child_id)
+        for index in range(position, len(cdf)):
+            cdf[index] += delta
+
     # --- queries ---
 
     def depth(self, node_id: int) -> int:
@@ -339,6 +361,30 @@ class Tree:
     def print(self, node_id: int = 0) -> None:
         """Print the subtree rooted at ``node_id`` as an indented tree."""
         self._render(node_id, prefix="")
+
+    def best_action_by_reward(self, belief_id: int) -> Any:
+        """Return the action of the highest-q_value action child of ``belief_id``.
+
+        Arena equivalent of :func:`get_optimal_action_reward_setting` from
+        ``anytree_based``.
+        """
+        children = self.children_ids[belief_id]
+        if not children:
+            raise ValueError("belief node has no action children")
+        best_id = max(children, key=lambda cid: self.q_value[cid])
+        return self.action[best_id]
+
+    def best_action_by_cost(self, belief_id: int) -> Any:
+        """Return the action of the lowest-q_value action child of ``belief_id``.
+
+        Arena equivalent of :func:`get_optimal_action_cost_setting` from
+        ``anytree_based``.
+        """
+        children = self.children_ids[belief_id]
+        if not children:
+            raise ValueError("belief node has no action children")
+        best_id = min(children, key=lambda cid: self.q_value[cid])
+        return self.action[best_id]
 
     def _render(self, node_id: int, prefix: str) -> None:
         label = "BeliefNode" if self.kind[node_id] == BELIEF else "ActionNode"

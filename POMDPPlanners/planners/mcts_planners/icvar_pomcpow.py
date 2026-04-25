@@ -10,31 +10,44 @@ Reference:
     Iterated CVaR Value Function. arXiv preprint arXiv:2601.20554.
     https://arxiv.org/abs/2601.20554
 
+Implementation note:
+    Operates on the column-store arena
+    :class:`POMDPPlanners.core.tree.arena.Tree` (integer node IDs, parallel
+    column lists) rather than the legacy anytree-based ``BeliefNode`` /
+    ``ActionNode`` graph. Inherits from
+    :class:`ArenaPathSimulationPolicyCostSetting`. External constructor
+    signature, ``action()`` interface, and behavior are unchanged.
+
 Classes:
     ICVaR_POMCPOW: Risk-sensitive POMCPOW planner with CVaR-based value updates
 """
 
 from pathlib import Path
-from typing import Any, Optional, Tuple
+from typing import Any, Optional
 
 import numpy as np
 
-from POMDPPlanners.core.policy import PolicySpaceInfo
+from POMDPPlanners.core.belief import WeightedParticleBelief, WeightedParticleBeliefStateUpdate
 from POMDPPlanners.core.environment import Environment, SpaceType
-from POMDPPlanners.core.belief import WeightedParticleBeliefStateUpdate, WeightedParticleBelief
-from POMDPPlanners.core.tree import BeliefNode
-from POMDPPlanners.planners.planners_utils.path_simulations_policy import (
-    PathSimulationPolicyCostSetting,
+from POMDPPlanners.core.policy import PolicySpaceInfo
+from POMDPPlanners.core.tree.arena import Tree
+from POMDPPlanners.planners.planners_utils.cvar_progressive_widening import (
+    cvar_action_progressive_widening_arena,
 )
 from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
-from POMDPPlanners.utils.statistics_utils import cvar_estimator_from_dist
-from POMDPPlanners.planners.planners_utils.cvar_progressive_widening import (
-    cvar_action_progressive_widening,
+from POMDPPlanners.planners.planners_utils.path_simulations_policy_arena import (
+    ArenaPathSimulationPolicyCostSetting,
 )
+from POMDPPlanners.utils.statistics_utils import cvar_estimator_from_dist
 
 
-class ICVaR_POMCPOW(PathSimulationPolicyCostSetting):
-    def __init__(
+class ICVaR_POMCPOW(ArenaPathSimulationPolicyCostSetting):
+    """ICVaR POMCPOW operating on the arena :class:`Tree` + integer node IDs.
+
+    See module docstring for algorithm details and reference.
+    """
+
+    def __init__(  # pylint: disable=too-many-arguments,too-many-locals
         self,
         environment: Environment,
         discount_factor: float,
@@ -54,6 +67,7 @@ class ICVaR_POMCPOW(PathSimulationPolicyCostSetting):
         n_simulations: Optional[int] = None,
         alpha: float = 0.05,
         min_samples_per_node: int = 10,
+        reserve_capacity: int = 0,
         log_path: Optional[Path] = None,
         debug: bool = False,
         visit_count_penalty: float = 0.0,
@@ -65,6 +79,7 @@ class ICVaR_POMCPOW(PathSimulationPolicyCostSetting):
             n_simulations=n_simulations,
             action_sampler=action_sampler,
             time_out_in_seconds=time_out_in_seconds,
+            reserve_capacity=reserve_capacity,
             log_path=log_path,
             debug=debug,
         )
@@ -72,7 +87,7 @@ class ICVaR_POMCPOW(PathSimulationPolicyCostSetting):
         self.depth = depth
         self.exploration_constant = exploration_constant
         self.min_samples_per_node = min_samples_per_node
-        self.action_sampler = action_sampler
+        self.action_sampler: ActionSampler = action_sampler
         self.alpha = alpha
 
         self.k_o = k_o
@@ -89,97 +104,59 @@ class ICVaR_POMCPOW(PathSimulationPolicyCostSetting):
 
         self.discrete_actions = self.environment.space_info.action_space == SpaceType.DISCRETE
 
-    def _simulate_path(self, belief_node: BeliefNode, depth: int) -> None:
-        """Simulate a single MCTS path from belief node using sampled state.
+    def _simulate_path(self, tree: Tree, belief_id: int, depth: int) -> None:
+        state = tree.belief[belief_id].sample()
+        self._simulate_state_path(tree=tree, state=state, belief_id=belief_id, depth=depth)
 
-        This method samples a state from the belief and delegates to _simulate_state_path
-        for the actual simulation logic. This separation allows for different belief
-        sampling strategies while maintaining the core simulation algorithm.
-
-        Args:
-            belief_node: Current belief node in the search tree
-            depth: Current depth in the search tree
-        """
-        state = belief_node.belief.sample()
-        self._simulate_state_path(state=state, belief_node=belief_node, depth=depth)
-
-    def _simulate_state_path(self, state: Any, belief_node: BeliefNode, depth: int) -> None:
-        """Simulate MCTS path from given state and belief node with progressive widening.
-
-        This is the core simulation method that implements the POMCPOW algorithm:
-        1. Check termination conditions (depth limit, terminal state)
-        2. Select/add action using action progressive widening
-        3. Sample next state and observation from environment
-        4. Select/add observation node using observation progressive widening
-        5. Update weighted particle belief in observation node
-        6. Recursively continue simulation or perform rollout
-        7. Backpropagate value updates
-
-        Args:
-            state: Current state to simulate from
-            belief_node: Current belief node in search tree
-            depth: Current depth in search tree
-
-        Returns:
-            Total discounted return from this simulation path
-        """
-        if self._check_termination_conditions(state=state, belief_node=belief_node, depth=depth):
+    def _simulate_state_path(self, tree: Tree, state: Any, belief_id: int, depth: int) -> None:
+        """Core ICVaR-POMCPOW simulation step on the arena tree."""
+        if self._check_termination_conditions(
+            tree=tree, state=state, belief_id=belief_id, depth=depth
+        ):
             return
 
-        action_node = self._select_action_with_progressive_widening(belief_node=belief_node)
-        next_state, next_observation, reward = self._sample_environment_step(
-            state=state, action_node=action_node
+        action_id = self._select_action_with_progressive_widening(tree=tree, belief_id=belief_id)
+        next_state, next_observation, reward = self.environment.sample_next_step(
+            state=state, action=tree.action[action_id]
         )
-        next_belief_node = self._select_or_create_observation_node(
-            action_node=action_node, next_observation=next_observation
+        next_belief_id = self._select_or_create_observation_node(
+            tree=tree, action_id=action_id, next_observation=next_observation
         )
         self._update_belief_with_state(
-            belief_node=next_belief_node,
-            action_node=action_node,
+            tree=tree,
+            belief_id=next_belief_id,
+            action_id=action_id,
             observation=next_observation,
             state=next_state,
         )
 
-        self._simulate_state_path(state=next_state, belief_node=next_belief_node, depth=depth + 1)
+        self._simulate_state_path(
+            tree=tree, state=next_state, belief_id=next_belief_id, depth=depth + 1
+        )
 
         self._backpropagate_values(
-            state=state, belief_node=belief_node, action_node=action_node, reward=reward
+            tree=tree,
+            belief_id=belief_id,
+            action_id=action_id,
+            reward=reward,
         )
 
     def _check_termination_conditions(
-        self, state: Any, belief_node: BeliefNode, depth: int
+        self, tree: Tree, state: Any, belief_id: int, depth: int
     ) -> bool:
-        """Check if simulation should terminate due to depth limit or terminal state.
-
-        Args:
-            state: Current state to check
-            belief_node: Current belief node in search tree
-            depth: Current depth in search tree
-
-        Returns:
-            True if simulation should terminate, False otherwise
-        """
         if depth > self.depth:
-            belief_node.parent = None
             return True
 
         if self.environment.is_terminal(state=state):
-            belief_node.visit_count += 1
+            tree.visit_count[belief_id] += 1
             return True
 
         return False
 
-    def _select_action_with_progressive_widening(self, belief_node: BeliefNode) -> Any:
-        """Select or add action node using action progressive widening.
-
-        Args:
-            belief_node: Current belief node in search tree
-
-        Returns:
-            Selected action node
-        """
-        return cvar_action_progressive_widening(
-            belief_node=belief_node,
+    def _select_action_with_progressive_widening(self, tree: Tree, belief_id: int) -> int:
+        return cvar_action_progressive_widening_arena(
+            tree=tree,
+            belief_id=belief_id,
             alpha_a=self.alpha_a,
             action_sampler=self.action_sampler,
             exploration_constant=self.exploration_constant,
@@ -196,166 +173,122 @@ class ICVaR_POMCPOW(PathSimulationPolicyCostSetting):
             visit_count_penalty=self.visit_count_penalty,
         )
 
-    def _sample_environment_step(self, state: Any, action_node: Any) -> Tuple[Any, Any, float]:
-        """Sample next state, observation, and reward from environment.
-
-        Args:
-            state: Current state
-            action_node: Action node containing the action to take
-
-        Returns:
-            Tuple of (next_state, next_observation, reward)
-        """
-        return self.environment.sample_next_step(state=state, action=action_node.action)
-
     def _select_or_create_observation_node(
-        self, action_node: Any, next_observation: Any
-    ) -> BeliefNode:
-        """Select or create observation node using observation progressive widening.
-
-        Args:
-            action_node: Action node to get children from
-            next_observation: Observed observation
-
-        Returns:
-            Selected or newly created belief node for the observation
-        """
-        if len(action_node.children) <= self.k_o * action_node.visit_count**self.alpha_o:
-            next_belief_node = action_node.get_belief_node_child(
-                observation=next_observation, environment=self.environment
-            )
-            if next_belief_node is None:
-                next_belief_node = BeliefNode(
+        self, tree: Tree, action_id: int, next_observation: Any
+    ) -> int:
+        children_count = len(tree.children_ids[action_id])
+        action_visits = tree.visit_count[action_id]
+        if children_count <= self.k_o * action_visits**self.alpha_o:
+            existing_id = tree.get_belief_child_indexed(action_id, next_observation)
+            if existing_id is None:
+                existing_id = tree.get_belief_child(action_id, next_observation, self.environment)
+            if existing_id is None:
+                next_belief_id = tree.add_belief_node(
                     belief=WeightedParticleBeliefStateUpdate(particles=[], weights=[]),
                     observation=next_observation,
-                    parent=action_node,
-                    weight=0,
+                    parent_id=action_id,
+                    weight=1.0,
                 )
-
-            next_belief_node.weight += 1
+            else:
+                tree.increment_weight(existing_id, delta=1.0)
+                next_belief_id = existing_id
         else:
-            next_belief_node = action_node.sample_child_node()
-
-        return next_belief_node
+            next_belief_id = tree.sample_belief_child(action_id)
+        return next_belief_id
 
     def _update_belief_with_state(
-        self, belief_node: BeliefNode, action_node: Any, observation: Any, state: Any
+        self,
+        tree: Tree,
+        belief_id: int,
+        action_id: int,
+        observation: Any,
+        state: Any,
     ) -> None:
-        """Update weighted particle belief with new state information.
-
-        Args:
-            belief_node: Belief node to update
-            action_node: Action node containing the action taken
-            observation: Observation received
-            state: New state to incorporate into belief
-        """
-        belief_node.belief.inplace_update(
-            action=action_node.action, observation=observation, pomdp=self.environment, state=state
+        tree.belief[belief_id].inplace_update(
+            action=tree.action[action_id],
+            observation=observation,
+            pomdp=self.environment,
+            state=state,
         )
 
     def _backpropagate_values(
-        self, state: Any, belief_node: BeliefNode, action_node: Any, reward: float
+        self,
+        tree: Tree,
+        belief_id: int,
+        action_id: int,
+        reward: float,
     ) -> None:
-        """Backpropagate value updates through the search tree.
-
-        Updates visit counts, immediate costs, Q-values, and V-values based on
-        the simulation results.
-
-        Args:
-            state: State that was used in the simulation
-            belief_node: Belief node to update
-            action_node: Action node to update
-            reward: Reward received from the environment step
-        """
-        belief_node.visit_count += 1
-        action_node.visit_count += 1
+        tree.visit_count[belief_id] += 1
+        tree.visit_count[action_id] += 1
 
         self._update_immediate_cost(
-            state=state, belief_node=belief_node, action_node=action_node, reward=reward
+            tree=tree, belief_id=belief_id, action_id=action_id, reward=reward
         )
-        self._update_q_value(action_node=action_node)
-        self._update_v_value(belief_node=belief_node)
+        self._update_q_value(tree=tree, action_id=action_id)
+        self._update_v_value(tree=tree, belief_id=belief_id)
 
     def _update_immediate_cost(
-        self, state: Any, belief_node: BeliefNode, action_node: Any, reward: float
-    ) -> None:  # pylint: disable=unused-argument
-        """Update the immediate cost estimate for an action node.
-
-        Args:
-            state: State used in the simulation
-            belief_node: Belief node containing belief information
-            action_node: Action node to update
-            reward: Reward received from the environment step
-        """
-        if action_node.immediate_cost is None:
-            if isinstance(belief_node.belief, WeightedParticleBeliefStateUpdate):
-                action_node.immediate_cost = -reward
-            elif isinstance(belief_node.belief, WeightedParticleBelief):
-                particle_weights = belief_node.belief.normalized_weights
+        self,
+        tree: Tree,
+        belief_id: int,
+        action_id: int,
+        reward: float,
+    ) -> None:
+        belief = tree.belief[belief_id]
+        action = tree.action[action_id]
+        immediate_cost = tree.immediate_cost[action_id]
+        if immediate_cost is None:
+            if isinstance(belief, WeightedParticleBeliefStateUpdate):
+                tree.set_immediate_cost(action_id, -reward)
+            elif isinstance(belief, WeightedParticleBelief):
+                particle_weights = belief.normalized_weights
                 particle_costs = np.array(
                     [
-                        -self.environment.reward(state=particle, action=action_node.action)
-                        for particle in belief_node.belief.particles
+                        -self.environment.reward(state=particle, action=action)
+                        for particle in belief.particles
                     ]
                 )
-                action_node.immediate_cost = sum(particle_costs * particle_weights)
+                tree.set_immediate_cost(action_id, float(np.sum(particle_costs * particle_weights)))
             else:
-                raise ValueError(f"Unsupported belief type: {type(belief_node.belief)}")
-        elif isinstance(belief_node.belief, WeightedParticleBeliefStateUpdate):
-            old_weights_sum = belief_node.belief.weights_sum - belief_node.belief.weights[-1]
-            action_node.immediate_cost = (
-                action_node.immediate_cost * old_weights_sum
-                - reward * belief_node.belief.weights[-1]
-            )
-            action_node.immediate_cost /= belief_node.belief.weights_sum  # type: ignore
+                raise ValueError(f"Unsupported belief type: {type(belief)}")
+        elif isinstance(belief, WeightedParticleBeliefStateUpdate):
+            old_weights_sum = belief.weights_sum - belief.weights[-1]
+            new_cost = (
+                immediate_cost * old_weights_sum - reward * belief.weights[-1]
+            ) / belief.weights_sum
+            tree.set_immediate_cost(action_id, new_cost)
 
-    def _update_q_value(self, action_node: Any) -> None:
-        """Update the Q-value for an action node based on its children.
+    def _update_q_value(self, tree: Tree, action_id: int) -> None:
+        children = tree.children_ids[action_id]
+        immediate_cost = tree.immediate_cost[action_id]
+        if immediate_cost is None:
+            raise ValueError("immediate_cost must be set before updating q_value")
 
-        Args:
-            action_node: Action node to update
-        """
-        if not action_node.is_leaf:
-            # Only use children that have been visited (weight > 0 or visit_count > 0)
-            visited_children = [child for child in action_node.children if child.visit_count > 0]
-            if len(visited_children) == 0:
-                # If no children have been visited yet, use immediate cost only
-                action_node.q_value = action_node.immediate_cost
-            else:
-                children_v_values = np.array([child.v_value for child in visited_children])
-                children_weights = np.array([child.weight for child in visited_children])
-                children_weights = children_weights / children_weights.sum()
+        if not children:
+            tree.q_value[action_id] = immediate_cost
+            return
 
-                action_node.q_value = (
-                    action_node.immediate_cost
-                    + self.discount_factor
-                    * cvar_estimator_from_dist(
-                        values=children_v_values, weights=children_weights, alpha=self.alpha
-                    )
-                )
-        else:
-            action_node.q_value = action_node.immediate_cost
+        visited_children = [cid for cid in children if tree.visit_count[cid] > 0]
+        if not visited_children:
+            tree.q_value[action_id] = immediate_cost
+            return
 
-    def _update_v_value(self, belief_node: BeliefNode) -> None:
-        """Update the V-value for a belief node based on its children.
+        v_values = np.array([tree.v_value[cid] for cid in visited_children])
+        weights = np.array([tree.weight[cid] for cid in visited_children])
+        weights_sum = weights.sum()
+        if weights_sum > 0:
+            weights = weights / weights_sum
+        tree.q_value[action_id] = immediate_cost + self.discount_factor * cvar_estimator_from_dist(
+            values=v_values, weights=weights, alpha=self.alpha
+        )
 
-        Args:
-            belief_node: Belief node to update
-        """
-        # Only consider children that have been visited
-        visited_children = [child for child in belief_node.children if child.visit_count > 0]
-        if len(visited_children) > 0:
-            belief_node.v_value = min(child.q_value for child in visited_children)
-        # If no children have been visited, v_value remains at its current value (or 0.0 if uninitialized)
+    def _update_v_value(self, tree: Tree, belief_id: int) -> None:
+        visited_q_values = [
+            tree.q_value[cid] for cid in tree.children_ids[belief_id] if tree.visit_count[cid] > 0
+        ]
+        if visited_q_values:
+            tree.v_value[belief_id] = min(visited_q_values)
 
     @classmethod
     def get_space_info(cls) -> PolicySpaceInfo:
-        """Get information about action and observation spaces.
-
-        POMCPOW supports mixed-type spaces through its action sampler interface,
-        allowing it to handle both discrete and continuous action spaces.
-
-        Returns:
-            PolicySpaceInfo with MIXED space types for both actions and observations
-        """
         return PolicySpaceInfo(action_space=SpaceType.MIXED, observation_space=SpaceType.MIXED)

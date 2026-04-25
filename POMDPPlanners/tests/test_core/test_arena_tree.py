@@ -334,6 +334,96 @@ def test_set_immediate_cost_mirrors_to_immediate_reward(belief):
     assert tree.immediate_reward[nid] == 99.0
 
 
+def test_increment_weight_updates_weight_and_parent_cdf(belief):
+    """``Tree.increment_weight`` bumps a child's weight and patches the parent's CDF.
+
+    Purpose: Validates the incremental CDF maintenance primitive used by POMCPOW
+    on every observation re-visit (cheaper than full ``recompute_children_cdf``).
+
+    Given: A belief root with two action children of default weight 1.0 each;
+    parent CDF is [1.0, 2.0].
+    When: ``increment_weight(c1, delta=2.0)`` is called on the second child.
+    Then: weight[c1] becomes 3.0; only CDF entries from c1's position onward
+    are bumped by 2.0 — CDF becomes [1.0, 4.0].
+
+    Test type: unit
+    """
+    tree = Tree()
+    root = tree.add_belief_node(belief)
+    c0 = tree.add_action_node("a0", parent_id=root)
+    c1 = tree.add_action_node("a1", parent_id=root)
+    assert list(tree.children_cdf[root]) == [1.0, 2.0]
+
+    tree.increment_weight(c1, delta=2.0)
+    assert tree.weight[c1] == 3.0
+    assert tree.weight[c0] == 1.0
+    assert list(tree.children_cdf[root]) == [1.0, 4.0]
+
+
+def test_increment_weight_root_only_updates_weight(belief):
+    """``increment_weight`` on the root (no parent) updates only the weight.
+
+    Purpose: Documents the no-op-on-CDF behaviour for the root node.
+
+    Given: A root with no parent.
+    When: ``increment_weight(root, delta=0.5)``.
+    Then: weight[root] is bumped; no error raised; no CDF to patch.
+
+    Test type: unit
+    """
+    tree = Tree()
+    root = tree.add_belief_node(belief)
+    initial = tree.weight[root]
+    tree.increment_weight(root, delta=0.5)
+    assert tree.weight[root] == initial + 0.5
+
+
+def test_increment_weight_negative_delta_decreases(belief):
+    """Negative delta decreases the child's weight and patches CDF correctly.
+
+    Purpose: Validates that the increment is a signed delta, not a positive bump.
+
+    Given: A belief root with one action child of weight 1.0.
+    When: ``increment_weight(c, delta=-0.4)``.
+    Then: weight[c] == 0.6; CDF reflects 0.6.
+
+    Test type: unit
+    """
+    tree = Tree()
+    root = tree.add_belief_node(belief)
+    c = tree.add_action_node("a", parent_id=root)
+    tree.increment_weight(c, delta=-0.4)
+    assert tree.weight[c] == pytest.approx(0.6)
+    assert tree.children_cdf[root][0] == pytest.approx(0.6)
+
+
+def test_increment_weight_then_sample_distribution_correct(belief):
+    """After ``increment_weight``, ``sample_belief_child`` honours the new weights.
+
+    Purpose: Validates that the incremental CDF patch keeps the sampler in sync
+    with the actual weights — no need to call ``recompute_children_cdf`` after.
+
+    Given: An action node with two belief children of weight 1.0; we then bump
+    the second child's weight to 4.0 (so light:heavy = 1:4 in expectation).
+    When: 5000 samples are drawn from the parent.
+    Then: The 4.0-weight child is sampled ~4× as often as the 1.0-weight child
+    (within statistical noise).
+
+    Test type: unit
+    """
+    tree = Tree()
+    root = tree.add_belief_node(belief)
+    action = tree.add_action_node("a", parent_id=root)
+    light = tree.add_belief_node(belief, observation="light", weight=1.0, parent_id=action)
+    heavy = tree.add_belief_node(belief, observation="heavy", weight=1.0, parent_id=action)
+    tree.increment_weight(heavy, delta=3.0)
+    counts = {light: 0, heavy: 0}
+    for _ in range(5000):
+        counts[tree.sample_belief_child(action)] += 1
+    ratio = counts[heavy] / counts[light]
+    assert 3.4 < ratio < 4.6  # expected 4.0; allow noise
+
+
 def test_get_belief_child_indexed_finds_or_returns_none(belief):
     """O(1) indexed lookup of belief children by hashable observation.
 
