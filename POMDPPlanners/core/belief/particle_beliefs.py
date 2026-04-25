@@ -254,13 +254,17 @@ class WeightedParticleBelief(Belief):
 
         effective_sample_size = 1 / np.sum(np.square(normalized_weights))
         if effective_sample_size < self.ess_threshold:
-            sampled_indexes = random.choices(
-                range(len(particles)),
-                weights=normalized_weights,
-                k=len(particles),
-            )
-            resampled_particles = [particles[i] for i in sampled_indexes]
-            new_log_weights = np.log(np.ones(len(resampled_particles)) / len(resampled_particles))
+            # Systematic resampling: one stratified uniform draw, vectorised
+            # CDF lookup via np.searchsorted. Unbiased and lower-variance
+            # than i.i.d. multinomial (random.choices) -- see Doucet &
+            # Johansen 2009. Replaces the per-call CPython bisect loop.
+            n = len(particles)
+            u0 = np.random.random() / n
+            positions = u0 + np.arange(n) / n
+            cdf = np.cumsum(normalized_weights)
+            idx = np.minimum(np.searchsorted(cdf, positions), n - 1)
+            resampled_particles = [particles[i] for i in idx]
+            new_log_weights = np.full(n, -np.log(n))
             return resampled_particles, new_log_weights
         return particles, log_weights
 

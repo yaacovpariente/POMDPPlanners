@@ -41,6 +41,10 @@ class ContinuousLaserTagTransitionCpp:
         values: Union[Sequence[NDArray[np.floating]], NDArray[np.floating]],
     ) -> NDArray[np.float64]: ...
     def batch_sample(self, particles: NDArray[np.floating]) -> NDArray[np.float64]: ...
+    def set_state(
+        self,
+        state: Union[Sequence[float], NDArray[np.floating]],
+    ) -> None: ...
 
 class ContinuousLaserTagObservationCpp:
     """Native 8-direction laser observation sampler."""
@@ -68,3 +72,7 @@ class ContinuousLaserTagObservationCpp:
         next_particles: NDArray[np.floating],
         observation: NDArray[np.floating],
     ) -> NDArray[np.float64]: ...
+    def set_next_state(
+        self,
+        next_state: Union[Sequence[float], NDArray[np.floating]],
+    ) -> None: ...

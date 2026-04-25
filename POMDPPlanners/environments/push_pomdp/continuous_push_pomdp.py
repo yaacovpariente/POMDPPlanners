@@ -23,7 +23,7 @@ Classes:
 
 from enum import Enum
 from pathlib import Path
-from typing import Any, List, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
@@ -309,6 +309,18 @@ class ContinuousPushPOMDP(Environment):
             state_transition_cov_matrix
         )
 
+        # Snapshot covariance buffer without copying for the per-action
+        # kernel cache below — the Cholesky lives inside the C++ kernel
+        # and never sees this array again after construction.
+        self._trans_cov_view = self._state_transition_dist.covariance_view()
+
+        # Per-action kernel caches: one C++ kernel per distinct action
+        # vector. Hot-path overrides flip the (next_)state field via
+        # set_state / set_next_state instead of rebuilding (skips the
+        # per-call Cholesky and obstacle-buffer copy).
+        self._trans_kernel_cache: Dict[bytes, Any] = {}
+        self._obs_kernel_cache: Dict[bytes, Any] = {}
+
         space_info = SpaceInfo(
             action_space=SpaceType.CONTINUOUS,
             observation_space=SpaceType.CONTINUOUS,
@@ -367,21 +379,48 @@ class ContinuousPushPOMDP(Environment):
     # subclass per call (np.asarray(...).ravel() x2, side-attribute
     # storage). The actual RNG draw lives entirely inside the C++
     # _native.ContinuousPush{Transition,Observation}Cpp.sample() method.
-    # These overrides skip the Python subclass, construct the native
-    # kernel directly, and produce byte-identical RNG draws.
+    # These overrides skip the Python subclass, fetch a cached per-action
+    # C++ kernel (Cholesky factored once, obstacle buffer copied once),
+    # and rewrite only the (next_)state field per call via set_state /
+    # set_next_state. The C++ RNG state lives on the kernel, so each
+    # cached kernel maintains a single RNG stream per (env, action).
+
+    def _get_trans_kernel(self, action: np.ndarray) -> Any:
+        action_arr = np.ascontiguousarray(np.asarray(action, dtype=np.float64))
+        key = action_arr.tobytes()
+        kernel = self._trans_kernel_cache.get(key)
+        if kernel is None:
+            kernel = _native.ContinuousPushTransitionCpp(
+                state=np.zeros(6, dtype=np.float64),
+                action=action_arr,
+                grid_size=float(self.grid_size),
+                push_threshold=float(self.push_threshold),
+                friction_coefficient=float(self.friction_coefficient),
+                max_push=float(self.max_push),
+                robot_radius=float(self.robot_radius),
+                obstacles=self.obstacles,
+                covariance=self._trans_cov_view,
+            )
+            self._trans_kernel_cache[key] = kernel
+        return kernel
+
+    def _get_obs_kernel(self, action: np.ndarray) -> Any:
+        action_arr = np.ascontiguousarray(np.asarray(action, dtype=np.float64))
+        key = action_arr.tobytes()
+        kernel = self._obs_kernel_cache.get(key)
+        if kernel is None:
+            kernel = _native.ContinuousPushObservationCpp(
+                next_state=np.zeros(6, dtype=np.float64),
+                action=action_arr,
+                observation_noise=float(self.observation_noise),
+                grid_size=float(self.grid_size),
+            )
+            self._obs_kernel_cache[key] = kernel
+        return kernel
 
     def sample_next_state(self, state: np.ndarray, action: np.ndarray, n_samples: int = 1) -> Any:
-        kernel = _native.ContinuousPushTransitionCpp(
-            state=state,
-            action=action,
-            grid_size=float(self.grid_size),
-            push_threshold=float(self.push_threshold),
-            friction_coefficient=float(self.friction_coefficient),
-            max_push=float(self.max_push),
-            robot_radius=float(self.robot_radius),
-            obstacles=self.obstacles,
-            covariance=self._state_transition_dist.covariance,
-        )
+        kernel = self._get_trans_kernel(action)
+        kernel.set_state(state)
         samples = kernel.sample(n_samples)
         if n_samples == 1:
             return samples[0]
@@ -390,12 +429,8 @@ class ContinuousPushPOMDP(Environment):
     def sample_observation(
         self, next_state: np.ndarray, action: np.ndarray, n_samples: int = 1
     ) -> Any:
-        kernel = _native.ContinuousPushObservationCpp(
-            next_state=next_state,
-            action=action,
-            observation_noise=float(self.observation_noise),
-            grid_size=float(self.grid_size),
-        )
+        kernel = self._get_obs_kernel(action)
+        kernel.set_next_state(next_state)
         samples = kernel.sample(n_samples)
         if n_samples == 1:
             return samples[0]
@@ -404,17 +439,8 @@ class ContinuousPushPOMDP(Environment):
     def transition_log_probability(
         self, state: np.ndarray, action: np.ndarray, next_states: Any
     ) -> np.ndarray:
-        kernel = _native.ContinuousPushTransitionCpp(
-            state=state,
-            action=action,
-            grid_size=float(self.grid_size),
-            push_threshold=float(self.push_threshold),
-            friction_coefficient=float(self.friction_coefficient),
-            max_push=float(self.max_push),
-            robot_radius=float(self.robot_radius),
-            obstacles=self.obstacles,
-            covariance=self._state_transition_dist.covariance,
-        )
+        kernel = self._get_trans_kernel(action)
+        kernel.set_state(state)
         probs = np.asarray(kernel.probability(next_states))
         with np.errstate(divide="ignore"):
             return np.log(probs)
@@ -422,12 +448,8 @@ class ContinuousPushPOMDP(Environment):
     def observation_log_probability(
         self, next_state: np.ndarray, action: np.ndarray, observations: Any
     ) -> np.ndarray:
-        kernel = _native.ContinuousPushObservationCpp(
-            next_state=next_state,
-            action=action,
-            observation_noise=float(self.observation_noise),
-            grid_size=float(self.grid_size),
-        )
+        kernel = self._get_obs_kernel(action)
+        kernel.set_next_state(next_state)
         # batch_log_likelihood is symmetric in the object-position slice:
         # passing the candidate observations as ``next_particles`` and the
         # fixed next_state as ``observation`` yields the per-row log-pdf of
@@ -446,17 +468,9 @@ class ContinuousPushPOMDP(Environment):
         states_array = np.ascontiguousarray(np.asarray(states, dtype=np.float64))
         if states_array.ndim == 1:
             states_array = states_array.reshape(1, -1)
-        kernel = _native.ContinuousPushTransitionCpp(
-            state=states_array[0],
-            action=action,
-            grid_size=float(self.grid_size),
-            push_threshold=float(self.push_threshold),
-            friction_coefficient=float(self.friction_coefficient),
-            max_push=float(self.max_push),
-            robot_radius=float(self.robot_radius),
-            obstacles=self.obstacles,
-            covariance=self._state_transition_dist.covariance,
-        )
+        kernel = self._get_trans_kernel(action)
+        # batch_sample reads the per-row state from the input, not the
+        # kernel's stored state, so no set_state is needed here.
         return np.asarray(kernel.batch_sample(states_array), dtype=np.float64)
 
     def observation_log_probability_per_state(
@@ -466,12 +480,9 @@ class ContinuousPushPOMDP(Environment):
         if next_states_array.ndim == 1:
             next_states_array = next_states_array.reshape(1, -1)
         observation_array = np.ascontiguousarray(np.asarray(observation, dtype=np.float64))
-        kernel = _native.ContinuousPushObservationCpp(
-            next_state=next_states_array[0],
-            action=action,
-            observation_noise=float(self.observation_noise),
-            grid_size=float(self.grid_size),
-        )
+        kernel = self._get_obs_kernel(action)
+        # batch_log_likelihood reads next_state per row from the input;
+        # no set_next_state needed.
         return np.asarray(
             kernel.batch_log_likelihood(
                 next_particles=next_states_array,
@@ -520,6 +531,20 @@ class ContinuousPushPOMDP(Environment):
         if self._is_circle_colliding_with_obstacle(state[:2] + action, self.robot_radius):
             rew += self.obstacle_penalty
         return rew
+
+    def __getstate__(self):
+        # Per-action C++ kernel cache holds pybind11 objects that aren't
+        # picklable. Drop them at serialization time; __setstate__ rebuilds
+        # empty caches so the env works after unpickling.
+        state = self.__dict__.copy()
+        state["_trans_kernel_cache"] = {}
+        state["_obs_kernel_cache"] = {}
+        return state
+
+    def __setstate__(self, state):
+        vars(self).update(state)
+        self._trans_kernel_cache = {}
+        self._obs_kernel_cache = {}
 
     def is_terminal(self, state: np.ndarray) -> bool:
         obj = state[2:4]
