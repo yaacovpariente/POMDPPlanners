@@ -58,6 +58,18 @@ class MockEnvironment(Environment):
         mock_model.probability.return_value = 1.0
         return mock_model
 
+    def sample_next_state(self, state, action, n_samples=1):
+        return state if n_samples == 1 else [state] * n_samples
+
+    def sample_observation(self, next_state, action, n_samples=1):
+        return 0 if n_samples == 1 else [0] * n_samples
+
+    def transition_log_probability(self, state, action, next_states):
+        return np.zeros(len(next_states))
+
+    def observation_log_probability(self, next_state, action, observations):
+        return np.zeros(len(observations))
+
     def reward(self, state, action):
         return 1.0
 

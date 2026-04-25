@@ -37,9 +37,9 @@ from POMDPPlanners.core.distributions import DiscreteDistribution, Distribution
 from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
     Environment,
-    ObservationModel,
     SpaceInfo,
     SpaceType,
+    ObservationModel,
     StateTransitionModel,
 )
 from POMDPPlanners.core.simulation import History, MetricValue, StepData

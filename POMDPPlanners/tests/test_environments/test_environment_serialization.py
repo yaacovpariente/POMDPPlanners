@@ -333,29 +333,16 @@ class TestEnvironmentStateSerialization:
 class TestEnvironmentTransitionModelSerialization:
     """Test cases for environment transition model serialization."""
 
+    @pytest.mark.skip(
+        reason=(
+            "TigerStateTransition wrapper class deleted in PR-D3 along with the "
+            "state_transition_model factory. There's no planner code path that "
+            "pickles the transition-model wrapper itself; env-level state "
+            "serialization is still covered."
+        )
+    )
     def test_tiger_transition_model_serialization(self):
-        """Test TigerPOMDP transition model serialization.
-
-        Purpose: Validates that TigerPOMDP transition models can be pickled and unpickled
-
-        Given: TigerPOMDP environment, state, and action
-        When: Transition model is pickled and unpickled
-        Then: Unpickled model can sample valid next states
-
-        Test type: unit
-        """
-        env = TigerPOMDP(discount_factor=0.95)
-        state = env.initial_state_dist().sample()[0]
-        actions = env.get_actions()
-        action = actions[0]
-
-        transition_model = env.state_transition_model(state, action)
-        pickled = pickle.dumps(transition_model)
-        unpickled_model = pickle.loads(pickled)
-
-        # Test that unpickled model can sample states
-        next_state = unpickled_model.sample()[0]
-        assert next_state is not None
+        """Test TigerPOMDP transition model serialization (obsolete after PR-D3)."""
 
     @pytest.mark.skip(
         reason=(
@@ -397,34 +384,15 @@ class TestEnvironmentTransitionModelSerialization:
 class TestEnvironmentObservationModelSerialization:
     """Test cases for environment observation model serialization."""
 
+    @pytest.mark.skip(
+        reason=(
+            "TigerObservation wrapper class deleted in PR-D3 along with the "
+            "observation_model factory. There's no planner code path that "
+            "pickles the observation-model wrapper itself."
+        )
+    )
     def test_tiger_observation_model_serialization(self):
-        """Test TigerPOMDP observation model serialization.
-
-        Purpose: Validates that TigerPOMDP observation models can be pickled and unpickled
-
-        Given: TigerPOMDP environment, next state, and action
-        When: Observation model is pickled and unpickled
-        Then: Unpickled model can sample valid observations
-
-        Test type: unit
-        """
-        env = TigerPOMDP(discount_factor=0.95)
-        state = env.initial_state_dist().sample()[0]
-        actions = env.get_actions()
-        action = actions[0]
-
-        # Sample next state
-        next_state = env.sample_next_state(state=state, action=action)
-        assert isinstance(next_state, str)
-
-        # Create observation model
-        obs_model = env.observation_model(next_state, action)
-        pickled = pickle.dumps(obs_model)
-        unpickled_model = pickle.loads(pickled)
-
-        # Test that unpickled model can sample observations
-        obs = unpickled_model.sample()[0]
-        assert obs is not None
+        """Test TigerPOMDP observation model serialization (obsolete after PR-D3)."""
 
     @pytest.mark.skip(
         reason=(
