@@ -1296,3 +1296,106 @@ class TestSampleNextStepEquivalence:
                     f"reward mismatch for action={action}, seed={seed}: "
                     f"{opt_reward} != {base_reward}"
                 )
+
+
+class TestSampleHotPathOverridesEquivalence:
+    """Pinned-seed equivalence between hot-path overrides and the wrapper path."""
+
+    def test_sample_next_state_matches_state_transition_model_wrapper(self):
+        """Pinned-seed equivalence: sample_next_state vs state_transition_model().sample()[0].
+
+        Purpose: Validates that the inlined sample_next_state override produces
+            byte-identical RNG draws to the wrapper-based state_transition_model
+            path. Both consume np.random.random() (then optionally
+            np.random.choice() on the error-action list) in the same order, so
+            under a pinned seed the two paths must yield equal next-states.
+
+        Given: A PushPOMDP with non-zero transition_error_prob (so the
+            np.random.choice branch is exercised), a list of (state, action)
+            pairs covering all four actions in mixed obstacle / push regimes,
+            and identical numpy / random seeds before each path.
+        When: env.state_transition_model(s, a).sample()[0] and
+            env.sample_next_state(s, a) are each called under the same seeded
+            RNG.
+        Then: For every (state, action) pair, both paths yield np.array_equal
+            results.
+
+        Test type: unit
+        """
+        env = PushPOMDP(
+            discount_factor=0.95,
+            grid_size=10,
+            push_threshold=1.0,
+            friction_coefficient=0.3,
+            observation_noise=0.1,
+            obstacles=[(3.0, 3.0), (7.0, 7.0)],
+            obstacle_radius=0.5,
+            transition_error_prob=0.2,
+        )
+        actions = env.get_actions()
+        test_pairs = [
+            (np.array([1.0, 1.0, 5.0, 5.0, 9.0, 9.0]), actions[0]),
+            (np.array([2.0, 3.0, 2.5, 3.0, 9.0, 9.0]), actions[1]),  # close to obj
+            (np.array([3.5, 3.0, 6.0, 6.0, 9.0, 9.0]), actions[2]),  # near obstacle
+            (np.array([0.0, 0.0, 1.0, 0.5, 9.0, 9.0]), actions[3]),  # corner
+            (np.array([8.0, 8.0, 7.5, 7.5, 9.0, 9.0]), actions[0]),  # near obstacle (7,7)
+            (np.array([5.0, 5.0, 5.5, 5.0, 9.0, 9.0]), actions[2]),  # close to obj
+        ]
+        for state, action in test_pairs:
+            for seed in (12345, 67890, 314159):
+                np.random.seed(seed)
+                random.seed(seed)
+                wrapper_next = env.state_transition_model(state, action).sample()[0]
+                np.random.seed(seed)
+                random.seed(seed)
+                direct_next = env.sample_next_state(state, action)
+                assert np.array_equal(wrapper_next, direct_next), (
+                    f"Mismatch for state={state}, action={action}, seed={seed}: "
+                    f"wrapper={wrapper_next}, direct={direct_next}"
+                )
+
+    def test_sample_observation_matches_observation_model_wrapper(self):
+        """Pinned-seed equivalence: sample_observation vs observation_model().sample()[0].
+
+        Purpose: Validates that the inlined sample_observation override produces
+            byte-identical RNG draws to the wrapper-based observation_model
+            path. Both consume two np.random.normal(0, sigma) draws in the same
+            order, so under a pinned seed the two paths must yield equal
+            observations (including the grid-clamp boundary cases).
+
+        Given: A PushPOMDP env, a list of (next_state, action) pairs spanning
+            mid-grid and edge / corner positions (so both unclamped and clamped
+            branches of max(0, min(.., gmax)) are exercised), and identical
+            numpy / random seeds before each path.
+        When: env.observation_model(ns, a).sample()[0] and
+            env.sample_observation(ns, a) are each called under the same seeded
+            RNG.
+        Then: For every (next_state, action) pair, both paths yield
+            np.array_equal observations.
+
+        Test type: unit
+        """
+        env = PushPOMDP(
+            discount_factor=0.95,
+            grid_size=10,
+            observation_noise=0.5,
+        )
+        test_pairs = [
+            (np.array([5.0, 5.0, 4.5, 5.5, 9.0, 9.0]), "up"),
+            (np.array([2.0, 7.0, 1.5, 6.5, 9.0, 9.0]), "down"),
+            (np.array([0.0, 0.0, 0.1, 0.0, 9.0, 9.0]), "right"),  # corner clamp
+            (np.array([9.0, 9.0, 8.9, 9.0, 9.0, 9.0]), "left"),  # opposite corner
+            (np.array([3.0, 3.0, 3.0, 3.0, 9.0, 9.0]), "up"),
+        ]
+        for next_state, action in test_pairs:
+            for seed in (54321, 24680, 271828):
+                np.random.seed(seed)
+                random.seed(seed)
+                wrapper_obs = env.observation_model(next_state, action).sample()[0]
+                np.random.seed(seed)
+                random.seed(seed)
+                direct_obs = env.sample_observation(next_state, action)
+                assert np.array_equal(wrapper_obs, direct_obs), (
+                    f"Mismatch for next_state={next_state}, action={action}, seed={seed}: "
+                    f"wrapper={wrapper_obs}, direct={direct_obs}"
+                )

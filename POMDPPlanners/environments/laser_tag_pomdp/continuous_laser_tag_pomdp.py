@@ -365,6 +365,39 @@ class ContinuousLaserTagPOMDP(Environment):
             opponent_radius=self.opponent_radius,
         )
 
+    # ── Hot-path sampling overrides ─────────────────────────────────
+    # The default base-class implementations build a Python wrapper subclass
+    # per call which only stores a few attributes; the actual RNG draw lives
+    # in the C++ _native kernel. These overrides construct the native kernel
+    # directly to skip the Python wrapper allocation, producing byte-identical
+    # RNG draws (same module-level RNG, same call sequence).
+
+    def sample_next_state(self, state: np.ndarray, action: np.ndarray) -> np.ndarray:
+        kernel = _native.ContinuousLaserTagTransitionCpp(
+            state=state,
+            action=np.asarray(action, dtype=float),
+            robot_covariance=self._robot_transition_dist.covariance,
+            opponent_covariance=self._opponent_transition_dist.covariance,
+            pursuit_speed=self.pursuit_speed,
+            walls=self._walls,
+            grid_size=self._grid_size,
+            robot_radius=self.robot_radius,
+            opponent_radius=self.opponent_radius,
+            tag_radius=self.tag_radius,
+        )
+        return kernel.sample(1)[0]
+
+    def sample_observation(self, next_state: np.ndarray, action: np.ndarray) -> Any:
+        kernel = _native.ContinuousLaserTagObservationCpp(
+            next_state=next_state,
+            action=np.asarray(action, dtype=float),
+            measurement_noise=self.measurement_noise,
+            walls=self._walls,
+            grid_size=self._grid_size,
+            opponent_radius=self.opponent_radius,
+        )
+        return kernel.sample(1)[0]
+
     def reward(self, state: np.ndarray, action: np.ndarray) -> float:
         if bool(state[4]):
             return 0.0
@@ -682,6 +715,12 @@ class ContinuousLaserTagPOMDPDiscreteActions(ContinuousLaserTagPOMDP, DiscreteAc
 
     def observation_model(self, next_state: np.ndarray, action: Any) -> ObservationModel:
         return super().observation_model(next_state, self.action_to_vector[action])
+
+    def sample_next_state(self, state: np.ndarray, action: Any) -> np.ndarray:
+        return super().sample_next_state(state, self.action_to_vector[action])
+
+    def sample_observation(self, next_state: np.ndarray, action: Any) -> Any:
+        return super().sample_observation(next_state, self.action_to_vector[action])
 
     def reward(self, state: np.ndarray, action: Any) -> float:
         return super().reward(state, self.action_to_vector[action])

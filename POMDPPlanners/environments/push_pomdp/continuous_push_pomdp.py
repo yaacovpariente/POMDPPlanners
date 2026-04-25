@@ -362,6 +362,37 @@ class ContinuousPushPOMDP(Environment):
             grid_size=self.grid_size,
         )
 
+    # ── Hot-path sampling overrides ─────────────────────────────────
+    # The default base-class implementations build a Python-wrapper
+    # subclass per call (np.asarray(...).ravel() x2, side-attribute
+    # storage). The actual RNG draw lives entirely inside the C++
+    # _native.ContinuousPush{Transition,Observation}Cpp.sample() method.
+    # These overrides skip the Python subclass, construct the native
+    # kernel directly, and produce byte-identical RNG draws.
+
+    def sample_next_state(self, state: np.ndarray, action: np.ndarray) -> np.ndarray:
+        kernel = _native.ContinuousPushTransitionCpp(
+            state=state,
+            action=action,
+            grid_size=float(self.grid_size),
+            push_threshold=float(self.push_threshold),
+            friction_coefficient=float(self.friction_coefficient),
+            max_push=float(self.max_push),
+            robot_radius=float(self.robot_radius),
+            obstacles=self.obstacles,
+            covariance=self._state_transition_dist.covariance,
+        )
+        return kernel.sample()[0]
+
+    def sample_observation(self, next_state: np.ndarray, action: np.ndarray) -> Any:
+        kernel = _native.ContinuousPushObservationCpp(
+            next_state=next_state,
+            action=action,
+            observation_noise=float(self.observation_noise),
+            grid_size=float(self.grid_size),
+        )
+        return kernel.sample()[0]
+
     def reward(self, state: np.ndarray, action: np.ndarray) -> float:
         action = np.asarray(action, dtype=float)
         next_state = self._sample_transition(state, action)
@@ -629,11 +660,13 @@ class ContinuousPushPOMDPDiscreteActions(ContinuousPushPOMDP, DiscreteActionsEnv
         )
 
         self.actions = ["up", "down", "right", "left"]
+        # Cache action vectors as contiguous float64 ndarrays so the hot
+        # path can skip np.asarray(...).ravel() conversions.
         self.action_to_vector = {
-            "up": np.array([0.0, 1.0]),
-            "down": np.array([0.0, -1.0]),
-            "right": np.array([1.0, 0.0]),
-            "left": np.array([-1.0, 0.0]),
+            "up": np.ascontiguousarray([0.0, 1.0], dtype=np.float64),
+            "down": np.ascontiguousarray([0.0, -1.0], dtype=np.float64),
+            "right": np.ascontiguousarray([1.0, 0.0], dtype=np.float64),
+            "left": np.ascontiguousarray([-1.0, 0.0], dtype=np.float64),
         }
 
     def get_actions(self) -> List[str]:
@@ -654,3 +687,9 @@ class ContinuousPushPOMDPDiscreteActions(ContinuousPushPOMDP, DiscreteActionsEnv
         if isinstance(action, str):
             action = self.action_to_vector[action]
         return super().reward_batch(np.asarray(states), action)
+
+    def sample_next_state(self, state: np.ndarray, action: Any) -> np.ndarray:
+        return super().sample_next_state(state, self.action_to_vector[action])
+
+    def sample_observation(self, next_state: np.ndarray, action: Any) -> Any:
+        return super().sample_observation(next_state, self.action_to_vector[action])

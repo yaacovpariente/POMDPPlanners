@@ -281,3 +281,84 @@ class TestAggressiveDistribution:
 
         # Probabilities should normalize over their support.
         assert math.isclose(float(probs.sum()), 1.0, abs_tol=1e-9)
+
+
+class TestSampleNextStateOverrideEquivalence:
+    """Hot-path overrides skip the Python wrapper but match it bit-exactly.
+
+    The new ``sample_next_state`` / ``sample_observation`` env-level
+    overrides construct the native C++ kernel directly, bypassing the
+    per-call ``PacManStateTransitionModel`` / ``PacManObservationModel``
+    wrapper allocation. Under a shared C++ RNG seed and the same
+    ``ghost_patrol_directions`` buffer state, both paths must produce
+    identical outputs.
+    """
+
+    def test_sample_next_state_matches_state_transition_model(self) -> None:
+        """Override sample_next_state matches state_transition_model.sample().
+
+        Purpose: Validates that ``PacManPOMDP.sample_next_state`` produces
+        the exact same next state as the legacy
+        ``state_transition_model(state, action).sample()[0]`` path under
+        a fixed C++ RNG seed and matching patrol-direction buffer state.
+
+        Given: A small env, a non-terminal state at the initial position,
+            and a sweep of all four discrete actions.
+        When: Both paths are invoked with ``_native.set_seed`` reset to
+            the same value and the env's ``ghost_patrol_directions``
+            buffer reset to zeros before each call.
+        Then: ``np.array_equal`` holds elementwise on the returned arrays.
+
+        Test type: integration
+        """
+        env = _build_env()
+        state = env.initial_state_dist().sample()[0]
+
+        for action in range(4):
+            env.ghost_patrol_directions[:] = 0
+            _native.set_seed(2024 + action)
+            via_wrapper = env.state_transition_model(state, action).sample()[0]
+
+            env.ghost_patrol_directions[:] = 0
+            _native.set_seed(2024 + action)
+            via_override = env.sample_next_state(state=state, action=action)
+
+            np.testing.assert_array_equal(via_wrapper, via_override)
+
+    def test_sample_observation_matches_observation_model(self) -> None:
+        """Override sample_observation matches observation_model.sample().
+
+        Purpose: Validates that ``PacManPOMDP.sample_observation``
+        (which constructs the native observation kernel directly) produces
+        the exact same tuple-of-(row, col) observation as the legacy
+        ``observation_model(...).sample()[0]`` path under a fixed C++ RNG
+        seed.
+
+        Given: A small env and a small set of representative next states
+            covering different ghost configurations.
+        When: Both paths are invoked with ``_native.set_seed`` reset to
+            the same value before each call.
+        Then: The two observations are equal.
+
+        Test type: integration
+        """
+        env = _build_env()
+        # Generate a few next-states by stepping the env from the initial
+        # state with different actions; this gives realistic non-terminal
+        # ghost positions to exercise the noise sampler over.
+        initial_state = env.initial_state_dist().sample()[0]
+        next_states = [initial_state]
+        env.ghost_patrol_directions[:] = 0
+        _native.set_seed(0)
+        for action in range(4):
+            next_states.append(env.state_transition_model(initial_state, action).sample()[0])
+
+        for i, next_state in enumerate(next_states):
+            for action in (0, 1, 2, 3):
+                _native.set_seed(7777 + i * 11 + action)
+                via_wrapper = env.observation_model(next_state, action).sample()[0]
+
+                _native.set_seed(7777 + i * 11 + action)
+                via_override = env.sample_observation(next_state=next_state, action=action)
+
+                assert via_wrapper == via_override

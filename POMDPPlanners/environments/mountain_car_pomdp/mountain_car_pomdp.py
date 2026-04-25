@@ -314,6 +314,36 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
             next_state=next_state, action=action, obs_dist=self._obs_dist
         )
 
+    # ── Hot-path sampling overrides ─────────────────────────────────
+    # The Python wrappers above only forward arguments to the native
+    # C++ constructor and keep a reference to the dist object. Skip
+    # the wrapper subclass and build the native kernel directly so
+    # ``sample()`` produces a byte-identical RNG draw to the legacy
+    # path.
+
+    def sample_next_state(self, state: Tuple[float, float], action: int) -> NDArray[np.float64]:
+        kernel = _native.MountainCarTransitionCpp(
+            state=state,
+            action=action,
+            power=self.power,
+            gravity=self.gravity,
+            max_speed=self.max_speed,
+            min_position=self.min_position,
+            max_position=self.max_position,
+            covariance=self._state_transition_dist.covariance,
+        )
+        return kernel.sample()[0]
+
+    def sample_observation(
+        self, next_state: Tuple[float, float], action: int
+    ) -> NDArray[np.float64]:
+        kernel = _native.MountainCarObservationCpp(
+            next_state=next_state,
+            action=action,
+            covariance=self._obs_dist.covariance,
+        )
+        return kernel.sample()[0]
+
     def reward(self, state: Tuple[float, float], action: int) -> float:
         position, _ = state
 

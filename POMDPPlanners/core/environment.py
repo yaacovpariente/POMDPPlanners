@@ -566,6 +566,40 @@ class Environment(ABC):
             This is particularly important for discrete observation spaces.
         """
 
+    def sample_next_state(self, state: Any, action: Any) -> Any:
+        """Sample a single next state for ``(state, action)``.
+
+        Hot-path entry point used by MCTS planners. The default delegates to
+        ``state_transition_model(state, action).sample()[0]``; subclasses may
+        override to skip the per-call wrapper allocation while preserving the
+        same RNG draw sequence.
+
+        Args:
+            state: Current state.
+            action: Action to execute.
+
+        Returns:
+            A sampled next state.
+        """
+        return self.state_transition_model(state=state, action=action).sample()[0]
+
+    def sample_observation(self, next_state: Any, action: Any) -> Any:
+        """Sample a single observation for ``(next_state, action)``.
+
+        Hot-path entry point used by MCTS planners. The default delegates to
+        ``observation_model(next_state, action).sample()[0]``; subclasses may
+        override to skip the per-call wrapper allocation while preserving the
+        same RNG draw sequence.
+
+        Args:
+            next_state: State after the action was executed.
+            action: Action that was executed.
+
+        Returns:
+            A sampled observation.
+        """
+        return self.observation_model(next_state=next_state, action=action).sample()[0]
+
     def sample_next_step(self, state: Any, action: Any) -> Tuple[Any, Any, float]:
         """Sample a complete state transition step.
 
@@ -582,8 +616,8 @@ class Environment(ABC):
                 - next_observation: Sampled observation
                 - reward: Immediate reward
         """
-        next_state = self.state_transition_model(state=state, action=action).sample()[0]
-        next_observation = self.observation_model(next_state=next_state, action=action).sample()[0]
+        next_state = self.sample_next_state(state=state, action=action)
+        next_observation = self.sample_observation(next_state=next_state, action=action)
         reward = self.reward(state=state, action=action)
 
         return next_state, next_observation, reward

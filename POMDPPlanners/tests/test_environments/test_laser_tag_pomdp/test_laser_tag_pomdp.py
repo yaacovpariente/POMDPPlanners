@@ -2049,6 +2049,117 @@ def test_metrics_confidence_intervals():
     verify_metrics_within_confidence_intervals(metrics)
 
 
+class TestLaserTagDirectSampleApiEquivalence:
+    """Equivalence tests for sample_next_state/sample_observation overrides.
+
+    Verifies that the env-level direct-sample overrides produce byte-identical
+    output to the wrapper path when seeded identically.
+    """
+
+    @pytest.mark.parametrize("action", [0, 1, 2, 3, 4])
+    def test_sample_next_state_matches_wrapper_with_pinned_rng(self, action: int) -> None:
+        """Direct sample_next_state matches wrapper.sample()[0] under pinned RNG.
+
+        Purpose: Validates that LaserTagPOMDP.sample_next_state inlines the
+            wrapper's RNG sequence exactly so seeded behavior is identical.
+
+        Given: A LaserTagPOMDP and a fixed (state, action). np.random and random
+            are seeded identically before each draw.
+        When: We draw via env.state_transition_model(s, a).sample()[0] and via
+            env.sample_next_state(s, a).
+        Then: The two next-state arrays are equal.
+
+        Test type: unit
+        """
+        env = LaserTagPOMDP(discount_factor=0.95, transition_error_prob=0.2)
+        state = np.array([3.0, 4.0, 5.0, 2.0, 0.0])
+
+        np.random.seed(123)
+        random.seed(123)
+        ns_wrap = env.state_transition_model(state, action).sample(n_samples=1)[0]
+
+        np.random.seed(123)
+        random.seed(123)
+        ns_direct = env.sample_next_state(state, action)
+
+        assert np.array_equal(ns_wrap, ns_direct)
+
+    def test_sample_next_state_terminal_tag_matches_wrapper(self) -> None:
+        """Terminal-tag transition matches wrapper output.
+
+        Purpose: Validates the tag-on-same-cell terminal branch of
+            sample_next_state matches the wrapper.
+
+        Given: A LaserTagPOMDP and a state where robot and opponent share a
+            cell, with action=Tag(4).
+        When: We draw via wrapper and via the override.
+        Then: Both produce the same terminal next state.
+
+        Test type: unit
+        """
+        env = LaserTagPOMDP(discount_factor=0.95)
+        state = np.array([3.0, 3.0, 3.0, 3.0, 0.0])
+
+        np.random.seed(0)
+        random.seed(0)
+        ns_wrap = env.state_transition_model(state, 4).sample(n_samples=1)[0]
+
+        np.random.seed(0)
+        random.seed(0)
+        ns_direct = env.sample_next_state(state, 4)
+
+        assert np.array_equal(ns_wrap, ns_direct)
+
+    @pytest.mark.parametrize("action", [0, 4])
+    def test_sample_observation_matches_wrapper_with_pinned_rng(self, action: int) -> None:
+        """Direct sample_observation matches wrapper.sample()[0] under pinned RNG.
+
+        Purpose: Validates that LaserTagPOMDP.sample_observation inlines the
+            wrapper's 8 np.random.normal draws in the same order.
+
+        Given: A LaserTagPOMDP and a fixed (next_state, action). RNG is seeded
+            identically before each draw.
+        When: We draw via env.observation_model(...).sample()[0] and via
+            env.sample_observation(...).
+        Then: The two observation tuples are equal.
+
+        Test type: unit
+        """
+        env = LaserTagPOMDP(discount_factor=0.95)
+        next_state = np.array([3.0, 4.0, 5.0, 2.0, 0.0])
+
+        np.random.seed(7)
+        random.seed(7)
+        o_wrap = env.observation_model(next_state, action).sample(n_samples=1)[0]
+
+        np.random.seed(7)
+        random.seed(7)
+        o_direct = env.sample_observation(next_state, action)
+
+        assert tuple(o_wrap) == tuple(o_direct)
+
+    def test_sample_observation_terminal_state_matches_wrapper(self) -> None:
+        """Terminal-state observation matches wrapper output.
+
+        Purpose: Validates terminal sentinel observation in sample_observation.
+
+        Given: A LaserTagPOMDP and a terminal next_state.
+        When: We draw via wrapper and via the override.
+        Then: Both produce the same terminal observation tuple.
+
+        Test type: unit
+        """
+        env = LaserTagPOMDP(discount_factor=0.95)
+        terminal_state = np.array([3.0, 3.0, 3.0, 3.0, 1.0])
+
+        np.random.seed(0)
+        o_wrap = env.observation_model(terminal_state, 4).sample(n_samples=1)[0]
+        np.random.seed(0)
+        o_direct = env.sample_observation(terminal_state, 4)
+
+        assert tuple(o_wrap) == tuple(o_direct)
+
+
 if __name__ == "__main__":
     # Run tests if script is executed directly
     pytest.main([__file__, "-v"])

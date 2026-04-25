@@ -1577,3 +1577,142 @@ def test_reward_batch_matches_scalar(base_light_dark_environment):
     assert single.shape == (1,)
     np.random.seed(42)
     np.testing.assert_allclose(single[0], env.reward(states[0], action))
+
+
+def test_sample_next_state_matches_state_transition_model_wrapper(base_light_dark_environment):
+    """Pinned-seed equivalence: sample_next_state vs state_transition_model().sample()[0].
+
+    Purpose: Validates that the inlined sample_next_state override produces
+        byte-identical RNG draws to the wrapper-based state_transition_model
+        path (which goes through DiscreteDistribution.sample() and
+        np.searchsorted on np.cumsum(probs)).
+
+    Given: A DiscreteLightDarkPOMDP environment, a fixed list of (state, action)
+        pairs spanning all four actions, and identical numpy / random seeds.
+    When: A next-state is drawn first via env.state_transition_model(s, a).sample()[0]
+        and then via env.sample_next_state(s, a) under the same re-seeded RNG.
+    Then: For every (state, action) pair, both paths yield np.array_equal results.
+
+    Test type: unit
+    """
+    env = base_light_dark_environment
+    actions = env.get_actions()
+    test_pairs = [
+        (np.array([0, 5]), actions[0]),
+        (np.array([3, 3]), actions[1]),
+        (np.array([7, 2]), actions[2]),
+        (np.array([10, 10]), actions[3]),
+        (np.array([5, 5]), actions[0]),
+        (np.array([1, 8]), actions[2]),
+    ]
+    for state, action in test_pairs:
+        np.random.seed(12345)
+        random.seed(12345)
+        wrapper_next = env.state_transition_model(state, action).sample()[0]
+        np.random.seed(12345)
+        random.seed(12345)
+        direct_next = env.sample_next_state(state, action)
+        assert np.array_equal(wrapper_next, direct_next), (
+            f"Mismatch for state={state}, action={action}: "
+            f"wrapper={wrapper_next}, direct={direct_next}"
+        )
+
+
+def test_sample_observation_matches_observation_model_wrapper_normal():
+    """Pinned-seed equivalence: sample_observation vs observation_model().sample()[0].
+
+    Purpose: Validates that the inlined sample_observation override (NORMAL
+        observation model type) produces byte-identical RNG draws to the
+        wrapper-based observation_model path.
+
+    Given: A DiscreteLightDarkPOMDP env using ObservationModelType.NORMAL,
+        a fixed list of (next_state, action) pairs that include states both
+        near and far from beacons, and identical numpy / random seeds.
+    When: An observation is drawn first via
+        env.observation_model(ns, a).sample()[0] and then via
+        env.sample_observation(ns, a) under the same re-seeded RNG.
+    Then: For every (next_state, action) pair, both paths yield equal results
+        (np.array_equal for ndarray observations, equality for "None" strings).
+
+    Test type: unit
+    """
+    env = DiscreteLightDarkPOMDP(
+        discount_factor=0.95,
+        transition_error_prob=0.05,
+        observation_error_prob=0.05,
+        beacons=[(0, 0), (5, 5), (10, 10)],
+        beacon_radius=1.5,
+        grid_size=11,
+        observation_model_type=ObservationModelType.NORMAL,
+    )
+    test_pairs = [
+        (np.array([0, 0]), "up"),  # near beacon
+        (np.array([5, 5]), "down"),  # near beacon
+        (np.array([3, 3]), "right"),  # far from beacon
+        (np.array([7, 1]), "left"),  # far from beacon
+        (np.array([10, 10]), "up"),  # near beacon
+        (np.array([8, 4]), "down"),  # far from beacon
+    ]
+    for next_state, action in test_pairs:
+        np.random.seed(54321)
+        random.seed(54321)
+        wrapper_obs = env.observation_model(next_state, action).sample()[0]
+        np.random.seed(54321)
+        random.seed(54321)
+        direct_obs = env.sample_observation(next_state, action)
+        if isinstance(wrapper_obs, np.ndarray):
+            assert isinstance(direct_obs, np.ndarray)
+            assert np.array_equal(wrapper_obs, direct_obs), (
+                f"Mismatch for next_state={next_state}, action={action}: "
+                f"wrapper={wrapper_obs}, direct={direct_obs}"
+            )
+        else:
+            assert wrapper_obs == direct_obs
+
+
+def test_sample_observation_falls_back_for_non_normal_model_types():
+    """Non-NORMAL observation model types delegate to base-class default.
+
+    Purpose: Validates that when observation_model_type is NO_OBS_IN_DARK or
+        DISTANCE_BASED, sample_observation falls back to
+        observation_model(...).sample()[0] (the inline override only handles
+        the NORMAL path).
+
+    Given: DiscreteLightDarkPOMDP envs configured with NO_OBS_IN_DARK and
+        DISTANCE_BASED observation model types.
+    When: sample_observation is called under a pinned seed, and the wrapper
+        path is also called under the same pinned seed.
+    Then: The two paths produce equal observations for several (next_state,
+        action) pairs.
+
+    Test type: unit
+    """
+    for obs_type in (
+        ObservationModelType.NO_OBS_IN_DARK,
+        ObservationModelType.DISTANCE_BASED,
+    ):
+        env = DiscreteLightDarkPOMDP(
+            discount_factor=0.95,
+            transition_error_prob=0.05,
+            observation_error_prob=0.05,
+            beacons=[(0, 0), (5, 5), (10, 10)],
+            beacon_radius=1.5,
+            grid_size=11,
+            observation_model_type=obs_type,
+        )
+        for next_state, action in [
+            (np.array([0, 0]), "up"),
+            (np.array([3, 3]), "right"),
+            (np.array([5, 5]), "down"),
+        ]:
+            np.random.seed(7)
+            random.seed(7)
+            wrapper_obs = env.observation_model(next_state, action).sample()[0]
+            np.random.seed(7)
+            random.seed(7)
+            direct_obs = env.sample_observation(next_state, action)
+            if isinstance(wrapper_obs, np.ndarray):
+                assert isinstance(direct_obs, np.ndarray)
+                assert np.array_equal(wrapper_obs, direct_obs)
+            else:
+                assert wrapper_obs == direct_obs

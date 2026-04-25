@@ -297,6 +297,11 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
         # Validate parameters
         self._validate_parameters()
 
+        # Cached int32 rock positions array; identical to what the per-call
+        # wrappers build via ``np.asarray(...)``. Reused on the hot-path
+        # native-kernel sample overrides to skip the per-call allocation.
+        self._rock_positions_int32 = np.asarray(self.rock_positions, dtype=np.int32)
+
         # Define actions: 0=sample, 1=north, 2=east, 3=south, 4=west, 5+=check_rock_i
         self.action_names = ["sample", "north", "east", "south", "west"]
         self.action_names.extend([f"check_rock_{i}" for i in range(len(self.rock_positions))])
@@ -398,12 +403,44 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
 
         return total_reward
 
+    # ── Hot-path sampling overrides ─────────────────────────────────
+    # The default base-class implementations build a Python wrapper
+    # (``RockSampleStateTransitionModel`` / ``RockSampleObservationModel``)
+    # per call, which forwards to the native C++ kernel. The overrides
+    # below construct the native kernel directly, skipping the wrapper
+    # allocation while preserving the identical kernel-construction
+    # sequence and arguments.
+
+    def sample_next_state(self, state: RockSampleState, action: int) -> RockSampleState:
+        kernel = _native.RockSampleTransitionCpp(
+            state=np.asarray(state, dtype=float),
+            action=int(action),
+            map_rows=self.map_size[0],
+            map_cols=self.map_size[1],
+            num_rocks=len(self.rock_positions),
+            rock_positions=self._rock_positions_int32,
+            sensor_efficiency=self.sensor_efficiency,
+        )
+        return kernel.sample()[0]
+
+    def sample_observation(self, next_state: RockSampleState, action: int) -> str:
+        kernel = _native.RockSampleObservationCpp(
+            next_state=np.asarray(next_state, dtype=float),
+            action=int(action),
+            map_rows=self.map_size[0],
+            map_cols=self.map_size[1],
+            num_rocks=len(self.rock_positions),
+            rock_positions=self._rock_positions_int32,
+            sensor_efficiency=self.sensor_efficiency,
+        )
+        return _OBS_CODE_TO_STR[kernel.sample()[0]]
+
     def sample_next_step(
         self, state: RockSampleState, action: int
     ) -> Tuple[RockSampleState, str, float]:
         """Override to avoid reward() recomputing next state."""
-        next_state = self.state_transition_model(state, action).sample()[0]
-        observation = self.observation_model(next_state, action).sample()[0]
+        next_state = self.sample_next_state(state=state, action=action)
+        observation = self.sample_observation(next_state=next_state, action=action)
         reward = self._reward_from_next_state(state, action, next_state)
         return next_state, observation, reward
 

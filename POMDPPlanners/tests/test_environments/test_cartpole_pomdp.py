@@ -848,3 +848,89 @@ def test_reward_batch_matches_scalar_reward():
     single = env.reward_batch(states[:1], action)
     assert single.shape == (1,)
     assert single[0] == env.reward(states[0], action)
+
+
+def test_sample_next_state_rng_pinned_equivalence(base_cartpole_environment):
+    """Test that sample_next_state matches state_transition_model().sample()[0] under fixed RNG.
+
+    Purpose: Validates that the sample_next_state override produces byte-identical results
+        to the wrapper-based path when both use the same native RNG seed.
+
+    Given: A CartPolePOMDP environment and (state, action) pairs covering both actions and
+        a range of state vectors near and away from the equilibrium, with the native module
+        RNG and Python np.random/random seeded identically before each pair of draws
+    When: A sample is drawn through state_transition_model(s, a).sample()[0] and again
+        through env.sample_next_state(s, a) after re-seeding
+    Then: The two draws produce arrays equal element-wise across all combinations
+
+    Test type: unit
+    """
+    from POMDPPlanners.environments.cartpole_pomdp import (  # pylint: disable=import-outside-toplevel
+        _native,
+    )
+
+    env = base_cartpole_environment
+    cases = [
+        (np.array([0.0, 0.0, 0.0, 0.0]), 0),
+        (np.array([0.0, 0.0, 0.0, 0.0]), 1),
+        (np.array([0.1, 0.05, 0.02, -0.1]), 1),
+        (np.array([-0.1, -0.05, -0.02, 0.1]), 0),
+        (np.array([0.5, 0.2, 0.05, 0.0]), 1),
+    ]
+    for state, action in cases:
+        _native.set_seed(2024)
+        np.random.seed(2024)
+        random.seed(2024)
+        wrapper_sample = env.state_transition_model(state=state, action=action).sample()[0]
+        _native.set_seed(2024)
+        np.random.seed(2024)
+        random.seed(2024)
+        direct_sample = env.sample_next_state(state=state, action=action)
+        np.testing.assert_array_equal(
+            wrapper_sample,
+            direct_sample,
+            err_msg=f"sample_next_state mismatch for ({state.tolist()}, {action})",
+        )
+
+
+def test_sample_observation_rng_pinned_equivalence(base_cartpole_environment):
+    """Test that sample_observation matches observation_model().sample()[0] under fixed RNG.
+
+    Purpose: Validates that the sample_observation override produces byte-identical results
+        to the wrapper-based path when both use the same native RNG seed.
+
+    Given: A CartPolePOMDP environment and (next_state, action) pairs covering both actions
+        across a range of state vectors, with the native module RNG and Python
+        np.random/random seeded identically before each pair of draws
+    When: An observation is drawn through observation_model(ns, a).sample()[0] and again
+        through env.sample_observation(ns, a) after re-seeding
+    Then: The two draws produce arrays equal element-wise across all combinations
+
+    Test type: unit
+    """
+    from POMDPPlanners.environments.cartpole_pomdp import (  # pylint: disable=import-outside-toplevel
+        _native,
+    )
+
+    env = base_cartpole_environment
+    cases = [
+        (np.array([0.0, 0.0, 0.0, 0.0]), 0),
+        (np.array([0.0, 0.0, 0.0, 0.0]), 1),
+        (np.array([0.1, 0.05, 0.02, -0.1]), 1),
+        (np.array([-0.1, -0.05, -0.02, 0.1]), 0),
+        (np.array([0.5, 0.2, 0.05, 0.0]), 1),
+    ]
+    for next_state, action in cases:
+        _native.set_seed(99)
+        np.random.seed(99)
+        random.seed(99)
+        wrapper_obs = env.observation_model(next_state=next_state, action=action).sample()[0]
+        _native.set_seed(99)
+        np.random.seed(99)
+        random.seed(99)
+        direct_obs = env.sample_observation(next_state=next_state, action=action)
+        np.testing.assert_array_equal(
+            wrapper_obs,
+            direct_obs,
+            err_msg=f"sample_observation mismatch for ({next_state.tolist()}, {action})",
+        )

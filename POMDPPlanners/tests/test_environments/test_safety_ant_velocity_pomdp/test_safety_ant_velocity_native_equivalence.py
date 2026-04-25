@@ -461,3 +461,79 @@ def test_observation_probability_accepts_list_and_ndarray_inputs(observation):
     from_array = observation.probability(array_values)
 
     np.testing.assert_array_equal(from_list, from_array)
+
+
+# ---------------------------------------------------------------------------
+# Hot-path sample_next_state / sample_observation overrides
+# (skip Python wrapper, route directly to native kernel)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "state,action",
+    [
+        (np.array([0.0, 0.0, 0.0, 0.0]), 0),  # zero force -> deterministic
+        (np.array([0.5, -0.2, 1.0, 0.5]), 1),
+        (np.array([-0.3, 0.4, 0.7, -0.6]), 2),
+        (np.array([0.1, 0.1, 1.5, 0.8]), 3),
+    ],
+)
+def test_sample_next_state_override_matches_wrapper(env, state, action):
+    """Override sample_next_state matches the per-call wrapper bit-exactly.
+
+    Purpose: Validates that ``SafeAntVelocityPOMDP.sample_next_state``
+    (which constructs the native transition kernel directly, skipping the
+    Python wrapper) produces the exact same next state as the legacy
+    ``state_transition_model(state, action).sample()[0]`` path under a
+    fixed C++ RNG seed.
+
+    Given: The shared SafeAnt env fixture and a parametrized
+        ``(state, action)`` pair covering zero-force and varied-force
+        regimes.
+    When: Both paths are invoked with ``_native.set_seed`` reset to the
+        same value before each call.
+    Then: ``np.array_equal`` holds elementwise on the returned arrays.
+
+    Test type: integration
+    """
+    _native.set_seed(2024)
+    via_wrapper = env.state_transition_model(state=state, action=action).sample()[0]
+
+    _native.set_seed(2024)
+    via_override = env.sample_next_state(state=state, action=action)
+
+    np.testing.assert_array_equal(via_wrapper, via_override)
+
+
+@pytest.mark.parametrize(
+    "next_state,action",
+    [
+        (np.array([0.0, 0.0, 0.0, 0.0]), 0),
+        (np.array([0.5, -0.2, 1.0, 0.5]), 1),
+        (np.array([-0.3, 0.4, 0.7, -0.6]), 2),
+        (np.array([0.1, 0.1, 1.5, 0.8]), 3),
+    ],
+)
+def test_sample_observation_override_matches_wrapper(env, next_state, action):
+    """Override sample_observation matches the per-call wrapper bit-exactly.
+
+    Purpose: Validates that ``SafeAntVelocityPOMDP.sample_observation``
+    (which constructs the native observation kernel directly, skipping
+    the Python wrapper) produces the exact same observation as the legacy
+    ``observation_model(...).sample()[0]`` path under a fixed C++ RNG seed.
+
+    Given: The shared env fixture plus a parametrized
+        ``(next_state, action)`` pair.
+    When: Both paths are invoked with ``_native.set_seed`` reset to the
+        same value before each call.
+    Then: ``np.array_equal`` holds elementwise.
+
+    Test type: integration
+    """
+    _native.set_seed(7777)
+    via_wrapper = env.observation_model(next_state=next_state, action=action).sample()[0]
+
+    _native.set_seed(7777)
+    via_override = env.sample_observation(next_state=next_state, action=action)
+
+    np.testing.assert_array_equal(via_wrapper, via_override)

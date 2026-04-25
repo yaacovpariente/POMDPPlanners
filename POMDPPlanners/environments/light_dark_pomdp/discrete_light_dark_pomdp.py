@@ -182,6 +182,9 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
         # Precompute transition cumulative sums per action for bisect sampling
         self._transition_probs = {}
         self._transition_cum: dict[str, list[float]] = {}
+        # Wrapper-equivalent cumulative-probability arrays for np.searchsorted
+        # (matches DiscreteDistribution(values, probs)._cumprobs = np.cumsum(probs))
+        self._transition_cumprobs_np: dict[str, np.ndarray] = {}
         for i, act in enumerate(self.actions):
             probs = np.ones(n_actions) * (self.transition_error_prob / (n_actions - 1))
             probs[i] = 1 - self.transition_error_prob
@@ -193,6 +196,7 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
                 running += float(p)
                 cum.append(running)
             self._transition_cum[act] = cum
+            self._transition_cumprobs_np[act] = np.cumsum(probs)
 
         # Precompute action vectors as a list for index-based access
         self._action_vectors = [self.action_to_vector[a] for a in self.actions]
@@ -213,6 +217,9 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
 
         self._obs_cum_near = list(np.cumsum(obs_probs_near))
         self._obs_cum_far = list(np.cumsum(obs_probs_far))
+        # Wrapper-equivalent np.cumsum arrays for np.searchsorted RNG path
+        self._obs_cumprobs_near_np = np.cumsum(obs_probs_near)
+        self._obs_cumprobs_far_np = np.cumsum(obs_probs_far)
 
         # Precompute reward helpers: obstacle positions as set of tuples for O(1) lookup
         self._obstacle_tuples = {
@@ -276,6 +283,45 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
             reward += self.obstacle_reward
 
         return reward
+
+    def sample_next_state(self, state: np.ndarray, action: Any) -> np.ndarray:
+        # Inlined wrapper-equivalent of
+        # state_transition_model(state, action).sample()[0].
+        # Wrapper builds DiscreteDistribution(values, probs) with
+        # _cumprobs = np.cumsum(probs); .sample() does
+        # idx = int(np.searchsorted(_cumprobs, np.random.rand())) clamped
+        # to len(values)-1. Same RNG draw is preserved here.
+        cumprobs = self._transition_cumprobs_np[action]
+        idx = int(np.searchsorted(cumprobs, np.random.rand()))
+        if idx >= self._n_actions:
+            idx = self._n_actions - 1
+        return state + self._action_vectors[idx]
+
+    def sample_observation(self, next_state: np.ndarray, action: Any) -> Any:
+        # Only the NORMAL observation model is inlined — it is the only
+        # path with no early-exit "None" branch and matches the wrapper's
+        # RNG sequence exactly. Other model types fall back to the base
+        # class default (observation_model(...).sample()[0]).
+        if self.observation_model_type != ObservationModelType.NORMAL:
+            return super().sample_observation(next_state=next_state, action=action)
+
+        # Wrapper-equivalent near-beacon check (BaseDiscreteLightDarkObservationModel._near_beacon):
+        # distances = np.linalg.norm(beacons - next_state[:, None], axis=0)
+        # near_beacon = float(np.min(distances)) < beacon_radius.
+        distances = np.linalg.norm(self.beacons - next_state[:, np.newaxis], axis=0)
+        near_beacon = float(np.min(distances)) < self.beacon_radius
+
+        cumprobs = self._obs_cumprobs_near_np if near_beacon else self._obs_cumprobs_far_np
+        # Wrapper builds values = [next_state + dir for dir in dirs] + [next_state],
+        # then DiscreteDistribution.sample() draws np.random.rand() and
+        # np.searchsorted; same draw replicated here.
+        idx = int(np.searchsorted(cumprobs, np.random.rand()))
+        n_obs = self._n_obs_values
+        if idx >= n_obs:
+            idx = n_obs - 1
+        if idx < self._n_actions:
+            return next_state + self._action_vectors[idx]
+        return next_state
 
     def state_transition_model(self, state: np.ndarray, action: Any) -> StateTransitionModel:
         action_index = self.actions.index(action)

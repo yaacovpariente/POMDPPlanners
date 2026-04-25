@@ -618,6 +618,33 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
         """Get observation model."""
         return PacManObservationModel(self._require_state_array(next_state), action, self)
 
+    # ── Hot-path sampling overrides ─────────────────────────────────
+    # The default base-class implementations build a Python wrapper
+    # subclass per call (``PacManStateTransitionModel`` /
+    # ``PacManObservationModel``) that forwards to the native C++
+    # kernel. The overrides below construct the native kernel directly
+    # and skip the wrapper allocation, while preserving the identical
+    # kernel-construction sequence and arguments.
+
+    def sample_next_state(self, state: np.ndarray, action: int) -> np.ndarray:
+        kernel = _native.PacManTransitionCpp(
+            state=self._require_state_array(state),
+            action=int(action),
+            **self.get_transition_cpp_ctor_kwargs(),
+            patrol_dir_state=self.ghost_patrol_directions,
+        )
+        return kernel.sample()[0]
+
+    def sample_observation(
+        self, next_state: np.ndarray, action: int
+    ) -> Tuple[Tuple[int, int], ...]:
+        kernel = _native.PacManObservationCpp(
+            next_state=self._require_state_array(next_state),
+            action=int(action),
+            **self.get_observation_cpp_ctor_kwargs(),
+        )
+        return self.array_to_observation(kernel.sample()[0])
+
     def reward(self, state: np.ndarray, action: int) -> float:
         """Calculate immediate reward."""
         state = self._require_state_array(state)
