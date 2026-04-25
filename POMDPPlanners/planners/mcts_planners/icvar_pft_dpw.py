@@ -150,13 +150,25 @@ class ICVaR_PFT_DPW(ArenaPathSimulationPolicyCostSetting):
 
     def _sample_next_existing_belief(self, tree: Tree, action_id: int) -> Tuple[int, float]:
         children = tree.children_ids[action_id]
-        child_visit_counts = np.array([tree.visit_count[cid] for cid in children])
+        n_children = len(children)
+        child_visit_counts = np.fromiter(
+            (tree.visit_count[cid] for cid in children),
+            dtype=np.float64,
+            count=n_children,
+        )
         min_visit_idx = int(np.argmin(child_visit_counts))
         if child_visit_counts[min_visit_idx] == 0:
             sampled_id = children[min_visit_idx]
-        else:
-            weights = child_visit_counts / child_visit_counts.sum()
-            sampled_id = children[int(np.random.choice(len(children), p=weights))]
+            immediate_cost = tree.immediate_cost[sampled_id]
+            expected_reward = -immediate_cost if immediate_cost is not None else 0.0
+            return sampled_id, float(expected_reward)
+
+        cdf = np.cumsum(child_visit_counts)
+        total = float(cdf[-1])
+        chosen_idx = int(np.searchsorted(cdf, np.random.random() * total))
+        if chosen_idx >= n_children:
+            chosen_idx = n_children - 1
+        sampled_id = children[chosen_idx]
         immediate_cost = tree.immediate_cost[sampled_id]
         expected_reward = -immediate_cost if immediate_cost is not None else 0.0
         return sampled_id, float(expected_reward)
