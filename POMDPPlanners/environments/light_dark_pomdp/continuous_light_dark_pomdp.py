@@ -497,6 +497,47 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
             next_state=next_state, action=action, observations=observations
         )
 
+    def sample_next_state_batch(self, states: Any, action: np.ndarray) -> np.ndarray:
+        states_array = np.ascontiguousarray(np.asarray(states, dtype=np.float64))
+        if states_array.ndim == 1:
+            states_array = states_array.reshape(1, -1)
+        kernel = _native.ContinuousLightDarkTransitionCpp(
+            state=states_array[0],
+            action=action,
+            covariance=self._state_transition_dist.covariance,
+        )
+        return np.asarray(kernel.batch_sample(states_array), dtype=np.float64)
+
+    def observation_log_probability_per_state(
+        self, next_states: Any, action: np.ndarray, observation: Any
+    ) -> np.ndarray:
+        if self.observation_model_type != ObservationModelType.NORMAL_NOISE:
+            # NoObsInDark and DistanceBased models lack a native batch kernel;
+            # fall back to the base-class per-state Python loop.
+            return super().observation_log_probability_per_state(
+                next_states=next_states, action=action, observation=observation
+            )
+        next_states_array = np.ascontiguousarray(np.asarray(next_states, dtype=np.float64))
+        if next_states_array.ndim == 1:
+            next_states_array = next_states_array.reshape(1, -1)
+        observation_array = np.ascontiguousarray(np.asarray(observation, dtype=np.float64))
+        kernel = _native.ContinuousLightDarkObservationCpp(
+            next_state=next_states_array[0],
+            action=action,
+            covariance_near=self._obs_dist_near_beacon.covariance,
+            covariance_far=self._obs_dist_far_from_beacon.covariance,
+            beacons=self.beacons,
+            beacon_radius=float(self.beacon_radius),
+            grid_size=float(self.grid_size),
+        )
+        return np.asarray(
+            kernel.batch_log_likelihood(
+                next_particles=next_states_array,
+                observation=observation_array,
+            ),
+            dtype=np.float64,
+        )
+
     def reward(self, state: np.ndarray, action: np.ndarray) -> float:
         return self.reward_model.compute_reward(state, action)
 
@@ -773,6 +814,16 @@ class ContinuousLightDarkPOMDPDiscreteActions(ContinuousLightDarkPOMDP, Discrete
     ) -> np.ndarray:
         return super().observation_log_probability(
             next_state, self.action_to_vector[action], observations
+        )
+
+    def sample_next_state_batch(self, states: Any, action: Any) -> np.ndarray:
+        return super().sample_next_state_batch(states, self.action_to_vector[action])
+
+    def observation_log_probability_per_state(
+        self, next_states: Any, action: Any, observation: Any
+    ) -> np.ndarray:
+        return super().observation_log_probability_per_state(
+            next_states, self.action_to_vector[action], observation
         )
 
     def __eq__(self, other):

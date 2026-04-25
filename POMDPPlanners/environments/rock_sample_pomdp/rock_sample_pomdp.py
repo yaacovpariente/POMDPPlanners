@@ -474,6 +474,45 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
         probs = np.asarray(kernel.probability(codes))
         return np.log(probs + 1e-300)
 
+    def sample_next_state_batch(self, states: Any, action: int) -> np.ndarray:
+        states_array = np.ascontiguousarray(np.asarray(states, dtype=np.float64))
+        if states_array.ndim == 1:
+            states_array = states_array.reshape(1, -1)
+        kernel = _native.RockSampleTransitionCpp(
+            state=states_array[0],
+            action=int(action),
+            map_rows=self.map_size[0],
+            map_cols=self.map_size[1],
+            num_rocks=len(self.rock_positions),
+            rock_positions=self._rock_positions_int32,
+            sensor_efficiency=self.sensor_efficiency,
+        )
+        return np.asarray(kernel.batch_sample(states_array), dtype=np.float64)
+
+    def observation_log_probability_per_state(
+        self, next_states: Any, action: int, observation: Any
+    ) -> np.ndarray:
+        next_states_array = np.ascontiguousarray(np.asarray(next_states, dtype=np.float64))
+        if next_states_array.ndim == 1:
+            next_states_array = next_states_array.reshape(1, -1)
+        kernel = _native.RockSampleObservationCpp(
+            next_state=next_states_array[0],
+            action=int(action),
+            map_rows=self.map_size[0],
+            map_cols=self.map_size[1],
+            num_rocks=len(self.rock_positions),
+            rock_positions=self._rock_positions_int32,
+            sensor_efficiency=self.sensor_efficiency,
+        )
+        observation_code = _OBS_STR_TO_CODE.get(observation, -1)
+        return np.asarray(
+            kernel.batch_log_likelihood(
+                next_particles=next_states_array,
+                observation=int(observation_code),
+            ),
+            dtype=np.float64,
+        )
+
     def sample_next_step(
         self, state: RockSampleState, action: int
     ) -> Tuple[RockSampleState, str, float]:

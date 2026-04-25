@@ -594,6 +594,41 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
         probs = np.asarray(kernel.probability(observations))
         return np.log(probs + 1e-300)
 
+    def sample_next_state_batch(self, states: Any, action: int) -> np.ndarray:
+        states_array = np.ascontiguousarray(np.asarray(states, dtype=np.float64))
+        if states_array.ndim == 1:
+            states_array = states_array.reshape(1, -1)
+        kernel = _native.SafeAntVelocityTransitionCpp(
+            state=states_array[0],
+            action=int(action),
+            dt=self.dt,
+            mass=self.mass,
+            damping=self.damping,
+            max_force=self.max_force,
+            force_scales=DEFAULT_FORCE_SCALES,
+        )
+        return np.asarray(kernel.batch_sample(states_array), dtype=np.float64)
+
+    def observation_log_probability_per_state(
+        self, next_states: Any, action: int, observation: Any
+    ) -> np.ndarray:
+        next_states_array = np.ascontiguousarray(np.asarray(next_states, dtype=np.float64))
+        if next_states_array.ndim == 1:
+            next_states_array = next_states_array.reshape(1, -1)
+        observation_array = np.ascontiguousarray(np.asarray(observation, dtype=np.float64))
+        kernel = _native.SafeAntVelocityObservationCpp(
+            next_state=next_states_array[0],
+            action=int(action),
+            covariance=self._observation_covariance,
+        )
+        return np.asarray(
+            kernel.batch_log_likelihood(
+                next_particles=next_states_array,
+                observation=observation_array,
+            ),
+            dtype=np.float64,
+        )
+
     def sample_next_step(
         self, state: np.ndarray, action: int
     ) -> Tuple[np.ndarray, np.ndarray, float]:
