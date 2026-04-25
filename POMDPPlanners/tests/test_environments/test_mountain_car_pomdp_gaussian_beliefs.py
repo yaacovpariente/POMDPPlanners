@@ -408,7 +408,7 @@ class TestEndToEndUpdate:
             initial_covariance=initial_cov,
         )
         action = np.array([1.0])
-        next_state = env.state_transition_model(tuple(belief.mean), 1).sample()[0]
+        next_state = env.sample_next_state(state=tuple(belief.mean), action=1)
         observation = next_state + np.random.randn(2) * 0.01
 
         new_belief = belief.update(action=action, observation=observation, pomdp=None)
@@ -444,7 +444,7 @@ class TestEndToEndUpdate:
             initial_covariance=large_cov,
         )
         action = np.array([1.0])
-        next_state = env.state_transition_model(tuple(belief.mean), 1).sample()[0]
+        next_state = env.sample_next_state(state=tuple(belief.mean), action=1)
         observation = next_state
 
         new_belief = belief.update(action=action, observation=observation, pomdp=None)
@@ -475,7 +475,7 @@ class TestEndToEndUpdate:
         )
 
         action = np.array([1.0])
-        next_state = env.state_transition_model((-0.5, 0.0), 1).sample()[0]
+        next_state = env.sample_next_state(state=(-0.5, 0.0), action=1)
         observation = next_state
 
         new_ekf = belief_ekf.update(action=action, observation=observation, pomdp=None)

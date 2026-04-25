@@ -414,7 +414,8 @@ class TestEnvironmentObservationModelSerialization:
         action = actions[0]
 
         # Sample next state
-        next_state = env.state_transition_model(state, action).sample()[0]
+        next_state = env.sample_next_state(state=state, action=action)
+        assert isinstance(next_state, str)
 
         # Create observation model
         obs_model = env.observation_model(next_state, action)
@@ -449,7 +450,7 @@ class TestEnvironmentObservationModelSerialization:
         action = actions[0]
 
         # Sample next state
-        next_state = env.state_transition_model(state, action).sample()[0]
+        next_state = env.sample_next_state(state=state, action=action)
 
         # Create observation model
         obs_model = env.observation_model(next_state, action)

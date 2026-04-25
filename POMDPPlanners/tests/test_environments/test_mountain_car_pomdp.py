@@ -51,7 +51,7 @@ def test_state_transition_model(base_mountain_car_environment):
     Purpose: Validates that state transition model correctly updates car position and velocity for different actions
 
     Given: MountainCarPOMDP environment and test state [0.0, 0.0] with actions -1, 0, and 1
-    When: State transition model is called and next states are sampled
+    When: env.sample_next_state is called for each action
     Then: All next states have correct 2D shape representing [position, velocity] and change based on applied action
 
     Test type: unit
@@ -59,22 +59,19 @@ def test_state_transition_model(base_mountain_car_environment):
     # Test state transition
     state = np.array([0.0, 0.0])
     action = 0
-    transition = base_mountain_car_environment.state_transition_model(state, action)
-    new_state = transition.sample()[0]
+    new_state = base_mountain_car_environment.sample_next_state(state=state, action=action)
     assert isinstance(new_state, np.ndarray)
     assert new_state.shape == (2,)
 
     # Test with different action
     action = 1
-    transition = base_mountain_car_environment.state_transition_model(state, action)
-    new_state = transition.sample()[0]
+    new_state = base_mountain_car_environment.sample_next_state(state=state, action=action)
     assert isinstance(new_state, np.ndarray)
     assert new_state.shape == (2,)
 
     # Test with negative action
     action = -1
-    transition = base_mountain_car_environment.state_transition_model(state, action)
-    new_state = transition.sample()[0]
+    new_state = base_mountain_car_environment.sample_next_state(state=state, action=action)
     assert isinstance(new_state, np.ndarray)
     assert new_state.shape == (2,)
 
@@ -86,15 +83,16 @@ def test_state_transition_produces_varying_samples(base_mountain_car_environment
     different samples due to Gaussian process noise
 
     Given: A MountainCarPOMDP environment and initial state [-0.5, 0.0] with action 1
-    When: Multiple samples are drawn from the state transition model
+    When: Multiple samples are drawn via env.sample_next_state
     Then: Not all samples are identical, confirming stochastic behavior
 
     Test type: unit
     """
     state = np.array([-0.5, 0.0])
     action = 1
-    transition = base_mountain_car_environment.state_transition_model(state, action)
-    samples = transition.sample(n_samples=50)
+    samples = base_mountain_car_environment.sample_next_state(
+        state=state, action=action, n_samples=50
+    )
 
     assert len(samples) == 50
     assert all(s.shape == (2,) for s in samples)
@@ -176,7 +174,7 @@ def test_observation_model(base_mountain_car_environment):
     Purpose: Validates that observation model correctly adds noise to position and velocity measurements
 
     Given: MountainCarPOMDP environment and test state [0.0, 0.0] with action 0
-    When: Observation model is called and observations are sampled
+    When: env.sample_observation is called
     Then: All observations have correct 2D shape and contain noise in both position and velocity components
 
     Test type: unit
@@ -184,40 +182,41 @@ def test_observation_model(base_mountain_car_environment):
     # Test observation model
     state = np.array([0.0, 0.0])
     action = 0
-    observation = base_mountain_car_environment.observation_model(state, action)
-    obs = observation.sample()[0]
+    obs = base_mountain_car_environment.sample_observation(next_state=state, action=action)
     assert isinstance(obs, np.ndarray)
     assert obs.shape == (2,)
 
     # Test multiple observations
-    observations = base_mountain_car_environment.observation_model(state, action).sample(
-        n_samples=100
+    observations = base_mountain_car_environment.sample_observation(
+        next_state=state, action=action, n_samples=100
     )
     assert len(observations) == 100
     assert all(isinstance(obs, np.ndarray) and obs.shape == (2,) for obs in observations)
 
 
 def test_observation_model_probability_single_observation(base_mountain_car_environment):
-    """Test observation model probability function with single observation.
+    """Test observation log-probability with single observation.
 
-    Purpose: Validates that observation model probability function correctly handles single observation input
+    Purpose: Validates that observation_log_probability correctly handles single observation input
 
-    Given: MountainCarPOMDP environment and observation model with specific state and covariance
-    When: probability() method is called with single observation
-    Then: Returns numpy array with shape (1,) containing probability density value
+    Given: MountainCarPOMDP environment with specific next_state and action
+    When: env.observation_log_probability is called with a single observation
+    Then: Returns numpy array with shape (1,) and exponentiated probability is positive
 
     Test type: unit
     """
     # Test single observation probability
     state = np.array([0.0, 0.0])
     action = 0
-    obs_model = base_mountain_car_environment.observation_model(state, action)
 
     # Create a single observation close to true state
     observation = np.array([0.05, 0.01])  # Small deviation from true state [0.0, 0.0]
 
-    # Get probability
-    probabilities = obs_model.probability([observation])
+    # Get probability via env-level API
+    log_probabilities = base_mountain_car_environment.observation_log_probability(
+        next_state=state, action=action, observations=[observation]
+    )
+    probabilities = np.exp(log_probabilities)
 
     # Verify output type and shape
     assert isinstance(probabilities, np.ndarray), "Probability should return numpy array"
@@ -229,20 +228,19 @@ def test_observation_model_probability_single_observation(base_mountain_car_envi
 
 
 def test_observation_model_probability_multiple_observations(base_mountain_car_environment):
-    """Test observation model probability function with multiple observations.
+    """Test observation log-probability with multiple observations.
 
-    Purpose: Validates that observation model probability function correctly handles multiple observations input
+    Purpose: Validates that observation_log_probability correctly handles multiple observations
 
-    Given: MountainCarPOMDP environment and observation model with specific state and covariance
-    When: probability() method is called with multiple observations
-    Then: Returns numpy array with shape (n,) containing probability densities for each observation
+    Given: MountainCarPOMDP environment with specific next_state and action
+    When: env.observation_log_probability is called with multiple observations
+    Then: Returns numpy array with shape (n,) of decreasing probabilities with distance
 
     Test type: unit
     """
     # Test multiple observations probability
     state = np.array([0.0, 0.0])
     action = 0
-    obs_model = base_mountain_car_environment.observation_model(state, action)
 
     # Create multiple observations at different distances from true state
     observations = [
@@ -252,8 +250,11 @@ def test_observation_model_probability_multiple_observations(base_mountain_car_e
         np.array([0.5, 0.1]),  # Far from true state (lowest probability)
     ]
 
-    # Get probabilities
-    probabilities = obs_model.probability(observations)
+    # Get probabilities via env-level API
+    log_probabilities = base_mountain_car_environment.observation_log_probability(
+        next_state=state, action=action, observations=observations
+    )
+    probabilities = np.exp(log_probabilities)
 
     # Verify output type and shape
     assert isinstance(probabilities, np.ndarray), "Probability should return numpy array"
@@ -322,22 +323,24 @@ def test_observation_model_probability_mathematical_correctness(base_mountain_ca
 
 
 def test_observation_model_probability_edge_cases(base_mountain_car_environment):
-    """Test observation model probability function edge cases.
+    """Test observation log-probability edge cases.
 
-    Purpose: Validates that observation model probability function handles edge cases correctly
+    Purpose: Validates that observation_log_probability handles edge cases correctly
 
-    Given: MountainCarPOMDP environment and observation model
-    When: probability() method is called with edge cases (empty list, extreme values)
+    Given: MountainCarPOMDP environment with specific next_state and action
+    When: env.observation_log_probability is called with edge cases (empty list, extreme values)
     Then: Function handles edge cases gracefully and returns appropriate results
 
     Test type: unit
     """
     state = np.array([0.0, 0.0])
     action = 0
-    obs_model = base_mountain_car_environment.observation_model(state, action)
 
     # Test empty list (should return empty array)
-    empty_probs = obs_model.probability([])
+    empty_log_probs = base_mountain_car_environment.observation_log_probability(
+        next_state=state, action=action, observations=[]
+    )
+    empty_probs = np.exp(empty_log_probs)
     assert isinstance(empty_probs, np.ndarray), "Empty list should return numpy array"
     assert empty_probs.shape == (
         0,
@@ -350,7 +353,10 @@ def test_observation_model_probability_edge_cases(base_mountain_car_environment)
         np.array([0.0, 0.0]),  # At true state
     ]
 
-    extreme_probs = obs_model.probability(extreme_observations)
+    extreme_log_probs = base_mountain_car_environment.observation_log_probability(
+        next_state=state, action=action, observations=extreme_observations
+    )
+    extreme_probs = np.exp(extreme_log_probs)
     assert isinstance(extreme_probs, np.ndarray), "Extreme values should return numpy array"
     assert extreme_probs.shape == (
         3,
@@ -371,20 +377,19 @@ def test_observation_model_probability_edge_cases(base_mountain_car_environment)
 
 
 def test_observation_model_probability_batch_consistency(base_mountain_car_environment):
-    """Test observation model probability function batch consistency.
+    """Test observation log-probability batch consistency.
 
-    Purpose: Validates that observation model probability function produces consistent results
+    Purpose: Validates that observation_log_probability produces consistent results
     when called multiple times with same inputs
 
-    Given: MountainCarPOMDP environment and observation model
-    When: probability() method is called multiple times with identical observations
+    Given: MountainCarPOMDP environment with specific next_state and action
+    When: env.observation_log_probability is called multiple times with identical observations
     Then: All calls return identical probability values, demonstrating deterministic behavior
 
     Test type: unit
     """
     state = np.array([0.0, 0.0])
     action = 0
-    obs_model = base_mountain_car_environment.observation_model(state, action)
 
     # Create test observations
     observations = [
@@ -393,10 +398,22 @@ def test_observation_model_probability_batch_consistency(base_mountain_car_envir
         np.array([-0.05, -0.005]),
     ]
 
-    # Call probability function multiple times
-    probs1 = obs_model.probability(observations)
-    probs2 = obs_model.probability(observations)
-    probs3 = obs_model.probability(observations)
+    # Call probability function multiple times via env-level API
+    probs1 = np.exp(
+        base_mountain_car_environment.observation_log_probability(
+            next_state=state, action=action, observations=observations
+        )
+    )
+    probs2 = np.exp(
+        base_mountain_car_environment.observation_log_probability(
+            next_state=state, action=action, observations=observations
+        )
+    )
+    probs3 = np.exp(
+        base_mountain_car_environment.observation_log_probability(
+            next_state=state, action=action, observations=observations
+        )
+    )
 
     # All results should be identical
     assert np.array_equal(probs1, probs2), "Multiple calls should return identical results"
@@ -405,13 +422,13 @@ def test_observation_model_probability_batch_consistency(base_mountain_car_envir
 
 
 def test_observation_model_probability_different_states(base_mountain_car_environment):
-    """Test observation model probability function with different true states.
+    """Test observation log-probability with different true states.
 
-    Purpose: Validates that observation model probability function works correctly
+    Purpose: Validates that observation_log_probability works correctly
     with different true states and maintains proper probability relationships
 
-    Given: MountainCarPOMDP environment and observation models with different true states
-    When: probability() method is called with observations relative to each true state
+    Given: MountainCarPOMDP environment with different true next_states
+    When: env.observation_log_probability is called with observations relative to each true state
     Then: Probabilities are highest for observations closest to their respective true states
 
     Test type: unit
@@ -425,7 +442,6 @@ def test_observation_model_probability_different_states(base_mountain_car_enviro
 
     for state in states:
         action = 0
-        obs_model = base_mountain_car_environment.observation_model(state, action)
 
         # Create observations at different distances from this true state
         observations = [
@@ -434,7 +450,11 @@ def test_observation_model_probability_different_states(base_mountain_car_enviro
             state + np.array([0.2, 0.02]),  # Far from true state
         ]
 
-        probabilities = obs_model.probability(observations)
+        probabilities = np.exp(
+            base_mountain_car_environment.observation_log_probability(
+                next_state=state, action=action, observations=observations
+            )
+        )
 
         # Verify shape and type
         assert isinstance(probabilities, np.ndarray), "Should return numpy array"
@@ -651,20 +671,20 @@ def test_mountain_car_state_bounds():
 
     # Test position bounds
     state = (pomdp.min_position - 0.1, 0.0)
-    transition = pomdp.state_transition_model(state, 0).sample()[0]
+    transition = pomdp.sample_next_state(state=state, action=0)
     assert transition[0] >= pomdp.min_position
 
     state = (pomdp.max_position + 0.1, 0.0)
-    transition = pomdp.state_transition_model(state, 0).sample()[0]
+    transition = pomdp.sample_next_state(state=state, action=0)
     assert transition[0] <= pomdp.max_position
 
     # Test velocity bounds
     state = (0.0, pomdp.max_speed + 0.1)
-    transition = pomdp.state_transition_model(state, 0).sample()[0]
+    transition = pomdp.sample_next_state(state=state, action=0)
     assert abs(transition[1]) <= pomdp.max_speed
 
     state = (0.0, -pomdp.max_speed - 0.1)
-    transition = pomdp.state_transition_model(state, 0).sample()[0]
+    transition = pomdp.sample_next_state(state=state, action=0)
     assert abs(transition[1]) <= pomdp.max_speed
 
 
