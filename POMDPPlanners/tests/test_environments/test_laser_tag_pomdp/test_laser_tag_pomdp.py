@@ -2160,6 +2160,166 @@ class TestLaserTagDirectSampleApiEquivalence:
         assert tuple(o_wrap) == tuple(o_direct)
 
 
+class TestLaserTagBatchSampleAndLogProb:
+    """Tests for n_samples batching and log-probability methods on LaserTagPOMDP."""
+
+    @pytest.mark.parametrize("n", [1, 5, 100])
+    @pytest.mark.parametrize("action", [0, 1, 2, 3, 4])
+    def test_sample_next_state_n_samples_equivalence(self, n: int, action: int) -> None:
+        """sample_next_state(n_samples=n) matches wrapper.sample(n) under pinned RNG.
+
+        Purpose: Validates batched sample_next_state preserves byte-identical RNG
+            draw sequence vs the wrapper for n in {1, 5, 100}.
+
+        Given: A LaserTagPOMDP with transition_error_prob>0 to exercise the actual-action
+            error branch, and a fixed (state, action). RNG seeded identically before each draw.
+        When: Drawing via env.state_transition_model(s, a).sample(n) and via
+            env.sample_next_state(s, a, n_samples=n).
+        Then: For n==1 the single result equals the wrapper's first sample; for n>1
+            each row equals the wrapper's row at the same index.
+
+        Test type: unit
+        """
+        env = LaserTagPOMDP(discount_factor=0.95, transition_error_prob=0.2)
+        state = np.array([3.0, 4.0, 5.0, 2.0, 0.0])
+
+        np.random.seed(123)
+        random.seed(123)
+        wrap_samples = env.state_transition_model(state, action).sample(n_samples=n)
+
+        np.random.seed(123)
+        random.seed(123)
+        direct = env.sample_next_state(state, action, n_samples=n)
+
+        if n == 1:
+            assert isinstance(direct, np.ndarray)
+            assert np.array_equal(direct, wrap_samples[0])
+        else:
+            assert len(direct) == n  # type: ignore[arg-type]
+            for i in range(n):
+                assert np.array_equal(direct[i], wrap_samples[i])
+
+    def test_sample_next_state_terminal_tag_n_samples_equivalence(self) -> None:
+        """Terminal-tag branch returns N copies and matches the wrapper for n>1.
+
+        Purpose: Validates that the terminal-tag fast path replicates the wrapper
+            output across all n samples without consuming extra RNG draws.
+
+        Given: A LaserTagPOMDP and a state where robot==opponent with action=4.
+        When: Drawing wrapper.sample(n_samples=5) and env.sample_next_state(..., n_samples=5).
+        Then: All five samples in each match elementwise.
+
+        Test type: unit
+        """
+        env = LaserTagPOMDP(discount_factor=0.95)
+        state = np.array([3.0, 3.0, 3.0, 3.0, 0.0])
+
+        np.random.seed(0)
+        random.seed(0)
+        wrap_samples = env.state_transition_model(state, 4).sample(n_samples=5)
+
+        np.random.seed(0)
+        random.seed(0)
+        direct = env.sample_next_state(state, 4, n_samples=5)
+
+        assert len(direct) == 5  # type: ignore[arg-type]
+        for i in range(5):
+            assert np.array_equal(direct[i], wrap_samples[i])
+
+    @pytest.mark.parametrize("n", [1, 5, 100])
+    @pytest.mark.parametrize("action", [0, 4])
+    def test_sample_observation_n_samples_equivalence(self, n: int, action: int) -> None:
+        """sample_observation(n_samples=n) matches wrapper.sample(n) under pinned RNG.
+
+        Purpose: Validates batched sample_observation produces byte-identical 8-direction
+            laser noise sequences as the wrapper for n in {1, 5, 100}.
+
+        Given: A LaserTagPOMDP and a fixed (next_state, action) with RNG seeded identically.
+        When: Drawing via env.observation_model(...).sample(n) and via
+            env.sample_observation(..., n_samples=n).
+        Then: All N observations agree elementwise.
+
+        Test type: unit
+        """
+        env = LaserTagPOMDP(discount_factor=0.95)
+        next_state = np.array([3.0, 4.0, 5.0, 2.0, 0.0])
+
+        np.random.seed(7)
+        random.seed(7)
+        wrap_obs = env.observation_model(next_state, action).sample(n_samples=n)
+
+        np.random.seed(7)
+        random.seed(7)
+        direct = env.sample_observation(next_state, action, n_samples=n)
+
+        if n == 1:
+            assert tuple(direct) == tuple(wrap_obs[0])  # type: ignore[arg-type]
+        else:
+            assert len(direct) == n  # type: ignore[arg-type]
+            for i in range(n):
+                assert tuple(direct[i]) == tuple(wrap_obs[i])
+
+    @pytest.mark.parametrize("action", [0, 1, 2, 3, 4])
+    def test_transition_log_probability_equivalence(self, action: int) -> None:
+        """transition_log_probability matches log of the wrapper's probability.
+
+        Purpose: Validates env.transition_log_probability returns log of the
+            wrapper-model probability within fp tolerance for representative
+            candidate next states drawn from the model.
+
+        Given: A LaserTagPOMDP with transition_error_prob>0 and a fixed (state, action).
+        When: A batch of 16 candidate next states is drawn from the wrapper, and we
+            compute log via wrapper.probability + np.log and via env.transition_log_probability.
+        Then: The two log-probability arrays agree within 1e-10 absolute tolerance.
+
+        Test type: unit
+        """
+        env = LaserTagPOMDP(discount_factor=0.95, transition_error_prob=0.2)
+        state = np.array([3.0, 4.0, 5.0, 2.0, 0.0])
+
+        np.random.seed(2024)
+        wrap_model = env.state_transition_model(state, action)
+        next_states = wrap_model.sample(n_samples=16)
+        # Add an unreachable state to exercise log(0) -> -inf
+        unreachable = np.array([0.0, 0.0, 0.0, 0.0, 0.0])
+        next_states.append(unreachable)
+
+        with np.errstate(divide="ignore"):
+            expected = np.log(np.asarray(wrap_model.probability(next_states)))
+        actual = env.transition_log_probability(state, action, next_states)
+
+        assert actual.shape == (len(next_states),)
+        np.testing.assert_allclose(actual, expected, atol=1e-10, equal_nan=True)
+
+    @pytest.mark.parametrize("action", [0, 4])
+    def test_observation_log_probability_equivalence(self, action: int) -> None:
+        """observation_log_probability matches log of the wrapper's probability.
+
+        Purpose: Validates env.observation_log_probability returns log of the
+            wrapper-model PDF within fp tolerance for sampled observations.
+
+        Given: A LaserTagPOMDP and a fixed (next_state, action).
+        When: A batch of 8 observations is drawn from the wrapper, and we compute log
+            via wrapper.probability + np.log and via env.observation_log_probability.
+        Then: The two log-probability arrays agree within 1e-10 absolute tolerance.
+
+        Test type: unit
+        """
+        env = LaserTagPOMDP(discount_factor=0.95)
+        next_state = np.array([3.0, 4.0, 5.0, 2.0, 0.0])
+
+        np.random.seed(31)
+        wrap_model = env.observation_model(next_state, action)
+        observations = wrap_model.sample(n_samples=8)
+
+        with np.errstate(divide="ignore"):
+            expected = np.log(np.asarray(wrap_model.probability(observations)))
+        actual = env.observation_log_probability(next_state, action, observations)
+
+        assert actual.shape == (len(observations),)
+        np.testing.assert_allclose(actual, expected, atol=1e-10, equal_nan=True)
+
+
 if __name__ == "__main__":
     # Run tests if script is executed directly
     pytest.main([__file__, "-v"])

@@ -626,24 +626,75 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
     # and skip the wrapper allocation, while preserving the identical
     # kernel-construction sequence and arguments.
 
-    def sample_next_state(self, state: np.ndarray, action: int) -> np.ndarray:
+    def sample_next_state(self, state: np.ndarray, action: int, n_samples: int = 1) -> Any:
         kernel = _native.PacManTransitionCpp(
             state=self._require_state_array(state),
             action=int(action),
             **self.get_transition_cpp_ctor_kwargs(),
             patrol_dir_state=self.ghost_patrol_directions,
         )
-        return kernel.sample()[0]
+        samples = kernel.sample(n_samples)
+        if n_samples == 1:
+            return samples[0]
+        return samples
 
-    def sample_observation(
-        self, next_state: np.ndarray, action: int
-    ) -> Tuple[Tuple[int, int], ...]:
+    def sample_observation(self, next_state: np.ndarray, action: int, n_samples: int = 1) -> Any:
         kernel = _native.PacManObservationCpp(
             next_state=self._require_state_array(next_state),
             action=int(action),
             **self.get_observation_cpp_ctor_kwargs(),
         )
-        return self.array_to_observation(kernel.sample()[0])
+        arrays = kernel.sample(n_samples)
+        if n_samples == 1:
+            return self.array_to_observation(arrays[0])
+        return [self.array_to_observation(arr) for arr in arrays]
+
+    def transition_log_probability(
+        self, state: np.ndarray, action: int, next_states: Any
+    ) -> np.ndarray:
+        kernel = _native.PacManTransitionCpp(
+            state=self._require_state_array(state),
+            action=int(action),
+            **self.get_transition_cpp_ctor_kwargs(),
+            patrol_dir_state=self.ghost_patrol_directions,
+        )
+        # Accept either a sequence of 1-D state arrays or a 2-D ndarray.
+        if isinstance(next_states, np.ndarray) and next_states.ndim == 2:
+            stacked = next_states
+        else:
+            stacked = np.stack([np.asarray(s, dtype=np.float64) for s in next_states])
+        probs = np.asarray(kernel.probability(stacked))
+        return np.log(probs + 1e-300)
+
+    def observation_log_probability(
+        self, next_state: np.ndarray, action: int, observations: Any
+    ) -> np.ndarray:
+        kernel = _native.PacManObservationCpp(
+            next_state=self._require_state_array(next_state),
+            action=int(action),
+            **self.get_observation_cpp_ctor_kwargs(),
+        )
+        # Accept either a 2-D ndarray of shape (N, 2*num_ghosts) or a sequence
+        # of public tuple-of-(row, col) observations.
+        if isinstance(observations, np.ndarray) and observations.ndim == 2:
+            stacked = observations
+            probs = np.asarray(kernel.probability(stacked))
+            return np.log(probs + 1e-300)
+        n = len(observations)
+        probs = np.zeros(n, dtype=np.float64)
+        usable_rows: List[np.ndarray] = []
+        usable_indices: List[int] = []
+        for i, obs in enumerate(observations):
+            if len(obs) != self.num_ghosts:
+                continue  # wrong ghost count -> probability 0 -> -inf
+            usable_rows.append(self.observation_to_array(obs))
+            usable_indices.append(i)
+        if usable_rows:
+            stacked = np.stack(usable_rows)
+            sub_probs = np.asarray(kernel.probability(stacked))
+            for idx, p in zip(usable_indices, sub_probs):
+                probs[idx] = p
+        return np.log(probs + 1e-300)
 
     def reward(self, state: np.ndarray, action: int) -> float:
         """Calculate immediate reward."""

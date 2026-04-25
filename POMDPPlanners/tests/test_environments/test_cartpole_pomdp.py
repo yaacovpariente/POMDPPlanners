@@ -934,3 +934,195 @@ def test_sample_observation_rng_pinned_equivalence(base_cartpole_environment):
             direct_obs,
             err_msg=f"sample_observation mismatch for ({next_state.tolist()}, {action})",
         )
+
+
+def test_sample_next_state_n_samples_equivalence(base_cartpole_environment):
+    """Test sample_next_state with n>1 matches state_transition_model().sample(n) under fixed RNG.
+
+    Purpose: Validates that the n_samples-aware sample_next_state override produces
+        byte-identical batched results to the wrapper-based path when both use the same
+        native RNG seed.
+
+    Given: A CartPolePOMDP environment and (state, action) pairs covering both actions
+        and a range of state vectors near and away from equilibrium, with the native
+        module RNG seeded identically before each pair of draws, for n in {1, 5, 100}
+    When: A batch is drawn through state_transition_model(s, a).sample(n) and again
+        through env.sample_next_state(s, a, n_samples=n) after re-seeding
+    Then: The two batches are equal element-wise across all combinations and all n
+
+    Test type: unit
+    """
+    from POMDPPlanners.environments.cartpole_pomdp import (  # pylint: disable=import-outside-toplevel
+        _native,
+    )
+
+    env = base_cartpole_environment
+    cases = [
+        (np.array([0.0, 0.0, 0.0, 0.0]), 0),
+        (np.array([0.0, 0.0, 0.0, 0.0]), 1),
+        (np.array([0.1, 0.05, 0.02, -0.1]), 1),
+        (np.array([-0.1, -0.05, -0.02, 0.1]), 0),
+    ]
+    for n in (1, 5, 100):
+        for state, action in cases:
+            _native.set_seed(2024)
+            np.random.seed(2024)
+            random.seed(2024)
+            wrapper_samples = env.state_transition_model(state=state, action=action).sample(n)
+            _native.set_seed(2024)
+            np.random.seed(2024)
+            random.seed(2024)
+            direct_samples = env.sample_next_state(state=state, action=action, n_samples=n)
+            wrapper_arr = np.asarray(wrapper_samples).reshape(n, -1)
+            direct_arr = np.asarray(direct_samples).reshape(n, -1)
+            np.testing.assert_array_equal(
+                wrapper_arr,
+                direct_arr,
+                err_msg=f"sample_next_state n={n} mismatch for ({state.tolist()}, {action})",
+            )
+
+
+def test_sample_observation_n_samples_equivalence(base_cartpole_environment):
+    """Test sample_observation with n>1 matches observation_model().sample(n) under fixed RNG.
+
+    Purpose: Validates that the n_samples-aware sample_observation override produces
+        byte-identical batched results to the wrapper-based path when both use the same
+        native RNG seed.
+
+    Given: A CartPolePOMDP environment and (next_state, action) pairs covering both
+        actions across a range of state vectors, with the native module RNG seeded
+        identically, for n in {1, 5, 100}
+    When: A batch is drawn through observation_model(ns, a).sample(n) and again through
+        env.sample_observation(ns, a, n_samples=n) after re-seeding
+    Then: The two batches are equal element-wise across all combinations and all n
+
+    Test type: unit
+    """
+    from POMDPPlanners.environments.cartpole_pomdp import (  # pylint: disable=import-outside-toplevel
+        _native,
+    )
+
+    env = base_cartpole_environment
+    cases = [
+        (np.array([0.0, 0.0, 0.0, 0.0]), 0),
+        (np.array([0.0, 0.0, 0.0, 0.0]), 1),
+        (np.array([0.1, 0.05, 0.02, -0.1]), 1),
+        (np.array([-0.1, -0.05, -0.02, 0.1]), 0),
+    ]
+    for n in (1, 5, 100):
+        for next_state, action in cases:
+            _native.set_seed(99)
+            np.random.seed(99)
+            random.seed(99)
+            wrapper_samples = env.observation_model(next_state=next_state, action=action).sample(n)
+            _native.set_seed(99)
+            np.random.seed(99)
+            random.seed(99)
+            direct_samples = env.sample_observation(
+                next_state=next_state, action=action, n_samples=n
+            )
+            wrapper_arr = np.asarray(wrapper_samples).reshape(n, -1)
+            direct_arr = np.asarray(direct_samples).reshape(n, -1)
+            np.testing.assert_array_equal(
+                wrapper_arr,
+                direct_arr,
+                err_msg=(
+                    f"sample_observation n={n} mismatch for " f"({next_state.tolist()}, {action})"
+                ),
+            )
+
+
+def test_transition_log_probability_equivalence(base_cartpole_environment):
+    """Test transition_log_probability matches np.log(probability) from the wrapper.
+
+    Purpose: Validates that transition_log_probability returns log-PDFs equivalent
+        (within fp tolerance) to applying np.log to the wrapper-based probability path.
+
+    Given: A CartPolePOMDP environment and (state, action) pairs covering both actions,
+        plus a batch of candidate next-state arrays
+    When: Log-probabilities are computed via env.transition_log_probability(s, a, vals)
+        and via np.log(env.state_transition_model(s, a).probability(vals) + 1e-300)
+    Then: The two ndarrays are equal element-wise within fp tolerance
+
+    Test type: unit
+    """
+    env = base_cartpole_environment
+    candidate_states = np.array(
+        [
+            [0.0, 0.0, 0.0, 0.0],
+            [0.001, 0.002, 0.05, 0.0],
+            [0.05, 0.0, 0.02, 0.01],
+            [-0.02, 0.01, -0.005, 0.0],
+            [1.0, 0.5, 0.1, 0.2],
+        ]
+    )
+    cases = [
+        (np.array([0.0, 0.0, 0.0, 0.0]), 0),
+        (np.array([0.0, 0.0, 0.0, 0.0]), 1),
+        (np.array([0.1, 0.05, 0.02, -0.1]), 1),
+        (np.array([-0.1, -0.05, -0.02, 0.1]), 0),
+    ]
+    for state, action in cases:
+        direct = env.transition_log_probability(
+            state=state, action=action, next_states=candidate_states
+        )
+        wrapper_probs = np.asarray(
+            env.state_transition_model(state=state, action=action).probability(candidate_states)
+        )
+        ref = np.log(wrapper_probs + 1e-300)
+        np.testing.assert_allclose(
+            direct,
+            ref,
+            rtol=1e-12,
+            atol=1e-12,
+            err_msg=f"transition_log_probability mismatch for ({state.tolist()}, {action})",
+        )
+
+
+def test_observation_log_probability_equivalence(base_cartpole_environment):
+    """Test observation_log_probability matches np.log(probability) from the wrapper.
+
+    Purpose: Validates that observation_log_probability returns log-PDFs equivalent
+        (within fp tolerance) to applying np.log to the wrapper-based probability path.
+
+    Given: A CartPolePOMDP environment and (next_state, action) pairs covering both
+        actions, plus a batch of candidate observation arrays
+    When: Log-probabilities are computed via env.observation_log_probability(ns, a, obs)
+        and via np.log(env.observation_model(ns, a).probability(obs) + 1e-300)
+    Then: The two ndarrays are equal element-wise within fp tolerance
+
+    Test type: unit
+    """
+    env = base_cartpole_environment
+    candidate_obs = np.array(
+        [
+            [0.0, 0.0, 0.0, 0.0],
+            [0.05, 0.02, 0.01, 0.0],
+            [-0.05, -0.02, -0.01, 0.0],
+            [0.5, 0.5, 0.5, 0.5],
+            [1.0, 0.0, 0.1, -0.1],
+        ]
+    )
+    cases = [
+        (np.array([0.0, 0.0, 0.0, 0.0]), 0),
+        (np.array([0.0, 0.0, 0.0, 0.0]), 1),
+        (np.array([0.1, 0.05, 0.02, -0.1]), 1),
+        (np.array([-0.1, -0.05, -0.02, 0.1]), 0),
+    ]
+    for next_state, action in cases:
+        direct = env.observation_log_probability(
+            next_state=next_state, action=action, observations=candidate_obs
+        )
+        wrapper_probs = np.asarray(
+            env.observation_model(next_state=next_state, action=action).probability(candidate_obs)
+        )
+        ref = np.log(wrapper_probs + 1e-300)
+        np.testing.assert_allclose(
+            direct,
+            ref,
+            rtol=1e-12,
+            atol=1e-12,
+            err_msg=(
+                f"observation_log_probability mismatch for " f"({next_state.tolist()}, {action})"
+            ),
+        )

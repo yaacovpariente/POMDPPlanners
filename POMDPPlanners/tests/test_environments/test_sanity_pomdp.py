@@ -909,3 +909,141 @@ def test_sample_observation_rng_pinned_equivalence(sanity_pomdp):
             f"sample_observation mismatch for ({next_state}, {action}): "
             f"{wrapper_obs} vs {direct_obs}"
         )
+
+
+def test_sample_next_state_n_samples_equivalence(sanity_pomdp):
+    """Test that sample_next_state with n>1 matches state_transition_model().sample(n) under fixed RNG.
+
+    Purpose: Validates that the n_samples-aware sample_next_state override produces
+        results equivalent (value-wise) to repeatedly drawing from the wrapper-based path.
+
+    Given: A SanityPOMDP environment and the four (state, action) combinations covering
+        the full discrete state-action space, with both np.random and random pinned, and
+        n in {1, 5, 100}
+    When: A batch of samples is drawn through state_transition_model(s, a).sample(n) and
+        through env.sample_next_state(s, a, n_samples=n) after re-seeding
+    Then: The two batches contain the same values across all (state, action) combinations
+        and all n values
+
+    Test type: unit
+    """
+    cases = [(0, 0), (0, 1), (1, 0), (1, 1)]
+    for n in (1, 5, 100):
+        for state, action in cases:
+            np.random.seed(123)
+            random.seed(123)
+            wrapper_samples = sanity_pomdp.state_transition_model(
+                state=state, action=action
+            ).sample(n)
+            np.random.seed(123)
+            random.seed(123)
+            direct_samples = sanity_pomdp.sample_next_state(state=state, action=action, n_samples=n)
+            wrapper_arr = np.asarray(wrapper_samples)
+            direct_arr = np.asarray(direct_samples).reshape(-1)
+            np.testing.assert_array_equal(
+                wrapper_arr,
+                direct_arr,
+                err_msg=f"sample_next_state n={n} mismatch for ({state}, {action})",
+            )
+
+
+def test_sample_observation_n_samples_equivalence(sanity_pomdp):
+    """Test that sample_observation with n>1 matches observation_model().sample(n) under fixed RNG.
+
+    Purpose: Validates that the n_samples-aware sample_observation override produces
+        results equivalent (value-wise) to drawing from the wrapper-based path.
+
+    Given: A SanityPOMDP environment and the four (next_state, action) combinations,
+        with both np.random and random pinned, and n in {1, 5, 100}
+    When: A batch of samples is drawn through observation_model(ns, a).sample(n) and
+        through env.sample_observation(ns, a, n_samples=n) after re-seeding
+    Then: The two batches contain the same values across all combinations and all n
+
+    Test type: unit
+    """
+    cases = [(0, 0), (0, 1), (1, 0), (1, 1)]
+    for n in (1, 5, 100):
+        for next_state, action in cases:
+            np.random.seed(7)
+            random.seed(7)
+            wrapper_samples = sanity_pomdp.observation_model(
+                next_state=next_state, action=action
+            ).sample(n)
+            np.random.seed(7)
+            random.seed(7)
+            direct_samples = sanity_pomdp.sample_observation(
+                next_state=next_state, action=action, n_samples=n
+            )
+            wrapper_arr = np.asarray(wrapper_samples)
+            direct_arr = np.asarray(direct_samples).reshape(-1)
+            np.testing.assert_array_equal(
+                wrapper_arr,
+                direct_arr,
+                err_msg=f"sample_observation n={n} mismatch for ({next_state}, {action})",
+            )
+
+
+def test_transition_log_probability_equivalence(sanity_pomdp):
+    """Test that transition_log_probability matches np.log(probability) from wrapper.
+
+    Purpose: Validates that the new transition_log_probability hot-path produces
+        log-probabilities equal (within fp tolerance) to the wrapper-based computation.
+
+    Given: A SanityPOMDP environment and (state, action) pairs covering all four
+        discrete combinations, plus a candidate next-state list including both valid
+        and invalid values
+    When: log-probabilities are computed via env.transition_log_probability(s, a, vals)
+        and via np.log(env.state_transition_model(s, a).probability(vals) + 1e-300)
+    Then: Both ndarrays are equal within fp tolerance for every combination
+
+    Test type: unit
+    """
+    cases = [(0, 0), (0, 1), (1, 0), (1, 1)]
+    candidates = [0, 1, 0, 1]
+    for state, action in cases:
+        direct = sanity_pomdp.transition_log_probability(
+            state=state, action=action, next_states=candidates
+        )
+        wrapper_probs = np.asarray(
+            sanity_pomdp.state_transition_model(state=state, action=action).probability(candidates)
+        )
+        ref = np.log(wrapper_probs + 1e-300)
+        np.testing.assert_allclose(
+            direct,
+            ref,
+            err_msg=f"transition_log_probability mismatch for ({state}, {action})",
+        )
+
+
+def test_observation_log_probability_equivalence(sanity_pomdp):
+    """Test that observation_log_probability matches np.log(probability) from wrapper.
+
+    Purpose: Validates that the new observation_log_probability hot-path produces
+        log-probabilities equal (within fp tolerance) to the wrapper-based computation.
+
+    Given: A SanityPOMDP environment and (next_state, action) pairs covering all four
+        discrete combinations, plus a candidate observation list with both valid and
+        invalid values
+    When: log-probabilities are computed via env.observation_log_probability(ns, a, obs)
+        and via np.log(env.observation_model(ns, a).probability(obs) + 1e-300)
+    Then: Both ndarrays are equal within fp tolerance for every combination
+
+    Test type: unit
+    """
+    cases = [(0, 0), (0, 1), (1, 0), (1, 1)]
+    candidates = [0, 1, 0, 1]
+    for next_state, action in cases:
+        direct = sanity_pomdp.observation_log_probability(
+            next_state=next_state, action=action, observations=candidates
+        )
+        wrapper_probs = np.asarray(
+            sanity_pomdp.observation_model(next_state=next_state, action=action).probability(
+                candidates
+            )
+        )
+        ref = np.log(wrapper_probs + 1e-300)
+        np.testing.assert_allclose(
+            direct,
+            ref,
+            err_msg=f"observation_log_probability mismatch for ({next_state}, {action})",
+        )

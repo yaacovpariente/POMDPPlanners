@@ -425,15 +425,21 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
     # method. These overrides skip the Python subclass, construct the
     # native kernel directly, and produce byte-identical RNG draws.
 
-    def sample_next_state(self, state: np.ndarray, action: np.ndarray) -> np.ndarray:
+    def sample_next_state(
+        self, state: np.ndarray, action: np.ndarray, n_samples: int = 1
+    ) -> np.ndarray:
         kernel = _native.ContinuousLightDarkTransitionCpp(
             state=state,
             action=action,
             covariance=self._state_transition_dist.covariance,
         )
-        return kernel.sample()[0]
+        if n_samples == 1:
+            return kernel.sample()[0]
+        return np.asarray(kernel.sample(n_samples), dtype=np.float64)
 
-    def sample_observation(self, next_state: np.ndarray, action: np.ndarray) -> Any:
+    def sample_observation(
+        self, next_state: np.ndarray, action: np.ndarray, n_samples: int = 1
+    ) -> Any:
         if self.observation_model_type == ObservationModelType.NORMAL_NOISE:
             kernel = _native.ContinuousLightDarkObservationCpp(
                 next_state=next_state,
@@ -444,11 +450,52 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
                 beacon_radius=float(self.beacon_radius),
                 grid_size=float(self.grid_size),
             )
-            return kernel.sample()[0]
+            if n_samples == 1:
+                return kernel.sample()[0]
+            return np.asarray(kernel.sample(n_samples), dtype=np.float64)
         # NoObsInDark and DistanceBased models have Python-side sampling
         # logic in their wrappers; fall back to the default base-class
-        # path which goes through observation_model(...).sample()[0].
-        return super().sample_observation(next_state=next_state, action=action)
+        # path which goes through observation_model(...).sample().
+        return super().sample_observation(next_state=next_state, action=action, n_samples=n_samples)
+
+    def transition_log_probability(
+        self, state: np.ndarray, action: np.ndarray, next_states: Any
+    ) -> np.ndarray:
+        kernel = _native.ContinuousLightDarkTransitionCpp(
+            state=state,
+            action=action,
+            covariance=self._state_transition_dist.covariance,
+        )
+        next_states_array = np.asarray(next_states, dtype=np.float64)
+        if next_states_array.ndim == 1:
+            next_states_array = next_states_array.reshape(1, -1)
+        probs = np.asarray(kernel.probability(next_states_array), dtype=np.float64)
+        return np.log(probs + 1e-300)
+
+    def observation_log_probability(
+        self, next_state: np.ndarray, action: np.ndarray, observations: Any
+    ) -> np.ndarray:
+        if self.observation_model_type == ObservationModelType.NORMAL_NOISE:
+            kernel = _native.ContinuousLightDarkObservationCpp(
+                next_state=next_state,
+                action=action,
+                covariance_near=self._obs_dist_near_beacon.covariance,
+                covariance_far=self._obs_dist_far_from_beacon.covariance,
+                beacons=self.beacons,
+                beacon_radius=float(self.beacon_radius),
+                grid_size=float(self.grid_size),
+            )
+            obs_array = np.asarray(observations, dtype=np.float64)
+            if obs_array.ndim == 1:
+                obs_array = obs_array.reshape(1, -1)
+            probs = np.asarray(kernel.probability(obs_array), dtype=np.float64)
+            return np.log(probs + 1e-300)
+        # NoObsInDark and DistanceBased models accept "None" string
+        # observations; defer to the base-class path which goes through
+        # observation_model(...).probability().
+        return super().observation_log_probability(
+            next_state=next_state, action=action, observations=observations
+        )
 
     def reward(self, state: np.ndarray, action: np.ndarray) -> float:
         return self.reward_model.compute_reward(state, action)
@@ -708,11 +755,25 @@ class ContinuousLightDarkPOMDPDiscreteActions(ContinuousLightDarkPOMDP, Discrete
     def reward_batch(self, states: Union[np.ndarray, Sequence[Any]], action: Any) -> np.ndarray:
         return super().reward_batch(np.asarray(states), self.action_to_vector[action])
 
-    def sample_next_state(self, state: np.ndarray, action: Any) -> np.ndarray:
-        return super().sample_next_state(state, self.action_to_vector[action])
+    def sample_next_state(self, state: np.ndarray, action: Any, n_samples: int = 1) -> np.ndarray:
+        return super().sample_next_state(state, self.action_to_vector[action], n_samples=n_samples)
 
-    def sample_observation(self, next_state: np.ndarray, action: Any) -> Any:
-        return super().sample_observation(next_state, self.action_to_vector[action])
+    def sample_observation(self, next_state: np.ndarray, action: Any, n_samples: int = 1) -> Any:
+        return super().sample_observation(
+            next_state, self.action_to_vector[action], n_samples=n_samples
+        )
+
+    def transition_log_probability(
+        self, state: np.ndarray, action: Any, next_states: Any
+    ) -> np.ndarray:
+        return super().transition_log_probability(state, self.action_to_vector[action], next_states)
+
+    def observation_log_probability(
+        self, next_state: np.ndarray, action: Any, observations: Any
+    ) -> np.ndarray:
+        return super().observation_log_probability(
+            next_state, self.action_to_vector[action], observations
+        )
 
     def __eq__(self, other):
         if not isinstance(other, ContinuousLightDarkPOMDPDiscreteActions):

@@ -779,7 +779,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
             and pos not in self.walls
         )
 
-    def sample_next_state(self, state: np.ndarray, action: int) -> np.ndarray:
+    def sample_next_state(self, state: np.ndarray, action: int, n_samples: int = 1) -> Any:
         # _get_actual_action: matches LaserTagStateTransition._get_actual_action
         if action == 4:
             actual_action = action
@@ -801,9 +801,9 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
 
         opponent_current = (int(state[2]), int(state[3]))
 
-        # Tag at same cell → terminal
+        # Tag at same cell → terminal: no extra RNG draws regardless of n_samples
         if actual_action == 4 and robot_current == opponent_current:
-            return np.array(
+            terminal_array = np.array(
                 [
                     float(robot_next[0]),
                     float(robot_next[1]),
@@ -812,21 +812,42 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
                     1.0,
                 ]
             )
+            if n_samples == 1:
+                return terminal_array
+            return [terminal_array.copy() for _ in range(n_samples)]
 
-        # Regular transition: build opponent move distribution then draw
+        # Regular transition: build opponent move distribution then draw indices
+        # in a single np.random.choice call (matches the wrapper's RNG draw order
+        # for any n_samples).
         opp_moves = self._opponent_move_probabilities_inline(state, robot_next)
         positions, probabilities = zip(*opp_moves)
-        opp_indices = np.random.choice(len(positions), size=1, p=probabilities)
-        opp_next_pos = positions[opp_indices[0]]
-        return np.array(
-            [
-                float(robot_next[0]),
-                float(robot_next[1]),
-                float(opp_next_pos[0]),
-                float(opp_next_pos[1]),
-                0.0,
-            ]
-        )
+        opp_indices = np.random.choice(len(positions), size=n_samples, p=probabilities)
+        if n_samples == 1:
+            opp_next_pos = positions[opp_indices[0]]
+            return np.array(
+                [
+                    float(robot_next[0]),
+                    float(robot_next[1]),
+                    float(opp_next_pos[0]),
+                    float(opp_next_pos[1]),
+                    0.0,
+                ]
+            )
+        samples: List[np.ndarray] = []
+        for idx in opp_indices:
+            opp_next_pos = positions[idx]
+            samples.append(
+                np.array(
+                    [
+                        float(robot_next[0]),
+                        float(robot_next[1]),
+                        float(opp_next_pos[0]),
+                        float(opp_next_pos[1]),
+                        0.0,
+                    ]
+                )
+            )
+        return samples
 
     def _opponent_move_probabilities_inline(
         self, state: np.ndarray, robot_pos: Tuple[int, int]
@@ -895,9 +916,12 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
             moves.append((away_pos, away_prob))
         return moves
 
-    def sample_observation(self, next_state: np.ndarray, action: int) -> Tuple[float, ...]:
+    def sample_observation(self, next_state: np.ndarray, action: int, n_samples: int = 1) -> Any:
         if bool(next_state[4]):
-            return (-1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0)
+            terminal_obs = (-1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0)
+            if n_samples == 1:
+                return terminal_obs
+            return [terminal_obs] * n_samples
 
         robot_pos = (int(next_state[0]), int(next_state[1]))
         opp_pos = (int(next_state[2]), int(next_state[3]))
@@ -906,12 +930,41 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
             self._laser_distance_inline(robot_pos, direction, opp_pos)
             for direction in _LASER_DIRECTIONS
         ]
-        # Add Gaussian noise to each measurement (8 np.random.normal draws, in order)
-        noisy: List[float] = []
-        for true_measure in true_measurements:
-            noise = np.random.normal(0, self.measurement_noise)
-            noisy.append(max(0.0, true_measure + noise))
-        return tuple(noisy)
+        # Add Gaussian noise to each measurement (8 np.random.normal draws per
+        # sample, in dir order — matches wrapper's RNG draw sequence).
+        if n_samples == 1:
+            noisy: List[float] = []
+            for true_measure in true_measurements:
+                noise = np.random.normal(0, self.measurement_noise)
+                noisy.append(max(0.0, true_measure + noise))
+            return tuple(noisy)
+
+        samples: List[Tuple[float, ...]] = []
+        for _ in range(n_samples):
+            noisy_inner: List[float] = []
+            for true_measure in true_measurements:
+                noise = np.random.normal(0, self.measurement_noise)
+                noisy_inner.append(max(0.0, true_measure + noise))
+            samples.append(tuple(noisy_inner))
+        return samples
+
+    def transition_log_probability(
+        self, state: np.ndarray, action: int, next_states: Any
+    ) -> np.ndarray:
+        probs = np.asarray(
+            self.state_transition_model(state=state, action=action).probability(next_states)
+        )
+        with np.errstate(divide="ignore"):
+            return np.log(probs)
+
+    def observation_log_probability(
+        self, next_state: np.ndarray, action: int, observations: Any
+    ) -> np.ndarray:
+        probs = np.asarray(
+            self.observation_model(next_state=next_state, action=action).probability(observations)
+        )
+        with np.errstate(divide="ignore"):
+            return np.log(probs)
 
     def _laser_distance_inline(
         self,

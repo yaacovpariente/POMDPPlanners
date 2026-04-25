@@ -362,3 +362,209 @@ class TestSampleNextStateOverrideEquivalence:
                 via_override = env.sample_observation(next_state=next_state, action=action)
 
                 assert via_wrapper == via_override
+
+
+class TestNSamplesAndLogProbabilityEquivalence:
+    """env-level n_samples + log-probability methods match wrapper path."""
+
+    @staticmethod
+    def _seeded_loop_states(env: PacManPOMDP, state: np.ndarray, action: int, n: int):
+        env.ghost_patrol_directions[:] = 0
+        _native.set_seed(2024)
+        return [env.state_transition_model(state, action).sample()[0] for _ in range(n)]
+
+    @staticmethod
+    def _seeded_batch_states(env: PacManPOMDP, state: np.ndarray, action: int, n: int):
+        env.ghost_patrol_directions[:] = 0
+        _native.set_seed(2024)
+        if n == 1:
+            return [env.sample_next_state(state=state, action=action)]
+        return list(env.sample_next_state(state=state, action=action, n_samples=n))
+
+    @staticmethod
+    def _seeded_loop_obs(env: PacManPOMDP, next_state: np.ndarray, action: int, n: int):
+        _native.set_seed(99)
+        return [env.observation_model(next_state, action).sample()[0] for _ in range(n)]
+
+    @staticmethod
+    def _seeded_batch_obs(env: PacManPOMDP, next_state: np.ndarray, action: int, n: int):
+        _native.set_seed(99)
+        if n == 1:
+            return [env.sample_observation(next_state=next_state, action=action)]
+        return list(env.sample_observation(next_state=next_state, action=action, n_samples=n))
+
+    def test_sample_next_state_n_samples_equivalence_n_1(self) -> None:
+        """env.sample_next_state(n=1) matches one wrapper sample(1) call.
+
+        Purpose: Validates that the n_samples=1 fast path equals the
+        legacy wrapper path bit-exactly under shared seed and identical
+        ``ghost_patrol_directions`` buffer state.
+
+        Given: An env, an initial state, and action=1 (East).
+        When: Both paths run with ``_native.set_seed(2024)`` and patrol
+            buffer reset to zeros.
+        Then: ``np.array_equal`` on the returned arrays.
+
+        Test type: integration
+        """
+        env = _build_env()
+        state = env.initial_state_dist().sample()[0]
+        loop = self._seeded_loop_states(env, state, action=1, n=1)
+        batch = self._seeded_batch_states(env, state, action=1, n=1)
+        np.testing.assert_array_equal(batch[0], loop[0])
+
+    def test_sample_next_state_n_samples_equivalence_n_5(self) -> None:
+        """env.sample_next_state(n=5) matches 5 wrapper sample(1) calls.
+
+        Purpose: Validates that the batched n_samples path advances the
+        native RNG in the same order as repeated single-sample wrapper
+        calls under shared seed and matching patrol-direction buffers.
+
+        Given: An env and a non-terminal state.
+        When: Both paths run with the same seed.
+        Then: All 5 returned states are np.array_equal.
+
+        Test type: integration
+        """
+        env = _build_env()
+        state = env.initial_state_dist().sample()[0]
+        loop = self._seeded_loop_states(env, state, action=1, n=5)
+        batch = self._seeded_batch_states(env, state, action=1, n=5)
+        assert len(batch) == 5
+        for a, b in zip(loop, batch):
+            np.testing.assert_array_equal(a, b)
+
+    def test_sample_next_state_n_samples_equivalence_n_100(self) -> None:
+        """env.sample_next_state(n=100) matches 100 wrapper sample(1) calls.
+
+        Purpose: Larger-N variant of the equivalence check, sufficient
+        to cover patrol-direction mutation patterns and multi-ghost RNG
+        consumption order.
+
+        Given: An env and an initial state.
+        When: Both paths run with the same seed.
+        Then: All 100 returned states are np.array_equal.
+
+        Test type: integration
+        """
+        env = _build_env()
+        state = env.initial_state_dist().sample()[0]
+        loop = self._seeded_loop_states(env, state, action=1, n=100)
+        batch = self._seeded_batch_states(env, state, action=1, n=100)
+        assert len(batch) == 100
+        for a, b in zip(loop, batch):
+            np.testing.assert_array_equal(a, b)
+
+    def test_sample_observation_n_samples_equivalence_n_1(self) -> None:
+        """env.sample_observation(n=1) matches one wrapper sample(1) call.
+
+        Purpose: Validates the n_samples=1 observation fast path matches
+        the legacy wrapper path bit-exactly under shared seed.
+
+        Given: A non-terminal next_state and action=0.
+        When: Both paths run with ``_native.set_seed(99)``.
+        Then: The two observations are equal (tuple-of-tuples form).
+
+        Test type: integration
+        """
+        env = _build_env()
+        next_state = env.initial_state_dist().sample()[0]
+        loop = self._seeded_loop_obs(env, next_state, action=0, n=1)
+        batch = self._seeded_batch_obs(env, next_state, action=0, n=1)
+        assert batch[0] == loop[0]
+
+    def test_sample_observation_n_samples_equivalence_n_5(self) -> None:
+        """env.sample_observation(n=5) matches 5 wrapper sample(1) calls.
+
+        Purpose: Validates the batched observation sampler consumes the
+        native RNG in the same order as repeated wrapper calls.
+
+        Given: A non-terminal next_state and action=0.
+        When: Both paths run with the same seed.
+        Then: All 5 observations match in tuple-of-tuples form.
+
+        Test type: integration
+        """
+        env = _build_env()
+        next_state = env.initial_state_dist().sample()[0]
+        loop = self._seeded_loop_obs(env, next_state, action=0, n=5)
+        batch = self._seeded_batch_obs(env, next_state, action=0, n=5)
+        assert batch == loop
+
+    def test_sample_observation_n_samples_equivalence_n_100(self) -> None:
+        """env.sample_observation(n=100) matches 100 wrapper sample(1) calls.
+
+        Purpose: Larger-N variant for thorough RNG-order coverage.
+
+        Given: A non-terminal next_state.
+        When: Both paths run with the same seed.
+        Then: All 100 observations match in tuple-of-tuples form.
+
+        Test type: integration
+        """
+        env = _build_env()
+        next_state = env.initial_state_dist().sample()[0]
+        loop = self._seeded_loop_obs(env, next_state, action=0, n=100)
+        batch = self._seeded_batch_obs(env, next_state, action=0, n=100)
+        assert batch == loop
+
+    def test_transition_log_probability_equivalence(self) -> None:
+        """transition_log_probability matches log(state_transition_model.probability).
+
+        Purpose: Validates that the env-level vectorized log-probability
+        equals ``log(prob + 1e-300)`` of the per-call wrapper path.
+
+        Given: An initial state, action, and a candidate set including
+            the actual sampled next state plus a perturbed copy.
+        When: env.transition_log_probability is compared to
+            ``np.log(wrapper.probability(...) + 1e-300)``.
+        Then: Arrays agree elementwise within 1e-10.
+
+        Test type: integration
+        """
+        env = _build_env()
+        state = env.initial_state_dist().sample()[0]
+        env.ghost_patrol_directions[:] = 0
+        _native.set_seed(0)
+        next_state = env.state_transition_model(state, 1).sample()[0]
+        perturbed = next_state.copy()
+        perturbed[env._idx_pac_row] += 1  # pylint: disable=protected-access
+        candidates = [next_state, perturbed]
+
+        env.ghost_patrol_directions[:] = 0
+        log_p = env.transition_log_probability(state, 1, candidates)
+
+        env.ghost_patrol_directions[:] = 0
+        expected = np.log(
+            np.asarray(env.state_transition_model(state, 1).probability(candidates)) + 1e-300
+        )
+
+        assert log_p.shape == (len(candidates),)
+        np.testing.assert_allclose(log_p, expected, atol=1e-10)
+
+    def test_observation_log_probability_equivalence(self) -> None:
+        """observation_log_probability matches log(observation_model.probability).
+
+        Purpose: Validates that the env-level vectorized log-density
+        equals the per-call wrapper path on a small candidate
+        observation list (tuple-of-(row, col) format).
+
+        Given: A non-terminal next_state and three candidate observations.
+        When: env.observation_log_probability is compared to
+            ``log(wrapper.probability(...) + 1e-300)``.
+        Then: Arrays agree elementwise within 1e-10.
+
+        Test type: integration
+        """
+        env = _build_env()
+        next_state = env.initial_state_dist().sample()[0]
+        _native.set_seed(13)
+        obs_list = [env.observation_model(next_state, 0).sample()[0] for _ in range(3)]
+
+        log_p = env.observation_log_probability(next_state, 0, obs_list)
+        expected = np.log(
+            np.asarray(env.observation_model(next_state, 0).probability(obs_list)) + 1e-300
+        )
+
+        assert log_p.shape == (len(obs_list),)
+        np.testing.assert_allclose(log_p, expected, atol=1e-10)

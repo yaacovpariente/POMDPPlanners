@@ -629,7 +629,15 @@ class PushPOMDP(DiscreteActionsEnvironment):
     # the wrapper allocation is skipped while the np.random.* call sequence
     # remains byte-identical with the wrapper path.
 
-    def sample_next_state(self, state: np.ndarray, action: str) -> np.ndarray:
+    def sample_next_state(self, state: np.ndarray, action: str, n_samples: int = 1) -> Any:
+        if n_samples == 1:
+            return self._sample_one_next_state(state, action)
+        samples: List[np.ndarray] = []
+        for _ in range(n_samples):
+            samples.append(self._sample_one_next_state(state, action))
+        return samples
+
+    def _sample_one_next_state(self, state: np.ndarray, action: str) -> np.ndarray:
         # Inline of PushStateTransition._get_actual_action() then
         # _compute_next_state_for_action(). RNG order: one np.random.random()
         # call, optionally one np.random.choice() call on error_actions.
@@ -698,7 +706,15 @@ class PushPOMDP(DiscreteActionsEnvironment):
                 return True
         return False
 
-    def sample_observation(self, next_state: np.ndarray, action: str) -> np.ndarray:
+    def sample_observation(self, next_state: np.ndarray, action: str, n_samples: int = 1) -> Any:
+        if n_samples == 1:
+            return self._sample_one_observation(next_state)
+        samples: List[np.ndarray] = []
+        for _ in range(n_samples):
+            samples.append(self._sample_one_observation(next_state))
+        return samples
+
+    def _sample_one_observation(self, next_state: np.ndarray) -> np.ndarray:
         # Inline of PushObservation.sample(1): two np.random.normal(0, sigma)
         # draws, clamped to [0, grid_size - 1]. RNG order matches the wrapper.
         gmax = self.grid_size - 1
@@ -718,6 +734,31 @@ class PushPOMDP(DiscreteActionsEnvironment):
         observation[4] = tx
         observation[5] = ty
         return observation
+
+    def transition_log_probability(
+        self, state: np.ndarray, action: str, next_states: Any
+    ) -> np.ndarray:
+        probs = np.asarray(
+            self.state_transition_model(state=state, action=action).probability(next_states)
+        )
+        with np.errstate(divide="ignore"):
+            return np.log(probs)
+
+    def observation_log_probability(
+        self, next_state: np.ndarray, action: str, observations: Any
+    ) -> np.ndarray:
+        # Closed-form 2-D Gaussian log-pdf on the object-position slice
+        # (cols 2:4) against next_state[2:4]. Robot/target dims are observed
+        # exactly so they don't affect the likelihood (the wrapper's
+        # probability() ignores them too).
+        variance = self.observation_noise * self.observation_noise
+        log_norm = -float(np.log(2.0 * np.pi * variance))
+        obs_arr = np.asarray(observations, dtype=float)
+        if obs_arr.ndim == 1:
+            obs_arr = obs_arr.reshape(1, -1)
+        diffs = obs_arr[:, 2:4] - np.asarray(next_state, dtype=float)[2:4]
+        sq = np.sum(diffs * diffs, axis=1)
+        return log_norm - 0.5 * sq / variance
 
     def reward(self, state: np.ndarray, action: str) -> float:
         # Compute next state to evaluate reward based on action result
