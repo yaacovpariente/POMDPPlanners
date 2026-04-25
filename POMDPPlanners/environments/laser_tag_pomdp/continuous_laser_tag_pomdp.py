@@ -337,6 +337,14 @@ class ContinuousLaserTagPOMDP(Environment):
             self.opponent_transition_cov_matrix
         )
 
+        # Per-action kernel caches: one C++ kernel per distinct action vector.
+        # Hot-path overrides flip the (next_)state field via set_state /
+        # set_next_state instead of rebuilding (skips the per-call Cholesky
+        # build and wall-array repacking). Keys are action.tobytes(); values
+        # are the long-lived C++ kernels.
+        self._trans_kernel_cache: Dict[bytes, Any] = {}
+        self._obs_kernel_cache: Dict[bytes, Any] = {}
+
     # ------------------------------------------------------------------
     # Core Environment interface
     # ------------------------------------------------------------------
@@ -368,23 +376,53 @@ class ContinuousLaserTagPOMDP(Environment):
     # ── Hot-path sampling overrides ─────────────────────────────────
     # The default base-class implementations build a Python wrapper subclass
     # per call which only stores a few attributes; the actual RNG draw lives
-    # in the C++ _native kernel. These overrides construct the native kernel
-    # directly to skip the Python wrapper allocation, producing byte-identical
-    # RNG draws (same module-level RNG, same call sequence).
+    # in the C++ _native kernel. These overrides skip the Python subclass,
+    # fetch a cached per-action C++ kernel (Cholesky factored once per action,
+    # walls repacked once per action), and rewrite only the (next_)state
+    # field per call via set_state / set_next_state. The C++ RNG state lives
+    # on the kernel, so each cached kernel maintains a single RNG stream per
+    # (env, action).
+
+    def _get_trans_kernel(self, action: np.ndarray) -> Any:
+        action_arr = np.ascontiguousarray(np.asarray(action, dtype=np.float64))
+        key = action_arr.tobytes()
+        kernel = self._trans_kernel_cache.get(key)
+        if kernel is None:
+            # Use a zero placeholder state — set_state will overwrite it.
+            kernel = _native.ContinuousLaserTagTransitionCpp(
+                state=np.zeros(5, dtype=np.float64),
+                action=action_arr,
+                robot_covariance=self._robot_transition_dist.covariance,
+                opponent_covariance=self._opponent_transition_dist.covariance,
+                pursuit_speed=self.pursuit_speed,
+                walls=self._walls,
+                grid_size=self._grid_size,
+                robot_radius=self.robot_radius,
+                opponent_radius=self.opponent_radius,
+                tag_radius=self.tag_radius,
+            )
+            self._trans_kernel_cache[key] = kernel
+        return kernel
+
+    def _get_obs_kernel(self, action: np.ndarray) -> Any:
+        action_arr = np.ascontiguousarray(np.asarray(action, dtype=np.float64))
+        key = action_arr.tobytes()
+        kernel = self._obs_kernel_cache.get(key)
+        if kernel is None:
+            kernel = _native.ContinuousLaserTagObservationCpp(
+                next_state=np.zeros(5, dtype=np.float64),
+                action=action_arr,
+                measurement_noise=self.measurement_noise,
+                walls=self._walls,
+                grid_size=self._grid_size,
+                opponent_radius=self.opponent_radius,
+            )
+            self._obs_kernel_cache[key] = kernel
+        return kernel
 
     def sample_next_state(self, state: np.ndarray, action: np.ndarray, n_samples: int = 1) -> Any:
-        kernel = _native.ContinuousLaserTagTransitionCpp(
-            state=state,
-            action=np.asarray(action, dtype=float),
-            robot_covariance=self._robot_transition_dist.covariance,
-            opponent_covariance=self._opponent_transition_dist.covariance,
-            pursuit_speed=self.pursuit_speed,
-            walls=self._walls,
-            grid_size=self._grid_size,
-            robot_radius=self.robot_radius,
-            opponent_radius=self.opponent_radius,
-            tag_radius=self.tag_radius,
-        )
+        kernel = self._get_trans_kernel(action)
+        kernel.set_state(state)
         samples = kernel.sample(n_samples)
         if n_samples == 1:
             return samples[0]
@@ -393,14 +431,8 @@ class ContinuousLaserTagPOMDP(Environment):
     def sample_observation(
         self, next_state: np.ndarray, action: np.ndarray, n_samples: int = 1
     ) -> Any:
-        kernel = _native.ContinuousLaserTagObservationCpp(
-            next_state=next_state,
-            action=np.asarray(action, dtype=float),
-            measurement_noise=self.measurement_noise,
-            walls=self._walls,
-            grid_size=self._grid_size,
-            opponent_radius=self.opponent_radius,
-        )
+        kernel = self._get_obs_kernel(action)
+        kernel.set_next_state(next_state)
         samples = kernel.sample(n_samples)
         if n_samples == 1:
             return samples[0]
@@ -409,18 +441,8 @@ class ContinuousLaserTagPOMDP(Environment):
     def transition_log_probability(
         self, state: np.ndarray, action: np.ndarray, next_states: Any
     ) -> np.ndarray:
-        kernel = _native.ContinuousLaserTagTransitionCpp(
-            state=state,
-            action=np.asarray(action, dtype=float),
-            robot_covariance=self._robot_transition_dist.covariance,
-            opponent_covariance=self._opponent_transition_dist.covariance,
-            pursuit_speed=self.pursuit_speed,
-            walls=self._walls,
-            grid_size=self._grid_size,
-            robot_radius=self.robot_radius,
-            opponent_radius=self.opponent_radius,
-            tag_radius=self.tag_radius,
-        )
+        kernel = self._get_trans_kernel(action)
+        kernel.set_state(state)
         probs = np.asarray(kernel.probability(next_states))
         with np.errstate(divide="ignore"):
             return np.log(probs)
@@ -428,14 +450,8 @@ class ContinuousLaserTagPOMDP(Environment):
     def observation_log_probability(
         self, next_state: np.ndarray, action: np.ndarray, observations: Any
     ) -> np.ndarray:
-        kernel = _native.ContinuousLaserTagObservationCpp(
-            next_state=next_state,
-            action=np.asarray(action, dtype=float),
-            measurement_noise=self.measurement_noise,
-            walls=self._walls,
-            grid_size=self._grid_size,
-            opponent_radius=self.opponent_radius,
-        )
+        kernel = self._get_obs_kernel(action)
+        kernel.set_next_state(next_state)
         probs = np.asarray(kernel.probability(observations))
         with np.errstate(divide="ignore"):
             return np.log(probs)
@@ -444,18 +460,9 @@ class ContinuousLaserTagPOMDP(Environment):
         states_array = np.ascontiguousarray(np.asarray(states, dtype=np.float64))
         if states_array.ndim == 1:
             states_array = states_array.reshape(1, -1)
-        kernel = _native.ContinuousLaserTagTransitionCpp(
-            state=states_array[0],
-            action=np.asarray(action, dtype=float),
-            robot_covariance=self._robot_transition_dist.covariance,
-            opponent_covariance=self._opponent_transition_dist.covariance,
-            pursuit_speed=self.pursuit_speed,
-            walls=self._walls,
-            grid_size=self._grid_size,
-            robot_radius=self.robot_radius,
-            opponent_radius=self.opponent_radius,
-            tag_radius=self.tag_radius,
-        )
+        kernel = self._get_trans_kernel(action)
+        # batch_sample reads the per-row state from the input, not the
+        # kernel's stored state, so no set_state is needed here.
         return np.asarray(kernel.batch_sample(states_array), dtype=np.float64)
 
     def observation_log_probability_per_state(
@@ -465,14 +472,9 @@ class ContinuousLaserTagPOMDP(Environment):
         if next_states_array.ndim == 1:
             next_states_array = next_states_array.reshape(1, -1)
         observation_array = np.ascontiguousarray(np.asarray(observation, dtype=np.float64))
-        kernel = _native.ContinuousLaserTagObservationCpp(
-            next_state=next_states_array[0],
-            action=np.asarray(action, dtype=float),
-            measurement_noise=self.measurement_noise,
-            walls=self._walls,
-            grid_size=self._grid_size,
-            opponent_radius=self.opponent_radius,
-        )
+        kernel = self._get_obs_kernel(action)
+        # batch_log_likelihood reads next_state per row from the input;
+        # no set_next_state needed.
         log_probs = np.asarray(
             kernel.batch_log_likelihood(
                 next_particles=next_states_array,
@@ -607,6 +609,24 @@ class ContinuousLaserTagPOMDP(Environment):
     @property
     def grid_size(self) -> np.ndarray:
         return self._grid_size
+
+    # ------------------------------------------------------------------
+    # Pickling
+    # ------------------------------------------------------------------
+
+    def __getstate__(self):
+        # Per-action C++ kernel cache holds pybind11 objects that aren't
+        # picklable. Drop them at serialization time; __setstate__ rebuilds
+        # empty caches so the env works after unpickling.
+        state = self.__dict__.copy()
+        state["_trans_kernel_cache"] = {}
+        state["_obs_kernel_cache"] = {}
+        return state
+
+    def __setstate__(self, state):
+        vars(self).update(state)
+        self._trans_kernel_cache = {}
+        self._obs_kernel_cache = {}
 
     # ------------------------------------------------------------------
     # Private helpers
