@@ -179,10 +179,8 @@ class ICVaR_PFT_DPW(ArenaPathSimulationPolicyCostSetting):
         belief = tree.belief[parent_belief_id]
         action = tree.action[action_id]
         state = belief.sample()
-        next_state = self.environment.state_transition_model(state=state, action=action).sample()[0]
-        next_observation = self.environment.observation_model(
-            next_state=next_state, action=action
-        ).sample()[0]
+        next_state = self.environment.sample_next_state(state=state, action=action)
+        next_observation = self.environment.sample_observation(next_state=next_state, action=action)
 
         next_belief = belief.update(
             action=action, observation=next_observation, pomdp=self.environment

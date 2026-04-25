@@ -46,8 +46,8 @@ def sample_next_belief(belief: Belief, action: Any, pomdp: "Environment") -> Tup
             - Observation that was generated
     """
     state = belief.sample()
-    next_state = pomdp.state_transition_model(state=state, action=action).sample()[0]
-    observation = pomdp.observation_model(next_state=next_state, action=action).sample()[0]
+    next_state = pomdp.sample_next_state(state=state, action=action)
+    observation = pomdp.sample_observation(next_state=next_state, action=action)
 
     next_belief = belief.update(action=action, observation=observation, pomdp=pomdp)
 

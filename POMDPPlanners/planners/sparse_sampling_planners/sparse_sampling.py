@@ -121,8 +121,8 @@ class BaseSparseSamplingDiscreteActionsPlanner(Policy, ABC):
             child = ActionNode(action=action, parent=belief_node, children=tuple(), data=None)
 
             state = belief_node.belief.sample()
-            next_state = self.environment.state_transition_model(state, action).sample()[0]
-            next_observation = self.environment.observation_model(next_state, action).sample()[0]
+            next_state = self.environment.sample_next_state(state, action)
+            next_observation = self.environment.sample_observation(next_state, action)
 
             next_belief = belief_node.belief.update(
                 action=action, observation=next_observation, pomdp=self.environment
