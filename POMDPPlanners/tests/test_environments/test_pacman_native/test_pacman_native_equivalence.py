@@ -122,8 +122,7 @@ class TestTerminalAbsorbing:
             terminal=True,
         )
         _native.set_seed(0)
-        model = env.state_transition_model(terminal_state, 0)
-        next_state = model.sample()[0]
+        next_state = env.sample_next_state(state=terminal_state, action=0)
         np.testing.assert_array_equal(next_state, terminal_state)
 
 
@@ -151,8 +150,7 @@ class TestPelletCollection:
             terminal=False,
         )
         _native.set_seed(0)
-        model = env.state_transition_model(state, 1)  # East
-        next_state = model.sample()[0]
+        next_state = env.sample_next_state(state=state, action=1)  # East
         assert env.get_pacman_pos(next_state) == (1, 1)
         pellets_after = set(env.get_pellets(next_state))
         assert (1, 1) not in pellets_after
@@ -189,8 +187,7 @@ class TestCollisionTerminal:
         collision_found = False
         for seed in range(50):
             _native.set_seed(seed)
-            model = env.state_transition_model(state, 1)  # East
-            next_state = model.sample()[0]
+            next_state = env.sample_next_state(state=state, action=1)  # East
             if env.get_terminal(next_state) and env.get_pacman_pos(
                 next_state
             ) in env.get_ghost_positions(next_state):
@@ -220,8 +217,7 @@ class TestWinCondition:
             terminal=False,
         )
         _native.set_seed(0)
-        model = env.state_transition_model(state, 1)  # East
-        next_state = model.sample()[0]
+        next_state = env.sample_next_state(state=state, action=1)  # East
         assert env.get_pacman_pos(next_state) == (1, 1)
         assert env.get_pellets(next_state) == ()
         assert env.get_terminal(next_state)

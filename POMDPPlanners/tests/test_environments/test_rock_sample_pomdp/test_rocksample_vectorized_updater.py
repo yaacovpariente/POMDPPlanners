@@ -429,7 +429,7 @@ class TestEquivalenceWithPerParticleLoop:
         particles = np.stack(states)
 
         def per_particle_fn(particle, action):
-            return simple_env.state_transition_model(state=particle, action=action).sample()[0]
+            return simple_env.sample_next_state(state=particle, action=action)
 
         for action in [0, 1, 2, 3, 4, 5, 6]:  # Sample, N, E, S, W, Check0, Check1
             assert_batch_transition_matches_loop(
@@ -458,12 +458,9 @@ class TestEquivalenceWithPerParticleLoop:
         particles = np.stack(states)
 
         def per_particle_ll_fn(particle, action, obs):
-            obs_model = simple_env.observation_model(next_state=particle, action=action)
             obs_str = {OBS_NONE: "none", OBS_GOOD: "good", OBS_BAD: "bad"}[int(obs)]
-            prob = obs_model.probability([obs_str])[0]
-            if prob > 0:
-                return np.log(prob)
-            return -np.inf
+            log_prob = simple_env.observation_log_probability(particle, action, [obs_str])[0]
+            return log_prob
 
         # Check rock 0 with "good" observation
         assert_batch_obs_log_likelihood_matches_loop(

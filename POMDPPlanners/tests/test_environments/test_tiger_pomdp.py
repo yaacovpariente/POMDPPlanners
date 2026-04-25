@@ -95,15 +95,14 @@ def test_state_transition_listen(tiger_pomdp):
     Purpose: Validates that TigerPOMDP listen action doesn't change the state
 
     Given: A TigerPOMDP environment and both states (tiger_left, tiger_right)
-    When: State transition model is created for listen action and next state is sampled
+    When: env.sample_next_state is called for the listen action repeatedly
     Then: All samples return the same state as the input state, confirming that listening doesn't change the tiger's position
 
     Test type: unit
     """
     # Listening shouldn't change the state
     for state in tiger_pomdp.states:
-        dist = tiger_pomdp.state_transition_model(state, "listen")
-        samples = dist.sample(n_samples=10)
+        samples = [tiger_pomdp.sample_next_state(state=state, action="listen") for _ in range(10)]
         assert all(s == state for s in samples)
 
 
@@ -113,15 +112,16 @@ def test_state_transition_open_door(tiger_pomdp):
     Purpose: Validates that TigerPOMDP open door actions randomly place tiger behind either door
 
     Given: A TigerPOMDP environment starting from tiger_left state and both open actions (open_left, open_right)
-    When: State transition model is created for open actions and next states are sampled 100 times
+    When: env.sample_next_state is called for the open actions 100 times
     Then: All samples are valid states and both states appear, demonstrating random placement after opening doors
 
     Test type: unit
     """
     # Opening a door should randomly place tiger behind either door
     for action in ["open_left", "open_right"]:
-        dist = tiger_pomdp.state_transition_model("tiger_left", action)
-        samples = dist.sample(n_samples=100)
+        samples = [
+            tiger_pomdp.sample_next_state(state="tiger_left", action=action) for _ in range(100)
+        ]
         assert all(s in tiger_pomdp.states for s in samples)
         assert len(set(samples)) == 2  # Should get both states
 
@@ -132,15 +132,16 @@ def test_observation_model_listen(tiger_pomdp):
     Purpose: Validates that TigerPOMDP listen action provides mostly correct observations with some noise
 
     Given: A TigerPOMDP environment and both states (tiger_left, tiger_right)
-    When: Observation model is created for listen action and observations are sampled 100 times
+    When: env.sample_observation is called for the listen action 100 times
     Then: Most observations are correct (hear_left for tiger_left, hear_right for tiger_right) with approximately 85% accuracy
 
     Test type: unit
     """
     # Test listen action with both states
     for state in tiger_pomdp.states:
-        dist = tiger_pomdp.observation_model(state, "listen")
-        samples = dist.sample(n_samples=100)
+        samples = [
+            tiger_pomdp.sample_observation(next_state=state, action="listen") for _ in range(100)
+        ]
         assert all(s in tiger_pomdp.observations for s in samples)
 
         # Should mostly get correct observation
@@ -155,7 +156,7 @@ def test_observation_model_open_door(tiger_pomdp):
     Purpose: Validates that TigerPOMDP open door actions always provide "hear_nothing" observations
 
     Given: A TigerPOMDP environment and both states (tiger_left, tiger_right) with both open actions (open_left, open_right)
-    When: Observation model is created for open actions and observations are sampled 10 times
+    When: env.sample_observation is called for the open actions 10 times
     Then: All samples return "hear_nothing", confirming that opening doors provides no auditory information
 
     Test type: unit
@@ -163,8 +164,9 @@ def test_observation_model_open_door(tiger_pomdp):
     # Opening a door should always give 'hear_nothing'
     for state in tiger_pomdp.states:
         for action in ["open_left", "open_right"]:
-            dist = tiger_pomdp.observation_model(state, action)
-            samples = dist.sample(n_samples=10)
+            samples = [
+                tiger_pomdp.sample_observation(next_state=state, action=action) for _ in range(10)
+            ]
             assert all(s == "hear_nothing" for s in samples)
 
 

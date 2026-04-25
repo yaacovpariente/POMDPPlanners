@@ -117,9 +117,9 @@ def _simulate_one_step(env):
     particles = env.initial_state_dist().sample(n_samples=NUM_PARTICLES)
     action = env.get_actions()[0]
     state = particles[0]
-    next_state = env.state_transition_model(state, action).sample()[0]
-    observation = env.observation_model(next_state, action).sample()[0]
-    next_states = [env.state_transition_model(p, action).sample()[0] for p in particles]
+    next_state = env.sample_next_state(state, action)
+    observation = env.sample_observation(next_state, action)
+    next_states = [env.sample_next_state(p, action) for p in particles]
     return particles, action, observation, next_states
 
 
@@ -292,8 +292,8 @@ def _simulate_trajectory(env, n_steps):
     actions = []
     observations = []
     for _ in range(n_steps):
-        next_state = env.state_transition_model(state, action).sample()[0]
-        observation = env.observation_model(next_state, action).sample()[0]
+        next_state = env.sample_next_state(state, action)
+        observation = env.sample_observation(next_state, action)
         actions.append(action)
         observations.append(observation)
         state = next_state

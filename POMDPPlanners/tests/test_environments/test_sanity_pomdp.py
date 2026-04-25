@@ -312,94 +312,90 @@ class TestSanityStateTransitionModel:
         assert model.state == 0
         assert model.action == 1
 
-    def test_sample_action_0(self):
+    def test_sample_action_0(self, sanity_pomdp):
         """Test sampling with action 0 (should always lead to state 0).
 
         Purpose: Validates state transition sampling with action 0 produces deterministic state 0 transitions
 
-        Given: SanityStateTransitionModel configured with initial state=0 and action=0
-        When: Sample method is called for 10 samples
+        Given: A SanityPOMDP environment, initial state=0 and action=0
+        When: env.sample_next_state is called 10 times
         Then: All samples return state 0 (deterministic transition for action 0)
 
         Test type: unit
         """
-        model = SanityStateTransitionModel(state=0, action=0)
-        samples = model.sample(n_samples=10)
+        samples = [sanity_pomdp.sample_next_state(state=0, action=0) for _ in range(10)]
         assert all(s == 0 for s in samples)
         assert len(samples) == 10
 
-    def test_sample_action_1(self):
+    def test_sample_action_1(self, sanity_pomdp):
         """Test sampling with action 1 (should always lead to state 1).
 
         Purpose: Validates state transition sampling with action 1 produces deterministic state 1 transitions
 
-        Given: SanityStateTransitionModel configured with initial state=0 and action=1
-        When: Sample method is called for 10 samples
+        Given: A SanityPOMDP environment, initial state=0 and action=1
+        When: env.sample_next_state is called 10 times
         Then: All samples return state 1 (deterministic transition for action 1)
 
         Test type: unit
         """
-        model = SanityStateTransitionModel(state=0, action=1)
-        samples = model.sample(n_samples=10)
+        samples = [sanity_pomdp.sample_next_state(state=0, action=1) for _ in range(10)]
         assert all(s == 1 for s in samples)
         assert len(samples) == 10
 
-    def test_sample_different_states(self):
+    def test_sample_different_states(self, sanity_pomdp):
         """Test that state doesn't affect transition (only action matters).
 
-        Purpose: Validates sampling behavior for  different states
+        Purpose: Validates sampling behavior for different states
 
-        Given: Configured object with sampling capabilities
-        When: Sample method is called
-        Then: Valid samples are returned according to distribution
+        Given: A SanityPOMDP environment
+        When: env.sample_next_state is called for both states with each action
+        Then: Action 0 always leads to state 0, action 1 always leads to state 1
 
         Test type: unit
         """
         # Action 0 should always lead to state 0 regardless of current state
         for state in [0, 1]:
-            model = SanityStateTransitionModel(state=state, action=0)
-            samples = model.sample(n_samples=5)
+            samples = [sanity_pomdp.sample_next_state(state=state, action=0) for _ in range(5)]
             assert all(s == 0 for s in samples)
 
         # Action 1 should always lead to state 1 regardless of current state
         for state in [0, 1]:
-            model = SanityStateTransitionModel(state=state, action=1)
-            samples = model.sample(n_samples=5)
+            samples = [sanity_pomdp.sample_next_state(state=state, action=1) for _ in range(5)]
             assert all(s == 1 for s in samples)
 
-    def test_probability_action_0(self):
+    def test_probability_action_0(self, sanity_pomdp):
         """Test probability calculation for action 0.
 
         Purpose: Validates state transition probabilities for action 0 (deterministically leads to state 0)
 
-        Given: SanityStateTransitionModel with action=0 and test values [0,1,0,1]
-        When: Probability method is called with the test values
-        Then: Returns [1.0,0.0,1.0,0.0] probabilities (1.0 for state 0, 0.0 for state 1)
+        Given: A SanityPOMDP environment with state=0, action=0 and candidate next states [0,1,0,1]
+        When: env.transition_log_probability is called with the candidate next states
+        Then: Exponentiated log-probs equal [1.0, 0.0, 1.0, 0.0]
 
         Test type: unit
         """
-        model = SanityStateTransitionModel(state=0, action=0)
         values = [0, 1, 0, 1]
-        probs = model.probability(values)
+        log_probs = sanity_pomdp.transition_log_probability(state=0, action=0, next_states=values)
+        probs = np.exp(log_probs)
         expected = np.array([1.0, 0.0, 1.0, 0.0])
-        np.testing.assert_array_equal(probs, expected)
+        np.testing.assert_allclose(probs, expected, atol=1e-200)
 
-    def test_probability_action_1(self):
+    def test_probability_action_1(self, sanity_pomdp):
         """Test probability calculation for action 1.
 
         Purpose: Validates state transition probabilities for action 1 (deterministically leads to state 1)
 
-        Given: SanityStateTransitionModel with action=1 and test values [0,1,0,1]
-        When: Probability method is called with the test values
-        Then: Returns [0.0,1.0,0.0,1.0] probabilities (0.0 for state 0, 1.0 for state 1)
+        Given: A SanityPOMDP environment with state=0, action=1 and candidate next states [0,1,0,1]
+        When: env.transition_log_probability is called with the candidate next states
+        Then: Exponentiated log-probs equal [0.0, 1.0, 0.0, 1.0]
 
         Test type: unit
         """
-        model = SanityStateTransitionModel(state=0, action=1)
         values = [0, 1, 0, 1]
-        probs = model.probability(values)
+        log_probs = sanity_pomdp.transition_log_probability(state=0, action=1, next_states=values)
+        probs = np.exp(log_probs)
         expected = np.array([0.0, 1.0, 0.0, 1.0])
-        np.testing.assert_array_equal(probs, expected)
+        np.testing.assert_allclose(probs, expected, atol=1e-200)
 
 
 class TestSanityObservationModel:
@@ -420,94 +416,98 @@ class TestSanityObservationModel:
         assert model.next_state == 1
         assert model.action == 0
 
-    def test_sample_state_0(self):
+    def test_sample_state_0(self, sanity_pomdp):
         """Test sampling with state 0 (should always observe 0).
 
         Purpose: Validates observation sampling from state 0 produces deterministic observation 0
 
-        Given: SanityObservationModel configured with next_state=0 and action=0
-        When: Sample method is called for 10 samples
+        Given: A SanityPOMDP environment, next_state=0 and action=0
+        When: env.sample_observation is called 10 times
         Then: All samples return observation 0 (deterministic observation for state 0)
 
         Test type: unit
         """
-        model = SanityObservationModel(next_state=0, action=0)
-        samples = model.sample(n_samples=10)
+        samples = [sanity_pomdp.sample_observation(next_state=0, action=0) for _ in range(10)]
         assert all(s == 0 for s in samples)
         assert len(samples) == 10
 
-    def test_sample_state_1(self):
+    def test_sample_state_1(self, sanity_pomdp):
         """Test sampling with state 1 (should always observe 1).
 
         Purpose: Validates observation sampling from state 1 produces deterministic observation 1
 
-        Given: SanityObservationModel configured with next_state=1 and action=0
-        When: Sample method is called for 10 samples
+        Given: A SanityPOMDP environment, next_state=1 and action=0
+        When: env.sample_observation is called 10 times
         Then: All samples return observation 1 (deterministic observation for state 1)
 
         Test type: unit
         """
-        model = SanityObservationModel(next_state=1, action=0)
-        samples = model.sample(n_samples=10)
+        samples = [sanity_pomdp.sample_observation(next_state=1, action=0) for _ in range(10)]
         assert all(s == 1 for s in samples)
         assert len(samples) == 10
 
-    def test_sample_different_actions(self):
+    def test_sample_different_actions(self, sanity_pomdp):
         """Test that action doesn't affect observation (only state matters).
 
-        Purpose: Validates sampling behavior for  different actions
+        Purpose: Validates sampling behavior for different actions
 
-        Given: Configured object with sampling capabilities
-        When: Sample method is called
-        Then: Valid samples are returned according to distribution
+        Given: A SanityPOMDP environment
+        When: env.sample_observation is called for both next states with each action
+        Then: Next-state 0 always observes 0; next-state 1 always observes 1
 
         Test type: unit
         """
         # State 0 should always give observation 0 regardless of action
         for action in [0, 1]:
-            model = SanityObservationModel(next_state=0, action=action)
-            samples = model.sample(n_samples=5)
+            samples = [
+                sanity_pomdp.sample_observation(next_state=0, action=action) for _ in range(5)
+            ]
             assert all(s == 0 for s in samples)
 
         # State 1 should always give observation 1 regardless of action
         for action in [0, 1]:
-            model = SanityObservationModel(next_state=1, action=action)
-            samples = model.sample(n_samples=5)
+            samples = [
+                sanity_pomdp.sample_observation(next_state=1, action=action) for _ in range(5)
+            ]
             assert all(s == 1 for s in samples)
 
-    def test_probability_state_0(self):
+    def test_probability_state_0(self, sanity_pomdp):
         """Test probability calculation for state 0.
 
         Purpose: Validates observation probabilities for state 0 (deterministically observes observation 0)
 
-        Given: SanityObservationModel with next_state=0 and test values [0,1,0,1]
-        When: Probability method is called with the test values
-        Then: Returns [1.0,0.0,1.0,0.0] probabilities (1.0 for obs 0, 0.0 for obs 1)
+        Given: A SanityPOMDP environment with next_state=0, action=0 and candidate observations [0,1,0,1]
+        When: env.observation_log_probability is called with the candidate observations
+        Then: Exponentiated log-probs equal [1.0, 0.0, 1.0, 0.0]
 
         Test type: unit
         """
-        model = SanityObservationModel(next_state=0, action=0)
         values = [0, 1, 0, 1]
-        probs = model.probability(values)
+        log_probs = sanity_pomdp.observation_log_probability(
+            next_state=0, action=0, observations=values
+        )
+        probs = np.exp(log_probs)
         expected = np.array([1.0, 0.0, 1.0, 0.0])
-        np.testing.assert_array_equal(probs, expected)
+        np.testing.assert_allclose(probs, expected, atol=1e-200)
 
-    def test_probability_state_1(self):
+    def test_probability_state_1(self, sanity_pomdp):
         """Test probability calculation for state 1.
 
         Purpose: Validates observation probabilities for state 1 (deterministically observes observation 1)
 
-        Given: SanityObservationModel with next_state=1 and test values [0,1,0,1]
-        When: Probability method is called with the test values
-        Then: Returns [0.0,1.0,0.0,1.0] probabilities (0.0 for obs 0, 1.0 for obs 1)
+        Given: A SanityPOMDP environment with next_state=1, action=0 and candidate observations [0,1,0,1]
+        When: env.observation_log_probability is called with the candidate observations
+        Then: Exponentiated log-probs equal [0.0, 1.0, 0.0, 1.0]
 
         Test type: unit
         """
-        model = SanityObservationModel(next_state=1, action=0)
         values = [0, 1, 0, 1]
-        probs = model.probability(values)
+        log_probs = sanity_pomdp.observation_log_probability(
+            next_state=1, action=0, observations=values
+        )
+        probs = np.exp(log_probs)
         expected = np.array([0.0, 1.0, 0.0, 1.0])
-        np.testing.assert_array_equal(probs, expected)
+        np.testing.assert_allclose(probs, expected, atol=1e-200)
 
 
 class TestSanityInitialStateDist:

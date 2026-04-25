@@ -39,7 +39,7 @@ def test_bench_tiger_state_transition(benchmark, tiger_state_action):
     Purpose: Measure state transition sampling in isolation.
 
     Given: A TigerPOMDP environment with a valid state and action.
-    When: state_transition_model is called and sampled repeatedly.
+    When: sample_next_state is called repeatedly.
     Then: Execution time is recorded for regression tracking.
 
     Test type: performance
@@ -48,7 +48,7 @@ def test_bench_tiger_state_transition(benchmark, tiger_state_action):
     np.random.seed(42)
 
     def run():
-        return env.state_transition_model(state=state, action=action).sample()[0]
+        return env.sample_next_state(state=state, action=action)
 
     benchmark(run)
 
@@ -60,17 +60,17 @@ def test_bench_tiger_observation_model(benchmark, tiger_state_action):
     Purpose: Measure observation sampling in isolation.
 
     Given: A TigerPOMDP environment with a sampled next state and action.
-    When: observation_model is called and sampled repeatedly.
+    When: sample_observation is called repeatedly.
     Then: Execution time is recorded for regression tracking.
 
     Test type: performance
     """
     env, state, action = tiger_state_action
     np.random.seed(42)
-    next_state = env.state_transition_model(state=state, action=action).sample()[0]
+    next_state = env.sample_next_state(state=state, action=action)
 
     def run():
-        return env.observation_model(next_state=next_state, action=action).sample()[0]
+        return env.sample_observation(next_state=next_state, action=action)
 
     benchmark(run)
 
@@ -136,7 +136,7 @@ def test_bench_discrete_ld_state_transition(benchmark, discrete_ld_state_action)
     Purpose: Measure state transition sampling in isolation.
 
     Given: A DiscreteLightDarkPOMDP with a valid state and action.
-    When: state_transition_model is called and sampled repeatedly.
+    When: sample_next_state is called repeatedly.
     Then: Execution time is recorded for regression tracking.
 
     Test type: performance
@@ -145,7 +145,7 @@ def test_bench_discrete_ld_state_transition(benchmark, discrete_ld_state_action)
     np.random.seed(42)
 
     def run():
-        return env.state_transition_model(state=state, action=action).sample()[0]
+        return env.sample_next_state(state=state, action=action)
 
     benchmark(run)
 
@@ -157,17 +157,17 @@ def test_bench_discrete_ld_observation_model(benchmark, discrete_ld_state_action
     Purpose: Measure observation sampling in isolation.
 
     Given: A DiscreteLightDarkPOMDP with a sampled next state and action.
-    When: observation_model is called and sampled repeatedly.
+    When: sample_observation is called repeatedly.
     Then: Execution time is recorded for regression tracking.
 
     Test type: performance
     """
     env, state, action = discrete_ld_state_action
     np.random.seed(42)
-    next_state = env.state_transition_model(state=state, action=action).sample()[0]
+    next_state = env.sample_next_state(state=state, action=action)
 
     def run():
-        return env.observation_model(next_state=next_state, action=action).sample()[0]
+        return env.sample_observation(next_state=next_state, action=action)
 
     benchmark(run)
 
@@ -233,7 +233,7 @@ def test_bench_continuous_ld_state_transition(benchmark, continuous_ld_state_act
     Purpose: Measure state transition sampling in isolation.
 
     Given: A ContinuousLightDarkPOMDPDiscreteActions with a valid state and action.
-    When: state_transition_model is called and sampled repeatedly.
+    When: sample_next_state is called repeatedly.
     Then: Execution time is recorded for regression tracking.
 
     Test type: performance
@@ -242,7 +242,7 @@ def test_bench_continuous_ld_state_transition(benchmark, continuous_ld_state_act
     np.random.seed(42)
 
     def run():
-        return env.state_transition_model(state=state, action=action).sample()[0]
+        return env.sample_next_state(state=state, action=action)
 
     benchmark(run)
 
@@ -254,17 +254,17 @@ def test_bench_continuous_ld_observation_model(benchmark, continuous_ld_state_ac
     Purpose: Measure observation sampling in isolation.
 
     Given: A ContinuousLightDarkPOMDPDiscreteActions with a sampled next state and action.
-    When: observation_model is called and sampled repeatedly.
+    When: sample_observation is called repeatedly.
     Then: Execution time is recorded for regression tracking.
 
     Test type: performance
     """
     env, state, action = continuous_ld_state_action
     np.random.seed(42)
-    next_state = env.state_transition_model(state=state, action=action).sample()[0]
+    next_state = env.sample_next_state(state=state, action=action)
 
     def run():
-        return env.observation_model(next_state=next_state, action=action).sample()[0]
+        return env.sample_observation(next_state=next_state, action=action)
 
     benchmark(run)
 
@@ -330,7 +330,7 @@ def test_bench_rock_sample_state_transition(benchmark, rock_sample_state_action)
     Purpose: Measure state transition sampling in isolation.
 
     Given: A RockSamplePOMDP with a valid state and action.
-    When: state_transition_model is called and sampled repeatedly.
+    When: sample_next_state is called repeatedly.
     Then: Execution time is recorded for regression tracking.
 
     Test type: performance
@@ -339,7 +339,7 @@ def test_bench_rock_sample_state_transition(benchmark, rock_sample_state_action)
     np.random.seed(42)
 
     def run():
-        return env.state_transition_model(state=state, action=action).sample()[0]
+        return env.sample_next_state(state=state, action=action)
 
     benchmark(run)
 
@@ -351,17 +351,17 @@ def test_bench_rock_sample_observation_model(benchmark, rock_sample_state_action
     Purpose: Measure observation sampling in isolation.
 
     Given: A RockSamplePOMDP with a sampled next state and action.
-    When: observation_model is called and sampled repeatedly.
+    When: sample_observation is called repeatedly.
     Then: Execution time is recorded for regression tracking.
 
     Test type: performance
     """
     env, state, action = rock_sample_state_action
     np.random.seed(42)
-    next_state = env.state_transition_model(state=state, action=action).sample()[0]
+    next_state = env.sample_next_state(state=state, action=action)
 
     def run():
-        return env.observation_model(next_state=next_state, action=action).sample()[0]
+        return env.sample_observation(next_state=next_state, action=action)
 
     benchmark(run)
 
@@ -427,7 +427,7 @@ def test_bench_laser_tag_state_transition(benchmark, laser_tag_state_action):
     Purpose: Measure state transition sampling in isolation.
 
     Given: A LaserTagPOMDP with a valid state and action.
-    When: state_transition_model is called and sampled repeatedly.
+    When: sample_next_state is called repeatedly.
     Then: Execution time is recorded for regression tracking.
 
     Test type: performance
@@ -436,7 +436,7 @@ def test_bench_laser_tag_state_transition(benchmark, laser_tag_state_action):
     np.random.seed(42)
 
     def run():
-        return env.state_transition_model(state=state, action=action).sample()[0]
+        return env.sample_next_state(state=state, action=action)
 
     benchmark(run)
 
@@ -448,17 +448,17 @@ def test_bench_laser_tag_observation_model(benchmark, laser_tag_state_action):
     Purpose: Measure observation sampling in isolation.
 
     Given: A LaserTagPOMDP with a sampled next state and action.
-    When: observation_model is called and sampled repeatedly.
+    When: sample_observation is called repeatedly.
     Then: Execution time is recorded for regression tracking.
 
     Test type: performance
     """
     env, state, action = laser_tag_state_action
     np.random.seed(42)
-    next_state = env.state_transition_model(state=state, action=action).sample()[0]
+    next_state = env.sample_next_state(state=state, action=action)
 
     def run():
-        return env.observation_model(next_state=next_state, action=action).sample()[0]
+        return env.sample_observation(next_state=next_state, action=action)
 
     benchmark(run)
 

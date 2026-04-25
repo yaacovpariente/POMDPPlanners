@@ -76,7 +76,7 @@ def _benchmark_continuous_transition(env: ContinuousLightDarkPOMDP, updater) -> 
         states = [particles[i].copy() for i in range(n)]
 
         mean_loop, _ = _time_fn(
-            lambda: [env.state_transition_model(s, action).sample()[0] for s in states],
+            lambda: [env.sample_next_state(s, action) for s in states],
             n_runs=N_RUNS_FAST,
         )
         mean_vec, _ = _time_fn(
@@ -99,16 +99,7 @@ def _benchmark_continuous_log_lik(env: ContinuousLightDarkPOMDP, updater, observ
             mean_loop, _ = _time_fn(
                 lambda: np.array(
                     [
-                        (
-                            np.log(p)
-                            if (
-                                p := env.observation_model(particles[i], action).probability(
-                                    [observation]
-                                )[0]
-                            )
-                            > 0
-                            else -np.inf
-                        )
+                        env.observation_log_probability(particles[i], action, [observation])[0]
                         for i in range(n)
                     ]
                 ),
@@ -200,7 +191,7 @@ def _benchmark_discrete_transition(env: DiscreteLightDarkPOMDP, updater) -> None
         states = [particles[i].copy() for i in range(n)]
 
         mean_loop, _ = _time_fn(
-            lambda: [env.state_transition_model(s, action).sample()[0] for s in states],
+            lambda: [env.sample_next_state(s, action) for s in states],
             n_runs=N_RUNS_FAST,
         )
         mean_vec, _ = _time_fn(
@@ -222,16 +213,7 @@ def _benchmark_discrete_log_lik(env: DiscreteLightDarkPOMDP, updater, observatio
         mean_loop, _ = _time_fn(
             lambda: np.array(
                 [
-                    (
-                        np.log(p)
-                        if (
-                            p := env.observation_model(particles[i], action).probability(
-                                [observation]
-                            )[0]
-                        )
-                        > 0
-                        else -np.inf
-                    )
+                    env.observation_log_probability(particles[i], action, [observation])[0]
                     for i in range(n)
                 ]
             ),

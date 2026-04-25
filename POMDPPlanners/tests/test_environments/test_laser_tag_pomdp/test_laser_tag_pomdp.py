@@ -1009,9 +1009,8 @@ class TestLaserTagPOMDPTransitionError:
         env = LaserTagPOMDP(discount_factor=0.95, transition_error_prob=0.7)
         state = np.array([3.0, 5.0, 1.0, 1.0, 0.0])
 
-        # Sample many transitions with North action (0)
-        transition = env.state_transition_model(state, 0)
-        next_states = transition.sample(n_samples=1000)
+        # Sample many transitions with North action (0) via the env-level API.
+        next_states = env.sample_next_state(state, 0, n_samples=1000)
         robot_positions = [(int(ns[0]), int(ns[1])) for ns in next_states]
 
         position_counts = Counter(robot_positions)
