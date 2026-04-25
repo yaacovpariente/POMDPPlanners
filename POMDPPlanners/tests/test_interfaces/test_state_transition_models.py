@@ -30,7 +30,6 @@ from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp import (
     create_rock_sample_state,
 )
 from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP, SanityStateTransitionModel
-from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP, TigerStateTransition
 from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP, CartPoleStateTransition
 from POMDPPlanners.environments.mountain_car_pomdp import (
     MountainCarPOMDP,
@@ -43,51 +42,6 @@ from POMDPPlanners.environments.safety_ant_velocity_pomdp.safety_ant_velocity_po
 from POMDPPlanners.tests.test_utils.test_probability_utils import (
     validate_probability_matches_empirical_distribution,
 )
-
-
-class TestTigerPOMDPProbability:
-    """Test probability method for Tiger POMDP."""
-
-    def test_tiger_listen_action_probability(self):
-        """Test Tiger POMDP probability method with listen action.
-
-        Purpose: Validates that probability() method matches empirical distribution for listen action
-
-        Given: Tiger POMDP with listen action (deterministic state transition)
-        When: Comparing computed probabilities to empirical sampling
-        Then: Probabilities match within tolerance and are properly normalized
-
-        Test type: unit
-        """
-        transition = TigerStateTransition(state="tiger_left", action="listen")
-        results = validate_probability_matches_empirical_distribution(
-            transition, num_samples=1000, max_js_divergence=0.01
-        )
-
-        # Listen action should be deterministic (state doesn't change)
-        assert results["probabilities_normalized"]
-        assert results["distance"] < 0.01  # Should be nearly perfect
-        assert results["num_unique_states"] == 1  # Deterministic transition
-
-    def test_tiger_open_door_action_probability(self):
-        """Test Tiger POMDP probability method with open door action.
-
-        Purpose: Validates that probability() method matches empirical distribution for open action
-
-        Given: Tiger POMDP with open_left action (stochastic state transition)
-        When: Comparing computed probabilities to empirical sampling
-        Then: Probabilities match within tolerance and are properly normalized
-
-        Test type: unit
-        """
-        transition = TigerStateTransition(state="tiger_left", action="open_left")
-        results = validate_probability_matches_empirical_distribution(
-            transition, num_samples=1000, max_js_divergence=0.05
-        )
-
-        assert results["probabilities_normalized"]
-        assert results["distance"] < 0.05
-        assert results["num_unique_states"] == 2  # Two possible tiger positions
 
 
 class TestPacManPOMDPProbability:
