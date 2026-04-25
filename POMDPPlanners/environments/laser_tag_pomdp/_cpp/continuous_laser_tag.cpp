@@ -444,6 +444,12 @@ class ContinuousLaserTagTransitionCpp {
         return py::make_tuple(action_[0], action_[1], action_[2]);
     }
 
+    // Rewrite only the state field; covariance / Cholesky factors, action,
+    // and env geometry stay frozen so cached Cholesky factors and the
+    // pre-built wall list remain valid. Lets Python keep one kernel per
+    // (env, action) instead of rebuilding for every call.
+    void set_state(const py::object &state_obj) { state_ = parse_state(state_obj); }
+
   private:
     void sample_into(const double *src, double *out, pomdp_native::RNGState &rng) const {
         // Terminal particles are absorbing: copy the state through unchanged.
@@ -644,6 +650,14 @@ class ContinuousLaserTagObservationCpp {
     py::tuple action_property() const {
         return py::make_tuple(action_[0], action_[1], action_[2]);
     }
+
+    // Rewrite only the next_state field; measurement_noise constants, action,
+    // and env geometry (walls / grid / opponent radius) stay frozen so the
+    // cached log-norm factor and pre-built wall list remain valid.
+    void set_next_state(const py::object &next_state_obj) {
+        next_state_ = parse_state(next_state_obj);
+    }
+
     py::array_t<double> mean_property() const {
         double mean[kObsDim];  // NOLINT(modernize-avoid-c-arrays)
         if (next_state_[4] != 0.0) {
@@ -680,6 +694,94 @@ class ContinuousLaserTagObservationCpp {
     EnvParams env_;
 };
 
+// Vectorised reward kernel.
+//
+// Mirrors ContinuousLaserTagPOMDP.reward / reward_batch in pure C++:
+//   - terminal-flag rows yield 0.0 (live mask in Python collapsed here);
+//   - on a tag action (action[2] > 0.5) live rows get +tag_reward when
+//     ||robot - opp|| <= tag_radius, else -tag_penalty;
+//   - all live rows pay -step_cost;
+//   - any live row whose robot position lies within
+//     ``dangerous_area_radius`` of any (dx, dy) pays -dangerous_area_penalty.
+//
+// dangerous_areas is shape (K, 2) (or empty (0, 2) / 1-D length-0); the
+// per-particle inner loop replaces the per-area numpy ``np.sqrt(...)``
+// + boolean-index assignment chain that dominated PFT-DPW reward time.
+py::array_t<double> reward_batch(
+    const py::array_t<double, py::array::c_style | py::array::forcecast> &states,
+    const py::array_t<double, py::array::c_style | py::array::forcecast> &action,
+    double tag_radius, double tag_reward, double tag_penalty, double step_cost,
+    const py::array_t<double, py::array::c_style | py::array::forcecast> &dangerous_areas,
+    double dangerous_area_radius, double dangerous_area_penalty) {
+    if (states.ndim() != 2 || states.shape(1) != static_cast<py::ssize_t>(kStateDim)) {
+        throw std::invalid_argument("states must have shape (N, 5)");
+    }
+    if (action.ndim() != 1 || (action.shape(0) != 2 && action.shape(0) != 3)) {
+        throw std::invalid_argument("action must be a length-2 or length-3 1-D array");
+    }
+    auto action_view = action.unchecked<1>();
+    const double tag_flag = (action.shape(0) == 3) ? action_view(2) : 0.0;
+    const bool is_tag = tag_flag > 0.5;
+
+    // dangerous_areas: accept (K, 2) or (0,) for empty.
+    std::vector<std::pair<double, double>> areas;
+    if (!(dangerous_areas.ndim() == 1 && dangerous_areas.shape(0) == 0)) {
+        if (dangerous_areas.ndim() != 2 || dangerous_areas.shape(1) != 2) {
+            throw std::invalid_argument("dangerous_areas must have shape (K, 2)");
+        }
+        const auto k = static_cast<std::size_t>(dangerous_areas.shape(0));
+        areas.reserve(k);
+        auto da_view = dangerous_areas.unchecked<2>();
+        for (std::size_t i = 0; i < k; ++i) {
+            areas.emplace_back(da_view(static_cast<py::ssize_t>(i), 0),
+                               da_view(static_cast<py::ssize_t>(i), 1));
+        }
+    }
+    const double r_sq = dangerous_area_radius * dangerous_area_radius;
+    const double tag_radius_sq = tag_radius * tag_radius;
+
+    const auto n = static_cast<std::size_t>(states.shape(0));
+    auto state_view = states.unchecked<2>();
+    auto out = py::array_t<double>(static_cast<py::ssize_t>(n));
+    auto buf = out.mutable_unchecked<1>();
+
+    for (std::size_t i = 0; i < n; ++i) {
+        const py::ssize_t row = static_cast<py::ssize_t>(i);
+        // Terminal particles contribute zero reward.
+        if (state_view(row, 4) != 0.0) {
+            buf(row) = 0.0;
+            continue;
+        }
+        double r = -step_cost;
+        if (is_tag) {
+            const double rx = state_view(row, 0);
+            const double ry = state_view(row, 1);
+            const double ox = state_view(row, 2);
+            const double oy = state_view(row, 3);
+            const double dx = rx - ox;
+            const double dy = ry - oy;
+            const double dist_sq = dx * dx + dy * dy;
+            r += (dist_sq <= tag_radius_sq) ? tag_reward : -tag_penalty;
+        }
+        if (!areas.empty()) {
+            const double rx = state_view(row, 0);
+            const double ry = state_view(row, 1);
+            // Match the Python ``reward_batch`` semantics: accumulate one
+            // penalty per matching area (the singular ``reward`` short-
+            // circuits, but reward_batch is what we're replacing).
+            for (const auto &area : areas) {
+                const double ddx = rx - area.first;
+                const double ddy = ry - area.second;
+                if (ddx * ddx + ddy * ddy <= r_sq) {
+                    r -= dangerous_area_penalty;
+                }
+            }
+        }
+        buf(row) = r;
+    }
+    return out;
+}
+
 }  // anonymous namespace
 
 PYBIND11_MODULE(_native, m) {
@@ -687,6 +789,13 @@ PYBIND11_MODULE(_native, m) {
 
     m.def("set_seed", &pomdp_native::set_default_seed, py::arg("seed"),
           "Seed the module-level RNG used by sample() / batch_sample() / batch_log_likelihood().");
+
+    m.def("reward_batch", &reward_batch, py::arg("states"), py::arg("action"),
+          py::arg("tag_radius"), py::arg("tag_reward"), py::arg("tag_penalty"),
+          py::arg("step_cost"), py::arg("dangerous_areas"), py::arg("dangerous_area_radius"),
+          py::arg("dangerous_area_penalty"),
+          "Vectorised reward computation: returns shape (N,) float64. See "
+          "ContinuousLaserTagPOMDP.reward_batch for semantics.");
 
     py::class_<ContinuousLaserTagTransitionCpp>(m, "ContinuousLaserTagTransitionCpp")
         .def(py::init<const py::object &, const py::object &, const py::array_t<double> &,
@@ -699,6 +808,7 @@ PYBIND11_MODULE(_native, m) {
         .def("sample", &ContinuousLaserTagTransitionCpp::sample, py::arg("n_samples") = 1)
         .def("probability", &ContinuousLaserTagTransitionCpp::probability, py::arg("values"))
         .def("batch_sample", &ContinuousLaserTagTransitionCpp::batch_sample, py::arg("particles"))
+        .def("set_state", &ContinuousLaserTagTransitionCpp::set_state, py::arg("state"))
         .def_property_readonly("state", &ContinuousLaserTagTransitionCpp::state_property)
         .def_property_readonly("action", &ContinuousLaserTagTransitionCpp::action_property);
 
@@ -711,6 +821,8 @@ PYBIND11_MODULE(_native, m) {
         .def("probability", &ContinuousLaserTagObservationCpp::probability, py::arg("values"))
         .def("batch_log_likelihood", &ContinuousLaserTagObservationCpp::batch_log_likelihood,
              py::arg("next_particles"), py::arg("observation"))
+        .def("set_next_state", &ContinuousLaserTagObservationCpp::set_next_state,
+             py::arg("next_state"))
         .def_property_readonly("next_state", &ContinuousLaserTagObservationCpp::next_state_property)
         .def_property_readonly("action", &ContinuousLaserTagObservationCpp::action_property)
         .def_property_readonly("mean", &ContinuousLaserTagObservationCpp::mean_property);
