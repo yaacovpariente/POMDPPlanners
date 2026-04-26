@@ -766,6 +766,17 @@ class PacManTransitionCpp {
     py::array_t<double> state_property() const { return state_array_; }
     int action_property() const { return action_; }
 
+    // Rewrite only the stored state. Maze geometry, neighbor table, pellet
+    // positions, ghost strategies and all the other env_ fields stay frozen,
+    // so cached members remain valid. Lets Python keep one kernel per
+    // (env, action) instead of rebuilding for every call.
+    void set_state(py::array_t<double> state) {
+        if (state.ndim() != 1 || state.shape(0) != env_.state_dim) {
+            throw std::invalid_argument("state must be 1-D with state_dim entries");
+        }
+        state_array_ = state;
+    }
+
   private:
     py::array_t<double> state_copy_as_array() const {
         auto arr = py::array_t<double>(static_cast<py::ssize_t>(env_.state_dim));
@@ -1000,6 +1011,17 @@ class PacManObservationCpp {
     py::array_t<double> next_state_property() const { return next_state_array_; }
     int action_property() const { return action_; }
 
+    // Rewrite only the stored next_state. Observation env params (noise
+    // factors, idx fields) stay frozen, so the cached configuration remains
+    // valid. Lets Python keep one kernel per (env, action) instead of
+    // rebuilding for every call.
+    void set_next_state(py::array_t<double> next_state) {
+        if (next_state.ndim() != 1) {
+            throw std::invalid_argument("next_state must be 1-D");
+        }
+        next_state_array_ = next_state;
+    }
+
   private:
     py::array_t<double> next_state_array_;
     int action_;
@@ -1120,6 +1142,7 @@ PYBIND11_MODULE(_native, m) {
         .def("sample", &PacManTransitionCpp::sample, py::arg("n_samples") = 1)
         .def("probability", &PacManTransitionCpp::probability, py::arg("values"))
         .def("batch_sample", &PacManTransitionCpp::batch_sample, py::arg("particles"))
+        .def("set_state", &PacManTransitionCpp::set_state, py::arg("state"))
         .def_property_readonly("state", &PacManTransitionCpp::state_property)
         .def_property_readonly("action", &PacManTransitionCpp::action_property);
 
@@ -1134,6 +1157,8 @@ PYBIND11_MODULE(_native, m) {
         .def("probability", &PacManObservationCpp::probability, py::arg("values"))
         .def("batch_log_likelihood", &PacManObservationCpp::batch_log_likelihood,
              py::arg("next_particles"), py::arg("observation"))
+        .def("set_next_state", &PacManObservationCpp::set_next_state,
+             py::arg("next_state"))
         .def_property_readonly("next_state", &PacManObservationCpp::next_state_property)
         .def_property_readonly("action", &PacManObservationCpp::action_property);
 
