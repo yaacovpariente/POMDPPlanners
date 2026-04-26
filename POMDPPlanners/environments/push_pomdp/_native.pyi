@@ -128,3 +128,35 @@ def observation_log_probability_step(
     ``observations`` must be shape (N, 6) float64.
     """
     ...
+
+def belief_batch_transition_discrete(
+    particles: NDArray[np.floating],
+    action_idx: int,
+    transition_error_prob: float,
+    obstacles: NDArray[np.floating],
+    obstacle_radius: float,
+    grid_size: float,
+    push_threshold: float,
+    friction_coefficient: float,
+) -> NDArray[np.float64]:
+    """Native batch transition for the discrete Push belief updater.
+
+    Applies ``action_idx`` to all (N, 6) particles in one C++ call.
+    When ``transition_error_prob > 0`` an independent C++ RNG decides
+    per-particle which action actually executes (matches the Python
+    ``PushVectorizedUpdater._batch_transition_with_error`` semantics).
+    """
+    ...
+
+def belief_batch_obs_log_likelihood_discrete(
+    next_particles: NDArray[np.floating],
+    observation: NDArray[np.floating],
+    observation_noise: float,
+) -> NDArray[np.float64]:
+    """Native batch observation log-likelihood for the discrete Push updater.
+
+    Returns the per-particle log N(obs[2:4] | particle[2:4], sigma**2 * I_2)
+    over all (N, 6) particles. Bit-for-bit equivalent to the Python
+    ``PushVectorizedUpdater.batch_observation_log_likelihood`` (no RNG).
+    """
+    ...

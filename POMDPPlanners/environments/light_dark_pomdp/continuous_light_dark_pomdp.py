@@ -25,6 +25,7 @@ Classes:
     ContinuousLightDarkPOMDPDiscreteActions: Discrete action variant
 """
 
+import math
 from enum import Enum
 from typing import Any, Dict, List, Sequence, Tuple, Union
 
@@ -244,6 +245,18 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         self._trans_kernel_cache: Dict[bytes, Any] = {}
         self._obs_kernel_cache: Dict[bytes, Any] = {}
 
+        # Cached scalar constants for the observation_log_probability_single
+        # fast-path used by POMCPOW's WeightedParticleBeliefStateUpdate.
+        # Each near/far covariance is 2x2; we store the inverse and the
+        # log normalizer so each per-state call avoids array allocation.
+        self._cls_obs_inv_cov_far = self._build_inverse_2x2(observation_cov_matrix)
+        self._cls_obs_inv_cov_near = self._build_inverse_2x2(observation_cov_matrix * 0.5)
+        self._cls_obs_log_norm_far = self._build_log_norm_2d(observation_cov_matrix)
+        self._cls_obs_log_norm_near = self._build_log_norm_2d(observation_cov_matrix * 0.5)
+        self._cls_beacon_radius_sq = float(beacon_radius) * float(beacon_radius)
+        # Beacons stored as (2, N) float ndarray; precompute (N, 2) for the
+        # singleton near-beacon scan.
+        self._cls_beacons_t = np.ascontiguousarray(self.beacons.T, dtype=np.float64)
         # Initialize reward model based on type
         self.reward_model: BaseLightDarkRewardModel
         if reward_model_type == RewardModelType.STANDARD:
@@ -567,6 +580,70 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
             ),
             dtype=np.float64,
         )
+
+    @staticmethod
+    def _build_inverse_2x2(cov: np.ndarray) -> Tuple[float, float, float]:
+        # Returns (inv00, inv01, inv11) for a 2x2 symmetric positive-definite matrix.
+        a = float(cov[0, 0])
+        b = float(cov[0, 1])
+        d = float(cov[1, 1])
+        det = a * d - b * b
+        if det <= 0.0:
+            raise ValueError("Observation covariance must be positive definite")
+        inv_det = 1.0 / det
+        return (d * inv_det, -b * inv_det, a * inv_det)
+
+    @staticmethod
+    def _build_log_norm_2d(cov: np.ndarray) -> float:
+        # log(1 / (2*pi*sqrt(det))) for a 2x2 covariance matrix.
+        a = float(cov[0, 0])
+        b = float(cov[0, 1])
+        d = float(cov[1, 1])
+        det = a * d - b * b
+        if det <= 0.0:
+            raise ValueError("Observation covariance must be positive definite")
+        return -math.log(2.0 * math.pi) - 0.5 * math.log(det)
+
+    def _is_near_beacon_scalar(self, x: float, y: float) -> bool:
+        # Scalar near-beacon scan; mirrors the broadcasting check in
+        # BaseContinuousLightDarkObservationModel._near_beacon but without
+        # numpy allocation. Returns True if within beacon_radius of any beacon.
+        beacons = self._cls_beacons_t
+        if beacons.shape[0] == 0:
+            return False
+        radius_sq = self._cls_beacon_radius_sq
+        for i in range(beacons.shape[0]):
+            dx = x - beacons[i, 0]
+            dy = y - beacons[i, 1]
+            if dx * dx + dy * dy <= radius_sq:
+                return True
+        return False
+
+    def observation_log_probability_single(
+        self, next_state: Any, action: Any, observation: Any
+    ) -> float:
+        # Scalar fast-path used by POMCPOW's incremental belief update for
+        # the NORMAL_NOISE observation model. Other model types fall back to
+        # the base-class default that wraps the batched probability call.
+        if self.observation_model_type != ObservationModelType.NORMAL_NOISE:
+            return super().observation_log_probability_single(
+                next_state=next_state, action=action, observation=observation
+            )
+
+        nx = float(next_state[0])
+        ny = float(next_state[1])
+        if self._is_near_beacon_scalar(nx, ny):
+            inv00, inv01, inv11 = self._cls_obs_inv_cov_near
+            log_norm = self._cls_obs_log_norm_near
+        else:
+            inv00, inv01, inv11 = self._cls_obs_inv_cov_far
+            log_norm = self._cls_obs_log_norm_far
+
+        dx = float(observation[0]) - nx
+        dy = float(observation[1]) - ny
+        # Mahalanobis squared for a 2D symmetric inverse covariance.
+        m_sq = inv00 * dx * dx + 2.0 * inv01 * dx * dy + inv11 * dy * dy
+        return log_norm - 0.5 * m_sq
 
     def reward(self, state: np.ndarray, action: np.ndarray) -> float:
         return self.reward_model.compute_reward(state, action)

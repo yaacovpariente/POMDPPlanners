@@ -981,6 +981,203 @@ double cont_simulate_rollout(
     return total;
 }
 
+// ── Discrete Push belief-update batch kernels ───────────────────────────────
+//
+// Native ports of PushVectorizedUpdater._transition_for_action and the
+// observation log-likelihood path. Replaces the per-particle Python loops
+// that dominate WeightedParticleBelief._update_weights when running PFT-DPW
+// or POMCPOW on the discrete Push environment.
+//
+// Mirrors the LaserTag pattern (belief_batch_transition_discrete /
+// belief_batch_obs_log_likelihood_discrete): single C++ round-trip per
+// belief update, independent C++ RNG for the per-particle action-error coin
+// flip (deterministic-otherwise transition; obs likelihood has no RNG).
+
+// Apply one discrete Push action to all N particles deterministically.
+// Reads particle rows in_data[i*6 .. i*6+5] and writes next-state rows to
+// out_data with identical layout.
+inline void discrete_apply_action_batch(int action_idx, std::size_t n,
+                                         const double *in_data, double *out_data,
+                                         double grid_max, double push_threshold_sq,
+                                         double push_scale, double obstacle_radius_sq,
+                                         const std::vector<double> &obstacles) noexcept {
+    const int dx = kDiscreteDXY[static_cast<std::size_t>(action_idx)][0];
+    const int dy = kDiscreteDXY[static_cast<std::size_t>(action_idx)][1];
+    const bool has_obs = !obstacles.empty();
+    for (std::size_t i = 0; i < n; ++i) {
+        const double *src = in_data + i * 6;
+        double *dst = out_data + i * 6;
+        const double rx = src[0];
+        const double ry = src[1];
+        const double ox = src[2];
+        const double oy = src[3];
+
+        // Robot movement: blocked by obstacle.
+        const double irx = rx + static_cast<double>(dx);
+        const double iry = ry + static_cast<double>(dy);
+        double nrx = irx;
+        double nry = iry;
+        if (has_obs && discrete_collides(irx, iry, obstacles, obstacle_radius_sq)) {
+            nrx = rx;
+            nry = ry;
+        }
+
+        // Object push: only if robot within push_threshold of object.
+        const double ddx = nrx - ox;
+        const double ddy = nry - oy;
+        double nox = ox;
+        double noy = oy;
+        if ((ddx * ddx + ddy * ddy) < push_threshold_sq) {
+            const double iox = ox + static_cast<double>(dx) * push_scale;
+            const double ioy = oy + static_cast<double>(dy) * push_scale;
+            if (!(has_obs && discrete_collides(iox, ioy, obstacles, obstacle_radius_sq))) {
+                nox = iox;
+                noy = ioy;
+            }
+        }
+
+        // Clamp to grid.
+        dst[0] = std::clamp(nrx, 0.0, grid_max);
+        dst[1] = std::clamp(nry, 0.0, grid_max);
+        dst[2] = std::clamp(nox, 0.0, grid_max);
+        dst[3] = std::clamp(noy, 0.0, grid_max);
+        // Target unchanged.
+        dst[4] = src[4];
+        dst[5] = src[5];
+    }
+}
+
+// Native port of PushVectorizedUpdater.batch_transition.
+//
+// Parameters:
+//   particles            : (N, 6) float64 input particles
+//   action_idx           : intended action (0..3)
+//   transition_error_prob: per-particle probability of executing a random
+//                          other action instead of action_idx
+//   obstacles_arr        : (M, 2) float64 obstacle centres, or empty (0,) /
+//                          (0, 2) array for no obstacles
+//   obstacle_radius      : collision radius for each obstacle
+//   grid_size            : grid size; positions clipped to [0, grid_size-1]
+//   push_threshold       : maximum robot-object distance for a push
+//   friction_coefficient : friction reducing push force (push_scale = 1 - f)
+//
+// Returns: (N, 6) float64 array of next particles.
+py::array_t<double> belief_batch_transition_discrete(
+    const py::array_t<double, py::array::c_style | py::array::forcecast> &particles,
+    int action_idx, double transition_error_prob,
+    const py::array_t<double, py::array::c_style | py::array::forcecast> &obstacles_arr,
+    double obstacle_radius, double grid_size, double push_threshold,
+    double friction_coefficient) {
+    if (particles.ndim() != 2 || particles.shape(1) != 6) {
+        throw std::invalid_argument("particles must have shape (N, 6)");
+    }
+    if (action_idx < 0 || action_idx > 3) {
+        throw std::invalid_argument("action_idx must be in {0,1,2,3}");
+    }
+    const auto n = static_cast<std::size_t>(particles.shape(0));
+    auto out = py::array_t<double>({static_cast<py::ssize_t>(n), static_cast<py::ssize_t>(6)});
+    if (n == 0) {
+        return out;
+    }
+
+    // Normalize obstacles: accept (0,), (0,2), (M,2).
+    std::vector<double> obstacles;
+    if (!(obstacles_arr.ndim() == 1 && obstacles_arr.shape(0) == 0)) {
+        obstacles = load_discrete_obstacles(obstacles_arr);
+    }
+
+    const double grid_max = grid_size - 1.0;
+    const double push_threshold_sq = push_threshold * push_threshold;
+    const double push_scale = 1.0 - friction_coefficient;
+    const double obstacle_radius_sq = obstacle_radius * obstacle_radius;
+
+    const double *in_data = particles.data();
+    double *out_data = out.mutable_data();
+
+    // Fast path: no error → single dispatch.
+    if (transition_error_prob <= 0.0) {
+        discrete_apply_action_batch(action_idx, n, in_data, out_data, grid_max,
+                                     push_threshold_sq, push_scale,
+                                     obstacle_radius_sq, obstacles);
+        return out;
+    }
+
+    // Error path: compute candidates for all 4 actions, then per-particle
+    // choose intended or one of the three other actions. Mirrors the Python
+    // ``_batch_transition_with_error`` semantics.
+    std::array<std::vector<double>, 4> candidates;
+    for (int a = 0; a < 4; ++a) {
+        candidates[static_cast<std::size_t>(a)].assign(n * 6, 0.0);
+        discrete_apply_action_batch(a, n, in_data,
+                                     candidates[static_cast<std::size_t>(a)].data(),
+                                     grid_max, push_threshold_sq, push_scale,
+                                     obstacle_radius_sq, obstacles);
+    }
+
+    pomdp_native::RNGState &rng = pomdp_native::default_rng();
+    std::uniform_real_distribution<double> uniform(0.0, 1.0);
+    std::uniform_int_distribution<int> err_choice(0, 2);
+    const auto &err_table = kErrorActions[static_cast<std::size_t>(action_idx)];
+    for (std::size_t i = 0; i < n; ++i) {
+        const double err_u = uniform(rng.engine());
+        int chosen = action_idx;
+        if (err_u < transition_error_prob) {
+            chosen = err_table[static_cast<std::size_t>(err_choice(rng.engine()))];
+        }
+        const double *src = candidates[static_cast<std::size_t>(chosen)].data() + i * 6;
+        for (std::size_t d = 0; d < 6; ++d) {
+            out_data[i * 6 + d] = src[d];
+        }
+    }
+    return out;
+}
+
+// Native port of PushVectorizedUpdater.batch_observation_log_likelihood.
+//
+// Closed-form 2-D isotropic Gaussian log-pdf evaluated on the object-position
+// slice (cols 2..3) of each particle. No RNG; bit-for-bit equivalent to the
+// Python ``CovarianceParameterizedMultivariateNormal.log_pdf`` for diag(σ²).
+//
+// Parameters:
+//   next_particles    : (N, 6) float64 input particles (post-transition)
+//   observation       : (6,) float64 observation vector; only obs[2:4] used
+//   observation_noise : standard deviation σ of the isotropic 2-D Gaussian
+//
+// Returns: (N,) float64 log-likelihoods.
+py::array_t<double> belief_batch_obs_log_likelihood_discrete(
+    const py::array_t<double, py::array::c_style | py::array::forcecast> &next_particles,
+    const py::array_t<double, py::array::c_style | py::array::forcecast> &observation,
+    double observation_noise) {
+    if (next_particles.ndim() != 2 || next_particles.shape(1) != 6) {
+        throw std::invalid_argument("next_particles must have shape (N, 6)");
+    }
+    if (observation.ndim() != 1 || observation.shape(0) != 6) {
+        throw std::invalid_argument("observation must have shape (6,)");
+    }
+    const auto n = static_cast<std::size_t>(next_particles.shape(0));
+    auto out = py::array_t<double>(static_cast<py::ssize_t>(n));
+    if (n == 0) {
+        return out;
+    }
+
+    const double *part_data = next_particles.data();
+    const double *obs_data = observation.data();
+    double *out_data = out.mutable_data();
+
+    const double variance = observation_noise * observation_noise;
+    const double inv_2var = 0.5 / variance;
+    const double log_norm = -std::log(2.0 * M_PI * variance);
+    const double obs_obj_x = obs_data[2];
+    const double obs_obj_y = obs_data[3];
+
+    for (std::size_t i = 0; i < n; ++i) {
+        const double dx = part_data[i * 6 + 2] - obs_obj_x;
+        const double dy = part_data[i * 6 + 3] - obs_obj_y;
+        out_data[i] = log_norm - (dx * dx + dy * dy) * inv_2var;
+    }
+    return out;
+}
+
 // ── Single-step Push observation kernels (added by perf agent) ──────────────
 //
 // These free functions expose the Push observation log-likelihood without
@@ -1050,6 +1247,26 @@ PYBIND11_MODULE(_native, m) {
           py::arg("obstacles"), py::arg("obstacle_radius"),
           py::arg("obstacle_penalty"), py::arg("transition_error_prob"),
           "Run a full discrete Push rollout in C++. Returns discounted reward sum.");
+
+    m.def("belief_batch_transition_discrete", &belief_batch_transition_discrete,
+          py::arg("particles"), py::arg("action_idx"), py::arg("transition_error_prob"),
+          py::arg("obstacles"), py::arg("obstacle_radius"), py::arg("grid_size"),
+          py::arg("push_threshold"), py::arg("friction_coefficient"),
+          "Native batch transition for the discrete Push belief updater. "
+          "Applies action_idx to all (N, 6) particles in one C++ call. "
+          "When transition_error_prob > 0, an independent C++ RNG decides "
+          "per-particle which action actually executes (matches Python "
+          "PushVectorizedUpdater._batch_transition_with_error semantics).");
+
+    m.def("belief_batch_obs_log_likelihood_discrete",
+          &belief_batch_obs_log_likelihood_discrete,
+          py::arg("next_particles"), py::arg("observation"),
+          py::arg("observation_noise"),
+          "Native batch observation log-likelihood for the discrete Push "
+          "belief updater. Returns the per-particle log N(obs[2:4] | "
+          "particle[2:4], σ²·I_2) over all (N, 6) particles. "
+          "Bit-for-bit equivalent to PushVectorizedUpdater."
+          "batch_observation_log_likelihood (no RNG involved).");
 
     py::class_<ContinuousPushTransitionCpp>(m, "ContinuousPushTransitionCpp")
         .def(py::init<const py::object &, const py::object &, double, double, double, double,
