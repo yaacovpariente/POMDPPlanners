@@ -220,8 +220,14 @@ class ContinuousLaserTagPOMDP(Environment):
         )
 
         # Per-action C++ kernel caches (Cholesky factored once per action).
+        # The bytes-keyed cache is the source of truth; the id-keyed shortcut
+        # skips ``tobytes()`` when the same Python action object is passed
+        # repeatedly (typical for the discrete-action wrapper, which maps each
+        # label to a single cached ndarray).
         self._trans_kernel_cache: Dict[bytes, Any] = {}
         self._obs_kernel_cache: Dict[bytes, Any] = {}
+        self._trans_kernel_id_cache: Dict[int, Any] = {}
+        self._obs_kernel_id_cache: Dict[int, Any] = {}
         # Static params for cont_simulate_rollout: built once, unpacked per call.
         self._rollout_static_params: Dict[str, Any] = {
             "robot_covariance": self._robot_transition_dist.covariance,
@@ -250,6 +256,9 @@ class ContinuousLaserTagPOMDP(Environment):
     # the stored state via set_state / set_next_state.
 
     def _get_trans_kernel(self, action: np.ndarray) -> Any:
+        cached = self._trans_kernel_id_cache.get(id(action))
+        if cached is not None:
+            return cached
         action_arr = np.ascontiguousarray(np.asarray(action, dtype=np.float64))
         key = action_arr.tobytes()
         kernel = self._trans_kernel_cache.get(key)
@@ -268,9 +277,14 @@ class ContinuousLaserTagPOMDP(Environment):
                 tag_radius=self.tag_radius,
             )
             self._trans_kernel_cache[key] = kernel
+        if isinstance(action, np.ndarray):
+            self._trans_kernel_id_cache[id(action)] = kernel
         return kernel
 
     def _get_obs_kernel(self, action: np.ndarray) -> Any:
+        cached = self._obs_kernel_id_cache.get(id(action))
+        if cached is not None:
+            return cached
         action_arr = np.ascontiguousarray(np.asarray(action, dtype=np.float64))
         key = action_arr.tobytes()
         kernel = self._obs_kernel_cache.get(key)
@@ -284,6 +298,8 @@ class ContinuousLaserTagPOMDP(Environment):
                 opponent_radius=self.opponent_radius,
             )
             self._obs_kernel_cache[key] = kernel
+        if isinstance(action, np.ndarray):
+            self._obs_kernel_id_cache[id(action)] = kernel
         return kernel
 
     def sample_next_state(self, state: np.ndarray, action: np.ndarray, n_samples: int = 1) -> Any:
@@ -570,16 +586,22 @@ class ContinuousLaserTagPOMDP(Environment):
     def __getstate__(self):
         # Per-action C++ kernel cache holds pybind11 objects that aren't
         # picklable. Drop them at serialization time; __setstate__ rebuilds
-        # empty caches so the env works after unpickling.
+        # empty caches so the env works after unpickling. The id-keyed
+        # shortcut caches must also be dropped — id() values are not stable
+        # across processes.
         state = self.__dict__.copy()
         state["_trans_kernel_cache"] = {}
         state["_obs_kernel_cache"] = {}
+        state["_trans_kernel_id_cache"] = {}
+        state["_obs_kernel_id_cache"] = {}
         return state
 
     def __setstate__(self, state):
         vars(self).update(state)
         self._trans_kernel_cache = {}
         self._obs_kernel_cache = {}
+        self._trans_kernel_id_cache = {}
+        self._obs_kernel_id_cache = {}
 
     # ------------------------------------------------------------------
     # Private helpers

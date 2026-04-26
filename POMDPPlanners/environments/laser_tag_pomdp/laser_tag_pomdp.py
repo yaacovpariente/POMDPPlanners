@@ -129,7 +129,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         False
     """
 
-    def __init__(
+    def __init__(  # pylint: disable=dangerous-default-value
         self,
         discount_factor: float,
         name: str = "LaserTagPOMDP",
@@ -233,6 +233,32 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
             3: (0, -1),  # West (left)
             4: (0, 0),  # Tag (no movement)
         }
+        # Pre-built C-contiguous int64 (4, 2) array of (dr, dc) for actions 0..3,
+        # consumed by the native ``lasertag_discrete_reward_batch`` kernel so the
+        # hot path doesn't repack a Python dict on every call.
+        self._action_directions_arr: np.ndarray = np.ascontiguousarray(
+            np.array(
+                [self._action_directions[a] for a in (0, 1, 2, 3)],
+                dtype=np.int64,
+            )
+        )
+        # Pre-built (D, 2) C-contiguous float64 array of dangerous-area centres
+        # (or empty (0, 2) when none are configured) so the native kernel can
+        # consume it directly without per-call reallocation.
+        if self.dangerous_areas:
+            self._dangerous_areas_arr: np.ndarray = np.ascontiguousarray(
+                np.asarray(self.dangerous_areas, dtype=np.float64).reshape(-1, 2)
+            )
+        else:
+            self._dangerous_areas_arr = np.empty((0, 2), dtype=np.float64)
+        # Flattened int64 walls buffer (length 2 * n_walls) for the native
+        # kernel; pairs are (row, col). Sorted for deterministic ordering.
+        walls_list = sorted(self.walls)
+        self._reward_walls_flat: np.ndarray = np.array(
+            [coord for pair in walls_list for coord in pair],
+            dtype=np.int64,
+        )
+        self._reward_n_walls: int = len(walls_list)
 
     def _is_valid_position_inline(self, pos: Tuple[int, int]) -> bool:
         row, col = pos
@@ -812,9 +838,10 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         if cached is not None:
             return cached
         try:
+            # pylint: disable=import-outside-toplevel
             from POMDPPlanners.environments.laser_tag_pomdp import (
                 _native,
-            )  # pylint: disable=import-outside-toplevel
+            )
         except ImportError:
             return None
         if not hasattr(_native, "simulate_rollout_discrete"):
@@ -970,9 +997,47 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         states_arr = np.asarray(states, dtype=np.float64)
         if states_arr.ndim == 1:
             states_arr = states_arr.reshape(1, -1)
-        return self._compute_reward_batch(states_arr, action)
+        states_arr = np.ascontiguousarray(states_arr)
+        native_fn = self._get_native_reward_batch()
+        if native_fn is not None:
+            return np.asarray(
+                native_fn(
+                    states=states_arr,
+                    action=int(action),
+                    rows=int(self.floor_shape[0]),
+                    cols=int(self.floor_shape[1]),
+                    walls_flat=self._reward_walls_flat,
+                    n_walls=self._reward_n_walls,
+                    dangerous_areas=self._dangerous_areas_arr,
+                    n_dangerous=int(self._dangerous_areas_arr.shape[0]),
+                    dangerous_area_radius=float(self.dangerous_area_radius),
+                    dangerous_area_penalty=float(self.dangerous_area_penalty),
+                    tag_reward=float(self.tag_reward),
+                    tag_penalty=float(self.tag_penalty),
+                    step_cost=float(self.step_cost),
+                    action_directions=self._action_directions_arr,
+                )
+            )
+        return self._compute_reward_batch_python(states_arr, action)
 
-    def _compute_reward_batch(self, states: np.ndarray, action: int) -> np.ndarray:
+    def _get_native_reward_batch(self) -> Optional[Any]:
+        cached = getattr(self, "_cached_native_reward_batch", None)
+        if cached is not None:
+            return cached if cached is not False else None
+        try:
+            from POMDPPlanners.environments.laser_tag_pomdp import (  # pylint: disable=import-outside-toplevel
+                _native,
+            )
+        except ImportError:
+            # pylint: disable=attribute-defined-outside-init
+            self._cached_native_reward_batch = False
+            return None
+        fn = getattr(_native, "lasertag_discrete_reward_batch", None)
+        # pylint: disable=attribute-defined-outside-init
+        self._cached_native_reward_batch = fn if fn is not None else False
+        return fn
+
+    def _compute_reward_batch_python(self, states: np.ndarray, action: int) -> np.ndarray:
         n = states.shape[0]
         terminal_mask = states[:, 4].astype(bool)
 
