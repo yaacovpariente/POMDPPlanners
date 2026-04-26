@@ -99,6 +99,26 @@ class ContinuousPushTransitionCpp {
         return out;
     }
 
+    // Hot-path entry: take the input state directly, draw one sample, and
+    // return a single (6,) ndarray. Bypasses set_state + py::list wrapping +
+    // list[0] indexing that the generic ``sample(n_samples=1)`` path incurs.
+    py::array_t<double> sample_one(
+        const py::array_t<double, py::array::c_style | py::array::forcecast> &state_in) const {
+        if (state_in.ndim() != 1 ||
+            static_cast<std::size_t>(state_in.shape(0)) != kPushStateDim) {
+            throw std::invalid_argument("state must have shape (6,)");
+        }
+        auto sv = state_in.unchecked<1>();
+        double src[kPushStateDim];  // NOLINT(modernize-avoid-c-arrays)
+        for (std::size_t d = 0; d < kPushStateDim; ++d) {
+            src[d] = sv(static_cast<py::ssize_t>(d));
+        }
+        double row[kPushStateDim];  // NOLINT(modernize-avoid-c-arrays)
+        pomdp_native::RNGState &rng = pomdp_native::default_rng();
+        sample_row_from_state(src, row, rng);
+        return pomdp_native::array_from_vector(row, kPushStateDim);
+    }
+
     // probability evaluates p(next_state) = N(robot_next | robot_pos + action, cov).
     // Matches ContinuousPushStateTransitionModel.probability exactly.
     py::array_t<double> probability(const py::object &values) const {
@@ -354,6 +374,33 @@ class ContinuousPushObservationCpp {
             out.append(pomdp_native::array_from_vector(row, kPushStateDim));
         }
         return out;
+    }
+
+    // Hot-path single-sample entry: take the next_state directly, draw one
+    // observation, return a single (6,) ndarray. Bypasses set_next_state +
+    // py::list wrapping + list[0] indexing.
+    py::array_t<double> sample_one(
+        const py::array_t<double, py::array::c_style | py::array::forcecast> &next_state_in)
+        const {
+        if (next_state_in.ndim() != 1 ||
+            static_cast<std::size_t>(next_state_in.shape(0)) != kPushStateDim) {
+            throw std::invalid_argument("next_state must have shape (6,)");
+        }
+        auto sv = next_state_in.unchecked<1>();
+        pomdp_native::RNGState &rng = pomdp_native::default_rng();
+        std::normal_distribution<double> standard_normal(0.0, 1.0);
+        double row[kPushStateDim];  // NOLINT(modernize-avoid-c-arrays)
+        row[0] = sv(0);
+        row[1] = sv(1);
+        const double nx = standard_normal(rng.engine()) * observation_noise_;
+        const double ny = standard_normal(rng.engine()) * observation_noise_;
+        const double obj_x = std::clamp(sv(2) + nx, 0.0, grid_size_ - 1.0);
+        const double obj_y = std::clamp(sv(3) + ny, 0.0, grid_size_ - 1.0);
+        row[2] = obj_x;
+        row[3] = obj_y;
+        row[4] = sv(4);
+        row[5] = sv(5);
+        return pomdp_native::array_from_vector(row, kPushStateDim);
     }
 
     // probability(values): values rows are 6-D observations; use the
@@ -934,6 +981,49 @@ double cont_simulate_rollout(
     return total;
 }
 
+// ── Single-step Push observation kernels (added by perf agent) ──────────────
+//
+// These free functions expose the Push observation log-likelihood without
+// going through ContinuousPushObservationCpp's per-action kernel cache /
+// set_next_state / batch_log_likelihood path. The math is the same isotropic
+// 2-D Gaussian log-pdf on the object-position slice (cols 2..3) used by the
+// existing kernel; this entry skips kernel-cache lookup and per-call
+// ``np.ascontiguousarray`` overhead so the Python single-state hot path can
+// shave ~10us per call vs the existing routing through ``batch_log_likelihood``.
+
+py::array_t<double> push_observation_log_probability_step(
+    const py::array_t<double, py::array::c_style | py::array::forcecast> &next_state,
+    const py::array_t<double, py::array::c_style | py::array::forcecast> &observations,
+    double observation_noise) {
+    if (next_state.ndim() != 1 ||
+        static_cast<std::size_t>(next_state.shape(0)) != kPushStateDim) {
+        throw std::invalid_argument("next_state must have shape (6,)");
+    }
+    if (observations.ndim() != 2 ||
+        static_cast<std::size_t>(observations.shape(1)) != kPushStateDim) {
+        throw std::invalid_argument("observations must have shape (N, 6)");
+    }
+    auto sv = next_state.unchecked<1>();
+    auto ov = observations.unchecked<2>();
+
+    const double variance = observation_noise * observation_noise;
+    const double inv_2var = 0.5 / variance;
+    const double log_norm = -std::log(2.0 * M_PI * variance);
+
+    const double mean_x = sv(2);
+    const double mean_y = sv(3);
+
+    const auto n = static_cast<std::size_t>(observations.shape(0));
+    auto out = py::array_t<double>(static_cast<py::ssize_t>(n));
+    auto out_view = out.mutable_unchecked<1>();
+    for (std::size_t i = 0; i < n; ++i) {
+        const double dx = ov(static_cast<py::ssize_t>(i), 2) - mean_x;
+        const double dy = ov(static_cast<py::ssize_t>(i), 3) - mean_y;
+        out_view(static_cast<py::ssize_t>(i)) = log_norm - (dx * dx + dy * dy) * inv_2var;
+    }
+    return out;
+}
+
 }  // anonymous namespace
 
 PYBIND11_MODULE(_native, m) {
@@ -969,17 +1059,29 @@ PYBIND11_MODULE(_native, m) {
              py::arg("max_push"), py::arg("robot_radius"), py::arg("obstacles"),
              py::arg("covariance"))
         .def("sample", &ContinuousPushTransitionCpp::sample, py::arg("n_samples") = 1)
+        .def("sample_one", &ContinuousPushTransitionCpp::sample_one, py::arg("state"))
         .def("probability", &ContinuousPushTransitionCpp::probability, py::arg("values"))
         .def("batch_sample", &ContinuousPushTransitionCpp::batch_sample, py::arg("particles"))
         .def("set_state", &ContinuousPushTransitionCpp::set_state, py::arg("state"))
         .def_property_readonly("state", &ContinuousPushTransitionCpp::state_property)
         .def_property_readonly("action", &ContinuousPushTransitionCpp::action_property);
 
+    m.def(
+        "observation_log_probability_step", &push_observation_log_probability_step,
+        py::arg("next_state"), py::arg("observations"), py::arg("observation_noise"),
+        "Per-observation log-probability for ContinuousPushPOMDP.\n\n"
+        "Single-step entry that mirrors\n"
+        "ContinuousPushObservationCpp::batch_log_likelihood for one fixed\n"
+        "next_state, without kernel-cache lookup or set_next_state overhead.\n"
+        "``observations`` must be shape (N, 6) float64 (or (1, 6) for one\n"
+        "observation). Returns a (N,) float64 array of log-probabilities.");
+
     py::class_<ContinuousPushObservationCpp>(m, "ContinuousPushObservationCpp")
         .def(py::init<const py::object &, const py::object &, double, double>(),
              py::arg("next_state"), py::arg("action"), py::arg("observation_noise"),
              py::arg("grid_size"))
         .def("sample", &ContinuousPushObservationCpp::sample, py::arg("n_samples") = 1)
+        .def("sample_one", &ContinuousPushObservationCpp::sample_one, py::arg("next_state"))
         .def("probability", &ContinuousPushObservationCpp::probability, py::arg("values"))
         .def("batch_log_likelihood", &ContinuousPushObservationCpp::batch_log_likelihood,
              py::arg("next_particles"), py::arg("observation"))

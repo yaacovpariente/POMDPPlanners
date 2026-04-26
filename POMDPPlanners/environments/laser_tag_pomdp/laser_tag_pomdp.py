@@ -242,7 +242,86 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
             and pos not in self.walls
         )
 
+    def _get_native_step_params(self) -> Optional[Any]:
+        """Return cached static params for the native single-step kernels."""
+        cached = getattr(self, "_cached_native_step_params", None)
+        if cached is not None:
+            return cached
+        try:
+            from POMDPPlanners.environments.laser_tag_pomdp import (  # pylint: disable=import-outside-toplevel
+                _native,
+            )
+        except ImportError:
+            return None
+        if not hasattr(_native, "sample_next_state_step"):
+            return None
+        walls_list = sorted(self.walls)
+        walls_flat = np.array([c for pair in walls_list for c in pair], dtype=np.int64)
+        params = (_native, int(self.floor_shape[0]), int(self.floor_shape[1]), walls_flat)
+        # pylint: disable=attribute-defined-outside-init
+        self._cached_native_step_params = params
+        return params
+
     def sample_next_state(self, state: np.ndarray, action: int, n_samples: int = 1) -> Any:
+        # Fast path: native single-step C++ kernel for the n_samples == 1 case
+        # (the POMCPOW hot path). RNG draws are issued from numpy in the same
+        # order and quantity as the original Python implementation, then
+        # forwarded to C++ to preserve byte-identical reproducibility.
+        if n_samples == 1:
+            params = self._get_native_step_params()
+            if params is not None:
+                return self._native_sample_next_state_one(state, action, params)
+
+        # Slow / batch path: original numpy implementation.
+        return self._python_sample_next_state(state, action, n_samples)
+
+    def _native_sample_next_state_one(
+        self,
+        state: np.ndarray,
+        action: int,
+        params: Any,
+    ) -> np.ndarray:
+        # Resolve actual_action via the same numpy RNG draws as the original
+        # Python path (one np.random.random() coin for action != 4, plus an
+        # np.random.choice for the error branch when triggered).
+        actual_action = self._resolve_actual_action(action)
+
+        # Successful tag short-circuit: no opponent draw needed.
+        robot_current = (int(state[0]), int(state[1]))
+        opponent_current = (int(state[2]), int(state[3]))
+        if actual_action == 4 and robot_current == opponent_current:
+            return np.array(
+                [
+                    float(robot_current[0]),
+                    float(robot_current[1]),
+                    float(opponent_current[0]),
+                    float(opponent_current[1]),
+                    1.0,
+                ]
+            )
+
+        # Otherwise draw the opponent uniform via numpy and forward to C++.
+        opp_uniform = float(np.random.random())
+        native, rows, cols, walls_flat = params
+        return native.sample_next_state_step(
+            state=np.ascontiguousarray(np.asarray(state, dtype=np.float64)),
+            actual_action=int(actual_action),
+            opp_uniform=opp_uniform,
+            rows=rows,
+            cols=cols,
+            walls_flat=walls_flat,
+        )
+
+    def _resolve_actual_action(self, action: int) -> int:
+        # Mirrors the action-error coin used by the original Python path.
+        if action == 4:
+            return 4
+        if np.random.random() < self.transition_error_prob:
+            available_actions = [a for a in (0, 1, 2, 3) if a != action]
+            return int(np.random.choice(available_actions))
+        return action
+
+    def _python_sample_next_state(self, state: np.ndarray, action: int, n_samples: int) -> Any:
         # _get_actual_action: matches LaserTagStateTransition._get_actual_action
         if action == 4:
             actual_action = action
@@ -386,6 +465,27 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
                 return terminal_obs
             return [terminal_obs] * n_samples
 
+        # Fast path: native single-step C++ kernel for n_samples == 1 (the
+        # POMCPOW hot path). The 8 noise samples are pre-drawn from numpy in
+        # the same order as the original Python path so byte-identical numpy
+        # RNG state is preserved across both paths.
+        if n_samples == 1:
+            params = self._get_native_step_params()
+            if params is not None:
+                native, rows, cols, walls_flat = params
+                noise = np.random.normal(0, self.measurement_noise, size=8)
+                obs_arr = native.sample_observation_step(
+                    next_state=np.ascontiguousarray(np.asarray(next_state, dtype=np.float64)),
+                    noise=np.ascontiguousarray(noise, dtype=np.float64),
+                    rows=rows,
+                    cols=cols,
+                    walls_flat=walls_flat,
+                )
+                # tolist() is ~8x faster than a per-element float() genexpr and
+                # produces a Python list of floats; tuple() wraps to match the
+                # historical return type.
+                return tuple(obs_arr.tolist())
+
         robot_pos = (int(next_state[0]), int(next_state[1]))
         opp_pos = (int(next_state[2]), int(next_state[3]))
         # Compute true 8-direction laser measurements (no RNG)
@@ -398,16 +498,16 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         if n_samples == 1:
             noisy: List[float] = []
             for true_measure in true_measurements:
-                noise = np.random.normal(0, self.measurement_noise)
-                noisy.append(max(0.0, true_measure + noise))
+                noise_value = np.random.normal(0, self.measurement_noise)
+                noisy.append(max(0.0, true_measure + noise_value))
             return tuple(noisy)
 
         samples: List[Tuple[float, ...]] = []
         for _ in range(n_samples):
             noisy_inner: List[float] = []
             for true_measure in true_measurements:
-                noise = np.random.normal(0, self.measurement_noise)
-                noisy_inner.append(max(0.0, true_measure + noise))
+                noise_value = np.random.normal(0, self.measurement_noise)
+                noisy_inner.append(max(0.0, true_measure + noise_value))
             samples.append(tuple(noisy_inner))
         return samples
 
@@ -484,6 +584,54 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         # states emit a sentinel observation deterministically; non-terminal states
         # emit independent Gaussian-noise laser ranges in 8 directions.
         del action  # observation distribution does not depend on action in LaserTag
+
+        # Fast path: native C++ kernel that mirrors the Python loop bit-for-bit
+        # but skips Python-level per-direction overhead (laser ray-casting,
+        # exp/sqrt, tuple iteration). The native entry handles the terminal
+        # sentinel branch and returns log-probabilities directly.
+        params = self._get_native_step_params()
+        if params is not None:
+            obs_arr = self._coerce_observations_array(observations)
+            if obs_arr is not None:
+                native, rows, cols, walls_flat = params
+                return np.asarray(
+                    native.observation_log_probability_step(
+                        next_state=np.ascontiguousarray(np.asarray(next_state, dtype=np.float64)),
+                        observations=obs_arr,
+                        measurement_noise=float(self.measurement_noise),
+                        rows=rows,
+                        cols=cols,
+                        walls_flat=walls_flat,
+                    )
+                )
+        return self._python_observation_log_probability(next_state, observations)
+
+    @staticmethod
+    def _coerce_observations_array(observations: Any) -> Optional[np.ndarray]:
+        # Convert a heterogeneous observation collection (tuple of tuples,
+        # list of ndarrays, etc.) into a contiguous (N, 8) float64 array. Any
+        # row that is not exactly length 8 disqualifies the fast path so the
+        # native kernel never sees malformed inputs.
+        if isinstance(observations, np.ndarray):
+            arr = observations
+        else:
+            try:
+                arr = np.asarray(observations, dtype=np.float64)
+            except (ValueError, TypeError):
+                return None
+        if arr.ndim == 1:
+            if arr.shape[0] != 8:
+                return None
+            arr = arr.reshape(1, -1)
+        if arr.ndim != 2 or arr.shape[1] != 8:
+            return None
+        return np.ascontiguousarray(arr, dtype=np.float64)
+
+    def _python_observation_log_probability(
+        self, next_state: np.ndarray, observations: Any
+    ) -> np.ndarray:
+        # Pure-Python fallback retained for parity testing and for unusual
+        # observation shapes the native fast path declines to handle.
         result = np.zeros(len(observations))
 
         if bool(next_state[4]):
