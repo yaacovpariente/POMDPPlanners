@@ -87,7 +87,7 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
         False
     """
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-statements
         self,
         maze_size: Tuple[int, int] = (7, 7),
         walls: Optional[Set[Tuple[int, int]]] = None,
@@ -229,6 +229,15 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
         self._cached_neighbor_table: Optional[np.ndarray] = None
         self._cached_neighbor_validity: Optional[np.ndarray] = None
         self._cached_transition_cpp_ctor_kwargs: Optional[Dict[str, Any]] = None
+        # Per-action C++ kernel caches keyed by int action; static (P, 2)
+        # int32 pellet-position buffer reused by the vectorised reward path.
+        self._trans_kernel_cache: Dict[int, Any] = {}
+        self._obs_kernel_cache: Dict[int, Any] = {}
+        self._pellet_positions_arr: np.ndarray = (
+            np.asarray(self._all_pellet_positions, dtype=np.int32).reshape(-1, 2)
+            if self._num_initial_pellets > 0
+            else np.empty((0, 2), dtype=np.int32)
+        )
 
     @property
     def initial_ghost_pos(self) -> Tuple[int, int]:
@@ -473,29 +482,48 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
         return list(range(len(self.action_names)))
 
     # ── Env-API sampling/log-prob methods ───────────────────────────
-    # These construct the C++ native kernel directly from per-env cached
-    # ctor kwargs and run sampling / probability evaluation in C++. The
-    # earlier per-call PacMan{Transition,Observation} Python wrappers
-    # were deleted in PR-D-Pacman.
+    # These fetch a per-action cached C++ kernel and rewrite only the
+    # stored state/next_state via set_state / set_next_state. Building the
+    # kernel from scratch on every call dominated the hot path; with the
+    # cache, neighbor tables / ghost strategy codes / pellet positions are
+    # repacked exactly once per (env, action) pair.
+
+    def _get_trans_kernel(self, action: int) -> Any:
+        key = int(action)
+        kernel = self._trans_kernel_cache.get(key)
+        if kernel is None:
+            kernel = _native.PacManTransitionCpp(
+                state=np.zeros(self._state_dim, dtype=np.float64),
+                action=key,
+                **self.get_transition_cpp_ctor_kwargs(),
+                patrol_dir_state=self.ghost_patrol_directions,
+            )
+            self._trans_kernel_cache[key] = kernel
+        return kernel
+
+    def _get_obs_kernel(self, action: int) -> Any:
+        key = int(action)
+        kernel = self._obs_kernel_cache.get(key)
+        if kernel is None:
+            kernel = _native.PacManObservationCpp(
+                next_state=np.zeros(self._state_dim, dtype=np.float64),
+                action=key,
+                **self.get_observation_cpp_ctor_kwargs(),
+            )
+            self._obs_kernel_cache[key] = kernel
+        return kernel
 
     def sample_next_state(self, state: np.ndarray, action: int, n_samples: int = 1) -> Any:
-        kernel = _native.PacManTransitionCpp(
-            state=self._require_state_array(state),
-            action=int(action),
-            **self.get_transition_cpp_ctor_kwargs(),
-            patrol_dir_state=self.ghost_patrol_directions,
-        )
+        kernel = self._get_trans_kernel(action)
+        kernel.set_state(self._require_state_array(state))
         samples = kernel.sample(n_samples)
         if n_samples == 1:
             return samples[0]
         return samples
 
     def sample_observation(self, next_state: np.ndarray, action: int, n_samples: int = 1) -> Any:
-        kernel = _native.PacManObservationCpp(
-            next_state=self._require_state_array(next_state),
-            action=int(action),
-            **self.get_observation_cpp_ctor_kwargs(),
-        )
+        kernel = self._get_obs_kernel(action)
+        kernel.set_next_state(self._require_state_array(next_state))
         arrays = kernel.sample(n_samples)
         if n_samples == 1:
             return self.array_to_observation(arrays[0])
@@ -504,12 +532,8 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
     def transition_log_probability(
         self, state: np.ndarray, action: int, next_states: Any
     ) -> np.ndarray:
-        kernel = _native.PacManTransitionCpp(
-            state=self._require_state_array(state),
-            action=int(action),
-            **self.get_transition_cpp_ctor_kwargs(),
-            patrol_dir_state=self.ghost_patrol_directions,
-        )
+        kernel = self._get_trans_kernel(action)
+        kernel.set_state(self._require_state_array(state))
         # Accept either a sequence of 1-D state arrays or a 2-D ndarray.
         if isinstance(next_states, np.ndarray) and next_states.ndim == 2:
             stacked = next_states
@@ -521,11 +545,8 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
     def observation_log_probability(
         self, next_state: np.ndarray, action: int, observations: Any
     ) -> np.ndarray:
-        kernel = _native.PacManObservationCpp(
-            next_state=self._require_state_array(next_state),
-            action=int(action),
-            **self.get_observation_cpp_ctor_kwargs(),
-        )
+        kernel = self._get_obs_kernel(action)
+        kernel.set_next_state(self._require_state_array(next_state))
         # Accept either a 2-D ndarray of shape (N, 2*num_ghosts) or a sequence
         # of public tuple-of-(row, col) observations.
         if isinstance(observations, np.ndarray) and observations.ndim == 2:
@@ -556,12 +577,9 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
                 np.stack([self._require_state_array(s) for s in states]),
                 dtype=np.float64,
             )
-        kernel = _native.PacManTransitionCpp(
-            state=states_array[0],
-            action=int(action),
-            **self.get_transition_cpp_ctor_kwargs(),
-            patrol_dir_state=self.ghost_patrol_directions,
-        )
+        # batch_sample reads the per-row state from the input, not the
+        # kernel's stored state, so no set_state is needed here.
+        kernel = self._get_trans_kernel(action)
         return np.asarray(kernel.batch_sample(states_array), dtype=np.float64)
 
     def observation_log_probability_per_state(
@@ -580,11 +598,9 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
             observation_array = np.ascontiguousarray(
                 self.observation_to_array(observation), dtype=np.float64
             )
-        kernel = _native.PacManObservationCpp(
-            next_state=next_states_array[0],
-            action=int(action),
-            **self.get_observation_cpp_ctor_kwargs(),
-        )
+        # batch_log_likelihood reads next_state per row from the input;
+        # no set_next_state needed.
+        kernel = self._get_obs_kernel(action)
         return np.asarray(
             kernel.batch_log_likelihood(
                 next_particles=next_states_array,
@@ -712,49 +728,43 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
         return np.array([self.reward(states[i], action) for i in range(len(states))])
 
     def _compute_reward_batch(self, states_arr: np.ndarray, action: int) -> np.ndarray:
+        # Single-pass vectorised reward kernel. Ghost-collision penalty is
+        # intentionally excluded because it depends on the stochastic ghost
+        # transition, not the pre-transition state. Patrol-direction state is
+        # also untouched here — it is mutated only inside the C++ transition
+        # kernel and is not observable from this deterministic preview.
         terminal = states_arr[:, self._idx_terminal] > 0.5
         rewards = np.where(terminal, 0.0, self.step_penalty)
 
-        new_pac_rows, new_pac_cols = self._batch_move_pacman(states_arr, action)
-        pellet_collected, all_collected = self._batch_check_pellets(
-            states_arr, new_pac_rows, new_pac_cols
-        )
-        rewards += np.where(~terminal & pellet_collected, self.pellet_reward, 0.0)
-        rewards += np.where(~terminal & all_collected, self.win_reward, 0.0)
-        return rewards
-
-    def _batch_move_pacman(
-        self, states_arr: np.ndarray, action: int
-    ) -> Tuple[np.ndarray, np.ndarray]:
+        # Vectorised neighbor-table lookup: (rows, cols, action) -> next pos.
         pac_rows = states_arr[:, self._idx_pac_row].astype(np.int32)
         pac_cols = states_arr[:, self._idx_pac_col].astype(np.int32)
-        table = self._get_neighbor_table()
-        new_positions = table[pac_rows, pac_cols, action]
-        return new_positions[:, 0], new_positions[:, 1]
+        new_positions = self._get_neighbor_table()[pac_rows, pac_cols, action]
+        new_pac_rows = new_positions[:, 0]
+        new_pac_cols = new_positions[:, 1]
 
-    def _batch_check_pellets(
-        self,
-        states_arr: np.ndarray,
-        pac_rows: np.ndarray,
-        pac_cols: np.ndarray,
-    ) -> Tuple[np.ndarray, np.ndarray]:
-        n = states_arr.shape[0]
+        if self._pellet_positions_arr.shape[0] == 0:
+            # No pellets exist → no pellet rewards, "all collected" trivially
+            # holds for non-terminal states (matches prior behaviour).
+            return rewards + np.where(~terminal, self.win_reward, 0.0)
+
         pellet_mask = states_arr[:, self._idx_pellets_start : self._idx_pellets_end]
-        pellet_pos = np.array(self._all_pellet_positions, dtype=np.int32)
+        pellet_pos = self._pellet_positions_arr  # (P, 2) int32, static.
 
-        if len(pellet_pos) == 0:
-            return np.zeros(n, dtype=bool), np.ones(n, dtype=bool)
-
-        # Check if new pacman position matches any active pellet
-        row_match = pac_rows[:, None] == pellet_pos[None, :, 0]
-        col_match = pac_cols[:, None] == pellet_pos[None, :, 1]
-        pos_match = row_match & col_match
+        # Broadcast (N, 1) vs (1, P): which pellet (if any) sits on the
+        # target cell, gated on it currently being active.
+        pos_match = (new_pac_rows[:, None] == pellet_pos[None, :, 0]) & (
+            new_pac_cols[:, None] == pellet_pos[None, :, 1]
+        )
         active_match = pos_match & (pellet_mask > 0.5)
         collected = active_match.any(axis=1)
 
         remaining_after = pellet_mask.sum(axis=1) - collected.astype(np.float64)
         all_collected = collected & (remaining_after < 0.5)
-        return collected, all_collected
+
+        rewards += np.where(~terminal & collected, self.pellet_reward, 0.0)
+        rewards += np.where(~terminal & all_collected, self.win_reward, 0.0)
+        return rewards
 
     def _get_neighbor_table(self) -> np.ndarray:
         if self._cached_neighbor_table is None:
@@ -862,6 +872,24 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
     def is_equal_observation(self, observation1: Any, observation2: Any) -> bool:
         """Check if two observations are equal."""
         return observation1 == observation2
+
+    # ------------------------------------------------------------------
+    # Pickling
+    # ------------------------------------------------------------------
+
+    def __getstate__(self) -> Dict[str, Any]:
+        # Per-action C++ kernel caches hold pybind11 objects that are not
+        # picklable by default. Drop them at serialization time;
+        # __setstate__ rebuilds empty caches that lazily refill on first use.
+        state = self.__dict__.copy()
+        state["_trans_kernel_cache"] = {}
+        state["_obs_kernel_cache"] = {}
+        return state
+
+    def __setstate__(self, state: Dict[str, Any]) -> None:
+        vars(self).update(state)
+        self._trans_kernel_cache = {}
+        self._obs_kernel_cache = {}
 
     def _check_episode_win_status(self, final_state: np.ndarray) -> int:
         pellet_mask = final_state[self._idx_pellets_start : self._idx_pellets_end]
