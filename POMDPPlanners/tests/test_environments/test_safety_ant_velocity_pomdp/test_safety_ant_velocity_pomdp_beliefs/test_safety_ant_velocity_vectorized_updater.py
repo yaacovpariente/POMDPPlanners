@@ -326,15 +326,15 @@ class TestConfigId:
 
 class TestEquivalenceWithPerParticleLoop:
     def test_batch_transition_matches_per_particle_loop(self, env, updater):
-        """Test vectorized batch_transition matches per-particle state_transition_model.
+        """Test vectorized batch_transition matches per-particle env.sample_next_state.
 
         Purpose: Verifies that batch_transition produces the same results as calling
-                 the environment's state_transition_model per particle with the same
+                 the environment's sample_next_state per particle with the same
                  random seed.
 
         Given: A set of particles, an action, and a fixed random seed.
         When: batch_transition is called, and the same transitions are computed
-              per-particle using the environment's state_transition_model.
+              per-particle using env.sample_next_state.
         Then: Results match within floating-point tolerance.
 
         Test type: integration
@@ -348,7 +348,7 @@ class TestEquivalenceWithPerParticleLoop:
         )
 
         def per_particle_fn(particle, action):
-            return env.state_transition_model(state=particle, action=action).sample()[0]
+            return env.sample_next_state(state=particle, action=action)
 
         assert_batch_transition_matches_loop(
             updater=updater,
@@ -360,18 +360,19 @@ class TestEquivalenceWithPerParticleLoop:
         )
 
     def test_batch_observation_log_likelihood_matches_per_particle_loop(self, env, updater):
-        """Test vectorized log-likelihood matches per-particle observation probability up to constant.
+        """Test vectorized log-likelihood matches per-particle env.observation_log_probability up to constant.
 
         Purpose: Verifies that batch_observation_log_likelihood produces
                  log-likelihoods that differ from the per-particle
-                 log(observation_model.probability) only by a constant offset.
-                 The environment's probability() omits the Gaussian normalisation
-                 constant, while the vectorized updater uses the fully normalised
-                 log_pdf.  Relative differences between particles must still match.
+                 env.observation_log_probability only by a constant offset.
+                 The env-level path omits the Gaussian normalisation constant in
+                 the underlying probability(), while the vectorized updater uses
+                 the fully normalised log_pdf.  Relative differences between
+                 particles must still match.
 
         Given: A set of next-state particles and an observation.
         When: batch_observation_log_likelihood is called, and per-particle
-              log(observation_model.probability) is computed.
+              env.observation_log_probability is computed.
         Then: The pairwise differences between log-likelihoods match within
               floating-point tolerance.
 
@@ -387,8 +388,7 @@ class TestEquivalenceWithPerParticleLoop:
         observation = np.array([0.1, -0.1, 0.5, 0.2])
 
         def per_particle_ll_fn(particle, action, obs):
-            obs_model = env.observation_model(next_state=particle, action=action)
-            return np.log(obs_model.probability([obs])[0])
+            return env.observation_log_probability(particle, action, [obs])[0]
 
         assert_batch_obs_log_likelihood_matches_loop(
             updater=updater,

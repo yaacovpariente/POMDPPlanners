@@ -16,10 +16,8 @@ import pytest
 from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.core.simulation import StepData
 from POMDPPlanners.environments.rock_sample_pomdp import (
-    RockSampleObservationModel,
     RockSamplePOMDP,
     RockSampleState,
-    RockSampleStateTransitionModel,
     create_random_rock_sample,
     create_rock_sample_state,
     get_robot_pos,
@@ -347,7 +345,7 @@ class TestRockSamplePOMDP:
 
 
 class TestStateTransitionModel:
-    """Test state transition model."""
+    """Test state transition model via env.sample_next_state env-API."""
 
     def test_transition_movement_north(self):
         """Test north movement transition.
@@ -355,16 +353,15 @@ class TestStateTransitionModel:
         Purpose: Validates correct robot movement north within bounds
 
         Given: Robot at position (2, 1) with north action
-        When: State transition is sampled
+        When: env.sample_next_state is invoked
         Then: Robot moves to position (1, 1) and rocks remain unchanged
 
         Test type: unit
         """
         pomdp = RockSamplePOMDP()
         state = create_rock_sample_state((2, 1), (True, False, True))
-        transition = RockSampleStateTransitionModel(state, 1, pomdp)  # North
 
-        next_state = transition.sample()[0]
+        next_state = pomdp.sample_next_state(state=state, action=1)  # North
         assert get_robot_pos(next_state) == (1, 1)
         assert get_rocks(next_state) == (True, False, True)
 
@@ -374,16 +371,15 @@ class TestStateTransitionModel:
         Purpose: Validates that robot cannot move beyond north boundary
 
         Given: Robot at top boundary (0, 1) with north action
-        When: State transition is sampled
+        When: env.sample_next_state is invoked
         Then: Robot remains at (0, 1) due to boundary constraint
 
         Test type: unit
         """
         pomdp = RockSamplePOMDP()
         state = create_rock_sample_state((0, 1), (True, False, True))
-        transition = RockSampleStateTransitionModel(state, 1, pomdp)  # North
 
-        next_state = transition.sample()[0]
+        next_state = pomdp.sample_next_state(state=state, action=1)  # North
         assert get_robot_pos(next_state) == (0, 1)  # Blocked by boundary
 
     def test_transition_movement_east(self):
@@ -392,16 +388,15 @@ class TestStateTransitionModel:
         Purpose: Validates correct robot movement east within bounds
 
         Given: Robot at position (1, 2) with east action
-        When: State transition is sampled
+        When: env.sample_next_state is invoked
         Then: Robot moves to position (1, 3) and rocks remain unchanged
 
         Test type: unit
         """
         pomdp = RockSamplePOMDP()
         state = create_rock_sample_state((1, 2), (True, False, True))
-        transition = RockSampleStateTransitionModel(state, 2, pomdp)  # East
 
-        next_state = transition.sample()[0]
+        next_state = pomdp.sample_next_state(state=state, action=2)  # East
         assert get_robot_pos(next_state) == (1, 3)
         assert get_rocks(next_state) == (True, False, True)
 
@@ -411,16 +406,15 @@ class TestStateTransitionModel:
         Purpose: Validates terminal state transition when exiting map
 
         Given: Robot at right boundary (1, 4) in 5x5 map with east action
-        When: State transition is sampled
+        When: env.sample_next_state is invoked
         Then: Robot moves to terminal position (-1, -1)
 
         Test type: unit
         """
         pomdp = RockSamplePOMDP()  # Default 5x5 map
         state = create_rock_sample_state((1, 4), (True, False, True))  # Right boundary
-        transition = RockSampleStateTransitionModel(state, 2, pomdp)  # East
 
-        next_state = transition.sample()[0]
+        next_state = pomdp.sample_next_state(state=state, action=2)  # East
         assert get_robot_pos(next_state) == (-1, -1)  # Terminal state
 
     def test_transition_movement_south(self):
@@ -429,16 +423,15 @@ class TestStateTransitionModel:
         Purpose: Validates correct robot movement south within bounds
 
         Given: Robot at position (1, 2) with south action
-        When: State transition is sampled
+        When: env.sample_next_state is invoked
         Then: Robot moves to position (2, 2) and rocks remain unchanged
 
         Test type: unit
         """
         pomdp = RockSamplePOMDP()
         state = create_rock_sample_state((1, 2), (True, False, True))
-        transition = RockSampleStateTransitionModel(state, 3, pomdp)  # South
 
-        next_state = transition.sample()[0]
+        next_state = pomdp.sample_next_state(state=state, action=3)  # South
         assert get_robot_pos(next_state) == (2, 2)
         assert get_rocks(next_state) == (True, False, True)
 
@@ -448,16 +441,15 @@ class TestStateTransitionModel:
         Purpose: Validates that robot cannot move beyond south boundary
 
         Given: Robot at bottom boundary (4, 1) in 5x5 map with south action
-        When: State transition is sampled
+        When: env.sample_next_state is invoked
         Then: Robot remains at (4, 1) due to boundary constraint
 
         Test type: unit
         """
         pomdp = RockSamplePOMDP()  # Default 5x5 map
         state = create_rock_sample_state((4, 1), (True, False, True))  # Bottom boundary
-        transition = RockSampleStateTransitionModel(state, 3, pomdp)  # South
 
-        next_state = transition.sample()[0]
+        next_state = pomdp.sample_next_state(state=state, action=3)  # South
         assert get_robot_pos(next_state) == (4, 1)  # Blocked by boundary
 
     def test_transition_movement_west(self):
@@ -466,16 +458,15 @@ class TestStateTransitionModel:
         Purpose: Validates correct robot movement west within bounds
 
         Given: Robot at position (2, 3) with west action
-        When: State transition is sampled
+        When: env.sample_next_state is invoked
         Then: Robot moves to position (2, 2) and rocks remain unchanged
 
         Test type: unit
         """
         pomdp = RockSamplePOMDP()
         state = create_rock_sample_state((2, 3), (True, False, True))
-        transition = RockSampleStateTransitionModel(state, 4, pomdp)  # West
 
-        next_state = transition.sample()[0]
+        next_state = pomdp.sample_next_state(state=state, action=4)  # West
         assert get_robot_pos(next_state) == (2, 2)
         assert get_rocks(next_state) == (True, False, True)
 
@@ -485,16 +476,15 @@ class TestStateTransitionModel:
         Purpose: Validates that robot cannot move beyond west boundary
 
         Given: Robot at left boundary (2, 0) with west action
-        When: State transition is sampled
+        When: env.sample_next_state is invoked
         Then: Robot remains at (2, 0) due to boundary constraint
 
         Test type: unit
         """
         pomdp = RockSamplePOMDP()
         state = create_rock_sample_state((2, 0), (True, False, True))
-        transition = RockSampleStateTransitionModel(state, 4, pomdp)  # West
 
-        next_state = transition.sample()[0]
+        next_state = pomdp.sample_next_state(state=state, action=4)  # West
         assert get_robot_pos(next_state) == (2, 0)  # Blocked by boundary
 
     def test_transition_sample_at_rock_position(self):
@@ -503,16 +493,15 @@ class TestStateTransitionModel:
         Purpose: Validates that sampling at rock position changes rock state
 
         Given: Robot at rock position (0, 0) with good rock and sample action
-        When: State transition is sampled
+        When: env.sample_next_state is invoked
         Then: Robot stays at (0, 0) and rock becomes bad
 
         Test type: unit
         """
         pomdp = RockSamplePOMDP(rock_positions=[(0, 0), (2, 2), (3, 3)])
         state = create_rock_sample_state((0, 0), (True, False, True))  # At rock 0
-        transition = RockSampleStateTransitionModel(state, 0, pomdp)  # Sample
 
-        next_state = transition.sample()[0]
+        next_state = pomdp.sample_next_state(state=state, action=0)  # Sample
         assert get_robot_pos(next_state) == (0, 0)  # Stay in place
         assert get_rocks(next_state) == (False, False, True)  # Rock 0 becomes bad
 
@@ -522,16 +511,15 @@ class TestStateTransitionModel:
         Purpose: Validates that sampling away from rocks has no effect on rock states
 
         Given: Robot at position not matching any rock with sample action
-        When: State transition is sampled
+        When: env.sample_next_state is invoked
         Then: Robot stays in place and all rocks remain unchanged
 
         Test type: unit
         """
         pomdp = RockSamplePOMDP(rock_positions=[(0, 0), (2, 2), (3, 3)])
         state = create_rock_sample_state((1, 1), (True, False, True))  # Not at any rock
-        transition = RockSampleStateTransitionModel(state, 0, pomdp)  # Sample
 
-        next_state = transition.sample()[0]
+        next_state = pomdp.sample_next_state(state=state, action=0)  # Sample
         assert get_robot_pos(next_state) == (1, 1)
         assert get_rocks(next_state) == (True, False, True)  # No change
 
@@ -541,22 +529,21 @@ class TestStateTransitionModel:
         Purpose: Validates that check actions keep robot in place
 
         Given: Robot at any position with check action
-        When: State transition is sampled
+        When: env.sample_next_state is invoked
         Then: Robot remains at same position and rocks unchanged
 
         Test type: unit
         """
         pomdp = RockSamplePOMDP()
         state = create_rock_sample_state((2, 1), (True, False, True))
-        transition = RockSampleStateTransitionModel(state, 5, pomdp)  # Check rock 0
 
-        next_state = transition.sample()[0]
+        next_state = pomdp.sample_next_state(state=state, action=5)  # Check rock 0
         assert get_robot_pos(next_state) == (2, 1)  # Stay in place
         assert get_rocks(next_state) == (True, False, True)  # No change
 
 
 class TestObservationModel:
-    """Test observation model."""
+    """Test observation model via env.sample_observation / env.observation_log_probability."""
 
     def test_observation_movement_action(self):
         """Test observation for movement actions.
@@ -564,7 +551,7 @@ class TestObservationModel:
         Purpose: Validates that movement actions always produce 'none' observation
 
         Given: Any state with movement action (1-4)
-        When: Observation is sampled
+        When: env.sample_observation is invoked
         Then: Always returns 'none' observation
 
         Test type: unit
@@ -573,8 +560,7 @@ class TestObservationModel:
         state = create_rock_sample_state((1, 1), (True, False))
 
         for action in [1, 2, 3, 4]:  # North, East, South, West
-            obs_model = RockSampleObservationModel(state, action, pomdp)
-            observation = obs_model.sample()[0]
+            observation = pomdp.sample_observation(next_state=state, action=action)
             assert observation == "none"
 
     def test_observation_sample_action(self):
@@ -583,16 +569,15 @@ class TestObservationModel:
         Purpose: Validates that sample action always produces 'none' observation
 
         Given: Any state with sample action
-        When: Observation is sampled
+        When: env.sample_observation is invoked
         Then: Returns 'none' observation
 
         Test type: unit
         """
         pomdp = RockSamplePOMDP()
         state = create_rock_sample_state((1, 1), (True, False))
-        obs_model = RockSampleObservationModel(state, 0, pomdp)  # Sample
 
-        observation = obs_model.sample()[0]
+        observation = pomdp.sample_observation(next_state=state, action=0)  # Sample
         assert observation == "none"
 
     def test_observation_check_action_close_distance(self):
@@ -601,7 +586,7 @@ class TestObservationModel:
         Purpose: Validates high accuracy sensor readings at close range
 
         Given: Robot very close to rock with check action and high sensor efficiency
-        When: Observation probabilities are calculated
+        When: Observation probabilities are calculated via env.observation_log_probability
         Then: Correct observation has high probability
 
         Test type: unit
@@ -610,13 +595,13 @@ class TestObservationModel:
             rock_positions=[(1, 1), (3, 3)], sensor_efficiency=50.0  # High efficiency
         )
         state = create_rock_sample_state((1, 1), (True, False))  # At rock 0 position
-        obs_model = RockSampleObservationModel(state, 5, pomdp)  # Check rock 0
 
         # Should have high probability of correct observation
-        probs = obs_model.probability(["good", "bad", "none"])
+        log_probs = pomdp.observation_log_probability(state, 5, ["good", "bad", "none"])
+        probs = np.exp(log_probs)
         assert probs[0] > 0.9  # High probability of "good"
         assert probs[1] < 0.1  # Low probability of "bad"
-        assert probs[2] == 0.0  # No probability of "none"
+        assert probs[2] < 1e-200  # Effectively zero probability of "none"
 
     def test_observation_check_action_far_distance(self):
         """Test observation for check action at far distance.
@@ -624,7 +609,7 @@ class TestObservationModel:
         Purpose: Validates reduced accuracy sensor readings at far range
 
         Given: Robot far from rock with check action and very low sensor efficiency
-        When: Observation probabilities are calculated
+        When: Observation probabilities are calculated via env.observation_log_probability
         Then: Observation probabilities are closer to random
 
         Test type: unit
@@ -634,15 +619,15 @@ class TestObservationModel:
             sensor_efficiency=2.0,  # Moderate efficiency for reasonable uncertainty
         )
         state = create_rock_sample_state((0, 0), (True, False))  # At rock 0, check rock 1 at (1,2)
-        obs_model = RockSampleObservationModel(state, 6, pomdp)  # Check rock 1
 
-        probs = obs_model.probability(["good", "bad", "none"])
+        log_probs = pomdp.observation_log_probability(state, 6, ["good", "bad", "none"])
+        probs = np.exp(log_probs)
         # Distance = sqrt((0-1)^2 + (0-2)^2) = sqrt(5) ≈ 2.24
         # Efficiency = exp(-2.24/2.0) ≈ 0.33
         # For bad rock: P(good) = 1-0.33 = 0.67, P(bad) = 0.33
         assert 0.6 < probs[0] < 0.8  # P(good|bad_rock) should be high due to low efficiency
         assert 0.2 < probs[1] < 0.4  # P(bad|bad_rock) should be low
-        assert probs[2] == 0.0
+        assert probs[2] < 1e-200  # Effectively zero probability of "none"
 
     def test_observation_check_invalid_rock(self):
         """Test observation for check action on invalid rock index.
@@ -650,16 +635,15 @@ class TestObservationModel:
         Purpose: Validates proper handling of invalid rock check actions
 
         Given: Check action for rock index beyond available rocks
-        When: Observation is sampled
+        When: env.sample_observation is invoked
         Then: Returns 'none' observation
 
         Test type: unit
         """
         pomdp = RockSamplePOMDP(rock_positions=[(0, 0), (2, 2)])  # Only 2 rocks
         state = create_rock_sample_state((1, 1), (True, False))
-        obs_model = RockSampleObservationModel(state, 7, pomdp)  # Check rock 2 (invalid)
 
-        observation = obs_model.sample()[0]
+        observation = pomdp.sample_observation(next_state=state, action=7)  # Check rock 2 (invalid)
         assert observation == "none"
 
     def test_observation_probability_calculation(self):
@@ -668,20 +652,20 @@ class TestObservationModel:
         Purpose: Validates mathematical correctness of sensor probability model
 
         Given: Known robot and rock positions with defined sensor efficiency
-        When: Observation probabilities are calculated
+        When: Observation probabilities are calculated via env.observation_log_probability
         Then: Probabilities sum to 1 and match expected sensor model
 
         Test type: unit
         """
         pomdp = RockSamplePOMDP(rock_positions=[(2, 2)], sensor_efficiency=10.0)
         state = create_rock_sample_state((1, 1), (True,))  # Good rock at distance sqrt(2)
-        obs_model = RockSampleObservationModel(state, 5, pomdp)  # Check rock 0
 
-        probs = obs_model.probability(["good", "bad", "none"])
+        log_probs = pomdp.observation_log_probability(state, 5, ["good", "bad", "none"])
+        probs = np.exp(log_probs)
 
         # Probabilities should sum to 1 (excluding 'none')
         assert abs(probs[0] + probs[1] - 1.0) < 1e-10
-        assert probs[2] == 0.0
+        assert probs[2] < 1e-200  # Effectively zero probability of "none"
 
         # For good rock, "good" observation should be more likely
         assert probs[0] > probs[1]
@@ -1228,7 +1212,7 @@ class TestIntegration:
         Purpose: Validates sensor model produces statistically correct observations
 
         Given: Known robot and rock positions with multiple sensor readings
-        When: Many observations are sampled from check actions
+        When: Many observations are sampled from check actions via env.sample_observation
         Then: Observation frequencies match expected sensor efficiency
 
         Test type: integration
@@ -1240,10 +1224,9 @@ class TestIntegration:
 
         # Robot at rock position - should get very accurate readings
         state = create_rock_sample_state((1, 1), (True,))  # Good rock
-        obs_model = RockSampleObservationModel(state, 5, pomdp)  # Check rock 0
 
-        # Sample many observations
-        observations = obs_model.sample(100)
+        # Sample many observations via env-API batched sampling
+        observations = pomdp.sample_observation(next_state=state, action=5, n_samples=100)
         good_count = sum(1 for obs in observations if obs == "good")
 
         # With very high efficiency and zero distance, should be very accurate
@@ -1276,52 +1259,6 @@ class TestIntegration:
         expected_configs = {(True, True), (True, False), (False, True), (False, False)}
 
         assert rock_configs == expected_configs
-
-
-class TestSampleNextStepEquivalence:
-    """Test that the optimized sample_next_step produces identical results to the base class."""
-
-    def test_sample_next_step_matches_base_class(self):
-        """Test optimized sample_next_step agrees with base Environment.sample_next_step.
-
-        Purpose: Validates that the inlined sample_next_step override produces
-        identical results to the original base class implementation.
-
-        Given: A RockSamplePOMDP environment and valid (state, action) pairs
-        When: Both the optimized and base class sample_next_step are called
-              with the same numpy RNG seed
-        Then: next_state, observation, and reward are identical
-
-        Test type: unit
-        """
-        from POMDPPlanners.core.environment import Environment
-
-        env = RockSamplePOMDP(discount_factor=0.95)
-        state = env.initial_state_dist().sample()[0]
-
-        for action in [0, 1, 2, 3, 4, 5]:
-            for _ in range(30):
-                seed = np.random.randint(0, 2**31)
-
-                np.random.seed(seed)
-                opt_next, opt_obs, opt_reward = env.sample_next_step(state, action)
-
-                np.random.seed(seed)
-                base_next, base_obs, base_reward = Environment.sample_next_step(env, state, action)
-
-                np.testing.assert_array_almost_equal(
-                    opt_next,
-                    base_next,
-                    decimal=10,
-                    err_msg=f"next_state mismatch for action={action}, seed={seed}",
-                )
-                assert (
-                    opt_obs == base_obs
-                ), f"observation mismatch for action={action}, seed={seed}: {opt_obs} != {base_obs}"
-                assert opt_reward == base_reward, (
-                    f"reward mismatch for action={action}, seed={seed}: "
-                    f"{opt_reward} != {base_reward}"
-                )
 
 
 if __name__ == "__main__":

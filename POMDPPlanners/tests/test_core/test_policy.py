@@ -20,10 +20,8 @@ from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.core.environment import (
     Environment,
-    ObservationModel,
     SpaceInfo,
     SpaceType,
-    StateTransitionModel,
 )
 from POMDPPlanners.core.policy import Policy, PolicySpaceInfo, PolicyRunData
 from POMDPPlanners.utils.logger import reset_logger_state
@@ -45,11 +43,25 @@ class MockEnvironment(Environment):
             use_queue_logger=False,
         )  # Use individual logger for tests
 
-    def state_transition_model(self, state, action):
-        return Mock(spec=StateTransitionModel)
+    def sample_next_state(self, state, action, n_samples: int = 1):
+        del action
+        if n_samples == 1:
+            return state
+        return [state] * n_samples
 
-    def observation_model(self, next_state, action):
-        return Mock(spec=ObservationModel)
+    def sample_observation(self, next_state, action, n_samples: int = 1):
+        del next_state, action
+        if n_samples == 1:
+            return "obs"
+        return ["obs"] * n_samples
+
+    def transition_log_probability(self, state, action, next_states) -> np.ndarray:
+        del state, action
+        return np.zeros(len(next_states))
+
+    def observation_log_probability(self, next_state, action, observations) -> np.ndarray:
+        del next_state, action
+        return np.zeros(len(observations))
 
     def reward(self, state, action):
         return 0.0

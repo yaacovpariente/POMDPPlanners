@@ -19,8 +19,6 @@ Observation:
     measurements.  Terminal observation is ``np.full(8, -1.0)``.
 
 Classes:
-    ContinuousLaserTagStateTransitionModel: State transition model.
-    ContinuousLaserTagObservationModel: Observation model.
     ContinuousLaserTagPOMDP: Continuous-action environment.
     ContinuousLaserTagPOMDPDiscreteActions: Discrete-action variant.
 """
@@ -39,8 +37,6 @@ from POMDPPlanners.core.environment import (
     Environment,
     SpaceInfo,
     SpaceType,
-    ObservationModel,
-    StateTransitionModel,
 )
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
 from POMDPPlanners.environments.laser_tag_pomdp import _native
@@ -91,129 +87,6 @@ class ContinuousLaserTagPOMDPMetrics(Enum):
     AVERAGE_WALL_COLLISIONS = "average_wall_collisions"
     AVERAGE_DANGEROUS_AREA_STEPS = "average_dangerous_area_steps"
     AVERAGE_ALL_DANGEROUS_ENCOUNTERS = "average_all_dangerous_encounters"
-
-
-class ContinuousLaserTagStateTransitionModel(_native.ContinuousLaserTagTransitionCpp):
-    """State transition model for the Continuous LaserTag POMDP.
-
-    Robot movement: ``next_pos = pos + action[:2] + noise`` where noise is
-    sampled from a 2-D Gaussian. Opponent pursues the robot stochastically
-    (mean step of ``pursuit_speed`` along ``(robot - opponent)`` unit vector,
-    plus a separate 2-D Gaussian). Wall collisions are resolved via
-    circle-AABB minimum translation vector and the final position is
-    clamped to the grid.
-
-    The ``sample()``, ``probability()`` and ``batch_sample()`` methods
-    execute entirely in C++ via the ``_native`` extension; this Python
-    subclass only wraps the constructor so existing call sites that pass
-    :class:`CovarianceParameterizedMultivariateNormal` keep working.
-
-    Example:
-        >>> import numpy as np
-        >>> np.random.seed(42)
-        >>> from POMDPPlanners.utils.multivariate_normal import (
-        ...     CovarianceParameterizedMultivariateNormal,
-        ... )
-        >>> from POMDPPlanners.environments.laser_tag_pomdp import _native
-        >>> _native.set_seed(42)
-        >>> state = np.array([3.0, 3.0, 8.0, 5.0, 0.0])
-        >>> action = np.array([1.0, 0.0, 0.0])
-        >>> robot_dist = CovarianceParameterizedMultivariateNormal(np.eye(2) * 0.1)
-        >>> opponent_dist = CovarianceParameterizedMultivariateNormal(np.eye(2) * 0.05)
-        >>> walls = np.empty((0, 4))
-        >>> grid_size = np.array([11.0, 7.0])
-        >>> model = ContinuousLaserTagStateTransitionModel(
-        ...     state=state, action=action,
-        ...     robot_transition_dist=robot_dist,
-        ...     opponent_transition_dist=opponent_dist,
-        ...     pursuit_speed=0.6,
-        ...     walls=walls, grid_size=grid_size,
-        ...     robot_radius=0.3, opponent_radius=0.3, tag_radius=0.5,
-        ... )
-        >>> samples = model.sample(n_samples=3)
-        >>> len(samples)
-        3
-    """
-
-    def __init__(
-        self,
-        state: np.ndarray,
-        action: np.ndarray,
-        robot_transition_dist: CovarianceParameterizedMultivariateNormal,
-        opponent_transition_dist: CovarianceParameterizedMultivariateNormal,
-        pursuit_speed: float,
-        walls: np.ndarray,
-        grid_size: np.ndarray,
-        robot_radius: float,
-        opponent_radius: float,
-        tag_radius: float,
-    ):
-        super().__init__(
-            state=state,
-            action=action,
-            robot_covariance=robot_transition_dist.covariance,
-            opponent_covariance=opponent_transition_dist.covariance,
-            pursuit_speed=pursuit_speed,
-            walls=np.asarray(walls, dtype=float).reshape(-1, 4),
-            grid_size=np.asarray(grid_size, dtype=float),
-            robot_radius=robot_radius,
-            opponent_radius=opponent_radius,
-            tag_radius=tag_radius,
-        )
-        self._robot_dist = robot_transition_dist
-        self._opponent_dist = opponent_transition_dist
-
-
-StateTransitionModel.register(ContinuousLaserTagStateTransitionModel)
-
-
-class ContinuousLaserTagObservationModel(_native.ContinuousLaserTagObservationCpp):
-    """Observation model for the Continuous LaserTag POMDP.
-
-    Provides 8-direction laser range measurements with Gaussian noise. The
-    ``sample()``, ``probability()`` and ``batch_log_likelihood()`` methods
-    execute entirely in C++ via the ``_native`` extension; this Python
-    subclass only wraps the constructor.
-
-    Example:
-        >>> import numpy as np
-        >>> np.random.seed(42)
-        >>> from POMDPPlanners.environments.laser_tag_pomdp import _native
-        >>> _native.set_seed(42)
-        >>> state = np.array([3.0, 3.0, 8.0, 5.0, 0.0])
-        >>> walls = np.empty((0, 4))
-        >>> grid_size = np.array([11.0, 7.0])
-        >>> model = ContinuousLaserTagObservationModel(
-        ...     next_state=state, action=np.array([1.0, 0.0, 0.0]),
-        ...     measurement_noise=1.0, walls=walls,
-        ...     grid_size=grid_size, opponent_radius=0.3,
-        ... )
-        >>> obs = model.sample(n_samples=2)
-        >>> len(obs)
-        2
-    """
-
-    def __init__(
-        self,
-        next_state: np.ndarray,
-        action: np.ndarray,
-        measurement_noise: float,
-        walls: np.ndarray,
-        grid_size: np.ndarray,
-        opponent_radius: float,
-    ):
-        super().__init__(
-            next_state=next_state,
-            action=action,
-            measurement_noise=measurement_noise,
-            walls=np.asarray(walls, dtype=float).reshape(-1, 4),
-            grid_size=np.asarray(grid_size, dtype=float),
-            opponent_radius=opponent_radius,
-        )
-        self._measurement_noise = measurement_noise
-
-
-ObservationModel.register(ContinuousLaserTagObservationModel)
 
 
 class ContinuousLaserTagPOMDP(Environment):
@@ -356,30 +229,6 @@ class ContinuousLaserTagPOMDP(Environment):
     # ------------------------------------------------------------------
     # Core Environment interface
     # ------------------------------------------------------------------
-
-    def state_transition_model(self, state: np.ndarray, action: np.ndarray) -> StateTransitionModel:
-        return ContinuousLaserTagStateTransitionModel(  # pyright: ignore[reportReturnType]
-            state=state,
-            action=np.asarray(action, dtype=float),
-            robot_transition_dist=self._robot_transition_dist,
-            opponent_transition_dist=self._opponent_transition_dist,
-            pursuit_speed=self.pursuit_speed,
-            walls=self._walls,
-            grid_size=self._grid_size,
-            robot_radius=self.robot_radius,
-            opponent_radius=self.opponent_radius,
-            tag_radius=self.tag_radius,
-        )
-
-    def observation_model(self, next_state: np.ndarray, action: np.ndarray) -> ObservationModel:
-        return ContinuousLaserTagObservationModel(  # pyright: ignore[reportReturnType]
-            next_state=next_state,
-            action=np.asarray(action, dtype=float),
-            measurement_noise=self.measurement_noise,
-            walls=self._walls,
-            grid_size=self._grid_size,
-            opponent_radius=self.opponent_radius,
-        )
 
     # ── Hot-path sampling overrides ─────────────────────────────────
     # The default base-class implementations build a Python wrapper subclass
@@ -857,12 +706,6 @@ class ContinuousLaserTagPOMDPDiscreteActions(ContinuousLaserTagPOMDP, DiscreteAc
 
     def get_actions(self) -> List[str]:
         return self.actions
-
-    def state_transition_model(self, state: np.ndarray, action: Any) -> StateTransitionModel:
-        return super().state_transition_model(state, self.action_to_vector[action])
-
-    def observation_model(self, next_state: np.ndarray, action: Any) -> ObservationModel:
-        return super().observation_model(next_state, self.action_to_vector[action])
 
     # Hot-path overrides: the discrete wrapper used to delegate every
     # method to its parent via ``super().method(self.action_to_vector[action])``.

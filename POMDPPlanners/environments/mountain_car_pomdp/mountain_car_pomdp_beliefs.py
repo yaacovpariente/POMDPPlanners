@@ -51,10 +51,10 @@ class MountainCarVectorizedUpdater(VectorizedParticleBeliefUpdater):
 
     ``batch_transition`` applies the deterministic cart physics to all
     particles, then adds a per-particle Gaussian process-noise sample drawn
-    from ``state_transition_dist`` (mirroring
-    :meth:`MountainCarTransition.sample`), and finally re-applies the
-    position/velocity clipping and wall-stop boundary rule. Observations
-    follow a single Gaussian centred on the true state.
+    from ``state_transition_dist`` (mirroring the native
+    :class:`_native.MountainCarTransitionCpp` ``sample`` path), and finally
+    re-applies the position/velocity clipping and wall-stop boundary rule.
+    Observations follow a single Gaussian centred on the true state.
 
     Attributes:
         state_transition_dist: Process-noise distribution added after the
@@ -149,9 +149,8 @@ class MountainCarVectorizedUpdater(VectorizedParticleBeliefUpdater):
 
     def batch_transition(self, particles: np.ndarray, action: np.ndarray) -> np.ndarray:
         # particles: (N, 2) = [position, velocity]. Delegates to the native
-        # C++ batch sampler so both this path and the per-particle
-        # MountainCarTransition.sample() share the same C++ RNG (closes the
-        # cross-path divergence that used to skip the equivalence tests).
+        # C++ batch sampler so this path uses the same C++ RNG as the
+        # per-particle ``env.sample_next_state`` path.
         # The `state=particles[0]` passed to the ctor is unused on the
         # batch path; only the ctor signature requires it.
         transition = _native.MountainCarTransitionCpp(

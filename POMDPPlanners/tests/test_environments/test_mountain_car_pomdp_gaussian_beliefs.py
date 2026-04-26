@@ -12,11 +12,32 @@ from POMDPPlanners.core.belief.gaussian_belief_updaters import (
     ExtendedKalmanFilterUpdater,
     UnscentedKalmanFilterUpdater,
 )
-from POMDPPlanners.environments.mountain_car_pomdp import MountainCarPOMDP
+from POMDPPlanners.environments.mountain_car_pomdp import MountainCarPOMDP, _native
 from POMDPPlanners.environments.mountain_car_pomdp.mountain_car_pomdp_gaussian_beliefs import (
     GaussianBeliefUpdaterType,
     create_mountain_car_gaussian_belief,
 )
+
+
+def _deterministic_next_state(env: MountainCarPOMDP, state: np.ndarray, action: int) -> np.ndarray:
+    """Compute the deterministic MountainCar next state via the native kernel.
+
+    Replaces the deleted ``env.state_transition_model(...)`` factory; mirrors the
+    construction used inside ``MountainCarPOMDP.sample_next_state``.
+    """
+    kernel = _native.MountainCarTransitionCpp(
+        state=tuple(float(x) for x in state),
+        action=action,
+        power=env.power,
+        gravity=env.gravity,
+        max_speed=env.max_speed,
+        min_position=env.min_position,
+        max_position=env.max_position,
+        covariance=env.state_transition_cov,
+    )
+    return np.asarray(
+        kernel._compute_deterministic_next_state()
+    )  # pylint: disable=protected-access
 
 
 # ---------------------------------------------------------------------------
@@ -107,8 +128,7 @@ class TestEKFFunctions:
 
         state = np.array([-0.5, 0.01])
         for action_val in [-1, 0, 1]:
-            transition = env.state_transition_model(tuple(state), action_val)
-            env_next = transition._compute_deterministic_next_state()
+            env_next = _deterministic_next_state(env, state, action_val)
             ekf_next = updater.transition_fn(state, np.array([float(action_val)]))
             np.testing.assert_allclose(ekf_next, env_next, atol=1e-12)
 
@@ -222,8 +242,7 @@ class TestUKFFunctions:
 
         state = np.array([-0.5, 0.01])
         for action_val in [-1, 0, 1]:
-            transition = env.state_transition_model(tuple(state), action_val)
-            env_next = transition._compute_deterministic_next_state()
+            env_next = _deterministic_next_state(env, state, action_val)
             ukf_next = updater.transition_fn(state, np.array([float(action_val)]))
             np.testing.assert_allclose(ukf_next, env_next, atol=1e-12)
 

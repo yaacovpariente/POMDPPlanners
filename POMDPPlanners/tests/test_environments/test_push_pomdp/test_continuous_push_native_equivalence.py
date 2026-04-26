@@ -3,10 +3,15 @@
 Verifies that the C++ ``_native`` sampling / probability code matches the
 Python reference (the pre-port numpy implementation) up to statistical
 noise in the samples and floating-point tolerance in the PDF. Complements
-``test_continuous_push_pomdp.py`` which exercises the shipped API; this
-module focuses on the port-specific invariants (ABC contract, empirical
-moments, bit-exact PDF, determinism under seeding, and batch vs
-per-particle parity for both transition and observation).
+``test_continuous_push_pomdp.py`` which exercises the shipped env API;
+this module focuses on the port-specific invariants (empirical moments,
+bit-exact PDF, determinism under seeding, and batch vs per-particle
+parity for both transition and observation).
+
+The Python wrapper classes ``ContinuousPushStateTransitionModel`` and
+``ContinuousPushObservationModel`` no longer exist; this module
+constructs the C++ kernels directly via ``_native.ContinuousPush*Cpp``,
+seeded with the same parameters the env would have passed.
 
 Generic assertion mechanics live in ``_native_parity.py`` so the helpers
 are shared with MountainCar.
@@ -15,15 +20,39 @@ are shared with MountainCar.
 import numpy as np
 import pytest
 
-from POMDPPlanners.core.environment import ObservationModel, StateTransitionModel
-from POMDPPlanners.environments.push_pomdp import (
-    ContinuousPushObservationModel,
-    ContinuousPushPOMDP,
-    ContinuousPushStateTransitionModel,
-    _native,
-)
+from POMDPPlanners.environments.push_pomdp import _native
+from POMDPPlanners.environments.push_pomdp.continuous_push_pomdp import ContinuousPushPOMDP
 from POMDPPlanners.tests.test_environments import _native_parity
 from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
+
+
+def _make_transition_kernel(env: ContinuousPushPOMDP, state, action):
+    """Construct a ``_native.ContinuousPushTransitionCpp`` matching ``env``.
+
+    Replaces the deleted ``env.state_transition_model(...)`` factory; the
+    arguments mirror what the wrapper passed to its C++ base.
+    """
+    return _native.ContinuousPushTransitionCpp(
+        state=np.asarray(state, dtype=float).ravel(),
+        action=np.asarray(action, dtype=float).ravel(),
+        grid_size=float(env.grid_size),
+        push_threshold=float(env.push_threshold),
+        friction_coefficient=float(env.friction_coefficient),
+        max_push=float(env.max_push),
+        robot_radius=float(env.robot_radius),
+        obstacles=np.asarray(env.obstacles, dtype=float),
+        covariance=env._state_transition_dist.covariance,  # pylint: disable=protected-access
+    )
+
+
+def _make_observation_kernel(env: ContinuousPushPOMDP, next_state, action):
+    """Construct a ``_native.ContinuousPushObservationCpp`` matching ``env``."""
+    return _native.ContinuousPushObservationCpp(
+        next_state=np.asarray(next_state, dtype=float).ravel(),
+        action=np.asarray(action, dtype=float).ravel(),
+        observation_noise=float(env.observation_noise),
+        grid_size=float(env.grid_size),
+    )
 
 
 @pytest.fixture(name="env")
@@ -38,82 +67,13 @@ def _env_fixture():
 @pytest.fixture(name="transition")
 def _transition_fixture(env):
     state = np.array([2.0, 3.0, 5.0, 5.0, 8.0, 8.0])
-    return env.state_transition_model(state=state, action=np.array([1.0, 0.0]))
+    return _make_transition_kernel(env, state=state, action=np.array([1.0, 0.0]))
 
 
 @pytest.fixture(name="observation")
 def _observation_fixture(env):
     state = np.array([2.0, 3.0, 2.8, 3.2, 8.0, 8.0])
-    return env.observation_model(next_state=state, action=np.array([1.0, 0.0]))
-
-
-# ---------------------------------------------------------------------------
-# ABC / typing contract
-# ---------------------------------------------------------------------------
-
-
-def test_transition_is_registered_as_state_transition_model(transition):
-    """Shim passes isinstance check for StateTransitionModel after register().
-
-    Purpose: Validates the ABC virtual-subclass registration applied in the
-    Python shim so downstream polymorphic callers see the C++ class as a
-    valid StateTransitionModel.
-
-    Given: A ContinuousPushStateTransitionModel produced by the env factory.
-    When: isinstance is checked against StateTransitionModel.
-    Then: It returns True.
-
-    Test type: unit
-    """
-    _native_parity.assert_abc_registration(transition, StateTransitionModel)
-
-
-def test_observation_is_registered_as_observation_model(observation):
-    """Shim passes isinstance check for ObservationModel after register().
-
-    Purpose: Same as the transition case, for the observation model.
-
-    Given: A ContinuousPushObservationModel produced by the env factory.
-    When: isinstance is checked against ObservationModel.
-    Then: It returns True.
-
-    Test type: unit
-    """
-    _native_parity.assert_abc_registration(observation, ObservationModel)
-
-
-def test_transition_is_not_abstract():
-    """ContinuousPushStateTransitionModel has no unresolved abstract methods.
-
-    Purpose: Guards against ABC.register masking missing slot implementations
-    on the C++ side.
-
-    Given: The ContinuousPushStateTransitionModel class object.
-    When: __abstractmethods__ is inspected.
-    Then: The set is empty.
-
-    Test type: unit
-    """
-    abstract_methods = getattr(
-        ContinuousPushStateTransitionModel, "__abstractmethods__", frozenset()
-    )
-    assert abstract_methods == frozenset()
-
-
-def test_observation_is_not_abstract():
-    """ContinuousPushObservationModel has no unresolved abstract methods.
-
-    Purpose: Guards against ABC.register masking missing slot implementations
-    on the C++ side.
-
-    Given: The ContinuousPushObservationModel class object.
-    When: __abstractmethods__ is inspected.
-    Then: The set is empty.
-
-    Test type: unit
-    """
-    abstract_methods = getattr(ContinuousPushObservationModel, "__abstractmethods__", frozenset())
-    assert abstract_methods == frozenset()
+    return _make_observation_kernel(env, next_state=state, action=np.array([1.0, 0.0]))
 
 
 # ---------------------------------------------------------------------------
@@ -141,7 +101,7 @@ def test_transition_sample_empirical_robot_moments_match_spec(env):
     """
     state = np.array([2.0, 3.0, 7.0, 7.0, 8.0, 8.0])  # object far from robot
     action = np.array([1.0, 0.0])
-    transition = env.state_transition_model(state=state, action=action)
+    transition = _make_transition_kernel(env, state=state, action=action)
     expected_robot_mean = state[:2] + action
 
     _native.set_seed(12345)
@@ -170,7 +130,7 @@ def test_transition_sample_object_and_target_deterministic(env):
     Test type: unit
     """
     state = np.array([2.0, 3.0, 7.0, 7.0, 8.0, 8.0])
-    transition = env.state_transition_model(state=state, action=np.array([1.0, 0.0]))
+    transition = _make_transition_kernel(env, state=state, action=np.array([1.0, 0.0]))
     _native.set_seed(999)
     samples = np.asarray(transition.sample(500))
     np.testing.assert_array_equal(samples[:, 2:4], np.tile(state[2:4], (500, 1)))
@@ -200,7 +160,7 @@ def test_transition_probability_matches_python_reference_on_grid(env):
     """
     state = np.array([2.0, 3.0, 5.0, 5.0, 8.0, 8.0])
     action = np.array([1.0, 0.0])
-    transition = env.state_transition_model(state=state, action=action)
+    transition = _make_transition_kernel(env, state=state, action=action)
     robot_mean = state[:2] + action
 
     rng = np.random.default_rng(42)
@@ -231,7 +191,7 @@ def test_observation_probability_matches_python_reference_on_grid(env):
     Test type: unit
     """
     next_state = np.array([2.0, 3.0, 2.8, 3.2, 8.0, 8.0])
-    observation = env.observation_model(next_state=next_state, action=np.array([1.0, 0.0]))
+    observation = _make_observation_kernel(env, next_state=next_state, action=np.array([1.0, 0.0]))
 
     rng = np.random.default_rng(4242)
     offsets = rng.normal(size=(1000, 2)) * np.array([0.1, 0.1])
@@ -242,7 +202,7 @@ def test_observation_probability_matches_python_reference_on_grid(env):
     full_grid[:, 4:6] = next_state[4:6]
 
     cpp_pdf = observation.probability(full_grid)
-    # Python reference: per ContinuousPushObservationModel.probability
+    # Python reference: per pre-port ContinuousPushObservationModel.probability
     sigma = env.observation_noise
     variance = sigma * sigma
     normalization = 1.0 / (2.0 * np.pi * variance)
@@ -285,15 +245,15 @@ def test_sample_is_deterministic_under_set_seed(env):
 
     Purpose: Validates the determinism path used by reproducible tests.
 
-    Given: Two ContinuousPushStateTransitionModel instances sampled under the
-        same seed.
+    Given: Two ``_native.ContinuousPushTransitionCpp`` instances sampled
+        under the same seed.
     When: _native.set_seed(seed) is called before each, followed by sample(50).
     Then: The two sample sequences are elementwise identical.
 
     Test type: unit
     """
     state = np.array([2.0, 3.0, 5.0, 5.0, 8.0, 8.0])
-    transition = env.state_transition_model(state=state, action=np.array([1.0, 0.0]))
+    transition = _make_transition_kernel(env, state=state, action=np.array([1.0, 0.0]))
     _native_parity.assert_determinism_under_seed(
         model=transition,
         seed_fn=_native.set_seed,
@@ -307,15 +267,15 @@ def test_observation_sample_is_deterministic_under_set_seed(env):
 
     Purpose: Validates the determinism path for the observation model.
 
-    Given: Two ContinuousPushObservationModel instances sampled under the
-        same seed.
+    Given: Two ``_native.ContinuousPushObservationCpp`` instances sampled
+        under the same seed.
     When: _native.set_seed(seed) is called before each, followed by sample(50).
     Then: The two sample sequences are elementwise identical.
 
     Test type: unit
     """
     next_state = np.array([2.0, 3.0, 2.8, 3.2, 8.0, 8.0])
-    observation = env.observation_model(next_state=next_state, action=np.array([1.0, 0.0]))
+    observation = _make_observation_kernel(env, next_state=next_state, action=np.array([1.0, 0.0]))
     _native_parity.assert_determinism_under_seed(
         model=observation,
         seed_fn=_native.set_seed,
@@ -330,7 +290,7 @@ def test_sample_returns_list_of_1d_ndarrays(transition):
     Purpose: Guards against accidental API drift (many call sites index
     the returned list with ``[0]`` or iterate it).
 
-    Given: A ContinuousPushStateTransitionModel.
+    Given: A ``_native.ContinuousPushTransitionCpp`` kernel.
     When: sample(3) is called.
     Then: The return value is a list of exactly three 1-D ndarrays of
         length 6.
@@ -360,8 +320,8 @@ def test_transition_batch_sample_matches_per_particle_sample(env):
     Given: 64 particles spanning the grid with objects both inside and
         outside push range.
     When: batch_sample runs under seed=777; then for each particle a fresh
-        ContinuousPushStateTransitionModel is built and sample(1) is called
-        in the same order under the same seed.
+        ``_native.ContinuousPushTransitionCpp`` kernel is built and sample(1)
+        is called in the same order under the same seed.
     Then: The two (64, 6) arrays are array_equal.
 
     Test type: unit
@@ -380,13 +340,13 @@ def test_transition_batch_sample_matches_per_particle_sample(env):
     action = np.array([1.0, 0.0])
 
     _native.set_seed(777)
-    transition = env.state_transition_model(state=particles[0], action=action)
+    transition = _make_transition_kernel(env, state=particles[0], action=action)
     batch_result = transition.batch_sample(particles)
 
     _native.set_seed(777)
     per_particle_rows = []
     for row in particles:
-        model = env.state_transition_model(state=row, action=action)
+        model = _make_transition_kernel(env, state=row, action=action)
         per_particle_rows.append(model.sample(1)[0])
     per_particle_result = np.stack(per_particle_rows, axis=0)
 
@@ -402,8 +362,8 @@ def test_observation_batch_log_likelihood_matches_per_particle(env):
 
     Given: 64 random next-state particles and a single observation.
     When: batch_log_likelihood(next_particles, observation) is called, and
-        for each particle a fresh ContinuousPushObservationModel is built
-        and probability([observation]) is computed.
+        for each particle a fresh ``_native.ContinuousPushObservationCpp``
+        kernel is built and probability([observation]) is computed.
     Then: The batch log-likelihoods equal np.log of the per-particle
         probabilities within atol=1e-12.
 
@@ -427,12 +387,12 @@ def test_observation_batch_log_likelihood_matches_per_particle(env):
     observation = np.array([2.0, 3.0, observation_obj[0], observation_obj[1], 8.0, 8.0])
     action = np.array([1.0, 0.0])
 
-    obs_model = env.observation_model(next_state=next_particles[0], action=action)
+    obs_model = _make_observation_kernel(env, next_state=next_particles[0], action=action)
     batch_log_ll = obs_model.batch_log_likelihood(next_particles, observation)
 
     per_particle_log_ll = np.empty(len(next_particles))
     for i, next_state in enumerate(next_particles):
-        model = env.observation_model(next_state=next_state, action=action)
+        model = _make_observation_kernel(env, next_state=next_state, action=action)
         per_particle_log_ll[i] = np.log(model.probability([observation])[0])
 
     assert np.all(
@@ -446,15 +406,15 @@ def test_transition_batch_sample_shape_contract(env):
 
     Purpose: Guards the shape contract used by belief-level callers.
 
-    Given: A ContinuousPushStateTransitionModel and a (37, 6) particles
-        ndarray.
+    Given: A ``_native.ContinuousPushTransitionCpp`` kernel and a (37, 6)
+        particles ndarray.
     When: batch_sample is called.
     Then: The result is an ndarray of shape (37, 6) and dtype float64.
 
     Test type: unit
     """
     state = np.array([2.0, 3.0, 5.0, 5.0, 8.0, 8.0])
-    transition = env.state_transition_model(state=state, action=np.array([1.0, 0.0]))
+    transition = _make_transition_kernel(env, state=state, action=np.array([1.0, 0.0]))
     particles = np.tile(state, (37, 1))
     _native.set_seed(0)
     result = transition.batch_sample(particles)
@@ -468,15 +428,15 @@ def test_observation_batch_log_likelihood_shape_contract(env):
 
     Purpose: Guards the shape contract used by belief-level callers.
 
-    Given: A ContinuousPushObservationModel, 37 next-particles, and one
-        observation.
+    Given: A ``_native.ContinuousPushObservationCpp`` kernel, 37
+        next-particles, and one observation.
     When: batch_log_likelihood is called.
     Then: The result is an ndarray of shape (37,) and dtype float64.
 
     Test type: unit
     """
     next_state = np.array([2.0, 3.0, 2.8, 3.2, 8.0, 8.0])
-    obs_model = env.observation_model(next_state=next_state, action=np.array([1.0, 0.0]))
+    obs_model = _make_observation_kernel(env, next_state=next_state, action=np.array([1.0, 0.0]))
     next_particles = np.tile(next_state, (37, 1))
     observation = next_state.copy()
     result = obs_model.batch_log_likelihood(next_particles, observation)
@@ -515,7 +475,7 @@ def test_transition_push_mechanics_match_python_reference():
     )
     state = np.array([2.5, 3.1, 3.0, 3.0, 8.0, 8.0])  # dist ~0.51 < 1.0 threshold
     action = np.array([1.0, 0.0])
-    transition = tiny_env.state_transition_model(state=state, action=action)
+    transition = _make_transition_kernel(tiny_env, state=state, action=action)
     _native.set_seed(0)
     samples = np.asarray(transition.sample(10))
 
@@ -545,7 +505,7 @@ def test_transition_wall_collision_clamps_to_grid(env):
     """
     state = np.array([0.3, 0.3, 5.0, 5.0, 8.0, 8.0])  # robot at lower corner
     action = np.array([-5.0, -5.0])
-    transition = env.state_transition_model(state=state, action=action)
+    transition = _make_transition_kernel(env, state=state, action=action)
     _native.set_seed(0)
     samples = np.asarray(transition.sample(100))
     radius = env.robot_radius

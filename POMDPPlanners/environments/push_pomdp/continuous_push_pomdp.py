@@ -15,8 +15,6 @@ The Continuous Push POMDP features:
 - Noisy observations of object position
 
 Classes:
-    ContinuousPushStateTransitionModel: Continuous movement with noise and push.
-    ContinuousPushObservationModel: Noisy object position observations.
     ContinuousPushPOMDP: Main environment with continuous actions.
     ContinuousPushPOMDPDiscreteActions: Discrete action wrapper.
 """
@@ -33,8 +31,6 @@ from POMDPPlanners.core.environment import (
     Environment,
     SpaceInfo,
     SpaceType,
-    ObservationModel,
-    StateTransitionModel,
 )
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
 from POMDPPlanners.environments.push_pomdp import _native
@@ -59,148 +55,6 @@ class ContinuousPushPOMDPMetrics(Enum):
     TOTAL_ROBOT_OBSTACLE_COLLISIONS = "total_robot_obstacle_collisions"
     TOTAL_OBJECT_OBSTACLE_COLLISIONS = "total_object_obstacle_collisions"
     TOTAL_ALL_OBSTACLE_COLLISIONS = "total_all_obstacle_collisions"
-
-
-class ContinuousPushStateTransitionModel(_native.ContinuousPushTransitionCpp):
-    """State transition model for Continuous Push POMDP.
-
-    Implements continuous robot movement with Gaussian noise and capped
-    push mechanics.  The robot is a circle; the object is a point.  Both
-    interact with axis-aligned square obstacles.
-
-    State representation: [robot_x, robot_y, object_x, object_y, target_x, target_y]
-
-    The ``sample()``, ``probability()`` and ``batch_sample()`` methods
-    execute entirely in C++ via the ``_native`` extension; this Python
-    subclass only wraps the constructor so existing call sites that pass a
-    :class:`CovarianceParameterizedMultivariateNormal` keep working.
-
-    Attributes:
-        state: Current state vector.
-        action: 2D movement vector.
-        grid_size: Grid dimension.
-        push_threshold: Maximum robot-object distance for a push.
-        friction_coefficient: Friction reducing push force (0-1).
-        max_push: Maximum push magnitude.
-        obstacles: Shape ``(M, 4)`` AABB array.
-        robot_radius: Robot body radius.
-
-    Example:
-        >>> import numpy as np
-        >>> np.random.seed(42)
-        >>> state = np.array([2.0, 3.0, 2.5, 3.1, 8.0, 8.0])
-        >>> action = np.array([1.0, 0.0])
-        >>> cov = np.eye(2) * 0.01
-        >>> dist = CovarianceParameterizedMultivariateNormal(cov)
-        >>> transition = ContinuousPushStateTransitionModel(
-        ...     state=state, action=action,
-        ...     state_transition_dist=dist, grid_size=10,
-        ...     push_threshold=1.0, friction_coefficient=0.3,
-        ...     max_push=2.0, obstacles=np.empty((0, 4)),
-        ...     robot_radius=0.3,
-        ... )
-        >>> next_state = transition.sample()[0]
-        >>> len(next_state) == 6
-        True
-    """
-
-    def __init__(
-        self,
-        state: np.ndarray,
-        action: np.ndarray,
-        state_transition_dist: CovarianceParameterizedMultivariateNormal,
-        grid_size: float,
-        push_threshold: float,
-        friction_coefficient: float,
-        max_push: float,
-        obstacles: np.ndarray,
-        robot_radius: float,
-    ):
-        action_arr = np.asarray(action, dtype=float).ravel()
-        super().__init__(
-            state=np.asarray(state, dtype=float).ravel(),
-            action=action_arr,
-            grid_size=float(grid_size),
-            push_threshold=float(push_threshold),
-            friction_coefficient=float(friction_coefficient),
-            max_push=float(max_push),
-            robot_radius=float(robot_radius),
-            obstacles=np.asarray(obstacles, dtype=float),
-            covariance=state_transition_dist.covariance,
-        )
-        # Python-visible attributes match the pre-port contract. The C++
-        # base exposes ``state`` / ``action`` read-only properties; other
-        # attributes live here only for downstream introspection.
-        self._state_transition_dist = state_transition_dist
-        self.grid_size = float(grid_size)
-        self.push_threshold = float(push_threshold)
-        self.friction_coefficient = float(friction_coefficient)
-        self.max_push = float(max_push)
-        self.obstacles = np.asarray(obstacles, dtype=float)
-        self.robot_radius = float(robot_radius)
-
-        self.robot_pos = np.asarray(state, dtype=float)[:2].copy()
-        self.object_pos = np.asarray(state, dtype=float)[2:4].copy()
-        self.target_pos = np.asarray(state, dtype=float)[4:6].copy()
-
-
-StateTransitionModel.register(ContinuousPushStateTransitionModel)
-
-
-class ContinuousPushObservationModel(_native.ContinuousPushObservationCpp):
-    """Noisy observation model for Continuous Push POMDP.
-
-    Robot and target positions are observed exactly; object position is
-    observed with additive Gaussian noise.
-
-    Observation format: [robot_x, robot_y, noisy_obj_x, noisy_obj_y, target_x, target_y]
-
-    The ``sample()``, ``probability()`` and ``batch_log_likelihood()``
-    methods execute entirely in C++ via the ``_native`` extension.
-
-    Attributes:
-        next_state: True state after action.
-        action: Action taken (2D vector).
-        observation_noise: Standard deviation of object position noise.
-        grid_size: Grid dimension.
-
-    Example:
-        >>> import numpy as np
-        >>> np.random.seed(42)
-        >>> state = np.array([3.0, 3.0, 2.8, 3.2, 8.0, 8.0])
-        >>> action = np.array([1.0, 0.0])
-        >>> obs_model = ContinuousPushObservationModel(
-        ...     next_state=state, action=action,
-        ...     observation_noise=0.1, grid_size=10,
-        ... )
-        >>> obs = obs_model.sample()[0]
-        >>> len(obs) == 6
-        True
-        >>> bool(obs[0] == 3.0)  # Robot exact
-        True
-    """
-
-    def __init__(
-        self,
-        next_state: np.ndarray,
-        action: np.ndarray,
-        observation_noise: float,
-        grid_size: float,
-    ):
-        super().__init__(
-            next_state=np.asarray(next_state, dtype=float).ravel(),
-            action=np.asarray(action, dtype=float).ravel(),
-            observation_noise=float(observation_noise),
-            grid_size=float(grid_size),
-        )
-        self.observation_noise = float(observation_noise)
-        self.grid_size = float(grid_size)
-        self.robot_pos = np.asarray(next_state, dtype=float)[:2]
-        self.object_pos = np.asarray(next_state, dtype=float)[2:4]
-        self.target_pos = np.asarray(next_state, dtype=float)[4:6]
-
-
-ObservationModel.register(ContinuousPushObservationModel)
 
 
 class _FixedStateDistribution(Distribution):
@@ -352,27 +206,6 @@ class ContinuousPushPOMDP(Environment):
     # ------------------------------------------------------------------
     # Environment interface
     # ------------------------------------------------------------------
-
-    def state_transition_model(self, state: np.ndarray, action: np.ndarray) -> StateTransitionModel:
-        return ContinuousPushStateTransitionModel(  # pyright: ignore[reportReturnType]
-            state=state,
-            action=np.asarray(action, dtype=float),
-            state_transition_dist=self._state_transition_dist,
-            grid_size=self.grid_size,
-            push_threshold=self.push_threshold,
-            friction_coefficient=self.friction_coefficient,
-            max_push=self.max_push,
-            obstacles=self.obstacles,
-            robot_radius=self.robot_radius,
-        )
-
-    def observation_model(self, next_state: np.ndarray, action: np.ndarray) -> ObservationModel:
-        return ContinuousPushObservationModel(  # pyright: ignore[reportReturnType]
-            next_state=next_state,
-            action=np.asarray(action, dtype=float),
-            observation_noise=self.observation_noise,
-            grid_size=self.grid_size,
-        )
 
     # ── Hot-path sampling overrides ─────────────────────────────────
     # The default base-class implementations build a Python-wrapper
@@ -819,12 +652,6 @@ class ContinuousPushPOMDPDiscreteActions(ContinuousPushPOMDP, DiscreteActionsEnv
 
     def get_actions(self) -> List[str]:
         return self.actions
-
-    def state_transition_model(self, state: np.ndarray, action: Any) -> StateTransitionModel:
-        return super().state_transition_model(state, self.action_to_vector[action])
-
-    def observation_model(self, next_state: np.ndarray, action: Any) -> ObservationModel:
-        return super().observation_model(next_state, self.action_to_vector[action])
 
     def reward(self, state: np.ndarray, action: Any) -> float:
         if isinstance(action, str):

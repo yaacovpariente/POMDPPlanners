@@ -15,11 +15,7 @@ import pytest
 from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.core.policy import PolicyRunData
 from POMDPPlanners.core.simulation import History, StepData
-from POMDPPlanners.environments.safety_ant_velocity_pomdp import (
-    SafeAntVelocityObservation,
-    SafeAntVelocityPOMDP,
-    SafeAntVelocityStateTransition,
-)
+from POMDPPlanners.environments.safety_ant_velocity_pomdp import SafeAntVelocityPOMDP
 
 # Set seeds for reproducible tests
 
@@ -67,35 +63,23 @@ def test_safe_velocity_pomdp_initialization():
     assert env.actions == [0, 1, 2, 3]
 
 
-def test_state_transition():
-    """Test state transition model with force application.
+def test_state_transition_with_force_via_env(pomdp):
+    """Test state transition behavior with force application via env API.
 
-    Purpose: Validates that state transitions correctly update position and velocity when force is applied
+    Purpose: Validates that env.sample_next_state correctly updates position and
+    velocity when force is applied.
 
-    Given: A SafeAntVelocityStateTransition model with state [0.0, 0.0, 1.0, 1.0] and maximum force action 3
-    When: State transition is sampled
-    Then: Next state has correct 4D shape, position changes due to velocity, and velocity changes due to applied force
+    Given: SafeAntVelocityPOMDP environment, state [0.0, 0.0, 1.0, 1.0], action 3
+    When: env.sample_next_state is called
+    Then: Next state has correct 4D shape, position changes due to velocity, and
+        velocity changes due to applied force.
 
     Test type: unit
     """
-    # Test state transition with known parameters
     state = np.array([0.0, 0.0, 1.0, 1.0])  # [pos_x, pos_y, vel_x, vel_y]
     action = 3  # Maximum force
-    dt = 0.1
-    mass = 1.0
-    damping = 0.1
-    max_force = 1.0
 
-    transition = SafeAntVelocityStateTransition(
-        state=state,
-        action=action,
-        dt=dt,
-        mass=mass,
-        damping=damping,
-        max_force=max_force,
-    )
-
-    next_state = transition.sample()[0]
+    next_state = pomdp.sample_next_state(state=state, action=action)
 
     # Verify state dimensions
     assert next_state.shape == (4,)
@@ -107,74 +91,56 @@ def test_state_transition():
     assert not np.array_equal(next_state[2:], state[2:])
 
 
-def test_state_transition_no_force():
-    """Test state transition model without force application.
+def test_state_transition_no_force_damping_via_env(pomdp):
+    """Test state transition behavior without force application via env API.
 
-    Purpose: Validates that state transitions correctly handle damping when no force is applied
+    Purpose: Validates that env.sample_next_state correctly handles damping when no
+    force is applied.
 
-    Given: A SafeAntVelocityStateTransition model with state [0.0, 0.0, 1.0, 1.0] and no-force action 0
-    When: State transition is sampled
-    Then: Velocity decreases due to damping effects while maintaining correct state dimensions
+    Given: SafeAntVelocityPOMDP environment, state [0.0, 0.0, 1.0, 1.0], action 0
+    When: env.sample_next_state is called
+    Then: Velocity decreases due to damping effects while maintaining state shape.
 
     Test type: unit
     """
-    # Test state transition with no force
     state = np.array([0.0, 0.0, 1.0, 1.0])
     action = 0  # No force
-    dt = 0.1
-    mass = 1.0
-    damping = 0.1
-    max_force = 1.0
 
-    transition = SafeAntVelocityStateTransition(
-        state=state,
-        action=action,
-        dt=dt,
-        mass=mass,
-        damping=damping,
-        max_force=max_force,
-    )
+    next_state = pomdp.sample_next_state(state=state, action=action)
 
-    next_state = transition.sample()
+    # Verify shape
+    assert next_state.shape == (4,)
 
     # Verify velocity decreased due to damping
     assert np.linalg.norm(next_state[2:]) < np.linalg.norm(state[2:])
 
 
-def test_observation_model():
-    """Test observation model with noise addition.
+def test_observation_adds_noise_via_env(pomdp):
+    """Test observation behavior with noise addition via env API.
 
-    Purpose: Validates that observation model correctly adds noise to position and velocity measurements
+    Purpose: Validates that env.sample_observation correctly adds noise to position
+    and velocity measurements.
 
-    Given: A SafeAntVelocityObservation model with state [0.0, 0.0, 1.0, 1.0] and noise parameters
-    When: Observation is sampled
-    Then: Observation has correct 4D shape and contains noise in both position and velocity components
+    Given: SafeAntVelocityPOMDP environment and next_state [0.0, 0.0, 1.0, 1.0]
+    When: env.sample_observation is called
+    Then: Observation has correct 4D shape and contains noise in both position and
+        velocity components.
 
     Test type: unit
     """
-    # Test observation model
-    state = np.array([0.0, 0.0, 1.0, 1.0])
+    next_state = np.array([0.0, 0.0, 1.0, 1.0])
     action = 1
-    position_noise = 0.1
-    velocity_noise = 0.2
 
-    observation_model = SafeAntVelocityObservation(
-        next_state=state,
-        action=action,
-        position_noise=position_noise,
-        velocity_noise=velocity_noise,
-    )
-
-    observation = observation_model.sample()[0]
+    observation = pomdp.sample_observation(next_state=next_state, action=action)
 
     # Verify observation dimensions
     assert observation.shape == (4,)
 
     # Verify position has noise
-    assert not np.array_equal(observation[:2], state[:2])
+    assert not np.array_equal(observation[:2], next_state[:2])
 
     # Verify velocity has noise
-    assert not np.array_equal(observation[2:], state[2:])
+    assert not np.array_equal(observation[2:], next_state[2:])
 
 
 def test_reward_function():
@@ -639,49 +605,43 @@ def test_config_id():
     assert env1.config_id != env3.config_id
 
 
-def test_state_transition_model(pomdp):
-    """Test state transition model creation and sampling.
+def test_env_sample_next_state_shape(pomdp):
+    """Test env.sample_next_state via env API.
 
-    Purpose: Validates that environment correctly creates state transition models for different actions
+    Purpose: Validates that env.sample_next_state produces correctly shaped states
+    for different actions.
 
-    Given: SafeAntVelocityPOMDP environment and test states with actions 0 and 1
-    When: state_transition_model is called and next states are sampled
-    Then: Returns valid state transition models that produce correctly shaped next states
-
-    Test type: unit
-    """
-    # Test state transition
-    state = np.array([0.0, 0.0, 0.0, 0.0])
-    action = 0
-    transition = pomdp.state_transition_model(state, action)
-    next_state = transition.sample()[0]
-    assert isinstance(next_state, np.ndarray)
-    assert next_state.shape == (4,)
-
-    # Test with different action
-    action = 1
-    transition = pomdp.state_transition_model(state, action)
-    next_state = transition.sample()[0]
-    assert isinstance(next_state, np.ndarray)
-    assert next_state.shape == (4,)
-
-
-def test_observation_model_with_pomdp(pomdp):
-    """Test observation model creation and sampling.
-
-    Purpose: Validates that environment correctly creates observation models that generate noisy observations
-
-    Given: SafeAntVelocityPOMDP environment and test state [0.0, 0.0, 0.0, 0.0] with action 0
-    When: observation_model is called and observation is sampled
-    Then: Returns valid observation model that produces correctly shaped observations
+    Given: SafeAntVelocityPOMDP environment, state [0.0, 0.0, 0.0, 0.0], actions 0 and 1
+    When: env.sample_next_state is called for each action
+    Then: Returns ndarray of shape (4,) for both actions.
 
     Test type: unit
     """
-    # Test observation model
     state = np.array([0.0, 0.0, 0.0, 0.0])
-    action = 0
-    observation = pomdp.observation_model(state, action)
-    obs = observation.sample()[0]
+
+    next_state_a0 = pomdp.sample_next_state(state=state, action=0)
+    assert isinstance(next_state_a0, np.ndarray)
+    assert next_state_a0.shape == (4,)
+
+    next_state_a1 = pomdp.sample_next_state(state=state, action=1)
+    assert isinstance(next_state_a1, np.ndarray)
+    assert next_state_a1.shape == (4,)
+
+
+def test_env_sample_observation_shape(pomdp):
+    """Test env.sample_observation produces correctly shaped observations.
+
+    Purpose: Validates that env.sample_observation generates noisy observations of
+    the right shape.
+
+    Given: SafeAntVelocityPOMDP environment and next_state [0.0, 0.0, 0.0, 0.0]
+    When: env.sample_observation is called
+    Then: Returns ndarray observation of shape (4,).
+
+    Test type: unit
+    """
+    next_state = np.array([0.0, 0.0, 0.0, 0.0])
+    obs = pomdp.sample_observation(next_state=next_state, action=0)
     assert isinstance(obs, np.ndarray)
     assert obs.shape == (4,)
 
@@ -704,118 +664,98 @@ def test_initial_state_distribution_with_pomdp(pomdp):
     assert state.shape == (4,)
 
 
-def test_observation_model_empty_observation_error():
-    """Test that observation model properly handles invalid empty observations.
+def test_observation_log_probability_invalid_observation_raises():
+    """Test that env.observation_log_probability rejects malformed observations.
 
-    Purpose: Validates that the observation probability method handles invalid inputs gracefully
+    Purpose: Validates that the env-level observation log-probability path
+    surfaces the native marshalling layer's length validation.
 
-    Given: A valid SafeAntVelocityObservation model and an empty observation array
-    When: The probability method is called with an empty observation
-    Then: A descriptive error should be raised explaining the invalid observation format
+    Given: A valid SafeAntVelocityPOMDP environment, a valid 4-D next_state, and
+        an empty observation array.
+    When: env.observation_log_probability is called with the empty observation.
+    Then: A ValueError mentioning "length 4" is raised.
 
     Test type: unit
     """
-    # Create observation model
-    state = np.array([0.5, -0.2, 1.0, 0.5])
-    obs_model = SafeAntVelocityObservation(
-        next_state=state,
-        action=1,
+    env = SafeAntVelocityPOMDP(
+        discount_factor=0.95,
         position_noise=0.1,
         velocity_noise=0.2,
     )
-
-    # Test with empty observation (this is the error case we fixed)
+    next_state = np.array([0.5, -0.2, 1.0, 0.5])
     empty_observation = np.array([])
 
     with pytest.raises(ValueError) as exc_info:
-        obs_model.probability([empty_observation])  # Now expects list
+        env.observation_log_probability(next_state, 1, [empty_observation])
 
     # The error comes from the native marshalling layer and mentions the expected length.
     assert "length 4" in str(exc_info.value)
 
 
-def test_observation_model_invalid_observation_shapes():
-    """Test observation model with various invalid observation shapes.
+def test_observation_log_probability_various_invalid_shapes():
+    """Test env.observation_log_probability rejects all malformed observation shapes.
 
-    Purpose: Validates that observation model handles all invalid observation shapes properly
+    Purpose: Validates that env.observation_log_probability surfaces shape
+    validation errors for observations of the wrong length.
 
-    Given: A valid SafeAntVelocityObservation model and observations with incorrect shapes
-    When: The probability method is called with malformed observations
-    Then: Appropriate errors should be raised for each invalid shape
+    Given: A valid SafeAntVelocityPOMDP environment, a 4-D next_state, and
+        observations with incorrect shapes (lengths 0, 1, 2, 3, 5, 6).
+    When: env.observation_log_probability is called with each malformed shape.
+    Then: A ValueError is raised in every case.
 
     Test type: unit
     """
-    # Create observation model
-    state = np.array([0.5, -0.2, 1.0, 0.5])
-    obs_model = SafeAntVelocityObservation(
-        next_state=state,
-        action=1,
+    env = SafeAntVelocityPOMDP(
+        discount_factor=0.95,
         position_noise=0.1,
         velocity_noise=0.2,
     )
+    next_state = np.array([0.5, -0.2, 1.0, 0.5])
 
-    # Test with various invalid observation shapes
     invalid_observations = [
-        np.array([]),  # Empty array (shape (0,))
-        np.array([1.0]),  # Too short (shape (1,))
-        np.array([1.0, 2.0]),  # Too short (shape (2,))
-        np.array([1.0, 2.0, 3.0]),  # Too short (shape (3,))
-        np.array([1.0, 2.0, 3.0, 4.0, 5.0]),  # Too long (shape (5,))
-        np.array([1.0, 2.0, 3.0, 4.0, 5.0, 6.0]),  # Too long (shape (6,))
+        np.array([]),  # shape (0,)
+        np.array([1.0]),  # shape (1,)
+        np.array([1.0, 2.0]),  # shape (2,)
+        np.array([1.0, 2.0, 3.0]),  # shape (3,)
+        np.array([1.0, 2.0, 3.0, 4.0, 5.0]),  # shape (5,)
+        np.array([1.0, 2.0, 3.0, 4.0, 5.0, 6.0]),  # shape (6,)
     ]
 
-    for i, invalid_obs in enumerate(invalid_observations):
-        with pytest.raises(ValueError) as exc_info:
-            obs_model.probability([invalid_obs])  # Now expects list
-
-        print(
-            f"Invalid observation {i} shape {invalid_obs.shape} correctly raised: {type(exc_info.value).__name__}"
-        )
+    for invalid_obs in invalid_observations:
+        with pytest.raises(ValueError):
+            env.observation_log_probability(next_state, 1, [invalid_obs])
 
 
-def test_observation_never_empty_from_sample():
-    """Test that observation model never produces empty observations from sample method.
+def test_env_sample_observation_never_empty():
+    """Test that env.sample_observation never produces empty observations.
 
-    Purpose: Validates that the sample method always produces correctly shaped observations
+    Purpose: Validates that env.sample_observation always produces correctly shaped
+    finite observations across many draws.
 
-    Given: A valid SafeAntVelocityObservation model
-    When: Multiple observations are sampled
-    Then: All observations should have shape (4,) and valid content
+    Given: A SafeAntVelocityPOMDP environment and a fixed next_state.
+    When: env.sample_observation is called many times.
+    Then: Every observation has shape (4,), is finite, and is usable for the
+        env-level observation log-probability path.
 
     Test type: unit
     """
-    # Create observation model
-    state = np.array([0.5, -0.2, 1.0, 0.5])
-    obs_model = SafeAntVelocityObservation(
-        next_state=state,
-        action=1,
+    env = SafeAntVelocityPOMDP(
+        discount_factor=0.95,
         position_noise=0.1,
         velocity_noise=0.2,
     )
+    next_state = np.array([0.5, -0.2, 1.0, 0.5])
+    action = 1
 
-    # Sample many observations to check consistency
     for _ in range(20):
-        observations = obs_model.sample(n_samples=5)
-
-        assert len(observations) == 5, "Should return requested number of observations"
-
-        for obs in observations:
-            assert isinstance(obs, np.ndarray), "Each observation should be numpy array"
-            assert obs.shape == (4,), f"Expected shape (4,), got {obs.shape}"
-            assert len(obs) > 0, "Observation should not be empty"
-            assert np.all(np.isfinite(obs)), "All observation values should be finite"
-
-            # Test that this observation can be used in probability calculation
-            try:
-                probs = obs_model.probability([obs])  # Now expects list
-                assert len(probs) == 1, "Should return one probability"
-                prob = probs[0]
-                assert np.isfinite(prob), "Probability should be finite"
-                assert prob >= 0.0, "Probability should be non-negative"
-            except Exception as e:  # pylint: disable=broad-exception-caught
-                pytest.fail(
-                    f"Valid observation {obs} with shape {obs.shape} failed probability calculation: {e}"
-                )
+        for _ in range(5):
+            obs = env.sample_observation(next_state=next_state, action=action)
+            assert isinstance(obs, np.ndarray)
+            assert obs.shape == (4,)
+            assert np.all(np.isfinite(obs))
+            log_probs = env.observation_log_probability(next_state, action, [obs])
+            assert len(log_probs) == 1
+            assert np.isfinite(log_probs[0])
 
 
 def test_sample_next_step_observation_never_empty():
@@ -861,62 +801,53 @@ def test_sample_next_step_observation_never_empty():
                 assert np.all(np.isfinite(observation)), "All observation values should be finite"
 
                 # Verify observation can be used in probability calculation
-                try:
-                    log_probs = env.observation_log_probability(next_state, action, [observation])
-                    assert len(log_probs) == 1, "Should return one log-probability"
-                    log_prob = log_probs[0]
-                    assert np.isfinite(log_prob), "Log-probability should be finite"
-                    prob = float(np.exp(log_prob))
-                    assert prob >= 0.0, "Probability should be non-negative"
-                except Exception as e:  # pylint: disable=broad-exception-caught
-                    pytest.fail(
-                        f"sample_next_step produced invalid observation {observation} with shape {observation.shape}: {e}"
-                    )
+                log_probs = env.observation_log_probability(next_state, action, [observation])
+                assert len(log_probs) == 1, "Should return one log-probability"
+                log_prob = log_probs[0]
+                assert np.isfinite(log_prob), "Log-probability should be finite"
+                prob = float(np.exp(log_prob))
+                assert prob >= 0.0, "Probability should be non-negative"
 
 
-def test_observation_probability_list_interface():
-    """Test that observation model probability method correctly handles list interface.
+def test_env_observation_log_probability_list_interface():
+    """Test that env.observation_log_probability handles a list of observations.
 
-    Purpose: Validates that probability method works with lists of observations and returns arrays
+    Purpose: Validates that env.observation_log_probability works with lists of
+    observations and returns arrays.
 
-    Given: A valid SafeAntVelocityObservation model and multiple valid observations
-    When: The probability method is called with list of observations
-    Then: Returns array of probabilities with correct length and finite values
+    Given: A SafeAntVelocityPOMDP environment, a fixed next_state, and a mix of
+        nearby and far observations.
+    When: env.observation_log_probability is called with the list.
+    Then: Returns a finite ndarray, and observations near the true state have
+        higher log-probability than those far away.
 
     Test type: unit
     """
-    # Create observation model
-    state = np.array([0.5, -0.2, 1.0, 0.5])
-    obs_model = SafeAntVelocityObservation(
-        next_state=state,
-        action=1,
+    env = SafeAntVelocityPOMDP(
+        discount_factor=0.95,
         position_noise=0.1,
         velocity_noise=0.2,
     )
+    next_state = np.array([0.5, -0.2, 1.0, 0.5])
+    action = 1
 
-    # Test single observation
     obs1 = np.array([0.51, -0.19, 1.02, 0.48])  # Close to true state
-    probs = obs_model.probability([obs1])
+    log_probs = env.observation_log_probability(next_state, action, [obs1])
+    assert isinstance(log_probs, np.ndarray)
+    assert len(log_probs) == 1
+    assert np.isfinite(log_probs[0])
 
-    assert isinstance(probs, np.ndarray), "Should return numpy array"
-    assert len(probs) == 1, "Should return one probability for one observation"
-    assert np.isfinite(probs[0]), "Probability should be finite"
-    assert probs[0] >= 0.0, "Probability should be non-negative"
-
-    # Test multiple observations
     obs2 = np.array([0.49, -0.21, 0.98, 0.52])  # Also close to true state
     obs3 = np.array([1.5, 1.8, 2.0, 2.5])  # Far from true state
 
-    probs_multi = obs_model.probability([obs1, obs2, obs3])
+    log_probs_multi = env.observation_log_probability(next_state, action, [obs1, obs2, obs3])
+    assert isinstance(log_probs_multi, np.ndarray)
+    assert len(log_probs_multi) == 3
+    assert np.all(np.isfinite(log_probs_multi))
 
-    assert isinstance(probs_multi, np.ndarray), "Should return numpy array"
-    assert len(probs_multi) == 3, "Should return three probabilities for three observations"
-    assert np.all(np.isfinite(probs_multi)), "All probabilities should be finite"
-    assert np.all(probs_multi >= 0.0), "All probabilities should be non-negative"
-
-    # Closer observations should have higher probability
-    assert probs_multi[0] > probs_multi[2], "Closer observation should have higher probability"
-    assert probs_multi[1] > probs_multi[2], "Closer observation should have higher probability"
+    # Closer observations should have higher log-probability
+    assert log_probs_multi[0] > log_probs_multi[2]
+    assert log_probs_multi[1] > log_probs_multi[2]
 
 
 def test_reward_batch_matches_scalar_reward():
