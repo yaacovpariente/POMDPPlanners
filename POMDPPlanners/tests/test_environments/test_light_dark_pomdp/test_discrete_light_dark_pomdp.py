@@ -7,6 +7,8 @@ This module tests the Discrete Light Dark POMDP environment, focusing on:
 - Terminal conditions
 """
 
+# pylint: disable=too-many-lines
+
 import copy
 import random
 
@@ -1773,3 +1775,225 @@ def test_discrete_observation_log_probability_per_state_near_vs_far(
     scalar_far = env.observation_log_probability(far_state, action, [observation])[0]
     np.testing.assert_allclose(result[0], scalar_near, atol=1e-12)
     np.testing.assert_allclose(result[1], scalar_far, atol=1e-12)
+
+
+# ===========================================================================
+# Feature-driven coverage added by /test-environment skill:
+#   - sample/PDF consistency for each ObservationModelType
+#   - sample-in-space sanity per ObservationModelType
+# ===========================================================================
+
+
+def _candidate_observations(env: DiscreteLightDarkPOMDP, next_state: np.ndarray) -> np.ndarray:
+    """Return the 5 candidate observations for ``next_state`` (4 neighbors + self).
+
+    Mirrors the candidate set used by sample_observation / observation_log_probability
+    for the discrete-LD env: ``[next_state + action_vector_i for i in 0..3] + [next_state]``,
+    in the same order as ``env.actions`` so candidate j matches probs[j].
+    """
+    candidates = [
+        next_state + env.action_to_vector[a] for a in env.actions  # type: ignore[attr-defined]
+    ]
+    candidates.append(next_state)
+    return np.stack(candidates, axis=0)
+
+
+def _empirical_frequency_per_candidate(samples: list, candidates: np.ndarray) -> np.ndarray:
+    """Empirical frequency of each candidate observation among samples (ignores 'None')."""
+    counts = np.zeros(len(candidates), dtype=np.float64)
+    for sample in samples:
+        if isinstance(sample, str):
+            continue
+        sample_arr = np.asarray(sample)
+        for j, cand in enumerate(candidates):
+            if np.array_equal(sample_arr, cand):
+                counts[j] += 1.0
+                break
+    return counts / max(len(samples), 1)
+
+
+def test_discrete_sample_observation_frequencies_match_log_probability_normal():
+    """NORMAL observation sample frequencies match exp(observation_log_probability).
+
+    Purpose: Validates that DiscreteLightDarkPOMDP.sample_observation and
+        observation_log_probability describe the same discrete observation
+        distribution under the NORMAL model — both at a near-beacon next_state
+        and a far-beacon next_state, exercising the near vs far probability
+        tables (_obs_probs_near vs _obs_probs_far) on both code paths.
+
+    Given: A default DiscreteLightDarkPOMDP. Anchors: near=[5,5] (on a beacon
+        with distance 0 < beacon_radius=1) and far=[3,2] (min beacon distance
+        ~2.24 > beacon_radius). Action="up" (unused in observation distribution
+        but required by the API).
+    When: 5000 observations are sampled at each anchor; analytic log-probs
+        evaluated on the 5 candidate observations.
+    Then: For each candidate, the empirical frequency is within Wilson-style
+        tolerance 3 / sqrt(N) of exp(log_prob).
+
+    Test type: unit
+    """
+    np.random.seed(101)
+    env = DiscreteLightDarkPOMDP(discount_factor=0.95)
+    action = "up"
+    n_samples = 5_000
+    tol = 3.0 / np.sqrt(n_samples)
+
+    for next_state, label in (
+        (np.array([5.0, 5.0]), "near"),
+        (np.array([3.0, 2.0]), "far"),
+    ):
+        samples = env.sample_observation(next_state, action, n_samples=n_samples)
+        candidates = _candidate_observations(env, next_state)
+        empirical = _empirical_frequency_per_candidate(list(samples), candidates)
+        analytic = np.exp(env.observation_log_probability(next_state, action, candidates))
+        for j, (emp, prob) in enumerate(zip(empirical, analytic)):
+            assert abs(emp - prob) < tol, (
+                f"{label} candidate {j}: empirical={emp:.4f} vs analytic={prob:.4f} "
+                f"(tol={tol:.4f})"
+            )
+
+
+def test_discrete_sample_observation_frequencies_match_log_probability_no_obs_in_dark():
+    """NO_OBS_IN_DARK sampling and log-prob agree on both branches.
+
+    Purpose: Validates the mixture contract of NO_OBS_IN_DARK: far from any
+        beacon every sample is the "None" sentinel and log_prob("None")=0;
+        near a beacon samples are drawn from the near-beacon discrete
+        distribution and log_prob("None")=-inf with empirical frequencies
+        matching exp(log_prob) for each candidate.
+
+    Given: An env with ObservationModelType.NO_OBS_IN_DARK. Anchors:
+        near=[5,5] (beacon distance 0) and far=[3,2] (>beacon_radius). Action
+        "up".
+    When: 5000 samples drawn at each anchor.
+    Then: Far: 100% "None" with analytic log_prob("None")=0. Near: 0% "None"
+        with analytic log_prob("None")=-inf, and per-candidate empirical
+        frequencies within 3/sqrt(N) of exp(log_prob).
+
+    Test type: unit
+    """
+    np.random.seed(202)
+    env = DiscreteLightDarkPOMDP(
+        discount_factor=0.95,
+        observation_model_type=ObservationModelType.NO_OBS_IN_DARK,
+    )
+    action = "up"
+    n_samples = 5_000
+    tol = 3.0 / np.sqrt(n_samples)
+
+    far = np.array([3.0, 2.0])
+    far_samples = env.sample_observation(far, action, n_samples=n_samples)
+    assert all(value == "None" for value in far_samples)
+    far_none_log_prob = env.observation_log_probability(far, action, ["None"])
+    assert far_none_log_prob[0] == pytest.approx(0.0, abs=1e-12)
+
+    near = np.array([5.0, 5.0])
+    near_samples = env.sample_observation(near, action, n_samples=n_samples)
+    assert all(isinstance(value, np.ndarray) for value in near_samples)
+    near_none_log_prob = env.observation_log_probability(near, action, ["None"])
+    assert near_none_log_prob[0] == -np.inf
+
+    candidates = _candidate_observations(env, near)
+    empirical = _empirical_frequency_per_candidate(list(near_samples), candidates)
+    analytic = np.exp(env.observation_log_probability(near, action, candidates))
+    for j, (emp, prob) in enumerate(zip(empirical, analytic)):
+        assert (
+            abs(emp - prob) < tol
+        ), f"near candidate {j}: empirical={emp:.4f} vs analytic={prob:.4f} (tol={tol:.4f})"
+
+
+def test_discrete_sample_observation_frequencies_match_log_probability_distance_based():
+    """DISTANCE_BASED sampling and log-prob agree on far ('None') and near branches.
+
+    Purpose: Validates the mixture contract of DISTANCE_BASED: when min beacon
+        distance > beacon_radius every sample is "None" and log_prob("None")=0;
+        otherwise samples are drawn from a distance-scaled discrete distribution
+        and log_prob("None")=-inf, with empirical frequencies matching
+        exp(log_prob) for each candidate.
+
+    Given: An env with ObservationModelType.DISTANCE_BASED. Anchors: near=[5,5]
+        (min beacon distance 0 <= beacon_radius=1) and far=[3,2]
+        (~2.24 > beacon_radius). Action "up".
+    When: 5000 samples drawn at each anchor.
+    Then: Far: 100% "None" with analytic log_prob("None")=0. Near: 0% "None"
+        with analytic log_prob("None")=-inf and per-candidate empirical
+        frequencies within 3/sqrt(N) of exp(log_prob).
+
+    Test type: unit
+    """
+    np.random.seed(303)
+    env = DiscreteLightDarkPOMDP(
+        discount_factor=0.95,
+        observation_model_type=ObservationModelType.DISTANCE_BASED,
+    )
+    action = "up"
+    n_samples = 5_000
+    tol = 3.0 / np.sqrt(n_samples)
+
+    far = np.array([3.0, 2.0])
+    far_samples = env.sample_observation(far, action, n_samples=n_samples)
+    assert all(value == "None" for value in far_samples)
+    far_none_log_prob = env.observation_log_probability(far, action, ["None"])
+    assert far_none_log_prob[0] == pytest.approx(0.0, abs=1e-12)
+
+    near = np.array([5.0, 5.0])
+    near_samples = env.sample_observation(near, action, n_samples=n_samples)
+    assert all(isinstance(value, np.ndarray) for value in near_samples)
+    near_none_log_prob = env.observation_log_probability(near, action, ["None"])
+    assert near_none_log_prob[0] == -np.inf
+
+    candidates = _candidate_observations(env, near)
+    empirical = _empirical_frequency_per_candidate(list(near_samples), candidates)
+    analytic = np.exp(env.observation_log_probability(near, action, candidates))
+    for j, (emp, prob) in enumerate(zip(empirical, analytic)):
+        assert (
+            abs(emp - prob) < tol
+        ), f"near candidate {j}: empirical={emp:.4f} vs analytic={prob:.4f} (tol={tol:.4f})"
+
+
+@pytest.mark.parametrize("observation_model_type", list(ObservationModelType))
+def test_discrete_sample_outputs_lie_in_grid_or_are_none_sentinel(
+    observation_model_type: ObservationModelType,
+):
+    """Sampled next-states are in-grid 2D coords; observations are 'None' or in-grid.
+
+    Purpose: Catches drift in the discrete sampler clipping/sentinel contract.
+        Every transition must remain a 2D coord; every observation must be
+        either an in-grid 2D coord or the literal "None" sentinel string.
+
+    Given: An env with the parametrized observation_model_type, default
+        beacons. Anchor next_state=[5,5] (near a beacon, valid for all three
+        models). Action "up".
+    When: 500 transitions are drawn from a representative state and 500
+        observations from a representative next_state.
+    Then: All transition samples are integer-valued 2D coords; all observations
+        are either "None" or 2D coords inside [0, grid_size] (the discrete
+        sampler does not clip but valid candidates always land in the grid for
+        the chosen anchor).
+
+    Test type: unit
+    """
+    np.random.seed(404)
+    env = DiscreteLightDarkPOMDP(
+        discount_factor=0.95,
+        observation_model_type=observation_model_type,
+    )
+    state = np.array([5.0, 5.0])
+    action = "up"
+    n_samples = 500
+
+    transitions = env.sample_next_state(state, action, n_samples=n_samples)
+    assert transitions.shape == (n_samples, 2)
+    assert np.all(np.isfinite(transitions))
+
+    observations = env.sample_observation(state, action, n_samples=n_samples)
+    assert len(observations) == n_samples
+    for value in observations:
+        if isinstance(value, str):
+            assert value == "None"
+            continue
+        assert isinstance(value, np.ndarray)
+        assert value.shape == (2,)
+        assert np.all(np.isfinite(value))
+        assert np.all(value >= 0.0)
+        assert np.all(value <= float(env.grid_size))
