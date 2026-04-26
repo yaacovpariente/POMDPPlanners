@@ -3,8 +3,14 @@
 This module implements a concrete
 :class:`~POMDPPlanners.core.belief.vectorized_particle_belief_updater.VectorizedParticleBeliefUpdater`
 that performs batched state transitions and observation log-likelihood
-evaluations for the Push environment, replacing per-particle Python
-loops with NumPy array operations.
+evaluations for the Push environment.
+
+The hot inner kernels (per-particle deterministic transition with optional
+action-error coin flips, and per-particle 2-D Gaussian log-pdf on the
+object-position slice) are implemented in C++ via the
+``POMDPPlanners.environments.push_pomdp._native`` extension; the Python
+class is a thin wrapper that pre-flattens obstacles and dispatches to
+the native kernels.
 
 Classes:
     PushVectorizedUpdater: Batched updater for the Push POMDP.
@@ -19,6 +25,7 @@ import numpy as np
 from POMDPPlanners.core.belief.vectorized_particle_belief_updater import (
     VectorizedParticleBeliefUpdater,
 )
+from POMDPPlanners.environments.push_pomdp import _native
 from POMDPPlanners.utils.config_to_id import config_to_id
 from POMDPPlanners.utils.multivariate_normal import (
     CovarianceParameterizedMultivariateNormal,
@@ -98,6 +105,14 @@ class PushVectorizedUpdater(VectorizedParticleBeliefUpdater):
         self.obstacle_radius = obstacle_radius
         self.transition_error_prob = transition_error_prob
 
+        # Recover sigma from the diagonal isotropic covariance once at
+        # construction time so each batch_observation_log_likelihood call
+        # avoids redundant attribute lookups.
+        self._observation_noise = float(np.sqrt(obs_dist.covariance[0, 0]))
+        # Pre-flatten obstacles for the C++ kernel (one allocation here,
+        # reused on every batch_transition call).
+        self._obstacles_arr = np.ascontiguousarray(obstacles, dtype=np.float64)
+
     @classmethod
     def from_environment(cls, env: "PushPOMDP") -> "PushVectorizedUpdater":
         """Construct an updater from a PushPOMDP instance.
@@ -128,9 +143,17 @@ class PushVectorizedUpdater(VectorizedParticleBeliefUpdater):
     def batch_transition(self, particles: np.ndarray, action: np.ndarray) -> np.ndarray:
         # particles: (N, 6) = [robot_x, robot_y, obj_x, obj_y, target_x, target_y]
         action_idx = self.ACTION_NAME_TO_INDEX[action] if isinstance(action, str) else int(action)
-        if self.transition_error_prob > 0:
-            return self._batch_transition_with_error(particles, action_idx)
-        return self._transition_for_action(particles, action_idx)
+        particles_arr = np.ascontiguousarray(particles, dtype=np.float64)
+        return _native.belief_batch_transition_discrete(
+            particles=particles_arr,
+            action_idx=action_idx,
+            transition_error_prob=float(self.transition_error_prob),
+            obstacles=self._obstacles_arr,
+            obstacle_radius=float(self.obstacle_radius),
+            grid_size=float(self.grid_size),
+            push_threshold=float(self.push_threshold),
+            friction_coefficient=float(self.friction_coefficient),
+        )
 
     def batch_observation_log_likelihood(
         self,
@@ -138,10 +161,14 @@ class PushVectorizedUpdater(VectorizedParticleBeliefUpdater):
         action: np.ndarray,
         observation: np.ndarray,
     ) -> np.ndarray:
-        observation = np.asarray(observation, dtype=float).ravel()
-        obs_obj = observation[2:4]
-        particle_obj = next_particles[:, 2:4]
-        return self.obs_dist.log_pdf(particle_obj, obs_obj)
+        del action  # unused: observation model depends only on next_state
+        observation_arr = np.ascontiguousarray(np.asarray(observation, dtype=np.float64).ravel())
+        next_particles_arr = np.ascontiguousarray(next_particles, dtype=np.float64)
+        return _native.belief_batch_obs_log_likelihood_discrete(
+            next_particles=next_particles_arr,
+            observation=observation_arr,
+            observation_noise=self._observation_noise,
+        )
 
     @property
     def config_id(self) -> str:
@@ -156,61 +183,3 @@ class PushVectorizedUpdater(VectorizedParticleBeliefUpdater):
             "transition_error_prob": self.transition_error_prob,
         }
         return config_to_id(config_dict)
-
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
-
-    def _transition_for_action(self, particles: np.ndarray, action_idx: int) -> np.ndarray:
-        movement = self.ACTION_VECTORS[action_idx]
-
-        # Robot movement
-        intended_robot = particles[:, :2] + movement
-        robot_colliding = self._batch_obstacle_collision(intended_robot)
-        new_robot = np.where(robot_colliding[:, None], particles[:, :2], intended_robot)
-
-        # Object pushing
-        dist_to_obj = np.linalg.norm(new_robot - particles[:, 2:4], axis=1)
-        can_push = dist_to_obj < self.push_threshold
-
-        push_force = movement * (1 - self.friction_coefficient)
-        intended_obj = particles[:, 2:4] + push_force
-        obj_colliding = self._batch_obstacle_collision(intended_obj)
-        pushed_obj = np.where(obj_colliding[:, None], particles[:, 2:4], intended_obj)
-        new_obj = np.where(can_push[:, None], pushed_obj, particles[:, 2:4])
-
-        # Grid clipping
-        new_robot = np.clip(new_robot, 0, self.grid_size - 1)
-        new_obj = np.clip(new_obj, 0, self.grid_size - 1)
-
-        return np.column_stack([new_robot, new_obj, particles[:, 4:6]])
-
-    def _batch_transition_with_error(
-        self, particles: np.ndarray, intended_action: int
-    ) -> np.ndarray:
-        n = particles.shape[0]
-
-        # Compute next state for all 4 possible actions
-        all_results = np.empty((4, n, 6))
-        for a in range(4):
-            all_results[a] = self._transition_for_action(particles, a)
-
-        # Sample which action each particle actually executes
-        error_mask = np.random.random(n) < self.transition_error_prob
-        chosen_actions = np.full(n, intended_action, dtype=int)
-
-        error_count = int(error_mask.sum())
-        if error_count > 0:
-            other_actions = [a for a in range(4) if a != intended_action]
-            chosen_actions[error_mask] = np.random.choice(other_actions, size=error_count)
-
-        # Gather per-particle results using fancy indexing
-        return all_results[chosen_actions, np.arange(n)]
-
-    def _batch_obstacle_collision(self, positions: np.ndarray) -> np.ndarray:
-        if self.obstacles.shape[0] == 0:
-            return np.zeros(len(positions), dtype=bool)
-        # positions: (N, 2), obstacles: (M, 2)
-        diff = positions[:, None, :] - self.obstacles[None, :, :]  # (N, M, 2)
-        distances = np.linalg.norm(diff, axis=2)  # (N, M)
-        return np.any(distances <= self.obstacle_radius, axis=1)  # (N,)
