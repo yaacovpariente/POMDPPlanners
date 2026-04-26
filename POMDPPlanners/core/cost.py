@@ -47,9 +47,16 @@ def belief_expectation_cost_particle_belief(
     Returns:
         Expected immediate cost (negative of expected reward)
     """
-    states = np.array(belief.particles)
-    costs = -env.reward_batch(states, action)
-    cost_: float = float(np.sum(costs * belief.normalized_weights))
+    # ``np.asarray`` is a no-op when ``belief.particles`` is already an ndarray
+    # (the common case after a vectorized batch update), avoiding a redundant
+    # copy/allocation per call.
+    states = np.asarray(belief.particles)
+    rewards = np.asarray(env.reward_batch(states, action))
+    weights = np.asarray(belief.normalized_weights)
+    # ``weights @ rewards`` is a single BLAS dot product with no temporary
+    # element-wise product array, which is materially faster than
+    # ``np.sum(rewards * weights)`` for typical belief sizes.
+    cost_: float = -float(weights @ rewards)
 
     return cost_
 
@@ -109,9 +116,8 @@ def belief_expectation_reward_particle_belief(
 def belief_expectation_cost_gaussian_belief(
     belief: GaussianBelief, action: Any, env: Environment, n_samples: int = 100
 ) -> float:
-    samples = belief._mvn.sample(
-        belief.mean, n_samples=n_samples
-    )  # pylint: disable=protected-access
+    # pylint: disable-next=protected-access
+    samples = belief._mvn.sample(belief.mean, n_samples=n_samples)
     costs = -env.reward_batch(samples, action)
     return float(np.mean(costs))
 
@@ -139,8 +145,9 @@ def belief_expectation_cost(belief: Belief, action: Any, env: Environment) -> fl
         Expected immediate cost
     """
     if isinstance(belief, VectorizedWeightedParticleBelief):
-        costs = -env.reward_batch(belief.particles, action)
-        return float(np.sum(costs * belief.normalized_weights))
+        rewards = np.asarray(env.reward_batch(belief.particles, action))
+        weights = np.asarray(belief.normalized_weights)
+        return -float(weights @ rewards)
     if isinstance(belief, WeightedParticleBelief):
         return belief_expectation_cost_particle_belief(belief=belief, action=action, env=env)
     if isinstance(belief, GaussianBelief):
