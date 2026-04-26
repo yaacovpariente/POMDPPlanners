@@ -167,10 +167,10 @@ class CartPoleVectorizedUpdater(VectorizedParticleBeliefUpdater):
     def batch_transition(self, particles: np.ndarray, action: np.ndarray) -> np.ndarray:
         # particles: (N, 4) = [x, x_dot, theta, theta_dot]. Delegates to the
         # native C++ batch sampler so both this path and the per-particle
-        # CartPoleStateTransition.sample() share the same C++ RNG (closes
-        # the cross-path divergence that used to skip the equivalence
-        # tests). The `state=particles[0]` passed to the ctor is unused on
-        # the batch path; only the ctor signature requires it.
+        # env.sample_next_state() (which also routes through
+        # _native.CartPoleTransitionCpp) share the same C++ RNG. The
+        # `state=particles[0]` passed to the ctor is unused on the batch
+        # path; only the ctor signature requires it.
         transition = _native.CartPoleTransitionCpp(
             state=particles[0],
             action=int(action),

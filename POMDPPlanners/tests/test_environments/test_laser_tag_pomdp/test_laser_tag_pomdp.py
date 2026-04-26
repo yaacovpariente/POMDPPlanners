@@ -13,18 +13,14 @@ from collections import Counter
 import numpy as np
 import pytest
 
-from typing import Dict, List, Tuple
+from typing import List
 
 from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.distributions import DiscreteDistribution
 from POMDPPlanners.core.environment import SpaceType
 from POMDPPlanners.core.policy import Policy, PolicyRunData, PolicySpaceInfo
 from POMDPPlanners.core.simulation import History, StepData
-from POMDPPlanners.environments.laser_tag_pomdp import (
-    LaserTagObservation,
-    LaserTagPOMDP,
-    LaserTagStateTransition,
-)
+from POMDPPlanners.environments.laser_tag_pomdp import LaserTagPOMDP
 from POMDPPlanners.simulations.episodes import run_episode
 from POMDPPlanners.tests.test_utils.confidence_interval_utils import (
     verify_metrics_within_confidence_intervals,
@@ -34,15 +30,6 @@ from POMDPPlanners.utils.logger import get_logger
 # Set seeds for reproducible tests
 np.random.seed(42)
 random.seed(42)
-
-# Action directions mapping for LaserTagStateTransition
-ACTION_DIRECTIONS: Dict[int, Tuple[int, int]] = {
-    0: (-1, 0),  # North (up)
-    1: (1, 0),  # South (down)
-    2: (0, 1),  # East (right)
-    3: (0, -1),  # West (left)
-    4: (0, 0),  # Tag (no movement)
-}
 
 
 class RandomPolicy(Policy):
@@ -130,13 +117,44 @@ class TestLaserTagState:
         assert bool(state[4]) == False
 
 
+def _make_env(
+    *,
+    floor_shape=(7, 11),
+    walls=None,
+    transition_error_prob=0.0,
+    measurement_noise=1.0,
+):
+    """Build a LaserTagPOMDP with empty dangerous areas for transition/observation tests."""
+    return LaserTagPOMDP(
+        discount_factor=0.95,
+        floor_shape=floor_shape,
+        walls=walls if walls is not None else set(),
+        dangerous_areas=set(),
+        measurement_noise=measurement_noise,
+        transition_error_prob=transition_error_prob,
+    )
+
+
+def _transition_probabilities(env, state, action, next_states):
+    """Convenience: env.transition_log_probability -> probability list."""
+    log_probs = env.transition_log_probability(state, action, next_states)
+    return np.exp(log_probs)
+
+
+def _observation_probabilities(env, next_state, action, observations):
+    """Convenience: env.observation_log_probability -> probability list."""
+    log_probs = env.observation_log_probability(next_state, action, observations)
+    return np.exp(log_probs)
+
+
 class TestLaserTagStateTransition:
-    """Test LaserTagStateTransition model functionality.
+    """Test LaserTag state transition dynamics via the env API.
 
     Purpose: Validates state transition dynamics including robot movement and opponent behavior
 
-    Given: LaserTag state transition models with various states and actions
-    When: Transitions are sampled and probabilities calculated
+    Given: LaserTagPOMDP environments with various floors, walls, and actions
+    When: Transitions are sampled via env.sample_next_state and probabilities are
+        evaluated via env.transition_log_probability
     Then: Robot and opponent movements follow expected dynamics
 
     Test type: unit
@@ -153,13 +171,10 @@ class TestLaserTagStateTransition:
 
         Test type: unit
         """
+        env = _make_env(floor_shape=(7, 11))
         state = np.array([3.0, 5.0, 1.0, 1.0, 0.0])
-        floor_shape = (7, 11)
-        walls = set()
 
-        # Test North movement (action 0)
-        transition = LaserTagStateTransition(state, 0, ACTION_DIRECTIONS, floor_shape, walls)
-        next_states = transition.sample(n_samples=10)
+        next_states = env.sample_next_state(state, 0, n_samples=10)
         for next_state in next_states:
             assert (int(next_state[0]), int(next_state[1])) == (2, 5)  # One row up
             assert not bool(next_state[4])
@@ -175,13 +190,11 @@ class TestLaserTagStateTransition:
 
         Test type: unit
         """
-        floor_shape = (7, 11)
-        walls = set()
+        env = _make_env(floor_shape=(7, 11))
 
-        # Test robot at top boundary trying to go North
+        # Robot at top boundary trying to go North
         state = np.array([0.0, 5.0, 3.0, 3.0, 0.0])
-        transition = LaserTagStateTransition(state, 0, ACTION_DIRECTIONS, floor_shape, walls)
-        next_states = transition.sample(n_samples=5)
+        next_states = env.sample_next_state(state, 0, n_samples=5)
         for next_state in next_states:
             assert (int(next_state[0]), int(next_state[1])) == (0, 5)  # Should stay in place
 
@@ -196,13 +209,10 @@ class TestLaserTagStateTransition:
 
         Test type: unit
         """
+        env = _make_env(floor_shape=(7, 11), walls={(3, 3)})  # Wall to the East
         state = np.array([3.0, 2.0, 1.0, 1.0, 0.0])
-        floor_shape = (7, 11)
-        walls = {(3, 3)}  # Wall to the East
 
-        # Test robot trying to move East into wall
-        transition = LaserTagStateTransition(state, 2, ACTION_DIRECTIONS, floor_shape, walls)
-        next_states = transition.sample(n_samples=5)
+        next_states = env.sample_next_state(state, 2, n_samples=5)
         for next_state in next_states:
             assert (int(next_state[0]), int(next_state[1])) == (3, 2)  # Should stay in place
 
@@ -217,14 +227,11 @@ class TestLaserTagStateTransition:
 
         Test type: unit
         """
+        env = _make_env(floor_shape=(7, 11))
         state = np.array([2.0, 5.0, 5.0, 5.0, 0.0])
-        floor_shape = (7, 11)
-        walls = set()
 
-        transition = LaserTagStateTransition(
-            state, 1, ACTION_DIRECTIONS, floor_shape, walls
-        )  # Robot moves South
-        samples = transition.sample(n_samples=1000)
+        # Robot moves South (action 1)
+        samples = env.sample_next_state(state, 1, n_samples=1000)
 
         # Count opponent positions
         opponent_positions = [(int(s[2]), int(s[3])) for s in samples]
@@ -251,13 +258,10 @@ class TestLaserTagStateTransition:
 
         Test type: unit
         """
+        env = _make_env(floor_shape=(7, 11))
         state = np.array([3.0, 5.0, 3.0, 5.0, 0.0])
-        floor_shape = (7, 11)
-        walls = set()
 
-        transition = LaserTagStateTransition(state, 4, ACTION_DIRECTIONS, floor_shape, walls)
-        next_states = transition.sample(n_samples=10)
-
+        next_states = env.sample_next_state(state, 4, n_samples=10)
         for next_state in next_states:
             assert bool(next_state[4])
             assert (int(next_state[0]), int(next_state[1])) == (3, 5)
@@ -274,13 +278,10 @@ class TestLaserTagStateTransition:
 
         Test type: unit
         """
+        env = _make_env(floor_shape=(7, 11))
         state = np.array([3.0, 5.0, 2.0, 4.0, 0.0])
-        floor_shape = (7, 11)
-        walls = set()
 
-        transition = LaserTagStateTransition(state, 4, ACTION_DIRECTIONS, floor_shape, walls)
-        next_states = transition.sample(n_samples=10)
-
+        next_states = env.sample_next_state(state, 4, n_samples=10)
         for next_state in next_states:
             assert not bool(next_state[4])
             assert (int(next_state[0]), int(next_state[1])) == (3, 5)  # Robot doesn't move on tag
@@ -291,26 +292,20 @@ class TestLaserTagStateTransition:
         Purpose: Validates probability assignment for terminal state after successful tag
 
         Given: Robot and opponent at same position with tag action
-        When: probability() is called with terminal state
+        When: env.transition_log_probability is called with candidate states
         Then: Returns probability 1.0 for correct terminal state and 0.0 for others
 
         Test type: unit
         """
+        env = _make_env(floor_shape=(7, 11))
         state = np.array([3.0, 5.0, 3.0, 5.0, 0.0])
-        floor_shape = (7, 11)
-        walls = set()
 
-        transition = LaserTagStateTransition(state, 4, ACTION_DIRECTIONS, floor_shape, walls)
-
-        # Correct terminal state
         correct_terminal = np.array([3.0, 5.0, 3.0, 5.0, 1.0])
-        # Wrong terminal state (different position)
         wrong_terminal = np.array([3.0, 4.0, 3.0, 4.0, 1.0])
-        # Non-terminal state
         non_terminal = np.array([3.0, 5.0, 3.0, 5.0, 0.0])
 
         test_states = [correct_terminal, wrong_terminal, non_terminal]
-        probs = transition.probability(test_states)
+        probs = _transition_probabilities(env, state, 4, test_states)
 
         assert probs[0] == 1.0, f"Expected 1.0 for correct terminal state, got {probs[0]}"
         assert probs[1] == 0.0, f"Expected 0.0 for wrong terminal state, got {probs[1]}"
@@ -322,48 +317,34 @@ class TestLaserTagStateTransition:
         Purpose: Validates probability distribution over opponent positions during normal movement
 
         Given: State with robot and opponent at different positions with movement action
-        When: probability() is called with various next states
+        When: env.transition_log_probability is called with various next states
         Then: Returns correct probabilities based on opponent movement model
 
         Test type: unit
         """
+        env = _make_env(floor_shape=(7, 11))
         state = np.array([3.0, 5.0, 5.0, 5.0, 0.0])
-        floor_shape = (7, 11)
-        walls = set()
 
         # Robot moves South (action 1), so next robot position is (4, 5)
-        transition = LaserTagStateTransition(state, 1, ACTION_DIRECTIONS, floor_shape, walls)
-
         # Opponent at (5, 5) should prefer moving toward robot at (4, 5)
         # Expected moves: North to (4, 5) with prob 0.4, stay at (5, 5) with prob 0.2
-        # No horizontal movement since same column
-
         next_state_north = np.array([4.0, 5.0, 4.0, 5.0, 0.0])  # Opponent moves North
         next_state_stay = np.array([4.0, 5.0, 5.0, 5.0, 0.0])  # Opponent stays
         next_state_south = np.array([4.0, 5.0, 6.0, 5.0, 0.0])  # Opponent moves South
         next_state_wrong_robot = np.array([3.0, 5.0, 4.0, 5.0, 0.0])  # Wrong robot position
 
         test_states = [next_state_north, next_state_stay, next_state_south, next_state_wrong_robot]
-        probs = transition.probability(test_states)
+        probs = _transition_probabilities(env, state, 1, test_states)
 
-        # Check that probabilities are non-negative
         assert all(p >= 0 for p in probs), "All probabilities should be non-negative"
-
-        # Check that valid states have positive probability
         assert (
             probs[0] > 0
         ), f"Expected positive probability for opponent moving North, got {probs[0]}"
         assert probs[1] > 0, f"Expected positive probability for opponent staying, got {probs[1]}"
-
-        # Check that opponent moving away (South) has zero probability
         assert (
             probs[2] == 0.0
         ), f"Expected 0.0 probability for opponent moving South (away), got {probs[2]}"
-
-        # Check that wrong robot position has zero probability
         assert probs[3] == 0.0, f"Expected 0.0 for wrong robot position, got {probs[3]}"
-
-        # Verify approximate probability values (0.4 for North, rest to stay)
         assert (
             0.35 <= probs[0] <= 0.45
         ), f"Expected ~0.4 probability for North movement, got {probs[0]}"
@@ -374,109 +355,60 @@ class TestLaserTagStateTransition:
         Purpose: Validates that blocked moves redistribute probability to staying
 
         Given: Opponent near walls that block some movement directions
-        When: probability() is called with possible next states
+        When: env.transition_log_probability is called with possible next states
         Then: Blocked moves have zero probability and staying absorbs extra probability
 
         Test type: unit
         """
+        env = _make_env(floor_shape=(7, 11), walls={(3, 4), (4, 3)})
         state = np.array([3.0, 5.0, 3.0, 3.0, 0.0])
-        floor_shape = (7, 11)
-        walls = {(3, 4), (4, 3)}  # Walls to the East and South of opponent
 
         # Robot moves North (action 0), so next robot position is (2, 5)
-        transition = LaserTagStateTransition(state, 0, ACTION_DIRECTIONS, floor_shape, walls)
-
-        # Opponent should try to move toward robot
-        # East move (3, 4) is blocked by wall
-        # South move (4, 3) is blocked by wall
-        # North move (2, 3) is valid
-        # West move (3, 2) is valid
-        # Stay at (3, 3) absorbs blocked probability
-
+        # East move (3, 4) is blocked, South move (4, 3) is blocked
+        # North move (2, 3) and West move (3, 2) are valid
         next_state_stay = np.array([2.0, 5.0, 3.0, 3.0, 0.0])
         next_state_north = np.array([2.0, 5.0, 2.0, 3.0, 0.0])
         next_state_east_blocked = np.array([2.0, 5.0, 3.0, 4.0, 0.0])
 
         test_states = [next_state_stay, next_state_north, next_state_east_blocked]
-        probs = transition.probability(test_states)
+        probs = _transition_probabilities(env, state, 0, test_states)
 
-        # Stay should have increased probability due to blocked moves
         assert (
             probs[0] > 0.2
         ), f"Expected stay probability > 0.2 due to blocked moves, got {probs[0]}"
-
-        # North is valid
         assert probs[1] >= 0, f"Expected non-negative probability for North, got {probs[1]}"
-
-        # East is blocked by wall
         assert probs[2] == 0.0, f"Expected 0.0 for blocked East move, got {probs[2]}"
 
         # Total probability should sum to 1.0
-        all_possible_positions = [
-            (3, 3),  # Stay
-            (2, 3),  # North
-            (3, 2),  # West
-        ]
+        all_possible_positions = [(3, 3), (2, 3), (3, 2)]
         all_states = [
             np.array([2.0, 5.0, float(pos[0]), float(pos[1]), 0.0])
             for pos in all_possible_positions
         ]
-        all_probs = transition.probability(all_states)
+        all_probs = _transition_probabilities(env, state, 0, all_states)
         total_prob = sum(all_probs)
         assert (
             abs(total_prob - 1.0) < 0.01
         ), f"Expected probabilities to sum to ~1.0, got {total_prob}"
-
-    def test_probability_with_invalid_states(self):
-        """Test probability calculation with invalid or non-LaserTagState objects.
-
-        Purpose: Validates robust handling of invalid inputs to probability method
-
-        Given: Transition model with valid state
-        When: probability() is called with non-LaserTagState objects
-        Then: Returns zero probability for invalid states
-
-        Test type: unit
-        """
-        state = np.array([3.0, 5.0, 2.0, 4.0, 0.0])
-        floor_shape = (7, 11)
-        walls = set()
-
-        transition = LaserTagStateTransition(state, 0, ACTION_DIRECTIONS, floor_shape, walls)
-
-        # Test with invalid inputs
-        invalid_states = ["not a state", None, 42, {"robot": (3, 5)}]
-        probs = transition.probability(invalid_states)
-
-        # All invalid states should have zero probability
-        assert all(p == 0.0 for p in probs), "Invalid states should have zero probability"
 
     def test_transition_error_probability_tag_action_no_errors(self):
         """Test that Tag action always executes correctly regardless of error probability.
 
         Purpose: Validates Tag action is never affected by transition error probability
 
-        Given: State transition model with Tag action and non-zero error probability
+        Given: Environment with Tag action and non-zero error probability
         When: Transitions are sampled
         Then: Tag action always executes correctly (no random action selection)
 
         Test type: unit
         """
         np.random.seed(42)  # For reproducibility
+        env = _make_env(floor_shape=(7, 11), transition_error_prob=0.9)
         state = np.array([3.0, 5.0, 3.0, 5.0, 0.0])  # Robot and opponent at same position
-        floor_shape = (7, 11)
-        walls = set()
 
-        # Tag action with high error probability should still execute correctly
-        transition = LaserTagStateTransition(
-            state, 4, ACTION_DIRECTIONS, floor_shape, walls, transition_error_prob=0.9
-        )
-
-        # Sample many times - Tag should always execute
-        next_states = transition.sample(n_samples=100)
+        next_states = env.sample_next_state(state, 4, n_samples=100)
         for next_state in next_states:
-            # Tag action should result in terminal state when robot and opponent are at same position
-            assert bool(next_state[4]) == True, "Tag action should result in terminal state"
+            assert bool(next_state[4]) is True, "Tag action should result in terminal state"
             assert (int(next_state[0]), int(next_state[1])) == (
                 3,
                 5,
@@ -487,24 +419,18 @@ class TestLaserTagStateTransition:
 
         Purpose: Validates backward compatibility with deterministic transitions
 
-        Given: State transition model with error_prob=0.0
+        Given: Environment with error_prob=0.0
         When: Movement actions are executed
         Then: Robot always moves according to intended action
 
         Test type: unit
         """
         np.random.seed(42)  # For reproducibility
+        env = _make_env(floor_shape=(7, 11), transition_error_prob=0.0)
         state = np.array([3.0, 5.0, 1.0, 1.0, 0.0])
-        floor_shape = (7, 11)
-        walls = set()
 
-        # North movement with zero error probability
-        transition = LaserTagStateTransition(
-            state, 0, ACTION_DIRECTIONS, floor_shape, walls, transition_error_prob=0.0
-        )
-
-        # Sample many times - should always move North
-        next_states = transition.sample(n_samples=100)
+        # North movement should always succeed
+        next_states = env.sample_next_state(state, 0, n_samples=100)
         for next_state in next_states:
             assert (int(next_state[0]), int(next_state[1])) == (
                 2,
@@ -516,56 +442,34 @@ class TestLaserTagStateTransition:
 
         Purpose: Validates stochastic action execution for movement actions
 
-        Given: State transition model with error_prob > 0.0 and movement action
+        Given: Environment with error_prob > 0.0 and movement action
         When: Transitions are sampled many times
         Then: Robot sometimes executes different actions than intended
 
         Test type: unit
         """
         np.random.seed(42)  # For reproducibility
+        env = _make_env(floor_shape=(7, 11), transition_error_prob=0.8)
         state = np.array([3.0, 5.0, 1.0, 1.0, 0.0])
-        floor_shape = (7, 11)
-        walls = set()
 
         # North movement (action 0) with high error probability
-        transition = LaserTagStateTransition(
-            state, 0, ACTION_DIRECTIONS, floor_shape, walls, transition_error_prob=0.8
-        )
-
-        # Sample many times
-        next_states = transition.sample(n_samples=1000)
+        next_states = env.sample_next_state(state, 0, n_samples=1000)
         robot_positions = [(int(ns[0]), int(ns[1])) for ns in next_states]
-
-        # Count occurrences of each position
         position_counts = Counter(robot_positions)
 
-        # Expected positions:
-        # - (2, 5) - North (intended action)
-        # - (4, 5) - South (error action)
-        # - (3, 6) - East (error action)
-        # - (3, 4) - West (error action)
         # Tag action (4) should NOT be in error selection, so robot should always move
-
-        # Verify robot always moves (no staying in place from Tag error)
+        # Verify robot rarely stays in place from Tag error
         assert (3, 5) not in position_counts or position_counts[
             (3, 5)
         ] == 0, "Robot should not stay in place - Tag action not included in error selection"
 
-        # With error_prob=0.8, we should see mostly error actions, but some intended actions too
-        # Verify that we don't always get the intended action (indicating stochasticity)
         intended_count = position_counts.get((2, 5), 0)
         total_samples = sum(position_counts.values())
 
-        # With error_prob=0.8, we expect ~20% intended, ~80% errors
-        # But with fixed seed, we might get deterministic results
-        # So we just verify that stochastic behavior is working (not all intended)
         assert intended_count < total_samples, (
             f"With error_prob=0.8, not all samples should be intended action. "
             f"Got {intended_count}/{total_samples} intended actions."
         )
-
-        # Verify intended action (North) can occur
-        # (It might not occur with this seed, but the mechanism should allow it)
 
         # Verify at least one error action occurs (with high error prob, this should happen)
         error_positions = {(4, 5), (3, 6), (3, 4)}  # South, East, West
@@ -578,57 +482,42 @@ class TestLaserTagStateTransition:
 
         Purpose: Validates Tag action is excluded from error action selection
 
-        Given: Movement action with error probability
+        Given: Environment with movement action and high error probability
         When: Errors occur
         Then: Only movement actions (0-3) are selected as errors, never Tag (4)
 
         Test type: unit
         """
         np.random.seed(42)  # For reproducibility
+        env = _make_env(floor_shape=(7, 11), transition_error_prob=0.99)
         state = np.array([3.0, 5.0, 1.0, 1.0, 0.0])
-        floor_shape = (7, 11)
-        walls = set()
 
         # East movement (action 2) with very high error probability
-        transition = LaserTagStateTransition(
-            state, 2, ACTION_DIRECTIONS, floor_shape, walls, transition_error_prob=0.99
-        )
-
-        # Sample many times - most should be errors
-        next_states = transition.sample(n_samples=1000)
+        next_states = env.sample_next_state(state, 2, n_samples=1000)
         robot_positions = [(int(ns[0]), int(ns[1])) for ns in next_states]
 
         # Robot should never stay in place (which would happen if Tag was selected)
-        # East action from (3,5) would go to (3,6)
-        # Error actions would be North (2,5), South (4,5), West (3,4)
+        # East action from (3,5) would go to (3,6); error actions would be (2,5)/(4,5)/(3,4)
         # Tag would keep robot at (3,5) - this should NOT happen
         assert (3, 5) not in Counter(robot_positions) or Counter(robot_positions)[
             (3, 5)
         ] == 0, "Robot should not stay in place - Tag action should not be in error selection"
 
     def test_transition_error_probability_probability_calculation(self):
-        """Test that probability() method accounts for error probability.
+        """Test that transition_log_probability accounts for error probability.
 
         Purpose: Validates probability calculations include all possible action outcomes
 
-        Given: State transition model with error probability
-        When: probability() is called for various next states
+        Given: Environment with error probability and movement action
+        When: env.transition_log_probability is called for various next states
         Then: Probabilities correctly account for intended and error actions
 
         Test type: unit
         """
+        env = _make_env(floor_shape=(7, 11), transition_error_prob=0.5)
         state = np.array([3.0, 5.0, 1.0, 1.0, 0.0])
-        floor_shape = (7, 11)
-        walls = set()
 
-        # North movement (action 0) with error probability
-        transition = LaserTagStateTransition(
-            state, 0, ACTION_DIRECTIONS, floor_shape, walls, transition_error_prob=0.5
-        )
-
-        # Test states for different robot positions
-        # Intended: North to (2, 5)
-        # Errors: South to (4, 5), East to (3, 6), West to (3, 4)
+        # North action (0). Intended -> (2,5). Errors -> (4,5)/(3,6)/(3,4).
         next_state_north = np.array([2.0, 5.0, 1.0, 1.0, 0.0])  # Intended action
         next_state_south = np.array([4.0, 5.0, 1.0, 1.0, 0.0])  # Error action
         next_state_east = np.array([3.0, 6.0, 1.0, 1.0, 0.0])  # Error action
@@ -642,136 +531,96 @@ class TestLaserTagStateTransition:
             next_state_west,
             next_state_wrong,
         ]
-        probs = transition.probability(test_states)
+        probs = _transition_probabilities(env, state, 0, test_states)
 
-        # Intended action should have probability > 0
         assert probs[0] > 0, "Intended action should have positive probability"
-
-        # Error actions should have probability > 0 (due to error probability)
         assert probs[1] > 0, "Error action (South) should have positive probability"
         assert probs[2] > 0, "Error action (East) should have positive probability"
         assert probs[3] > 0, "Error action (West) should have positive probability"
-
-        # Impossible state should have zero probability
         assert probs[4] == 0.0, "Impossible state should have zero probability"
-
-        # Probabilities should sum to approximately 1.0 when considering all possible outcomes
-        # (Note: This is approximate due to opponent movement probabilities)
 
     def test_transition_error_probability_tag_probability_deterministic(self):
         """Test that Tag action probability is deterministic regardless of error_prob.
 
         Purpose: Validates Tag action probability calculation is not affected by error_prob
 
-        Given: Tag action with various error probabilities
-        When: probability() is called
+        Given: Environment with Tag action and high error probability
+        When: env.transition_log_probability is called
         Then: Tag action probabilities are deterministic (1.0 or 0.0)
 
         Test type: unit
         """
-        # Robot and opponent at same position - Tag should succeed
-        state = np.array([3.0, 5.0, 3.0, 5.0, 0.0])
-        floor_shape = (7, 11)
-        walls = set()
+        env = _make_env(floor_shape=(7, 11), transition_error_prob=0.9)
+        state = np.array([3.0, 5.0, 3.0, 5.0, 0.0])  # Robot and opponent at same position
 
-        # Tag action with high error probability
-        transition = LaserTagStateTransition(
-            state, 4, ACTION_DIRECTIONS, floor_shape, walls, transition_error_prob=0.9
-        )
-
-        # Correct terminal state
         correct_state = np.array([3.0, 5.0, 3.0, 5.0, 1.0])
-        # Wrong state
         wrong_state = np.array([3.0, 5.0, 3.0, 5.0, 0.0])
 
-        probs = transition.probability([correct_state, wrong_state])
-
-        # Correct state should have probability 1.0
+        probs = _transition_probabilities(env, state, 4, [correct_state, wrong_state])
         assert probs[0] == 1.0, "Correct terminal state should have probability 1.0"
-        # Wrong state should have probability 0.0
         assert probs[1] == 0.0, "Wrong state should have probability 0.0"
 
     def test_state_transition_all_actions_deterministic(self):
-        """Test state transition sample() and probability() for all actions with transition_error_prob=0.
+        """Test sample/probability for all movement actions with transition_error_prob=0.
 
-        Purpose: Validates that all movement actions (0-3) execute correctly in deterministic mode
-                 and robot moves to expected positions
+        Purpose: Validates that all movement actions (0-3) execute correctly in deterministic
+            mode and robot moves to expected positions
 
-        Given: A LaserTagStateTransition with transition_error_prob=0 and hardcoded states
-        When: Each movement action is executed
-        Then: Robot moves to expected adjacent positions and opponent movement probabilities are correct
+        Given: A LaserTagPOMDP with transition_error_prob=0 and hardcoded states
+        When: Each movement action is executed via env.sample_next_state and probability via
+            env.transition_log_probability
+        Then: Robot moves to expected adjacent positions and the resulting next state has
+            positive probability
 
         Test type: unit
         """
-        # Hardcoded initial state: robot at (5, 5), opponent at (3, 3), non-terminal
-        # Robot is at center, opponent is away, so no tagging will occur
+        # Robot at center (5, 5), opponent at (3, 3); large grid with no walls
         initial_state = np.array([5.0, 5.0, 3.0, 3.0, 0.0])
-        floor_shape = (11, 11)  # Large enough grid to avoid boundaries
-        walls = set()
+        env = _make_env(floor_shape=(11, 11), transition_error_prob=0.0)
 
-        # Hardcoded expected robot positions for each action
-        # Robot moves by 1 cell in the action direction
         expected_robot_positions = {
-            0: (4, 5),  # North: robot moves up (row decreases)
-            1: (6, 5),  # South: robot moves down (row increases)
-            2: (5, 6),  # East: robot moves right (col increases)
-            3: (5, 4),  # West: robot moves left (col decreases)
+            0: (4, 5),  # North
+            1: (6, 5),  # South
+            2: (5, 6),  # East
+            3: (5, 4),  # West
         }
 
         for action, expected_robot_pos in expected_robot_positions.items():
-            transition = LaserTagStateTransition(
-                initial_state.copy(),
-                action,
-                ACTION_DIRECTIONS,
-                floor_shape,
-                walls,
-                transition_error_prob=0.0,  # Explicitly set to 0 for deterministic behavior
-            )
-
-            # Test sample() method - robot should move to expected position
-            next_state = transition.sample()[0]
+            next_state = env.sample_next_state(initial_state.copy(), action)
             actual_robot_pos = (int(next_state[0]), int(next_state[1]))
-
             assert (
                 actual_robot_pos == expected_robot_pos
             ), f"Action {action}: Expected robot at {expected_robot_pos}, got {actual_robot_pos}"
 
-            # Verify opponent moved (stochastic, but should be valid)
             opponent_pos = (int(next_state[2]), int(next_state[3]))
-            assert 0 <= opponent_pos[0] < floor_shape[0], "Opponent row out of bounds"
-            assert 0 <= opponent_pos[1] < floor_shape[1], "Opponent col out of bounds"
-
-            # Verify state is non-terminal (no tagging occurred)
+            assert 0 <= opponent_pos[0] < 11, "Opponent row out of bounds"
+            assert 0 <= opponent_pos[1] < 11, "Opponent col out of bounds"
             assert not bool(next_state[4]), "State should be non-terminal"
 
-            # Test probability() method - create state with correct robot position
-            # We'll test with the actual sampled state to verify probability > 0
-            prob_actual = transition.probability([next_state])
-            assert len(prob_actual) == 1
+            prob_actual = _transition_probabilities(env, initial_state, action, [next_state])
             assert prob_actual[0] > 0.0, (
                 f"Action {action}: Actual next state should have positive probability, "
                 f"got {prob_actual[0]}"
             )
 
             # Test probability for state with wrong robot position (should be 0.0)
-            # Create a state where robot is at initial position (clearly wrong)
             wrong_robot_state = np.array(
                 [
-                    initial_state[0],  # Robot at initial position (wrong)
+                    initial_state[0],
                     initial_state[1],
-                    next_state[2],  # Opponent at next position (might match)
+                    next_state[2],
                     next_state[3],
-                    0.0,  # Non-terminal
+                    0.0,
                 ]
             )
-            prob_wrong = transition.probability([wrong_robot_state])
+            prob_wrong = _transition_probabilities(env, initial_state, action, [wrong_robot_state])
             assert prob_wrong[0] == 0.0, (
                 f"Action {action}: State with wrong robot position should have probability 0.0, "
                 f"got {prob_wrong[0]}"
             )
 
-            # Test multiple samples - robot position should always be the same (deterministic)
-            samples = transition.sample(n_samples=5)
+            # Robot position should always be the same (deterministic) across multiple samples
+            samples = env.sample_next_state(initial_state.copy(), action, n_samples=5)
             assert len(samples) == 5
             for i, sample in enumerate(samples):
                 sample_robot_pos = (int(sample[0]), int(sample[1]))
@@ -781,65 +630,48 @@ class TestLaserTagStateTransition:
                 )
 
     def test_state_transition_tag_action_deterministic(self):
-        """Test state transition for Tag action (4) when robot and opponent are at same position.
+        """Test state transition for Tag action when robot and opponent are at same position.
 
-        Purpose: Validates that Tag action works correctly when robot and opponent are at same position
+        Purpose: Validates Tag action sampling and probability when robot and opponent are
+            colocated
 
-        Given: A LaserTagStateTransition with Tag action and robot/opponent at same position
-        When: Tag action is executed
-        Then: Resulting state should be terminal with robot and opponent at same position
+        Given: A LaserTagPOMDP with Tag action and robot/opponent at same position
+        When: Tag action is executed via env.sample_next_state and env.transition_log_probability
+        Then: Resulting state is terminal with robot and opponent at same position
 
         Test type: unit
         """
-        # Hardcoded initial state: robot and opponent at same position (5, 5), non-terminal
         initial_state = np.array([5.0, 5.0, 5.0, 5.0, 0.0])
-        floor_shape = (11, 11)
-        walls = set()
-
-        # Tag action (4)
+        env = _make_env(floor_shape=(11, 11), transition_error_prob=0.0)
         action = 4
 
-        transition = LaserTagStateTransition(
-            initial_state.copy(),
-            action,
-            ACTION_DIRECTIONS,
-            floor_shape,
-            walls,
-            transition_error_prob=0.0,  # Explicitly set to 0 for deterministic behavior
-        )
-
-        # Expected terminal state: robot and opponent at (5, 5), terminal flag = 1.0
         expected_state = np.array([5.0, 5.0, 5.0, 5.0, 1.0])
 
-        # Test sample() method - should return exact expected state
-        next_state = transition.sample()[0]
+        next_state = env.sample_next_state(initial_state.copy(), action)
         assert np.array_equal(
             next_state, expected_state
         ), f"Tag action: Expected {expected_state}, got {next_state}"
 
-        # Test probability() method - should return 1.0 for expected state
-        prob_expected = transition.probability([expected_state])
-        assert len(prob_expected) == 1
+        prob_expected = _transition_probabilities(env, initial_state, action, [expected_state])
         assert (
             prob_expected[0] == 1.0
         ), f"Tag action: Expected state should have probability 1.0, got {prob_expected[0]}"
 
-        # Test probability for non-terminal state (should be 0.0)
         non_terminal_state = np.array([5.0, 5.0, 5.0, 5.0, 0.0])
-        prob_non_terminal = transition.probability([non_terminal_state])
+        prob_non_terminal = _transition_probabilities(
+            env, initial_state, action, [non_terminal_state]
+        )
         assert prob_non_terminal[0] == 0.0, (
             f"Tag action: Non-terminal state should have probability 0.0, "
             f"got {prob_non_terminal[0]}"
         )
 
-        # Test probability for initial state (should be 0.0)
-        prob_initial = transition.probability([initial_state])
+        prob_initial = _transition_probabilities(env, initial_state, action, [initial_state])
         assert (
             prob_initial[0] == 0.0
         ), f"Tag action: Initial state should have probability 0.0, got {prob_initial[0]}"
 
-        # Test multiple samples - should all be identical (deterministic)
-        samples = transition.sample(n_samples=5)
+        samples = env.sample_next_state(initial_state.copy(), action, n_samples=5)
         assert len(samples) == 5
         for i, sample in enumerate(samples):
             assert np.array_equal(
@@ -851,17 +683,15 @@ class TestLaserTagStateTransition:
 
         Purpose: Validates that all actions work correctly when robot is at grid boundaries
 
-        Given: A LaserTagStateTransition with robot at grid boundaries and transition_error_prob=0
-        When: Each action is executed
+        Given: A LaserTagPOMDP with robot at grid boundaries and transition_error_prob=0
+        When: Each action is executed via env.sample_next_state
         Then: Robot stays in place when action would move outside boundaries
 
         Test type: unit
         """
-        floor_shape = (7, 7)  # Smaller grid for boundary testing
-        walls = set()
+        floor_shape = (7, 7)
+        env = _make_env(floor_shape=floor_shape, transition_error_prob=0.0)
 
-        # Test cases: (initial_robot_pos, action, expected_robot_pos)
-        # Robot at boundaries trying to move outside
         test_cases = [
             ((0, 3), 0, (0, 3)),  # Top boundary, try North - should stay
             ((6, 3), 1, (6, 3)),  # Bottom boundary, try South - should stay
@@ -870,21 +700,9 @@ class TestLaserTagStateTransition:
         ]
 
         for (robot_row, robot_col), action, expected_robot_pos in test_cases:
-            initial_state = np.array(
-                [float(robot_row), float(robot_col), 2.0, 2.0, 0.0]
-            )  # Opponent away from boundary
+            initial_state = np.array([float(robot_row), float(robot_col), 2.0, 2.0, 0.0])
 
-            transition = LaserTagStateTransition(
-                initial_state.copy(),
-                action,
-                ACTION_DIRECTIONS,
-                floor_shape,
-                walls,
-                transition_error_prob=0.0,  # Explicitly set to 0 for deterministic behavior
-            )
-
-            # Test sample() method - robot should stay at boundary
-            next_state = transition.sample()[0]
+            next_state = env.sample_next_state(initial_state.copy(), action)
             actual_robot_pos = (int(next_state[0]), int(next_state[1]))
 
             assert actual_robot_pos == expected_robot_pos, (
@@ -892,25 +710,25 @@ class TestLaserTagStateTransition:
                 f"Expected robot at {expected_robot_pos}, got {actual_robot_pos}"
             )
 
-            # Test probability() method - state with robot at boundary should have positive probability
-            prob_actual = transition.probability([next_state])
+            prob_actual = _transition_probabilities(env, initial_state, action, [next_state])
             assert prob_actual[0] > 0.0, (
                 f"Action {action} at boundary: Actual next state should have positive probability, "
                 f"got {prob_actual[0]}"
             )
 
-            # Test probability for state with robot moved outside boundary (should be 0.0)
             outside_boundary_state = next_state.copy()
             if action == 0:  # North
-                outside_boundary_state[0] = -1.0  # Outside top boundary
+                outside_boundary_state[0] = -1.0
             elif action == 1:  # South
-                outside_boundary_state[0] = floor_shape[0]  # Outside bottom boundary
+                outside_boundary_state[0] = floor_shape[0]
             elif action == 2:  # East
-                outside_boundary_state[1] = floor_shape[1]  # Outside right boundary
+                outside_boundary_state[1] = floor_shape[1]
             elif action == 3:  # West
-                outside_boundary_state[1] = -1.0  # Outside left boundary
+                outside_boundary_state[1] = -1.0
 
-            prob_outside = transition.probability([outside_boundary_state])
+            prob_outside = _transition_probabilities(
+                env, initial_state, action, [outside_boundary_state]
+            )
             assert prob_outside[0] == 0.0, (
                 f"Action {action} at boundary: State with robot outside boundary should have "
                 f"probability 0.0, got {prob_outside[0]}"
@@ -953,25 +771,19 @@ class TestLaserTagPOMDPTransitionError:
         LaserTagPOMDP(discount_factor=0.95, transition_error_prob=0.5)
         LaserTagPOMDP(discount_factor=0.95, transition_error_prob=1.0)
 
-    def test_transition_error_probability_passed_to_transition_model(self):
-        """Test that transition_error_prob is passed to state transition model.
+    def test_transition_error_probability_stored_on_environment(self):
+        """Test that transition_error_prob is stored on the environment.
 
-        Purpose: Validates parameter propagation from environment to transition model
+        Purpose: Validates parameter is accessible on the env instance
 
         Given: LaserTagPOMDP with transition_error_prob
-        When: state_transition_model() is called
-        Then: Transition model has correct transition_error_prob value
+        When: The attribute is read
+        Then: Environment exposes the configured value
 
         Test type: unit
         """
         env = LaserTagPOMDP(discount_factor=0.95, transition_error_prob=0.3)
-        state = np.array([3.0, 5.0, 1.0, 1.0, 0.0])
-
-        transition = env.state_transition_model(state, 0)
-        assert isinstance(transition, LaserTagStateTransition)
-        assert (
-            transition.transition_error_prob == 0.3
-        ), "Transition model should have same error probability as environment"
+        assert env.transition_error_prob == 0.3
 
     def test_transition_error_probability_default_zero(self):
         """Test that default transition_error_prob is 0.0 (backward compatibility).
@@ -979,20 +791,23 @@ class TestLaserTagPOMDPTransitionError:
         Purpose: Validates backward compatibility with default deterministic behavior
 
         Given: LaserTagPOMDP without specifying transition_error_prob
-        When: Environment is used
-        Then: transition_error_prob defaults to 0.0 (deterministic)
+        When: Movement actions are sampled
+        Then: transition_error_prob defaults to 0.0 and the robot always executes the
+            intended action
 
         Test type: unit
         """
-        env = LaserTagPOMDP(discount_factor=0.95)
+        env = LaserTagPOMDP(discount_factor=0.95, dangerous_areas=set())
         assert env.transition_error_prob == 0.0, "Default transition_error_prob should be 0.0"
 
+        np.random.seed(42)
         state = np.array([3.0, 5.0, 1.0, 1.0, 0.0])
-        transition = env.state_transition_model(state, 0)
-        assert isinstance(transition, LaserTagStateTransition)
-        assert (
-            transition.transition_error_prob == 0.0
-        ), "Transition model should have default error probability 0.0"
+        next_states = env.sample_next_state(state, 0, n_samples=50)
+        for ns in next_states:
+            assert (int(ns[0]), int(ns[1])) == (
+                2,
+                5,
+            ), "Default error_prob should leave robot deterministically moving North"
 
     def test_transition_error_probability_affects_simulation(self):
         """Test that transition_error_prob affects actual simulation behavior.
@@ -1036,47 +851,38 @@ class TestLaserTagPOMDPTransitionError:
 
 
 class TestLaserTagObservation:
-    """Test LaserTagObservation model functionality.
+    """Test LaserTag observation generation via the env API.
 
-    Purpose: Validates observation generation with Gaussian noise around opponent position
+    Purpose: Validates observation generation with Gaussian noise around laser ranges
 
-    Given: LaserTag observation models with various states
-    When: Observations are sampled and probabilities calculated
+    Given: LaserTagPOMDP environments with various states and noise levels
+    When: Observations are sampled via env.sample_observation and probabilities are
+        evaluated via env.observation_log_probability
     Then: Observations follow expected noise characteristics
 
     Test type: unit
     """
 
     def test_observation_noise_characteristics(self):
-        """Test observation model adds appropriate Gaussian noise.
+        """Test observation generation adds appropriate Gaussian noise.
 
-        Purpose: Validates observation noise follows Gaussian distribution around true position
+        Purpose: Validates observation noise is bounded by the configured measurement_noise
 
-        Given: Observation model with known opponent position and noise level
-        When: Many observations are sampled
-        Then: Observations are distributed around true position with correct noise characteristics
+        Given: Environment with low measurement noise and small grid
+        When: Many observations are sampled via env.sample_observation
+        Then: Observations are 8-D, non-negative, and have bounded standard deviation
 
         Test type: unit
         """
-        state = np.array([2.0, 2.0, 2.0, 4.0, 0.0])
-        obs_model = LaserTagObservation(
-            state,
-            0,
-            measurement_noise=0.1,  # Low noise for testing
-            floor_shape=(5, 5),
-            walls=set(),
-        )
+        env = _make_env(floor_shape=(5, 5), measurement_noise=0.1)
+        next_state = np.array([2.0, 2.0, 2.0, 4.0, 0.0])
 
-        observations = obs_model.sample(n_samples=100)
+        observations = env.sample_observation(next_state, 0, n_samples=100)
         obs_array = np.array(observations)
 
-        # Check all observations are 8-dimensional
         assert obs_array.shape[1] == 8, "Observations should be 8-dimensional laser measurements"
-
-        # Check observations are reasonable laser ranges (non-negative)
         assert np.all(obs_array >= 0), "Laser measurements should be non-negative"
 
-        # Check standard deviation is around measurement_noise for each direction
         std_obs = np.std(obs_array, axis=0)
         assert np.all(
             std_obs <= 1.0
@@ -1088,20 +894,18 @@ class TestLaserTagObservation:
         Purpose: Validates terminal states generate designated terminal observation
 
         Given: Terminal LaserTag state
-        When: Observations are sampled
-        Then: All observations are the special terminal observation (-1, -1)
+        When: Observations are sampled via env.sample_observation
+        Then: All observations are the special terminal observation tuple
 
         Test type: unit
         """
-        state = np.array([3.0, 5.0, 3.0, 5.0, 1.0])
-        obs_model = LaserTagObservation(
-            state, 4, measurement_noise=1.0, floor_shape=(7, 11), walls=set()
-        )
+        env = _make_env(floor_shape=(7, 11))
+        terminal_state = np.array([3.0, 5.0, 3.0, 5.0, 1.0])
 
-        observations = obs_model.sample(n_samples=10)
+        observations = env.sample_observation(terminal_state, 4, n_samples=10)
         terminal_obs = (-1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0)
         for obs in observations:
-            assert obs == terminal_obs, f"Terminal observation should be {terminal_obs}"
+            assert tuple(obs) == terminal_obs, f"Terminal observation should be {terminal_obs}"
 
     def test_probability_terminal_observation(self):
         """Test probability calculation for terminal state observations.
@@ -1109,22 +913,20 @@ class TestLaserTagObservation:
         Purpose: Validates probability is 1.0 for terminal observation and 0.0 for others
 
         Given: Terminal LaserTag state
-        When: probability() is called with terminal and non-terminal observations
+        When: env.observation_log_probability is called with terminal and non-terminal obs
         Then: Returns 1.0 for terminal observation and 0.0 for others
 
         Test type: unit
         """
-        state = np.array([3.0, 5.0, 3.0, 5.0, 1.0])
-        obs_model = LaserTagObservation(
-            state, 4, measurement_noise=1.0, floor_shape=(7, 11), walls=set()
-        )
+        env = _make_env(floor_shape=(7, 11))
+        terminal_state = np.array([3.0, 5.0, 3.0, 5.0, 1.0])
 
         terminal_obs = (-1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0)
         non_terminal_obs = (1.0, 2.0, 3.0, 1.5, 2.5, 1.2, 0.8, 2.1)
         wrong_terminal_obs = (-1.0, -1.0, -1.0, -1.0, 0.0, 0.0, 0.0, 0.0)
 
         test_observations = [terminal_obs, non_terminal_obs, wrong_terminal_obs]
-        probs = obs_model.probability(test_observations)
+        probs = _observation_probabilities(env, terminal_state, 4, test_observations)
 
         assert probs[0] == 1.0, f"Expected 1.0 for terminal observation, got {probs[0]}"
         assert probs[1] == 0.0, f"Expected 0.0 for non-terminal observation, got {probs[1]}"
@@ -1136,38 +938,28 @@ class TestLaserTagObservation:
         Purpose: Validates Gaussian probability density calculation for laser measurements
 
         Given: Non-terminal state with known laser measurements
-        When: probability() is called with observations near true measurements
+        When: env.observation_log_probability is called with observations near true measurements
         Then: Returns higher probability for observations closer to true measurements
 
         Test type: unit
         """
-        # Create simple scenario with robot in center of empty grid
-        state = np.array([3.0, 3.0, 5.0, 5.0, 0.0])
-        obs_model = LaserTagObservation(
-            state, 0, measurement_noise=1.0, floor_shape=(7, 7), walls=set()
-        )
+        env = _make_env(floor_shape=(7, 7), measurement_noise=1.0)
+        next_state = np.array([3.0, 3.0, 5.0, 5.0, 0.0])
 
-        # Get true measurements by sampling (we'll use these as baseline)
         np.random.seed(42)
-        true_sample = obs_model.sample(n_samples=1)[0]
+        true_sample = env.sample_observation(next_state, 0)
 
-        # Create observations: exact, close, and far from true
-        exact_obs = true_sample
-        close_obs = tuple(m + 0.1 for m in true_sample)  # Small perturbation
-        far_obs = tuple(m + 5.0 for m in true_sample)  # Large perturbation
+        exact_obs = tuple(true_sample)
+        close_obs = tuple(m + 0.1 for m in true_sample)
+        far_obs = tuple(m + 5.0 for m in true_sample)
 
         test_observations = [exact_obs, close_obs, far_obs]
-        probs = obs_model.probability(test_observations)
+        probs = _observation_probabilities(env, next_state, 0, test_observations)
 
-        # Exact should have highest probability
         assert probs[0] > 0, f"Expected positive probability for exact observation, got {probs[0]}"
-
-        # Close should have lower probability than exact but higher than far
         assert (
             probs[0] > probs[1] > probs[2]
         ), f"Expected exact > close > far, got {probs[0]}, {probs[1]}, {probs[2]}"
-
-        # All probabilities should be non-negative
         assert all(p >= 0 for p in probs), "All probabilities should be non-negative"
 
     def test_probability_with_walls(self):
@@ -1176,105 +968,51 @@ class TestLaserTagObservation:
         Purpose: Validates laser measurements consider walls as obstacles
 
         Given: Robot position with walls in specific directions
-        When: probability() is called with observations
-        Then: Probabilities reflect wall-blocked laser measurements
+        When: env.observation_log_probability is called on a sampled observation
+        Then: Returns positive probability for the matching observation
 
         Test type: unit
         """
-        # Place robot at (3, 3) with wall at (3, 5) to the East
-        state = np.array([3.0, 3.0, 5.0, 5.0, 0.0])
-        walls = {(3, 5)}
-        obs_model = LaserTagObservation(
-            state, 0, measurement_noise=0.5, floor_shape=(7, 7), walls=walls
-        )
+        env = _make_env(floor_shape=(7, 7), walls={(3, 5)}, measurement_noise=0.5)
+        next_state = np.array([3.0, 3.0, 5.0, 5.0, 0.0])
 
-        # Sample to understand true measurements with wall
         np.random.seed(42)
-        sampled_obs = obs_model.sample(n_samples=1)[0]
-
-        # East direction (index 2) should have shorter measurement due to wall
-        # Wall is at (3, 5), robot at (3, 3), so distance is 1 cell (to (3, 4))
-
-        # Create test observation matching the sampled one
-        test_observations = [sampled_obs]
-        probs = obs_model.probability(test_observations)
-
-        # Should have positive probability for matching observation
+        sampled_obs = env.sample_observation(next_state, 0)
+        probs = _observation_probabilities(env, next_state, 0, [sampled_obs])
         assert (
             probs[0] > 0
         ), f"Expected positive probability for matching observation, got {probs[0]}"
-
-    def test_probability_with_invalid_observations(self):
-        """Test probability calculation with invalid observation formats.
-
-        Purpose: Validates robust handling of invalid observation inputs
-
-        Given: Observation model with valid state
-        When: probability() is called with invalid observations
-        Then: Returns zero probability for invalid observations
-
-        Test type: unit
-        """
-        state = np.array([3.0, 3.0, 5.0, 5.0, 0.0])
-        obs_model = LaserTagObservation(
-            state, 0, measurement_noise=1.0, floor_shape=(7, 7), walls=set()
-        )
-
-        # Test invalid observation formats
-        invalid_observations = [
-            "not an observation",  # String
-            (1.0, 2.0, 3.0),  # Wrong dimension (3 instead of 8)
-            [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0],  # List instead of tuple (still valid)
-            None,  # None
-            (1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, -2.0),  # Negative measurement
-        ]
-
-        probs = obs_model.probability(invalid_observations)
-
-        # Most invalid observations should have zero probability
-        assert probs[0] == 0.0, f"String should have zero probability, got {probs[0]}"
-        assert probs[1] == 0.0, f"Wrong dimension should have zero probability, got {probs[1]}"
-        # Note: List of length 8 is actually valid
-        assert probs[3] == 0.0, f"None should have zero probability, got {probs[3]}"
-        assert probs[4] == 0.0, f"Negative measurement should have zero probability, got {probs[4]}"
 
     def test_probability_gaussian_properties(self):
         """Test that probability follows Gaussian distribution properties.
 
         Purpose: Validates observation probability follows expected Gaussian characteristics
 
-        Given: Observation model with specific measurement noise
-        When: probability() is called with observations at various distances from true
-        Then: Probabilities follow Gaussian decay pattern
+        Given: Environment with measurement_noise=1.0
+        When: env.observation_log_probability is called with observations at various
+            distances from a sampled baseline
+        Then: Probabilities follow a monotone Gaussian decay pattern
 
         Test type: unit
         """
-        state = np.array([3.0, 3.0, 5.0, 5.0, 0.0])
-        measurement_noise = 1.0
-        obs_model = LaserTagObservation(
-            state, 0, measurement_noise=measurement_noise, floor_shape=(7, 7), walls=set()
-        )
+        env = _make_env(floor_shape=(7, 7), measurement_noise=1.0)
+        next_state = np.array([3.0, 3.0, 5.0, 5.0, 0.0])
 
-        # Get true measurement by creating observation with zero noise effect
         np.random.seed(42)
-        base_sample = obs_model.sample(n_samples=1)[0]
+        base_sample = env.sample_observation(next_state, 0)
 
-        # Create observations at different distances from true (in one dimension)
-        # Keep all other dimensions the same
         observations_at_distances = []
         for distance in [0.0, 0.5, 1.0, 2.0, 3.0]:
             obs = tuple(base_sample[i] + (distance if i == 0 else 0.0) for i in range(8))
             observations_at_distances.append(obs)
 
-        probs = obs_model.probability(observations_at_distances)
+        probs = _observation_probabilities(env, next_state, 0, observations_at_distances)
 
-        # Probabilities should decrease as distance increases
         for i in range(len(probs) - 1):
             assert (
                 probs[i] >= probs[i + 1]
             ), f"Probability should decrease with distance: {probs[i]} >= {probs[i+1]} at index {i}"
 
-        # All probabilities should be positive
         assert all(p > 0 for p in probs), f"All probabilities should be positive, got {probs}"
 
 
@@ -2046,277 +1784,6 @@ def test_metrics_confidence_intervals():
 
     # Use generic confidence interval verification
     verify_metrics_within_confidence_intervals(metrics)
-
-
-class TestLaserTagDirectSampleApiEquivalence:
-    """Equivalence tests for sample_next_state/sample_observation overrides.
-
-    Verifies that the env-level direct-sample overrides produce byte-identical
-    output to the wrapper path when seeded identically.
-    """
-
-    @pytest.mark.parametrize("action", [0, 1, 2, 3, 4])
-    def test_sample_next_state_matches_wrapper_with_pinned_rng(self, action: int) -> None:
-        """Direct sample_next_state matches wrapper.sample()[0] under pinned RNG.
-
-        Purpose: Validates that LaserTagPOMDP.sample_next_state inlines the
-            wrapper's RNG sequence exactly so seeded behavior is identical.
-
-        Given: A LaserTagPOMDP and a fixed (state, action). np.random and random
-            are seeded identically before each draw.
-        When: We draw via env.state_transition_model(s, a).sample()[0] and via
-            env.sample_next_state(s, a).
-        Then: The two next-state arrays are equal.
-
-        Test type: unit
-        """
-        env = LaserTagPOMDP(discount_factor=0.95, transition_error_prob=0.2)
-        state = np.array([3.0, 4.0, 5.0, 2.0, 0.0])
-
-        np.random.seed(123)
-        random.seed(123)
-        ns_wrap = env.state_transition_model(state, action).sample(n_samples=1)[0]
-
-        np.random.seed(123)
-        random.seed(123)
-        ns_direct = env.sample_next_state(state, action)
-
-        assert np.array_equal(ns_wrap, ns_direct)
-
-    def test_sample_next_state_terminal_tag_matches_wrapper(self) -> None:
-        """Terminal-tag transition matches wrapper output.
-
-        Purpose: Validates the tag-on-same-cell terminal branch of
-            sample_next_state matches the wrapper.
-
-        Given: A LaserTagPOMDP and a state where robot and opponent share a
-            cell, with action=Tag(4).
-        When: We draw via wrapper and via the override.
-        Then: Both produce the same terminal next state.
-
-        Test type: unit
-        """
-        env = LaserTagPOMDP(discount_factor=0.95)
-        state = np.array([3.0, 3.0, 3.0, 3.0, 0.0])
-
-        np.random.seed(0)
-        random.seed(0)
-        ns_wrap = env.state_transition_model(state, 4).sample(n_samples=1)[0]
-
-        np.random.seed(0)
-        random.seed(0)
-        ns_direct = env.sample_next_state(state, 4)
-
-        assert np.array_equal(ns_wrap, ns_direct)
-
-    @pytest.mark.parametrize("action", [0, 4])
-    def test_sample_observation_matches_wrapper_with_pinned_rng(self, action: int) -> None:
-        """Direct sample_observation matches wrapper.sample()[0] under pinned RNG.
-
-        Purpose: Validates that LaserTagPOMDP.sample_observation inlines the
-            wrapper's 8 np.random.normal draws in the same order.
-
-        Given: A LaserTagPOMDP and a fixed (next_state, action). RNG is seeded
-            identically before each draw.
-        When: We draw via env.observation_model(...).sample()[0] and via
-            env.sample_observation(...).
-        Then: The two observation tuples are equal.
-
-        Test type: unit
-        """
-        env = LaserTagPOMDP(discount_factor=0.95)
-        next_state = np.array([3.0, 4.0, 5.0, 2.0, 0.0])
-
-        np.random.seed(7)
-        random.seed(7)
-        o_wrap = env.observation_model(next_state, action).sample(n_samples=1)[0]
-
-        np.random.seed(7)
-        random.seed(7)
-        o_direct = env.sample_observation(next_state, action)
-
-        assert tuple(o_wrap) == tuple(o_direct)
-
-    def test_sample_observation_terminal_state_matches_wrapper(self) -> None:
-        """Terminal-state observation matches wrapper output.
-
-        Purpose: Validates terminal sentinel observation in sample_observation.
-
-        Given: A LaserTagPOMDP and a terminal next_state.
-        When: We draw via wrapper and via the override.
-        Then: Both produce the same terminal observation tuple.
-
-        Test type: unit
-        """
-        env = LaserTagPOMDP(discount_factor=0.95)
-        terminal_state = np.array([3.0, 3.0, 3.0, 3.0, 1.0])
-
-        np.random.seed(0)
-        o_wrap = env.observation_model(terminal_state, 4).sample(n_samples=1)[0]
-        np.random.seed(0)
-        o_direct = env.sample_observation(terminal_state, 4)
-
-        assert tuple(o_wrap) == tuple(o_direct)
-
-
-class TestLaserTagBatchSampleAndLogProb:
-    """Tests for n_samples batching and log-probability methods on LaserTagPOMDP."""
-
-    @pytest.mark.parametrize("n", [1, 5, 100])
-    @pytest.mark.parametrize("action", [0, 1, 2, 3, 4])
-    def test_sample_next_state_n_samples_equivalence(self, n: int, action: int) -> None:
-        """sample_next_state(n_samples=n) matches wrapper.sample(n) under pinned RNG.
-
-        Purpose: Validates batched sample_next_state preserves byte-identical RNG
-            draw sequence vs the wrapper for n in {1, 5, 100}.
-
-        Given: A LaserTagPOMDP with transition_error_prob>0 to exercise the actual-action
-            error branch, and a fixed (state, action). RNG seeded identically before each draw.
-        When: Drawing via env.state_transition_model(s, a).sample(n) and via
-            env.sample_next_state(s, a, n_samples=n).
-        Then: For n==1 the single result equals the wrapper's first sample; for n>1
-            each row equals the wrapper's row at the same index.
-
-        Test type: unit
-        """
-        env = LaserTagPOMDP(discount_factor=0.95, transition_error_prob=0.2)
-        state = np.array([3.0, 4.0, 5.0, 2.0, 0.0])
-
-        np.random.seed(123)
-        random.seed(123)
-        wrap_samples = env.state_transition_model(state, action).sample(n_samples=n)
-
-        np.random.seed(123)
-        random.seed(123)
-        direct = env.sample_next_state(state, action, n_samples=n)
-
-        if n == 1:
-            assert isinstance(direct, np.ndarray)
-            assert np.array_equal(direct, wrap_samples[0])
-        else:
-            assert len(direct) == n  # type: ignore[arg-type]
-            for i in range(n):
-                assert np.array_equal(direct[i], wrap_samples[i])
-
-    def test_sample_next_state_terminal_tag_n_samples_equivalence(self) -> None:
-        """Terminal-tag branch returns N copies and matches the wrapper for n>1.
-
-        Purpose: Validates that the terminal-tag fast path replicates the wrapper
-            output across all n samples without consuming extra RNG draws.
-
-        Given: A LaserTagPOMDP and a state where robot==opponent with action=4.
-        When: Drawing wrapper.sample(n_samples=5) and env.sample_next_state(..., n_samples=5).
-        Then: All five samples in each match elementwise.
-
-        Test type: unit
-        """
-        env = LaserTagPOMDP(discount_factor=0.95)
-        state = np.array([3.0, 3.0, 3.0, 3.0, 0.0])
-
-        np.random.seed(0)
-        random.seed(0)
-        wrap_samples = env.state_transition_model(state, 4).sample(n_samples=5)
-
-        np.random.seed(0)
-        random.seed(0)
-        direct = env.sample_next_state(state, 4, n_samples=5)
-
-        assert len(direct) == 5  # type: ignore[arg-type]
-        for i in range(5):
-            assert np.array_equal(direct[i], wrap_samples[i])
-
-    @pytest.mark.parametrize("n", [1, 5, 100])
-    @pytest.mark.parametrize("action", [0, 4])
-    def test_sample_observation_n_samples_equivalence(self, n: int, action: int) -> None:
-        """sample_observation(n_samples=n) matches wrapper.sample(n) under pinned RNG.
-
-        Purpose: Validates batched sample_observation produces byte-identical 8-direction
-            laser noise sequences as the wrapper for n in {1, 5, 100}.
-
-        Given: A LaserTagPOMDP and a fixed (next_state, action) with RNG seeded identically.
-        When: Drawing via env.observation_model(...).sample(n) and via
-            env.sample_observation(..., n_samples=n).
-        Then: All N observations agree elementwise.
-
-        Test type: unit
-        """
-        env = LaserTagPOMDP(discount_factor=0.95)
-        next_state = np.array([3.0, 4.0, 5.0, 2.0, 0.0])
-
-        np.random.seed(7)
-        random.seed(7)
-        wrap_obs = env.observation_model(next_state, action).sample(n_samples=n)
-
-        np.random.seed(7)
-        random.seed(7)
-        direct = env.sample_observation(next_state, action, n_samples=n)
-
-        if n == 1:
-            assert tuple(direct) == tuple(wrap_obs[0])  # type: ignore[arg-type]
-        else:
-            assert len(direct) == n  # type: ignore[arg-type]
-            for i in range(n):
-                assert tuple(direct[i]) == tuple(wrap_obs[i])
-
-    @pytest.mark.parametrize("action", [0, 1, 2, 3, 4])
-    def test_transition_log_probability_equivalence(self, action: int) -> None:
-        """transition_log_probability matches log of the wrapper's probability.
-
-        Purpose: Validates env.transition_log_probability returns log of the
-            wrapper-model probability within fp tolerance for representative
-            candidate next states drawn from the model.
-
-        Given: A LaserTagPOMDP with transition_error_prob>0 and a fixed (state, action).
-        When: A batch of 16 candidate next states is drawn from the wrapper, and we
-            compute log via wrapper.probability + np.log and via env.transition_log_probability.
-        Then: The two log-probability arrays agree within 1e-10 absolute tolerance.
-
-        Test type: unit
-        """
-        env = LaserTagPOMDP(discount_factor=0.95, transition_error_prob=0.2)
-        state = np.array([3.0, 4.0, 5.0, 2.0, 0.0])
-
-        np.random.seed(2024)
-        wrap_model = env.state_transition_model(state, action)
-        next_states = wrap_model.sample(n_samples=16)
-        # Add an unreachable state to exercise log(0) -> -inf
-        unreachable = np.array([0.0, 0.0, 0.0, 0.0, 0.0])
-        next_states.append(unreachable)
-
-        with np.errstate(divide="ignore"):
-            expected = np.log(np.asarray(wrap_model.probability(next_states)))
-        actual = env.transition_log_probability(state, action, next_states)
-
-        assert actual.shape == (len(next_states),)
-        np.testing.assert_allclose(actual, expected, atol=1e-10, equal_nan=True)
-
-    @pytest.mark.parametrize("action", [0, 4])
-    def test_observation_log_probability_equivalence(self, action: int) -> None:
-        """observation_log_probability matches log of the wrapper's probability.
-
-        Purpose: Validates env.observation_log_probability returns log of the
-            wrapper-model PDF within fp tolerance for sampled observations.
-
-        Given: A LaserTagPOMDP and a fixed (next_state, action).
-        When: A batch of 8 observations is drawn from the wrapper, and we compute log
-            via wrapper.probability + np.log and via env.observation_log_probability.
-        Then: The two log-probability arrays agree within 1e-10 absolute tolerance.
-
-        Test type: unit
-        """
-        env = LaserTagPOMDP(discount_factor=0.95)
-        next_state = np.array([3.0, 4.0, 5.0, 2.0, 0.0])
-
-        np.random.seed(31)
-        wrap_model = env.observation_model(next_state, action)
-        observations = wrap_model.sample(n_samples=8)
-
-        with np.errstate(divide="ignore"):
-            expected = np.log(np.asarray(wrap_model.probability(observations)))
-        actual = env.observation_log_probability(next_state, action, observations)
-
-        assert actual.shape == (len(observations),)
-        np.testing.assert_allclose(actual, expected, atol=1e-10, equal_nan=True)
 
 
 if __name__ == "__main__":

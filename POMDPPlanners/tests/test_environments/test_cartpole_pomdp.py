@@ -15,9 +15,8 @@ import pytest
 
 from POMDPPlanners.environments.cartpole_pomdp import (
     CartPoleInitialStateDistribution,
-    CartPoleObservation,
     CartPolePOMDP,
-    CartPoleStateTransition,
+    _native,
 )
 
 # Set seeds for reproducible tests
@@ -324,25 +323,41 @@ def test_state_transition_noise_magnitude(base_cartpole_environment):
     Purpose: Validates that noisy samples cluster around the deterministic next state
 
     Given: A CartPolePOMDP environment with default noise covariance
-    When: Many samples are drawn from the state transition model
+    When: Many samples are drawn via env.sample_next_state
     Then: Sample mean is close to deterministic next state and standard deviations
     match the expected noise levels from the covariance matrix
 
     Test type: unit
     """
+    env = base_cartpole_environment
     state = np.array([0.0, 0.0, 0.1, 0.0])
     action = 1
-    transition = base_cartpole_environment.state_transition_model(state, action)
-    samples = np.array(transition.sample(n_samples=5000))
+    samples = np.asarray(env.sample_next_state(state=state, action=action, n_samples=5000))
 
-    # The mean of many samples should be close to the deterministic next state
+    # The mean of many samples should be close to the deterministic next state.
+    # Construct the native kernel directly to read the deterministic target,
+    # which is exactly what env.sample_next_state uses internally.
+    kernel = _native.CartPoleTransitionCpp(
+        state=state,
+        action=action,
+        force_mag=env.force_mag,
+        total_mass=env.total_mass,
+        polemass_length=env.polemass_length,
+        gravity=env.gravity,
+        length=env.length,
+        kinematics_integrator=env.kinematics_integrator,
+        tau=env.tau,
+        masspole=env.masspole,
+        covariance=env.state_transition_cov,
+    )
     # pylint: disable=protected-access
-    deterministic = transition._compute_deterministic_next_state()
+    deterministic = np.asarray(kernel._compute_deterministic_next_state())
+    # pylint: enable=protected-access
     sample_mean = samples.mean(axis=0)
     np.testing.assert_allclose(sample_mean, deterministic, atol=0.01)
 
     # Standard deviations should roughly match sqrt of diagonal of cov matrix
-    expected_std = np.sqrt(np.diag(base_cartpole_environment.state_transition_cov))
+    expected_std = np.sqrt(np.diag(env.state_transition_cov))
     sample_std = samples.std(axis=0)
     np.testing.assert_allclose(sample_std, expected_std, rtol=0.3)
 
@@ -501,34 +516,36 @@ def test_cartpole_pomdp_terminal():
 
 
 def test_cartpole_pomdp_models():
-    """Test cartpole pomdp models.
+    """Test cartpole pomdp model entry points.
 
-    Purpose: Validates that CartPolePOMDP model creation methods work correctly
+    Purpose: Validates that CartPolePOMDP exposes the expected env-API methods
+    and initial-state distribution type.
 
-    Given: A CartPolePOMDP environment and state [0.0, 0.0, 0.0, 0.0] with action [0]
-    When: Various model creation methods are called (state_transition_model, observation_model, initial_state_dist, initial_observation_dist)
-    Then: Returns correct model types: CartPoleStateTransition, CartPoleObservation, and CartPoleInitialStateDistribution
+    Given: A CartPolePOMDP environment and state [0.0, 0.0, 0.0, 0.0] with action 0
+    When: env.sample_next_state, env.sample_observation, and env.initial_state_dist /
+        env.initial_observation_dist are exercised
+    Then: sample methods return 4D float ndarrays and the initial distributions are
+        CartPoleInitialStateDistribution instances
 
     Test type: unit
     """
-    # Test model creation
     env = CartPolePOMDP(discount_factor=0.95, noise_cov=np.eye(4) * 0.1)
     state = np.array([0.0, 0.0, 0.0, 0.0])
     action = 0
 
-    # Test state transition model
-    transition_model = env.state_transition_model(state, action)
-    assert isinstance(transition_model, CartPoleStateTransition)
+    # Sample via env-level API
+    next_state = env.sample_next_state(state=state, action=action)
+    assert isinstance(next_state, np.ndarray)
+    assert next_state.shape == (4,)
 
-    # Test observation model
-    observation_model = env.observation_model(state, action)
-    assert isinstance(observation_model, CartPoleObservation)
+    observation = env.sample_observation(next_state=state, action=action)
+    assert isinstance(observation, np.ndarray)
+    assert observation.shape == (4,)
 
-    # Test initial state distribution
+    # Initial distributions
     initial_dist = env.initial_state_dist()
     assert isinstance(initial_dist, CartPoleInitialStateDistribution)
 
-    # Test initial observation distribution
     initial_obs_dist = env.initial_observation_dist()
     assert isinstance(initial_obs_dist, CartPoleInitialStateDistribution)
 
@@ -854,281 +871,3 @@ def test_reward_batch_matches_scalar_reward():
     single = env.reward_batch(states[:1], action)
     assert single.shape == (1,)
     assert single[0] == env.reward(states[0], action)
-
-
-def test_sample_next_state_rng_pinned_equivalence(base_cartpole_environment):
-    """Test that sample_next_state matches state_transition_model().sample()[0] under fixed RNG.
-
-    Purpose: Validates that the sample_next_state override produces byte-identical results
-        to the wrapper-based path when both use the same native RNG seed.
-
-    Given: A CartPolePOMDP environment and (state, action) pairs covering both actions and
-        a range of state vectors near and away from the equilibrium, with the native module
-        RNG and Python np.random/random seeded identically before each pair of draws
-    When: A sample is drawn through state_transition_model(s, a).sample()[0] and again
-        through env.sample_next_state(s, a) after re-seeding
-    Then: The two draws produce arrays equal element-wise across all combinations
-
-    Test type: unit
-    """
-    from POMDPPlanners.environments.cartpole_pomdp import (  # pylint: disable=import-outside-toplevel
-        _native,
-    )
-
-    env = base_cartpole_environment
-    cases = [
-        (np.array([0.0, 0.0, 0.0, 0.0]), 0),
-        (np.array([0.0, 0.0, 0.0, 0.0]), 1),
-        (np.array([0.1, 0.05, 0.02, -0.1]), 1),
-        (np.array([-0.1, -0.05, -0.02, 0.1]), 0),
-        (np.array([0.5, 0.2, 0.05, 0.0]), 1),
-    ]
-    for state, action in cases:
-        _native.set_seed(2024)
-        np.random.seed(2024)
-        random.seed(2024)
-        wrapper_sample = env.state_transition_model(state=state, action=action).sample()[0]
-        _native.set_seed(2024)
-        np.random.seed(2024)
-        random.seed(2024)
-        direct_sample = env.sample_next_state(state=state, action=action)
-        np.testing.assert_array_equal(
-            wrapper_sample,
-            direct_sample,
-            err_msg=f"sample_next_state mismatch for ({state.tolist()}, {action})",
-        )
-
-
-def test_sample_observation_rng_pinned_equivalence(base_cartpole_environment):
-    """Test that sample_observation matches observation_model().sample()[0] under fixed RNG.
-
-    Purpose: Validates that the sample_observation override produces byte-identical results
-        to the wrapper-based path when both use the same native RNG seed.
-
-    Given: A CartPolePOMDP environment and (next_state, action) pairs covering both actions
-        across a range of state vectors, with the native module RNG and Python
-        np.random/random seeded identically before each pair of draws
-    When: An observation is drawn through observation_model(ns, a).sample()[0] and again
-        through env.sample_observation(ns, a) after re-seeding
-    Then: The two draws produce arrays equal element-wise across all combinations
-
-    Test type: unit
-    """
-    from POMDPPlanners.environments.cartpole_pomdp import (  # pylint: disable=import-outside-toplevel
-        _native,
-    )
-
-    env = base_cartpole_environment
-    cases = [
-        (np.array([0.0, 0.0, 0.0, 0.0]), 0),
-        (np.array([0.0, 0.0, 0.0, 0.0]), 1),
-        (np.array([0.1, 0.05, 0.02, -0.1]), 1),
-        (np.array([-0.1, -0.05, -0.02, 0.1]), 0),
-        (np.array([0.5, 0.2, 0.05, 0.0]), 1),
-    ]
-    for next_state, action in cases:
-        _native.set_seed(99)
-        np.random.seed(99)
-        random.seed(99)
-        wrapper_obs = env.observation_model(next_state=next_state, action=action).sample()[0]
-        _native.set_seed(99)
-        np.random.seed(99)
-        random.seed(99)
-        direct_obs = env.sample_observation(next_state=next_state, action=action)
-        np.testing.assert_array_equal(
-            wrapper_obs,
-            direct_obs,
-            err_msg=f"sample_observation mismatch for ({next_state.tolist()}, {action})",
-        )
-
-
-def test_sample_next_state_n_samples_equivalence(base_cartpole_environment):
-    """Test sample_next_state with n>1 matches state_transition_model().sample(n) under fixed RNG.
-
-    Purpose: Validates that the n_samples-aware sample_next_state override produces
-        byte-identical batched results to the wrapper-based path when both use the same
-        native RNG seed.
-
-    Given: A CartPolePOMDP environment and (state, action) pairs covering both actions
-        and a range of state vectors near and away from equilibrium, with the native
-        module RNG seeded identically before each pair of draws, for n in {1, 5, 100}
-    When: A batch is drawn through state_transition_model(s, a).sample(n) and again
-        through env.sample_next_state(s, a, n_samples=n) after re-seeding
-    Then: The two batches are equal element-wise across all combinations and all n
-
-    Test type: unit
-    """
-    from POMDPPlanners.environments.cartpole_pomdp import (  # pylint: disable=import-outside-toplevel
-        _native,
-    )
-
-    env = base_cartpole_environment
-    cases = [
-        (np.array([0.0, 0.0, 0.0, 0.0]), 0),
-        (np.array([0.0, 0.0, 0.0, 0.0]), 1),
-        (np.array([0.1, 0.05, 0.02, -0.1]), 1),
-        (np.array([-0.1, -0.05, -0.02, 0.1]), 0),
-    ]
-    for n in (1, 5, 100):
-        for state, action in cases:
-            _native.set_seed(2024)
-            np.random.seed(2024)
-            random.seed(2024)
-            wrapper_samples = env.state_transition_model(state=state, action=action).sample(n)
-            _native.set_seed(2024)
-            np.random.seed(2024)
-            random.seed(2024)
-            direct_samples = env.sample_next_state(state=state, action=action, n_samples=n)
-            wrapper_arr = np.asarray(wrapper_samples).reshape(n, -1)
-            direct_arr = np.asarray(direct_samples).reshape(n, -1)
-            np.testing.assert_array_equal(
-                wrapper_arr,
-                direct_arr,
-                err_msg=f"sample_next_state n={n} mismatch for ({state.tolist()}, {action})",
-            )
-
-
-def test_sample_observation_n_samples_equivalence(base_cartpole_environment):
-    """Test sample_observation with n>1 matches observation_model().sample(n) under fixed RNG.
-
-    Purpose: Validates that the n_samples-aware sample_observation override produces
-        byte-identical batched results to the wrapper-based path when both use the same
-        native RNG seed.
-
-    Given: A CartPolePOMDP environment and (next_state, action) pairs covering both
-        actions across a range of state vectors, with the native module RNG seeded
-        identically, for n in {1, 5, 100}
-    When: A batch is drawn through observation_model(ns, a).sample(n) and again through
-        env.sample_observation(ns, a, n_samples=n) after re-seeding
-    Then: The two batches are equal element-wise across all combinations and all n
-
-    Test type: unit
-    """
-    from POMDPPlanners.environments.cartpole_pomdp import (  # pylint: disable=import-outside-toplevel
-        _native,
-    )
-
-    env = base_cartpole_environment
-    cases = [
-        (np.array([0.0, 0.0, 0.0, 0.0]), 0),
-        (np.array([0.0, 0.0, 0.0, 0.0]), 1),
-        (np.array([0.1, 0.05, 0.02, -0.1]), 1),
-        (np.array([-0.1, -0.05, -0.02, 0.1]), 0),
-    ]
-    for n in (1, 5, 100):
-        for next_state, action in cases:
-            _native.set_seed(99)
-            np.random.seed(99)
-            random.seed(99)
-            wrapper_samples = env.observation_model(next_state=next_state, action=action).sample(n)
-            _native.set_seed(99)
-            np.random.seed(99)
-            random.seed(99)
-            direct_samples = env.sample_observation(
-                next_state=next_state, action=action, n_samples=n
-            )
-            wrapper_arr = np.asarray(wrapper_samples).reshape(n, -1)
-            direct_arr = np.asarray(direct_samples).reshape(n, -1)
-            np.testing.assert_array_equal(
-                wrapper_arr,
-                direct_arr,
-                err_msg=(
-                    f"sample_observation n={n} mismatch for " f"({next_state.tolist()}, {action})"
-                ),
-            )
-
-
-def test_transition_log_probability_equivalence(base_cartpole_environment):
-    """Test transition_log_probability matches np.log(probability) from the wrapper.
-
-    Purpose: Validates that transition_log_probability returns log-PDFs equivalent
-        (within fp tolerance) to applying np.log to the wrapper-based probability path.
-
-    Given: A CartPolePOMDP environment and (state, action) pairs covering both actions,
-        plus a batch of candidate next-state arrays
-    When: Log-probabilities are computed via env.transition_log_probability(s, a, vals)
-        and via np.log(env.state_transition_model(s, a).probability(vals) + 1e-300)
-    Then: The two ndarrays are equal element-wise within fp tolerance
-
-    Test type: unit
-    """
-    env = base_cartpole_environment
-    candidate_states = np.array(
-        [
-            [0.0, 0.0, 0.0, 0.0],
-            [0.001, 0.002, 0.05, 0.0],
-            [0.05, 0.0, 0.02, 0.01],
-            [-0.02, 0.01, -0.005, 0.0],
-            [1.0, 0.5, 0.1, 0.2],
-        ]
-    )
-    cases = [
-        (np.array([0.0, 0.0, 0.0, 0.0]), 0),
-        (np.array([0.0, 0.0, 0.0, 0.0]), 1),
-        (np.array([0.1, 0.05, 0.02, -0.1]), 1),
-        (np.array([-0.1, -0.05, -0.02, 0.1]), 0),
-    ]
-    for state, action in cases:
-        direct = env.transition_log_probability(
-            state=state, action=action, next_states=candidate_states
-        )
-        wrapper_probs = np.asarray(
-            env.state_transition_model(state=state, action=action).probability(candidate_states)
-        )
-        ref = np.log(wrapper_probs + 1e-300)
-        np.testing.assert_allclose(
-            direct,
-            ref,
-            rtol=1e-12,
-            atol=1e-12,
-            err_msg=f"transition_log_probability mismatch for ({state.tolist()}, {action})",
-        )
-
-
-def test_observation_log_probability_equivalence(base_cartpole_environment):
-    """Test observation_log_probability matches np.log(probability) from the wrapper.
-
-    Purpose: Validates that observation_log_probability returns log-PDFs equivalent
-        (within fp tolerance) to applying np.log to the wrapper-based probability path.
-
-    Given: A CartPolePOMDP environment and (next_state, action) pairs covering both
-        actions, plus a batch of candidate observation arrays
-    When: Log-probabilities are computed via env.observation_log_probability(ns, a, obs)
-        and via np.log(env.observation_model(ns, a).probability(obs) + 1e-300)
-    Then: The two ndarrays are equal element-wise within fp tolerance
-
-    Test type: unit
-    """
-    env = base_cartpole_environment
-    candidate_obs = np.array(
-        [
-            [0.0, 0.0, 0.0, 0.0],
-            [0.05, 0.02, 0.01, 0.0],
-            [-0.05, -0.02, -0.01, 0.0],
-            [0.5, 0.5, 0.5, 0.5],
-            [1.0, 0.0, 0.1, -0.1],
-        ]
-    )
-    cases = [
-        (np.array([0.0, 0.0, 0.0, 0.0]), 0),
-        (np.array([0.0, 0.0, 0.0, 0.0]), 1),
-        (np.array([0.1, 0.05, 0.02, -0.1]), 1),
-        (np.array([-0.1, -0.05, -0.02, 0.1]), 0),
-    ]
-    for next_state, action in cases:
-        direct = env.observation_log_probability(
-            next_state=next_state, action=action, observations=candidate_obs
-        )
-        wrapper_probs = np.asarray(
-            env.observation_model(next_state=next_state, action=action).probability(candidate_obs)
-        )
-        ref = np.log(wrapper_probs + 1e-300)
-        np.testing.assert_allclose(
-            direct,
-            ref,
-            rtol=1e-12,
-            atol=1e-12,
-            err_msg=(
-                f"observation_log_probability mismatch for " f"({next_state.tolist()}, {action})"
-            ),
-        )

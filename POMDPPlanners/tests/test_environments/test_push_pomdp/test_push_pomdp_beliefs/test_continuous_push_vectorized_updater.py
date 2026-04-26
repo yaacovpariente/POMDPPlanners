@@ -175,15 +175,15 @@ class TestContinuousPushVectorizedUpdater:
         assert self.updater.config_id == updater2.config_id
 
     def test_batch_transition_matches_per_particle_loop(self):
-        """Test vectorized batch_transition matches per-particle state_transition_model.
+        """Test vectorized batch_transition matches per-particle env.sample_next_state.
 
         Purpose: Verifies that batch_transition produces the same results as
-                 calling the environment's state_transition_model per particle
+                 calling the environment's sample_next_state per particle
                  with the same random seed.
 
         Given: A set of particles with varied positions and a continuous action.
         When: batch_transition is called, and the same transitions are
-              computed per-particle via state_transition_model.
+              computed per-particle via env.sample_next_state.
         Then: Results match within floating-point tolerance.
 
         Test type: integration
@@ -195,7 +195,7 @@ class TestContinuousPushVectorizedUpdater:
         action = np.array([0.5, 0.3])
 
         def per_particle_fn(particle, act):
-            return self.env.state_transition_model(state=particle, action=act).sample()[0]
+            return self.env.sample_next_state(particle, act)
 
         assert_batch_transition_matches_loop(
             updater=self.updater,
@@ -207,11 +207,11 @@ class TestContinuousPushVectorizedUpdater:
         )
 
     def test_batch_obs_log_likelihood_matches_per_particle_loop(self):
-        """Test vectorized log-likelihood matches per-particle observation_model.probability.
+        """Test vectorized log-likelihood matches per-particle env.observation_log_probability.
 
         Purpose: Verifies that batch_observation_log_likelihood matches the
-                 per-particle log(observation_model.probability) from the
-                 environment.
+                 per-particle env.observation_log_probability output for the
+                 same (particle, action, observation) triples.
 
         Given: A set of particles with object positions near the observation.
         When: batch_observation_log_likelihood is called, and per-particle
@@ -232,11 +232,7 @@ class TestContinuousPushVectorizedUpdater:
         action = np.array([0.5, 0.0])
 
         def per_particle_ll_fn(particle, act, obs):
-            obs_model = self.env.observation_model(next_state=particle, action=act)
-            prob = obs_model.probability([obs])[0]
-            if prob > 0:
-                return np.log(prob)
-            return -np.inf
+            return float(self.env.observation_log_probability(particle, act, [obs])[0])
 
         assert_batch_obs_log_likelihood_matches_loop(
             updater=self.updater,

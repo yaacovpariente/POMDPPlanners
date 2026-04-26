@@ -12,11 +12,35 @@ from POMDPPlanners.core.belief.gaussian_belief_updaters import (
     ExtendedKalmanFilterUpdater,
     UnscentedKalmanFilterUpdater,
 )
-from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
+from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP, _native
 from POMDPPlanners.environments.cartpole_pomdp.cartpole_pomdp_gaussian_beliefs import (
     GaussianBeliefUpdaterType,
     create_cartpole_gaussian_belief,
 )
+
+
+def _deterministic_next_state(env: CartPolePOMDP, state: np.ndarray, action: int) -> np.ndarray:
+    """Compute the deterministic CartPole next state via the native kernel.
+
+    Replaces the deleted ``env.state_transition_model(...)`` factory; mirrors the
+    construction used inside ``CartPolePOMDP.sample_next_state``.
+    """
+    kernel = _native.CartPoleTransitionCpp(
+        state=state,
+        action=action,
+        force_mag=env.force_mag,
+        total_mass=env.total_mass,
+        polemass_length=env.polemass_length,
+        gravity=env.gravity,
+        length=env.length,
+        kinematics_integrator=env.kinematics_integrator,
+        tau=env.tau,
+        masspole=env.masspole,
+        covariance=env.state_transition_cov,
+    )
+    return np.asarray(
+        kernel._compute_deterministic_next_state()
+    )  # pylint: disable=protected-access
 
 
 # ---------------------------------------------------------------------------
@@ -108,8 +132,7 @@ class TestEKFFunctions:
 
         state = np.array([0.01, -0.02, 0.03, -0.01])
         for action_val in [0, 1]:
-            transition = env.state_transition_model(state, action_val)
-            env_next = transition._compute_deterministic_next_state()
+            env_next = _deterministic_next_state(env, state, action_val)
             ekf_next = updater.transition_fn(state, np.array([float(action_val)]))
             np.testing.assert_allclose(ekf_next, env_next, atol=1e-12)
 
@@ -221,8 +244,7 @@ class TestUKFFunctions:
 
         state = np.array([0.01, -0.02, 0.03, -0.01])
         for action_val in [0, 1]:
-            transition = env.state_transition_model(state, action_val)
-            env_next = transition._compute_deterministic_next_state()
+            env_next = _deterministic_next_state(env, state, action_val)
             ukf_next = updater.transition_fn(state, np.array([float(action_val)]))
             np.testing.assert_allclose(ukf_next, env_next, atol=1e-12)
 

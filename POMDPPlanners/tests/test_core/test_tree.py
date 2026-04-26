@@ -11,16 +11,13 @@ import random
 
 import numpy as np
 import pytest
-from unittest.mock import Mock
 
 from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.distributions import DiscreteDistribution
 from POMDPPlanners.core.environment import (
     Environment,
-    ObservationModel,
     SpaceInfo,
     SpaceType,
-    StateTransitionModel,
 )
 from POMDPPlanners.core.tree import (
     ActionNode,
@@ -39,13 +36,25 @@ class MockEnvironment(Environment):
         space_info = SpaceInfo(SpaceType.DISCRETE, SpaceType.DISCRETE)
         super().__init__(discount_factor=0.95, name="MockEnvironment", space_info=space_info)
 
-    def state_transition(self, state, action):
-        return state
+    def sample_next_state(self, state, action, n_samples: int = 1):
+        del action
+        if n_samples == 1:
+            return state
+        return [state] * n_samples
 
-    def observation_model(self, next_state, action):
-        mock_model = Mock(spec=ObservationModel)
-        mock_model.probability.return_value = 1.0
-        return mock_model
+    def sample_observation(self, next_state, action, n_samples: int = 1):
+        del next_state, action
+        if n_samples == 1:
+            return "obs"
+        return ["obs"] * n_samples
+
+    def transition_log_probability(self, state, action, next_states) -> np.ndarray:
+        del state, action
+        return np.zeros(len(next_states))
+
+    def observation_log_probability(self, next_state, action, observations) -> np.ndarray:
+        del next_state, action
+        return np.zeros(len(observations))
 
     def is_equal_observation(self, observation1, observation2):
         """Check if two observations are equal."""
@@ -66,12 +75,6 @@ class MockEnvironment(Environment):
     def initial_observation_dist(self):
         """Return initial observation distribution."""
         return DiscreteDistribution(values=["obs"], probs=np.array([1.0]))
-
-    def state_transition_model(self, state, action):
-        """Return state transition model."""
-        mock_model = Mock(spec=StateTransitionModel)
-        mock_model.probability.return_value = 1.0
-        return mock_model
 
 
 @pytest.fixture

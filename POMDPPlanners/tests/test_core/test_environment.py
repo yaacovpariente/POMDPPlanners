@@ -17,10 +17,8 @@ import pytest
 from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.core.environment import (
     Environment,
-    ObservationModel,
     SpaceInfo,
     SpaceType,
-    StateTransitionModel,
 )
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.utils.logger import reset_logger_state
@@ -31,22 +29,6 @@ random.seed(42)
 
 
 class MockDistribution(Distribution):
-    def sample(self, n_samples: int = 1) -> List[np.ndarray]:
-        return [np.array([1, 2])] * n_samples
-
-    def probability(self, values: List[np.ndarray]) -> np.ndarray:
-        return np.array([1.0] * len(values))
-
-
-class MockStateTransitionModel(StateTransitionModel):
-    def sample(self, n_samples: int = 1) -> List[np.ndarray]:
-        return [np.array([1, 2])] * n_samples
-
-    def probability(self, values: List[np.ndarray]) -> np.ndarray:
-        return np.array([1.0] * len(values))
-
-
-class MockObservationModel(ObservationModel):
     def sample(self, n_samples: int = 1) -> List[np.ndarray]:
         return [np.array([1, 2])] * n_samples
 
@@ -74,11 +56,21 @@ class MockEnvironment(Environment):
         )
         self.test_array = test_array if test_array is not None else np.array([1, 2, 3])
 
-    def state_transition_model(self, state: np.ndarray, action: np.ndarray) -> StateTransitionModel:
-        return MockStateTransitionModel(state, action)
+    def sample_next_state(self, state, action, n_samples: int = 1):
+        if n_samples == 1:
+            return np.array([1, 2])
+        return [np.array([1, 2])] * n_samples
 
-    def observation_model(self, next_state: np.ndarray, action: np.ndarray) -> ObservationModel:
-        return MockObservationModel(next_state, action)
+    def sample_observation(self, next_state, action, n_samples: int = 1):
+        if n_samples == 1:
+            return np.array([1, 2])
+        return [np.array([1, 2])] * n_samples
+
+    def transition_log_probability(self, state, action, next_states) -> np.ndarray:
+        return np.zeros(len(next_states))
+
+    def observation_log_probability(self, next_state, action, observations) -> np.ndarray:
+        return np.zeros(len(observations))
 
     def reward(self, state: np.ndarray, action: np.ndarray) -> float:
         return 1.0
@@ -114,11 +106,21 @@ class DifferentEnvironment(Environment):
             debug=debug,
         )
 
-    def state_transition_model(self, state: np.ndarray, action: np.ndarray) -> StateTransitionModel:
-        return MockStateTransitionModel(state, action)
+    def sample_next_state(self, state, action, n_samples: int = 1):
+        if n_samples == 1:
+            return np.array([1, 2])
+        return [np.array([1, 2])] * n_samples
 
-    def observation_model(self, next_state: np.ndarray, action: np.ndarray) -> ObservationModel:
-        return MockObservationModel(next_state, action)
+    def sample_observation(self, next_state, action, n_samples: int = 1):
+        if n_samples == 1:
+            return np.array([1, 2])
+        return [np.array([1, 2])] * n_samples
+
+    def transition_log_probability(self, state, action, next_states) -> np.ndarray:
+        return np.zeros(len(next_states))
+
+    def observation_log_probability(self, next_state, action, observations) -> np.ndarray:
+        return np.zeros(len(observations))
 
     def reward(self, state: np.ndarray, action: np.ndarray) -> float:
         return 1.0

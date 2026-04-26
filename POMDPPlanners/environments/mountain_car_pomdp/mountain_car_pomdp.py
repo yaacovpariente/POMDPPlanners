@@ -16,8 +16,6 @@ the mountain, so the agent must learn to build momentum by first moving away
 from the goal.
 
 Classes:
-    MountainCarTransition: Physics-based state transition model
-    MountainCarObservation: Gaussian noise observation model
     MountainCarPOMDP: Main Mountain Car environment with POMDP formulation
 """
 
@@ -34,8 +32,6 @@ from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
     SpaceInfo,
     SpaceType,
-    ObservationModel,
-    StateTransitionModel,
 )
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
 from POMDPPlanners.environments.mountain_car_pomdp import _native
@@ -49,161 +45,6 @@ class MountainCarPOMDPMetrics(Enum):
     """Metric names for Mountain Car POMDP environment."""
 
     GOAL_REACHING_RATE = "goal_reaching_rate"
-
-
-class MountainCarTransition(_native.MountainCarTransitionCpp):
-    """Physics-based state transition model for Mountain Car POMDP.
-
-    This model implements the physics of a car on a sinusoidal hill surface
-    with additive Gaussian process noise. The car's velocity is affected by
-    both the applied action (engine force) and gravitational force that depends
-    on the slope of the hill.
-
-    The physics equations are:
-    - velocity += action * power + cos(3 * position) * (-gravity)
-    - position += velocity
-
-    After computing the deterministic next state, Normal noise is sampled
-    from the provided distribution and added. The result is then clipped
-    to respect position and velocity bounds.
-
-    The ``sample()`` and ``probability()`` methods execute entirely in C++
-    via the ``_native`` extension; this Python subclass only wraps the
-    constructor so existing call sites that pass a
-    :class:`CovarianceParameterizedMultivariateNormal` keep working.
-
-    Attributes:
-        state: Current state (position, velocity) tuple
-        action: Engine action (-1, 0, or 1)
-        power: Engine power scaling factor
-        gravity: Gravitational force constant
-        max_speed: Maximum velocity magnitude
-        min_position: Minimum position boundary
-        max_position: Maximum position boundary
-
-    Example:
-        Using the Mountain Car transition model::
-
-            >>> import numpy as np
-            >>> np.random.seed(42)  # For reproducible results
-            >>> from POMDPPlanners.environments.mountain_car_pomdp import _native
-            >>> _native.set_seed(42)
-            >>> from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
-            >>>
-            >>> # Define car state: position=-0.5 (in valley), velocity=0.0
-            >>> state = (-0.5, 0.0)
-            >>> action = 1  # Accelerate right/forward
-            >>>
-            >>> # Create transition model with noise
-            >>> state_transition_cov = np.diag([2.5e-5, 1e-6])
-            >>> state_transition_dist = CovarianceParameterizedMultivariateNormal(state_transition_cov)
-            >>> transition = MountainCarTransition(
-            ...     state=state,
-            ...     action=action,
-            ...     power=0.001,
-            ...     gravity=0.0025,
-            ...     max_speed=0.07,
-            ...     min_position=-1.2,
-            ...     max_position=0.6,
-            ...     state_transition_dist=state_transition_dist
-            ... )
-            >>>
-            >>> # Simulate physics step
-            >>> next_state = transition.sample()[0]
-            >>> # Returns new [position, velocity] with physics and noise applied
-            >>> len(next_state) == 2
-            True
-    """
-
-    def __init__(
-        self,
-        state: Tuple[float, float],
-        action: int,
-        power: float,
-        gravity: float,
-        max_speed: float,
-        min_position: float,
-        max_position: float,
-        state_transition_dist: CovarianceParameterizedMultivariateNormal,
-    ):
-        super().__init__(
-            state=state,
-            action=action,
-            power=power,
-            gravity=gravity,
-            max_speed=max_speed,
-            min_position=min_position,
-            max_position=max_position,
-            covariance=state_transition_dist.covariance,
-        )
-        self._state_transition_dist = state_transition_dist
-
-
-StateTransitionModel.register(MountainCarTransition)
-
-
-class MountainCarObservation(_native.MountainCarObservationCpp):
-    """Noisy observation model for Mountain Car POMDP.
-
-    This model adds Gaussian noise to the true car state (position, velocity)
-    to create partial observability. The agent receives noisy measurements
-    of both position and velocity, making state estimation challenging.
-
-    The ``sample()`` and ``probability()`` methods execute entirely in C++
-    via the ``_native`` extension.
-
-    Attributes:
-        next_state: True state after action execution
-        action: Action that was taken (not used in observation generation)
-        mean: Expected observation (equals true state)
-
-    Example:
-        Using the Mountain Car observation model::
-
-            >>> import numpy as np
-            >>> np.random.seed(42)  # For reproducible results
-            >>> from POMDPPlanners.environments.mountain_car_pomdp import _native
-            >>> _native.set_seed(42)
-            >>>
-            >>> # Define true state after physics step
-            >>> true_state = (-0.45, 0.02)  # [position, velocity]
-            >>> action = 1
-            >>>
-            >>> # Define observation noise covariance and create distribution
-            >>> from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
-            >>> cov_matrix = np.array([[0.1**2, 0], [0, 0.01**2]])  # Position and velocity noise
-            >>> obs_dist = CovarianceParameterizedMultivariateNormal(cov_matrix)
-            >>>
-            >>> # Create observation model
-            >>> obs_model = MountainCarObservation(
-            ...     next_state=true_state,
-            ...     action=action,
-            ...     obs_dist=obs_dist
-            ... )
-            >>>
-            >>> # Sample noisy observation
-            >>> observation = obs_model.sample()[0]
-            >>> # Returns noisy [position, velocity] close to true_state
-            >>> len(observation) == 2
-            True
-            >>>
-            >>> # Calculate observation probability
-            >>> prob = obs_model.probability([observation])
-            >>> prob.shape == (1,)
-            True
-    """
-
-    def __init__(
-        self,
-        next_state: Tuple[float, float],
-        action: int,
-        obs_dist: CovarianceParameterizedMultivariateNormal,
-    ):
-        super().__init__(next_state=next_state, action=action, covariance=obs_dist.covariance)
-        self._obs_dist = obs_dist
-
-
-ObservationModel.register(MountainCarObservation)
 
 
 class MountainCarPOMDP(DiscreteActionsEnvironment):
@@ -295,31 +136,9 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
             use_queue_logger=use_queue_logger,
         )
 
-    def state_transition_model(
-        self, state: Tuple[float, float], action: int
-    ) -> StateTransitionModel:
-        return MountainCarTransition(  # pyright: ignore[reportReturnType]
-            state=state,
-            action=action,
-            power=self.power,
-            gravity=self.gravity,
-            max_speed=self.max_speed,
-            min_position=self.min_position,
-            max_position=self.max_position,
-            state_transition_dist=self._state_transition_dist,
-        )
-
-    def observation_model(self, next_state: Tuple[float, float], action: int) -> ObservationModel:
-        return MountainCarObservation(  # pyright: ignore[reportReturnType]
-            next_state=next_state, action=action, obs_dist=self._obs_dist
-        )
-
     # ── Hot-path sampling overrides ─────────────────────────────────
-    # The Python wrappers above only forward arguments to the native
-    # C++ constructor and keep a reference to the dist object. Skip
-    # the wrapper subclass and build the native kernel directly so
-    # ``sample()`` produces a byte-identical RNG draw to the legacy
-    # path.
+    # Build the native kernel directly so ``sample()`` and the
+    # log-probability paths execute entirely in C++.
 
     def sample_next_state(
         self,

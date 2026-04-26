@@ -11,8 +11,6 @@ from POMDPPlanners.core.environment import (
     Environment,
     SpaceInfo,
     SpaceType,
-    ObservationModel,
-    StateTransitionModel,
 )
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
 from POMDPPlanners.utils.numba_kernels import any_point_within_radius_kernel
@@ -267,14 +265,6 @@ class BaseLightDarkPOMDP(Environment, ABC):
         self.__validate_coordinates_within_grid(
             beacons, goal_state, start_state, obstacles, grid_size
         )
-
-    @abstractmethod
-    def state_transition_model(self, state: np.ndarray, action: Any) -> StateTransitionModel:
-        pass
-
-    @abstractmethod
-    def observation_model(self, next_state: np.ndarray, action: Any) -> ObservationModel:
-        pass
 
     @abstractmethod
     def reward(self, state: np.ndarray, action: Any) -> float:

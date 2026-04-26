@@ -7,9 +7,9 @@ evaluations for the Continuous LaserTag environment.
 
 ``batch_transition`` delegates to the native ``_native`` C++ extension's
 ``ContinuousLaserTagTransitionCpp.batch_sample`` so both the explicit
-vectorized path and the per-particle :class:`ContinuousLaserTagStateTransitionModel`
-path share the same C++ RNG (the Python-side numpy loop used before was
-what forced the cross-path skip in the baseline equivalence tests).
+vectorized path and the per-particle ``env.sample_next_state`` path share
+the same C++ RNG (the Python-side numpy loop used before was what forced
+the cross-path skip in the baseline equivalence tests).
 ``batch_observation_log_likelihood`` delegates to
 ``ContinuousLaserTagObservationCpp.batch_log_likelihood``.
 
@@ -43,9 +43,9 @@ class ContinuousLaserTagVectorizedUpdater(VectorizedParticleBeliefUpdater):
     Performs all-particle transitions and observation log-likelihood
     evaluations by delegating to the native ``_native`` C++ extension's
     batch entry points. The explicit vectorized path and the per-particle
-    :class:`ContinuousLaserTagStateTransitionModel` path now share the same
-    C++ RNG, closing the cross-path divergence that previously forced the
-    equivalence tests to seed each particle individually.
+    ``env.sample_next_state`` path now share the same C++ RNG, closing the
+    cross-path divergence that previously forced the equivalence tests to
+    seed each particle individually.
 
     Attributes:
         walls: Shape ``(M, 4)`` wall AABB array.
@@ -73,7 +73,7 @@ class ContinuousLaserTagVectorizedUpdater(VectorizedParticleBeliefUpdater):
         >>> next_p = updater.batch_transition(particles, action)
         >>> next_p.shape[1]
         5
-        >>> obs = env.observation_model(state, action).sample()[0]
+        >>> obs = env.sample_observation(state, action)
         >>> ll = updater.batch_observation_log_likelihood(next_p, action, obs)
         >>> ll.shape[0]
         50

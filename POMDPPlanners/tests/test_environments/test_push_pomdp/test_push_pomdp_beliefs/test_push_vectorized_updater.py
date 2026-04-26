@@ -485,9 +485,7 @@ class TestEquivalenceWithPerParticleLoop:
             action_str = ACTION_STRINGS[action_idx]
 
             def per_particle_fn(particle, _action, _str=action_str):
-                return env_no_obstacles.state_transition_model(
-                    state=particle, action=_str
-                ).sample()[0]
+                return env_no_obstacles.sample_next_state(state=particle, action=_str)
 
             assert_batch_transition_matches_loop(
                 updater=updater_no_obstacles,
@@ -527,8 +525,10 @@ class TestEquivalenceWithPerParticleLoop:
         observation[2:4] = base_obj + 0.02
 
         def per_particle_ll_fn(particle, _action, obs):
-            obs_model = env_no_obstacles.observation_model(next_state=particle, action=action_str)
-            return np.log(obs_model.probability([obs])[0])
+            log_probs = env_no_obstacles.observation_log_probability(
+                next_state=particle, action=action_str, observations=[obs]
+            )
+            return float(log_probs[0])
 
         assert_batch_obs_log_likelihood_matches_loop(
             updater=updater_no_obstacles,
@@ -558,7 +558,7 @@ class TestEquivalenceWithPerParticleLoop:
             action_str = ACTION_STRINGS[action_idx]
 
             def per_particle_fn(particle, _action, _str=action_str):
-                return env.state_transition_model(state=particle, action=_str).sample()[0]
+                return env.sample_next_state(state=particle, action=_str)
 
             assert_batch_transition_matches_loop(
                 updater=updater,
