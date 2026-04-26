@@ -211,6 +211,13 @@ class CartPoleTransitionCpp : public pomdp_native::TransitionModelCpp<kCartPoleS
         return pomdp_native::array_from_vector(out, kCartPoleStateDim);
     }
 
+    // Rewrite only the state field; physics params, action, and noise stay
+    // frozen. Lets Python keep one kernel per (env, action) instead of
+    // rebuilding for every call. Mirrors ContinuousPushTransitionCpp.
+    void set_state(const py::object &state_obj) {
+        state_ = pomdp_native::to_array<kCartPoleStateDim>(state_obj, "state");
+    }
+
   protected:
     void compute_mean_from_state(const double *state, double *out) const override {
         const double x = state[0];
@@ -281,6 +288,12 @@ class CartPoleObservationCpp : public pomdp_native::ObservationModelCpp<kCartPol
         return pomdp_native::array_from_vector(next_state_.data(), next_state_.size());
     }
 
+    // Rewrite only the next_state field; action and noise stay frozen.
+    // Mirrors ContinuousPushObservationCpp.
+    void set_next_state(const py::object &next_state_obj) {
+        next_state_ = pomdp_native::to_array<kCartPoleStateDim>(next_state_obj, "next_state");
+    }
+
   private:
     int action_int_;
 };
@@ -315,6 +328,7 @@ PYBIND11_MODULE(_native, m) {
         .def("sample", &CartPoleTransitionCpp::sample, py::arg("n_samples") = 1)
         .def("probability", &CartPoleTransitionCpp::probability, py::arg("values"))
         .def("batch_sample", &CartPoleTransitionCpp::batch_sample, py::arg("particles"))
+        .def("set_state", &CartPoleTransitionCpp::set_state, py::arg("state"))
         .def("_compute_deterministic_next_state",
              &CartPoleTransitionCpp::compute_deterministic_next_state_py)
         .def_property_readonly("state", &CartPoleTransitionCpp::state_property)
@@ -336,6 +350,8 @@ PYBIND11_MODULE(_native, m) {
         .def("probability", &CartPoleObservationCpp::probability, py::arg("values"))
         .def("batch_log_likelihood", &CartPoleObservationCpp::batch_log_likelihood,
              py::arg("next_particles"), py::arg("observation"))
+        .def("set_next_state", &CartPoleObservationCpp::set_next_state,
+             py::arg("next_state"))
         .def_property_readonly("next_state", &CartPoleObservationCpp::next_state_property)
         .def_property_readonly("action", &CartPoleObservationCpp::action_property)
         .def_property_readonly("mean", &CartPoleObservationCpp::mean_property);
