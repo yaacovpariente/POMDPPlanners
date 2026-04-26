@@ -53,6 +53,14 @@ class MountainCarTransitionCpp : public pomdp_native::TransitionModelCpp<kMounta
         return pomdp_native::array_from_vector(out, kMountainCarStateDim);
     }
 
+    // Rewrite only the state field; env params (action, power, gravity,
+    // max_speed, min_position, max_position, covariance) stay frozen so
+    // Python can keep one kernel per (env, action) and reuse it across
+    // calls. Mirrors SafeAntVelocityTransitionCpp::set_state.
+    void set_state(const py::object &state_obj) {
+        state_ = pomdp_native::to_array<kMountainCarStateDim>(state_obj, "state");
+    }
+
   protected:
     void compute_mean_from_state(const double *state, double *out) const override {
         double v = state[1] + static_cast<double>(action_int_) * power_ +
@@ -102,6 +110,13 @@ class MountainCarObservationCpp : public pomdp_native::ObservationModelCpp<kMoun
     int action_property() const { return action_int_; }
     py::array_t<double> mean_property() const {
         return pomdp_native::array_from_vector(next_state_.data(), next_state_.size());
+    }
+
+    // Rewrite only the next_state field; env params (action, covariance)
+    // stay frozen. Mirrors SafeAntVelocityObservationCpp::set_next_state.
+    void set_next_state(const py::object &next_state_obj) {
+        next_state_ =
+            pomdp_native::to_array<kMountainCarStateDim>(next_state_obj, "next_state");
     }
 
   private:
@@ -244,6 +259,7 @@ PYBIND11_MODULE(_native, m) {
         .def("sample", &MountainCarTransitionCpp::sample, py::arg("n_samples") = 1)
         .def("probability", &MountainCarTransitionCpp::probability, py::arg("values"))
         .def("batch_sample", &MountainCarTransitionCpp::batch_sample, py::arg("particles"))
+        .def("set_state", &MountainCarTransitionCpp::set_state, py::arg("state"))
         .def("_compute_deterministic_next_state",
              &MountainCarTransitionCpp::compute_deterministic_next_state_py)
         .def_property_readonly("state", &MountainCarTransitionCpp::state_property)
@@ -261,6 +277,8 @@ PYBIND11_MODULE(_native, m) {
         .def("probability", &MountainCarObservationCpp::probability, py::arg("values"))
         .def("batch_log_likelihood", &MountainCarObservationCpp::batch_log_likelihood,
              py::arg("next_particles"), py::arg("observation"))
+        .def("set_next_state", &MountainCarObservationCpp::set_next_state,
+             py::arg("next_state"))
         .def_property_readonly("next_state", &MountainCarObservationCpp::next_state_property)
         .def_property_readonly("action", &MountainCarObservationCpp::action_property)
         .def_property_readonly("mean", &MountainCarObservationCpp::mean_property);

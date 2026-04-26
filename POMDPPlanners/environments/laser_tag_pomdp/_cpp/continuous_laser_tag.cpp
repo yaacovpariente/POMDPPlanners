@@ -26,8 +26,10 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <limits>
 #include <stdexcept>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -776,6 +778,141 @@ py::array_t<double> reward_batch(
                     r -= dangerous_area_penalty;
                 }
             }
+        }
+        buf(row) = r;
+    }
+    return out;
+}
+
+// Vectorised reward kernel for the discrete LaserTagPOMDP.
+//
+// Mirrors LaserTagPOMDP._compute_reward_batch in pure C++:
+//   - terminal-flag rows yield 0.0;
+//   - on the tag action (action == 4): live rows get +tag_reward when the
+//     robot grid cell equals the opponent grid cell, else -tag_penalty;
+//   - on a movement action (0..3): live rows pay -step_cost;
+//   - the intended-position penalty (-dangerous_area_penalty) is applied
+//     when the intended cell hits a wall (in-bounds + walls hit) or lies
+//     within ``dangerous_area_radius`` (Euclidean) of any dangerous-area
+//     centre. For action == 4 the intended cell is the current robot cell;
+//     for actions 0..3 it is the robot cell shifted by ``action_directions``.
+//
+// dangerous_areas: shape (D, 2) float64 (or (0, 2) / 1-D length-0 for empty).
+// walls_flat: 1-D int64 array of (row, col) pairs flattened (length = 2 * n_walls).
+// action_directions: shape (4, 2) int64 with row r = (dr, dc) for action r.
+py::array_t<double> lasertag_discrete_reward_batch(
+    const py::array_t<double, py::array::c_style | py::array::forcecast> &states,
+    int action,
+    int rows, int cols,
+    const py::array_t<int64_t, py::array::c_style | py::array::forcecast> &walls_flat,
+    int n_walls,
+    const py::array_t<double, py::array::c_style | py::array::forcecast> &dangerous_areas,
+    int n_dangerous,
+    double dangerous_area_radius,
+    double dangerous_area_penalty,
+    double tag_reward,
+    double tag_penalty,
+    double step_cost,
+    const py::array_t<int64_t, py::array::c_style | py::array::forcecast> &action_directions) {
+    if (states.ndim() != 2 || states.shape(1) != static_cast<py::ssize_t>(kStateDim)) {
+        throw std::invalid_argument("states must have shape (N, 5)");
+    }
+    if (walls_flat.ndim() != 1 ||
+        walls_flat.shape(0) != static_cast<py::ssize_t>(2 * n_walls)) {
+        throw std::invalid_argument("walls_flat must be a 1-D int64 array of length 2 * n_walls");
+    }
+    if (action_directions.ndim() != 2 || action_directions.shape(0) != 4 ||
+        action_directions.shape(1) != 2) {
+        throw std::invalid_argument("action_directions must have shape (4, 2)");
+    }
+
+    // Pack walls into a hash set of row * cols + col for O(1) wall hits.
+    auto walls_view = walls_flat.unchecked<1>();
+    std::unordered_set<int64_t> wall_cells;
+    wall_cells.reserve(static_cast<std::size_t>(n_walls) * 2 + 1);
+    for (int i = 0; i < n_walls; ++i) {
+        const int64_t wr = walls_view(static_cast<py::ssize_t>(2 * i));
+        const int64_t wc = walls_view(static_cast<py::ssize_t>(2 * i + 1));
+        wall_cells.insert(wr * static_cast<int64_t>(cols) + wc);
+    }
+
+    // Pack dangerous-area centres.
+    std::vector<std::pair<double, double>> areas;
+    if (n_dangerous > 0) {
+        if (dangerous_areas.ndim() != 2 || dangerous_areas.shape(0) != n_dangerous ||
+            dangerous_areas.shape(1) != 2) {
+            throw std::invalid_argument("dangerous_areas must have shape (n_dangerous, 2)");
+        }
+        areas.reserve(static_cast<std::size_t>(n_dangerous));
+        auto da_view = dangerous_areas.unchecked<2>();
+        for (int i = 0; i < n_dangerous; ++i) {
+            areas.emplace_back(da_view(static_cast<py::ssize_t>(i), 0),
+                               da_view(static_cast<py::ssize_t>(i), 1));
+        }
+    }
+    const double r_sq = dangerous_area_radius * dangerous_area_radius;
+
+    // Resolve the action's grid delta. For action 4 (tag) the intended cell is
+    // the current cell, so dr/dc are zero; for 0..3 they are looked up from
+    // ``action_directions``.
+    int64_t dr = 0;
+    int64_t dc = 0;
+    if (action >= 0 && action <= 3) {
+        auto ad_view = action_directions.unchecked<2>();
+        dr = ad_view(action, 0);
+        dc = ad_view(action, 1);
+    }
+    const bool is_tag = (action == 4);
+
+    const auto n = static_cast<std::size_t>(states.shape(0));
+    auto state_view = states.unchecked<2>();
+    auto out = py::array_t<double>(static_cast<py::ssize_t>(n));
+    auto buf = out.mutable_unchecked<1>();
+
+    for (std::size_t i = 0; i < n; ++i) {
+        const py::ssize_t row = static_cast<py::ssize_t>(i);
+        if (state_view(row, 4) != 0.0) {
+            buf(row) = 0.0;
+            continue;
+        }
+
+        const int64_t robot_r = static_cast<int64_t>(state_view(row, 0));
+        const int64_t robot_c = static_cast<int64_t>(state_view(row, 1));
+
+        double r;
+        if (is_tag) {
+            const int64_t opp_r = static_cast<int64_t>(state_view(row, 2));
+            const int64_t opp_c = static_cast<int64_t>(state_view(row, 3));
+            r = (robot_r == opp_r && robot_c == opp_c) ? tag_reward : -tag_penalty;
+        } else {
+            r = -step_cost;
+        }
+
+        const int64_t int_r = robot_r + dr;
+        const int64_t int_c = robot_c + dc;
+
+        bool penalty = false;
+        if (int_r >= 0 && int_r < static_cast<int64_t>(rows) &&
+            int_c >= 0 && int_c < static_cast<int64_t>(cols)) {
+            const int64_t key = int_r * static_cast<int64_t>(cols) + int_c;
+            if (wall_cells.find(key) != wall_cells.end()) {
+                penalty = true;
+            }
+        }
+        if (!penalty && !areas.empty()) {
+            const double pr = static_cast<double>(int_r);
+            const double pc = static_cast<double>(int_c);
+            for (const auto &area : areas) {
+                const double ddr = pr - area.first;
+                const double ddc = pc - area.second;
+                if (ddr * ddr + ddc * ddc <= r_sq) {
+                    penalty = true;
+                    break;
+                }
+            }
+        }
+        if (penalty) {
+            r -= dangerous_area_penalty;
         }
         buf(row) = r;
     }
@@ -2059,6 +2196,22 @@ PYBIND11_MODULE(_native, m) {
           py::arg("dangerous_area_penalty"),
           "Vectorised reward computation: returns shape (N,) float64. See "
           "ContinuousLaserTagPOMDP.reward_batch for semantics.");
+
+    m.def("lasertag_discrete_reward_batch", &lasertag_discrete_reward_batch,
+          py::arg("states"), py::arg("action"),
+          py::arg("rows"), py::arg("cols"),
+          py::arg("walls_flat"), py::arg("n_walls"),
+          py::arg("dangerous_areas"), py::arg("n_dangerous"),
+          py::arg("dangerous_area_radius"), py::arg("dangerous_area_penalty"),
+          py::arg("tag_reward"), py::arg("tag_penalty"), py::arg("step_cost"),
+          py::arg("action_directions"),
+          "Vectorised reward computation for the discrete LaserTagPOMDP. "
+          "Returns shape (N,) float64. Mirrors LaserTagPOMDP._compute_reward_batch "
+          "semantics: terminal rows yield 0, action 4 yields +tag_reward / "
+          "-tag_penalty, actions 0..3 pay -step_cost, and the intended cell "
+          "(robot + action_directions[action] for actions 0..3, robot for tag) "
+          "incurs -dangerous_area_penalty when it hits a wall (in-bounds) or "
+          "lies within dangerous_area_radius of any dangerous-area centre.");
 
     py::class_<ContinuousLaserTagTransitionCpp>(m, "ContinuousLaserTagTransitionCpp")
         .def(py::init<const py::object &, const py::object &, const py::array_t<double> &,
