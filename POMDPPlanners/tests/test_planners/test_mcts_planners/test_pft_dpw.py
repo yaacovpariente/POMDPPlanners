@@ -1,10 +1,14 @@
 # pylint: disable=protected-access  # Tests need to access protected members
 import random
+from typing import Any, List
+from unittest.mock import Mock
 
 import numpy as np
 import pytest
 
 from POMDPPlanners.core.belief import get_initial_belief
+from POMDPPlanners.core.distributions import Distribution
+from POMDPPlanners.core.environment import Environment, SpaceInfo, SpaceType
 from POMDPPlanners.core.tree import BeliefNode
 from POMDPPlanners.core.tree.arena import ACTION, BELIEF, Tree
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
@@ -12,6 +16,7 @@ from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp imp
 )
 from POMDPPlanners.planners.mcts_planners.pft_dpw import PFT_DPW
 from POMDPPlanners.planners.planners_utils.dpw import (
+    ActionSampler,
     action_progressive_widening,
 )
 from POMDPPlanners.utils.action_samplers import UnitCircleActionSampler
@@ -696,3 +701,155 @@ def test_max_depth_reached_with_timeout(environment, action_sampler):
     assert len(tree.children_ids[root_id]) > 0
     assert tree.visit_count[root_id] > 0
     assert tree.v_value[root_id] is not None
+
+
+# ---------------------------------------------------------------------------
+# Regression test for the native-rollout-dispatcher migration.
+#
+# Background: PFT-DPW used to roll out via a hand-rolled Python recursion
+# that allowed one final action at ``depth == self.depth`` (it returned 0
+# only when ``depth > self.depth``). The migration routes the rollout
+# through ``random_rollout_action_sampler`` whose Python fallback
+# returns 0 when ``depth >= max_depth``. To preserve the old boundary
+# we pass ``max_depth=self.depth + 1``.
+#
+# This test pins the step count down so a future change cannot silently
+# shift the boundary by one.
+# ---------------------------------------------------------------------------
+
+
+class _StepCountingEnv(Environment):
+    """Minimal env that counts ``sample_next_state`` calls. No native rollout kernel."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            discount_factor=0.95,
+            name="StepCountingEnv",
+            space_info=SpaceInfo(
+                action_space=SpaceType.DISCRETE,
+                observation_space=SpaceType.DISCRETE,
+            ),
+        )
+        self.sample_next_state_calls = 0
+
+    def sample_next_state(self, state: Any, action: Any, n_samples: int = 1) -> Any:
+        self.sample_next_state_calls += 1
+        return state if n_samples == 1 else [state] * n_samples
+
+    def sample_observation(self, next_state: Any, action: Any, n_samples: int = 1) -> Any:
+        return 0 if n_samples == 1 else [0] * n_samples
+
+    def transition_log_probability(self, state: Any, action: Any, next_states: Any) -> np.ndarray:
+        return np.zeros(len(next_states))
+
+    def observation_log_probability(
+        self, next_state: Any, action: Any, observations: Any
+    ) -> np.ndarray:
+        return np.zeros(len(observations))
+
+    def reward(self, state: Any, action: Any) -> float:
+        return 1.0
+
+    def is_terminal(self, state: Any) -> bool:
+        return False
+
+    def initial_state_dist(self) -> Distribution:
+        mock_dist = Mock(spec=Distribution)
+        mock_dist.sample = Mock(return_value=[0])
+        return mock_dist
+
+    def initial_observation_dist(self) -> Distribution:
+        mock_dist = Mock(spec=Distribution)
+        mock_dist.sample = Mock(return_value=[0])
+        return mock_dist
+
+    def is_equal_observation(self, observation1: Any, observation2: Any) -> bool:
+        return observation1 == observation2
+
+    def get_actions(self) -> List[Any]:
+        return [0, 1, 2]
+
+
+class _SingleActionSampler(ActionSampler):
+    """Always returns the same action; no randomness so step counts are deterministic."""
+
+    def sample(self, belief_node: Any = None) -> Any:
+        return 0
+
+    def get_space(self) -> List[Any]:
+        return [0]
+
+
+def _make_pft_dpw_with_step_counter(self_depth: int) -> PFT_DPW:
+    env = _StepCountingEnv()
+    return PFT_DPW(
+        environment=env,
+        discount_factor=0.95,
+        depth=self_depth,
+        name="StepCountPFT",
+        action_sampler=_SingleActionSampler(),
+        k_a=1.0,
+        alpha_a=0.5,
+        k_o=1.0,
+        alpha_o=0.5,
+        exploration_constant=1.0,
+        n_simulations=1,
+        min_visit_count_per_action=1,
+    )
+
+
+@pytest.mark.parametrize(
+    "self_depth, entry_depth, expected_steps",
+    [
+        # Old: while depth <= self_depth: action; recurse(depth+1). At entry=1,
+        # actions taken at depths 1..self_depth (= self_depth steps).
+        (5, 1, 5),
+        # Entry mid-rollout: actions at depths 3..5 (= 3 steps).
+        (5, 3, 3),
+        # Boundary case: entry == self_depth. Old code allowed exactly one
+        # final action, returning 0 on the recursive call at depth+1.
+        (5, 5, 1),
+        # Out-of-budget: entry == self_depth + 1. Old code returned 0
+        # immediately with no actions taken.
+        (5, 6, 0),
+        # depth == 0 at entry shouldn't happen in practice (rollouts enter
+        # at depth+1 from _simulate_return), but the bound still applies.
+        (3, 0, 4),
+    ],
+)
+def test_random_rollout_depth_semantics_preserved(
+    self_depth: int, entry_depth: int, expected_steps: int
+) -> None:
+    """Verify that routing through ``random_rollout_action_sampler`` preserves step count.
+
+    Purpose: Validates that the native-rollout dispatcher migration in PFT-DPW
+        preserves the original Python recursion's step count exactly. The old
+        code returned 0 when ``depth > self.depth`` (allowing one final action
+        at ``depth == self.depth``); the new code passes ``max_depth=self.depth + 1``
+        to ``random_rollout_action_sampler`` so the ``depth >= max_depth`` boundary
+        stops at the same point.
+
+    Given: A minimal counting environment with no ``simulate_random_rollout``
+        attribute (so the dispatcher falls through to ``python_random_rollout``),
+        a deterministic single-action sampler, a PFT-DPW planner constructed
+        with ``self.depth = self_depth``, and an entry depth ``entry_depth``.
+    When: ``planner._random_rollout(state=0, depth=entry_depth)`` is called once.
+    Then: The number of ``sample_next_state`` calls equals ``expected_steps``,
+        which matches what the original Python recursion would have produced.
+
+    Test type: unit
+    """
+    planner = _make_pft_dpw_with_step_counter(self_depth=self_depth)
+    env = planner.environment
+    assert isinstance(env, _StepCountingEnv)
+    # Sanity: the dispatcher should fall through to python_random_rollout
+    # (i.e. no native rollout on this minimal env).
+    assert not hasattr(env, "simulate_random_rollout")
+
+    env.sample_next_state_calls = 0
+    planner._random_rollout(state=0, depth=entry_depth)
+
+    assert env.sample_next_state_calls == expected_steps, (
+        f"Depth semantics changed: self.depth={self_depth}, entry_depth={entry_depth}, "
+        f"expected {expected_steps} steps, got {env.sample_next_state_calls}."
+    )
