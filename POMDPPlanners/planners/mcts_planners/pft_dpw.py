@@ -52,6 +52,7 @@ from POMDPPlanners.planners.planners_utils.dpw import (
 from POMDPPlanners.planners.planners_utils.path_simulations_policy_arena import (
     ArenaDoubleProgressiveWideningMCTSPolicy,
 )
+from POMDPPlanners.planners.planners_utils.rollout import random_rollout_action_sampler
 
 
 class PFT_DPW(ArenaDoubleProgressiveWideningMCTSPolicy):
@@ -216,12 +217,26 @@ class PFT_DPW(ArenaDoubleProgressiveWideningMCTSPolicy):
         return next_belief_id, immediate_reward
 
     def _random_rollout(self, state: Any, depth: int) -> float:
-        if depth > self.depth or self.environment.is_terminal(state=state):
-            return 0
-        action = self.action_sampler.sample()
-        next_state, _, reward = self.environment.sample_next_step(state=state, action=action)
-        return reward + self.discount_factor * self._random_rollout(
-            state=next_state, depth=depth + 1
+        # Route through the shared dispatcher so that envs which provide a
+        # native ``simulate_random_rollout`` C++ kernel (e.g. LaserTag, Push,
+        # Pacman, RockSample, ContinuousLightDarkDiscreteActions, ...) skip
+        # the per-step Python ``sample_next_step`` round-trip.
+        #
+        # Depth semantics: the previous Python recursion returned 0 when
+        # ``depth > self.depth`` (i.e. it allowed one final action at
+        # ``depth == self.depth``). ``random_rollout_action_sampler`` /
+        # ``python_random_rollout`` return 0 when ``depth >= max_depth``.
+        # Passing ``max_depth=self.depth + 1`` preserves the boundary
+        # exactly. See the regression test
+        # ``test_random_rollout_depth_semantics_preserved`` in
+        # ``test_pft_dpw.py``.
+        return random_rollout_action_sampler(
+            state=state,
+            depth=depth,
+            action_sampler=self.action_sampler,
+            environment=self.environment,
+            discount_factor=self.discount_factor,
+            max_depth=self.depth + 1,
         )
 
     def sample_existing_belief_node(
