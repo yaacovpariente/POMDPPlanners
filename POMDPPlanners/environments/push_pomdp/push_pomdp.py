@@ -26,6 +26,7 @@ Classes:
 import math
 from enum import Enum
 from pathlib import Path
+from collections.abc import Hashable
 from typing import Any, List, Optional, Tuple
 
 import numpy as np
@@ -472,6 +473,11 @@ class PushPOMDP(DiscreteActionsEnvironment):
 
     def is_equal_observation(self, observation1: np.ndarray, observation2: np.ndarray) -> bool:
         return np.array_equal(observation1, observation2)
+
+    def hash_observation(self, observation: Any) -> Hashable:
+        # ndarray observations are unhashable; ``tobytes()`` is consistent with
+        # ``np.array_equal`` for fixed-shape/dtype observations of this env.
+        return np.ascontiguousarray(observation).tobytes()
 
     def _get_native_rollout_obstacles(self) -> np.ndarray:
         # Returns (M, 2) float64 array of obstacle centres; cached on first call.

@@ -29,6 +29,7 @@ from __future__ import annotations
 
 from enum import Enum
 from pathlib import Path
+from collections.abc import Hashable
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
@@ -513,6 +514,11 @@ class ContinuousLaserTagPOMDP(Environment):
             np.asarray(observation1, dtype=float),
             np.asarray(observation2, dtype=float),
         )
+
+    def hash_observation(self, observation: Any) -> Hashable:
+        # is_equal_observation casts to float arrays before comparing;
+        # match that contract by hashing the float64 byte representation.
+        return np.ascontiguousarray(np.asarray(observation, dtype=float)).tobytes()
 
     # ------------------------------------------------------------------
     # Metrics
