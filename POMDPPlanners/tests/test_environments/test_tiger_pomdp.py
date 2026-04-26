@@ -7,7 +7,7 @@ import pytest
 from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.core.policy import PolicyRunData
 from POMDPPlanners.core.simulation import StepData
-from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+from POMDPPlanners.environments.tiger_pomdp import STATES, TigerPOMDP
 from POMDPPlanners.tests.test_utils.confidence_interval_utils import (
     verify_metrics_within_confidence_intervals,
 )
@@ -696,3 +696,153 @@ def test_metric_name_consistency(tiger_pomdp):
 
     # Verify consistency using reusable utility function
     verify_environment_metric_consistency(tiger_pomdp, histories)
+
+
+# ---------------------------------------------------------------------------
+# Batch-method equivalence tests
+# ---------------------------------------------------------------------------
+
+
+class TestTigerBatchMethods:
+    """Equivalence tests for TigerPOMDP vectorised batch API."""
+
+    N = 16
+
+    def test_reward_batch_listen_all_minus_one(self, tiger_pomdp: TigerPOMDP):
+        """reward_batch with listen returns -1.0 for every state.
+
+        Purpose: Validates reward_batch for listen action returns correct scalar reward vectorised
+
+        Given: 16 particle states (mixed tiger_left / tiger_right) and action=listen
+        When: reward_batch is called
+        Then: All rewards equal -1.0 (same as scalar reward)
+
+        Test type: unit
+        """
+        states = ["tiger_left", "tiger_right"] * (self.N // 2)
+        result = tiger_pomdp.reward_batch(states, "listen")
+        expected = np.array([tiger_pomdp.reward(s, "listen") for s in states])
+        np.testing.assert_array_equal(result, expected)
+
+    def test_reward_batch_open_left_matches_scalar(self, tiger_pomdp: TigerPOMDP):
+        """reward_batch(open_left) matches scalar reward for all particles.
+
+        Purpose: Validates reward_batch for open_left matches per-state scalar reward
+
+        Given: 16 states alternating tiger_left/tiger_right and action=open_left
+        When: reward_batch is called
+        Then: Output equals [reward(s, open_left) for s in states] exactly
+
+        Test type: unit
+        """
+        states = ["tiger_left", "tiger_right"] * (self.N // 2)
+        result = tiger_pomdp.reward_batch(states, "open_left")
+        expected = np.array([tiger_pomdp.reward(s, "open_left") for s in states])
+        np.testing.assert_array_equal(result, expected)
+
+    def test_reward_batch_open_right_matches_scalar(self, tiger_pomdp: TigerPOMDP):
+        """reward_batch(open_right) matches scalar reward for all particles.
+
+        Purpose: Validates reward_batch for open_right matches per-state scalar reward
+
+        Given: 16 states alternating tiger_left/tiger_right and action=open_right
+        When: reward_batch is called
+        Then: Output equals [reward(s, open_right) for s in states] exactly
+
+        Test type: unit
+        """
+        states = ["tiger_left", "tiger_right"] * (self.N // 2)
+        result = tiger_pomdp.reward_batch(states, "open_right")
+        expected = np.array([tiger_pomdp.reward(s, "open_right") for s in states])
+        np.testing.assert_array_equal(result, expected)
+
+    def test_sample_next_state_batch_listen_preserves_states(self, tiger_pomdp: TigerPOMDP):
+        """sample_next_state_batch with listen returns each input state unchanged.
+
+        Purpose: Validates that listen action leaves states unchanged in batch mode
+
+        Given: 16 states alternating tiger_left/tiger_right and action=listen
+        When: sample_next_state_batch is called
+        Then: Each output state equals the corresponding input state
+
+        Test type: unit
+        """
+        states = ["tiger_left", "tiger_right"] * (self.N // 2)
+        result = tiger_pomdp.sample_next_state_batch(states, "listen")
+        assert len(result) == self.N
+        for inp, out in zip(states, result):
+            assert inp == out
+
+    def test_sample_next_state_batch_open_door_valid_states(self, tiger_pomdp: TigerPOMDP):
+        """sample_next_state_batch with open actions produces valid STATES.
+
+        Purpose: Validates open actions produce valid random states in batch mode
+
+        Given: 16 states all tiger_left and action=open_left
+        When: sample_next_state_batch is called with fixed seed
+        Then: All outputs are in STATES and both states appear across 32 draws
+
+        Test type: unit
+        """
+        np.random.seed(0)
+        states = ["tiger_left"] * self.N
+        result = tiger_pomdp.sample_next_state_batch(states, "open_left")
+        assert len(result) == self.N
+        assert all(s in STATES for s in result)
+        # With 16 draws we expect both states to appear (probability of only one ≈ 2^-15)
+        assert len(set(result)) == 2
+
+    def test_observation_log_probability_per_state_listen_hear_left(self, tiger_pomdp: TigerPOMDP):
+        """observation_log_probability_per_state for listen+hear_left matches scalar.
+
+        Purpose: Validates vectorised per-state log-prob matches scalar reference for listen action
+
+        Given: 16 states (alternating tiger_left/tiger_right), action=listen, observation=hear_left
+        When: observation_log_probability_per_state is called
+        Then: Output matches [observation_log_probability(s, listen, [hear_left])[0] for s in states]
+
+        Test type: unit
+        """
+        states = ["tiger_left", "tiger_right"] * (self.N // 2)
+        obs = "hear_left"
+        result = tiger_pomdp.observation_log_probability_per_state(states, "listen", obs)
+        expected = np.array(
+            [tiger_pomdp.observation_log_probability(s, "listen", [obs])[0] for s in states]
+        )
+        np.testing.assert_allclose(result, expected, atol=1e-12)
+
+    def test_observation_log_probability_per_state_open_door(self, tiger_pomdp: TigerPOMDP):
+        """observation_log_probability_per_state for open action matches scalar.
+
+        Purpose: Validates per-state log-prob for non-listen action (hear_nothing) is 0.0
+
+        Given: 16 states, action=open_left, observation=hear_nothing
+        When: observation_log_probability_per_state is called
+        Then: All outputs are 0.0 (log of probability 1.0)
+
+        Test type: unit
+        """
+        states = ["tiger_left", "tiger_right"] * (self.N // 2)
+        result = tiger_pomdp.observation_log_probability_per_state(
+            states, "open_left", "hear_nothing"
+        )
+        np.testing.assert_array_equal(result, np.zeros(self.N))
+
+    def test_observation_log_probability_per_state_open_door_wrong_obs(
+        self, tiger_pomdp: TigerPOMDP
+    ):
+        """observation_log_probability_per_state returns -inf for invalid obs with open action.
+
+        Purpose: Validates invalid observation yields -inf log-prob for open actions
+
+        Given: 16 states, action=open_right, observation=hear_left (invalid for open action)
+        When: observation_log_probability_per_state is called
+        Then: All outputs are -inf
+
+        Test type: unit
+        """
+        states = ["tiger_left", "tiger_right"] * (self.N // 2)
+        result = tiger_pomdp.observation_log_probability_per_state(
+            states, "open_right", "hear_left"
+        )
+        assert np.all(result == -np.inf)

@@ -20,7 +20,7 @@ Classes:
 
 from enum import Enum
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Sequence, Union
 
 import numpy as np
 
@@ -185,6 +185,51 @@ class TigerPOMDP(DiscreteActionsEnvironment):
         if state == "tiger_right":
             return -100.0  # Opening door with tiger
         return 10.0  # Opening door with treasure
+
+    def reward_batch(self, states: Union[np.ndarray, Sequence[Any]], action: str) -> np.ndarray:
+        if action == "listen":
+            return np.full(len(states), -1.0)
+        # open_left: -100 if tiger_left, else +10
+        # open_right: -100 if tiger_right, else +10
+        if action == "open_left":
+            return np.array([-100.0 if s == "tiger_left" else 10.0 for s in states])
+        # open_right
+        return np.array([-100.0 if s == "tiger_right" else 10.0 for s in states])
+
+    def sample_next_state_batch(
+        self, states: Union[np.ndarray, Sequence[Any]], action: str
+    ) -> List[str]:
+        n = len(states)
+        if action in ("open_left", "open_right"):
+            idxs = np.random.randint(0, 2, size=n)
+            return [STATES[i] for i in idxs]
+        return list(states)
+
+    def observation_log_probability_per_state(
+        self,
+        next_states: Union[np.ndarray, Sequence[Any]],
+        action: str,
+        observation: str,
+    ) -> np.ndarray:
+        n = len(next_states)
+        if action != "listen":
+            fill = 0.0 if observation == "hear_nothing" else -np.inf
+            return np.full(n, fill)
+        # listen: correct ear =0.85, other =0.15; vectorised string compare
+        states_arr = np.asarray(next_states)
+        is_left = states_arr == "tiger_left"
+        # correct observation for tiger_left is hear_left; for tiger_right is hear_right
+        obs_is_left = observation == "hear_left"
+        obs_is_right = observation == "hear_right"
+        log_correct = np.log(0.85)
+        log_wrong = np.log(0.15)
+        result = np.full(n, -np.inf)
+        if obs_is_left:
+            result = np.where(is_left, log_correct, log_wrong)
+        elif obs_is_right:
+            result = np.where(is_left, log_wrong, log_correct)
+        # else hear_nothing while listening -> -inf (stays -inf)
+        return result
 
     def is_terminal(self, state: str) -> bool:
         # Game ends when a door is opened

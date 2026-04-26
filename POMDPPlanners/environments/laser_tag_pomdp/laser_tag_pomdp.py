@@ -656,6 +656,245 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         """
         return np.array_equal(observation1, observation2)
 
+    def _get_native_rollout_params(
+        self,
+    ) -> Optional[Any]:
+        """Return cached static params for the native discrete rollout, or None."""
+        cached = getattr(self, "_cached_native_rollout_params", None)
+        if cached is not None:
+            return cached
+        try:
+            from POMDPPlanners.environments.laser_tag_pomdp import (
+                _native,
+            )  # pylint: disable=import-outside-toplevel
+        except ImportError:
+            return None
+        if not hasattr(_native, "simulate_rollout_discrete"):
+            return None
+        walls_list = sorted(self.walls)
+        walls_flat = np.array([coord for pair in walls_list for coord in pair], dtype=np.int64)
+        if self.dangerous_areas:
+            dangerous_areas_arr = np.array(self.dangerous_areas, dtype=np.float64)
+        else:
+            dangerous_areas_arr = np.empty((0,), dtype=np.float64)
+        params = (
+            _native,
+            self.floor_shape[0],
+            self.floor_shape[1],
+            walls_flat,
+            dangerous_areas_arr,
+            float(self.dangerous_area_radius),
+            float(self.dangerous_area_penalty),
+            float(self.tag_reward),
+            float(self.tag_penalty),
+            float(self.step_cost),
+            float(self.transition_error_prob),
+        )
+        # pylint: disable=attribute-defined-outside-init
+        self._cached_native_rollout_params = params
+        return params
+
+    def simulate_random_rollout(
+        self,
+        state: Any,
+        action_sampler: Any,
+        max_depth: int,
+        discount_factor: float,
+        depth: int = 0,
+    ) -> float:
+        # Attempt the native C++ rollout.  The C++ kernel draws actions
+        # uniformly from {0,1,2,3,4} using the module-level mt19937_64 RNG,
+        # which differs from the Python path's numpy mt19937 RNG; the two paths
+        # are therefore only equivalent in distribution, not bit-by-bit.
+        # If the action_sampler is not a uniform sampler over all 5 actions, fall
+        # back to the Python loop so planner-specific rollout policies still work.
+        params = self._get_native_rollout_params()
+        if params is not None:
+            state_arr = np.ascontiguousarray(np.asarray(state, dtype=np.float64))
+            (
+                _native,
+                rows,
+                cols,
+                walls_flat,
+                dangerous_areas_arr,
+                dangerous_area_radius,
+                dangerous_area_penalty,
+                tag_reward,
+                tag_penalty,
+                step_cost,
+                transition_error_prob,
+            ) = params
+            return float(
+                _native.simulate_rollout_discrete(
+                    initial_state=state_arr,
+                    max_depth=max_depth,
+                    discount=discount_factor,
+                    initial_depth=depth,
+                    rows=rows,
+                    cols=cols,
+                    walls_flat=walls_flat,
+                    dangerous_areas=dangerous_areas_arr,
+                    dangerous_area_radius=dangerous_area_radius,
+                    dangerous_area_penalty=dangerous_area_penalty,
+                    tag_reward=tag_reward,
+                    tag_penalty=tag_penalty,
+                    step_cost=step_cost,
+                    transition_error_prob=transition_error_prob,
+                )
+            )
+
+        # Python fallback (also used in equivalence tests via super()).
+        sample_next = self.sample_next_state
+        reward_fn = self.reward
+        action_sample = action_sampler.sample
+
+        total = 0.0
+        gamma_power = 1.0
+        current = state
+        while depth < max_depth and current[4] != 1.0:
+            action = action_sample()
+            r = reward_fn(state=current, action=action)
+            total += gamma_power * r
+            current = sample_next(state=current, action=action)
+            gamma_power *= discount_factor
+            depth += 1
+        return total
+
+    # ── Vectorized batch overrides ─────────────────────────────────
+    # PFT-DPW belief updates and any caller of the batch API otherwise hit
+    # the per-state Python fallback in ``Environment``. Delegate to the
+    # vectorized updater (which already exists for explicit belief
+    # filtering) so all-particle work happens inside NumPy, not a Python
+    # loop. The updater is built lazily on first call and cached.
+
+    def _get_vectorized_updater(self) -> Any:
+        cached = getattr(self, "_cached_vectorized_updater", None)
+        if cached is not None:
+            return cached
+        # pylint: disable=import-outside-toplevel
+        from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_beliefs.laser_tag_vectorized_updater import (
+            LaserTagVectorizedUpdater,
+        )
+
+        cached = LaserTagVectorizedUpdater.from_environment(self)
+        # pylint: disable=attribute-defined-outside-init
+        self._cached_vectorized_updater = cached
+        return cached
+
+    def sample_next_state_batch(self, states: Any, action: int) -> np.ndarray:
+        states_array = np.ascontiguousarray(np.asarray(states, dtype=float))
+        if states_array.ndim == 1:
+            states_array = states_array.reshape(1, -1)
+        return self._get_vectorized_updater().batch_transition(states_array, np.asarray(action))
+
+    def observation_log_probability_per_state(
+        self, next_states: Any, action: int, observation: Any
+    ) -> np.ndarray:
+        next_states_arr = np.ascontiguousarray(np.asarray(next_states, dtype=float))
+        if next_states_arr.ndim == 1:
+            next_states_arr = next_states_arr.reshape(1, -1)
+        return self._get_vectorized_updater().batch_observation_log_likelihood(
+            next_states_arr, np.asarray(action), np.asarray(observation, dtype=float)
+        )
+
+    def _get_wall_grid(self) -> np.ndarray:
+        cached = getattr(self, "_wall_grid", None)
+        if cached is not None:
+            return cached
+        grid = np.zeros(self.floor_shape, dtype=bool)
+        for row, col in self.walls:
+            grid[row, col] = True
+        # pylint: disable=attribute-defined-outside-init
+        self._wall_grid = grid
+        return grid
+
+    def reward_batch(self, states: Any, action: int) -> np.ndarray:
+        """Vectorised reward for a batch of states under a single action.
+
+        Args:
+            states: Array-like of shape (N, 5) or (5,) representing particle states.
+                Each state is [robot_row, robot_col, opp_row, opp_col, terminal_flag].
+            action: Integer action in {0, 1, 2, 3, 4}.
+
+        Returns:
+            Float64 array of shape (N,) with per-particle rewards.
+        """
+        states_arr = np.asarray(states, dtype=np.float64)
+        if states_arr.ndim == 1:
+            states_arr = states_arr.reshape(1, -1)
+        return self._compute_reward_batch(states_arr, action)
+
+    def _compute_reward_batch(self, states: np.ndarray, action: int) -> np.ndarray:
+        n = states.shape[0]
+        terminal_mask = states[:, 4].astype(bool)
+
+        robot_r = states[:, 0].astype(np.int64)
+        robot_c = states[:, 1].astype(np.int64)
+        opp_r = states[:, 2].astype(np.int64)
+        opp_c = states[:, 3].astype(np.int64)
+
+        rewards = self._compute_base_rewards(action, robot_r, robot_c, opp_r, opp_c, n)
+        self._apply_area_penalty_batch(rewards, action, robot_r, robot_c)
+
+        rewards[terminal_mask] = 0.0
+        return rewards
+
+    def _compute_base_rewards(
+        self,
+        action: int,
+        robot_r: np.ndarray,
+        robot_c: np.ndarray,
+        opp_r: np.ndarray,
+        opp_c: np.ndarray,
+        n: int,
+    ) -> np.ndarray:
+        if action == 4:
+            at_same_pos = (robot_r == opp_r) & (robot_c == opp_c)
+            rewards = np.where(at_same_pos, float(self.tag_reward), float(-self.tag_penalty))
+        else:
+            rewards = np.full(n, float(-self.step_cost), dtype=np.float64)
+        return rewards
+
+    def _compute_intended_positions(
+        self, action: int, robot_r: np.ndarray, robot_c: np.ndarray
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        if action in (0, 1, 2, 3):
+            dr, dc = self._action_directions[action]
+            return robot_r + dr, robot_c + dc
+        return robot_r.copy(), robot_c.copy()
+
+    def _apply_area_penalty_batch(
+        self, rewards: np.ndarray, action: int, robot_r: np.ndarray, robot_c: np.ndarray
+    ) -> None:
+        int_r, int_c = self._compute_intended_positions(action, robot_r, robot_c)
+
+        wall_mask = self._compute_wall_hit_mask(int_r, int_c)
+        danger_mask = self._compute_danger_mask(int_r, int_c)
+
+        penalty_mask = wall_mask | danger_mask
+        rewards[penalty_mask] -= self.dangerous_area_penalty
+
+    def _compute_wall_hit_mask(self, int_r: np.ndarray, int_c: np.ndarray) -> np.ndarray:
+        rows, cols = self.floor_shape
+        wall_grid = self._get_wall_grid()
+
+        # Out-of-bounds positions are NOT in self.walls, so they return False here.
+        # We clip to grid bounds for safe indexing, then zero-out OOB entries via the mask.
+        clipped_r = np.clip(int_r, 0, rows - 1)
+        clipped_c = np.clip(int_c, 0, cols - 1)
+        in_bounds = (int_r >= 0) & (int_r < rows) & (int_c >= 0) & (int_c < cols)
+        return in_bounds & wall_grid[clipped_r, clipped_c]
+
+    def _compute_danger_mask(self, int_r: np.ndarray, int_c: np.ndarray) -> np.ndarray:
+        if not self.dangerous_areas:
+            return np.zeros(len(int_r), dtype=bool)
+        centers = np.array(self.dangerous_areas, dtype=np.float64)  # shape (D, 2)
+        # Euclidean distance from each intended position to each danger center: (N, D)
+        dr = int_r[:, np.newaxis] - centers[:, 0]
+        dc = int_c[:, np.newaxis] - centers[:, 1]
+        dist = np.sqrt(dr**2 + dc**2)
+        return np.asarray((dist <= self.dangerous_area_radius).any(axis=1), dtype=bool)
+
     def _count_episode_metrics(
         self, history: History, action_dirs: Dict[int, Tuple[int, int]]
     ) -> Tuple[int, int, int, int]:

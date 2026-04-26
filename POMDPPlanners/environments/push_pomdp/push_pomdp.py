@@ -1,3 +1,4 @@
+# pylint: disable=too-many-lines
 """Push POMDP Environment Implementation.
 
 This module implements a robotic push task as a POMDP, where a robot must
@@ -471,6 +472,179 @@ class PushPOMDP(DiscreteActionsEnvironment):
 
     def is_equal_observation(self, observation1: np.ndarray, observation2: np.ndarray) -> bool:
         return np.array_equal(observation1, observation2)
+
+    def _get_native_rollout_obstacles(self) -> np.ndarray:
+        # Returns (M, 2) float64 array of obstacle centres; cached on first call.
+        cached = getattr(self, "_cached_native_rollout_obstacles", None)
+        if cached is not None:
+            return cached  # type: ignore[return-value]
+        if self.obstacles:
+            obs_arr: np.ndarray = np.array(self.obstacles, dtype=np.float64)
+        else:
+            obs_arr = np.empty((0,), dtype=np.float64)
+        # pylint: disable=attribute-defined-outside-init
+        self._cached_native_rollout_obstacles: np.ndarray = obs_arr
+        return obs_arr
+
+    def simulate_random_rollout(
+        self,
+        state: Any,
+        action_sampler: Any,
+        max_depth: int,
+        discount_factor: float,
+        depth: int = 0,
+    ) -> float:
+        # Fast path: delegate the entire rollout to the C++ kernel.
+        # Pre-draw action indices in Python so np's random stream (used by
+        # belief updates etc.) remains the caller's random stream.
+        from POMDPPlanners.environments.push_pomdp import (  # pylint: disable=import-outside-toplevel
+            _native,
+        )
+
+        remaining = max_depth - depth
+        if remaining <= 0 or self.is_terminal(state=state):
+            return 0.0
+
+        action_indices = np.random.randint(0, 4, size=remaining, dtype=np.int64)
+        obs_arr = self._get_native_rollout_obstacles()
+        state_arr = np.asarray(state, dtype=np.float64)
+
+        return float(
+            _native.simulate_rollout_discrete(
+                state=state_arr,
+                action_indices=action_indices,
+                max_depth=max_depth,
+                depth=depth,
+                discount=discount_factor,
+                grid_size=float(self.grid_size),
+                push_threshold=float(self.push_threshold),
+                friction_coefficient=float(self.friction_coefficient),
+                obstacles=obs_arr,
+                obstacle_radius=float(self.obstacle_radius),
+                obstacle_penalty=float(self.obstacle_penalty),
+                transition_error_prob=float(self.transition_error_prob),
+            )
+        )
+
+    def _python_simulate_random_rollout(
+        self,
+        state: Any,
+        actions: List[str],
+        max_depth: int,
+        discount_factor: float,
+        depth: int = 0,
+    ) -> float:
+        # Pure-Python reference rollout: mirrors the pre-native logic but
+        # accepts a pre-drawn action list (to allow exact comparison with the
+        # C++ path when transition_error_prob=0 and the actions are held fixed).
+        sample_one = self._sample_one_next_state
+        reward_from_next = self._reward_from_next_state
+        is_terminal = self.is_terminal
+
+        total = 0.0
+        gamma_power = 1.0
+        current = state
+        cursor = 0
+        while depth < max_depth and not is_terminal(state=current):
+            if cursor >= len(actions):
+                break
+            action = actions[cursor]
+            cursor += 1
+            next_state = sample_one(current, action)
+            r = reward_from_next(current, action, next_state)
+            total += gamma_power * r
+            current = next_state
+            gamma_power *= discount_factor
+            depth += 1
+        return total
+
+    # ── Vectorized batch overrides ─────────────────────────────────
+    # PFT-DPW belief updates and any caller of the batch API otherwise hit
+    # the per-state Python fallback in ``Environment``. Delegate to the
+    # vectorized updater (which already exists for explicit belief
+    # filtering) so all-particle work happens inside NumPy, not a Python
+    # loop. The updater is built lazily on first call and cached.
+
+    def _get_vectorized_updater(self) -> Any:
+        cached = getattr(self, "_cached_vectorized_updater", None)
+        if cached is not None:
+            return cached
+        # pylint: disable=import-outside-toplevel
+        from POMDPPlanners.environments.push_pomdp.push_pomdp_beliefs.push_vectorized_updater import (
+            PushVectorizedUpdater,
+        )
+
+        cached = PushVectorizedUpdater.from_environment(self)
+        # pylint: disable=attribute-defined-outside-init
+        self._cached_vectorized_updater = cached
+        return cached
+
+    def sample_next_state_batch(self, states: Any, action: str) -> np.ndarray:
+        states_array = np.ascontiguousarray(np.asarray(states, dtype=float))
+        if states_array.ndim == 1:
+            states_array = states_array.reshape(1, -1)
+        return self._get_vectorized_updater().batch_transition(states_array, action)
+
+    def reward_batch(self, states: Any, action: str) -> np.ndarray:
+        """Calculate rewards for a batch of states given a single action.
+
+        Samples N next states in one vectorised call via the cached
+        ``PushVectorizedUpdater``, then computes per-particle rewards with
+        pure NumPy operations — no Python loop over particles.
+
+        Args:
+            states: Sequence / array of states, shape ``(N, 6)``.
+            action: Discrete action string ("up", "down", "right", "left").
+
+        Returns:
+            1-D ``float64`` array of shape ``(N,)``.
+        """
+        states_array = np.ascontiguousarray(np.asarray(states, dtype=float))
+        if states_array.ndim == 1:
+            states_array = states_array.reshape(1, -1)
+        next_states = self._get_vectorized_updater().batch_transition(states_array, action)
+        return self._reward_batch_from_next_states(states_array, action, next_states)
+
+    def _reward_batch_from_next_states(
+        self, states: np.ndarray, action: str, next_states: np.ndarray
+    ) -> np.ndarray:
+        dx = next_states[:, 2] - next_states[:, 4]
+        dy = next_states[:, 3] - next_states[:, 5]
+        dist = np.sqrt(dx * dx + dy * dy)
+        rewards = -dist
+        rewards = np.where(dist < 0.5, rewards + 100.0, rewards)
+        rewards += self._obstacle_penalty_batch(states, action)
+        return rewards.astype(np.float64)
+
+    def _obstacle_penalty_batch(self, states: np.ndarray, action: str) -> np.ndarray:
+        if (
+            not self.obstacles or action not in self._ACTION_TO_DXY
+        ):  # pylint: disable=protected-access
+            return np.zeros(len(states), dtype=np.float64)
+        dx, dy = self._ACTION_TO_DXY[action]  # pylint: disable=protected-access
+        intended = states[:, :2] + np.array([dx, dy], dtype=float)
+        obs_arr = np.asarray(self.obstacles, dtype=float)  # (M, 2)
+        diff = intended[:, None, :] - obs_arr[None, :, :]  # (N, M, 2)
+        dist_sq = np.sum(diff * diff, axis=2)  # (N, M)
+        colliding = np.any(dist_sq <= self.obstacle_radius * self.obstacle_radius, axis=1)
+        return np.where(colliding, self.obstacle_penalty, 0.0).astype(np.float64)
+
+    def observation_log_probability_per_state(
+        self, next_states: Any, action: str, observation: Any
+    ) -> np.ndarray:
+        next_states_arr = np.ascontiguousarray(np.asarray(next_states, dtype=float))
+        if next_states_arr.ndim == 1:
+            next_states_arr = next_states_arr.reshape(1, -1)
+        # The closed-form 2-D Gaussian on cols 2:4 doesn't depend on action,
+        # so we inline it directly rather than going through the updater
+        # (which uses CovarianceParameterizedMultivariateNormal). Keeps a
+        # single source of truth for the noise model.
+        variance = self.observation_noise * self.observation_noise
+        log_norm = -float(np.log(2.0 * np.pi * variance))
+        obs_obj = np.asarray(observation, dtype=float).ravel()[2:4]
+        diffs = next_states_arr[:, 2:4] - obs_obj[None, :]
+        sq = np.sum(diffs * diffs, axis=1)
+        return log_norm - 0.5 * sq / variance
 
     def cache_visualization(self, history: List[StepData], cache_path: Path) -> None:
         """Cache animated visualization of the push episode.

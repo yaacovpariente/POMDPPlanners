@@ -23,6 +23,8 @@ Classes:
     ContinuousLaserTagPOMDPDiscreteActions: Discrete-action variant.
 """
 
+# pylint: disable=too-many-lines  # Module size exceeds 1000 lines due to native rollout addition.
+
 from __future__ import annotations
 
 from enum import Enum
@@ -198,9 +200,7 @@ class ContinuousLaserTagPOMDP(Environment):
         )
         self.dangerous_area_radius = dangerous_area_radius
         self.dangerous_area_penalty = dangerous_area_penalty
-        # Precompute the (K, 2) C-contiguous float64 packed dangerous-area
-        # array for the C++ reward kernel; reused across every reward_batch
-        # call so the hot path doesn't repack the Python list.
+        # Packed (K, 2) float64 dangerous-area array; reused by the C++ reward kernel.
         self._dangerous_areas_arr = (
             np.ascontiguousarray(np.asarray(self.dangerous_areas, dtype=np.float64).reshape(-1, 2))
             if self.dangerous_areas
@@ -218,27 +218,35 @@ class ContinuousLaserTagPOMDP(Environment):
             self.opponent_transition_cov_matrix
         )
 
-        # Per-action kernel caches: one C++ kernel per distinct action vector.
-        # Hot-path overrides flip the (next_)state field via set_state /
-        # set_next_state instead of rebuilding (skips the per-call Cholesky
-        # build and wall-array repacking). Keys are action.tobytes(); values
-        # are the long-lived C++ kernels.
+        # Per-action C++ kernel caches (Cholesky factored once per action).
         self._trans_kernel_cache: Dict[bytes, Any] = {}
         self._obs_kernel_cache: Dict[bytes, Any] = {}
+        # Static params for cont_simulate_rollout: built once, unpacked per call.
+        self._rollout_static_params: Dict[str, Any] = {
+            "robot_covariance": self._robot_transition_dist.covariance,
+            "opponent_covariance": self._opponent_transition_dist.covariance,
+            "pursuit_speed": self.pursuit_speed,
+            "walls": self._walls,
+            "grid_size": self._grid_size,
+            "robot_radius": self.robot_radius,
+            "opponent_radius": self.opponent_radius,
+            "tag_radius": self.tag_radius,
+            "tag_reward": self.tag_reward,
+            "tag_penalty": self.tag_penalty,
+            "step_cost": self.step_cost,
+            "dangerous_areas": self._dangerous_areas_arr,
+            "dangerous_area_radius": self.dangerous_area_radius,
+            "dangerous_area_penalty": self.dangerous_area_penalty,
+        }
 
     # ------------------------------------------------------------------
     # Core Environment interface
     # ------------------------------------------------------------------
 
     # ── Hot-path sampling overrides ─────────────────────────────────
-    # The default base-class implementations build a Python wrapper subclass
-    # per call which only stores a few attributes; the actual RNG draw lives
-    # in the C++ _native kernel. These overrides skip the Python subclass,
-    # fetch a cached per-action C++ kernel (Cholesky factored once per action,
-    # walls repacked once per action), and rewrite only the (next_)state
-    # field per call via set_state / set_next_state. The C++ RNG state lives
-    # on the kernel, so each cached kernel maintains a single RNG stream per
-    # (env, action).
+    # Skip the Python wrapper subclass; fetch/reuse a cached per-action C++
+    # kernel (Cholesky factored once, walls repacked once) and mutate only
+    # the stored state via set_state / set_next_state.
 
     def _get_trans_kernel(self, action: np.ndarray) -> Any:
         action_arr = np.ascontiguousarray(np.asarray(action, dtype=np.float64))
@@ -366,6 +374,55 @@ class ContinuousLaserTagPOMDP(Environment):
             dtype=np.float64,
         )
         return log_probs
+
+    def simulate_random_rollout(
+        self,
+        state: np.ndarray,
+        action_sampler: Any,
+        max_depth: int,
+        discount_factor: float,
+        depth: int = 0,
+    ) -> float:
+        """Random rollout dispatched to native C++ via ``cont_simulate_rollout``.
+
+        Pre-samples actions from ``action_sampler``, packs them into a ``(N, 3)``
+        buffer, and runs the full discounted-return loop inside C++. Results are
+        numerically identical to the :meth:`Environment.simulate_random_rollout`
+        Python fallback.
+        """
+        steps_left = max_depth - depth
+        if steps_left <= 0 or bool(state[4]):
+            return 0.0
+        actions_buffer = self._sample_action_buffer(action_sampler, steps_left)
+        return self._native_rollout(state, actions_buffer, depth, max_depth, discount_factor)
+
+    def _native_rollout(
+        self,
+        state: np.ndarray,
+        actions_buffer: np.ndarray,
+        depth: int,
+        max_depth: int,
+        discount_factor: float,
+    ) -> float:
+        state_arr = np.ascontiguousarray(np.asarray(state, dtype=np.float64).ravel())
+        return _native.cont_simulate_rollout(
+            initial_state=state_arr,
+            actions_buffer=actions_buffer,
+            start_depth=depth,
+            max_depth=max_depth,
+            discount_factor=discount_factor,
+            **self._rollout_static_params,
+        )
+
+    def _sample_action_buffer(self, action_sampler: Any, n_steps: int) -> np.ndarray:
+        action_sample = action_sampler.sample
+        rows = []
+        for _ in range(n_steps):
+            act = np.asarray(action_sample(), dtype=np.float64).ravel()
+            if act.shape[0] == 2:
+                act = np.concatenate([act, [0.0]])
+            rows.append(act)
+        return np.ascontiguousarray(np.stack(rows, axis=0))
 
     def reward(self, state: np.ndarray, action: np.ndarray) -> float:
         # Single-state reward routes through the same C++ kernel used by
@@ -768,6 +825,28 @@ class ContinuousLaserTagPOMDPDiscreteActions(ContinuousLaserTagPOMDP, DiscreteAc
         action: Any,
     ) -> np.ndarray:
         return ContinuousLaserTagPOMDP.reward_batch(self, states, self.action_to_vector[action])
+
+    def simulate_random_rollout(
+        self,
+        state: np.ndarray,
+        action_sampler: Any,
+        max_depth: int,
+        discount_factor: float,
+        depth: int = 0,
+    ) -> float:
+        steps_left = max_depth - depth
+        if steps_left <= 0 or bool(state[4]):
+            return 0.0
+        actions_buffer = self._sample_discrete_action_buffer(action_sampler, steps_left)
+        return self._native_rollout(state, actions_buffer, depth, max_depth, discount_factor)
+
+    def _sample_discrete_action_buffer(self, action_sampler: Any, n_steps: int) -> np.ndarray:
+        action_sample = action_sampler.sample
+        rows = []
+        for _ in range(n_steps):
+            action_str = action_sample()
+            rows.append(self.action_to_vector[action_str])
+        return np.ascontiguousarray(np.stack(rows, axis=0))
 
     def _count_episode_metrics(self, steps: List[StepData]) -> Tuple[int, int, int]:
         converted = []

@@ -165,6 +165,12 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
             position_noise, velocity_noise
         )
 
+        # Cached force scales as a contiguous float64 array for the native
+        # simulate_rollout kernel.
+        self._force_scales_f64: np.ndarray = np.ascontiguousarray(
+            DEFAULT_FORCE_SCALES, dtype=np.float64
+        )
+
     def reward(self, state: np.ndarray, action: int) -> float:
         # Extract velocity components
         velocity = state[2:4]
@@ -454,6 +460,53 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
                 observation=observation_array,
             ),
             dtype=np.float64,
+        )
+
+    def simulate_random_rollout(
+        self,
+        state: Any,
+        action_sampler: Any,
+        max_depth: int,
+        discount_factor: float,
+        depth: int = 0,
+    ) -> float:
+        """Random rollout via native C++ physics and reward kernel.
+
+        Pre-draws action indices and runs the full rollout in a single C++
+        call, avoiding per-step Python dispatch.
+
+        Args:
+            state: Current 4-D state ``[px, py, vx, vy]``.
+            action_sampler: Object with a ``sample()`` method returning an
+                integer action; used only if no steps remain (returns 0.0).
+            max_depth: Maximum rollout depth.
+            discount_factor: Per-step discount factor.
+            depth: Depth already consumed by the search tree. Defaults to 0.
+
+        Returns:
+            Discounted sum of immediate rewards along the sampled trajectory.
+        """
+        steps_left = max_depth - depth
+        if steps_left <= 0:
+            return 0.0
+
+        state_arr = np.ascontiguousarray(np.asarray(state, dtype=np.float64).ravel())
+        action_indices = np.random.randint(0, len(self.actions), size=steps_left, dtype=np.int32)
+
+        return _native.simulate_rollout(
+            initial_state=state_arr,
+            action_indices=action_indices,
+            force_scales=self._force_scales_f64,
+            max_depth=max_depth,
+            start_depth=depth,
+            discount_factor=discount_factor,
+            dt=float(self.dt),
+            mass=float(self.mass),
+            damping=float(self.damping),
+            max_force=float(self.max_force),
+            safe_velocity_threshold=float(self.safe_velocity_threshold),
+            safety_violation_penalty=float(self.safety_violation_penalty),
+            movement_reward_scale=float(self.movement_reward_scale),
         )
 
     def sample_next_step(

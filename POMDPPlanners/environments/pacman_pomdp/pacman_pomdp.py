@@ -593,6 +593,68 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
             dtype=np.float64,
         )
 
+    def simulate_random_rollout(
+        self,
+        state: Any,
+        action_sampler: "Any",
+        max_depth: int,
+        discount_factor: float,
+        depth: int = 0,
+    ) -> float:
+        """Estimate the value of ``state`` via a native C++ random rollout.
+
+        Pre-draws all action indices in NumPy, then delegates the entire
+        trajectory (transition + reward accumulation) to the C++ kernel.
+        This avoids per-step Python frame overhead for the common path.
+
+        Args:
+            state: Current state ndarray.
+            action_sampler: Object with a ``sample()`` method returning a
+                random action; only used to pre-draw action integers.
+            max_depth: Maximum rollout depth.
+            discount_factor: Per-step discount factor.
+            depth: Current depth consumed by the search tree. Defaults to 0.
+
+        Returns:
+            Discounted cumulative reward along the sampled trajectory.
+        """
+        state_arr = self._require_state_array(state)
+        remaining_depth = max_depth - depth
+        if remaining_depth <= 0 or self.is_terminal(state_arr):
+            return 0.0
+        num_actions = len(self.action_names)
+        action_indices = np.random.randint(0, num_actions, size=remaining_depth, dtype=np.int32)
+        transition_kwargs = self.get_transition_cpp_ctor_kwargs()
+        return _native.simulate_rollout(
+            state=state_arr,
+            action_indices=action_indices,
+            maze_rows=transition_kwargs["maze_rows"],
+            maze_cols=transition_kwargs["maze_cols"],
+            neighbor_table=transition_kwargs["neighbor_table"],
+            neighbor_validity=transition_kwargs["neighbor_validity"],
+            pellet_positions=transition_kwargs["pellet_positions"],
+            ghost_aggressiveness=transition_kwargs["ghost_aggressiveness"],
+            ghost_coordination_code=transition_kwargs["ghost_coordination_code"],
+            ghost_strategy_codes=transition_kwargs["ghost_strategy_codes"],
+            num_ghosts=transition_kwargs["num_ghosts"],
+            num_pellets=transition_kwargs["num_pellets"],
+            pellet_reward=transition_kwargs["pellet_reward"],
+            idx_pac_row=transition_kwargs["idx_pac_row"],
+            idx_pac_col=transition_kwargs["idx_pac_col"],
+            idx_ghosts_start=transition_kwargs["idx_ghosts_start"],
+            idx_pellets_start=transition_kwargs["idx_pellets_start"],
+            idx_pellets_end=transition_kwargs["idx_pellets_end"],
+            idx_score=transition_kwargs["idx_score"],
+            idx_terminal=transition_kwargs["idx_terminal"],
+            patrol_dir_state=self.ghost_patrol_directions,
+            ghost_collision_penalty=float(self.ghost_collision_penalty),
+            step_penalty=float(self.step_penalty),
+            win_reward=float(self.win_reward),
+            discount_factor=float(discount_factor),
+            depth=0,
+            max_depth=remaining_depth,
+        )
+
     def reward(self, state: np.ndarray, action: int) -> float:
         """Calculate immediate reward."""
         state = self._require_state_array(state)

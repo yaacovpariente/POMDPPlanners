@@ -13,7 +13,7 @@ import random
 import numpy as np
 import pytest
 
-from POMDPPlanners.environments.push_pomdp import PushPOMDP
+from POMDPPlanners.environments.push_pomdp import PushPOMDP, _native as push_native
 
 # Set seeds for reproducible tests
 np.random.seed(42)
@@ -1237,3 +1237,348 @@ class TestSampleNextStepEquivalence:
                     f"reward mismatch for action={action}, seed={seed}: "
                     f"{opt_reward} != {base_reward}"
                 )
+
+
+class TestRewardBatchMatchesScalarLoop:
+    """Test that reward_batch produces distributional results equivalent to scalar reward()."""
+
+    def test_push_reward_batch_matches_scalar_loop(self):
+        """Test that reward_batch summary statistics match the scalar-loop equivalent.
+
+        Purpose: Validates that the vectorised reward_batch override produces
+            rewards drawn from the same distribution as the scalar reward() loop.
+            Both paths internally re-sample a fresh next state, so exact value
+            equality per-particle is not expected; instead we compare the
+            empirical mean and std over a large particle set (N=500) and verify
+            they agree within 5% relative on mean and 10% relative on std.
+
+        Given: A PushPOMDP(discount_factor=0.95) with obstacles.  32 initial
+            particles sampled from the initial-state distribution with seed 0.
+            For each of the four actions, a large particle set of 500 copies of
+            the same state is evaluated so the per-particle stochasticity
+            averages out.
+
+        When: reward_batch(particles, action) is called once (with np.random
+            seeded to 123 before the call) to obtain a batch of 500 rewards.
+            Separately, scalar env.reward(s, action) is called 500 times with
+            the same seed (123 then incremented per-call) to obtain 500 scalar
+            rewards.
+
+        Then: For every action, abs(mean_batch - mean_scalar) / max(|mean_scalar|, 1e-6)
+            < 0.05 and abs(std_batch - std_scalar) / max(std_scalar, 1e-6) < 0.10.
+
+        Test type: unit
+        """
+        _N_PARTICLES = 500
+        _MEAN_TOL = 0.05
+        _STD_TOL = 0.10
+
+        env = PushPOMDP(
+            discount_factor=0.95,
+            grid_size=10,
+            obstacles=[(3.0, 3.0), (7.0, 7.0)],
+            obstacle_radius=0.5,
+            obstacle_penalty=-10.0,
+        )
+
+        np.random.seed(0)
+        random.seed(0)
+        initial_state = env.initial_state_dist().sample()[0]
+
+        # Tile the same state to get a large particle array
+        particles = np.tile(initial_state, (_N_PARTICLES, 1))
+
+        for action in env.get_actions():
+            # --- batch path ---
+            np.random.seed(123)
+            random.seed(123)
+            batch_rewards = env.reward_batch(particles, action)
+
+            # --- scalar loop path (independent draws, same seed base) ---
+            np.random.seed(123)
+            random.seed(123)
+            scalar_rewards = np.array(
+                [env.reward(initial_state, action) for _ in range(_N_PARTICLES)]
+            )
+
+            mean_batch = float(np.mean(batch_rewards))
+            mean_scalar = float(np.mean(scalar_rewards))
+            std_batch = float(np.std(batch_rewards))
+            std_scalar = float(np.std(scalar_rewards))
+
+            mean_ref = max(abs(mean_scalar), 1e-6)
+            std_ref = max(std_scalar, 1e-6)
+
+            assert abs(mean_batch - mean_scalar) / mean_ref < _MEAN_TOL, (
+                f"action={action}: mean_batch={mean_batch:.4f}, mean_scalar={mean_scalar:.4f}, "
+                f"rel_diff={abs(mean_batch - mean_scalar) / mean_ref:.4f} >= {_MEAN_TOL}"
+            )
+            assert abs(std_batch - std_scalar) / std_ref < _STD_TOL, (
+                f"action={action}: std_batch={std_batch:.4f}, std_scalar={std_scalar:.4f}, "
+                f"rel_diff={abs(std_batch - std_scalar) / std_ref:.4f} >= {_STD_TOL}"
+            )
+
+    def test_push_reward_batch_shape_and_dtype(self):
+        """Test that reward_batch returns a correctly shaped float64 array.
+
+        Purpose: Validates the output shape, dtype, and basic finite-ness of reward_batch.
+
+        Given: A PushPOMDP and a batch of 16 particles.
+        When: reward_batch is called for each action.
+        Then: Output has shape (16,), dtype float64, and all finite values.
+
+        Test type: unit
+        """
+        env = PushPOMDP(discount_factor=0.95)
+        np.random.seed(7)
+        particles = env.initial_state_dist().sample(n_samples=16)
+        particles_arr = np.array(particles)
+
+        for action in env.get_actions():
+            result = env.reward_batch(particles_arr, action)
+            assert result.shape == (16,), f"Expected shape (16,) for action={action}"
+            assert result.dtype == np.float64, f"Expected float64 dtype for action={action}"
+            assert np.all(np.isfinite(result)), f"Expected finite rewards for action={action}"
+
+    def test_push_reward_batch_with_obstacles_applies_penalty(self):
+        """Test that reward_batch correctly applies obstacle penalty when robot would collide.
+
+        Purpose: Validates that the vectorised obstacle-penalty branch in reward_batch
+            produces penalty values identical to the scalar reward() path.
+
+        Given: A PushPOMDP with one obstacle at (3, 3).  States where the robot
+            will collide when moving 'right' (robot at (2, 3)) and states where
+            there is no collision (robot at (1, 1)).
+
+        When: reward_batch is called on a homogeneous batch of collision /
+            no-collision states.  The next states are deterministic (no friction,
+            no transition error) so exact value equality holds.
+
+        Then: Collision-state batch rewards equal the scalar reward for that
+            state (same next-state drawn from a deterministic transition).
+            No-collision batch rewards have no obstacle penalty component.
+
+        Test type: unit
+        """
+        env = PushPOMDP(
+            discount_factor=0.95,
+            obstacles=[(3.0, 3.0)],
+            obstacle_radius=0.5,
+            obstacle_penalty=-10.0,
+            transition_error_prob=0.0,
+            friction_coefficient=0.0,
+        )
+
+        # State where 'right' triggers penalty: robot at (2,3), intended=(3,3) in obstacle
+        collision_state = np.array([2.0, 3.0, 5.0, 5.0, 9.0, 9.0])
+        no_collision_state = np.array([1.0, 1.0, 5.0, 5.0, 9.0, 9.0])
+
+        np.random.seed(0)
+        collision_batch = env.reward_batch(np.tile(collision_state, (10, 1)), "right")
+        np.random.seed(0)
+        collision_scalar = env.reward(collision_state, "right")
+
+        # All rewards in the batch should equal the scalar (deterministic transition)
+        np.testing.assert_allclose(collision_batch, collision_scalar, rtol=1e-10)
+
+        np.random.seed(1)
+        no_col_batch = env.reward_batch(np.tile(no_collision_state, (10, 1)), "right")
+        np.random.seed(1)
+        no_col_scalar = env.reward(no_collision_state, "right")
+
+        np.testing.assert_allclose(no_col_batch, no_col_scalar, rtol=1e-10)
+
+        # Collision rewards should be lower than no-collision rewards
+        assert np.mean(collision_batch) < np.mean(no_col_batch)
+
+
+class TestPushNativeSimulateRollout:
+    """Tests for the native C++ simulate_rollout_discrete entry point."""
+
+    def test_push_native_simulate_rollout_matches_python(self):
+        """Native C++ rollout must produce the same discounted return as the Python reference.
+
+        Purpose: Validates that simulate_rollout_discrete in C++ is a byte-exact
+            port of PushPOMDP._python_simulate_random_rollout for deterministic
+            (transition_error_prob=0) rollouts with a fixed action sequence.
+
+        Given: A PushPOMDP with transition_error_prob=0 and a fixed initial state.
+            A deterministic action sequence is pre-drawn and shared between the
+            Python and native paths so that both see the same action at each step.
+
+        When: Both paths execute the rollout from the same state with the same
+            action sequence and environment parameters.
+
+        Then: The discounted returns agree to within atol=1e-9, confirming that
+            the C++ transition, reward, and terminal-check kernels are faithful
+            ports of the Python originals.
+
+        Test type: integration
+        """
+        _ACTIONS = ["up", "down", "right", "left"]
+
+        env = PushPOMDP(
+            discount_factor=0.95,
+            grid_size=10,
+            push_threshold=1.0,
+            friction_coefficient=0.3,
+            observation_noise=0.1,
+            obstacles=[(3.0, 3.0), (7.0, 7.0)],
+            obstacle_radius=0.5,
+            obstacle_penalty=-10.0,
+            transition_error_prob=0.0,
+        )
+
+        initial_state = np.array([2.0, 3.0, 2.5, 3.1, 9.0, 9.0], dtype=np.float64)
+        max_depth = 20
+        depth = 0
+
+        # Pre-draw action indices that will be shared between both paths.
+        np.random.seed(123)
+        action_indices = np.random.randint(0, 4, size=max_depth, dtype=np.int64)
+        action_strings = [_ACTIONS[i] for i in action_indices]
+
+        # Python reference path (uses the pre-drawn action string list).
+        python_return = env._python_simulate_random_rollout(
+            state=initial_state,
+            actions=action_strings,
+            max_depth=max_depth,
+            discount_factor=env.discount_factor,
+            depth=depth,
+        )
+
+        # Native C++ path: seed must NOT be set here — with transition_error_prob=0
+        # the C++ kernel makes zero RNG calls, so the result is fully determined
+        # by the action_indices array.
+        obs_arr = env._get_native_rollout_obstacles()
+        state_arr = np.asarray(initial_state, dtype=np.float64)
+        native_return = float(
+            push_native.simulate_rollout_discrete(
+                state=state_arr,
+                action_indices=action_indices,
+                max_depth=max_depth,
+                depth=depth,
+                discount=env.discount_factor,
+                grid_size=float(env.grid_size),
+                push_threshold=float(env.push_threshold),
+                friction_coefficient=float(env.friction_coefficient),
+                obstacles=obs_arr,
+                obstacle_radius=float(env.obstacle_radius),
+                obstacle_penalty=float(env.obstacle_penalty),
+                transition_error_prob=float(env.transition_error_prob),
+            )
+        )
+
+        np.testing.assert_allclose(
+            native_return,
+            python_return,
+            atol=1e-9,
+            err_msg=(
+                f"Native rollout ({native_return:.15f}) does not match "
+                f"Python reference ({python_return:.15f})."
+            ),
+        )
+
+    def test_push_native_simulate_rollout_no_obstacles(self):
+        """Native rollout with no obstacles matches Python reference.
+
+        Purpose: Validates the obstacle-free code path in simulate_rollout_discrete.
+
+        Given: A PushPOMDP with no obstacles and transition_error_prob=0.
+        When: Both paths execute from the same state with the same action sequence.
+        Then: Returns match to within atol=1e-9.
+
+        Test type: integration
+        """
+        _ACTIONS = ["up", "down", "right", "left"]
+
+        env = PushPOMDP(
+            discount_factor=0.99,
+            grid_size=10,
+            push_threshold=1.5,
+            friction_coefficient=0.2,
+            observation_noise=0.1,
+            obstacles=None,
+            obstacle_radius=0.5,
+            obstacle_penalty=-5.0,
+            transition_error_prob=0.0,
+        )
+
+        initial_state = np.array([0.0, 0.0, 5.0, 5.0, 9.0, 9.0], dtype=np.float64)
+        max_depth = 15
+
+        np.random.seed(999)
+        action_indices = np.random.randint(0, 4, size=max_depth, dtype=np.int64)
+        action_strings = [_ACTIONS[i] for i in action_indices]
+
+        python_return = env._python_simulate_random_rollout(
+            state=initial_state,
+            actions=action_strings,
+            max_depth=max_depth,
+            discount_factor=env.discount_factor,
+        )
+
+        obs_arr = env._get_native_rollout_obstacles()
+        native_return = float(
+            push_native.simulate_rollout_discrete(
+                state=np.asarray(initial_state, dtype=np.float64),
+                action_indices=action_indices,
+                max_depth=max_depth,
+                depth=0,
+                discount=env.discount_factor,
+                grid_size=float(env.grid_size),
+                push_threshold=float(env.push_threshold),
+                friction_coefficient=float(env.friction_coefficient),
+                obstacles=obs_arr,
+                obstacle_radius=float(env.obstacle_radius),
+                obstacle_penalty=float(env.obstacle_penalty),
+                transition_error_prob=float(env.transition_error_prob),
+            )
+        )
+
+        np.testing.assert_allclose(
+            native_return,
+            python_return,
+            atol=1e-9,
+            err_msg=(
+                f"Native rollout no-obstacles ({native_return:.15f}) != "
+                f"Python ({python_return:.15f})"
+            ),
+        )
+
+    def test_push_native_rollout_terminal_state_returns_zero(self):
+        """Rollout from a terminal state returns zero immediately.
+
+        Purpose: Validates that simulate_rollout_discrete correctly detects a
+            terminal initial state and returns 0.0 without stepping.
+
+        Given: A PushPOMDP and a state where the object is already at the target.
+        When: simulate_random_rollout is called from the terminal state.
+        Then: The return value is 0.0.
+
+        Test type: unit
+        """
+        env = PushPOMDP(
+            discount_factor=0.95,
+            grid_size=10,
+            push_threshold=1.0,
+            friction_coefficient=0.3,
+            observation_noise=0.1,
+            transition_error_prob=0.0,
+        )
+
+        # Object is at the target: (9-9)^2 + (9-9)^2 = 0 < 0.25, terminal.
+        terminal_state = np.array([1.0, 1.0, 9.0, 9.0, 9.0, 9.0], dtype=np.float64)
+        assert env.is_terminal(terminal_state)
+
+        class _DummySampler:
+            def sample(self) -> str:
+                return "up"
+
+        result = env.simulate_random_rollout(
+            state=terminal_state,
+            action_sampler=_DummySampler(),
+            max_depth=20,
+            discount_factor=env.discount_factor,
+        )
+        assert result == 0.0

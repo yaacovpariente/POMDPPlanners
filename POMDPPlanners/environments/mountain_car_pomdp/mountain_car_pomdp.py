@@ -101,6 +101,9 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
 
         # Define actions: -1 (left), 0 (no acceleration), 1 (right)
         self.actions = [-1, 0, 1]
+        self._actions_int32: np.ndarray = np.ascontiguousarray(
+            np.array(self.actions, dtype=np.int32)
+        )
 
         # Define observation noise parameters
         self.position_noise = 0.1
@@ -264,6 +267,51 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
     def is_terminal(self, state: Tuple[float, float]) -> bool:
         position, _ = state
         return bool(position >= self.goal_position)
+
+    def simulate_random_rollout(
+        self,
+        state: Any,
+        action_sampler: Any,
+        max_depth: int,
+        discount_factor: float,
+        depth: int = 0,
+    ) -> float:
+        """Random rollout via native C++.
+
+        Args:
+            state: Current 2-D car state ``[position, velocity]``.
+            action_sampler: Object with a ``sample()`` method (used only on the
+                Python fallback path).
+            max_depth: Maximum rollout depth.
+            discount_factor: Per-step discount factor.
+            depth: Depth already consumed by the search tree. Defaults to 0.
+
+        Returns:
+            Discounted sum of immediate rewards along the sampled trajectory.
+        """
+        steps_left = max_depth - depth
+        if steps_left <= 0:
+            return 0.0
+
+        state_arr = np.ascontiguousarray(np.asarray(state, dtype=np.float64).ravel())
+        n_actions = len(self.actions)
+        action_indices = np.random.randint(0, n_actions, size=steps_left, dtype=np.int32)
+
+        return _native.simulate_rollout(
+            initial_state=state_arr,
+            actions=self._actions_int32,
+            action_indices=action_indices,
+            max_depth=max_depth,
+            start_depth=depth,
+            discount_factor=discount_factor,
+            power=self.power,
+            gravity=self.gravity,
+            max_speed=self.max_speed,
+            min_position=self.min_position,
+            max_position=self.max_position,
+            goal_position=self.goal_position,
+            covariance=self._state_transition_dist.covariance,
+        )
 
     def initial_state_dist(self) -> Distribution:
         class InitialState(Distribution):

@@ -608,6 +608,46 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
         rewards[oob & ~goal_mask & ~in_obstacle] += self.obstacle_reward
         return rewards
 
+    def sample_next_state_batch(
+        self, states: Union[np.ndarray, Sequence[Any]], action: str
+    ) -> np.ndarray:
+        states_arr = np.asarray(states)
+        n = len(states_arr)
+        cumprobs = self._transition_cumprobs_np[action]
+        draws = np.random.rand(n)
+        idxs = np.searchsorted(cumprobs, draws)
+        idxs = np.clip(idxs, 0, self._n_actions - 1)
+        offsets = np.stack([self._action_vectors[i] for i in idxs], axis=0)
+        return states_arr + offsets
+
+    def observation_log_probability_per_state(
+        self,
+        next_states: Union[np.ndarray, Sequence[Any]],
+        action: Any,
+        observation: np.ndarray,
+    ) -> np.ndarray:
+        if self.observation_model_type != ObservationModelType.NORMAL:
+            return super().observation_log_probability_per_state(
+                next_states=next_states, action=action, observation=observation
+            )
+        next_states_arr = np.asarray(next_states)
+        n = len(next_states_arr)
+        observation_arr = np.asarray(observation)
+        result = np.full(n, -np.inf)
+        for i in range(n):
+            ns = next_states_arr[i]
+            distances = np.linalg.norm(self.beacons - ns[:, np.newaxis], axis=0)
+            near_beacon = float(np.min(distances)) < self.beacon_radius
+            probs_vec = self._obs_probs_near if near_beacon else self._obs_probs_far
+            candidates = [ns + self._action_vectors[j] for j in range(self._n_actions)]
+            candidates.append(ns)
+            for j, cand in enumerate(candidates):
+                if np.array_equal(observation_arr, cand):
+                    p = float(probs_vec[j])
+                    result[i] = np.log(p) if p > 0.0 else -np.inf
+                    break
+        return result
+
     def is_terminal(self, state: np.ndarray) -> bool:
         if state.shape != (2,):
             raise ValueError("state must be a 2D vector")

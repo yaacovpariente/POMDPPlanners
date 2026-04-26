@@ -20,6 +20,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, List, Optional, Sequence, Union
 
+_INTEGRATOR_CODES: dict[str, int] = {"euler": 0, "semi-implicit euler": 1}
+
 import numpy as np
 from numpy.typing import NDArray
 
@@ -151,6 +153,7 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
         self.force_mag = 10.0
         self.tau = 0.02  # seconds between state updates
         self.kinematics_integrator = "euler"
+        self._kinematics_integrator_int: int = _INTEGRATOR_CODES[self.kinematics_integrator]
         self.theta_threshold_radians = 12 * 2 * math.pi / 360
         self.x_threshold = 2.4
         self.screen_width = 600
@@ -323,6 +326,53 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
         )
 
         return terminated
+
+    def simulate_random_rollout(
+        self,
+        state: Any,
+        action_sampler: Any,
+        max_depth: int,
+        discount_factor: float,
+        depth: int = 0,
+    ) -> float:
+        """Random rollout via native C++.
+
+        Args:
+            state: Current 4-D cart-pole state ``[x, x_dot, theta, theta_dot]``.
+            action_sampler: Object with a ``sample()`` method (used only on the
+                Python fallback path).
+            max_depth: Maximum rollout depth.
+            discount_factor: Per-step discount factor.
+            depth: Depth already consumed by the search tree. Defaults to 0.
+
+        Returns:
+            Discounted sum of immediate rewards along the sampled trajectory.
+        """
+        steps_left = max_depth - depth
+        if steps_left <= 0:
+            return 0.0
+
+        state_arr = np.ascontiguousarray(np.asarray(state, dtype=np.float64).ravel())
+        action_indices = np.random.randint(0, 2, size=steps_left, dtype=np.int32)
+
+        return _native.simulate_rollout(
+            initial_state=state_arr,
+            action_indices=action_indices,
+            max_depth=max_depth,
+            start_depth=depth,
+            discount_factor=discount_factor,
+            force_mag=self.force_mag,
+            total_mass=self.total_mass,
+            polemass_length=self.polemass_length,
+            gravity=self.gravity,
+            length=self.length,
+            kinematics_integrator=self._kinematics_integrator_int,
+            tau=self.tau,
+            masspole=self.masspole,
+            x_threshold=self.x_threshold,
+            theta_threshold=self.theta_threshold_radians,
+            covariance=self._state_transition_dist.covariance,
+        )
 
     def initial_state_dist(self) -> Distribution:
         return CartPoleInitialStateDistribution()

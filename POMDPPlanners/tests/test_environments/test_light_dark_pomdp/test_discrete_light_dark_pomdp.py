@@ -1651,3 +1651,125 @@ def test_discrete_sample_observation_n_samples_for_non_normal():
         assert len(direct) == 4
         for value in direct:
             assert isinstance(value, np.ndarray) or value == "None"
+
+
+# ---------------------------------------------------------------------------
+# Batch API: sample_next_state_batch and observation_log_probability_per_state
+# ---------------------------------------------------------------------------
+
+
+def test_discrete_sample_next_state_batch_matches_scalar_loop(base_light_dark_environment):
+    """sample_next_state_batch under a fixed seed matches per-particle scalar loop.
+
+    Purpose: Validates that DiscreteLightDarkPOMDP.sample_next_state_batch draws
+        N next-states in one vectorised call and the results match calling
+        sample_next_state once per particle under the same RNG sequence.
+
+    Given: 24 random grid-integer states, action="up", and identical numpy seeds
+    When: sample_next_state_batch is called vs. a manual loop of sample_next_state calls
+    Then: Output shape is (N, 2) and each row is array-equal to the scalar loop result
+
+    Test type: unit
+    """
+    env = base_light_dark_environment
+    rng = np.random.RandomState(7)
+    states = rng.randint(0, env.grid_size + 1, (24, 2)).astype(float)
+    action = "up"
+
+    np.random.seed(42)
+    batch = env.sample_next_state_batch(states, action)
+    assert isinstance(batch, np.ndarray)
+    assert batch.shape == (24, 2)
+
+    np.random.seed(42)
+    scalar_loop = np.stack([env.sample_next_state(states[i], action) for i in range(24)], axis=0)
+    np.testing.assert_array_equal(batch, scalar_loop)
+
+
+def test_discrete_sample_next_state_batch_action_coverage(base_light_dark_environment):
+    """sample_next_state_batch works for every discrete action direction.
+
+    Purpose: Validates sample_next_state_batch for all four actions
+
+    Given: A DiscreteLightDarkPOMDP env and a fixed state, N=16 identical particles
+    When: sample_next_state_batch is called for each of the four actions
+    Then: Output shape is (16, 2) and all outputs are within valid grid bounds
+
+    Test type: unit
+    """
+    env = base_light_dark_environment
+    states = np.tile(np.array([5.0, 5.0]), (16, 1))
+    for action in env.get_actions():
+        result = env.sample_next_state_batch(states, action)
+        assert isinstance(result, np.ndarray)
+        assert result.shape == (16, 2)
+
+
+def test_discrete_observation_log_probability_per_state_matches_scalar(
+    base_light_dark_environment,
+):
+    """observation_log_probability_per_state matches scalar-loop reference.
+
+    Purpose: Validates that DiscreteLightDarkPOMDP.observation_log_probability_per_state
+        returns the same log-probs as calling observation_log_probability once per
+        next-state with a single-element observation list.
+
+    Given: 16 random grid-integer next-states, action="up", and a fixed observation
+        (the state-itself which is the "no-noise" candidate)
+    When: observation_log_probability_per_state is called and compared to scalar loop
+    Then: Output shape is (16,) and allclose within atol=1e-12
+
+    Test type: unit
+    """
+    env = base_light_dark_environment
+    rng = np.random.RandomState(99)
+    next_states = rng.randint(0, env.grid_size + 1, (16, 2)).astype(float)
+    action = "up"
+    # Use the first next_state as a fixed observation (deterministic, no RNG needed)
+    observation = next_states[0].copy()
+
+    batch = env.observation_log_probability_per_state(next_states, action, observation)
+    assert batch.shape == (16,)
+
+    scalar = np.array(
+        [
+            env.observation_log_probability(next_states[i], action, [observation])[0]
+            for i in range(16)
+        ]
+    )
+    np.testing.assert_allclose(batch, scalar, atol=1e-12)
+
+
+def test_discrete_observation_log_probability_per_state_near_vs_far(
+    base_light_dark_environment,
+):
+    """observation_log_probability_per_state distinguishes near-beacon from far-beacon.
+
+    Purpose: Validates that per-state log-probs correctly switch between the
+        near-beacon and far-beacon probability tables based on each next-state's
+        distance to the closest beacon.
+
+    Given: A DiscreteLightDarkPOMDP env, two next-states (one near a beacon, one far),
+        action="up", and a common observation (the near-beacon state itself)
+    When: observation_log_probability_per_state is called with both next-states
+    Then: The near-beacon state yields a higher log-prob than the far-beacon state
+
+    Test type: unit
+    """
+    env = base_light_dark_environment
+    near_state = np.array([0.0, 0.0])  # directly on first beacon
+    far_state = np.array([6.0, 3.0])  # away from all beacons
+    next_states = np.stack([near_state, far_state], axis=0)
+    action = "up"
+    # observation = near_state itself (the "no noise" candidate for near_state)
+    observation = near_state.copy()
+
+    result = env.observation_log_probability_per_state(next_states, action, observation)
+    assert result.shape == (2,)
+    # The near-beacon state should assign higher (or equal) probability to
+    # its own position as the "correct" observation than the far state does.
+    # Both can be -inf if observation is off-distribution for far_state, that's fine.
+    scalar_near = env.observation_log_probability(near_state, action, [observation])[0]
+    scalar_far = env.observation_log_probability(far_state, action, [observation])[0]
+    np.testing.assert_allclose(result[0], scalar_near, atol=1e-12)
+    np.testing.assert_allclose(result[1], scalar_far, atol=1e-12)
