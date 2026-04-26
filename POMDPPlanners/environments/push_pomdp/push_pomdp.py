@@ -192,6 +192,11 @@ class PushPOMDP(DiscreteActionsEnvironment):
         self._initial_state = initial_state
         self.transition_error_prob = transition_error_prob
 
+        # Cached constants for the scalar observation log-probability fast-path
+        # used by POMCPOW's WeightedParticleBeliefStateUpdate.inplace_update.
+        self._obs_variance = float(observation_noise) * float(observation_noise)
+        self._obs_log_norm = -math.log(2.0 * math.pi * self._obs_variance)
+
         # Define actions
         self.actions = ["up", "down", "right", "left"]
 
@@ -424,6 +429,18 @@ class PushPOMDP(DiscreteActionsEnvironment):
         diffs = obs_arr[:, 2:4] - np.asarray(next_state, dtype=float)[2:4]
         sq = np.sum(diffs * diffs, axis=1)
         return log_norm - 0.5 * sq / variance
+
+    def observation_log_probability_single(
+        self, next_state: Any, action: Any, observation: Any
+    ) -> float:
+        # Scalar fast-path used by POMCPOW's incremental belief update.
+        # Same 2-D Gaussian on object position (cols 2:4) as the batched path
+        # above, but skips numpy array allocation per call. Cached
+        # ``_obs_variance`` and ``_obs_log_norm`` are set in __init__.
+        del action  # unused; obs noise is action-independent for this env
+        dx = float(observation[2]) - float(next_state[2])
+        dy = float(observation[3]) - float(next_state[3])
+        return self._obs_log_norm - 0.5 * (dx * dx + dy * dy) / self._obs_variance
 
     def reward(self, state: np.ndarray, action: str) -> float:
         # Compute next state to evaluate reward based on action result.
