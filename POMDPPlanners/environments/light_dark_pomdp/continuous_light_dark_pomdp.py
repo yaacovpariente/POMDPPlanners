@@ -26,6 +26,7 @@ Classes:
 """
 
 import math
+from collections.abc import Hashable
 from enum import Enum
 from typing import Any, Dict, List, Sequence, Tuple, Union
 
@@ -789,6 +790,11 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
             and self.observation_model_type == other.observation_model_type
         )
 
+    def hash_action(self, action: Any) -> Hashable:
+        # Continuous actions are ndarray; bytes match np.array_equal semantics
+        # for arrays of identical shape and dtype.
+        return np.ascontiguousarray(action, dtype=np.float64).tobytes()
+
 
 class ContinuousLightDarkPOMDPDiscreteActions(ContinuousLightDarkPOMDP, DiscreteActionsEnvironment):
     """Continuous Light-Dark POMDP environment with discrete actions.
@@ -1044,3 +1050,7 @@ class ContinuousLightDarkPOMDPDiscreteActions(ContinuousLightDarkPOMDP, Discrete
                 for k, value in self.action_to_vector.items()
             )
         )
+
+    def hash_action(self, action: Any) -> Hashable:
+        # Discrete-action variant: actions are str labels (e.g. "up").
+        return action

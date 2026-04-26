@@ -25,6 +25,7 @@ Classes:
 from enum import Enum
 from math import hypot
 from pathlib import Path
+from collections.abc import Hashable
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
@@ -267,6 +268,10 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
 
     def is_equal_observation(self, observation1: np.ndarray, observation2: np.ndarray) -> bool:
         return np.array_equal(observation1, observation2)
+
+    def hash_action(self, action: Any) -> Hashable:
+        # Discrete int actions (force levels); already hashable.
+        return action
 
     def cache_visualization(self, history: List[StepData], cache_path: Path) -> None:
         """Cache animated visualization of the safety ant velocity episode.

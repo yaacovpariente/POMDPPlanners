@@ -766,6 +766,9 @@ class _StepCountingEnv(Environment):
     def is_equal_observation(self, observation1: Any, observation2: Any) -> bool:
         return observation1 == observation2
 
+    def hash_action(self, action: Any) -> Any:
+        return action
+
     def get_actions(self) -> List[Any]:
         return [0, 1, 2]
 

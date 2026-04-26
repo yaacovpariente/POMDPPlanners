@@ -18,6 +18,7 @@ Classes:
 import math
 from enum import Enum
 from pathlib import Path
+from collections.abc import Hashable
 from typing import Any, Dict, List, Optional, Sequence, Union
 
 _INTEGRATOR_CODES: dict[str, int] = {"euler": 0, "semi-implicit euler": 1}
@@ -403,6 +404,10 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
 
     def is_equal_observation(self, observation1: np.ndarray, observation2: np.ndarray) -> bool:
         return np.array_equal(observation1, observation2)
+
+    def hash_action(self, action: Any) -> Hashable:
+        # Discrete int actions (0, 1); already hashable.
+        return action
 
     def get_metric_names(self) -> List[str]:
         """Get names of CartPole POMDP specific metrics.

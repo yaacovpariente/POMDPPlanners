@@ -453,6 +453,28 @@ class Environment(ABC):  # pylint: disable=too-many-public-methods
         return observation
 
     @abstractmethod
+    def hash_action(self, action: Any) -> Hashable:
+        """Return a hashable key consistent with action equality.
+
+        Used by tree-search planners to index action children of a belief
+        node in O(1). The returned key MUST satisfy::
+
+            action_a == action_b   (per env's notion of equality)
+            ==> hash_action(action_a) == hash_action(action_b)
+
+        Subclasses with non-hashable actions (e.g. ``np.ndarray``) must
+        override to return a hashable surrogate (``tobytes()`` is the
+        standard choice for ndarray actions, which mirrors the
+        ``np.array_equal`` semantics used by the linear-scan fallback).
+
+        Args:
+            action: Action to hash.
+
+        Returns:
+            A hashable key derived from ``action``.
+        """
+
+    @abstractmethod
     def sample_next_state(self, state: Any, action: Any, n_samples: int = 1) -> Any:
         """Sample one or more next states for ``(state, action)``.
 

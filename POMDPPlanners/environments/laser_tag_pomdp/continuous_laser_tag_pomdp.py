@@ -536,6 +536,11 @@ class ContinuousLaserTagPOMDP(Environment):
         # match that contract by hashing the float64 byte representation.
         return np.ascontiguousarray(np.asarray(observation, dtype=float)).tobytes()
 
+    def hash_action(self, action: Any) -> Hashable:
+        # Continuous actions are ndarray of shape (3,); bytes match
+        # np.array_equal semantics for arrays of identical shape and dtype.
+        return np.ascontiguousarray(action, dtype=np.float64).tobytes()
+
     # ------------------------------------------------------------------
     # Metrics
     # ------------------------------------------------------------------
@@ -884,6 +889,10 @@ class ContinuousLaserTagPOMDPDiscreteActions(ContinuousLaserTagPOMDP, DiscreteAc
             else:
                 converted.append(step)
         return super()._count_episode_metrics(converted)
+
+    def hash_action(self, action: Any) -> Hashable:
+        # Discrete-action variant: actions are str labels (e.g. "up").
+        return action
 
 
 class _ContinuousLaserTagInitialDist(Distribution):

@@ -171,6 +171,7 @@ class ICVaR_POMCPOW(ArenaPathSimulationPolicyCostSetting):
             delta=self.delta,
             discrete_actions=self.discrete_actions,
             visit_count_penalty=self.visit_count_penalty,
+            environment=self.environment,
         )
 
     def _select_or_create_observation_node(

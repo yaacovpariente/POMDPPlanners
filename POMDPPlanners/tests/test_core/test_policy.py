@@ -78,6 +78,9 @@ class MockEnvironment(Environment):
     def is_equal_observation(self, observation1, observation2):
         return True
 
+    def hash_action(self, action):
+        return action
+
 
 class MockBelief(Belief):
     def __init__(self, environment: Environment):

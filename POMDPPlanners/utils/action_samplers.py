@@ -1,3 +1,4 @@
+import math
 import random
 from typing import Any, List, Optional
 
@@ -20,25 +21,39 @@ class UnitCircleActionSampler(ActionSampler):
     with naive rectangular sampling.
 
     Mathematical Foundation:
-        - Angle θ ~ Uniform(0, 2π)
-        - Radius r ~ √Uniform(0, 1) × max_magnitude
-        - Action = [r·cos(θ), r·sin(θ)]
+        - Angle theta ~ Uniform(0, 2*pi)
+        - Radius r ~ sqrt(Uniform(0, 1)) * max_magnitude
+        - Action = [r*cos(theta), r*sin(theta)]
 
     The square root transformation for radius ensures uniform area distribution
     within the circle rather than biasing toward the center.
 
     Args:
         max_action_magnitude: Maximum magnitude of action vectors (circle radius)
+        seed: Optional integer seed. When provided, draws come from a private
+            ``random.Random`` instance keyed on the seed for deterministic
+            reproduction. When ``None`` (default), draws come from the
+            module-level ``random`` generator, which the caller may seed via
+            ``random.seed``.
     """
 
-    def __init__(self, max_action_magnitude: float = 1.0):
+    def __init__(
+        self,
+        max_action_magnitude: float = 1.0,
+        *,
+        seed: Optional[int] = None,
+    ):
         """
         Initialize the unit circle action sampler.
 
         Args:
             max_action_magnitude: Maximum magnitude of the action vector (default: 1.0)
+            seed: Optional integer seed for a private ``random.Random`` instance.
+                When ``None`` (default), the module-level ``random`` generator is used.
         """
         self.max_action_magnitude = max_action_magnitude
+        self._seed = seed
+        self._rng: Optional[random.Random] = random.Random(seed) if seed is not None else None
 
     def sample(self, belief_node: Optional[BeliefNode] = None) -> np.ndarray:
         """
@@ -50,17 +65,15 @@ class UnitCircleActionSampler(ActionSampler):
         Returns:
             np.ndarray: A 2D action vector within the unit circle
         """
-        # Generate random angle in [0, 2π]
-        theta = np.random.uniform(0, 2 * np.pi)
-
-        # Generate random radius in [0, 1] using square root for uniform distribution
-        r = np.sqrt(np.random.uniform(0, 1)) * self.max_action_magnitude
-
-        # Convert polar coordinates to Cartesian
-        x = r * np.cos(theta)
-        y = r * np.sin(theta)
-
-        return np.array([x, y])
+        del belief_node  # unused - kept for ActionSampler protocol parity
+        rng = self._rng
+        if rng is None:
+            theta = random.uniform(0.0, 2.0 * math.pi)
+            r = math.sqrt(random.random()) * self.max_action_magnitude
+        else:
+            theta = rng.uniform(0.0, 2.0 * math.pi)
+            r = math.sqrt(rng.random()) * self.max_action_magnitude
+        return np.array([r * math.cos(theta), r * math.sin(theta)], dtype=np.float64)
 
 
 class DiscreteActionSampler(ActionSampler):

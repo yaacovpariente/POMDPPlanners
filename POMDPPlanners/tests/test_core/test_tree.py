@@ -60,6 +60,9 @@ class MockEnvironment(Environment):
         """Check if two observations are equal."""
         return observation1 == observation2
 
+    def hash_action(self, action):
+        return action
+
     def is_terminal(self, state):
         """Check if state is terminal."""
         return False
