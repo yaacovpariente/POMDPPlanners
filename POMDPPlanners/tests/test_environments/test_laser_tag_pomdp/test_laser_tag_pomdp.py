@@ -21,6 +21,7 @@ from POMDPPlanners.core.environment import SpaceType
 from POMDPPlanners.core.policy import Policy, PolicyRunData, PolicySpaceInfo
 from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.environments.laser_tag_pomdp import LaserTagPOMDP
+from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
 from POMDPPlanners.simulations.episodes import run_episode
 from POMDPPlanners.tests.test_utils.confidence_interval_utils import (
     verify_metrics_within_confidence_intervals,
@@ -1784,6 +1785,298 @@ def test_metrics_confidence_intervals():
 
     # Use generic confidence interval verification
     verify_metrics_within_confidence_intervals(metrics)
+
+
+class TestLaserTagRewardBatch:
+    """Tests for the vectorised reward_batch override on LaserTagPOMDP.
+
+    Purpose: Validates that reward_batch produces results numerically identical to
+        the scalar reward() loop and handles edge cases correctly.
+
+    Given: A LaserTagPOMDP instance with default parameters.
+    When: reward_batch is called with various particle sets and actions.
+    Then: Results match the scalar loop within floating-point tolerance and corner
+        cases (terminal states, out-of-bounds intended positions) are handled.
+
+    Test type: unit
+    """
+
+    def _make_env(self) -> LaserTagPOMDP:
+        return LaserTagPOMDP(discount_factor=0.95)
+
+    def _sample_states(self, env: LaserTagPOMDP, n: int, seed: int = 0) -> np.ndarray:
+        np.random.seed(seed)
+        dist = env.initial_state_dist()
+        states = np.array([dist.sample()[0] for _ in range(n)], dtype=np.float64)
+        return states
+
+    def test_lasertag_reward_batch_matches_scalar_loop(self) -> None:
+        """reward_batch agrees with the scalar loop for 64 particles × all 5 actions.
+
+        Purpose: Validates numerical equivalence between reward_batch and the
+            per-particle Python loop that calls scalar reward() for every action.
+
+        Given: 64 non-terminal particle states sampled from the initial distribution.
+        When: reward_batch(states, action) and [env.reward(s, action) for s in states]
+            are computed for each action in {0, 1, 2, 3, 4}.
+        Then: Arrays agree with atol=1e-12.
+
+        Test type: unit
+        """
+        env = self._make_env()
+        states = self._sample_states(env, 64, seed=42)
+
+        for action in env.get_actions():
+            batch = env.reward_batch(states, action)
+            scalar = np.array([env.reward(s, action) for s in states], dtype=np.float64)
+            np.testing.assert_allclose(
+                batch,
+                scalar,
+                atol=1e-12,
+                err_msg=f"Mismatch for action={action}",
+            )
+
+    def test_lasertag_reward_batch_terminal_states_return_zero(self) -> None:
+        """reward_batch returns 0 for every particle whose terminal flag is set.
+
+        Purpose: Validates that terminal particles always yield reward 0 regardless
+            of robot/opponent positions or the chosen action.
+
+        Given: A batch of 20 states with terminal flag (index 4) set to 1.0.
+        When: reward_batch is called with each action in {0, 1, 2, 3, 4}.
+        Then: All returned rewards are exactly 0.0.
+
+        Test type: unit
+        """
+        env = self._make_env()
+        states = self._sample_states(env, 20, seed=7)
+        states[:, 4] = 1.0  # Force all particles to terminal
+
+        for action in env.get_actions():
+            batch = env.reward_batch(states, action)
+            assert np.all(batch == 0.0), (
+                f"Expected all-zero rewards for terminal states with action={action}, "
+                f"got {batch}"
+            )
+
+    def test_lasertag_reward_batch_handles_out_of_bounds_intended(self) -> None:
+        """reward_batch matches scalar reward when the intended move exits the grid.
+
+        Purpose: Validates that an intended position outside the floor grid is treated
+            identically by reward_batch and scalar reward (no crash, correct penalty
+            logic — OOB positions are not in self.walls so no wall penalty applies).
+
+        Given: A robot placed at the top row (row=0) attempting to move North (action=0),
+            which would yield intended row=-1 (out of bounds).
+        When: reward_batch is called with this set of particles.
+        Then: reward_batch result equals the scalar reward result for each particle.
+
+        Test type: unit
+        """
+        env = self._make_env()
+        # Robot at row=0, various cols; opponent somewhere else; non-terminal.
+        n = 10
+        states = np.zeros((n, 5), dtype=np.float64)
+        states[:, 0] = 0.0  # robot row = 0 → North moves OOB
+        states[:, 1] = np.arange(n, dtype=np.float64) % env.floor_shape[1]
+        states[:, 2] = 5.0  # opponent row
+        states[:, 3] = 3.0  # opponent col
+        states[:, 4] = 0.0  # non-terminal
+
+        action = 0  # North — intended row = -1 (OOB)
+        batch = env.reward_batch(states, action)
+        scalar = np.array([env.reward(s, action) for s in states], dtype=np.float64)
+        np.testing.assert_allclose(
+            batch,
+            scalar,
+            atol=1e-12,
+            err_msg="Mismatch for OOB-intended-position particles",
+        )
+
+
+class _UniformActionSampler(ActionSampler):
+    """Action sampler that draws uniformly from {0, 1, 2, 3, 4}."""
+
+    def sample(self, belief_node=None) -> int:
+        del belief_node
+        return int(np.random.choice([0, 1, 2, 3, 4]))
+
+
+def _python_rollout(
+    env: LaserTagPOMDP,
+    state: np.ndarray,
+    max_depth: int,
+    discount_factor: float,
+    depth: int = 0,
+) -> float:
+    """Pure Python rollout that uses numpy RNG (bypasses the native override)."""
+    from POMDPPlanners.planners.planners_utils.rollout import (
+        python_random_rollout,
+    )  # pylint: disable=import-outside-toplevel
+
+    return python_random_rollout(
+        state=state,
+        depth=depth,
+        action_sampler=_UniformActionSampler(),
+        environment=env,
+        discount_factor=discount_factor,
+        max_depth=max_depth,
+    )
+
+
+class TestNativeDiscreteRollout:
+    """Tests for the native C++ discrete LaserTag rollout kernel."""
+
+    def test_lasertag_native_simulate_rollout_matches_python(self) -> None:
+        """Native C++ rollout produces the same return distribution as the Python loop.
+
+        Purpose: Validates that simulate_rollout_discrete in the C++ extension implements
+            the same stochastic transition / reward / terminal logic as the Python
+            ``Environment.simulate_random_rollout`` base-class loop, so that replacing
+            the Python loop with the C++ kernel does not change the algorithm's value
+            estimates in expectation.
+
+        Given: A LaserTagPOMDP with default walls and dangerous areas, a fixed
+            initial state, max_depth=15, discount=0.95, and 500 independent
+            rollout trials.
+        When: 500 trials are run with both the pure Python path (NumPy RNG) and
+            the native C++ path (mt19937_64 RNG), each seeded independently before
+            the batch.
+        Then: The Monte-Carlo means of the two return distributions agree within
+            0.5 standard deviations of the Python distribution.
+
+        Test type: integration
+        """
+        env = LaserTagPOMDP(discount_factor=0.95)
+        state = np.array([0.0, 0.0, 6.0, 5.0, 0.0])
+        max_depth = 15
+        discount = 0.95
+        n_trials = 500
+
+        # Python path (base-class loop, uses numpy RNG).
+        np.random.seed(0)
+        python_returns = np.array(
+            [_python_rollout(env, state, max_depth, discount) for _ in range(n_trials)]
+        )
+
+        # Native C++ path (uses pomdp_native::default_rng, mt19937_64).
+        from POMDPPlanners.environments.laser_tag_pomdp import (
+            _native,
+        )  # pylint: disable=import-outside-toplevel
+
+        _native.set_seed(0)
+        native_returns = np.array(
+            [
+                env.simulate_random_rollout(
+                    state=state,
+                    action_sampler=_UniformActionSampler(),
+                    max_depth=max_depth,
+                    discount_factor=discount,
+                )
+                for _ in range(n_trials)
+            ]
+        )
+
+        py_mean = float(np.mean(python_returns))
+        nat_mean = float(np.mean(native_returns))
+        scale = float(np.std(python_returns)) + 1e-6
+        diff = abs(nat_mean - py_mean)
+        assert diff < 0.5 * scale, (
+            f"Native mean {nat_mean:.3f} differs from Python mean {py_mean:.3f} "
+            f"by {diff:.3f} (scale={scale:.3f}). C++ and Python rollout kernels "
+            "implement different distributions."
+        )
+
+    def test_lasertag_native_rollout_returns_finite_float(self) -> None:
+        """Native rollout returns a finite float from a valid initial state.
+
+        Purpose: Smoke-test that simulate_rollout_discrete does not raise and
+            returns a finite value.
+
+        Given: A default LaserTagPOMDP, a non-terminal state, max_depth=10.
+        When: simulate_rollout_discrete is called via the LaserTagPOMDP override.
+        Then: Result is a finite float.
+
+        Test type: unit
+        """
+        env = LaserTagPOMDP(discount_factor=0.95)
+        state = np.array([0.0, 0.0, 6.0, 5.0, 0.0])
+        from POMDPPlanners.environments.laser_tag_pomdp import (
+            _native,
+        )  # pylint: disable=import-outside-toplevel
+
+        _native.set_seed(7)
+        result = env.simulate_random_rollout(
+            state=state,
+            action_sampler=_UniformActionSampler(),
+            max_depth=10,
+            discount_factor=0.95,
+        )
+        assert isinstance(result, float)
+        assert np.isfinite(result)
+
+    def test_lasertag_native_rollout_terminal_state_returns_zero(self) -> None:
+        """Native rollout returns 0.0 when the initial state is already terminal.
+
+        Purpose: Validates that the terminal short-circuit in the C++ kernel
+            works correctly — no further steps are taken.
+
+        Given: A LaserTagPOMDP and a terminal state (state[4] == 1.0).
+        When: simulate_rollout_discrete is called with the terminal state.
+        Then: Returns exactly 0.0.
+
+        Test type: unit
+        """
+        env = LaserTagPOMDP(discount_factor=0.95)
+        terminal_state = np.array([3.0, 2.0, 3.0, 2.0, 1.0])
+        from POMDPPlanners.environments.laser_tag_pomdp import (
+            _native,
+        )  # pylint: disable=import-outside-toplevel
+
+        _native.set_seed(0)
+        result = env.simulate_random_rollout(
+            state=terminal_state,
+            action_sampler=_UniformActionSampler(),
+            max_depth=20,
+            discount_factor=0.95,
+        )
+        assert result == 0.0
+
+    def test_lasertag_native_rollout_respects_max_depth(self) -> None:
+        """Native rollout accumulates at most max_depth steps.
+
+        Purpose: Verifies that the C++ kernel stops after max_depth steps even
+            when no terminal state is reached, by checking that the return
+            magnitude is bounded by max possible per-step reward times geometric sum.
+
+        Given: A non-terminal state, max_depth=5, discount=1.0.
+        When: simulate_rollout_discrete is called.
+        Then: |return| <= max_step_abs_reward * max_depth.
+
+        Test type: unit
+        """
+        env = LaserTagPOMDP(
+            discount_factor=0.95,
+            tag_reward=10.0,
+            tag_penalty=10.0,
+            step_cost=1.0,
+            dangerous_area_penalty=5.0,
+        )
+        state = np.array([0.0, 0.0, 6.0, 5.0, 0.0])
+        max_depth = 5
+        from POMDPPlanners.environments.laser_tag_pomdp import (
+            _native,
+        )  # pylint: disable=import-outside-toplevel
+
+        _native.set_seed(99)
+        result = env.simulate_random_rollout(
+            state=state,
+            action_sampler=_UniformActionSampler(),
+            max_depth=max_depth,
+            discount_factor=1.0,
+        )
+        max_abs = (10.0 + 5.0) * max_depth  # tag_reward + penalty, 5 steps
+        assert abs(result) <= max_abs + 1e-9
 
 
 if __name__ == "__main__":

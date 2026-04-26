@@ -90,3 +90,59 @@ class ContinuousLaserTagObservationCpp:
         self,
         next_state: Union[Sequence[float], NDArray[np.floating]],
     ) -> None: ...
+
+# ── Discrete LaserTag native rollout ─────────────────────────────────────────
+
+def simulate_rollout_discrete(
+    initial_state: NDArray[np.floating],
+    max_depth: int,
+    discount: float,
+    initial_depth: int,
+    rows: int,
+    cols: int,
+    walls_flat: NDArray[np.integer],
+    dangerous_areas: NDArray[np.floating],
+    dangerous_area_radius: float,
+    dangerous_area_penalty: float,
+    tag_reward: float,
+    tag_penalty: float,
+    step_cost: float,
+    transition_error_prob: float,
+) -> float:
+    """Run a full random-action rollout for the discrete LaserTagPOMDP in one C++ frame.
+
+    Actions are drawn uniformly from {0,1,2,3,4} using the module-level mt19937_64 RNG.
+    Seed via set_seed() before calling for reproducible results.
+    Returns the discounted sum of immediate rewards along the sampled trajectory.
+    """
+    ...
+
+# ── ContinuousLaserTag native rollout (added by perf agent) ──────────────────
+
+def cont_simulate_rollout(
+    initial_state: NDArray[np.floating],
+    actions_buffer: NDArray[np.floating],
+    start_depth: int,
+    max_depth: int,
+    discount_factor: float,
+    robot_covariance: NDArray[np.floating],
+    opponent_covariance: NDArray[np.floating],
+    pursuit_speed: float,
+    walls: NDArray[np.floating],
+    grid_size: NDArray[np.floating],
+    robot_radius: float,
+    opponent_radius: float,
+    tag_radius: float,
+    tag_reward: float,
+    tag_penalty: float,
+    step_cost: float,
+    dangerous_areas: NDArray[np.floating],
+    dangerous_area_radius: float,
+    dangerous_area_penalty: float,
+) -> float:
+    """Run a full random rollout for ContinuousLaserTagPOMDP in one C++ frame.
+
+    ``actions_buffer`` must be shape (N, 3) float64 with N >= max_depth - start_depth.
+    Returns the discounted sum of immediate rewards along the sampled trajectory.
+    """
+    ...

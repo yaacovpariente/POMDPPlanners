@@ -580,6 +580,132 @@ class RockSampleObservationCpp {
     int action_;
 };
 
+// ---------------------------------------------------------------------------
+// simulate_rollout_discrete: run a full rollout from ``initial_state``.
+//
+// Each step:
+//   1. check terminal (robot_row == -1, robot_col == -1) — break if true
+//   2. pick action from action_indices
+//   3. deterministic transition via transition_into
+//   4. compute reward matching _reward_from_next_state (without dangerous_areas)
+//   5. accumulate gamma^depth * reward
+//
+// action_indices: pre-drawn int32 array of length (max_depth - start_depth).
+// rock_positions_flat: interleaved [row0, col0, row1, col1, ...] (1-D int32).
+// ---------------------------------------------------------------------------
+double simulate_rollout_discrete(
+    const py::array_t<double, py::array::c_style | py::array::forcecast> &initial_state,
+    const py::array_t<int, py::array::c_style | py::array::forcecast> &action_indices,
+    const py::array_t<std::int32_t, py::array::c_style | py::array::forcecast>
+        &rock_positions_flat,
+    int max_depth,
+    int start_depth,
+    double discount_factor,
+    int map_rows,
+    int map_cols,
+    int n_actions,
+    double step_penalty,
+    double exit_reward,
+    double good_rock_reward,
+    double bad_rock_penalty,
+    double sensor_use_penalty) {
+    if (initial_state.ndim() != 1 || initial_state.shape(0) < 2) {
+        throw std::invalid_argument("initial_state must be a 1-D array with length >= 2");
+    }
+    if (rock_positions_flat.ndim() != 1) {
+        throw std::invalid_argument("rock_positions_flat must be 1-D");
+    }
+    if (action_indices.ndim() != 1) {
+        throw std::invalid_argument("action_indices must be 1-D");
+    }
+    const int n_indices = static_cast<int>(action_indices.shape(0));
+
+    const std::size_t state_dim = static_cast<std::size_t>(initial_state.shape(0));
+    const int num_rocks = static_cast<int>((state_dim >= 2) ? state_dim - 2 : 0);
+
+    // Unpack rock positions from flat array
+    const auto rp_size = static_cast<std::size_t>(rock_positions_flat.shape(0));
+    auto rp_view = rock_positions_flat.unchecked<1>();
+    std::vector<std::int32_t> rock_rows_local;
+    std::vector<std::int32_t> rock_cols_local;
+    rock_rows_local.reserve(static_cast<std::size_t>(num_rocks));
+    rock_cols_local.reserve(static_cast<std::size_t>(num_rocks));
+    for (std::size_t i = 0; i + 1 < rp_size; i += 2) {
+        rock_rows_local.push_back(rp_view(static_cast<py::ssize_t>(i)));
+        rock_cols_local.push_back(rp_view(static_cast<py::ssize_t>(i + 1)));
+    }
+
+    // Build a minimal EnvParams for transition_into
+    EnvParams env_local;
+    env_local.map_rows = map_rows;
+    env_local.map_cols = map_cols;
+    env_local.num_rocks = num_rocks;
+    env_local.sensor_efficiency = 1.0;
+    env_local.rock_rows = rock_rows_local;
+    env_local.rock_cols = rock_cols_local;
+
+    // Copy initial state into mutable buffer
+    auto state_view = initial_state.unchecked<1>();
+    std::vector<double> cur(state_dim), nxt(state_dim);
+    for (std::size_t d = 0; d < state_dim; ++d) {
+        cur[d] = state_view(static_cast<py::ssize_t>(d));
+    }
+
+    auto ai_view = action_indices.unchecked<1>();
+
+    double total = 0.0;
+    double gamma_power = 1.0;
+    int depth = start_depth;
+
+    while (depth < max_depth) {
+        if (is_terminal_row(cur.data())) {
+            break;
+        }
+
+        const int idx_slot = depth - start_depth;
+        if (idx_slot >= n_indices) {
+            break;
+        }
+        int ai = ai_view(static_cast<py::ssize_t>(idx_slot));
+        if (n_actions > 0 && (ai < 0 || ai >= n_actions)) {
+            ai = ((ai % n_actions) + n_actions) % n_actions;
+        }
+
+        // Deterministic transition
+        transition_into(cur.data(), nxt.data(), ai, env_local, state_dim);
+
+        // Reward: matches _reward_from_next_state (no dangerous_area term)
+        double r = step_penalty;
+        const int robot_col = static_cast<int>(cur[1]);
+        if (ai == 2 && robot_col == map_cols - 1) {
+            r += exit_reward;
+        } else {
+            if (ai == 0) {
+                const int robot_row = static_cast<int>(cur[0]);
+                for (int k = 0; k < num_rocks; ++k) {
+                    if (env_local.rock_rows[static_cast<std::size_t>(k)] == robot_row &&
+                        env_local.rock_cols[static_cast<std::size_t>(k)] == robot_col) {
+                        const std::size_t slot = static_cast<std::size_t>(2 + k);
+                        if (slot < state_dim) {
+                            r += (cur[slot] > 0.5) ? good_rock_reward : bad_rock_penalty;
+                        }
+                        break;
+                    }
+                }
+            }
+            if (ai >= 5) {
+                r += sensor_use_penalty;
+            }
+        }
+
+        total += gamma_power * r;
+        gamma_power *= discount_factor;
+        std::swap(cur, nxt);
+        ++depth;
+    }
+    return total;
+}
+
 }  // anonymous namespace
 
 PYBIND11_MODULE(_native, m) {
@@ -587,6 +713,18 @@ PYBIND11_MODULE(_native, m) {
 
     m.def("set_seed", &pomdp_native::set_default_seed, py::arg("seed"),
           "Seed the module-level RNG used by sample().");
+
+    m.def("simulate_rollout_discrete", &simulate_rollout_discrete,
+          py::arg("initial_state"), py::arg("action_indices"),
+          py::arg("rock_positions_flat"), py::arg("max_depth"), py::arg("start_depth"),
+          py::arg("discount_factor"), py::arg("map_rows"), py::arg("map_cols"),
+          py::arg("n_actions"), py::arg("step_penalty"), py::arg("exit_reward"),
+          py::arg("good_rock_reward"), py::arg("bad_rock_penalty"),
+          py::arg("sensor_use_penalty"),
+          "Native random rollout for RockSamplePOMDP (no dangerous-area term). "
+          "Returns discounted reward sum. "
+          "action_indices must be a pre-drawn int32 array of length (max_depth-start_depth). "
+          "rock_positions_flat is a 1-D int32 array [row0, col0, row1, col1, ...].");
 
     py::class_<RockSampleTransitionCpp>(m, "RockSampleTransitionCpp")
         .def(py::init<const py::object &, int, int, int, int,

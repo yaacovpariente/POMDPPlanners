@@ -1006,6 +1006,93 @@ class PacManObservationCpp {
     ObservationEnv env_{};
 };
 
+// ---------------------------------------------------------------------------
+// simulate_rollout: run a full random rollout from `state` using pre-drawn
+// action indices, returning the discounted cumulative reward.
+//
+// Reward mirrors the Python `reward()` method in PacManPOMDP:
+//   r = step_penalty
+//       + ghost_collision_penalty  (if pacman lands on a ghost)
+//       + pellet_reward            (if a pellet is collected — already in env_)
+//       + win_reward               (if all pellets gone at terminal step)
+// Ghost-collision detection uses the *post-transition* state, matching the
+// Python reference which calls state_transition_model().sample() inside reward().
+// ---------------------------------------------------------------------------
+
+double simulate_rollout_impl(
+    const TransitionEnv &env,
+    const double *initial_state,
+    const std::int32_t *action_indices,
+    int n_actions,
+    double ghost_collision_penalty,
+    double step_penalty,
+    double win_reward,
+    double discount_factor,
+    int depth,
+    int max_depth)
+{
+    const int state_dim = env.state_dim;
+    std::vector<double> current(initial_state, initial_state + state_dim);
+    std::vector<double> next(state_dim);
+
+    auto &rng = pomdp_native::default_rng().engine();
+
+    double total = 0.0;
+    double gamma_power = 1.0;
+    int action_pos = 0;
+
+    while (depth < max_depth && current[env.idx_terminal] < 0.5) {
+        if (action_pos >= n_actions) {
+            break;
+        }
+        const int action = action_indices[action_pos++];
+
+        // Compute next state.
+        std::copy(current.begin(), current.end(), next.begin());
+        apply_transition(env, action, next.data(), rng);
+
+        // Reward: step_penalty is always applied (matches Python).
+        double r = step_penalty;
+
+        // Ghost collision: check if pacman landed on any ghost.
+        const int new_pac_r = static_cast<int>(next[env.idx_pac_row]);
+        const int new_pac_c = static_cast<int>(next[env.idx_pac_col]);
+        for (int g = 0; g < env.num_ghosts; ++g) {
+            const int gr = static_cast<int>(next[env.idx_ghosts_start + 2 * g]);
+            const int gc = static_cast<int>(next[env.idx_ghosts_start + 2 * g + 1]);
+            if (gr == new_pac_r && gc == new_pac_c) {
+                r += ghost_collision_penalty;
+                break;
+            }
+        }
+
+        // Pellet collection: detected via score increase.
+        if (next[env.idx_score] > current[env.idx_score]) {
+            r += env.pellet_reward;
+        }
+
+        // Win bonus: terminal AND all pellets gone.
+        if (next[env.idx_terminal] > 0.5) {
+            bool any_active = false;
+            for (int p = 0; p < env.num_pellets; ++p) {
+                if (next[env.idx_pellets_start + p] > 0.5) {
+                    any_active = true;
+                    break;
+                }
+            }
+            if (!any_active) {
+                r += win_reward;
+            }
+        }
+
+        total += gamma_power * r;
+        gamma_power *= discount_factor;
+        current.swap(next);
+        ++depth;
+    }
+    return total;
+}
+
 }  // anonymous namespace
 
 PYBIND11_MODULE(_native, m) {
@@ -1049,4 +1136,111 @@ PYBIND11_MODULE(_native, m) {
              py::arg("next_particles"), py::arg("observation"))
         .def_property_readonly("next_state", &PacManObservationCpp::next_state_property)
         .def_property_readonly("action", &PacManObservationCpp::action_property);
+
+    // simulate_rollout: run a random rollout entirely in C++ using pre-drawn
+    // action indices. Parameters mirror PacManTransitionCpp plus reward scalars
+    // and rollout controls. Returns the discounted cumulative reward.
+    m.def(
+        "simulate_rollout",
+        [](py::array_t<double> state,
+           py::array_t<std::int32_t> action_indices,
+           int maze_rows,
+           int maze_cols,
+           py::array_t<std::int32_t> neighbor_table,
+           py::array_t<std::uint8_t> neighbor_validity,
+           py::array_t<std::int32_t> pellet_positions,
+           double ghost_aggressiveness,
+           int ghost_coordination_code,
+           py::array_t<std::int32_t> ghost_strategy_codes,
+           int num_ghosts,
+           int num_pellets,
+           double pellet_reward,
+           int idx_pac_row,
+           int idx_pac_col,
+           int idx_ghosts_start,
+           int idx_pellets_start,
+           int idx_pellets_end,
+           int idx_score,
+           int idx_terminal,
+           py::array_t<std::int32_t> patrol_dir_state,
+           double ghost_collision_penalty,
+           double step_penalty,
+           double win_reward,
+           double discount_factor,
+           int depth,
+           int max_depth) -> double {
+            if (state.ndim() != 1) {
+                throw std::invalid_argument("state must be 1-D");
+            }
+            if (action_indices.ndim() != 1) {
+                throw std::invalid_argument("action_indices must be 1-D");
+            }
+            // Build TransitionEnv (mirrors PacManTransitionCpp ctor).
+            TransitionEnv env{};
+            env.maze_rows = maze_rows;
+            env.maze_cols = maze_cols;
+            env.num_ghosts = num_ghosts;
+            env.num_pellets = num_pellets;
+            env.state_dim = static_cast<int>(state.shape(0));
+            env.ghost_aggressiveness = ghost_aggressiveness;
+            env.pellet_reward = pellet_reward;
+            env.ghost_coordination = static_cast<GhostCoord>(ghost_coordination_code);
+            env.neighbor_table = {neighbor_table.data(), maze_rows, maze_cols};
+            env.neighbor_validity = {neighbor_validity.data(), maze_rows, maze_cols};
+            env.pellet_positions = {pellet_positions.data(), num_pellets};
+            env.idx_pac_row = idx_pac_row;
+            env.idx_pac_col = idx_pac_col;
+            env.idx_ghosts_start = idx_ghosts_start;
+            env.idx_pellets_start = idx_pellets_start;
+            env.idx_pellets_end = idx_pellets_end;
+            env.idx_score = idx_score;
+            env.idx_terminal = idx_terminal;
+            env.ghost_strategies.resize(static_cast<std::size_t>(num_ghosts));
+            auto codes = ghost_strategy_codes.unchecked<1>();
+            for (int g = 0; g < num_ghosts; ++g) {
+                env.ghost_strategies[g] = static_cast<GhostStrategy>(codes(g));
+            }
+            env.patrol_dir_state = patrol_dir_state.mutable_data();
+
+            return simulate_rollout_impl(
+                env,
+                state.data(),
+                action_indices.data(),
+                static_cast<int>(action_indices.shape(0)),
+                ghost_collision_penalty,
+                step_penalty,
+                win_reward,
+                discount_factor,
+                depth,
+                max_depth);
+        },
+        py::arg("state"),
+        py::arg("action_indices"),
+        py::arg("maze_rows"),
+        py::arg("maze_cols"),
+        py::arg("neighbor_table"),
+        py::arg("neighbor_validity"),
+        py::arg("pellet_positions"),
+        py::arg("ghost_aggressiveness"),
+        py::arg("ghost_coordination_code"),
+        py::arg("ghost_strategy_codes"),
+        py::arg("num_ghosts"),
+        py::arg("num_pellets"),
+        py::arg("pellet_reward"),
+        py::arg("idx_pac_row"),
+        py::arg("idx_pac_col"),
+        py::arg("idx_ghosts_start"),
+        py::arg("idx_pellets_start"),
+        py::arg("idx_pellets_end"),
+        py::arg("idx_score"),
+        py::arg("idx_terminal"),
+        py::arg("patrol_dir_state"),
+        py::arg("ghost_collision_penalty"),
+        py::arg("step_penalty"),
+        py::arg("win_reward"),
+        py::arg("discount_factor"),
+        py::arg("depth") = 0,
+        py::arg("max_depth"),
+        "Run a random rollout from state using pre-drawn action_indices; "
+        "returns the discounted cumulative reward.");
 }

@@ -16,6 +16,29 @@ def set_seed(seed: int) -> None:
     """Seed the module-level RNG used by ``sample()`` calls."""
     ...
 
+def simulate_rollout(
+    initial_state: NDArray[np.float64],
+    actions: NDArray[np.int32],
+    action_indices: NDArray[np.int32],
+    max_depth: int,
+    start_depth: int,
+    discount_factor: float,
+    power: float,
+    gravity: float,
+    max_speed: float,
+    min_position: float,
+    max_position: float,
+    goal_position: float,
+    covariance: NDArray[np.float64],
+) -> float:
+    """Native random rollout for MountainCar.
+
+    Returns the discounted return from ``initial_state``.
+    ``actions`` must be a 1-D int32 array of action values (e.g. [-1, 0, 1]).
+    ``action_indices`` must be a pre-drawn 1-D int32 array of indices into ``actions``.
+    """
+    ...
+
 class MountainCarTransitionCpp:
     """Native physics + Gaussian-noise transition sampler."""
 

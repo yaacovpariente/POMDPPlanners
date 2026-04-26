@@ -46,6 +46,28 @@ namespace {
 constexpr std::size_t kSafeAntStateDim = 4;
 constexpr double kPi = 3.14159265358979323846;
 
+// Free physics helper shared by the transition class and simulate_rollout.
+inline void integrate_one_step_free(const double *state, double force_magnitude, double theta,
+                                    double *out, double dt, double mass, double damping) {
+    const double px = state[0];
+    const double py_ = state[1];
+    const double vx = state[2];
+    const double vy = state[3];
+
+    const double fx = force_magnitude * std::cos(theta);
+    const double fy = force_magnitude * std::sin(theta);
+
+    const double ax = (fx - damping * vx) / mass;
+    const double ay = (fy - damping * vy) / mass;
+    const double nvx = vx + ax * dt;
+    const double nvy = vy + ay * dt;
+
+    out[0] = px + nvx * dt;
+    out[1] = py_ + nvy * dt;
+    out[2] = nvx;
+    out[3] = nvy;
+}
+
 class SafeAntVelocityTransitionCpp {
   public:
     SafeAntVelocityTransitionCpp(const py::object &state_obj, int action, double dt, double mass,
@@ -149,25 +171,7 @@ class SafeAntVelocityTransitionCpp {
 
     void integrate_one_step(const double *state, double force_magnitude, double theta,
                             double *out) const {
-        const double px = state[0];
-        const double py_ = state[1];
-        const double vx = state[2];
-        const double vy = state[3];
-
-        const double fx = force_magnitude * std::cos(theta);
-        const double fy = force_magnitude * std::sin(theta);
-
-        const double ax = (fx - damping_ * vx) / mass_;
-        const double ay = (fy - damping_ * vy) / mass_;
-        const double nvx = vx + ax * dt_;
-        const double nvy = vy + ay * dt_;
-        const double npx = px + nvx * dt_;
-        const double npy = py_ + nvy * dt_;
-
-        out[0] = npx;
-        out[1] = npy;
-        out[2] = nvx;
-        out[3] = nvy;
+        integrate_one_step_free(state, force_magnitude, theta, out, dt_, mass_, damping_);
     }
 
     std::array<double, kSafeAntStateDim> state_;
@@ -202,6 +206,114 @@ class SafeAntVelocityObservationCpp
     int action_int_;
 };
 
+// ---------------------------------------------------------------------------
+// simulate_rollout: single random rollout in C++.
+//
+// Physics and reward match SafeAntVelocityPOMDP:
+//   - force_magnitude = force_scales[action] * max_force
+//   - theta ~ Uniform(-pi, pi)
+//   - accel = (force - damping * velocity) / mass
+//   - next_velocity = velocity + accel * dt
+//   - next_position = position + next_velocity * dt
+//
+//   reward = speed * movement_reward_scale
+//            + (safety_violation_penalty if speed > safe_velocity_threshold)
+//
+//   terminal = (speed > safe_velocity_threshold * 1.5)
+//
+// action_indices: pre-drawn int32 array of length (max_depth - start_depth).
+// force_scales: 1-D float64 array, length n_actions.
+// ---------------------------------------------------------------------------
+double simulate_rollout(
+    const py::array_t<double, py::array::c_style | py::array::forcecast> &initial_state,
+    const py::array_t<int, py::array::c_style | py::array::forcecast> &action_indices,
+    const py::array_t<double, py::array::c_style | py::array::forcecast> &force_scales,
+    int max_depth,
+    int start_depth,
+    double discount_factor,
+    double dt,
+    double mass,
+    double damping,
+    double max_force,
+    double safe_velocity_threshold,
+    double safety_violation_penalty,
+    double movement_reward_scale) {
+    if (initial_state.ndim() != 1 ||
+        static_cast<std::size_t>(initial_state.shape(0)) != kSafeAntStateDim) {
+        throw std::invalid_argument("initial_state must have shape (4,)");
+    }
+    if (force_scales.ndim() != 1 || force_scales.shape(0) < 1) {
+        throw std::invalid_argument("force_scales must be a non-empty 1-D array");
+    }
+    const int n_actions = static_cast<int>(force_scales.shape(0));
+    if (action_indices.ndim() != 1) {
+        throw std::invalid_argument("action_indices must be 1-D");
+    }
+    const int n_indices = static_cast<int>(action_indices.shape(0));
+
+    auto state_view = initial_state.unchecked<1>();
+    auto ai_view = action_indices.unchecked<1>();
+    auto fs_view = force_scales.unchecked<1>();
+
+    double state[kSafeAntStateDim] = {
+        state_view(0), state_view(1), state_view(2), state_view(3)};
+
+    const double terminal_threshold = safe_velocity_threshold * 1.5;
+
+    pomdp_native::RNGState &rng = pomdp_native::default_rng();
+    std::uniform_real_distribution<double> uniform_angle(-kPi, kPi);
+
+    double total = 0.0;
+    double gamma_power = 1.0;
+    int depth = start_depth;
+
+    while (depth < max_depth) {
+        // Terminal check: speed > 1.5 * safe_velocity_threshold
+        const double vx = state[2];
+        const double vy = state[3];
+        const double speed = std::sqrt(vx * vx + vy * vy);
+        if (speed > terminal_threshold) {
+            break;
+        }
+
+        const int idx_slot = depth - start_depth;
+        if (idx_slot >= n_indices) {
+            break;
+        }
+        int ai = ai_view(static_cast<py::ssize_t>(idx_slot));
+        if (ai < 0 || ai >= n_actions) {
+            ai = ((ai % n_actions) + n_actions) % n_actions;
+        }
+
+        const double force_magnitude = fs_view(static_cast<py::ssize_t>(ai)) * max_force;
+        const double theta = uniform_angle(rng.engine());
+
+        // Step transition
+        double next_state[kSafeAntStateDim];
+        integrate_one_step_free(state, force_magnitude, theta, next_state,
+                                dt, mass, damping);
+
+        // Reward from next_state (matches Python: speed of next_state drives reward)
+        const double nvx = next_state[2];
+        const double nvy = next_state[3];
+        const double next_speed = std::sqrt(nvx * nvx + nvy * nvy);
+        double step_reward = next_speed * movement_reward_scale;
+        if (next_speed > safe_velocity_threshold) {
+            step_reward += safety_violation_penalty;
+        }
+
+        total += gamma_power * step_reward;
+        gamma_power *= discount_factor;
+
+        state[0] = next_state[0];
+        state[1] = next_state[1];
+        state[2] = next_state[2];
+        state[3] = next_state[3];
+        ++depth;
+    }
+    return total;
+}
+
 }  // namespace
 
 PYBIND11_MODULE(_native, m) {
@@ -209,6 +321,15 @@ PYBIND11_MODULE(_native, m) {
 
     m.def("set_seed", &pomdp_native::set_default_seed, py::arg("seed"),
           "Seed the module-level RNG used by sample() / batch_sample().");
+
+    m.def("simulate_rollout", &simulate_rollout,
+          py::arg("initial_state"), py::arg("action_indices"), py::arg("force_scales"),
+          py::arg("max_depth"), py::arg("start_depth"), py::arg("discount_factor"),
+          py::arg("dt"), py::arg("mass"), py::arg("damping"), py::arg("max_force"),
+          py::arg("safe_velocity_threshold"), py::arg("safety_violation_penalty"),
+          py::arg("movement_reward_scale"),
+          "Native random rollout for SafeAntVelocityPOMDP. Returns discounted reward sum. "
+          "action_indices must be a pre-drawn int32 array of length (max_depth - start_depth).");
 
     py::class_<SafeAntVelocityTransitionCpp>(m, "SafeAntVelocityTransitionCpp")
         .def(py::init<const py::object &, int, double, double, double, double,

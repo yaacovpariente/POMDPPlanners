@@ -7,6 +7,8 @@ This module tests the RockSample POMDP environment, focusing on:
 - Terminal conditions
 """
 
+# pylint: disable=too-many-lines
+
 import random
 from unittest.mock import Mock
 
@@ -1259,6 +1261,298 @@ class TestIntegration:
         expected_configs = {(True, True), (True, False), (False, True), (False, False)}
 
         assert rock_configs == expected_configs
+
+
+class TestSampleNextStepEquivalence:
+    """Test that the optimized sample_next_step produces identical results to the base class."""
+
+    def test_sample_next_step_matches_base_class(self):
+        """Test optimized sample_next_step agrees with base Environment.sample_next_step.
+
+        Purpose: Validates that the inlined sample_next_step override produces
+        identical results to the original base class implementation.
+
+        Given: A RockSamplePOMDP environment and valid (state, action) pairs
+        When: Both the optimized and base class sample_next_step are called
+              with the same numpy RNG seed
+        Then: next_state, observation, and reward are identical
+
+        Test type: unit
+        """
+        from POMDPPlanners.core.environment import Environment
+
+        env = RockSamplePOMDP(discount_factor=0.95)
+        state = env.initial_state_dist().sample()[0]
+
+        for action in [0, 1, 2, 3, 4, 5]:
+            for _ in range(30):
+                seed = np.random.randint(0, 2**31)
+
+                np.random.seed(seed)
+                opt_next, opt_obs, opt_reward = env.sample_next_step(state, action)
+
+                np.random.seed(seed)
+                base_next, base_obs, base_reward = Environment.sample_next_step(env, state, action)
+
+                np.testing.assert_array_almost_equal(
+                    opt_next,
+                    base_next,
+                    decimal=10,
+                    err_msg=f"next_state mismatch for action={action}, seed={seed}",
+                )
+                assert (
+                    opt_obs == base_obs
+                ), f"observation mismatch for action={action}, seed={seed}: {opt_obs} != {base_obs}"
+                assert opt_reward == base_reward, (
+                    f"reward mismatch for action={action}, seed={seed}: "
+                    f"{opt_reward} != {base_reward}"
+                )
+
+
+# ---------------------------------------------------------------------------
+# reward_batch equivalence (atol=1e-12, deterministic) and native rollout tests
+# ---------------------------------------------------------------------------
+
+_RS_ROCK_POSITIONS = [(1, 1), (3, 3), (5, 5)]
+_RS_MAP_SIZE = (7, 7)
+_RS_NUM_ROCKS = len(_RS_ROCK_POSITIONS)
+_RS_STATE_DIM = 2 + _RS_NUM_ROCKS
+
+
+def _make_rs_env(**kwargs) -> RockSamplePOMDP:
+    return RockSamplePOMDP(
+        map_size=_RS_MAP_SIZE,
+        rock_positions=list(_RS_ROCK_POSITIONS),
+        init_pos=(0, 0),
+        **kwargs,
+    )
+
+
+class _FixedActionSamplerRS:
+    def __init__(self, action: int) -> None:
+        self._action = action
+
+    def sample(self) -> int:
+        return self._action
+
+
+def test_rocksample_reward_batch_matches_scalar():
+    """reward_batch matches scalar _reward_from_next_state for all actions.
+
+    Purpose: Validates that the vectorised reward_batch produces the same
+    per-particle rewards as calling the scalar reward path per particle,
+    covering movement, sample, check, and exit actions. Since transitions
+    are deterministic, the results are bit-identical (atol=1e-12).
+
+    Given: A batch of 32 random particles, tested for all actions in [0, 7].
+    When: reward_batch is compared element-by-element to the scalar path.
+    Then: All differences are within atol=1e-12.
+
+    Test type: integration
+    """
+    env_local = _make_rs_env()
+    rng = np.random.default_rng(0)
+    particles = np.zeros((32, _RS_STATE_DIM), dtype=np.float64)
+    for i in range(32):
+        particles[i, 0] = int(rng.integers(0, _RS_MAP_SIZE[0]))
+        particles[i, 1] = int(rng.integers(0, _RS_MAP_SIZE[1]))
+        particles[i, 2:] = rng.integers(0, 2, size=_RS_NUM_ROCKS).astype(float)
+
+    for action in range(5 + _RS_NUM_ROCKS):
+        batch_rewards = env_local.reward_batch(particles, action)
+        scalar_rewards = np.array(
+            [
+                env_local._reward_from_next_state(  # pylint: disable=protected-access
+                    row,
+                    action,
+                    env_local.sample_next_state(state=row, action=action),
+                )
+                for row in particles
+            ],
+            dtype=np.float64,
+        )
+        np.testing.assert_allclose(
+            batch_rewards,
+            scalar_rewards,
+            atol=1e-12,
+            rtol=0.0,
+            err_msg=f"reward_batch mismatch for action={action}",
+        )
+
+
+def _rs_python_rollout_native_semantics(
+    env_local: RockSamplePOMDP,
+    initial_state: RockSampleState,
+    action_indices: np.ndarray,
+    max_depth: int,
+    start_depth: int,
+    discount_factor: float,
+) -> float:
+    state = np.array(initial_state, dtype=np.float64)
+    total = 0.0
+    gamma_power = 1.0
+    depth = start_depth
+    n_actions = len(env_local.action_names)
+
+    for action_int in action_indices:
+        if depth >= max_depth:
+            break
+        if int(state[0]) == -1 and int(state[1]) == -1:
+            break
+        ai = int(action_int) % n_actions
+        next_state = np.asarray(
+            env_local.sample_next_state(state=state, action=ai), dtype=np.float64
+        )
+        r = env_local._reward_from_next_state(  # pylint: disable=protected-access
+            state, ai, next_state
+        )
+        total += gamma_power * r
+        gamma_power *= discount_factor
+        state = next_state
+        depth += 1
+
+    return total
+
+
+def test_native_simulate_rollout_rocksample_matches_python_reference():
+    """native simulate_rollout_discrete matches Python reference with same semantics.
+
+    Purpose: Validates that the C++ rollout accumulates the same discounted
+    return as a Python loop using the same deterministic transitions and
+    reward conventions (no dangerous-area term) under identical pre-drawn
+    action indices.
+
+    Given: A RockSamplePOMDP with no dangerous areas, a fixed initial state,
+        and identical pre-drawn action_indices for both implementations.
+    When: Both ``_native.simulate_rollout_discrete`` and the Python
+        reference walk the same trajectory.
+    Then: Returned discounted returns agree within atol=1e-9.
+
+    Test type: integration
+    """
+    from POMDPPlanners.environments.rock_sample_pomdp import (
+        _native as rs_native,
+    )  # pylint: disable=import-outside-toplevel
+
+    np.random.seed(0)
+    env_local = _make_rs_env()
+    initial_state = create_rock_sample_state((0, 0), (True, False, True))
+    max_depth = 10
+    start_depth = 0
+    discount_factor = 0.95
+    steps_left = max_depth - start_depth
+    n_actions = len(env_local.action_names)
+
+    action_indices = np.random.randint(0, n_actions, size=steps_left, dtype=np.int32)
+
+    native_result = rs_native.simulate_rollout_discrete(
+        initial_state=np.ascontiguousarray(initial_state, dtype=np.float64),
+        action_indices=action_indices,
+        rock_positions_flat=env_local._rock_positions_flat,  # pylint: disable=protected-access
+        max_depth=max_depth,
+        start_depth=start_depth,
+        discount_factor=discount_factor,
+        map_rows=int(env_local.map_size[0]),
+        map_cols=int(env_local.map_size[1]),
+        n_actions=n_actions,
+        step_penalty=float(env_local.step_penalty),
+        exit_reward=float(env_local.exit_reward),
+        good_rock_reward=float(env_local.good_rock_reward),
+        bad_rock_penalty=float(env_local.bad_rock_penalty),
+        sensor_use_penalty=float(env_local.sensor_use_penalty),
+    )
+
+    python_result = _rs_python_rollout_native_semantics(
+        env_local=env_local,
+        initial_state=initial_state,
+        action_indices=action_indices,
+        max_depth=max_depth,
+        start_depth=start_depth,
+        discount_factor=discount_factor,
+    )
+
+    np.testing.assert_allclose(native_result, python_result, atol=1e-9, rtol=0.0)
+
+
+def test_simulate_random_rollout_rocksample_returns_finite_float():
+    """simulate_random_rollout returns a finite float from an initial state.
+
+    Purpose: Smoke-test that the native override does not raise or produce
+    non-finite values from a fresh initial state with a shallow horizon.
+
+    Given: A RockSamplePOMDP, its initial state, and a fixed action.
+    When: simulate_random_rollout is called with max_depth=10.
+    Then: The result is a finite float.
+
+    Test type: integration
+    """
+    np.random.seed(0)
+    env_local = _make_rs_env()
+    state = env_local.initial_state_dist().sample()[0]
+    sampler = _FixedActionSamplerRS(action=2)
+
+    result = env_local.simulate_random_rollout(
+        state=state,
+        action_sampler=sampler,
+        max_depth=10,
+        discount_factor=0.95,
+    )
+
+    assert isinstance(result, float)
+    assert np.isfinite(result)
+
+
+def test_simulate_random_rollout_rocksample_returns_zero_at_max_depth():
+    """simulate_random_rollout returns 0.0 when depth equals max_depth.
+
+    Purpose: Validates the depth-bounded base case for the override.
+
+    Given: A RockSamplePOMDP, any state, and depth == max_depth.
+    When: simulate_random_rollout is called.
+    Then: The return is exactly 0.0.
+
+    Test type: unit
+    """
+    env_local = _make_rs_env()
+    state = env_local.initial_state_dist().sample()[0]
+    sampler = _FixedActionSamplerRS(action=1)
+
+    result = env_local.simulate_random_rollout(
+        state=state,
+        action_sampler=sampler,
+        max_depth=5,
+        discount_factor=0.95,
+        depth=5,
+    )
+
+    assert result == 0.0
+
+
+def test_simulate_random_rollout_rocksample_terminal_returns_zero():
+    """simulate_random_rollout returns 0.0 from a terminal sentinel state.
+
+    Purpose: Validates that the terminal sentinel [-1, -1, ...] causes
+    the rollout to exit immediately and return 0.0.
+
+    Given: A terminal-sentinel state and depth < max_depth.
+    When: simulate_random_rollout is called.
+    Then: The return is exactly 0.0.
+
+    Test type: unit
+    """
+    env_local = _make_rs_env()
+    terminal_state = np.array([-1.0, -1.0, 0.0, 0.0, 0.0], dtype=np.float64)
+    sampler = _FixedActionSamplerRS(action=2)
+
+    result = env_local.simulate_random_rollout(
+        state=terminal_state,
+        action_sampler=sampler,
+        max_depth=10,
+        discount_factor=0.95,
+        depth=0,
+    )
+
+    assert result == 0.0
 
 
 if __name__ == "__main__":

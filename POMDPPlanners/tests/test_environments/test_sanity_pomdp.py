@@ -787,3 +787,119 @@ class TestSanityPOMDPIntegration:
             assert next_state == 1
             assert next_observation == 1
             assert reward == 0.0
+
+
+# ---------------------------------------------------------------------------
+# Batch-method equivalence tests
+# ---------------------------------------------------------------------------
+
+
+class TestSanityBatchMethods:
+    """Equivalence tests for SanityPOMDP vectorised batch API."""
+
+    N = 16
+
+    def test_reward_batch_action_0_all_one(self, sanity_pomdp):
+        """reward_batch with action 0 returns 1.0 for every input state.
+
+        Purpose: Validates reward_batch(action=0) matches scalar reward for all states
+
+        Given: 16 mixed states [0,1,...] and action=0
+        When: reward_batch is called
+        Then: All rewards equal 1.0 (scalar reward for action 0 always gives next_state=0 -> reward 1.0)
+
+        Test type: unit
+        """
+        states = list(range(self.N % 2)) * self.N + [0] * (self.N - (self.N % 2) * self.N)
+        states = [i % 2 for i in range(self.N)]
+        result = sanity_pomdp.reward_batch(states, 0)
+        expected = np.array([sanity_pomdp.reward(s, 0) for s in states])
+        np.testing.assert_array_equal(result, expected)
+        np.testing.assert_array_equal(result, np.ones(self.N))
+
+    def test_reward_batch_action_1_all_zero(self, sanity_pomdp):
+        """reward_batch with action 1 returns 0.0 for every input state.
+
+        Purpose: Validates reward_batch(action=1) matches scalar reward for all states
+
+        Given: 16 mixed states [0,1,...] and action=1
+        When: reward_batch is called
+        Then: All rewards equal 0.0 (scalar reward for action 1 always gives next_state=1 -> reward 0.0)
+
+        Test type: unit
+        """
+        states = [i % 2 for i in range(self.N)]
+        result = sanity_pomdp.reward_batch(states, 1)
+        expected = np.array([sanity_pomdp.reward(s, 1) for s in states])
+        np.testing.assert_array_equal(result, expected)
+        np.testing.assert_array_equal(result, np.zeros(self.N))
+
+    def test_sample_next_state_batch_action_0_all_zero(self, sanity_pomdp):
+        """sample_next_state_batch(action=0) returns all 0s regardless of input states.
+
+        Purpose: Validates vectorised next-state sampling for deterministic action 0
+
+        Given: 16 mixed states and action=0
+        When: sample_next_state_batch is called
+        Then: Every output is 0 matching the scalar sample_next_state behaviour
+
+        Test type: unit
+        """
+        states = [i % 2 for i in range(self.N)]
+        result = sanity_pomdp.sample_next_state_batch(states, 0)
+        assert len(result) == self.N
+        np.testing.assert_array_equal(result, np.zeros(self.N, dtype=np.int64))
+
+    def test_sample_next_state_batch_action_1_all_one(self, sanity_pomdp):
+        """sample_next_state_batch(action=1) returns all 1s regardless of input states.
+
+        Purpose: Validates vectorised next-state sampling for deterministic action 1
+
+        Given: 16 mixed states and action=1
+        When: sample_next_state_batch is called
+        Then: Every output is 1 matching the scalar sample_next_state behaviour
+
+        Test type: unit
+        """
+        states = [i % 2 for i in range(self.N)]
+        result = sanity_pomdp.sample_next_state_batch(states, 1)
+        assert len(result) == self.N
+        np.testing.assert_array_equal(result, np.ones(self.N, dtype=np.int64))
+
+    def test_observation_log_probability_per_state_matches_scalar(self, sanity_pomdp):
+        """observation_log_probability_per_state matches per-state scalar reference.
+
+        Purpose: Validates vectorised per-state observation log-prob against scalar loop
+
+        Given: 16 next-states [0,1,...], action=0, observation=0
+        When: observation_log_probability_per_state is called
+        Then: Output matches [observation_log_probability(ns, 0, [0])[0] for ns in next_states]
+
+        Test type: unit
+        """
+        next_states = [i % 2 for i in range(self.N)]
+        obs = 0
+        result = sanity_pomdp.observation_log_probability_per_state(next_states, 0, obs)
+        expected = np.array(
+            [sanity_pomdp.observation_log_probability(ns, 0, [obs])[0] for ns in next_states]
+        )
+        np.testing.assert_allclose(result, expected, atol=1e-12)
+
+    def test_observation_log_probability_per_state_observation_1(self, sanity_pomdp):
+        """observation_log_probability_per_state for observation=1 matches scalar.
+
+        Purpose: Validates per-state log-prob for observation=1 against scalar reference
+
+        Given: 16 next-states [0,1,...], action=1, observation=1
+        When: observation_log_probability_per_state is called
+        Then: States equal to 1 get log(1)=0.0; states equal to 0 get log(0+eps)≈-690
+
+        Test type: unit
+        """
+        next_states = [i % 2 for i in range(self.N)]
+        obs = 1
+        result = sanity_pomdp.observation_log_probability_per_state(next_states, 1, obs)
+        expected = np.array(
+            [sanity_pomdp.observation_log_probability(ns, 1, [obs])[0] for ns in next_states]
+        )
+        np.testing.assert_allclose(result, expected, atol=1e-12)

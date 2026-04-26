@@ -20,6 +20,31 @@ def set_seed(seed: int) -> None:
     """
     ...
 
+def simulate_rollout_discrete(
+    initial_state: NDArray[np.floating],
+    action_indices: NDArray[np.int32],
+    rock_positions_flat: NDArray[np.int32],
+    max_depth: int,
+    start_depth: int,
+    discount_factor: float,
+    map_rows: int,
+    map_cols: int,
+    n_actions: int,
+    step_penalty: float,
+    exit_reward: float,
+    good_rock_reward: float,
+    bad_rock_penalty: float,
+    sensor_use_penalty: float,
+) -> float:
+    """Native random rollout for RockSamplePOMDP (no dangerous-area term).
+
+    Walks the deterministic transition model and computes rewards in C++.
+    Returns the discounted sum of rewards. ``action_indices`` must be a
+    pre-drawn integer array of length ``max_depth - start_depth``.
+    ``rock_positions_flat`` is a 1-D int32 array ``[row0, col0, row1, col1, …]``.
+    """
+    ...
+
 class RockSampleTransitionCpp:
     """Native state transition sampler (deterministic RockSample dynamics)."""
 
