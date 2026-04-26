@@ -17,6 +17,7 @@ Classes:
 import importlib
 import inspect
 import logging
+import math
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
@@ -341,7 +342,6 @@ class Environment(ABC):  # pylint: disable=too-many-public-methods
     def __hash__(self) -> int:
         return hash(self.config_id)
 
-    @abstractmethod
     def reward(self, state: Any, action: Any) -> float:
         """Calculate the immediate reward for a state-action pair.
 
@@ -496,6 +496,26 @@ class Environment(ABC):  # pylint: disable=too-many-public-methods
         candidate observations. Subclasses must implement.
         """
 
+    def observation_log_probability_single(
+        self, next_state: Any, action: Any, observation: Any
+    ) -> float:
+        """Scalar log-likelihood for one ``(next_state, observation)`` pair.
+
+        Per-state fast-path used by incremental belief updates
+        (e.g. POMCPOW's :meth:`WeightedParticleBeliefStateUpdate.inplace_update`)
+        to skip the per-call numpy setup overhead of the batched
+        :meth:`observation_log_probability` path on a singleton input.
+
+        The default falls back to the batched method with a one-element
+        observations list. Envs with cheap scalar likelihoods (e.g. the
+        2-D Gaussian on Push or the cached-inverse-cov path on
+        ContinuousLightDark) should override to skip array allocation.
+        """
+        arr = self.observation_log_probability(
+            next_state=next_state, action=action, observations=[observation]
+        )
+        return float(arr[0])
+
     def sample_next_state_batch(self, states: Any, action: Any) -> Any:
         """Sample one next state per input state, all under the same action.
 
@@ -569,6 +589,7 @@ class Environment(ABC):  # pylint: disable=too-many-public-methods
         """
         next_state = self.sample_next_state(state=state, action=action)
         next_observation = self.sample_observation(next_state=next_state, action=action)
+        # pylint: disable-next=assignment-from-no-return
         reward = self.reward(state=state, action=action)
 
         return next_state, next_observation, reward
