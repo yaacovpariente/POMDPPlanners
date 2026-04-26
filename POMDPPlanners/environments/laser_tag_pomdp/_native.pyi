@@ -117,6 +117,41 @@ def simulate_rollout_discrete(
     """
     ...
 
+# ── Discrete LaserTag belief-update kernels ──────────────────────────────────
+
+def belief_batch_transition_discrete(
+    particles: NDArray[np.floating],
+    action_idx: int,
+    transition_error_prob: float,
+    valid_cell_flat: NDArray[np.unsignedinteger],
+    rows: int,
+    cols: int,
+) -> NDArray[np.float64]:
+    """Native port of LaserTagVectorizedUpdater.batch_transition.
+
+    Returns the (N, 5) float64 array of next particles. Uses the module-level
+    mt19937_64 RNG; seed via set_seed() before calling for reproducibility.
+    """
+    ...
+
+def belief_batch_obs_log_likelihood_discrete(
+    next_particles: NDArray[np.floating],
+    observation: NDArray[np.floating],
+    wall_dist_table_flat: NDArray[np.integer],
+    rows: int,
+    cols: int,
+    log_norm_1d: float,
+    inv_2var: float,
+) -> NDArray[np.float64]:
+    """Native port of LaserTagVectorizedUpdater.batch_observation_log_likelihood.
+
+    Returns the (N,) float64 array of per-particle log-likelihoods.
+    Terminal handling matches the Python wrapper: terminal observations
+    return 0.0 for terminal particles and -inf for non-terminal, and
+    non-terminal observations return -inf for terminal particles.
+    """
+    ...
+
 # ── ContinuousLaserTag native rollout (added by perf agent) ──────────────────
 
 def cont_simulate_rollout(
