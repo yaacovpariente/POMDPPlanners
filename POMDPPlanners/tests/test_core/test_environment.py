@@ -87,6 +87,9 @@ class MockEnvironment(Environment):
     def is_equal_observation(self, observation1: np.ndarray, observation2: np.ndarray) -> bool:
         return np.array_equal(observation1, observation2)
 
+    def hash_action(self, action):
+        return action
+
 
 class DifferentEnvironment(Environment):
     def __init__(
@@ -136,6 +139,9 @@ class DifferentEnvironment(Environment):
 
     def is_equal_observation(self, observation1: np.ndarray, observation2: np.ndarray) -> bool:
         return np.array_equal(observation1, observation2)
+
+    def hash_action(self, action):
+        return action
 
 
 @pytest.fixture

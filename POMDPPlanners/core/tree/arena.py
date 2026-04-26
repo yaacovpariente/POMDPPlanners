@@ -208,22 +208,37 @@ class Tree:
         action: Any,
         parent_id: int,
         data: Any = None,
+        action_key: Optional[Hashable] = None,
     ) -> int:
         """Allocate an action node under ``parent_id`` and return its ID.
 
         Also: (a) extend the parent's CDF by 1.0 (action nodes default to
-        unit weight); (b) register ``(parent_id, action) → node_id`` in
-        ``action_child_lookup`` if ``action`` is hashable.
+        unit weight); (b) register ``(parent_id, key) → node_id`` in
+        ``action_child_lookup`` where ``key`` is the explicit ``action_key``
+        if provided (caller guarantees hashable), or the raw ``action``
+        (silently dropped if unhashable).
         """
         node_id = self._allocate(ACTION, parent_id)
         self.action[node_id] = action
         self.data[node_id] = data
         self._extend_cdf(parent_id, 1.0)
+        self._register_action_child(parent_id, action, action_key, node_id)
+        return node_id
+
+    def _register_action_child(
+        self,
+        parent_id: int,
+        action: Any,
+        action_key: Optional[Hashable],
+        node_id: int,
+    ) -> None:
+        if action_key is not None:
+            self.action_child_lookup[(parent_id, action_key)] = node_id
+            return
         try:
             self.action_child_lookup[(parent_id, action)] = node_id
         except TypeError:
             pass  # unhashable action; rely on linear-scan get_action_child
-        return node_id
 
     def _extend_cdf(self, parent_id: int, weight: float) -> None:
         cdf = self.children_cdf[parent_id]
@@ -324,11 +339,20 @@ class Tree:
                 return cid
         return None
 
-    def get_action_child_indexed(self, belief_id: int, action: Any) -> Optional[int]:
-        """O(1) lookup of an action child of ``belief_id`` by hashable action.
+    def get_action_child_indexed(
+        self,
+        belief_id: int,
+        action: Any = None,
+        action_key: Optional[Hashable] = None,
+    ) -> Optional[int]:
+        """O(1) lookup of an action child of ``belief_id`` by hashable key.
 
-        Returns ``None`` if no match or if ``action`` is not hashable.
+        If ``action_key`` is provided the caller guarantees it is hashable;
+        the lookup uses it directly. Otherwise, the raw ``action`` is tried
+        and ``None`` is returned for unhashable values.
         """
+        if action_key is not None:
+            return self.action_child_lookup.get((belief_id, action_key))
         try:
             return self.action_child_lookup.get((belief_id, action))
         except TypeError:

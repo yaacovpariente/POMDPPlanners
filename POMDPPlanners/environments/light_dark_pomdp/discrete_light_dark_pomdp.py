@@ -1,5 +1,6 @@
 import random
 from bisect import bisect
+from collections.abc import Hashable
 from enum import Enum
 from typing import Any, List, Sequence, Tuple, Union
 
@@ -871,3 +872,7 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
                 upper_confidence_bound=dangerous_states_counter_ci[1],
             ),
         ]
+
+    def hash_action(self, action: Any) -> Hashable:
+        # Discrete-action env: actions are str labels (e.g. "up").
+        return action
