@@ -103,7 +103,7 @@ class LaserTagVectorizedUpdater(VectorizedParticleBeliefUpdater):
         >>> next_p = updater.batch_transition(particles, action)
         >>> next_p.shape[1]
         5
-        >>> obs = env.observation_model(state, action).sample()[0]
+        >>> obs = env.sample_observation(next_state=state, action=action)
         >>> obs_arr = np.array(obs, dtype=float)
         >>> ll = updater.batch_observation_log_likelihood(next_p, action, obs_arr)
         >>> ll.shape[0]
