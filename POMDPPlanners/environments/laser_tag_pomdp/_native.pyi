@@ -152,6 +152,53 @@ def belief_batch_obs_log_likelihood_discrete(
     """
     ...
 
+# ── Discrete LaserTag single-step kernels ───────────────────────────────────
+
+def sample_next_state_step(
+    state: NDArray[np.floating],
+    actual_action: int,
+    opp_uniform: float,
+    rows: int,
+    cols: int,
+    walls_flat: NDArray[np.integer],
+) -> NDArray[np.float64]:
+    """Single-step transition for the discrete LaserTagPOMDP.
+
+    The Python wrapper resolves the actual_action (handling the optional
+    transition error in numpy) and pre-draws ``opp_uniform`` via
+    ``np.random.random()`` so byte-identical numpy RNG state is preserved
+    across the original Python path and this native fast path.
+    """
+    ...
+
+def sample_observation_step(
+    next_state: NDArray[np.floating],
+    noise: NDArray[np.floating],
+    rows: int,
+    cols: int,
+    walls_flat: NDArray[np.integer],
+) -> NDArray[np.float64]:
+    """Single-step observation for the discrete LaserTagPOMDP.
+
+    ``noise`` must be a length-8 float64 array of pre-drawn N(0, sigma)
+    samples. Returns the noisy 8-direction laser observation.
+    """
+    ...
+
+def observation_log_probability_step(
+    next_state: NDArray[np.floating],
+    observations: NDArray[np.floating],
+    measurement_noise: float,
+    rows: int,
+    cols: int,
+    walls_flat: NDArray[np.integer],
+) -> NDArray[np.float64]:
+    """Per-observation log-probability for the discrete LaserTagPOMDP.
+
+    Mirrors LaserTagPOMDP.observation_log_probability semantics.
+    """
+    ...
+
 # ── ContinuousLaserTag native rollout (added by perf agent) ──────────────────
 
 def cont_simulate_rollout(
