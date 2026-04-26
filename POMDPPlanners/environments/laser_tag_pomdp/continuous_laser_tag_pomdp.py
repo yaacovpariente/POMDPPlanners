@@ -27,6 +27,7 @@ Classes:
 
 from __future__ import annotations
 
+import math
 from enum import Enum
 from pathlib import Path
 from collections.abc import Hashable
@@ -337,6 +338,19 @@ class ContinuousLaserTagPOMDP(Environment):
         probs = np.asarray(kernel.probability(observations))
         with np.errstate(divide="ignore"):
             return np.log(probs)
+
+    def observation_log_probability_single(
+        self, next_state: Any, action: Any, observation: Any
+    ) -> float:
+        # Scalar fast-path for POMCPOW's WeightedParticleBeliefStateUpdate.
+        # Skips the size-1 np.asarray + np.errstate + np.log wrap that the
+        # batched path would do, and the [0] re-index in the base default.
+        kernel = self._get_obs_kernel(action)
+        kernel.set_next_state(next_state)
+        prob = float(kernel.probability([observation])[0])
+        if prob <= 0.0:
+            return -math.inf
+        return math.log(prob)
 
     def sample_next_state_batch(self, states: Any, action: np.ndarray) -> np.ndarray:
         # Short-circuit when the caller already hands us a C-contiguous
@@ -835,6 +849,13 @@ class ContinuousLaserTagPOMDPDiscreteActions(ContinuousLaserTagPOMDP, DiscreteAc
     ) -> np.ndarray:
         return ContinuousLaserTagPOMDP.observation_log_probability(
             self, next_state, self.action_to_vector[action], observations
+        )
+
+    def observation_log_probability_single(
+        self, next_state: Any, action: Any, observation: Any
+    ) -> float:
+        return ContinuousLaserTagPOMDP.observation_log_probability_single(
+            self, next_state, self.action_to_vector[action], observation
         )
 
     def sample_next_state_batch(self, states: Any, action: Any) -> np.ndarray:

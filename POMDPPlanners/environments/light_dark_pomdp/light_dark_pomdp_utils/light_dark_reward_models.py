@@ -47,6 +47,14 @@ class ContinuousLightDarkRewardModel(BaseLightDarkRewardModel):
         self.obstacle_reward = obstacle_reward
         self.goal_reward = goal_reward
         self.fuel_cost = fuel_cost
+        # Cached scalars/arrays for compute_reward_batch hot path:
+        # squared radii skip per-call sqrts in mask checks, and obstacle
+        # rows are pre-broadcast as (1, M) views to avoid the (N, 2, M)
+        # intermediate that np.linalg.norm forces.
+        self._goal_radius_sq = float(goal_state_radius) * float(goal_state_radius)
+        self._obstacle_radius_sq = float(obstacle_radius) * float(obstacle_radius)
+        self._obs_x_row = np.ascontiguousarray(obstacles[0]).reshape(1, -1)
+        self._obs_y_row = np.ascontiguousarray(obstacles[1]).reshape(1, -1)
 
     def _is_goal_state(self, state: np.ndarray) -> bool:
         """Check if state is within goal state radius."""
@@ -96,21 +104,29 @@ class ContinuousLightDarkRewardModel(BaseLightDarkRewardModel):
 
     def compute_reward_batch(self, states: np.ndarray, action: np.ndarray) -> np.ndarray:
         next_states = states + action
-        dists_to_goal = np.linalg.norm(next_states - self.goal_state, axis=1)
-        rewards = -self.fuel_cost - dists_to_goal
+        nx = next_states[:, 0]
+        ny = next_states[:, 1]
 
-        goal_mask = dists_to_goal <= self.goal_state_radius
+        # Goal distance from raw components — cheaper than np.linalg.norm.
+        g_dx = nx - self.goal_state[0]
+        g_dy = ny - self.goal_state[1]
+        sq_dist_to_goal = g_dx * g_dx + g_dy * g_dy
+        rewards = -self.fuel_cost - np.sqrt(sq_dist_to_goal)
+        goal_mask = sq_dist_to_goal <= self._goal_radius_sq
         rewards[goal_mask] += self.goal_reward
 
-        diffs = next_states[:, :, np.newaxis] - self.obstacles[np.newaxis, :, :]
-        obs_dists = np.linalg.norm(diffs, axis=1)
-        in_range = np.any(obs_dists <= self.obstacle_radius, axis=1)
+        # Obstacle membership — squared distances on (N, M), no (N, 2, M)
+        # intermediate. self._obs_{x,y}_row are cached (1, M) views.
+        o_dx = nx[:, None] - self._obs_x_row
+        o_dy = ny[:, None] - self._obs_y_row
+        sq_obs_dists = o_dx * o_dx + o_dy * o_dy
+        in_range = np.any(sq_obs_dists <= self._obstacle_radius_sq, axis=1)
         obstacle_mask = in_range & ~goal_mask
-        n_obs = int(np.sum(obstacle_mask))
+        n_obs = int(np.count_nonzero(obstacle_mask))
         if n_obs > 0:
             rewards[obstacle_mask] += self._obstacle_reward_batch(n_obs)
 
-        oob = np.any(next_states < 0, axis=1) | np.any(next_states > self.grid_size, axis=1)
+        oob = (nx < 0.0) | (ny < 0.0) | (nx > self.grid_size) | (ny > self.grid_size)
         rewards[oob & ~goal_mask & ~in_range] += self.obstacle_reward
         return rewards
 
