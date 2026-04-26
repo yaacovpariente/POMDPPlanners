@@ -16,6 +16,7 @@ Functions:
 """
 
 import bisect
+import math
 import random
 from abc import ABC, abstractmethod
 from collections.abc import Hashable
@@ -616,10 +617,10 @@ class WeightedParticleBeliefStateUpdate(Belief):
             raise TypeError("pomdp must be an instance of Environment")
 
         self.particles.append(state)
-        log_p = pomdp.observation_log_probability(
-            next_state=state, action=action, observations=[observation]
-        )[0]
-        weight = float(np.exp(log_p))
+        log_p = pomdp.observation_log_probability_single(
+            next_state=state, action=action, observation=observation
+        )
+        weight = math.exp(log_p) if math.isfinite(log_p) else 0.0
         self.weights.append(weight)
         self.weights_sum = float(self.weights_sum) + weight
         # Maintain CDF for O(log K) sampling.
