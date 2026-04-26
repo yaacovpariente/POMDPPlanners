@@ -108,7 +108,12 @@ def _sparse_sampling_guarantees_exploration_v2_arena(
 ) -> int:
     """Arena variant of :func:`_get_sparse_sampling_guarantees_exploration_v2`."""
     children = tree.children_ids[belief_id]
-    visit_count_array = np.array([tree.visit_count[cid] for cid in children])
+    n_children = len(children)
+    visit_count_array = np.fromiter(
+        (tree.visit_count[cid] for cid in children),
+        dtype=np.float64,
+        count=n_children,
+    )
     unvisited_indices = np.where(visit_count_array >= 1)[0]
     if len(unvisited_indices) > 0:
         return children[int(np.random.choice(unvisited_indices))]
@@ -123,9 +128,12 @@ def _sparse_sampling_guarantees_exploration_v2_arena(
 
     guarantees_bound = (max_cost - min_cost) * np.sqrt(x3 / x4)
 
-    lower_confidence_bounds = (
-        np.array([tree.q_value[cid] for cid in children]) - exploration_constant * guarantees_bound
+    q_values = np.fromiter(
+        (tree.q_value[cid] for cid in children),
+        dtype=np.float64,
+        count=n_children,
     )
+    lower_confidence_bounds = q_values - exploration_constant * guarantees_bound
     return children[
         int(np.argmin(lower_confidence_bounds + visit_count_penalty * visit_count_penalty_array))
     ]
@@ -147,7 +155,12 @@ def get_explored_action_node_arena(  # pylint: disable=too-many-arguments
 ) -> int:
     """Arena variant of :func:`get_explored_action_node`. Returns action-node ID."""
     children = tree.children_ids[belief_id]
-    action_visits = np.array([tree.visit_count[cid] for cid in children])
+    n_children = len(children)
+    action_visits = np.fromiter(
+        (tree.visit_count[cid] for cid in children),
+        dtype=np.int64,
+        count=n_children,
+    )
     unvisited_indices = np.where(action_visits == 0)[0]
     if len(unvisited_indices) > 0:
         return children[int(np.random.choice(unvisited_indices))]

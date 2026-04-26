@@ -6,7 +6,7 @@ import pytest
 
 from POMDPPlanners.core.environment import SpaceType
 from POMDPPlanners.core.belief import WeightedParticleBelief, get_initial_belief
-from POMDPPlanners.core.tree.arena import ACTION, BELIEF, Tree
+from POMDPPlanners.core.tree.arena import BELIEF, Tree
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
     ContinuousLightDarkPOMDP,
 )
@@ -93,10 +93,9 @@ def test_generate_belief(planner, belief):
     action = np.array([1.0, 0.0])
     action_id = tree.add_action_node(action=action, parent_id=root_id)
 
-    next_belief_id, immediate_reward = planner._generate_belief(tree=tree, action_id=action_id)
+    next_belief_id = planner._generate_belief(tree=tree, action_id=action_id)
 
     assert tree.kind[next_belief_id] == BELIEF
-    assert isinstance(immediate_reward, float)
     assert tree.parent_id[next_belief_id] == action_id
 
 
@@ -116,12 +115,9 @@ def test_sample_next_existing_belief(planner, belief):
         tree.visit_count[child_id] = i
         tree.set_immediate_cost(child_id, -float(i))
 
-    next_belief_id, immediate_reward = planner._sample_next_existing_belief(
-        tree=tree, action_id=action_id
-    )
+    next_belief_id = planner._sample_next_existing_belief(tree=tree, action_id=action_id)
 
     assert tree.kind[next_belief_id] == BELIEF
-    assert isinstance(immediate_reward, float)
     assert next_belief_id in tree.children_ids[action_id]
 
 
@@ -155,118 +151,21 @@ def test_get_space_info(planner):
     assert space_info.observation_space == SpaceType.CONTINUOUS
 
 
-def test_entropy_weight_initialization(env, action_sampler):
-    """Test that entropy_weight is properly initialized."""
-    planner = ICVaR_PFT_DPW(
-        environment=env,
-        name="test_planner_entropy",
-        depth=3,
-        discount_factor=0.95,
-        n_simulations=100,
-        alpha=0.1,
-        delta=0.1,
-        k_o=5,
-        min_immediate_cost=0.0,
-        max_immediate_cost=1.0,
-        min_visit_count_per_action=1,
-        exploration_constant=1.0,
-        action_sampler=action_sampler,
-        k_a=2.0,
-        alpha_a=0.0,
-        alpha_o=0.0,
-        entropy_weight=0.5,
-    )
-    assert planner.entropy_weight == 0.5
+def test_immediate_cost_computed_once_per_action(planner, belief):
+    """After _generate_belief, the action node carries the (parent_belief, action) cost
+    and update_nodes does not recompute it."""
+    tree = Tree()
+    root_id = tree.add_belief_node(belief)
+    action = np.array([1.0, 0.0])
+    action_id = tree.add_action_node(action=action, parent_id=root_id)
 
-    # Test default value
-    planner_default = ICVaR_PFT_DPW(
-        environment=env,
-        name="test_planner_default",
-        depth=3,
-        discount_factor=0.95,
-        n_simulations=100,
-        alpha=0.1,
-        delta=0.1,
-        k_o=5,
-        min_immediate_cost=0.0,
-        max_immediate_cost=1.0,
-        min_visit_count_per_action=1,
-        exploration_constant=1.0,
-        action_sampler=action_sampler,
-        k_a=2.0,
-        alpha_a=0.0,
-        alpha_o=0.0,
-    )
-    assert planner_default.entropy_weight == 0.0
+    assert tree.immediate_cost[action_id] is None
+    planner._generate_belief(tree=tree, action_id=action_id)
+    after_generate = tree.immediate_cost[action_id]
+    assert after_generate is not None
 
-
-def test_entropy_weight_affects_cost(env, action_sampler, belief):
-    """Test that entropy_weight affects the immediate cost calculation."""
-    # Create planner with entropy_weight=0
-    planner_no_entropy = ICVaR_PFT_DPW(
-        environment=env,
-        name="test_planner_no_entropy",
-        depth=3,
-        discount_factor=0.95,
-        n_simulations=50,
-        alpha=0.1,
-        delta=0.1,
-        k_o=5,
-        min_immediate_cost=0.0,
-        max_immediate_cost=1.0,
-        min_visit_count_per_action=1,
-        exploration_constant=1.0,
-        action_sampler=action_sampler,
-        k_a=2.0,
-        alpha_a=0.0,
-        alpha_o=0.0,
-        entropy_weight=0.0,
-    )
-
-    # Create planner with entropy_weight>0
-    planner_with_entropy = ICVaR_PFT_DPW(
-        environment=env,
-        name="test_planner_with_entropy",
-        depth=3,
-        discount_factor=0.95,
-        n_simulations=50,
-        alpha=0.1,
-        delta=0.1,
-        k_o=5,
-        min_immediate_cost=0.0,
-        max_immediate_cost=1.0,
-        min_visit_count_per_action=1,
-        exploration_constant=1.0,
-        action_sampler=action_sampler,
-        k_a=2.0,
-        alpha_a=0.0,
-        alpha_o=0.0,
-        entropy_weight=0.5,
-    )
-
-    # Build trees with both planners and check that costs differ
-    tree_no_entropy, _ = planner_no_entropy._learn_tree(belief=belief)
-    tree_with_entropy, _ = planner_with_entropy._learn_tree(belief=belief)
-
-    def get_action_node_costs(tree: Tree):
-        return [
-            tree.immediate_cost[node_id]
-            for node_id in range(len(tree))
-            if tree.kind[node_id] == ACTION and tree.immediate_cost[node_id] is not None
-        ]
-
-    costs_no_entropy = get_action_node_costs(tree_no_entropy)
-    costs_with_entropy = get_action_node_costs(tree_with_entropy)
-
-    # Both should have computed costs
-    assert len(costs_no_entropy) > 0
-    assert len(costs_with_entropy) > 0
-
-    # When entropy_weight > 0, costs should generally be different
-    # (though they might be the same in some cases due to clipping)
-    # At minimum, both planners should produce valid cost values
-    assert all(isinstance(cost, (int, float)) for cost in costs_no_entropy)
-    assert all(isinstance(cost, (int, float)) for cost in costs_with_entropy)
+    planner.update_nodes(tree=tree, belief_id=root_id, action_id=action_id)
+    assert tree.immediate_cost[action_id] == after_generate
 
 
 def test_action(planner, belief):

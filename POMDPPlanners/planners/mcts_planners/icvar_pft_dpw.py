@@ -21,12 +21,12 @@ Classes:
     ICVaR_PFT_DPW: Risk-sensitive PFT-DPW planner with CVaR-based value updates
 """
 
-from typing import Optional, Tuple
+from typing import Optional
 
 import numpy as np
 
 from POMDPPlanners.core.belief import Belief, is_terminal_belief
-from POMDPPlanners.core.cost import belief_expectation_cost_entropy_penalty
+from POMDPPlanners.core.cost import belief_expectation_cost
 from POMDPPlanners.core.environment import Environment, SpaceType
 from POMDPPlanners.core.policy import PolicySpaceInfo
 from POMDPPlanners.core.tree.arena import Tree
@@ -37,7 +37,7 @@ from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
 from POMDPPlanners.planners.planners_utils.path_simulations_policy_arena import (
     ArenaPathSimulationPolicyCostSetting,
 )
-from POMDPPlanners.utils.statistics_utils import cvar_estimator_from_dist, get_min_and_max_cost
+from POMDPPlanners.utils.statistics_utils import cvar_estimator_from_dist_fast
 
 
 class ICVaR_PFT_DPW(ArenaPathSimulationPolicyCostSetting):
@@ -66,7 +66,6 @@ class ICVaR_PFT_DPW(ArenaPathSimulationPolicyCostSetting):
         alpha_a: float = 0.5,
         k_o: float = 1.0,
         alpha_o: float = 0.5,
-        entropy_weight: float = 0.0,
         visit_count_penalty: float = 0.0,
         reserve_capacity: int = 0,
     ):
@@ -102,7 +101,6 @@ class ICVaR_PFT_DPW(ArenaPathSimulationPolicyCostSetting):
         self.alpha_a = alpha_a
         self.k_o = k_o
         self.alpha_o = alpha_o
-        self.entropy_weight = entropy_weight
         self.discrete_actions = self.environment.space_info.action_space == SpaceType.DISCRETE
         self.visit_count_penalty = visit_count_penalty
 
@@ -136,9 +134,9 @@ class ICVaR_PFT_DPW(ArenaPathSimulationPolicyCostSetting):
         action_children_count = len(tree.children_ids[action_id])
         action_visits = tree.visit_count[action_id]
         if action_children_count <= self.k_o * action_visits**self.alpha_o:
-            next_belief_id, _ = self._generate_belief(tree=tree, action_id=action_id)
+            next_belief_id = self._generate_belief(tree=tree, action_id=action_id)
         else:
-            next_belief_id, _ = self._sample_next_existing_belief(tree=tree, action_id=action_id)
+            next_belief_id = self._sample_next_existing_belief(tree=tree, action_id=action_id)
 
         self._simulate_path(tree=tree, belief_id=next_belief_id, depth=depth + 1)
 
@@ -148,7 +146,7 @@ class ICVaR_PFT_DPW(ArenaPathSimulationPolicyCostSetting):
         """Return True if all particles in ``belief`` are terminal states."""
         return is_terminal_belief(belief=belief, env=self.environment)
 
-    def _sample_next_existing_belief(self, tree: Tree, action_id: int) -> Tuple[int, float]:
+    def _sample_next_existing_belief(self, tree: Tree, action_id: int) -> int:
         children = tree.children_ids[action_id]
         n_children = len(children)
         child_visit_counts = np.fromiter(
@@ -158,22 +156,16 @@ class ICVaR_PFT_DPW(ArenaPathSimulationPolicyCostSetting):
         )
         min_visit_idx = int(np.argmin(child_visit_counts))
         if child_visit_counts[min_visit_idx] == 0:
-            sampled_id = children[min_visit_idx]
-            immediate_cost = tree.immediate_cost[sampled_id]
-            expected_reward = -immediate_cost if immediate_cost is not None else 0.0
-            return sampled_id, float(expected_reward)
+            return children[min_visit_idx]
 
         cdf = np.cumsum(child_visit_counts)
         total = float(cdf[-1])
         chosen_idx = int(np.searchsorted(cdf, np.random.random() * total))
         if chosen_idx >= n_children:
             chosen_idx = n_children - 1
-        sampled_id = children[chosen_idx]
-        immediate_cost = tree.immediate_cost[sampled_id]
-        expected_reward = -immediate_cost if immediate_cost is not None else 0.0
-        return sampled_id, float(expected_reward)
+        return children[chosen_idx]
 
-    def _generate_belief(self, tree: Tree, action_id: int) -> Tuple[int, float]:
+    def _generate_belief(self, tree: Tree, action_id: int) -> int:
         parent_belief_id = tree.parent_id[action_id]
         assert parent_belief_id is not None, "action node must have a parent belief"
         belief = tree.belief[parent_belief_id]
@@ -189,77 +181,67 @@ class ICVaR_PFT_DPW(ArenaPathSimulationPolicyCostSetting):
         next_belief_id = tree.add_belief_node(
             belief=next_belief, observation=next_observation, parent_id=action_id
         )
-        min_cost, max_cost = get_min_and_max_cost(
-            min_immediate_cost=self.min_immediate_cost,
-            max_immediate_cost=self.max_immediate_cost,
-            depth=self.depth,
-            max_depth=self.max_depth,
-            gamma=self.discount_factor,
-        )
-        immediate_cost = belief_expectation_cost_entropy_penalty(
-            belief=belief,
-            action=action,
-            env=self.environment,
-            entropy_weight=self.entropy_weight,
-            lower_clip=min_cost,
-            upper_clip=max_cost,
-        )
-        tree.set_immediate_cost(next_belief_id, immediate_cost)
-        immediate_reward = -immediate_cost
+        # Compute the (parent_belief, action) expected cost once and stash it on
+        # the action node. ``update_nodes`` reads it back without recomputing.
+        if tree.immediate_cost[action_id] is None:
+            tree.set_immediate_cost(
+                action_id,
+                belief_expectation_cost(belief=belief, action=action, env=self.environment),
+            )
 
-        return next_belief_id, immediate_reward
+        return next_belief_id
 
     def update_nodes(self, tree: Tree, belief_id: int, action_id: int) -> None:
         tree.visit_count[belief_id] += 1
         tree.visit_count[action_id] += 1
 
-        if tree.immediate_cost[action_id] is None:
-            min_cost, max_cost = get_min_and_max_cost(
-                min_immediate_cost=self.min_immediate_cost,
-                max_immediate_cost=self.max_immediate_cost,
-                depth=self.depth,
-                max_depth=self.max_depth,
-                gamma=self.discount_factor,
-            )
-            tree.set_immediate_cost(
-                action_id,
-                belief_expectation_cost_entropy_penalty(
-                    belief=tree.belief[belief_id],
-                    action=tree.action[action_id],
-                    env=self.environment,
-                    entropy_weight=self.entropy_weight,
-                    lower_clip=min_cost,
-                    upper_clip=max_cost,
-                ),
-            )
-
         action_immediate_cost = tree.immediate_cost[action_id]
-        assert action_immediate_cost is not None
+        if action_immediate_cost is None:
+            # Action selected via LCB exploration on a never-expanded path.
+            action_immediate_cost = belief_expectation_cost(
+                belief=tree.belief[belief_id],
+                action=tree.action[action_id],
+                env=self.environment,
+            )
+            tree.set_immediate_cost(action_id, action_immediate_cost)
 
         action_children = tree.children_ids[action_id]
-        if not action_children:
+        n_action_children = len(action_children)
+        if n_action_children == 0:
             tree.q_value[action_id] = action_immediate_cost
         else:
-            visit_counts = np.array([tree.visit_count[cid] for cid in action_children])
-            v_values = np.array([tree.v_value[cid] for cid in action_children])
+            visit_counts = np.fromiter(
+                (tree.visit_count[cid] for cid in action_children),
+                dtype=np.float64,
+                count=n_action_children,
+            )
             total_visits = visit_counts.sum()
             if total_visits == 0:
                 tree.q_value[action_id] = action_immediate_cost
             else:
+                v_values = np.fromiter(
+                    (tree.v_value[cid] for cid in action_children),
+                    dtype=np.float64,
+                    count=n_action_children,
+                )
                 tree.q_value[action_id] = action_immediate_cost + (
                     self.discount_factor
-                    * cvar_estimator_from_dist(
+                    * cvar_estimator_from_dist_fast(
                         values=v_values,
                         weights=visit_counts / total_visits,
                         alpha=self.alpha,
                     )
                 )
 
-        visited_q_values = [
-            tree.q_value[cid] for cid in tree.children_ids[belief_id] if tree.visit_count[cid] > 0
-        ]
-        if visited_q_values:
-            tree.v_value[belief_id] = float(np.min(visited_q_values))
+        belief_children = tree.children_ids[belief_id]
+        best_q: Optional[float] = None
+        for cid in belief_children:
+            if tree.visit_count[cid] > 0:
+                q = tree.q_value[cid]
+                if best_q is None or q < best_q:
+                    best_q = q
+        if best_q is not None:
+            tree.v_value[belief_id] = best_q
 
     @classmethod
     def get_space_info(cls) -> PolicySpaceInfo:
