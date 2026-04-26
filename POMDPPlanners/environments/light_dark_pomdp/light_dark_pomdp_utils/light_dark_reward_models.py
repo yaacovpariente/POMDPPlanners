@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 import numpy as np
 
 from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.numba_kernels import (
+    compute_reward_base_batch_kernel,
     compute_reward_base_kernel,
     compute_reward_decaying_hit_prob_kernel,
 )
@@ -47,14 +48,6 @@ class ContinuousLightDarkRewardModel(BaseLightDarkRewardModel):
         self.obstacle_reward = obstacle_reward
         self.goal_reward = goal_reward
         self.fuel_cost = fuel_cost
-        # Cached scalars/arrays for compute_reward_batch hot path:
-        # squared radii skip per-call sqrts in mask checks, and obstacle
-        # rows are pre-broadcast as (1, M) views to avoid the (N, 2, M)
-        # intermediate that np.linalg.norm forces.
-        self._goal_radius_sq = float(goal_state_radius) * float(goal_state_radius)
-        self._obstacle_radius_sq = float(obstacle_radius) * float(obstacle_radius)
-        self._obs_x_row = np.ascontiguousarray(obstacles[0]).reshape(1, -1)
-        self._obs_y_row = np.ascontiguousarray(obstacles[1]).reshape(1, -1)
 
     def _is_goal_state(self, state: np.ndarray) -> bool:
         """Check if state is within goal state radius."""
@@ -103,31 +96,25 @@ class ContinuousLightDarkRewardModel(BaseLightDarkRewardModel):
         return self.obstacle_reward if np.random.rand() < self.obstacle_hit_probability else 0.0
 
     def compute_reward_batch(self, states: np.ndarray, action: np.ndarray) -> np.ndarray:
-        next_states = states + action
-        nx = next_states[:, 0]
-        ny = next_states[:, 1]
-
-        # Goal distance from raw components — cheaper than np.linalg.norm.
-        g_dx = nx - self.goal_state[0]
-        g_dy = ny - self.goal_state[1]
-        sq_dist_to_goal = g_dx * g_dx + g_dy * g_dy
-        rewards = -self.fuel_cost - np.sqrt(sq_dist_to_goal)
-        goal_mask = sq_dist_to_goal <= self._goal_radius_sq
-        rewards[goal_mask] += self.goal_reward
-
-        # Obstacle membership — squared distances on (N, M), no (N, 2, M)
-        # intermediate. self._obs_{x,y}_row are cached (1, M) views.
-        o_dx = nx[:, None] - self._obs_x_row
-        o_dy = ny[:, None] - self._obs_y_row
-        sq_obs_dists = o_dx * o_dx + o_dy * o_dy
-        in_range = np.any(sq_obs_dists <= self._obstacle_radius_sq, axis=1)
-        obstacle_mask = in_range & ~goal_mask
+        # Deterministic part runs in a Numba kernel. The mask flags the rows
+        # where the next state landed in an obstacle region but was not at
+        # goal / out-of-grid; those rows still need the stochastic obstacle
+        # contribution applied in Python so seeded RNG stays reproducible.
+        rewards, obstacle_mask = compute_reward_base_batch_kernel(
+            states,
+            action,
+            self.goal_state,
+            self.obstacles,
+            self.goal_state_radius,
+            self.obstacle_radius,
+            float(self.grid_size),
+            self.fuel_cost,
+            self.goal_reward,
+            self.obstacle_reward,
+        )
         n_obs = int(np.count_nonzero(obstacle_mask))
         if n_obs > 0:
             rewards[obstacle_mask] += self._obstacle_reward_batch(n_obs)
-
-        oob = (nx < 0.0) | (ny < 0.0) | (nx > self.grid_size) | (ny > self.grid_size)
-        rewards[oob & ~goal_mask & ~in_range] += self.obstacle_reward
         return rewards
 
     def _obstacle_reward_batch(self, n: int) -> np.ndarray:
