@@ -72,6 +72,11 @@ class ArenaPathSimulationPolicy(Policy):
         self.action_sampler = action_sampler
         # Optional sizehint for Tree column buffers (POMCPOW.jl-style).
         self.reserve_capacity = reserve_capacity
+        # Adaptive sizehint: remember the last tree's final node count so
+        # the next ``_learn_tree`` call can reserve a buffer that already
+        # covers the typical workload. Cuts the realloc bursts that
+        # ``_allocate`` would otherwise pay on every call.
+        self._last_tree_size: int = 0
 
         if n_simulations is not None and time_out_in_seconds is not None:
             raise ValueError("Cannot specify both n_simulations and time_out_in_seconds")
@@ -112,8 +117,9 @@ class ArenaPathSimulationPolicy(Policy):
 
     def _learn_tree(self, belief: Belief) -> Tuple[Tree, int]:
         tree = Tree()
-        if self.reserve_capacity > 0:
-            tree.reserve(self.reserve_capacity)
+        capacity = self._effective_reserve_capacity()
+        if capacity > 0:
+            tree.reserve(capacity)
         root_id = tree.add_belief_node(belief)
 
         if self.n_simulations is not None:
@@ -123,7 +129,32 @@ class ArenaPathSimulationPolicy(Policy):
         else:
             raise ValueError("Either n_simulations or time_out_in_seconds must be provided")
 
+        # Remember the final size so the next call can pre-reserve a
+        # buffer that already covers the typical workload.
+        self._last_tree_size = len(tree)
         return tree, root_id
+
+    def _effective_reserve_capacity(self) -> int:
+        """Capacity passed to :meth:`Tree.reserve` for each new tree.
+
+        If the caller supplied an explicit ``reserve_capacity`` we honour it
+        verbatim. Otherwise, prefer a sizehint derived from the previous
+        call's final tree (adaptive, dialled in after one warmup) and fall
+        back to ``2 * n_simulations`` when no history is available — each
+        simulation adds at most one belief node and one action node per
+        level it descends, so this is a safe-but-not-bloated baseline that
+        covers shallow trees and lets deeper trees fall back to
+        ``list.append`` past the reserved zone.
+        """
+        if self.reserve_capacity > 0:
+            return self.reserve_capacity
+        if self._last_tree_size > 0:
+            # 1.25x headroom so a slightly larger tree still hits the
+            # reserved zone instead of falling back to append.
+            return (self._last_tree_size * 5) // 4
+        if self.n_simulations is not None:
+            return 2 * self.n_simulations
+        return 0
 
     def _construct_tree_using_n_simulations(self, tree: Tree, root_id: int) -> None:
         if self.n_simulations is None:
