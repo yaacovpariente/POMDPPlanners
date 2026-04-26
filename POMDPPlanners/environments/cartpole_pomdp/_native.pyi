@@ -16,6 +16,31 @@ def set_seed(seed: int) -> None:
     """Seed the module-level RNG used by ``sample()`` calls."""
     ...
 
+def simulate_rollout(
+    initial_state: NDArray[np.float64],
+    action_indices: NDArray[np.int32],
+    max_depth: int,
+    start_depth: int,
+    discount_factor: float,
+    force_mag: float,
+    total_mass: float,
+    polemass_length: float,
+    gravity: float,
+    length: float,
+    kinematics_integrator: int,
+    tau: float,
+    masspole: float,
+    x_threshold: float,
+    theta_threshold: float,
+    covariance: NDArray[np.float64],
+) -> float:
+    """Native random rollout for CartPole.
+
+    Returns the discounted return from ``initial_state``.
+    ``action_indices`` must be a pre-drawn 1-D int32 array.
+    """
+    ...
+
 class CartPoleTransitionCpp:
     """Native physics + Gaussian-noise transition sampler."""
 

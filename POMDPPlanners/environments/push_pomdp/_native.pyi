@@ -16,6 +16,52 @@ def set_seed(seed: int) -> None:
     """Seed the module-level RNG used by ``sample()`` calls."""
     ...
 
+def simulate_rollout_discrete(
+    state: NDArray[np.float64],
+    action_indices: NDArray[np.int64],
+    max_depth: int,
+    depth: int,
+    discount: float,
+    grid_size: float,
+    push_threshold: float,
+    friction_coefficient: float,
+    obstacles: NDArray[np.float64],
+    obstacle_radius: float,
+    obstacle_penalty: float,
+    transition_error_prob: float,
+) -> float:
+    """Run a full discrete Push POMDP rollout in C++.
+
+    Returns the discounted sum of immediate rewards along the sampled
+    trajectory, using pre-drawn action indices supplied by the caller.
+    """
+    ...
+
+def cont_simulate_rollout(
+    initial_state: NDArray[np.floating],
+    action_array: NDArray[np.floating],
+    action_indices: NDArray[np.int32],
+    max_depth: int,
+    start_depth: int,
+    discount_factor: float,
+    grid_size: float,
+    push_threshold: float,
+    friction_coefficient: float,
+    max_push: float,
+    robot_radius: float,
+    obstacle_penalty: float,
+    obstacles: NDArray[np.floating],
+    covariance: NDArray[np.floating],
+) -> float:
+    """Native random rollout for ContinuousPushPOMDP.
+
+    Returns the discounted sum of immediate rewards from ``initial_state``.
+    ``action_indices`` must be a pre-drawn int32 array of shape
+    ``(steps_left,)``.  ``obstacles`` must have shape ``(M, 4)`` with
+    rows ``(cx, cy, hx, hy)``.
+    """
+    ...
+
 class ContinuousPushTransitionCpp:
     """Native 6-D transition sampler for Continuous Push POMDP."""
 

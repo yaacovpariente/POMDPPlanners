@@ -871,3 +871,79 @@ def test_reward_batch_matches_scalar_reward():
     single = env.reward_batch(states[:1], action)
     assert single.shape == (1,)
     assert single[0] == env.reward(states[0], action)
+
+
+def test_simulate_random_rollout_native_matches_base_class_python() -> None:
+    """Test that CartPole native simulate_random_rollout matches the base-class Python loop.
+
+    Purpose: Validates that the native C++ rollout produces a discounted return
+    equal (within atol=1e-9) to the base-class Python loop when both use the
+    same action sequence and the same C++ RNG seed.
+
+    Given: A CartPolePOMDP env seeded identically for C++ RNG and numpy; a fixed
+        action sequence pre-drawn from numpy seed 0; a non-terminal initial state;
+        max_depth=10, discount_factor=0.95, depth=0.
+    When: Both the native override and the Python base-class loop are run with the
+        same action sequence and the same C++ RNG seed before each call.
+    Then: The two discounted returns are equal within atol=1e-9.
+
+    Test type: unit
+    """
+    from POMDPPlanners.environments.cartpole_pomdp import (
+        _native,
+    )  # pylint: disable=import-outside-toplevel
+    from POMDPPlanners.planners.planners_utils.dpw import (
+        ActionSampler,
+    )  # pylint: disable=import-outside-toplevel
+    from POMDPPlanners.planners.planners_utils.rollout import (
+        python_random_rollout,
+    )  # pylint: disable=import-outside-toplevel
+
+    env = CartPolePOMDP(discount_factor=0.99, noise_cov=np.diag([0.1, 0.1, 0.1, 0.1]))
+    state = np.array([0.0, 0.0, 0.0, 0.0], dtype=np.float64)
+    max_depth = 10
+    gamma = 0.95
+
+    # Pre-draw a fixed action sequence with numpy seed 0
+    np.random.seed(0)
+    fixed_actions = np.random.randint(0, 2, size=max_depth, dtype=np.int32)
+
+    class _SequenceActionSampler(ActionSampler):
+        def __init__(self, actions: np.ndarray) -> None:
+            self._actions = actions
+            self._idx = 0
+
+        def sample(self, belief_node=None) -> int:  # pylint: disable=unused-argument
+            a = int(self._actions[self._idx % len(self._actions)])
+            self._idx += 1
+            return a
+
+    # Run native rollout: seed numpy so randint draws the fixed_actions sequence
+    np.random.seed(0)
+    _native.set_seed(7)
+    native_return = env.simulate_random_rollout(
+        state=state,
+        action_sampler=None,
+        max_depth=max_depth,
+        discount_factor=gamma,
+        depth=0,
+    )
+
+    # Run Python base-class rollout with the same action sequence and C++ seed
+    sampler = _SequenceActionSampler(fixed_actions)
+    _native.set_seed(7)
+    python_return = python_random_rollout(
+        state=state,
+        depth=0,
+        action_sampler=sampler,
+        environment=env,
+        discount_factor=gamma,
+        max_depth=max_depth,
+    )
+
+    np.testing.assert_allclose(
+        native_return,
+        python_return,
+        atol=1e-9,
+        err_msg=(f"Native rollout {native_return:.9f} != " f"Python rollout {python_return:.9f}"),
+    )

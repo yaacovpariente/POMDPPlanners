@@ -40,6 +40,128 @@ constexpr std::size_t kCartPoleStateDim = 4;
 constexpr int kEulerIntegrator = 0;
 constexpr int kSemiImplicitEulerIntegrator = 1;
 
+// ---------------------------------------------------------------------------
+// Deterministic CartPole physics step (Euler or semi-implicit Euler).
+// Writes next state into ``out``. ``state`` has 4 elements:
+// [x, x_dot, theta, theta_dot]. ``action_int`` must be 0 or 1.
+// ---------------------------------------------------------------------------
+static void cartpole_step(const double *state, double *out, int action_int,
+                           double force_mag, double total_mass,
+                           double polemass_length, double gravity, double length,
+                           int integrator, double tau, double masspole) {
+    const double x = state[0];
+    const double x_dot = state[1];
+    const double theta = state[2];
+    const double theta_dot = state[3];
+
+    const double force = (action_int == 1) ? force_mag : -force_mag;
+    const double costheta = std::cos(theta);
+    const double sintheta = std::sin(theta);
+
+    const double temp =
+        (force + polemass_length * theta_dot * theta_dot * sintheta) / total_mass;
+    const double thetaacc =
+        (gravity * sintheta - costheta * temp) /
+        (length * (4.0 / 3.0 - masspole * costheta * costheta / total_mass));
+    const double xacc = temp - polemass_length * thetaacc * costheta / total_mass;
+
+    if (integrator == kEulerIntegrator) {
+        out[0] = x + tau * x_dot;
+        out[1] = x_dot + tau * xacc;
+        out[2] = theta + tau * theta_dot;
+        out[3] = theta_dot + tau * thetaacc;
+    } else {
+        const double next_x_dot = x_dot + tau * xacc;
+        const double next_theta_dot = theta_dot + tau * thetaacc;
+        out[0] = x + tau * next_x_dot;
+        out[1] = next_x_dot;
+        out[2] = theta + tau * next_theta_dot;
+        out[3] = next_theta_dot;
+    }
+}
+
+// Returns true when the cart-pole is in a terminal state.
+static bool cartpole_is_terminal(const double *state, double x_threshold,
+                                  double theta_threshold) noexcept {
+    const double x = state[0];
+    const double theta = state[2];
+    return (x < -x_threshold || x > x_threshold ||
+            theta < -theta_threshold || theta > theta_threshold);
+}
+
+// ---------------------------------------------------------------------------
+// Native simulate_rollout for CartPole.
+//
+// action_indices: pre-drawn integer action indices (0 or 1), shape (n,)
+// covariance: 4x4 state-transition covariance matrix
+// ---------------------------------------------------------------------------
+double cartpole_simulate_rollout(
+    const py::array_t<double, py::array::c_style | py::array::forcecast> &initial_state,
+    const py::array_t<int, py::array::c_style | py::array::forcecast> &action_indices,
+    int max_depth,
+    int start_depth,
+    double discount_factor,
+    double force_mag,
+    double total_mass,
+    double polemass_length,
+    double gravity,
+    double length,
+    int kinematics_integrator,
+    double tau,
+    double masspole,
+    double x_threshold,
+    double theta_threshold,
+    const py::array_t<double> &covariance) {
+    if (initial_state.ndim() != 1 ||
+        static_cast<std::size_t>(initial_state.shape(0)) != kCartPoleStateDim) {
+        throw std::invalid_argument("initial_state must have shape (4,)");
+    }
+    if (action_indices.ndim() != 1) {
+        throw std::invalid_argument("action_indices must be 1-D");
+    }
+
+    const auto noise =
+        pomdp_native::GaussianND<kCartPoleStateDim>::from_covariance(covariance);
+
+    auto state_view = initial_state.unchecked<1>();
+    double state[kCartPoleStateDim] = {state_view(0), state_view(1), state_view(2), state_view(3)};
+    double next_state[kCartPoleStateDim];
+
+    auto ai_view = action_indices.unchecked<1>();
+    const int n_indices = static_cast<int>(action_indices.shape(0));
+
+    pomdp_native::RNGState &rng = pomdp_native::default_rng();
+
+    double total = 0.0;
+    double gamma_power = 1.0;
+    int depth = start_depth;
+
+    while (depth < max_depth) {
+        if (cartpole_is_terminal(state, x_threshold, theta_threshold)) {
+            break;
+        }
+
+        const int idx_slot = depth - start_depth;
+        if (idx_slot >= n_indices) {
+            break;
+        }
+        const int action_int = ai_view(static_cast<py::ssize_t>(idx_slot));
+
+        // Reward for current (non-terminal) state: always 1.0
+        total += gamma_power * 1.0;
+        gamma_power *= discount_factor;
+
+        // Compute deterministic next state then add Gaussian noise
+        cartpole_step(state, next_state, action_int, force_mag, total_mass,
+                      polemass_length, gravity, length,
+                      kinematics_integrator, tau, masspole);
+        noise.sample_into(state, next_state, rng);
+        ++depth;
+    }
+
+    return total;
+}
+
 int encode_integrator(const std::string &name) {
     if (name == "euler") {
         return kEulerIntegrator;
@@ -170,6 +292,18 @@ PYBIND11_MODULE(_native, m) {
 
     m.def("set_seed", &pomdp_native::set_default_seed, py::arg("seed"),
           "Seed the module-level RNG used by sample().");
+
+    m.def("simulate_rollout", &cartpole_simulate_rollout,
+          py::arg("initial_state"), py::arg("action_indices"),
+          py::arg("max_depth"), py::arg("start_depth"), py::arg("discount_factor"),
+          py::arg("force_mag"), py::arg("total_mass"), py::arg("polemass_length"),
+          py::arg("gravity"), py::arg("length"), py::arg("kinematics_integrator"),
+          py::arg("tau"), py::arg("masspole"),
+          py::arg("x_threshold"), py::arg("theta_threshold"),
+          py::arg("covariance"),
+          "Native random rollout for CartPole. "
+          "action_indices must be a pre-drawn 1-D int32 array. "
+          "Returns discounted return from initial_state.");
 
     py::class_<CartPoleTransitionCpp>(m, "CartPoleTransitionCpp")
         .def(py::init<const py::object &, int, double, double, double, double, double,

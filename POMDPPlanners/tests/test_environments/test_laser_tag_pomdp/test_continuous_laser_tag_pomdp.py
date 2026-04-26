@@ -12,10 +12,13 @@ import pytest
 from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.policy import PolicyRunData
 from POMDPPlanners.core.simulation import History, StepData
+from POMDPPlanners.environments.laser_tag_pomdp import _native
 from POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_pomdp import (
     ContinuousLaserTagPOMDP,
     ContinuousLaserTagPOMDPDiscreteActions,
 )
+from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
+from POMDPPlanners.planners.planners_utils.rollout import python_random_rollout
 from POMDPPlanners.tests.test_utils.confidence_interval_utils import (
     verify_metrics_within_confidence_intervals,
 )
@@ -1064,3 +1067,194 @@ class TestObservationLogProbabilityTerminal:
         assert actual.shape == (2,)
         assert actual[0] == 0.0
         assert np.isneginf(actual[1])
+
+
+class TestContinuousLaserTagNativeRollout:
+    """Tests for the native cont_simulate_rollout entry point."""
+
+    def test_continuous_lasertag_native_rollout_matches_python(self) -> None:
+        """Native cont_simulate_rollout return matches python_random_rollout.
+
+        Purpose: Validates that cont_simulate_rollout in the C++ _native extension
+            produces a discounted return numerically identical to the Python
+            python_random_rollout baseline when given the same RNG
+            seed and action sequence.
+
+        Given: A ContinuousLaserTagPOMDP with no walls, a fixed initial state, a
+            deterministic action sampler that replays a pre-drawn action sequence,
+            and the module-level _native RNG seeded to the same value before each
+            call.
+        When: We compute the rollout return via the Python base-class loop (using
+            the deterministic action sampler to ensure both paths see the same
+            action sequence) and via env.simulate_random_rollout (which delegates
+            to cont_simulate_rollout after pre-sampling actions).
+        Then: The two return values agree within atol=1e-9.
+
+        Test type: unit
+        """
+        env = ContinuousLaserTagPOMDP(
+            discount_factor=0.95,
+            walls=[],
+            dangerous_areas=[],
+        )
+        state = np.array([3.0, 3.0, 8.0, 5.0, 0.0])
+        max_depth = 10
+        depth = 2
+        steps_left = max_depth - depth
+
+        # Pre-draw the action sequence that both paths will use.
+        np.random.seed(0)
+        raw_actions = [
+            np.ascontiguousarray(
+                np.array(
+                    [np.random.uniform(-1, 1), np.random.uniform(-1, 1), 0.0], dtype=np.float64
+                )
+            )
+            for _ in range(steps_left)
+        ]
+
+        # A deterministic action sampler that replays the pre-drawn actions.
+        class _ReplayActionSampler(ActionSampler):
+            def __init__(self, actions):
+                self._actions = list(actions)
+                self._idx = 0
+
+            def sample(self, belief_node=None):  # pylint: disable=unused-argument
+                act = self._actions[self._idx % len(self._actions)]
+                self._idx += 1
+                return act
+
+        # Python baseline: call python_random_rollout directly.
+        _native.set_seed(0)
+        python_result = python_random_rollout(
+            state=state,
+            depth=depth,
+            action_sampler=_ReplayActionSampler(raw_actions),
+            environment=env,
+            discount_factor=env.discount_factor,
+            max_depth=max_depth,
+        )
+
+        # Native path: call env.simulate_random_rollout (delegates to cont_simulate_rollout).
+        _native.set_seed(0)
+        native_result = env.simulate_random_rollout(
+            state=state,
+            action_sampler=_ReplayActionSampler(raw_actions),
+            max_depth=max_depth,
+            discount_factor=env.discount_factor,
+            depth=depth,
+        )
+
+        np.testing.assert_allclose(native_result, python_result, atol=1e-9)
+
+    def test_continuous_lasertag_native_rollout_terminal_state_returns_zero(self) -> None:
+        """Native rollout returns 0.0 for a terminal initial state.
+
+        Purpose: Validates the early-exit path when the initial state is terminal.
+
+        Given: A ContinuousLaserTagPOMDP and a terminal state (terminal_flag=1).
+        When: simulate_random_rollout is called.
+        Then: Returns 0.0.
+
+        Test type: unit
+        """
+
+        class _DummySampler:
+            def sample(self, belief_node=None):  # pylint: disable=unused-argument
+                return np.array([1.0, 0.0, 0.0])
+
+        env = ContinuousLaserTagPOMDP(discount_factor=0.95, walls=[], dangerous_areas=[])
+        terminal_state = np.array([5.0, 3.0, 5.0, 3.0, 1.0])
+        result = env.simulate_random_rollout(
+            state=terminal_state,
+            action_sampler=_DummySampler(),
+            max_depth=10,
+            discount_factor=env.discount_factor,
+            depth=0,
+        )
+        assert result == 0.0
+
+    def test_continuous_lasertag_native_rollout_zero_depth_returns_zero(self) -> None:
+        """Native rollout returns 0.0 when depth equals max_depth.
+
+        Purpose: Validates the early-exit path when no steps remain.
+
+        Given: A ContinuousLaserTagPOMDP and depth == max_depth.
+        When: simulate_random_rollout is called.
+        Then: Returns 0.0.
+
+        Test type: unit
+        """
+
+        class _DummySampler:
+            def sample(self, belief_node=None):  # pylint: disable=unused-argument
+                return np.array([1.0, 0.0, 0.0])
+
+        env = ContinuousLaserTagPOMDP(discount_factor=0.95, walls=[], dangerous_areas=[])
+        state = np.array([3.0, 3.0, 8.0, 5.0, 0.0])
+        result = env.simulate_random_rollout(
+            state=state,
+            action_sampler=_DummySampler(),
+            max_depth=5,
+            discount_factor=env.discount_factor,
+            depth=5,
+        )
+        assert result == 0.0
+
+    def test_discrete_actions_native_rollout_matches_python(self) -> None:
+        """DiscreteActions variant native rollout matches Python baseline.
+
+        Purpose: Validates that ContinuousLaserTagPOMDPDiscreteActions.simulate_random_rollout
+            produces the same result as the Python loop for a deterministic action
+            sequence.
+
+        Given: A ContinuousLaserTagPOMDPDiscreteActions, a fixed initial state, a
+            deterministic string-action sampler, and identical _native RNG seeds.
+        When: Both Python and native paths are called.
+        Then: The two return values agree within atol=1e-9.
+
+        Test type: unit
+        """
+        env = ContinuousLaserTagPOMDPDiscreteActions(
+            discount_factor=0.95,
+            walls=[],
+            dangerous_areas=[],
+        )
+        state = np.array([3.0, 3.0, 8.0, 5.0, 0.0])
+        max_depth = 8
+        depth = 1
+        steps_left = max_depth - depth
+
+        action_sequence = ["right", "up", "left", "down", "tag", "right", "up"] * 10
+        action_sequence = action_sequence[:steps_left]
+
+        class _DiscreteSampler(ActionSampler):
+            def __init__(self, actions):
+                self._actions = list(actions)
+                self._idx = 0
+
+            def sample(self, belief_node=None):  # pylint: disable=unused-argument
+                act = self._actions[self._idx % len(self._actions)]
+                self._idx += 1
+                return act
+
+        _native.set_seed(7)
+        python_result = python_random_rollout(
+            state=state,
+            depth=depth,
+            action_sampler=_DiscreteSampler(action_sequence),
+            environment=env,
+            discount_factor=env.discount_factor,
+            max_depth=max_depth,
+        )
+
+        _native.set_seed(7)
+        native_result = env.simulate_random_rollout(
+            state=state,
+            action_sampler=_DiscreteSampler(action_sequence),
+            max_depth=max_depth,
+            discount_factor=env.discount_factor,
+            depth=depth,
+        )
+
+        np.testing.assert_allclose(native_result, python_result, atol=1e-9)

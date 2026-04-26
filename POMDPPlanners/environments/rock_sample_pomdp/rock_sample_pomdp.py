@@ -103,7 +103,7 @@ _OBS_CODE_TO_STR = ("none", "good", "bad")
 _OBS_STR_TO_CODE = {"none": 0, "good": 1, "bad": 2}
 
 
-class RockSamplePOMDP(DiscreteActionsEnvironment):
+class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-methods
     """RockSample POMDP environment
 
     This environment implements the classic rock sampling problem where a robot
@@ -224,6 +224,12 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
         # native-kernel sample overrides to skip the per-call allocation.
         self._rock_positions_int32 = np.asarray(self.rock_positions, dtype=np.int32)
 
+        # Flat interleaved [row0, col0, row1, col1, ...] version for the
+        # native simulate_rollout_discrete kernel.
+        self._rock_positions_flat: np.ndarray = np.asarray(
+            [coord for rp in self.rock_positions for coord in rp], dtype=np.int32
+        )
+
         # Define actions: 0=sample, 1=north, 2=east, 3=south, 4=west, 5+=check_rock_i
         self.action_names = ["sample", "north", "east", "south", "west"]
         self.action_names.extend([f"check_rock_{i}" for i in range(len(self.rock_positions))])
@@ -312,6 +318,65 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
             total_reward += self.dangerous_area_penalty
 
         return total_reward
+
+    def reward_batch(self, states: Any, action: int) -> np.ndarray:
+        """Calculate rewards for a batch of states given a single action.
+
+        Since RockSample transitions are deterministic, next states are
+        computed in a single vectorised native call and the reward formula
+        is applied with pure NumPy operations — no Python loop over
+        particles.
+
+        Args:
+            states: Sequence / array of states, shape ``(N, 2 + num_rocks)``.
+            action: Discrete action integer.
+
+        Returns:
+            1-D ``float64`` array of shape ``(N,)``.
+        """
+        states_array = np.ascontiguousarray(np.asarray(states, dtype=np.float64))
+        if states_array.ndim == 1:
+            states_array = states_array.reshape(1, -1)
+        return self._reward_batch_vectorized(states_array, int(action))
+
+    def _reward_batch_vectorized(self, states: np.ndarray, action: int) -> np.ndarray:
+        n = states.shape[0]
+        next_states = self.sample_next_state_batch(states, action)
+        rewards = np.full(n, self.step_penalty, dtype=np.float64)
+        map_cols = self.map_size[1]
+
+        if action == 2:
+            # East exit: robot at last column exits
+            exits = states[:, 1].astype(int) == (map_cols - 1)
+            # Terminal-sentinel rows are already exited; treat as exit
+            terminal = (states[:, 0] < 0) & (states[:, 1] < 0)
+            rewards[exits | terminal] += self.exit_reward
+            return rewards
+
+        if action == 0:
+            # Sample action: reward depends on rock quality at robot position
+            robot_rows = states[:, 0].astype(int)
+            robot_cols = states[:, 1].astype(int)
+            for i, (rr, rc) in enumerate(self.rock_positions):
+                at_rock = (robot_rows == rr) & (robot_cols == rc)
+                if not np.any(at_rock):
+                    continue
+                rock_slot = 2 + i
+                rock_good = states[:, rock_slot] > 0.5
+                rewards[at_rock & rock_good] += self.good_rock_reward
+                rewards[at_rock & ~rock_good] += self.bad_rock_penalty
+
+        if action >= 5:
+            rewards += self.sensor_use_penalty
+
+        if self.dangerous_areas:
+            next_robot_rows = next_states[:, 0].astype(int)
+            next_robot_cols = next_states[:, 1].astype(int)
+            for j in range(n):
+                if self._is_in_dangerous_area((next_robot_rows[j], next_robot_cols[j])):
+                    rewards[j] += self.dangerous_area_penalty
+
+        return rewards
 
     # ── Native-backed env-API implementations ────────────────────────
     # Each method constructs the native C++ kernel directly with cached
@@ -418,6 +483,69 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
                 observation=int(observation_code),
             ),
             dtype=np.float64,
+        )
+
+    def simulate_random_rollout(
+        self,
+        state: Any,
+        action_sampler: Any,
+        max_depth: int,
+        discount_factor: float,
+        depth: int = 0,
+    ) -> float:
+        """Random rollout via native C++ deterministic transition and reward kernel.
+
+        Falls back to the base-class Python loop when dangerous areas are
+        configured (their stochastic-penalty semantics are not ported to C++).
+
+        Args:
+            state: Current RockSample state array.
+            action_sampler: Object with a ``sample()`` method returning an
+                integer action; used only on the Python fallback path.
+            max_depth: Maximum rollout depth.
+            discount_factor: Per-step discount factor.
+            depth: Depth already consumed by the search tree. Defaults to 0.
+
+        Returns:
+            Discounted sum of immediate rewards along the sampled trajectory.
+        """
+        if self.dangerous_areas:
+            from POMDPPlanners.planners.planners_utils.rollout import (
+                python_random_rollout,
+            )  # pylint: disable=import-outside-toplevel
+
+            return python_random_rollout(
+                state=state,
+                depth=depth,
+                action_sampler=action_sampler,
+                environment=self,
+                discount_factor=discount_factor,
+                max_depth=max_depth,
+            )
+
+        steps_left = max_depth - depth
+        if steps_left <= 0:
+            return 0.0
+
+        state_arr = np.ascontiguousarray(np.asarray(state, dtype=np.float64).ravel())
+        n_actions = len(self.action_names)
+        action_indices = np.random.randint(0, n_actions, size=steps_left, dtype=np.int32)
+
+        return _native.simulate_rollout_discrete(
+            initial_state=state_arr,
+            action_indices=action_indices,
+            rock_positions_flat=self._rock_positions_flat,
+            max_depth=max_depth,
+            start_depth=depth,
+            discount_factor=discount_factor,
+            map_rows=int(self.map_size[0]),
+            map_cols=int(self.map_size[1]),
+            n_actions=n_actions,
+            step_penalty=float(self.step_penalty),
+            exit_reward=float(self.exit_reward),
+            good_rock_reward=float(self.good_rock_reward),
+            bad_rock_penalty=float(self.bad_rock_penalty),
+            sensor_use_penalty=float(self.sensor_use_penalty),
         )
 
     def sample_next_step(

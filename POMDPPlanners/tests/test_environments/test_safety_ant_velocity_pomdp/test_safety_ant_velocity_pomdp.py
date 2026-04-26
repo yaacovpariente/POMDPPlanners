@@ -7,6 +7,8 @@ This module tests the Safety Ant Velocity POMDP environment, focusing on:
 - Terminal conditions
 """
 
+# pylint: disable=too-many-lines
+
 from unittest.mock import Mock
 
 import numpy as np
@@ -883,3 +885,202 @@ def test_reward_batch_matches_scalar_reward():
     single = env.reward_batch(states[:1], action)
     assert single.shape == (1,)
     np.testing.assert_allclose(single[0], env.reward(states[0], action))
+
+
+# ---------------------------------------------------------------------------
+# Native simulate_rollout equivalence and smoke tests
+# ---------------------------------------------------------------------------
+
+
+class _FixedActionSamplerSafeAnt:
+    def __init__(self, action: int) -> None:
+        self._action = action
+
+    def sample(self) -> int:
+        return self._action
+
+
+def _safe_ant_python_rollout_native_semantics(
+    env_local: SafeAntVelocityPOMDP,
+    initial_state: np.ndarray,
+    action_indices: np.ndarray,
+    max_depth: int,
+    start_depth: int,
+    discount_factor: float,
+) -> float:
+    terminal_threshold = env_local.safe_velocity_threshold * 1.5
+    state = np.array(initial_state, dtype=np.float64)
+    total = 0.0
+    gamma_power = 1.0
+    depth = start_depth
+    n_actions = len(env_local.actions)
+
+    for action_int in action_indices:
+        if depth >= max_depth:
+            break
+        vx, vy = state[2], state[3]
+        if np.sqrt(vx * vx + vy * vy) > terminal_threshold:
+            break
+        ai = int(action_int) % n_actions
+        next_state = env_local.sample_next_state(state=state, action=ai)
+        nx, ny = next_state[2], next_state[3]
+        next_speed = float(np.sqrt(nx * nx + ny * ny))
+        step_reward = next_speed * env_local.movement_reward_scale
+        if next_speed > env_local.safe_velocity_threshold:
+            step_reward += env_local.safety_violation_penalty
+        total += gamma_power * step_reward
+        gamma_power *= discount_factor
+        state = np.asarray(next_state, dtype=np.float64)
+        depth += 1
+
+    return total
+
+
+def test_native_simulate_rollout_safe_ant_matches_python_reference():
+    """Native simulate_rollout matches a Python reference with same reward semantics.
+
+    Purpose: Validates that the C++ rollout accumulates the same discounted
+    return as a Python loop using identical physics and reward conventions
+    (reward computed from next state) under a fixed C++ RNG seed and
+    identical pre-drawn action indices.
+
+    Given: A SafeAntVelocityPOMDP, a fixed initial state, and identical
+        action_indices and C++ RNG seed for both implementations.
+    When: Both the native ``_native.simulate_rollout`` and the Python
+        reference walk the same trajectory.
+    Then: Returned discounted returns agree within atol=1e-9.
+
+    Test type: integration
+    """
+    from POMDPPlanners.environments.safety_ant_velocity_pomdp import (
+        _native as sa_native,
+    )  # pylint: disable=import-outside-toplevel
+    from POMDPPlanners.environments.safety_ant_velocity_pomdp.safety_ant_velocity_pomdp import (
+        DEFAULT_FORCE_SCALES,
+    )  # pylint: disable=import-outside-toplevel
+
+    np.random.seed(0)
+    env_local = SafeAntVelocityPOMDP(discount_factor=0.99)
+    initial_state = np.array([0.2, -0.1, 0.5, 0.3], dtype=np.float64)
+    max_depth = 8
+    start_depth = 0
+    discount_factor = 0.99
+    steps_left = max_depth - start_depth
+
+    action_indices = np.random.randint(0, 4, size=steps_left, dtype=np.int32)
+
+    sa_native.set_seed(42)
+    native_result = sa_native.simulate_rollout(
+        initial_state=np.ascontiguousarray(initial_state),
+        action_indices=action_indices,
+        force_scales=np.ascontiguousarray(DEFAULT_FORCE_SCALES, dtype=np.float64),
+        max_depth=max_depth,
+        start_depth=start_depth,
+        discount_factor=discount_factor,
+        dt=float(env_local.dt),
+        mass=float(env_local.mass),
+        damping=float(env_local.damping),
+        max_force=float(env_local.max_force),
+        safe_velocity_threshold=float(env_local.safe_velocity_threshold),
+        safety_violation_penalty=float(env_local.safety_violation_penalty),
+        movement_reward_scale=float(env_local.movement_reward_scale),
+    )
+
+    sa_native.set_seed(42)
+    python_result = _safe_ant_python_rollout_native_semantics(
+        env_local=env_local,
+        initial_state=initial_state,
+        action_indices=action_indices,
+        max_depth=max_depth,
+        start_depth=start_depth,
+        discount_factor=discount_factor,
+    )
+
+    np.testing.assert_allclose(native_result, python_result, atol=1e-9, rtol=0.0)
+
+
+def test_simulate_random_rollout_safe_ant_returns_finite_float():
+    """simulate_random_rollout returns a finite float from an initial state.
+
+    Purpose: Smoke-test that the native override does not raise or produce
+    non-finite values from a fresh initial state with shallow horizon.
+
+    Given: A SafeAntVelocityPOMDP, its initial state, and a fixed action.
+    When: simulate_random_rollout is called with max_depth=6.
+    Then: The result is a finite float.
+
+    Test type: integration
+    """
+    from POMDPPlanners.environments.safety_ant_velocity_pomdp import (
+        _native as sa_native,
+    )  # pylint: disable=import-outside-toplevel
+
+    np.random.seed(0)
+    sa_native.set_seed(0)
+    env_local = SafeAntVelocityPOMDP(discount_factor=0.99)
+    state = env_local.initial_state_dist().sample()[0]
+    sampler = _FixedActionSamplerSafeAnt(action=1)
+
+    result = env_local.simulate_random_rollout(
+        state=state,
+        action_sampler=sampler,
+        max_depth=6,
+        discount_factor=0.99,
+    )
+
+    assert isinstance(result, float)
+    assert np.isfinite(result)
+
+
+def test_simulate_random_rollout_safe_ant_returns_zero_at_max_depth():
+    """simulate_random_rollout returns 0.0 when depth equals max_depth.
+
+    Purpose: Validates the depth-bounded base case for the override.
+
+    Given: A SafeAntVelocityPOMDP, any state, and depth == max_depth.
+    When: simulate_random_rollout is called.
+    Then: The return is exactly 0.0.
+
+    Test type: unit
+    """
+    env_local = SafeAntVelocityPOMDP(discount_factor=0.99)
+    state = env_local.initial_state_dist().sample()[0]
+    sampler = _FixedActionSamplerSafeAnt(action=0)
+
+    result = env_local.simulate_random_rollout(
+        state=state,
+        action_sampler=sampler,
+        max_depth=5,
+        discount_factor=0.99,
+        depth=5,
+    )
+
+    assert result == 0.0
+
+
+def test_simulate_random_rollout_safe_ant_terminal_returns_zero():
+    """simulate_random_rollout returns 0.0 from a terminal state.
+
+    Purpose: Validates that a state with critically-high speed terminates
+    the rollout immediately and returns 0.0.
+
+    Given: A state where speed exceeds 1.5 * safe_velocity_threshold.
+    When: simulate_random_rollout is called with depth < max_depth.
+    Then: The return is exactly 0.0.
+
+    Test type: unit
+    """
+    env_local = SafeAntVelocityPOMDP(discount_factor=0.99)
+    critical_speed = env_local.safe_velocity_threshold * 2.0
+    terminal_state = np.array([0.0, 0.0, critical_speed, 0.0], dtype=np.float64)
+    sampler = _FixedActionSamplerSafeAnt(action=0)
+
+    result = env_local.simulate_random_rollout(
+        state=terminal_state,
+        action_sampler=sampler,
+        max_depth=10,
+        discount_factor=0.99,
+        depth=0,
+    )
+
+    assert result == 0.0

@@ -7,6 +7,8 @@ This module tests the Continuous Light Dark POMDP environment, focusing on:
 - Terminal conditions
 """
 
+# pylint: disable=too-many-lines
+
 import random
 import time
 
@@ -21,6 +23,7 @@ from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.distributions import DiscreteDistribution
 from POMDPPlanners.core.policy import PolicyRunData
 from POMDPPlanners.core.simulation import History, StepData
+from POMDPPlanners.environments.light_dark_pomdp import _native
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
     ContinuousLightDarkPOMDP,
     ContinuousLightDarkPOMDPDiscreteActions,
@@ -1557,18 +1560,18 @@ def test_risk_averse_environment_config_start_state_validity():
     light_dark_env_typed = light_dark_env
 
     # Check that start state is not terminal
-    assert not light_dark_env_typed.is_terminal(
-        light_dark_env_typed.start_state
-    ), f"RiskAverseEnvironmentConfigsAPI created terminal start state {light_dark_env_typed.start_state}"
+    assert not light_dark_env.is_terminal(
+        light_dark_env.start_state
+    ), f"RiskAverseEnvironmentConfigsAPI created terminal start state {light_dark_env.start_state}"
 
     # Explicitly check distance to each obstacle
-    start_state = light_dark_env_typed.start_state
-    for i in range(light_dark_env_typed.obstacles.shape[1]):
-        obstacle_pos = light_dark_env_typed.obstacles[:, i]
+    start_state = light_dark_env.start_state
+    for i in range(light_dark_env.obstacles.shape[1]):
+        obstacle_pos = light_dark_env.obstacles[:, i]
         distance = np.linalg.norm(start_state - obstacle_pos)
-        assert distance > light_dark_env_typed.obstacle_radius, (
+        assert distance > light_dark_env.obstacle_radius, (
             f"RiskAverseEnvironmentConfigsAPI: Start state {start_state} too close to obstacle {i} "
-            f"at {obstacle_pos} (distance {distance:.2f} <= radius {light_dark_env_typed.obstacle_radius})"
+            f"at {obstacle_pos} (distance {distance:.2f} <= radius {light_dark_env.obstacle_radius})"
         )
 
     # The main test has passed - start state is not terminal and obstacles are far enough away
@@ -2083,3 +2086,154 @@ def test_continuous_sample_observation_n_samples_for_non_normal_noise():
         assert len(direct) == 4
         for value in direct:
             assert isinstance(value, np.ndarray) or value == "None"
+
+
+def test_native_simulate_rollout_matches_python_rollout_seeded():
+    """Native C++ rollout returns identical discounted return to Python base-class rollout.
+
+    Purpose: Validates that _native.simulate_rollout produces the same discounted
+        return as the Python Environment.simulate_random_rollout for the same action
+        sequence and RNG seed when obstacle_hit_probability=0 (deterministic rewards).
+
+    Given: A ContinuousLightDarkPOMDPDiscreteActions env with obstacle_hit_probability=0,
+        a fixed np.random seed, and a manually pre-drawn action index sequence.
+    When: Both the native rollout and a manual Python rollout walk the same action
+        indices and use the same RNG seed for transition noise.
+    Then: The discounted returns match to within atol=1e-9.
+
+    Test type: unit
+    """
+    env = ContinuousLightDarkPOMDPDiscreteActions(
+        discount_factor=0.95,
+        obstacle_hit_probability=0.0,  # Deterministic rewards — no stochastic obstacle draw
+        state_transition_cov_matrix=np.eye(2) * 0.01,
+        observation_cov_matrix=np.eye(2),
+    )
+    initial_state = np.array([1.0, 2.0])
+    max_depth = 8
+
+    # Pre-draw action indices to share between both paths
+    np.random.seed(0)
+    action_indices = np.random.randint(0, len(env.actions), size=max_depth, dtype=np.int32)
+
+    # Seed native C++ RNG; run native rollout
+    _native.set_seed(0)
+    native_return = _native.simulate_rollout(  # pylint: disable=protected-access
+        initial_state=np.ascontiguousarray(initial_state, dtype=np.float64),
+        action_array=env._actions_array,  # pylint: disable=protected-access
+        action_indices=action_indices,
+        max_depth=max_depth,
+        start_depth=0,
+        discount_factor=env.discount_factor,
+        goal_state=env._goal_state_f64,  # pylint: disable=protected-access
+        obstacles=env._obstacles_flat,  # pylint: disable=protected-access
+        goal_state_radius=float(env.goal_state_radius),
+        obstacle_radius=float(env.obstacle_radius),
+        grid_size=float(env.grid_size),
+        fuel_cost=float(env.fuel_cost),
+        goal_reward=float(env.goal_reward),
+        obstacle_reward=float(env.obstacle_reward),
+        obstacle_hit_probability=0.0,
+        is_obstacle_hit_terminal=bool(env.is_obstacle_hit_terminal),
+        covariance=env._trans_cov_view,  # pylint: disable=protected-access
+    )
+
+    # Python manual rollout using same action sequence and C++ RNG seed
+    _native.set_seed(0)
+    state = initial_state.copy()
+    python_return = 0.0
+    gamma_power = 1.0
+    for depth_step in range(max_depth):
+        if env.is_terminal(state):
+            break
+        ai = int(action_indices[depth_step])
+        action = env.actions[ai]
+        r = env.reward(state, action)
+        python_return += gamma_power * r
+        # step via the kernel (uses _native.default_rng, same seed as above)
+        state = env.sample_next_state(state, action)
+        gamma_power *= env.discount_factor
+
+    assert abs(native_return - python_return) < 1e-9, (
+        f"Native rollout {native_return} != Python rollout {python_return} "
+        f"(diff={abs(native_return - python_return):.2e})"
+    )
+
+
+def test_native_simulate_rollout_terminal_short_circuit():
+    """Native rollout exits immediately when the initial state is already terminal.
+
+    Purpose: Validates that the native C++ rollout correctly short-circuits at
+        depth 0 when the start state is inside the goal radius.
+
+    Given: A ContinuousLightDarkPOMDPDiscreteActions env and an initial state
+        at the exact goal position (guaranteed terminal).
+    When: _native.simulate_rollout is called from that state.
+    Then: The returned discounted return is 0.0 and no transition is executed.
+
+    Test type: unit
+    """
+    env = ContinuousLightDarkPOMDPDiscreteActions(discount_factor=0.95)
+
+    # Place initial state exactly at goal — is_terminal must return True
+    terminal_state = env.goal_state.astype(np.float64).copy()
+    assert env.is_terminal(terminal_state), "Precondition: goal state must be terminal"
+
+    action_indices = np.zeros(10, dtype=np.int32)
+
+    result = _native.simulate_rollout(  # pylint: disable=protected-access
+        initial_state=np.ascontiguousarray(terminal_state),
+        action_array=env._actions_array,  # pylint: disable=protected-access
+        action_indices=action_indices,
+        max_depth=10,
+        start_depth=0,
+        discount_factor=env.discount_factor,
+        goal_state=env._goal_state_f64,  # pylint: disable=protected-access
+        obstacles=env._obstacles_flat,  # pylint: disable=protected-access
+        goal_state_radius=float(env.goal_state_radius),
+        obstacle_radius=float(env.obstacle_radius),
+        grid_size=float(env.grid_size),
+        fuel_cost=float(env.fuel_cost),
+        goal_reward=float(env.goal_reward),
+        obstacle_reward=float(env.obstacle_reward),
+        obstacle_hit_probability=float(env.obstacle_hit_probability),
+        is_obstacle_hit_terminal=bool(env.is_obstacle_hit_terminal),
+        covariance=env._trans_cov_view,  # pylint: disable=protected-access
+    )
+
+    assert result == 0.0, f"Terminal state rollout must return 0.0, got {result}"
+
+
+def test_continuous_light_dark_reward_batch_matches_scalar():
+    """reward_batch returns values consistent with per-particle scalar reward calls.
+
+    Purpose: Validates that the vectorized reward_batch method produces the same
+        rewards as calling scalar reward() once per particle, confirming no
+        bookkeeping overhead has changed the semantics.
+
+    Given: 32 random particles, each action in {up, down, right, left}, and
+        obstacle_hit_probability=0 (deterministic rewards).
+    When: reward_batch is called once per action and scalar reward() is called
+        per (particle, action) pair.
+    Then: All values agree to within atol=1e-12.
+
+    Test type: unit
+    """
+    env = ContinuousLightDarkPOMDPDiscreteActions(
+        discount_factor=0.95,
+        obstacle_hit_probability=0.0,  # Deterministic rewards
+    )
+
+    np.random.seed(7)
+    particles = np.random.uniform(0, env.grid_size, size=(32, 2))
+
+    for action in env.get_actions():
+        batch_rewards = env.reward_batch(particles, action)
+        scalar_rewards = np.array([env.reward(p, action) for p in particles])
+        assert batch_rewards.shape == (32,), f"Expected shape (32,), got {batch_rewards.shape}"
+        np.testing.assert_allclose(
+            batch_rewards,
+            scalar_rewards,
+            atol=1e-12,
+            err_msg=f"reward_batch != scalar rewards for action '{action}'",
+        )

@@ -39,6 +39,7 @@ from POMDPPlanners.core.simulation import History, MetricValue
 from POMDPPlanners.environments.light_dark_pomdp import (
     _native,  # pylint: disable=no-name-in-module
 )
+from POMDPPlanners.planners.planners_utils.rollout import python_random_rollout
 from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp import (
     BaseLightDarkPOMDP,
 )
@@ -821,6 +822,18 @@ class ContinuousLightDarkPOMDPDiscreteActions(ContinuousLightDarkPOMDP, Discrete
             "left": np.ascontiguousarray([-1.0, 0.0], dtype=np.float64),
         }
 
+        # Pre-built arrays for native simulate_rollout.
+        # _actions_array: shape (n_actions, 2) — action vectors stacked row-wise.
+        # _obstacles_flat: shape (2*n_obstacles,) — interleaved [x0,y0,x1,y1,...].
+        self._actions_array: np.ndarray = np.ascontiguousarray(
+            np.stack(list(self.action_to_vector.values()), axis=0), dtype=np.float64
+        )
+        # self.obstacles is stored as (2, N); flatten to [x0,y0,x1,y1,...].
+        self._obstacles_flat: np.ndarray = np.ascontiguousarray(
+            self.obstacles.T.ravel(), dtype=np.float64
+        )
+        self._goal_state_f64: np.ndarray = np.ascontiguousarray(self.goal_state, dtype=np.float64)
+
     def get_actions(self) -> List[Any]:
         return self.actions
 
@@ -859,6 +872,71 @@ class ContinuousLightDarkPOMDPDiscreteActions(ContinuousLightDarkPOMDP, Discrete
     ) -> np.ndarray:
         return super().observation_log_probability_per_state(
             next_states, self.action_to_vector[action], observation
+        )
+
+    def simulate_random_rollout(
+        self,
+        state: Any,
+        action_sampler: Any,
+        max_depth: int,
+        discount_factor: float,
+        depth: int = 0,
+    ) -> float:
+        """Random rollout via native C++ for the STANDARD reward model.
+
+        Falls back to the base-class Python loop for non-STANDARD reward
+        models (DECAYING_HIT_PROBABILITY, DANGEROUS_STATES) which have
+        different stochastic semantics not yet ported to C++.
+
+        Args:
+            state: Current 2-D position ``[x, y]``.
+            action_sampler: Object with a ``sample()`` method; used only for
+                the Python fallback path. On the native path, action indices
+                are pre-drawn inside this method.
+            max_depth: Maximum rollout depth.
+            discount_factor: Per-step discount factor.
+            depth: Depth already consumed by the search tree. Defaults to 0.
+
+        Returns:
+            Discounted sum of immediate rewards along the sampled trajectory.
+        """
+        if not isinstance(self.reward_model, ContinuousLightDarkRewardModel) or isinstance(
+            self.reward_model, (ContinuousLDDangerousStatesRewardModel,)
+        ):
+            return python_random_rollout(
+                state=state,
+                depth=depth,
+                action_sampler=action_sampler,
+                environment=self,
+                discount_factor=discount_factor,
+                max_depth=max_depth,
+            )
+
+        steps_left = max_depth - depth
+        if steps_left <= 0:
+            return 0.0
+
+        state_arr = np.ascontiguousarray(np.asarray(state, dtype=np.float64).ravel())
+        action_indices = np.random.randint(0, len(self.actions), size=steps_left, dtype=np.int32)
+
+        return _native.simulate_rollout(
+            initial_state=state_arr,
+            action_array=self._actions_array,
+            action_indices=action_indices,
+            max_depth=max_depth,
+            start_depth=depth,
+            discount_factor=discount_factor,
+            goal_state=self._goal_state_f64,
+            obstacles=self._obstacles_flat,
+            goal_state_radius=float(self.goal_state_radius),
+            obstacle_radius=float(self.obstacle_radius),
+            grid_size=float(self.grid_size),
+            fuel_cost=float(self.fuel_cost),
+            goal_reward=float(self.goal_reward),
+            obstacle_reward=float(self.obstacle_reward),
+            obstacle_hit_probability=float(self.obstacle_hit_probability),
+            is_obstacle_hit_terminal=bool(self.is_obstacle_hit_terminal),
+            covariance=self._trans_cov_view,
         )
 
     def __eq__(self, other):
