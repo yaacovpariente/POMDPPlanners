@@ -15,7 +15,7 @@ Classes:
 import math
 from enum import Enum
 from pathlib import Path
-from typing import Any, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -246,6 +246,12 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
         for i in range(5, len(self.action_names)):
             self.action_to_vector[i] = (0, 0)
 
+        # Per-action C++ kernel caches: actions are ``int`` so a plain
+        # ``Dict[int, Any]`` suffices. Lazily built by ``_get_trans_kernel``
+        # / ``_get_obs_kernel`` and reset on unpickle.
+        self._trans_kernel_cache: Dict[int, Any] = {}
+        self._obs_kernel_cache: Dict[int, Any] = {}
+
     def _validate_parameters(self):
         """Validate environment parameters."""
         if self.map_size[0] <= 0 or self.map_size[1] <= 0:
@@ -341,7 +347,6 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
 
     def _reward_batch_vectorized(self, states: np.ndarray, action: int) -> np.ndarray:
         n = states.shape[0]
-        next_states = self.sample_next_state_batch(states, action)
         rewards = np.full(n, self.step_penalty, dtype=np.float64)
         map_cols = self.map_size[1]
 
@@ -369,30 +374,93 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
         if action >= 5:
             rewards += self.sensor_use_penalty
 
-        if self.dangerous_areas:
-            next_robot_rows = next_states[:, 0].astype(int)
-            next_robot_cols = next_states[:, 1].astype(int)
-            for j in range(n):
-                if self._is_in_dangerous_area((next_robot_rows[j], next_robot_cols[j])):
-                    rewards[j] += self.dangerous_area_penalty
+        # Default config has no dangerous areas; skip the closed-form
+        # next-position computation entirely. RockSample transitions are
+        # deterministic and trivial, so when dangerous_areas is non-empty
+        # we recreate the next robot position with closed-form math instead
+        # of dispatching to the native batch kernel.
+        if not self.dangerous_areas:
+            return rewards
+
+        next_robot_rows, next_robot_cols = self._closed_form_next_robot_pos(states, action)
+        for j in range(n):
+            if self._is_in_dangerous_area((next_robot_rows[j], next_robot_cols[j])):
+                rewards[j] += self.dangerous_area_penalty
 
         return rewards
 
+    def _closed_form_next_robot_pos(
+        self, states: np.ndarray, action: int
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        # Closed-form post-transition robot position for the dangerous-area
+        # check. RockSample movement actions translate by ``(dr, dc)`` and
+        # clip to map bounds; sample / sense actions leave position
+        # unchanged. Terminal-sentinel rows (state[:, 0] < 0) keep their
+        # negative coordinates so they never match a dangerous-area cell,
+        # mirroring the batch-kernel semantics for that path.
+        robot_rows = states[:, 0].astype(int)
+        robot_cols = states[:, 1].astype(int)
+        if action == 1:
+            dr, dc = -1, 0
+        elif action == 3:
+            dr, dc = 1, 0
+        elif action == 4:
+            dr, dc = 0, -1
+        else:
+            dr, dc = 0, 0
+        new_rows = robot_rows + dr
+        new_cols = robot_cols + dc
+        terminal = (states[:, 0] < 0) & (states[:, 1] < 0)
+        new_rows = np.clip(new_rows, 0, self.map_size[0] - 1)
+        new_cols = np.clip(new_cols, 0, self.map_size[1] - 1)
+        # Restore terminal-sentinel rows so they stay "in their own row".
+        new_rows[terminal] = robot_rows[terminal]
+        new_cols[terminal] = robot_cols[terminal]
+        return new_rows, new_cols
+
     # ── Native-backed env-API implementations ────────────────────────
-    # Each method constructs the native C++ kernel directly with cached
-    # int32 rock positions and dispatches sampling/probability calls to
-    # the native extension; no Python wrapper class is interposed.
+    # Each method fetches a cached per-action C++ kernel, mutates its
+    # stored state via ``set_state`` / ``set_next_state`` (when needed),
+    # and dispatches to the same native sample / probability /
+    # batch_sample / batch_log_likelihood entry points as before. The
+    # kernel itself caches frozen env geometry (rock positions, grid
+    # size, sensor efficiency) so we no longer rebuild those per call.
+
+    def _get_trans_kernel(self, action: int) -> Any:
+        kernel = self._trans_kernel_cache.get(action)
+        if kernel is None:
+            placeholder = np.zeros(2 + len(self.rock_positions), dtype=np.float64)
+            kernel = _native.RockSampleTransitionCpp(
+                state=placeholder,
+                action=int(action),
+                map_rows=self.map_size[0],
+                map_cols=self.map_size[1],
+                num_rocks=len(self.rock_positions),
+                rock_positions=self._rock_positions_int32,
+                sensor_efficiency=self.sensor_efficiency,
+            )
+            self._trans_kernel_cache[action] = kernel
+        return kernel
+
+    def _get_obs_kernel(self, action: int) -> Any:
+        kernel = self._obs_kernel_cache.get(action)
+        if kernel is None:
+            placeholder = np.zeros(2 + len(self.rock_positions), dtype=np.float64)
+            kernel = _native.RockSampleObservationCpp(
+                next_state=placeholder,
+                action=int(action),
+                map_rows=self.map_size[0],
+                map_cols=self.map_size[1],
+                num_rocks=len(self.rock_positions),
+                rock_positions=self._rock_positions_int32,
+                sensor_efficiency=self.sensor_efficiency,
+            )
+            self._obs_kernel_cache[action] = kernel
+        return kernel
 
     def sample_next_state(self, state: RockSampleState, action: int, n_samples: int = 1) -> Any:
-        kernel = _native.RockSampleTransitionCpp(
-            state=np.asarray(state, dtype=float),
-            action=int(action),
-            map_rows=self.map_size[0],
-            map_cols=self.map_size[1],
-            num_rocks=len(self.rock_positions),
-            rock_positions=self._rock_positions_int32,
-            sensor_efficiency=self.sensor_efficiency,
-        )
+        kernel = self._get_trans_kernel(int(action))
+        kernel.set_state(np.asarray(state, dtype=float))
         samples = kernel.sample(n_samples)
         if n_samples == 1:
             return samples[0]
@@ -401,15 +469,8 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
     def sample_observation(
         self, next_state: RockSampleState, action: int, n_samples: int = 1
     ) -> Any:
-        kernel = _native.RockSampleObservationCpp(
-            next_state=np.asarray(next_state, dtype=float),
-            action=int(action),
-            map_rows=self.map_size[0],
-            map_cols=self.map_size[1],
-            num_rocks=len(self.rock_positions),
-            rock_positions=self._rock_positions_int32,
-            sensor_efficiency=self.sensor_efficiency,
-        )
+        kernel = self._get_obs_kernel(int(action))
+        kernel.set_next_state(np.asarray(next_state, dtype=float))
         codes = kernel.sample(n_samples)
         if n_samples == 1:
             return _OBS_CODE_TO_STR[codes[0]]
@@ -418,30 +479,16 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
     def transition_log_probability(
         self, state: RockSampleState, action: int, next_states: Any
     ) -> np.ndarray:
-        kernel = _native.RockSampleTransitionCpp(
-            state=np.asarray(state, dtype=float),
-            action=int(action),
-            map_rows=self.map_size[0],
-            map_cols=self.map_size[1],
-            num_rocks=len(self.rock_positions),
-            rock_positions=self._rock_positions_int32,
-            sensor_efficiency=self.sensor_efficiency,
-        )
+        kernel = self._get_trans_kernel(int(action))
+        kernel.set_state(np.asarray(state, dtype=float))
         probs = np.asarray(kernel.probability(next_states))
         return np.log(probs + 1e-300)
 
     def observation_log_probability(
         self, next_state: RockSampleState, action: int, observations: Any
     ) -> np.ndarray:
-        kernel = _native.RockSampleObservationCpp(
-            next_state=np.asarray(next_state, dtype=float),
-            action=int(action),
-            map_rows=self.map_size[0],
-            map_cols=self.map_size[1],
-            num_rocks=len(self.rock_positions),
-            rock_positions=self._rock_positions_int32,
-            sensor_efficiency=self.sensor_efficiency,
-        )
+        kernel = self._get_obs_kernel(int(action))
+        kernel.set_next_state(np.asarray(next_state, dtype=float))
         codes = np.array([_OBS_STR_TO_CODE.get(v, -1) for v in observations], dtype=np.int32)
         probs = np.asarray(kernel.probability(codes))
         return np.log(probs + 1e-300)
@@ -450,15 +497,10 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
         states_array = np.ascontiguousarray(np.asarray(states, dtype=np.float64))
         if states_array.ndim == 1:
             states_array = states_array.reshape(1, -1)
-        kernel = _native.RockSampleTransitionCpp(
-            state=states_array[0],
-            action=int(action),
-            map_rows=self.map_size[0],
-            map_cols=self.map_size[1],
-            num_rocks=len(self.rock_positions),
-            rock_positions=self._rock_positions_int32,
-            sensor_efficiency=self.sensor_efficiency,
-        )
+        # ``batch_sample`` reads each row's state from the input array;
+        # the kernel's stored ``state_`` is not consulted, so we skip
+        # ``set_state`` on this hot path.
+        kernel = self._get_trans_kernel(int(action))
         return np.asarray(kernel.batch_sample(states_array), dtype=np.float64)
 
     def observation_log_probability_per_state(
@@ -467,15 +509,10 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
         next_states_array = np.ascontiguousarray(np.asarray(next_states, dtype=np.float64))
         if next_states_array.ndim == 1:
             next_states_array = next_states_array.reshape(1, -1)
-        kernel = _native.RockSampleObservationCpp(
-            next_state=next_states_array[0],
-            action=int(action),
-            map_rows=self.map_size[0],
-            map_cols=self.map_size[1],
-            num_rocks=len(self.rock_positions),
-            rock_positions=self._rock_positions_int32,
-            sensor_efficiency=self.sensor_efficiency,
-        )
+        # ``batch_log_likelihood`` reads each row's next-state from the
+        # input array; ``next_state_`` on the kernel is unused, so we
+        # skip ``set_next_state`` on this hot path.
+        kernel = self._get_obs_kernel(int(action))
         observation_code = _OBS_STR_TO_CODE.get(observation, -1)
         return np.asarray(
             kernel.batch_log_likelihood(
@@ -510,9 +547,10 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
             Discounted sum of immediate rewards along the sampled trajectory.
         """
         if self.dangerous_areas:
+            # pylint: disable-next=import-outside-toplevel
             from POMDPPlanners.planners.planners_utils.rollout import (
                 python_random_rollout,
-            )  # pylint: disable=import-outside-toplevel
+            )
 
             return python_random_rollout(
                 state=state,
@@ -560,6 +598,20 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
     def is_terminal(self, state: RockSampleState) -> bool:
         """Check if state is terminal."""
         return int(state[0]) == -1 and int(state[1]) == -1
+
+    def __getstate__(self) -> Dict[str, Any]:
+        # Per-action C++ kernel caches hold pybind11 objects that aren't
+        # picklable. Drop them at serialization time; ``__setstate__``
+        # rebuilds empty caches so the env works after unpickling.
+        state = self.__dict__.copy()
+        state["_trans_kernel_cache"] = {}
+        state["_obs_kernel_cache"] = {}
+        return state
+
+    def __setstate__(self, state: Dict[str, Any]) -> None:
+        vars(self).update(state)
+        self._trans_kernel_cache = {}
+        self._obs_kernel_cache = {}
 
     def initial_state_dist(self) -> DiscreteDistribution:
         """Get initial state distribution."""
