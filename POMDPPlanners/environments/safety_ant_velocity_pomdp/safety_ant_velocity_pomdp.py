@@ -23,8 +23,9 @@ Classes:
 """
 
 from enum import Enum
+from math import hypot
 from pathlib import Path
-from typing import Any, List, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
@@ -171,18 +172,63 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
             DEFAULT_FORCE_SCALES, dtype=np.float64
         )
 
+        # Per-action native-kernel caches. The transition kernel only depends on
+        # ``(action, dt, mass, damping, max_force, force_scales)``; the
+        # observation kernel only depends on ``(action, covariance)``. The
+        # state / next_state argument is a per-call mutable. We construct one
+        # kernel per discrete action on first use and reuse it across
+        # subsequent calls via ``set_state`` / ``set_next_state`` -- this
+        # collapses the 5x per-call ``numpy.asarray`` + Cholesky + GIL
+        # round-trip overhead that showed up in cProfile.
+        self._trans_kernel_cache: Dict[int, Any] = {}
+        self._obs_kernel_cache: Dict[int, Any] = {}
+
+    def __getstate__(self) -> dict:
+        # pybind11 kernels are not picklable; rebuild lazily on the receiver.
+        state = self.__dict__.copy()
+        state["_trans_kernel_cache"] = {}
+        state["_obs_kernel_cache"] = {}
+        return state
+
+    def __setstate__(self, state: dict) -> None:
+        vars(self).update(state)
+        self._trans_kernel_cache = {}
+        self._obs_kernel_cache = {}
+
+    def _get_trans_kernel(self, action: int) -> Any:
+        kernel = self._trans_kernel_cache.get(int(action))
+        if kernel is None:
+            kernel = _native.SafeAntVelocityTransitionCpp(
+                state=np.zeros(4, dtype=np.float64),
+                action=int(action),
+                dt=self.dt,
+                mass=self.mass,
+                damping=self.damping,
+                max_force=self.max_force,
+                force_scales=DEFAULT_FORCE_SCALES,
+            )
+            self._trans_kernel_cache[int(action)] = kernel
+        return kernel
+
+    def _get_obs_kernel(self, action: int) -> Any:
+        kernel = self._obs_kernel_cache.get(int(action))
+        if kernel is None:
+            kernel = _native.SafeAntVelocityObservationCpp(
+                next_state=np.zeros(4, dtype=np.float64),
+                action=int(action),
+                covariance=self._observation_covariance,
+            )
+            self._obs_kernel_cache[int(action)] = kernel
+        return kernel
+
     def reward(self, state: np.ndarray, action: int) -> float:
-        # Extract velocity components
-        velocity = state[2:4]
-        speed = np.linalg.norm(velocity)
-
-        # Base reward is proportional to movement (encourage exploration)
+        # ``hypot`` outperforms ``numpy.linalg.norm`` for fixed 2-D inputs:
+        # cProfile attributed ~25% of POMCPOW wall time to the norm calls
+        # in this method plus ``is_terminal``.
+        speed = hypot(float(state[2]), float(state[3]))
         reward = speed * self.movement_reward_scale
-
-        # Penalty for exceeding safe velocity
         if speed > self.safe_velocity_threshold:
             reward += self.safety_violation_penalty
-
         return float(reward)
 
     def reward_batch(self, states: Union[np.ndarray, Sequence[Any]], action: int) -> np.ndarray:
@@ -193,9 +239,10 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
         return rewards
 
     def is_terminal(self, state: np.ndarray) -> bool:
-        # Episode ends if velocity exceeds safe threshold by too much
-        velocity = state[2:4]
-        speed = np.linalg.norm(velocity)
+        # Episode ends if velocity exceeds safe threshold by too much.
+        # ``hypot`` is significantly faster than ``numpy.linalg.norm`` on
+        # 2-element input — see ``reward`` for the same optimisation.
+        speed = hypot(float(state[2]), float(state[3]))
         return bool(speed > self.safe_velocity_threshold * 1.5)  # 50% margin
 
     def initial_state_dist(self) -> Distribution:
@@ -259,9 +306,9 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
             total_steps = len(history.history)
 
             for step in history.history:
-                # Get velocity from state
-                velocity = step.state[2:4]  # [vx, vy]
-                speed = np.linalg.norm(velocity)
+                # Get velocity from state — ``hypot`` is used for the same
+                # reason as in ``reward`` / ``is_terminal``.
+                speed = hypot(float(step.state[2]), float(step.state[3]))
 
                 # Count safety violations
                 if speed > self.safe_velocity_threshold:
@@ -331,26 +378,16 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
     # throughout the simulator and belief-update paths.
 
     def sample_next_state(self, state: np.ndarray, action: int, n_samples: int = 1) -> Any:
-        kernel = _native.SafeAntVelocityTransitionCpp(
-            state=state,
-            action=action,
-            dt=self.dt,
-            mass=self.mass,
-            damping=self.damping,
-            max_force=self.max_force,
-            force_scales=DEFAULT_FORCE_SCALES,
-        )
+        kernel = self._get_trans_kernel(action)
+        kernel.set_state(state)
         samples = kernel.sample(n_samples)
         if n_samples == 1:
             return samples[0]
         return samples
 
     def sample_observation(self, next_state: np.ndarray, action: int, n_samples: int = 1) -> Any:
-        kernel = _native.SafeAntVelocityObservationCpp(
-            next_state=next_state,
-            action=action,
-            covariance=self._observation_covariance,
-        )
+        kernel = self._get_obs_kernel(action)
+        kernel.set_next_state(next_state)
         samples = kernel.sample(n_samples)
         if n_samples == 1:
             return samples[0]
@@ -419,11 +456,8 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
     def observation_log_probability(
         self, next_state: np.ndarray, action: int, observations: Any
     ) -> np.ndarray:
-        kernel = _native.SafeAntVelocityObservationCpp(
-            next_state=next_state,
-            action=action,
-            covariance=self._observation_covariance,
-        )
+        kernel = self._get_obs_kernel(action)
+        kernel.set_next_state(next_state)
         probs = np.asarray(kernel.probability(observations))
         return np.log(probs + 1e-300)
 
@@ -431,15 +465,9 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
         states_array = np.ascontiguousarray(np.asarray(states, dtype=np.float64))
         if states_array.ndim == 1:
             states_array = states_array.reshape(1, -1)
-        kernel = _native.SafeAntVelocityTransitionCpp(
-            state=states_array[0],
-            action=int(action),
-            dt=self.dt,
-            mass=self.mass,
-            damping=self.damping,
-            max_force=self.max_force,
-            force_scales=DEFAULT_FORCE_SCALES,
-        )
+        # batch_sample reads the per-row state from ``states_array`` and never
+        # touches the kernel's stored state, so no set_state is needed here.
+        kernel = self._get_trans_kernel(action)
         return np.asarray(kernel.batch_sample(states_array), dtype=np.float64)
 
     def observation_log_probability_per_state(
@@ -449,11 +477,9 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
         if next_states_array.ndim == 1:
             next_states_array = next_states_array.reshape(1, -1)
         observation_array = np.ascontiguousarray(np.asarray(observation, dtype=np.float64))
-        kernel = _native.SafeAntVelocityObservationCpp(
-            next_state=next_states_array[0],
-            action=int(action),
-            covariance=self._observation_covariance,
-        )
+        # batch_log_likelihood reads per-row from ``next_states_array``; no
+        # set_next_state needed.
+        kernel = self._get_obs_kernel(action)
         return np.asarray(
             kernel.batch_log_likelihood(
                 next_particles=next_states_array,
@@ -462,7 +488,7 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
             dtype=np.float64,
         )
 
-    def simulate_random_rollout(
+    def simulate_random_rollout(  # pylint: disable=unused-argument
         self,
         state: Any,
         action_sampler: Any,
@@ -477,8 +503,10 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
 
         Args:
             state: Current 4-D state ``[px, py, vx, vy]``.
-            action_sampler: Object with a ``sample()`` method returning an
-                integer action; used only if no steps remain (returns 0.0).
+            action_sampler: Accepted for interface compatibility with the
+                base ``simulate_random_rollout`` signature; the native
+                rollout draws action indices via ``np.random.randint``
+                directly and never invokes the sampler.
             max_depth: Maximum rollout depth.
             discount_factor: Per-step discount factor.
             depth: Depth already consumed by the search tree. Defaults to 0.
