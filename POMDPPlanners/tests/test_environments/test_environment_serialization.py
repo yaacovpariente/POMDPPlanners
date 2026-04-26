@@ -346,39 +346,16 @@ class TestEnvironmentTransitionModelSerialization:
 
     @pytest.mark.skip(
         reason=(
-            "PacManStateTransitionModel inherits from a pybind11 C++ class "
-            "(_native.PacManTransitionCpp), which is not pickleable by default. "
-            "Serializing the env-level state array is still covered by "
-            "test_pacman_state_serialization; there's no planner code path "
-            "that pickles the transition-model wrapper itself."
+            "PacManStateTransitionModel wrapper class deleted in PR-D-Pacman "
+            "along with the state_transition_model factory. The wrapper inherited "
+            "from a pybind11 C++ class (_native.PacManTransitionCpp) which is not "
+            "pickleable by default; with the wrapper gone, this test has no object "
+            "to pickle. Env-level state-array serialization is still covered by "
+            "test_pacman_state_serialization."
         )
     )
     def test_pacman_transition_model_serialization(self):
-        """Test PacManPOMDP transition model serialization.
-
-        Purpose: Validates that PacManPOMDP transition models can be pickled and unpickled
-
-        Given: PacManPOMDP environment, state, and action
-        When: Transition model is pickled and unpickled
-        Then: Unpickled model can sample valid next states
-
-        Test type: unit
-        """
-        env = PacManPOMDP(discount_factor=0.95)
-        state = env.initial_state_dist().sample()[0]
-        actions = env.get_actions()
-        action = actions[0]
-
-        transition_model = env.state_transition_model(state, action)
-        pickled = pickle.dumps(transition_model)
-        unpickled_model = pickle.loads(pickled)
-
-        # Test that unpickled model can sample states
-        next_state = unpickled_model.sample()[0]
-        assert isinstance(next_state, np.ndarray)
-        assert next_state.shape == (env._state_dim,)  # pylint: disable=protected-access
-        env.get_pacman_pos(next_state)
-        env.get_ghost_positions(next_state)
+        """Test PacManPOMDP transition model serialization (obsolete after PR-D-Pacman)."""
 
 
 class TestEnvironmentObservationModelSerialization:
@@ -396,39 +373,15 @@ class TestEnvironmentObservationModelSerialization:
 
     @pytest.mark.skip(
         reason=(
-            "PacManObservationModel inherits from a pybind11 C++ class "
-            "(_native.PacManObservationCpp), which is not pickleable by default. "
-            "No planner code path pickles the observation-model wrapper itself."
+            "PacManObservationModel wrapper class deleted in PR-D-Pacman "
+            "along with the observation_model factory. The wrapper inherited from "
+            "a pybind11 C++ class (_native.PacManObservationCpp) which is not "
+            "pickleable by default; with the wrapper gone, this test has no object "
+            "to pickle. No planner code path pickles the observation-model wrapper."
         )
     )
     def test_pacman_observation_model_serialization(self):
-        """Test PacManPOMDP observation model serialization.
-
-        Purpose: Validates that PacManPOMDP observation models can be pickled and unpickled
-
-        Given: PacManPOMDP environment, next state, and action
-        When: Observation model is pickled and unpickled
-        Then: Unpickled model can sample valid observations
-
-        Test type: unit
-        """
-        env = PacManPOMDP(discount_factor=0.95)
-        state = env.initial_state_dist().sample()[0]
-        actions = env.get_actions()
-        action = actions[0]
-
-        # Sample next state
-        next_state = env.sample_next_state(state=state, action=action)
-
-        # Create observation model
-        obs_model = env.observation_model(next_state, action)
-        pickled = pickle.dumps(obs_model)
-        unpickled_model = pickle.loads(pickled)
-
-        # Test that unpickled model can sample observations
-        obs = unpickled_model.sample()[0]
-        assert obs is not None
-        assert isinstance(obs, tuple)  # Multi-ghost observations
+        """Test PacManPOMDP observation model serialization (obsolete after PR-D-Pacman)."""
 
 
 class TestEnvironmentSerializationRoundTrip:

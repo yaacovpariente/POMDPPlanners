@@ -19,8 +19,6 @@ Key aspects:
 - Safety metrics track violation rates over episodes
 
 Classes:
-    SafeAntVelocityStateTransition: Physics simulation with force control
-    SafeAntVelocityObservation: Noisy position and velocity observations
     SafeAntVelocityPOMDP: Main safety-critical velocity control environment
 """
 
@@ -35,8 +33,6 @@ from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
     SpaceInfo,
     SpaceType,
-    ObservationModel,
-    StateTransitionModel,
 )
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
 from POMDPPlanners.environments.safety_ant_velocity_pomdp import _native
@@ -57,142 +53,6 @@ class SafeAntVelocityPOMDPMetrics(Enum):
     TOTAL_CRITICAL_VIOLATIONS = "total_critical_violations"
 
 
-class SafeAntVelocityStateTransition(_native.SafeAntVelocityTransitionCpp):
-    """Physics-based state transition model for Safety Ant Velocity POMDP.
-
-    This model simulates simplified physics with force application, damping, and
-    random force directions. The agent can choose different force magnitudes
-    but cannot control the direction, creating uncertainty in the outcomes.
-
-    Physics equations:
-    - acceleration = (force - damping * velocity) / mass
-    - velocity += acceleration * dt
-    - position += velocity * dt
-
-    The ``sample()`` and ``batch_sample()`` methods execute entirely in C++
-    via the ``_native`` extension. ``probability()`` remains a Python
-    override because the force-direction distribution is uniform on a ring
-    (not Gaussian) and is evaluated via a tolerance-based consistency check
-    rather than a closed-form density.
-
-    Attributes:
-        state: Current state [position_x, position_y, velocity_x, velocity_y]
-        action: Force magnitude index (0=no force, 1=small, 2=medium, 3=large)
-        dt: Time step for physics integration
-        mass: Mass of the agent (affects acceleration)
-        damping: Damping coefficient (opposes velocity)
-        max_force: Maximum force magnitude
-        force_scales: Force scaling factors for each action
-
-    Example:
-        >>> import numpy as np
-        >>> from POMDPPlanners.environments.safety_ant_velocity_pomdp import _native
-        >>> _native.set_seed(42)
-        >>>
-        >>> state = np.array([0.5, -0.2, 1.0, 0.5])
-        >>> transition = SafeAntVelocityStateTransition(
-        ...     state=state,
-        ...     action=2,
-        ...     dt=0.1,
-        ...     mass=1.0,
-        ...     damping=0.1,
-        ...     max_force=1.0,
-        ... )
-        >>> next_state = transition.sample()[0]
-        >>> next_state.shape
-        (4,)
-    """
-
-    def __init__(
-        self,
-        state: np.ndarray,
-        action: int,
-        dt: float = 0.1,
-        mass: float = 1.0,
-        damping: float = 0.1,
-        max_force: float = 1.0,
-        force_scales: Optional[np.ndarray] = None,
-    ):
-        effective_force_scales = (
-            DEFAULT_FORCE_SCALES if force_scales is None else np.asarray(force_scales, dtype=float)
-        )
-        super().__init__(
-            state=state,
-            action=action,
-            dt=dt,
-            mass=mass,
-            damping=damping,
-            max_force=max_force,
-            force_scales=effective_force_scales,
-        )
-        self.position = np.asarray(state, dtype=float)[:2]
-        self.velocity = np.asarray(state, dtype=float)[2:4]
-
-    def probability(self, values: List[Any]) -> np.ndarray:
-        """Tolerance-based transition probability over a uniformly-random ring.
-
-        Since the force direction is uniformly random over [-π, π], the next
-        states lie on a continuous ring in state space. This method returns
-        a uniform mass over the ring-consistent subset of ``values`` (and
-        degenerates to a point mass when ``force_magnitude == 0``).
-
-        Args:
-            values: List of potential next states.
-
-        Returns:
-            Normalized probabilities (summing to 1 if any state is consistent).
-        """
-        # pylint: disable=unsubscriptable-object,invalid-unary-operand-type
-        # force_scales / damping / mass / dt / max_force / action are inherited
-        # from the C++ parent class; pylint does not trace the .pyi stub.
-        force_magnitude = float(self.force_scales[self.action]) * self.max_force
-
-        if force_magnitude == 0:
-            acceleration = -self.damping * self.velocity / self.mass
-            expected_velocity = self.velocity + acceleration * self.dt
-            expected_position = self.position + expected_velocity * self.dt
-            expected_state = np.concatenate([expected_position, expected_velocity])
-            probs = np.array(
-                [
-                    1.0 if np.allclose(state, expected_state, rtol=1e-5, atol=1e-8) else 0.0
-                    for state in values
-                ]
-            )
-        else:
-            position_tolerance = 0.01
-            force_tolerance = 0.05
-
-            probs_list: List[float] = []
-            for next_state in values:
-                next_position = next_state[:2]
-                next_velocity = next_state[2:4]
-
-                expected_position = self.position + next_velocity * self.dt
-                position_error = np.linalg.norm(next_position - expected_position)
-
-                required_force = (
-                    next_velocity - self.velocity
-                ) * self.mass / self.dt + self.damping * self.velocity
-                required_force_magnitude = np.linalg.norm(required_force)
-                force_magnitude_error = abs(required_force_magnitude - force_magnitude)
-
-                if position_error < position_tolerance and force_magnitude_error < force_tolerance:
-                    probs_list.append(1.0)
-                else:
-                    probs_list.append(0.0)
-
-            probs = np.array(probs_list)
-
-        total = np.sum(probs)
-        if total > 0:
-            probs = probs / total
-
-        return probs
-
-
-StateTransitionModel.register(SafeAntVelocityStateTransition)
-
-
 def _build_safe_ant_obs_covariance(position_noise: float, velocity_noise: float) -> np.ndarray:
     return np.diag(
         [
@@ -202,59 +62,6 @@ def _build_safe_ant_obs_covariance(position_noise: float, velocity_noise: float)
             velocity_noise**2,
         ]
     )
-
-
-class SafeAntVelocityObservation(_native.SafeAntVelocityObservationCpp):
-    """Noisy observation model for Safety Ant Velocity POMDP.
-
-    This model adds Gaussian noise to both position and velocity measurements,
-    creating partial observability that makes velocity estimation challenging.
-    Higher noise in velocity measurements reflects the difficulty of measuring
-    velocity precisely in practice.
-
-    The ``sample()``, ``probability()``, and ``batch_log_likelihood()``
-    methods execute entirely in C++ via the ``_native`` extension
-    (``ObservationModelCpp<4>`` specialized with a diagonal covariance).
-
-    Attributes:
-        next_state: True state after action execution
-        action: Action that was taken (not used in observation generation)
-        position_noise: Standard deviation of Gaussian noise for position
-        velocity_noise: Standard deviation of Gaussian noise for velocity
-
-    Example:
-        >>> import numpy as np
-        >>> from POMDPPlanners.environments.safety_ant_velocity_pomdp import _native
-        >>> _native.set_seed(42)
-        >>>
-        >>> true_state = np.array([0.6, -0.1, 1.2, 0.8])
-        >>> obs_model = SafeAntVelocityObservation(
-        ...     next_state=true_state,
-        ...     action=2,
-        ...     position_noise=0.1,
-        ...     velocity_noise=0.2,
-        ... )
-        >>> observation = obs_model.sample()[0]
-        >>> observation.shape
-        (4,)
-    """
-
-    def __init__(
-        self,
-        next_state: np.ndarray,
-        action: int,
-        position_noise: float = 0.1,
-        velocity_noise: float = 0.2,
-    ):
-        covariance = _build_safe_ant_obs_covariance(position_noise, velocity_noise)
-        super().__init__(next_state=next_state, action=action, covariance=covariance)
-        self.position_noise = position_noise
-        self.velocity_noise = velocity_noise
-        self.position = np.asarray(next_state, dtype=float)[:2]
-        self.velocity = np.asarray(next_state, dtype=float)[2:4]
-
-
-ObservationModel.register(SafeAntVelocityObservation)
 
 
 class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
@@ -356,24 +163,6 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
         # kernel observation override to skip the per-call allocation.
         self._observation_covariance = _build_safe_ant_obs_covariance(
             position_noise, velocity_noise
-        )
-
-    def state_transition_model(self, state: np.ndarray, action: int) -> StateTransitionModel:
-        return SafeAntVelocityStateTransition(  # pyright: ignore[reportReturnType]
-            state=state,
-            action=action,
-            dt=self.dt,
-            mass=self.mass,
-            damping=self.damping,
-            max_force=self.max_force,
-        )
-
-    def observation_model(self, next_state: np.ndarray, action: int) -> ObservationModel:
-        return SafeAntVelocityObservation(  # pyright: ignore[reportReturnType]
-            next_state=next_state,
-            action=action,
-            position_noise=self.position_noise,
-            velocity_noise=self.velocity_noise,
         )
 
     def reward(self, state: np.ndarray, action: int) -> float:
@@ -530,13 +319,10 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
             ),
         ]
 
-    # ── Hot-path sampling overrides ─────────────────────────────────
-    # The default base-class implementations build a Python wrapper
-    # subclass per call (``SafeAntVelocityStateTransition`` /
-    # ``SafeAntVelocityObservation``) that forwards to the native C++
-    # kernel. The overrides below construct the native kernel directly
-    # and skip the wrapper allocation, while preserving the identical
-    # kernel-construction sequence and arguments.
+    # ── Env-API sampling and density methods ─────────────────────────
+    # These methods construct the native C++ kernel directly and
+    # provide the canonical sampling/density entry points used
+    # throughout the simulator and belief-update paths.
 
     def sample_next_state(self, state: np.ndarray, action: int, n_samples: int = 1) -> Any:
         kernel = _native.SafeAntVelocityTransitionCpp(
@@ -567,21 +353,62 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
     def transition_log_probability(
         self, state: np.ndarray, action: int, next_states: Any
     ) -> np.ndarray:
-        # Re-use the Python ``probability()`` defined on the wrapper subclass:
-        # the force-direction distribution is uniform on a ring (no closed-form
-        # density), so the wrapper's tolerance-based consistency check is the
-        # canonical implementation. Wrapper construction is a thin shim over
-        # ``SafeAntVelocityTransitionCpp`` and matches the env's settings.
-        wrapper = SafeAntVelocityStateTransition(
-            state=state,
-            action=action,
-            dt=self.dt,
-            mass=self.mass,
-            damping=self.damping,
-            max_force=self.max_force,
-        )
-        probs = np.asarray(wrapper.probability(list(next_states)))
+        # The force-direction distribution is uniform on a ring (no closed-form
+        # density). We use a tolerance-based consistency check: each candidate
+        # next state either matches the deterministic damped-integration step
+        # (zero-force regime) or lies on the action's force-magnitude ring
+        # within position/force tolerances (non-zero-force regime).
+        probs = np.asarray(self._transition_probability(state, action, list(next_states)))
         return np.log(probs + 1e-300)
+
+    def _transition_probability(
+        self, state: np.ndarray, action: int, values: List[Any]
+    ) -> np.ndarray:
+        position = np.asarray(state, dtype=float)[:2]
+        velocity = np.asarray(state, dtype=float)[2:4]
+        force_magnitude = float(DEFAULT_FORCE_SCALES[action]) * self.max_force
+
+        if force_magnitude == 0:
+            acceleration = -self.damping * velocity / self.mass
+            expected_velocity = velocity + acceleration * self.dt
+            expected_position = position + expected_velocity * self.dt
+            expected_state = np.concatenate([expected_position, expected_velocity])
+            probs = np.array(
+                [
+                    1.0 if np.allclose(s, expected_state, rtol=1e-5, atol=1e-8) else 0.0
+                    for s in values
+                ]
+            )
+        else:
+            position_tolerance = 0.01
+            force_tolerance = 0.05
+
+            probs_list: List[float] = []
+            for next_state in values:
+                next_position = next_state[:2]
+                next_velocity = next_state[2:4]
+
+                expected_position = position + next_velocity * self.dt
+                position_error = np.linalg.norm(next_position - expected_position)
+
+                required_force = (
+                    next_velocity - velocity
+                ) * self.mass / self.dt + self.damping * velocity
+                required_force_magnitude = np.linalg.norm(required_force)
+                force_magnitude_error = abs(required_force_magnitude - force_magnitude)
+
+                if position_error < position_tolerance and force_magnitude_error < force_tolerance:
+                    probs_list.append(1.0)
+                else:
+                    probs_list.append(0.0)
+
+            probs = np.array(probs_list)
+
+        total = np.sum(probs)
+        if total > 0:
+            probs = probs / total
+
+        return probs
 
     def observation_log_probability(
         self, next_state: np.ndarray, action: int, observations: Any

@@ -12,13 +12,7 @@ env ports can reuse them.
 import numpy as np
 import pytest
 
-from POMDPPlanners.core.environment import ObservationModel, StateTransitionModel
-from POMDPPlanners.environments.cartpole_pomdp import (
-    CartPoleObservation,
-    CartPolePOMDP,
-    CartPoleStateTransition,
-    _native,
-)
+from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP, _native
 from POMDPPlanners.tests.test_environments import _native_parity
 from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
 
@@ -29,83 +23,40 @@ def _env_fixture():
     return CartPolePOMDP(discount_factor=0.99, noise_cov=noise_cov)
 
 
+def _build_transition(env: CartPolePOMDP, state: np.ndarray, action: int):
+    return _native.CartPoleTransitionCpp(
+        state=state,
+        action=action,
+        force_mag=env.force_mag,
+        total_mass=env.total_mass,
+        polemass_length=env.polemass_length,
+        gravity=env.gravity,
+        length=env.length,
+        kinematics_integrator=env.kinematics_integrator,
+        tau=env.tau,
+        masspole=env.masspole,
+        covariance=env.state_transition_cov,
+    )
+
+
+def _build_observation(env: CartPolePOMDP, next_state: np.ndarray, action: int):
+    return _native.CartPoleObservationCpp(
+        next_state=next_state,
+        action=action,
+        covariance=env.noise_cov,
+    )
+
+
 @pytest.fixture(name="transition")
 def _transition_fixture(env):
     state = np.array([0.0, 0.0, 0.05, 0.0])
-    return env.state_transition_model(state=state, action=1)
+    return _build_transition(env, state, action=1)
 
 
 @pytest.fixture(name="observation")
 def _observation_fixture(env):
     next_state = np.array([0.01, 0.0, 0.05, 0.0])
-    return env.observation_model(next_state=next_state, action=1)
-
-
-# ---------------------------------------------------------------------------
-# ABC / typing contract
-# ---------------------------------------------------------------------------
-
-
-def test_transition_is_registered_as_state_transition_model(transition):
-    """Shim passes isinstance check for StateTransitionModel after register().
-
-    Purpose: Validates the ABC virtual-subclass registration applied in the
-    Python shim so downstream polymorphic callers see the C++ class as a
-    valid StateTransitionModel.
-
-    Given: A CartPoleStateTransition produced by CartPolePOMDP's factory.
-    When: isinstance is checked against StateTransitionModel.
-    Then: It returns True.
-
-    Test type: unit
-    """
-    _native_parity.assert_abc_registration(transition, StateTransitionModel)
-
-
-def test_observation_is_registered_as_observation_model(observation):
-    """Shim passes isinstance check for ObservationModel after register().
-
-    Purpose: Same as the transition case, for the observation model.
-
-    Given: A CartPoleObservation produced by CartPolePOMDP's factory.
-    When: isinstance is checked against ObservationModel.
-    Then: It returns True.
-
-    Test type: unit
-    """
-    _native_parity.assert_abc_registration(observation, ObservationModel)
-
-
-def test_transition_is_not_abstract():
-    """CartPoleStateTransition is instantiable (no unresolved abstract methods).
-
-    Purpose: Guards against ABC.register masking missing slot implementations
-    on the C++ side.
-
-    Given: The CartPoleStateTransition class object.
-    When: __abstractmethods__ is inspected.
-    Then: The set is empty.
-
-    Test type: unit
-    """
-    abstract_methods = getattr(CartPoleStateTransition, "__abstractmethods__", frozenset())
-    assert abstract_methods == frozenset()
-
-
-def test_observation_is_not_abstract():
-    """CartPoleObservation is instantiable (no unresolved abstract methods).
-
-    Purpose: Guards against ABC.register masking missing slot implementations
-    on the C++ side.
-
-    Given: The CartPoleObservation class object.
-    When: __abstractmethods__ is inspected.
-    Then: The set is empty.
-
-    Test type: unit
-    """
-    abstract_methods = getattr(CartPoleObservation, "__abstractmethods__", frozenset())
-    assert abstract_methods == frozenset()
+    return _build_observation(env, next_state, action=1)
 
 
 # ---------------------------------------------------------------------------
@@ -121,8 +72,8 @@ def test_transition_sample_empirical_moments_match_spec(env):
     declared process noise), since the C++ RNG cannot be compared
     bit-for-bit against numpy's.
 
-    Given: A CartPoleStateTransition from an interior state with action=1
-        (no boundary effects).
+    Given: A native CartPoleTransitionCpp from an interior state with
+        action=1 (no boundary effects).
     When: 200,000 samples are drawn via the C++ path.
     Then: The empirical mean matches the deterministic next state within
         5e-3, and the empirical covariance matches the configured process
@@ -131,7 +82,7 @@ def test_transition_sample_empirical_moments_match_spec(env):
     Test type: integration
     """
     state = np.array([0.0, 0.0, 0.05, 0.0])
-    transition = env.state_transition_model(state=state, action=1)
+    transition = _build_transition(env, state, action=1)
     det = np.asarray(
         transition._compute_deterministic_next_state()  # pylint: disable=protected-access
     )
@@ -155,7 +106,7 @@ def test_observation_sample_empirical_moments_match_spec(env):
     mean (the input next_state) and covariance (the declared observation
     noise).
 
-    Given: A CartPoleObservation with a fixed next_state.
+    Given: A native CartPoleObservationCpp with a fixed next_state.
     When: 200,000 samples are drawn via the C++ path.
     Then: The empirical mean matches the next_state within 5e-3, and the
         empirical covariance matches the observation covariance within
@@ -164,7 +115,7 @@ def test_observation_sample_empirical_moments_match_spec(env):
     Test type: integration
     """
     next_state = np.array([0.05, 0.1, -0.02, 0.0])
-    observation_model = env.observation_model(next_state=next_state, action=0)
+    observation_model = _build_observation(env, next_state, action=0)
 
     _native_parity.assert_sample_moments_match(
         model=observation_model,
@@ -199,7 +150,7 @@ def test_transition_probability_matches_python_reference_on_grid(env):
     Test type: unit
     """
     state = np.array([0.0, 0.0, 0.05, 0.0])
-    transition = env.state_transition_model(state=state, action=1)
+    transition = _build_transition(env, state, action=1)
     det = np.asarray(
         transition._compute_deterministic_next_state()  # pylint: disable=protected-access
     )
@@ -230,7 +181,7 @@ def test_observation_probability_matches_python_reference_on_grid(env):
     Test type: unit
     """
     next_state = np.array([0.02, 0.05, -0.01, 0.1])
-    observation_model = env.observation_model(next_state=next_state, action=1)
+    observation_model = _build_observation(env, next_state, action=1)
 
     rng = np.random.default_rng(4242)
     offsets = rng.normal(size=(1000, 4)) * np.array([0.1, 0.1, 0.05, 0.1])
@@ -282,14 +233,14 @@ def test_sample_is_deterministic_under_set_seed(env):
 
     Purpose: Validates the determinism path used by reproducible tests.
 
-    Given: Two CartPoleStateTransition instances sampled under the same seed.
+    Given: Two CartPoleTransitionCpp instances sampled under the same seed.
     When: _native.set_seed(seed) is called before each, followed by sample(50).
     Then: The two sample sequences are elementwise identical.
 
     Test type: unit
     """
     state = np.array([0.01, 0.005, 0.03, -0.01])
-    transition = env.state_transition_model(state=state, action=1)
+    transition = _build_transition(env, state, action=1)
     _native_parity.assert_determinism_under_seed(
         model=transition,
         seed_fn=_native.set_seed,
@@ -304,7 +255,7 @@ def test_sample_returns_list_of_1d_ndarrays(transition):
     Purpose: Guards against accidental API drift (many call sites index
     the returned list with ``[0]`` or iterate it).
 
-    Given: A CartPoleStateTransition.
+    Given: A native CartPoleTransitionCpp.
     When: sample(3) is called.
     Then: The return value is a list of exactly three 1-D ndarrays of
         length 4.
@@ -333,7 +284,7 @@ def test_transition_batch_sample_matches_per_particle_sample(env):
 
     Given: 64 particles spanning a range of CartPole states.
     When: batch_sample runs under seed=777; then for each particle a fresh
-        CartPoleStateTransition is built and sample(1) is called in the same
+        CartPoleTransitionCpp is built and sample(1) is called in the same
         order under the same seed.
     Then: The two (64, 4) arrays are array_equal.
 
@@ -351,13 +302,13 @@ def test_transition_batch_sample_matches_per_particle_sample(env):
     action = 1
 
     _native.set_seed(777)
-    transition = env.state_transition_model(state=particles[0], action=action)
+    transition = _build_transition(env, particles[0], action=action)
     batch_result = transition.batch_sample(particles)
 
     _native.set_seed(777)
     per_particle_rows = []
     for row in particles:
-        model = env.state_transition_model(state=row, action=action)
+        model = _build_transition(env, row, action=action)
         per_particle_rows.append(model.sample(1)[0])
     per_particle_result = np.stack(per_particle_rows, axis=0)
 
@@ -373,7 +324,7 @@ def test_observation_batch_log_likelihood_matches_per_particle(env):
 
     Given: 64 random next-state particles and a single observation.
     When: batch_log_likelihood(next_particles, observation) is called, and
-        for each particle a fresh CartPoleObservation is built and
+        for each particle a fresh CartPoleObservationCpp is built and
         probability([observation]) is computed.
     Then: The batch log-likelihoods equal np.log of the per-particle
         probabilities within atol=1e-12.
@@ -392,12 +343,12 @@ def test_observation_batch_log_likelihood_matches_per_particle(env):
     observation = np.array([0.02, 0.0, -0.01, 0.0])
     action = 0
 
-    obs_model = env.observation_model(next_state=next_particles[0], action=action)
+    obs_model = _build_observation(env, next_particles[0], action=action)
     batch_log_ll = obs_model.batch_log_likelihood(next_particles, observation)
 
     per_particle_log_ll = np.empty(len(next_particles))
     for i, next_state in enumerate(next_particles):
-        model = env.observation_model(next_state=next_state, action=action)
+        model = _build_observation(env, next_state, action=action)
         per_particle_log_ll[i] = np.log(model.probability([observation])[0])
 
     np.testing.assert_allclose(batch_log_ll, per_particle_log_ll, atol=1e-12, rtol=0.0)
@@ -408,14 +359,14 @@ def test_transition_batch_sample_shape_contract(env):
 
     Purpose: Guards the shape contract used by belief-level callers.
 
-    Given: A CartPoleStateTransition and a (37, 4) particles ndarray.
+    Given: A native CartPoleTransitionCpp and a (37, 4) particles ndarray.
     When: batch_sample is called.
     Then: The result is an ndarray of shape (37, 4) and dtype float64.
 
     Test type: unit
     """
     state = np.array([0.0, 0.0, 0.05, 0.0])
-    transition = env.state_transition_model(state=state, action=1)
+    transition = _build_transition(env, state, action=1)
     particles = np.zeros((37, 4), dtype=np.float64)
     _native.set_seed(0)
     result = transition.batch_sample(particles)
@@ -429,14 +380,14 @@ def test_observation_batch_log_likelihood_shape_contract(env):
 
     Purpose: Guards the shape contract used by belief-level callers.
 
-    Given: A CartPoleObservation, 37 next-particles, and one observation.
+    Given: A native CartPoleObservationCpp, 37 next-particles, and one observation.
     When: batch_log_likelihood is called.
     Then: The result is an ndarray of shape (37,) and dtype float64.
 
     Test type: unit
     """
     next_state = np.array([0.0, 0.0, 0.05, 0.0])
-    obs_model = env.observation_model(next_state=next_state, action=1)
+    obs_model = _build_observation(env, next_state, action=1)
     next_particles = np.zeros((37, 4), dtype=np.float64)
     observation = np.array([0.0, 0.0, 0.05, 0.0])
     result = obs_model.batch_log_likelihood(next_particles, observation)

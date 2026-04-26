@@ -12,8 +12,6 @@ The CartPole POMDP features:
 - Episode termination when pole falls beyond threshold or cart moves too far
 
 Classes:
-    CartPoleStateTransition: Physics-based state transition model
-    CartPoleObservation: Gaussian noise observation model
     CartPolePOMDP: Main CartPole environment with POMDP formulation
 """
 
@@ -30,8 +28,6 @@ from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
     SpaceInfo,
     SpaceType,
-    ObservationModel,
-    StateTransitionModel,
 )
 from POMDPPlanners.core.simulation import History, MetricValue
 from POMDPPlanners.environments.cartpole_pomdp import _native
@@ -43,167 +39,6 @@ class CartPolePOMDPMetrics(Enum):
     """Metric names for CartPole POMDP environment."""
 
     GOAL_REACHING_RATE = "goal_reaching_rate"
-
-
-class CartPoleStateTransition(_native.CartPoleTransitionCpp):
-    """Physics-based state transition model for CartPole POMDP.
-
-    This model implements the classical cart-pole dynamics with Gaussian
-    process noise. The cart experiences forces that affect both cart
-    acceleration and pole angular acceleration through coupled equations
-    of motion, with additive Normal noise on the resulting next state.
-
-    The ``sample()`` and ``probability()`` methods execute entirely in C++
-    via the ``_native`` extension; this Python subclass only wraps the
-    constructor so existing call sites that pass a
-    :class:`CovarianceParameterizedMultivariateNormal` keep working.
-
-    Attributes:
-        state: Current state [cart_position, cart_velocity, pole_angle, pole_velocity]
-        action: Force direction (0 for left, 1 for right)
-        force_mag: Magnitude of applied force
-        total_mass: Combined mass of cart and pole
-        polemass_length: Pole mass times pole length (moment calculation)
-        gravity: Gravitational acceleration constant
-        length: Half the pole's length
-        kinematics_integrator: Integration method ("euler" or "semi-implicit euler")
-        tau: Time step for integration
-        masspole: Mass of the pole
-
-    Example:
-        Using the CartPole transition model::
-
-            >>> import numpy as np
-            >>> np.random.seed(42)  # For reproducible results
-            >>> from POMDPPlanners.environments.cartpole_pomdp import _native
-            >>> _native.set_seed(42)
-            >>> from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
-            >>>
-            >>> # Define initial state [position, velocity, angle, angular_velocity]
-            >>> state = np.array([0.0, 0.0, 0.1, 0.0])
-            >>> action = 1  # Apply right force
-            >>>
-            >>> # Create transition model with physics parameters and noise
-            >>> state_transition_cov = np.diag([1e-4, 1e-4, 2.5e-5, 1e-4])
-            >>> state_transition_dist = CovarianceParameterizedMultivariateNormal(state_transition_cov)
-            >>> transition = CartPoleStateTransition(
-            ...     state=state,
-            ...     action=action,
-            ...     force_mag=10.0,
-            ...     total_mass=1.1,
-            ...     polemass_length=0.05,
-            ...     gravity=9.8,
-            ...     length=0.5,
-            ...     kinematics_integrator="euler",
-            ...     tau=0.02,
-            ...     masspole=0.1,
-            ...     state_transition_dist=state_transition_dist
-            ... )
-            >>>
-            >>> # Simulate physics step
-            >>> next_state = transition.sample()[0]
-            >>> len(next_state) == 4  # [pos, vel, angle, ang_vel]
-            True
-            >>> isinstance(next_state, np.ndarray)
-            True
-    """
-
-    def __init__(
-        self,
-        state: np.ndarray,
-        action: int,
-        force_mag: float,
-        total_mass: float,
-        polemass_length: float,
-        gravity: float,
-        length: float,
-        kinematics_integrator: str,
-        tau: float,
-        masspole: float,
-        state_transition_dist: CovarianceParameterizedMultivariateNormal,
-    ):
-        super().__init__(
-            state=state,
-            action=action,
-            force_mag=force_mag,
-            total_mass=total_mass,
-            polemass_length=polemass_length,
-            gravity=gravity,
-            length=length,
-            kinematics_integrator=kinematics_integrator,
-            tau=tau,
-            masspole=masspole,
-            covariance=state_transition_dist.covariance,
-        )
-        self._state_transition_dist = state_transition_dist
-
-
-StateTransitionModel.register(CartPoleStateTransition)
-
-
-class CartPoleObservation(_native.CartPoleObservationCpp):
-    """Noisy observation model for CartPole POMDP.
-
-    This model adds Gaussian noise to the true state to create partial observability.
-    The agent receives a noisy version of the full state vector, making it challenging
-    to determine the exact cart-pole configuration.
-
-    The ``sample()`` and ``probability()`` methods execute entirely in C++
-    via the ``_native`` extension.
-
-    Attributes:
-        next_state: True state after action execution
-        action: Action that was taken (not used in observation generation)
-        mean: Expected observation (equals ``next_state``)
-
-    Example:
-        Using the CartPole observation model::
-
-            >>> import numpy as np
-            >>> np.random.seed(42)  # For reproducible results
-            >>> from POMDPPlanners.environments.cartpole_pomdp import _native
-            >>> _native.set_seed(42)
-            >>> from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
-            >>>
-            >>> # Define true state after action
-            >>> true_state = np.array([0.1, 0.05, 0.02, -0.1])
-            >>> action = 1
-            >>>
-            >>> # Define observation noise covariance and create distribution
-            >>> noise_cov = np.diag([0.1, 0.1, 0.1, 0.1])
-            >>> obs_dist = CovarianceParameterizedMultivariateNormal(noise_cov)
-            >>>
-            >>> # Create observation model
-            >>> obs_model = CartPoleObservation(
-            ...     next_state=true_state,
-            ...     action=action,
-            ...     obs_dist=obs_dist
-            ... )
-            >>>
-            >>> # Sample noisy observation
-            >>> observation = obs_model.sample()[0]
-            >>> len(observation) == 4  # Same dimensionality as state
-            True
-            >>> isinstance(observation, np.ndarray)
-            True
-            >>>
-            >>> # Calculate probability of specific observation
-            >>> prob = obs_model.probability([observation])
-            >>> len(prob) == 1
-            True
-    """
-
-    def __init__(
-        self,
-        next_state: np.ndarray,
-        action: int,
-        obs_dist: CovarianceParameterizedMultivariateNormal,
-    ):
-        super().__init__(next_state=next_state, action=action, covariance=obs_dist.covariance)
-        self._obs_dist = obs_dist
-
-
-ObservationModel.register(CartPoleObservation)
 
 
 class CartPoleInitialStateDistribution(Distribution):
@@ -341,32 +176,10 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
             use_queue_logger=use_queue_logger,
         )
 
-    def state_transition_model(self, state: np.ndarray, action: int) -> StateTransitionModel:
-        return CartPoleStateTransition(  # pyright: ignore[reportReturnType]
-            state=state,
-            action=action,
-            force_mag=self.force_mag,
-            total_mass=self.total_mass,
-            polemass_length=self.polemass_length,
-            gravity=self.gravity,
-            length=self.length,
-            kinematics_integrator=self.kinematics_integrator,
-            tau=self.tau,
-            masspole=self.masspole,
-            state_transition_dist=self._state_transition_dist,
-        )
-
-    def observation_model(self, next_state: np.ndarray, action: int) -> ObservationModel:
-        return CartPoleObservation(  # pyright: ignore[reportReturnType]
-            next_state=next_state, action=action, obs_dist=self._obs_dist
-        )
-
-    # ── Hot-path sampling overrides ─────────────────────────────────
-    # The Python wrappers above only forward arguments to the native
-    # C++ constructor and keep a reference to the dist object. Skip
-    # the wrapper subclass and build the native kernel directly so
-    # ``sample()`` produces a byte-identical RNG draw to the legacy
-    # path.
+    # ── Hot-path sampling: build the native C++ kernel directly. ─────
+    # The wrapper-subclass path that used to live here was identical
+    # to constructing _native.CartPole{Transition,Observation}Cpp; the
+    # subclass only existed for ABC compatibility and has been deleted.
 
     def sample_next_state(
         self, state: np.ndarray, action: int, n_samples: int = 1

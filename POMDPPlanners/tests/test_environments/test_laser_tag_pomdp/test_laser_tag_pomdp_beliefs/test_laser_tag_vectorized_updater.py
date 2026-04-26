@@ -451,7 +451,7 @@ class TestConfigId:
 
 class TestEquivalenceWithPerParticleLoop:
     def test_robot_position_matches_per_particle_loop(self, env_no_walls, updater_no_walls):
-        """Test that vectorized robot positions match per-particle state_transition_model.
+        """Test that vectorized robot positions match per-particle env.sample_next_state.
 
         Purpose: Verifies that robot movement (deterministic part) in
                  batch_transition matches the per-particle loop exactly.
@@ -460,7 +460,8 @@ class TestEquivalenceWithPerParticleLoop:
                  the vectorized and per-particle paths.
 
         Given: A set of non-terminal particles with transition_error_prob=0.
-        When: batch_transition is called and the per-particle loop is run.
+        When: batch_transition is called and the per-particle loop is run via
+            env.sample_next_state.
         Then: Robot positions match exactly for all 5 actions.
 
         Test type: integration
@@ -481,9 +482,7 @@ class TestEquivalenceWithPerParticleLoop:
             np.random.seed(999)
             per_particle = np.empty_like(particles)
             for i in range(n):
-                next_state = env_no_walls.state_transition_model(
-                    state=particles[i], action=action_idx
-                ).sample()[0]
+                next_state = env_no_walls.sample_next_state(state=particles[i], action=action_idx)
                 per_particle[i] = next_state
 
             np.testing.assert_array_equal(
@@ -527,14 +526,14 @@ class TestEquivalenceWithPerParticleLoop:
     def test_observation_log_likelihood_matches_per_particle_loop(
         self, env_no_walls, updater_no_walls
     ):
-        """Test vectorized log-likelihood matches per-particle observation_model.probability.
+        """Test vectorized log-likelihood matches per-particle env.observation_log_probability.
 
         Purpose: Verifies that batch_observation_log_likelihood matches the
-                 per-particle observation probability from the environment.
+                 per-particle observation log-probability from the environment.
 
         Given: A set of non-terminal particles and a non-terminal observation.
         When: batch_observation_log_likelihood is called, and per-particle
-              log(observation_model.probability) is computed.
+              env.observation_log_probability is computed.
         Then: Results match within floating-point tolerance.
 
         Test type: integration
@@ -554,11 +553,10 @@ class TestEquivalenceWithPerParticleLoop:
         obs_array = np.array(obs_tuple, dtype=float)
 
         def per_particle_ll_fn(particle, action, _observation):
-            obs_model = env_no_walls.observation_model(next_state=particle, action=action)
-            prob = obs_model.probability([obs_tuple])[0]
-            if prob > 0:
-                return np.log(prob)
-            return -np.inf
+            log_prob = env_no_walls.observation_log_probability(
+                next_state=particle, action=action, observations=[obs_tuple]
+            )[0]
+            return float(log_prob)
 
         assert_batch_obs_log_likelihood_matches_loop(
             updater=updater_no_walls,

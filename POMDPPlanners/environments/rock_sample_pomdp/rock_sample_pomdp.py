@@ -24,8 +24,6 @@ from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
     SpaceInfo,
     SpaceType,
-    ObservationModel,
-    StateTransitionModel,
 )
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
 from POMDPPlanners.environments.rock_sample_pomdp import _native
@@ -103,82 +101,6 @@ def states_equal(state1: RockSampleState, state2: RockSampleState) -> bool:
 
 _OBS_CODE_TO_STR = ("none", "good", "bad")
 _OBS_STR_TO_CODE = {"none": 0, "good": 1, "bad": 2}
-
-
-class RockSampleStateTransitionModel(_native.RockSampleTransitionCpp):
-    """State transition model for RockSample POMDP.
-
-    Thin Python wrapper around the native C++ class. Deterministic dynamics:
-    movement clamps to grid boundaries (East is unclamped to allow exit),
-    sample flips the colocated rock to bad, and check actions leave the
-    state unchanged. Terminal sentinel ``[-1, -1, ...]`` is absorbing.
-    """
-
-    def __init__(self, state: RockSampleState, action: int, pomdp: "RockSamplePOMDP"):
-        """Initialize transition model.
-
-        Args:
-            state: Current state
-            action: Action to execute
-            pomdp: Reference to the POMDP environment
-        """
-        super().__init__(
-            state=np.asarray(state, dtype=float),
-            action=int(action),
-            map_rows=pomdp.map_size[0],
-            map_cols=pomdp.map_size[1],
-            num_rocks=len(pomdp.rock_positions),
-            rock_positions=np.asarray(pomdp.rock_positions, dtype=np.int32),
-            sensor_efficiency=pomdp.sensor_efficiency,
-        )
-        self.pomdp = pomdp
-
-
-StateTransitionModel.register(RockSampleStateTransitionModel)
-
-
-class RockSampleObservationModel(ObservationModel):
-    """Observation model for RockSample POMDP.
-
-    Uses the native C++ sampler via composition (not inheritance) so the
-    string-typed public observation API stays decoupled from the
-    integer-coded C++ batch interface: callers exchange ``"none" / "good"
-    / "bad"`` with this class, which translates to/from the C++ integer
-    codes (0=none, 1=good, 2=bad) and delegates ``sample`` / ``probability``
-    to the native implementation. The core belief update's batch path
-    (which assumes numeric observations) therefore does not pick this
-    class up via ``hasattr(..., "batch_log_likelihood")``; the vectorized
-    updater calls the native extension directly for its batched path.
-    """
-
-    def __init__(self, next_state: RockSampleState, action: int, pomdp: "RockSamplePOMDP"):
-        """Initialize observation model.
-
-        Args:
-            next_state: Next state after transition
-            action: Action that was executed
-            pomdp: Reference to the POMDP environment
-        """
-        super().__init__(next_state=next_state, action=action)
-        self.pomdp = pomdp
-        self._native = _native.RockSampleObservationCpp(
-            next_state=np.asarray(next_state, dtype=float),
-            action=int(action),
-            map_rows=pomdp.map_size[0],
-            map_cols=pomdp.map_size[1],
-            num_rocks=len(pomdp.rock_positions),
-            rock_positions=np.asarray(pomdp.rock_positions, dtype=np.int32),
-            sensor_efficiency=pomdp.sensor_efficiency,
-        )
-
-    def sample(self, n_samples: int = 1) -> List[str]:
-        """Sample observations as string labels."""
-        return [_OBS_CODE_TO_STR[c] for c in self._native.sample(n_samples)]
-
-    def probability(self, values: List[str]) -> np.ndarray:
-        """Calculate observation probabilities for string observations."""
-        codes = np.array([_OBS_STR_TO_CODE.get(v, -1) for v in values], dtype=np.int32)
-        return self._native.probability(codes)
 
 
 class RockSamplePOMDP(DiscreteActionsEnvironment):
@@ -358,21 +280,9 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
         """Get all available actions."""
         return list(range(len(self.action_names)))
 
-    def state_transition_model(self, state: RockSampleState, action: int) -> StateTransitionModel:
-        """Get state transition model."""
-        return RockSampleStateTransitionModel(  # pyright: ignore[reportReturnType]
-            state, action, self
-        )
-
-    def observation_model(self, next_state: RockSampleState, action: int) -> ObservationModel:
-        """Get observation model."""
-        return RockSampleObservationModel(  # pyright: ignore[reportReturnType]
-            next_state, action, self
-        )
-
     def reward(self, state: RockSampleState, action: int) -> float:
         """Calculate immediate reward."""
-        next_state = self.state_transition_model(state, action).sample()[0]
+        next_state = self.sample_next_state(state=state, action=action)
         return self._reward_from_next_state(state, action, next_state)
 
     def _reward_from_next_state(
@@ -403,13 +313,10 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
 
         return total_reward
 
-    # ── Hot-path sampling overrides ─────────────────────────────────
-    # The default base-class implementations build a Python wrapper
-    # (``RockSampleStateTransitionModel`` / ``RockSampleObservationModel``)
-    # per call, which forwards to the native C++ kernel. The overrides
-    # below construct the native kernel directly, skipping the wrapper
-    # allocation while preserving the identical kernel-construction
-    # sequence and arguments.
+    # ── Native-backed env-API implementations ────────────────────────
+    # Each method constructs the native C++ kernel directly with cached
+    # int32 rock positions and dispatches sampling/probability calls to
+    # the native extension; no Python wrapper class is interposed.
 
     def sample_next_state(self, state: RockSampleState, action: int, n_samples: int = 1) -> Any:
         kernel = _native.RockSampleTransitionCpp(

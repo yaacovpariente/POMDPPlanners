@@ -1,24 +1,14 @@
 import random
 from bisect import bisect
 from enum import Enum
-from typing import Any, List, Optional, Sequence, Tuple, Union
+from typing import Any, List, Sequence, Tuple, Union
 
 import numpy as np
 
-from POMDPPlanners.core.distributions import DiscreteDistribution
-from POMDPPlanners.core.environment import (
-    DiscreteActionsEnvironment,
-    ObservationModel,
-    StateTransitionModel,
-)
+from POMDPPlanners.core.environment import DiscreteActionsEnvironment
 from POMDPPlanners.core.simulation import History, MetricValue
 from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp import (
     BaseLightDarkPOMDPDiscreteActions,
-)
-from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_observation_models import (
-    DiscreteLDDistanceBasedObservationModel,
-    DiscreteLDObservationModel,
-    DiscreteLDObservationModelNoObsInDark,
 )
 from POMDPPlanners.utils.statistics_utils import confidence_interval
 
@@ -263,6 +253,171 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
         reward = self._compute_reward_fast(state, action)
         return next_state, observation, reward
 
+    # ── Helpers for non-NORMAL observation models (inlined post-PR-D) ───────
+    # These replace the previously-routed-through factory the env used to
+    # build per-call wrappers (DiscreteLDObservationModelNoObsInDark and
+    # DiscreteLDDistanceBasedObservationModel). The math is preserved
+    # bit-for-bit with the deleted wrapper implementations.
+
+    def _is_near_beacon(self, next_state: np.ndarray) -> bool:
+        # Strict-less-than match for parity with the deleted wrapper helper
+        # ``BaseDiscreteLightDarkObservationModel._near_beacon``.
+        distances = np.linalg.norm(self.beacons - next_state[:, np.newaxis], axis=0)
+        return float(np.min(distances)) < self.beacon_radius
+
+    def _min_distance_to_beacon(self, next_state: np.ndarray) -> float:
+        distances = np.linalg.norm(self.beacons - next_state[:, np.newaxis], axis=0)
+        return float(np.min(distances))
+
+    def _distance_based_error_factor(self, min_distance: float) -> float:
+        # Continuous scaling: factor = min_factor + (1 - min_factor) * (d / beacon_radius).
+        # Mirrors DiscreteLDDistanceBasedObservationModel._create_distribution.
+        min_factor = 0.0001
+        if self.beacon_radius > 0:
+            distance_ratio = min_distance / self.beacon_radius
+            return min_factor + (1.0 - min_factor) * distance_ratio
+        return 1.0
+
+    def _scaled_obs_probs(self, error_factor: float) -> np.ndarray:
+        n_obs = self._n_obs_values
+        error_prob = self.observation_error_prob * error_factor
+        probs = np.ones(n_obs) * (error_prob / (n_obs - 1))
+        probs[-1] = 1.0 - error_prob
+        return probs
+
+    def _sample_from_obs_probs(self, next_state: np.ndarray, probs: np.ndarray, n_samples: int):
+        # Mirrors DiscreteDistribution.sample(): draw uniform, np.searchsorted
+        # on np.cumsum(probs), clip to last index, map index < n_actions to
+        # next_state + dir, else next_state.
+        cumprobs = np.cumsum(probs)
+        n_obs = self._n_obs_values
+        if n_samples == 1:
+            idx = int(np.searchsorted(cumprobs, np.random.rand()))
+            if idx >= n_obs:
+                idx = n_obs - 1
+            if idx < self._n_actions:
+                return [next_state + self._action_vectors[idx]]
+            return [next_state]
+        draws = np.random.rand(n_samples)
+        idxs = np.searchsorted(cumprobs, draws)
+        idxs = np.clip(idxs, 0, n_obs - 1)
+        out: List[Any] = []
+        for idx in idxs:
+            if idx < self._n_actions:
+                out.append(next_state + self._action_vectors[idx])
+            else:
+                out.append(next_state)
+        return out
+
+    def _sample_observation_non_normal(self, next_state: np.ndarray, n_samples: int):
+        # Returns None for NORMAL (caller proceeds with the inlined path) or
+        # the unwrapped sample value(s) for NO_OBS_IN_DARK / DISTANCE_BASED.
+        if self.observation_model_type == ObservationModelType.NO_OBS_IN_DARK:
+            samples = self._sample_no_obs_in_dark(next_state, n_samples)
+        elif self.observation_model_type == ObservationModelType.DISTANCE_BASED:
+            samples = self._sample_distance_based(next_state, n_samples)
+        else:
+            return None
+        return samples[0] if n_samples == 1 else samples
+
+    def _sample_no_obs_in_dark(self, next_state: np.ndarray, n_samples: int) -> List[Any]:
+        # Mirrors DiscreteLDObservationModelNoObsInDark.sample().
+        if self._is_near_beacon(next_state):
+            # Same probabilities as NORMAL near-beacon path
+            # (beacon_error_factor=0.2 baked into self._obs_probs_near).
+            return self._sample_from_obs_probs(next_state, self._obs_probs_near, n_samples)
+        return ["None"] * n_samples
+
+    def _sample_distance_based(self, next_state: np.ndarray, n_samples: int) -> List[Any]:
+        # Mirrors DiscreteLDDistanceBasedObservationModel.sample().
+        min_distance = self._min_distance_to_beacon(next_state)
+        if min_distance > self.beacon_radius:
+            return ["None"] * n_samples
+        error_factor = self._distance_based_error_factor(min_distance)
+        probs = self._scaled_obs_probs(error_factor)
+        return self._sample_from_obs_probs(next_state, probs, n_samples)
+
+    def _log_prob_from_obs_probs(
+        self, next_state: np.ndarray, observations: Any, probs_vec: np.ndarray
+    ) -> np.ndarray:
+        # Mirrors DiscreteDistribution.probability(): exact-match candidate
+        # search; out is np.log(p) for matched candidates, -inf otherwise.
+        candidates = [next_state + self._action_vectors[i] for i in range(self._n_actions)]
+        candidates.append(next_state)
+        candidates_array = np.stack(candidates, axis=0)
+        observations_array = np.asarray(observations)
+        if observations_array.ndim == 1:
+            observations_array = observations_array.reshape(1, -1)
+        out = np.full(len(observations_array), -np.inf, dtype=np.float64)
+        for i, obs in enumerate(observations_array):
+            for j, candidate in enumerate(candidates_array):
+                if np.array_equal(obs, candidate):
+                    p = float(probs_vec[j])
+                    out[i] = np.log(p) if p > 0.0 else -np.inf
+                    break
+        return out
+
+    def _log_prob_no_obs_in_dark(self, next_state: np.ndarray, observations: Any) -> np.ndarray:
+        # Mirrors DiscreteLDObservationModelNoObsInDark.probability() with
+        # log conversion applied at the end.
+        observations_list = self._normalize_observations_list(observations)
+        if self._is_near_beacon(next_state):
+            # Map "None" → -inf, real obs → log(p) from near-beacon dist.
+            probs_vec = self._obs_probs_near
+            return self._log_prob_dispatch(next_state, observations_list, probs_vec, near=True)
+        # Far: "None" has probability 1 (log 0), real obs probability 0 (-inf).
+        return self._log_prob_dispatch(next_state, observations_list, None, near=False)
+
+    def _log_prob_distance_based(self, next_state: np.ndarray, observations: Any) -> np.ndarray:
+        # Mirrors DiscreteLDDistanceBasedObservationModel.probability() with
+        # log conversion applied at the end.
+        observations_list = self._normalize_observations_list(observations)
+        min_distance = self._min_distance_to_beacon(next_state)
+        if min_distance > self.beacon_radius:
+            return self._log_prob_dispatch(next_state, observations_list, None, near=False)
+        error_factor = self._distance_based_error_factor(min_distance)
+        probs_vec = self._scaled_obs_probs(error_factor)
+        return self._log_prob_dispatch(next_state, observations_list, probs_vec, near=True)
+
+    def _normalize_observations_list(self, observations: Any) -> list:
+        # The non-NORMAL paths must accept lists with mixed "None" strings
+        # and ndarray observations, matching the wrapper's
+        # ``probability(values: List[Union[Any, str]])`` signature.
+        if isinstance(observations, np.ndarray):
+            if observations.ndim == 1:
+                return [observations]
+            return list(observations)
+        return list(observations)
+
+    def _log_prob_dispatch(
+        self,
+        next_state: np.ndarray,
+        observations_list: list,
+        probs_vec: Any,
+        near: bool,
+    ) -> np.ndarray:
+        out = np.full(len(observations_list), -np.inf, dtype=np.float64)
+        if near:
+            # probs_vec is non-None here.
+            candidates = [next_state + self._action_vectors[i] for i in range(self._n_actions)]
+            candidates.append(next_state)
+            for i, value in enumerate(observations_list):
+                if isinstance(value, str) and value == "None":
+                    # "None" has probability 0 → -inf.
+                    continue
+                value_arr = np.asarray(value)
+                for j, cand in enumerate(candidates):
+                    if np.array_equal(value_arr, cand):
+                        p = float(probs_vec[j])
+                        out[i] = np.log(p) if p > 0.0 else -np.inf
+                        break
+            return out
+        # Far branch: only "None" is possible (log 1 = 0), all else -inf.
+        for i, value in enumerate(observations_list):
+            if isinstance(value, str) and value == "None":
+                out[i] = 0.0
+        return out
+
     def _compute_reward_fast(self, state: np.ndarray, action: Any) -> float:
         av = self.action_to_vector[action]
         nx = int(state[0]) + int(av[0])
@@ -307,16 +462,17 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
         return state + offsets
 
     def sample_observation(self, next_state: np.ndarray, action: Any, n_samples: int = 1) -> Any:
-        # Only the NORMAL observation model is inlined — it is the only
-        # path with no early-exit "None" branch and matches the wrapper's
-        # RNG sequence exactly. Other model types fall back to the base
-        # class default (observation_model(...).sample()).
-        if self.observation_model_type != ObservationModelType.NORMAL:
-            return super().sample_observation(
-                next_state=next_state, action=action, n_samples=n_samples
-            )
+        # Dispatch on observation_model_type. NORMAL stays inlined here for
+        # the original hot-path; NO_OBS_IN_DARK and DISTANCE_BASED route
+        # through helpers that mirror the deleted wrapper sampling logic
+        # bit-for-bit. ``action`` is unused (reads only next_state) but
+        # part of the env-API signature.
+        del action
+        non_normal = self._sample_observation_non_normal(next_state, n_samples)
+        if non_normal is not None:
+            return non_normal
 
-        # Wrapper-equivalent near-beacon check (BaseDiscreteLightDarkObservationModel._near_beacon):
+        # NORMAL path — wrapper-equivalent near-beacon check (strict-less-than):
         # distances = np.linalg.norm(beacons - next_state[:, None], axis=0)
         # near_beacon = float(np.min(distances)) < beacon_radius.
         distances = np.linalg.norm(self.beacons - next_state[:, np.newaxis], axis=0)
@@ -378,10 +534,11 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
     def observation_log_probability(
         self, next_state: np.ndarray, action: Any, observations: Any
     ) -> np.ndarray:
-        if self.observation_model_type != ObservationModelType.NORMAL:
-            return super().observation_log_probability(
-                next_state=next_state, action=action, observations=observations
-            )
+        del action  # unused; observation log-prob depends only on next_state
+        if self.observation_model_type == ObservationModelType.NO_OBS_IN_DARK:
+            return self._log_prob_no_obs_in_dark(next_state, observations)
+        if self.observation_model_type == ObservationModelType.DISTANCE_BASED:
+            return self._log_prob_distance_based(next_state, observations)
 
         distances = np.linalg.norm(self.beacons - next_state[:, np.newaxis], axis=0)
         near_beacon = float(np.min(distances)) < self.beacon_radius
@@ -403,48 +560,6 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
                     out[i] = np.log(p) if p > 0.0 else -np.inf
                     break
         return out
-
-    def state_transition_model(self, state: np.ndarray, action: Any) -> StateTransitionModel:
-        action_index = self.actions.index(action)
-        values = [state + self.action_to_vector[action] for action in self.actions]
-
-        # Distribute error probability equally among other actions
-        probs = np.ones(len(values)) * (self.transition_error_prob / (len(self.actions) - 1))
-        probs[action_index] = 1 - self.transition_error_prob
-        s = sum(probs)
-        probs[0] += 1 - s
-
-        return DiscreteDistribution(values, probs)  # type: ignore[return-value]
-
-    def observation_model(self, next_state: np.ndarray, action: Any) -> ObservationModel:
-        if self.observation_model_type == ObservationModelType.NORMAL:
-            return DiscreteLDObservationModel(
-                next_state=next_state,
-                action=action,
-                beacons=self.beacons,
-                obstacles=self.obstacles,
-                beacon_radius=self.beacon_radius,
-                observation_error_prob=self.observation_error_prob,
-            )
-        if self.observation_model_type == ObservationModelType.NO_OBS_IN_DARK:
-            return DiscreteLDObservationModelNoObsInDark(
-                next_state=next_state,
-                action=action,
-                beacons=self.beacons,
-                obstacles=self.obstacles,
-                beacon_radius=self.beacon_radius,
-                observation_error_prob=self.observation_error_prob,
-            )
-        if self.observation_model_type == ObservationModelType.DISTANCE_BASED:
-            return DiscreteLDDistanceBasedObservationModel(
-                next_state=next_state,
-                action=action,
-                beacons=self.beacons,
-                obstacles=self.obstacles,
-                beacon_radius=self.beacon_radius,
-                observation_error_prob=self.observation_error_prob,
-            )
-        raise ValueError(f"Unknown observation model type: {self.observation_model_type}")
 
     def reward(self, state: np.ndarray, action: Any) -> float:
         if state.shape != (2,):

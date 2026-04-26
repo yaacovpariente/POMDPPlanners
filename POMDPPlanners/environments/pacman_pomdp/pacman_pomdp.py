@@ -16,8 +16,6 @@ build states via :meth:`PacManPOMDP.make_state` and read fields back with
 
 Classes:
     PacManPOMDP: The main POMDP environment implementation
-    PacManStateTransitionModel: Per-state transition model
-    PacManObservationModel: Per-state observation model
 """
 
 from enum import Enum
@@ -31,8 +29,6 @@ from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
     SpaceInfo,
     SpaceType,
-    ObservationModel,
-    StateTransitionModel,
 )
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
 from POMDPPlanners.environments.pacman_pomdp import _native  # pylint: disable=no-name-in-module
@@ -50,140 +46,6 @@ class PacManPOMDPMetrics(Enum):
     AVG_EPISODE_LENGTH = "avg_episode_length"
     AVG_PACMAN_CLOSEST_GHOST_DISTANCE = "avg_pacman_closest_ghost_distance"
     AVG_COLLISION_ENCOUNTERS = "avg_collision_encounters"
-
-
-class PacManStateTransitionModel(_native.PacManTransitionCpp):
-    """State transition model for PacMan POMDP, backed by the C++ native kernel.
-
-    This is a thin shim over :class:`_native.PacManTransitionCpp`. All sampling
-    and probability evaluation runs in C++; the Python constructor only forwards
-    the env's precomputed ctor kwargs plus the shared patrol-direction buffer.
-    """
-
-    def __init__(self, state: np.ndarray, action: int, pomdp: "PacManPOMDP"):
-        """Initialize transition model.
-
-        Args:
-            state: Current state as the env's canonical ndarray.
-            action: Action to execute.
-            pomdp: Reference to the POMDP environment.
-        """
-        super().__init__(
-            state=state,
-            action=int(action),
-            **pomdp.get_transition_cpp_ctor_kwargs(),
-            patrol_dir_state=pomdp.ghost_patrol_directions,
-        )
-        self.pomdp = pomdp
-
-
-StateTransitionModel.register(PacManStateTransitionModel)
-
-
-class PacManObservationModel(_native.PacManObservationCpp):
-    """Observation model for PacMan POMDP, backed by the C++ native kernel.
-
-    The native kernel samples and evaluates observation log-likelihoods for
-    all ghosts as flat float64 ndarrays ``[g0_row, g0_col, ..., gN_row, gN_col]``.
-    The Python shim converts between this array shape and the public
-    tuple-of-(row, col) shape for backwards compatibility.
-    """
-
-    def __init__(self, next_state: np.ndarray, action: int, pomdp: "PacManPOMDP"):
-        """Initialize observation model.
-
-        Args:
-            next_state: Next state as the env's canonical ndarray.
-            action: Action that was executed.
-            pomdp: Reference to the POMDP environment.
-        """
-        super().__init__(
-            next_state=next_state,
-            action=int(action),
-            **pomdp.get_observation_cpp_ctor_kwargs(),
-        )
-        self.pomdp = pomdp
-        self._num_ghosts = pomdp.num_ghosts
-
-    def sample(  # type: ignore[override]
-        self, n_samples: int = 1
-    ) -> List[Tuple[Tuple[int, int], ...]]:
-        """Sample observations of all ghost positions with noise.
-
-        Returns tuples of ``(row, col)`` pairs (public API) by post-converting
-        the native ndarray outputs. The deliberate return-type widening
-        (ndarray → tuple-of-tuples) is why this override carries a type-ignore.
-        """
-        arrays = super().sample(n_samples)
-        return [self.pomdp.array_to_observation(arr) for arr in arrays]
-
-    def sample_closest_ghosts(
-        self, max_ghosts: int = 2, n_samples: int = 1
-    ) -> List[Tuple[Tuple[int, int], ...]]:
-        """Sample observations of only the closest ghosts (Python-only helper).
-
-        Not on the ObservationModel ABC; kept for backwards compatibility with
-        callers that want a reduced observation.
-        """
-        pacman_pos = self.pomdp.get_pacman_pos(self.next_state)
-        ghost_positions = self.pomdp.get_ghost_positions(self.next_state)
-        terminal = self.pomdp.get_terminal(self.next_state)
-        if terminal:
-            terminal_obs = tuple([(-1, -1)] * min(max_ghosts, len(ghost_positions)))
-            return [terminal_obs] * n_samples
-        ghost_distances = sorted(
-            (
-                (ghost_pos, abs(ghost_pos[0] - pacman_pos[0]) + abs(ghost_pos[1] - pacman_pos[1]))
-                for ghost_pos in ghost_positions
-            ),
-            key=lambda x: x[1],
-        )[:max_ghosts]
-        observations = []
-        for _ in range(n_samples):
-            ghost_obs = []
-            for ghost_pos, distance in ghost_distances:
-                noise_std = min(
-                    distance * self.pomdp.observation_noise_factor,
-                    self.pomdp.max_observation_noise,
-                )
-                noise_row = np.random.normal(0, noise_std)
-                noise_col = np.random.normal(0, noise_std)
-                observed_row = int(np.round(ghost_pos[0] + noise_row))
-                observed_col = int(np.round(ghost_pos[1] + noise_col))
-                observed_row = max(0, min(self.pomdp.maze_size[0] - 1, observed_row))
-                observed_col = max(0, min(self.pomdp.maze_size[1] - 1, observed_col))
-                ghost_obs.append((observed_row, observed_col))
-            observations.append(tuple(ghost_obs))
-        return observations
-
-    def probability(  # type: ignore[override]
-        self, values: List[Tuple[Tuple[int, int], ...]]
-    ) -> np.ndarray:
-        """Calculate observation probabilities for multi-ghost observations.
-
-        Accepts either the public tuple-of-tuples shape or a raw ndarray of
-        shape ``(N, 2 * num_ghosts)`` / ``(2 * num_ghosts,)``. Tuples of
-        wrong length (ghost count mismatch) receive probability 0.
-        """
-        if isinstance(values, np.ndarray):
-            return super().probability(values)
-        probs = np.zeros(len(values), dtype=np.float64)
-        usable_rows: List[np.ndarray] = []
-        usable_indices: List[int] = []
-        for i, obs_tuple in enumerate(values):
-            if len(obs_tuple) != self._num_ghosts:
-                continue  # wrong ghost count → probability 0
-            usable_rows.append(self.pomdp.observation_to_array(obs_tuple))
-            usable_indices.append(i)
-        if usable_rows:
-            stacked = np.stack(usable_rows)
-            sub_probs = super().probability(stacked)
-            for idx, p in zip(usable_indices, sub_probs):
-                probs[idx] = p
-        return probs
-
-
-ObservationModel.register(PacManObservationModel)
 
 
 class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-methods
@@ -610,21 +472,11 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
         """Get all available actions."""
         return list(range(len(self.action_names)))
 
-    def state_transition_model(self, state: np.ndarray, action: int) -> StateTransitionModel:
-        """Get state transition model."""
-        return PacManStateTransitionModel(self._require_state_array(state), action, self)
-
-    def observation_model(self, next_state: np.ndarray, action: int) -> ObservationModel:
-        """Get observation model."""
-        return PacManObservationModel(self._require_state_array(next_state), action, self)
-
-    # ── Hot-path sampling overrides ─────────────────────────────────
-    # The default base-class implementations build a Python wrapper
-    # subclass per call (``PacManStateTransitionModel`` /
-    # ``PacManObservationModel``) that forwards to the native C++
-    # kernel. The overrides below construct the native kernel directly
-    # and skip the wrapper allocation, while preserving the identical
-    # kernel-construction sequence and arguments.
+    # ── Env-API sampling/log-prob methods ───────────────────────────
+    # These construct the C++ native kernel directly from per-env cached
+    # ctor kwargs and run sampling / probability evaluation in C++. The
+    # earlier per-call PacMan{Transition,Observation} Python wrappers
+    # were deleted in PR-D-Pacman.
 
     def sample_next_state(self, state: np.ndarray, action: int, n_samples: int = 1) -> Any:
         kernel = _native.PacManTransitionCpp(
@@ -748,7 +600,7 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
             return 0.0
 
         total_reward = self.step_penalty
-        next_state = self.state_transition_model(state, action).sample()[0]
+        next_state = self.sample_next_state(state, action)
 
         next_pac_row = int(next_state[self._idx_pac_row])
         next_pac_col = int(next_state[self._idx_pac_col])
@@ -939,9 +791,9 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
     def initial_observation_dist(self) -> DiscreteDistribution:
         """Get initial observation distribution."""
         # Initial observation is the true ghost position with some noise
-        initial_obs = self.observation_model(
+        initial_obs = self.sample_observation(
             next_state=self.initial_state_dist().sample()[0], action=0  # Dummy action
-        ).sample()[0]
+        )
 
         return DiscreteDistribution(values=[initial_obs], probs=np.array([1.0]))
 

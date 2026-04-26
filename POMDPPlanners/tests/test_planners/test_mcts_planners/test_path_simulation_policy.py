@@ -22,8 +22,6 @@ from POMDPPlanners.core.environment import (
     Environment,
     SpaceInfo,
     SpaceType,
-    StateTransitionModel,
-    ObservationModel,
 )
 from POMDPPlanners.core.policy import PolicyInfoVariable, PolicyRunData, PolicySpaceInfo
 from POMDPPlanners.core.tree import ActionNode, BeliefNode
@@ -47,16 +45,6 @@ class MockEnvironment(Environment):
             name="MockEnvironment",
             space_info=space_info,
         )
-
-    def state_transition_model(self, state, action):
-        mock_model = Mock(spec=StateTransitionModel)
-        mock_model.probability.return_value = 1.0
-        return mock_model
-
-    def observation_model(self, next_state, action):
-        mock_model = Mock(spec=ObservationModel)
-        mock_model.probability.return_value = 1.0
-        return mock_model
 
     def sample_next_state(self, state, action, n_samples=1):
         return state if n_samples == 1 else [state] * n_samples
