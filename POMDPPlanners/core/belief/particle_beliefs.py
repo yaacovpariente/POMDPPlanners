@@ -300,15 +300,33 @@ class WeightedParticleBelief(Belief):
             next_states=next_particles, action=action, observation=observation
         )
 
-        # Apply the eps floor for the non-native fallback path. Native envs
-        # using log_pdf (Gaussian) never produce -inf; this is a no-op there.
-        # For discrete-prob envs that may return -inf for impossible
-        # observations, the eps preserves the pre-migration weight contract
-        # (log(eps + p) instead of log(p) -> -inf).
-        probs = np.exp(log_ll)
-        next_log_weights = self.log_weights + np.log(self.eps + probs)
+        # Override-driven eps-skip fast path. Subclasses that override
+        # observation_log_probability_per_state are migrated to a native
+        # batch kernel (Gaussian log_pdf, native discrete log-prob) and are
+        # contracted to return finite log-likelihoods, so the
+        # exp -> eps-floor -> log round-trip is pure overhead. Skip it and
+        # add log_ll directly, matching the existing _update_weights_batch
+        # contract. For envs that still rely on the base Environment loop
+        # we keep the safe eps-floor path so impossible observations don't
+        # drive log-weights to -inf and break downstream normalisation.
+        if self._uses_native_obs_kernel(pomdp):
+            next_log_weights = self.log_weights + log_ll
+        else:
+            probs = np.exp(log_ll)
+            next_log_weights = self.log_weights + np.log(self.eps + probs)
 
         return next_particles, next_log_weights
+
+    @staticmethod
+    def _uses_native_obs_kernel(pomdp: Environment) -> bool:
+        # An override of observation_log_probability_per_state is the signal
+        # that the env returns finite log-likelihoods from a vectorised
+        # kernel. Lookup is one attribute compare and is itself memoised on
+        # the env class via __mro__ caching, so this stays cheap inside the
+        # PFT-DPW hot path.
+        return type(pomdp).observation_log_probability_per_state is not (  # noqa: E721
+            Environment.observation_log_probability_per_state
+        )
 
     def _update_weights_batch(
         self,
@@ -344,11 +362,46 @@ class WeightedParticleBelief(Belief):
         if self.resampling:
             next_particles, next_log_weights = self._resample(next_particles, next_log_weights)
 
-        return WeightedParticleBelief(
+        # Skip the validating __init__ on the hot path: next_particles came
+        # from sample_next_state_batch (and possibly _resample), and
+        # next_log_weights is a freshly computed finite ndarray. Re-running
+        # the type/length/finite/non-zero checks for every PFT-DPW expansion
+        # was a measured chunk of belief-update wall time.
+        return WeightedParticleBelief._from_validated_arrays(
             particles=next_particles,
             log_weights=next_log_weights,
             resampling=self.resampling,
+            ess_factor=self.ess_factor,
         )
+
+    @classmethod
+    def _from_validated_arrays(
+        cls,
+        particles: Any,
+        log_weights: np.ndarray,
+        resampling: bool,
+        ess_factor: float,
+    ) -> "WeightedParticleBelief":
+        # Internal fast-path constructor used by update(): bypasses the
+        # validation block in __init__ because every caller already
+        # guarantees:
+        #   * particles is a list or 2-D ndarray sized N
+        #   * log_weights is a finite ndarray of length N with at least one
+        #     non-zero entry (sample_next_state_batch + log_ll preserve this)
+        #   * resampling is a bool, ess_factor is a float
+        # External callers should keep using the public __init__.
+        belief = cls.__new__(cls)
+        belief.particles = particles
+        belief.log_weights = log_weights
+        max_lw = np.max(log_weights)
+        normalized = np.exp(log_weights - max_lw)
+        belief.normalized_weights = normalized / np.sum(normalized)
+        belief.resampling = resampling
+        belief.ess_factor = ess_factor
+        belief.ess_threshold = len(particles) * ess_factor
+        belief.eps = 1e-10
+        belief._cdf = None  # pylint: disable=protected-access
+        return belief
 
     def sample(self):
         """Sample a particle from the belief."""
