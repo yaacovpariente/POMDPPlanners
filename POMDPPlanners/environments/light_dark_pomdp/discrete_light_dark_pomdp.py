@@ -7,9 +7,13 @@ import numpy as np
 
 from POMDPPlanners.core.environment import DiscreteActionsEnvironment
 from POMDPPlanners.core.simulation import History, MetricValue
+from POMDPPlanners.environments.light_dark_pomdp import (
+    _native,  # pylint: disable=no-name-in-module
+)
 from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp import (
     BaseLightDarkPOMDPDiscreteActions,
 )
+from POMDPPlanners.planners.planners_utils.rollout import python_random_rollout
 from POMDPPlanners.utils.statistics_utils import confidence_interval
 
 
@@ -226,6 +230,36 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
             for j in range(self.beacons.shape[1])
         ]
         self._n_actions = n_actions
+
+        # Pre-built buffers for native discrete kernels.
+        # _beacons_flat: shape (2 * n_beacons,) interleaved [x0,y0,x1,y1,...].
+        # _obstacles_flat: shape (2 * n_obstacles,) interleaved.
+        # _action_offsets_array: shape (n_actions, 2) stacked offset vectors.
+        # _goal_state_f64: shape (2,) goal as float64.
+        # _actions_array_f64: shape (n_actions, 2) — float64 view of action vectors,
+        #   suitable for native discrete_simulate_rollout.
+        self._beacons_flat: np.ndarray = np.ascontiguousarray(
+            self.beacons.T.ravel(), dtype=np.float64
+        )
+        self._obstacles_flat: np.ndarray = np.ascontiguousarray(
+            self.obstacles.T.ravel(), dtype=np.float64
+        )
+        self._action_offsets_array: np.ndarray = np.ascontiguousarray(
+            np.stack(
+                [np.asarray(self._action_vectors[i], dtype=np.float64) for i in range(n_actions)],
+                axis=0,
+            ),
+            dtype=np.float64,
+        )
+        self._goal_state_f64: np.ndarray = np.ascontiguousarray(self.goal_state, dtype=np.float64)
+        self._actions_array_f64: np.ndarray = self._action_offsets_array
+        # Native log-prob fast path requires float64 prob tables.
+        self._obs_probs_near_f64: np.ndarray = np.ascontiguousarray(
+            self._obs_probs_near, dtype=np.float64
+        )
+        self._obs_probs_far_f64: np.ndarray = np.ascontiguousarray(
+            self._obs_probs_far, dtype=np.float64
+        )
 
     def sample_next_step(self, state: np.ndarray, action: Any) -> Tuple[Any, Any, float]:
         if self.observation_model_type != ObservationModelType.NORMAL:
@@ -540,26 +574,20 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
         if self.observation_model_type == ObservationModelType.DISTANCE_BASED:
             return self._log_prob_distance_based(next_state, observations)
 
-        distances = np.linalg.norm(self.beacons - next_state[:, np.newaxis], axis=0)
-        near_beacon = float(np.min(distances)) < self.beacon_radius
-        probs_vec = self._obs_probs_near if near_beacon else self._obs_probs_far
-
-        # Wrapper builds values = [ns + dir for dir in dirs] + [ns]
-        candidates = [next_state + self._action_vectors[i] for i in range(self._n_actions)]
-        candidates.append(next_state)
-        candidates_array = np.stack(candidates, axis=0)
-
-        observations_array = np.asarray(observations)
-        if observations_array.ndim == 1:
-            observations_array = observations_array.reshape(1, -1)
-        out = np.full(len(observations_array), -np.inf, dtype=np.float64)
-        for i, obs in enumerate(observations_array):
-            for j, candidate in enumerate(candidates_array):
-                if np.array_equal(obs, candidate):
-                    p = float(probs_vec[j])
-                    out[i] = np.log(p) if p > 0.0 else -np.inf
-                    break
-        return out
+        # NORMAL — delegate to native kernel. The kernel applies the same
+        # strict-less-than near-beacon predicate, exact-equality candidate
+        # match, and ``log(p) for p>0 else -inf`` rules as the Python path.
+        observations_array = np.ascontiguousarray(np.asarray(observations, dtype=np.float64))
+        next_state_f64 = np.ascontiguousarray(np.asarray(next_state, dtype=np.float64))
+        return _native.discrete_observation_log_prob(
+            next_state=next_state_f64,
+            observations=observations_array,
+            beacons=self._beacons_flat,
+            beacon_radius=float(self.beacon_radius),
+            obs_probs_near=self._obs_probs_near_f64,
+            obs_probs_far=self._obs_probs_far_f64,
+            action_offsets=self._action_offsets_array,
+        )
 
     def reward(self, state: np.ndarray, action: Any) -> float:
         if state.shape != (2,):
@@ -630,34 +658,103 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
             return super().observation_log_probability_per_state(
                 next_states=next_states, action=action, observation=observation
             )
-        next_states_arr = np.asarray(next_states)
-        n = len(next_states_arr)
-        observation_arr = np.asarray(observation)
-        result = np.full(n, -np.inf)
-        for i in range(n):
-            ns = next_states_arr[i]
-            distances = np.linalg.norm(self.beacons - ns[:, np.newaxis], axis=0)
-            near_beacon = float(np.min(distances)) < self.beacon_radius
-            probs_vec = self._obs_probs_near if near_beacon else self._obs_probs_far
-            candidates = [ns + self._action_vectors[j] for j in range(self._n_actions)]
-            candidates.append(ns)
-            for j, cand in enumerate(candidates):
-                if np.array_equal(observation_arr, cand):
-                    p = float(probs_vec[j])
-                    result[i] = np.log(p) if p > 0.0 else -np.inf
-                    break
-        return result
+        del action  # unused; per-state log-prob reads only next_states + obs
+        next_states_arr = np.ascontiguousarray(np.asarray(next_states, dtype=np.float64))
+        if next_states_arr.ndim == 1:
+            next_states_arr = next_states_arr.reshape(1, -1)
+        observation_arr = np.ascontiguousarray(np.asarray(observation, dtype=np.float64))
+        return _native.discrete_observation_log_prob_per_state(
+            next_states=next_states_arr,
+            observation=observation_arr,
+            beacons=self._beacons_flat,
+            beacon_radius=float(self.beacon_radius),
+            obs_probs_near=self._obs_probs_near_f64,
+            obs_probs_far=self._obs_probs_far_f64,
+            action_offsets=self._action_offsets_array,
+        )
 
     def is_terminal(self, state: np.ndarray) -> bool:
         if state.shape != (2,):
             raise ValueError("state must be a 2D vector")
+        # Native fast-path: state-equals-goal OR state-in-any-obstacle (exact
+        # float equality, matching the Python np.all/np.any-on-equality rules).
+        return _native.discrete_is_terminal(
+            state=np.ascontiguousarray(state, dtype=np.float64),
+            goal_state=self._goal_state_f64,
+            obstacles=self._obstacles_flat,
+        )
 
-        is_goal_state = np.all(state == self.goal_state)
-        is_obstacle_hit = np.any(np.all(state.reshape(-1, 1) == self.obstacles, axis=0))
+    def simulate_random_rollout(
+        self,
+        state: Any,
+        action_sampler: Any,
+        max_depth: int,
+        discount_factor: float,
+        depth: int = 0,
+    ) -> float:
+        """Random rollout via native C++.
 
-        is_terminal = is_goal_state or is_obstacle_hit
+        Pre-draws the per-step action indices on the Python side (so the
+        ``action_sampler`` interaction stays observable for tests / hooks)
+        and forwards to the native discrete rollout kernel. The kernel uses
+        the module-level C++ RNG for the per-step obstacle-hit and
+        transition-error draws.
 
-        return bool(is_terminal)
+        Falls back to the base-class Python loop when the env is configured
+        for a non-NORMAL observation model only if the rollout would
+        otherwise short-circuit at the wrong place — actually rollout reward
+        and dynamics are independent of the observation model, so the native
+        path is safe for all observation models.
+
+        Args:
+            state: Current 2-D position ``[x, y]``.
+            action_sampler: Object with a ``sample()`` method; used only for
+                the Python fallback path. On the native path, action indices
+                are pre-drawn via ``np.random.randint``.
+            max_depth: Maximum rollout depth.
+            discount_factor: Per-step discount factor.
+            depth: Depth already consumed by the search tree. Defaults to 0.
+
+        Returns:
+            Discounted sum of immediate rewards along the sampled trajectory.
+        """
+        steps_left = max_depth - depth
+        if steps_left <= 0:
+            return 0.0
+
+        # Stochastic-reward semantics: the native kernel draws the per-step
+        # obstacle-hit Bernoulli with ``obstacle_hit_probability``. When
+        # ``is_stochastic_reward`` is False the Python ``reward()`` path
+        # would deterministically apply the obstacle penalty (rather than
+        # drawing a Bernoulli) — fall back to Python in that case.
+        if not self.is_stochastic_reward:
+            return python_random_rollout(
+                state=state,
+                depth=depth,
+                action_sampler=action_sampler,
+                environment=self,
+                discount_factor=discount_factor,
+                max_depth=max_depth,
+            )
+
+        state_arr = np.ascontiguousarray(np.asarray(state, dtype=np.float64).ravel())
+        action_indices = np.random.randint(0, len(self.actions), size=steps_left, dtype=np.int32)
+        return _native.discrete_simulate_rollout(
+            initial_state=state_arr,
+            action_array=self._actions_array_f64,
+            action_indices=action_indices,
+            max_depth=max_depth,
+            start_depth=depth,
+            discount_factor=discount_factor,
+            goal_state=self._goal_state_f64,
+            obstacles=self._obstacles_flat,
+            grid_size=float(self.grid_size),
+            fuel_cost=float(self.fuel_cost),
+            goal_reward=float(self.goal_reward),
+            obstacle_reward=float(self.obstacle_reward),
+            obstacle_hit_probability=float(self.obstacle_hit_probability),
+            transition_error_prob=float(self.transition_error_prob),
+        )
 
     def get_metric_names(self) -> List[str]:
         """Get names of Discrete Light-Dark POMDP specific metrics.
