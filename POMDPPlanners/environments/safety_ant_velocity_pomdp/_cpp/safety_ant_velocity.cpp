@@ -103,6 +103,13 @@ class SafeAntVelocityTransitionCpp {
         return pomdp_native::array_from_vector(force_scales_.data(), force_scales_.size());
     }
 
+    // Rewrite only the stored state; physics scalars and force_scales stay
+    // frozen so the kernel can be reused across calls with different states
+    // without paying the per-call construction cost.
+    void set_state(const py::object &state_obj) {
+        state_ = pomdp_native::to_array<kSafeAntStateDim>(state_obj, "state");
+    }
+
     py::list sample(int n_samples) const {
         if (n_samples < 0) {
             throw std::invalid_argument("n_samples must be non-negative");
@@ -200,6 +207,14 @@ class SafeAntVelocityObservationCpp
     int action_property() const { return action_int_; }
     py::array_t<double> mean_property() const {
         return pomdp_native::array_from_vector(next_state_.data(), next_state_.size());
+    }
+
+    // Rewrite only the next_state; cached Cholesky factors and log-norm
+    // constant inside the GaussianND noise stay valid across calls. Permits
+    // reusing one kernel for many sample / probability / batch_log_likelihood
+    // invocations.
+    void set_next_state(const py::object &next_state_obj) {
+        next_state_ = pomdp_native::to_array<kSafeAntStateDim>(next_state_obj, "next_state");
     }
 
   private:
@@ -338,6 +353,7 @@ PYBIND11_MODULE(_native, m) {
              py::arg("damping"), py::arg("max_force"), py::arg("force_scales"))
         .def("sample", &SafeAntVelocityTransitionCpp::sample, py::arg("n_samples") = 1)
         .def("batch_sample", &SafeAntVelocityTransitionCpp::batch_sample, py::arg("particles"))
+        .def("set_state", &SafeAntVelocityTransitionCpp::set_state, py::arg("state"))
         .def_property_readonly("state", &SafeAntVelocityTransitionCpp::state_property)
         .def_property_readonly("action", &SafeAntVelocityTransitionCpp::action_property)
         .def_property_readonly("dt", &SafeAntVelocityTransitionCpp::dt_property)
@@ -353,6 +369,8 @@ PYBIND11_MODULE(_native, m) {
         .def("probability", &SafeAntVelocityObservationCpp::probability, py::arg("values"))
         .def("batch_log_likelihood", &SafeAntVelocityObservationCpp::batch_log_likelihood,
              py::arg("next_particles"), py::arg("observation"))
+        .def("set_next_state", &SafeAntVelocityObservationCpp::set_next_state,
+             py::arg("next_state"))
         .def_property_readonly("next_state", &SafeAntVelocityObservationCpp::next_state_property)
         .def_property_readonly("action", &SafeAntVelocityObservationCpp::action_property)
         .def_property_readonly("mean", &SafeAntVelocityObservationCpp::mean_property);

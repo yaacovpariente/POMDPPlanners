@@ -1291,6 +1291,760 @@ double simulate_rollout_discrete(
     return total;
 }
 
+// ── Discrete LaserTag belief-update kernels ─────────────────────────────────
+//
+// Native ports of the four hot helpers in
+// ``laser_tag_vectorized_updater.py``:
+//   - _batch_is_valid (inlined into both kernels via valid_cell lookup)
+//   - _batch_opponent_move (sampled inline in transition kernel)
+//   - _batch_laser_measurements (inlined into obs kernel via wall_dist_table)
+//   - _compute_opponent_distance_on_ray (inlined into obs kernel)
+//
+// The transition kernel preserves the Python helper's draw order: one bulk
+// uniform per non-terminal-particle (opponent move), plus the
+// transition-error sampling (one uniform per particle when probability > 0,
+// then one categorical-of-3 per error-flagged particle). RNG state is the
+// shared module-level mt19937_64; tests for the Python-level updater
+// already only check distributions over many samples, not bit-by-bit RNG
+// equality, so swapping NumPy's PRNG for the C++ RNG is safe.
+
+// 8 laser-direction (drow, dcol) vectors, matching _LASER_DIRECTIONS in
+// laser_tag_vectorized_updater.py.
+constexpr std::array<std::array<int, 2>, 8> kBeliefLaserDirections = {{
+    {{-1, 0}}, {{-1, 1}}, {{0, 1}}, {{1, 1}},
+    {{1, 0}}, {{1, -1}}, {{0, -1}}, {{-1, -1}},
+}};
+
+// 5 action-direction (drow, dcol) vectors: N, S, E, W, Tag (Tag = no-op).
+constexpr std::array<std::array<int, 2>, 5> kBeliefActionDirections = {{
+    {{-1, 0}}, {{1, 0}}, {{0, 1}}, {{0, -1}}, {{0, 0}},
+}};
+
+inline bool belief_is_valid(int r, int c, int rows, int cols, const std::uint8_t *valid_cell) {
+    if (r < 0 || r >= rows || c < 0 || c >= cols) {
+        return false;
+    }
+    return valid_cell[r * cols + c] != 0;
+}
+
+// Compute the opponent's next position by sampling from the 5-way
+// categorical distribution defined in
+// LaserTagVectorizedUpdater._batch_opponent_move, using a single uniform
+// draw u in [0, 1).  The 5 categorical bins (right, left, up, down, stay)
+// match the Python cumulative thresholds (cum1, cum2, cum3, cum4, 1.0).
+void belief_sample_opponent_move(int robot_r, int robot_c, int opp_r, int opp_c,
+                                  int rows, int cols, const std::uint8_t *valid_cell,
+                                  double u, int *out_r, int *out_c) {
+    const bool right_valid = belief_is_valid(opp_r, opp_c + 1, rows, cols, valid_cell);
+    const bool left_valid = belief_is_valid(opp_r, opp_c - 1, rows, cols, valid_cell);
+    const bool up_valid = belief_is_valid(opp_r - 1, opp_c, rows, cols, valid_cell);
+    const bool down_valid = belief_is_valid(opp_r + 1, opp_c, rows, cols, valid_cell);
+
+    const bool same_col = (robot_c == opp_c);
+    const bool same_row = (robot_r == opp_r);
+
+    double right_prob = 0.0;
+    if (same_col && right_valid) {
+        right_prob = 0.2;
+    } else if (robot_c > opp_c && right_valid) {
+        right_prob = 0.4;
+    }
+    double left_prob = 0.0;
+    if (same_col && left_valid) {
+        left_prob = 0.2;
+    } else if (robot_c < opp_c && left_valid) {
+        left_prob = 0.4;
+    }
+    double up_prob = 0.0;
+    if (same_row && up_valid) {
+        up_prob = 0.2;
+    } else if (robot_r < opp_r && up_valid) {
+        up_prob = 0.4;
+    }
+    double down_prob = 0.0;
+    if (same_row && down_valid) {
+        down_prob = 0.2;
+    } else if (robot_r > opp_r && down_valid) {
+        down_prob = 0.4;
+    }
+
+    const double cum1 = right_prob;
+    const double cum2 = cum1 + left_prob;
+    const double cum3 = cum2 + up_prob;
+    const double cum4 = cum3 + down_prob;
+
+    if (u < cum1) {
+        *out_r = opp_r;
+        *out_c = opp_c + 1;
+    } else if (u < cum2) {
+        *out_r = opp_r;
+        *out_c = opp_c - 1;
+    } else if (u < cum3) {
+        *out_r = opp_r - 1;
+        *out_c = opp_c;
+    } else if (u < cum4) {
+        *out_r = opp_r + 1;
+        *out_c = opp_c;
+    } else {
+        *out_r = opp_r;
+        *out_c = opp_c;
+    }
+}
+
+// Apply a single (intended) movement-or-tag action to all live particles.
+//
+// ``out`` must be a writable (N, 5) buffer (caller pre-fills it with the
+// input particles).  Live (non-terminal) particles are updated in place.
+// Uses one uniform draw per live particle for the opponent move.
+void belief_apply_action(int action_idx, std::size_t n,
+                          const double *particles, double *out,
+                          int rows, int cols, const std::uint8_t *valid_cell,
+                          pomdp_native::RNGState &rng) {
+    std::uniform_real_distribution<double> uniform(0.0, 1.0);
+    const int dr = kBeliefActionDirections[static_cast<std::size_t>(action_idx)][0];
+    const int dc = kBeliefActionDirections[static_cast<std::size_t>(action_idx)][1];
+
+    for (std::size_t i = 0; i < n; ++i) {
+        const std::size_t off = i * 5;
+        // Copy through (terminal handled by caller; we still mirror values).
+        out[off + 0] = particles[off + 0];
+        out[off + 1] = particles[off + 1];
+        out[off + 2] = particles[off + 2];
+        out[off + 3] = particles[off + 3];
+        out[off + 4] = particles[off + 4];
+
+        if (particles[off + 4] != 0.0) {
+            continue;
+        }
+
+        const int robot_r = static_cast<int>(particles[off + 0]);
+        const int robot_c = static_cast<int>(particles[off + 1]);
+        const int opp_r = static_cast<int>(particles[off + 2]);
+        const int opp_c = static_cast<int>(particles[off + 3]);
+
+        // Robot move: tag (action 4) leaves robot in place; movement
+        // actions move iff the candidate cell is valid.
+        int new_robot_r;
+        int new_robot_c;
+        if (action_idx == 4) {
+            new_robot_r = robot_r;
+            new_robot_c = robot_c;
+        } else {
+            const int cand_r = robot_r + dr;
+            const int cand_c = robot_c + dc;
+            if (belief_is_valid(cand_r, cand_c, rows, cols, valid_cell)) {
+                new_robot_r = cand_r;
+                new_robot_c = cand_c;
+            } else {
+                new_robot_r = robot_r;
+                new_robot_c = robot_c;
+            }
+        }
+
+        // Tag at opponent cell: terminal, opponent does NOT move.
+        if (action_idx == 4 && new_robot_r == opp_r && new_robot_c == opp_c) {
+            out[off + 0] = static_cast<double>(new_robot_r);
+            out[off + 1] = static_cast<double>(new_robot_c);
+            out[off + 2] = static_cast<double>(opp_r);
+            out[off + 3] = static_cast<double>(opp_c);
+            out[off + 4] = 1.0;
+            continue;
+        }
+
+        const double u = uniform(rng.engine());
+        int new_opp_r;
+        int new_opp_c;
+        belief_sample_opponent_move(new_robot_r, new_robot_c, opp_r, opp_c,
+                                     rows, cols, valid_cell, u,
+                                     &new_opp_r, &new_opp_c);
+
+        out[off + 0] = static_cast<double>(new_robot_r);
+        out[off + 1] = static_cast<double>(new_robot_c);
+        out[off + 2] = static_cast<double>(new_opp_r);
+        out[off + 3] = static_cast<double>(new_opp_c);
+        out[off + 4] = 0.0;
+    }
+}
+
+// Native port of LaserTagVectorizedUpdater.batch_transition.
+//
+// Parameters:
+//   particles               : (N, 5) float64 input particles
+//   action_idx              : intended movement action (0..4)
+//   transition_error_prob   : per-particle probability of executing a random
+//                             non-intended movement instead of action_idx
+//                             (only applied for action_idx in {0,1,2,3})
+//   valid_cell_flat         : (rows * cols,) uint8 boolean grid where 1
+//                             indicates a non-wall cell
+//   rows, cols              : grid dimensions
+//
+// Returns: (N, 5) float64 array of next particles.
+py::array_t<double> belief_batch_transition_discrete(
+    const py::array_t<double, py::array::c_style | py::array::forcecast> &particles,
+    int action_idx, double transition_error_prob,
+    const py::array_t<std::uint8_t, py::array::c_style | py::array::forcecast> &valid_cell_flat,
+    int rows, int cols) {
+    if (particles.ndim() != 2 || particles.shape(1) != 5) {
+        throw std::invalid_argument("particles must have shape (N, 5)");
+    }
+    if (action_idx < 0 || action_idx > 4) {
+        throw std::invalid_argument("action_idx must be in {0,1,2,3,4}");
+    }
+    if (valid_cell_flat.ndim() != 1 ||
+        static_cast<int>(valid_cell_flat.shape(0)) != rows * cols) {
+        throw std::invalid_argument("valid_cell_flat must have shape (rows*cols,)");
+    }
+    const auto n = static_cast<std::size_t>(particles.shape(0));
+    auto out = py::array_t<double>({static_cast<py::ssize_t>(n), static_cast<py::ssize_t>(5)});
+    if (n == 0) {
+        return out;
+    }
+
+    auto in_view = particles.unchecked<2>();
+    auto out_view = out.mutable_unchecked<2>();
+    auto vc_view = valid_cell_flat.unchecked<1>();
+
+    // Flatten input into a contiguous double buffer for the kernels (the
+    // pybind unchecked accessor is already contiguous, so we just view
+    // its underlying data through .data()).
+    const double *in_data = particles.data();
+    double *out_data = out.mutable_data();
+    const std::uint8_t *vc_data = valid_cell_flat.data();
+
+    pomdp_native::RNGState &rng = pomdp_native::default_rng();
+    std::uniform_real_distribution<double> uniform(0.0, 1.0);
+
+    // Fast path: tag action or zero error probability → single dispatch.
+    if (action_idx == 4 || transition_error_prob <= 0.0) {
+        belief_apply_action(action_idx, n, in_data, out_data, rows, cols, vc_data, rng);
+        // Suppress unused-variable warnings from unused views.
+        (void)in_view;
+        (void)out_view;
+        (void)vc_view;
+        return out;
+    }
+
+    // Error path: per-particle Bernoulli. Allocate four candidate buffers
+    // (one per error action) and select per particle.  This matches the
+    // Python ``_batch_transition_with_error`` semantics.
+    std::array<std::vector<double>, 4> candidates;
+    for (int a = 0; a < 4; ++a) {
+        candidates[static_cast<std::size_t>(a)].assign(n * 5, 0.0);
+        belief_apply_action(a, n, in_data, candidates[static_cast<std::size_t>(a)].data(),
+                            rows, cols, vc_data, rng);
+    }
+
+    // For each particle, decide which action was actually executed.
+    // ``other_actions`` mirrors the Python list comprehension: actions in
+    // {0,1,2,3} \ {intended}.  We index this per-particle when the error
+    // flag fires.
+    std::array<int, 3> other_actions{};
+    {
+        int idx = 0;
+        for (int a = 0; a < 4; ++a) {
+            if (a != action_idx) {
+                other_actions[static_cast<std::size_t>(idx++)] = a;
+            }
+        }
+    }
+
+    std::uniform_int_distribution<int> err_choice(0, 2);
+    for (std::size_t i = 0; i < n; ++i) {
+        const double err_u = uniform(rng.engine());
+        int chosen;
+        if (err_u < transition_error_prob) {
+            chosen = other_actions[static_cast<std::size_t>(err_choice(rng.engine()))];
+        } else {
+            chosen = action_idx;
+        }
+        const double *src = candidates[static_cast<std::size_t>(chosen)].data() + i * 5;
+        for (std::size_t d = 0; d < 5; ++d) {
+            out_data[i * 5 + d] = src[d];
+        }
+    }
+    (void)in_view;
+    (void)out_view;
+    (void)vc_view;
+    return out;
+}
+
+// Compute opponent distance on a single ray, matching the geometry of
+// LaserTagVectorizedUpdater._compute_opponent_distance_on_ray.  Returns
+// -1 if the opponent is not on this ray within the wall distance.
+inline int opponent_distance_on_ray(int diff_r, int diff_c, int dr, int dc, int wall_dist) {
+    if (dr != 0 && dc != 0) {
+        // Diagonal ray: both coordinates must equal the same positive integer step.
+        if (dr * diff_r <= 0 || dc * diff_c <= 0) {
+            return -1;
+        }
+        const int step_r = diff_r / dr;
+        const int step_c = diff_c / dc;
+        if (step_r != step_c) {
+            return -1;
+        }
+        if (diff_r != step_r * dr || diff_c != step_c * dc) {
+            return -1;
+        }
+        if (step_r < 1 || (step_r - 1) > wall_dist) {
+            return -1;
+        }
+        return step_r - 1;
+    }
+    if (dr != 0) {
+        if (diff_c != 0) {
+            return -1;
+        }
+        if (dr * diff_r <= 0) {
+            return -1;
+        }
+        const int step = diff_r / dr;
+        if (step < 1 || (step - 1) > wall_dist) {
+            return -1;
+        }
+        return step - 1;
+    }
+    // dc != 0
+    if (diff_r != 0) {
+        return -1;
+    }
+    if (dc * diff_c <= 0) {
+        return -1;
+    }
+    const int step = diff_c / dc;
+    if (step < 1 || (step - 1) > wall_dist) {
+        return -1;
+    }
+    return step - 1;
+}
+
+// Compute the 8-direction laser measurement vector for a single particle.
+// ``wall_dist_table`` is a flat (rows * cols * 8) int32 buffer; for cell
+// (r, c) and direction d the wall distance is at ``r * cols * 8 + c * 8 + d``.
+inline void belief_compute_laser_measurements(int robot_r, int robot_c, int opp_r, int opp_c,
+                                                const std::int32_t *wall_dist_table, int cols,
+                                                double *out) {
+    const int diff_r = opp_r - robot_r;
+    const int diff_c = opp_c - robot_c;
+    const std::int32_t *wall_row = wall_dist_table + (robot_r * cols + robot_c) * 8;
+    for (std::size_t d = 0; d < 8; ++d) {
+        const int wall_dist = static_cast<int>(wall_row[d]);
+        const int dr = kBeliefLaserDirections[d][0];
+        const int dc = kBeliefLaserDirections[d][1];
+        const int opp_dist = opponent_distance_on_ray(diff_r, diff_c, dr, dc, wall_dist);
+        if (opp_dist >= 0 && opp_dist < wall_dist) {
+            out[d] = static_cast<double>(opp_dist);
+        } else {
+            out[d] = static_cast<double>(wall_dist);
+        }
+    }
+}
+
+// Native port of
+// LaserTagVectorizedUpdater.batch_observation_log_likelihood.
+//
+// Parameters:
+//   next_particles    : (N, 5) float64 input particles (post-transition)
+//   observation       : (8,) float64 observation vector (terminal = all -1)
+//   wall_dist_table_flat : (rows * cols * 8,) int32 precomputed table
+//   rows, cols        : grid dimensions
+//   log_norm_1d       : -0.5 * log(2 * pi * variance)
+//   inv_2var          : 0.5 / variance
+//
+// Returns: (N,) float64 log-likelihoods. Matches the semantics of
+// _batch_non_terminal_log_likelihood combined with the terminal handling
+// in batch_observation_log_likelihood.
+py::array_t<double> belief_batch_obs_log_likelihood_discrete(
+    const py::array_t<double, py::array::c_style | py::array::forcecast> &next_particles,
+    const py::array_t<double, py::array::c_style | py::array::forcecast> &observation,
+    const py::array_t<std::int32_t, py::array::c_style | py::array::forcecast> &wall_dist_table_flat,
+    int rows, int cols, double log_norm_1d, double inv_2var) {
+    if (next_particles.ndim() != 2 || next_particles.shape(1) != 5) {
+        throw std::invalid_argument("next_particles must have shape (N, 5)");
+    }
+    if (observation.ndim() != 1 || observation.shape(0) != 8) {
+        throw std::invalid_argument("observation must have shape (8,)");
+    }
+    if (wall_dist_table_flat.ndim() != 1 ||
+        static_cast<int>(wall_dist_table_flat.shape(0)) != rows * cols * 8) {
+        throw std::invalid_argument(
+            "wall_dist_table_flat must have shape (rows*cols*8,)");
+    }
+
+    const auto n = static_cast<std::size_t>(next_particles.shape(0));
+    auto out = py::array_t<double>(static_cast<py::ssize_t>(n));
+    if (n == 0) {
+        return out;
+    }
+
+    const double *part_data = next_particles.data();
+    const double *obs_data = observation.data();
+    const std::int32_t *wall_data = wall_dist_table_flat.data();
+    double *out_data = out.mutable_data();
+
+    bool obs_is_terminal = true;
+    for (std::size_t d = 0; d < 8; ++d) {
+        if (obs_data[d] != -1.0) {
+            obs_is_terminal = false;
+            break;
+        }
+    }
+
+    const double neg_inf = -std::numeric_limits<double>::infinity();
+    const double obs_const = 8.0 * log_norm_1d;
+
+    for (std::size_t i = 0; i < n; ++i) {
+        const double terminal_flag = part_data[i * 5 + 4];
+        if (obs_is_terminal) {
+            out_data[i] = (terminal_flag == 1.0) ? 0.0 : neg_inf;
+            continue;
+        }
+        if (terminal_flag == 1.0) {
+            out_data[i] = neg_inf;
+            continue;
+        }
+        const int robot_r = static_cast<int>(part_data[i * 5 + 0]);
+        const int robot_c = static_cast<int>(part_data[i * 5 + 1]);
+        const int opp_r = static_cast<int>(part_data[i * 5 + 2]);
+        const int opp_c = static_cast<int>(part_data[i * 5 + 3]);
+
+        double measurements[8];  // NOLINT(modernize-avoid-c-arrays)
+        belief_compute_laser_measurements(robot_r, robot_c, opp_r, opp_c, wall_data, cols,
+                                            measurements);
+
+        double sq = 0.0;
+        for (std::size_t d = 0; d < 8; ++d) {
+            const double diff = obs_data[d] - measurements[d];
+            sq += diff * diff;
+        }
+        out_data[i] = obs_const - sq * inv_2var;
+    }
+    return out;
+}
+
+// ── Discrete LaserTag single-step kernels ───────────────────────────────────
+//
+// These helpers expose the per-step transition / observation / observation-log
+// probability math used by ``simulate_rollout_discrete`` so the Python single-
+// state hot path (``sample_next_state``, ``sample_observation``,
+// ``observation_log_probability``) can call into C++ without duplicating
+// implementation logic.
+//
+// To preserve byte-for-byte numpy RNG reproducibility, the transition /
+// observation kernels do NOT draw randomness internally; the Python caller
+// pre-draws the required uniforms / normals using ``np.random.*`` and forwards
+// the values here. C++ then deterministically computes the next state /
+// observation using these pre-drawn samples.
+
+// Cumulative sample: given probabilities (sum to 1) and a uniform draw u in
+// [0, 1), return the index where u falls in the cumulative distribution.
+// Mirrors numpy.random.choice behavior with size=1 and p=probs.
+inline std::size_t cumulative_sample(const double *probs, std::size_t n, double u) {
+    double cum = 0.0;
+    for (std::size_t i = 0; i < n; ++i) {
+        cum += probs[i];
+        if (u < cum) {
+            return i;
+        }
+    }
+    return n - 1;
+}
+
+// 8-direction laser distance scan from (robot_r, robot_c). Mirrors
+// LaserTagPOMDP._laser_distance_inline / _LASER_DIRECTIONS.
+// Output: out[0..7] in order N, NE, E, SE, S, SW, W, NW.
+static constexpr std::array<std::array<int, 2>, 8> kDiscLaserDirs = {{
+    {{-1, 0}}, {{-1, 1}}, {{0, 1}}, {{1, 1}}, {{1, 0}}, {{1, -1}}, {{0, -1}}, {{-1, -1}}}};
+
+void disc_laser_measurements(int robot_r, int robot_c, int opp_r, int opp_c,
+                             const DiscreteEnvParams &env, double *out) {
+    for (std::size_t d = 0; d < 8; ++d) {
+        const int dr = kDiscLaserDirs[d][0];
+        const int dc = kDiscLaserDirs[d][1];
+        int r = robot_r;
+        int c = robot_c;
+        double dist = 0.0;
+        while (true) {
+            r += dr;
+            c += dc;
+            dist += 1.0;
+            if (r < 0 || r >= env.rows || c < 0 || c >= env.cols) {
+                break;
+            }
+            if (env.wall_grid[static_cast<std::size_t>(r * env.cols + c)]) {
+                break;
+            }
+            if (r == opp_r && c == opp_c) {
+                break;
+            }
+        }
+        out[d] = dist - 1.0;
+    }
+}
+
+// Build the opponent-move probability table (positions and probabilities)
+// after the robot has already moved. Mirrors
+// LaserTagPOMDP._opponent_move_probabilities_inline. Returns the count.
+std::size_t disc_opponent_move_table(int opp_r, int opp_c, int robot_r_after,
+                                     int robot_c_after, const DiscreteEnvParams &env,
+                                     int *out_rows, int *out_cols, double *out_probs) {
+    std::size_t n = 0;
+
+    auto try_add = [&](int r, int c, double prob) {
+        if (prob > 0.0 && disc_is_valid(r, c, env)) {
+            out_rows[n] = r;
+            out_cols[n] = c;
+            out_probs[n] = prob;
+            ++n;
+        }
+    };
+
+    // x-moves (column direction, fixed row = opp_r)
+    if (robot_c_after == opp_c) {
+        try_add(opp_r, opp_c + 1, 0.2);
+        try_add(opp_r, opp_c - 1, 0.2);
+    } else {
+        const int toward_c = (robot_c_after > opp_c) ? opp_c + 1 : opp_c - 1;
+        try_add(opp_r, toward_c, 0.4);
+    }
+
+    // y-moves (row direction, fixed col = opp_c)
+    if (robot_r_after == opp_r) {
+        try_add(opp_r + 1, opp_c, 0.2);
+        try_add(opp_r - 1, opp_c, 0.2);
+    } else {
+        const int toward_r = (robot_r_after > opp_r) ? opp_r + 1 : opp_r - 1;
+        try_add(toward_r, opp_c, 0.4);
+    }
+
+    // Stay action probability: 0.2 + slack from invalid moves.
+    double actual_total = 0.2;
+    for (std::size_t i = 0; i < n; ++i) {
+        actual_total += out_probs[i];
+    }
+    const double stay_prob = (actual_total < 1.0) ? 0.2 + (1.0 - actual_total) : 0.2;
+    out_rows[n] = opp_r;
+    out_cols[n] = opp_c;
+    out_probs[n] = stay_prob;
+    ++n;
+    return n;
+}
+
+// Compute the next-state for a single transition using a PRE-DRAWN uniform
+// for the opponent move. The Python caller is responsible for resolving the
+// actual_action (handling the optional transition error in numpy, preserving
+// byte-identical RNG state with the original Python implementation), and for
+// drawing ``opp_uniform`` via ``np.random.random()`` (except on the
+// successful-tag short circuit where no opp draw is required).
+py::array_t<double> lasertag_sample_next_state_step(
+    const py::array_t<double, py::array::c_style | py::array::forcecast> &state_arr,
+    int actual_action, double opp_uniform, int rows, int cols,
+    const py::array_t<std::int64_t, py::array::c_style | py::array::forcecast> &walls_flat) {
+    if (state_arr.ndim() != 1 || state_arr.shape(0) != 5) {
+        throw std::invalid_argument("state must have shape (5,)");
+    }
+    if (actual_action < 0 || actual_action > 4) {
+        throw std::invalid_argument("actual_action must be in [0, 4]");
+    }
+    auto sv = state_arr.unchecked<1>();
+
+    // Build a lightweight env (no dangerous_areas / reward fields needed).
+    DiscreteEnvParams env;
+    env.rows = rows;
+    env.cols = cols;
+    env.wall_grid.assign(static_cast<std::size_t>(rows * cols), false);
+    if (walls_flat.ndim() != 1) {
+        throw std::invalid_argument("walls_flat must be 1-D");
+    }
+    const auto wlen = static_cast<std::size_t>(walls_flat.shape(0));
+    if (wlen % 2 != 0) {
+        throw std::invalid_argument("walls_flat length must be even");
+    }
+    auto wview = walls_flat.unchecked<1>();
+    for (std::size_t i = 0; i < wlen; i += 2) {
+        const int wr = static_cast<int>(wview(static_cast<py::ssize_t>(i)));
+        const int wc = static_cast<int>(wview(static_cast<py::ssize_t>(i + 1)));
+        if (wr >= 0 && wr < rows && wc >= 0 && wc < cols) {
+            env.wall_grid[static_cast<std::size_t>(wr * cols + wc)] = true;
+        }
+    }
+
+    const int robot_r = static_cast<int>(sv(0));
+    const int robot_c = static_cast<int>(sv(1));
+    const int opp_r = static_cast<int>(sv(2));
+    const int opp_c = static_cast<int>(sv(3));
+
+    // Robot's next position.
+    int robot_next_r = robot_r;
+    int robot_next_c = robot_c;
+    if (actual_action != 4) {
+        const int dr = kDiscActDirs[static_cast<std::size_t>(actual_action)][0];
+        const int dc = kDiscActDirs[static_cast<std::size_t>(actual_action)][1];
+        if (disc_is_valid(robot_r + dr, robot_c + dc, env)) {
+            robot_next_r = robot_r + dr;
+            robot_next_c = robot_c + dc;
+        }
+    }
+
+    // Allocate output state.
+    auto out = py::array_t<double>(5);
+    auto ov = out.mutable_unchecked<1>();
+
+    // Successful tag: terminal state, no opp draw.
+    if (actual_action == 4 && robot_r == opp_r && robot_c == opp_c) {
+        ov(0) = static_cast<double>(robot_next_r);
+        ov(1) = static_cast<double>(robot_next_c);
+        ov(2) = static_cast<double>(opp_r);
+        ov(3) = static_cast<double>(opp_c);
+        ov(4) = 1.0;
+        return out;
+    }
+
+    // Sample opponent move via cumulative draw on the opp-move table.
+    int opp_rows_buf[5];   // NOLINT(modernize-avoid-c-arrays)
+    int opp_cols_buf[5];   // NOLINT(modernize-avoid-c-arrays)
+    double opp_probs[5];   // NOLINT(modernize-avoid-c-arrays)
+    const std::size_t n_opp = disc_opponent_move_table(
+        opp_r, opp_c, robot_next_r, robot_next_c, env, opp_rows_buf, opp_cols_buf, opp_probs);
+    const std::size_t pick = cumulative_sample(opp_probs, n_opp, opp_uniform);
+
+    ov(0) = static_cast<double>(robot_next_r);
+    ov(1) = static_cast<double>(robot_next_c);
+    ov(2) = static_cast<double>(opp_rows_buf[pick]);
+    ov(3) = static_cast<double>(opp_cols_buf[pick]);
+    ov(4) = 0.0;
+    return out;
+}
+
+// Compute the noisy 8-direction laser observation for a non-terminal next
+// state, given a pre-drawn (8,) noise vector. Returns a tuple-compatible
+// 8-element float64 ndarray. Caller must handle the terminal case.
+py::array_t<double> lasertag_sample_observation_step(
+    const py::array_t<double, py::array::c_style | py::array::forcecast> &next_state_arr,
+    const py::array_t<double, py::array::c_style | py::array::forcecast> &noise,
+    int rows, int cols,
+    const py::array_t<std::int64_t, py::array::c_style | py::array::forcecast> &walls_flat) {
+    if (next_state_arr.ndim() != 1 || next_state_arr.shape(0) != 5) {
+        throw std::invalid_argument("next_state must have shape (5,)");
+    }
+    if (noise.ndim() != 1 || noise.shape(0) != 8) {
+        throw std::invalid_argument("noise must have shape (8,)");
+    }
+    auto sv = next_state_arr.unchecked<1>();
+    auto nv = noise.unchecked<1>();
+
+    DiscreteEnvParams env;
+    env.rows = rows;
+    env.cols = cols;
+    env.wall_grid.assign(static_cast<std::size_t>(rows * cols), false);
+    auto wview = walls_flat.unchecked<1>();
+    const auto wlen = static_cast<std::size_t>(walls_flat.shape(0));
+    for (std::size_t i = 0; i < wlen; i += 2) {
+        const int wr = static_cast<int>(wview(static_cast<py::ssize_t>(i)));
+        const int wc = static_cast<int>(wview(static_cast<py::ssize_t>(i + 1)));
+        if (wr >= 0 && wr < rows && wc >= 0 && wc < cols) {
+            env.wall_grid[static_cast<std::size_t>(wr * cols + wc)] = true;
+        }
+    }
+
+    const int robot_r = static_cast<int>(sv(0));
+    const int robot_c = static_cast<int>(sv(1));
+    const int opp_r = static_cast<int>(sv(2));
+    const int opp_c = static_cast<int>(sv(3));
+
+    double truth[8];  // NOLINT(modernize-avoid-c-arrays)
+    disc_laser_measurements(robot_r, robot_c, opp_r, opp_c, env, truth);
+
+    auto out = py::array_t<double>(8);
+    auto ov = out.mutable_unchecked<1>();
+    for (std::size_t d = 0; d < 8; ++d) {
+        const double noisy = truth[d] + nv(static_cast<py::ssize_t>(d));
+        ov(static_cast<py::ssize_t>(d)) = std::max(0.0, noisy);
+    }
+    return out;
+}
+
+// Single-state observation log-probability over a list/array of observations.
+// Mirrors LaserTagPOMDP.observation_log_probability exactly.
+py::array_t<double> lasertag_observation_log_probability_step(
+    const py::array_t<double, py::array::c_style | py::array::forcecast> &next_state_arr,
+    const py::array_t<double, py::array::c_style | py::array::forcecast> &observations_arr,
+    double measurement_noise, int rows, int cols,
+    const py::array_t<std::int64_t, py::array::c_style | py::array::forcecast> &walls_flat) {
+    if (next_state_arr.ndim() != 1 || next_state_arr.shape(0) != 5) {
+        throw std::invalid_argument("next_state must have shape (5,)");
+    }
+    if (observations_arr.ndim() != 2 || observations_arr.shape(1) != 8) {
+        throw std::invalid_argument("observations must have shape (N, 8)");
+    }
+    auto sv = next_state_arr.unchecked<1>();
+    auto ov = observations_arr.unchecked<2>();
+
+    const auto n = static_cast<std::size_t>(observations_arr.shape(0));
+    auto out = py::array_t<double>(static_cast<py::ssize_t>(n));
+    auto out_view = out.mutable_unchecked<1>();
+
+    const double neg_inf = -std::numeric_limits<double>::infinity();
+
+    // Terminal next_state: observation must equal sentinel (-1, ..., -1).
+    if (sv(4) != 0.0) {
+        for (std::size_t i = 0; i < n; ++i) {
+            bool matches = true;
+            for (std::size_t d = 0; d < 8; ++d) {
+                if (std::abs(ov(static_cast<py::ssize_t>(i), static_cast<py::ssize_t>(d)) - (-1.0)) >
+                    1e-12) {
+                    matches = false;
+                    break;
+                }
+            }
+            // log(1.0) = 0.0; log(0.0) = -inf
+            out_view(static_cast<py::ssize_t>(i)) = matches ? 0.0 : neg_inf;
+        }
+        return out;
+    }
+
+    // Non-terminal: 8-dim Gaussian log-pdf with shared variance.
+    DiscreteEnvParams env;
+    env.rows = rows;
+    env.cols = cols;
+    env.wall_grid.assign(static_cast<std::size_t>(rows * cols), false);
+    auto wview = walls_flat.unchecked<1>();
+    const auto wlen = static_cast<std::size_t>(walls_flat.shape(0));
+    for (std::size_t i = 0; i < wlen; i += 2) {
+        const int wr = static_cast<int>(wview(static_cast<py::ssize_t>(i)));
+        const int wc = static_cast<int>(wview(static_cast<py::ssize_t>(i + 1)));
+        if (wr >= 0 && wr < rows && wc >= 0 && wc < cols) {
+            env.wall_grid[static_cast<std::size_t>(wr * cols + wc)] = true;
+        }
+    }
+    const int robot_r = static_cast<int>(sv(0));
+    const int robot_c = static_cast<int>(sv(1));
+    const int opp_r = static_cast<int>(sv(2));
+    const int opp_c = static_cast<int>(sv(3));
+
+    double truth[8];  // NOLINT(modernize-avoid-c-arrays)
+    disc_laser_measurements(robot_r, robot_c, opp_r, opp_c, env, truth);
+
+    const double variance = measurement_noise * measurement_noise;
+    const double inv_2var = 0.5 / variance;
+    const double log_norm_const = -0.5 * std::log(2.0 * M_PI * variance);
+
+    for (std::size_t i = 0; i < n; ++i) {
+        double log_prob = 0.0;
+        bool any_negative = false;
+        for (std::size_t d = 0; d < 8; ++d) {
+            const double observed = ov(static_cast<py::ssize_t>(i), static_cast<py::ssize_t>(d));
+            if (observed < 0.0) {
+                any_negative = true;
+                break;
+            }
+            const double diff = observed - truth[d];
+            log_prob += log_norm_const - diff * diff * inv_2var;
+        }
+        out_view(static_cast<py::ssize_t>(i)) = any_negative ? neg_inf : log_prob;
+    }
+    return out;
+}
+
 }  // anonymous namespace
 
 PYBIND11_MODULE(_native, m) {
@@ -1364,4 +2118,55 @@ PYBIND11_MODULE(_native, m) {
         "Actions are drawn uniformly from {0,1,2,3,4} using pomdp_native::default_rng().\n"
         "Seed via set_seed() before calling to obtain reproducible trajectories.\n"
         "Returns the discounted sum of immediate rewards along the sampled trajectory.");
+
+    // ── Discrete LaserTag belief-update kernels ─────────────────────────────
+    m.def(
+        "belief_batch_transition_discrete", &belief_batch_transition_discrete,
+        py::arg("particles"), py::arg("action_idx"), py::arg("transition_error_prob"),
+        py::arg("valid_cell_flat"), py::arg("rows"), py::arg("cols"),
+        "Native port of LaserTagVectorizedUpdater.batch_transition.\n\n"
+        "Returns the (N, 5) float64 array of next particles.  Uses\n"
+        "pomdp_native::default_rng(); seed via set_seed() for reproducibility.");
+
+    m.def(
+        "belief_batch_obs_log_likelihood_discrete",
+        &belief_batch_obs_log_likelihood_discrete,
+        py::arg("next_particles"), py::arg("observation"),
+        py::arg("wall_dist_table_flat"), py::arg("rows"), py::arg("cols"),
+        py::arg("log_norm_1d"), py::arg("inv_2var"),
+        "Native port of\n"
+        "LaserTagVectorizedUpdater.batch_observation_log_likelihood.\n\n"
+        "Returns the (N,) float64 array of per-particle log-likelihoods.");
+
+    // ── Discrete LaserTag single-step kernels ───────────────────────────────
+    m.def(
+        "sample_next_state_step", &lasertag_sample_next_state_step,
+        py::arg("state"), py::arg("actual_action"), py::arg("opp_uniform"),
+        py::arg("rows"), py::arg("cols"), py::arg("walls_flat"),
+        "Single-step transition for the discrete LaserTagPOMDP.\n\n"
+        "Caller must resolve the actual_action via numpy (handling the\n"
+        "optional transition error). ``opp_uniform`` is a uniform [0,1) draw\n"
+        "used to pick the opponent move; must be drawn with np.random.random()\n"
+        "for byte-identical reproducibility against the original Python path.\n"
+        "Returns a (5,) float64 ndarray.");
+
+    m.def(
+        "sample_observation_step", &lasertag_sample_observation_step,
+        py::arg("next_state"), py::arg("noise"),
+        py::arg("rows"), py::arg("cols"), py::arg("walls_flat"),
+        "Single-step observation for the discrete LaserTagPOMDP.\n\n"
+        "``noise`` is a length-8 float64 array of pre-drawn N(0, sigma) samples\n"
+        "(typically np.random.normal(0, measurement_noise, size=8)).\n"
+        "Returns the noisy 8-direction laser observation as a (8,) float64\n"
+        "ndarray. Caller must check next_state[4] (terminal) before calling.");
+
+    m.def(
+        "observation_log_probability_step", &lasertag_observation_log_probability_step,
+        py::arg("next_state"), py::arg("observations"), py::arg("measurement_noise"),
+        py::arg("rows"), py::arg("cols"), py::arg("walls_flat"),
+        "Per-observation log-probability for the discrete LaserTagPOMDP.\n\n"
+        "``observations`` is a (N, 8) float64 array. Returns a (N,) float64\n"
+        "array of log-probabilities, mirroring\n"
+        "LaserTagPOMDP.observation_log_probability semantics (terminal next\n"
+        "state requires the (-1, ..., -1) sentinel observation).");
 }

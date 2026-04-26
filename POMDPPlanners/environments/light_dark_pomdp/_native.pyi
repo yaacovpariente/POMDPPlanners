@@ -49,6 +49,61 @@ def simulate_rollout(
     """
     ...
 
+def discrete_is_terminal(
+    state: NDArray[np.float64],
+    goal_state: NDArray[np.float64],
+    obstacles: NDArray[np.float64],
+) -> bool:
+    """Discrete-LD is_terminal: state-equals-goal OR state-in-any-obstacle."""
+    ...
+
+def discrete_observation_log_prob(
+    next_state: NDArray[np.float64],
+    observations: NDArray[np.floating],
+    beacons: NDArray[np.float64],
+    beacon_radius: float,
+    obs_probs_near: NDArray[np.float64],
+    obs_probs_far: NDArray[np.float64],
+    action_offsets: NDArray[np.float64],
+) -> NDArray[np.float64]:
+    """Single-state observation log-probability for the NORMAL discrete model."""
+    ...
+
+def discrete_observation_log_prob_per_state(
+    next_states: NDArray[np.float64],
+    observation: NDArray[np.float64],
+    beacons: NDArray[np.float64],
+    beacon_radius: float,
+    obs_probs_near: NDArray[np.float64],
+    obs_probs_far: NDArray[np.float64],
+    action_offsets: NDArray[np.float64],
+) -> NDArray[np.float64]:
+    """Per-state observation log-probability for the NORMAL discrete model."""
+    ...
+
+def discrete_simulate_rollout(
+    initial_state: NDArray[np.float64],
+    action_array: NDArray[np.float64],
+    action_indices: NDArray[np.int32],
+    max_depth: int,
+    start_depth: int,
+    discount_factor: float,
+    goal_state: NDArray[np.float64],
+    obstacles: NDArray[np.float64],
+    grid_size: float,
+    fuel_cost: float,
+    goal_reward: float,
+    obstacle_reward: float,
+    obstacle_hit_probability: float,
+    transition_error_prob: float,
+) -> float:
+    """Native random rollout for the discrete LightDark env.
+
+    Pre-draws action indices on the Python side; uses the module-level C++
+    RNG for the per-step obstacle-hit and transition-error draws.
+    """
+    ...
+
 class ContinuousLightDarkTransitionCpp:
     """Native additive-Gaussian transition sampler for Continuous Light-Dark."""
 
