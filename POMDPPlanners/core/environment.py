@@ -129,38 +129,6 @@ register_serializer(SpaceInfo, _serialize_space_info)
 register_deserializer(SpaceInfo, _deserialize_space_info)
 
 
-class StateTransitionModel(Distribution, ABC):
-    """Deprecated. Slated for deletion. Kept temporarily so legacy wrapper
-    class definitions in env files still parse during the staged migration.
-    No production code uses this class; consult the env's
-    ``sample_next_state`` / ``transition_log_probability`` methods instead.
-    """
-
-    def __init__(self, state: Any = None, action: Any = None) -> None:
-        self.state = state
-        self.action = action
-
-    def sample(self, n_samples: int = 1) -> List[Any]:  # pragma: no cover
-        raise NotImplementedError("Use env.sample_next_state(state, action, n_samples) instead.")
-
-
-class ObservationModel(Distribution, ABC):
-    """Deprecated. Slated for deletion. Kept temporarily so legacy wrapper
-    class definitions in env files still parse during the staged migration.
-    No production code uses this class; consult the env's
-    ``sample_observation`` / ``observation_log_probability`` methods instead.
-    """
-
-    def __init__(self, next_state: Any = None, action: Any = None) -> None:
-        self.next_state = next_state
-        self.action = action
-
-    def sample(self, n_samples: int = 1) -> List[Any]:  # pragma: no cover
-        raise NotImplementedError(
-            "Use env.sample_observation(next_state, action, n_samples) instead."
-        )
-
-
 class Environment(ABC):
     """Abstract base class for POMDP environments.
 
@@ -454,58 +422,49 @@ class Environment(ABC):
             This is particularly important for discrete observation spaces.
         """
 
+    @abstractmethod
     def sample_next_state(self, state: Any, action: Any, n_samples: int = 1) -> Any:
         """Sample one or more next states for ``(state, action)``.
 
-        Default implementation routes through the legacy
-        ``state_transition_model`` factory + ``.sample(n_samples)``. Envs
-        that have deleted their factory (post-PR-D3) MUST override this
-        method.
-        """
-        # pylint: disable=no-member
-        samples = self.state_transition_model(state=state, action=action).sample(n_samples)  # type: ignore[attr-defined]
-        if n_samples == 1:
-            return samples[0]
-        return samples
+        Hot-path entry point used by MCTS planners and particle filters.
+        Subclasses must implement.
 
+        Returns:
+            When ``n_samples == 1``: a single next state of the env's
+            native type. When ``n_samples > 1``: an array-like of length
+            ``n_samples`` (numeric envs return ``np.ndarray`` of shape
+            ``(n_samples, *dim)``; structured envs return ``List[T]``).
+        """
+
+    @abstractmethod
     def sample_observation(self, next_state: Any, action: Any, n_samples: int = 1) -> Any:
         """Sample one or more observations for ``(next_state, action)``.
 
-        Default implementation routes through the legacy
-        ``observation_model`` factory + ``.sample(n_samples)``. Envs that
-        have deleted their factory (post-PR-D3) MUST override this method.
-        """
-        # pylint: disable=no-member
-        samples = self.observation_model(next_state=next_state, action=action).sample(n_samples)  # type: ignore[attr-defined]
-        if n_samples == 1:
-            return samples[0]
-        return samples
+        Hot-path entry point used by MCTS planners and particle filters.
+        Subclasses must implement.
 
+        Returns:
+            When ``n_samples == 1``: a single observation. When
+            ``n_samples > 1``: an array-like of length ``n_samples``.
+        """
+
+    @abstractmethod
     def transition_log_probability(self, state: Any, action: Any, next_states: Any) -> np.ndarray:
         """Log-probability of each candidate next state under ``(state, action)``.
 
-        Default implementation routes through the legacy
-        ``state_transition_model`` factory + ``.probability(next_states)``.
+        Returns ``np.ndarray`` of shape ``(N,)`` where N is the number of
+        candidate next states. Subclasses must implement.
         """
-        # pylint: disable=no-member
-        probs = np.asarray(
-            self.state_transition_model(state=state, action=action).probability(next_states)  # type: ignore[attr-defined]
-        )
-        return np.log(probs + 1e-300)
 
+    @abstractmethod
     def observation_log_probability(
         self, next_state: Any, action: Any, observations: Any
     ) -> np.ndarray:
         """Log-probability of each candidate observation under ``(next_state, action)``.
 
-        Default implementation routes through the legacy
-        ``observation_model`` factory + ``.probability(observations)``.
+        Returns ``np.ndarray`` of shape ``(N,)`` where N is the number of
+        candidate observations. Subclasses must implement.
         """
-        # pylint: disable=no-member
-        probs = np.asarray(
-            self.observation_model(next_state=next_state, action=action).probability(observations)  # type: ignore[attr-defined]
-        )
-        return np.log(probs + 1e-300)
 
     def sample_next_state_batch(self, states: Any, action: Any) -> Any:
         """Sample one next state per input state, all under the same action.

@@ -21,7 +21,6 @@ Key characteristics:
 
 Classes:
     RewardModelType: Enumeration of available reward model types
-    StateTransitionModel: Continuous movement with Gaussian noise
     ContinuousLightDarkPOMDP: Main environment class
     ContinuousLightDarkPOMDPDiscreteActions: Discrete action variant
 """
@@ -35,8 +34,6 @@ from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
     SpaceInfo,
     SpaceType,
-    ObservationModel,
-    StateTransitionModel,
 )
 from POMDPPlanners.core.simulation import History, MetricValue
 from POMDPPlanners.environments.light_dark_pomdp import (
@@ -49,20 +46,16 @@ from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.numba_ke
     is_terminal_kernel,
 )
 from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
-
-# pylint: disable=no-name-in-module
-from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_observation_models import (
-    # Type checkers have trouble resolving this import despite the class being properly defined
-    # and listed in __all__. The import works correctly at runtime.
-    ContinuousLightDarkDistanceBasedObservationModel,  # pyright: ignore[reportAttributeAccessIssue]
-    ContinuousLightDarkNormalNoiseNoObsInDarkObservationModel,
-    ContinuousLightDarkNormalNoiseObservationModel,
-)
 from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_reward_models import (
     BaseLightDarkRewardModel,
     ContinuousLDDangerousStatesRewardModel,
     ContinuousLightDarkDecayingHitProbabilityRewardModel,
     ContinuousLightDarkRewardModel,
+)
+from POMDPPlanners.utils.numba_kernels import (
+    any_point_within_radius_kernel,
+    min_distance_to_points_kernel,
+    mvn_sample_2d_kernel,
 )
 from POMDPPlanners.utils.statistics_utils import confidence_interval
 
@@ -87,70 +80,6 @@ class ObservationModelType(Enum):
     NORMAL_NOISE = "normal_noise"
     NORMAL_NOISE_NO_OBS_IN_DARK = "normal_noise_no_obs_in_dark"
     DISTANCE_BASED = "distance_based"
-
-
-class ContinuousLightDarkStateTransitionModel(_native.ContinuousLightDarkTransitionCpp):
-    """State transition model for Continuous Light-Dark POMDP.
-
-    This model implements continuous movement in 2D space with Gaussian
-    noise. The agent's next position is the sum of the current position,
-    the action vector, and an additive Gaussian draw parameterized by
-    ``state_dist``.
-
-    The ``sample`` / ``probability`` / ``batch_sample`` methods execute
-    entirely in C++ via the ``_native`` extension; this Python subclass
-    only wraps the constructor so existing call sites that pass a
-    :class:`CovarianceParameterizedMultivariateNormal` keep working.
-
-    Attributes:
-        state: Current 2D position ``[x, y]``.
-        action: Movement vector ``[dx, dy]``.
-        mean: Expected next position (``state + action``).
-
-    Example:
-        >>> import numpy as np
-        >>> np.random.seed(42)  # For reproducible results
-        >>> # Define current position and movement action
-        >>> state = np.array([3.0, 4.0])  # Current position
-        >>> action = np.array([1.0, 0.5])  # Move right and slightly up
-        >>>
-        >>> # Define movement noise
-        >>> cov_matrix = np.eye(2) * 0.1  # Small movement noise
-        >>> state_dist = CovarianceParameterizedMultivariateNormal(cov_matrix)
-        >>>
-        >>> # Create transition model
-        >>> transition = ContinuousLightDarkStateTransitionModel(
-        ...     state=state,
-        ...     action=action,
-        ...     state_dist=state_dist
-        ... )
-        >>>
-        >>> # Sample next position with noise
-        >>> next_position = transition.sample()[0]  # doctest: +SKIP
-        >>> # Returns position around [4.0, 4.5] ± noise
-        >>>
-        >>> # Calculate probability of specific next position
-        >>> prob = transition.probability([next_position])  # doctest: +SKIP
-    """
-
-    def __init__(
-        self,
-        state: np.ndarray,
-        action: np.ndarray,
-        state_dist: CovarianceParameterizedMultivariateNormal,
-    ):
-        action_array = np.asarray(action, dtype=float).ravel()
-        state_array = np.asarray(state, dtype=float).ravel()
-        super().__init__(
-            state=state_array,
-            action=action_array,
-            covariance=state_dist.covariance,
-        )
-        self._state_dist = state_dist
-        self.mean = state_array + action_array
-
-
-StateTransitionModel.register(ContinuousLightDarkStateTransitionModel)
 
 
 class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
@@ -375,61 +304,134 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         if obstacle_radius <= 0:
             raise ValueError("obstacle_radius must be greater than 0")
 
-    def state_transition_model(self, state: np.ndarray, action: np.ndarray) -> StateTransitionModel:
-        if state.shape != (2,):
-            raise ValueError("state must be a 2D vector")
-        if action.shape != (2,):
-            raise ValueError("action must be a 2D vector")
+    # ── Helpers for non-NORMAL_NOISE observation models (inlined post-PR-D) ──
+    # These replace the deleted Python wrapper classes
+    # ContinuousLightDarkNormalNoiseNoObsInDarkObservationModel and
+    # ContinuousLightDarkDistanceBasedObservationModel. The math is preserved
+    # bit-for-bit (RNG draw count, near-beacon predicate strictness, clipping).
 
-        return ContinuousLightDarkStateTransitionModel(  # type: ignore[return-value]
-            state=state,
-            action=action,
-            state_dist=self._state_transition_dist,
+    def _near_beacon_continuous(self, next_state: np.ndarray) -> bool:
+        return bool(
+            any_point_within_radius_kernel(
+                np.asarray(next_state, dtype=float), self.beacons, self.beacon_radius
+            )
         )
 
-    def observation_model(self, next_state: np.ndarray, action: np.ndarray) -> ObservationModel:
-        if next_state.shape != (2,):
-            raise ValueError("next_state must be a 2D vector")
-        if action.shape != (2,):
-            raise ValueError("action must be a 2D vector")
+    def _sample_mvn_clipped(
+        self,
+        next_state: np.ndarray,
+        dist: CovarianceParameterizedMultivariateNormal,
+        n_samples: int,
+    ) -> np.ndarray:
+        # Mirrors the wrapper sample path:
+        #   z = np.random.standard_normal((n_samples, 2))
+        #   obs = next_state + z @ dist._cholesky_L_T
+        #   obs = clip(obs, 0, grid_size)
+        z = np.random.standard_normal((n_samples, 2))
+        chol_L_T = dist._cholesky_L_T  # pylint: disable=protected-access
+        observations = mvn_sample_2d_kernel(next_state, z, chol_L_T)
+        return np.clip(observations, 0, self.grid_size)
 
-        if self.observation_model_type == ObservationModelType.NORMAL_NOISE:
-            # Subclass of _native.ContinuousLightDarkObservationCpp +
-            # ObservationModel.register() makes isinstance(ObservationModel)
-            # True at runtime, but pyright does not follow the register()
-            # call — suppress the spurious return-type mismatch.
-            return (
-                ContinuousLightDarkNormalNoiseObservationModel(  # pyright: ignore[reportReturnType]
-                    next_state=next_state,
-                    action=action,
-                    obs_dist_near_beacon=self._obs_dist_near_beacon,
-                    obs_dist_far_from_beacon=self._obs_dist_far_from_beacon,
-                    grid_size=self.grid_size,
-                    beacons=self.beacons,
-                    beacon_radius=self.beacon_radius,
-                )
+    def _sample_no_obs_in_dark(self, next_state: np.ndarray, n_samples: int) -> List[Any]:
+        # Mirrors ContinuousLightDarkNormalNoiseNoObsInDarkObservationModel.sample():
+        # near_beacon (strict <) → MVN samples from near-beacon dist, else "None".
+        if self._near_beacon_continuous(next_state):
+            observations = self._sample_mvn_clipped(
+                next_state, self._obs_dist_near_beacon, n_samples
             )
-        if self.observation_model_type == ObservationModelType.NORMAL_NOISE_NO_OBS_IN_DARK:
-            return ContinuousLightDarkNormalNoiseNoObsInDarkObservationModel(
-                next_state=next_state,
-                action=action,
-                obs_dist_near_beacon=self._obs_dist_near_beacon,
-                obs_dist_far_from_beacon=self._obs_dist_far_from_beacon,
-                grid_size=self.grid_size,
-                beacons=self.beacons,
-                beacon_radius=self.beacon_radius,
+            return list(observations)
+        return ["None"] * n_samples
+
+    def _sample_distance_based(self, next_state: np.ndarray, n_samples: int) -> List[Any]:
+        # Mirrors ContinuousLightDarkDistanceBasedObservationModel.sample():
+        # if min_distance > beacon_radius → "None", else MVN from active_dist
+        # (near if strict-near, else far). The strictness mismatch between
+        # `near_beacon` (strict <) and `> beacon_radius` is preserved.
+        min_distance = float(min_distance_to_points_kernel(next_state, self.beacons))
+        if min_distance > self.beacon_radius:
+            return ["None"] * n_samples
+        active_dist = (
+            self._obs_dist_near_beacon
+            if self._near_beacon_continuous(next_state)
+            else self._obs_dist_far_from_beacon
+        )
+        observations = self._sample_mvn_clipped(next_state, active_dist, n_samples)
+        return list(observations)
+
+    def _log_prob_no_obs_in_dark(self, next_state: np.ndarray, observations: Any) -> np.ndarray:
+        # Mirrors ContinuousLightDarkNormalNoiseNoObsInDarkObservationModel.probability().
+        # near_beacon → "None" probability is 0 (-inf); real obs uses the
+        # active (near-beacon) distribution's PDF.
+        # far_beacon → "None" probability is 1 (log 0); real obs uses the
+        # active (far-from-beacon) distribution's PDF (note: the deleted
+        # wrapper computed pdf for any non-"None" value regardless of
+        # beacon proximity, so the env API mirrors that asymmetry).
+        observations_list = self._normalize_observations_list(observations)
+        near = self._near_beacon_continuous(next_state)
+        active_dist = self._obs_dist_near_beacon if near else self._obs_dist_far_from_beacon
+        return self._mixed_log_probs(
+            next_state,
+            observations_list,
+            none_log_mass=-np.inf if near else 0.0,
+            real_obs_dist=active_dist,
+        )
+
+    def _log_prob_distance_based(self, next_state: np.ndarray, observations: Any) -> np.ndarray:
+        # Mirrors ContinuousLightDarkDistanceBasedObservationModel.probability().
+        # if min_distance > beacon_radius → "None" probability is 1 (log 0),
+        # real obs probability 0 (-inf); else "None" probability is 0 (-inf)
+        # and real obs uses the active distribution's PDF (active dist is
+        # near-beacon when strict-near, else far-from-beacon).
+        observations_list = self._normalize_observations_list(observations)
+        min_distance = float(min_distance_to_points_kernel(next_state, self.beacons))
+        far = min_distance > self.beacon_radius
+        if far:
+            return self._mixed_log_probs(
+                next_state,
+                observations_list,
+                none_log_mass=0.0,
+                real_obs_dist=None,
             )
-        if self.observation_model_type == ObservationModelType.DISTANCE_BASED:
-            return ContinuousLightDarkDistanceBasedObservationModel(
-                next_state=next_state,
-                action=action,
-                obs_dist_near_beacon=self._obs_dist_near_beacon,
-                obs_dist_far_from_beacon=self._obs_dist_far_from_beacon,
-                grid_size=self.grid_size,
-                beacons=self.beacons,
-                beacon_radius=self.beacon_radius,
-            )
-        raise ValueError(f"Unknown observation model type: {self.observation_model_type}")
+        active_dist = (
+            self._obs_dist_near_beacon
+            if self._near_beacon_continuous(next_state)
+            else self._obs_dist_far_from_beacon
+        )
+        return self._mixed_log_probs(
+            next_state,
+            observations_list,
+            none_log_mass=-np.inf,
+            real_obs_dist=active_dist,
+        )
+
+    def _normalize_observations_list(self, observations: Any) -> list:
+        if isinstance(observations, np.ndarray):
+            if observations.ndim == 1:
+                return [observations]
+            return list(observations)
+        return list(observations)
+
+    def _mixed_log_probs(
+        self,
+        next_state: np.ndarray,
+        observations_list: list,
+        none_log_mass: float,
+        real_obs_dist: Any,
+    ) -> np.ndarray:
+        # ``none_log_mass`` is the log-probability assigned to the "None"
+        # sentinel; ``real_obs_dist`` (or None if real observations are
+        # impossible) provides the PDF for non-"None" array observations.
+        out = np.full(len(observations_list), -np.inf, dtype=np.float64)
+        for i, value in enumerate(observations_list):
+            if isinstance(value, str) and value == "None":
+                out[i] = none_log_mass
+                continue
+            if real_obs_dist is None:
+                continue  # real observations carry probability 0 → -inf
+            value_arr = np.asarray(value, dtype=float)
+            pdf = float(real_obs_dist.pdf(np.array([value_arr]), next_state)[0])
+            out[i] = np.log(pdf) if pdf > 0.0 else -np.inf
+        return out
 
     # ── Hot-path sampling overrides ─────────────────────────────────
     # The default base-class implementations build a Python-wrapper
@@ -491,10 +493,17 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
             if n_samples == 1:
                 return kernel.sample()[0]
             return np.asarray(kernel.sample(n_samples), dtype=np.float64)
-        # NoObsInDark and DistanceBased models have Python-side sampling
-        # logic in their wrappers; fall back to the default base-class
-        # path which goes through observation_model(...).sample().
-        return super().sample_observation(next_state=next_state, action=action, n_samples=n_samples)
+        if self.observation_model_type == ObservationModelType.NORMAL_NOISE_NO_OBS_IN_DARK:
+            samples = self._sample_no_obs_in_dark(next_state, n_samples)
+            if n_samples == 1:
+                return samples[0]
+            return samples
+        if self.observation_model_type == ObservationModelType.DISTANCE_BASED:
+            samples = self._sample_distance_based(next_state, n_samples)
+            if n_samples == 1:
+                return samples[0]
+            return samples
+        raise ValueError(f"Unknown observation model type: {self.observation_model_type}")
 
     def transition_log_probability(
         self, state: np.ndarray, action: np.ndarray, next_states: Any
@@ -518,12 +527,12 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
                 obs_array = obs_array.reshape(1, -1)
             probs = np.asarray(kernel.probability(obs_array), dtype=np.float64)
             return np.log(probs + 1e-300)
-        # NoObsInDark and DistanceBased models accept "None" string
-        # observations; defer to the base-class path which goes through
-        # observation_model(...).probability().
-        return super().observation_log_probability(
-            next_state=next_state, action=action, observations=observations
-        )
+        del action  # unused; non-NORMAL paths read only next_state and obs
+        if self.observation_model_type == ObservationModelType.NORMAL_NOISE_NO_OBS_IN_DARK:
+            return self._log_prob_no_obs_in_dark(next_state, observations)
+        if self.observation_model_type == ObservationModelType.DISTANCE_BASED:
+            return self._log_prob_distance_based(next_state, observations)
+        raise ValueError(f"Unknown observation model type: {self.observation_model_type}")
 
     def sample_next_state_batch(self, states: Any, action: np.ndarray) -> np.ndarray:
         states_array = np.ascontiguousarray(np.asarray(states, dtype=np.float64))
@@ -814,14 +823,6 @@ class ContinuousLightDarkPOMDPDiscreteActions(ContinuousLightDarkPOMDP, Discrete
 
     def get_actions(self) -> List[Any]:
         return self.actions
-
-    def state_transition_model(self, state: np.ndarray, action: Any) -> StateTransitionModel:
-        action_vector = self.action_to_vector[action]
-        return super().state_transition_model(state, action_vector)
-
-    def observation_model(self, next_state: np.ndarray, action: Any) -> ObservationModel:
-        action_vector = self.action_to_vector[action]
-        return super().observation_model(next_state, action_vector)
 
     def reward(self, state: np.ndarray, action: Any) -> float:
         action_vector = self.action_to_vector[action]

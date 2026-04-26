@@ -19,8 +19,6 @@ Key mechanics:
 - Episode terminates when object reaches target
 
 Classes:
-    PushStateTransition: Physics-based pushing dynamics
-    PushObservation: Noisy object position observations
     PushPOMDP: Main push task environment with POMDP formulation
 """
 
@@ -36,8 +34,6 @@ from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
     SpaceInfo,
     SpaceType,
-    ObservationModel,
-    StateTransitionModel,
 )
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
 from POMDPPlanners.environments.push_pomdp.push_pomdp_visualizer import PushPOMDPVisualizer
@@ -54,353 +50,6 @@ class PushPOMDPMetrics(Enum):
     TOTAL_ROBOT_OBSTACLE_COLLISIONS = "total_robot_obstacle_collisions"
     TOTAL_OBJECT_OBSTACLE_COLLISIONS = "total_object_obstacle_collisions"
     TOTAL_ALL_OBSTACLE_COLLISIONS = "total_all_obstacle_collisions"
-
-
-class PushStateTransition(StateTransitionModel):
-    """State transition model for Push POMDP with physics-based pushing.
-
-    This model implements robot movement and object pushing dynamics on a 2D grid.
-    The robot moves according to discrete actions, and can push objects when
-    within the push threshold distance. Friction reduces push effectiveness.
-
-    State representation: [robot_x, robot_y, object_x, object_y, target_x, target_y]
-
-    Attributes:
-        state: Current state vector containing all entity positions
-        action: Movement action ("up", "down", "left", "right")
-        grid_size: Size of the grid environment
-        push_threshold: Maximum distance for robot to push object
-        friction_coefficient: Friction that reduces push force (0=no friction, 1=max friction)
-        robot_pos: Current robot position [x, y]
-        object_pos: Current object position [x, y]
-        target_pos: Target position [x, y] (fixed)
-
-    Example:
-        >>> import numpy as np
-        >>> np.random.seed(42)  # For reproducible results
-        >>> # Define state: [robot_x, robot_y, object_x, object_y, target_x, target_y]
-        >>> state = np.array([2.0, 3.0, 2.5, 3.1, 8.0, 8.0])
-        >>> action = "right"  # Move robot right
-
-        >>> # Create transition model
-        >>> transition = PushStateTransition(
-        ...     state=state,
-        ...     action=action,
-        ...     grid_size=10,
-        ...     push_threshold=1.0,
-        ...     friction_coefficient=0.3
-        ... )
-
-        >>> # Simulate step
-        >>> next_state = transition.sample()[0]
-        >>> len(next_state) == 6  # [robot_x, robot_y, object_x, object_y, target_x, target_y]
-        True
-        >>> isinstance(next_state, np.ndarray)
-        True
-        >>> bool(next_state[0] > state[0])  # Robot moved right
-        True
-    """
-
-    # Class-level constants shared across all instances
-    _AVAILABLE_ACTIONS = ["up", "down", "right", "left"]
-    _ACTION_TO_DXY = {
-        "up": (0, 1),
-        "down": (0, -1),
-        "right": (1, 0),
-        "left": (-1, 0),
-    }
-    # Keep numpy version for compatibility with code that uses action_to_vector
-    _ACTION_TO_VECTOR = {
-        "up": np.array([0, 1]),
-        "down": np.array([0, -1]),
-        "right": np.array([1, 0]),
-        "left": np.array([-1, 0]),
-    }
-
-    def __init__(
-        self,
-        state: np.ndarray,
-        action: str,
-        grid_size: int,
-        push_threshold: float,
-        friction_coefficient: float,
-        obstacles: Optional[List[Tuple[float, float]]] = None,
-        obstacle_radius: float = 0.5,
-        transition_error_prob: float = 0.0,
-    ):
-        super().__init__(state, action)
-        self.grid_size = grid_size
-        self.push_threshold = push_threshold
-        self.friction_coefficient = friction_coefficient
-        self.obstacles = obstacles if obstacles is not None else []
-        self.obstacle_radius = obstacle_radius
-        self.obstacle_radius_sq = obstacle_radius * obstacle_radius
-        self.transition_error_prob = transition_error_prob
-
-        # State components: [robot_x, robot_y, object_x, object_y, target_x, target_y]
-        self.robot_pos = state[:2]
-        self.object_pos = state[2:4]
-        self.target_pos = state[4:6]
-
-        # Available actions
-        self.available_actions = self._AVAILABLE_ACTIONS
-
-        # Action to movement mapping (reference class-level constant)
-        self.action_to_vector = self._ACTION_TO_VECTOR
-
-        # Pre-compute grid bounds
-        self._grid_max = grid_size - 1
-        self._push_threshold_sq = push_threshold * push_threshold
-
-    def _get_actual_action(self) -> str:
-        """Get the actual action to execute, accounting for transition errors.
-
-        Returns:
-            The action that will actually be executed. With probability (1-p)
-            returns the intended action, with probability p returns a uniformly
-            random action from the available actions excluding the intended action.
-        """
-        # Apply error probability
-        if np.random.random() < self.transition_error_prob:
-            # Select uniformly from available actions excluding the intended action
-            error_actions = [a for a in self.available_actions if a != self.action]
-            return np.random.choice(error_actions)
-        return self.action
-
-    def sample(self, n_samples: int = 1) -> List[Any]:
-        next_states = []
-        for _ in range(n_samples):
-            # Get the actual action to execute (may differ from intended due to errors)
-            actual_action = self._get_actual_action()
-            # Compute next state for this actual action
-            next_state = self._compute_next_state_for_action(actual_action)
-            next_states.append(next_state)
-        return next_states
-
-    def probability(self, values: List[Any]) -> np.ndarray:
-        """Calculate probability of transitioning to given next states.
-
-        Accounts for transition error probability. With probability (1-p), the
-        intended action executes. With probability p, a random error action
-        (excluding the intended one) is selected uniformly.
-
-        Args:
-            values: List of potential next states to evaluate
-
-        Returns:
-            Array of probabilities for each state in values
-        """
-        probabilities = []
-
-        # Compute next state for intended action
-        intended_next_state = self._compute_next_state_for_action(self.action)
-
-        # Get error actions (all actions except intended)
-        error_actions = [a for a in self.available_actions if a != self.action]
-        num_error_actions = len(error_actions)
-
-        for state in values:
-            # Probability from intended action
-            prob_intended = 0.0
-            if np.array_equal(state, intended_next_state):
-                prob_intended = 1.0
-
-            # Probability from error actions
-            prob_error = 0.0
-            if self.transition_error_prob > 0.0 and num_error_actions > 0:
-                error_prob_sum = 0.0
-                for error_action in error_actions:
-                    error_next_state = self._compute_next_state_for_action(error_action)
-                    if np.array_equal(state, error_next_state):
-                        error_prob_sum += 1.0
-                prob_error = self.transition_error_prob * (1.0 / num_error_actions) * error_prob_sum
-
-            # Total probability is sum of intended and error contributions
-            total_prob = (1.0 - self.transition_error_prob) * prob_intended + prob_error
-            probabilities.append(total_prob)
-
-        return np.array(probabilities)
-
-    def _compute_next_state_for_action(self, action: str) -> np.ndarray:
-        dx, dy = self._ACTION_TO_DXY[action]
-
-        # Extract scalar positions
-        rx, ry = float(self.robot_pos[0]), float(self.robot_pos[1])
-        ox, oy = float(self.object_pos[0]), float(self.object_pos[1])
-        tx, ty = float(self.target_pos[0]), float(self.target_pos[1])
-
-        # Calculate intended new robot position
-        irx, iry = rx + dx, ry + dy
-
-        # Check for collision with obstacles - if colliding, robot doesn't move
-        if self._is_colliding_with_obstacle_scalar(irx, iry):
-            nrx, nry = rx, ry
-        else:
-            nrx, nry = irx, iry
-
-        # Check if robot is close enough to push object (squared distance)
-        ddx, ddy = nrx - ox, nry - oy
-        dist_sq = ddx * ddx + ddy * ddy
-
-        if dist_sq < self._push_threshold_sq:
-            push_scale = 1.0 - self.friction_coefficient
-            iox = ox + dx * push_scale
-            ioy = oy + dy * push_scale
-
-            if self._is_colliding_with_obstacle_scalar(iox, ioy):
-                nox, noy = ox, oy
-            else:
-                nox, noy = iox, ioy
-        else:
-            nox, noy = ox, oy
-
-        # Clip to grid bounds using min/max (faster than np.clip for scalars)
-        gmax = self._grid_max
-        nrx = max(0.0, min(nrx, gmax))
-        nry = max(0.0, min(nry, gmax))
-        nox = max(0.0, min(nox, gmax))
-        noy = max(0.0, min(noy, gmax))
-
-        # Build result array directly
-        result = np.empty(6)
-        result[0] = nrx
-        result[1] = nry
-        result[2] = nox
-        result[3] = noy
-        result[4] = tx
-        result[5] = ty
-        return result
-
-    def _is_colliding_with_obstacle(self, position: np.ndarray) -> bool:
-        """Check if a position collides with any obstacle."""
-        if not self.obstacles:
-            return False
-
-        pos_x, pos_y = float(position[0]), float(position[1])
-        return self._is_colliding_with_obstacle_scalar(pos_x, pos_y)
-
-    def _is_colliding_with_obstacle_scalar(self, pos_x: float, pos_y: float) -> bool:
-        obs_r_sq = self.obstacle_radius_sq
-        for obs_x, obs_y in self.obstacles:
-            ddx = pos_x - obs_x
-            ddy = pos_y - obs_y
-            if ddx * ddx + ddy * ddy <= obs_r_sq:
-                return True
-        return False
-
-
-class PushObservation(ObservationModel):
-    """Noisy observation model for Push POMDP.
-
-    This model provides partial observability by adding Gaussian noise to
-    the object's position while keeping robot and target positions fully observable.
-    This creates uncertainty about the exact object location, making planning challenging.
-
-    Observation format: [robot_x, robot_y, noisy_object_x, noisy_object_y, target_x, target_y]
-
-    Attributes:
-        next_state: True state after action execution
-        action: Action that was taken (not used in observation generation)
-        observation_noise: Standard deviation of Gaussian noise for object position
-        grid_size: Size of the grid environment
-        robot_pos: Robot position (observed exactly)
-        object_pos: True object position (observed with noise)
-        target_pos: Target position (observed exactly)
-
-    Example:
-        >>> import numpy as np
-        >>> np.random.seed(42)  # For reproducible results
-        >>> # True state after robot movement
-        >>> true_state = np.array([3.0, 3.0, 2.8, 3.2, 8.0, 8.0])
-        >>> action = "right"
-
-        >>> # Create observation model
-        >>> obs_model = PushObservation(
-        ...     next_state=true_state,
-        ...     action=action,
-        ...     observation_noise=0.1,
-        ...     grid_size=10
-        ... )
-
-        >>> # Sample noisy observation
-        >>> observation = obs_model.sample()[0]
-        >>> len(observation) == 6  # [robot_x, robot_y, noisy_obj_x, noisy_obj_y, target_x, target_y]
-        True
-        >>> bool(observation[0] == 3.0)  # Robot position exact
-        True
-        >>> bool(observation[1] == 3.0)  # Robot position exact
-        True
-        >>> bool(observation[4] == 8.0)  # Target position exact
-        True
-
-        >>> # Calculate observation probability
-        >>> prob = obs_model.probability([observation])
-        >>> len(prob) == 1
-        True
-    """
-
-    def __init__(
-        self,
-        next_state: np.ndarray,
-        action: str,
-        observation_noise: float,
-        grid_size: int,
-    ):
-        super().__init__(next_state=next_state, action=action)
-        self.observation_noise = observation_noise
-        self.grid_size = grid_size
-
-        # State components: [robot_x, robot_y, object_x, object_y, target_x, target_y]
-        self.robot_pos = next_state[:2]
-        self.object_pos = next_state[2:4]
-        self.target_pos = next_state[4:6]
-
-    def sample(self, n_samples: int = 1) -> List[Any]:
-        observations = []
-        gmax = self.grid_size - 1
-        rx, ry = float(self.robot_pos[0]), float(self.robot_pos[1])
-        ox, oy = float(self.object_pos[0]), float(self.object_pos[1])
-        tx, ty = float(self.target_pos[0]), float(self.target_pos[1])
-        noise_std = self.observation_noise
-
-        for _ in range(n_samples):
-            # Add noise to object position observation
-            nox = max(0.0, min(ox + np.random.normal(0, noise_std), gmax))
-            noy = max(0.0, min(oy + np.random.normal(0, noise_std), gmax))
-
-            observation = np.empty(6)
-            observation[0] = rx
-            observation[1] = ry
-            observation[2] = nox
-            observation[3] = noy
-            observation[4] = tx
-            observation[5] = ty
-            observations.append(observation)
-        return observations
-
-    def probability(self, values: List[Any]) -> np.ndarray:
-        # Calculate probabilities based on Gaussian noise model for list of observations
-        # Using 2D Gaussian PDF: (1/(2*pi*sigma^2)) * exp(-0.5 * ||diff||^2 / sigma^2)
-        probabilities = []
-        variance = self.observation_noise**2
-        normalization = 1.0 / (2.0 * np.pi * variance)
-
-        for observation in values:
-            # Ensure observation is numpy array with correct shape
-            if not isinstance(observation, np.ndarray) or observation.size == 0:
-                raise ValueError(
-                    f"Expected non-empty numpy array observation, got {type(observation)} with shape {getattr(observation, 'shape', 'unknown')}"
-                )
-
-            if observation.shape != (6,):
-                raise ValueError(f"Expected observation shape (6,), got {observation.shape}")
-
-            object_pos_diff = observation[2:4] - self.object_pos
-            log_prob = -0.5 * np.sum(object_pos_diff**2) / variance
-            prob = normalization * np.exp(log_prob)
-            probabilities.append(prob)
-
-        return np.array(probabilities)
 
 
 class FixedStateDistribution(Distribution):
@@ -504,6 +153,16 @@ class PushPOMDP(DiscreteActionsEnvironment):
         False
     """
 
+    # Class-level action -> (dx, dy) offset table. Shared across instances
+    # and referenced by both the deterministic next-state helper and the
+    # obstacle-collision check.
+    _ACTION_TO_DXY = {
+        "up": (0, 1),
+        "down": (0, -1),
+        "right": (1, 0),
+        "left": (-1, 0),
+    }
+
     def __init__(
         self,
         discount_factor: float,
@@ -580,7 +239,7 @@ class PushPOMDP(DiscreteActionsEnvironment):
             return False
 
         if action is not None:
-            dx, dy = PushStateTransition._ACTION_TO_DXY[action]
+            dx, dy = self._ACTION_TO_DXY[action]
             check_x = float(position[0]) + dx
             check_y = float(position[1]) + dy
         else:
@@ -596,38 +255,16 @@ class PushPOMDP(DiscreteActionsEnvironment):
 
         return False
 
-    def state_transition_model(self, state: np.ndarray, action: str) -> StateTransitionModel:
-        return PushStateTransition(
-            state=state,
-            action=action,
-            grid_size=self.grid_size,
-            push_threshold=self.push_threshold,
-            friction_coefficient=self.friction_coefficient,
-            obstacles=self.obstacles,
-            obstacle_radius=self.obstacle_radius,
-            transition_error_prob=self.transition_error_prob,
-        )
-
-    def observation_model(self, next_state: np.ndarray, action: str) -> ObservationModel:
-        return PushObservation(
-            next_state=next_state,
-            action=action,
-            observation_noise=self.observation_noise,
-            grid_size=self.grid_size,
-        )
-
     def sample_next_step(self, state: Any, action: Any) -> Tuple[Any, Any, float]:
         next_state = self.sample_next_state(state=state, action=action)
         next_observation = self.sample_observation(next_state=next_state, action=action)
         r = self._reward_from_next_state(state, action, next_state)
         return next_state, next_observation, r
 
-    # ── Hot-path sampling overrides ─────────────────────────────────
-    # The default base-class implementations build a PushStateTransition /
-    # PushObservation wrapper per call (constructor work, slicing, and a
-    # Python ``sample()`` loop). These overrides inline the wrapper body so
-    # the wrapper allocation is skipped while the np.random.* call sequence
-    # remains byte-identical with the wrapper path.
+    # ── Env-API sampling implementations ────────────────────────────
+    # These methods inline the per-call physics (push, friction, obstacle
+    # collision, grid clipping) and the per-call RNG draws so callers
+    # never need to allocate a per-(state, action) wrapper object.
 
     def sample_next_state(self, state: np.ndarray, action: str, n_samples: int = 1) -> Any:
         if n_samples == 1:
@@ -638,18 +275,20 @@ class PushPOMDP(DiscreteActionsEnvironment):
         return samples
 
     def _sample_one_next_state(self, state: np.ndarray, action: str) -> np.ndarray:
-        # Inline of PushStateTransition._get_actual_action() then
-        # _compute_next_state_for_action(). RNG order: one np.random.random()
-        # call, optionally one np.random.choice() call on error_actions.
+        # RNG order: one np.random.random() call, optionally one
+        # np.random.choice() call over the error-action list.
         if self.transition_error_prob > 0.0 and np.random.random() < self.transition_error_prob:
             error_actions = [a for a in self.actions if a != action]
             actual_action = np.random.choice(error_actions)
         else:
             actual_action = action
+        return self._compute_next_state_for_action(state, actual_action)
 
-        dx, dy = PushStateTransition._ACTION_TO_DXY[
-            actual_action
-        ]  # pylint: disable=protected-access
+    def _compute_next_state_for_action(self, state: np.ndarray, action: str) -> np.ndarray:
+        # Deterministic next-state calculation for ``action`` (no RNG draws).
+        # Used by both the sampling path (after error-action selection) and
+        # the closed-form transition_log_probability path.
+        dx, dy = self._ACTION_TO_DXY[action]
 
         # Extract scalar positions from the 6-D state.
         rx, ry = float(state[0]), float(state[1])
@@ -715,8 +354,8 @@ class PushPOMDP(DiscreteActionsEnvironment):
         return samples
 
     def _sample_one_observation(self, next_state: np.ndarray) -> np.ndarray:
-        # Inline of PushObservation.sample(1): two np.random.normal(0, sigma)
-        # draws, clamped to [0, grid_size - 1]. RNG order matches the wrapper.
+        # Two np.random.normal(0, sigma) draws (object-x, object-y), clamped
+        # to [0, grid_size - 1]. Robot and target slices are observed exactly.
         gmax = self.grid_size - 1
         rx, ry = float(next_state[0]), float(next_state[1])
         ox, oy = float(next_state[2]), float(next_state[3])
@@ -738,19 +377,43 @@ class PushPOMDP(DiscreteActionsEnvironment):
     def transition_log_probability(
         self, state: np.ndarray, action: str, next_states: Any
     ) -> np.ndarray:
-        probs = np.asarray(
-            self.state_transition_model(state=state, action=action).probability(next_states)
-        )
+        # Closed-form discrete probability:
+        #   P(next | s, a) = (1 - p_err) * 1[next == intended(s, a)]
+        #                  + p_err * (1 / n_err) * sum_a' 1[next == intended(s, a')]
+        # where the second sum runs over error_actions = actions \ {a}.
+        intended_next = self._compute_next_state_for_action(state, action)
+        error_actions = [a for a in self.actions if a != action]
+        num_error_actions = len(error_actions)
+        error_results: List[np.ndarray] = []
+        if self.transition_error_prob > 0.0 and num_error_actions > 0:
+            error_results = [
+                self._compute_next_state_for_action(state, error_action)
+                for error_action in error_actions
+            ]
+
+        probabilities = np.empty(len(next_states), dtype=float)
+        for i, candidate in enumerate(next_states):
+            prob_intended = 1.0 if np.array_equal(candidate, intended_next) else 0.0
+            prob_error = 0.0
+            if error_results:
+                error_match_count = sum(1 for er in error_results if np.array_equal(candidate, er))
+                prob_error = (
+                    self.transition_error_prob
+                    * (1.0 / num_error_actions)
+                    * float(error_match_count)
+                )
+            total = (1.0 - self.transition_error_prob) * prob_intended + prob_error
+            probabilities[i] = total
+
         with np.errstate(divide="ignore"):
-            return np.log(probs)
+            return np.log(probabilities)
 
     def observation_log_probability(
         self, next_state: np.ndarray, action: str, observations: Any
     ) -> np.ndarray:
         # Closed-form 2-D Gaussian log-pdf on the object-position slice
         # (cols 2:4) against next_state[2:4]. Robot/target dims are observed
-        # exactly so they don't affect the likelihood (the wrapper's
-        # probability() ignores them too).
+        # exactly so they don't affect the likelihood.
         variance = self.observation_noise * self.observation_noise
         log_norm = -float(np.log(2.0 * np.pi * variance))
         obs_arr = np.asarray(observations, dtype=float)
@@ -761,8 +424,8 @@ class PushPOMDP(DiscreteActionsEnvironment):
         return log_norm - 0.5 * sq / variance
 
     def reward(self, state: np.ndarray, action: str) -> float:
-        # Compute next state to evaluate reward based on action result
-        next_state = self.state_transition_model(state, action).sample()[0]
+        # Compute next state to evaluate reward based on action result.
+        next_state = self.sample_next_state(state, action)
         return self._reward_from_next_state(state, action, next_state)
 
     def _reward_from_next_state(

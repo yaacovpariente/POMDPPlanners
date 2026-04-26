@@ -1,3 +1,5 @@
+import numpy as np
+
 from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     CategoricalHyperParameter,
     NumericalHyperParameter,
@@ -322,11 +324,17 @@ class TestHyperParameterRunParamsIdUniqueness:
             def config_id(self):
                 return "env1"
 
-            def state_transition_model(self, state, action):  # type: ignore[override]
-                pass
+            def sample_next_state(self, state, action, n_samples=1):  # type: ignore[override]
+                return state if n_samples == 1 else [state] * n_samples
 
-            def observation_model(self, next_state, action):  # type: ignore[override]
-                pass
+            def sample_observation(self, next_state, action, n_samples=1):  # type: ignore[override]
+                return next_state if n_samples == 1 else [next_state] * n_samples
+
+            def transition_log_probability(self, state, action, next_states):  # type: ignore[override]
+                return np.zeros(len(next_states))
+
+            def observation_log_probability(self, next_state, action, observations):  # type: ignore[override]
+                return np.zeros(len(observations))
 
             def reward(self, state, action):
                 return 0.0
@@ -413,11 +421,17 @@ class TestHyperParameterRunParamsIdUniqueness:
             def config_id(self):
                 return "env1"
 
-            def state_transition_model(self, state, action):  # type: ignore[override]
-                pass
+            def sample_next_state(self, state, action, n_samples=1):  # type: ignore[override]
+                return state if n_samples == 1 else [state] * n_samples
 
-            def observation_model(self, next_state, action):  # type: ignore[override]
-                pass
+            def sample_observation(self, next_state, action, n_samples=1):  # type: ignore[override]
+                return next_state if n_samples == 1 else [next_state] * n_samples
+
+            def transition_log_probability(self, state, action, next_states):  # type: ignore[override]
+                return np.zeros(len(next_states))
+
+            def observation_log_probability(self, next_state, action, observations):  # type: ignore[override]
+                return np.zeros(len(observations))
 
             def reward(self, state, action):
                 return 0.0
@@ -508,11 +522,17 @@ class TestHyperParameterRunParamsIdUniqueness:
             def config_id(self):
                 return "env1"
 
-            def state_transition_model(self, state, action):  # type: ignore[override]
-                pass
+            def sample_next_state(self, state, action, n_samples=1):  # type: ignore[override]
+                return state if n_samples == 1 else [state] * n_samples
 
-            def observation_model(self, next_state, action):  # type: ignore[override]
-                pass
+            def sample_observation(self, next_state, action, n_samples=1):  # type: ignore[override]
+                return next_state if n_samples == 1 else [next_state] * n_samples
+
+            def transition_log_probability(self, state, action, next_states):  # type: ignore[override]
+                return np.zeros(len(next_states))
+
+            def observation_log_probability(self, next_state, action, observations):  # type: ignore[override]
+                return np.zeros(len(observations))
 
             def reward(self, state, action):
                 return 0.0
@@ -605,11 +625,17 @@ class TestHyperParameterRunParamsIdUniqueness:
             def config_id(self):
                 return "env1"
 
-            def state_transition_model(self, state, action):  # type: ignore[override]
-                pass
+            def sample_next_state(self, state, action, n_samples=1):  # type: ignore[override]
+                return state if n_samples == 1 else [state] * n_samples
 
-            def observation_model(self, next_state, action):  # type: ignore[override]
-                pass
+            def sample_observation(self, next_state, action, n_samples=1):  # type: ignore[override]
+                return next_state if n_samples == 1 else [next_state] * n_samples
+
+            def transition_log_probability(self, state, action, next_states):  # type: ignore[override]
+                return np.zeros(len(next_states))
+
+            def observation_log_probability(self, next_state, action, observations):  # type: ignore[override]
+                return np.zeros(len(observations))
 
             def reward(self, state, action):
                 return 0.0
@@ -1065,11 +1091,17 @@ class TestOptimizedPolicyResultValidation:
             def config_id(self):
                 return "mock_env_id"
 
-            def state_transition_model(self, state, action):  # type: ignore[override]
-                pass
+            def sample_next_state(self, state, action, n_samples=1):  # type: ignore[override]
+                return state if n_samples == 1 else [state] * n_samples
 
-            def observation_model(self, next_state, action):  # type: ignore[override]
-                pass
+            def sample_observation(self, next_state, action, n_samples=1):  # type: ignore[override]
+                return next_state if n_samples == 1 else [next_state] * n_samples
+
+            def transition_log_probability(self, state, action, next_states):  # type: ignore[override]
+                return np.zeros(len(next_states))
+
+            def observation_log_probability(self, next_state, action, observations):  # type: ignore[override]
+                return np.zeros(len(observations))
 
             def reward(self, state, action):
                 return 0.0

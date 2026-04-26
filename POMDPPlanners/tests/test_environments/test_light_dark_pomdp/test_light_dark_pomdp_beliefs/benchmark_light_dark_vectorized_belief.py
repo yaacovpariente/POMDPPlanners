@@ -110,8 +110,11 @@ def _benchmark_continuous_log_lik(env: ContinuousLightDarkPOMDP, updater, observ
             def _per_particle_log_lik():
                 result = np.empty(n)
                 for i in range(n):
-                    obs_model = env.observation_model(particles[i], action)
-                    dist = getattr(obs_model, "_active_dist")
+                    dist = (
+                        env._obs_dist_near_beacon  # pylint: disable=protected-access
+                        if env.is_state_near_beacon(particles[i])
+                        else env._obs_dist_far_from_beacon  # pylint: disable=protected-access
+                    )
                     result[i] = dist.log_pdf(np.array([observation]), particles[i])[0]
                 return result
 

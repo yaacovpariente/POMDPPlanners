@@ -13,11 +13,7 @@ import random
 import numpy as np
 import pytest
 
-from POMDPPlanners.environments.push_pomdp import (
-    PushObservation,
-    PushPOMDP,
-    PushStateTransition,
-)
+from POMDPPlanners.environments.push_pomdp import PushPOMDP
 
 # Set seeds for reproducible tests
 np.random.seed(42)
@@ -295,30 +291,65 @@ class TestPushPOMDP:
             distance = np.linalg.norm(object_pos - target_pos)
             assert distance >= 2.0  # Minimum distance constraint
 
-    def test_state_transition_model(self):
-        """Test state transition model creation and functionality."""
-        # Create a test state
-        test_state = np.array([1.0, 1.0, 2.0, 2.0, 9.0, 9.0])
+    def test_sample_next_state_uses_env_parameters(self):
+        """Test that env.sample_next_state honors env physics parameters.
 
-        # Get transition model
-        transition_model = self.env.state_transition_model(test_state, "right")
+        Purpose: Validates that the env-API sample_next_state respects the
+            env's grid_size, push_threshold, and friction_coefficient when
+            computing transitions.
 
-        assert isinstance(transition_model, PushStateTransition)
-        assert transition_model.grid_size == self.env.grid_size
-        assert transition_model.push_threshold == self.env.push_threshold
-        assert transition_model.friction_coefficient == self.env.friction_coefficient
+        Given: A PushPOMDP with known parameters and a (state, action) pair
+            where the robot sits one cell to the left of the object so the
+            object will be pushed.
+        When: env.sample_next_state(state, action) is called.
+        Then: The robot moves by one unit, the object is pushed by
+            ``1 - friction_coefficient``, and the result is clipped within
+            ``[0, grid_size - 1]``.
 
-    def test_observation_model(self):
-        """Test observation model creation and functionality."""
-        # Create a test next state
-        test_next_state = np.array([2.0, 1.0, 2.0, 2.0, 9.0, 9.0])
+        Test type: unit
+        """
+        # Robot directly left of object so a "right" action both moves the
+        # robot and pushes the object (push threshold is 1.0).
+        test_state = np.array([1.0, 1.0, 2.0, 1.0, 9.0, 9.0])
+        next_state = self.env.sample_next_state(test_state, "right")
 
-        # Get observation model
-        obs_model = self.env.observation_model(test_next_state, "right")
+        assert isinstance(next_state, np.ndarray)
+        assert next_state.shape == (6,)
+        # Robot moved one unit right.
+        assert np.isclose(next_state[0], 2.0)
+        # Object pushed right by (1 - friction_coefficient) = 0.7.
+        assert np.isclose(next_state[2], 2.0 + (1.0 - self.env.friction_coefficient))
+        # Target unchanged.
+        assert np.array_equal(next_state[4:], test_state[4:])
+        # All positions within grid bounds.
+        assert np.all(next_state >= 0)
+        assert np.all(next_state < self.env.grid_size)
 
-        assert isinstance(obs_model, PushObservation)
-        assert obs_model.observation_noise == self.env.observation_noise
-        assert obs_model.grid_size == self.env.grid_size
+    def test_sample_observation_uses_env_parameters(self):
+        """Test that env.sample_observation honors env observation parameters.
+
+        Purpose: Validates that the env-API sample_observation respects the
+            env's observation_noise and grid_size, exactly mirroring the
+            object position (with noise) and clamping to bounds.
+
+        Given: A PushPOMDP and a known next_state.
+        When: env.sample_observation(next_state, action) is called.
+        Then: The observation has shape (6,), the robot/target slices match
+            the state exactly, and the object slice is within grid bounds.
+
+        Test type: unit
+        """
+        next_state = np.array([2.0, 1.0, 2.0, 2.0, 9.0, 9.0])
+        observation = self.env.sample_observation(next_state, "right")
+
+        assert isinstance(observation, np.ndarray)
+        assert observation.shape == (6,)
+        # Robot and target observed exactly.
+        assert np.array_equal(observation[:2], next_state[:2])
+        assert np.array_equal(observation[4:], next_state[4:])
+        # Object position within grid bounds.
+        assert 0.0 <= observation[2] < self.env.grid_size
+        assert 0.0 <= observation[3] < self.env.grid_size
 
     def test_terminal_condition(self):
         """Test terminal condition detection."""
@@ -336,22 +367,17 @@ class TestPushPOMDP:
 
     def test_state_transition(self):
         """Test state transition with pushing behavior."""
-        # Test state transition with known parameters
-        state = np.array([5.0, 5.0, 6.0, 5.0, 9.0, 9.0])  # Robot to the left of object
+        # Robot directly left of object; push_threshold of 2.0 ensures pushing.
+        state = np.array([5.0, 5.0, 6.0, 5.0, 9.0, 9.0])
         action = "right"
-        grid_size = 10
-        push_threshold = 2.0  # Increased threshold to ensure pushing
-        friction_coefficient = 0.3
-
-        transition = PushStateTransition(
-            state=state,
-            action=action,
-            grid_size=grid_size,
-            push_threshold=push_threshold,
-            friction_coefficient=friction_coefficient,
+        env = PushPOMDP(
+            discount_factor=0.95,
+            grid_size=10,
+            push_threshold=2.0,
+            friction_coefficient=0.3,
         )
 
-        next_state = transition.sample()[0]  # Get first element from list
+        next_state = env.sample_next_state(state, action)
 
         # Verify state dimensions
         assert next_state.shape == (6,)
@@ -367,26 +393,21 @@ class TestPushPOMDP:
 
         # Verify positions within bounds
         assert np.all(next_state >= 0)
-        assert np.all(next_state < grid_size)
+        assert np.all(next_state < env.grid_size)
 
     def test_state_transition_no_push(self):
         """Test state transition without pushing when robot is too far."""
-        # Test state transition when robot is too far to push
-        state = np.array([1.0, 1.0, 8.0, 8.0, 9.0, 9.0])  # Robot far from object
+        # Robot far from object so the push threshold gates out the push.
+        state = np.array([1.0, 1.0, 8.0, 8.0, 9.0, 9.0])
         action = "right"
-        grid_size = 10
-        push_threshold = 1.0
-        friction_coefficient = 0.3
-
-        transition = PushStateTransition(
-            state=state,
-            action=action,
-            grid_size=grid_size,
-            push_threshold=push_threshold,
-            friction_coefficient=friction_coefficient,
+        env = PushPOMDP(
+            discount_factor=0.95,
+            grid_size=10,
+            push_threshold=1.0,
+            friction_coefficient=0.3,
         )
 
-        next_state = transition.sample()[0]  # Get first element from list
+        next_state = env.sample_next_state(state, action)
 
         # Verify robot moved
         assert next_state[0] > state[0]
@@ -396,20 +417,11 @@ class TestPushPOMDP:
 
     def test_observation_model_functionality(self):
         """Test observation model functionality with noise."""
-        # Test observation model
+        # Build an env whose observation parameters drive the env-API call.
+        env = PushPOMDP(discount_factor=0.95, grid_size=10, observation_noise=0.1)
         state = np.array([5.0, 5.0, 4.0, 5.0, 9.0, 9.0])
-        action = "right"
-        observation_noise = 0.1
-        grid_size = 10
 
-        observation_model = PushObservation(
-            next_state=state,
-            action=action,
-            observation_noise=observation_noise,
-            grid_size=grid_size,
-        )
-
-        observation = observation_model.sample()[0]  # Get first element from list
+        observation = env.sample_observation(state, "right")
 
         # Verify observation dimensions
         assert observation.shape == (6,)
@@ -576,114 +588,45 @@ class TestPushPOMDP:
         )
         assert env1.config_id != env3.config_id
 
-    def test_observation_model_empty_observation_error(self):
-        """Test that observation model properly handles invalid empty observations.
-
-        Purpose: Validates that the observation probability method handles invalid inputs gracefully
-
-        Given: A valid PushObservation model and an empty observation array
-        When: The probability method is called with an empty observation
-        Then: A descriptive error should be raised explaining the invalid observation format
-
-        Test type: unit
-        """
-        # Create observation model
-        state = np.array([5.0, 5.0, 4.0, 5.0, 9.0, 9.0])
-        obs_model = PushObservation(
-            next_state=state,
-            action="right",
-            observation_noise=0.1,
-            grid_size=10,
-        )
-
-        # Test with empty observation (this is the error case we're debugging)
-        empty_observation = np.array([])
-
-        with pytest.raises(ValueError) as exc_info:
-            obs_model.probability([empty_observation])  # Now expects list
-
-        # The error should mention expected array format
-        assert "Expected non-empty numpy array observation" in str(exc_info.value)
-
-    def test_observation_model_invalid_observation_shapes(self):
-        """Test observation model with various invalid observation shapes.
-
-        Purpose: Validates that observation model handles all invalid observation shapes properly
-
-        Given: A valid PushObservation model and observations with incorrect shapes
-        When: The probability method is called with malformed observations
-        Then: Appropriate errors should be raised for each invalid shape
-
-        Test type: unit
-        """
-        # Create observation model
-        state = np.array([5.0, 5.0, 4.0, 5.0, 9.0, 9.0])
-        obs_model = PushObservation(
-            next_state=state,
-            action="right",
-            observation_noise=0.1,
-            grid_size=10,
-        )
-
-        # Test with various invalid observation shapes
-        invalid_observations = [
-            np.array([]),  # Empty array (shape (0,))
-            np.array([1.0]),  # Too short (shape (1,))
-            np.array([1.0, 2.0, 3.0]),  # Too short (shape (3,))
-            np.array([1.0, 2.0, 3.0, 4.0, 5.0]),  # Too short (shape (5,))
-            np.array([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0]),  # Too long (shape (7,))
-        ]
-
-        for i, invalid_obs in enumerate(invalid_observations):
-            with pytest.raises(ValueError) as exc_info:
-                obs_model.probability([invalid_obs])  # Now expects list
-
-            print(
-                f"Invalid observation {i} shape {invalid_obs.shape} correctly raised: {type(exc_info.value).__name__}"
-            )
-
     def test_observation_never_empty_from_sample(self):
-        """Test that observation model never produces empty observations from sample method.
+        """Test that env.sample_observation never produces empty observations.
 
-        Purpose: Validates that the sample method always produces correctly shaped observations
+        Purpose: Validates that sample_observation always produces correctly
+            shaped observations and that the resulting observations have a
+            finite, non-negative log-probability under
+            ``env.observation_log_probability``.
 
-        Given: A valid PushObservation model
-        When: Multiple observations are sampled
-        Then: All observations should have shape (6,) and valid content
+        Given: A PushPOMDP environment.
+        When: Multiple observations are sampled via env.sample_observation.
+        Then: All observations have shape (6,), are finite, and yield finite
+            log-probabilities under env.observation_log_probability.
 
         Test type: unit
         """
-        # Create observation model
-        state = np.array([5.0, 5.0, 4.0, 5.0, 9.0, 9.0])
-        obs_model = PushObservation(
-            next_state=state,
-            action="right",
-            observation_noise=0.1,
-            grid_size=10,
-        )
+        env = PushPOMDP(discount_factor=0.95, grid_size=10, observation_noise=0.1)
+        next_state = np.array([5.0, 5.0, 4.0, 5.0, 9.0, 9.0])
 
-        # Sample many observations to check consistency
+        # Sample many observations to check consistency.
         for _ in range(20):
-            observations = obs_model.sample(n_samples=5)
+            observations = env.sample_observation(next_state, "right", n_samples=5)
 
             assert len(observations) == 5, "Should return requested number of observations"
 
             for obs in observations:
                 assert isinstance(obs, np.ndarray), "Each observation should be numpy array"
                 assert obs.shape == (6,), f"Expected shape (6,), got {obs.shape}"
-                assert len(obs) > 0, "Observation should not be empty"
                 assert np.all(np.isfinite(obs)), "All observation values should be finite"
 
-                # Test that this observation can be used in probability calculation
+                # Test that this observation can be evaluated under the env API.
                 try:
-                    probs = obs_model.probability([obs])  # Now expects list
-                    assert len(probs) == 1, "Should return one probability"
-                    prob = probs[0]
-                    assert np.isfinite(prob), "Probability should be finite"
-                    assert prob >= 0.0, "Probability should be non-negative"
-                except Exception as e:
+                    log_probs = env.observation_log_probability(next_state, "right", [obs])
+                    assert len(log_probs) == 1, "Should return one log-probability"
+                    log_prob = log_probs[0]
+                    assert np.isfinite(log_prob), "Log-probability should be finite"
+                except Exception as exc:  # pylint: disable=broad-except
                     pytest.fail(
-                        f"Valid observation {obs} with shape {obs.shape} failed probability calculation: {e}"
+                        f"Valid observation {obs} with shape {obs.shape} "
+                        f"failed log-probability calculation: {exc}"
                     )
 
     def test_sample_next_step_observation_never_empty(self):
@@ -723,36 +666,40 @@ class TestPushPOMDP:
                         np.isfinite(observation)
                     ), "All observation values should be finite"
 
-                    # Verify observation can be used in probability calculation
-                    obs_model = self.env.observation_model(next_state, action)
+                    # Verify observation can be evaluated under env-API log-prob.
                     try:
-                        probs = obs_model.probability([observation])  # Now expects list
-                        assert len(probs) == 1, "Should return one probability"
-                        prob = probs[0]
-                        assert np.isfinite(prob), "Probability should be finite"
-                        assert prob >= 0.0, "Probability should be non-negative"
-                    except Exception as e:
+                        log_probs = self.env.observation_log_probability(
+                            next_state, action, [observation]
+                        )
+                        assert len(log_probs) == 1, "Should return one log-probability"
+                        log_prob = log_probs[0]
+                        assert np.isfinite(log_prob), "Log-probability should be finite"
+                    except Exception as exc:  # pylint: disable=broad-except
                         pytest.fail(
-                            f"sample_next_step produced invalid observation {observation} with shape {observation.shape}: {e}"
+                            f"sample_next_step produced invalid observation "
+                            f"{observation} with shape {observation.shape}: {exc}"
                         )
 
     def test_state_transition_probability_deterministic(self):
-        """Test that state transition probability correctly identifies deterministic transitions.
+        """Test that env.transition_log_probability correctly identifies deterministic transitions.
 
-        Purpose: Validates that probability() returns 1.0 for the correct next state and 0.0 for others
+        Purpose: Validates that ``np.exp(env.transition_log_probability(...))``
+            returns 1.0 for the correct next state and 0.0 for others when
+            transition_error_prob=0.
 
-        Given: A PushStateTransition with a known current state and action
-        When: The probability method is called with various potential next states
-        Then: Only the actual next state should have probability 1.0, all others should be 0.0
+        Given: A PushPOMDP without obstacles or transition error and a known
+            (state, action) pair.
+        When: env.transition_log_probability is queried with various
+            candidate next states.
+        Then: Only the actual sampled next state has probability 1.0; all
+            others have probability 0.0.
 
         Test type: unit
         """
         state = np.array([2.0, 2.0, 3.0, 3.0, 9.0, 9.0])
         action = "right"
-
-        transition = PushStateTransition(
-            state=state,
-            action=action,
+        env = PushPOMDP(
+            discount_factor=0.95,
             grid_size=10,
             push_threshold=1.0,
             friction_coefficient=0.3,
@@ -760,24 +707,24 @@ class TestPushPOMDP:
             obstacle_radius=0.5,
         )
 
-        # Get the actual next state
-        actual_next_state = transition.sample()[0]
+        # Get the actual next state via the env API.
+        actual_next_state = env.sample_next_state(state, action)
 
-        # Test probability for actual next state
-        prob_actual = transition.probability([actual_next_state])
+        # Test probability for actual next state.
+        prob_actual = np.exp(env.transition_log_probability(state, action, [actual_next_state]))
         assert len(prob_actual) == 1
         assert prob_actual[0] == 1.0, "Actual next state should have probability 1.0"
 
-        # Test probability for different states
+        # Test probability for different states.
         different_state1 = np.array([2.0, 2.0, 3.0, 3.0, 9.0, 9.0])  # Same as initial
         different_state2 = np.array([5.0, 5.0, 5.0, 5.0, 9.0, 9.0])  # Completely different
         different_state3 = actual_next_state + np.array(
             [0.1, 0.0, 0.0, 0.0, 0.0, 0.0]
         )  # Slightly off
 
-        prob_diff1 = transition.probability([different_state1])
-        prob_diff2 = transition.probability([different_state2])
-        prob_diff3 = transition.probability([different_state3])
+        prob_diff1 = np.exp(env.transition_log_probability(state, action, [different_state1]))
+        prob_diff2 = np.exp(env.transition_log_probability(state, action, [different_state2]))
+        prob_diff3 = np.exp(env.transition_log_probability(state, action, [different_state3]))
 
         assert prob_diff1[0] == 0.0, "Different state should have probability 0.0"
         assert prob_diff2[0] == 0.0, "Different state should have probability 0.0"
@@ -797,10 +744,8 @@ class TestPushPOMDP:
         obstacles = [(3.0, 3.0)]
         state = np.array([2.5, 3.0, 1.0, 1.0, 9.0, 9.0])  # Robot just left of obstacle
         action = "right"  # Will collide with obstacle
-
-        transition = PushStateTransition(
-            state=state,
-            action=action,
+        env = PushPOMDP(
+            discount_factor=0.95,
             grid_size=10,
             push_threshold=1.0,
             friction_coefficient=0.3,
@@ -808,22 +753,24 @@ class TestPushPOMDP:
             obstacle_radius=0.5,
         )
 
-        # Get the actual next state (robot should stay in place due to collision)
-        actual_next_state = transition.sample()[0]
+        # Get the actual next state (robot should stay in place due to collision).
+        actual_next_state = env.sample_next_state(state, action)
 
-        # Verify robot didn't move (stayed at same position due to collision)
+        # Verify robot didn't move (stayed at same position due to collision).
         assert np.allclose(
             actual_next_state[:2], state[:2]
         ), "Robot should stay in place when colliding with obstacle"
 
-        # Test probability for actual next state
-        prob_actual = transition.probability([actual_next_state])
+        # Test probability for actual next state.
+        prob_actual = np.exp(env.transition_log_probability(state, action, [actual_next_state]))
         assert prob_actual[0] == 1.0, "Actual next state should have probability 1.0"
 
-        # Test probability for state where robot would have moved (if no obstacle)
+        # Test probability for state where robot would have moved (if no obstacle).
         hypothetical_moved_state = state.copy()
         hypothetical_moved_state[0] += 1.0  # Robot moved right
-        prob_moved = transition.probability([hypothetical_moved_state])
+        prob_moved = np.exp(
+            env.transition_log_probability(state, action, [hypothetical_moved_state])
+        )
         assert prob_moved[0] == 0.0, "State with robot moved should have probability 0.0"
 
     def test_state_transition_probability_pushing_object(self):
@@ -840,10 +787,8 @@ class TestPushPOMDP:
         state = np.array([2.0, 2.0, 2.5, 2.0, 9.0, 9.0])  # Robot close to object
         action = "right"
         friction = 0.5
-
-        transition = PushStateTransition(
-            state=state,
-            action=action,
+        env = PushPOMDP(
+            discount_factor=0.95,
             grid_size=10,
             push_threshold=1.0,  # Robot is within push threshold
             friction_coefficient=friction,
@@ -851,28 +796,28 @@ class TestPushPOMDP:
             obstacle_radius=0.5,
         )
 
-        # Get the actual next state with push dynamics
-        actual_next_state = transition.sample()[0]
+        # Get the actual next state with push dynamics.
+        actual_next_state = env.sample_next_state(state, action)
 
-        # Verify both robot and object moved
+        # Verify both robot and object moved.
         assert actual_next_state[0] > state[0], "Robot should have moved right"
         assert actual_next_state[2] > state[2], "Object should have been pushed right"
 
-        # Verify friction was applied (object moves less than robot)
+        # Verify friction was applied (object moves less than robot).
         expected_object_movement = 1.0 * (1 - friction)  # movement * (1 - friction)
         actual_object_movement = actual_next_state[2] - state[2]
         assert np.isclose(
             actual_object_movement, expected_object_movement, atol=0.01
         ), "Object movement should account for friction"
 
-        # Test probability for actual next state
-        prob_actual = transition.probability([actual_next_state])
+        # Test probability for actual next state.
+        prob_actual = np.exp(env.transition_log_probability(state, action, [actual_next_state]))
         assert prob_actual[0] == 1.0, "Actual next state should have probability 1.0"
 
-        # Test probability for state where object didn't move
+        # Test probability for state where object didn't move.
         no_push_state = state.copy()
         no_push_state[0] += 1.0  # Only robot moved
-        prob_no_push = transition.probability([no_push_state])
+        prob_no_push = np.exp(env.transition_log_probability(state, action, [no_push_state]))
         assert prob_no_push[0] == 0.0, "State without object push should have probability 0.0"
 
     def test_state_transition_probability_boundary_clipping(self):
@@ -888,10 +833,8 @@ class TestPushPOMDP:
         """
         state = np.array([0.0, 0.0, 2.0, 2.0, 9.0, 9.0])  # Robot at corner
         action = "left"  # Try to move beyond boundary
-
-        transition = PushStateTransition(
-            state=state,
-            action=action,
+        env = PushPOMDP(
+            discount_factor=0.95,
             grid_size=10,
             push_threshold=1.0,
             friction_coefficient=0.3,
@@ -899,21 +842,23 @@ class TestPushPOMDP:
             obstacle_radius=0.5,
         )
 
-        # Get actual next state (should be clipped at boundary)
-        actual_next_state = transition.sample()[0]
+        # Get actual next state (should be clipped at boundary).
+        actual_next_state = env.sample_next_state(state, action)
 
-        # Verify robot position was clipped at boundary
+        # Verify robot position was clipped at boundary.
         assert actual_next_state[0] == 0.0, "Robot x-position should be clipped at 0"
         assert actual_next_state[1] == 0.0, "Robot y-position should remain at 0"
 
-        # Test probability for actual next state
-        prob_actual = transition.probability([actual_next_state])
+        # Test probability for actual next state.
+        prob_actual = np.exp(env.transition_log_probability(state, action, [actual_next_state]))
         assert prob_actual[0] == 1.0, "Actual next state should have probability 1.0"
 
-        # Test probability for state with negative position (if no clipping)
+        # Test probability for state with negative position (if no clipping).
         hypothetical_negative_state = state.copy()
         hypothetical_negative_state[0] = -1.0  # Beyond boundary
-        prob_negative = transition.probability([hypothetical_negative_state])
+        prob_negative = np.exp(
+            env.transition_log_probability(state, action, [hypothetical_negative_state])
+        )
         assert prob_negative[0] == 0.0, "State beyond boundary should have probability 0.0"
 
     def test_state_transition_probability_multiple_states(self):
@@ -929,10 +874,8 @@ class TestPushPOMDP:
         """
         state = np.array([5.0, 5.0, 6.0, 5.0, 9.0, 9.0])
         action = "up"
-
-        transition = PushStateTransition(
-            state=state,
-            action=action,
+        env = PushPOMDP(
+            discount_factor=0.95,
             grid_size=10,
             push_threshold=1.0,
             friction_coefficient=0.3,
@@ -940,10 +883,10 @@ class TestPushPOMDP:
             obstacle_radius=0.5,
         )
 
-        # Get actual next state
-        actual_next_state = transition.sample()[0]
+        # Get actual next state.
+        actual_next_state = env.sample_next_state(state, action)
 
-        # Create list of candidate states (only one should be correct)
+        # Create list of candidate states (only one should be correct).
         candidate_states = [
             np.array([5.0, 6.0, 6.0, 5.7, 9.0, 9.0]),  # Possible next state
             actual_next_state,  # The correct next state
@@ -951,19 +894,19 @@ class TestPushPOMDP:
             np.array([4.0, 5.0, 5.0, 5.0, 9.0, 9.0]),  # Different state
         ]
 
-        # Test probability for all candidates
-        probs = transition.probability(candidate_states)
+        # Test probability for all candidates.
+        probs = np.exp(env.transition_log_probability(state, action, candidate_states))
 
-        # Verify output shape
+        # Verify output shape.
         assert len(probs) == 4, "Should return probability for each candidate"
 
-        # Verify only the actual next state has probability 1.0
+        # Verify only the actual next state has probability 1.0.
         assert probs[1] == 1.0, "Actual next state should have probability 1.0"
         assert probs[0] == 0.0, "Incorrect state should have probability 0.0"
         assert probs[2] == 0.0, "Initial state should have probability 0.0"
         assert probs[3] == 0.0, "Different state should have probability 0.0"
 
-        # Verify probabilities sum to 1.0 (since only one state is possible)
+        # Verify probabilities sum to 1.0 (since only one state is possible).
         assert np.sum(probs) == 1.0, "Probabilities should sum to 1.0"
 
     def test_fixed_initial_state_returns_exact_state(self):
@@ -1126,25 +1069,31 @@ class TestPushPOMDP:
             ), f"Object at {object_pos} should be >= 2.0 units from target {target_pos}"
 
     def test_state_transition_all_actions_deterministic(self):
-        """Test state transition sample() and probability() for all actions with transition_error_prob=0.
+        """Test env.sample_next_state and env.transition_log_probability for all actions with transition_error_prob=0.
 
         Purpose: Validates that all actions (up, down, left, right) execute correctly in deterministic mode
 
-        Given: A PushStateTransition with transition_error_prob=0 and hardcoded states
+        Given: A PushPOMDP with transition_error_prob=0 and hardcoded states
         When: Each action is executed
         Then: Resulting state should exactly match hardcoded expected state
 
         Test type: unit
         """
-        # Hardcoded initial state: robot at (5.0, 5.0), object at (5.0, 5.0), target at (9.0, 9.0)
-        # Robot and object are at same position, so pushing will occur
+        # Hardcoded initial state: robot at (5.0, 5.0), object at (5.0, 5.0), target at (9.0, 9.0).
+        # Robot and object are at same position, so pushing will occur.
         initial_state = np.array([5.0, 5.0, 5.0, 5.0, 9.0, 9.0])
-        push_threshold = 2.0  # Large enough so robot stays within threshold after moving
-        friction_coefficient = 0.3
-        grid_size = 10
+        env = PushPOMDP(
+            discount_factor=0.95,
+            grid_size=10,
+            push_threshold=2.0,  # Large enough so robot stays within threshold after moving
+            friction_coefficient=0.3,
+            obstacles=[],
+            obstacle_radius=0.5,
+            transition_error_prob=0.0,  # Explicitly set to 0 for deterministic behavior
+        )
 
-        # Hardcoded expected states for each action
-        # Robot moves by 1.0, object moves by 1.0 * (1 - 0.3) = 0.7
+        # Hardcoded expected states for each action.
+        # Robot moves by 1.0, object moves by 1.0 * (1 - 0.3) = 0.7.
         expected_states = {
             "up": np.array([5.0, 6.0, 5.0, 5.7, 9.0, 9.0]),  # Robot up, object pushed up
             "down": np.array([5.0, 4.0, 5.0, 4.3, 9.0, 9.0]),  # Robot down, object pushed down
@@ -1153,33 +1102,26 @@ class TestPushPOMDP:
         }
 
         for action_name, expected_state in expected_states.items():
-            transition = PushStateTransition(
-                state=initial_state.copy(),
-                action=action_name,
-                grid_size=grid_size,
-                push_threshold=push_threshold,
-                friction_coefficient=friction_coefficient,
-                obstacles=[],
-                obstacle_radius=0.5,
-                transition_error_prob=0.0,  # Explicitly set to 0 for deterministic behavior
-            )
-
-            # Test sample() method - should return exact expected state
-            next_state = transition.sample()[0]
+            # Test sample_next_state - should return exact expected state.
+            next_state = env.sample_next_state(initial_state.copy(), action_name)
             assert np.array_equal(
                 next_state, expected_state
             ), f"Action '{action_name}': Expected {expected_state}, got {next_state}"
 
-            # Test probability() method - should return 1.0 for expected state
-            prob_expected = transition.probability([expected_state])
+            # Test transition_log_probability - should give probability 1.0 for expected state.
+            prob_expected = np.exp(
+                env.transition_log_probability(initial_state, action_name, [expected_state])
+            )
             assert len(prob_expected) == 1
             assert prob_expected[0] == 1.0, (
                 f"Action '{action_name}': Expected state should have probability 1.0, "
                 f"got {prob_expected[0]}"
             )
 
-            # Test probability for initial state (should be 0.0)
-            prob_initial = transition.probability([initial_state])
+            # Test transition_log_probability for initial state (should be 0.0).
+            prob_initial = np.exp(
+                env.transition_log_probability(initial_state, action_name, [initial_state])
+            )
             assert prob_initial[0] == 0.0, (
                 f"Action '{action_name}': Initial state should have probability 0.0, "
                 f"got {prob_initial[0]}"
@@ -1194,21 +1136,27 @@ class TestPushPOMDPStateTransition:
 
         Purpose: Validates that all actions work correctly when robot cannot push object
 
-        Given: A PushStateTransition with robot far from object and transition_error_prob=0
+        Given: A PushPOMDP with robot far from object and transition_error_prob=0
         When: Each action is executed
         Then: Resulting state should exactly match hardcoded expected state (robot moves, object doesn't)
 
         Test type: unit
         """
-        # Hardcoded initial state: robot at (1.0, 1.0), object at (8.0, 8.0), target at (9.0, 9.0)
-        # Robot is far from object, so no pushing will occur
+        # Hardcoded initial state: robot at (1.0, 1.0), object at (8.0, 8.0), target at (9.0, 9.0).
+        # Robot is far from object, so no pushing will occur.
         initial_state = np.array([1.0, 1.0, 8.0, 8.0, 9.0, 9.0])
-        push_threshold = 1.0
-        friction_coefficient = 0.3
-        grid_size = 10
+        env = PushPOMDP(
+            discount_factor=0.95,
+            grid_size=10,
+            push_threshold=1.0,
+            friction_coefficient=0.3,
+            obstacles=[],
+            obstacle_radius=0.5,
+            transition_error_prob=0.0,  # Explicitly set to 0 for deterministic behavior
+        )
 
-        # Hardcoded expected states for each action
-        # Robot moves by 1.0, object stays at (8.0, 8.0)
+        # Hardcoded expected states for each action.
+        # Robot moves by 1.0, object stays at (8.0, 8.0).
         expected_states = {
             "up": np.array([1.0, 2.0, 8.0, 8.0, 9.0, 9.0]),  # Robot up, object unchanged
             "down": np.array([1.0, 0.0, 8.0, 8.0, 9.0, 9.0]),  # Robot down, object unchanged
@@ -1217,32 +1165,25 @@ class TestPushPOMDPStateTransition:
         }
 
         for action_name, expected_state in expected_states.items():
-            transition = PushStateTransition(
-                state=initial_state.copy(),
-                action=action_name,
-                grid_size=grid_size,
-                push_threshold=push_threshold,
-                friction_coefficient=friction_coefficient,
-                obstacles=[],
-                obstacle_radius=0.5,
-                transition_error_prob=0.0,  # Explicitly set to 0 for deterministic behavior
-            )
-
-            # Test sample() method - should return exact expected state
-            next_state = transition.sample()[0]
+            # Test sample_next_state - should return exact expected state.
+            next_state = env.sample_next_state(initial_state.copy(), action_name)
             assert np.array_equal(
                 next_state, expected_state
             ), f"Action '{action_name}': Expected {expected_state}, got {next_state}"
 
-            # Test probability() method - should return 1.0 for expected state
-            prob_expected = transition.probability([expected_state])
+            # Test transition_log_probability - should give probability 1.0 for expected state.
+            prob_expected = np.exp(
+                env.transition_log_probability(initial_state, action_name, [expected_state])
+            )
             assert prob_expected[0] == 1.0, (
                 f"Action '{action_name}': Expected state should have probability 1.0, "
                 f"got {prob_expected[0]}"
             )
 
-            # Test probability for initial state (should be 0.0)
-            prob_initial = transition.probability([initial_state])
+            # Test transition_log_probability for initial state (should be 0.0).
+            prob_initial = np.exp(
+                env.transition_log_probability(initial_state, action_name, [initial_state])
+            )
             assert prob_initial[0] == 0.0, (
                 f"Action '{action_name}': Initial state should have probability 0.0, "
                 f"got {prob_initial[0]}"
@@ -1296,260 +1237,3 @@ class TestSampleNextStepEquivalence:
                     f"reward mismatch for action={action}, seed={seed}: "
                     f"{opt_reward} != {base_reward}"
                 )
-
-
-class TestSampleHotPathOverridesEquivalence:
-    """Pinned-seed equivalence between hot-path overrides and the wrapper path."""
-
-    def test_sample_next_state_matches_state_transition_model_wrapper(self):
-        """Pinned-seed equivalence: sample_next_state vs state_transition_model().sample()[0].
-
-        Purpose: Validates that the inlined sample_next_state override produces
-            byte-identical RNG draws to the wrapper-based state_transition_model
-            path. Both consume np.random.random() (then optionally
-            np.random.choice() on the error-action list) in the same order, so
-            under a pinned seed the two paths must yield equal next-states.
-
-        Given: A PushPOMDP with non-zero transition_error_prob (so the
-            np.random.choice branch is exercised), a list of (state, action)
-            pairs covering all four actions in mixed obstacle / push regimes,
-            and identical numpy / random seeds before each path.
-        When: env.state_transition_model(s, a).sample()[0] and
-            env.sample_next_state(s, a) are each called under the same seeded
-            RNG.
-        Then: For every (state, action) pair, both paths yield np.array_equal
-            results.
-
-        Test type: unit
-        """
-        env = PushPOMDP(
-            discount_factor=0.95,
-            grid_size=10,
-            push_threshold=1.0,
-            friction_coefficient=0.3,
-            observation_noise=0.1,
-            obstacles=[(3.0, 3.0), (7.0, 7.0)],
-            obstacle_radius=0.5,
-            transition_error_prob=0.2,
-        )
-        actions = env.get_actions()
-        test_pairs = [
-            (np.array([1.0, 1.0, 5.0, 5.0, 9.0, 9.0]), actions[0]),
-            (np.array([2.0, 3.0, 2.5, 3.0, 9.0, 9.0]), actions[1]),  # close to obj
-            (np.array([3.5, 3.0, 6.0, 6.0, 9.0, 9.0]), actions[2]),  # near obstacle
-            (np.array([0.0, 0.0, 1.0, 0.5, 9.0, 9.0]), actions[3]),  # corner
-            (np.array([8.0, 8.0, 7.5, 7.5, 9.0, 9.0]), actions[0]),  # near obstacle (7,7)
-            (np.array([5.0, 5.0, 5.5, 5.0, 9.0, 9.0]), actions[2]),  # close to obj
-        ]
-        for state, action in test_pairs:
-            for seed in (12345, 67890, 314159):
-                np.random.seed(seed)
-                random.seed(seed)
-                wrapper_next = env.state_transition_model(state, action).sample()[0]
-                np.random.seed(seed)
-                random.seed(seed)
-                direct_next = env.sample_next_state(state, action)
-                assert np.array_equal(wrapper_next, direct_next), (
-                    f"Mismatch for state={state}, action={action}, seed={seed}: "
-                    f"wrapper={wrapper_next}, direct={direct_next}"
-                )
-
-    def test_sample_observation_matches_observation_model_wrapper(self):
-        """Pinned-seed equivalence: sample_observation vs observation_model().sample()[0].
-
-        Purpose: Validates that the inlined sample_observation override produces
-            byte-identical RNG draws to the wrapper-based observation_model
-            path. Both consume two np.random.normal(0, sigma) draws in the same
-            order, so under a pinned seed the two paths must yield equal
-            observations (including the grid-clamp boundary cases).
-
-        Given: A PushPOMDP env, a list of (next_state, action) pairs spanning
-            mid-grid and edge / corner positions (so both unclamped and clamped
-            branches of max(0, min(.., gmax)) are exercised), and identical
-            numpy / random seeds before each path.
-        When: env.observation_model(ns, a).sample()[0] and
-            env.sample_observation(ns, a) are each called under the same seeded
-            RNG.
-        Then: For every (next_state, action) pair, both paths yield
-            np.array_equal observations.
-
-        Test type: unit
-        """
-        env = PushPOMDP(
-            discount_factor=0.95,
-            grid_size=10,
-            observation_noise=0.5,
-        )
-        test_pairs = [
-            (np.array([5.0, 5.0, 4.5, 5.5, 9.0, 9.0]), "up"),
-            (np.array([2.0, 7.0, 1.5, 6.5, 9.0, 9.0]), "down"),
-            (np.array([0.0, 0.0, 0.1, 0.0, 9.0, 9.0]), "right"),  # corner clamp
-            (np.array([9.0, 9.0, 8.9, 9.0, 9.0, 9.0]), "left"),  # opposite corner
-            (np.array([3.0, 3.0, 3.0, 3.0, 9.0, 9.0]), "up"),
-        ]
-        for next_state, action in test_pairs:
-            for seed in (54321, 24680, 271828):
-                np.random.seed(seed)
-                random.seed(seed)
-                wrapper_obs = env.observation_model(next_state, action).sample()[0]
-                np.random.seed(seed)
-                random.seed(seed)
-                direct_obs = env.sample_observation(next_state, action)
-                assert np.array_equal(wrapper_obs, direct_obs), (
-                    f"Mismatch for next_state={next_state}, action={action}, seed={seed}: "
-                    f"wrapper={wrapper_obs}, direct={direct_obs}"
-                )
-
-    @pytest.mark.parametrize("n_samples", [1, 5, 100])
-    def test_sample_next_state_n_samples_equivalence(self, n_samples):
-        """Pinned-seed equivalence: sample_next_state(..., n) vs wrapper.sample(n).
-
-        Purpose: Validates that the new ``n_samples`` parameter on
-            ``sample_next_state`` preserves the exact RNG-draw order of the
-            wrapper path. Each of the n inner draws is bit-identical to the
-            corresponding draw produced by ``state_transition_model(...).sample(n)``.
-
-        Given: A PushPOMDP with non-zero transition_error_prob (so the
-            np.random.choice branch fires for some draws), a fixed (state,
-            action) pair, and identical np / random seeds before each path.
-        When: state_transition_model(s, a).sample(n_samples) and
-            sample_next_state(s, a, n_samples=n_samples) are each called
-            under the same seed.
-        Then: The two outputs are equal element-by-element. For n==1 the
-            override returns a single ndarray (back-compat); for n>1 it
-            returns a length-n list of ndarrays.
-
-        Test type: unit
-        """
-        env = PushPOMDP(
-            discount_factor=0.95,
-            grid_size=10,
-            push_threshold=1.0,
-            friction_coefficient=0.3,
-            obstacles=[(3.0, 3.0), (7.0, 7.0)],
-            obstacle_radius=0.5,
-            transition_error_prob=0.3,
-        )
-        state = np.array([2.5, 3.1, 3.0, 3.0, 9.0, 9.0])
-        action = "right"
-        seed = 1234
-        np.random.seed(seed)
-        random.seed(seed)
-        wrapper_samples = env.state_transition_model(state, action).sample(n_samples)
-        np.random.seed(seed)
-        random.seed(seed)
-        direct = env.sample_next_state(state, action, n_samples=n_samples)
-        if n_samples == 1:
-            assert isinstance(direct, np.ndarray)
-            assert np.array_equal(direct, wrapper_samples[0])
-        else:
-            assert len(direct) == n_samples
-            for i in range(n_samples):
-                assert np.array_equal(
-                    direct[i], wrapper_samples[i]
-                ), f"Mismatch at i={i}: direct={direct[i]} vs wrapper={wrapper_samples[i]}"
-
-    @pytest.mark.parametrize("n_samples", [1, 5, 100])
-    def test_sample_observation_n_samples_equivalence(self, n_samples):
-        """Pinned-seed equivalence: sample_observation(..., n) vs wrapper.sample(n).
-
-        Purpose: Validates that the new ``n_samples`` parameter on
-            ``sample_observation`` preserves the wrapper's RNG-draw order
-            (two np.random.normal draws per sample, in row order).
-
-        Given: A PushPOMDP env, a fixed (next_state, action) pair, and
-            identical np / random seeds before each path.
-        When: observation_model(ns, a).sample(n_samples) and
-            sample_observation(ns, a, n_samples=n_samples) are each called
-            under the same seed.
-        Then: The two outputs are equal element-by-element.
-
-        Test type: unit
-        """
-        env = PushPOMDP(discount_factor=0.95, grid_size=10, observation_noise=0.4)
-        next_state = np.array([5.0, 5.0, 4.5, 5.5, 9.0, 9.0])
-        action = "up"
-        seed = 7777
-        np.random.seed(seed)
-        random.seed(seed)
-        wrapper_samples = env.observation_model(next_state, action).sample(n_samples)
-        np.random.seed(seed)
-        random.seed(seed)
-        direct = env.sample_observation(next_state, action, n_samples=n_samples)
-        if n_samples == 1:
-            assert isinstance(direct, np.ndarray)
-            assert np.array_equal(direct, wrapper_samples[0])
-        else:
-            assert len(direct) == n_samples
-            for i in range(n_samples):
-                assert np.array_equal(direct[i], wrapper_samples[i])
-
-    def test_transition_log_probability_equivalence(self):
-        """transition_log_probability == log(state_transition_model(..).probability(..)).
-
-        Purpose: Validates the new vectorized log-probability path matches
-            ``np.log(probability(...))`` from the wrapper.
-
-        Given: A PushPOMDP with transition_error_prob > 0 (so non-degenerate
-            probability mass over multiple candidate next-states), a fixed
-            (state, action) pair, and a list of candidate next_states drawn
-            from both the intended-action result and one error-action result.
-        When: env.transition_log_probability(s, a, next_states) is called.
-        Then: The result equals ``np.log(probability(next_states))`` from
-            the wrapper, with -inf for impossible next-states.
-
-        Test type: unit
-        """
-        env = PushPOMDP(
-            discount_factor=0.95,
-            grid_size=10,
-            transition_error_prob=0.25,
-        )
-        state = np.array([2.0, 3.0, 5.0, 5.0, 9.0, 9.0])
-        action = "right"
-        wrapper = env.state_transition_model(state, action)
-        # Candidate next-states: intended ("right" -> robot+x), one error
-        # action result, and an impossible state.
-        candidates = [
-            wrapper.sample()[0],  # intended
-            np.array([2.0, 3.0, 5.0, 5.0, 9.0, 9.0]),  # impossible / no-move
-            np.array([1.0, 3.0, 5.0, 5.0, 9.0, 9.0]),  # left-error result
-            np.array([2.0, 4.0, 5.0, 5.0, 9.0, 9.0]),  # up-error result
-        ]
-        wrapper_probs = wrapper.probability(candidates)
-        with np.errstate(divide="ignore"):
-            expected_log = np.log(wrapper_probs)
-        log_probs = env.transition_log_probability(state, action, candidates)
-        assert log_probs.shape == (len(candidates),)
-        np.testing.assert_array_equal(log_probs, expected_log)
-
-    def test_observation_log_probability_equivalence(self):
-        """observation_log_probability == log(observation_model(..).probability(..)).
-
-        Purpose: Validates the new vectorized log-probability path matches
-            ``np.log(probability(...))`` from the wrapper.
-
-        Given: A PushPOMDP env, a fixed (next_state, action) pair, and a
-            list of candidate observations spanning equal-to-truth and
-            offset positions.
-        When: env.observation_log_probability(ns, a, observations) is called.
-        Then: The result equals ``np.log(probability(observations))`` from
-            the wrapper to numerical tolerance.
-
-        Test type: unit
-        """
-        env = PushPOMDP(discount_factor=0.95, grid_size=10, observation_noise=0.5)
-        next_state = np.array([3.0, 3.0, 5.0, 5.0, 9.0, 9.0])
-        action = "up"
-        wrapper = env.observation_model(next_state, action)
-        observations = [
-            next_state.copy(),  # zero-diff -> max log-pdf
-            np.array([3.0, 3.0, 5.1, 5.0, 9.0, 9.0]),
-            np.array([3.0, 3.0, 5.5, 4.6, 9.0, 9.0]),
-            np.array([3.0, 3.0, 6.0, 5.0, 9.0, 9.0]),
-        ]
-        wrapper_probs = wrapper.probability(observations)
-        expected_log = np.log(wrapper_probs)
-        log_probs = env.observation_log_probability(next_state, action, observations)
-        assert log_probs.shape == (len(observations),)
-        np.testing.assert_allclose(log_probs, expected_log, rtol=1e-12, atol=1e-12)

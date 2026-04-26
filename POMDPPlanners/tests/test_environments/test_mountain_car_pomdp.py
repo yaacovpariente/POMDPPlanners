@@ -109,23 +109,37 @@ def test_state_transition_noise_magnitude(base_mountain_car_environment):
     Purpose: Validates that noisy samples cluster around the deterministic next state
 
     Given: A MountainCarPOMDP environment with default noise covariance
-    When: Many samples are drawn from the state transition model
-    Then: Sample mean is close to deterministic next state and standard deviations
-    match the expected noise levels from the covariance matrix
+    When: Many samples are drawn via env.sample_next_state
+    Then: Sample mean is close to deterministic next state computed via the native
+    kernel and standard deviations match the expected noise levels from the
+    covariance matrix
 
     Test type: unit
     """
+    # pylint: disable=import-outside-toplevel
+    from POMDPPlanners.environments.mountain_car_pomdp import _native
+
+    env = base_mountain_car_environment
     state = np.array([-0.5, 0.0])
     action = 1
-    transition = base_mountain_car_environment.state_transition_model(state, action)
-    samples = np.array(transition.sample(n_samples=5000))
+    samples = np.array(env.sample_next_state(state=state, action=action, n_samples=5000))
 
+    deterministic_kernel = _native.MountainCarTransitionCpp(
+        state=state,
+        action=action,
+        power=env.power,
+        gravity=env.gravity,
+        max_speed=env.max_speed,
+        min_position=env.min_position,
+        max_position=env.max_position,
+        covariance=env.state_transition_cov,
+    )
     # pylint: disable=protected-access
-    deterministic = transition._compute_deterministic_next_state()
+    deterministic = deterministic_kernel._compute_deterministic_next_state()
     sample_mean = samples.mean(axis=0)
     np.testing.assert_allclose(sample_mean, deterministic, atol=0.005)
 
-    expected_std = np.sqrt(np.diag(base_mountain_car_environment.state_transition_cov))
+    expected_std = np.sqrt(np.diag(env.state_transition_cov))
     sample_std = samples.std(axis=0)
     np.testing.assert_allclose(sample_std, expected_std, rtol=0.3)
 
@@ -272,43 +286,49 @@ def test_observation_model_probability_multiple_observations(base_mountain_car_e
 
 
 def test_observation_model_probability_mathematical_correctness(base_mountain_car_environment):
-    """Test observation model probability function mathematical correctness.
+    """Test observation_log_probability mathematical correctness.
 
-    Purpose: Validates that observation model probability function computes correct probability densities
-    using multivariate normal distribution
+    Purpose: Validates that observation_log_probability computes correct probability
+    densities matching the multivariate normal distribution centered at next_state
 
-    Given: MountainCarPOMDP environment with known covariance matrix and true state
-    When: probability() method is called with specific observations
-    Then: Probabilities match expected multivariate normal distribution calculations
+    Given: MountainCarPOMDP environment with known covariance matrix and true next_state
+    When: env.observation_log_probability is called with specific observations
+    Then: Exponentiated log-probabilities match scipy multivariate_normal.pdf calculations
 
     Test type: unit
     """
-    # Test mathematical correctness
-    state = np.array([0.0, 0.0])
+    env = base_mountain_car_environment
+    true_state = np.array([0.0, 0.0])
     action = 0
-    obs_model = base_mountain_car_environment.observation_model(state, action)
-
-    # Get the true state and covariance matrix
-    true_state = obs_model.mean
-    cov_matrix = base_mountain_car_environment.cov_matrix
+    cov_matrix = env.cov_matrix
 
     # Test with observation at true state (should have highest probability)
     observation_at_mean = true_state.copy()
-    prob_at_mean = obs_model.probability([observation_at_mean])[0]
+    prob_at_mean = float(
+        np.exp(
+            env.observation_log_probability(
+                next_state=true_state, action=action, observations=[observation_at_mean]
+            )
+        )[0]
+    )
 
-    # Calculate expected probability using scipy
     expected_prob_at_mean = scipy.stats.multivariate_normal.pdf(
         observation_at_mean, mean=true_state, cov=cov_matrix
     )
 
-    # Verify probability matches expected value
     assert np.isclose(
         prob_at_mean, expected_prob_at_mean, rtol=1e-10
     ), f"Probability at mean {prob_at_mean} should match expected {expected_prob_at_mean}"
 
     # Test with observation away from mean
     observation_offset = true_state + np.array([0.1, 0.01])
-    prob_offset = obs_model.probability([observation_offset])[0]
+    prob_offset = float(
+        np.exp(
+            env.observation_log_probability(
+                next_state=true_state, action=action, observations=[observation_offset]
+            )
+        )[0]
+    )
 
     expected_prob_offset = scipy.stats.multivariate_normal.pdf(
         observation_offset, mean=true_state, cov=cov_matrix
@@ -1154,280 +1174,3 @@ def test_reward_batch_matches_scalar_reward():
     single = env.reward_batch(states[:1], action)
     assert single.shape == (1,)
     assert single[0] == env.reward(states[0], action)
-
-
-def test_sample_next_state_rng_pinned_equivalence(base_mountain_car_environment):
-    """Test that sample_next_state matches state_transition_model().sample()[0] under fixed RNG.
-
-    Purpose: Validates that the sample_next_state override produces byte-identical results
-        to the wrapper-based path when both use the same native RNG seed.
-
-    Given: A MountainCarPOMDP environment and (state, action) pairs covering the three
-        actions and a few representative positions/velocities, with the native module RNG
-        and Python-side np.random/random seeded identically before each pair of draws
-    When: A sample is drawn through state_transition_model(s, a).sample()[0] and again
-        through env.sample_next_state(s, a) after re-seeding
-    Then: The two draws produce arrays equal element-wise across all combinations
-
-    Test type: unit
-    """
-    from POMDPPlanners.environments.mountain_car_pomdp import (  # pylint: disable=import-outside-toplevel
-        _native,
-    )
-
-    env = base_mountain_car_environment
-    cases = [
-        ((-0.5, 0.0), -1),
-        ((-0.5, 0.0), 0),
-        ((-0.5, 0.0), 1),
-        ((0.0, 0.05), 1),
-        ((-1.0, -0.03), 0),
-        ((0.4, 0.04), -1),
-    ]
-    for state, action in cases:
-        _native.set_seed(2024)
-        np.random.seed(2024)
-        random.seed(2024)
-        wrapper_sample = env.state_transition_model(state=state, action=action).sample()[0]
-        _native.set_seed(2024)
-        np.random.seed(2024)
-        random.seed(2024)
-        direct_sample = env.sample_next_state(state=state, action=action)
-        np.testing.assert_array_equal(
-            wrapper_sample,
-            direct_sample,
-            err_msg=f"sample_next_state mismatch for ({state}, {action})",
-        )
-
-
-def test_sample_observation_rng_pinned_equivalence(base_mountain_car_environment):
-    """Test that sample_observation matches observation_model().sample()[0] under fixed RNG.
-
-    Purpose: Validates that the sample_observation override produces byte-identical results
-        to the wrapper-based path when both use the same native RNG seed.
-
-    Given: A MountainCarPOMDP environment and (next_state, action) pairs covering the three
-        actions and a range of positions/velocities, with the native module RNG and Python
-        np.random/random seeded identically before each pair of draws
-    When: An observation is drawn through observation_model(ns, a).sample()[0] and again
-        through env.sample_observation(ns, a) after re-seeding
-    Then: The two draws produce arrays equal element-wise across all combinations
-
-    Test type: unit
-    """
-    from POMDPPlanners.environments.mountain_car_pomdp import (  # pylint: disable=import-outside-toplevel
-        _native,
-    )
-
-    env = base_mountain_car_environment
-    cases = [
-        ((-0.5, 0.0), -1),
-        ((-0.5, 0.0), 0),
-        ((-0.5, 0.0), 1),
-        ((0.0, 0.05), 1),
-        ((-1.0, -0.03), 0),
-        ((0.4, 0.04), -1),
-    ]
-    for next_state, action in cases:
-        _native.set_seed(99)
-        np.random.seed(99)
-        random.seed(99)
-        wrapper_obs = env.observation_model(next_state=next_state, action=action).sample()[0]
-        _native.set_seed(99)
-        np.random.seed(99)
-        random.seed(99)
-        direct_obs = env.sample_observation(next_state=next_state, action=action)
-        np.testing.assert_array_equal(
-            wrapper_obs,
-            direct_obs,
-            err_msg=f"sample_observation mismatch for ({next_state}, {action})",
-        )
-
-
-def test_sample_next_state_n_samples_equivalence(base_mountain_car_environment):
-    """Test sample_next_state with n>1 matches state_transition_model().sample(n) under fixed RNG.
-
-    Purpose: Validates that the n_samples-aware sample_next_state override produces
-        byte-identical batched results to the wrapper-based path when both use the same
-        native RNG seed.
-
-    Given: A MountainCarPOMDP environment and (state, action) pairs covering the three
-        actions and a few representative positions, with the native module RNG seeded
-        identically before each pair of draws, for n in {1, 5, 100}
-    When: A batch is drawn through state_transition_model(s, a).sample(n) and again
-        through env.sample_next_state(s, a, n_samples=n) after re-seeding
-    Then: The two batches are equal element-wise across all combinations and all n
-
-    Test type: unit
-    """
-    from POMDPPlanners.environments.mountain_car_pomdp import (  # pylint: disable=import-outside-toplevel
-        _native,
-    )
-
-    env = base_mountain_car_environment
-    cases = [
-        ((-0.5, 0.0), -1),
-        ((-0.5, 0.0), 0),
-        ((-0.5, 0.0), 1),
-        ((0.0, 0.05), 1),
-    ]
-    for n in (1, 5, 100):
-        for state, action in cases:
-            _native.set_seed(2024)
-            np.random.seed(2024)
-            random.seed(2024)
-            wrapper_samples = env.state_transition_model(state=state, action=action).sample(n)
-            _native.set_seed(2024)
-            np.random.seed(2024)
-            random.seed(2024)
-            direct_samples = env.sample_next_state(state=state, action=action, n_samples=n)
-            wrapper_arr = np.asarray(wrapper_samples).reshape(n, -1)
-            direct_arr = np.asarray(direct_samples).reshape(n, -1)
-            np.testing.assert_array_equal(
-                wrapper_arr,
-                direct_arr,
-                err_msg=f"sample_next_state n={n} mismatch for ({state}, {action})",
-            )
-
-
-def test_sample_observation_n_samples_equivalence(base_mountain_car_environment):
-    """Test sample_observation with n>1 matches observation_model().sample(n) under fixed RNG.
-
-    Purpose: Validates that the n_samples-aware sample_observation override produces
-        byte-identical batched results to the wrapper-based path when both use the same
-        native RNG seed.
-
-    Given: A MountainCarPOMDP environment and (next_state, action) pairs covering the
-        three actions, with the native module RNG seeded identically, for n in {1, 5, 100}
-    When: A batch is drawn through observation_model(ns, a).sample(n) and again through
-        env.sample_observation(ns, a, n_samples=n) after re-seeding
-    Then: The two batches are equal element-wise across all combinations and all n
-
-    Test type: unit
-    """
-    from POMDPPlanners.environments.mountain_car_pomdp import (  # pylint: disable=import-outside-toplevel
-        _native,
-    )
-
-    env = base_mountain_car_environment
-    cases = [
-        ((-0.5, 0.0), -1),
-        ((-0.5, 0.0), 0),
-        ((-0.5, 0.0), 1),
-        ((0.0, 0.05), 1),
-    ]
-    for n in (1, 5, 100):
-        for next_state, action in cases:
-            _native.set_seed(99)
-            np.random.seed(99)
-            random.seed(99)
-            wrapper_samples = env.observation_model(next_state=next_state, action=action).sample(n)
-            _native.set_seed(99)
-            np.random.seed(99)
-            random.seed(99)
-            direct_samples = env.sample_observation(
-                next_state=next_state, action=action, n_samples=n
-            )
-            wrapper_arr = np.asarray(wrapper_samples).reshape(n, -1)
-            direct_arr = np.asarray(direct_samples).reshape(n, -1)
-            np.testing.assert_array_equal(
-                wrapper_arr,
-                direct_arr,
-                err_msg=f"sample_observation n={n} mismatch for ({next_state}, {action})",
-            )
-
-
-def test_transition_log_probability_equivalence(base_mountain_car_environment):
-    """Test transition_log_probability matches np.log(probability) from the wrapper.
-
-    Purpose: Validates that transition_log_probability returns log-PDFs equivalent
-        (within fp tolerance) to applying np.log to the wrapper-based probability path.
-
-    Given: A MountainCarPOMDP environment and (state, action) pairs covering the three
-        actions, plus a batch of candidate next-state arrays
-    When: Log-probabilities are computed via env.transition_log_probability(s, a, vals)
-        and via np.log(env.state_transition_model(s, a).probability(vals) + 1e-300)
-    Then: The two ndarrays are equal element-wise within fp tolerance
-
-    Test type: unit
-    """
-    env = base_mountain_car_environment
-    candidate_states = np.array(
-        [
-            [-0.4956519, 0.00211698],
-            [-0.6, 0.01],
-            [-0.4, 0.0],
-            [0.5, 0.07],
-            [-1.2, -0.07],
-        ]
-    )
-    cases = [
-        ((-0.5, 0.0), -1),
-        ((-0.5, 0.0), 0),
-        ((-0.5, 0.0), 1),
-        ((0.0, 0.05), 1),
-        ((-1.0, -0.03), 0),
-    ]
-    for state, action in cases:
-        direct = env.transition_log_probability(
-            state=state, action=action, next_states=candidate_states
-        )
-        wrapper_probs = np.asarray(
-            env.state_transition_model(state=state, action=action).probability(candidate_states)
-        )
-        ref = np.log(wrapper_probs + 1e-300)
-        np.testing.assert_allclose(
-            direct,
-            ref,
-            rtol=1e-12,
-            atol=1e-12,
-            err_msg=f"transition_log_probability mismatch for ({state}, {action})",
-        )
-
-
-def test_observation_log_probability_equivalence(base_mountain_car_environment):
-    """Test observation_log_probability matches np.log(probability) from the wrapper.
-
-    Purpose: Validates that observation_log_probability returns log-PDFs equivalent
-        (within fp tolerance) to applying np.log to the wrapper-based probability path.
-
-    Given: A MountainCarPOMDP environment and (next_state, action) pairs covering the
-        three actions, plus a batch of candidate observation arrays
-    When: Log-probabilities are computed via env.observation_log_probability(ns, a, obs)
-        and via np.log(env.observation_model(ns, a).probability(obs) + 1e-300)
-    Then: The two ndarrays are equal element-wise within fp tolerance
-
-    Test type: unit
-    """
-    env = base_mountain_car_environment
-    candidate_obs = np.array(
-        [
-            [-0.5, 0.0],
-            [-0.4, 0.01],
-            [-0.6, 0.02],
-            [0.0, -0.05],
-            [0.4, 0.05],
-        ]
-    )
-    cases = [
-        ((-0.5, 0.0), -1),
-        ((-0.5, 0.0), 0),
-        ((-0.5, 0.0), 1),
-        ((0.0, 0.05), 1),
-        ((-1.0, -0.03), 0),
-    ]
-    for next_state, action in cases:
-        direct = env.observation_log_probability(
-            next_state=next_state, action=action, observations=candidate_obs
-        )
-        wrapper_probs = np.asarray(
-            env.observation_model(next_state=next_state, action=action).probability(candidate_obs)
-        )
-        ref = np.log(wrapper_probs + 1e-300)
-        np.testing.assert_allclose(
-            direct,
-            ref,
-            rtol=1e-12,
-            atol=1e-12,
-            err_msg=f"observation_log_probability mismatch for ({next_state}, {action})",
-        )

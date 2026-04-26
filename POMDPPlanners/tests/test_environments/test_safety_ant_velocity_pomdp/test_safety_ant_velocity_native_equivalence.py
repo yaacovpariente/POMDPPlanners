@@ -13,12 +13,12 @@ Generic assertion mechanics live in ``_native_parity.py``.
 import numpy as np
 import pytest
 
-from POMDPPlanners.core.environment import ObservationModel, StateTransitionModel
 from POMDPPlanners.environments.safety_ant_velocity_pomdp import (
-    SafeAntVelocityObservation,
     SafeAntVelocityPOMDP,
-    SafeAntVelocityStateTransition,
     _native,
+)
+from POMDPPlanners.environments.safety_ant_velocity_pomdp.safety_ant_velocity_pomdp import (
+    DEFAULT_FORCE_SCALES,
 )
 from POMDPPlanners.tests.test_environments import _native_parity
 from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
@@ -29,83 +29,44 @@ def _env_fixture():
     return SafeAntVelocityPOMDP(discount_factor=0.99)
 
 
+def _build_native_transition(env: SafeAntVelocityPOMDP, state: np.ndarray, action: int):
+    return _native.SafeAntVelocityTransitionCpp(
+        state=state,
+        action=action,
+        dt=env.dt,
+        mass=env.mass,
+        damping=env.damping,
+        max_force=env.max_force,
+        force_scales=DEFAULT_FORCE_SCALES,
+    )
+
+
+def _build_native_observation(env: SafeAntVelocityPOMDP, next_state: np.ndarray, action: int):
+    covariance = np.diag(
+        [
+            env.position_noise**2,
+            env.position_noise**2,
+            env.velocity_noise**2,
+            env.velocity_noise**2,
+        ]
+    )
+    return _native.SafeAntVelocityObservationCpp(
+        next_state=next_state,
+        action=action,
+        covariance=covariance,
+    )
+
+
 @pytest.fixture(name="transition")
 def _transition_fixture(env):
     state = np.array([0.0, 0.0, 0.5, -0.3])
-    return env.state_transition_model(state=state, action=2)
+    return _build_native_transition(env, state=state, action=2)
 
 
 @pytest.fixture(name="observation")
 def _observation_fixture(env):
     next_state = np.array([0.1, -0.1, 0.5, 0.3])
-    return env.observation_model(next_state=next_state, action=1)
-
-
-# ---------------------------------------------------------------------------
-# ABC / typing contract
-# ---------------------------------------------------------------------------
-
-
-def test_transition_is_registered_as_state_transition_model(transition):
-    """Shim passes isinstance check for StateTransitionModel after register().
-
-    Purpose: Validates the ABC virtual-subclass registration applied in the
-    Python shim so downstream polymorphic callers see the C++ class as a
-    valid StateTransitionModel.
-
-    Given: A SafeAntVelocityStateTransition produced by the env factory.
-    When: isinstance is checked against StateTransitionModel.
-    Then: It returns True.
-
-    Test type: unit
-    """
-    _native_parity.assert_abc_registration(transition, StateTransitionModel)
-
-
-def test_observation_is_registered_as_observation_model(observation):
-    """Shim passes isinstance check for ObservationModel after register().
-
-    Purpose: Same as the transition case, for the observation model.
-
-    Given: A SafeAntVelocityObservation produced by the env factory.
-    When: isinstance is checked against ObservationModel.
-    Then: It returns True.
-
-    Test type: unit
-    """
-    _native_parity.assert_abc_registration(observation, ObservationModel)
-
-
-def test_transition_is_not_abstract():
-    """SafeAntVelocityStateTransition is instantiable (no unresolved abstract methods).
-
-    Purpose: Guards against ABC.register masking missing slot implementations
-    on the C++ side.
-
-    Given: The SafeAntVelocityStateTransition class object.
-    When: __abstractmethods__ is inspected.
-    Then: The set is empty.
-
-    Test type: unit
-    """
-    abstract_methods = getattr(SafeAntVelocityStateTransition, "__abstractmethods__", frozenset())
-    assert abstract_methods == frozenset()
-
-
-def test_observation_is_not_abstract():
-    """SafeAntVelocityObservation is instantiable (no unresolved abstract methods).
-
-    Purpose: Guards against ABC.register masking missing slot implementations
-    on the C++ side.
-
-    Given: The SafeAntVelocityObservation class object.
-    When: __abstractmethods__ is inspected.
-    Then: The set is empty.
-
-    Test type: unit
-    """
-    abstract_methods = getattr(SafeAntVelocityObservation, "__abstractmethods__", frozenset())
-    assert abstract_methods == frozenset()
+    return _build_native_observation(env, next_state=next_state, action=1)
 
 
 # ---------------------------------------------------------------------------
@@ -119,7 +80,7 @@ def test_transition_sample_returns_list_of_1d_ndarrays(transition):
     Purpose: Guards against accidental API drift (call sites index with [0]
     or iterate the list).
 
-    Given: A SafeAntVelocityStateTransition.
+    Given: A native SafeAntVelocityTransitionCpp.
     When: sample(3) is called.
     Then: The return value is a list of exactly three 1-D ndarrays of length 4.
 
@@ -138,7 +99,7 @@ def test_transition_sample_is_deterministic_under_set_seed(transition):
 
     Purpose: Validates the determinism path used by reproducible tests.
 
-    Given: A SafeAntVelocityStateTransition.
+    Given: A native SafeAntVelocityTransitionCpp.
     When: _native.set_seed(seed) is called before each of two sample(50) draws.
     Then: The two sample sequences are elementwise identical.
 
@@ -157,14 +118,14 @@ def test_transition_batch_sample_shape_contract(env):
 
     Purpose: Guards the shape contract used by belief-level callers.
 
-    Given: A SafeAntVelocityStateTransition and a (37, 4) particles ndarray.
+    Given: A native SafeAntVelocityTransitionCpp and a (37, 4) particles ndarray.
     When: batch_sample is called.
     Then: The result is an ndarray of shape (37, 4) and dtype float64.
 
     Test type: unit
     """
     state = np.array([0.0, 0.0, 0.0, 0.0])
-    transition = env.state_transition_model(state=state, action=1)
+    transition = _build_native_transition(env, state=state, action=1)
     particles = np.zeros((37, 4), dtype=np.float64)
     _native.set_seed(0)
     result = transition.batch_sample(particles)
@@ -186,7 +147,7 @@ def test_transition_zero_force_is_deterministic(env):
     Test type: unit
     """
     state = np.array([0.1, -0.2, 1.0, 0.5])
-    transition = env.state_transition_model(state=state, action=0)
+    transition = _build_native_transition(env, state=state, action=0)
     particles = np.tile(state, (100, 1))
     _native.set_seed(99)
     result = transition.batch_sample(particles)
@@ -214,7 +175,7 @@ def test_transition_batch_sample_velocity_magnitude_matches_ring_radius(env):
     Test type: integration
     """
     state = np.zeros(4)
-    transition = env.state_transition_model(state=state, action=3)
+    transition = _build_native_transition(env, state=state, action=3)
     particles = np.tile(state, (100_000, 1))
 
     _native.set_seed(123)
@@ -241,7 +202,7 @@ def test_transition_batch_sample_force_direction_is_uniform_on_circle(env):
     Test type: integration
     """
     state = np.zeros(4)
-    transition = env.state_transition_model(state=state, action=3)
+    transition = _build_native_transition(env, state=state, action=3)
     particles = np.tile(state, (100_000, 1))
 
     _native.set_seed(456)
@@ -264,8 +225,8 @@ def test_transition_batch_sample_matches_per_particle_loop_under_shared_seed(env
 
     Given: 64 randomly-placed particles.
     When: batch_sample runs under seed=777; then for each particle a fresh
-        SafeAntVelocityStateTransition is built and sample(1) is called in
-        the same order under the same seed.
+        native SafeAntVelocityTransitionCpp is built and sample(1) is called
+        in the same order under the same seed.
     Then: The two (64, 4) arrays are array_equal.
 
     Test type: unit
@@ -282,13 +243,13 @@ def test_transition_batch_sample_matches_per_particle_loop_under_shared_seed(env
     action = 2
 
     _native.set_seed(777)
-    transition = env.state_transition_model(state=particles[0], action=action)
+    transition = _build_native_transition(env, state=particles[0], action=action)
     batch_result = transition.batch_sample(particles)
 
     _native.set_seed(777)
     per_particle_rows = []
     for row in particles:
-        model = env.state_transition_model(state=row, action=action)
+        model = _build_native_transition(env, state=row, action=action)
         per_particle_rows.append(model.sample(1)[0])
     per_particle_result = np.stack(per_particle_rows, axis=0)
 
@@ -306,7 +267,7 @@ def test_observation_sample_empirical_moments_match_spec(env):
     Purpose: Validates that 200k observation samples have the theoretical
     mean (the input next_state) and covariance (diag of pos/vel noises).
 
-    Given: A SafeAntVelocityObservation with a fixed next_state.
+    Given: A native SafeAntVelocityObservationCpp with a fixed next_state.
     When: 200,000 samples are drawn via the C++ path.
     Then: The empirical mean matches the next_state within 5e-3, and the
         empirical covariance matches the observation covariance within
@@ -315,7 +276,7 @@ def test_observation_sample_empirical_moments_match_spec(env):
     Test type: integration
     """
     next_state = np.array([0.05, 0.1, -0.3, 0.4])
-    obs_model = env.observation_model(next_state=next_state, action=0)
+    obs_model = _build_native_observation(env, next_state=next_state, action=0)
     expected_cov = np.diag(
         [
             env.position_noise**2,
@@ -352,7 +313,7 @@ def test_observation_probability_matches_python_reference_on_grid(env):
     Test type: unit
     """
     next_state = np.array([0.02, 0.05, -0.01, 0.1])
-    obs_model = env.observation_model(next_state=next_state, action=1)
+    obs_model = _build_native_observation(env, next_state=next_state, action=1)
     cov = np.diag(
         [
             env.position_noise**2,
@@ -387,8 +348,8 @@ def test_observation_batch_log_likelihood_matches_per_particle(env):
 
     Given: 64 random next-state particles and a single observation.
     When: batch_log_likelihood(next_particles, observation) is called, and
-        for each particle a fresh SafeAntVelocityObservation is built and
-        probability([observation]) is computed.
+        for each particle a fresh native SafeAntVelocityObservationCpp is
+        built and probability([observation]) is computed.
     Then: The batch log-likelihoods equal np.log of the per-particle
         probabilities within atol=1e-12.
 
@@ -406,12 +367,12 @@ def test_observation_batch_log_likelihood_matches_per_particle(env):
     observation = np.array([0.02, 0.0, -0.01, 0.0])
     action = 0
 
-    obs_model = env.observation_model(next_state=next_particles[0], action=action)
+    obs_model = _build_native_observation(env, next_state=next_particles[0], action=action)
     batch_log_ll = obs_model.batch_log_likelihood(next_particles, observation)
 
     per_particle_log_ll = np.empty(len(next_particles))
     for i, next_state in enumerate(next_particles):
-        model = env.observation_model(next_state=next_state, action=action)
+        model = _build_native_observation(env, next_state=next_state, action=action)
         per_particle_log_ll[i] = np.log(model.probability([observation])[0])
 
     np.testing.assert_allclose(batch_log_ll, per_particle_log_ll, atol=1e-12, rtol=0.0)
@@ -422,14 +383,14 @@ def test_observation_batch_log_likelihood_shape_contract(env):
 
     Purpose: Guards the shape contract used by belief-level callers.
 
-    Given: A SafeAntVelocityObservation, 37 next-particles, and one observation.
+    Given: A native SafeAntVelocityObservationCpp, 37 next-particles, and one observation.
     When: batch_log_likelihood is called.
     Then: The result is an ndarray of shape (37,) and dtype float64.
 
     Test type: unit
     """
     next_state = np.array([0.0, 0.0, 0.0, 0.0])
-    obs_model = env.observation_model(next_state=next_state, action=1)
+    obs_model = _build_native_observation(env, next_state=next_state, action=1)
     next_particles = np.zeros((37, 4), dtype=np.float64)
     observation = np.array([0.0, 0.0, 0.0, 0.0])
     result = obs_model.batch_log_likelihood(next_particles, observation)
@@ -461,208 +422,3 @@ def test_observation_probability_accepts_list_and_ndarray_inputs(observation):
     from_array = observation.probability(array_values)
 
     np.testing.assert_array_equal(from_list, from_array)
-
-
-# ---------------------------------------------------------------------------
-# Hot-path sample_next_state / sample_observation overrides
-# (skip Python wrapper, route directly to native kernel)
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize(
-    "state,action",
-    [
-        (np.array([0.0, 0.0, 0.0, 0.0]), 0),  # zero force -> deterministic
-        (np.array([0.5, -0.2, 1.0, 0.5]), 1),
-        (np.array([-0.3, 0.4, 0.7, -0.6]), 2),
-        (np.array([0.1, 0.1, 1.5, 0.8]), 3),
-    ],
-)
-def test_sample_next_state_override_matches_wrapper(env, state, action):
-    """Override sample_next_state matches the per-call wrapper bit-exactly.
-
-    Purpose: Validates that ``SafeAntVelocityPOMDP.sample_next_state``
-    (which constructs the native transition kernel directly, skipping the
-    Python wrapper) produces the exact same next state as the legacy
-    ``state_transition_model(state, action).sample()[0]`` path under a
-    fixed C++ RNG seed.
-
-    Given: The shared SafeAnt env fixture and a parametrized
-        ``(state, action)`` pair covering zero-force and varied-force
-        regimes.
-    When: Both paths are invoked with ``_native.set_seed`` reset to the
-        same value before each call.
-    Then: ``np.array_equal`` holds elementwise on the returned arrays.
-
-    Test type: integration
-    """
-    _native.set_seed(2024)
-    via_wrapper = env.state_transition_model(state=state, action=action).sample()[0]
-
-    _native.set_seed(2024)
-    via_override = env.sample_next_state(state=state, action=action)
-
-    np.testing.assert_array_equal(via_wrapper, via_override)
-
-
-@pytest.mark.parametrize(
-    "next_state,action",
-    [
-        (np.array([0.0, 0.0, 0.0, 0.0]), 0),
-        (np.array([0.5, -0.2, 1.0, 0.5]), 1),
-        (np.array([-0.3, 0.4, 0.7, -0.6]), 2),
-        (np.array([0.1, 0.1, 1.5, 0.8]), 3),
-    ],
-)
-def test_sample_observation_override_matches_wrapper(env, next_state, action):
-    """Override sample_observation matches the per-call wrapper bit-exactly.
-
-    Purpose: Validates that ``SafeAntVelocityPOMDP.sample_observation``
-    (which constructs the native observation kernel directly, skipping
-    the Python wrapper) produces the exact same observation as the legacy
-    ``observation_model(...).sample()[0]`` path under a fixed C++ RNG seed.
-
-    Given: The shared env fixture plus a parametrized
-        ``(next_state, action)`` pair.
-    When: Both paths are invoked with ``_native.set_seed`` reset to the
-        same value before each call.
-    Then: ``np.array_equal`` holds elementwise.
-
-    Test type: integration
-    """
-    _native.set_seed(7777)
-    via_wrapper = env.observation_model(next_state=next_state, action=action).sample()[0]
-
-    _native.set_seed(7777)
-    via_override = env.sample_observation(next_state=next_state, action=action)
-
-    np.testing.assert_array_equal(via_wrapper, via_override)
-
-
-# ---------------------------------------------------------------------------
-# n_samples / log-probability equivalence (PR-A)
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize("n", [1, 5, 100])
-def test_sample_next_state_n_samples_equivalence(env, n):
-    """env.sample_next_state(n) matches n calls of state_transition_model.sample(1).
-
-    Purpose: Validates that the env-level batched transition sampler
-    advances the native RNG in the same order as repeated wrapper
-    sample(1) calls under the same seed.
-
-    Given: A non-zero force action so the uniform-angle RNG is consumed.
-    When: Both paths are seeded identically and asked for n samples.
-    Then: Returned states are np.array_equal element-wise.
-
-    Test type: integration
-    """
-    state = np.array([0.5, -0.2, 1.0, 0.5])
-    action = 2
-
-    _native.set_seed(2024)
-    loop = [env.state_transition_model(state, action).sample()[0] for _ in range(n)]
-
-    _native.set_seed(2024)
-    if n == 1:
-        batch = [env.sample_next_state(state=state, action=action)]
-    else:
-        batch = list(env.sample_next_state(state=state, action=action, n_samples=n))
-
-    assert len(batch) == n
-    for a, b in zip(loop, batch):
-        np.testing.assert_array_equal(a, b)
-
-
-@pytest.mark.parametrize("n", [1, 5, 100])
-def test_sample_observation_n_samples_equivalence(env, n):
-    """env.sample_observation(n) matches n calls of observation_model.sample(1).
-
-    Purpose: Validates that the env-level batched observation sampler
-    advances the native RNG in the same order as repeated wrapper
-    sample(1) calls under the same seed.
-
-    Given: A representative non-zero next_state.
-    When: Both paths are seeded identically.
-    Then: All sampled observations are np.array_equal element-wise.
-
-    Test type: integration
-    """
-    next_state = np.array([0.5, -0.2, 1.0, 0.5])
-    action = 2
-
-    _native.set_seed(99)
-    loop = [env.observation_model(next_state, action).sample()[0] for _ in range(n)]
-
-    _native.set_seed(99)
-    if n == 1:
-        batch = [env.sample_observation(next_state=next_state, action=action)]
-    else:
-        batch = list(env.sample_observation(next_state=next_state, action=action, n_samples=n))
-
-    assert len(batch) == n
-    for a, b in zip(loop, batch):
-        np.testing.assert_array_equal(a, b)
-
-
-def test_transition_log_probability_equivalence(env):
-    """transition_log_probability matches log of state_transition_model.probability.
-
-    Purpose: Validates the env-level vectorized log-probability matches
-    the wrapper-based path. The transition's probability() is the
-    tolerance-based ring-consistency check (no closed-form density).
-
-    Given: A state, action with non-zero force, and a few candidate
-        next states sampled from the same kernel plus a perturbed one.
-    When: env.transition_log_probability is compared to log of wrapper
-        probability().
-    Then: Arrays agree elementwise within 1e-10.
-
-    Test type: integration
-    """
-    state = np.array([0.0, 0.0, 0.5, -0.3])
-    action = 2
-
-    _native.set_seed(11)
-    samples = list(env.state_transition_model(state, action).sample(3))
-    perturbed = samples[0].copy()
-    perturbed[0] += 5.0  # break the ring-consistency check
-    candidates = list(samples) + [perturbed]
-
-    log_p = env.transition_log_probability(state, action, candidates)
-    expected = np.log(
-        np.asarray(env.state_transition_model(state, action).probability(candidates)) + 1e-300
-    )
-
-    assert log_p.shape == (len(candidates),)
-    np.testing.assert_allclose(log_p, expected, atol=1e-10)
-
-
-def test_observation_log_probability_equivalence(env):
-    """observation_log_probability matches log of observation_model.probability.
-
-    Purpose: Validates the env-level vectorized log-density matches the
-    wrapper path on a list of candidate observations (Gaussian density).
-
-    Given: A representative next_state and a small set of candidate
-        observations near its identity-mean.
-    When: env.observation_log_probability is compared to log of wrapper
-        probability().
-    Then: Arrays agree elementwise within 1e-10.
-
-    Test type: integration
-    """
-    next_state = np.array([0.6, -0.1, 1.2, 0.8])
-    action = 2
-
-    _native.set_seed(13)
-    candidates = list(env.observation_model(next_state, action).sample(4))
-
-    log_p = env.observation_log_probability(next_state, action, candidates)
-    expected = np.log(
-        np.asarray(env.observation_model(next_state, action).probability(candidates)) + 1e-300
-    )
-
-    assert log_p.shape == (len(candidates),)
-    np.testing.assert_allclose(log_p, expected, atol=1e-10)
