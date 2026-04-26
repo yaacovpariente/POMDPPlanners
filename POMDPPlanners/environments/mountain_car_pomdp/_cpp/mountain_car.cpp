@@ -108,6 +108,114 @@ class MountainCarObservationCpp : public pomdp_native::ObservationModelCpp<kMoun
     int action_int_;
 };
 
+// ---------------------------------------------------------------------------
+// Deterministic MountainCar physics step. Writes 2 doubles to ``out``.
+// ``state`` is [position, velocity]; ``action_int`` is -1, 0, or 1.
+// ---------------------------------------------------------------------------
+static void mountain_car_step(const double *state, double *out, int action_int,
+                               double power, double gravity,
+                               double max_speed, double min_position,
+                               double max_position) noexcept {
+    double v = state[1] + static_cast<double>(action_int) * power +
+               std::cos(3.0 * state[0]) * (-gravity);
+    v = std::clamp(v, -max_speed, max_speed);
+    double p = state[0] + v;
+    p = std::clamp(p, min_position, max_position);
+    if (p == min_position && v < 0.0) {
+        v = 0.0;
+    }
+    out[0] = p;
+    out[1] = v;
+}
+
+// Returns true when position >= goal_position (terminal).
+static bool mountain_car_is_terminal(const double *state,
+                                      double goal_position) noexcept {
+    return state[0] >= goal_position;
+}
+
+// ---------------------------------------------------------------------------
+// Native simulate_rollout for MountainCar.
+//
+// actions_arr: shape (n_actions,) — the integer action values (e.g. [-1,0,1])
+// action_indices: pre-drawn 1-D int32 indices into actions_arr, shape (n,)
+// covariance: 2x2 state-transition covariance matrix
+// ---------------------------------------------------------------------------
+double mountain_car_simulate_rollout(
+    const py::array_t<double, py::array::c_style | py::array::forcecast> &initial_state,
+    const py::array_t<int, py::array::c_style | py::array::forcecast> &actions_arr,
+    const py::array_t<int, py::array::c_style | py::array::forcecast> &action_indices,
+    int max_depth,
+    int start_depth,
+    double discount_factor,
+    double power,
+    double gravity,
+    double max_speed,
+    double min_position,
+    double max_position,
+    double goal_position,
+    const py::array_t<double> &covariance) {
+    if (initial_state.ndim() != 1 ||
+        static_cast<std::size_t>(initial_state.shape(0)) != kMountainCarStateDim) {
+        throw std::invalid_argument("initial_state must have shape (2,)");
+    }
+    if (action_indices.ndim() != 1) {
+        throw std::invalid_argument("action_indices must be 1-D");
+    }
+
+    const int n_actions = static_cast<int>(actions_arr.shape(0));
+    const auto noise =
+        pomdp_native::GaussianND<kMountainCarStateDim>::from_covariance(covariance);
+
+    auto state_view = initial_state.unchecked<1>();
+    double state[kMountainCarStateDim] = {state_view(0), state_view(1)};
+    double next_state[kMountainCarStateDim];
+
+    auto ai_view = action_indices.unchecked<1>();
+    auto av_view = actions_arr.unchecked<1>();
+    const int n_indices = static_cast<int>(action_indices.shape(0));
+
+    pomdp_native::RNGState &rng = pomdp_native::default_rng();
+
+    double total = 0.0;
+    double gamma_power = 1.0;
+    int depth = start_depth;
+
+    while (depth < max_depth) {
+        if (mountain_car_is_terminal(state, goal_position)) {
+            break;
+        }
+
+        const int idx_slot = depth - start_depth;
+        if (idx_slot >= n_indices) {
+            break;
+        }
+        int ai = ai_view(static_cast<py::ssize_t>(idx_slot));
+        if (ai < 0 || ai >= n_actions) {
+            ai = ((ai % n_actions) + n_actions) % n_actions;
+        }
+        const int action_int = av_view(static_cast<py::ssize_t>(ai));
+
+        // Reward: -1.0 for non-terminal states
+        total += gamma_power * (-1.0);
+        gamma_power *= discount_factor;
+
+        // Compute deterministic next state then add Gaussian noise
+        mountain_car_step(state, next_state, action_int, power, gravity,
+                          max_speed, min_position, max_position);
+        noise.sample_into(state, next_state, rng);
+        // Post-sample clamp (matches post_sample_transform)
+        state[1] = std::clamp(state[1], -max_speed, max_speed);
+        state[0] = std::clamp(state[0], min_position, max_position);
+        if (state[0] == min_position && state[1] < 0.0) {
+            state[1] = 0.0;
+        }
+        ++depth;
+    }
+
+    return total;
+}
+
 }  // anonymous namespace
 
 PYBIND11_MODULE(_native, m) {
@@ -115,6 +223,17 @@ PYBIND11_MODULE(_native, m) {
 
     m.def("set_seed", &pomdp_native::set_default_seed, py::arg("seed"),
           "Seed the module-level RNG used by sample().");
+
+    m.def("simulate_rollout", &mountain_car_simulate_rollout,
+          py::arg("initial_state"), py::arg("actions"), py::arg("action_indices"),
+          py::arg("max_depth"), py::arg("start_depth"), py::arg("discount_factor"),
+          py::arg("power"), py::arg("gravity"), py::arg("max_speed"),
+          py::arg("min_position"), py::arg("max_position"), py::arg("goal_position"),
+          py::arg("covariance"),
+          "Native random rollout for MountainCar. "
+          "actions must be a 1-D int32 array of action values (e.g. [-1,0,1]). "
+          "action_indices must be a pre-drawn 1-D int32 array of indices into actions. "
+          "Returns discounted return from initial_state.");
 
     py::class_<MountainCarTransitionCpp>(m, "MountainCarTransitionCpp")
         .def(py::init<const py::object &, int, double, double, double, double, double,

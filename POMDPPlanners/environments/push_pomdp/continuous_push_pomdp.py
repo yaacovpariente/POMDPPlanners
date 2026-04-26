@@ -34,6 +34,7 @@ from POMDPPlanners.core.environment import (
 )
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
 from POMDPPlanners.environments.push_pomdp import _native
+from POMDPPlanners.planners.planners_utils.rollout import python_random_rollout
 from POMDPPlanners.environments.push_pomdp.continuous_push_geometry import (
     circle_aabb_overlap,
     point_inside_aabb,
@@ -174,6 +175,10 @@ class ContinuousPushPOMDP(Environment):
         # per-call Cholesky and obstacle-buffer copy).
         self._trans_kernel_cache: Dict[bytes, Any] = {}
         self._obs_kernel_cache: Dict[bytes, Any] = {}
+
+        # Cached (N_actions, 2) float64 array used by simulate_random_rollout.
+        # Built lazily on first rollout call; reset to None on pickle round-trips.
+        self._rollout_actions_array: Optional[np.ndarray] = None
 
         space_info = SpaceInfo(
             action_space=SpaceType.CONTINUOUS,
@@ -408,12 +413,97 @@ class ContinuousPushPOMDP(Environment):
         state = self.__dict__.copy()
         state["_trans_kernel_cache"] = {}
         state["_obs_kernel_cache"] = {}
+        state["_rollout_actions_array"] = None
         return state
 
     def __setstate__(self, state):
         vars(self).update(state)
         self._trans_kernel_cache = {}
         self._obs_kernel_cache = {}
+        self._rollout_actions_array = None
+
+    def _build_rollout_actions_array(self) -> Optional[np.ndarray]:
+        action_to_vector: Optional[Dict[str, np.ndarray]] = getattr(self, "action_to_vector", None)
+        if action_to_vector is None:
+            return None
+        # action_to_vector is only set on the discrete subclass, which also
+        # defines get_actions(). Use getattr to avoid the base-class attribute
+        # error; the None guard above ensures we never reach this line without
+        # a working discrete action set.
+        actions_list: List[str] = getattr(self, "actions", list(action_to_vector))
+        rows = [np.asarray(action_to_vector[a], dtype=np.float64) for a in actions_list]
+        return np.ascontiguousarray(np.stack(rows, axis=0), dtype=np.float64)
+
+    def _get_rollout_actions_array(self) -> Optional[np.ndarray]:
+        cached = getattr(self, "_rollout_actions_array", None)
+        if cached is None:
+            cached = self._build_rollout_actions_array()
+            self._rollout_actions_array = cached
+        return cached
+
+    def simulate_random_rollout(
+        self,
+        state: Any,
+        action_sampler: Any,
+        max_depth: int,
+        discount_factor: float,
+        depth: int = 0,
+    ) -> float:
+        """Random rollout dispatched to native C++ when a fixed action set is available.
+
+        Uses the ``cont_simulate_rollout`` native kernel when ``self`` has an
+        ``action_to_vector`` mapping (i.e. the discrete-action subclass).
+        Falls back to the Python base-class loop for pure continuous-action
+        environments where no finite action set exists.
+
+        Args:
+            state: Current 6-D state ``[rx, ry, ox, oy, tx, ty]``.
+            action_sampler: Object with a ``sample()`` method; used only for
+                the Python fallback path.
+            max_depth: Maximum rollout depth.
+            discount_factor: Per-step discount factor.
+            depth: Depth already consumed by the search tree. Defaults to 0.
+
+        Returns:
+            Discounted sum of immediate rewards along the sampled trajectory.
+        """
+        steps_left = max_depth - depth
+        if steps_left <= 0:
+            return 0.0
+
+        actions_array = self._get_rollout_actions_array()
+        if actions_array is None:
+            return python_random_rollout(
+                state=state,
+                depth=depth,
+                action_sampler=action_sampler,
+                environment=self,
+                discount_factor=discount_factor,
+                max_depth=max_depth,
+            )
+
+        n_actions = len(actions_array)
+        action_indices = np.random.randint(0, n_actions, size=steps_left, dtype=np.int32)
+        state_arr = np.ascontiguousarray(np.asarray(state, dtype=np.float64).ravel())
+
+        return float(
+            _native.cont_simulate_rollout(
+                initial_state=state_arr,
+                action_array=actions_array,
+                action_indices=action_indices,
+                max_depth=max_depth,
+                start_depth=depth,
+                discount_factor=float(discount_factor),
+                grid_size=float(self.grid_size),
+                push_threshold=float(self.push_threshold),
+                friction_coefficient=float(self.friction_coefficient),
+                max_push=float(self.max_push),
+                robot_radius=float(self.robot_radius),
+                obstacle_penalty=float(self.obstacle_penalty),
+                obstacles=np.ascontiguousarray(self.obstacles, dtype=np.float64),
+                covariance=self._trans_cov_view,
+            )
+        )
 
     def is_terminal(self, state: np.ndarray) -> bool:
         obj = state[2:4]

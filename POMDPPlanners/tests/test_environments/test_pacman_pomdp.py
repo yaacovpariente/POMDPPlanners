@@ -2084,3 +2084,206 @@ class TestRewardBatch:
         ).reshape(1, -1)
         rewards = env.reward_batch(arr, 1)  # East -> (1,1)
         assert rewards[0] == env.step_penalty + env.pellet_reward
+
+
+class TestNativeSimulateRollout:
+    """Tests for PacManPOMDP.simulate_random_rollout C++ native override."""
+
+    def _make_env(self) -> PacManPOMDP:
+        return PacManPOMDP(
+            maze_size=(7, 7),
+            walls={(2, 2), (2, 3), (3, 2), (4, 4), (3, 5)},
+            initial_pellets=[(1, 1), (1, 5), (5, 1), (5, 5)],
+            initial_pacman_pos=(0, 0),
+            num_ghosts=1,
+            initial_ghost_positions=[(6, 6)],
+            pellet_reward=10.0,
+            ghost_collision_penalty=-100.0,
+            step_penalty=-1.0,
+            win_reward=100.0,
+            discount_factor=0.95,
+        )
+
+    def test_pacman_native_simulate_rollout_matches_python(self):
+        """Test native C++ rollout matches Python reference for same actions and RNG.
+
+        Purpose: Validates that simulate_random_rollout's C++ implementation
+            produces the same discounted cumulative reward as a Python reference
+            that uses the same pre-drawn action sequence and shares the C++ RNG.
+
+        Given: A deterministic PacManPOMDP instance and a fixed np.random.seed(0).
+            Pre-draw action indices for the rollout depth in Python.
+            Reset the C++ RNG to a known seed before both calls.
+        When: The native simulate_random_rollout and the Python reference (which
+            steps through the same actions using the same C++ RNG) are both called.
+        Then: The returned discounted rewards agree to atol=1e-9.
+
+        Test type: unit
+        """
+        from POMDPPlanners.environments.pacman_pomdp import (
+            _native,
+        )  # pylint: disable=import-outside-toplevel
+
+        env = self._make_env()
+        np.random.seed(0)
+        initial_state = env.initial_state_dist().sample()[0]
+        max_depth = 10
+        discount_factor = 0.95
+
+        # Pre-draw action indices; the native rollout will use these same actions.
+        action_indices = np.random.randint(0, 4, size=max_depth, dtype=np.int32)
+
+        # Python reference: step once per action and compute reward from the
+        # resulting next_state (same semantics as simulate_rollout_impl in C++).
+        _native.set_seed(12345)
+        py_total = _python_reference_rollout(
+            env, initial_state, action_indices, discount_factor, max_depth
+        )
+
+        # Native rollout with the same C++ RNG seed.
+        _native.set_seed(12345)
+        transition_kwargs = env.get_transition_cpp_ctor_kwargs()
+        native_total = _native.simulate_rollout(
+            state=initial_state,
+            action_indices=action_indices,
+            maze_rows=transition_kwargs["maze_rows"],
+            maze_cols=transition_kwargs["maze_cols"],
+            neighbor_table=transition_kwargs["neighbor_table"],
+            neighbor_validity=transition_kwargs["neighbor_validity"],
+            pellet_positions=transition_kwargs["pellet_positions"],
+            ghost_aggressiveness=transition_kwargs["ghost_aggressiveness"],
+            ghost_coordination_code=transition_kwargs["ghost_coordination_code"],
+            ghost_strategy_codes=transition_kwargs["ghost_strategy_codes"],
+            num_ghosts=transition_kwargs["num_ghosts"],
+            num_pellets=transition_kwargs["num_pellets"],
+            pellet_reward=transition_kwargs["pellet_reward"],
+            idx_pac_row=transition_kwargs["idx_pac_row"],
+            idx_pac_col=transition_kwargs["idx_pac_col"],
+            idx_ghosts_start=transition_kwargs["idx_ghosts_start"],
+            idx_pellets_start=transition_kwargs["idx_pellets_start"],
+            idx_pellets_end=transition_kwargs["idx_pellets_end"],
+            idx_score=transition_kwargs["idx_score"],
+            idx_terminal=transition_kwargs["idx_terminal"],
+            patrol_dir_state=env.ghost_patrol_directions,
+            ghost_collision_penalty=float(env.ghost_collision_penalty),
+            step_penalty=float(env.step_penalty),
+            win_reward=float(env.win_reward),
+            discount_factor=float(discount_factor),
+            depth=0,
+            max_depth=max_depth,
+        )
+
+        assert abs(native_total - py_total) <= 1e-9, (
+            f"Native rollout {native_total:.6f} != Python reference {py_total:.6f}, "
+            f"delta={abs(native_total - py_total):.2e}"
+        )
+
+    def test_native_rollout_returns_zero_for_terminal_state(self):
+        """Test native rollout returns zero when the initial state is terminal.
+
+        Purpose: Validates the early-exit path when state is already terminal.
+
+        Given: A terminal state.
+        When: simulate_random_rollout is called.
+        Then: 0.0 is returned immediately.
+
+        Test type: unit
+        """
+        env = self._make_env()
+        terminal_state = env.make_state(
+            pacman_pos=(0, 0),
+            ghost_positions=((0, 0),),  # collision → terminal
+            pellets=((1, 1), (1, 5), (5, 1), (5, 5)),
+            terminal=True,
+        )
+
+        class _DummySampler:
+            def sample(self) -> int:
+                return 0
+
+        result = env.simulate_random_rollout(
+            state=terminal_state,
+            action_sampler=_DummySampler(),
+            max_depth=20,
+            discount_factor=0.95,
+        )
+        assert result == 0.0
+
+    def test_native_rollout_respects_depth_offset(self):
+        """Test that depth parameter correctly reduces the number of steps.
+
+        Purpose: Validates the (max_depth - depth) remaining-depth calculation.
+
+        Given: max_depth=5, depth=5.
+        When: simulate_random_rollout is called.
+        Then: 0.0 is returned (no steps executed).
+
+        Test type: unit
+        """
+        env = self._make_env()
+        initial_state = env.initial_state_dist().sample()[0]
+
+        class _DummySampler:
+            def sample(self) -> int:
+                return 0
+
+        result = env.simulate_random_rollout(
+            state=initial_state,
+            action_sampler=_DummySampler(),
+            max_depth=5,
+            discount_factor=0.95,
+            depth=5,
+        )
+        assert result == 0.0
+
+
+def _python_reference_rollout(
+    env: PacManPOMDP,
+    initial_state: np.ndarray,
+    action_indices: np.ndarray,
+    discount_factor: float,
+    max_depth: int,
+) -> float:
+    """Python reference matching simulate_rollout_impl: sample once per step.
+
+    Steps through pre-drawn action_indices using the C++ transition kernel and
+    computes reward from the resulting next_state (not a second sample).
+    """
+    from POMDPPlanners.environments.pacman_pomdp import (
+        _native,
+    )  # pylint: disable=import-outside-toplevel
+
+    current = initial_state.copy()
+    total = 0.0
+    gamma_power = 1.0
+
+    for step in range(min(max_depth, len(action_indices))):
+        if env.get_terminal(current):
+            break
+        action = int(action_indices[step])
+        kernel = _native.PacManTransitionCpp(
+            state=current,
+            action=action,
+            **env.get_transition_cpp_ctor_kwargs(),
+            patrol_dir_state=env.ghost_patrol_directions,
+        )
+        next_state = kernel.sample(1)[0]
+
+        r = env.step_penalty
+        new_pac_pos = env.get_pacman_pos(next_state)
+        for ghost_pos in env.get_ghost_positions(next_state):
+            if ghost_pos == new_pac_pos:
+                r += env.ghost_collision_penalty
+                break
+
+        if env.get_score(next_state) > env.get_score(current):
+            r += env.pellet_reward
+
+        if env.get_terminal(next_state) and not env.get_pellets(next_state):
+            r += env.win_reward
+
+        total += gamma_power * r
+        gamma_power *= discount_factor
+        current = next_state
+
+    return total

@@ -21,6 +21,34 @@ def set_seed(seed: int) -> None:
     """Seed the module-level RNG used by ``sample()`` calls."""
     ...
 
+def simulate_rollout(
+    initial_state: NDArray[np.float64],
+    action_array: NDArray[np.float64],
+    action_indices: NDArray[np.int32],
+    max_depth: int,
+    start_depth: int,
+    discount_factor: float,
+    goal_state: NDArray[np.float64],
+    obstacles: NDArray[np.float64],
+    goal_state_radius: float,
+    obstacle_radius: float,
+    grid_size: float,
+    fuel_cost: float,
+    goal_reward: float,
+    obstacle_reward: float,
+    obstacle_hit_probability: float,
+    is_obstacle_hit_terminal: bool,
+    covariance: NDArray[np.float64],
+) -> float:
+    """Native random rollout for the STANDARD reward model.
+
+    Returns the discounted return from ``initial_state`` using the STANDARD
+    reward model. ``action_indices`` must be a pre-drawn 1-D int array with
+    at least ``max_depth - start_depth`` entries. ``obstacles`` must be a flat
+    1-D array ``[x0, y0, x1, y1, ...]`` (row-major interleaved).
+    """
+    ...
+
 class ContinuousLightDarkTransitionCpp:
     """Native additive-Gaussian transition sampler for Continuous Light-Dark."""
 

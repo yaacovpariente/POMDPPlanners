@@ -16,6 +16,30 @@ def set_seed(seed: int) -> None:
     """Seed the module-level RNG used by ``sample()`` / ``batch_sample()`` calls."""
     ...
 
+def simulate_rollout(
+    initial_state: NDArray[np.floating],
+    action_indices: NDArray[np.int32],
+    force_scales: NDArray[np.floating],
+    max_depth: int,
+    start_depth: int,
+    discount_factor: float,
+    dt: float,
+    mass: float,
+    damping: float,
+    max_force: float,
+    safe_velocity_threshold: float,
+    safety_violation_penalty: float,
+    movement_reward_scale: float,
+) -> float:
+    """Native random rollout for SafeAntVelocityPOMDP.
+
+    Walks the physics model in C++ for ``max_depth - start_depth`` steps
+    (or until terminal) and returns the discounted sum of rewards.
+    ``action_indices`` must be a pre-drawn integer array of length
+    ``max_depth - start_depth``.
+    """
+    ...
+
 class SafeAntVelocityTransitionCpp:
     """Native damped-force + uniform-angle transition sampler."""
 

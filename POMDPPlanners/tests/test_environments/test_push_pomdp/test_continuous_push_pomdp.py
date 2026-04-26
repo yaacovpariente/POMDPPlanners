@@ -830,3 +830,275 @@ class TestSampleNSamplesContract:
             for sample in result:
                 assert isinstance(sample, np.ndarray)
                 assert sample.shape == (6,)
+
+
+# Native rollout equivalence
+# ------------------------------------------------------------------
+
+
+class _FixedActionSampler:
+    """Minimal sampler that cycles through a fixed sequence of actions."""
+
+    def __init__(self, actions_seq):
+        self._actions = list(actions_seq)
+        self._idx = 0
+
+    def sample(self, belief_node=None):  # pylint: disable=unused-argument
+        action = self._actions[self._idx % len(self._actions)]
+        self._idx += 1
+        return action
+
+
+class TestNativeRolloutEquivalence:
+    """Equivalence tests for the native C++ simulate_random_rollout override."""
+
+    def _make_env(self) -> ContinuousPushPOMDPDiscreteActions:
+        return ContinuousPushPOMDPDiscreteActions(
+            discount_factor=0.95,
+            grid_size=10,
+            push_threshold=1.0,
+            friction_coefficient=0.3,
+            max_push=2.0,
+            observation_noise=0.1,
+            obstacles=[(5.0, 5.0, 0.5)],
+            obstacle_penalty=-10.0,
+            robot_radius=0.3,
+            state_transition_cov_matrix=np.eye(2) * 0.05,
+        )
+
+    def test_native_rollout_is_float(self):
+        """simulate_random_rollout returns a Python float.
+
+        Purpose: Validates that the native override returns a scalar float,
+            matching the return-type contract of the base class.
+
+        Given: A ContinuousPushPOMDPDiscreteActions env and an initial state.
+        When: simulate_random_rollout is called with a discrete sampler.
+        Then: The result is a Python float.
+
+        Test type: unit
+        """
+        from POMDPPlanners.environments.push_pomdp import (
+            _native,
+        )  # pylint: disable=import-outside-toplevel
+
+        env = self._make_env()
+        _native.set_seed(1)
+        state = np.array([2.0, 2.0, 5.0, 5.0, 9.0, 9.0])
+        from POMDPPlanners.utils.action_samplers import (
+            DiscreteActionSampler,
+        )  # pylint: disable=import-outside-toplevel
+
+        sampler = DiscreteActionSampler(env.get_actions())
+        result = env.simulate_random_rollout(
+            state=state,
+            action_sampler=sampler,
+            max_depth=10,
+            discount_factor=0.95,
+        )
+        assert isinstance(result, float)
+
+    def test_native_rollout_deterministic_under_seed(self):
+        """Two calls with the same seed produce identical rollout returns.
+
+        Purpose: Validates that the native C++ rollout is deterministic when
+            the module-level RNG is re-seeded to the same value before each
+            call.
+
+        Given: A fixed initial state and two identical seeds applied via
+            ``_native.set_seed`` before each rollout.
+        When: simulate_random_rollout is called twice with the same seed.
+        Then: Both calls return the exact same float.
+
+        Test type: unit
+        """
+        from POMDPPlanners.environments.push_pomdp import (
+            _native,
+        )  # pylint: disable=import-outside-toplevel
+        from POMDPPlanners.utils.action_samplers import (
+            DiscreteActionSampler,
+        )  # pylint: disable=import-outside-toplevel
+
+        env = self._make_env()
+        state = np.array([3.0, 3.0, 6.0, 6.0, 9.0, 9.0])
+        sampler = DiscreteActionSampler(env.get_actions())
+
+        np.random.seed(42)
+        _native.set_seed(999)
+        result_a = env.simulate_random_rollout(
+            state=state, action_sampler=sampler, max_depth=15, discount_factor=0.95
+        )
+
+        np.random.seed(42)
+        _native.set_seed(999)
+        result_b = env.simulate_random_rollout(
+            state=state, action_sampler=sampler, max_depth=15, discount_factor=0.95
+        )
+
+        assert result_a == result_b
+
+    def test_native_rollout_equivalence_with_python_step_by_step(self):
+        """Native rollout matches a step-by-step Python reference at fixed seed.
+
+        Purpose: Validates that cont_simulate_rollout computes the same
+            discounted return as a manually constructed Python loop that
+            calls ``sample_next_state`` and ``reward`` using the same
+            action sequence and the same module-level C++ RNG seed.
+
+        Given: A fixed 6-D state, a fixed seed, and a pre-drawn action-index
+            sequence using ``np.random`` (so both paths draw from the same
+            action sequence).
+        When: The native rollout and a Python reference loop are each run
+            under the same ``_native.set_seed`` and ``np.random.seed``.
+        Then: Both discounted returns agree to absolute tolerance 1e-9.
+
+        Test type: unit
+        """
+        from POMDPPlanners.environments.push_pomdp import (
+            _native,
+        )  # pylint: disable=import-outside-toplevel
+
+        env = self._make_env()
+        state = np.array([2.0, 2.0, 6.0, 6.0, 9.0, 9.0])
+        discount_factor = 0.95
+        max_depth = 8
+        depth = 0
+        steps_left = max_depth - depth
+        seed_np = 1234
+        seed_native = 7777
+
+        # Pre-draw the same action index sequence used by both paths.
+        np.random.seed(seed_np)
+        action_indices = np.random.randint(0, 4, size=steps_left, dtype=np.int32)
+
+        # ── Native path ──────────────────────────────────────────────
+        _native.set_seed(seed_native)
+        native_return = env.simulate_random_rollout(
+            state=state,
+            action_sampler=_FixedActionSampler([env.get_actions()[i] for i in action_indices]),
+            max_depth=max_depth,
+            discount_factor=discount_factor,
+            depth=depth,
+        )
+
+        # ── Python reference loop ─────────────────────────────────────
+        # Reproduce the exact same action sequence via FixedActionSampler
+        # and reset the native RNG to the same seed so the Gaussian draws
+        # inside sample_next_state match.
+        _native.set_seed(seed_native)
+        ref_state = state.copy()
+        ref_total = 0.0
+        gamma_power = 1.0
+        for i in range(steps_left):
+            if env.is_terminal(ref_state):
+                break
+            str_action = env.get_actions()[action_indices[i]]
+            ref_next = env.sample_next_state(ref_state, str_action)
+            ref_reward = env.reward(ref_state, str_action)
+            ref_total += gamma_power * ref_reward
+            ref_state = ref_next
+            gamma_power *= discount_factor
+
+        np.testing.assert_allclose(
+            native_return,
+            ref_total,
+            atol=1e-9,
+            err_msg=(
+                f"Native rollout {native_return} vs Python reference {ref_total}: "
+                "discounted returns must agree to 1e-9"
+            ),
+        )
+
+    def test_native_rollout_terminates_at_goal(self):
+        """Rollout stops early when object is already at goal.
+
+        Purpose: Validates the terminal check in the native rollout loop.
+
+        Given: A state where the object is within 0.5 of the target
+            (terminal).
+        When: simulate_random_rollout is called with max_depth=20.
+        Then: Returns 0.0 (no steps taken).
+
+        Test type: unit
+        """
+        from POMDPPlanners.environments.push_pomdp import (
+            _native,
+        )  # pylint: disable=import-outside-toplevel
+        from POMDPPlanners.utils.action_samplers import (
+            DiscreteActionSampler,
+        )  # pylint: disable=import-outside-toplevel
+
+        env = self._make_env()
+        # Object at (9.1, 9.1), target at (9, 9) → dist ≈ 0.14 < 0.5 → terminal
+        terminal_state = np.array([1.0, 1.0, 9.1, 9.1, 9.0, 9.0])
+        assert env.is_terminal(terminal_state)
+        sampler = DiscreteActionSampler(env.get_actions())
+        _native.set_seed(0)
+        result = env.simulate_random_rollout(
+            state=terminal_state,
+            action_sampler=sampler,
+            max_depth=20,
+            discount_factor=0.95,
+        )
+        assert result == 0.0
+
+    def test_native_rollout_zero_steps_returns_zero(self):
+        """Rollout returns 0.0 when depth == max_depth.
+
+        Purpose: Validates the boundary guard (steps_left <= 0).
+
+        Given: A non-terminal state with depth == max_depth.
+        When: simulate_random_rollout is called.
+        Then: Returns 0.0 immediately.
+
+        Test type: unit
+        """
+        from POMDPPlanners.utils.action_samplers import (
+            DiscreteActionSampler,
+        )  # pylint: disable=import-outside-toplevel
+
+        env = self._make_env()
+        state = np.array([2.0, 2.0, 5.0, 5.0, 9.0, 9.0])
+        sampler = DiscreteActionSampler(env.get_actions())
+        result = env.simulate_random_rollout(
+            state=state,
+            action_sampler=sampler,
+            max_depth=5,
+            discount_factor=0.95,
+            depth=5,
+        )
+        assert result == 0.0
+
+    def test_continuous_env_falls_back_to_python_loop(self):
+        """ContinuousPushPOMDP (no action_to_vector) falls back to Python.
+
+        Purpose: Validates that the base ContinuousPushPOMDP, which has no
+            fixed discrete action set, gracefully delegates to the Python
+            base-class loop when simulate_random_rollout is called.
+
+        Given: A ContinuousPushPOMDP (not the discrete subclass) and a
+            UnitCircleActionSampler.
+        When: simulate_random_rollout is called.
+        Then: Returns a finite float without error.
+
+        Test type: unit
+        """
+        from POMDPPlanners.utils.action_samplers import (
+            UnitCircleActionSampler,
+        )  # pylint: disable=import-outside-toplevel
+
+        env = ContinuousPushPOMDP(
+            discount_factor=0.95,
+            grid_size=10,
+            state_transition_cov_matrix=np.eye(2) * 0.05,
+        )
+        state = np.array([2.0, 2.0, 5.0, 5.0, 9.0, 9.0])
+        sampler = UnitCircleActionSampler(max_action_magnitude=1.0)
+        np.random.seed(42)
+        result = env.simulate_random_rollout(
+            state=state,
+            action_sampler=sampler,
+            max_depth=5,
+            discount_factor=0.95,
+        )
+        assert np.isfinite(result)
