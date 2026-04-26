@@ -351,6 +351,9 @@ class TestHyperParameterRunParamsIdUniqueness:
             def is_equal_observation(self, observation1, observation2):
                 return observation1 == observation2
 
+            def hash_action(self, action):
+                return action
+
         class MockBelief(Belief):
             @property
             def config_id(self):
@@ -447,6 +450,9 @@ class TestHyperParameterRunParamsIdUniqueness:
 
             def is_equal_observation(self, observation1, observation2):
                 return observation1 == observation2
+
+            def hash_action(self, action):
+                return action
 
         class MockBelief(Belief):
             @property
@@ -548,6 +554,9 @@ class TestHyperParameterRunParamsIdUniqueness:
 
             def is_equal_observation(self, observation1, observation2):
                 return observation1 == observation2
+
+            def hash_action(self, action):
+                return action
 
         class MockBelief(Belief):
             @property
@@ -651,6 +660,9 @@ class TestHyperParameterRunParamsIdUniqueness:
 
             def is_equal_observation(self, observation1, observation2):
                 return observation1 == observation2
+
+            def hash_action(self, action):
+                return action
 
         class MockBelief(Belief):
             @property
@@ -1117,6 +1129,9 @@ class TestOptimizedPolicyResultValidation:
 
             def is_equal_observation(self, observation1, observation2):
                 return observation1 == observation2
+
+            def hash_action(self, action):
+                return action
 
         return MockEnv()
 

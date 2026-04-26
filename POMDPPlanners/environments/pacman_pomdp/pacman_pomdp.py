@@ -20,6 +20,7 @@ Classes:
 
 from enum import Enum
 from pathlib import Path
+from collections.abc import Hashable
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
 
 import numpy as np
@@ -872,6 +873,10 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
     def is_equal_observation(self, observation1: Any, observation2: Any) -> bool:
         """Check if two observations are equal."""
         return observation1 == observation2
+
+    def hash_action(self, action: Any) -> Hashable:
+        # Discrete int actions (movement directions); already hashable.
+        return action
 
     # ------------------------------------------------------------------
     # Pickling

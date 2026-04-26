@@ -21,6 +21,7 @@ Classes:
 
 from enum import Enum
 from pathlib import Path
+from collections.abc import Hashable
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
@@ -548,6 +549,11 @@ class ContinuousPushPOMDP(Environment):
     def is_equal_observation(self, observation1: np.ndarray, observation2: np.ndarray) -> bool:
         return bool(np.array_equal(observation1, observation2))
 
+    def hash_action(self, action: Any) -> Hashable:
+        # Continuous actions are ndarray of shape (2,); bytes match
+        # np.array_equal semantics for arrays of identical shape and dtype.
+        return np.ascontiguousarray(action, dtype=np.float64).tobytes()
+
     def cache_visualization(self, history: List[StepData], cache_path: Path) -> None:
         """Cache animated visualization of the continuous push episode.
 
@@ -809,3 +815,7 @@ class ContinuousPushPOMDPDiscreteActions(ContinuousPushPOMDP, DiscreteActionsEnv
         return super().observation_log_probability_per_state(
             next_states, self.action_to_vector[action], observation
         )
+
+    def hash_action(self, action: Any) -> Hashable:
+        # Discrete-action variant: actions are str labels (e.g. "up").
+        return action

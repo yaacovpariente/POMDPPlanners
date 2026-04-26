@@ -129,6 +129,7 @@ class ICVaR_PFT_DPW(ArenaPathSimulationPolicyCostSetting):
             delta=self.delta,
             discrete_actions=self.discrete_actions,
             visit_count_penalty=self.visit_count_penalty,
+            environment=self.environment,
         )
 
         action_children_count = len(tree.children_ids[action_id])

@@ -21,6 +21,7 @@ Classes:
 
 from enum import Enum
 from pathlib import Path
+from collections.abc import Hashable
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import matplotlib
@@ -365,6 +366,10 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
         self, observation1: Tuple[float, float], observation2: Tuple[float, float]
     ) -> bool:
         return np.array_equal(observation1, observation2)
+
+    def hash_action(self, action: Any) -> Hashable:
+        # Discrete int actions (-1, 0, 1); already hashable.
+        return action
 
     def get_metric_names(self) -> List[str]:
         """Get names of Mountain Car POMDP specific metrics.

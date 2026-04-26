@@ -111,7 +111,7 @@ class RandomInitialStateDistribution(Distribution):
         return np.random.uniform(0, self.grid_size - 1, size=2)
 
 
-class PushPOMDP(DiscreteActionsEnvironment):
+class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-methods
     """Robotic push task formulated as a POMDP.
 
     This environment simulates a robot that must push an object to a target location
@@ -550,6 +550,10 @@ class PushPOMDP(DiscreteActionsEnvironment):
         # ndarray observations are unhashable; ``tobytes()`` is consistent with
         # ``np.array_equal`` for fixed-shape/dtype observations of this env.
         return np.ascontiguousarray(observation).tobytes()
+
+    def hash_action(self, action: Any) -> Hashable:
+        # Discrete-action env: actions are str labels (e.g. "up").
+        return action
 
     def __getstate__(self) -> Dict[str, Any]:
         # Per-action C++ kernel cache holds pybind11 objects that are not

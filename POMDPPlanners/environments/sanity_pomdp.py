@@ -24,7 +24,8 @@ Classes:
 """
 
 from pathlib import Path
-from typing import List, Optional, Sequence, Union
+from collections.abc import Hashable
+from typing import Any, List, Optional, Sequence, Union
 
 import numpy as np
 
@@ -266,3 +267,7 @@ class SanityPOMDP(DiscreteActionsEnvironment):
 
     def is_equal_observation(self, observation1: int, observation2: int) -> bool:
         return observation1 == observation2
+
+    def hash_action(self, action: Any) -> Hashable:
+        # Discrete int actions (0, 1); already hashable.
+        return action
