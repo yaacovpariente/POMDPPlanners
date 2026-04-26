@@ -81,6 +81,7 @@ class ContinuousPushTransitionCpp:
         covariance: NDArray[np.floating],
     ) -> None: ...
     def sample(self, n_samples: int = 1) -> List[NDArray[np.float64]]: ...
+    def sample_one(self, state: NDArray[np.floating]) -> NDArray[np.float64]: ...
     def probability(
         self,
         values: Union[Sequence[NDArray[np.floating]], NDArray[np.floating]],
@@ -102,6 +103,7 @@ class ContinuousPushObservationCpp:
         grid_size: float,
     ) -> None: ...
     def sample(self, n_samples: int = 1) -> List[NDArray[np.float64]]: ...
+    def sample_one(self, next_state: NDArray[np.floating]) -> NDArray[np.float64]: ...
     def probability(
         self,
         values: Union[Sequence[NDArray[np.floating]], NDArray[np.floating]],
@@ -112,3 +114,17 @@ class ContinuousPushObservationCpp:
         observation: NDArray[np.floating],
     ) -> NDArray[np.float64]: ...
     def set_next_state(self, next_state: Union[Sequence[float], NDArray[np.floating]]) -> None: ...
+
+def observation_log_probability_step(
+    next_state: NDArray[np.floating],
+    observations: NDArray[np.floating],
+    observation_noise: float,
+) -> NDArray[np.float64]:
+    """Per-observation log-probability for ContinuousPushPOMDP.
+
+    Lean single-step entry that mirrors
+    ContinuousPushObservationCpp.batch_log_likelihood for one fixed
+    next_state but skips kernel-cache lookup and set_next_state overhead.
+    ``observations`` must be shape (N, 6) float64.
+    """
+    ...

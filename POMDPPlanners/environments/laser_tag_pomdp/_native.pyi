@@ -117,6 +117,88 @@ def simulate_rollout_discrete(
     """
     ...
 
+# ── Discrete LaserTag belief-update kernels ──────────────────────────────────
+
+def belief_batch_transition_discrete(
+    particles: NDArray[np.floating],
+    action_idx: int,
+    transition_error_prob: float,
+    valid_cell_flat: NDArray[np.unsignedinteger],
+    rows: int,
+    cols: int,
+) -> NDArray[np.float64]:
+    """Native port of LaserTagVectorizedUpdater.batch_transition.
+
+    Returns the (N, 5) float64 array of next particles. Uses the module-level
+    mt19937_64 RNG; seed via set_seed() before calling for reproducibility.
+    """
+    ...
+
+def belief_batch_obs_log_likelihood_discrete(
+    next_particles: NDArray[np.floating],
+    observation: NDArray[np.floating],
+    wall_dist_table_flat: NDArray[np.integer],
+    rows: int,
+    cols: int,
+    log_norm_1d: float,
+    inv_2var: float,
+) -> NDArray[np.float64]:
+    """Native port of LaserTagVectorizedUpdater.batch_observation_log_likelihood.
+
+    Returns the (N,) float64 array of per-particle log-likelihoods.
+    Terminal handling matches the Python wrapper: terminal observations
+    return 0.0 for terminal particles and -inf for non-terminal, and
+    non-terminal observations return -inf for terminal particles.
+    """
+    ...
+
+# ── Discrete LaserTag single-step kernels ───────────────────────────────────
+
+def sample_next_state_step(
+    state: NDArray[np.floating],
+    actual_action: int,
+    opp_uniform: float,
+    rows: int,
+    cols: int,
+    walls_flat: NDArray[np.integer],
+) -> NDArray[np.float64]:
+    """Single-step transition for the discrete LaserTagPOMDP.
+
+    The Python wrapper resolves the actual_action (handling the optional
+    transition error in numpy) and pre-draws ``opp_uniform`` via
+    ``np.random.random()`` so byte-identical numpy RNG state is preserved
+    across the original Python path and this native fast path.
+    """
+    ...
+
+def sample_observation_step(
+    next_state: NDArray[np.floating],
+    noise: NDArray[np.floating],
+    rows: int,
+    cols: int,
+    walls_flat: NDArray[np.integer],
+) -> NDArray[np.float64]:
+    """Single-step observation for the discrete LaserTagPOMDP.
+
+    ``noise`` must be a length-8 float64 array of pre-drawn N(0, sigma)
+    samples. Returns the noisy 8-direction laser observation.
+    """
+    ...
+
+def observation_log_probability_step(
+    next_state: NDArray[np.floating],
+    observations: NDArray[np.floating],
+    measurement_noise: float,
+    rows: int,
+    cols: int,
+    walls_flat: NDArray[np.integer],
+) -> NDArray[np.float64]:
+    """Per-observation log-probability for the discrete LaserTagPOMDP.
+
+    Mirrors LaserTagPOMDP.observation_log_probability semantics.
+    """
+    ...
+
 # ── ContinuousLaserTag native rollout (added by perf agent) ──────────────────
 
 def cont_simulate_rollout(

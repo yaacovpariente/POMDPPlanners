@@ -175,6 +175,12 @@ class ContinuousPushPOMDP(Environment):
         # per-call Cholesky and obstacle-buffer copy).
         self._trans_kernel_cache: Dict[bytes, Any] = {}
         self._obs_kernel_cache: Dict[bytes, Any] = {}
+        # Identity-keyed shortcut caches: when the caller passes the same
+        # ndarray object repeatedly (typical for the DiscreteActions wrapper
+        # where each action label maps to a single ndarray), id() lookup
+        # avoids np.ascontiguousarray + tobytes hashing per call.
+        self._trans_kernel_id_cache: Dict[int, Any] = {}
+        self._obs_kernel_id_cache: Dict[int, Any] = {}
 
         # Cached (N_actions, 2) float64 array used by simulate_random_rollout.
         # Built lazily on first rollout call; reset to None on pickle round-trips.
@@ -224,6 +230,14 @@ class ContinuousPushPOMDP(Environment):
     # cached kernel maintains a single RNG stream per (env, action).
 
     def _get_trans_kernel(self, action: np.ndarray) -> Any:
+        # Fast path: when ``action`` is the same Python object as a previously-
+        # seen call (typical for DiscreteActions, which maps each action label
+        # to a single cached ndarray), id-based lookup skips
+        # ``np.ascontiguousarray`` + ``tobytes`` and the resulting bytes-key
+        # dict probe entirely.
+        cached_id = self._trans_kernel_id_cache.get(id(action))
+        if cached_id is not None:
+            return cached_id
         action_arr = np.ascontiguousarray(np.asarray(action, dtype=np.float64))
         key = action_arr.tobytes()
         kernel = self._trans_kernel_cache.get(key)
@@ -240,9 +254,14 @@ class ContinuousPushPOMDP(Environment):
                 covariance=self._trans_cov_view,
             )
             self._trans_kernel_cache[key] = kernel
+        if isinstance(action, np.ndarray):
+            self._trans_kernel_id_cache[id(action)] = kernel
         return kernel
 
     def _get_obs_kernel(self, action: np.ndarray) -> Any:
+        cached_id = self._obs_kernel_id_cache.get(id(action))
+        if cached_id is not None:
+            return cached_id
         action_arr = np.ascontiguousarray(np.asarray(action, dtype=np.float64))
         key = action_arr.tobytes()
         kernel = self._obs_kernel_cache.get(key)
@@ -254,25 +273,27 @@ class ContinuousPushPOMDP(Environment):
                 grid_size=float(self.grid_size),
             )
             self._obs_kernel_cache[key] = kernel
+        if isinstance(action, np.ndarray):
+            self._obs_kernel_id_cache[id(action)] = kernel
         return kernel
 
     def sample_next_state(self, state: np.ndarray, action: np.ndarray, n_samples: int = 1) -> Any:
         kernel = self._get_trans_kernel(action)
-        kernel.set_state(state)
-        samples = kernel.sample(n_samples)
         if n_samples == 1:
-            return samples[0]
-        return samples
+            # Hot path: single-sample C++ entry returns the ndarray directly
+            # (skips py::list wrapping + set_state call).
+            return kernel.sample_one(state)
+        kernel.set_state(state)
+        return kernel.sample(n_samples)
 
     def sample_observation(
         self, next_state: np.ndarray, action: np.ndarray, n_samples: int = 1
     ) -> Any:
         kernel = self._get_obs_kernel(action)
-        kernel.set_next_state(next_state)
-        samples = kernel.sample(n_samples)
         if n_samples == 1:
-            return samples[0]
-        return samples
+            return kernel.sample_one(next_state)
+        kernel.set_next_state(next_state)
+        return kernel.sample(n_samples)
 
     def transition_log_probability(
         self, state: np.ndarray, action: np.ndarray, next_states: Any
@@ -286,19 +307,18 @@ class ContinuousPushPOMDP(Environment):
     def observation_log_probability(
         self, next_state: np.ndarray, action: np.ndarray, observations: Any
     ) -> np.ndarray:
-        kernel = self._get_obs_kernel(action)
-        kernel.set_next_state(next_state)
-        # batch_log_likelihood is symmetric in the object-position slice:
-        # passing the candidate observations as ``next_particles`` and the
-        # fixed next_state as ``observation`` yields the per-row log-pdf of
-        # each observation given next_state.
-        obs_arr = np.asarray(observations, dtype=float)
+        # Action does not enter the observation log-pdf (object-position-only
+        # isotropic Gaussian noise model); skip the per-action kernel cache /
+        # set_next_state path and call the lean single-step C++ entry directly.
+        del action  # kept in signature for protocol parity
+        obs_arr = np.asarray(observations, dtype=np.float64)
         if obs_arr.ndim == 1:
             obs_arr = obs_arr.reshape(1, -1)
         return np.asarray(
-            kernel.batch_log_likelihood(
-                next_particles=np.ascontiguousarray(obs_arr, dtype=np.float64),
-                observation=np.ascontiguousarray(np.asarray(next_state, dtype=np.float64)),
+            _native.observation_log_probability_step(
+                next_state=np.ascontiguousarray(np.asarray(next_state, dtype=np.float64)),
+                observations=np.ascontiguousarray(obs_arr, dtype=np.float64),
+                observation_noise=float(self.observation_noise),
             )
         )
 
@@ -413,6 +433,8 @@ class ContinuousPushPOMDP(Environment):
         state = self.__dict__.copy()
         state["_trans_kernel_cache"] = {}
         state["_obs_kernel_cache"] = {}
+        state["_trans_kernel_id_cache"] = {}
+        state["_obs_kernel_id_cache"] = {}
         state["_rollout_actions_array"] = None
         return state
 
@@ -420,6 +442,8 @@ class ContinuousPushPOMDP(Environment):
         vars(self).update(state)
         self._trans_kernel_cache = {}
         self._obs_kernel_cache = {}
+        self._trans_kernel_id_cache = {}
+        self._obs_kernel_id_cache = {}
         self._rollout_actions_array = None
 
     def _build_rollout_actions_array(self) -> Optional[np.ndarray]:
@@ -506,9 +530,12 @@ class ContinuousPushPOMDP(Environment):
         )
 
     def is_terminal(self, state: np.ndarray) -> bool:
-        obj = state[2:4]
-        target = state[4:6]
-        return bool(np.linalg.norm(obj - target) < 0.5)
+        # Inline 2-D distance squared comparison: avoids np.linalg.norm,
+        # which goes through einsum + sqrt on a tiny vector and dominates
+        # this hot path for POMCPOW.
+        dx = state[2] - state[4]
+        dy = state[3] - state[5]
+        return bool((dx * dx + dy * dy) < 0.25)
 
     def initial_state_dist(self) -> Distribution:
         if self._initial_state is not None:
