@@ -478,3 +478,53 @@ class TestEnvironmentLogger:
         env.logger.info("Test message to trigger directory creation")
         # Note: In queue-based logging, the logs directory is created by the writer thread
         # when the first message is processed, so we can't immediately assert its existence
+
+
+class TestHashObservationDefault:
+    """Default ``Environment.hash_observation`` behaviour."""
+
+    def test_returns_observation_when_already_hashable(self, base_environment: MockEnvironment):
+        """Default hash_observation returns the observation if already hashable.
+
+        Purpose: Validates the default identity-based key for hashable observations
+
+        Given: MockEnvironment instance and a hashable observation (string)
+        When: hash_observation is called with the hashable observation
+        Then: The returned key equals the observation itself
+
+        Test type: unit
+        """
+        assert base_environment.hash_observation("o1") == "o1"
+        assert base_environment.hash_observation((1, 2, 3)) == (1, 2, 3)
+        assert base_environment.hash_observation(7) == 7
+
+    def test_raises_not_implemented_for_unhashable(self, base_environment: MockEnvironment):
+        """Default hash_observation raises NotImplementedError for unhashable inputs.
+
+        Purpose: Validates that unmigrated envs surface a clear error for ndarray observations
+
+        Given: MockEnvironment instance and a non-hashable np.ndarray observation
+        When: hash_observation is called with the ndarray
+        Then: NotImplementedError is raised mentioning the env class name
+
+        Test type: unit
+        """
+        observation = np.array([1.0, 2.0, 3.0])
+        with pytest.raises(NotImplementedError, match="MockEnvironment"):
+            base_environment.hash_observation(observation)
+
+    def test_returned_key_is_consistent_with_is_equal_observation(
+        self, base_environment: MockEnvironment
+    ):
+        """Default hash_observation respects the equality contract for hashables.
+
+        Purpose: Validates is_equal_observation(a, b) implies equal hashes for default impl
+
+        Given: MockEnvironment and two equal hashable observations plus an unequal pair
+        When: hash_observation is computed for each pair
+        Then: Equal observations share a key; unequal observations differ in key
+
+        Test type: unit
+        """
+        assert base_environment.hash_observation("a") == base_environment.hash_observation("a")
+        assert base_environment.hash_observation("a") != base_environment.hash_observation("b")

@@ -21,6 +21,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
+from collections.abc import Hashable
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
@@ -129,7 +130,7 @@ register_serializer(SpaceInfo, _serialize_space_info)
 register_deserializer(SpaceInfo, _deserialize_space_info)
 
 
-class Environment(ABC):
+class Environment(ABC):  # pylint: disable=too-many-public-methods
     """Abstract base class for POMDP environments.
 
     This is the core abstract class that all POMDP environments must inherit from.
@@ -421,6 +422,35 @@ class Environment(ABC):
             Subclasses must implement this method to define observation equality.
             This is particularly important for discrete observation spaces.
         """
+
+    def hash_observation(self, observation: Any) -> Hashable:
+        """Return a hashable key consistent with :meth:`is_equal_observation`.
+
+        Used by tree-search planners to index belief children by observation
+        in O(1). The returned key MUST satisfy the contract::
+
+            is_equal_observation(a, b) implies hash_observation(a) == hash_observation(b)
+
+        Args:
+            observation: Observation to hash.
+
+        Returns:
+            A hashable key derived from ``observation`` (default: the
+            observation itself when it is already hashable).
+
+        Raises:
+            NotImplementedError: If the observation is not hashable and the
+                subclass has not provided an override. Subclasses with
+                non-hashable observations (e.g. ``np.ndarray``) MUST override.
+        """
+        try:
+            hash(observation)
+        except TypeError as exc:
+            raise NotImplementedError(
+                f"{type(self).__name__} must override hash_observation "
+                "for non-hashable observations"
+            ) from exc
+        return observation
 
     @abstractmethod
     def sample_next_state(self, state: Any, action: Any, n_samples: int = 1) -> Any:
