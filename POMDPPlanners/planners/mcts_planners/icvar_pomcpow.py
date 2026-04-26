@@ -38,7 +38,7 @@ from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
 from POMDPPlanners.planners.planners_utils.path_simulations_policy_arena import (
     ArenaPathSimulationPolicyCostSetting,
 )
-from POMDPPlanners.utils.statistics_utils import cvar_estimator_from_dist
+from POMDPPlanners.utils.statistics_utils import cvar_estimator_from_dist_fast
 
 
 class ICVaR_POMCPOW(ArenaPathSimulationPolicyCostSetting):
@@ -269,25 +269,39 @@ class ICVaR_POMCPOW(ArenaPathSimulationPolicyCostSetting):
             return
 
         visited_children = [cid for cid in children if tree.visit_count[cid] > 0]
-        if not visited_children:
+        n_visited = len(visited_children)
+        if n_visited == 0:
             tree.q_value[action_id] = immediate_cost
             return
 
-        v_values = np.array([tree.v_value[cid] for cid in visited_children])
-        weights = np.array([tree.weight[cid] for cid in visited_children])
+        v_values = np.fromiter(
+            (tree.v_value[cid] for cid in visited_children),
+            dtype=np.float64,
+            count=n_visited,
+        )
+        weights = np.fromiter(
+            (tree.weight[cid] for cid in visited_children),
+            dtype=np.float64,
+            count=n_visited,
+        )
         weights_sum = weights.sum()
         if weights_sum > 0:
             weights = weights / weights_sum
-        tree.q_value[action_id] = immediate_cost + self.discount_factor * cvar_estimator_from_dist(
-            values=v_values, weights=weights, alpha=self.alpha
+        tree.q_value[action_id] = (
+            immediate_cost
+            + self.discount_factor
+            * cvar_estimator_from_dist_fast(values=v_values, weights=weights, alpha=self.alpha)
         )
 
     def _update_v_value(self, tree: Tree, belief_id: int) -> None:
-        visited_q_values = [
-            tree.q_value[cid] for cid in tree.children_ids[belief_id] if tree.visit_count[cid] > 0
-        ]
-        if visited_q_values:
-            tree.v_value[belief_id] = min(visited_q_values)
+        best_q: Optional[float] = None
+        for cid in tree.children_ids[belief_id]:
+            if tree.visit_count[cid] > 0:
+                q = tree.q_value[cid]
+                if best_q is None or q < best_q:
+                    best_q = q
+        if best_q is not None:
+            tree.v_value[belief_id] = best_q
 
     @classmethod
     def get_space_info(cls) -> PolicySpaceInfo:

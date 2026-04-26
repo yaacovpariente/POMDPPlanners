@@ -1,4 +1,5 @@
 # pylint: disable=fixme
+from functools import lru_cache
 from typing import Optional, Tuple
 
 import numpy as np
@@ -379,6 +380,7 @@ def quantile_confidence_interval(data, alpha=0.95, conf_level=0.95):
     return x[k1 - 1], x[k2 - 1], k1, k2
 
 
+@lru_cache(maxsize=2048)
 def get_min_and_max_cost(
     min_immediate_cost: float,
     max_immediate_cost: float,
@@ -405,15 +407,14 @@ def get_min_and_max_cost(
     if not 0 <= gamma <= 1:
         raise ValueError("gamma must be between 0 and 1")
 
-    # Create array of powers of gamma
-    powers = np.arange(max_depth - depth + 1)
-    gamma_powers = gamma**powers
+    # Closed-form: sum_{k=0..h} gamma^k = (1 - gamma^(h+1)) / (1 - gamma) for gamma < 1, else h+1.
+    horizon = max_depth - depth + 1
+    if gamma == 1.0:
+        gamma_geometric_sum = float(horizon)
+    else:
+        gamma_geometric_sum = (1.0 - gamma**horizon) / (1.0 - gamma)
 
-    # Calculate min and max costs using vectorized operations
-    min_cost: float = float(np.sum(min_immediate_cost * gamma_powers))
-    max_cost: float = float(np.sum(max_immediate_cost * gamma_powers))
-
-    return min_cost, max_cost
+    return min_immediate_cost * gamma_geometric_sum, max_immediate_cost * gamma_geometric_sum
 
 
 def cvar_bound_const_eps(
@@ -589,6 +590,47 @@ def cvar_estimator_from_dist(values: np.ndarray, weights: np.ndarray, alpha: flo
     cvar = (np.sum(conditional_values * conditional_weights) - correction_val) / alpha
 
     return float(cvar)
+
+
+def cvar_estimator_from_dist_fast(values: np.ndarray, weights: np.ndarray, alpha: float) -> float:
+    """Fast CVaR over a discrete distribution. Caller guarantees weights sum to 1.
+
+    Hot-path variant of :func:`cvar_estimator_from_dist` for use inside MCTS
+    backups where ``values`` is small (≤ ~30 elements) and ``weights`` is
+    already normalized. Skips the input validation, the duplicate-value
+    aggregation, and the equality-search branch of the slow path; runs a
+    single ``argsort`` + cumulative sum + tail aggregation.
+
+    Args:
+        values: Array of values.
+        weights: Array of normalized probabilities (must sum to 1.0).
+        alpha: Confidence level in (0, 1].
+
+    Returns:
+        CVaR_alpha — the conditional expectation of ``values`` over the
+        worst-alpha probability mass (upper tail when interpreting values
+        as costs).
+    """
+    n = values.shape[0]
+    if n == 1:
+        return float(values[0])
+
+    sort_idx = np.argsort(values)
+    sorted_values = values[sort_idx]
+    sorted_weights = weights[sort_idx]
+
+    # Find the smallest index whose cumulative probability reaches 1 - alpha.
+    threshold = 1.0 - alpha
+    cumulative_probs = np.cumsum(sorted_weights)
+    var_idx = int(np.searchsorted(cumulative_probs, threshold, side="left"))
+    if var_idx >= n:
+        var_idx = n - 1
+
+    value_at_risk = sorted_values[var_idx]
+    tail_weight = float(np.sum(sorted_weights[var_idx:]))
+    tail_sum = float(np.sum(sorted_values[var_idx:] * sorted_weights[var_idx:]))
+    correction = (tail_weight - alpha) * value_at_risk
+    return (tail_sum - correction) / alpha
 
 
 def tv_distance_grid(
