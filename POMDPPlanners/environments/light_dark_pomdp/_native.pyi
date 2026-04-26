@@ -81,6 +81,39 @@ def discrete_observation_log_prob_per_state(
     """Per-state observation log-probability for the NORMAL discrete model."""
     ...
 
+def discrete_sample_next_state_step(
+    state: NDArray[np.float64],
+    cumprobs_for_action: NDArray[np.float64],
+    action_vectors: NDArray[np.float64],
+    uniform_draw: float,
+    n_actions: int,
+) -> NDArray[np.float64]:
+    """Single-step discrete ``sample_next_state`` for ``n_samples == 1``.
+
+    The Python wrapper pre-draws the uniform via ``np.random.rand()`` and
+    forwards it here so byte-identical numpy RNG state is preserved across
+    the original Python path and this native fast path.
+    """
+    ...
+
+def discrete_sample_observation_step_normal(
+    next_state: NDArray[np.float64],
+    beacons: NDArray[np.float64],
+    cumprobs_near: NDArray[np.float64],
+    cumprobs_far: NDArray[np.float64],
+    action_vectors: NDArray[np.float64],
+    beacon_radius: float,
+    uniform_draw: float,
+    n_actions: int,
+    n_obs: int,
+) -> NDArray[np.float64]:
+    """Single-step discrete ``sample_observation`` for the NORMAL model.
+
+    Mirrors the strict-less-than near-beacon test and ``np.searchsorted``
+    index selection; the Python wrapper pre-draws the uniform.
+    """
+    ...
+
 def discrete_simulate_rollout(
     initial_state: NDArray[np.float64],
     action_array: NDArray[np.float64],
