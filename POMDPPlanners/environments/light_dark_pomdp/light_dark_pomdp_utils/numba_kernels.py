@@ -16,6 +16,10 @@ Public kernels
 - :func:`compute_reward_base_kernel` — deterministic part of the Standard /
   DangerousStates reward model plus an ``is_obstacle_hit_region`` flag so the
   Python caller can decide whether to draw a uniform.
+- :func:`compute_reward_base_batch_kernel` — batched version of
+  :func:`compute_reward_base_kernel`. Returns ``(rewards, obstacle_mask)`` so
+  the Python caller can apply the stochastic obstacle-hit contribution where
+  the mask is ``True``, preserving the seeded RNG call pattern.
 - :func:`compute_reward_decaying_hit_prob_kernel` — full reward for the
   Decaying-Hit-Probability model (uniform drawn in Python and passed in).
 """
@@ -101,6 +105,72 @@ def compute_reward_base_kernel(
     if next_x < 0.0 or next_y < 0.0 or next_x > grid_size or next_y > grid_size:
         return reward + obstacle_reward, False
     return reward, False
+
+
+@njit(cache=True)  # type: ignore[misc]
+def compute_reward_base_batch_kernel(
+    states: np.ndarray,
+    action: np.ndarray,
+    goal_state: np.ndarray,
+    obstacles: np.ndarray,
+    goal_state_radius: float,
+    obstacle_radius: float,
+    grid_size: float,
+    fuel_cost: float,
+    goal_reward: float,
+    obstacle_reward: float,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Batched form of :func:`compute_reward_base_kernel`.
+
+    Parameters mirror the scalar kernel; ``states`` is shape ``(N, 2)``.
+    Returns ``(rewards, obstacle_mask)`` both of length ``N``. ``rewards``
+    already includes fuel, goal-distance, goal bonus, and the out-of-grid
+    penalty. The Python caller must add the stochastic obstacle-hit
+    contribution at indices where ``obstacle_mask`` is ``True``, drawing
+    its own RNG so seeded tests stay bit-identical to the per-state path.
+    """
+    n_states = states.shape[0]
+    n_obs = obstacles.shape[1]
+    goal_radius_sq = goal_state_radius * goal_state_radius
+    obs_radius_sq = obstacle_radius * obstacle_radius
+    ax = action[0]
+    ay = action[1]
+    gx0 = goal_state[0]
+    gy0 = goal_state[1]
+
+    rewards = np.empty(n_states, dtype=np.float64)
+    obstacle_mask = np.zeros(n_states, dtype=np.bool_)
+
+    for s in range(n_states):
+        next_x = states[s, 0] + ax
+        next_y = states[s, 1] + ay
+        gx = next_x - gx0
+        gy = next_y - gy0
+        sq_dist_to_goal = gx * gx + gy * gy
+        reward = -fuel_cost - sq_dist_to_goal**0.5
+
+        if sq_dist_to_goal <= goal_radius_sq:
+            rewards[s] = reward + goal_reward
+            continue
+
+        in_obstacle_range = False
+        for i in range(n_obs):
+            ox = next_x - obstacles[0, i]
+            oy = next_y - obstacles[1, i]
+            if ox * ox + oy * oy <= obs_radius_sq:
+                in_obstacle_range = True
+                break
+        if in_obstacle_range:
+            rewards[s] = reward
+            obstacle_mask[s] = True
+            continue
+
+        if next_x < 0.0 or next_y < 0.0 or next_x > grid_size or next_y > grid_size:
+            rewards[s] = reward + obstacle_reward
+        else:
+            rewards[s] = reward
+
+    return rewards, obstacle_mask
 
 
 @njit(cache=True)  # type: ignore[misc]
