@@ -821,8 +821,9 @@ def test_update_weights_skips_asarray_round_trip_on_native_path():
         Asserts the returned next-states are an ndarray (the load-bearing
         type contract), the shape matches the env's batch output, and the
         new log-weights equal the manual reference computation
-        ``log_weights + log(eps + exp(observation_log_probability_per_state))``
-        for the same draw.
+        ``log_weights + observation_log_probability_per_state`` (no
+        ``exp -> eps -> log`` round-trip) for envs that override the
+        observation kernel and therefore guarantee finite log-likelihoods.
 
     Given: A WeightedParticleBelief over 8 particles drawn from a native
         env (ContinuousLightDarkPOMDPDiscreteActions) and a fixed RNG seed.
@@ -868,10 +869,13 @@ def test_update_weights_skips_asarray_round_trip_on_native_path():
     # The log-weights must match the manual formula applied to the very
     # next-particles we just got back -- no covert list-rebuild detour
     # between sample_next_state_batch and observation_log_probability_per_state.
+    # Native envs (those that override observation_log_probability_per_state)
+    # are contracted to return finite log-likelihoods, so _update_weights
+    # adds log_ll directly without the exp -> eps-floor -> log round-trip.
     ref_log_ll = env.observation_log_probability_per_state(
         next_states=next_particles, action=action, observation=observation
     )
-    ref_log_weights = log_weights + np.log(belief.eps + np.exp(ref_log_ll))
+    ref_log_weights = log_weights + ref_log_ll
     np.testing.assert_allclose(next_log_weights, ref_log_weights)
 
 
