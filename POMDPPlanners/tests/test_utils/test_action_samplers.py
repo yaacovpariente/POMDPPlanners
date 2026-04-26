@@ -4,6 +4,9 @@ This module tests the action sampler implementations used for continuous action
 space sampling in POMDP planners, particularly for PFT-DPW integration.
 """
 
+# pylint: disable=too-many-lines
+
+import math
 import pickle
 import random
 import tempfile
@@ -239,29 +242,26 @@ class TestUnitCircleActionSampler:
             assert np.linalg.norm(action) == 0.0
 
     def test_unit_circle_action_sampler_repeatability(self):
-        """Test action sampling reproducibility with fixed seed.
+        """Test action sampling reproducibility with the seed kwarg.
 
-        Purpose: Validates that sampling is reproducible when random seed is fixed
+        Purpose: Validates that sampling is reproducible when the per-instance
+        seed is fixed via the ``seed`` constructor argument.
 
-        Given: Fixed numpy random seed and UnitCircleActionSampler
-        When: Actions are sampled multiple times with same seed
+        Given: Two UnitCircleActionSampler instances constructed with the same seed
+        When: Actions are sampled from each
         Then: Identical sequences of actions are produced
 
         Test type: unit
         """
-        sampler = UnitCircleActionSampler(max_action_magnitude=1.0)
+        sampler1 = UnitCircleActionSampler(max_action_magnitude=1.0, seed=42)
+        sampler2 = UnitCircleActionSampler(max_action_magnitude=1.0, seed=42)
 
-        # First sequence
-        np.random.seed(42)
-        actions1 = [sampler.sample() for _ in range(10)]
+        actions1 = [sampler1.sample() for _ in range(10)]
+        actions2 = [sampler2.sample() for _ in range(10)]
 
-        # Second sequence with same seed
-        np.random.seed(42)
-        actions2 = [sampler.sample() for _ in range(10)]
-
-        # Should be identical
+        # Should be byte-identical
         for a1, a2 in zip(actions1, actions2):
-            assert np.allclose(a1, a2)
+            assert np.array_equal(a1, a2)
 
     def test_unit_circle_action_sampler_serialization_pickle(self):
         """Test serialization and deserialization using pickle.
@@ -274,8 +274,8 @@ class TestUnitCircleActionSampler:
 
         Test type: unit
         """
-        # Create original sampler
-        original_sampler = UnitCircleActionSampler(max_action_magnitude=2.5)
+        # Create original sampler with explicit seed for deterministic comparison
+        original_sampler = UnitCircleActionSampler(max_action_magnitude=2.5, seed=123)
 
         # Serialize with pickle
         pickled_data = pickle.dumps(original_sampler)
@@ -287,15 +287,12 @@ class TestUnitCircleActionSampler:
         assert deserialized_sampler.max_action_magnitude == original_sampler.max_action_magnitude
         assert type(deserialized_sampler) == type(original_sampler)
 
-        # Check that both samplers produce valid actions
-        np.random.seed(123)
+        # Both samplers carry equivalent private RNG state from the same seed,
+        # so the next draw from each must match byte-for-byte.
         original_action = original_sampler.sample()
-
-        np.random.seed(123)
         deserialized_action = deserialized_sampler.sample()
 
-        # With same seed, should produce identical results
-        assert np.allclose(original_action, deserialized_action)
+        assert np.array_equal(original_action, deserialized_action)
 
         # Both actions should respect magnitude constraint
         assert np.linalg.norm(original_action) <= 2.5 + 1e-10
@@ -484,6 +481,93 @@ class TestUnitCircleActionSampler:
             assert action.shape == (2,)
             assert np.linalg.norm(action) <= 1.0 + 1e-10
 
+    def test_unit_circle_action_sampler_distribution_equivalence(self):
+        """Test that the scalar-Python rewrite preserves the target distribution.
+
+        Purpose: Validates that switching from numpy 0-D dispatches to
+        ``random``+``math`` scalar primitives still produces a uniform-in-area
+        distribution within a circle of the requested radius.
+
+        Given: A UnitCircleActionSampler with max_action_magnitude=1.0
+        When: 10000 samples are drawn
+        Then:
+            - All sample radii are within max_action_magnitude (with float epsilon)
+            - Mean radius is within 3 sigma of the analytical 2/3
+            - Angular distribution is uniform across 12 bins (chi-square p > 0.001)
+
+        Test type: unit
+        """
+        max_magnitude = 1.0
+        num_samples = 10_000
+        sampler = UnitCircleActionSampler(max_action_magnitude=max_magnitude, seed=2026)
+
+        samples = np.array([sampler.sample() for _ in range(num_samples)])
+
+        radii = np.linalg.norm(samples, axis=1)
+        assert radii.max() <= max_magnitude + 1e-12
+
+        # Analytical mean radius for uniform-in-area: 2/3 * R.
+        # Variance of radius is R^2 * (2/3 - 4/9) = R^2 * 2/9.
+        expected_mean_radius = (2.0 / 3.0) * max_magnitude
+        std_mean = math.sqrt((max_magnitude**2) * (2.0 / 9.0) / num_samples)
+        assert abs(radii.mean() - expected_mean_radius) < 3.0 * std_mean
+
+        # Chi-square test on 12 angular bins. Critical value for chi^2(df=11)
+        # at p=0.001 is approximately 31.264.
+        angles = np.arctan2(samples[:, 1], samples[:, 0]) % (2.0 * math.pi)
+        num_bins = 12
+        bin_edges = np.linspace(0.0, 2.0 * math.pi, num_bins + 1)
+        observed, _ = np.histogram(angles, bins=bin_edges)
+        expected_per_bin = num_samples / num_bins
+        chi_square = float(np.sum((observed - expected_per_bin) ** 2 / expected_per_bin))
+        assert chi_square < 31.264
+
+    def test_unit_circle_action_sampler_seeded_determinism(self):
+        """Test that two instances seeded identically produce identical sequences.
+
+        Purpose: Validates that the new ``seed`` kwarg yields byte-identical
+        sample sequences across independently constructed samplers.
+
+        Given: Two UnitCircleActionSampler instances each constructed with seed=42
+        When: 1000 samples are drawn from each in sequence
+        Then: The two sample arrays are byte-identical
+
+        Test type: unit
+        """
+        sampler_a = UnitCircleActionSampler(max_action_magnitude=1.5, seed=42)
+        sampler_b = UnitCircleActionSampler(max_action_magnitude=1.5, seed=42)
+
+        samples_a = np.array([sampler_a.sample() for _ in range(1000)])
+        samples_b = np.array([sampler_b.sample() for _ in range(1000)])
+
+        assert np.array_equal(samples_a, samples_b)
+
+    def test_unit_circle_action_sampler_seeded_independent_of_module_random(self):
+        """Test that a seeded sampler is unaffected by global ``random.seed``.
+
+        Purpose: Validates that a sampler with its own ``seed`` keeps a private
+        ``random.Random`` instance and ignores changes to the module-level RNG.
+
+        Given: A UnitCircleActionSampler constructed with seed=7
+        When: The module-level ``random.seed`` is reset between two draws
+        Then: The two draws still match the expected seeded sequence
+
+        Test type: unit
+        """
+        seeded = UnitCircleActionSampler(max_action_magnitude=1.0, seed=7)
+        reference = UnitCircleActionSampler(max_action_magnitude=1.0, seed=7)
+
+        random.seed(0)
+        first = seeded.sample()
+        random.seed(99999)
+        second = seeded.sample()
+
+        ref_first = reference.sample()
+        ref_second = reference.sample()
+
+        assert np.array_equal(first, ref_first)
+        assert np.array_equal(second, ref_second)
+
 
 class TestUsageExamples:
     """Test cases for usage examples from docstrings."""
@@ -511,7 +595,7 @@ class TestUsageExamples:
 
         # Test action sampling
         actions = [action_sampler.sample() for _ in range(5)]
-        for i, action in enumerate(actions):
+        for action in actions:
             magnitude = np.linalg.norm(action)
             assert isinstance(action, np.ndarray)
             assert action.shape == (2,)
@@ -530,7 +614,7 @@ class TestUsageExamples:
         )
 
         initial_belief = get_initial_belief(nav_env, n_particles=50)  # Reduced from 200
-        action, run_data = planner.action(initial_belief)
+        action, _ = planner.action(initial_belief)
 
         # Verify the selected action
         assert isinstance(action, list)
@@ -997,7 +1081,7 @@ class TestDiscreteActionSampler:
         assert isinstance(reduce_result, tuple)
         assert len(reduce_result) == 3
         assert reduce_result[0] == DiscreteActionSampler
-        assert reduce_result[1] == ()  # Empty constructor args
+        assert not reduce_result[1]  # Empty constructor args
         assert reduce_result[2] == {"actions": actions}  # State dict
 
         # Test reconstruction
