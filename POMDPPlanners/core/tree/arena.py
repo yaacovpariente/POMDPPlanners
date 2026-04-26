@@ -90,25 +90,41 @@ class Tree:
         # Hash-indexed children lookups; populated when the key is hashable.
         self.obs_child_lookup: Dict[Tuple[int, Any], int] = {}
         self.action_child_lookup: Dict[Tuple[int, Any], int] = {}
+        # Logical node count. May be less than ``len(self.kind)`` after a
+        # call to :meth:`reserve` pre-fills the columns with sentinels.
+        self._size: int = 0
 
     def __len__(self) -> int:
-        return len(self.kind)
+        return self._size
 
     def reserve(self, capacity: int) -> None:
-        """Pre-allocate the underlying buffer of every column for ``capacity`` nodes.
+        """Pre-allocate ``capacity`` slots in every per-node column.
 
         Mirrors Julia's ``sizehint!`` / ``Vector{T}(undef, n)``. After this
-        call every column still has length 0, but ``capacity`` slots are
-        reserved so subsequent ``append`` calls (up to ``capacity``) don't
-        trigger reallocation. Useful when the maximum tree size is known
-        in advance (e.g., ``2 * tree_queries`` in POMCPOW.jl).
+        call ``len(tree)`` is unchanged, but ``capacity`` slots are
+        physically resident in each column so the first ``capacity``
+        subsequent allocations write at a cursor instead of triggering
+        ``list.append`` (and the periodic O(N) realloc bursts that come
+        with it). Useful when the maximum tree size is known in advance
+        (e.g., ``2 * n_simulations * depth`` for POMCPOW-style planners).
+
+        Allocations beyond ``capacity`` fall back to ``append`` and grow
+        the columns normally. Calling :meth:`reserve` more than once is
+        idempotent in the sense that columns are re-padded up to
+        ``capacity`` if more headroom is needed; existing entries are
+        preserved.
         """
-        # The buffer's element type doesn't matter — clear() immediately
-        # drops the elements but preserves the underlying list capacity.
-        # Annotate as Any so pyright doesn't object to extend()ing an
-        # int/float/object-typed column with a list of Nones.
-        buffer: Any = [None] * capacity
-        for column in (
+        # Pad every column up to ``capacity`` slots, leaving any existing
+        # nodes (positions ``[0, _size)``) untouched. The sentinel value
+        # is a placeholder; ``_allocate`` overwrites it when the cursor
+        # advances over the slot, so the concrete value never matters at
+        # runtime — but we annotate columns as ``Any`` here to avoid
+        # variance complaints when extending an int/float-typed list with
+        # ``None`` (and vice versa).
+        target_len = max(self._size, capacity)
+        # Each column's element type is enforced by ``_allocate``'s writes;
+        # the sentinel exists only to grow the underlying buffer.
+        columns: List[Any] = [
             self.kind,
             self.parent_id,
             self.children_ids,
@@ -126,29 +142,55 @@ class Tree:
             self.data,
             self.sample,
             self.children_cdf,
-        ):
-            column.extend(buffer)
-            column.clear()
+        ]
+        for column in columns:
+            current_len = len(column)
+            if target_len > current_len:
+                column.extend([None] * (target_len - current_len))
 
     def _allocate(self, kind: int, parent_id: Optional[int]) -> int:
-        node_id = len(self.kind)
-        self.kind.append(kind)
-        self.parent_id.append(parent_id)
-        self.children_ids.append([])
-        self.visit_count.append(0)
-        self.q_value.append(0.0)
-        self.v_value.append(0.0)
-        self.lower_confidence_bound.append(0.0)
-        self.upper_confidence_bound.append(0.0)
-        self.immediate_cost.append(None)
-        self.immediate_reward.append(None)
-        self.weight.append(1.0)
-        self.action.append(None)
-        self.observation.append(None)
-        self.belief.append(None)
-        self.data.append(None)
-        self.sample.append([])
-        self.children_cdf.append([])
+        node_id = self._size
+        if node_id < len(self.kind):
+            # Reserved slot exists — overwrite in place. This path avoids
+            # ``list.append``'s amortised growth and the periodic O(N)
+            # realloc bursts on every column.
+            self.kind[node_id] = kind
+            self.parent_id[node_id] = parent_id
+            self.children_ids[node_id] = []
+            self.visit_count[node_id] = 0
+            self.q_value[node_id] = 0.0
+            self.v_value[node_id] = 0.0
+            self.lower_confidence_bound[node_id] = 0.0
+            self.upper_confidence_bound[node_id] = 0.0
+            self.immediate_cost[node_id] = None
+            self.immediate_reward[node_id] = None
+            self.weight[node_id] = 1.0
+            self.action[node_id] = None
+            self.observation[node_id] = None
+            self.belief[node_id] = None
+            self.data[node_id] = None
+            self.sample[node_id] = []
+            self.children_cdf[node_id] = []
+        else:
+            # Past the reserved zone — fall back to append.
+            self.kind.append(kind)
+            self.parent_id.append(parent_id)
+            self.children_ids.append([])
+            self.visit_count.append(0)
+            self.q_value.append(0.0)
+            self.v_value.append(0.0)
+            self.lower_confidence_bound.append(0.0)
+            self.upper_confidence_bound.append(0.0)
+            self.immediate_cost.append(None)
+            self.immediate_reward.append(None)
+            self.weight.append(1.0)
+            self.action.append(None)
+            self.observation.append(None)
+            self.belief.append(None)
+            self.data.append(None)
+            self.sample.append([])
+            self.children_cdf.append([])
+        self._size += 1
         if parent_id is not None:
             self.children_ids[parent_id].append(node_id)
         return node_id
