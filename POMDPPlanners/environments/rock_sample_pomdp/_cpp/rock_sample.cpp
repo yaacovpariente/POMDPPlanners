@@ -296,6 +296,13 @@ class RockSampleTransitionCpp {
     }
     int action_property() const { return action_; }
 
+    // Rewrite only the state field; env geometry, action, and rock positions
+    // stay frozen. Lets Python keep one kernel per (env, action) instead of
+    // rebuilding for every call. Mirrors ContinuousLaserTagTransitionCpp.
+    void set_state(const py::object &state_obj) {
+        state_ = parse_state_flexible(state_obj, "state");
+    }
+
   private:
     // Action-specific batch mutator. Applies the same transition semantics
     // as the per-particle ``transition_into`` but in a cache-friendly
@@ -565,6 +572,12 @@ class RockSampleObservationCpp {
     }
     int action_property() const { return action_; }
 
+    // Rewrite only the next_state field; env geometry, action, and rock
+    // positions stay frozen. Mirrors ContinuousLaserTagObservationCpp.
+    void set_next_state(const py::object &next_state_obj) {
+        next_state_ = parse_state_flexible(next_state_obj, "next_state");
+    }
+
   private:
     double check_efficiency(const double *state, int rock_idx) const {
         const std::int32_t rock_r = env_.rock_rows[static_cast<std::size_t>(rock_idx)];
@@ -735,6 +748,7 @@ PYBIND11_MODULE(_native, m) {
         .def("sample", &RockSampleTransitionCpp::sample, py::arg("n_samples") = 1)
         .def("probability", &RockSampleTransitionCpp::probability, py::arg("values"))
         .def("batch_sample", &RockSampleTransitionCpp::batch_sample, py::arg("particles"))
+        .def("set_state", &RockSampleTransitionCpp::set_state, py::arg("state"))
         .def_property_readonly("state", &RockSampleTransitionCpp::state_property)
         .def_property_readonly("action", &RockSampleTransitionCpp::action_property);
 
@@ -748,6 +762,8 @@ PYBIND11_MODULE(_native, m) {
         .def("probability", &RockSampleObservationCpp::probability, py::arg("values"))
         .def("batch_log_likelihood", &RockSampleObservationCpp::batch_log_likelihood,
              py::arg("next_particles"), py::arg("observation"))
+        .def("set_next_state", &RockSampleObservationCpp::set_next_state,
+             py::arg("next_state"))
         .def_property_readonly("next_state", &RockSampleObservationCpp::next_state_property)
         .def_property_readonly("action", &RockSampleObservationCpp::action_property);
 }
