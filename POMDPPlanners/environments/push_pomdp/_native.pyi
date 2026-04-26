@@ -160,3 +160,31 @@ def belief_batch_obs_log_likelihood_discrete(
     ``PushVectorizedUpdater.batch_observation_log_likelihood`` (no RNG).
     """
     ...
+
+class PushDiscreteTransitionCpp:
+    """Native deterministic transition kernel for the discrete Push POMDP.
+
+    One kernel per cached action label: the resolved (dx, dy) for that label
+    is frozen at construction; ``set_state`` flips the input state per call,
+    ``compute_next_state`` returns the closed-form next state for the cached
+    action, and ``compute_next_state_for_action`` evaluates an alternative
+    (dx, dy) without rebuilding (used by the error-action branch in
+    ``transition_log_probability``).
+    """
+
+    def __init__(
+        self,
+        state: NDArray[np.floating],
+        action_dxdy: NDArray[np.floating],
+        grid_size: float,
+        push_threshold: float,
+        friction_coefficient: float,
+        obstacles_flat: NDArray[np.floating],
+        n_obstacles: int,
+        obstacle_radius: float,
+    ) -> None: ...
+    def set_state(self, state: NDArray[np.floating]) -> None: ...
+    def compute_next_state(self) -> NDArray[np.float64]: ...
+    def compute_next_state_for_action(
+        self, action_dxdy: NDArray[np.floating]
+    ) -> NDArray[np.float64]: ...

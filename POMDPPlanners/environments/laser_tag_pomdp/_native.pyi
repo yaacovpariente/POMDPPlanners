@@ -30,6 +30,31 @@ def reward_batch(
     """Vectorised reward kernel; see ContinuousLaserTagPOMDP.reward_batch."""
     ...
 
+def lasertag_discrete_reward_batch(
+    states: NDArray[np.floating],
+    action: int,
+    rows: int,
+    cols: int,
+    walls_flat: NDArray[np.integer],
+    n_walls: int,
+    dangerous_areas: NDArray[np.floating],
+    n_dangerous: int,
+    dangerous_area_radius: float,
+    dangerous_area_penalty: float,
+    tag_reward: float,
+    tag_penalty: float,
+    step_cost: float,
+    action_directions: NDArray[np.integer],
+) -> NDArray[np.float64]:
+    """Vectorised reward kernel for the discrete LaserTagPOMDP.
+
+    Mirrors ``LaserTagPOMDP._compute_reward_batch``. ``walls_flat`` is the
+    flattened (row, col) wall list (length ``2 * n_walls``). ``action_directions``
+    is a (4, 2) int64 array mapping action index 0..3 to its (dr, dc) cell delta.
+    Returns shape (N,) float64.
+    """
+    ...
+
 class ContinuousLaserTagTransitionCpp:
     """Native state transition sampler (robot + opponent Gaussian steps)."""
 

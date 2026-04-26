@@ -643,6 +643,173 @@ static inline bool discrete_is_terminal(const double *state) noexcept {
     return (dx * dx + dy * dy) < 0.25;
 }
 
+// ── Discrete Push deterministic-transition kernel (per-action cache) ───────
+//
+// Mirrors PushPOMDP._compute_next_state_for_action exactly: a closed-form
+// next-state computation given a (state, action) pair, with no RNG involved.
+// The kernel is constructed once per action label (the resolved (dx, dy) is
+// frozen at ctor time); the caller flips ``state_`` via set_state on each
+// call and pulls compute_next_state(). compute_next_state_for_action(other)
+// supports the error-action branch in transition_log_probability where the
+// same kernel is used to evaluate alternative actions without rebuilding.
+
+class PushDiscreteTransitionCpp {
+  public:
+    PushDiscreteTransitionCpp(
+        py::array_t<double, py::array::c_style | py::array::forcecast> state,
+        py::array_t<double, py::array::c_style | py::array::forcecast> action_dxdy,
+        double grid_size, double push_threshold, double friction_coefficient,
+        py::array_t<double, py::array::c_style | py::array::forcecast> obstacles_flat,
+        int n_obstacles, double obstacle_radius)
+        : grid_size_(grid_size),
+          push_threshold_(push_threshold),
+          friction_coefficient_(friction_coefficient),
+          n_obstacles_(n_obstacles),
+          obstacle_radius_(obstacle_radius),
+          state_(kPushStateDim, 0.0) {
+        load_action_(action_dxdy, action_dxdy_);
+        load_obstacles_flat_(obstacles_flat);
+        load_state_(state);
+    }
+
+    void set_state(
+        py::array_t<double, py::array::c_style | py::array::forcecast> state) {
+        load_state_(state);
+    }
+
+    py::array_t<double> compute_next_state() const {
+        auto out = py::array_t<double>(static_cast<py::ssize_t>(kPushStateDim));
+        compute_next_state_into_(action_dxdy_, out.mutable_data());
+        return out;
+    }
+
+    py::array_t<double> compute_next_state_for_action(
+        py::array_t<double, py::array::c_style | py::array::forcecast> action_dxdy) const {
+        std::array<double, 2> override_action{};
+        load_action_(action_dxdy, override_action);
+        auto out = py::array_t<double>(static_cast<py::ssize_t>(kPushStateDim));
+        compute_next_state_into_(override_action, out.mutable_data());
+        return out;
+    }
+
+  private:
+    static void load_action_(
+        const py::array_t<double, py::array::c_style | py::array::forcecast> &action,
+        std::array<double, 2> &dst) {
+        if (action.ndim() != 1 || action.shape(0) != 2) {
+            throw std::invalid_argument("action_dxdy must have shape (2,)");
+        }
+        auto av = action.unchecked<1>();
+        dst[0] = av(0);
+        dst[1] = av(1);
+    }
+
+    void load_obstacles_flat_(
+        const py::array_t<double, py::array::c_style | py::array::forcecast> &obstacles_flat) {
+        if (n_obstacles_ < 0) {
+            throw std::invalid_argument("n_obstacles must be non-negative");
+        }
+        const auto expected = static_cast<std::size_t>(n_obstacles_) * 2;
+        if (obstacles_flat.ndim() != 1 ||
+            static_cast<std::size_t>(obstacles_flat.shape(0)) != expected) {
+            throw std::invalid_argument("obstacles_flat must have shape (n_obstacles*2,)");
+        }
+        obstacles_flat_.assign(obstacles_flat.data(), obstacles_flat.data() + expected);
+    }
+
+    void load_state_(
+        const py::array_t<double, py::array::c_style | py::array::forcecast> &state) {
+        if (state.ndim() != 1 ||
+            static_cast<std::size_t>(state.shape(0)) != kPushStateDim) {
+            throw std::invalid_argument("state must have shape (6,)");
+        }
+        auto sv = state.unchecked<1>();
+        for (std::size_t d = 0; d < kPushStateDim; ++d) {
+            state_[d] = sv(static_cast<py::ssize_t>(d));
+        }
+    }
+
+    bool collides_(double px, double py_) const noexcept {
+        if (n_obstacles_ <= 0) {
+            return false;
+        }
+        const double r_sq = obstacle_radius_ * obstacle_radius_;
+        for (int i = 0; i < n_obstacles_; ++i) {
+            const double dx = px - obstacles_flat_[static_cast<std::size_t>(i) * 2 + 0];
+            const double dy = py_ - obstacles_flat_[static_cast<std::size_t>(i) * 2 + 1];
+            if (dx * dx + dy * dy <= r_sq) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    void compute_next_state_into_(const std::array<double, 2> &dxy, double *out) const {
+        const double dx = dxy[0];
+        const double dy = dxy[1];
+
+        const double rx = state_[0];
+        const double ry = state_[1];
+        const double ox = state_[2];
+        const double oy = state_[3];
+        const double tx = state_[4];
+        const double ty = state_[5];
+
+        // Intended robot move; obstacle collision blocks movement.
+        const double irx = rx + dx;
+        const double iry = ry + dy;
+        double nrx;
+        double nry;
+        if (collides_(irx, iry)) {
+            nrx = rx;
+            nry = ry;
+        } else {
+            nrx = irx;
+            nry = iry;
+        }
+
+        // Object push if robot within push_threshold of object.
+        const double ddx = nrx - ox;
+        const double ddy = nry - oy;
+        const double dist_sq = ddx * ddx + ddy * ddy;
+        const double thr_sq = push_threshold_ * push_threshold_;
+        double nox;
+        double noy;
+        if (dist_sq < thr_sq) {
+            const double push_scale = 1.0 - friction_coefficient_;
+            const double iox = ox + dx * push_scale;
+            const double ioy = oy + dy * push_scale;
+            if (collides_(iox, ioy)) {
+                nox = ox;
+                noy = oy;
+            } else {
+                nox = iox;
+                noy = ioy;
+            }
+        } else {
+            nox = ox;
+            noy = oy;
+        }
+
+        const double gmax = grid_size_ - 1.0;
+        out[0] = std::max(0.0, std::min(nrx, gmax));
+        out[1] = std::max(0.0, std::min(nry, gmax));
+        out[2] = std::max(0.0, std::min(nox, gmax));
+        out[3] = std::max(0.0, std::min(noy, gmax));
+        out[4] = tx;
+        out[5] = ty;
+    }
+
+    std::array<double, 2> action_dxdy_{};
+    double grid_size_;
+    double push_threshold_;
+    double friction_coefficient_;
+    std::vector<double> obstacles_flat_;
+    int n_obstacles_;
+    double obstacle_radius_;
+    std::vector<double> state_;
+};
+
 // simulate_rollout_discrete: run a full rollout in one C++ frame.
 //
 // Parameters:
@@ -1267,6 +1434,22 @@ PYBIND11_MODULE(_native, m) {
           "particle[2:4], σ²·I_2) over all (N, 6) particles. "
           "Bit-for-bit equivalent to PushVectorizedUpdater."
           "batch_observation_log_likelihood (no RNG involved).");
+
+    py::class_<PushDiscreteTransitionCpp>(m, "PushDiscreteTransitionCpp")
+        .def(py::init<py::array_t<double, py::array::c_style | py::array::forcecast>,
+                      py::array_t<double, py::array::c_style | py::array::forcecast>,
+                      double, double, double,
+                      py::array_t<double, py::array::c_style | py::array::forcecast>,
+                      int, double>(),
+             py::arg("state"), py::arg("action_dxdy"), py::arg("grid_size"),
+             py::arg("push_threshold"), py::arg("friction_coefficient"),
+             py::arg("obstacles_flat"), py::arg("n_obstacles"),
+             py::arg("obstacle_radius"))
+        .def("set_state", &PushDiscreteTransitionCpp::set_state, py::arg("state"))
+        .def("compute_next_state", &PushDiscreteTransitionCpp::compute_next_state)
+        .def("compute_next_state_for_action",
+             &PushDiscreteTransitionCpp::compute_next_state_for_action,
+             py::arg("action_dxdy"));
 
     py::class_<ContinuousPushTransitionCpp>(m, "ContinuousPushTransitionCpp")
         .def(py::init<const py::object &, const py::object &, double, double, double, double,
