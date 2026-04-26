@@ -27,7 +27,7 @@ import math
 from enum import Enum
 from pathlib import Path
 from collections.abc import Hashable
-from typing import Any, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -38,6 +38,7 @@ from POMDPPlanners.core.environment import (
     SpaceType,
 )
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
+from POMDPPlanners.environments.push_pomdp import _native
 from POMDPPlanners.environments.push_pomdp.push_pomdp_visualizer import PushPOMDPVisualizer
 from POMDPPlanners.utils.statistics_utils import confidence_interval
 
@@ -94,9 +95,8 @@ class RandomInitialStateDistribution(Distribution):
         max_attempts = 100
         for _ in range(max_attempts):
             robot_pos = np.random.uniform(0, self.grid_size - 1, size=2)
-            if not self.parent._is_colliding_with_obstacle(
-                robot_pos
-            ):  # pylint: disable=protected-access
+            # pylint: disable-next=protected-access
+            if not self.parent._is_colliding_with_obstacle(robot_pos):
                 return robot_pos
         return np.random.uniform(0, self.grid_size - 1, size=2)
 
@@ -104,11 +104,9 @@ class RandomInitialStateDistribution(Distribution):
         max_attempts = 100
         for _ in range(max_attempts):
             object_pos = np.random.uniform(0, self.grid_size - 1, size=2)
-            if np.linalg.norm(
-                object_pos - self.target_pos
-            ) >= 2.0 and not self.parent._is_colliding_with_obstacle(
-                object_pos
-            ):  # pylint: disable=protected-access
+            # pylint: disable-next=protected-access
+            colliding = self.parent._is_colliding_with_obstacle(object_pos)
+            if np.linalg.norm(object_pos - self.target_pos) >= 2.0 and not colliding:
                 return object_pos
         return np.random.uniform(0, self.grid_size - 1, size=2)
 
@@ -230,6 +228,28 @@ class PushPOMDP(DiscreteActionsEnvironment):
             "left": np.array([-1, 0]),
         }
 
+        # Pre-built per-action (dx, dy) C-contiguous float64 buffers; one
+        # array per label, shared across all transition kernel calls so the
+        # cached C++ kernel doesn't need to repack on every dispatch.
+        self._action_dxdy_map: Dict[str, np.ndarray] = {
+            label: np.array([float(dx), float(dy)], dtype=np.float64)
+            for label, (dx, dy) in self._ACTION_TO_DXY.items()
+        }
+
+        # Flat (M*2,) float64 buffer of obstacle centres; shared across all
+        # cached kernels (they each copy it at construction).
+        if self.obstacles:
+            self._obstacles_flat_arr: np.ndarray = np.asarray(
+                self.obstacles, dtype=np.float64
+            ).ravel()
+        else:
+            self._obstacles_flat_arr = np.empty((0,), dtype=np.float64)
+
+        # Per-action C++ transition kernel cache. Built lazily on first
+        # dispatch so the env survives pickling without bundling pybind11
+        # objects.
+        self._trans_kernel_cache: Dict[str, Any] = {}
+
     def _is_colliding_with_obstacle(
         self, position: np.ndarray, action: Optional[str] = None
     ) -> bool:
@@ -291,10 +311,38 @@ class PushPOMDP(DiscreteActionsEnvironment):
             actual_action = action
         return self._compute_next_state_for_action(state, actual_action)
 
+    def _get_trans_kernel(self, action: str) -> Any:
+        # Per-action native transition kernel cache. Each kernel freezes the
+        # (dx, dy) for ``action`` and copies obstacles_flat once at
+        # construction; per-call work is just set_state + compute_next_state.
+        cached = self._trans_kernel_cache.get(action)
+        if cached is not None:
+            return cached
+        action_dxdy = self._action_dxdy_map[action]
+        kernel = _native.PushDiscreteTransitionCpp(
+            state=np.zeros(6, dtype=np.float64),
+            action_dxdy=action_dxdy,
+            grid_size=float(self.grid_size),
+            push_threshold=float(self.push_threshold),
+            friction_coefficient=float(self.friction_coefficient),
+            obstacles_flat=self._obstacles_flat_arr,
+            n_obstacles=len(self.obstacles),
+            obstacle_radius=float(self.obstacle_radius),
+        )
+        self._trans_kernel_cache[action] = kernel
+        return kernel
+
     def _compute_next_state_for_action(self, state: np.ndarray, action: str) -> np.ndarray:
-        # Deterministic next-state calculation for ``action`` (no RNG draws).
-        # Used by both the sampling path (after error-action selection) and
-        # the closed-form transition_log_probability path.
+        # Native dispatch path: route the closed-form deterministic transition
+        # through the cached PushDiscreteTransitionCpp kernel. Used by both
+        # the sampling path (after error-action selection) and the closed-form
+        # transition_log_probability path.
+        kernel = self._get_trans_kernel(action)
+        kernel.set_state(np.ascontiguousarray(state, dtype=np.float64))
+        return np.asarray(kernel.compute_next_state())
+
+    def _compute_next_state_for_action_python(self, state: np.ndarray, action: str) -> np.ndarray:
+        # Pure-Python reference implementation kept for the parity test.
         dx, dy = self._ACTION_TO_DXY[action]
 
         # Extract scalar positions from the 6-D state.
@@ -388,13 +436,20 @@ class PushPOMDP(DiscreteActionsEnvironment):
         #   P(next | s, a) = (1 - p_err) * 1[next == intended(s, a)]
         #                  + p_err * (1 / n_err) * sum_a' 1[next == intended(s, a')]
         # where the second sum runs over error_actions = actions \ {a}.
-        intended_next = self._compute_next_state_for_action(state, action)
+        # Single cached kernel handles every action label: set_state once,
+        # compute_next_state for the intended action and
+        # compute_next_state_for_action(other_dxdy) for the error branch.
+        kernel = self._get_trans_kernel(action)
+        kernel.set_state(np.ascontiguousarray(state, dtype=np.float64))
+        intended_next = np.asarray(kernel.compute_next_state())
         error_actions = [a for a in self.actions if a != action]
         num_error_actions = len(error_actions)
         error_results: List[np.ndarray] = []
         if self.transition_error_prob > 0.0 and num_error_actions > 0:
             error_results = [
-                self._compute_next_state_for_action(state, error_action)
+                np.asarray(
+                    kernel.compute_next_state_for_action(self._action_dxdy_map[error_action])
+                )
                 for error_action in error_actions
             ]
 
@@ -496,6 +551,18 @@ class PushPOMDP(DiscreteActionsEnvironment):
         # ``np.array_equal`` for fixed-shape/dtype observations of this env.
         return np.ascontiguousarray(observation).tobytes()
 
+    def __getstate__(self) -> Dict[str, Any]:
+        # Per-action C++ kernel cache holds pybind11 objects that are not
+        # picklable. Drop them at serialization time; ``__setstate__``
+        # rebuilds an empty cache on the receiving end.
+        state = self.__dict__.copy()
+        state["_trans_kernel_cache"] = {}
+        return state
+
+    def __setstate__(self, state: Dict[str, Any]) -> None:
+        vars(self).update(state)
+        self._trans_kernel_cache = {}
+
     def _get_native_rollout_obstacles(self) -> np.ndarray:
         # Returns (M, 2) float64 array of obstacle centres; cached on first call.
         cached = getattr(self, "_cached_native_rollout_obstacles", None)
@@ -519,11 +586,9 @@ class PushPOMDP(DiscreteActionsEnvironment):
     ) -> float:
         # Fast path: delegate the entire rollout to the C++ kernel.
         # Pre-draw action indices in Python so np's random stream (used by
-        # belief updates etc.) remains the caller's random stream.
-        from POMDPPlanners.environments.push_pomdp import (  # pylint: disable=import-outside-toplevel
-            _native,
-        )
-
+        # belief updates etc.) remains the caller's random stream. ``_native``
+        # is imported at module top.
+        del action_sampler  # rollouts use the module-level np RNG directly
         remaining = max_depth - depth
         if remaining <= 0 or self.is_terminal(state=state):
             return 0.0

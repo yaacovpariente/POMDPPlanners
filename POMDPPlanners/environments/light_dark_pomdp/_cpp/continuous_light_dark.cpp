@@ -758,6 +758,144 @@ double discrete_simulate_rollout(
     return total;
 }
 
+// Single-step discrete next-state sampler. Mirrors
+// DiscreteLightDarkPOMDP.sample_next_state for n_samples == 1: take a
+// pre-drawn uniform, np.searchsorted on the cumulative-probability table for
+// the chosen action, clamp to last index, gather the offset vector, and
+// return state + offset. The Python wrapper handles the np.random.rand()
+// draw and dict lookup so byte-identical numpy RNG state is preserved.
+py::array_t<double> discrete_sample_next_state_step(
+    const py::array_t<double, py::array::c_style | py::array::forcecast> &state,
+    const py::array_t<double, py::array::c_style | py::array::forcecast> &cumprobs_for_action,
+    const py::array_t<double, py::array::c_style | py::array::forcecast> &action_vectors,
+    double uniform_draw,
+    int n_actions) {
+    if (state.ndim() != 1 ||
+        static_cast<std::size_t>(state.shape(0)) != kLightDarkStateDim) {
+        throw std::invalid_argument("state must have shape (2,)");
+    }
+    if (cumprobs_for_action.ndim() != 1) {
+        throw std::invalid_argument("cumprobs_for_action must be 1-D");
+    }
+    if (action_vectors.ndim() != 2 ||
+        static_cast<std::size_t>(action_vectors.shape(1)) != kLightDarkStateDim) {
+        throw std::invalid_argument("action_vectors must have shape (n_actions, 2)");
+    }
+    if (n_actions <= 0 || n_actions > static_cast<int>(action_vectors.shape(0))) {
+        throw std::invalid_argument("n_actions must be in (0, action_vectors.shape[0]]");
+    }
+
+    auto cum_view = cumprobs_for_action.unchecked<1>();
+    const auto cum_len = static_cast<std::size_t>(cum_view.shape(0));
+    // np.searchsorted default side='left': first index i with cum[i] >= u.
+    std::size_t idx = cum_len;
+    for (std::size_t k = 0; k < cum_len; ++k) {
+        if (cum_view(static_cast<py::ssize_t>(k)) >= uniform_draw) {
+            idx = k;
+            break;
+        }
+    }
+    const std::size_t n_actions_sz = static_cast<std::size_t>(n_actions);
+    if (idx >= n_actions_sz) {
+        idx = n_actions_sz - 1;
+    }
+
+    auto state_view = state.unchecked<1>();
+    auto av_view = action_vectors.unchecked<2>();
+    py::array_t<double> out(static_cast<py::ssize_t>(kLightDarkStateDim));
+    auto out_view = out.mutable_unchecked<1>();
+    out_view(0) = state_view(0) + av_view(static_cast<py::ssize_t>(idx), 0);
+    out_view(1) = state_view(1) + av_view(static_cast<py::ssize_t>(idx), 1);
+    return out;
+}
+
+// Single-step discrete observation sampler for the NORMAL model. Mirrors
+// DiscreteLightDarkPOMDP.sample_observation for n_samples == 1, NORMAL only:
+// strict-less-than near-beacon test (matching the Python np.linalg.norm + min
+// + < beacon_radius), pick near vs far cumprobs, np.searchsorted on the
+// chosen cumprobs with the pre-drawn uniform, clamp, then return
+// next_state + action_vectors[idx] for idx < n_actions, else next_state.
+py::array_t<double> discrete_sample_observation_step_normal(
+    const py::array_t<double, py::array::c_style | py::array::forcecast> &next_state,
+    const py::array_t<double, py::array::c_style | py::array::forcecast> &beacons_arr,
+    const py::array_t<double, py::array::c_style | py::array::forcecast> &cumprobs_near,
+    const py::array_t<double, py::array::c_style | py::array::forcecast> &cumprobs_far,
+    const py::array_t<double, py::array::c_style | py::array::forcecast> &action_vectors,
+    double beacon_radius,
+    double uniform_draw,
+    int n_actions,
+    int n_obs) {
+    if (next_state.ndim() != 1 ||
+        static_cast<std::size_t>(next_state.shape(0)) != kLightDarkStateDim) {
+        throw std::invalid_argument("next_state must have shape (2,)");
+    }
+    if (beacons_arr.ndim() != 1) {
+        throw std::invalid_argument("beacons must be a flat 1-D array [x0,y0,x1,y1,...]");
+    }
+    if (cumprobs_near.ndim() != 1 || cumprobs_far.ndim() != 1) {
+        throw std::invalid_argument("cumprobs_{near,far} must be 1-D arrays");
+    }
+    if (action_vectors.ndim() != 2 ||
+        static_cast<std::size_t>(action_vectors.shape(1)) != kLightDarkStateDim) {
+        throw std::invalid_argument("action_vectors must have shape (n_actions, 2)");
+    }
+    if (n_actions <= 0 || n_actions > static_cast<int>(action_vectors.shape(0))) {
+        throw std::invalid_argument("n_actions must be in (0, action_vectors.shape[0]]");
+    }
+    if (n_obs <= 0) {
+        throw std::invalid_argument("n_obs must be positive");
+    }
+
+    auto ns_view = next_state.unchecked<1>();
+    const double ns_x = ns_view(0);
+    const double ns_y = ns_view(1);
+
+    // Strict-less-than near-beacon test, matching the Python branch:
+    //   distances = np.linalg.norm(beacons - next_state[:, np.newaxis], axis=0)
+    //   near = float(np.min(distances)) < beacon_radius
+    auto beacons_view = beacons_arr.unchecked<1>();
+    const std::size_t n_flat = static_cast<std::size_t>(beacons_view.shape(0));
+    const std::size_t n_beacons = n_flat / kLightDarkStateDim;
+    const double br_sq = beacon_radius * beacon_radius;
+    bool near = false;
+    for (std::size_t j = 0; j < n_beacons; ++j) {
+        const double bx = beacons_view(static_cast<py::ssize_t>(j * 2));
+        const double by = beacons_view(static_cast<py::ssize_t>(j * 2 + 1));
+        const double dx = ns_x - bx;
+        const double dy = ns_y - by;
+        if (dx * dx + dy * dy < br_sq) {
+            near = true;
+            break;
+        }
+    }
+
+    auto cum_view = (near ? cumprobs_near : cumprobs_far).unchecked<1>();
+    const auto cum_len = static_cast<std::size_t>(cum_view.shape(0));
+    std::size_t idx = cum_len;
+    for (std::size_t k = 0; k < cum_len; ++k) {
+        if (cum_view(static_cast<py::ssize_t>(k)) >= uniform_draw) {
+            idx = k;
+            break;
+        }
+    }
+    const std::size_t n_obs_sz = static_cast<std::size_t>(n_obs);
+    if (idx >= n_obs_sz) {
+        idx = n_obs_sz - 1;
+    }
+
+    py::array_t<double> out(static_cast<py::ssize_t>(kLightDarkStateDim));
+    auto out_view = out.mutable_unchecked<1>();
+    if (idx < static_cast<std::size_t>(n_actions)) {
+        auto av_view = action_vectors.unchecked<2>();
+        out_view(0) = ns_x + av_view(static_cast<py::ssize_t>(idx), 0);
+        out_view(1) = ns_y + av_view(static_cast<py::ssize_t>(idx), 1);
+    } else {
+        out_view(0) = ns_x;
+        out_view(1) = ns_y;
+    }
+    return out;
+}
+
 }  // anonymous namespace
 
 PYBIND11_MODULE(_native, m) {
@@ -807,6 +945,23 @@ PYBIND11_MODULE(_native, m) {
           py::arg("beacon_radius"), py::arg("obs_probs_near"), py::arg("obs_probs_far"),
           py::arg("action_offsets"),
           "Per-state observation log-probability for the NORMAL discrete observation model.");
+
+    m.def("discrete_sample_next_state_step", &discrete_sample_next_state_step,
+          py::arg("state"), py::arg("cumprobs_for_action"), py::arg("action_vectors"),
+          py::arg("uniform_draw"), py::arg("n_actions"),
+          "Single-step discrete sample_next_state. The Python wrapper draws the "
+          "uniform via np.random.rand() and forwards it here so byte-identical "
+          "numpy RNG state is preserved across the original Python path and this "
+          "native fast path.");
+
+    m.def("discrete_sample_observation_step_normal",
+          &discrete_sample_observation_step_normal,
+          py::arg("next_state"), py::arg("beacons"), py::arg("cumprobs_near"),
+          py::arg("cumprobs_far"), py::arg("action_vectors"), py::arg("beacon_radius"),
+          py::arg("uniform_draw"), py::arg("n_actions"), py::arg("n_obs"),
+          "Single-step discrete sample_observation for the NORMAL observation model. "
+          "Mirrors the strict-less-than near-beacon test and np.searchsorted index "
+          "selection; the Python wrapper pre-draws the uniform.");
 
     m.def("discrete_simulate_rollout", &discrete_simulate_rollout,
           py::arg("initial_state"), py::arg("action_array"), py::arg("action_indices"),

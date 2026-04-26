@@ -18,7 +18,7 @@ Classes:
 import math
 from enum import Enum
 from pathlib import Path
-from typing import Any, List, Optional, Sequence, Union
+from typing import Any, Dict, List, Optional, Sequence, Union
 
 _INTEGRATOR_CODES: dict[str, int] = {"euler": 0, "semi-implicit euler": 1}
 
@@ -179,27 +179,58 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
             use_queue_logger=use_queue_logger,
         )
 
-    # ── Hot-path sampling: build the native C++ kernel directly. ─────
-    # The wrapper-subclass path that used to live here was identical
-    # to constructing _native.CartPole{Transition,Observation}Cpp; the
-    # subclass only existed for ABC compatibility and has been deleted.
+        # Per-action C++ kernel caches: actions are ``int`` (0 / 1) so a
+        # plain ``Dict[int, Any]`` suffices. Lazily built by
+        # ``_get_trans_kernel`` / ``_get_obs_kernel`` and reset on
+        # unpickle. Mirrors the RockSample / Pacman pattern.
+        self._trans_kernel_cache: Dict[int, Any] = {}
+        self._obs_kernel_cache: Dict[int, Any] = {}
+
+    # ── Native-backed env-API implementations ────────────────────────
+    # Each method fetches a cached per-action C++ kernel, mutates its
+    # stored state via ``set_state`` / ``set_next_state`` (when needed),
+    # and dispatches to the same native sample / probability /
+    # batch_sample / batch_log_likelihood entry points as before. The
+    # kernel itself caches frozen physics params, action int, and
+    # covariance so we no longer rebuild those per call.
+
+    def _get_trans_kernel(self, action: int) -> Any:
+        kernel = self._trans_kernel_cache.get(action)
+        if kernel is None:
+            placeholder = np.zeros(4, dtype=np.float64)
+            kernel = _native.CartPoleTransitionCpp(
+                state=placeholder,
+                action=int(action),
+                force_mag=self.force_mag,
+                total_mass=self.total_mass,
+                polemass_length=self.polemass_length,
+                gravity=self.gravity,
+                length=self.length,
+                kinematics_integrator=self.kinematics_integrator,
+                tau=self.tau,
+                masspole=self.masspole,
+                covariance=self._state_transition_dist.covariance,
+            )
+            self._trans_kernel_cache[action] = kernel
+        return kernel
+
+    def _get_obs_kernel(self, action: int) -> Any:
+        kernel = self._obs_kernel_cache.get(action)
+        if kernel is None:
+            placeholder = np.zeros(4, dtype=np.float64)
+            kernel = _native.CartPoleObservationCpp(
+                next_state=placeholder,
+                action=int(action),
+                covariance=self._obs_dist.covariance,
+            )
+            self._obs_kernel_cache[action] = kernel
+        return kernel
 
     def sample_next_state(
         self, state: np.ndarray, action: int, n_samples: int = 1
     ) -> NDArray[np.float64]:
-        kernel = _native.CartPoleTransitionCpp(
-            state=state,
-            action=action,
-            force_mag=self.force_mag,
-            total_mass=self.total_mass,
-            polemass_length=self.polemass_length,
-            gravity=self.gravity,
-            length=self.length,
-            kinematics_integrator=self.kinematics_integrator,
-            tau=self.tau,
-            masspole=self.masspole,
-            covariance=self._state_transition_dist.covariance,
-        )
+        kernel = self._get_trans_kernel(int(action))
+        kernel.set_state(np.asarray(state, dtype=np.float64))
         samples = kernel.sample(n_samples)
         if n_samples == 1:
             return samples[0]
@@ -208,11 +239,8 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
     def sample_observation(
         self, next_state: np.ndarray, action: int, n_samples: int = 1
     ) -> NDArray[np.float64]:
-        kernel = _native.CartPoleObservationCpp(
-            next_state=next_state,
-            action=action,
-            covariance=self._obs_dist.covariance,
-        )
+        kernel = self._get_obs_kernel(int(action))
+        kernel.set_next_state(np.asarray(next_state, dtype=np.float64))
         samples = kernel.sample(n_samples)
         if n_samples == 1:
             return samples[0]
@@ -224,19 +252,8 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
         action: int,
         next_states: Union[Sequence[Any], np.ndarray],
     ) -> np.ndarray:
-        kernel = _native.CartPoleTransitionCpp(
-            state=state,
-            action=action,
-            force_mag=self.force_mag,
-            total_mass=self.total_mass,
-            polemass_length=self.polemass_length,
-            gravity=self.gravity,
-            length=self.length,
-            kinematics_integrator=self.kinematics_integrator,
-            tau=self.tau,
-            masspole=self.masspole,
-            covariance=self._state_transition_dist.covariance,
-        )
+        kernel = self._get_trans_kernel(int(action))
+        kernel.set_state(np.asarray(state, dtype=np.float64))
         probs = np.asarray(kernel.probability(next_states))
         return np.log(probs + 1e-300)
 
@@ -246,11 +263,8 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
         action: int,
         observations: Union[Sequence[Any], np.ndarray],
     ) -> np.ndarray:
-        kernel = _native.CartPoleObservationCpp(
-            next_state=next_state,
-            action=action,
-            covariance=self._obs_dist.covariance,
-        )
+        kernel = self._get_obs_kernel(int(action))
+        kernel.set_next_state(np.asarray(next_state, dtype=np.float64))
         probs = np.asarray(kernel.probability(observations))
         return np.log(probs + 1e-300)
 
@@ -258,19 +272,10 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
         states_array = np.ascontiguousarray(np.asarray(states, dtype=np.float64))
         if states_array.ndim == 1:
             states_array = states_array.reshape(1, -1)
-        kernel = _native.CartPoleTransitionCpp(
-            state=states_array[0],
-            action=action,
-            force_mag=self.force_mag,
-            total_mass=self.total_mass,
-            polemass_length=self.polemass_length,
-            gravity=self.gravity,
-            length=self.length,
-            kinematics_integrator=self.kinematics_integrator,
-            tau=self.tau,
-            masspole=self.masspole,
-            covariance=self._state_transition_dist.covariance,
-        )
+        # ``batch_sample`` reads each row's state from the input array;
+        # the kernel's stored ``state_`` is not consulted, so we skip
+        # ``set_state`` on this hot path.
+        kernel = self._get_trans_kernel(int(action))
         return np.asarray(kernel.batch_sample(states_array), dtype=np.float64)
 
     def observation_log_probability_per_state(
@@ -280,11 +285,10 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
         if next_states_array.ndim == 1:
             next_states_array = next_states_array.reshape(1, -1)
         observation_array = np.ascontiguousarray(np.asarray(observation, dtype=np.float64))
-        kernel = _native.CartPoleObservationCpp(
-            next_state=next_states_array[0],
-            action=action,
-            covariance=self._obs_dist.covariance,
-        )
+        # ``batch_log_likelihood`` reads each row's next-state from the
+        # input array; ``next_state_`` on the kernel is unused, so we
+        # skip ``set_next_state`` on this hot path.
+        kernel = self._get_obs_kernel(int(action))
         return np.asarray(
             kernel.batch_log_likelihood(
                 next_particles=next_states_array,
@@ -292,6 +296,20 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
             ),
             dtype=np.float64,
         )
+
+    def __getstate__(self) -> Dict[str, Any]:
+        # Per-action C++ kernel caches hold pybind11 objects that aren't
+        # picklable. Drop them at serialization time; ``__setstate__``
+        # rebuilds empty caches so the env works after unpickling.
+        state = self.__dict__.copy()
+        state["_trans_kernel_cache"] = {}
+        state["_obs_kernel_cache"] = {}
+        return state
+
+    def __setstate__(self, state: Dict[str, Any]) -> None:
+        vars(self).update(state)
+        self._trans_kernel_cache = {}
+        self._obs_kernel_cache = {}
 
     def reward(self, state: np.ndarray, action: int) -> float:
         terminated = self.is_terminal(state)
@@ -327,7 +345,7 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
 
         return terminated
 
-    def simulate_random_rollout(
+    def simulate_random_rollout(  # pylint: disable=unused-argument
         self,
         state: Any,
         action_sampler: Any,

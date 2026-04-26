@@ -482,7 +482,16 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
         # to len(values)-1. Same RNG draw is preserved here.
         cumprobs = self._transition_cumprobs_np[action]
         if n_samples == 1:
-            idx = int(np.searchsorted(cumprobs, np.random.rand()))
+            uniform_draw = float(np.random.rand())
+            if hasattr(_native, "discrete_sample_next_state_step"):
+                return _native.discrete_sample_next_state_step(
+                    state=np.ascontiguousarray(state, dtype=np.float64),
+                    cumprobs_for_action=np.ascontiguousarray(cumprobs, dtype=np.float64),
+                    action_vectors=self._action_offsets_array,
+                    uniform_draw=uniform_draw,
+                    n_actions=self._n_actions,
+                )
+            idx = int(np.searchsorted(cumprobs, uniform_draw))
             if idx >= self._n_actions:
                 idx = self._n_actions - 1
             return state + self._action_vectors[idx]
@@ -509,6 +518,20 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
         # NORMAL path — wrapper-equivalent near-beacon check (strict-less-than):
         # distances = np.linalg.norm(beacons - next_state[:, None], axis=0)
         # near_beacon = float(np.min(distances)) < beacon_radius.
+        if n_samples == 1 and hasattr(_native, "discrete_sample_observation_step_normal"):
+            uniform_draw = float(np.random.rand())
+            return _native.discrete_sample_observation_step_normal(
+                next_state=np.ascontiguousarray(next_state, dtype=np.float64),
+                beacons=self._beacons_flat,
+                cumprobs_near=self._obs_cumprobs_near_np,
+                cumprobs_far=self._obs_cumprobs_far_np,
+                action_vectors=self._action_offsets_array,
+                beacon_radius=float(self.beacon_radius),
+                uniform_draw=uniform_draw,
+                n_actions=self._n_actions,
+                n_obs=self._n_obs_values,
+            )
+
         distances = np.linalg.norm(self.beacons - next_state[:, np.newaxis], axis=0)
         near_beacon = float(np.min(distances)) < self.beacon_radius
 

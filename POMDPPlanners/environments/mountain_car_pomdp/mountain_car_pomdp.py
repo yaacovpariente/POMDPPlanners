@@ -21,7 +21,7 @@ Classes:
 
 from enum import Enum
 from pathlib import Path
-from typing import Any, List, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import matplotlib
 import numpy as np
@@ -139,9 +139,59 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
             use_queue_logger=use_queue_logger,
         )
 
+        # Per-action C++ kernel caches: actions are ``int`` so a plain
+        # ``Dict[int, Any]`` suffices. Lazily built by ``_get_trans_kernel``
+        # / ``_get_obs_kernel`` and reset on unpickle. The kernel keeps the
+        # frozen env params (action, power, gravity, max_speed,
+        # min_position, max_position, covariance) and is mutated only via
+        # ``set_state`` / ``set_next_state`` on hot paths.
+        self._trans_kernel_cache: Dict[int, Any] = {}
+        self._obs_kernel_cache: Dict[int, Any] = {}
+
+    def __getstate__(self) -> Dict[str, Any]:
+        # pybind11 kernels are not picklable; rebuild lazily on the receiver.
+        state = self.__dict__.copy()
+        state["_trans_kernel_cache"] = {}
+        state["_obs_kernel_cache"] = {}
+        return state
+
+    def __setstate__(self, state: Dict[str, Any]) -> None:
+        vars(self).update(state)
+        self._trans_kernel_cache = {}
+        self._obs_kernel_cache = {}
+
+    def _get_trans_kernel(self, action: int) -> Any:
+        kernel = self._trans_kernel_cache.get(int(action))
+        if kernel is None:
+            kernel = _native.MountainCarTransitionCpp(
+                state=np.zeros(2, dtype=np.float64),
+                action=int(action),
+                power=self.power,
+                gravity=self.gravity,
+                max_speed=self.max_speed,
+                min_position=self.min_position,
+                max_position=self.max_position,
+                covariance=self._state_transition_dist.covariance,
+            )
+            self._trans_kernel_cache[int(action)] = kernel
+        return kernel
+
+    def _get_obs_kernel(self, action: int) -> Any:
+        kernel = self._obs_kernel_cache.get(int(action))
+        if kernel is None:
+            kernel = _native.MountainCarObservationCpp(
+                next_state=np.zeros(2, dtype=np.float64),
+                action=int(action),
+                covariance=self._obs_dist.covariance,
+            )
+            self._obs_kernel_cache[int(action)] = kernel
+        return kernel
+
     # ── Hot-path sampling overrides ─────────────────────────────────
-    # Build the native kernel directly so ``sample()`` and the
-    # log-probability paths execute entirely in C++.
+    # Each method fetches a cached per-action C++ kernel, mutates its
+    # stored state via ``set_state`` / ``set_next_state`` (when needed),
+    # and dispatches to the same native sample / probability /
+    # batch_sample / batch_log_likelihood entry points as before.
 
     def sample_next_state(
         self,
@@ -149,16 +199,8 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
         action: int,
         n_samples: int = 1,
     ) -> NDArray[np.float64]:
-        kernel = _native.MountainCarTransitionCpp(
-            state=state,
-            action=action,
-            power=self.power,
-            gravity=self.gravity,
-            max_speed=self.max_speed,
-            min_position=self.min_position,
-            max_position=self.max_position,
-            covariance=self._state_transition_dist.covariance,
-        )
+        kernel = self._get_trans_kernel(int(action))
+        kernel.set_state(state)
         samples = kernel.sample(n_samples)
         if n_samples == 1:
             return samples[0]
@@ -170,11 +212,8 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
         action: int,
         n_samples: int = 1,
     ) -> NDArray[np.float64]:
-        kernel = _native.MountainCarObservationCpp(
-            next_state=next_state,
-            action=action,
-            covariance=self._obs_dist.covariance,
-        )
+        kernel = self._get_obs_kernel(int(action))
+        kernel.set_next_state(next_state)
         samples = kernel.sample(n_samples)
         if n_samples == 1:
             return samples[0]
@@ -186,16 +225,8 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
         action: int,
         next_states: Union[Sequence[Any], NDArray[np.float64]],
     ) -> np.ndarray:
-        kernel = _native.MountainCarTransitionCpp(
-            state=state,
-            action=action,
-            power=self.power,
-            gravity=self.gravity,
-            max_speed=self.max_speed,
-            min_position=self.min_position,
-            max_position=self.max_position,
-            covariance=self._state_transition_dist.covariance,
-        )
+        kernel = self._get_trans_kernel(int(action))
+        kernel.set_state(state)
         probs = np.asarray(kernel.probability(next_states))
         return np.log(probs + 1e-300)
 
@@ -205,11 +236,8 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
         action: int,
         observations: Union[Sequence[Any], NDArray[np.float64]],
     ) -> np.ndarray:
-        kernel = _native.MountainCarObservationCpp(
-            next_state=next_state,
-            action=action,
-            covariance=self._obs_dist.covariance,
-        )
+        kernel = self._get_obs_kernel(int(action))
+        kernel.set_next_state(next_state)
         probs = np.asarray(kernel.probability(observations))
         return np.log(probs + 1e-300)
 
@@ -217,16 +245,10 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
         states_array = np.ascontiguousarray(np.asarray(states, dtype=np.float64))
         if states_array.ndim == 1:
             states_array = states_array.reshape(1, -1)
-        kernel = _native.MountainCarTransitionCpp(
-            state=states_array[0],
-            action=action,
-            power=self.power,
-            gravity=self.gravity,
-            max_speed=self.max_speed,
-            min_position=self.min_position,
-            max_position=self.max_position,
-            covariance=self._state_transition_dist.covariance,
-        )
+        # ``batch_sample`` reads each row's state from the input array;
+        # the kernel's stored ``state_`` is not consulted, so we skip
+        # ``set_state`` on this hot path.
+        kernel = self._get_trans_kernel(int(action))
         return np.asarray(kernel.batch_sample(states_array), dtype=np.float64)
 
     def observation_log_probability_per_state(
@@ -236,11 +258,10 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
         if next_states_array.ndim == 1:
             next_states_array = next_states_array.reshape(1, -1)
         observation_array = np.ascontiguousarray(np.asarray(observation, dtype=np.float64))
-        kernel = _native.MountainCarObservationCpp(
-            next_state=next_states_array[0],
-            action=action,
-            covariance=self._obs_dist.covariance,
-        )
+        # ``batch_log_likelihood`` reads each row's next-state from the
+        # input array; ``next_state_`` on the kernel is unused, so we
+        # skip ``set_next_state`` on this hot path.
+        kernel = self._get_obs_kernel(int(action))
         return np.asarray(
             kernel.batch_log_likelihood(
                 next_particles=next_states_array,
@@ -268,7 +289,7 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
         position, _ = state
         return bool(position >= self.goal_position)
 
-    def simulate_random_rollout(
+    def simulate_random_rollout(  # pylint: disable=unused-argument
         self,
         state: Any,
         action_sampler: Any,
@@ -280,8 +301,9 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
 
         Args:
             state: Current 2-D car state ``[position, velocity]``.
-            action_sampler: Object with a ``sample()`` method (used only on the
-                Python fallback path).
+            action_sampler: Object with a ``sample()`` method (kept for API
+                parity with the base ``Environment`` contract; unused on the
+                native rollout path which draws indices directly via NumPy).
             max_depth: Maximum rollout depth.
             discount_factor: Per-step discount factor.
             depth: Depth already consumed by the search tree. Defaults to 0.
