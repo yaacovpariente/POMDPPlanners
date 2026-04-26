@@ -161,6 +161,7 @@ class PFT_DPW(ArenaDoubleProgressiveWideningMCTSPolicy):
             exploration_constant=self.exploration_constant,
             k_a=self.k_a,
             min_visit_count_per_action=self.min_visit_count_per_action,
+            environment=self.environment,
         )
 
         return_sample = self._simulate_return(

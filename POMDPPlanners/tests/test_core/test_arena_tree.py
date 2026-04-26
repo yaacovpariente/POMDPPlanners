@@ -52,6 +52,9 @@ class _MockEnvironment(Environment):
     def is_equal_observation(self, observation1, observation2):
         return observation1 == observation2
 
+    def hash_action(self, action):
+        return action
+
     def is_terminal(self, state):
         del state
         return False

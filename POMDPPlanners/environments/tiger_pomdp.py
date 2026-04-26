@@ -20,6 +20,7 @@ Classes:
 
 from enum import Enum
 from pathlib import Path
+from collections.abc import Hashable
 from typing import Any, List, Optional, Sequence, Union
 
 import numpy as np
@@ -249,6 +250,10 @@ class TigerPOMDP(DiscreteActionsEnvironment):
 
     def is_equal_observation(self, observation1: Any, observation2: Any) -> bool:
         return observation1 == observation2
+
+    def hash_action(self, action: Any) -> Hashable:
+        # Discrete-action env: actions are str labels (LISTEN/OPEN_LEFT/...).
+        return action
 
     def get_metric_names(self) -> List[str]:
         """Get names of Tiger POMDP specific metrics.

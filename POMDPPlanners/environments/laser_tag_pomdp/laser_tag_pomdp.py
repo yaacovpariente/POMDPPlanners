@@ -22,6 +22,7 @@ Classes:
 
 from enum import Enum
 from pathlib import Path
+from collections.abc import Hashable
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 import numpy as np
@@ -829,6 +830,10 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         Observations are 8-dimensional laser measurements or terminal observations.
         """
         return np.array_equal(observation1, observation2)
+
+    def hash_action(self, action: Any) -> Hashable:
+        # Discrete int actions (0..4); already hashable.
+        return action
 
     def _get_native_rollout_params(
         self,
