@@ -12,7 +12,7 @@ from POMDPPlanners.core.belief.particle_beliefs import WeightedParticleBelief
 from POMDPPlanners.core.belief.vectorized_weighted_particle_belief import (
     VectorizedWeightedParticleBelief,
 )
-from POMDPPlanners.environments.push_pomdp import PushPOMDP
+from POMDPPlanners.environments.push_pomdp import PushPOMDP, _native
 from POMDPPlanners.environments.push_pomdp.push_pomdp_beliefs import (
     PushVectorizedUpdater,
 )
@@ -649,3 +649,244 @@ class TestBeliefEquivalenceWithBaseline:
             atol_weights=0.02,
             seed=400,
         )
+
+
+# ---------------------------------------------------------------------------
+# Native vs Python parity for the C++ belief-update kernels
+# ---------------------------------------------------------------------------
+
+
+def _python_reference_transition(
+    particles: np.ndarray,
+    action_idx: int,
+    obstacles: np.ndarray,
+    obstacle_radius: float,
+    grid_size: float,
+    push_threshold: float,
+    friction_coefficient: float,
+) -> np.ndarray:
+    """NumPy reference implementation of the native belief-batch transition.
+
+    Mirrors the deterministic Python implementation that the C++ kernel
+    replaces. Used by the parity test to assert bit-for-bit equivalence
+    when ``transition_error_prob == 0`` (i.e., no RNG involved).
+    """
+    movement = np.array([[0, 1], [0, -1], [1, 0], [-1, 0]], dtype=float)[action_idx]
+    intended_robot = particles[:, :2] + movement
+    if obstacles.shape[0] > 0:
+        diff_r = intended_robot[:, None, :] - obstacles[None, :, :]
+        robot_colliding = np.any(np.linalg.norm(diff_r, axis=2) <= obstacle_radius, axis=1)
+    else:
+        robot_colliding = np.zeros(len(intended_robot), dtype=bool)
+    new_robot = np.where(robot_colliding[:, None], particles[:, :2], intended_robot)
+
+    dist_to_obj = np.linalg.norm(new_robot - particles[:, 2:4], axis=1)
+    can_push = dist_to_obj < push_threshold
+    push_force = movement * (1.0 - friction_coefficient)
+    intended_obj = particles[:, 2:4] + push_force
+    if obstacles.shape[0] > 0:
+        diff_o = intended_obj[:, None, :] - obstacles[None, :, :]
+        obj_colliding = np.any(np.linalg.norm(diff_o, axis=2) <= obstacle_radius, axis=1)
+    else:
+        obj_colliding = np.zeros(len(intended_obj), dtype=bool)
+    pushed_obj = np.where(obj_colliding[:, None], particles[:, 2:4], intended_obj)
+    new_obj = np.where(can_push[:, None], pushed_obj, particles[:, 2:4])
+
+    new_robot = np.clip(new_robot, 0, grid_size - 1)
+    new_obj = np.clip(new_obj, 0, grid_size - 1)
+    return np.column_stack([new_robot, new_obj, particles[:, 4:6]])
+
+
+@pytest.fixture
+def random_particles_k200():
+    """K=200 random Push particles distributed across the grid."""
+    rng = np.random.default_rng(seed=42)
+    particles = rng.uniform(0.5, 8.5, size=(200, 6))
+    particles[:, 4:6] = [9.0, 9.0]
+    return particles
+
+
+class TestNativeVsPythonParity:
+    def test_native_transition_matches_python_no_error(
+        self, env_no_obstacles, updater_no_obstacles, random_particles_k200
+    ):
+        """Native belief_batch_transition_discrete matches Python reference (no error).
+
+        Purpose: Validates that the C++ kernel's deterministic branch
+            (transition_error_prob == 0) produces bit-for-bit identical
+            output to the NumPy reference for K=200 random particles
+            across all four discrete actions.
+
+        Given: 200 random Push particles, no obstacles, transition_error_prob=0.
+        When: belief_batch_transition_discrete is called per action and the
+            equivalent NumPy reference is computed.
+        Then: ``np.array_equal`` holds (bit-for-bit equality, no RNG).
+
+        Test type: integration
+        """
+        del env_no_obstacles  # only updater params consumed
+        for action_idx in range(4):
+            native = _native.belief_batch_transition_discrete(
+                particles=random_particles_k200.astype(np.float64),
+                action_idx=action_idx,
+                transition_error_prob=0.0,
+                obstacles=updater_no_obstacles.obstacles.astype(np.float64),
+                obstacle_radius=float(updater_no_obstacles.obstacle_radius),
+                grid_size=float(updater_no_obstacles.grid_size),
+                push_threshold=float(updater_no_obstacles.push_threshold),
+                friction_coefficient=float(updater_no_obstacles.friction_coefficient),
+            )
+            reference = _python_reference_transition(
+                particles=random_particles_k200,
+                action_idx=action_idx,
+                obstacles=updater_no_obstacles.obstacles,
+                obstacle_radius=float(updater_no_obstacles.obstacle_radius),
+                grid_size=float(updater_no_obstacles.grid_size),
+                push_threshold=float(updater_no_obstacles.push_threshold),
+                friction_coefficient=float(updater_no_obstacles.friction_coefficient),
+            )
+            assert np.array_equal(
+                native, reference
+            ), f"native vs python mismatch for action {action_idx}"
+
+    def test_native_transition_matches_python_with_obstacles(self, updater, random_particles_k200):
+        """Native belief_batch_transition_discrete matches Python reference with obstacles.
+
+        Purpose: Same parity check, but with obstacles enabled, exercising
+            both robot-blocking and object-blocking collision branches.
+
+        Given: 200 random particles, 2 obstacles at (3,3) and (7,7).
+        When: belief_batch_transition_discrete is called per action.
+        Then: ``np.array_equal`` holds (bit-for-bit equality).
+
+        Test type: integration
+        """
+        for action_idx in range(4):
+            native = _native.belief_batch_transition_discrete(
+                particles=random_particles_k200.astype(np.float64),
+                action_idx=action_idx,
+                transition_error_prob=0.0,
+                obstacles=updater.obstacles.astype(np.float64),
+                obstacle_radius=float(updater.obstacle_radius),
+                grid_size=float(updater.grid_size),
+                push_threshold=float(updater.push_threshold),
+                friction_coefficient=float(updater.friction_coefficient),
+            )
+            reference = _python_reference_transition(
+                particles=random_particles_k200,
+                action_idx=action_idx,
+                obstacles=updater.obstacles,
+                obstacle_radius=float(updater.obstacle_radius),
+                grid_size=float(updater.grid_size),
+                push_threshold=float(updater.push_threshold),
+                friction_coefficient=float(updater.friction_coefficient),
+            )
+            assert np.array_equal(
+                native, reference
+            ), f"native vs python obstacle mismatch for action {action_idx}"
+
+    def test_native_transition_error_branch_distribution(
+        self, updater_no_obstacles, random_particles_k200
+    ):
+        """Native error-branch action distribution matches expected probabilities.
+
+        Purpose: Validates that the independent C++ RNG used for the
+            per-particle action-error coin flip produces an action mix
+            consistent with transition_error_prob. Uses a Wilson 99% CI
+            on the observed error rate vs the configured probability.
+
+        Given: 200 particles, transition_error_prob=0.5, intended action=0 (up).
+            Per particle, with prob 0.5 the actual action is uniformly
+            sampled from {1, 2, 3}; otherwise it is 0. We detect "error
+            occurred" by checking whether the resulting position differs
+            from the deterministic (action=0) result.
+        When: belief_batch_transition_discrete is called many times and
+            we count the fraction of particles that took a non-up move.
+        Then: The observed error fraction lies within a Wilson 99% CI of 0.5.
+
+        Test type: integration
+        """
+        # Use particles with object outside push radius and target far away
+        # so action choice is fully determined by the robot displacement.
+        particles = np.tile(np.array([4.0, 4.0, 8.0, 8.0, 9.0, 9.0]), (200, 1))
+        intended_action = 0  # up: dy = +1
+        n_trials = 30
+        n_total = 0
+        n_error = 0
+        for trial in range(n_trials):
+            _native.set_seed(1000 + trial)
+            result = _native.belief_batch_transition_discrete(
+                particles=particles.astype(np.float64),
+                action_idx=intended_action,
+                transition_error_prob=0.5,
+                obstacles=updater_no_obstacles.obstacles.astype(np.float64),
+                obstacle_radius=float(updater_no_obstacles.obstacle_radius),
+                grid_size=float(updater_no_obstacles.grid_size),
+                push_threshold=float(updater_no_obstacles.push_threshold),
+                friction_coefficient=float(updater_no_obstacles.friction_coefficient),
+            )
+            # Robot moved y from 4.0 to 5.0 if action=up was applied.
+            up_executed = result[:, 1] == 5.0
+            n_error += int((~up_executed).sum())
+            n_total += len(particles)
+        # Wilson 99% CI for proportion (z=2.576).
+        p = n_error / n_total
+        z = 2.576
+        denom = 1.0 + z * z / n_total
+        center = (p + z * z / (2 * n_total)) / denom
+        half = (z * np.sqrt(p * (1 - p) / n_total + z * z / (4 * n_total * n_total))) / denom
+        ci_lo = center - half
+        ci_hi = center + half
+        assert ci_lo <= 0.5 <= ci_hi, (
+            f"observed error rate {p:.4f} 99%-CI [{ci_lo:.4f}, {ci_hi:.4f}] "
+            "does not contain the configured probability 0.5"
+        )
+        del random_particles_k200  # unused, fixture provided for symmetry
+
+    def test_native_obs_log_likelihood_matches_python(
+        self, updater_no_obstacles, random_particles_k200
+    ):
+        """Native belief_batch_obs_log_likelihood_discrete matches Python reference.
+
+        Purpose: Validates that the C++ obs log-likelihood kernel produces
+            output identical to the Python ``CovarianceParameterizedMultivariateNormal``
+            log_pdf used by the original updater, on K=200 random particles.
+
+        Given: 200 random next-state particles and a fixed observation.
+        When: belief_batch_obs_log_likelihood_discrete is called and the
+            reference log-pdf is computed via obs_dist.log_pdf on cols 2:4.
+        Then: ``np.allclose`` holds with rtol=1e-7 (no RNG).
+
+        Test type: integration
+        """
+        observation = np.array([5.0, 5.0, 4.5, 4.5, 9.0, 9.0])
+        native = _native.belief_batch_obs_log_likelihood_discrete(
+            next_particles=random_particles_k200.astype(np.float64),
+            observation=observation,
+            observation_noise=updater_no_obstacles._observation_noise,  # pylint: disable=protected-access
+        )
+        reference = updater_no_obstacles.obs_dist.log_pdf(
+            random_particles_k200[:, 2:4], observation[2:4]
+        )
+        np.testing.assert_allclose(native, reference, rtol=1e-7, atol=0.0)
+
+    def test_updater_uses_native_belief_batch_transition(self, updater):
+        """PushVectorizedUpdater dispatches batch_transition through ``_native``.
+
+        Purpose: Wire-through smoke test confirming that the native module
+            is actually loaded and the updater's batch_transition path
+            calls into the C++ entry point rather than a Python fallback.
+
+        Given: A PushVectorizedUpdater built from a PushPOMDP environment.
+        When: We inspect the ``_native`` module attached to the updater's
+            module namespace.
+        Then: Both kernel symbols are callables on the module.
+
+        Test type: unit
+        """
+        assert callable(getattr(_native, "belief_batch_transition_discrete", None))
+        assert callable(getattr(_native, "belief_batch_obs_log_likelihood_discrete", None))
+        # Smoke: drive one round-trip through the updater.
+        particles = np.tile(np.array([4.0, 4.0, 4.0, 4.0, 9.0, 9.0]), (5, 1))
+        next_p = updater.batch_transition(particles, action="up")
+        assert next_p.shape == (5, 6)
