@@ -15,6 +15,7 @@ Functions:
     get_unique_support: Extract unique particles and their combined probabilities
 """
 
+import math
 import random
 from abc import ABC, abstractmethod
 from collections.abc import Hashable
@@ -503,11 +504,12 @@ class WeightedParticleBeliefStateUpdate(Belief):
             raise TypeError("pomdp must be an instance of Environment")
 
         self.particles.append(state)
-        observation_probability = pomdp.observation_model(
-            next_state=state, action=action
-        ).probability([observation])[0]
-        self.weights.append(float(observation_probability))
-        self.weights_sum = float(self.weights_sum) + float(observation_probability)
+        log_p = pomdp.observation_log_probability_single(
+            next_state=state, action=action, observation=observation
+        )
+        weight = math.exp(log_p) if math.isfinite(log_p) else 0.0
+        self.weights.append(weight)
+        self.weights_sum = float(self.weights_sum) + weight
 
     def sample(self) -> Any:
         """Sample a state from the current belief distribution.

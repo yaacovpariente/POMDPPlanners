@@ -531,6 +531,11 @@ class PushPOMDP(DiscreteActionsEnvironment):
         self._initial_state = initial_state
         self.transition_error_prob = transition_error_prob
 
+        # Cached constants for the scalar observation log-probability fast-path
+        # used by POMCPOW's WeightedParticleBeliefStateUpdate.inplace_update.
+        self._obs_variance = float(observation_noise) * float(observation_noise)
+        self._obs_log_norm = -math.log(2.0 * math.pi * self._obs_variance)
+
         # Define actions
         self.actions = ["up", "down", "right", "left"]
 
@@ -615,6 +620,18 @@ class PushPOMDP(DiscreteActionsEnvironment):
             observation_noise=self.observation_noise,
             grid_size=self.grid_size,
         )
+
+    def observation_log_probability_single(
+        self, next_state: Any, action: Any, observation: Any
+    ) -> float:
+        # Scalar fast-path used by POMCPOW's incremental belief update.
+        # Matches PushObservation.probability(): a 2D Gaussian on the noisy
+        # object position observation[2:4] - next_state[2:4]. Skipping numpy
+        # array allocation removes most of the per-call overhead profiled
+        # in WeightedParticleBeliefStateUpdate.inplace_update.
+        dx = float(observation[2]) - float(next_state[2])
+        dy = float(observation[3]) - float(next_state[3])
+        return self._obs_log_norm - 0.5 * (dx * dx + dy * dy) / self._obs_variance
 
     def sample_next_step(self, state: Any, action: Any) -> Tuple[Any, Any, float]:
         next_state = self.state_transition_model(state=state, action=action).sample()[0]

@@ -17,6 +17,7 @@ Classes:
 import importlib
 import inspect
 import logging
+import math
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
@@ -483,6 +484,39 @@ class Environment(ABC):
         Note:
             Subclasses must implement this method to define observation generation.
         """
+
+    def observation_log_probability_single(
+        self, next_state: Any, action: Any, observation: Any
+    ) -> float:
+        """Scalar log-likelihood for one (next_state, observation) pair.
+
+        Provides a per-state fast-path used by incremental belief updates
+        (e.g. POMCPOW's :meth:`WeightedParticleBeliefStateUpdate.inplace_update`)
+        to avoid the per-call numpy setup overhead of the batched
+        ``observation_model().probability([observation])`` path on a singleton.
+
+        The default implementation falls back to the existing observation
+        model and takes the natural log of the resulting probability.
+        Environments with cheap scalar likelihoods should override this to
+        skip array allocation and broadcasting overhead.
+
+        Args:
+            next_state: The resulting state after taking an action
+            action: The action that was executed
+            observation: A single observation value to score
+
+        Returns:
+            Natural log of ``p(observation | next_state, action)``.
+            Returns ``-math.inf`` when the probability is zero.
+        """
+        prob = float(
+            self.observation_model(next_state=next_state, action=action).probability([observation])[
+                0
+            ]
+        )
+        if prob <= 0.0:
+            return -math.inf
+        return math.log(prob)
 
     @abstractmethod
     def reward(self, state: Any, action: Any) -> float:
