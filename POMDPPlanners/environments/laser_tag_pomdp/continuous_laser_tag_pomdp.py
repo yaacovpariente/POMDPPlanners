@@ -326,7 +326,9 @@ class ContinuousLaserTagPOMDP(Environment):
     ) -> np.ndarray:
         kernel = self._get_trans_kernel(action)
         kernel.set_state(state)
-        probs = np.asarray(kernel.probability(next_states))
+        # kernel.probability returns a C-contiguous float64 ndarray; skip
+        # the redundant np.asarray wrap.
+        probs = kernel.probability(next_states)
         with np.errstate(divide="ignore"):
             return np.log(probs)
 
@@ -335,7 +337,9 @@ class ContinuousLaserTagPOMDP(Environment):
     ) -> np.ndarray:
         kernel = self._get_obs_kernel(action)
         kernel.set_next_state(next_state)
-        probs = np.asarray(kernel.probability(observations))
+        # kernel.probability returns a C-contiguous float64 ndarray; skip
+        # the redundant np.asarray wrap.
+        probs = kernel.probability(observations)
         with np.errstate(divide="ignore"):
             return np.log(probs)
 
@@ -369,7 +373,9 @@ class ContinuousLaserTagPOMDP(Environment):
         kernel = self._get_trans_kernel(action)
         # batch_sample reads the per-row state from the input, not the
         # kernel's stored state, so no set_state is needed here.
-        return np.asarray(kernel.batch_sample(states_array), dtype=np.float64)
+        # The native kernel returns a C-contiguous float64 ndarray
+        # (py::array_t<double>) so the np.asarray re-wrap is a no-op — drop it.
+        return kernel.batch_sample(states_array)
 
     def observation_log_probability_per_state(
         self, next_states: Any, action: np.ndarray, observation: Any
@@ -396,15 +402,13 @@ class ContinuousLaserTagPOMDP(Environment):
             observation_array = np.ascontiguousarray(np.asarray(observation, dtype=np.float64))
         kernel = self._get_obs_kernel(action)
         # batch_log_likelihood reads next_state per row from the input;
-        # no set_next_state needed.
-        log_probs = np.asarray(
-            kernel.batch_log_likelihood(
-                next_particles=next_states_array,
-                observation=observation_array,
-            ),
-            dtype=np.float64,
+        # no set_next_state needed. Native kernel returns a C-contiguous
+        # float64 ndarray (py::array_t<double>) so the np.asarray re-wrap is
+        # a no-op — drop it.
+        return kernel.batch_log_likelihood(
+            next_particles=next_states_array,
+            observation=observation_array,
         )
-        return log_probs
 
     def simulate_random_rollout(
         self,
