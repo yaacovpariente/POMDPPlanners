@@ -1,0 +1,20 @@
+/home/kobi/Documents/github/POMDPPlanners/.claude/worktrees/agent-a343923c68efc4837/POMDPPlanners/core/policy.py:27: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+2026-04-26 17:34:40,297 - INFO: /home/kobi/Documents/github/POMDPPlanners/.claude/worktrees/agent-a343923c68efc4837/POMDPPlanners/core/environment.py:183 - Initializing ContinuousLightDarkPOMDPDiscreteActions environment with discount factor 0.95
+2026-04-26 17:34:40,298 - INFO: /home/kobi/Documents/github/POMDPPlanners/.claude/worktrees/agent-a343923c68efc4837/POMDPPlanners/core/environment.py:183 - Initializing LaserTagPOMDP environment with discount factor 0.95
+2026-04-26 17:34:40,298 - INFO: /home/kobi/Documents/github/POMDPPlanners/.claude/worktrees/agent-a343923c68efc4837/POMDPPlanners/core/environment.py:183 - Initializing PushPOMDP environment with discount factor 0.95
+2026-04-26 17:34:40,298 - INFO: /home/kobi/Documents/github/POMDPPlanners/.claude/worktrees/agent-a343923c68efc4837/POMDPPlanners/core/policy.py:306 - Initialized policy: pomcpow_bench (debug=False)
+2026-04-26 17:34:45,365 - INFO: /home/kobi/Documents/github/POMDPPlanners/.claude/worktrees/agent-a343923c68efc4837/POMDPPlanners/core/policy.py:306 - Initialized policy: pomcpow_bench (debug=False)
+2026-04-26 17:34:50,508 - INFO: /home/kobi/Documents/github/POMDPPlanners/.claude/worktrees/agent-a343923c68efc4837/POMDPPlanners/core/policy.py:306 - Initialized policy: pomcpow_bench (debug=False)
+2026-04-26 17:34:55,671 - INFO: /home/kobi/Documents/github/POMDPPlanners/.claude/worktrees/agent-a343923c68efc4837/POMDPPlanners/core/policy.py:306 - Initialized policy: pft_dpw_bench (debug=False)
+2026-04-26 17:35:00,737 - INFO: /home/kobi/Documents/github/POMDPPlanners/.claude/worktrees/agent-a343923c68efc4837/POMDPPlanners/core/policy.py:306 - Initialized policy: pft_dpw_bench (debug=False)
+2026-04-26 17:35:05,809 - INFO: /home/kobi/Documents/github/POMDPPlanners/.claude/worktrees/agent-a343923c68efc4837/POMDPPlanners/core/policy.py:306 - Initialized policy: pft_dpw_bench (debug=False)
+================================================================================
+ sims/sec bench: 200 particles, 1.0s budget, 5 trials, seed=42
+================================================================================
+  ContinuousLightDark       POMCPOW    median=    17,582 sims/s  stdev=   1,184
+  LaserTag                  POMCPOW    median=    18,202 sims/s  stdev=   1,008
+  Push                      POMCPOW    median=    13,950 sims/s  stdev=     926
+  ContinuousLightDark       PFT_DPW    median=     5,323 sims/s  stdev=     239
+  LaserTag                  PFT_DPW    median=     5,653 sims/s  stdev=     197
+  Push                      PFT_DPW    median=     4,885 sims/s  stdev=     102
