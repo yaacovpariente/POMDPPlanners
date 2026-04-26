@@ -198,8 +198,17 @@ class POMCPOW(
         children_count = len(tree.children_ids[action_id])
         action_visits = tree.visit_count[action_id]
         if children_count <= self.k_o * action_visits**self.alpha_o:
-            existing_id = tree.get_belief_child_indexed(action_id, observation)
-            if existing_id is None:
+            try:
+                obs_key = self.environment.hash_observation(observation)
+                # Indexed lookup is authoritative when obs_key is available.
+                # The contract on ``hash_observation`` guarantees:
+                #   is_equal_observation(a, b) ==> hash_observation(a) ==
+                #   hash_observation(b)
+                # so a None result means no equal observation has been added.
+                existing_id = tree.get_belief_child_indexed(action_id, obs_key=obs_key)
+            except NotImplementedError:
+                # Env not migrated; fall back to linear-scan path.
+                obs_key = None
                 existing_id = tree.get_belief_child(action_id, observation, self.environment)
             if existing_id is None:
                 next_belief_id = tree.add_belief_node(
@@ -207,6 +216,7 @@ class POMCPOW(
                     observation=observation,
                     parent_id=action_id,
                     weight=1.0,
+                    obs_key=obs_key,
                 )
             else:
                 tree.increment_weight(existing_id, delta=1.0)

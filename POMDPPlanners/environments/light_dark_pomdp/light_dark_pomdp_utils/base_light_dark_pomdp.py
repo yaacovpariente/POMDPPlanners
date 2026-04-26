@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from enum import Enum
 from pathlib import Path
+from collections.abc import Hashable
 from typing import Any, List, Optional, Tuple
 
 import logging
@@ -336,6 +337,12 @@ class BaseLightDarkPOMDP(Environment, ABC):
 
     def is_equal_observation(self, observation1: Any, observation2: Any) -> bool:
         return np.array_equal(observation1, observation2)
+
+    def hash_observation(self, observation: Any) -> Hashable:
+        # ndarray observations are not hashable; ``tobytes()`` matches
+        # ``np.array_equal`` byte-for-byte for arrays of the same shape/dtype,
+        # which is invariant for this environment's observations.
+        return np.ascontiguousarray(observation).tobytes()
 
     @property
     def config_id(self) -> str:

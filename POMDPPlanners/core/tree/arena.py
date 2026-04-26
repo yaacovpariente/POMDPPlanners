@@ -45,6 +45,7 @@ observations/actions (e.g. ``np.ndarray``); use the linear-scan
 """
 
 import bisect
+from collections.abc import Hashable
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
@@ -161,12 +162,15 @@ class Tree:
         weight: float = 1.0,
         parent_id: Optional[int] = None,
         data: Any = None,
+        obs_key: Optional[Hashable] = None,
     ) -> int:
         """Allocate a belief node and return its ID.
 
         If ``parent_id`` is provided, also: (a) extend the parent's CDF by
-        ``weight``; (b) register ``(parent_id, observation) → node_id`` in
-        ``obs_child_lookup`` if ``observation`` is hashable.
+        ``weight``; (b) register ``(parent_id, key) → node_id`` in
+        ``obs_child_lookup`` where ``key`` is the explicit ``obs_key`` if
+        provided (caller guarantees hashable), or the raw ``observation``
+        (silently dropped if unhashable).
         """
         if not isinstance(belief, Belief):
             # Runtime guard for callers that bypass static typing.
@@ -181,11 +185,23 @@ class Tree:
         self.data[node_id] = data
         if parent_id is not None:
             self._extend_cdf(parent_id, weight_f)
-            try:
-                self.obs_child_lookup[(parent_id, observation)] = node_id
-            except TypeError:
-                pass  # unhashable observation; rely on linear-scan get_belief_child
+            self._register_obs_child(parent_id, observation, obs_key, node_id)
         return node_id
+
+    def _register_obs_child(
+        self,
+        parent_id: int,
+        observation: Any,
+        obs_key: Optional[Hashable],
+        node_id: int,
+    ) -> None:
+        if obs_key is not None:
+            self.obs_child_lookup[(parent_id, obs_key)] = node_id
+            return
+        try:
+            self.obs_child_lookup[(parent_id, observation)] = node_id
+        except TypeError:
+            pass  # unhashable observation; rely on linear-scan get_belief_child
 
     def add_action_node(
         self,
@@ -273,11 +289,20 @@ class Tree:
                 return cid
         return None
 
-    def get_belief_child_indexed(self, action_id: int, observation: Any) -> Optional[int]:
-        """O(1) lookup of a belief child of ``action_id`` by hashable observation.
+    def get_belief_child_indexed(
+        self,
+        action_id: int,
+        observation: Any = None,
+        obs_key: Optional[Hashable] = None,
+    ) -> Optional[int]:
+        """O(1) lookup of a belief child of ``action_id`` by hashable key.
 
-        Returns ``None`` if no match or if ``observation`` is not hashable.
+        If ``obs_key`` is provided the caller guarantees it is hashable; the
+        lookup uses it directly. Otherwise, the raw ``observation`` is tried
+        and ``None`` is returned for unhashable values.
         """
+        if obs_key is not None:
+            return self.obs_child_lookup.get((action_id, obs_key))
         try:
             return self.obs_child_lookup.get((action_id, observation))
         except TypeError:
