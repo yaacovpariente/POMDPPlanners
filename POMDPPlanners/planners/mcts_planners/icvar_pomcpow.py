@@ -38,7 +38,7 @@ from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
 from POMDPPlanners.planners.planners_utils.path_simulations_policy_arena import (
     ArenaPathSimulationPolicyCostSetting,
 )
-from POMDPPlanners.utils.statistics_utils import cvar_estimator_from_dist_fast
+from POMDPPlanners.utils.numba_kernels import cvar_estimator_from_dist_fast_kernel
 
 
 class ICVaR_POMCPOW(ArenaPathSimulationPolicyCostSetting):
@@ -285,23 +285,24 @@ class ICVaR_POMCPOW(ArenaPathSimulationPolicyCostSetting):
             tree.q_value[action_id] = immediate_cost
             return
 
-        v_values = np.fromiter(
-            (tree.v_value[cid] for cid in visited_children),
-            dtype=np.float64,
-            count=n_visited,
-        )
-        weights = np.fromiter(
-            (tree.weight[cid] for cid in visited_children),
-            dtype=np.float64,
-            count=n_visited,
-        )
-        weights_sum = weights.sum()
-        if weights_sum > 0:
+        # Single Python loop fills both arrays — faster than two np.fromiter
+        # calls over a Python-list source for small N (typical here).
+        tree_v_value = tree.v_value
+        tree_weight = tree.weight
+        v_values = np.empty(n_visited, dtype=np.float64)
+        weights = np.empty(n_visited, dtype=np.float64)
+        weights_sum = 0.0
+        for i, cid in enumerate(visited_children):
+            v_values[i] = tree_v_value[cid]
+            w = tree_weight[cid]
+            weights[i] = w
+            weights_sum += w
+        if weights_sum > 0.0:
             weights = weights / weights_sum
         tree.q_value[action_id] = (
             immediate_cost
             + self.discount_factor
-            * cvar_estimator_from_dist_fast(values=v_values, weights=weights, alpha=self.alpha)
+            * cvar_estimator_from_dist_fast_kernel(v_values, weights, self.alpha)
         )
 
     def _update_v_value(self, tree: Tree, belief_id: int) -> None:

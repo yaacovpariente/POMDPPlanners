@@ -1,5 +1,6 @@
 import numpy as np
 
+from POMDPPlanners.utils.numba_kernels import sparse_sampling_lcb_min_idx_kernel
 from POMDPPlanners.utils.statistics_utils import get_min_and_max_cost
 from POMDPPlanners.core.tree import BeliefNode, ActionNode
 from POMDPPlanners.core.tree.arena import Tree
@@ -109,34 +110,38 @@ def _sparse_sampling_guarantees_exploration_v2_arena(
     """Arena variant of :func:`_get_sparse_sampling_guarantees_exploration_v2`."""
     children = tree.children_ids[belief_id]
     n_children = len(children)
-    visit_count_array = np.fromiter(
-        (tree.visit_count[cid] for cid in children),
-        dtype=np.float64,
-        count=n_children,
-    )
-    unvisited_indices = np.where(visit_count_array >= 1)[0]
-    if len(unvisited_indices) > 0:
+    # Single Python loop fills both arrays — faster than two np.fromiter
+    # calls over a Python-list source for small N (typical here).
+    tree_visits = tree.visit_count
+    tree_q = tree.q_value
+    visit_count_array = np.empty(n_children, dtype=np.float64)
+    q_values = np.empty(n_children, dtype=np.float64)
+    has_visited = False
+    for i, cid in enumerate(children):
+        v = tree_visits[cid]
+        visit_count_array[i] = v
+        q_values[i] = tree_q[cid]
+        if v >= 1:
+            has_visited = True
+    if has_visited:
+        # Preserve original behaviour: pick a random visited child when any
+        # have been visited (the np.where(>= 1) branch in the prior code).
+        unvisited_indices = np.where(visit_count_array >= 1)[0]
         return children[int(np.random.choice(unvisited_indices))]
 
-    visit_count_penalty_array = 1 / (np.sqrt(visit_count_array) + 1)
-
-    belief_visits = tree.visit_count[belief_id]
-    x1 = 1 - belief_visits**horizon
-    x2 = delta * (1 - belief_visits)
-    x3 = np.log(x1 / x2)
-    x4 = alpha * visit_count_array
-
-    guarantees_bound = (max_cost - min_cost) * np.sqrt(x3 / x4)
-
-    q_values = np.fromiter(
-        (tree.q_value[cid] for cid in children),
-        dtype=np.float64,
-        count=n_children,
+    best_idx = sparse_sampling_lcb_min_idx_kernel(
+        visit_count_array,
+        q_values,
+        float(tree.visit_count[belief_id]),
+        int(horizon),
+        float(alpha),
+        float(delta),
+        float(min_cost),
+        float(max_cost),
+        float(exploration_constant),
+        float(visit_count_penalty),
     )
-    lower_confidence_bounds = q_values - exploration_constant * guarantees_bound
-    return children[
-        int(np.argmin(lower_confidence_bounds + visit_count_penalty * visit_count_penalty_array))
-    ]
+    return children[best_idx]
 
 
 def get_explored_action_node_arena(  # pylint: disable=too-many-arguments
@@ -155,15 +160,16 @@ def get_explored_action_node_arena(  # pylint: disable=too-many-arguments
 ) -> int:
     """Arena variant of :func:`get_explored_action_node`. Returns action-node ID."""
     children = tree.children_ids[belief_id]
-    n_children = len(children)
-    action_visits = np.fromiter(
-        (tree.visit_count[cid] for cid in children),
-        dtype=np.int64,
-        count=n_children,
-    )
-    unvisited_indices = np.where(action_visits == 0)[0]
-    if len(unvisited_indices) > 0:
-        return children[int(np.random.choice(unvisited_indices))]
+    # Plain loop is faster than np.fromiter over a Python-list source for
+    # the small N (action children) here. Builds the unvisited index set in
+    # one pass; np.fromiter + np.where would do the same work in two.
+    tree_visits = tree.visit_count
+    unvisited_local: list = []
+    for i, cid in enumerate(children):
+        if tree_visits[cid] == 0:
+            unvisited_local.append(i)
+    if unvisited_local:
+        return children[unvisited_local[int(np.random.randint(len(unvisited_local)))]]
 
     if tree.parent_id[belief_id] is None:
         for cid in children:
