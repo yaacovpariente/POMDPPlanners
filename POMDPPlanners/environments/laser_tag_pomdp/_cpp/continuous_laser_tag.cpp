@@ -527,6 +527,24 @@ class ContinuousLaserTagTransitionCpp {
 
 class ContinuousLaserTagObservationCpp {
   public:
+    // Shared terminal-sentinel predicates so kernel.probability and
+    // kernel.batch_log_likelihood agree on the contract:
+    //   - next_state terminal (flag != 0) AND obs is the all--1 sentinel ->
+    //     prob = 1.0 (log = 0.0): certainty.
+    //   - next_state terminal XOR obs sentinel -> prob = 0.0 (log = -inf):
+    //     impossible.
+    //   - both non-terminal -> Gaussian PDF.
+    static bool is_terminal_state(const double *state) { return state[4] != 0.0; }
+
+    static bool is_terminal_sentinel_obs(const double *obs) {
+        for (std::size_t d = 0; d < kObsDim; ++d) {
+            if (std::abs(obs[d] - (-1.0)) > 1e-8) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     ContinuousLaserTagObservationCpp(const py::object &next_state_obj,
                                      const py::object &action_obj, double measurement_noise,
                                      const py::array_t<double> &walls_arr,
@@ -574,24 +592,27 @@ class ContinuousLaserTagObservationCpp {
         auto batch = pomdp_native::extract_rows_nd(values, kObsDim);
         auto out = py::array_t<double>(static_cast<py::ssize_t>(batch.n));
         auto buf = out.mutable_unchecked<1>();
-        if (next_state_[4] != 0.0) {
+        const bool state_is_terminal = is_terminal_state(next_state_.data());
+        if (state_is_terminal) {
             for (std::size_t i = 0; i < batch.n; ++i) {
                 const double *obs = batch.flat.data() + i * kObsDim;
-                bool matches_terminal = true;
-                for (std::size_t d = 0; d < kObsDim; ++d) {
-                    if (std::abs(obs[d] - (-1.0)) > 1e-8) {
-                        matches_terminal = false;
-                        break;
-                    }
-                }
-                buf(static_cast<py::ssize_t>(i)) = matches_terminal ? 1.0 : 0.0;
+                buf(static_cast<py::ssize_t>(i)) = is_terminal_sentinel_obs(obs) ? 1.0 : 0.0;
             }
             return out;
         }
         double mean[kObsDim];  // NOLINT(modernize-avoid-c-arrays)
         compute_mean(next_state_.data(), mean);
         for (std::size_t i = 0; i < batch.n; ++i) {
-            buf(static_cast<py::ssize_t>(i)) = std::exp(log_pdf(batch.flat.data() + i * kObsDim, mean));
+            const double *obs = batch.flat.data() + i * kObsDim;
+            // Non-terminal next_state with the terminal sentinel observation
+            // is impossible per the kernel contract; return 0.0 so the
+            // Python wrapper's np.log(...) under errstate(divide="ignore")
+            // produces -inf, matching batch_log_likelihood's explicit guard.
+            if (is_terminal_sentinel_obs(obs)) {
+                buf(static_cast<py::ssize_t>(i)) = 0.0;
+                continue;
+            }
+            buf(static_cast<py::ssize_t>(i)) = std::exp(log_pdf(obs, mean));
         }
         return out;
     }
@@ -611,32 +632,28 @@ class ContinuousLaserTagObservationCpp {
         auto obs_view = observation.unchecked<1>();
 
         double obs[kObsDim];  // NOLINT(modernize-avoid-c-arrays)
-        bool obs_is_terminal = true;
         for (std::size_t d = 0; d < kObsDim; ++d) {
             obs[d] = obs_view(static_cast<py::ssize_t>(d));
-            if (std::abs(obs[d] - (-1.0)) > 1e-8) {
-                obs_is_terminal = false;
-            }
         }
+        const bool obs_is_terminal = is_terminal_sentinel_obs(obs);
 
         auto out = py::array_t<double>(static_cast<py::ssize_t>(n_rows));
         auto buf = out.mutable_unchecked<1>();
 
         const double neg_inf = -std::numeric_limits<double>::infinity();
         for (std::size_t i = 0; i < n_rows; ++i) {
-            const double terminal_flag =
-                part_view(static_cast<py::ssize_t>(i), static_cast<py::ssize_t>(4));
-            if (terminal_flag != 0.0) {
+            double state_row[kStateDim];  // NOLINT(modernize-avoid-c-arrays)
+            for (std::size_t d = 0; d < kStateDim; ++d) {
+                state_row[d] = part_view(static_cast<py::ssize_t>(i), static_cast<py::ssize_t>(d));
+            }
+            const bool state_is_terminal = is_terminal_state(state_row);
+            if (state_is_terminal) {
                 buf(static_cast<py::ssize_t>(i)) = obs_is_terminal ? 0.0 : neg_inf;
                 continue;
             }
             if (obs_is_terminal) {
                 buf(static_cast<py::ssize_t>(i)) = neg_inf;
                 continue;
-            }
-            double state_row[kStateDim];  // NOLINT(modernize-avoid-c-arrays)
-            for (std::size_t d = 0; d < kStateDim; ++d) {
-                state_row[d] = part_view(static_cast<py::ssize_t>(i), static_cast<py::ssize_t>(d));
             }
             double mean[kObsDim];  // NOLINT(modernize-avoid-c-arrays)
             compute_mean(state_row, mean);
