@@ -651,10 +651,19 @@ class ContinuousLaserTagObservationCpp {
             }
             return out;
         }
+        // Non-terminal next_state: a terminal-sentinel observation is impossible
+        // under the Gaussian model. Mirror the guard B2 added to ``probability``
+        // and ``batch_log_likelihood`` so the scalar (log_probability) and batch
+        // paths stay symmetric on impossible terminal-sentinel events.
         double mean[kObsDim];  // NOLINT(modernize-avoid-c-arrays)
         compute_mean(next_state_.data(), mean);
         for (std::size_t i = 0; i < batch.n; ++i) {
-            buf(static_cast<py::ssize_t>(i)) = log_pdf(batch.flat.data() + i * kObsDim, mean);
+            const double *obs = batch.flat.data() + i * kObsDim;
+            if (is_terminal_sentinel_obs(obs)) {
+                buf(static_cast<py::ssize_t>(i)) = neg_inf;
+                continue;
+            }
+            buf(static_cast<py::ssize_t>(i)) = log_pdf(obs, mean);
         }
         return out;
     }
