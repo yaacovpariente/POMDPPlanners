@@ -55,6 +55,28 @@ def any_point_within_radius_kernel(
 
 
 @njit(cache=True)  # type: ignore[misc]
+def any_point_within_radius_sq_xy_kernel(
+    x: float,
+    y: float,
+    points: np.ndarray,
+    radius_sq: float,
+) -> bool:
+    """Scalar (x, y) variant of :func:`any_point_within_radius_kernel`.
+
+    Takes pre-squared radius and scalar query coordinates so callers in
+    a hot per-visit path can avoid the per-call (2,) ndarray allocation
+    that the ndarray-query variant forces.
+    """
+    n_points = points.shape[1]
+    for i in range(n_points):
+        dx = x - points[0, i]
+        dy = y - points[1, i]
+        if dx * dx + dy * dy <= radius_sq:
+            return True
+    return False
+
+
+@njit(cache=True)  # type: ignore[misc]
 def min_distance_to_points_kernel(
     query: np.ndarray,
     points: np.ndarray,
