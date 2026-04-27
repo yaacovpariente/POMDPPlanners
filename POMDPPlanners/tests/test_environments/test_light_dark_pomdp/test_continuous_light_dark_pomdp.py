@@ -2871,3 +2871,50 @@ def test_continuous_observation_log_probability_per_state_matches_scalar_normal_
         scalar > -100.0
     ), "next_states cluster too wide; some scalar log-probs are floored"
     np.testing.assert_allclose(batch, scalar, atol=1e-6)
+
+
+def test_scalar_obs_log_prob_un_floored_matches_batch_after_fix():
+    """Scalar obs log-prob below -690 floor matches the batch path post-fix.
+
+    Purpose: Pins the post-fix contract for ContinuousLightDarkPOMDP that
+        ``observation_log_probability`` (scalar) and
+        ``observation_log_probability_per_state`` (batch) agree on a
+        moderate-density anchor whose analytic log-probability is well
+        below the old ``log(p + 1e-300) ≈ -690.776`` floor but still
+        above the kernel's internal float64 underflow threshold.
+        Pre-fix, the scalar path floored such values at ~-690.776 while
+        the batch path returned the un-floored kernel log-likelihood —
+        the asymmetry that motivated PR #N (Patterns A1-A5).
+
+    Given: A NORMAL_NOISE env (observation_cov=0.05*I), a fixed
+        next_state at [5, 5], and an observation offset of 4.2 along
+        each axis (analytic log-pdf ≈ -703.749).
+    When: Both ``observation_log_probability`` and
+        ``observation_log_probability_per_state`` are evaluated on the
+        same (next_state, action, observation).
+    Then: Both return finite, equal values to within atol=1e-6, and the
+        common value is below -700 (i.e. demonstrably past the old
+        floor).
+
+    Test type: unit
+    """
+    env = ContinuousLightDarkPOMDP(
+        discount_factor=0.95,
+        observation_cov_matrix=np.eye(2) * 0.05,
+        observation_model_type=ObservationModelType.NORMAL_NOISE,
+    )
+    next_state = np.array([5.0, 5.0])
+    action = np.array([0.0, 0.0])
+    observation = next_state + np.array([4.2, 4.2])
+
+    scalar = env.observation_log_probability(next_state, action, [observation])[0]
+    batch = env.observation_log_probability_per_state(np.array([next_state]), action, observation)[
+        0
+    ]
+
+    assert np.isfinite(scalar), f"scalar should be finite at this anchor, got {scalar}"
+    assert np.isfinite(batch), f"batch should be finite at this anchor, got {batch}"
+    assert (
+        scalar < -700.0
+    ), f"anchor must be below the old -690.776 floor to exercise the fix; got {scalar}"
+    np.testing.assert_allclose(scalar, batch, atol=1e-6)

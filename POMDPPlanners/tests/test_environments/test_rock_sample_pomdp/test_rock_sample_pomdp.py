@@ -1555,5 +1555,44 @@ def test_simulate_random_rollout_rocksample_terminal_returns_zero():
     assert result == 0.0
 
 
+def test_scalar_obs_log_prob_un_floored_matches_batch_after_fix() -> None:
+    """Scalar obs log-prob for impossible event matches the batch path post-fix.
+
+    Purpose: Pins the post-fix contract for RockSamplePOMDP's audit
+        case A5 — a CHECK action where the canonical observation
+        ``"none"`` is impossible (it can only fire on movement actions,
+        never on CHECK). Pre-fix, the scalar path returned
+        ``log(0 + 1e-300) ≈ -690.776`` while the batch path
+        ``observation_log_probability_per_state`` returned ``-inf``.
+        Post-fix, both paths return ``-inf`` for impossible events.
+
+    Given: A 1-rock RockSamplePOMDP with the rock at (1, 1), the robot
+        co-located at (1, 1) with that rock marked True, and the CHECK
+        action for rock 0 (action index 5). The observation ``"none"``
+        has zero probability under any CHECK action by construction.
+    When: Both ``observation_log_probability`` and
+        ``observation_log_probability_per_state`` are evaluated for
+        ``observation="none"``.
+    Then: Both return ``-inf`` (allclose treats two ``-inf`` values
+        as equal at any finite tolerance), pinning the post-fix
+        log-prob == -inf contract for impossible events.
+
+    Test type: unit
+    """
+    env = RockSamplePOMDP(
+        discount_factor=0.95,
+        rock_positions=[(1, 1)],
+        sensor_efficiency=10.0,
+    )
+    state = create_rock_sample_state((1, 1), (True,))
+
+    scalar = env.observation_log_probability(state, 5, ["none"])[0]
+    batch = env.observation_log_probability_per_state(state.reshape(1, -1), 5, "none")[0]
+
+    assert np.isneginf(scalar), f"scalar should be -inf for impossible event post-fix, got {scalar}"
+    assert np.isneginf(batch), f"batch should be -inf for impossible event, got {batch}"
+    np.testing.assert_allclose(scalar, batch, atol=1e-6)
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

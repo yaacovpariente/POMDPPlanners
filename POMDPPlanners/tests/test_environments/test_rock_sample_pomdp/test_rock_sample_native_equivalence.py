@@ -319,19 +319,32 @@ def test_observation_batch_log_likelihood_matches_per_particle(
 ) -> None:
     """Purpose: For check actions on live (non-terminal) particles, the
     native batch_log_likelihood must agree with per-particle
-    ``env.observation_log_probability([obs_str])[0]`` to 1e-10 atol.
+    ``env.observation_log_probability([obs_str])[0]`` to 1e-10 atol on
+    the finite-probability subset.
 
     The batch path treats terminal particles as -inf by design (same
     as the pre-port Python vectorized updater), while the per-particle
     path computes a finite value using the terminal sentinel as a real
     position. That pre-existing divergence is tested separately in
     ``test_batch_log_likelihood_terminal_semantics``; this test
-    intentionally uses only non-terminal particles so the two paths
-    are in the regime where they are contractually equivalent.
+    intentionally uses only non-terminal particles.
+
+    Post-floor-removal note: the scalar ``observation_log_probability``
+    path now returns ``-inf`` for impossible events (e.g. ``obs='good'``
+    against a bad rock at distance 0). The C++ ``batch_log_likelihood``
+    still applies an internal ``kProbFloor = 1e-300`` and reports
+    ``log(1e-300) ≈ -690.776`` in the same regime — a residual
+    asymmetry in the C++ kernel that is out of scope for the Python
+    scalar fix and tracked separately. This test therefore compares
+    scalar vs batch only on the finite-probability subset; impossible
+    events are accepted regardless of which "very negative" value each
+    path emits.
 
     Given: 32 random live next-particles (no terminal sentinel).
     When: batch_log_likelihood is compared to the per-particle loop.
-    Then: Arrays agree within 1e-10.
+    Then: Finite entries agree within 1e-10; entries the scalar path
+        marks as ``-inf`` are accepted as matching any value below
+        ``-100`` from the batch path.
 
     Test type: integration
     """
@@ -351,7 +364,17 @@ def test_observation_batch_log_likelihood_matches_per_particle(
     for i, row in enumerate(particles):
         expected[i] = env.observation_log_probability(row, action, [obs_str])[0]
 
-    np.testing.assert_allclose(batch_ll, expected, atol=1e-10)
+    finite_mask = np.isfinite(expected)
+    np.testing.assert_allclose(batch_ll[finite_mask], expected[finite_mask], atol=1e-10)
+    # Where the scalar path is -inf, the residual C++ floor in batch
+    # produces a very large negative value (~-690.776). Both encode
+    # "impossible event" — accept either as long as the batch path is
+    # well below any plausible finite log-probability.
+    inf_mask = ~finite_mask
+    if np.any(inf_mask):
+        assert np.all(
+            batch_ll[inf_mask] < -100.0
+        ), f"impossible-event entries from batch must be << 0: {batch_ll[inf_mask]}"
 
 
 def test_observation_batch_log_likelihood_matches_per_particle_movement(
