@@ -249,9 +249,10 @@ class SanityPOMDP(DiscreteActionsEnvironment):
         return np.log(probs + 1e-300)
 
     def reward(self, state: int, action: int) -> float:
-        # Higher reward for being in good state (0)
-        next_state = self.sample_next_state(state, action)
-        return 1.0 if next_state == 0 else 0.0
+        # Transition is deterministic: action 0 -> next_state 0 (reward 1.0),
+        # action != 0 -> next_state != 0 (reward 0.0). Inline to avoid the
+        # sample_next_state call overhead on the hot path.
+        return 1.0 if action == 0 else 0.0
 
     def is_terminal(self, state: int) -> bool:
         return False  # No terminal states
