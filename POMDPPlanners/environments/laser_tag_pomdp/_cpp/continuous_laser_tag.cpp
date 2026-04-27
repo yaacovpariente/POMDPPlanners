@@ -596,6 +596,48 @@ class ContinuousLaserTagObservationCpp {
         return out;
     }
 
+    // B1 fix: return ``log_pdf`` directly without the exp/log round-trip
+    // performed by ``probability``. The exp(log_pdf) round-trip in the
+    // legacy ``probability`` path silently collapses to 0.0 for
+    // observations whose log_pdf is below the IEEE-754 double underflow
+    // boundary (~ -745), making the Python ``np.log(probability(...))``
+    // wrapper return -inf while the batched ``batch_log_likelihood``
+    // path returns the finite log_pdf. This entry point lets the Python
+    // wrapper preserve the finite log-likelihood for low-density obs.
+    //
+    // Terminal-sentinel handling mirrors ``probability``: when the
+    // stored next_state is terminal, the only matching observation is
+    // the all-(-1) sentinel — its prob is 1.0 (log = 0.0); any other
+    // observation has prob 0.0 (log = -inf). This branch is the B2
+    // surface and is intentionally left in lock-step with ``probability``
+    // for now (B2 owns it in a separate fix).
+    py::array_t<double> log_probability(const py::object &values) const {
+        auto batch = pomdp_native::extract_rows_nd(values, kObsDim);
+        auto out = py::array_t<double>(static_cast<py::ssize_t>(batch.n));
+        auto buf = out.mutable_unchecked<1>();
+        const double neg_inf = -std::numeric_limits<double>::infinity();
+        if (next_state_[4] != 0.0) {
+            for (std::size_t i = 0; i < batch.n; ++i) {
+                const double *obs = batch.flat.data() + i * kObsDim;
+                bool matches_terminal = true;
+                for (std::size_t d = 0; d < kObsDim; ++d) {
+                    if (std::abs(obs[d] - (-1.0)) > 1e-8) {
+                        matches_terminal = false;
+                        break;
+                    }
+                }
+                buf(static_cast<py::ssize_t>(i)) = matches_terminal ? 0.0 : neg_inf;
+            }
+            return out;
+        }
+        double mean[kObsDim];  // NOLINT(modernize-avoid-c-arrays)
+        compute_mean(next_state_.data(), mean);
+        for (std::size_t i = 0; i < batch.n; ++i) {
+            buf(static_cast<py::ssize_t>(i)) = log_pdf(batch.flat.data() + i * kObsDim, mean);
+        }
+        return out;
+    }
+
     py::array_t<double> batch_log_likelihood(
         const py::array_t<double, py::array::c_style | py::array::forcecast> &next_particles,
         const py::array_t<double, py::array::c_style | py::array::forcecast> &observation) const {
@@ -2235,6 +2277,8 @@ PYBIND11_MODULE(_native, m) {
              py::arg("walls"), py::arg("grid_size"), py::arg("opponent_radius"))
         .def("sample", &ContinuousLaserTagObservationCpp::sample, py::arg("n_samples") = 1)
         .def("probability", &ContinuousLaserTagObservationCpp::probability, py::arg("values"))
+        .def("log_probability", &ContinuousLaserTagObservationCpp::log_probability,
+             py::arg("values"))
         .def("batch_log_likelihood", &ContinuousLaserTagObservationCpp::batch_log_likelihood,
              py::arg("next_particles"), py::arg("observation"))
         .def("set_next_state", &ContinuousLaserTagObservationCpp::set_next_state,
