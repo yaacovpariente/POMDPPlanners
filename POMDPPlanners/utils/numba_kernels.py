@@ -28,6 +28,10 @@ Public kernels
   pre-drawn standard normals and a transposed Cholesky factor.
 - :func:`systematic_resample_kernel` — fused log-weight normalization,
   ESS check, and systematic resampling index draw for particle filters.
+- :func:`cvar_estimator_from_dist_fast_kernel` — CVaR over a small
+  discrete distribution via a single argsort + linear tail aggregation.
+- :func:`sparse_sampling_lcb_min_idx_kernel` — argmin over the lower
+  confidence bound used by ICVaR action progressive widening.
 """
 
 from typing import Tuple
@@ -188,3 +192,88 @@ def systematic_resample_kernel(
         idx[i] = j
     new_log_weights = np.full(n, -np.log(n))
     return idx, True, new_log_weights
+
+
+@njit(cache=True)  # type: ignore[misc]
+def cvar_estimator_from_dist_fast_kernel(
+    values: np.ndarray, weights: np.ndarray, alpha: float
+) -> float:
+    """CVaR over a small discrete distribution. Caller guarantees ``weights`` sums to 1.
+
+    Hot-path variant of the upper-tail CVaR estimator used inside MCTS
+    backups. ``values`` is small (typically ≤ 30 elements) and ``weights``
+    is already normalized. Replaces the per-call numpy chain
+    (``argsort`` + fancy-index + ``cumsum`` + ``searchsorted`` + ``sum``)
+    with a single sort plus two linear scans, fused into one kernel.
+
+    Returns the conditional expectation of ``values`` over the worst-alpha
+    probability mass (upper tail when interpreting values as costs).
+    """
+    n = values.shape[0]
+    if n == 1:
+        return float(values[0])
+
+    sort_idx = np.argsort(values)
+    sorted_values = values[sort_idx]
+    sorted_weights = weights[sort_idx]
+
+    threshold = 1.0 - alpha
+    cum = 0.0
+    var_idx = n - 1
+    for i in range(n):
+        cum += sorted_weights[i]
+        if cum >= threshold:
+            var_idx = i
+            break
+
+    value_at_risk = sorted_values[var_idx]
+    tail_weight = 0.0
+    tail_sum = 0.0
+    for i in range(var_idx, n):
+        tail_weight += sorted_weights[i]
+        tail_sum += sorted_values[i] * sorted_weights[i]
+    correction = (tail_weight - alpha) * value_at_risk
+    return (tail_sum - correction) / alpha
+
+
+@njit(cache=True)  # type: ignore[misc]
+def sparse_sampling_lcb_min_idx_kernel(
+    visit_counts: np.ndarray,
+    q_values: np.ndarray,
+    belief_visits: float,
+    horizon: int,
+    alpha: float,
+    delta: float,
+    min_cost: float,
+    max_cost: float,
+    exploration_constant: float,
+    visit_count_penalty: float,
+) -> int:
+    """argmin over the LCB used by ICVaR action progressive widening.
+
+    Replaces the numpy chain in ``_sparse_sampling_guarantees_exploration_v2_arena``
+    (``np.fromiter`` × 2, ``np.sqrt``, ``np.log``, vector arithmetic, ``np.argmin``)
+    with a single fused loop over the ``N`` action children. ``N`` is small
+    (typically ≤ k_a × belief_visits**alpha_a, in practice ≤ ~30).
+
+    Returns the index into ``visit_counts`` / ``q_values`` whose lower
+    confidence bound (Q − exploration_constant·bound + visit_count_penalty/(√N+1))
+    is smallest.
+    """
+    n = visit_counts.shape[0]
+    x1 = 1.0 - belief_visits**horizon
+    x2 = delta * (1.0 - belief_visits)
+    x3 = np.log(x1 / x2)
+    cost_range = max_cost - min_cost
+    best_idx = 0
+    best_score = np.inf
+    for i in range(n):
+        nv = visit_counts[i]
+        x4 = alpha * nv
+        bound = cost_range * np.sqrt(x3 / x4)
+        penalty = visit_count_penalty / (np.sqrt(nv) + 1.0)
+        score = q_values[i] - exploration_constant * bound + penalty
+        if score < best_score:
+            best_score = score
+            best_idx = i
+    return best_idx
