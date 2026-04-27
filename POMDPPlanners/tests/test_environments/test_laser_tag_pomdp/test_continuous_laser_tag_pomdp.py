@@ -1071,6 +1071,120 @@ class TestObservationLogProbabilityTerminal:
         assert np.isneginf(actual[1])
 
 
+class TestObservationLogProbabilityScalarBatchTerminalParity:
+    """Parity tests for scalar/batch terminal-sentinel handling (regression for B2).
+
+    The scalar ``observation_log_probability`` path (which routes through the
+    C++ ``kernel.probability`` method) must agree with the batch
+    ``observation_log_probability_per_state`` path (which routes through
+    ``kernel.batch_log_likelihood``) on the three terminal-sentinel cases.
+
+    The batch path has had an explicit terminal-sentinel guard since the
+    native port; the scalar path historically computed the Gaussian PDF at
+    the all--1 sentinel against any non-terminal mean, returning a small
+    finite value (~exp(-139)) instead of -inf. This regression suite locks
+    in the corrected contract:
+      - next_state terminal AND obs terminal sentinel -> log = 0.0
+      - next_state terminal XOR obs terminal sentinel -> log = -inf
+    """
+
+    def _build_env(self) -> ContinuousLaserTagPOMDP:
+        return ContinuousLaserTagPOMDP(discount_factor=0.95, walls=[], dangerous_areas=[])
+
+    def test_scalar_matches_batch_nonterminal_state_terminal_obs(self) -> None:
+        """Non-terminal next_state with terminal-sentinel obs returns -inf on both paths.
+
+        Purpose: Validates that the scalar observation_log_probability path
+            agrees with the batch observation_log_probability_per_state path
+            when the next_state is non-terminal but the observation is the
+            all--1 terminal sentinel; both must return -inf (impossible).
+
+        Given: A non-terminal next_state, an arbitrary action, and the
+            terminal-sentinel observation [-1, ..., -1].
+        When: We query the scalar log-prob via observation_log_probability and
+            the batch log-prob via observation_log_probability_per_state with a
+            single-row particle batch.
+        Then: Both calls return -inf, and they agree.
+
+        Test type: unit
+        """
+        env = self._build_env()
+        next_state = np.array([3.0, 3.0, 8.0, 5.0, 0.0])
+        action = np.array([1.0, 0.0, 0.0])
+        terminal_obs = np.full(8, -1.0)
+
+        scalar = env.observation_log_probability(next_state, action, [terminal_obs])
+        batch = env.observation_log_probability_per_state(
+            np.tile(next_state, (1, 1)), action, terminal_obs
+        )
+
+        assert scalar.shape == (1,)
+        assert batch.shape == (1,)
+        assert np.isneginf(scalar[0])
+        assert np.isneginf(batch[0])
+        assert scalar[0] == batch[0]
+
+    def test_scalar_matches_batch_terminal_state_nonterminal_obs(self) -> None:
+        """Terminal next_state with non-sentinel obs returns -inf on both paths.
+
+        Purpose: Validates that the scalar observation_log_probability path
+            agrees with the batch observation_log_probability_per_state path
+            when the next_state is terminal but the observation is not the
+            terminal sentinel; both must return -inf (impossible).
+
+        Given: A terminal next_state (terminal_flag=1.0), an arbitrary action,
+            and a non-sentinel observation.
+        When: We query both the scalar and batch log-prob entry points.
+        Then: Both calls return -inf, and they agree.
+
+        Test type: unit
+        """
+        env = self._build_env()
+        terminal_state = np.array([3.0, 3.0, 8.0, 5.0, 1.0])
+        action = np.array([1.0, 0.0, 0.0])
+        non_terminal_obs = np.array([3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0])
+
+        scalar = env.observation_log_probability(terminal_state, action, [non_terminal_obs])
+        batch = env.observation_log_probability_per_state(
+            np.tile(terminal_state, (1, 1)), action, non_terminal_obs
+        )
+
+        assert scalar.shape == (1,)
+        assert batch.shape == (1,)
+        assert np.isneginf(scalar[0])
+        assert np.isneginf(batch[0])
+        assert scalar[0] == batch[0]
+
+    def test_scalar_matches_batch_terminal_state_terminal_obs(self) -> None:
+        """Terminal next_state with terminal-sentinel obs returns log(1)=0 on both paths.
+
+        Purpose: Validates that the scalar observation_log_probability path
+            agrees with the batch observation_log_probability_per_state path
+            when both the next_state and the observation are terminal; both
+            must return 0.0 (certainty).
+
+        Given: A terminal next_state and the terminal-sentinel observation.
+        When: We query both the scalar and batch log-prob entry points.
+        Then: Both calls return 0.0, and they agree exactly.
+
+        Test type: unit
+        """
+        env = self._build_env()
+        terminal_state = np.array([3.0, 3.0, 8.0, 5.0, 1.0])
+        action = np.array([1.0, 0.0, 0.0])
+        terminal_obs = np.full(8, -1.0)
+
+        scalar = env.observation_log_probability(terminal_state, action, [terminal_obs])
+        batch = env.observation_log_probability_per_state(
+            np.tile(terminal_state, (1, 1)), action, terminal_obs
+        )
+
+        assert scalar.shape == (1,)
+        assert batch.shape == (1,)
+        assert scalar[0] == 0.0
+        assert batch[0] == 0.0
+
+
 class TestContinuousLaserTagNativeRollout:
     """Tests for the native cont_simulate_rollout entry point."""
 
