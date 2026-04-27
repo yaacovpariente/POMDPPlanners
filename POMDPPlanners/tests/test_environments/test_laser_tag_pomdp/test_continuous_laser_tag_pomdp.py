@@ -6,6 +6,8 @@ observation model, reward, terminal conditions, metrics, and
 registry integration.
 """
 
+import math
+
 import numpy as np
 import pytest
 
@@ -1258,3 +1260,106 @@ class TestContinuousLaserTagNativeRollout:
         )
 
         np.testing.assert_allclose(native_result, python_result, atol=1e-9)
+
+
+class TestObservationLogProbabilityLowDensityB1:
+    """Regression tests for B1 — scalar/batch log-prob underflow asymmetry."""
+
+    def test_scalar_log_probability_low_density_obs_matches_batch(self) -> None:
+        """Scalar observation_log_probability matches batch path on a low-density obs.
+
+        Purpose: Regression for B1. The scalar ``observation_log_probability``
+            previously round-tripped through ``np.exp(log_pdf)`` inside the C++
+            ``probability`` kernel and then took ``np.log`` in Python; for an
+            observation whose ``log_pdf`` is well below IEEE-754 double-precision
+            ``exp`` underflow (~ -745), ``exp(log_pdf)`` collapses to ``0.0`` and
+            the wrapper returned ``-inf``. Meanwhile the batched
+            ``observation_log_probability_per_state`` returns ``log_pdf``
+            directly via ``batch_log_likelihood``, never paying the round-trip.
+            After the fix, the scalar path must return the same finite,
+            large-negative value as the batch path.
+
+        Given: A ContinuousLaserTagPOMDP with no walls, a non-terminal
+            next_state, and a far-from-mean (non-terminal-sentinel) observation
+            chosen so that ``log_pdf`` is approximately -1e6 — well past the
+            ``exp`` underflow boundary.
+        When: We compute the log-probability of that single observation via
+            both the scalar ``env.observation_log_probability`` (passing a
+            list-of-one) and the batch
+            ``env.observation_log_probability_per_state`` (passing a
+            list-of-one next_state).
+        Then: The scalar value is finite (not ``-inf``), is large and negative
+            (less than ``-1e5``), and agrees with the batch value within
+            ``atol=1e-6``.
+
+        Test type: unit
+        """
+        env = ContinuousLaserTagPOMDP(discount_factor=0.95, walls=[], dangerous_areas=[])
+        action = np.array([1.0, 0.0, 0.0])
+        next_state = np.array([3.0, 3.0, 8.0, 5.0, 0.0])
+
+        # Compute the kernel mean so we can place the observation far from it
+        # without depending on internal layout. log_pdf for an 8-D Gaussian
+        # with sigma=1 is 8 * log_norm_1d_ - 0.5 * sum_sq_diff. With per-dim
+        # diff = 500, sum_sq_diff = 8 * 250000 = 2e6, so log_pdf is ~ -1e6.
+        kernel = env._get_obs_kernel(action)  # pylint: disable=protected-access
+        kernel.set_next_state(next_state)
+        mean = np.asarray(kernel.mean, dtype=np.float64)
+        far_obs = mean + 500.0
+        # Sanity: this is *not* the terminal sentinel (np.full(8, -1.0)),
+        # so we are exercising B1 (low-density Gaussian) and not B2.
+        assert not np.allclose(far_obs, -1.0)
+
+        scalar_log_probs = env.observation_log_probability(next_state, action, [far_obs])
+        batch_log_probs = env.observation_log_probability_per_state(
+            np.asarray([next_state], dtype=np.float64), action, far_obs
+        )
+
+        assert scalar_log_probs.shape == (1,)
+        assert batch_log_probs.shape == (1,)
+        assert np.isfinite(
+            scalar_log_probs[0]
+        ), f"scalar log-prob underflowed to {scalar_log_probs[0]} — B1 not fixed"
+        assert scalar_log_probs[0] < -1e5
+        np.testing.assert_allclose(scalar_log_probs[0], batch_log_probs[0], atol=1e-6)
+
+    def test_scalar_log_probability_single_low_density_obs_matches_batch(self) -> None:
+        """observation_log_probability_single returns finite value on low-density obs.
+
+        Purpose: Regression for B1 on the scalar fast-path used by POMCPOW's
+            ``WeightedParticleBeliefStateUpdate``. Pre-fix, this method called
+            ``kernel.probability([obs])[0]`` and clamped to ``-math.inf`` when
+            ``prob <= 0.0``, masking the underflow. Post-fix, it must return a
+            finite log-prob agreeing with the batch path.
+
+        Given: A ContinuousLaserTagPOMDP with no walls, a non-terminal
+            next_state, and a far-from-mean (non-terminal-sentinel) observation
+            with ``log_pdf`` well past the ``exp`` underflow boundary.
+        When: We compute the log-probability via
+            ``env.observation_log_probability_single`` and via
+            ``env.observation_log_probability_per_state`` (single-row batch).
+        Then: The scalar value is finite, large negative, and agrees with the
+            batch value within ``atol=1e-6``.
+
+        Test type: unit
+        """
+        env = ContinuousLaserTagPOMDP(discount_factor=0.95, walls=[], dangerous_areas=[])
+        action = np.array([1.0, 0.0, 0.0])
+        next_state = np.array([3.0, 3.0, 8.0, 5.0, 0.0])
+
+        kernel = env._get_obs_kernel(action)  # pylint: disable=protected-access
+        kernel.set_next_state(next_state)
+        mean = np.asarray(kernel.mean, dtype=np.float64)
+        far_obs = mean + 500.0
+        assert not np.allclose(far_obs, -1.0)
+
+        scalar_value = env.observation_log_probability_single(next_state, action, far_obs)
+        batch_log_probs = env.observation_log_probability_per_state(
+            np.asarray([next_state], dtype=np.float64), action, far_obs
+        )
+
+        assert math.isfinite(
+            scalar_value
+        ), f"scalar single log-prob underflowed to {scalar_value} — B1 not fixed"
+        assert scalar_value < -1e5
+        np.testing.assert_allclose(scalar_value, batch_log_probs[0], atol=1e-6)
