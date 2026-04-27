@@ -148,23 +148,16 @@ class ICVaR_PFT_DPW(ArenaPathSimulationPolicyCostSetting):
         return is_terminal_belief(belief=belief, env=self.environment)
 
     def _sample_next_existing_belief(self, tree: Tree, action_id: int) -> int:
-        children = tree.children_ids[action_id]
-        n_children = len(children)
-        child_visit_counts = np.fromiter(
-            (tree.visit_count[cid] for cid in children),
-            dtype=np.float64,
-            count=n_children,
-        )
-        min_visit_idx = int(np.argmin(child_visit_counts))
-        if child_visit_counts[min_visit_idx] == 0:
-            return children[min_visit_idx]
-
-        cdf = np.cumsum(child_visit_counts)
-        total = float(cdf[-1])
-        chosen_idx = int(np.searchsorted(cdf, np.random.random() * total))
-        if chosen_idx >= n_children:
-            chosen_idx = n_children - 1
-        return children[chosen_idx]
+        # Belief children carry an arena-maintained CDF over their ``weight``
+        # values. ``add_belief_node`` initialises each child with weight=1.0
+        # (mirroring the +1 update_nodes increments at generation), so the
+        # weighted sample below is statistically equivalent to the previous
+        # ``np.cumsum(visit_count) → searchsorted`` path while running in
+        # O(log K) instead of O(K). The matching ``increment_weight`` keeps
+        # the CDF aligned with each child's running visit count.
+        sampled_id = tree.sample_belief_child(action_id)
+        tree.increment_weight(sampled_id, 1.0)
+        return sampled_id
 
     def _generate_belief(self, tree: Tree, action_id: int) -> int:
         parent_belief_id = tree.parent_id[action_id]
