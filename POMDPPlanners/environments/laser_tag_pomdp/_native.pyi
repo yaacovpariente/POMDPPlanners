@@ -106,6 +106,10 @@ class ContinuousLaserTagObservationCpp:
         self,
         values: Union[Sequence[NDArray[np.floating]], NDArray[np.floating]],
     ) -> NDArray[np.float64]: ...
+    def log_probability(
+        self,
+        values: Union[Sequence[NDArray[np.floating]], NDArray[np.floating]],
+    ) -> NDArray[np.float64]: ...
     def batch_log_likelihood(
         self,
         next_particles: NDArray[np.floating],
