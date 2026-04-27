@@ -57,6 +57,7 @@ from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_da
 )
 from POMDPPlanners.utils.numba_kernels import (
     any_point_within_radius_kernel,
+    any_point_within_radius_sq_xy_kernel,
     min_distance_to_points_kernel,
     mvn_sample_2d_kernel,
 )
@@ -255,9 +256,6 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         self._cls_obs_log_norm_far = self._build_log_norm_2d(observation_cov_matrix)
         self._cls_obs_log_norm_near = self._build_log_norm_2d(observation_cov_matrix * 0.5)
         self._cls_beacon_radius_sq = float(beacon_radius) * float(beacon_radius)
-        # Beacons stored as (2, N) float ndarray; precompute (N, 2) for the
-        # singleton near-beacon scan.
-        self._cls_beacons_t = np.ascontiguousarray(self.beacons.T, dtype=np.float64)
         # Initialize reward model based on type
         self.reward_model: BaseLightDarkRewardModel
         if reward_model_type == RewardModelType.STANDARD:
@@ -606,19 +604,11 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         return -math.log(2.0 * math.pi) - 0.5 * math.log(det)
 
     def _is_near_beacon_scalar(self, x: float, y: float) -> bool:
-        # Scalar near-beacon scan; mirrors the broadcasting check in
-        # BaseContinuousLightDarkObservationModel._near_beacon but without
-        # numpy allocation. Returns True if within beacon_radius of any beacon.
-        beacons = self._cls_beacons_t
-        if beacons.shape[0] == 0:
-            return False
-        radius_sq = self._cls_beacon_radius_sq
-        for i in range(beacons.shape[0]):
-            dx = x - beacons[i, 0]
-            dy = y - beacons[i, 1]
-            if dx * dx + dy * dy <= radius_sq:
-                return True
-        return False
+        # Numba kernel scan over self.beacons (2, N). Empty-beacon set is
+        # handled by the kernel returning False on the zero-iteration loop.
+        return bool(
+            any_point_within_radius_sq_xy_kernel(x, y, self.beacons, self._cls_beacon_radius_sq)
+        )
 
     def observation_log_probability_single(
         self, next_state: Any, action: Any, observation: Any
