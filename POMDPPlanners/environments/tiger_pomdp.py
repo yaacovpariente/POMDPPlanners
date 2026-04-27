@@ -129,27 +129,28 @@ class TigerPOMDP(DiscreteActionsEnvironment):
 
     def sample_next_state(self, state: str, action: str, n_samples: int = 1):
         if action in ("open_left", "open_right"):
-            samples = [str(np.random.choice(STATES)) for _ in range(n_samples)]
-        else:
-            samples = [state] * n_samples
+            # randint(0, 2) is ~3.5x faster than np.random.choice over a list
+            if n_samples == 1:
+                return STATES[np.random.randint(0, 2)]
+            idxs = np.random.randint(0, 2, size=n_samples)
+            return [STATES[i] for i in idxs]
         if n_samples == 1:
-            return samples[0]
-        return samples
+            return state
+        return [state] * n_samples
 
     def sample_observation(self, next_state: str, action: str, n_samples: int = 1):
-        samples: List[str] = []
-        if action == "listen":
-            if next_state == "tiger_left":
-                for _ in range(n_samples):
-                    samples.append("hear_left" if np.random.random() < 0.85 else "hear_right")
-            else:
-                for _ in range(n_samples):
-                    samples.append("hear_right" if np.random.random() < 0.85 else "hear_left")
-        else:
-            samples = ["hear_nothing"] * n_samples
+        if action != "listen":
+            if n_samples == 1:
+                return "hear_nothing"
+            return ["hear_nothing"] * n_samples
+        # Listen: 0.85 prob hear matching ear, 0.15 hear opposite.
+        # Single draw of np.random.random per call (n=1) or one batched draw (n>1).
+        correct = "hear_left" if next_state == "tiger_left" else "hear_right"
+        wrong = "hear_right" if next_state == "tiger_left" else "hear_left"
         if n_samples == 1:
-            return samples[0]
-        return samples
+            return correct if np.random.random() < 0.85 else wrong
+        draws = np.random.random(size=n_samples)
+        return [correct if d < 0.85 else wrong for d in draws]
 
     def transition_log_probability(self, state: str, action: str, next_states) -> np.ndarray:
         result = np.zeros(len(next_states))

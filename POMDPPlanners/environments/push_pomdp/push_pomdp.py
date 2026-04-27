@@ -236,6 +236,13 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
             for label, (dx, dy) in self._ACTION_TO_DXY.items()
         }
 
+        # Precomputed error-action list per action label. Avoids per-call
+        # list comprehension + np.random.choice over a Python list (~5 µs)
+        # in _sample_one_next_state's error branch.
+        self._error_actions_for: Dict[str, List[str]] = {
+            a: [b for b in self.actions if b != a] for a in self.actions
+        }
+
         # Flat (M*2,) float64 buffer of obstacle centres; shared across all
         # cached kernels (they each copy it at construction).
         if self.obstacles:
@@ -303,10 +310,11 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
 
     def _sample_one_next_state(self, state: np.ndarray, action: str) -> np.ndarray:
         # RNG order: one np.random.random() call, optionally one
-        # np.random.choice() call over the error-action list.
+        # np.random.randint() call indexing into the precomputed error list.
+        # randint+index is ~3.5x faster than np.random.choice over a Python list.
         if self.transition_error_prob > 0.0 and np.random.random() < self.transition_error_prob:
-            error_actions = [a for a in self.actions if a != action]
-            actual_action = np.random.choice(error_actions)
+            error_actions = self._error_actions_for[action]
+            actual_action = error_actions[np.random.randint(len(error_actions))]
         else:
             actual_action = action
         return self._compute_next_state_for_action(state, actual_action)
@@ -409,16 +417,17 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
         return samples
 
     def _sample_one_observation(self, next_state: np.ndarray) -> np.ndarray:
-        # Two np.random.normal(0, sigma) draws (object-x, object-y), clamped
-        # to [0, grid_size - 1]. Robot and target slices are observed exactly.
+        # Two Gaussian draws (object-x, object-y), clamped to [0, grid_size - 1].
+        # Robot and target slices are observed exactly. Single size=2 draw beats
+        # two scalar np.random.normal calls by avoiding dispatch overhead.
         gmax = self.grid_size - 1
         rx, ry = float(next_state[0]), float(next_state[1])
         ox, oy = float(next_state[2]), float(next_state[3])
         tx, ty = float(next_state[4]), float(next_state[5])
-        noise_std = self.observation_noise
 
-        nox = max(0.0, min(ox + np.random.normal(0, noise_std), gmax))
-        noy = max(0.0, min(oy + np.random.normal(0, noise_std), gmax))
+        noise = np.random.normal(0.0, self.observation_noise, size=2)
+        nox = max(0.0, min(ox + float(noise[0]), gmax))
+        noy = max(0.0, min(oy + float(noise[1]), gmax))
 
         observation = np.empty(6)
         observation[0] = rx
