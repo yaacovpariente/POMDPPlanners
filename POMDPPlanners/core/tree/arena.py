@@ -87,6 +87,10 @@ class Tree:
         self.sample: List[List[Any]] = []
         # Per-parent CDF over children's weights, aligned with children_ids[parent].
         self.children_cdf: List[List[float]] = []
+        # Index of each child within its parent's children_ids list. Cached
+        # at allocation time so ``increment_weight`` can locate the CDF slot
+        # in O(1) instead of O(K) via ``children_ids.index``.
+        self.position_in_parent: List[int] = []
         # Hash-indexed children lookups; populated when the key is hashable.
         self.obs_child_lookup: Dict[Tuple[int, Any], int] = {}
         self.action_child_lookup: Dict[Tuple[int, Any], int] = {}
@@ -142,6 +146,7 @@ class Tree:
             self.data,
             self.sample,
             self.children_cdf,
+            self.position_in_parent,
         ]
         for column in columns:
             current_len = len(column)
@@ -171,6 +176,7 @@ class Tree:
             self.data[node_id] = None
             self.sample[node_id] = []
             self.children_cdf[node_id] = []
+            self.position_in_parent[node_id] = -1
         else:
             # Past the reserved zone — fall back to append.
             self.kind.append(kind)
@@ -190,9 +196,12 @@ class Tree:
             self.data.append(None)
             self.sample.append([])
             self.children_cdf.append([])
+            self.position_in_parent.append(-1)
         self._size += 1
         if parent_id is not None:
-            self.children_ids[parent_id].append(node_id)
+            siblings = self.children_ids[parent_id]
+            self.position_in_parent[node_id] = len(siblings)
+            siblings.append(node_id)
         return node_id
 
     # --- construction ---
@@ -316,9 +325,8 @@ class Tree:
         parent_id = self.parent_id[child_id]
         if parent_id is None:
             return
-        siblings = self.children_ids[parent_id]
         cdf = self.children_cdf[parent_id]
-        position = siblings.index(child_id)
+        position = self.position_in_parent[child_id]
         for index in range(position, len(cdf)):
             cdf[index] += delta
 

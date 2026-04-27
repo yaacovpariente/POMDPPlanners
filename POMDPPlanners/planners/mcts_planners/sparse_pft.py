@@ -162,22 +162,14 @@ class SparsePFT(ArenaPathSimulationPolicy):
         return children[int(np.argmax(q_vals + sparse_addition))]
 
     def _sample_next_existing_belief(self, tree: Tree, action_id: int) -> Tuple[int, float]:
-        children = tree.children_ids[action_id]
-        n_children = len(children)
-        child_visits = np.fromiter(
-            (tree.visit_count[cid] for cid in children),
-            dtype=np.float64,
-            count=n_children,
-        )
-        total = float(child_visits.sum())
-        if total == 0.0:
-            chosen_idx = random.randrange(n_children)
-        else:
-            cdf = np.cumsum(child_visits)
-            chosen_idx = int(np.searchsorted(cdf, np.random.random() * total))
-            if chosen_idx >= n_children:
-                chosen_idx = n_children - 1
-        sampled_id = children[chosen_idx]
+        # Sample a belief child via the arena's maintained CDF — O(log K).
+        # ``add_belief_node`` defaults each child's ``weight`` to 1.0
+        # (matching the +1 update_nodes increments at generation), and
+        # ``increment_weight`` keeps weight ≡ visit_count thereafter, so
+        # ``sample_belief_child`` is statistically equivalent to the previous
+        # ``np.cumsum(visit_count) → searchsorted`` path.
+        sampled_id = tree.sample_belief_child(action_id)
+        tree.increment_weight(sampled_id, 1.0)
         immediate_cost = tree.immediate_cost[sampled_id]
         expected_reward = -immediate_cost if immediate_cost is not None else 0.0
         return sampled_id, expected_reward
