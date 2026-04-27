@@ -27,6 +27,7 @@ import numpy as np
 from POMDPPlanners.core.belief.base_belief import Belief
 from POMDPPlanners.core.distributions import DiscreteDistribution
 from POMDPPlanners.core.environment import Environment
+from POMDPPlanners.utils.numba_kernels import systematic_resample_kernel
 from POMDPPlanners.utils.config_to_id import config_to_id
 
 
@@ -255,30 +256,26 @@ class WeightedParticleBelief(Belief):
         return config_to_id(config_dict)
 
     def _resample(self, particles: Any, log_weights: np.ndarray) -> Tuple[Any, np.ndarray]:
-        normalized_weights = np.exp(log_weights - np.max(log_weights))
-        normalized_weights = normalized_weights / np.sum(normalized_weights)
-
-        effective_sample_size = 1 / np.sum(np.square(normalized_weights))
-        if effective_sample_size < self.ess_threshold:
-            # Systematic resampling: one stratified uniform draw, vectorised
-            # CDF lookup via np.searchsorted. Unbiased and lower-variance
-            # than i.i.d. multinomial (random.choices) -- see Doucet &
-            # Johansen 2009. Replaces the per-call CPython bisect loop.
-            n = len(particles)
-            u0 = np.random.random() / n
-            positions = u0 + np.arange(n) / n
-            cdf = np.cumsum(normalized_weights)
-            idx = np.minimum(np.searchsorted(cdf, positions), n - 1)
-            # Use ndarray fancy indexing for the native batch path (one
-            # contiguous gather) and fall back to a Python list comp for
-            # heterogeneous list-backed beliefs.
-            if isinstance(particles, np.ndarray):
-                resampled_particles: Any = particles[idx]
-            else:
-                resampled_particles = [particles[i] for i in idx]
-            new_log_weights = np.full(n, -np.log(n))
-            return resampled_particles, new_log_weights
-        return particles, log_weights
+        # Fused log-weight normalize + ESS check + systematic resample in
+        # one Numba kernel. Replaces 6+ separate vectorised numpy passes
+        # (max, exp, sum, normalise, square, cumsum, searchsorted, ...)
+        # whose temp-array allocations dominated this method on small N.
+        n = len(particles)
+        u0 = np.random.random() / n
+        idx, did_resample, new_log_weights = systematic_resample_kernel(
+            log_weights=np.ascontiguousarray(log_weights, dtype=np.float64),
+            ess_threshold=float(self.ess_threshold),
+            u0=float(u0),
+        )
+        if not did_resample:
+            return particles, log_weights
+        # ndarray fancy index for the native batch path (one contiguous
+        # gather); list comp for heterogeneous list-backed beliefs.
+        if isinstance(particles, np.ndarray):
+            resampled_particles: Any = particles[idx]
+        else:
+            resampled_particles = [particles[i] for i in idx]
+        return resampled_particles, new_log_weights
 
     def _update_weights(
         self, action: Any, observation: Any, pomdp: Environment
