@@ -275,15 +275,16 @@ class TestEquivalenceWithPerParticleLoop:
 
         Purpose: Verifies that batch_observation_log_likelihood matches the
                  per-particle log-PDF computed directly from the active
-                 multivariate normal distribution (mirrors the vectorized
-                 path's direct log-space computation; env.observation_log_probability
-                 floors with ``log(pdf + 1e-300)`` and diverges for very
-                 small pdf values).
+                 multivariate normal distribution. Both the batch path and
+                 the per-particle reference apply the symmetric C++
+                 ``kLogProbFloor = log(1e-300) ~= -690.776`` floor for
+                 impossible events so the two paths agree across the
+                 entire array (including extreme-distance particles).
 
         Given: A set of next-state particles and an observation.
         When: batch_observation_log_likelihood is called, and per-particle
               log-pdf is computed via the env's near/far Gaussian (selected
-              by env.is_state_near_beacon).
+              by env.is_state_near_beacon), with the same C++ floor applied.
         Then: Results match within floating-point tolerance.
 
         Test type: integration
@@ -293,6 +294,8 @@ class TestEquivalenceWithPerParticleLoop:
         observation = np.array([5.0, 5.0])
         action = np.array([1.0, 0.0])
 
+        log_floor = float(np.log(1e-300))  # ~= -690.7755278982137
+
         def per_particle_ll_fn(particle, act, obs):
             del act
             dist = (
@@ -300,7 +303,11 @@ class TestEquivalenceWithPerParticleLoop:
                 if env.is_state_near_beacon(particle)
                 else env._obs_dist_far_from_beacon  # pylint: disable=protected-access
             )
-            return dist.log_pdf(np.array([obs]), particle)[0]
+            log_pdf = dist.log_pdf(np.array([obs]), particle)[0]
+            # Mirror the symmetric C++ kernel floor applied by
+            # ``batch_log_likelihood`` so the reference matches the
+            # implementation under test for events past the floor.
+            return max(log_pdf, log_floor)
 
         assert_batch_obs_log_likelihood_matches_loop(
             updater=updater,
