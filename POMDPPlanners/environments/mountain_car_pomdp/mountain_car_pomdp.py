@@ -339,12 +339,10 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
     def initial_state_dist(self) -> Distribution:
         class InitialState(Distribution):
             def sample(self, n_samples: int = 1) -> List[np.ndarray]:
-                samples = []
-                for _ in range(n_samples):
-                    position = np.random.uniform(-0.6, -0.4)
-                    velocity = 0.0
-                    samples.append(np.array([position, velocity]))
-                return samples
+                # Vectorized batch RNG draw + per-row np.array — avoids the
+                # per-iteration np.random.uniform dispatch for n_samples > 1.
+                positions = np.random.uniform(-0.6, -0.4, size=n_samples)
+                return [np.array([float(p), 0.0]) for p in positions]
 
         return InitialState()
 
