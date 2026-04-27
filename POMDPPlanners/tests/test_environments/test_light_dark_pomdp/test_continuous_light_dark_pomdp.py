@@ -2918,3 +2918,50 @@ def test_scalar_obs_log_prob_un_floored_matches_batch_after_fix():
         scalar < -700.0
     ), f"anchor must be below the old -690.776 floor to exercise the fix; got {scalar}"
     np.testing.assert_allclose(scalar, batch, atol=1e-6)
+
+
+def test_scalar_and_batch_obs_log_prob_share_symmetric_floor_in_deep_underflow():
+    """Both scalar and batch obs log-prob clamp to ``log(1e-300)`` for impossible events.
+
+    Purpose: Pins the symmetric C++ kernel floor contract for
+        ContinuousLightDarkPOMDP. Both
+        ``observation_log_probability`` (scalar, via
+        ``kernel.probability``) and
+        ``observation_log_probability_per_state`` (batch, via
+        ``kernel.batch_log_likelihood``) clamp at the C++ layer to
+        ``kProbFloor = 1e-300`` (linear) and
+        ``kLogProbFloor = log(1e-300) ~= -690.776`` (log) respectively.
+        The two API paths must therefore agree on the same floored value
+        for events whose un-floored log-probability is below the floor.
+
+    Given: A NORMAL_NOISE env (observation_cov=0.01*I), a fixed
+        next_state at [5, 5], and a 6.0-unit-per-axis offset
+        observation whose un-floored analytic log-pdf is roughly
+        -3500 (well below the floor and below the historical
+        log(p + 1e-300) = -690.776 cap).
+    When: Both ``observation_log_probability`` (scalar) and
+        ``observation_log_probability_per_state`` (batch) are evaluated
+        on the same (next_state, action, observation).
+    Then: Both return approximately -690.776 (within atol=1e-6),
+        the symmetric C++ floor.
+
+    Test type: unit
+    """
+    env = ContinuousLightDarkPOMDP(
+        discount_factor=0.95,
+        observation_cov_matrix=np.eye(2) * 0.01,
+        observation_model_type=ObservationModelType.NORMAL_NOISE,
+    )
+    next_state = np.array([5.0, 5.0])
+    action = np.array([0.0, 0.0])
+    observation = next_state + np.array([6.0, 6.0])
+
+    scalar = env.observation_log_probability(next_state, action, [observation])[0]
+    batch = env.observation_log_probability_per_state(np.array([next_state]), action, observation)[
+        0
+    ]
+
+    expected_floor = float(np.log(1e-300))  # ~= -690.7755278982137
+    np.testing.assert_allclose(scalar, expected_floor, atol=1e-6)
+    np.testing.assert_allclose(batch, expected_floor, atol=1e-6)
+    np.testing.assert_allclose(scalar, batch, atol=1e-6)
