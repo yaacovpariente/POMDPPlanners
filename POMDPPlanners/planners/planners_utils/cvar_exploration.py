@@ -17,9 +17,20 @@ def _get_sparse_sampling_guarantees_exploration_v2(
     visit_count_penalty: float = 0.0,
 ) -> ActionNode:
     visit_count_array = np.array([child.visit_count for child in belief_node.children])
-    unvisited_action_indices = np.where(visit_count_array >= 1)[0]
+    # Bug-fix: the original predicate was `visit_count_array >= 1` with
+    # variable name `unvisited_action_indices` — that always returned
+    # visited children and skipped the LCB calculation entirely. Correct
+    # semantic is "if any child is unvisited, explore it randomly".
+    unvisited_action_indices = np.where(visit_count_array == 0)[0]
     if len(unvisited_action_indices) > 0:
         return belief_node.children[np.random.choice(unvisited_action_indices)]
+
+    # Guard: the LCB formula below has `delta * (1 - belief_visits)` in the
+    # denominator, which is 0 when belief_visits == 1 (the second visit to
+    # this belief node). Fall back to random visited-child selection in
+    # that edge case; LCB only becomes well-defined for belief_visits >= 2.
+    if belief_node.visit_count <= 1:
+        return belief_node.children[int(np.random.randint(len(belief_node.children)))]
 
     visit_count_penalty_array = 1 / (np.sqrt(visit_count_array) + 1)
 
@@ -116,23 +127,32 @@ def _sparse_sampling_guarantees_exploration_v2_arena(
     tree_q = tree.q_value
     visit_count_array = np.empty(n_children, dtype=np.float64)
     q_values = np.empty(n_children, dtype=np.float64)
-    has_visited = False
+    unvisited_local: list = []
     for i, cid in enumerate(children):
         v = tree_visits[cid]
         visit_count_array[i] = v
         q_values[i] = tree_q[cid]
-        if v >= 1:
-            has_visited = True
-    if has_visited:
-        # Preserve original behaviour: pick a random visited child when any
-        # have been visited (the np.where(>= 1) branch in the prior code).
-        unvisited_indices = np.where(visit_count_array >= 1)[0]
-        return children[int(np.random.choice(unvisited_indices))]
+        if v == 0:
+            unvisited_local.append(i)
+    if unvisited_local:
+        # Bug-fix: the original predicate was `visit_count_array >= 1` with
+        # variable name `unvisited_indices` — that always returned visited
+        # children and skipped the LCB calculation entirely. The intended
+        # semantic is "if any child is unvisited, explore it randomly".
+        return children[unvisited_local[int(np.random.randint(len(unvisited_local)))]]
+
+    # Guard: the LCB formula below has `delta * (1 - belief_visits)` in the
+    # denominator, which is 0 when belief_visits == 1 (the second visit to
+    # this belief node). Fall back to random visited-child selection in
+    # that edge case; LCB only becomes well-defined for belief_visits >= 2.
+    belief_visits = tree.visit_count[belief_id]
+    if belief_visits <= 1:
+        return children[int(np.random.randint(n_children))]
 
     best_idx = sparse_sampling_lcb_min_idx_kernel(
         visit_count_array,
         q_values,
-        float(tree.visit_count[belief_id]),
+        float(belief_visits),
         int(horizon),
         float(alpha),
         float(delta),
