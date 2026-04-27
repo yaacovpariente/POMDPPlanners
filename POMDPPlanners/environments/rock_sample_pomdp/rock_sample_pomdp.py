@@ -483,7 +483,8 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
         kernel = self._get_trans_kernel(int(action))
         kernel.set_state(np.asarray(state, dtype=float))
         probs = np.asarray(kernel.probability(next_states))
-        return np.log(probs + 1e-300)
+        with np.errstate(divide="ignore"):
+            return np.log(probs)
 
     def observation_log_probability(
         self, next_state: RockSampleState, action: int, observations: Any
@@ -500,7 +501,8 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
                 count=len(observations) if hasattr(observations, "__len__") else -1,
             )
         probs = np.asarray(kernel.probability(codes))
-        return np.log(probs + 1e-300)
+        with np.errstate(divide="ignore"):
+            return np.log(probs)
 
     def sample_next_state_batch(self, states: Any, action: int) -> np.ndarray:
         states_array = np.ascontiguousarray(np.asarray(states, dtype=np.float64))
