@@ -490,7 +490,15 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
     ) -> np.ndarray:
         kernel = self._get_obs_kernel(int(action))
         kernel.set_next_state(np.asarray(next_state, dtype=float))
-        codes = np.array([_OBS_STR_TO_CODE.get(v, -1) for v in observations], dtype=np.int32)
+        # Length-1 fast path: skip the list comprehension + np.array allocation.
+        if hasattr(observations, "__len__") and len(observations) == 1:
+            codes = np.array([_OBS_STR_TO_CODE.get(observations[0], -1)], dtype=np.int32)
+        else:
+            codes = np.fromiter(
+                (_OBS_STR_TO_CODE.get(v, -1) for v in observations),
+                dtype=np.int32,
+                count=len(observations) if hasattr(observations, "__len__") else -1,
+            )
         probs = np.asarray(kernel.probability(codes))
         return np.log(probs + 1e-300)
 
