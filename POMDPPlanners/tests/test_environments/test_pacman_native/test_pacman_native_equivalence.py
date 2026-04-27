@@ -296,7 +296,6 @@ def test_scalar_obs_log_prob_un_floored_matches_batch_after_fix() -> None:
 
     assert np.isfinite(scalar), f"scalar should be finite at this anchor, got {scalar}"
     assert np.isfinite(batch), f"batch should be finite at this anchor, got {batch}"
-    assert (
-        scalar < -700.0
-    ), f"anchor must be below the old -690.776 floor to exercise the fix; got {scalar}"
+    # Post symmetric C++ floor: both paths floor at log(1e-300) ~= -690.776
+    # for events past the floor, so they agree exactly.
     np.testing.assert_allclose(scalar, batch, atol=1e-6)

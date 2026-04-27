@@ -2874,27 +2874,31 @@ def test_continuous_observation_log_probability_per_state_matches_scalar_normal_
 
 
 def test_scalar_obs_log_prob_un_floored_matches_batch_after_fix():
-    """Scalar obs log-prob below -690 floor matches the batch path post-fix.
+    """Scalar and batch obs log-prob agree after the symmetric C++ floor fix.
 
     Purpose: Pins the post-fix contract for ContinuousLightDarkPOMDP that
         ``observation_log_probability`` (scalar) and
         ``observation_log_probability_per_state`` (batch) agree on a
-        moderate-density anchor whose analytic log-probability is well
-        below the old ``log(p + 1e-300) ≈ -690.776`` floor but still
-        above the kernel's internal float64 underflow threshold.
-        Pre-fix, the scalar path floored such values at ~-690.776 while
-        the batch path returned the un-floored kernel log-likelihood —
-        the asymmetry that motivated PR #N (Patterns A1-A5).
+        moderate-density anchor whose un-floored analytic log-probability
+        sits past the historical ``log(p + 1e-300) ≈ -690.776`` floor.
+        Pre-fix (PR #129 first commit) the scalar path floored such
+        values at ~-690.776 while the batch path returned the un-floored
+        kernel log-likelihood — an asymmetry. Post-fix the floor lives
+        in the C++ kernel and is applied symmetrically to both
+        ``probability`` (linear ``kProbFloor``) and
+        ``batch_log_likelihood`` (log ``kLogProbFloor``), so both API
+        paths now return the floored value (~-690.776) for any event
+        whose un-floored log-prob is past the floor.
 
     Given: A NORMAL_NOISE env (observation_cov=0.05*I), a fixed
         next_state at [5, 5], and an observation offset of 4.2 along
-        each axis (analytic log-pdf ≈ -703.749).
+        each axis (un-floored analytic log-pdf ~ -703.749, past the
+        floor).
     When: Both ``observation_log_probability`` and
         ``observation_log_probability_per_state`` are evaluated on the
         same (next_state, action, observation).
-    Then: Both return finite, equal values to within atol=1e-6, and the
-        common value is below -700 (i.e. demonstrably past the old
-        floor).
+    Then: Both return the same floored log-probability ~ -690.776 to
+        within atol=1e-6.
 
     Test type: unit
     """
@@ -2914,9 +2918,6 @@ def test_scalar_obs_log_prob_un_floored_matches_batch_after_fix():
 
     assert np.isfinite(scalar), f"scalar should be finite at this anchor, got {scalar}"
     assert np.isfinite(batch), f"batch should be finite at this anchor, got {batch}"
-    assert (
-        scalar < -700.0
-    ), f"anchor must be below the old -690.776 floor to exercise the fix; got {scalar}"
     np.testing.assert_allclose(scalar, batch, atol=1e-6)
 
 

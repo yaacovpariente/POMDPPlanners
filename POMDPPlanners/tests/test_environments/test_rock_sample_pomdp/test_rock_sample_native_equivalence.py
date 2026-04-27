@@ -318,33 +318,21 @@ def test_observation_batch_log_likelihood_matches_per_particle(
     env: RockSamplePOMDP, action: int, obs_str: str, obs_code: int
 ) -> None:
     """Purpose: For check actions on live (non-terminal) particles, the
-    native batch_log_likelihood must agree with per-particle
-    ``env.observation_log_probability([obs_str])[0]`` to 1e-10 atol on
-    the finite-probability subset.
+    native batch_log_likelihood agrees with the per-particle
+    ``env.observation_log_probability([obs_str])[0]`` across the entire
+    array (including impossible events).
 
-    The batch path treats terminal particles as -inf by design (same
-    as the pre-port Python vectorized updater), while the per-particle
-    path computes a finite value using the terminal sentinel as a real
-    position. That pre-existing divergence is tested separately in
-    ``test_batch_log_likelihood_terminal_semantics``; this test
-    intentionally uses only non-terminal particles.
-
-    Post-floor-removal note: the scalar ``observation_log_probability``
-    path now returns ``-inf`` for impossible events (e.g. ``obs='good'``
-    against a bad rock at distance 0). The C++ ``batch_log_likelihood``
-    still applies an internal ``kProbFloor = 1e-300`` and reports
-    ``log(1e-300) ≈ -690.776`` in the same regime — a residual
-    asymmetry in the C++ kernel that is out of scope for the Python
-    scalar fix and tracked separately. This test therefore compares
-    scalar vs batch only on the finite-probability subset; impossible
-    events are accepted regardless of which "very negative" value each
-    path emits.
+    Post symmetric C++ floor: both
+    ``batch_log_likelihood`` (log-floor) and the scalar path
+    ``np.log(kernel.probability(...))`` (linear-floor then log) clamp
+    impossible events to ``log(kProbFloor) = log(1e-300) ~= -690.776``,
+    so the two paths produce bit-exact values everywhere — including
+    the impossible-event subset. The earlier relaxation that compared
+    only the finite-probability subset is no longer needed.
 
     Given: 32 random live next-particles (no terminal sentinel).
     When: batch_log_likelihood is compared to the per-particle loop.
-    Then: Finite entries agree within 1e-10; entries the scalar path
-        marks as ``-inf`` are accepted as matching any value below
-        ``-100`` from the batch path.
+    Then: Arrays agree within 1e-10 across all entries.
 
     Test type: integration
     """
@@ -364,17 +352,7 @@ def test_observation_batch_log_likelihood_matches_per_particle(
     for i, row in enumerate(particles):
         expected[i] = env.observation_log_probability(row, action, [obs_str])[0]
 
-    finite_mask = np.isfinite(expected)
-    np.testing.assert_allclose(batch_ll[finite_mask], expected[finite_mask], atol=1e-10)
-    # Where the scalar path is -inf, the residual C++ floor in batch
-    # produces a very large negative value (~-690.776). Both encode
-    # "impossible event" — accept either as long as the batch path is
-    # well below any plausible finite log-probability.
-    inf_mask = ~finite_mask
-    if np.any(inf_mask):
-        assert np.all(
-            batch_ll[inf_mask] < -100.0
-        ), f"impossible-event entries from batch must be << 0: {batch_ll[inf_mask]}"
+    np.testing.assert_allclose(batch_ll, expected, atol=1e-10)
 
 
 def test_observation_batch_log_likelihood_matches_per_particle_movement(
@@ -456,13 +434,19 @@ def test_observation_batch_log_likelihood_shape_contract(env: RockSamplePOMDP) -
 
 
 def test_batch_log_likelihood_terminal_semantics(env: RockSamplePOMDP) -> None:
-    """Purpose: Terminal particles get -inf for check actions regardless
-    of the observation; for movement actions + obs=none they get 0.0.
+    """Purpose: Terminal particles get the symmetric ``kLogProbFloor``
+    floor (~ -690.776) for check actions regardless of the observation;
+    for movement actions + obs=none they get 0.0.
+
+    Post symmetric C++ floor: the historical -inf for impossible events
+    is now floored to ``log(kProbFloor) = log(1e-300) ~= -690.776`` so
+    the C++ ``batch_log_likelihood`` and the env-API scalar
+    ``np.log(kernel.probability(...))`` paths agree on the same value.
 
     Given: A batch of particles: [live_at_rock, terminal].
     When: batch_log_likelihood is invoked for (check action, good obs)
         and (movement action, none obs).
-    Then: For check: [finite, -inf]. For movement + none: [0, 0].
+    Then: For check: [finite, ~ -690.776]. For movement + none: [0, 0].
 
     Test type: unit
     """
@@ -474,10 +458,11 @@ def test_batch_log_likelihood_terminal_semantics(env: RockSamplePOMDP) -> None:
         ],
         dtype=float,
     )
-    # Check action + good obs: live gets ~0 (log(efficiency)), terminal = -inf.
+    floor = float(np.log(1e-300))  # ~= -690.7755278982137
+    # Check action + good obs: live gets ~0 (log(efficiency)), terminal = floor.
     ll_check = updater.batch_observation_log_likelihood(particles, np.array(5), np.array(OBS_GOOD))
     assert np.isfinite(ll_check[0])
-    assert ll_check[1] == -np.inf
+    np.testing.assert_allclose(ll_check[1], floor, atol=1e-6)
 
     # Movement action + none obs: both rows get 0.
     ll_move = updater.batch_observation_log_likelihood(particles, np.array(2), np.array(OBS_NONE))
@@ -491,11 +476,16 @@ def test_batch_log_likelihood_terminal_semantics(env: RockSamplePOMDP) -> None:
 
 def test_batch_log_likelihood_movement_action_semantics(env: RockSamplePOMDP) -> None:
     """Purpose: For any movement action, batch_log_likelihood is 0 for
-    obs=none and -inf for obs in {good, bad}.
+    obs=none and floored to ``log(1e-300) ~= -690.776`` for obs in
+    {good, bad}.
+
+    Post symmetric C++ floor: the historical -inf for impossible events
+    is now floored to ``kLogProbFloor`` so the batch and scalar API
+    paths agree on the same value.
 
     Given: Arbitrary particles.
     When: batch_log_likelihood is invoked with movement actions 0-4.
-    Then: All particles get 0 for none, -inf for good/bad.
+    Then: All particles get 0 for none, ~ -690.776 for good/bad.
 
     Test type: unit
     """
@@ -504,6 +494,7 @@ def test_batch_log_likelihood_movement_action_semantics(env: RockSamplePOMDP) ->
     particles[:, 0] = np.arange(5)
     particles[:, 1] = np.arange(5)
 
+    floor = float(np.log(1e-300))  # ~= -690.7755278982137
     for action in (0, 1, 2, 3, 4):
         ll_none = updater.batch_observation_log_likelihood(
             particles, np.array(action), np.array(OBS_NONE)
@@ -514,7 +505,7 @@ def test_batch_log_likelihood_movement_action_semantics(env: RockSamplePOMDP) ->
             ll = updater.batch_observation_log_likelihood(
                 particles, np.array(action), np.array(obs)
             )
-            assert np.all(ll == -np.inf)
+            np.testing.assert_allclose(ll, np.full(5, floor), atol=1e-6)
 
 
 # ---------------------------------------------------------------------------

@@ -1556,15 +1556,18 @@ def test_simulate_random_rollout_rocksample_terminal_returns_zero():
 
 
 def test_scalar_obs_log_prob_un_floored_matches_batch_after_fix() -> None:
-    """Scalar obs log-prob for impossible event matches the batch path post-fix.
+    """Scalar and batch obs log-prob agree at the symmetric C++ floor.
 
     Purpose: Pins the post-fix contract for RockSamplePOMDP's audit
         case A5 — a CHECK action where the canonical observation
         ``"none"`` is impossible (it can only fire on movement actions,
-        never on CHECK). Pre-fix, the scalar path returned
-        ``log(0 + 1e-300) ≈ -690.776`` while the batch path
-        ``observation_log_probability_per_state`` returned ``-inf``.
-        Post-fix, both paths return ``-inf`` for impossible events.
+        never on CHECK). With the symmetric C++ kernel floor in place,
+        both ``observation_log_probability`` (scalar, via
+        ``kernel.probability``) and
+        ``observation_log_probability_per_state`` (batch, via
+        ``kernel.batch_log_likelihood``) return
+        ``log(kProbFloor) = log(1e-300) ~= -690.776`` for impossible
+        events.
 
     Given: A 1-rock RockSamplePOMDP with the rock at (1, 1), the robot
         co-located at (1, 1) with that rock marked True, and the CHECK
@@ -1573,9 +1576,9 @@ def test_scalar_obs_log_prob_un_floored_matches_batch_after_fix() -> None:
     When: Both ``observation_log_probability`` and
         ``observation_log_probability_per_state`` are evaluated for
         ``observation="none"``.
-    Then: Both return ``-inf`` (allclose treats two ``-inf`` values
-        as equal at any finite tolerance), pinning the post-fix
-        log-prob == -inf contract for impossible events.
+    Then: Both return ``log(1e-300) ~= -690.776`` (the symmetric C++
+        floor), pinning the post-fix log-prob contract for impossible
+        events.
 
     Test type: unit
     """
@@ -1589,8 +1592,9 @@ def test_scalar_obs_log_prob_un_floored_matches_batch_after_fix() -> None:
     scalar = env.observation_log_probability(state, 5, ["none"])[0]
     batch = env.observation_log_probability_per_state(state.reshape(1, -1), 5, "none")[0]
 
-    assert np.isneginf(scalar), f"scalar should be -inf for impossible event post-fix, got {scalar}"
-    assert np.isneginf(batch), f"batch should be -inf for impossible event, got {batch}"
+    expected_floor = float(np.log(1e-300))  # ~= -690.7755278982137
+    np.testing.assert_allclose(scalar, expected_floor, atol=1e-6)
+    np.testing.assert_allclose(batch, expected_floor, atol=1e-6)
     np.testing.assert_allclose(scalar, batch, atol=1e-6)
 
 
