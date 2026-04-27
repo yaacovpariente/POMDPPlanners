@@ -1251,3 +1251,47 @@ def test_simulate_random_rollout_native_matches_base_class_python() -> None:
         atol=1e-9,
         err_msg=(f"Native rollout {native_return:.9f} != " f"Python rollout {python_return:.9f}"),
     )
+
+
+def test_scalar_obs_log_prob_un_floored_matches_batch_after_fix() -> None:
+    """Scalar obs log-prob below -690 floor matches the batch path post-fix.
+
+    Purpose: Pins the post-fix contract for MountainCarPOMDP that
+        ``observation_log_probability`` (scalar) and
+        ``observation_log_probability_per_state`` (batch) agree on a
+        moderate-density anchor whose analytic log-probability is well
+        below the old ``log(p + 1e-300) ≈ -690.776`` floor but still
+        above the kernel's internal float64 underflow threshold.
+        Pre-fix, the scalar path floored such values at ~-690.776 while
+        the batch path returned the un-floored kernel log-likelihood —
+        the asymmetry that motivated the env-wide log-prob floor
+        removal.
+
+    Given: A default MountainCarPOMDP env (position_noise=0.1,
+        velocity_noise=0.01), a fixed next_state at the origin, action 0,
+        and an observation at (3.78, 0.0). The analytic 2-D Gaussian
+        log-pdf at this offset is ≈ -709.350.
+    When: Both ``observation_log_probability`` and
+        ``observation_log_probability_per_state`` are evaluated on the
+        same (next_state, action, observation).
+    Then: Both return finite, equal values to within atol=1e-6, and the
+        common value is below -700 (past the old floor).
+
+    Test type: unit
+    """
+    env = MountainCarPOMDP(discount_factor=0.95)
+    next_state = np.array([0.0, 0.0])
+    action = 0
+    observation = np.array([3.78, 0.0])
+
+    scalar = env.observation_log_probability(next_state, action, [observation])[0]
+    batch = env.observation_log_probability_per_state(np.array([next_state]), action, observation)[
+        0
+    ]
+
+    assert np.isfinite(scalar), f"scalar should be finite at this anchor, got {scalar}"
+    assert np.isfinite(batch), f"batch should be finite at this anchor, got {batch}"
+    assert (
+        scalar < -700.0
+    ), f"anchor must be below the old -690.776 floor to exercise the fix; got {scalar}"
+    np.testing.assert_allclose(scalar, batch, atol=1e-6)

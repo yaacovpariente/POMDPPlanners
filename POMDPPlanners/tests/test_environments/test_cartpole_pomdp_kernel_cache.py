@@ -171,7 +171,11 @@ def test_transition_log_probability_parity_fresh_vs_cached(env: CartPolePOMDP) -
         fresh = _fresh_trans_kernel(env, action)
         fresh.set_state(np.asarray(state, dtype=np.float64))
         fresh_probs = np.asarray(fresh.probability(next_states))
-        fresh_logp = np.log(fresh_probs + 1e-300)
+        # The env path uses ``np.log(probs)`` (no ``+ 1e-300`` floor) so
+        # impossible kernel evaluations return -inf rather than the
+        # historical -690.776 floor. Mirror that contract here.
+        with np.errstate(divide="ignore"):
+            fresh_logp = np.log(fresh_probs)
 
         np.testing.assert_allclose(cached, fresh_logp, atol=1e-12, rtol=0.0)
 
@@ -204,7 +208,11 @@ def test_observation_log_probability_parity_fresh_vs_cached(env: CartPolePOMDP) 
         fresh = _fresh_obs_kernel(env, action)
         fresh.set_next_state(np.asarray(next_state, dtype=np.float64))
         fresh_probs = np.asarray(fresh.probability(observations))
-        fresh_logp = np.log(fresh_probs + 1e-300)
+        # The env path uses ``np.log(probs)`` (no ``+ 1e-300`` floor) so
+        # impossible kernel evaluations return -inf rather than the
+        # historical -690.776 floor. Mirror that contract here.
+        with np.errstate(divide="ignore"):
+            fresh_logp = np.log(fresh_probs)
 
         np.testing.assert_allclose(cached, fresh_logp, atol=1e-12, rtol=0.0)
 
