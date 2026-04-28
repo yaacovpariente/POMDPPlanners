@@ -165,8 +165,12 @@ class TigerPOMDP(DiscreteActionsEnvironment):
     def observation_log_probability(self, next_state: str, action: str, observations) -> np.ndarray:
         result = np.zeros(len(observations))
         if action == "listen":
+            # Listen emits only directional observations; ``hear_nothing`` is
+            # impossible under listen and reserved for the open_* actions.
+            # Using ``OBSERVATIONS`` here would let ``hear_nothing`` fall through
+            # and incorrectly receive log(0.15), making the kernel sum to 1.15.
             for i, obs in enumerate(observations):
-                if obs not in OBSERVATIONS:
+                if obs not in ("hear_left", "hear_right"):
                     result[i] = -np.inf
                     continue
                 correct = "hear_left" if next_state == "tiger_left" else "hear_right"

@@ -205,10 +205,14 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
             action_space=SpaceType.DISCRETE,  # Action space is discrete positions
             observation_space=SpaceType.CONTINUOUS,  # Observation space is positions with noise
         )
-        # Calculate reward range based on maximum distance to target
-        # Maximum distance is diagonal from corner to corner: sqrt(2) * (grid_size - 1)
+        # Calculate reward range based on maximum distance to target plus the
+        # additive obstacle penalty when obstacles are configured. Without the
+        # obstacle term, any robot action that drives the robot onto an obstacle
+        # produces a reward strictly more negative than the advertised lower
+        # bound (reward = -dist_to_target + obstacle_penalty < -max_distance).
+        # Maximum distance is diagonal from corner to corner: sqrt(2) * (grid_size - 1).
         max_distance = np.sqrt(2) * (grid_size - 1)
-        min_reward = -max_distance  # Worst case: maximum distance to target
+        min_reward = -max_distance + min(0.0, obstacle_penalty if self.obstacles else 0.0)
         max_reward = 100.0  # Best case: at target with bonus reward
 
         super().__init__(
