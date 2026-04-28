@@ -42,6 +42,15 @@ constexpr int kObsNone = 0;
 constexpr int kObsGood = 1;
 constexpr int kObsBad = 2;
 
+// Defensive flooring constants applied symmetrically by ``probability`` /
+// ``batch_log_likelihood`` so the env-API scalar (np.log(prob)) and batch
+// (log-pdf) paths agree on the same floored value (~ -690.776) for
+// impossible events. ``std::log`` is not constexpr in C++17 so the log
+// constant is a hard-coded ``static const double`` matching
+// ``std::log(kProbFloor)``.
+constexpr double kProbFloor = 1e-300;
+static const double kLogProbFloor = -690.7755278982137;  // == std::log(kProbFloor)
+
 // Discrete action ids mirror rock_sample_pomdp.py:
 //   0 = sample (pick up rock at robot position if any)
 //   1 = move north (row -= 1, clamped to >= 0)
@@ -236,7 +245,10 @@ class RockSampleTransitionCpp {
     }
 
     // Indicator density: 1.0 for rows equal to the deterministic next state,
-    // 0.0 otherwise. Matches the pre-port Python contract.
+    // ``kProbFloor`` otherwise. Symmetric defensive flooring keeps the
+    // env-API scalar ``np.log(probs)`` from emitting ``-inf`` for
+    // impossible candidates (matches the log-space floor applied in
+    // ``batch_log_likelihood``).
     py::array_t<double> probability(const py::object &values) const {
         const std::size_t state_dim = state_.size();
         auto batch = pomdp_native::extract_rows_nd(values, state_dim);
@@ -254,7 +266,7 @@ class RockSampleTransitionCpp {
                     break;
                 }
             }
-            buf(static_cast<py::ssize_t>(i)) = equal ? 1.0 : 0.0;
+            buf(static_cast<py::ssize_t>(i)) = equal ? 1.0 : kProbFloor;
         }
         return out;
     }
@@ -467,7 +479,7 @@ class RockSampleObservationCpp {
         if (!is_check) {
             for (std::size_t i = 0; i < n; ++i) {
                 buf(static_cast<py::ssize_t>(i)) =
-                    code_view(static_cast<py::ssize_t>(i)) == kObsNone ? 1.0 : 0.0;
+                    code_view(static_cast<py::ssize_t>(i)) == kObsNone ? 1.0 : kProbFloor;
             }
             return out;
         }
@@ -486,6 +498,12 @@ class RockSampleObservationCpp {
                 p = p_good;
             } else if (code == kObsBad) {
                 p = p_bad;
+            }
+            // Symmetric defensive flooring: keep impossible events from
+            // emitting np.log(0) = -inf through the env API (mirrors the
+            // log-floor in batch_log_likelihood).
+            if (p < kProbFloor) {
+                p = kProbFloor;
             }
             buf(static_cast<py::ssize_t>(i)) = p;
         }
@@ -512,12 +530,15 @@ class RockSampleObservationCpp {
         auto out = py::array_t<double>(static_cast<py::ssize_t>(n_rows));
         double *buf = out.mutable_data();
 
-        const double neg_inf = -std::numeric_limits<double>::infinity();
+        // Symmetric flooring: replace what used to be -inf for impossible
+        // events with kLogProbFloor so the env-API batch path matches the
+        // scalar (np.log(kernel.probability(...))) path which gets the same
+        // floor through ``probability``'s kProbFloor clamp.
         const int rock_idx = action_ - 5;
         const bool is_check = (action_ >= 5 && rock_idx < env_.num_rocks);
 
         if (!is_check) {
-            const double val = (observation == kObsNone) ? 0.0 : neg_inf;
+            const double val = (observation == kObsNone) ? 0.0 : kLogProbFloor;
             for (std::size_t i = 0; i < n_rows; ++i) {
                 buf[i] = val;
             }
@@ -526,7 +547,7 @@ class RockSampleObservationCpp {
 
         if (observation == kObsNone) {
             for (std::size_t i = 0; i < n_rows; ++i) {
-                buf[i] = neg_inf;
+                buf[i] = kLogProbFloor;
             }
             return out;
         }
@@ -534,7 +555,6 @@ class RockSampleObservationCpp {
         const std::int32_t rock_r = env_.rock_rows[static_cast<std::size_t>(rock_idx)];
         const std::int32_t rock_c = env_.rock_cols[static_cast<std::size_t>(rock_idx)];
         const double inv_sigma = 1.0 / env_.sensor_efficiency;
-        constexpr double kProbFloor = 1e-300;  // matches Python np.maximum(prob, 1e-300)
         const std::size_t rock_offset = static_cast<std::size_t>(2 + rock_idx);
 
         const double *data = next_particles.data();
@@ -543,7 +563,7 @@ class RockSampleObservationCpp {
             const double robot_row = row[0];
             const double robot_col = row[1];
             if (robot_row < 0.0 && robot_col < 0.0) {
-                buf[i] = neg_inf;
+                buf[i] = kLogProbFloor;
                 continue;
             }
             const double dr = robot_row - static_cast<double>(rock_r);
@@ -558,7 +578,11 @@ class RockSampleObservationCpp {
                 prob = rock_good ? (1.0 - efficiency) : efficiency;
             }
             if (prob < kProbFloor) prob = kProbFloor;
-            buf[i] = std::log(prob);
+            double log_prob = std::log(prob);
+            if (log_prob < kLogProbFloor) {
+                log_prob = kLogProbFloor;
+            }
+            buf[i] = log_prob;
         }
         return out;
     }

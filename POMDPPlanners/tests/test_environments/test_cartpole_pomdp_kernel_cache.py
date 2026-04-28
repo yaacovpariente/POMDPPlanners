@@ -170,8 +170,14 @@ def test_transition_log_probability_parity_fresh_vs_cached(env: CartPolePOMDP) -
 
         fresh = _fresh_trans_kernel(env, action)
         fresh.set_state(np.asarray(state, dtype=np.float64))
+        # The C++ kernel applies a symmetric ``kProbFloor = 1e-300``
+        # floor inside ``probability`` so ``np.log(probs)`` returns
+        # ``log(1e-300) ~= -690.776`` for impossible events instead
+        # of ``-inf`` — matching what the env path returns. No
+        # ``errstate`` guard needed because the floored prob is
+        # strictly positive.
         fresh_probs = np.asarray(fresh.probability(next_states))
-        fresh_logp = np.log(fresh_probs + 1e-300)
+        fresh_logp = np.log(fresh_probs)
 
         np.testing.assert_allclose(cached, fresh_logp, atol=1e-12, rtol=0.0)
 
@@ -203,8 +209,14 @@ def test_observation_log_probability_parity_fresh_vs_cached(env: CartPolePOMDP) 
 
         fresh = _fresh_obs_kernel(env, action)
         fresh.set_next_state(np.asarray(next_state, dtype=np.float64))
+        # The C++ kernel applies a symmetric ``kProbFloor = 1e-300``
+        # floor inside ``probability`` so ``np.log(probs)`` returns
+        # ``log(1e-300) ~= -690.776`` for impossible events instead
+        # of ``-inf`` — matching what the env path returns. No
+        # ``errstate`` guard needed because the floored prob is
+        # strictly positive.
         fresh_probs = np.asarray(fresh.probability(observations))
-        fresh_logp = np.log(fresh_probs + 1e-300)
+        fresh_logp = np.log(fresh_probs)
 
         np.testing.assert_allclose(cached, fresh_logp, atol=1e-12, rtol=0.0)
 

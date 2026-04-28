@@ -541,7 +541,8 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
         else:
             stacked = np.stack([np.asarray(s, dtype=np.float64) for s in next_states])
         probs = np.asarray(kernel.probability(stacked))
-        return np.log(probs + 1e-300)
+        with np.errstate(divide="ignore"):
+            return np.log(probs)
 
     def observation_log_probability(
         self, next_state: np.ndarray, action: int, observations: Any
@@ -553,7 +554,8 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
         if isinstance(observations, np.ndarray) and observations.ndim == 2:
             stacked = observations
             probs = np.asarray(kernel.probability(stacked))
-            return np.log(probs + 1e-300)
+            with np.errstate(divide="ignore"):
+                return np.log(probs)
         n = len(observations)
         probs = np.zeros(n, dtype=np.float64)
         usable_rows: List[np.ndarray] = []
@@ -568,7 +570,8 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
             sub_probs = np.asarray(kernel.probability(stacked))
             for idx, p in zip(usable_indices, sub_probs):
                 probs[idx] = p
-        return np.log(probs + 1e-300)
+        with np.errstate(divide="ignore"):
+            return np.log(probs)
 
     def sample_next_state_batch(self, states: Any, action: int) -> np.ndarray:
         if isinstance(states, np.ndarray) and states.ndim == 2:
