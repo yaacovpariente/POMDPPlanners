@@ -15,7 +15,7 @@ import pytest
 
 from POMDPPlanners.core.belief import WeightedParticleBelief, get_initial_belief
 from POMDPPlanners.core.policy import PolicyRunData
-from POMDPPlanners.core.tree.arena import Tree
+from POMDPPlanners.core.tree.arena import ACTION, BELIEF, Tree
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.planners.mcts_planners.beta_zero.beta_zero import BetaZero
 from POMDPPlanners.training import PolicyTrainer
@@ -539,3 +539,107 @@ class TestBetaZero:
 
         assert isinstance(cid, str)
         assert len(cid) > 0
+
+    def test_tree_structure_after_plan(self, tiger_planner, initial_belief):
+        """Test that the tree built by _learn_tree satisfies arena invariants.
+
+        Purpose: Validates that BetaZero's _learn_tree produces an arena tree
+        with the expected structural and bookkeeping invariants after a real
+        planning call.
+
+        Given: A BetaZero planner and an initial belief for TigerPOMDP.
+        When: _learn_tree(belief) is called and the resulting tree is walked
+              from the root via BFS.
+        Then: The root is a BELIEF node with no parent and no observation;
+              every non-root node has a parent; visit_count is non-negative
+              everywhere; BELIEF and ACTION kinds strictly alternate down the
+              tree; BELIEF nodes carry a belief and ACTION nodes carry an
+              action; the maximum BFS depth is bounded by 2*planner.depth + 2;
+              and parent visit_count is at least the sum of children visits.
+
+        Test type: unit
+        """
+        tree, root_id = tiger_planner._learn_tree(initial_belief)
+
+        # Root invariants.
+        assert tree.kind[root_id] == BELIEF
+        assert tree.parent_id[root_id] is None
+        assert tree.observation[root_id] is None
+        assert len(tree.children_ids[root_id]) > 0
+
+        # Walk the tree via BFS to check invariants and depth bound.
+        max_observed_depth = 0
+        frontier = [(root_id, 0)]
+        while frontier:
+            node_id, depth_d = frontier.pop()
+            max_observed_depth = max(max_observed_depth, depth_d)
+
+            # Visit count non-negative everywhere.
+            assert tree.visit_count[node_id] >= 0
+
+            node_kind = tree.kind[node_id]
+            if node_kind == BELIEF:
+                assert tree.belief[node_id] is not None
+            elif node_kind == ACTION:
+                assert tree.action[node_id] is not None
+            else:
+                pytest.fail(f"Unexpected node kind {node_kind} at node {node_id}")
+
+            children = tree.children_ids[node_id]
+
+            # BELIEF <-> ACTION alternation.
+            for child_id in children:
+                if node_kind == BELIEF:
+                    assert tree.kind[child_id] == ACTION, (
+                        f"BELIEF node {node_id} has non-ACTION child {child_id} "
+                        f"with kind {tree.kind[child_id]}"
+                    )
+                else:
+                    assert tree.kind[child_id] == BELIEF, (
+                        f"ACTION node {node_id} has non-BELIEF child {child_id} "
+                        f"with kind {tree.kind[child_id]}"
+                    )
+                assert tree.parent_id[child_id] is not None
+
+            # Parent visits >= sum of children visits.
+            if children:
+                children_visits_sum = sum(tree.visit_count[cid] for cid in children)
+                assert tree.visit_count[node_id] >= children_visits_sum, (
+                    f"Node {node_id} visit_count {tree.visit_count[node_id]} "
+                    f"< sum of children visits {children_visits_sum}"
+                )
+
+            for child_id in children:
+                frontier.append((child_id, depth_d + 1))
+
+        assert max_observed_depth <= 2 * tiger_planner.depth + 2
+
+    def test_action_priors_sum_to_one(self, tiger_planner):
+        """Test that _discrete_action_priors returns a valid probability vector.
+
+        Purpose: Validates that BetaZero's _discrete_action_priors normalizes
+        the network output to a non-negative vector that sums to one over the
+        belief node's action children.
+
+        Given: A manually constructed arena tree with a root belief node and
+               two valid Tiger action children (listen, open_left).
+        When: _discrete_action_priors(tree=tree, belief_id=root_id) is called.
+        Then: The returned array has length equal to the number of action
+              children; all entries are non-negative; and the entries sum to 1.
+
+        Test type: unit
+        """
+        particles = [["tiger_left"], ["tiger_right"]]
+        log_weights = np.log(np.array([0.5, 0.5]))
+        belief = WeightedParticleBelief(particles, log_weights)
+        tree = Tree()
+        root_id = tree.add_belief_node(belief)
+
+        tree.add_action_node(action="listen", parent_id=root_id)
+        tree.add_action_node(action="open_left", parent_id=root_id)
+
+        priors = tiger_planner._discrete_action_priors(tree=tree, belief_id=root_id)
+
+        assert len(priors) == len(tree.children_ids[root_id])
+        assert np.all(priors >= 0.0)
+        assert np.isclose(priors.sum(), 1.0, atol=1e-6)

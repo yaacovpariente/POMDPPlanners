@@ -1289,3 +1289,182 @@ def test_max_depth_reached_with_timeout():
     assert tree.observation[root_id] is None
     assert len(tree.children_ids[root_id]) > 0
     assert tree.visit_count[root_id] > 0
+
+
+def test_observation_cdf_consistency(
+    environment,
+    discount_factor,
+    depth,
+    exploration_constant,
+    k_o,
+    k_a,
+    alpha_o,
+    alpha_a,
+):
+    """Test the per-parent children_cdf invariants on the POMCPOW arena tree.
+
+    Purpose: Validates the arena tree's ``children_cdf`` (used by
+    ``sample_belief_child`` for O(log K) weighted sampling at observation-widening
+    action nodes) is monotonically non-decreasing and totals to the sum of
+    children weights for every parent in the tree.
+
+    Given: POMCPOW planner built with enough simulations to widen at least one
+    action node into multiple belief children (n_simulations=300). The action
+    sampler uses the environment's real action space so the environment yields
+    distinguishable observations.
+    When: ``_learn_tree`` builds the tree and every parent is walked.
+    Then: For every parent with children, the CDF length matches children count,
+    is monotonically non-decreasing, and ``cdf[-1]`` equals the sum of children
+    weights within absolute tolerance ``1e-6``. At least one action node has
+    multiple belief children.
+
+    Test type: unit
+    """
+    cdf_action_sampler = MockActionSampler(environment.get_actions())
+    planner = POMCPOW(
+        environment=environment,
+        discount_factor=discount_factor,
+        depth=depth,
+        exploration_constant=exploration_constant,
+        k_o=k_o,
+        k_a=k_a,
+        alpha_o=alpha_o,
+        alpha_a=alpha_a,
+        n_simulations=300,
+        action_sampler=cdf_action_sampler,
+        name="TestPOMCPOW_CDF",
+    )
+
+    n_particles = 100
+    belief = get_initial_belief(environment, n_particles=n_particles, resampling=True)
+
+    tree, root_id = planner._learn_tree(belief=belief)
+    del root_id
+
+    multi_child_action_seen = False
+    for parent_id in range(len(tree)):
+        children = tree.children_ids[parent_id]
+        if not children:
+            continue
+        cdf = tree.children_cdf[parent_id]
+
+        assert len(cdf) == len(children), (
+            f"Parent {parent_id} (kind={tree.kind[parent_id]}) has {len(children)} "
+            f"children but CDF has {len(cdf)} entries"
+        )
+
+        for i in range(1, len(cdf)):
+            assert cdf[i] >= cdf[i - 1] - 1e-9, (
+                f"Parent {parent_id} CDF not monotone at index {i}: "
+                f"cdf[{i - 1}]={cdf[i - 1]}, cdf[{i}]={cdf[i]}"
+            )
+
+        total_weight = sum(tree.weight[cid] for cid in children)
+        assert abs(cdf[-1] - total_weight) < 1e-6, (
+            f"Parent {parent_id} CDF total {cdf[-1]} != sum of child weights "
+            f"{total_weight} (kind={tree.kind[parent_id]})"
+        )
+
+        if tree.kind[parent_id] == ACTION and len(children) >= 2:
+            multi_child_action_seen = True
+
+    assert multi_child_action_seen, (
+        "No action node with multiple belief children found; observation-widening "
+        "CDF invariant is vacuous on this tree. Increase n_simulations."
+    )
+
+
+def test_tree_structure_comprehensive(planner, belief):
+    """Comprehensive arena tree-structure invariants for POMCPOW.
+
+    Purpose: Bundle root-, kind-alternation-, V/Q-relationship-, depth-, and
+    progressive-widening invariants for the POMCPOW arena tree into one walk.
+
+    Given: POMCPOW planner with default fixture parameters and an initial belief.
+    When: ``_learn_tree`` builds the tree and a BFS walk inspects every node.
+    Then: Root is BELIEF with parent None and observation None; every node has
+    visit_count >= 0; BELIEF/ACTION kinds alternate along every edge; every
+    non-root has a parent; BELIEF nodes have a non-None belief; ACTION nodes
+    have non-None action and q_value; node visit_count >= sum of children
+    visits; each BELIEF node with at least one visited action child has
+    v_value equal to the max q_value over visited action children (POMCPOW
+    max-Q backup); the BFS depth from root is at most ``2 * planner.depth + 2``;
+    PW bounds hold at every node with visit_count > 0.
+
+    Test type: unit
+    """
+    tree, root_id = planner._learn_tree(belief=belief)
+
+    assert tree.kind[root_id] == BELIEF
+    assert tree.parent_id[root_id] is None
+    assert tree.observation[root_id] is None
+
+    # BFS to bound depth and visit every node reachable from root.
+    max_observed_depth = 0
+    frontier = [(root_id, 0)]
+    visited_node_ids: list[int] = []
+    while frontier:
+        node_id, d = frontier.pop()
+        visited_node_ids.append(node_id)
+        max_observed_depth = max(max_observed_depth, d)
+        for cid in tree.children_ids[node_id]:
+            frontier.append((cid, d + 1))
+
+    assert max_observed_depth <= 2 * planner.depth + 2, (
+        f"Tree max depth ({max_observed_depth}) exceeded 2 * planner.depth + 2 "
+        f"({2 * planner.depth + 2})"
+    )
+
+    for node_id in visited_node_ids:
+        assert tree.visit_count[node_id] >= 0
+
+        if node_id != root_id:
+            assert tree.parent_id[node_id] is not None
+            parent_id = tree.parent_id[node_id]
+            # Kind alternation: BELIEF parent => ACTION child and vice versa.
+            assert tree.kind[node_id] != tree.kind[parent_id], (
+                f"Kind alternation violated at node {node_id} (kind={tree.kind[node_id]}, "
+                f"parent kind={tree.kind[parent_id]})"
+            )
+
+        children = tree.children_ids[node_id]
+
+        if tree.kind[node_id] == BELIEF:
+            assert tree.belief[node_id] is not None
+            # Q/V relationship: max-Q backup over visited action children.
+            visited_action_children = [cid for cid in children if tree.visit_count[cid] > 0]
+            if visited_action_children:
+                max_q = max(tree.q_value[cid] for cid in visited_action_children)
+                assert np.isclose(tree.v_value[node_id], max_q), (
+                    f"BELIEF node {node_id} v_value ({tree.v_value[node_id]}) != max q_value "
+                    f"of visited action children ({max_q})"
+                )
+        else:
+            assert tree.action[node_id] is not None
+            assert tree.q_value[node_id] is not None
+
+        # Visit-count consistency: parent visits >= sum of child visits.
+        if children:
+            total_child_visits = sum(tree.visit_count[cid] for cid in children)
+            assert tree.visit_count[node_id] >= total_child_visits, (
+                f"Node {node_id} (kind={tree.kind[node_id]}) visit_count "
+                f"({tree.visit_count[node_id]}) < sum of children visits ({total_child_visits})"
+            )
+
+        # Progressive widening bounds at any node with visits.
+        visit_count = tree.visit_count[node_id]
+        if visit_count > 0 and children:
+            if tree.kind[node_id] == BELIEF:
+                max_allowed = int(planner.k_a * (visit_count**planner.alpha_a)) + 1
+                assert len(children) <= max_allowed, (
+                    f"BELIEF node {node_id} has {len(children)} action children but "
+                    f"PW allows at most {max_allowed} (k_a={planner.k_a}, "
+                    f"alpha_a={planner.alpha_a}, visit_count={visit_count})"
+                )
+            else:
+                max_allowed = int(planner.k_o * (visit_count**planner.alpha_o)) + 1
+                assert len(children) <= max_allowed, (
+                    f"ACTION node {node_id} has {len(children)} belief children but "
+                    f"PW allows at most {max_allowed} (k_o={planner.k_o}, "
+                    f"alpha_o={planner.alpha_o}, visit_count={visit_count})"
+                )
