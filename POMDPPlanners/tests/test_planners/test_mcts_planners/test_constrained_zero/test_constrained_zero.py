@@ -15,7 +15,7 @@ import torch
 
 from POMDPPlanners.core.belief import WeightedParticleBelief, get_initial_belief
 from POMDPPlanners.core.simulation.history import History, StepData
-from POMDPPlanners.core.tree.arena import Tree
+from POMDPPlanners.core.tree.arena import ACTION, BELIEF, Tree
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.planners.mcts_planners.beta_zero.beta_zero import BetaZero
 from POMDPPlanners.planners.mcts_planners.constrained_zero.constrained_training_buffer import (
@@ -546,3 +546,123 @@ class TestConstrainedZeroFit:
         metrics = trainer.train()
 
         assert "failure_loss" in metrics
+
+
+class TestConstrainedZeroTreeStructure:
+    """Tests for tree structure and statistics after a real plan."""
+
+    def test_tree_structure_after_plan(self, tiger_planner, initial_belief):
+        """Test arena tree has well-formed structure after _learn_tree.
+
+        Purpose: Validates root-node invariants, BELIEF/ACTION alternation,
+        per-node payload presence, depth bound, and visit-count monotonicity.
+
+        Given: A ConstrainedZero planner and an initial belief.
+        When: _learn_tree is called to build the search tree.
+        Then: The root is a BELIEF with no parent and no observation; every
+              non-root node has a parent; visit counts are non-negative;
+              BELIEF and ACTION nodes alternate; BELIEF nodes carry a belief
+              and ACTION nodes carry an action; BFS-depth from root is at
+              most 2 * planner.depth + 2; and every node's visit_count is
+              at least the sum of its children's visit_counts.
+
+        Test type: unit
+        """
+        tree, root_id = tiger_planner._learn_tree(initial_belief)
+
+        assert tree.kind[root_id] == BELIEF
+        assert tree.parent_id[root_id] is None
+        assert tree.observation[root_id] is None
+        assert len(tree.children_ids[root_id]) > 0
+
+        max_observed_depth = 0
+        frontier = [(root_id, 0)]
+        visited_ids = []
+        while frontier:
+            node_id, d = frontier.pop()
+            visited_ids.append(node_id)
+            max_observed_depth = max(max_observed_depth, d)
+            for cid in tree.children_ids[node_id]:
+                frontier.append((cid, d + 1))
+
+        for node_id in visited_ids:
+            assert tree.visit_count[node_id] >= 0
+            if node_id != root_id:
+                assert tree.parent_id[node_id] is not None
+            if tree.kind[node_id] == BELIEF:
+                assert tree.belief[node_id] is not None
+                for cid in tree.children_ids[node_id]:
+                    assert tree.kind[cid] == ACTION
+            else:
+                assert tree.kind[node_id] == ACTION
+                assert tree.action[node_id] is not None
+                for cid in tree.children_ids[node_id]:
+                    assert tree.kind[cid] == BELIEF
+
+            children = tree.children_ids[node_id]
+            if children:
+                children_visit_sum = sum(tree.visit_count[c] for c in children)
+                assert tree.visit_count[node_id] >= children_visit_sum
+
+        assert max_observed_depth <= 2 * tiger_planner.depth + 2
+
+    def test_failure_dict_populated_after_plan(self, tiger_planner, initial_belief):
+        """Test _failure_dict has entries for every visited action node.
+
+        Purpose: Validates the failure-tracking dict is populated for all
+        action nodes that were actually visited during MCTS, with values in
+        the valid probability range [0.0, 1.0].
+
+        Given: A ConstrainedZero planner and an initial belief.
+        When: _learn_tree is called to build the search tree.
+        Then: _failure_dict is non-empty, and every ACTION node with
+              visit_count > 0 in the tree has an entry in _failure_dict
+              whose value lies in [0.0, 1.0].
+
+        Test type: unit
+        """
+        tree, _ = tiger_planner._learn_tree(initial_belief)
+
+        assert len(tiger_planner._failure_dict) > 0
+
+        for node_id in range(len(tree)):
+            if tree.kind[node_id] != ACTION:
+                continue
+            if tree.visit_count[node_id] <= 0:
+                continue
+            assert node_id in tiger_planner._failure_dict
+            failure_value = tiger_planner._failure_dict[node_id]
+            assert 0.0 <= failure_value <= 1.0
+
+    def test_v_value_matches_max_q_of_children(self, tiger_planner, initial_belief):
+        """Test v_value of each visited belief equals max q over its children.
+
+        Purpose: Validates the ConstrainedZero v-value update rule
+        (_update_node_statistics_constrained) which sets
+        v_value[belief] = max(q_value[c] for c in children).
+
+        Given: A ConstrainedZero planner and an initial belief.
+        When: _learn_tree is called to build the search tree.
+        Then: For every BELIEF node with at least one action child where
+              some child has visit_count > 0, the stored v_value matches
+              the max of q_values over ALL children (unvisited children
+              contribute q_value=0.0 by default).
+
+        Test type: unit
+        """
+        tree, _ = tiger_planner._learn_tree(initial_belief)
+
+        checked_any = False
+        for node_id in range(len(tree)):
+            if tree.kind[node_id] != BELIEF:
+                continue
+            children = tree.children_ids[node_id]
+            if not children:
+                continue
+            if not any(tree.visit_count[c] > 0 for c in children):
+                continue
+            expected = max(tree.q_value[c] for c in children)
+            assert np.isclose(tree.v_value[node_id], expected)
+            checked_any = True
+
+        assert checked_any

@@ -687,3 +687,45 @@ def test_sparse_pft_config_id_hash_properties():
     # Should be a valid hexadecimal hash (SHA-256 produces 64 hex characters)
     assert len(config_id) == 64
     assert all(c in "0123456789abcdef" for c in config_id.lower())
+
+
+def test_q_value_v_value_consistency(planner, initial_belief):
+    """Verify ``v_value`` of every BELIEF node equals max ``q_value`` over its children.
+
+    Purpose: Pins down the contract enforced by ``update_nodes`` in SparsePFT:
+        after each backup, ``tree.v_value[belief_id]`` equals the max
+        ``tree.q_value[c]`` across all children of that belief node. This
+        guards against silent drift if a future refactor changes the
+        aggregator or filters children by visit count.
+
+    Given: The ``planner`` fixture (SparsePFT on TigerPOMDP, depth=3,
+        belief_child_num=2, n_simulations=100) and the ``initial_belief``
+        fixture; ``_learn_tree`` builds the arena tree.
+    When: Every BELIEF node with non-empty children is enumerated and the
+        observed ``tree.v_value[belief_id]`` is compared against
+        ``max(tree.q_value[c] for c in tree.children_ids[belief_id])`` taken
+        over ALL action children (no visit-count filter), matching the
+        ``update_nodes`` source behavior.
+    Then: The values agree within ``atol=1e-9`` (float-tolerant equality via
+        ``pytest.approx``).
+
+    Test type: unit
+    """
+    tree, root_id = planner._learn_tree(belief=initial_belief)
+    assert tree.kind[root_id] == BELIEF  # sanity: root is a belief node
+
+    n_nodes = len(tree)
+    n_belief_nodes_checked = 0
+    for node_id in range(n_nodes):
+        if tree.kind[node_id] != BELIEF:
+            continue
+        children = tree.children_ids[node_id]
+        if not children:
+            continue
+        expected_v = max(tree.q_value[c] for c in children)
+        observed_v = tree.v_value[node_id]
+        assert observed_v == pytest.approx(expected_v, abs=1e-9)
+        n_belief_nodes_checked += 1
+
+    # Sanity: at least the root should have been checked.
+    assert n_belief_nodes_checked >= 1
