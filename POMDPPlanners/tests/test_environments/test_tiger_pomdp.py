@@ -846,3 +846,71 @@ class TestTigerBatchMethods:
             states, "open_right", "hear_left"
         )
         assert np.all(result == -np.inf)
+
+
+class TestTigerListenObservationKernelValidDistribution:
+    """Tests pinning the listen-action observation kernel as a valid distribution.
+
+    Regressions for C1: scalar ``observation_log_probability`` previously returned
+    ``log(0.15)`` for the impossible event ``(action=listen, obs=hear_nothing, *)``,
+    making the kernel sum to 1.15 across declared observations and disagreeing
+    with both the batch path and the sampler.
+    """
+
+    def test_listen_kernel_sums_to_one_tiger_left(self, tiger_pomdp: TigerPOMDP):
+        """Listen-action observation kernel sums to 1.0 over all declared observations.
+
+        Purpose: Validates the listen scalar kernel is a valid probability distribution
+            over OBSERVATIONS for state=tiger_left.
+
+        Given: TigerPOMDP env, state=tiger_left, action=listen.
+        When: scalar observation_log_probability is queried over the full
+            observation vocabulary [hear_left, hear_right, hear_nothing].
+        Then: sum(exp(log_probs)) == 1.0 within atol=1e-12.
+
+        Test type: unit
+        """
+        log_probs = tiger_pomdp.observation_log_probability(
+            "tiger_left", "listen", ["hear_left", "hear_right", "hear_nothing"]
+        )
+        assert float(np.sum(np.exp(log_probs))) == pytest.approx(1.0, abs=1e-12)
+
+    def test_listen_kernel_sums_to_one_tiger_right(self, tiger_pomdp: TigerPOMDP):
+        """Listen-action observation kernel sums to 1.0 — symmetric case.
+
+        Purpose: Same as the tiger_left case but with state=tiger_right to confirm
+            the bug was symmetric across states.
+
+        Given: TigerPOMDP env, state=tiger_right, action=listen.
+        When: scalar observation_log_probability is queried over the full
+            observation vocabulary.
+        Then: sum(exp(log_probs)) == 1.0 within atol=1e-12.
+
+        Test type: unit
+        """
+        log_probs = tiger_pomdp.observation_log_probability(
+            "tiger_right", "listen", ["hear_left", "hear_right", "hear_nothing"]
+        )
+        assert float(np.sum(np.exp(log_probs))) == pytest.approx(1.0, abs=1e-12)
+
+    @pytest.mark.parametrize("state", ["tiger_left", "tiger_right"])
+    def test_listen_with_hear_nothing_returns_neg_inf(self, tiger_pomdp: TigerPOMDP, state: str):
+        """observation_log_probability(listen, hear_nothing, *) returns -inf.
+
+        Purpose: Validates that ``hear_nothing`` is treated as impossible under
+            ``listen`` — only ``hear_left`` and ``hear_right`` are emittable.
+
+        Given: TigerPOMDP env, action=listen, observation=hear_nothing, parametrized
+            over both tiger states.
+        When: scalar observation_log_probability is queried.
+        Then: log-prob is -inf, agreeing with the batch path's documented contract.
+
+        Test type: unit
+        """
+        scalar = tiger_pomdp.observation_log_probability(state, "listen", ["hear_nothing"])[0]
+        batch = tiger_pomdp.observation_log_probability_per_state(
+            [state], "listen", "hear_nothing"
+        )[0]
+        assert scalar == -np.inf
+        assert batch == -np.inf
+        assert scalar == batch  # parity
