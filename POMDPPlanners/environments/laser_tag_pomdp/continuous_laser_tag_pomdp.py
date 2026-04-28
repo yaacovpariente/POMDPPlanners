@@ -27,7 +27,6 @@ Classes:
 
 from __future__ import annotations
 
-import math
 from enum import Enum
 from pathlib import Path
 from collections.abc import Hashable
@@ -337,24 +336,28 @@ class ContinuousLaserTagPOMDP(Environment):
     ) -> np.ndarray:
         kernel = self._get_obs_kernel(action)
         kernel.set_next_state(next_state)
-        # kernel.probability returns a C-contiguous float64 ndarray; skip
-        # the redundant np.asarray wrap.
-        probs = kernel.probability(observations)
-        with np.errstate(divide="ignore"):
-            return np.log(probs)
+        # B1 fix: call kernel.log_probability(...) directly instead of
+        # np.log(kernel.probability(...)). The legacy probability path
+        # round-trips log_pdf through std::exp, which underflows to 0.0
+        # for low-density observations and makes np.log return -inf,
+        # disagreeing with the batched
+        # ``observation_log_probability_per_state`` path that goes
+        # through ``batch_log_likelihood``. log_probability returns
+        # log_pdf directly, eliminating the round-trip.
+        return kernel.log_probability(observations)
 
     def observation_log_probability_single(
         self, next_state: Any, action: Any, observation: Any
     ) -> float:
         # Scalar fast-path for POMCPOW's WeightedParticleBeliefStateUpdate.
-        # Skips the size-1 np.asarray + np.errstate + np.log wrap that the
-        # batched path would do, and the [0] re-index in the base default.
+        # B1 fix: use kernel.log_probability so low-density observations
+        # whose log_pdf is below the IEEE-754 ``exp`` underflow boundary
+        # still return a finite, large-negative log-likelihood instead of
+        # collapsing to -inf via the legacy ``np.log(probability(...))``
+        # round-trip.
         kernel = self._get_obs_kernel(action)
         kernel.set_next_state(next_state)
-        prob = float(kernel.probability([observation])[0])
-        if prob <= 0.0:
-            return -math.inf
-        return math.log(prob)
+        return float(kernel.log_probability([observation])[0])
 
     def sample_next_state_batch(self, states: Any, action: np.ndarray) -> np.ndarray:
         # Short-circuit when the caller already hands us a C-contiguous
