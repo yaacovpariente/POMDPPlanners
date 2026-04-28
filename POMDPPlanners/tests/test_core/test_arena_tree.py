@@ -5,6 +5,8 @@ The arena tree has no node objects: a node is an integer ID into the
 tests validate that contract.
 """
 
+# pylint: disable=too-many-lines
+
 import random
 from unittest.mock import Mock
 
@@ -598,3 +600,457 @@ def test_set_immediate_reward_mirrors_to_immediate_cost(belief):
     tree.set_immediate_reward(nid, None)
     assert tree.immediate_reward[nid] is None
     assert tree.immediate_cost[nid] == 99.0
+
+
+def test_best_action_by_reward_returns_action_with_highest_q_value(belief):
+    """best_action_by_reward picks the action label of the max-q child.
+
+    Purpose: Validates the reward-setting argmax used to extract the
+    final action recommendation from a search tree.
+
+    Given: A belief root with three action children whose q_values are
+    1.0, 5.0, 3.0.
+    When: best_action_by_reward is called on the root.
+    Then: The action label of the q=5.0 child is returned.
+
+    Test type: unit
+    """
+    tree = Tree()
+    root = tree.add_belief_node(belief)
+    a_low = tree.add_action_node("low", parent_id=root)
+    a_high = tree.add_action_node("high", parent_id=root)
+    a_mid = tree.add_action_node("mid", parent_id=root)
+    tree.q_value[a_low] = 1.0
+    tree.q_value[a_high] = 5.0
+    tree.q_value[a_mid] = 3.0
+    assert tree.best_action_by_reward(root) == "high"
+
+
+def test_best_action_by_reward_raises_when_belief_has_no_action_children(belief):
+    """best_action_by_reward on a childless belief raises ValueError.
+
+    Purpose: Validates the empty-children edge case — there is no
+    well-defined argmax when there are no candidates.
+
+    Given: A belief root with no action children.
+    When: best_action_by_reward is called.
+    Then: ValueError mentioning "no action children".
+
+    Test type: unit
+    """
+    tree = Tree()
+    root = tree.add_belief_node(belief)
+    with pytest.raises(ValueError, match="no action children"):
+        tree.best_action_by_reward(root)
+
+
+def test_best_action_by_cost_returns_action_with_lowest_q_value(belief):
+    """best_action_by_cost picks the action label of the min-q child.
+
+    Purpose: Validates the cost-setting argmin — symmetric counterpart
+    to best_action_by_reward.
+
+    Given: A belief root with three action children whose q_values are
+    4.0, -2.0, 1.0.
+    When: best_action_by_cost is called on the root.
+    Then: The action label of the q=-2.0 child is returned.
+
+    Test type: unit
+    """
+    tree = Tree()
+    root = tree.add_belief_node(belief)
+    a_high = tree.add_action_node("high", parent_id=root)
+    a_low = tree.add_action_node("low", parent_id=root)
+    a_mid = tree.add_action_node("mid", parent_id=root)
+    tree.q_value[a_high] = 4.0
+    tree.q_value[a_low] = -2.0
+    tree.q_value[a_mid] = 1.0
+    assert tree.best_action_by_cost(root) == "low"
+
+
+def test_best_action_by_cost_raises_when_belief_has_no_action_children(belief):
+    """best_action_by_cost on a childless belief raises ValueError.
+
+    Purpose: Symmetric edge case to best_action_by_reward.
+
+    Given: A belief root with no action children.
+    When: best_action_by_cost is called.
+    Then: ValueError mentioning "no action children".
+
+    Test type: unit
+    """
+    tree = Tree()
+    root = tree.add_belief_node(belief)
+    with pytest.raises(ValueError, match="no action children"):
+        tree.best_action_by_cost(root)
+
+
+def test_sample_belief_child_zero_total_weight_raises(belief):
+    """sample_belief_child raises when all child weights are zero.
+
+    Purpose: Validates the second guard in sample_belief_child — children
+    exist but their CDF total is non-positive, so weighted sampling is
+    undefined. (The "no children" branch is covered separately.)
+
+    Given: An action node with two belief children each added with weight=0.0.
+    When: sample_belief_child is called.
+    Then: ValueError mentioning "non-positive".
+
+    Test type: unit
+    """
+    tree = Tree()
+    root = tree.add_belief_node(belief)
+    action = tree.add_action_node("a", parent_id=root)
+    tree.add_belief_node(belief, observation="o1", weight=0.0, parent_id=action)
+    tree.add_belief_node(belief, observation="o2", weight=0.0, parent_id=action)
+    with pytest.raises(ValueError, match="non-positive"):
+        tree.sample_belief_child(action)
+
+
+def test_add_belief_node_obs_key_overrides_observation_in_index(belief):
+    """Explicit obs_key shadows the raw observation in obs_child_lookup.
+
+    Purpose: Validates the obs_key branch of _register_obs_child — when
+    the caller supplies a hashable surrogate, the index is keyed by that
+    surrogate alone; the raw observation is NOT also registered.
+
+    Given: An action node and a belief child added with both a hashable
+    observation="raw" and obs_key="K".
+    When: get_belief_child_indexed is called with obs_key="K" and again
+    with the raw observation.
+    Then: obs_key="K" returns the child ID; the raw observation returns
+    None (only the surrogate was registered).
+
+    Test type: unit
+    """
+    tree = Tree()
+    root = tree.add_belief_node(belief)
+    action = tree.add_action_node("a", parent_id=root)
+    cid = tree.add_belief_node(belief, observation="raw", parent_id=action, obs_key="K")
+    assert tree.get_belief_child_indexed(action, obs_key="K") == cid
+    assert tree.get_belief_child_indexed(action, observation="raw") is None
+
+
+def test_add_action_node_action_key_overrides_action_in_index(belief):
+    """Explicit action_key shadows the raw action in action_child_lookup.
+
+    Purpose: Symmetric to obs_key override — when the caller supplies a
+    hashable surrogate, only the surrogate is registered.
+
+    Given: A belief root and an action child added with both a hashable
+    action="raw" and action_key="K".
+    When: get_action_child_indexed is called with action_key="K" and again
+    with the raw action.
+    Then: action_key="K" returns the child ID; the raw action returns None.
+
+    Test type: unit
+    """
+    tree = Tree()
+    root = tree.add_belief_node(belief)
+    aid = tree.add_action_node("raw", parent_id=root, action_key="K")
+    assert tree.get_action_child_indexed(root, action_key="K") == aid
+    assert tree.get_action_child_indexed(root, action="raw") is None
+
+
+def test_get_belief_child_indexed_with_obs_key_for_unhashable_observation(belief):
+    """obs_key enables indexed lookup when the raw observation is unhashable.
+
+    Purpose: Validates the typical caller pattern — supply a hashable
+    surrogate (here an int) when the actual observation is an ndarray.
+
+    Given: An action node with a belief child whose observation is an
+    ndarray and whose obs_key is the integer 42.
+    When: get_belief_child_indexed is called with obs_key=42 and obs_key=99.
+    Then: 42 returns the child ID; 99 returns None.
+
+    Test type: unit
+    """
+    tree = Tree()
+    root = tree.add_belief_node(belief)
+    action = tree.add_action_node("a", parent_id=root)
+    cid = tree.add_belief_node(
+        belief, observation=np.array([1.0, 2.0]), parent_id=action, obs_key=42
+    )
+    assert tree.get_belief_child_indexed(action, obs_key=42) == cid
+    assert tree.get_belief_child_indexed(action, obs_key=99) is None
+
+
+def test_get_action_child_indexed_with_action_key_for_unhashable_action(belief):
+    """action_key enables indexed lookup when the raw action is unhashable.
+
+    Purpose: Symmetric to the obs_key get-side test — supply a hashable
+    surrogate when the actual action is an ndarray.
+
+    Given: A belief root with an action child whose action is an ndarray
+    and whose action_key is the integer 42.
+    When: get_action_child_indexed is called with action_key=42 and 99.
+    Then: 42 returns the child ID; 99 returns None.
+
+    Test type: unit
+    """
+    tree = Tree()
+    root = tree.add_belief_node(belief)
+    aid = tree.add_action_node(np.array([1.0, 2.0]), parent_id=root, action_key=42)
+    assert tree.get_action_child_indexed(root, action_key=42) == aid
+    assert tree.get_action_child_indexed(root, action_key=99) is None
+
+
+def test_reserve_does_not_change_logical_size(belief):
+    """reserve(capacity) leaves len(tree) unchanged.
+
+    Purpose: Validates that pre-allocation is invisible to the logical
+    node count — only the underlying column buffers are padded.
+
+    Given: A fresh Tree.
+    When: reserve(100) is called, then one belief node is added.
+    Then: len(tree) is 0 immediately after reserve, and 1 after the add.
+
+    Test type: unit
+    """
+    tree = Tree()
+    tree.reserve(100)
+    assert len(tree) == 0
+    tree.add_belief_node(belief)
+    assert len(tree) == 1
+
+
+def test_reserve_pads_every_column_to_capacity():
+    """reserve(capacity) physically grows every per-node column.
+
+    Purpose: Validates that the schema list inside reserve is complete —
+    if a column is added to __init__/_allocate but not to reserve's list,
+    that column would be undersized after reserve and the next overwrite
+    would IndexError. This test catches that.
+
+    Given: A fresh Tree.
+    When: reserve(50) is called.
+    Then: Every per-node column has length 50.
+
+    Test type: unit
+    """
+    tree = Tree()
+    tree.reserve(50)
+    columns = [
+        tree.kind,
+        tree.parent_id,
+        tree.children_ids,
+        tree.visit_count,
+        tree.q_value,
+        tree.v_value,
+        tree.lower_confidence_bound,
+        tree.upper_confidence_bound,
+        tree.immediate_cost,
+        tree.immediate_reward,
+        tree.weight,
+        tree.action,
+        tree.observation,
+        tree.belief,
+        tree.data,
+        tree.sample,
+        tree.children_cdf,
+        tree.position_in_parent,
+    ]
+    for column in columns:
+        assert len(column) == 50
+
+
+def test_reserve_behavioral_equivalence_with_unreserved_tree(belief):
+    """A reserved tree and an unreserved tree built with the same calls
+    have identical column contents.
+
+    Purpose: Validates that the "reserved-slot overwrite" branch in
+    _allocate produces the same defaults and structure as the "append"
+    branch — i.e. reserve is a perf-only optimisation, not a behavioural
+    change.
+
+    Given: Two Tree instances built with identical add sequences (root +
+    two actions + two beliefs under the first action), with non-default
+    weights and observations. One calls reserve(10) before the adds.
+    When: All five nodes have been added on each tree.
+    Then: For every node ID, every column has the same value in both trees.
+
+    Test type: unit
+    """
+
+    def build(reserve_capacity):
+        tree = Tree()
+        if reserve_capacity is not None:
+            tree.reserve(reserve_capacity)
+        root = tree.add_belief_node(belief, weight=2.0)
+        a0 = tree.add_action_node("a0", parent_id=root)
+        tree.add_action_node("a1", parent_id=root)
+        tree.add_belief_node(belief, observation="o0", weight=1.5, parent_id=a0)
+        tree.add_belief_node(belief, observation="o1", weight=0.5, parent_id=a0)
+        return tree
+
+    reserved = build(reserve_capacity=10)
+    unreserved = build(reserve_capacity=None)
+
+    assert len(reserved) == len(unreserved) == 5
+    for nid in range(len(reserved)):
+        assert reserved.kind[nid] == unreserved.kind[nid]
+        assert reserved.parent_id[nid] == unreserved.parent_id[nid]
+        assert reserved.children_ids[nid] == unreserved.children_ids[nid]
+        assert reserved.weight[nid] == unreserved.weight[nid]
+        assert reserved.observation[nid] == unreserved.observation[nid]
+        assert reserved.action[nid] == unreserved.action[nid]
+        assert reserved.children_cdf[nid] == unreserved.children_cdf[nid]
+        assert reserved.position_in_parent[nid] == unreserved.position_in_parent[nid]
+        assert reserved.q_value[nid] == unreserved.q_value[nid]
+        assert reserved.visit_count[nid] == unreserved.visit_count[nid]
+        assert reserved.v_value[nid] == unreserved.v_value[nid]
+        assert reserved.immediate_cost[nid] == unreserved.immediate_cost[nid]
+        assert reserved.immediate_reward[nid] == unreserved.immediate_reward[nid]
+
+
+def test_reserve_then_allocate_past_capacity_falls_back_to_append(belief):
+    """Allocations beyond reserved capacity transparently fall back to append.
+
+    Purpose: Validates the second branch of _allocate — once the cursor
+    crosses len(self.kind), columns grow normally via append.
+
+    Given: A tree with reserve(2).
+    When: Five belief nodes are added.
+    Then: IDs are 0..4, len(tree) is 5, and column length is 5 (not 2).
+
+    Test type: unit
+    """
+    tree = Tree()
+    tree.reserve(2)
+    ids = [tree.add_belief_node(belief) for _ in range(5)]
+    assert ids == [0, 1, 2, 3, 4]
+    assert len(tree) == 5
+    assert len(tree.kind) == 5
+
+
+def test_reserve_idempotent_when_growing_preserves_existing_nodes(belief):
+    """Re-reserving to a larger capacity preserves already-allocated nodes.
+
+    Purpose: Validates the "pad up to capacity, leaving existing nodes
+    untouched" semantics — calling reserve more than once must not
+    corrupt prior data.
+
+    Given: A tree with two nodes already added (root belief and one action).
+    When: reserve(20) is called.
+    Then: len(tree) is unchanged at 2; column length is 20; node 0 and
+    node 1 retain their kind, weight, action, and parent values.
+
+    Test type: unit
+    """
+    tree = Tree()
+    root = tree.add_belief_node(belief, weight=2.5)
+    tree.add_action_node("a", parent_id=root)
+    assert len(tree.kind) == 2
+
+    tree.reserve(20)
+
+    assert len(tree) == 2
+    assert len(tree.kind) == 20
+    assert tree.kind[0] == BELIEF
+    assert tree.kind[1] == ACTION
+    assert tree.weight[0] == 2.5
+    assert tree.action[1] == "a"
+    assert tree.parent_id[1] == 0
+
+
+def test_reserve_is_noop_when_capacity_below_current_size(belief):
+    """reserve(capacity) with capacity < _size never shrinks the columns.
+
+    Purpose: Validates the target_len = max(_size, capacity) clause —
+    reserve grows-only, never truncates.
+
+    Given: A tree with 3 nodes already added.
+    When: reserve(1) is called (capacity below current size).
+    Then: len(tree) stays at 3; column length stays at 3; existing entries
+    are preserved.
+
+    Test type: unit
+    """
+    tree = Tree()
+    root = tree.add_belief_node(belief)
+    action = tree.add_action_node("a", parent_id=root)
+    tree.add_belief_node(belief, parent_id=action)
+    assert len(tree.kind) == 3
+
+    tree.reserve(1)
+
+    assert len(tree) == 3
+    assert len(tree.kind) == 3
+    assert tree.kind[0] == BELIEF
+    assert tree.kind[1] == ACTION
+    assert tree.kind[2] == BELIEF
+
+
+def test_print_emits_root_label_and_metrics_format(belief, capsys):
+    """print on a single root emits a BeliefNode[0] line with metrics.
+
+    Purpose: Validates the rendering format for a node — label, ID,
+    observation payload, and visits/q/v formatted with three decimals.
+
+    Given: A Tree with one belief root.
+    When: print(0) is called and stdout is captured.
+    Then: Output contains "BeliefNode[0]", "obs=None", "visits=0",
+    "q=0.000", "v=0.000".
+
+    Test type: unit
+    """
+    tree = Tree()
+    tree.add_belief_node(belief)
+    tree.print(0)
+    out = capsys.readouterr().out
+    assert "BeliefNode[0]" in out
+    assert "obs=None" in out
+    assert "visits=0" in out
+    assert "q=0.000" in out
+    assert "v=0.000" in out
+
+
+def test_print_uses_branch_markers_for_first_and_last_children(belief, capsys):
+    """A parent with two children renders both branch glyphs.
+
+    Purpose: Validates the last-vs-not-last branch in _render — the only
+    conditional in the renderer.
+
+    Given: A belief root with two action children "a0" and "a1".
+    When: print(0) is called.
+    Then: Output contains "├── " (first child), "└── " (last child),
+    "ActionNode[1]", "ActionNode[2]", "action=a0", "action=a1".
+
+    Test type: unit
+    """
+    tree = Tree()
+    root = tree.add_belief_node(belief)
+    tree.add_action_node("a0", parent_id=root)
+    tree.add_action_node("a1", parent_id=root)
+    tree.print(0)
+    out = capsys.readouterr().out
+    assert "├── " in out
+    assert "└── " in out
+    assert "ActionNode[1]" in out
+    assert "ActionNode[2]" in out
+    assert "action=a0" in out
+    assert "action=a1" in out
+
+
+def test_print_subtree_omits_lines_outside_subtree(belief, capsys):
+    """print(node_id) renders only the subtree rooted at node_id.
+
+    Purpose: Validates that _render's recursion stays local — sibling
+    and ancestor nodes are not printed.
+
+    Given: A 3-node tree: BeliefNode[0] -> ActionNode[1] -> BeliefNode[2].
+    When: print(1) is called (the action node, not the root).
+    Then: ActionNode[1] and BeliefNode[2] appear in the output;
+    BeliefNode[0] does not.
+
+    Test type: unit
+    """
+    tree = Tree()
+    root = tree.add_belief_node(belief)
+    action = tree.add_action_node("a", parent_id=root)
+    tree.add_belief_node(belief, observation="o", parent_id=action)
+    tree.print(action)
+    out = capsys.readouterr().out
+    assert "ActionNode[1]" in out
+    assert "BeliefNode[2]" in out
+    assert "BeliefNode[0]" not in out
