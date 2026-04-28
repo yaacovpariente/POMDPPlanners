@@ -492,6 +492,43 @@ class TestPushPOMDP:
         assert worst_reward >= env.reward_range[0]
         assert best_reward <= env.reward_range[1]
 
+    def test_reward_range_includes_obstacle_penalty_when_obstacles_configured(self):
+        """Advertised reward_range[0] bounds rewards even on obstacle collisions.
+
+        Purpose: Regression for D1 — the constructor previously set
+            ``min_reward = -max_distance`` without accounting for
+            ``obstacle_penalty``, so any robot action that drove into an obstacle
+            produced a reward strictly more negative than the advertised
+            ``reward_range[0]``.
+
+        Given: A PushPOMDP with grid_size=10, a single obstacle at (3, 3),
+            obstacle_radius=0.5, obstacle_penalty=-10.0. A constructed state
+            placing the robot at (3.0, 3.5) and a target at (9, 9), then
+            action=down which pushes the robot onto the obstacle.
+        When: env.reward(state, action) is computed.
+        Then: The reward is >= advertised reward_range[0]. Currently fails
+            because reward = -dist_to_target + obstacle_penalty
+            ≈ -8.485 + -10.0 = -18.485 while reward_range[0] ≈ -12.728.
+
+        Test type: unit
+        """
+        env = PushPOMDP(
+            discount_factor=0.95,
+            grid_size=10,
+            obstacles=[(3.0, 3.0)],
+            obstacle_radius=0.5,
+            obstacle_penalty=-10.0,
+        )
+        state = np.array([3.0, 3.5, 0.0, 0.0, 9.0, 9.0])
+        action = "down"
+        reward = env.reward(state, action)
+        assert env.reward_range is not None
+        assert reward >= env.reward_range[0], (
+            f"Reward {reward:.3f} violates advertised reward_range[0] "
+            f"= {env.reward_range[0]:.3f}; obstacle_penalty must be reflected "
+            f"in min_reward when obstacles are configured."
+        )
+
     def test_is_equal_observation(self):
         """Test observation equality comparison."""
         # Test equal observations
