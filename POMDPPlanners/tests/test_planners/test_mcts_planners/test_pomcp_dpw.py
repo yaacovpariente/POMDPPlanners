@@ -1167,3 +1167,90 @@ def test_min_visit_count_per_action_enforcement(environment, discrete_action_sam
         assert (
             visits >= min_visit_count
         ), f"Action {tree.action[action_id]} has {visits} visits, expected at least {min_visit_count}"
+
+
+def test_observation_cdf_consistency(
+    environment,
+    discount_factor,
+    depth,
+    exploration_constant,
+    k_o,
+    k_a,
+    alpha_o,
+    alpha_a,
+):
+    """Test that the per-parent children_cdf invariants hold throughout the tree.
+
+    Purpose: Validates the arena tree's ``children_cdf`` (used by
+    ``sample_belief_child`` for O(log K) weighted sampling at observation-widening
+    action nodes) is monotonically non-decreasing and totals to the sum of
+    children weights for every parent in the tree.
+
+    Given: POMCP_DPW planner built with sufficient simulations to expand at least
+    one action node with multiple belief children (n_simulations=300). The action
+    sampler uses the environment's real action space so that observations are not
+    collapsed to a single sentinel by the environment.
+    When: The tree is built via ``_learn_tree`` and every parent (belief and
+    action) is walked.
+    Then: For every parent with children, the CDF length matches children count,
+    is monotonically non-decreasing, and ``cdf[-1]`` equals the sum of children
+    weights within absolute tolerance ``1e-6``. At least one action node has
+    multiple belief children (otherwise the OW invariant is vacuous).
+
+    Test type: unit
+    """
+    cdf_action_sampler = MockActionSampler(environment.get_actions())
+    planner = POMCP_DPW(
+        environment=environment,
+        discount_factor=discount_factor,
+        depth=depth,
+        exploration_constant=exploration_constant,
+        k_o=k_o,
+        k_a=k_a,
+        alpha_o=alpha_o,
+        alpha_a=alpha_a,
+        n_simulations=300,
+        action_sampler=cdf_action_sampler,
+        name="TestPOMCP_DPW_CDF",
+    )
+
+    n_particles = 100
+    belief = get_initial_belief(environment, n_particles=n_particles, resampling=True)
+
+    tree, root_id = planner._learn_tree(belief=belief)
+    del root_id  # walk all parents in the arena instead of subtree-only
+
+    multi_child_action_seen = False
+    for parent_id in range(len(tree)):
+        children = tree.children_ids[parent_id]
+        if not children:
+            continue
+        cdf = tree.children_cdf[parent_id]
+
+        # Length matches.
+        assert len(cdf) == len(children), (
+            f"Parent {parent_id} (kind={tree.kind[parent_id]}) has {len(children)} "
+            f"children but CDF has {len(cdf)} entries"
+        )
+
+        # Monotonic non-decreasing (allow tiny float slack).
+        for i in range(1, len(cdf)):
+            assert cdf[i] >= cdf[i - 1] - 1e-9, (
+                f"Parent {parent_id} CDF not monotone at index {i}: "
+                f"cdf[{i - 1}]={cdf[i - 1]}, cdf[{i}]={cdf[i]}"
+            )
+
+        # Total equals sum of children weights.
+        total_weight = sum(tree.weight[cid] for cid in children)
+        assert abs(cdf[-1] - total_weight) < 1e-6, (
+            f"Parent {parent_id} CDF total {cdf[-1]} != sum of child weights "
+            f"{total_weight} (kind={tree.kind[parent_id]})"
+        )
+
+        if tree.kind[parent_id] == ACTION and len(children) >= 2:
+            multi_child_action_seen = True
+
+    assert multi_child_action_seen, (
+        "No action node with multiple belief children found; observation-widening "
+        "CDF invariant is vacuous on this tree. Increase n_simulations."
+    )

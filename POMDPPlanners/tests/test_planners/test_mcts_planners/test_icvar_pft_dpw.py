@@ -6,7 +6,7 @@ import pytest
 
 from POMDPPlanners.core.environment import SpaceType
 from POMDPPlanners.core.belief import WeightedParticleBelief, get_initial_belief
-from POMDPPlanners.core.tree.arena import BELIEF, Tree
+from POMDPPlanners.core.tree.arena import ACTION, BELIEF, Tree
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
     ContinuousLightDarkPOMDP,
 )
@@ -204,6 +204,120 @@ def test_progressive_widening_constraints(planner, belief):
 
     assert belief_count >= 1, "Tree should contain at least the root belief node"
     assert action_count >= 0, "Tree should contain zero or more action nodes"
+
+
+def test_tree_structure_comprehensive(planner, belief):
+    """Comprehensive structural validation of the iCVaR PFT-DPW search tree.
+
+    Purpose: Validates that the search tree built by ICVaR_PFT_DPW respects all
+    structural invariants: root metadata, BELIEF/ACTION kind alternation, parent
+    pointers, value/visit-count consistency, the cost-channel V=min(Q) backup at
+    BELIEF nodes (note: min, not max, since iCVaR is a cost channel), BFS depth
+    bounds, and progressive widening bounds for both action and observation
+    branches.
+
+    Given: An ICVaR_PFT_DPW planner with progressive-widening parameters and a
+    WeightedParticleBelief with two particles in the continuous light-dark POMDP.
+    When: A full search tree is constructed via planner._learn_tree(belief) and
+    every node is visited via BFS with depth tracking.
+    Then: All structural invariants hold simultaneously across every node in
+    the tree, and the cost-channel V=min(Q) backup matches within float
+    tolerance at every BELIEF node with at least one visited action child.
+
+    Test type: unit
+    """
+    tree, root_id = planner._learn_tree(belief=belief)
+
+    # Root-level invariants
+    assert tree.kind[root_id] == BELIEF
+    assert tree.parent_id[root_id] is None
+    assert tree.observation[root_id] is None
+    assert len(tree.children_ids[root_id]) > 0
+
+    # BFS walk tracking depth
+    max_bfs_depth = 0
+    frontier: list[tuple[int, int]] = [(root_id, 0)]
+    while frontier:
+        node_id, depth = frontier.pop(0)
+        max_bfs_depth = max(max_bfs_depth, depth)
+        _assert_node_invariants(tree, node_id, root_id)
+        _assert_pw_bounds(tree, node_id, planner)
+        for child_id in tree.children_ids[node_id]:
+            frontier.append((child_id, depth + 1))
+
+    max_depth_bound = 2 * planner.depth + 2
+    assert max_bfs_depth <= max_depth_bound, (
+        f"Max BFS depth {max_bfs_depth} exceeds bound {max_depth_bound} "
+        f"(2 * planner.depth + 2 with planner.depth={planner.depth})"
+    )
+
+
+def _assert_node_invariants(tree, node_id, root_id):
+    assert (
+        tree.visit_count[node_id] >= 0
+    ), f"Node {node_id} has negative visit_count {tree.visit_count[node_id]}"
+    if node_id != root_id:
+        assert tree.parent_id[node_id] is not None, f"Non-root node {node_id} has no parent"
+
+    children = tree.children_ids[node_id]
+    node_kind = tree.kind[node_id]
+
+    if node_kind == BELIEF:
+        assert tree.belief[node_id] is not None, f"BELIEF node {node_id} has no belief"
+        assert tree.v_value[node_id] is not None, f"BELIEF node {node_id} has no v_value"
+        for child_id in children:
+            assert (
+                tree.kind[child_id] == ACTION
+            ), f"Child {child_id} of BELIEF node {node_id} is not ACTION"
+        _assert_v_min_backup(tree, node_id, children)
+    else:
+        assert node_kind == ACTION
+        assert tree.action[node_id] is not None, f"ACTION node {node_id} has no action"
+        assert tree.q_value[node_id] is not None, f"ACTION node {node_id} has no q_value"
+        for child_id in children:
+            assert (
+                tree.kind[child_id] == BELIEF
+            ), f"Child {child_id} of ACTION node {node_id} is not BELIEF"
+
+    if children:
+        children_visit_sum = sum(tree.visit_count[c] for c in children)
+        assert tree.visit_count[node_id] >= children_visit_sum, (
+            f"Node {node_id} visit_count {tree.visit_count[node_id]} is less than "
+            f"sum of children visit counts {children_visit_sum}"
+        )
+
+
+def _assert_v_min_backup(tree, belief_node_id, children):
+    visited_action_children = [c for c in children if tree.visit_count[c] > 0]
+    if not visited_action_children:
+        return
+    expected_v = min(tree.q_value[c] for c in visited_action_children)
+    actual_v = tree.v_value[belief_node_id]
+    assert actual_v == pytest.approx(expected_v), (
+        f"BELIEF node {belief_node_id}: v_value={actual_v} does not equal "
+        f"min over visited action children q_values={expected_v}"
+    )
+
+
+def _assert_pw_bounds(tree, node_id, planner):
+    visit_count = tree.visit_count[node_id]
+    if visit_count <= 0:
+        return
+    children = tree.children_ids[node_id]
+    if tree.kind[node_id] == BELIEF:
+        max_allowed = int(planner.k_a * (visit_count**planner.alpha_a)) + 1
+        assert len(children) <= max_allowed, (
+            f"BELIEF node {node_id} has {len(children)} children, exceeds "
+            f"PW bound {max_allowed} (k_a={planner.k_a}, alpha_a={planner.alpha_a}, "
+            f"visit_count={visit_count})"
+        )
+    else:
+        max_allowed = int(planner.k_o * (visit_count**planner.alpha_o)) + 1
+        assert len(children) <= max_allowed, (
+            f"ACTION node {node_id} has {len(children)} children, exceeds "
+            f"PW bound {max_allowed} (k_o={planner.k_o}, alpha_o={planner.alpha_o}, "
+            f"visit_count={visit_count})"
+        )
 
 
 class TestICVaR_PFT_DPWEpisodeTests:
