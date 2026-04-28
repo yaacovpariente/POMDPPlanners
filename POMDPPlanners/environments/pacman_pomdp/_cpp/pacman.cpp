@@ -33,6 +33,15 @@ namespace {
 
 constexpr int kNumMoves = 5;  // N, E, S, W, Stay  (matches pacman_grid_utils)
 
+// Defensive flooring constants applied symmetrically by ``probability`` /
+// ``batch_log_likelihood`` so the env-API scalar (np.log(prob)) and batch
+// (log-pdf) paths agree on the same floored value (~ -690.776) for
+// impossible events. ``std::log`` is not constexpr in C++17 so the log
+// constant is a hard-coded ``static const double`` matching
+// ``std::log(kProbFloor)``.
+constexpr double kProbFloor = 1e-300;
+static const double kLogProbFloor = -690.7755278982137;  // == std::log(kProbFloor)
+
 enum class GhostCoord : int {
     Independent = 0,
     Coordinated = 1,
@@ -736,6 +745,14 @@ class PacManTransitionCpp {
                 obuf(static_cast<py::ssize_t>(i)) /= total;
             }
         }
+        // Symmetric defensive flooring: keep impossible candidates from
+        // emitting np.log(0) = -inf through the env API (mirrors the
+        // log-floor applied in batch_log_likelihood paths elsewhere).
+        for (std::size_t i = 0; i < n; ++i) {
+            if (obuf(static_cast<py::ssize_t>(i)) < kProbFloor) {
+                obuf(static_cast<py::ssize_t>(i)) = kProbFloor;
+            }
+        }
         return out;
     }
 
@@ -973,7 +990,11 @@ class PacManObservationCpp {
         for (std::size_t i = 0; i < batch.n; ++i) {
             const double *row = &batch.flat[i * 2 * env_.num_ghosts];
             const double log_lp = observation_log_pdf(env_, state.data(), row);
-            buf(static_cast<py::ssize_t>(i)) = std::isfinite(log_lp) ? std::exp(log_lp) : 0.0;
+            double prob = std::isfinite(log_lp) ? std::exp(log_lp) : 0.0;
+            if (prob < kProbFloor) {
+                prob = kProbFloor;
+            }
+            buf(static_cast<py::ssize_t>(i)) = prob;
         }
         return out;
     }
@@ -1002,8 +1023,11 @@ class PacManObservationCpp {
             for (int d = 0; d < nd; ++d) {
                 scratch[d] = src(static_cast<py::ssize_t>(i), d);
             }
-            buf(static_cast<py::ssize_t>(i)) = observation_log_pdf(env_, scratch.data(),
-                                                                    obs_copy.data());
+            double log_prob = observation_log_pdf(env_, scratch.data(), obs_copy.data());
+            if (log_prob < kLogProbFloor) {
+                log_prob = kLogProbFloor;
+            }
+            buf(static_cast<py::ssize_t>(i)) = log_prob;
         }
         return out;
     }

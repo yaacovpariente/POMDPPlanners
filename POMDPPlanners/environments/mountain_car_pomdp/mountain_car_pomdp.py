@@ -229,7 +229,8 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
         kernel = self._get_trans_kernel(int(action))
         kernel.set_state(state)
         probs = np.asarray(kernel.probability(next_states))
-        return np.log(probs + 1e-300)
+        with np.errstate(divide="ignore"):
+            return np.log(probs)
 
     def observation_log_probability(
         self,
@@ -240,7 +241,8 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
         kernel = self._get_obs_kernel(int(action))
         kernel.set_next_state(next_state)
         probs = np.asarray(kernel.probability(observations))
-        return np.log(probs + 1e-300)
+        with np.errstate(divide="ignore"):
+            return np.log(probs)
 
     def sample_next_state_batch(self, states: Any, action: int) -> np.ndarray:
         states_array = np.ascontiguousarray(np.asarray(states, dtype=np.float64))
