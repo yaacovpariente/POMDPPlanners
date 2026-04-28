@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from POMDPPlanners.core.belief import WeightedParticleBelief, get_initial_belief
-from POMDPPlanners.core.tree.arena import BELIEF, Tree
+from POMDPPlanners.core.tree.arena import ACTION, BELIEF, Tree
 from POMDPPlanners.environments import TigerPOMDP, DiscreteLightDarkPOMDP
 from POMDPPlanners.utils.action_samplers import DiscreteActionSampler
 from POMDPPlanners.simulations.episodes import run_episode
@@ -1268,6 +1268,68 @@ class TestICVaR_POMCPOWEpisodeTests:
         else:
             # If not terminal, should have used all steps
             assert len(history.history) == num_steps
+
+
+class TestICVaR_POMCPOWArenaInvariants:
+    """Test class for arena tree invariants beyond visit/PW/Q-V relationships."""
+
+    def test_observation_cdf_consistency(self, planner, belief):
+        """Test the per-parent children_cdf invariants on the iCVaR-POMCPOW arena tree.
+
+        Purpose: Validates the arena tree's ``children_cdf`` (used by
+        ``sample_belief_child`` for O(log K) weighted sampling at observation-widening
+        action nodes) is monotonically non-decreasing and totals to the sum of
+        children weights for every parent in the tree.
+
+        Given: ICVaR_POMCPOW planner with default fixture parameters and an initial
+        belief; tree is built by running 100 ``_simulate_path`` calls from the root
+        (matching the existing comprehensive test setup).
+        When: Every parent in the arena (belief and action) is walked.
+        Then: For every parent with children, the CDF length matches children count,
+        is monotonically non-decreasing, and ``cdf[-1]`` equals the sum of children
+        weights within absolute tolerance ``1e-6``. At least one action node has
+        multiple belief children.
+
+        Test type: unit
+        """
+        tree = Tree()
+        root_id = tree.add_belief_node(belief)
+
+        n_sims = 100
+        for _ in range(n_sims):
+            planner._simulate_path(tree=tree, belief_id=root_id, depth=0)
+
+        multi_child_action_seen = False
+        for parent_id in _iter_node_ids(tree, root_id):
+            children = tree.children_ids[parent_id]
+            if not children:
+                continue
+            cdf = tree.children_cdf[parent_id]
+
+            assert len(cdf) == len(children), (
+                f"Parent {parent_id} (kind={tree.kind[parent_id]}) has {len(children)} "
+                f"children but CDF has {len(cdf)} entries"
+            )
+
+            for i in range(1, len(cdf)):
+                assert cdf[i] >= cdf[i - 1] - 1e-9, (
+                    f"Parent {parent_id} CDF not monotone at index {i}: "
+                    f"cdf[{i - 1}]={cdf[i - 1]}, cdf[{i}]={cdf[i]}"
+                )
+
+            total_weight = sum(tree.weight[cid] for cid in children)
+            assert abs(cdf[-1] - total_weight) < 1e-6, (
+                f"Parent {parent_id} CDF total {cdf[-1]} != sum of child weights "
+                f"{total_weight} (kind={tree.kind[parent_id]})"
+            )
+
+            if tree.kind[parent_id] == ACTION and len(children) >= 2:
+                multi_child_action_seen = True
+
+        assert multi_child_action_seen, (
+            "No action node with multiple belief children found; observation-widening "
+            "CDF invariant is vacuous on this tree. Increase n_sims."
+        )
 
 
 if __name__ == "__main__":

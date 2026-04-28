@@ -856,3 +856,130 @@ def test_random_rollout_depth_semantics_preserved(
         f"Depth semantics changed: self.depth={self_depth}, entry_depth={entry_depth}, "
         f"expected {expected_steps} steps, got {env.sample_next_state_calls}."
     )
+
+
+def test_tree_structure_comprehensive(planner, initial_belief):
+    """Comprehensive structural invariants on a freshly-built PFT-DPW arena tree.
+
+    Purpose: Validates that ``_learn_tree`` produces an arena ``Tree`` whose
+        kind/parent/children/visit/value fields satisfy the documented invariants
+        for a PFT-DPW search: belief/action level alternation, populated payloads
+        per kind, non-negative visit counts, parent visits dominating the sum of
+        child visits, BFS depth bounded by ``2 * planner.depth + 2``, and
+        progressive widening bounds on per-node child counts.
+
+    Given: The ``planner`` fixture (PFT_DPW with depth=5, n_simulations=100,
+        k_a=k_o=1.0, alpha_a=alpha_o=0.5) and the ``initial_belief`` fixture
+        (continuous light-dark POMDP belief with 20 particles).
+    When: ``planner._learn_tree(initial_belief)`` builds the tree, then a BFS
+        from ``root_id`` collects ``(node_id, depth)`` tuples and per-node
+        invariants are checked across the full arena.
+    Then: Root is a BELIEF node with no parent/observation and at least one
+        child; every node has non-negative ``visit_count``; BELIEF nodes carry
+        a populated ``belief``; ACTION nodes carry a populated ``action`` and
+        ``q_value``; non-root nodes have a non-None parent; kinds alternate
+        along every parent-child edge; visit-count is conserved (parent >=
+        sum of children's visits); BFS depth <= ``2 * planner.depth + 2``;
+        and progressive-widening bounds hold at every visited node.
+
+    Test type: unit
+    """
+    tree, root_id = planner._learn_tree(initial_belief)
+
+    # Root invariants.
+    assert tree.kind[root_id] == BELIEF
+    assert tree.parent_id[root_id] is None
+    assert tree.observation[root_id] is None
+    assert len(tree.children_ids[root_id]) > 0
+
+    # BFS to collect (node_id, depth) for the bound check; meanwhile
+    # record per-node depth so kind alternation can be checked against it.
+    max_observed_depth = 0
+    frontier = [(root_id, 0)]
+    while frontier:
+        node_id, d = frontier.pop()
+        max_observed_depth = max(max_observed_depth, d)
+        for cid in tree.children_ids[node_id]:
+            frontier.append((cid, d + 1))
+
+    assert max_observed_depth <= 2 * planner.depth + 2
+
+    # Per-node invariants. Iterate over the full arena (every allocated id).
+    n_nodes = len(tree)
+    for node_id in range(n_nodes):
+        # Visit count non-negative everywhere.
+        assert tree.visit_count[node_id] >= 0
+
+        # Non-root nodes have a parent; root parent is None and was checked.
+        if node_id != root_id:
+            assert tree.parent_id[node_id] is not None
+
+        # Kind-specific payload presence.
+        if tree.kind[node_id] == BELIEF:
+            assert tree.belief[node_id] is not None
+        else:
+            assert tree.kind[node_id] == ACTION
+            assert tree.action[node_id] is not None
+            assert tree.q_value[node_id] is not None
+
+        # Kind alternation along every parent-child edge.
+        parent = tree.parent_id[node_id]
+        if parent is not None:
+            assert tree.kind[node_id] != tree.kind[parent]
+
+        # Visit-count consistency: parent visits >= sum of children's visits.
+        children = tree.children_ids[node_id]
+        if children:
+            child_visits_sum = sum(tree.visit_count[c] for c in children)
+            assert tree.visit_count[node_id] >= child_visits_sum
+
+        # Progressive-widening bounds at visited nodes only.
+        if tree.visit_count[node_id] > 0:
+            n_children = len(children)
+            if tree.kind[node_id] == BELIEF:
+                pw_bound = int(planner.k_a * (tree.visit_count[node_id] ** planner.alpha_a)) + 1
+                assert n_children <= pw_bound
+            else:
+                pw_bound = int(planner.k_o * (tree.visit_count[node_id] ** planner.alpha_o)) + 1
+                assert n_children <= pw_bound
+
+
+def test_q_value_v_value_consistency(planner, initial_belief):
+    """Verify ``v_value`` of every BELIEF node equals max ``q_value`` over its children.
+
+    Purpose: Pins down the contract enforced by ``_update_node_statistics``:
+        after every backup, the V-value at a belief node equals the max
+        Q-value across all of its action children (visited or not). This
+        guards against silent drift if a future change reorders updates,
+        filters by visit count, or computes a different aggregate.
+
+    Given: The ``planner`` fixture (PFT_DPW) and the ``initial_belief``
+        fixture; ``_learn_tree`` builds the arena tree.
+    When: Every BELIEF node with non-empty children is enumerated, and the
+        observed ``tree.v_value[belief_id]`` is compared against
+        ``max(tree.q_value[c] for c in tree.children_ids[belief_id])`` taken
+        over ALL children (no visit-count filter).
+    Then: The values agree within ``atol=1e-9`` (float-tolerant equality via
+        ``pytest.approx``).
+
+    Test type: unit
+    """
+    tree, root_id = planner._learn_tree(initial_belief)
+    assert tree.kind[root_id] == BELIEF  # sanity: root is a belief node
+
+    n_nodes = len(tree)
+    n_belief_nodes_checked = 0
+    for node_id in range(n_nodes):
+        if tree.kind[node_id] != BELIEF:
+            continue
+        children = tree.children_ids[node_id]
+        if not children:
+            continue
+        # PFT-DPW takes max over ALL children (including unvisited q=0.0).
+        expected_v = max(tree.q_value[c] for c in children)
+        observed_v = tree.v_value[node_id]
+        assert observed_v == pytest.approx(expected_v, abs=1e-9)
+        n_belief_nodes_checked += 1
+
+    # Sanity: at least the root should have been checked.
+    assert n_belief_nodes_checked >= 1
