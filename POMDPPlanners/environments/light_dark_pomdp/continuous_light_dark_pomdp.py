@@ -527,7 +527,8 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         if next_states_array.ndim == 1:
             next_states_array = next_states_array.reshape(1, -1)
         probs = np.asarray(kernel.probability(next_states_array), dtype=np.float64)
-        return np.log(probs + 1e-300)
+        with np.errstate(divide="ignore"):
+            return np.log(probs)
 
     def observation_log_probability(
         self, next_state: np.ndarray, action: np.ndarray, observations: Any
@@ -539,7 +540,8 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
             if obs_array.ndim == 1:
                 obs_array = obs_array.reshape(1, -1)
             probs = np.asarray(kernel.probability(obs_array), dtype=np.float64)
-            return np.log(probs + 1e-300)
+            with np.errstate(divide="ignore"):
+                return np.log(probs)
         del action  # unused; non-NORMAL paths read only next_state and obs
         if self.observation_model_type == ObservationModelType.NORMAL_NOISE_NO_OBS_IN_DARK:
             return self._log_prob_no_obs_in_dark(next_state, observations)

@@ -44,6 +44,17 @@
 #include "pomdp_native/rng.hpp"
 
 namespace pomdp_native {
+// Defensive flooring constants used by ``probability`` /
+// ``batch_log_likelihood`` to keep impossible events from emitting
+// ``-inf`` through the env API. Kept symmetric across the two methods
+// so the scalar (``np.log(kernel.probability(...))``) and batch
+// (``kernel.batch_log_likelihood(...)``) paths return the same floored
+// value (~= -690.776) for events whose un-floored log-density is
+// below the floor. ``std::log`` is not constexpr in C++17 so the log
+// constant is a hard-coded ``static const double`` matching
+// ``std::log(kProbFloor)``.
+constexpr double kProbFloor = 1e-300;
+static const double kLogProbFloor = -690.7755278982137;  // == std::log(kProbFloor)
 
 template <std::size_t Dim>
 class TransitionModelCpp {
@@ -81,7 +92,11 @@ class TransitionModelCpp {
         auto buf = out.mutable_unchecked<1>();
         for (std::size_t i = 0; i < batch.n; ++i) {
             const double *x = batch.flat.data() + i * Dim;
-            buf(static_cast<pybind11::ssize_t>(i)) = std::exp(noise_.log_pdf(x, mean));
+            double prob = std::exp(noise_.log_pdf(x, mean));
+            if (prob < kProbFloor) {
+                prob = kProbFloor;
+            }
+            buf(static_cast<pybind11::ssize_t>(i)) = prob;
         }
         return out;
     }
@@ -182,7 +197,11 @@ class ObservationModelCpp {
         auto buf = out.mutable_unchecked<1>();
         for (std::size_t i = 0; i < batch.n; ++i) {
             const double *x = batch.flat.data() + i * Dim;
-            buf(static_cast<pybind11::ssize_t>(i)) = std::exp(noise_.log_pdf(x, mean));
+            double prob = std::exp(noise_.log_pdf(x, mean));
+            if (prob < kProbFloor) {
+                prob = kProbFloor;
+            }
+            buf(static_cast<pybind11::ssize_t>(i)) = prob;
         }
         return out;
     }
@@ -225,7 +244,11 @@ class ObservationModelCpp {
                                                    static_cast<pybind11::ssize_t>(d));
             }
             compute_mean_from_next_state(next_state_row, mean);
-            out_view(static_cast<pybind11::ssize_t>(i)) = noise_.log_pdf(obs_buf, mean);
+            double log_prob = noise_.log_pdf(obs_buf, mean);
+            if (log_prob < kLogProbFloor) {
+                log_prob = kLogProbFloor;
+            }
+            out_view(static_cast<pybind11::ssize_t>(i)) = log_prob;
         }
         return out;
     }
@@ -307,7 +330,11 @@ class StateDependentObservationModelCpp {
         auto buf = out.mutable_unchecked<1>();
         for (std::size_t i = 0; i < batch.n; ++i) {
             const double *x = batch.flat.data() + i * Dim;
-            buf(static_cast<pybind11::ssize_t>(i)) = std::exp(active.log_pdf(x, mean));
+            double prob = std::exp(active.log_pdf(x, mean));
+            if (prob < kProbFloor) {
+                prob = kProbFloor;
+            }
+            buf(static_cast<pybind11::ssize_t>(i)) = prob;
         }
         return out;
     }
@@ -351,7 +378,11 @@ class StateDependentObservationModelCpp {
             compute_mean_from_next_state(next_state_row, mean);
             const bool near = is_near_next_state(next_state_row);
             const GaussianND<Dim> &active = near ? noise_near_ : noise_far_;
-            out_view(static_cast<pybind11::ssize_t>(i)) = active.log_pdf(obs_buf, mean);
+            double log_prob = active.log_pdf(obs_buf, mean);
+            if (log_prob < kLogProbFloor) {
+                log_prob = kLogProbFloor;
+            }
+            out_view(static_cast<pybind11::ssize_t>(i)) = log_prob;
         }
         return out;
     }

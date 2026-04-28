@@ -315,22 +315,26 @@ class TestBatchObservationLogLikelihood:
             np.testing.assert_array_equal(log_ll, 0.0)
 
     def test_movement_action_non_none_obs(self, updater, sample_particles):
-        """Test that movement actions with non-'none' obs give -inf.
+        """Test that movement actions with non-'none' obs give the symmetric C++ floor.
 
         Purpose: Validates impossible observations for movement actions.
+            Post symmetric C++ floor, the historical -inf is now floored
+            to ``log(1e-300) ~= -690.776`` so the batch and scalar API
+            paths agree on the same value.
 
         Given: Particles with movement action.
         When: Observation is 'good' or 'bad'.
-        Then: All log-likelihoods are -inf.
+        Then: All log-likelihoods equal ``log(1e-300) ~= -690.776``.
 
         Test type: unit
         """
+        floor = float(np.log(1e-300))  # ~= -690.7755278982137
         for action in range(5):
             for obs in [OBS_GOOD, OBS_BAD]:
                 log_ll = updater.batch_observation_log_likelihood(
                     sample_particles, np.array(action), np.array(obs)
                 )
-                assert np.all(np.isneginf(log_ll))
+                np.testing.assert_allclose(log_ll, np.full_like(log_ll, floor), atol=1e-6)
 
     def test_check_good_rock_close_good_obs(self, updater):
         """Test high log-likelihood for correct obs near a good rock.
@@ -374,35 +378,43 @@ class TestBatchObservationLogLikelihood:
         assert ll_far[0] > ll_close[0]
 
     def test_terminal_particles_neg_inf(self, updater):
-        """Test that terminal particles get -inf log-likelihood for check obs.
+        """Test that terminal particles get the symmetric C++ floor for check obs.
 
-        Purpose: Validates terminal handling in observation model.
+        Purpose: Validates terminal handling in observation model. Post
+            symmetric C++ floor, the historical -inf is now floored to
+            ``log(1e-300) ~= -690.776`` (kept the function name for
+            historical continuity).
 
         Given: A terminal particle (-1, -1).
         When: Check action with 'good' observation.
-        Then: Log-likelihood is -inf.
+        Then: Log-likelihood equals ``log(1e-300) ~= -690.776``.
 
         Test type: unit
         """
         terminal = np.array([[-1.0, -1.0, 1.0, 0.0]])
         log_ll = updater.batch_observation_log_likelihood(terminal, np.array(5), np.array(OBS_GOOD))
-        assert np.isneginf(log_ll[0])
+        floor = float(np.log(1e-300))  # ~= -690.7755278982137
+        np.testing.assert_allclose(log_ll[0], floor, atol=1e-6)
 
     def test_check_none_obs_impossible(self, updater, sample_particles):
         """Test that 'none' observation is impossible for check actions.
 
         Purpose: Validates that check actions cannot produce 'none'.
+            Post symmetric C++ floor, the historical -inf is now floored
+            to ``log(1e-300) ~= -690.776`` so the batch and scalar API
+            paths agree on the same value.
 
         Given: Particles with check action.
         When: Observation is 'none'.
-        Then: All log-likelihoods are -inf.
+        Then: All log-likelihoods equal ``log(1e-300) ~= -690.776``.
 
         Test type: unit
         """
         log_ll = updater.batch_observation_log_likelihood(
             sample_particles, np.array(5), np.array(OBS_NONE)
         )
-        assert np.all(np.isneginf(log_ll))
+        floor = float(np.log(1e-300))  # ~= -690.7755278982137
+        np.testing.assert_allclose(log_ll, np.full_like(log_ll, floor), atol=1e-6)
 
 
 # ---------------------------------------------------------------------------

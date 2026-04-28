@@ -1555,5 +1555,48 @@ def test_simulate_random_rollout_rocksample_terminal_returns_zero():
     assert result == 0.0
 
 
+def test_scalar_obs_log_prob_un_floored_matches_batch_after_fix() -> None:
+    """Scalar and batch obs log-prob agree at the symmetric C++ floor.
+
+    Purpose: Pins the post-fix contract for RockSamplePOMDP's audit
+        case A5 — a CHECK action where the canonical observation
+        ``"none"`` is impossible (it can only fire on movement actions,
+        never on CHECK). With the symmetric C++ kernel floor in place,
+        both ``observation_log_probability`` (scalar, via
+        ``kernel.probability``) and
+        ``observation_log_probability_per_state`` (batch, via
+        ``kernel.batch_log_likelihood``) return
+        ``log(kProbFloor) = log(1e-300) ~= -690.776`` for impossible
+        events.
+
+    Given: A 1-rock RockSamplePOMDP with the rock at (1, 1), the robot
+        co-located at (1, 1) with that rock marked True, and the CHECK
+        action for rock 0 (action index 5). The observation ``"none"``
+        has zero probability under any CHECK action by construction.
+    When: Both ``observation_log_probability`` and
+        ``observation_log_probability_per_state`` are evaluated for
+        ``observation="none"``.
+    Then: Both return ``log(1e-300) ~= -690.776`` (the symmetric C++
+        floor), pinning the post-fix log-prob contract for impossible
+        events.
+
+    Test type: unit
+    """
+    env = RockSamplePOMDP(
+        discount_factor=0.95,
+        rock_positions=[(1, 1)],
+        sensor_efficiency=10.0,
+    )
+    state = create_rock_sample_state((1, 1), (True,))
+
+    scalar = env.observation_log_probability(state, 5, ["none"])[0]
+    batch = env.observation_log_probability_per_state(state.reshape(1, -1), 5, "none")[0]
+
+    expected_floor = float(np.log(1e-300))  # ~= -690.7755278982137
+    np.testing.assert_allclose(scalar, expected_floor, atol=1e-6)
+    np.testing.assert_allclose(batch, expected_floor, atol=1e-6)
+    np.testing.assert_allclose(scalar, batch, atol=1e-6)
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

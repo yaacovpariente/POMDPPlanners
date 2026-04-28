@@ -258,3 +258,44 @@ class TestAggressiveDistribution:
 
         # Probabilities should normalize over their support.
         assert math.isclose(float(probs.sum()), 1.0, abs_tol=1e-9)
+
+
+def test_scalar_obs_log_prob_un_floored_matches_batch_after_fix() -> None:
+    """Scalar obs log-prob below -690 floor matches the batch path post-fix.
+
+    Purpose: Pins the post-fix contract for PacManPOMDP that
+        ``observation_log_probability`` (scalar) and
+        ``observation_log_probability_per_state`` (batch) agree on a
+        moderate-density anchor whose analytic log-probability is well
+        below the old ``log(p + 1e-300) ≈ -690.776`` floor but still
+        above the kernel's internal float64 underflow threshold.
+        Pre-fix, the scalar path floored such values at ~-690.776 while
+        the batch path returned the un-floored kernel log-likelihood —
+        the asymmetry that motivated the env-wide log-prob floor
+        removal.
+
+    Given: The shared 2-ghost env from ``_build_env``, a fresh
+        initial state, action 0, and a 2-D ndarray observation
+        ``[[31, 31, 31, 31]]`` (one row of 2*num_ghosts coordinates).
+        At this offset the analytic 4-D Gaussian log-pdf for both
+        ghosts is ≈ -710.187.
+    When: Both ``observation_log_probability`` (with the 2-D ndarray
+        fast path) and ``observation_log_probability_per_state`` are
+        evaluated on the same (next_state, action, observation).
+    Then: Both return finite, equal values to within atol=1e-6, and
+        the common value is below -700 (past the old floor).
+
+    Test type: unit
+    """
+    env = _build_env()
+    next_state = env.initial_state_dist().sample()[0]
+    obs_2d = np.array([[31.0] * (2 * env.num_ghosts)], dtype=np.float64)
+
+    scalar = env.observation_log_probability(next_state, 0, obs_2d)[0]
+    batch = env.observation_log_probability_per_state(np.array([next_state]), 0, obs_2d[0])[0]
+
+    assert np.isfinite(scalar), f"scalar should be finite at this anchor, got {scalar}"
+    assert np.isfinite(batch), f"batch should be finite at this anchor, got {batch}"
+    # Post symmetric C++ floor: both paths floor at log(1e-300) ~= -690.776
+    # for events past the floor, so they agree exactly.
+    np.testing.assert_allclose(scalar, batch, atol=1e-6)
