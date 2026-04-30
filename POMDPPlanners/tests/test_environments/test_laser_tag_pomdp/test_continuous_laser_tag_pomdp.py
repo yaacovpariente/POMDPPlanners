@@ -333,6 +333,191 @@ class TestReward:
         assert r == -env.step_cost - 5.0
 
 
+class TestStochasticDangerousAreaPenalty:
+    """Tests for the ``dangerous_area_hit_probability`` parameter."""
+
+    @staticmethod
+    def _stochastic_env(hit_probability: float, penalty: float = 5.0) -> ContinuousLaserTagPOMDP:
+        return ContinuousLaserTagPOMDP(
+            discount_factor=0.95,
+            walls=[],
+            dangerous_areas=[(5.0, 3.0)],
+            dangerous_area_radius=1.0,
+            dangerous_area_penalty=penalty,
+            dangerous_area_hit_probability=hit_probability,
+        )
+
+    def test_default_hit_probability_is_one(self, env_default):
+        """Test that the default hit probability preserves legacy behavior.
+
+        Purpose: Validates that omitting the new parameter keeps the
+        deterministic dangerous-area penalty active.
+
+        Given: An env constructed with default parameters.
+        When: ``dangerous_area_hit_probability`` is read.
+        Then: It equals ``1.0`` (deterministic-penalty regime).
+
+        Test type: unit
+        """
+        assert env_default.dangerous_area_hit_probability == 1.0
+
+    def test_hit_probability_zero_never_applies_penalty(self):
+        """Test that hit_probability=0 disables the dangerous-area penalty.
+
+        Purpose: Validates the lower-bound of the stochastic penalty.
+
+        Given: A state inside a dangerous area and hit_probability=0.
+        When: reward() is called many times.
+        Then: The dangerous-area penalty is never applied.
+
+        Test type: unit
+        """
+        env = self._stochastic_env(hit_probability=0.0)
+        state = np.array([5.0, 3.0, 8.0, 5.0, 0.0])
+        action = np.array([1.0, 0.0, 0.0])
+        np.random.seed(0)
+        for _ in range(200):
+            assert env.reward(state, action) == -env.step_cost
+
+    def test_hit_probability_one_matches_deterministic(self):
+        """Test that hit_probability=1 matches the legacy deterministic penalty.
+
+        Purpose: Validates the upper-bound of the stochastic penalty
+        (regression check that the default behavior is preserved).
+
+        Given: A state inside a dangerous area and hit_probability=1.
+        When: reward() is called many times.
+        Then: The dangerous-area penalty is always applied.
+
+        Test type: unit
+        """
+        env = self._stochastic_env(hit_probability=1.0)
+        state = np.array([5.0, 3.0, 8.0, 5.0, 0.0])
+        action = np.array([1.0, 0.0, 0.0])
+        for _ in range(50):
+            assert env.reward(state, action) == -env.step_cost - 5.0
+
+    def test_hit_probability_zero_three_empirical_rate(self):
+        """Test empirical hit rate matches hit_probability over many calls.
+
+        Purpose: Validates that the per-call Bernoulli draw matches the
+        configured probability over a large sample.
+
+        Given: An in-zone state and hit_probability=0.3.
+        When: reward() is called 5000 times.
+        Then: Empirical hit rate is within 0.05 of 0.3.
+
+        Test type: unit
+        """
+        env = self._stochastic_env(hit_probability=0.3)
+        state = np.array([5.0, 3.0, 8.0, 5.0, 0.0])
+        action = np.array([1.0, 0.0, 0.0])
+        np.random.seed(123)
+        n_trials = 5000
+        hits = 0
+        penalty_reward = -env.step_cost - 5.0
+        for _ in range(n_trials):
+            if env.reward(state, action) == penalty_reward:
+                hits += 1
+        empirical_rate = hits / n_trials
+        assert abs(empirical_rate - 0.3) < 0.05
+
+    def test_reward_batch_honours_hit_probability(self):
+        """Test that reward_batch applies stochastic penalty consistently.
+
+        Purpose: Validates that the batched reward path uses the same
+        Bernoulli mechanism as the single-state path.
+
+        Given: 5000 copies of an in-zone state and hit_probability=0.3.
+        When: reward_batch() is called once.
+        Then: Empirical hit rate across the batch is within 0.05 of 0.3.
+
+        Test type: unit
+        """
+        env = self._stochastic_env(hit_probability=0.3)
+        state = np.array([5.0, 3.0, 8.0, 5.0, 0.0])
+        action = np.array([1.0, 0.0, 0.0])
+        n_trials = 5000
+        states = np.tile(state, (n_trials, 1))
+        np.random.seed(456)
+        rewards = env.reward_batch(states, action)
+        penalty_reward = -env.step_cost - 5.0
+        hits = int(np.sum(np.isclose(rewards, penalty_reward)))
+        empirical_rate = hits / n_trials
+        assert abs(empirical_rate - 0.3) < 0.05
+
+    def test_reward_batch_terminal_states_unaffected(self):
+        """Test that terminal rows in reward_batch ignore the stochastic refund.
+
+        Purpose: Validates that the kernel's zero-reward semantics for
+        terminal states is preserved under the Python refund pass.
+
+        Given: A batch with mixed terminal/non-terminal in-zone states.
+        When: reward_batch() is called with hit_probability=0.0.
+        Then: Terminal rows return 0.0 unchanged; non-terminal rows
+              return only the step cost (full refund).
+
+        Test type: unit
+        """
+        env = self._stochastic_env(hit_probability=0.0)
+        states = np.array(
+            [
+                [5.0, 3.0, 8.0, 5.0, 0.0],
+                [5.0, 3.0, 8.0, 5.0, 1.0],
+            ]
+        )
+        action = np.array([1.0, 0.0, 0.0])
+        rewards = env.reward_batch(states, action)
+        assert rewards[0] == -env.step_cost
+        assert rewards[1] == 0.0
+
+    @pytest.mark.parametrize("bad_value", [-0.1, 1.5, 2.0, -1.0])
+    def test_invalid_hit_probability_raises(self, bad_value: float):
+        """Test that out-of-range hit_probability raises ValueError.
+
+        Purpose: Validates input validation on the new parameter.
+
+        Given: A hit_probability value outside [0, 1].
+        When: ContinuousLaserTagPOMDP is constructed.
+        Then: ValueError is raised.
+
+        Test type: unit
+        """
+        with pytest.raises(ValueError, match="dangerous_area_hit_probability"):
+            ContinuousLaserTagPOMDP(
+                discount_factor=0.95,
+                dangerous_area_hit_probability=bad_value,
+            )
+
+    def test_discrete_actions_wrapper_forwards_hit_probability(self):
+        """Test that the discrete-actions wrapper forwards the new parameter.
+
+        Purpose: Validates that constructing
+        ``ContinuousLaserTagPOMDPDiscreteActions`` with a custom
+        ``dangerous_area_hit_probability`` propagates to the underlying
+        reward path.
+
+        Given: A discrete-actions env with hit_probability=0.0 and an
+            in-zone state.
+        When: reward() is called many times with the ``"up"`` action.
+        Then: No dangerous-area penalty is ever applied.
+
+        Test type: unit
+        """
+        env = ContinuousLaserTagPOMDPDiscreteActions(
+            discount_factor=0.95,
+            walls=[],
+            dangerous_areas=[(5.0, 3.0)],
+            dangerous_area_radius=1.0,
+            dangerous_area_penalty=5.0,
+            dangerous_area_hit_probability=0.0,
+        )
+        assert env.dangerous_area_hit_probability == 0.0
+        state = np.array([5.0, 3.0, 8.0, 5.0, 0.0])
+        for _ in range(100):
+            assert env.reward(state, "up") == -env.step_cost
+
+
 class TestRewardBatch:
     """Tests for reward_batch."""
 
