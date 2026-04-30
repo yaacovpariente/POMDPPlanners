@@ -681,19 +681,19 @@ class ContinuousPushPOMDP(Environment):
             ),
             MetricValue(
                 ContinuousPushPOMDPMetrics.TOTAL_ROBOT_OBSTACLE_COLLISIONS.value,
-                sum(robot_col_list),
+                float(np.mean(robot_col_list)) if robot_col_list else 0.0,
                 tr_ci[0],
                 tr_ci[1],
             ),
             MetricValue(
                 ContinuousPushPOMDPMetrics.TOTAL_OBJECT_OBSTACLE_COLLISIONS.value,
-                sum(obj_col_list),
+                float(np.mean(obj_col_list)) if obj_col_list else 0.0,
                 to_ci[0],
                 to_ci[1],
             ),
             MetricValue(
                 ContinuousPushPOMDPMetrics.TOTAL_ALL_OBSTACLE_COLLISIONS.value,
-                sum(total_col_list),
+                float(np.mean(total_col_list)) if total_col_list else 0.0,
                 ta_ci[0],
                 ta_ci[1],
             ),
