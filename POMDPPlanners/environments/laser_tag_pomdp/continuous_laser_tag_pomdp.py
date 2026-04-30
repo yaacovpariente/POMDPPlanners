@@ -46,6 +46,7 @@ from POMDPPlanners.environments.laser_tag_pomdp import _native
 from POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_visualizer import (
     ContinuousLaserTagVisualizer,
 )
+from POMDPPlanners.planners.planners_utils.rollout import python_random_rollout
 from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
 from POMDPPlanners.utils.statistics_utils import confidence_interval
 
@@ -99,6 +100,22 @@ class ContinuousLaserTagPOMDP(Environment):
     navigate to tag an opponent.  The robot receives noisy 8-direction
     laser range observations.
 
+    Stochasticity:
+        The dangerous-area penalty can be applied either deterministically
+        (the default) or stochastically.  When
+        ``dangerous_area_hit_probability == 1.0`` (default), the kernel's
+        deterministic deduction is preserved verbatim, matching legacy
+        behavior.  When ``dangerous_area_hit_probability < 1.0``, the
+        accumulated dangerous-area deduction is applied to the reward only
+        with that probability per ``reward()`` call, producing a
+        heavy-tailed return distribution suitable for benchmarking
+        risk-sensitive planners (e.g. ICVaR-aware MCTS) against
+        expected-value MCTS on the same env.  Note that this makes
+        ``reward(state, action)`` non-deterministic given a state-action
+        pair, so any external caching that assumes deterministic rewards
+        must be aware of this.  ``transition_log_probability`` is
+        unaffected.
+
     Example:
         >>> import numpy as np
         >>> np.random.seed(42)
@@ -116,6 +133,16 @@ class ContinuousLaserTagPOMDP(Environment):
         >>> # Check terminal condition
         >>> env.is_terminal(initial_state)
         False
+
+    Example:
+        Risk-sensitive evaluation -- a 10%-tail-risk environment suitable
+        for benchmarking ICVaR-aware planners against expected-value MCTS::
+
+            >>> env = ContinuousLaserTagPOMDP(
+            ...     discount_factor=0.95,
+            ...     dangerous_area_penalty=150.0,
+            ...     dangerous_area_hit_probability=0.1,
+            ... )
     """
 
     def __init__(
@@ -137,6 +164,7 @@ class ContinuousLaserTagPOMDP(Environment):
         dangerous_areas: Optional[List[Tuple[float, float]]] = None,
         dangerous_area_radius: float = 1.0,
         dangerous_area_penalty: float = 5.0,
+        dangerous_area_hit_probability: float = 1.0,
         output_dir: Optional[Path] = None,
         debug: bool = False,
         use_queue_logger: bool = False,
@@ -162,6 +190,13 @@ class ContinuousLaserTagPOMDP(Environment):
             dangerous_areas: Dangerous area centers as ``(x, y)`` tuples.
             dangerous_area_radius: Radius of dangerous areas.
             dangerous_area_penalty: Penalty for being in a dangerous area.
+            dangerous_area_hit_probability: Probability that the
+                dangerous-area penalty is actually applied to the reward
+                when the robot is inside a dangerous area.  Must lie in
+                ``[0, 1]``.  Defaults to ``1.0`` (deterministic penalty,
+                matching legacy behavior).  Values below ``1.0`` make the
+                reward stochastic, useful for risk-sensitive planning
+                benchmarks.
             output_dir: Optional logging directory.
             debug: Enable debug logging.
             use_queue_logger: Use queue-based logger.
@@ -169,6 +204,8 @@ class ContinuousLaserTagPOMDP(Environment):
         """
         if not 0.0 <= discount_factor <= 1.0:
             raise ValueError("discount_factor must be between 0 and 1 (inclusive)")
+        if not 0.0 <= dangerous_area_hit_probability <= 1.0:
+            raise ValueError("dangerous_area_hit_probability must be between 0 and 1 (inclusive)")
 
         space_info = SpaceInfo(
             action_space=SpaceType.CONTINUOUS,
@@ -201,6 +238,7 @@ class ContinuousLaserTagPOMDP(Environment):
         )
         self.dangerous_area_radius = dangerous_area_radius
         self.dangerous_area_penalty = dangerous_area_penalty
+        self.dangerous_area_hit_probability = float(dangerous_area_hit_probability)
         # Packed (K, 2) float64 dangerous-area array; reused by the C++ reward kernel.
         self._dangerous_areas_arr = (
             np.ascontiguousarray(np.asarray(self.dangerous_areas, dtype=np.float64).reshape(-1, 2))
@@ -427,7 +465,22 @@ class ContinuousLaserTagPOMDP(Environment):
         buffer, and runs the full discounted-return loop inside C++. Results are
         numerically identical to the :meth:`Environment.simulate_random_rollout`
         Python fallback.
+
+        When ``dangerous_area_hit_probability < 1.0``, falls back to the
+        Python rollout: the native kernel applies the dangerous-area
+        penalty deterministically per step, which contradicts the
+        stochastic semantics; routing through Python ``reward()`` keeps
+        the per-step Bernoulli intact.
         """
+        if self.dangerous_area_hit_probability < 1.0:
+            return python_random_rollout(
+                state=state,
+                depth=depth,
+                action_sampler=action_sampler,
+                environment=self,
+                discount_factor=discount_factor,
+                max_depth=max_depth,
+            )
         steps_left = max_depth - depth
         if steps_left <= 0 or bool(state[4]):
             return 0.0
@@ -480,7 +533,21 @@ class ContinuousLaserTagPOMDP(Environment):
             self.dangerous_area_radius,
             self.dangerous_area_penalty,
         )
-        return float(rewards[0])
+        base = float(rewards[0])
+        # Stochastic-penalty refund: the kernel always deducts the
+        # dangerous-area penalty deterministically; when
+        # ``dangerous_area_hit_probability < 1.0`` we cancel the deduction
+        # with probability ``1 - p`` per call.
+        if self.dangerous_area_hit_probability >= 1.0:
+            return base
+        if state_arr[0, 4] != 0.0:
+            return base
+        n_matches = self._count_dangerous_area_matches(state_arr[0, :2])
+        if n_matches == 0:
+            return base
+        if np.random.random() >= self.dangerous_area_hit_probability:
+            return base + n_matches * self.dangerous_area_penalty
+        return base
 
     def reward_batch(
         self,
@@ -516,7 +583,7 @@ class ContinuousLaserTagPOMDP(Environment):
             action_arr = action
         else:
             action_arr = np.ascontiguousarray(np.asarray(action, dtype=np.float64)).ravel()
-        return _native.reward_batch(
+        rewards = _native.reward_batch(
             states_arr,
             action_arr,
             self.tag_radius,
@@ -527,6 +594,35 @@ class ContinuousLaserTagPOMDP(Environment):
             self.dangerous_area_radius,
             self.dangerous_area_penalty,
         )
+        return self._apply_stochastic_dangerous_refund(rewards, states_arr)
+
+    def _apply_stochastic_dangerous_refund(
+        self, rewards: np.ndarray, states_arr: np.ndarray
+    ) -> np.ndarray:
+        if self.dangerous_area_hit_probability >= 1.0 or self._dangerous_areas_arr.size == 0:
+            return rewards
+        positions = states_arr[:, :2]
+        centers = self._dangerous_areas_arr.reshape(-1, 2)
+        deltas = positions[:, None, :] - centers[None, :, :]
+        in_zone = np.sum(deltas * deltas, axis=2) <= (
+            self.dangerous_area_radius * self.dangerous_area_radius
+        )
+        # Terminal rows contribute zero reward and never get a deduction.
+        terminal_mask = states_arr[:, 4] != 0.0
+        if terminal_mask.any():
+            in_zone = in_zone.copy()
+            in_zone[terminal_mask, :] = False
+        match_counts = np.sum(in_zone, axis=1)
+        any_match = match_counts > 0
+        # One Bernoulli per state: when miss, refund the full deterministic
+        # deduction (n_matches * penalty). Mirrors the semantics of
+        # ``reward()`` so single- and batch-paths agree statistically.
+        miss = np.random.random(states_arr.shape[0]) >= self.dangerous_area_hit_probability
+        refund_mask = any_match & miss
+        if not refund_mask.any():
+            return rewards
+        refunds = match_counts.astype(np.float64) * float(self.dangerous_area_penalty)
+        return rewards + np.where(refund_mask, refunds, 0.0)
 
     def is_terminal(self, state: np.ndarray) -> bool:
         return bool(state[4])
@@ -643,6 +739,14 @@ class ContinuousLaserTagPOMDP(Environment):
             ):
                 return True
         return False
+
+    def _count_dangerous_area_matches(self, position: np.ndarray) -> int:
+        if self._dangerous_areas_arr.size == 0:
+            return 0
+        centers = self._dangerous_areas_arr.reshape(-1, 2)
+        dx = centers[:, 0] - float(position[0])
+        dy = centers[:, 1] - float(position[1])
+        return int(np.sum(dx * dx + dy * dy <= self.dangerous_area_radius**2))
 
     def _collect_episode_data(self, histories: List[History]) -> Dict[str, list]:
         data: Dict[str, list] = {
@@ -768,6 +872,7 @@ class ContinuousLaserTagPOMDPDiscreteActions(ContinuousLaserTagPOMDP, DiscreteAc
         dangerous_areas: Optional[List[Tuple[float, float]]] = None,
         dangerous_area_radius: float = 1.0,
         dangerous_area_penalty: float = 5.0,
+        dangerous_area_hit_probability: float = 1.0,
         output_dir: Optional[Path] = None,
         debug: bool = False,
         use_queue_logger: bool = False,
@@ -791,6 +896,7 @@ class ContinuousLaserTagPOMDPDiscreteActions(ContinuousLaserTagPOMDP, DiscreteAc
             dangerous_areas=dangerous_areas,
             dangerous_area_radius=dangerous_area_radius,
             dangerous_area_penalty=dangerous_area_penalty,
+            dangerous_area_hit_probability=dangerous_area_hit_probability,
             output_dir=output_dir,
             debug=debug,
             use_queue_logger=use_queue_logger,
@@ -895,6 +1001,15 @@ class ContinuousLaserTagPOMDPDiscreteActions(ContinuousLaserTagPOMDP, DiscreteAc
         discount_factor: float,
         depth: int = 0,
     ) -> float:
+        if self.dangerous_area_hit_probability < 1.0:
+            return python_random_rollout(
+                state=state,
+                depth=depth,
+                action_sampler=action_sampler,
+                environment=self,
+                discount_factor=discount_factor,
+                max_depth=max_depth,
+            )
         steps_left = max_depth - depth
         if steps_left <= 0 or bool(state[4]):
             return 0.0
