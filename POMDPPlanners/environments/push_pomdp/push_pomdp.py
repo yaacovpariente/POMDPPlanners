@@ -50,9 +50,6 @@ class PushPOMDPMetrics(Enum):
     ROBOT_OBSTACLE_COLLISION_RATE = "robot_obstacle_collision_rate"
     OBJECT_OBSTACLE_COLLISION_RATE = "object_obstacle_collision_rate"
     TOTAL_OBSTACLE_COLLISION_RATE = "total_obstacle_collision_rate"
-    TOTAL_ROBOT_OBSTACLE_COLLISIONS = "total_robot_obstacle_collisions"
-    TOTAL_OBJECT_OBSTACLE_COLLISIONS = "total_object_obstacle_collisions"
-    TOTAL_ALL_OBSTACLE_COLLISIONS = "total_all_obstacle_collisions"
 
 
 class FixedStateDistribution(Distribution):
@@ -807,24 +804,6 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
                 robot_collisions.append(history_robot_collisions)
                 object_collisions.append(history_object_collisions)
                 total_collisions.append(history_robot_collisions + history_object_collisions)
-            history_robot_collisions = 0
-            history_object_collisions = 0
-            total_steps = len(history.history)
-
-            for step in history.history:
-                robot_pos = step.state[:2]  # [robot_x, robot_y]
-                object_pos = step.state[2:4]  # [object_x, object_y]
-
-                if self._is_colliding_with_obstacle(robot_pos):
-                    history_robot_collisions += 1
-
-                if self._is_colliding_with_obstacle(object_pos):
-                    history_object_collisions += 1
-
-            if total_steps > 0:
-                robot_collisions.append(history_robot_collisions)
-                object_collisions.append(history_object_collisions)
-                total_collisions.append(history_robot_collisions + history_object_collisions)
 
         total_steps_all = sum(len(history.history) for history in histories)
         avg_robot_collisions = sum(robot_collisions) / total_steps_all if total_steps_all > 0 else 0
@@ -846,10 +825,6 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
         robot_collisions_ci = confidence_interval(data=robot_collision_rates, confidence=0.95)
         object_collisions_ci = confidence_interval(data=object_collision_rates, confidence=0.95)
         total_collisions_ci = confidence_interval(data=total_collision_rates, confidence=0.95)
-
-        total_robot_collisions_ci = confidence_interval(data=robot_collisions, confidence=0.95)
-        total_object_collisions_ci = confidence_interval(data=object_collisions, confidence=0.95)
-        total_all_collisions_ci = confidence_interval(data=total_collisions, confidence=0.95)
 
         avg_goal_reached = float(np.mean(goal_reached))
         goal_reached_ci = confidence_interval(data=goal_reached, confidence=0.95)
@@ -878,23 +853,5 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
                 value=avg_total_collisions,
                 lower_confidence_bound=total_collisions_ci[0],
                 upper_confidence_bound=total_collisions_ci[1],
-            ),
-            MetricValue(
-                name=PushPOMDPMetrics.TOTAL_ROBOT_OBSTACLE_COLLISIONS.value,
-                value=sum(robot_collisions),
-                lower_confidence_bound=total_robot_collisions_ci[0],
-                upper_confidence_bound=total_robot_collisions_ci[1],
-            ),
-            MetricValue(
-                name=PushPOMDPMetrics.TOTAL_OBJECT_OBSTACLE_COLLISIONS.value,
-                value=sum(object_collisions),
-                lower_confidence_bound=total_object_collisions_ci[0],
-                upper_confidence_bound=total_object_collisions_ci[1],
-            ),
-            MetricValue(
-                name=PushPOMDPMetrics.TOTAL_ALL_OBSTACLE_COLLISIONS.value,
-                value=sum(total_collisions),
-                lower_confidence_bound=total_all_collisions_ci[0],
-                upper_confidence_bound=total_all_collisions_ci[1],
             ),
         ]

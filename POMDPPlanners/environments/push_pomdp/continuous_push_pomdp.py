@@ -54,9 +54,6 @@ class ContinuousPushPOMDPMetrics(Enum):
     ROBOT_OBSTACLE_COLLISION_RATE = "robot_obstacle_collision_rate"
     OBJECT_OBSTACLE_COLLISION_RATE = "object_obstacle_collision_rate"
     TOTAL_OBSTACLE_COLLISION_RATE = "total_obstacle_collision_rate"
-    TOTAL_ROBOT_OBSTACLE_COLLISIONS = "total_robot_obstacle_collisions"
-    TOTAL_OBJECT_OBSTACLE_COLLISIONS = "total_object_obstacle_collisions"
-    TOTAL_ALL_OBSTACLE_COLLISIONS = "total_all_obstacle_collisions"
 
 
 class _FixedStateDistribution(Distribution):
@@ -642,14 +639,6 @@ class ContinuousPushPOMDP(Environment):
         o_ci = confidence_interval(data=o_rates, confidence=0.95) if o_rates else (0, 0)
         t_ci = confidence_interval(data=t_rates, confidence=0.95) if t_rates else (0, 0)
 
-        tr_ci = (
-            confidence_interval(data=robot_col_list, confidence=0.95) if robot_col_list else (0, 0)
-        )
-        to_ci = confidence_interval(data=obj_col_list, confidence=0.95) if obj_col_list else (0, 0)
-        ta_ci = (
-            confidence_interval(data=total_col_list, confidence=0.95) if total_col_list else (0, 0)
-        )
-
         avg_goal = float(np.mean(goal_reached_list)) if goal_reached_list else 0.0
         g_ci = (
             confidence_interval(data=goal_reached_list, confidence=0.95)
@@ -678,24 +667,6 @@ class ContinuousPushPOMDP(Environment):
                 avg_t,
                 t_ci[0],
                 t_ci[1],
-            ),
-            MetricValue(
-                ContinuousPushPOMDPMetrics.TOTAL_ROBOT_OBSTACLE_COLLISIONS.value,
-                sum(robot_col_list),
-                tr_ci[0],
-                tr_ci[1],
-            ),
-            MetricValue(
-                ContinuousPushPOMDPMetrics.TOTAL_OBJECT_OBSTACLE_COLLISIONS.value,
-                sum(obj_col_list),
-                to_ci[0],
-                to_ci[1],
-            ),
-            MetricValue(
-                ContinuousPushPOMDPMetrics.TOTAL_ALL_OBSTACLE_COLLISIONS.value,
-                sum(total_col_list),
-                ta_ci[0],
-                ta_ci[1],
             ),
         ]
 
