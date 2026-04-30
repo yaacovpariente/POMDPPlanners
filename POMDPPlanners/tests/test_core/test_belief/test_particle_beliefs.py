@@ -26,6 +26,9 @@ from POMDPPlanners.core.tree import ActionNode, BeliefNode
 from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
 from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+from POMDPPlanners.tests.test_utils.metric_invariants_utils import (
+    verify_belief_invariants,
+)
 
 # Set seeds for reproducible tests
 np.random.seed(42)
@@ -665,6 +668,7 @@ def test_belief_update_basic():
     particles = [0, 1, 0, 1]  # Mix of states
     log_weights = np.array([0.1, 0.1, 0.1, 0.1])  # Non-zero weights
     belief = WeightedParticleBelief(particles=particles, log_weights=log_weights, resampling=False)
+    verify_belief_invariants(belief, expected_n_particles=len(particles))
 
     # Perform an update
     action = 0
@@ -680,6 +684,7 @@ def test_belief_update_basic():
 
     # Check that weights are still valid (not all zero)
     assert np.any(updated_belief.log_weights > -np.inf)
+    verify_belief_invariants(updated_belief, expected_n_particles=len(particles))
 
 
 def test_belief_update_with_resampling():
@@ -705,6 +710,7 @@ def test_belief_update_with_resampling():
     # Check that weights are normalized after resampling
     normalized_weights = np.exp(updated_belief.log_weights - np.max(updated_belief.log_weights))
     assert np.isclose(np.sum(normalized_weights), len(updated_belief.particles))
+    verify_belief_invariants(updated_belief, expected_n_particles=len(particles))
 
 
 def test_belief_update_state_transitions():
@@ -758,6 +764,7 @@ def test_belief_update_with_tiger_pomdp():
 
     # Check that weights have been updated
     assert not np.array_equal(updated_belief.log_weights, belief.log_weights)
+    verify_belief_invariants(updated_belief, expected_n_particles=len(particles))
 
 
 def test_belief_update_preserves_particle_count():
@@ -774,6 +781,7 @@ def test_belief_update_preserves_particle_count():
     updated_belief = belief.update(action=action, observation=observation, pomdp=env)
 
     assert len(updated_belief.particles) == n_particles
+    verify_belief_invariants(updated_belief, expected_n_particles=n_particles)
 
 
 def test_belief_update_weight_normalization():

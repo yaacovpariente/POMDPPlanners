@@ -22,6 +22,14 @@ from POMDPPlanners.environments.push_pomdp.continuous_push_pomdp import (
     ContinuousPushPOMDP,
     ContinuousPushPOMDPDiscreteActions,
 )
+from POMDPPlanners.tests.test_utils.confidence_interval_utils import (
+    verify_metrics_within_confidence_intervals,
+)
+from POMDPPlanners.tests.test_utils.metric_invariants_utils import (
+    verify_history_returns_bounded,
+    verify_metric_sanity,
+    verify_return_shift_linearity,
+)
 
 
 def _make_env(**overrides) -> ContinuousPushPOMDP:
@@ -531,6 +539,136 @@ class TestContinuousPushPOMDP:
         metric_names = {m.name for m in metrics}
         assert "goal_reaching_rate" in metric_names
         assert "robot_obstacle_collision_rate" in metric_names
+
+    def test_compute_metrics_values_within_confidence_intervals(self):
+        """Test full-metric CI containment + structural invariants.
+
+        Purpose: Broad property check that every metric's value is inside its
+            own CI and that all structural invariants on the metric set and
+            histories hold (rate-in-[0,1], counts >= 0, finite CI for n>=2,
+            per-step-counts <= total_steps, discounted return inside reward
+            bounds, return shifts linearly with reward shift).
+
+        Given: 5 hand-built histories with varied collision/goal patterns
+            (all-safe, robot-only collisions, object-only collisions, both,
+            and a terminal-reaching episode).
+        When: compute_metrics is called.
+        Then: All four invariant helpers pass without raising.
+
+        Test type: integration
+        """
+        target = np.array([9.0, 9.0])
+        obstacle_center = np.array([5.0, 5.0])
+        safe_robot = np.array([1.0, 1.0])
+        safe_object = np.array([1.0, 1.0])
+
+        # History 0: all-safe (no collisions, no goal)
+        all_safe_steps = [
+            StepData(
+                state=np.concatenate([safe_robot, safe_object, target]),
+                action=np.array([0.0, 0.0]),
+                next_state=np.concatenate([safe_robot, safe_object, target]),
+                observation=np.concatenate([safe_robot, safe_object, target]),
+                reward=0.0,
+                belief=None,  # type: ignore[arg-type]
+            )
+            for _ in range(4)
+        ]
+
+        # History 1: robot-only collisions on first 2 of 4 steps.
+        robot_only_steps = []
+        for step_index in range(4):
+            robot_pos = obstacle_center if step_index < 2 else safe_robot
+            state = np.concatenate([robot_pos, safe_object, target])
+            robot_only_steps.append(
+                StepData(
+                    state=state,
+                    action=np.array([0.0, 0.0]),
+                    next_state=state,
+                    observation=state,
+                    reward=-1.0,
+                    belief=None,  # type: ignore[arg-type]
+                )
+            )
+
+        # History 2: object-only collisions on first 3 of 5 steps.
+        object_only_steps = []
+        for step_index in range(5):
+            object_pos = obstacle_center if step_index < 3 else safe_object
+            state = np.concatenate([safe_robot, object_pos, target])
+            object_only_steps.append(
+                StepData(
+                    state=state,
+                    action=np.array([0.0, 0.0]),
+                    next_state=state,
+                    observation=state,
+                    reward=-1.0,
+                    belief=None,  # type: ignore[arg-type]
+                )
+            )
+
+        # History 3: both robot AND object colliding on 1 of 3 steps.
+        both_steps = []
+        for step_index in range(3):
+            robot_pos = obstacle_center if step_index == 0 else safe_robot
+            object_pos = obstacle_center if step_index == 0 else safe_object
+            state = np.concatenate([robot_pos, object_pos, target])
+            both_steps.append(
+                StepData(
+                    state=state,
+                    action=np.array([0.0, 0.0]),
+                    next_state=state,
+                    observation=state,
+                    reward=-2.0,
+                    belief=None,  # type: ignore[arg-type]
+                )
+            )
+
+        # History 4: terminal-reaching (object placed at target).
+        # is_terminal triggers when ||object - target|| < 0.5 (typical thresh).
+        terminal_steps = []
+        for step_index in range(3):
+            object_pos = target if step_index == 2 else safe_object
+            state = np.concatenate([safe_robot, object_pos, target])
+            terminal_steps.append(
+                StepData(
+                    state=state,
+                    action=np.array([0.0, 0.0]),
+                    next_state=state,
+                    observation=state,
+                    reward=0.0,
+                    belief=None,  # type: ignore[arg-type]
+                )
+            )
+
+        histories = []
+        for steps, reach_terminal in (
+            (all_safe_steps, False),
+            (robot_only_steps, False),
+            (object_only_steps, False),
+            (both_steps, False),
+            (terminal_steps, True),
+        ):
+            histories.append(
+                History(
+                    history=steps,
+                    discount_factor=0.99,
+                    average_state_sampling_time=0.0,
+                    average_action_time=0.0,
+                    average_observation_time=0.0,
+                    average_belief_update_time=0.0,
+                    average_reward_time=0.0,
+                    actual_num_steps=len(steps),
+                    reach_terminal_state=reach_terminal,
+                    policy_run_data=[PolicyRunData(info_variables=[])],
+                )
+            )
+
+        metrics = self.env.compute_metrics(histories)
+        verify_metrics_within_confidence_intervals(metrics)
+        verify_metric_sanity(metrics, histories, self.env)
+        verify_history_returns_bounded(histories, self.env)
+        verify_return_shift_linearity(histories, self.env, shift=1.5)
 
 
 # ------------------------------------------------------------------
