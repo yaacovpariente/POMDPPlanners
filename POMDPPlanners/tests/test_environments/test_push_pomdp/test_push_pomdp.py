@@ -13,7 +13,17 @@ import random
 import numpy as np
 import pytest
 
+from POMDPPlanners.core.policy import PolicyRunData
+from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.environments.push_pomdp import PushPOMDP, _native as push_native
+from POMDPPlanners.tests.test_utils.confidence_interval_utils import (
+    verify_metrics_within_confidence_intervals,
+)
+from POMDPPlanners.tests.test_utils.metric_invariants_utils import (
+    verify_history_returns_bounded,
+    verify_metric_sanity,
+    verify_return_shift_linearity,
+)
 
 # Set seeds for reproducible tests
 np.random.seed(42)
@@ -1619,3 +1629,126 @@ class TestPushNativeSimulateRollout:
             discount_factor=env.discount_factor,
         )
         assert result == 0.0
+
+
+def test_compute_metrics_values_within_confidence_intervals():
+    """Test PushPOMDP metric values fall inside CIs and pass invariants.
+
+    Purpose: Validates that PushPOMDP compute_metrics produces metrics whose
+        values lie inside their CI bounds, satisfy structural invariants
+        (rate-in-[0,1], counts >= 0, finite CI for n>=2, per-step-counts
+        bounded by total steps), and that the underlying histories satisfy
+        discounted-return bounds and return-shift linearity.
+
+    Given: A PushPOMDP with two obstacles and 4 hand-built histories with
+        varied collision/goal patterns (all-safe, robot-only, object-only,
+        and a goal-reaching episode).
+    When: compute_metrics is called and the four invariant helpers are run.
+    Then: All checks pass without raising.
+
+    Test type: integration
+    """
+    env = PushPOMDP(
+        discount_factor=0.95,
+        grid_size=10,
+        push_threshold=1.0,
+        friction_coefficient=0.3,
+        observation_noise=0.1,
+        obstacles=[(3.0, 3.0), (7.0, 7.0)],
+        obstacle_radius=0.5,
+        obstacle_penalty=-10.0,
+    )
+
+    target = np.array([9.0, 9.0])
+    obstacle = np.array([3.0, 3.0])
+    safe_robot = np.array([1.0, 1.0])
+    safe_object = np.array([2.0, 2.0])
+
+    # History 0: all-safe
+    all_safe_steps = [
+        StepData(
+            state=np.concatenate([safe_robot, safe_object, target]),
+            action="up",
+            next_state=np.concatenate([safe_robot, safe_object, target]),
+            observation=np.concatenate([safe_robot, safe_object, target]),
+            reward=-1.0,
+            belief=None,  # type: ignore[arg-type]
+        )
+        for _ in range(4)
+    ]
+
+    # History 1: robot-only collisions for first 2 of 4 steps.
+    robot_only_steps = []
+    for step_index in range(4):
+        robot_pos = obstacle if step_index < 2 else safe_robot
+        state = np.concatenate([robot_pos, safe_object, target])
+        robot_only_steps.append(
+            StepData(
+                state=state,
+                action="up",
+                next_state=state,
+                observation=state,
+                reward=-2.0,
+                belief=None,  # type: ignore[arg-type]
+            )
+        )
+
+    # History 2: object-only collisions for first 1 of 3 steps.
+    object_only_steps = []
+    for step_index in range(3):
+        object_pos = obstacle if step_index == 0 else safe_object
+        state = np.concatenate([safe_robot, object_pos, target])
+        object_only_steps.append(
+            StepData(
+                state=state,
+                action="up",
+                next_state=state,
+                observation=state,
+                reward=-1.5,
+                belief=None,  # type: ignore[arg-type]
+            )
+        )
+
+    # History 3: terminal-reaching (object very close to target on last step).
+    terminal_steps = []
+    for step_index in range(3):
+        object_pos = target if step_index == 2 else safe_object
+        state = np.concatenate([safe_robot, object_pos, target])
+        terminal_steps.append(
+            StepData(
+                state=state,
+                action="up",
+                next_state=state,
+                observation=state,
+                reward=-1.0,
+                belief=None,  # type: ignore[arg-type]
+            )
+        )
+
+    histories = []
+    for steps, reach_terminal in (
+        (all_safe_steps, False),
+        (robot_only_steps, False),
+        (object_only_steps, False),
+        (terminal_steps, True),
+    ):
+        histories.append(
+            History(
+                history=steps,
+                discount_factor=0.95,
+                average_state_sampling_time=0.0,
+                average_action_time=0.0,
+                average_observation_time=0.0,
+                average_belief_update_time=0.0,
+                average_reward_time=0.0,
+                actual_num_steps=len(steps),
+                reach_terminal_state=reach_terminal,
+                policy_run_data=[PolicyRunData(info_variables=[])],
+            )
+        )
+
+    metrics = env.compute_metrics(histories)
+    verify_metrics_within_confidence_intervals(metrics)
+    verify_metric_sanity(metrics, histories, env)
+    verify_history_returns_bounded(histories, env)
+    verify_return_shift_linearity(histories, env, shift=1.5)

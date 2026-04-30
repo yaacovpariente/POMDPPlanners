@@ -43,6 +43,9 @@ from POMDPPlanners.environments import (
 )
 from POMDPPlanners.environments.pacman_pomdp import create_simple_maze_pacman
 from POMDPPlanners.environments.rock_sample_pomdp import create_random_rock_sample
+from POMDPPlanners.tests.test_utils.metric_invariants_utils import (
+    verify_belief_invariants,
+)
 
 NUM_PARTICLES = 10
 NUM_STATE_UPDATE_PARTICLES = 3
@@ -150,6 +153,7 @@ class TestWeightedParticleBeliefAllEnvironments:
 
         log_weights = np.full(len(particles), -np.log(len(particles)))
         belief = WeightedParticleBelief(particles=particles, log_weights=log_weights)
+        verify_belief_invariants(belief, expected_n_particles=len(particles))
 
         updated = belief.update(action=action, observation=observation, pomdp=env)
 
@@ -157,6 +161,7 @@ class TestWeightedParticleBeliefAllEnvironments:
         assert len(updated.particles) == len(particles)
         sample = updated.sample()
         assert sample is not None
+        verify_belief_invariants(updated, expected_n_particles=len(particles))
 
 
 class TestWeightedParticleBeliefStateUpdateAllEnvironments:
@@ -242,6 +247,7 @@ class TestUnweightedParticleBeliefStateUpdateAllEnvironments:
         assert belief.weights_sum == NUM_STATE_UPDATE_PARTICLES
         sample = belief.sample()
         assert sample is not None
+        verify_belief_invariants(belief, expected_n_particles=NUM_STATE_UPDATE_PARTICLES)
 
 
 # ---------------------------------------------------------------------------

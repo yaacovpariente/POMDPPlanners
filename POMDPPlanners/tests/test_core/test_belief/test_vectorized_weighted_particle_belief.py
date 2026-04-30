@@ -13,6 +13,9 @@ from POMDPPlanners.core.belief.vectorized_particle_belief_updater import (
 from POMDPPlanners.core.belief.vectorized_weighted_particle_belief import (
     VectorizedWeightedParticleBelief,
 )
+from POMDPPlanners.tests.test_utils.metric_invariants_utils import (
+    verify_belief_invariants,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -90,6 +93,7 @@ class TestConstruction:
         assert uniform_belief.particles.shape == (100, 2)
         assert uniform_belief.log_weights.shape == (100,)
         np.testing.assert_allclose(uniform_belief.normalized_weights.sum(), 1.0, atol=1e-12)
+        verify_belief_invariants(uniform_belief, expected_n_particles=100)
 
     def test_particles_must_be_ndarray(self):
         """Test that non-ndarray particles raise TypeError.
@@ -245,6 +249,7 @@ class TestUpdate:
         )
         assert isinstance(new_belief, VectorizedWeightedParticleBelief)
         assert new_belief is not uniform_belief
+        verify_belief_invariants(new_belief, expected_n_particles=uniform_belief.n_particles)
 
     def test_update_transitions_particles(self, uniform_belief):
         """Test that update transitions particles via the updater.
@@ -275,6 +280,7 @@ class TestUpdate:
         """
         new_belief = uniform_belief.update(action=np.zeros(2), observation=np.zeros(2), pomdp=None)
         assert new_belief.n_particles == uniform_belief.n_particles
+        verify_belief_invariants(new_belief, expected_n_particles=uniform_belief.n_particles)
 
 
 # ---------------------------------------------------------------------------
@@ -318,6 +324,7 @@ class TestResampling:
             np.ones(n) / n,
             atol=1e-12,
         )
+        verify_belief_invariants(new_belief, expected_n_particles=n)
 
     def test_no_resampling_when_disabled(self, uniform_belief):
         """Test that resampling does not occur when disabled.
@@ -350,6 +357,58 @@ class TestResampling:
             new_belief.normalized_weights,
             np.ones(50) / 50,
         )
+
+    def test_resampling_collapses_to_dominant_state(self):
+        """Test that resampling discards near-zero-weight particles in favor of the dominant state.
+
+        Purpose: Validates particle survival bias under degenerate weights — when one
+        particle holds essentially all the probability mass and all others are
+        negligible, the post-resample particle set should be dominated by copies of
+        the high-weight particle's state (this is the expected outcome of multinomial
+        resampling on a degenerate weight distribution).
+
+        Given: A belief with 100 distinct particles where particle 0 has log-weight 0.0
+            and all others have log-weight -100.0 (relative weight ~e^-100, negligible),
+            paired with a uniform-likelihood mock updater and a zero action so the
+            transition is the identity.
+        When: update() is called with resampling enabled (ess_factor=0.5).
+        Then: At least 95% of post-resample particles are exact copies of the dominant
+            particle's state, and the post-resample weights are uniform.
+
+        Test type: unit
+        """
+        np.random.seed(42)
+        n, d = 100, 2
+        # 100 distinct particles so we can identify which survives resampling.
+        particles = np.arange(n * d, dtype=float).reshape(n, d)
+        dominant_state = particles[0].copy()
+
+        # Degenerate log-weights: one near 0, the rest at -100 (~e^-100, negligible).
+        log_weights = np.full(n, -100.0)
+        log_weights[0] = 0.0
+
+        belief = VectorizedWeightedParticleBelief(
+            particles=particles,
+            log_weights=log_weights,
+            updater=_MockUpdater(),
+            resampling=True,
+            ess_factor=0.5,
+        )
+
+        new_belief = belief.update(
+            action=np.zeros(d),
+            observation=np.array([0.0, 0.0]),
+            pomdp=None,
+        )
+
+        matches = np.all(new_belief.particles == dominant_state, axis=1)
+        assert matches.sum() >= int(0.95 * n)
+        np.testing.assert_allclose(
+            new_belief.normalized_weights,
+            np.ones(n) / n,
+            atol=1e-12,
+        )
+        verify_belief_invariants(new_belief, expected_n_particles=n)
 
 
 # ---------------------------------------------------------------------------

@@ -12,6 +12,11 @@ from POMDPPlanners.tests.test_utils.confidence_interval_utils import (
     verify_metrics_within_confidence_intervals,
 )
 from POMDPPlanners.tests.test_utils.history_builders import build_test_history
+from POMDPPlanners.tests.test_utils.metric_invariants_utils import (
+    verify_history_returns_bounded,
+    verify_metric_sanity,
+    verify_return_shift_linearity,
+)
 
 np.random.seed(42)
 random.seed(42)
@@ -656,6 +661,9 @@ def test_metrics_confidence_intervals(tiger_pomdp):
 
     # Use generic confidence interval verification
     verify_metrics_within_confidence_intervals(metrics)
+    verify_metric_sanity(metrics, histories, tiger_pomdp)
+    verify_history_returns_bounded(histories, tiger_pomdp)
+    verify_return_shift_linearity(histories, tiger_pomdp, shift=1.5)
 
 
 def test_metric_name_consistency(tiger_pomdp):

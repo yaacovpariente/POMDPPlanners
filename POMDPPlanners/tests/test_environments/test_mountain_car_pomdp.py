@@ -1141,6 +1141,145 @@ def test_compute_metrics_goal_reaching():
     assert goal_rate.lower_confidence_bound <= goal_rate.value <= goal_rate.upper_confidence_bound
 
 
+def test_compute_metrics_values_within_confidence_intervals():
+    """Test MountainCarPOMDP metric values are inside CIs and pass invariants.
+
+    Purpose: Validates that metrics produced by compute_metrics lie inside
+        their CI bounds and that all structural invariants hold (rate-in-[0,1],
+        counts >= 0, finite CI for n>=2, returns inside reward bounds, and
+        return-shift linearity).
+
+    Given: A MountainCarPOMDP and 3 hand-built histories with varied outcomes
+        (goal-reaching, almost-goal, never-near-goal). Rewards lie in [-1.0, 0.0]
+        as declared by the env's reward_range.
+    When: compute_metrics is called and the four invariant helpers are run.
+    Then: All checks pass without raising.
+
+    Test type: integration
+    """
+    # Local imports needed because file does not import these at module level.
+    from POMDPPlanners.core.belief import (  # pylint: disable=import-outside-toplevel
+        WeightedParticleBelief,
+    )
+    from POMDPPlanners.core.policy import (  # pylint: disable=import-outside-toplevel
+        PolicyRunData,
+    )
+    from POMDPPlanners.core.simulation import (  # pylint: disable=import-outside-toplevel
+        History,
+        StepData,
+    )
+    from POMDPPlanners.tests.test_utils.confidence_interval_utils import (  # pylint: disable=import-outside-toplevel
+        verify_metrics_within_confidence_intervals,
+    )
+    from POMDPPlanners.tests.test_utils.metric_invariants_utils import (  # pylint: disable=import-outside-toplevel
+        verify_history_returns_bounded,
+        verify_metric_sanity,
+        verify_return_shift_linearity,
+    )
+
+    env = MountainCarPOMDP(discount_factor=0.95)
+
+    def _make_belief(state: np.ndarray) -> WeightedParticleBelief:
+        return WeightedParticleBelief(
+            particles=[state], log_weights=np.array([1.0]), resampling=False
+        )
+
+    # History 0: reach goal at last step.
+    goal_steps = [
+        StepData(
+            state=np.array([0.0, 0.0]),
+            action=1,
+            next_state=np.array([0.1, 0.01]),
+            observation=np.array([0.1, 0.01]),
+            reward=-1.0,
+            belief=_make_belief(np.array([0.0, 0.0])),
+        ),
+        StepData(
+            state=np.array([0.55, 0.02]),
+            action=1,
+            next_state=np.array([0.6, 0.03]),
+            observation=np.array([0.6, 0.03]),
+            reward=0.0,
+            belief=_make_belief(np.array([0.55, 0.02])),
+        ),
+    ]
+
+    # History 1: almost reach goal but not quite.
+    almost_steps = [
+        StepData(
+            state=np.array([0.0, 0.0]),
+            action=1,
+            next_state=np.array([0.1, 0.01]),
+            observation=np.array([0.1, 0.01]),
+            reward=-1.0,
+            belief=_make_belief(np.array([0.0, 0.0])),
+        ),
+        StepData(
+            state=np.array([0.4, 0.02]),
+            action=1,
+            next_state=np.array([0.45, 0.02]),
+            observation=np.array([0.45, 0.02]),
+            reward=-1.0,
+            belief=_make_belief(np.array([0.4, 0.02])),
+        ),
+    ]
+
+    # History 2: never near goal.
+    far_steps = [
+        StepData(
+            state=np.array([-0.5, 0.0]),
+            action=-1,
+            next_state=np.array([-0.6, -0.01]),
+            observation=np.array([-0.6, -0.01]),
+            reward=-1.0,
+            belief=_make_belief(np.array([-0.5, 0.0])),
+        ),
+        StepData(
+            state=np.array([-0.7, -0.02]),
+            action=-1,
+            next_state=np.array([-0.8, -0.03]),
+            observation=np.array([-0.8, -0.03]),
+            reward=-1.0,
+            belief=_make_belief(np.array([-0.7, -0.02])),
+        ),
+        StepData(
+            state=np.array([-0.9, -0.04]),
+            action=0,
+            next_state=np.array([-0.9, -0.04]),
+            observation=np.array([-0.9, -0.04]),
+            reward=-1.0,
+            belief=_make_belief(np.array([-0.9, -0.04])),
+        ),
+    ]
+
+    histories = []
+    for steps, reach_terminal in (
+        (goal_steps, True),
+        (almost_steps, False),
+        (far_steps, False),
+    ):
+        histories.append(
+            History(
+                history=steps,
+                discount_factor=0.95,
+                average_state_sampling_time=0.0,
+                average_action_time=0.0,
+                average_observation_time=0.0,
+                average_belief_update_time=0.0,
+                average_reward_time=0.0,
+                actual_num_steps=len(steps),
+                reach_terminal_state=reach_terminal,
+                policy_run_data=[PolicyRunData(info_variables=[])],
+            )
+        )
+
+    metrics = env.compute_metrics(histories)
+    verify_metrics_within_confidence_intervals(metrics)
+    verify_metric_sanity(metrics, histories, env)
+    verify_history_returns_bounded(histories, env)
+    verify_return_shift_linearity(histories, env, shift=1.5)
+
+
 def test_reward_batch_matches_scalar_reward():
     """Test that reward_batch returns results consistent with scalar reward.
 
