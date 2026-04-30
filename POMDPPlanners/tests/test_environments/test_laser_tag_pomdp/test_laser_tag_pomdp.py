@@ -26,6 +26,11 @@ from POMDPPlanners.simulations.episodes import run_episode
 from POMDPPlanners.tests.test_utils.confidence_interval_utils import (
     verify_metrics_within_confidence_intervals,
 )
+from POMDPPlanners.tests.test_utils.metric_invariants_utils import (
+    verify_history_returns_bounded,
+    verify_metric_sanity,
+    verify_return_shift_linearity,
+)
 from POMDPPlanners.utils.logger import get_logger
 
 # Set seeds for reproducible tests
@@ -1785,6 +1790,9 @@ def test_metrics_confidence_intervals():
 
     # Use generic confidence interval verification
     verify_metrics_within_confidence_intervals(metrics)
+    verify_metric_sanity(metrics, histories, env)
+    verify_history_returns_bounded(histories, env)
+    verify_return_shift_linearity(histories, env, shift=1.5)
 
 
 class TestLaserTagRewardBatch:

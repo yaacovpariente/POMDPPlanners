@@ -19,6 +19,14 @@ from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.distributions import DiscreteDistribution
 from POMDPPlanners.core.policy import PolicyRunData
 from POMDPPlanners.core.simulation import History, StepData
+from POMDPPlanners.tests.test_utils.confidence_interval_utils import (
+    verify_metrics_within_confidence_intervals,
+)
+from POMDPPlanners.tests.test_utils.metric_invariants_utils import (
+    verify_history_returns_bounded,
+    verify_metric_sanity,
+    verify_return_shift_linearity,
+)
 from POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp import (
     DiscreteLightDarkPOMDP,
     ObservationModelType,
@@ -1256,6 +1264,123 @@ def test_compute_metrics():
         <= obstacle_rate.value
         <= obstacle_rate.upper_confidence_bound
     )
+
+
+def test_compute_metrics_values_within_confidence_intervals():
+    """Test DiscreteLightDarkPOMDP metric values are inside CIs and pass invariants.
+
+    Purpose: Validates that metrics produced by compute_metrics lie inside
+        their CI bounds and that all structural invariants hold (rate-in-[0,1],
+        counts >= 0, finite CI for n>=2, return-shift linearity).
+
+    Given: A DiscreteLightDarkPOMDP and 3 hand-built histories with varied
+        outcomes (goal-reaching, obstacle-hitting, all-safe).
+    When: compute_metrics is called and the four invariant helpers are run.
+    Then: All checks pass without raising.
+
+    Test type: integration
+    """
+    env = DiscreteLightDarkPOMDP(discount_factor=0.95)
+
+    def _make_belief(state: np.ndarray) -> WeightedParticleBelief:
+        return WeightedParticleBelief(
+            particles=[state], log_weights=np.array([1.0]), resampling=False
+        )
+
+    # History 0: reach goal cleanly.
+    goal_steps = [
+        StepData(
+            state=np.array([0, 5]),
+            action="right",
+            next_state=np.array([1, 5]),
+            observation=np.array([1, 5]),
+            reward=-2.0,
+            belief=_make_belief(np.array([0, 5])),
+        ),
+        StepData(
+            state=np.array([1, 5]),
+            action="right",
+            next_state=np.array([2, 5]),
+            observation=np.array([2, 5]),
+            reward=-2.0,
+            belief=_make_belief(np.array([1, 5])),
+        ),
+        StepData(
+            state=np.array([10, 5]),
+            action="right",
+            next_state=np.array([10, 5]),
+            observation=np.array([10, 5]),
+            reward=8.0,
+            belief=_make_belief(np.array([10, 5])),
+        ),
+    ]
+
+    # History 1: hit an obstacle at (5, 5).
+    obstacle_steps = [
+        StepData(
+            state=np.array([0, 5]),
+            action="right",
+            next_state=np.array([1, 5]),
+            observation=np.array([1, 5]),
+            reward=-2.0,
+            belief=_make_belief(np.array([0, 5])),
+        ),
+        StepData(
+            state=np.array([5, 5]),
+            action="right",
+            next_state=np.array([5, 5]),
+            observation=np.array([5, 5]),
+            reward=-12.0,
+            belief=_make_belief(np.array([5, 5])),
+        ),
+    ]
+
+    # History 2: all-safe (no goal, no obstacle).
+    safe_steps = [
+        StepData(
+            state=np.array([0, 5]),
+            action="up",
+            next_state=np.array([0, 6]),
+            observation=np.array([0, 6]),
+            reward=-2.0,
+            belief=_make_belief(np.array([0, 5])),
+        ),
+        StepData(
+            state=np.array([0, 6]),
+            action="right",
+            next_state=np.array([1, 6]),
+            observation=np.array([1, 6]),
+            reward=-2.0,
+            belief=_make_belief(np.array([0, 6])),
+        ),
+    ]
+
+    histories = []
+    for steps, reach_terminal in (
+        (goal_steps, True),
+        (obstacle_steps, True),
+        (safe_steps, False),
+    ):
+        histories.append(
+            History(
+                history=steps,
+                discount_factor=0.95,
+                average_state_sampling_time=0.0,
+                average_action_time=0.0,
+                average_observation_time=0.0,
+                average_belief_update_time=0.0,
+                average_reward_time=0.0,
+                actual_num_steps=len(steps),
+                reach_terminal_state=reach_terminal,
+                policy_run_data=[PolicyRunData(info_variables=[])],
+            )
+        )
+
+    metrics = env.compute_metrics(histories)
+    verify_metrics_within_confidence_intervals(metrics)
+    verify_metric_sanity(metrics, histories, env)
+    verify_history_returns_bounded(histories, env)
+    verify_return_shift_linearity(histories, env, shift=1.5)
 
 
 def test_normal_observation_model():

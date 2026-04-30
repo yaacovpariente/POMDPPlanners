@@ -24,6 +24,11 @@ from POMDPPlanners.planners.planners_utils.rollout import python_random_rollout
 from POMDPPlanners.tests.test_utils.confidence_interval_utils import (
     verify_metrics_within_confidence_intervals,
 )
+from POMDPPlanners.tests.test_utils.metric_invariants_utils import (
+    verify_history_returns_bounded,
+    verify_metric_sanity,
+    verify_return_shift_linearity,
+)
 
 
 @pytest.fixture
@@ -1145,6 +1150,10 @@ class TestMetrics:
 
         # With 3 episodes, confidence bounds should be finite (not -inf/inf)
         verify_metrics_within_confidence_intervals(metrics)
+        histories = [h1, h2, h3]
+        verify_metric_sanity(metrics, histories, env)
+        verify_history_returns_bounded(histories, env)
+        verify_return_shift_linearity(histories, env, shift=1.5)
         for m in metrics:
             assert np.isfinite(
                 m.lower_confidence_bound
