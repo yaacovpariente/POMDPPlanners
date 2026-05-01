@@ -111,6 +111,22 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
     must navigate a grid, use sensors to evaluate rocks, and decide which ones
     to sample while balancing exploration costs and sampling rewards.
 
+    Stochasticity:
+        The dangerous-area penalty can be applied either deterministically
+        (the default) or stochastically. When
+        ``dangerous_area_hit_probability == 1.0`` (default), the penalty is
+        applied every time the robot's next position lies inside a
+        dangerous area, matching legacy behavior. When
+        ``dangerous_area_hit_probability < 1.0``, the penalty is applied
+        only with that probability per ``reward()`` / ``reward_batch()``
+        call (one Bernoulli draw per state), producing a heavy-tailed
+        return distribution suitable for benchmarking risk-sensitive
+        planners (e.g. ICVaR-aware MCTS) against expected-value MCTS on
+        the same env. Note that this makes ``reward(state, action)``
+        non-deterministic given a state-action pair, so any external
+        caching that assumes deterministic rewards must be aware of this.
+        ``transition_log_probability`` is unaffected.
+
     Attributes:
         map_size: Grid dimensions as (rows, cols)
         rock_positions: List of rock positions as (row, col) tuples
@@ -156,6 +172,7 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
         dangerous_areas: Optional[List[Tuple[int, int]]] = None,
         dangerous_area_radius: float = 1.0,
         dangerous_area_penalty: float = 5.0,
+        dangerous_area_hit_probability: float = 1.0,
         discount_factor: float = 0.95,
         name: str = "RockSample",
         output_dir: Optional[Path] = None,
@@ -177,11 +194,23 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
             dangerous_areas: List of dangerous area center positions as (row, col) tuples. Defaults to None.
             dangerous_area_radius: Radius around dangerous area centers. Defaults to 1.0.
             dangerous_area_penalty: Penalty magnitude applied randomly when in dangerous areas. Defaults to 5.0.
+            dangerous_area_hit_probability: Probability that the dangerous-area
+                penalty is actually applied to the reward when the robot's
+                next position is inside a dangerous area. Must lie in
+                ``[0, 1]``. Defaults to ``1.0`` (deterministic penalty,
+                matching legacy behavior). Values below ``1.0`` make the
+                reward stochastic (per-call Bernoulli draw), useful for
+                risk-sensitive planning benchmarks. Note that this makes
+                ``reward(state, action)`` non-deterministic given a
+                state-action pair.
             discount_factor: Discount factor. Defaults to 0.95.
             name: Environment name. Defaults to "RockSample".
             output_dir: Output directory for logging. Defaults to None.
             debug: Enable debug logging. Defaults to False.
         """
+        if not 0.0 <= dangerous_area_hit_probability <= 1.0:
+            raise ValueError("dangerous_area_hit_probability must be between 0 and 1 (inclusive)")
+
         # Calculate reward range based on parameters
         min_reward = step_penalty + bad_rock_penalty + sensor_use_penalty
         max_reward = step_penalty + exit_reward
@@ -216,6 +245,7 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
         )
         self.dangerous_area_radius = dangerous_area_radius
         self.dangerous_area_penalty = dangerous_area_penalty
+        self.dangerous_area_hit_probability = float(dangerous_area_hit_probability)
 
         # Validate parameters
         self._validate_parameters()
@@ -322,7 +352,11 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
             total_reward += self.sensor_use_penalty
 
         if self._is_in_dangerous_area(get_robot_pos(next_state)):
-            total_reward += self.dangerous_area_penalty
+            if (
+                self.dangerous_area_hit_probability >= 1.0
+                or np.random.random() < self.dangerous_area_hit_probability
+            ):
+                total_reward += self.dangerous_area_penalty
 
         return total_reward
 
@@ -384,8 +418,11 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
             return rewards
 
         next_robot_rows, next_robot_cols = self._closed_form_next_robot_pos(states, action)
+        deterministic = self.dangerous_area_hit_probability >= 1.0
         for j in range(n):
-            if self._is_in_dangerous_area((next_robot_rows[j], next_robot_cols[j])):
+            if not self._is_in_dangerous_area((next_robot_rows[j], next_robot_cols[j])):
+                continue
+            if deterministic or np.random.random() < self.dangerous_area_hit_probability:
                 rewards[j] += self.dangerous_area_penalty
 
         return rewards
