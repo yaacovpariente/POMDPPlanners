@@ -983,6 +983,165 @@ class TestDangerousArea:
         assert pomdp._is_in_dangerous_area((3, 2)) is False
 
 
+class TestStochasticDangerousAreaPenalty:
+    """Tests for the ``dangerous_area_hit_probability`` parameter.
+
+    Geometry: dangerous area centred at ``(2, 0)`` with radius 1.0; the
+    test fixtures place the robot at ``(1, 0)`` and use action 3 (south)
+    so the next-state position ``(2, 0)`` lies inside the zone. Action 3
+    avoids the action-2 (east-exit) early-return branch in
+    ``_reward_batch_vectorized``.
+    """
+
+    SOUTH_ACTION = 3
+
+    @staticmethod
+    def _stochastic_env(hit_probability: float, penalty: float = 5.0) -> RockSamplePOMDP:
+        return RockSamplePOMDP(
+            map_size=(5, 5),
+            rock_positions=[(4, 4)],
+            init_pos=(1, 0),
+            dangerous_areas=[(2, 0)],
+            dangerous_area_radius=1.0,
+            dangerous_area_penalty=penalty,
+            dangerous_area_hit_probability=hit_probability,
+            step_penalty=0.0,
+        )
+
+    def test_default_hit_probability_is_one(self):
+        """Default hit probability preserves legacy deterministic behavior.
+
+        Purpose: Validates that omitting the new parameter keeps the
+            deterministic dangerous-area penalty active.
+
+        Given: A RockSamplePOMDP constructed with default parameters.
+        When: ``dangerous_area_hit_probability`` is read.
+        Then: It equals ``1.0`` (deterministic-penalty regime).
+
+        Test type: unit
+        """
+        env = RockSamplePOMDP()
+        assert env.dangerous_area_hit_probability == 1.0
+
+    def test_hit_probability_zero_never_applies_penalty(self):
+        """hit_probability=0 disables the dangerous-area penalty.
+
+        Purpose: Validates the lower-bound of the stochastic penalty.
+
+        Given: A robot moving south from (1, 0) into the (2, 0)
+            dangerous area with hit_probability=0.
+        When: ``reward()`` is called many times.
+        Then: The dangerous-area penalty is never added.
+
+        Test type: unit
+        """
+        env = self._stochastic_env(hit_probability=0.0)
+        state = create_rock_sample_state((1, 0), (True,))
+        np.random.seed(0)
+        for _ in range(200):
+            assert env.reward(state, self.SOUTH_ACTION) == 0.0
+
+    def test_hit_probability_one_matches_deterministic(self):
+        """hit_probability=1 matches legacy deterministic penalty.
+
+        Purpose: Regression check that the default behavior is preserved
+            when hit_probability=1.0 is passed explicitly.
+
+        Given: A robot moving south from (1, 0) into the (2, 0)
+            dangerous area with hit_probability=1.0.
+        When: ``reward()`` is called many times.
+        Then: The dangerous-area penalty is always applied.
+
+        Test type: unit
+        """
+        env = self._stochastic_env(hit_probability=1.0)
+        state = create_rock_sample_state((1, 0), (True,))
+        for _ in range(50):
+            assert env.reward(state, self.SOUTH_ACTION) == pytest.approx(5.0)
+
+    def test_hit_probability_zero_three_empirical_rate(self):
+        """Empirical hit rate matches hit_probability over many calls.
+
+        Purpose: Validates that the per-call Bernoulli draw matches the
+            configured probability over a large sample.
+
+        Given: A robot moving into a dangerous area with
+            hit_probability=0.3.
+        When: ``reward()`` is called 5000 times.
+        Then: Empirical hit rate is within 0.05 of 0.3.
+
+        Test type: unit
+        """
+        env = self._stochastic_env(hit_probability=0.3)
+        state = create_rock_sample_state((1, 0), (True,))
+        np.random.seed(123)
+        n_trials = 5000
+        hits = 0
+        for _ in range(n_trials):
+            if env.reward(state, self.SOUTH_ACTION) == pytest.approx(5.0):
+                hits += 1
+        empirical_rate = hits / n_trials
+        assert abs(empirical_rate - 0.3) < 0.05
+
+    def test_reward_batch_honours_hit_probability(self):
+        """reward_batch applies stochastic penalty consistently with single-state.
+
+        Purpose: Validates that the batched reward path uses the same
+            Bernoulli mechanism as the single-state path.
+
+        Given: 5000 copies of a state moving into a dangerous area with
+            hit_probability=0.3.
+        When: ``reward_batch()`` is called once.
+        Then: Empirical hit rate across the batch is within 0.05 of 0.3.
+
+        Test type: unit
+        """
+        env = self._stochastic_env(hit_probability=0.3)
+        state = create_rock_sample_state((1, 0), (True,))
+        n_trials = 5000
+        states = np.tile(state, (n_trials, 1))
+        np.random.seed(456)
+        rewards = env.reward_batch(states, self.SOUTH_ACTION)
+        hits = int(np.sum(np.isclose(rewards, 5.0)))
+        empirical_rate = hits / n_trials
+        assert abs(empirical_rate - 0.3) < 0.05
+
+    def test_reward_batch_zero_probability_never_applies_penalty(self):
+        """reward_batch with hit_probability=0 returns zero penalty for all rows.
+
+        Purpose: Validates the lower-bound of the stochastic penalty in
+            the batched path.
+
+        Given: A batch of in-zone next-state states with
+            hit_probability=0.0 and step_penalty=0.
+        When: ``reward_batch()`` is called.
+        Then: All returned rewards equal 0.0.
+
+        Test type: unit
+        """
+        env = self._stochastic_env(hit_probability=0.0)
+        state = create_rock_sample_state((1, 0), (True,))
+        states = np.tile(state, (200, 1))
+        np.random.seed(789)
+        rewards = env.reward_batch(states, self.SOUTH_ACTION)
+        assert np.all(rewards == 0.0)
+
+    @pytest.mark.parametrize("bad_value", [-0.1, 1.5, 2.0, -1.0])
+    def test_invalid_hit_probability_raises(self, bad_value: float):
+        """Out-of-range hit_probability raises ValueError.
+
+        Purpose: Validates input validation on the new parameter.
+
+        Given: A hit_probability value outside [0, 1].
+        When: RockSamplePOMDP is constructed.
+        Then: ValueError is raised mentioning the parameter name.
+
+        Test type: unit
+        """
+        with pytest.raises(ValueError, match="dangerous_area_hit_probability"):
+            RockSamplePOMDP(dangerous_area_hit_probability=bad_value)
+
+
 class TestMetricsComputation:
     """Test metrics computation."""
 
