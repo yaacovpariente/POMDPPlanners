@@ -133,6 +133,26 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
     - Obstacle collision detection with configurable penalties
     - Obstacles prevent robot and object movement through them
 
+    Stochasticity:
+        The obstacle-collision penalty can be applied either
+        deterministically (the default) or stochastically. When
+        ``obstacle_hit_probability == 1.0`` (default), the penalty is
+        applied every time the robot's intended next position lies inside
+        an obstacle, matching legacy behavior. When
+        ``obstacle_hit_probability < 1.0``, the penalty is applied only
+        with that probability per ``reward()`` / ``reward_batch()`` call
+        (one Bernoulli draw per state), producing a heavy-tailed return
+        distribution suitable for benchmarking risk-sensitive planners
+        (e.g. ICVaR-aware MCTS) against expected-value MCTS on the same
+        env. Note that this makes ``reward(state, action)`` non-
+        deterministic given a state-action pair, so any external caching
+        that assumes deterministic rewards must be aware of this.
+        ``transition_log_probability`` is unaffected; the obstacle still
+        deterministically blocks movement. When
+        ``obstacle_hit_probability < 1.0`` the native C++ rollout (which
+        deducts the penalty deterministically) is bypassed in favour of
+        the pure-Python rollout so per-step Bernoulli draws survive.
+
     Example:
         >>> import numpy as np
         >>> np.random.seed(42)  # For reproducible results
@@ -173,6 +193,7 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
         obstacles: Optional[List[Tuple[float, float]]] = None,
         obstacle_radius: float = 0.5,
         obstacle_penalty: float = -10.0,
+        obstacle_hit_probability: float = 1.0,
         initial_state: Optional[np.ndarray] = None,
         transition_error_prob: float = 0.0,
         name: str = "PushPOMDP",
@@ -180,6 +201,9 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
         debug: bool = False,
         use_queue_logger: bool = False,
     ):
+        if not 0.0 <= obstacle_hit_probability <= 1.0:
+            raise ValueError("obstacle_hit_probability must be between 0 and 1 (inclusive)")
+
         self.grid_size = grid_size
         self.push_threshold = push_threshold
         self.friction_coefficient = friction_coefficient
@@ -187,6 +211,7 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
         self.obstacles: List[Tuple[float, float]] = obstacles if obstacles is not None else []
         self.obstacle_radius = obstacle_radius
         self.obstacle_penalty = obstacle_penalty
+        self.obstacle_hit_probability = float(obstacle_hit_probability)
         self._initial_state = initial_state
         self.transition_error_prob = transition_error_prob
 
@@ -531,7 +556,11 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
             reward += 100.0
 
         if self._is_colliding_with_obstacle(state[:2], action):
-            reward += self.obstacle_penalty
+            if (
+                self.obstacle_hit_probability >= 1.0
+                or np.random.random() < self.obstacle_hit_probability
+            ):
+                reward += self.obstacle_penalty
 
         return float(reward)
 
@@ -609,6 +638,19 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
         remaining = max_depth - depth
         if remaining <= 0 or self.is_terminal(state=state):
             return 0.0
+
+        if self.obstacle_hit_probability < 1.0:
+            # Native kernel applies the obstacle penalty deterministically;
+            # fall back to the Python rollout so per-step Bernoulli draws
+            # against ``obstacle_hit_probability`` survive.
+            actions = [self.actions[i] for i in np.random.randint(0, 4, size=remaining)]
+            return self._python_simulate_random_rollout(
+                state=state,
+                actions=actions,
+                max_depth=max_depth,
+                discount_factor=discount_factor,
+                depth=depth,
+            )
 
         action_indices = np.random.randint(0, 4, size=remaining, dtype=np.int64)
         obs_arr = self._get_native_rollout_obstacles()
@@ -732,6 +774,11 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
         diff = intended[:, None, :] - obs_arr[None, :, :]  # (N, M, 2)
         dist_sq = np.sum(diff * diff, axis=2)  # (N, M)
         colliding = np.any(dist_sq <= self.obstacle_radius * self.obstacle_radius, axis=1)
+        if self.obstacle_hit_probability < 1.0:
+            # Per-row Bernoulli mask: refund the penalty for rows that collide
+            # but lose the per-call coin flip.
+            applied = np.random.random(len(states)) < self.obstacle_hit_probability
+            colliding = colliding & applied
         return np.where(colliding, self.obstacle_penalty, 0.0).astype(np.float64)
 
     def observation_log_probability_per_state(
