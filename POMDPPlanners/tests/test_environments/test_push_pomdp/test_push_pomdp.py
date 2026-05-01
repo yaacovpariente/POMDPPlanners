@@ -1237,6 +1237,178 @@ class TestPushPOMDPStateTransition:
             )
 
 
+class TestStochasticObstacleHitProbability:
+    """Tests for the ``obstacle_hit_probability`` parameter on ``PushPOMDP``.
+
+    Geometry: a single obstacle centred at ``(3.0, 3.0)`` with radius
+    ``0.5``; the robot starts at ``(2.0, 3.0)`` and the action ``"right"``
+    drives the intended next-position to ``(3.0, 3.0)`` (inside the
+    obstacle). The object is parked far away so it never affects the
+    distance-to-target term in cross-call comparisons.
+    """
+
+    COLLIDE_ACTION = "right"
+    OBSTACLE_PENALTY = -10.0
+
+    @staticmethod
+    def _stochastic_env(hit_probability: float) -> PushPOMDP:
+        return PushPOMDP(
+            discount_factor=0.95,
+            grid_size=10,
+            obstacles=[(3.0, 3.0)],
+            obstacle_radius=0.5,
+            obstacle_penalty=TestStochasticObstacleHitProbability.OBSTACLE_PENALTY,
+            obstacle_hit_probability=hit_probability,
+            transition_error_prob=0.0,
+        )
+
+    @staticmethod
+    def _collide_state() -> np.ndarray:
+        # robot just left of obstacle; object far away from target stays put
+        return np.array([2.0, 3.0, 8.0, 8.0, 9.0, 9.0])
+
+    def test_default_hit_probability_is_one(self):
+        """Default hit probability preserves legacy deterministic behavior.
+
+        Purpose: Validates that omitting the new parameter keeps the
+            deterministic obstacle-collision penalty active.
+
+        Given: A PushPOMDP constructed with default parameters.
+        When: ``obstacle_hit_probability`` is read.
+        Then: It equals ``1.0`` (deterministic-penalty regime).
+
+        Test type: unit
+        """
+        env = PushPOMDP(discount_factor=0.95)
+        assert env.obstacle_hit_probability == 1.0
+
+    def test_hit_probability_zero_never_applies_penalty(self):
+        """hit_probability=0 disables the obstacle-collision penalty.
+
+        Purpose: Validates the lower-bound of the stochastic penalty.
+
+        Given: A robot moving right from (2, 3) into the (3, 3) obstacle
+            with hit_probability=0.
+        When: ``reward()`` is called many times.
+        Then: The obstacle penalty is never added; reward equals the
+            base distance term.
+
+        Test type: unit
+        """
+        env = self._stochastic_env(hit_probability=0.0)
+        state = self._collide_state()
+        np.random.seed(0)
+        # baseline distance-to-target reward (object stays at (8, 8); target (9, 9))
+        expected = -float(np.linalg.norm(state[2:4] - state[4:6]))
+        for _ in range(200):
+            assert env.reward(state, self.COLLIDE_ACTION) == pytest.approx(expected)
+
+    def test_hit_probability_one_matches_deterministic(self):
+        """hit_probability=1 matches legacy deterministic penalty.
+
+        Purpose: Regression check that the default behavior is preserved
+            when hit_probability=1.0 is passed explicitly.
+
+        Given: A robot moving right from (2, 3) into the (3, 3) obstacle
+            with hit_probability=1.0.
+        When: ``reward()`` is called many times.
+        Then: The obstacle penalty is always applied.
+
+        Test type: unit
+        """
+        env = self._stochastic_env(hit_probability=1.0)
+        state = self._collide_state()
+        expected = -float(np.linalg.norm(state[2:4] - state[4:6])) + self.OBSTACLE_PENALTY
+        for _ in range(50):
+            assert env.reward(state, self.COLLIDE_ACTION) == pytest.approx(expected)
+
+    def test_hit_probability_zero_three_empirical_rate(self):
+        """Empirical hit rate matches hit_probability over many calls.
+
+        Purpose: Validates that the per-call Bernoulli draw matches the
+            configured probability over a large sample.
+
+        Given: A robot moving into an obstacle with hit_probability=0.3.
+        When: ``reward()`` is called 5000 times.
+        Then: Empirical hit rate is within 0.05 of 0.3.
+
+        Test type: unit
+        """
+        env = self._stochastic_env(hit_probability=0.3)
+        state = self._collide_state()
+        baseline = -float(np.linalg.norm(state[2:4] - state[4:6]))
+        np.random.seed(123)
+        n_trials = 5000
+        hits = 0
+        for _ in range(n_trials):
+            r = env.reward(state, self.COLLIDE_ACTION)
+            if r == pytest.approx(baseline + self.OBSTACLE_PENALTY):
+                hits += 1
+        empirical_rate = hits / n_trials
+        assert abs(empirical_rate - 0.3) < 0.05
+
+    def test_reward_batch_honours_hit_probability(self):
+        """reward_batch applies stochastic penalty consistently with single-state.
+
+        Purpose: Validates that the batched reward path uses the same
+            Bernoulli mechanism as the single-state path.
+
+        Given: 5000 copies of a state moving into an obstacle with
+            hit_probability=0.3.
+        When: ``reward_batch()`` is called once.
+        Then: Empirical hit rate across the batch is within 0.05 of 0.3.
+
+        Test type: unit
+        """
+        env = self._stochastic_env(hit_probability=0.3)
+        state = self._collide_state()
+        baseline = -float(np.linalg.norm(state[2:4] - state[4:6]))
+        n_trials = 5000
+        states = np.tile(state, (n_trials, 1))
+        np.random.seed(456)
+        rewards = env.reward_batch(states, self.COLLIDE_ACTION)
+        hits = int(np.sum(np.isclose(rewards, baseline + self.OBSTACLE_PENALTY)))
+        empirical_rate = hits / n_trials
+        assert abs(empirical_rate - 0.3) < 0.05
+
+    def test_reward_batch_zero_probability_never_applies_penalty(self):
+        """reward_batch with hit_probability=0 returns no obstacle penalty.
+
+        Purpose: Validates the lower-bound of the stochastic penalty in
+            the batched path.
+
+        Given: A batch of in-zone next-state states with
+            hit_probability=0.0.
+        When: ``reward_batch()`` is called.
+        Then: All returned rewards equal the baseline distance reward
+            (no obstacle penalty added).
+
+        Test type: unit
+        """
+        env = self._stochastic_env(hit_probability=0.0)
+        state = self._collide_state()
+        baseline = -float(np.linalg.norm(state[2:4] - state[4:6]))
+        states = np.tile(state, (200, 1))
+        np.random.seed(789)
+        rewards = env.reward_batch(states, self.COLLIDE_ACTION)
+        assert np.allclose(rewards, baseline)
+
+    @pytest.mark.parametrize("bad_value", [-0.1, 1.5, 2.0, -1.0])
+    def test_invalid_hit_probability_raises(self, bad_value: float):
+        """Out-of-range hit_probability raises ValueError.
+
+        Purpose: Validates input validation on the new parameter.
+
+        Given: A hit_probability value outside [0, 1].
+        When: PushPOMDP is constructed.
+        Then: ValueError is raised mentioning the parameter name.
+
+        Test type: unit
+        """
+        with pytest.raises(ValueError, match="obstacle_hit_probability"):
+            PushPOMDP(discount_factor=0.95, obstacle_hit_probability=bad_value)
+
+
 class TestSampleNextStepEquivalence:
     """Test that the optimized sample_next_step produces identical results to the base class."""
 
