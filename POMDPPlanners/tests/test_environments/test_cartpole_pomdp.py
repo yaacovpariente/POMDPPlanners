@@ -7,6 +7,8 @@ This module tests the CartPole POMDP environment, focusing on:
 - Terminal conditions
 """
 
+# pylint: disable=too-many-lines
+
 import copy
 import random
 
@@ -842,6 +844,148 @@ def test_compute_metrics_goal_reaching():
     goal_rate = metrics_dict["goal_reaching_rate"]
     assert goal_rate.value == 2 / 3  # 2 out of 3 histories complete successfully
     assert goal_rate.lower_confidence_bound <= goal_rate.value <= goal_rate.upper_confidence_bound
+
+
+def test_compute_metrics_values_within_confidence_intervals():
+    """Test CartPolePOMDP metric values are inside CIs and pass invariants.
+
+    Purpose: Validates that metrics produced by compute_metrics lie inside
+        their CI bounds and that all structural invariants hold (rate-in-[0,1],
+        counts >= 0, finite CI for n>=2, returns inside reward bounds, and
+        return-shift linearity).
+
+    Given: A CartPolePOMDP and 3 hand-built histories with varied outcomes
+        (no-crash, no-crash, crash). Rewards are 0.0/1.0, inside the env's
+        declared reward_range = (0.0, 1.0).
+    When: compute_metrics is called and the four invariant helpers are run.
+    Then: All checks pass without raising.
+
+    Test type: integration
+    """
+    from POMDPPlanners.core.belief import (  # pylint: disable=import-outside-toplevel
+        WeightedParticleBelief,
+    )
+    from POMDPPlanners.core.policy import (  # pylint: disable=import-outside-toplevel
+        PolicyRunData,
+    )
+    from POMDPPlanners.core.simulation import (  # pylint: disable=import-outside-toplevel
+        History,
+        StepData,
+    )
+    from POMDPPlanners.tests.test_utils.confidence_interval_utils import (  # pylint: disable=import-outside-toplevel
+        verify_metrics_within_confidence_intervals,
+    )
+    from POMDPPlanners.tests.test_utils.metric_invariants_utils import (  # pylint: disable=import-outside-toplevel
+        verify_history_returns_bounded,
+        verify_metric_sanity,
+        verify_return_shift_linearity,
+    )
+
+    noise_cov = np.eye(4) * 0.1
+    env = CartPolePOMDP(discount_factor=0.95, noise_cov=noise_cov)
+
+    def _make_belief(state: np.ndarray) -> WeightedParticleBelief:
+        return WeightedParticleBelief(
+            particles=[state], log_weights=np.array([1.0]), resampling=False
+        )
+
+    safe_state = np.array([0.0, 0.0, 0.0, 0.0])
+    crash_state = np.array([0.0, 0.0, 0.3, 0.0])  # theta > threshold
+
+    # History 0: no-crash, 3 steps.
+    no_crash_steps_a = [
+        StepData(
+            state=safe_state,
+            action=0,
+            next_state=safe_state,
+            observation=safe_state,
+            reward=1.0,
+            belief=_make_belief(safe_state),
+        ),
+        StepData(
+            state=safe_state,
+            action=1,
+            next_state=safe_state,
+            observation=safe_state,
+            reward=1.0,
+            belief=_make_belief(safe_state),
+        ),
+        StepData(
+            state=safe_state,
+            action=0,
+            next_state=safe_state,
+            observation=safe_state,
+            reward=1.0,
+            belief=_make_belief(safe_state),
+        ),
+    ]
+
+    # History 1: no-crash, 2 steps.
+    no_crash_steps_b = [
+        StepData(
+            state=safe_state,
+            action=1,
+            next_state=safe_state,
+            observation=safe_state,
+            reward=1.0,
+            belief=_make_belief(safe_state),
+        ),
+        StepData(
+            state=safe_state,
+            action=0,
+            next_state=safe_state,
+            observation=safe_state,
+            reward=1.0,
+            belief=_make_belief(safe_state),
+        ),
+    ]
+
+    # History 2: crash on second step.
+    crash_steps = [
+        StepData(
+            state=safe_state,
+            action=0,
+            next_state=crash_state,
+            observation=safe_state,
+            reward=1.0,
+            belief=_make_belief(safe_state),
+        ),
+        StepData(
+            state=crash_state,
+            action=0,
+            next_state=crash_state,
+            observation=crash_state,
+            reward=0.0,
+            belief=_make_belief(crash_state),
+        ),
+    ]
+
+    histories = []
+    for steps, reach_terminal in (
+        (no_crash_steps_a, False),
+        (no_crash_steps_b, False),
+        (crash_steps, True),
+    ):
+        histories.append(
+            History(
+                history=steps,
+                discount_factor=0.95,
+                average_state_sampling_time=0.0,
+                average_action_time=0.0,
+                average_observation_time=0.0,
+                average_belief_update_time=0.0,
+                average_reward_time=0.0,
+                actual_num_steps=len(steps),
+                reach_terminal_state=reach_terminal,
+                policy_run_data=[PolicyRunData(info_variables=[])],
+            )
+        )
+
+    metrics = env.compute_metrics(histories)
+    verify_metrics_within_confidence_intervals(metrics)
+    verify_metric_sanity(metrics, histories, env)
+    verify_history_returns_bounded(histories, env)
+    verify_return_shift_linearity(histories, env, shift=1.5)
 
 
 def test_reward_batch_matches_scalar_reward():

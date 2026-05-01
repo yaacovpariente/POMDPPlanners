@@ -18,6 +18,14 @@ from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.core.policy import PolicyRunData
 from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.environments.safety_ant_velocity_pomdp import SafeAntVelocityPOMDP
+from POMDPPlanners.tests.test_utils.confidence_interval_utils import (
+    verify_metrics_within_confidence_intervals,
+)
+from POMDPPlanners.tests.test_utils.metric_invariants_utils import (
+    verify_history_returns_bounded,
+    verify_metric_sanity,
+    verify_return_shift_linearity,
+)
 
 # Set seeds for reproducible tests
 
@@ -493,6 +501,107 @@ def test_compute_metrics():
         metrics_dict["critical_violation_rate"].upper_confidence_bound
         >= metrics_dict["critical_violation_rate"].value
     )
+
+
+def test_compute_metrics_values_within_confidence_intervals():
+    """Test SafeAntVelocityPOMDP metric values are inside CIs and pass invariants.
+
+    Purpose: Validates that metrics produced by compute_metrics lie inside
+        their CI bounds and that all structural invariants hold (rate-in-[0,1],
+        counts >= 0, finite CI for n>=2, returns inside reward bounds, and
+        return-shift linearity).
+
+    Given: A SafeAntVelocityPOMDP and 3 hand-built histories with varied
+        velocity profiles (all-safe, mixed, critical). Rewards lie in
+        [-100, 3.0] as declared by reward_range.
+    When: compute_metrics is called and the four invariant helpers are run.
+    Then: All checks pass without raising.
+
+    Test type: integration
+    """
+    env = SafeAntVelocityPOMDP(
+        discount_factor=0.95,
+        safe_velocity_threshold=2.0,
+    )
+
+    # History 0: all-safe.
+    safe_steps = [
+        StepData(
+            state=np.array([0.0, 0.0, 1.0, 1.0]),
+            action=1,
+            observation=np.array([0.0, 0.0, 1.0, 1.0]),
+            reward=1.0,
+            next_state=np.array([0.1, 0.1, 1.1, 1.1]),
+            belief=Mock(spec=Belief),
+        ),
+        StepData(
+            state=np.array([0.1, 0.1, 1.1, 1.1]),
+            action=1,
+            observation=np.array([0.1, 0.1, 1.1, 1.1]),
+            reward=1.0,
+            next_state=np.array([0.2, 0.2, 1.2, 1.2]),
+            belief=Mock(spec=Belief),
+        ),
+    ]
+
+    # History 1: mixed (one safety violation, no critical).
+    mixed_steps = [
+        StepData(
+            state=np.array([0.0, 0.0, 1.0, 1.0]),
+            action=1,
+            observation=np.array([0.0, 0.0, 1.0, 1.0]),
+            reward=1.0,
+            next_state=np.array([0.1, 0.1, 1.1, 1.1]),
+            belief=Mock(spec=Belief),
+        ),
+        StepData(
+            state=np.array([0.1, 0.1, 2.1, 2.1]),
+            action=3,
+            observation=np.array([0.1, 0.1, 2.1, 2.1]),
+            reward=-100.0,
+            next_state=np.array([0.2, 0.2, 1.2, 1.2]),
+            belief=Mock(spec=Belief),
+        ),
+    ]
+
+    # History 2: critical violation.
+    critical_steps = [
+        StepData(
+            state=np.array([0.0, 0.0, 3.1, 3.1]),
+            action=3,
+            observation=np.array([0.0, 0.0, 3.1, 3.1]),
+            reward=-100.0,
+            next_state=np.array([0.1, 0.1, 3.2, 3.2]),
+            belief=Mock(spec=Belief),
+        ),
+    ]
+
+    histories = []
+    for steps, reach_terminal in (
+        (safe_steps, False),
+        (mixed_steps, False),
+        (critical_steps, True),
+    ):
+        histories.append(
+            History(
+                history=steps,
+                discount_factor=0.95,
+                average_state_sampling_time=0.0,
+                average_action_time=0.0,
+                average_observation_time=0.0,
+                average_belief_update_time=0.0,
+                average_reward_time=0.0,
+                actual_num_steps=len(steps),
+                reach_terminal_state=reach_terminal,
+                policy_run_data=[PolicyRunData(info_variables=[])],
+            )
+        )
+
+    metrics = env.compute_metrics(histories)
+    verify_metrics_within_confidence_intervals(metrics)
+    verify_metric_sanity(metrics, histories, env)
+    verify_history_returns_bounded(histories, env)
+    verify_return_shift_linearity(histories, env, shift=1.5)
 
 
 def test_environment_equality():

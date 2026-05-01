@@ -15,6 +15,9 @@ import pytest
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
     ContinuousLightDarkPOMDPDiscreteActions,
 )
+from POMDPPlanners.tests.test_utils.metric_invariants_utils import (
+    verify_belief_invariants,
+)
 from POMDPPlanners.utils.weighted_particle_beliefs import (
     WeightedParticleBeliefContinuousLightDarkFullCoverage,
     WeightedParticleBeliefDiscreteLightDark,
@@ -57,6 +60,7 @@ def test_initialization():
     assert belief.reinvigoration_fraction == 0.2
     assert belief.actions == ["up", "down", "right", "left"]
     assert belief.action_to_vector["up"] == pytest.approx(np.array([0, 1]))
+    verify_belief_invariants(belief, expected_n_particles=n_particles)
 
 
 def test_reinvigoration():
@@ -99,6 +103,7 @@ def test_reinvigoration():
     # Check that some particles were reinvigorated
     n_reinvigorate = int(belief.reinvigoration_fraction * n_particles)
     assert n_reinvigorate > 0
+    verify_belief_invariants(reinvigorated_belief, expected_n_particles=n_particles)
 
 
 def test_invalid_initialization():
@@ -193,6 +198,7 @@ def test_full_coverage_initialization():
     assert belief.actions == ["up", "down", "right", "left"]
     assert belief.action_to_vector["up"] == pytest.approx(np.array([0, 1]))
     assert not belief.resampling  # Should be False as specified in __init__
+    verify_belief_invariants(belief, expected_n_particles=n_particles)
 
 
 def test_full_coverage_reinvigoration():
@@ -238,6 +244,7 @@ def test_full_coverage_reinvigoration():
 
     for i in range(n_states):
         assert np.array_equal(reinvigorated_belief.particles[-(i + 1)], expected_states[-(i + 1)])
+    verify_belief_invariants(reinvigorated_belief, expected_n_particles=n_particles)
 
 
 def test_full_coverage_invalid_initialization():
@@ -604,3 +611,4 @@ def test_continuous_full_coverage_particle_type_preservation_after_update():
     assert updated_belief.log_weights.shape == (
         n_particles,
     ), f"Log weights shape should be ({n_particles},), got {updated_belief.log_weights.shape}"
+    verify_belief_invariants(updated_belief, expected_n_particles=n_particles)
