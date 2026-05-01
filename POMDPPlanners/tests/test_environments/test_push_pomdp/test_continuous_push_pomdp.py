@@ -671,6 +671,195 @@ class TestContinuousPushPOMDP:
         verify_return_shift_linearity(histories, self.env, shift=1.5)
 
 
+class TestContinuousPushStochasticObstacleHitProbability:
+    """Tests for ``obstacle_hit_probability`` on ``ContinuousPushPOMDP``.
+
+    Geometry: a single AABB obstacle centred at ``(5.0, 5.0)`` with
+    half-size ``0.5`` (extents ``[4.5, 5.5]^2``). The robot starts at
+    ``(4.0, 5.0)`` and the action ``(1.0, 0.0)`` puts the post-action
+    robot position at ``(5.0, 5.0)`` — well inside the AABB even after
+    accounting for ``robot_radius``. Transition covariance is set to a
+    near-zero diagonal so the distance-to-target term is effectively
+    deterministic and the obstacle penalty (-10.0) cleanly dominates the
+    decision boundary used to bucket "hit" vs. "no-hit" trials.
+    """
+
+    OBSTACLE_PENALTY = -10.0
+    COLLIDE_ACTION = np.array([1.0, 0.0])
+
+    @staticmethod
+    def _stochastic_env(hit_probability: float) -> ContinuousPushPOMDP:
+        return ContinuousPushPOMDP(
+            discount_factor=0.99,
+            grid_size=10,
+            obstacles=[(5.0, 5.0, 0.5)],
+            obstacle_penalty=TestContinuousPushStochasticObstacleHitProbability.OBSTACLE_PENALTY,
+            obstacle_hit_probability=hit_probability,
+            robot_radius=0.3,
+            state_transition_cov_matrix=np.eye(2) * 1e-8,
+        )
+
+    @staticmethod
+    def _collide_state() -> np.ndarray:
+        # robot just left of obstacle AABB; object far from target so the
+        # distance-to-target term is well above 0.5 (no goal bonus).
+        return np.array([4.0, 5.0, 1.0, 1.0, 9.0, 9.0])
+
+    def test_default_hit_probability_is_one(self):
+        """Default hit probability preserves legacy deterministic behavior.
+
+        Purpose: Validates that omitting the new parameter keeps the
+            deterministic obstacle-collision penalty active.
+
+        Given: A ContinuousPushPOMDP with default parameters.
+        When: ``obstacle_hit_probability`` is read.
+        Then: It equals ``1.0``.
+
+        Test type: unit
+        """
+        env = ContinuousPushPOMDP(discount_factor=0.99)
+        assert env.obstacle_hit_probability == 1.0
+
+    def test_hit_probability_zero_never_applies_penalty(self):
+        """hit_probability=0 disables the obstacle-collision penalty.
+
+        Purpose: Validates the lower-bound of the stochastic penalty for
+            the continuous-action env.
+
+        Given: A robot moving right into an obstacle AABB with
+            hit_probability=0 and near-zero transition noise.
+        When: ``reward()`` is called many times.
+        Then: Every reward sits above the (baseline - penalty/2) midpoint
+            — i.e. no obstacle penalty was applied.
+
+        Test type: unit
+        """
+        env = self._stochastic_env(hit_probability=0.0)
+        state = self._collide_state()
+        # With p=0 the reward equals the baseline distance term up to the
+        # tiny transition-noise jitter (cov 1e-8). A midpoint between
+        # baseline and (baseline + obstacle_penalty) cleanly separates the
+        # two regimes regardless of where the absolute baseline sits.
+        baseline = env.reward(state, self.COLLIDE_ACTION)
+        midpoint = baseline + self.OBSTACLE_PENALTY / 2.0
+        np.random.seed(0)
+        for _ in range(200):
+            r = env.reward(state, self.COLLIDE_ACTION)
+            assert r > midpoint
+
+    def test_hit_probability_one_always_applies_penalty(self):
+        """hit_probability=1 matches legacy deterministic penalty.
+
+        Purpose: Regression check that the default behavior is preserved
+            when hit_probability=1.0 is passed explicitly.
+
+        Given: A robot moving right into an obstacle AABB with
+            hit_probability=1.0 and near-zero transition noise.
+        When: ``reward()`` is called many times.
+        Then: Every reward includes the full obstacle penalty.
+
+        Test type: unit
+        """
+        env = self._stochastic_env(hit_probability=1.0)
+        state = self._collide_state()
+        # Compare against the same env with p=0 to isolate the penalty.
+        env_no_pen = self._stochastic_env(hit_probability=0.0)
+        baseline = env_no_pen.reward(state, self.COLLIDE_ACTION)
+        for _ in range(50):
+            r = env.reward(state, self.COLLIDE_ACTION)
+            assert r == pytest.approx(baseline + self.OBSTACLE_PENALTY, abs=1e-3)
+
+    def test_hit_probability_zero_three_empirical_rate(self):
+        """Empirical hit rate matches hit_probability over many calls.
+
+        Purpose: Validates that the per-call Bernoulli draw matches the
+            configured probability over a large sample.
+
+        Given: A robot moving into an obstacle with hit_probability=0.3.
+        When: ``reward()`` is called 5000 times.
+        Then: Empirical hit rate is within 0.05 of 0.3.
+
+        Test type: unit
+        """
+        env = self._stochastic_env(hit_probability=0.3)
+        state = self._collide_state()
+        env_no_pen = self._stochastic_env(hit_probability=0.0)
+        baseline = env_no_pen.reward(state, self.COLLIDE_ACTION)
+        midpoint = baseline + self.OBSTACLE_PENALTY / 2.0
+        np.random.seed(123)
+        n_trials = 5000
+        hits = 0
+        for _ in range(n_trials):
+            if env.reward(state, self.COLLIDE_ACTION) < midpoint:
+                hits += 1
+        empirical_rate = hits / n_trials
+        assert abs(empirical_rate - 0.3) < 0.05
+
+    def test_reward_batch_honours_hit_probability(self):
+        """reward_batch applies stochastic penalty consistently.
+
+        Purpose: Validates that the batched reward path uses the same
+            Bernoulli mechanism as the single-state path.
+
+        Given: 5000 copies of a state moving into an obstacle with
+            hit_probability=0.3.
+        When: ``reward_batch()`` is called once.
+        Then: Empirical hit rate across the batch is within 0.05 of 0.3.
+
+        Test type: unit
+        """
+        env = self._stochastic_env(hit_probability=0.3)
+        state = self._collide_state()
+        env_no_pen = self._stochastic_env(hit_probability=0.0)
+        baseline = env_no_pen.reward(state, self.COLLIDE_ACTION)
+        midpoint = baseline + self.OBSTACLE_PENALTY / 2.0
+        n_trials = 5000
+        states = np.tile(state, (n_trials, 1))
+        np.random.seed(456)
+        rewards = env.reward_batch(states, self.COLLIDE_ACTION)
+        hits = int(np.sum(rewards < midpoint))
+        empirical_rate = hits / n_trials
+        assert abs(empirical_rate - 0.3) < 0.05
+
+    def test_reward_batch_zero_probability_never_applies_penalty(self):
+        """reward_batch with hit_probability=0 returns no obstacle penalty.
+
+        Purpose: Validates the lower-bound of the stochastic penalty in
+            the batched path.
+
+        Given: A batch of in-zone next-state states with
+            hit_probability=0.0.
+        When: ``reward_batch()`` is called.
+        Then: All returned rewards exceed the obstacle-penalty floor.
+
+        Test type: unit
+        """
+        env = self._stochastic_env(hit_probability=0.0)
+        state = self._collide_state()
+        env_no_pen = self._stochastic_env(hit_probability=0.0)
+        baseline = env_no_pen.reward(state, self.COLLIDE_ACTION)
+        midpoint = baseline + self.OBSTACLE_PENALTY / 2.0
+        states = np.tile(state, (200, 1))
+        np.random.seed(789)
+        rewards = env.reward_batch(states, self.COLLIDE_ACTION)
+        assert np.all(rewards > midpoint)
+
+    @pytest.mark.parametrize("bad_value", [-0.1, 1.5, 2.0, -1.0])
+    def test_invalid_hit_probability_raises(self, bad_value: float):
+        """Out-of-range hit_probability raises ValueError.
+
+        Purpose: Validates input validation on the new parameter.
+
+        Given: A hit_probability value outside [0, 1].
+        When: ContinuousPushPOMDP is constructed.
+        Then: ValueError is raised mentioning the parameter name.
+
+        Test type: unit
+        """
+        with pytest.raises(ValueError, match="obstacle_hit_probability"):
+            ContinuousPushPOMDP(discount_factor=0.99, obstacle_hit_probability=bad_value)
+
+
 # ------------------------------------------------------------------
 # Discrete Actions
 # ------------------------------------------------------------------
