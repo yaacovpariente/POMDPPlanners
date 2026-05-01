@@ -111,6 +111,25 @@ class ContinuousPushPOMDP(Environment):
     Actions: 2D numpy vectors
     Observations: [robot_x, robot_y, noisy_obj_x, noisy_obj_y, target_x, target_y]
 
+    Stochasticity:
+        The obstacle-collision penalty can be applied either
+        deterministically (the default) or stochastically. When
+        ``obstacle_hit_probability == 1.0`` (default), the penalty is
+        applied every time the post-action robot position overlaps an
+        obstacle AABB, matching legacy behavior. When
+        ``obstacle_hit_probability < 1.0``, the penalty is applied only
+        with that probability per ``reward()`` / ``reward_batch()`` call
+        (one Bernoulli draw per state), producing a heavy-tailed return
+        distribution suitable for benchmarking risk-sensitive planners
+        (e.g. ICVaR-aware MCTS) against expected-value MCTS on the same
+        env. Note that this makes ``reward(state, action)`` non-
+        deterministic given a state-action pair, so any external caching
+        that assumes deterministic rewards must be aware of this.
+        ``transition_log_probability`` is unaffected. When
+        ``obstacle_hit_probability < 1.0`` the native C++ rollout (which
+        deducts the penalty deterministically) is bypassed in favour of
+        the Python rollout so per-step Bernoulli draws survive.
+
     Example:
         >>> import numpy as np
         >>> np.random.seed(42)
@@ -136,6 +155,7 @@ class ContinuousPushPOMDP(Environment):
         observation_noise: float = 0.1,
         obstacles: Optional[List[Tuple[float, float, float]]] = None,
         obstacle_penalty: float = -10.0,
+        obstacle_hit_probability: float = 1.0,
         robot_radius: float = 0.3,
         state_transition_cov_matrix: np.ndarray = np.eye(2) * 0.1,
         initial_state: Optional[np.ndarray] = None,
@@ -144,12 +164,16 @@ class ContinuousPushPOMDP(Environment):
         debug: bool = False,
         use_queue_logger: bool = False,
     ):
+        if not 0.0 <= obstacle_hit_probability <= 1.0:
+            raise ValueError("obstacle_hit_probability must be between 0 and 1 (inclusive)")
+
         self.grid_size = grid_size
         self.push_threshold = push_threshold
         self.friction_coefficient = friction_coefficient
         self.max_push = max_push
         self.observation_noise = observation_noise
         self.obstacle_penalty = obstacle_penalty
+        self.obstacle_hit_probability = float(obstacle_hit_probability)
         self.robot_radius = robot_radius
         self.state_transition_cov_matrix = state_transition_cov_matrix
         self._initial_state = initial_state
@@ -398,6 +422,11 @@ class ContinuousPushPOMDP(Environment):
         if self.obstacles.shape[0] > 0:
             robot_after = states[:, :2] + action  # (N, 2)
             collide = self._batch_circle_obstacle_overlap(robot_after, self.robot_radius)
+            if self.obstacle_hit_probability < 1.0:
+                # Per-row Bernoulli mask: refund the penalty for rows that
+                # collide but lose the per-call coin flip.
+                applied = np.random.random(collide.shape[0]) < self.obstacle_hit_probability
+                collide = collide & applied
             if np.any(collide):
                 rewards[collide] += self.obstacle_penalty
 
@@ -497,7 +526,10 @@ class ContinuousPushPOMDP(Environment):
             return 0.0
 
         actions_array = self._get_rollout_actions_array()
-        if actions_array is None:
+        if actions_array is None or self.obstacle_hit_probability < 1.0:
+            # Native kernel applies the obstacle penalty deterministically;
+            # fall back to the Python rollout so per-step Bernoulli draws
+            # against ``obstacle_hit_probability`` survive.
             return python_random_rollout(
                 state=state,
                 depth=depth,
