@@ -17,6 +17,14 @@ import pytest
 from POMDPPlanners.core.belief import Belief, WeightedParticleBelief
 from POMDPPlanners.core.environment import SpaceType
 from POMDPPlanners.core.simulation import History, StepData
+from POMDPPlanners.tests.test_utils.confidence_interval_utils import (
+    verify_metrics_within_confidence_intervals,
+)
+from POMDPPlanners.tests.test_utils.metric_invariants_utils import (
+    verify_history_returns_bounded,
+    verify_metric_sanity,
+    verify_return_shift_linearity,
+)
 from POMDPPlanners.environments.pacman_pomdp import (
     PacManPOMDP,
     create_simple_maze_pacman,
@@ -1401,6 +1409,134 @@ class TestPacManPOMDPMetrics:
         # Should have confidence bounds
         assert collision_metric.lower_confidence_bound is not None
         assert collision_metric.upper_confidence_bound is not None
+
+    def test_compute_metrics_values_within_confidence_intervals(self):
+        """Test PacManPOMDP metric values are inside CIs and pass invariants.
+
+        Purpose: Validates that metrics produced by compute_metrics lie inside
+            their CI bounds and that all structural invariants hold (rate-in-[0,1],
+            counts >= 0, finite CI for n>=2, returns inside reward bounds, and
+            return-shift linearity).
+
+        Given: A PacManPOMDP and 3 hand-built histories with varied outcomes
+            (win, loss, in-progress). Rewards lie inside reward_range.
+        When: compute_metrics is called and the four invariant helpers are run.
+        Then: All checks pass without raising.
+
+        Test type: integration
+        """
+        dummy_belief = Mock(spec=Belief)
+
+        # History 0: win (no pellets remaining)
+        win_state = self.pomdp.make_state(
+            pacman_pos=(2, 2),
+            ghost_positions=((0, 0),),
+            pellets=(),
+            terminal=True,
+            score=100,
+        )
+        win_steps = [
+            StepData(
+                state=win_state,
+                action=None,
+                next_state=win_state,
+                observation=None,
+                reward=10.0,
+                belief=dummy_belief,
+            ),
+            StepData(
+                state=win_state,
+                action=None,
+                next_state=win_state,
+                observation=None,
+                reward=99.0,  # well within reward_range = (-101, 109)
+                belief=dummy_belief,
+            ),
+        ]
+
+        # History 1: loss (collision with ghost, pellets remaining)
+        loss_state = self.pomdp.make_state(
+            pacman_pos=(1, 1),
+            ghost_positions=((1, 1),),
+            pellets=((1, 1),),
+            terminal=True,
+            score=10.0,
+        )
+        loss_steps = [
+            StepData(
+                state=loss_state,
+                action=None,
+                next_state=loss_state,
+                observation=None,
+                reward=-1.0,
+                belief=dummy_belief,
+            ),
+            StepData(
+                state=loss_state,
+                action=None,
+                next_state=loss_state,
+                observation=None,
+                reward=-100.0,
+                belief=dummy_belief,
+            ),
+        ]
+
+        # History 2: in-progress (no terminal, pellets remaining, no collisions)
+        progress_state_a = self.pomdp.make_state(
+            pacman_pos=(0, 0),
+            ghost_positions=((4, 4),),
+            pellets=((1, 1), (3, 3)),
+        )
+        progress_state_b = self.pomdp.make_state(
+            pacman_pos=(0, 1),
+            ghost_positions=((4, 4),),
+            pellets=((1, 1), (3, 3)),
+        )
+        progress_steps = [
+            StepData(
+                state=progress_state_a,
+                action=None,
+                next_state=progress_state_b,
+                observation=None,
+                reward=-1.0,
+                belief=dummy_belief,
+            ),
+            StepData(
+                state=progress_state_b,
+                action=None,
+                next_state=progress_state_b,
+                observation=None,
+                reward=-1.0,
+                belief=dummy_belief,
+            ),
+        ]
+
+        histories = []
+        for steps, reach_terminal in (
+            (win_steps, True),
+            (loss_steps, True),
+            (progress_steps, False),
+        ):
+            histories.append(
+                History(
+                    history=steps,
+                    discount_factor=0.95,
+                    average_state_sampling_time=0.0,
+                    average_action_time=0.0,
+                    average_observation_time=0.0,
+                    average_belief_update_time=0.0,
+                    average_reward_time=0.0,
+                    actual_num_steps=len(steps),
+                    reach_terminal_state=reach_terminal,
+                    policy_run_data=[],
+                )
+            )
+
+        metrics = self.pomdp.compute_metrics(histories)
+        verify_metrics_within_confidence_intervals(metrics)
+        verify_metric_sanity(metrics, histories, self.pomdp)
+        verify_history_returns_bounded(histories, self.pomdp)
+        verify_return_shift_linearity(histories, self.pomdp, shift=1.5)
 
 
 class TestCreateSimpleMazePacman:

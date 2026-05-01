@@ -26,7 +26,15 @@ from POMDPPlanners.environments.rock_sample_pomdp import (
     get_rocks,
     states_equal,
 )
+from POMDPPlanners.tests.test_utils.confidence_interval_utils import (
+    verify_metrics_within_confidence_intervals,
+)
 from POMDPPlanners.tests.test_utils.history_builders import build_test_history
+from POMDPPlanners.tests.test_utils.metric_invariants_utils import (
+    verify_history_returns_bounded,
+    verify_metric_sanity,
+    verify_return_shift_linearity,
+)
 
 # Set seeds for reproducible tests
 np.random.seed(42)
@@ -1255,6 +1263,100 @@ class TestMetricsComputation:
         exit_metric = next((m for m in metrics if m.name == "exit_success_rate"), None)
         assert exit_metric is not None
         assert exit_metric.value == 0.5  # 1/2 successful exits
+
+    def test_compute_metrics_values_within_confidence_intervals(self):
+        """Test RockSamplePOMDP metric values are inside CIs and pass invariants.
+
+        Purpose: Validates that metrics produced by compute_metrics lie inside
+            their CI bounds and that all structural invariants hold (rate-in-[0,1],
+            counts >= 0, finite CI for n>=2, returns inside reward bounds, and
+            return-shift linearity).
+
+        Given: A RockSamplePOMDP and 3 hand-built histories with varied
+            outcomes (sample-and-exit, traverse, no-action). Rewards lie within
+            reward_range = (-10, 10).
+        When: compute_metrics is called and the four invariant helpers are run.
+        Then: All checks pass without raising.
+
+        Test type: integration
+        """
+        pomdp = RockSamplePOMDP()
+
+        # History 0: sample once and exit successfully.
+        sample_state = create_rock_sample_state((0, 0), (True, True))
+        terminal_state = create_rock_sample_state((-1, -1), (True, False))
+        sample_exit_steps = [
+            StepData(
+                state=sample_state,
+                action=0,  # Sample
+                next_state=sample_state,
+                observation="none",
+                reward=10.0,
+                belief=Mock(spec=Belief),
+            ),
+            StepData(
+                state=terminal_state,
+                action=1,
+                next_state=terminal_state,
+                observation="none",
+                reward=10.0,  # exit reward
+                belief=Mock(spec=Belief),
+            ),
+        ]
+
+        # History 1: traverse without sampling, no exit.
+        traverse_state = create_rock_sample_state((2, 2), (True, False))
+        traverse_steps = [
+            StepData(
+                state=traverse_state,
+                action=1,
+                next_state=traverse_state,
+                observation="none",
+                reward=0.0,
+                belief=Mock(spec=Belief),
+            ),
+            StepData(
+                state=traverse_state,
+                action=2,
+                next_state=traverse_state,
+                observation="none",
+                reward=0.0,
+                belief=Mock(spec=Belief),
+            ),
+        ]
+
+        # History 2: sample twice, no exit.
+        sample_twice_state = create_rock_sample_state((1, 1), (False, False))
+        sample_twice_steps = [
+            StepData(
+                state=sample_twice_state,
+                action=0,
+                next_state=sample_twice_state,
+                observation="none",
+                reward=-10.0,  # bad rock penalty
+                belief=Mock(spec=Belief),
+            ),
+            StepData(
+                state=sample_twice_state,
+                action=0,
+                next_state=sample_twice_state,
+                observation="none",
+                reward=-10.0,
+                belief=Mock(spec=Belief),
+            ),
+        ]
+
+        histories = [
+            build_test_history(steps=sample_exit_steps, actual_num_steps=2, reach_terminal=True),
+            build_test_history(steps=traverse_steps, actual_num_steps=2, reach_terminal=False),
+            build_test_history(steps=sample_twice_steps, actual_num_steps=2, reach_terminal=False),
+        ]
+
+        metrics = pomdp.compute_metrics(histories)
+        verify_metrics_within_confidence_intervals(metrics)
+        verify_metric_sanity(metrics, histories, pomdp)
+        verify_history_returns_bounded(histories, pomdp)
+        verify_return_shift_linearity(histories, pomdp, shift=1.5)
 
 
 class TestRandomRockSample:

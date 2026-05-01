@@ -365,13 +365,13 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
             ),
             MetricValue(
                 name=SafeAntVelocityPOMDPMetrics.TOTAL_SAFETY_VIOLATIONS.value,
-                value=sum(safety_violations),
+                value=float(np.mean(safety_violations)) if safety_violations else 0.0,
                 lower_confidence_bound=total_safety_violations_ci[0],
                 upper_confidence_bound=total_safety_violations_ci[1],
             ),
             MetricValue(
                 name=SafeAntVelocityPOMDPMetrics.TOTAL_CRITICAL_VIOLATIONS.value,
-                value=sum(critical_violations),
+                value=float(np.mean(critical_violations)) if critical_violations else 0.0,
                 lower_confidence_bound=total_critical_violations_ci[0],
                 upper_confidence_bound=total_critical_violations_ci[1],
             ),
