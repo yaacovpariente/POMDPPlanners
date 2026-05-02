@@ -22,6 +22,9 @@ from POMDPPlanners.simulations.workflows.hyperparameter_tuning_evaluation_workfl
 from POMDPPlanners.simulations.hyper_parameter_tuning_simulations import (
     HyperParameterOptimizer,
 )
+from POMDPPlanners.simulations.grid_search_simulations import (
+    GridSearchOptimizer,
+)
 from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import (
     JoblibConfig,
 )
@@ -646,6 +649,105 @@ class LocalSimulationsAPI(SimulationsAPIInterface):
 
         finally:
             # Clean up optimizer resources
+            try:
+                optimizer.cleanup()
+            except Exception as cleanup_error:  # pylint: disable=broad-exception-caught
+                self.logger.warning("Error during optimizer cleanup: %s", cleanup_error)
+
+    def run_grid_search_optimization(
+        self,
+        environment_run_params: List[HyperParameterRunParams],
+        experiment_name: str = "POMDP_Grid_Search_Optimization",
+        n_jobs: int = -1,
+        cache_dir_path: Optional[Path] = None,
+        confidence_interval_level: float = 0.95,
+        alpha: float = 0.05,
+        use_queue_logger: bool = False,
+    ) -> List[OptimizedPolicyResult]:
+        """Run grid (linear) search hyperparameter optimization for POMDP policies.
+
+        Drop-in alternative to :meth:`run_hyperparameter_optimization` that
+        replaces Optuna's adaptive search with an exhaustive Cartesian-product
+        sweep over user-supplied value lists. Useful when you want to evaluate
+        every combination of a small grid rather than letting Optuna sample
+        adaptively, or when you need deterministic, reproducible coverage.
+
+        Each :class:`HyperParameterRunParams` config must use only
+        :class:`CategoricalHyperParameter` (explicit ``choices`` list) or
+        :class:`NumericalGridSpec` (``low``/``high``/``n_points``) for its
+        hyperparameters. A bare :class:`NumericalHyperParameter` is rejected.
+
+        Episodes are seeded matched-pairs style — every combination uses the
+        same seed for the same ``episode_index`` — so head-to-head
+        combination comparisons share trajectory noise.
+
+        Args:
+            environment_run_params: List of :class:`HyperParameterRunParams`
+                configurations. The ``n_trials`` field is ignored — grid
+                search trial count is determined by the Cartesian product
+                size.
+            experiment_name: Name for the MLflow experiment tracking.
+            n_jobs: Number of parallel jobs across the (combination, episode)
+                batch. Use ``-1`` for all cores.
+            cache_dir_path: Optional path for storing results, MLflow runs,
+                and the per-episode cache.
+            confidence_interval_level: Confidence level for statistics.
+            alpha: Significance level for statistical tests.
+            use_queue_logger: Whether to use queue-based logging.
+
+        Returns:
+            List of :class:`OptimizedPolicyResult` — one per input config.
+            The ``chosen_hyper_parameters`` field contains the winning
+            combination; ``optimized_metric_values`` contains its measured
+            metric values.
+
+        Raises:
+            TypeError: If any hyperparameter is not a grid-compatible type.
+            RuntimeError: If optimization fails for any configuration.
+        """
+        self.logger.info(
+            "Starting grid search optimization for %s configurations",
+            len(environment_run_params),
+        )
+
+        if cache_dir_path is None:
+            cache_dir_path = Path("./grid_search_optimization_results")
+        cache_dir_path.mkdir(parents=True, exist_ok=True)
+
+        task_manager_config = JoblibConfig(n_jobs=1)
+
+        optimizer = GridSearchOptimizer(
+            cache_dir_path=cache_dir_path,
+            experiment_name=experiment_name,
+            n_jobs=n_jobs,
+            task_manager_config=task_manager_config,
+            confidence_interval_level=confidence_interval_level,
+            alpha=alpha,
+            use_queue_logger=use_queue_logger,
+        )
+
+        try:
+            results = optimizer.optimize(environment_run_params)
+            self.logger.info(
+                "Grid search optimization completed: %s/%s configurations succeeded",
+                len(results),
+                len(environment_run_params),
+            )
+            for i, result in enumerate(results):
+                self.logger.info(
+                    "Configuration %s: %s with %s - Best parameters: %s",
+                    i + 1,
+                    result.environment.__class__.__name__,
+                    result.policy.__class__.__name__,
+                    result.chosen_hyper_parameters,
+                )
+            return results
+
+        except Exception as e:
+            self.logger.error("Grid search optimization failed: %s", e)
+            raise RuntimeError(f"Grid search optimization failed: {e}") from e
+
+        finally:
             try:
                 optimizer.cleanup()
             except Exception as cleanup_error:  # pylint: disable=broad-exception-caught

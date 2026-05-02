@@ -24,6 +24,7 @@ from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     HyperParameterOptimizationDirection,
     OptimizedPolicyResult,
     ParallelizationLevel,
+    compute_pareto_scores,
 )
 from POMDPPlanners.core.simulation.simulation_configs import EnvironmentRunParams
 from POMDPPlanners.simulations.simulation_statistics import (
@@ -570,17 +571,15 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         Returns:
             Dict mapping trial number to aggregated Pareto score
         """
-        # Use provided pareto_trials if available, otherwise use all trials
         trials_to_score = pareto_trials if pareto_trials is not None else study.trials
 
-        # Collect all metric values across trials to score
-        trial_metrics = {}
+        trial_metrics: Dict[int, Dict[str, float]] = {}
         for trial in trials_to_score:
             if trial.state != optuna.trial.TrialState.COMPLETE:
                 continue
 
-            metrics = {}
-            for param_name, direction in self.parameters_to_optimize:
+            metrics: Dict[str, float] = {}
+            for param_name, _ in self.parameters_to_optimize:
                 metric_key = f"metric_{param_name}"
                 if metric_key not in trial.user_attrs:
                     continue
@@ -592,38 +591,11 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         if not trial_metrics:
             raise ValueError("No completed trials with all required metrics found")
 
-        # Compute mean and std for each metric across trials to score
-        metric_stats = {}
-        for param_name, _ in self.parameters_to_optimize:
-            values = [trial_data[param_name] for trial_data in trial_metrics.values()]
-            metric_stats[param_name] = {
-                "mean": np.mean(values),
-                "std": np.std(values) if np.std(values) > 0 else 1.0,  # Avoid division by zero
-            }
-
-        # Compute normalized scores for each trial
-        pareto_scores = {}
-        for trial_num, metrics in trial_metrics.items():
-            normalized_metrics = []
-
-            for param_name, direction in self.parameters_to_optimize:
-                value = metrics[param_name]
-                mean = metric_stats[param_name]["mean"]
-                std = metric_stats[param_name]["std"]
-
-                # Normalize to z-score
-                normalized = (value - mean) / std
-
-                # Flip sign for minimization objectives
-                if direction == HyperParameterOptimizationDirection.MINIMIZE:
-                    normalized = -normalized
-
-                normalized_metrics.append(normalized)
-
-            # Average normalized metrics to get final score
-            pareto_scores[trial_num] = np.mean(normalized_metrics)
-
-        return pareto_scores
+        scores = compute_pareto_scores(
+            metric_table=trial_metrics,
+            parameters_to_optimize=self.parameters_to_optimize,
+        )
+        return dict(scores)
 
     def _train_policy_if_trainable(self, policy: Policy, trial: FrozenTrial) -> None:
         if not isinstance(policy, TrainablePolicy):

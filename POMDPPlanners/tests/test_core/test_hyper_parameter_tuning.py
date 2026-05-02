@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     CategoricalHyperParameter,
@@ -815,7 +816,6 @@ class TestHyperParamPlannerConfigValidation:
 
         Test type: unit
         """
-        import pytest
 
         param = CategoricalHyperParameter(choices=[1, 2], name="param")
 
@@ -837,7 +837,6 @@ class TestHyperParamPlannerConfigValidation:
 
         Test type: unit
         """
-        import pytest
 
         class MockPolicy(Policy):
             def __init__(
@@ -879,7 +878,6 @@ class TestHyperParamPlannerConfigValidation:
 
         Test type: unit
         """
-        import pytest
 
         class MockPolicy(Policy):
             def __init__(
@@ -924,7 +922,6 @@ class TestHyperParamPlannerConfigValidation:
 
         Test type: unit
         """
-        import pytest
 
         class MockPolicy(Policy):
             def __init__(
@@ -968,7 +965,6 @@ class TestHyperParamPlannerConfigValidation:
 
         Test type: unit
         """
-        import pytest
 
         class MockPolicy(Policy):
             def __init__(
@@ -1006,7 +1002,6 @@ class TestHyperParamPlannerConfigValidation:
 
         Test type: unit
         """
-        import pytest
 
         class MockPolicy(Policy):
             def __init__(
@@ -1218,7 +1213,6 @@ class TestOptimizedPolicyResultValidation:
 
         Test type: unit
         """
-        import pytest
 
         env = self._create_mock_environment()
         policy = self._create_mock_policy(env)
@@ -1249,7 +1243,6 @@ class TestOptimizedPolicyResultValidation:
 
         Test type: unit
         """
-        import pytest
 
         env = self._create_mock_environment()
         policy = self._create_mock_policy(env)
@@ -1278,7 +1271,6 @@ class TestOptimizedPolicyResultValidation:
 
         Test type: unit
         """
-        import pytest
 
         env = self._create_mock_environment()
         policy = self._create_mock_policy(env)
@@ -1307,7 +1299,6 @@ class TestOptimizedPolicyResultValidation:
 
         Test type: unit
         """
-        import pytest
 
         env = self._create_mock_environment()
         policy = self._create_mock_policy(env)
@@ -1336,7 +1327,6 @@ class TestOptimizedPolicyResultValidation:
 
         Test type: unit
         """
-        import pytest
 
         env = self._create_mock_environment()
         policy = self._create_mock_policy(env)
@@ -1365,7 +1355,6 @@ class TestOptimizedPolicyResultValidation:
 
         Test type: unit
         """
-        import pytest
 
         env = self._create_mock_environment()
         policy = self._create_mock_policy(env)
@@ -1394,7 +1383,6 @@ class TestOptimizedPolicyResultValidation:
 
         Test type: unit
         """
-        import pytest
 
         env = self._create_mock_environment()
 
@@ -1422,7 +1410,6 @@ class TestOptimizedPolicyResultValidation:
 
         Test type: unit
         """
-        import pytest
 
         env = self._create_mock_environment()
         policy = self._create_mock_policy(env)
@@ -1451,7 +1438,6 @@ class TestOptimizedPolicyResultValidation:
 
         Test type: unit
         """
-        import pytest
 
         env = self._create_mock_environment()
         policy = self._create_mock_policy(env)
@@ -1480,7 +1466,6 @@ class TestOptimizedPolicyResultValidation:
 
         Test type: unit
         """
-        import pytest
 
         env = self._create_mock_environment()
         policy = self._create_mock_policy(env)
@@ -1507,7 +1492,6 @@ class TestOptimizedPolicyResultValidation:
 
         Test type: unit
         """
-        import pytest
 
         env = self._create_mock_environment()
         policy = self._create_mock_policy(env)
@@ -1534,7 +1518,6 @@ class TestOptimizedPolicyResultValidation:
 
         Test type: unit
         """
-        import pytest
 
         env = self._create_mock_environment()
         policy = self._create_mock_policy(env)
@@ -1563,7 +1546,6 @@ class TestOptimizedPolicyResultValidation:
 
         Test type: unit
         """
-        import pytest
 
         env = self._create_mock_environment()
         policy = self._create_mock_policy(env)
@@ -1592,7 +1574,6 @@ class TestOptimizedPolicyResultValidation:
 
         Test type: unit
         """
-        import pytest
 
         env = self._create_mock_environment()
         policy = self._create_mock_policy(env)
@@ -1622,7 +1603,6 @@ class TestOptimizedPolicyResultValidation:
 
         Test type: unit
         """
-        import pytest
 
         env = self._create_mock_environment()
         policy = self._create_mock_policy(env)
@@ -1651,7 +1631,6 @@ class TestOptimizedPolicyResultValidation:
 
         Test type: unit
         """
-        import pytest
 
         env = self._create_mock_environment()
         policy = self._create_mock_policy(env)
@@ -1680,7 +1659,6 @@ class TestOptimizedPolicyResultValidation:
 
         Test type: unit
         """
-        import pytest
 
         env = self._create_mock_environment()
         policy = self._create_mock_policy(env)
@@ -1712,7 +1690,6 @@ class TestOptimizedPolicyResultValidation:
 
         Test type: unit
         """
-        import pytest
 
         env = self._create_mock_environment()
         policy = self._create_mock_policy(env)
@@ -1863,7 +1840,383 @@ class TestParallelizationLevelEnum:
 
         Test type: unit
         """
-        import pytest
 
         with pytest.raises(ValueError):
             ParallelizationLevel("invalid")
+
+
+# ===== Grid search primitives =====
+# pylint: disable-next=wrong-import-position
+from POMDPPlanners.core.simulation.hyperparameter_tuning import (  # noqa: E402
+    NumericalGridSpec,
+    compute_pareto_scores,
+    expand_grid,
+)
+
+
+class TestNumericalGridSpec:
+    """Tests for NumericalGridSpec.expand() and id stability."""
+
+    def test_linear_scale_returns_n_points_endpoints_inclusive(self):
+        """Linear scale produces n_points evenly-spaced values inclusive of bounds.
+
+        Purpose: Validates np.linspace behavior is preserved
+
+        Given: A NumericalGridSpec with low=0, high=10, n_points=5, scale="linear"
+        When: expand() is called
+        Then: The list contains 5 values [0.0, 2.5, 5.0, 7.5, 10.0]
+
+        Test type: unit
+        """
+        spec = NumericalGridSpec(0.0, 10.0, 5, "x", "linear")
+        values = spec.expand()
+        assert len(values) == 5
+        assert values[0] == pytest.approx(0.0)
+        assert values[-1] == pytest.approx(10.0)
+        assert all(isinstance(v, float) for v in values)
+        assert values == pytest.approx([0.0, 2.5, 5.0, 7.5, 10.0])
+
+    def test_log_scale_uses_geomspace(self):
+        """Log scale produces geometrically-spaced positive values.
+
+        Purpose: Validates np.geomspace behavior
+
+        Given: A NumericalGridSpec with low=0.1, high=100, n_points=4, scale="log"
+        When: expand() is called
+        Then: The list contains [0.1, 1.0, 10.0, 100.0]
+
+        Test type: unit
+        """
+        spec = NumericalGridSpec(0.1, 100.0, 4, "x", "log")
+        values = spec.expand()
+        assert values == pytest.approx([0.1, 1.0, 10.0, 100.0])
+
+    def test_log_scale_rejects_non_positive_bounds(self):
+        """Log scale requires both bounds > 0.
+
+        Purpose: Validates input validation for geomspace's domain
+
+        Given: A NumericalGridSpec with low=0 and scale="log"
+        When: expand() is called
+        Then: ValueError is raised mentioning low and high
+
+        Test type: unit
+        """
+        spec = NumericalGridSpec(0.0, 10.0, 3, "x", "log")
+        with pytest.raises(ValueError, match="scale='log'"):
+            spec.expand()
+
+    def test_unknown_scale_raises_value_error(self):
+        """Unknown scale raises ValueError naming the bad value.
+
+        Purpose: Validates scale validation
+
+        Given: A NumericalGridSpec with scale="quadratic"
+        When: expand() is called
+        Then: ValueError is raised mentioning scale
+
+        Test type: unit
+        """
+        spec = NumericalGridSpec(0.0, 10.0, 3, "x", "quadratic")
+        with pytest.raises(ValueError, match="scale"):
+            spec.expand()
+
+    def test_n_points_below_two_raises_value_error(self):
+        """n_points < 2 is rejected.
+
+        Purpose: Validates n_points lower bound
+
+        Given: A NumericalGridSpec with n_points=1
+        When: expand() is called
+        Then: ValueError is raised
+
+        Test type: unit
+        """
+        spec = NumericalGridSpec(0.0, 10.0, 1, "x", "linear")
+        with pytest.raises(ValueError, match="n_points"):
+            spec.expand()
+
+    def test_id_stable_for_same_inputs(self):
+        """Two specs with the same fields produce the same id.
+
+        Purpose: Validates id() stability
+
+        Given: Two NumericalGridSpec instances with identical fields
+        When: id() is compared
+        Then: They are equal and hash equal
+
+        Test type: unit
+        """
+        a = NumericalGridSpec(0.0, 1.0, 5, "x", "linear")
+        b = NumericalGridSpec(0.0, 1.0, 5, "x", "linear")
+        assert a.id() == b.id()
+        assert hash(a) == hash(b)
+        assert a == b
+
+    def test_id_differs_when_scale_differs(self):
+        """Different scale field produces a different id.
+
+        Purpose: Validates id() distinguishes scale
+
+        Given: Two specs identical except scale
+        When: id() is compared
+        Then: ids differ
+
+        Test type: unit
+        """
+        a = NumericalGridSpec(0.1, 10.0, 5, "x", "linear")
+        b = NumericalGridSpec(0.1, 10.0, 5, "x", "log")
+        assert a.id() != b.id()
+        assert a != b
+
+
+class TestExpandGrid:
+    """Tests for expand_grid Cartesian product helper."""
+
+    def test_empty_input_yields_one_empty_combo(self):
+        """Empty hyperparameter list yields a single empty combination.
+
+        Purpose: Validates degenerate-input handling
+
+        Given: An empty list of hyperparameters
+        When: expand_grid is called
+        Then: Returns [{}]
+
+        Test type: unit
+        """
+        assert expand_grid([]) == [{}]
+
+    def test_single_categorical_axis(self):
+        """A single categorical axis produces one dict per choice.
+
+        Purpose: Validates the simplest non-trivial expansion
+
+        Given: One CategoricalHyperParameter with 3 choices
+        When: expand_grid is called
+        Then: Returns 3 single-key dicts in choice order
+
+        Test type: unit
+        """
+        param = CategoricalHyperParameter(choices=["a", "b", "c"], name="kind")
+        result = expand_grid([param])
+        assert result == [{"kind": "a"}, {"kind": "b"}, {"kind": "c"}]
+
+    def test_mixed_categorical_and_numerical_grid_spec(self):
+        """Mixed input produces the full Cartesian product.
+
+        Purpose: Validates multi-axis expansion with mixed types
+
+        Given: One CategoricalHyperParameter (2 choices) + one NumericalGridSpec (3 points)
+        When: expand_grid is called
+        Then: Returns 6 combinations covering all pairs
+
+        Test type: unit
+        """
+        cat = CategoricalHyperParameter(choices=["x", "y"], name="kind")
+        num = NumericalGridSpec(0.0, 1.0, 3, "weight", "linear")
+        result = expand_grid([cat, num])
+        assert len(result) == 6
+        kinds = {(c["kind"], c["weight"]) for c in result}
+        assert kinds == {
+            ("x", 0.0),
+            ("x", 0.5),
+            ("x", 1.0),
+            ("y", 0.0),
+            ("y", 0.5),
+            ("y", 1.0),
+        }
+
+    def test_deterministic_ordering(self):
+        """Two calls with identical inputs produce identical orderings.
+
+        Purpose: Validates ordering stability so cache keys are reproducible
+
+        Given: Same hyperparameter sequence, twice
+        When: expand_grid is called twice
+        Then: The two result lists are equal and in the same order
+
+        Test type: unit
+        """
+        cat = CategoricalHyperParameter(choices=[1, 2], name="a")
+        num = NumericalGridSpec(0.0, 1.0, 2, "b", "linear")
+        first = expand_grid([cat, num])
+        second = expand_grid([cat, num])
+        assert first == second
+
+    def test_rejects_bare_numerical_hyperparameter(self):
+        """A NumericalHyperParameter is rejected with a descriptive error.
+
+        Purpose: Validates that the non-grid type is rejected explicitly
+
+        Given: A NumericalHyperParameter (continuous range, no n_points)
+        When: expand_grid is called
+        Then: TypeError is raised naming NumericalGridSpec in the message
+
+        Test type: unit
+        """
+        bad = NumericalHyperParameter(0.0, 1.0, "x")
+        with pytest.raises(TypeError, match="NumericalGridSpec"):
+            expand_grid([bad])  # type: ignore[list-item]
+
+    def test_duplicate_names_rejected(self):
+        """Two hyperparameters sharing a name raise ValueError.
+
+        Purpose: Validates that overlapping names would corrupt combo dicts
+
+        Given: Two CategoricalHyperParameters with the same name
+        When: expand_grid is called
+        Then: ValueError is raised mentioning duplicate
+
+        Test type: unit
+        """
+        a = CategoricalHyperParameter(choices=[1], name="x")
+        b = CategoricalHyperParameter(choices=[2], name="x")
+        with pytest.raises(ValueError, match="Duplicate"):
+            expand_grid([a, b])
+
+
+class TestComputeParetoScores:
+    """Tests for compute_pareto_scores free function."""
+
+    def test_single_objective_maximize_picks_largest_value(self):
+        """Single MAXIMIZE objective: row with largest value gets the highest score.
+
+        Purpose: Validates basic single-objective ranking
+
+        Given: 3 rows with one metric "ret", values 1, 2, 3, direction MAXIMIZE
+        When: compute_pareto_scores is called
+        Then: Row "c" (value 3) has the highest score, row "a" (value 1) the lowest
+
+        Test type: unit
+        """
+        table = {"a": {"ret": 1.0}, "b": {"ret": 2.0}, "c": {"ret": 3.0}}
+        scores = compute_pareto_scores(
+            table,
+            [("ret", HyperParameterOptimizationDirection.MAXIMIZE)],
+        )
+        assert scores["c"] > scores["b"] > scores["a"]
+
+    def test_single_objective_minimize_inverts_ranking(self):
+        """Single MINIMIZE objective: smallest value gets the highest score.
+
+        Purpose: Validates direction handling
+
+        Given: Same table as above, direction MINIMIZE
+        When: compute_pareto_scores is called
+        Then: Row "a" (value 1) has the highest score, row "c" (value 3) the lowest
+
+        Test type: unit
+        """
+        table = {"a": {"ret": 1.0}, "b": {"ret": 2.0}, "c": {"ret": 3.0}}
+        scores = compute_pareto_scores(
+            table,
+            [("ret", HyperParameterOptimizationDirection.MINIMIZE)],
+        )
+        assert scores["a"] > scores["b"] > scores["c"]
+
+    def test_multi_objective_averages_normalized_metrics(self):
+        """With two objectives, the score is the mean of two z-scores.
+
+        Purpose: Validates multi-objective aggregation matches the documented formula
+
+        Given: Two metrics "ret" (MAXIMIZE) and "time" (MINIMIZE) with known values
+        When: compute_pareto_scores is called
+        Then: Each row's score equals the mean of (z(ret), -z(time)),
+            verifiable by reconstructing the z-scores manually
+
+        Test type: unit
+        """
+        table = {
+            "a": {"ret": 1.0, "time": 1.0},
+            "b": {"ret": 3.0, "time": 3.0},
+        }
+        scores = compute_pareto_scores(
+            table,
+            [
+                ("ret", HyperParameterOptimizationDirection.MAXIMIZE),
+                ("time", HyperParameterOptimizationDirection.MINIMIZE),
+            ],
+        )
+        # ret values [1, 3] => mean=2, std=1 => z(a)=-1, z(b)=+1
+        # time values [1, 3] => z(a)=-1, z(b)=+1; flipped for MINIMIZE => +1, -1
+        # score(a) = mean(-1, +1) = 0; score(b) = mean(+1, -1) = 0
+        assert scores["a"] == pytest.approx(0.0)
+        assert scores["b"] == pytest.approx(0.0)
+
+    def test_zero_variance_metric_does_not_divide_by_zero(self):
+        """A metric with zero std uses std=1 to avoid NaN scores.
+
+        Purpose: Validates the std==0 guard documented in the function
+
+        Given: All rows have the same value for one metric
+        When: compute_pareto_scores is called
+        Then: Returns finite scores (not NaN)
+
+        Test type: unit
+        """
+        table = {"a": {"ret": 5.0}, "b": {"ret": 5.0}}
+        scores = compute_pareto_scores(
+            table,
+            [("ret", HyperParameterOptimizationDirection.MAXIMIZE)],
+        )
+        assert all(np.isfinite(v) for v in scores.values())
+        assert scores["a"] == pytest.approx(0.0)
+        assert scores["b"] == pytest.approx(0.0)
+
+    def test_empty_metric_table_raises(self):
+        """An empty metric_table raises ValueError.
+
+        Purpose: Validates input validation
+
+        Given: An empty metric_table
+        When: compute_pareto_scores is called
+        Then: ValueError is raised
+
+        Test type: unit
+        """
+        with pytest.raises(ValueError, match="metric_table"):
+            compute_pareto_scores(
+                {},
+                [("ret", HyperParameterOptimizationDirection.MAXIMIZE)],
+            )
+
+    def test_missing_metric_raises_with_row_key(self):
+        """A row missing a required metric raises ValueError naming the row.
+
+        Purpose: Validates per-row metric validation
+
+        Given: One row missing the metric "ret"
+        When: compute_pareto_scores is called
+        Then: ValueError is raised naming the row key
+
+        Test type: unit
+        """
+        table = {"a": {"ret": 1.0}, "b": {"other": 2.0}}
+        with pytest.raises(ValueError, match="'b'"):
+            compute_pareto_scores(
+                table,
+                [("ret", HyperParameterOptimizationDirection.MAXIMIZE)],
+            )
+
+    def test_preserves_row_keys_unchanged(self):
+        """Input row keys are returned unchanged in the result dict.
+
+        Purpose: Validates that callers can use any hashable row key
+            (trial number, combo id string, etc.)
+
+        Given: Mixed-type row keys (int, str, tuple)
+        When: compute_pareto_scores is called
+        Then: Result dict has exactly the same keys
+
+        Test type: unit
+        """
+        table = {
+            42: {"ret": 1.0},
+            "name": {"ret": 2.0},
+            (1, 2): {"ret": 3.0},
+        }
+        scores = compute_pareto_scores(
+            table,
+            [("ret", HyperParameterOptimizationDirection.MAXIMIZE)],
+        )
+        assert set(scores.keys()) == {42, "name", (1, 2)}

@@ -1,4 +1,6 @@
+import itertools
 from abc import ABC, abstractmethod
+from collections.abc import Hashable
 from dataclasses import dataclass
 from enum import Enum
 from inspect import signature
@@ -7,13 +9,18 @@ from typing import (
     Any,
     Dict,
     List,
+    Mapping,
     NamedTuple,
     Optional,
     Sequence,
     Tuple,
     Type,
+    TypeVar,
     Union,
 )
+
+import numpy as np
+
 from POMDPPlanners.utils.config_to_id import config_to_id
 
 if TYPE_CHECKING:
@@ -72,9 +79,201 @@ class NumericalHyperParameter(NamedTuple):
 HyperParameterFeature = Union[CategoricalHyperParameter, NumericalHyperParameter]
 
 
+class NumericalGridSpec(NamedTuple):
+    """Discretized numerical hyperparameter for grid (linear) search.
+
+    Distinct from :class:`NumericalHyperParameter`, which describes a continuous
+    range sampled by Optuna. ``NumericalGridSpec`` describes an explicit set of
+    ``n_points`` values that grid search should iterate over.
+
+    Attributes:
+        low: Lower bound of the range (inclusive).
+        high: Upper bound of the range (inclusive for ``"linear"`` scale,
+            inclusive for ``"log"`` via ``np.geomspace``).
+        n_points: Number of discrete values in the grid (must be at least 2).
+        name: Hyperparameter name. Must match a parameter of the policy class.
+        scale: ``"linear"`` for ``np.linspace`` (default) or ``"log"`` for
+            ``np.geomspace``. Both bounds must be positive when ``scale="log"``.
+    """
+
+    low: Union[int, float]
+    high: Union[int, float]
+    n_points: int
+    name: str
+    scale: str = "linear"
+
+    def expand(self) -> List[Union[int, float]]:
+        """Compute the grid values.
+
+        When both bounds are ``int`` and ``scale`` is ``"linear"``, the
+        returned values are ``int`` (rounded), so callers whose policies
+        require integer hyperparameters work without an extra cast.
+        Otherwise the values are ``float``.
+        """
+        if self.n_points < 2:
+            raise ValueError(f"NumericalGridSpec.n_points must be >= 2, got {self.n_points}")
+        if self.scale == "linear":
+            raw = np.linspace(self.low, self.high, self.n_points)
+            if isinstance(self.low, int) and isinstance(self.high, int):
+                return [int(round(v)) for v in raw]
+            return [float(v) for v in raw]
+        if self.scale == "log":
+            if self.low <= 0 or self.high <= 0:
+                raise ValueError(
+                    "NumericalGridSpec.scale='log' requires low and high to be > 0, "
+                    f"got low={self.low}, high={self.high}"
+                )
+            return [float(v) for v in np.geomspace(self.low, self.high, self.n_points)]
+        raise ValueError(f"NumericalGridSpec.scale must be 'linear' or 'log', got {self.scale!r}")
+
+    def id(self) -> str:
+        return config_to_id(
+            {
+                "low": self.low,
+                "high": self.high,
+                "n_points": self.n_points,
+                "name": self.name,
+                "scale": self.scale,
+            }
+        )
+
+    def __hash__(self) -> int:
+        return hash(self.id())
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, NumericalGridSpec):
+            return False
+        return self.id() == other.id()
+
+
+GridHyperParameterFeature = Union[CategoricalHyperParameter, NumericalGridSpec]
+
+
+AnyHyperParameterFeature = Union[
+    CategoricalHyperParameter, NumericalHyperParameter, NumericalGridSpec
+]
+
+
+def expand_grid(
+    hyper_parameters: Sequence[GridHyperParameterFeature],
+) -> List[Dict[str, Any]]:
+    """Compute the Cartesian product of grid hyperparameters.
+
+    Returns a deterministically-ordered list of ``{param_name: value}`` dicts —
+    one per combination — so two callers that pass the same hyperparameter
+    sequence get identical orderings (and therefore identical cache keys).
+
+    Args:
+        hyper_parameters: Sequence of :class:`CategoricalHyperParameter` or
+            :class:`NumericalGridSpec`. A bare :class:`NumericalHyperParameter`
+            is rejected — grid search needs an explicit value list, not a
+            continuous range.
+
+    Returns:
+        List of dicts. Empty input yields ``[{}]`` (one combination, no params).
+
+    Raises:
+        TypeError: If any element is a :class:`NumericalHyperParameter`, or any
+            other unsupported type.
+        ValueError: If two hyperparameters share the same ``name``.
+    """
+    seen_names: set = set()
+    axes: List[List[Tuple[str, Any]]] = []
+    for param in hyper_parameters:
+        if isinstance(param, NumericalHyperParameter):
+            raise TypeError(
+                f"NumericalHyperParameter({param.name!r}) is a continuous range and "
+                "cannot be expanded into a grid. Use NumericalGridSpec(low, high, "
+                "n_points, name, scale) or CategoricalHyperParameter(choices, name)."
+            )
+        if isinstance(param, CategoricalHyperParameter):
+            values: List[Any] = list(param.choices)
+        elif isinstance(param, NumericalGridSpec):
+            values = list(param.expand())
+        else:
+            raise TypeError(
+                f"expand_grid expects CategoricalHyperParameter or NumericalGridSpec, "
+                f"got {type(param).__name__}"
+            )
+        if param.name in seen_names:
+            raise ValueError(f"Duplicate hyperparameter name: {param.name!r}")
+        seen_names.add(param.name)
+        axes.append([(param.name, v) for v in values])
+
+    if not axes:
+        return [{}]
+
+    return [dict(combo) for combo in itertools.product(*axes)]
+
+
 class HyperParameterOptimizationDirection(Enum):
     MAXIMIZE = "maximize"
     MINIMIZE = "minimize"
+
+
+_RowKey = TypeVar("_RowKey", bound=Hashable)
+
+
+def compute_pareto_scores(
+    metric_table: Mapping[_RowKey, Mapping[str, float]],
+    parameters_to_optimize: Sequence[Tuple[str, "HyperParameterOptimizationDirection"]],
+) -> Dict[_RowKey, float]:
+    """Aggregate multi-objective metric rows into a single comparable score per row.
+
+    Each metric is z-score-normalized across rows; values are sign-flipped for
+    ``MINIMIZE`` directions so larger normalized scores are always better; the
+    final per-row score is the mean of normalized metric values. This is the
+    same algorithm used to score Optuna's Pareto-optimal trials, extracted to
+    a free function so grid search can reuse it.
+
+    Args:
+        metric_table: Mapping ``row_key -> {metric_name: metric_value}``. Rows
+            represent trials/combinations; row keys are usually trial numbers
+            or grid combination indices.
+        parameters_to_optimize: ``(metric_name, direction)`` pairs. Every
+            ``metric_name`` must be present in every row.
+
+    Returns:
+        Mapping ``row_key -> aggregated_score``. Higher is better.
+
+    Raises:
+        ValueError: If ``metric_table`` is empty, or any row is missing a
+            metric named in ``parameters_to_optimize``.
+    """
+    if not metric_table:
+        raise ValueError("metric_table cannot be empty")
+    if not parameters_to_optimize:
+        raise ValueError("parameters_to_optimize cannot be empty")
+
+    required = {name for name, _ in parameters_to_optimize}
+    for row_key, row in metric_table.items():
+        missing = required - set(row.keys())
+        if missing:
+            raise ValueError(f"metric_table row {row_key!r} is missing metrics: {sorted(missing)}")
+
+    metric_stats: Dict[str, Dict[str, float]] = {}
+    for param_name, _ in parameters_to_optimize:
+        values = [row[param_name] for row in metric_table.values()]
+        std = float(np.std(values))
+        metric_stats[param_name] = {
+            "mean": float(np.mean(values)),
+            "std": std if std > 0 else 1.0,
+        }
+
+    pareto_scores: Dict[_RowKey, float] = {}
+    for row_key, row in metric_table.items():
+        normalized: List[float] = []
+        for param_name, direction in parameters_to_optimize:
+            value = row[param_name]
+            mean = metric_stats[param_name]["mean"]
+            std = metric_stats[param_name]["std"]
+            z = (value - mean) / std
+            if direction == HyperParameterOptimizationDirection.MINIMIZE:
+                z = -z
+            normalized.append(z)
+        pareto_scores[row_key] = float(np.mean(normalized))
+
+    return pareto_scores
 
 
 class ParallelizationLevel(Enum):
@@ -94,9 +293,9 @@ class ParallelizationLevel(Enum):
 @dataclass(frozen=True)
 class HyperParamPlannerConfig:
     policy_cls: Type["Policy"]
-    hyper_parameters: Sequence[HyperParameterFeature]
+    hyper_parameters: Sequence[AnyHyperParameterFeature]
     constant_parameters: Dict[str, Any]
-    training_hyper_parameters: Sequence[HyperParameterFeature] = ()
+    training_hyper_parameters: Sequence[AnyHyperParameterFeature] = ()
     training_constant_parameters: Dict[str, Any] = None  # type: ignore[assignment]
 
     def __post_init__(self) -> None:
@@ -120,11 +319,19 @@ class HyperParamPlannerConfig:
                 f"hyper_parameters must be a Sequence (list or tuple), got {type(self.hyper_parameters).__name__}"
             )
 
-        # Validate each hyperparameter is of correct type
+        # Validate each hyperparameter is of correct type. NumericalGridSpec
+        # is accepted here so the same HyperParamPlannerConfig type can target
+        # either HyperParameterOptimizer (Optuna) or GridSearchOptimizer; the
+        # per-optimizer validators reject any incompatible types at task
+        # creation time.
         for i, param in enumerate(self.hyper_parameters):
-            if not isinstance(param, (CategoricalHyperParameter, NumericalHyperParameter)):
+            if not isinstance(
+                param,
+                (CategoricalHyperParameter, NumericalHyperParameter, NumericalGridSpec),
+            ):
                 raise TypeError(
-                    f"hyper_parameters[{i}] must be either CategoricalHyperParameter or NumericalHyperParameter, "
+                    f"hyper_parameters[{i}] must be CategoricalHyperParameter, "
+                    f"NumericalHyperParameter, or NumericalGridSpec, "
                     f"got {type(param).__name__}"
                 )
 
@@ -141,10 +348,13 @@ class HyperParamPlannerConfig:
                 f"got {type(self.training_hyper_parameters).__name__}"
             )
         for i, param in enumerate(self.training_hyper_parameters):
-            if not isinstance(param, (CategoricalHyperParameter, NumericalHyperParameter)):
+            if not isinstance(
+                param,
+                (CategoricalHyperParameter, NumericalHyperParameter, NumericalGridSpec),
+            ):
                 raise TypeError(
-                    f"training_hyper_parameters[{i}] must be a HyperParameterFeature, "
-                    f"got {type(param).__name__}"
+                    f"training_hyper_parameters[{i}] must be a HyperParameterFeature "
+                    f"or NumericalGridSpec, got {type(param).__name__}"
                 )
 
         if not isinstance(self.training_constant_parameters, dict):

@@ -15,6 +15,13 @@ from POMDPPlanners.simulations.workflows.hyperparameter_tuning_evaluation_workfl
     OptimizationEvaluationDaskWorkflow,
     OptimizationEvaluationPBSWorkflow,
 )
+from POMDPPlanners.simulations.hyper_parameter_tuning_simulations import (
+    BaseHyperParameterOptimizer,
+    HyperParameterOptimizer,
+)
+from POMDPPlanners.simulations.grid_search_simulations import (
+    GridSearchOptimizer,
+)
 
 __all__ = [
     "POMDPSimulator",
@@ -28,4 +35,7 @@ __all__ = [
     "OptimizationEvaluationLocalWorkflow",
     "OptimizationEvaluationDaskWorkflow",
     "OptimizationEvaluationPBSWorkflow",
+    "BaseHyperParameterOptimizer",
+    "HyperParameterOptimizer",
+    "GridSearchOptimizer",
 ]

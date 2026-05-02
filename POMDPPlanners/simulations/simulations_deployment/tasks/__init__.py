@@ -9,10 +9,12 @@ and __setstate__ methods.
 
 from .environment_visualization_task import EnvironmentVisualizationTask
 from .episode_simulation_task import EpisodeSimulationTask
+from .grid_search_tuning_task import GridSearchTuningTask
 from .hyper_parameter_tuning_simulation_task import HyperParameterTuningSimulationTask
 
 __all__ = [
     "EnvironmentVisualizationTask",
     "EpisodeSimulationTask",
+    "GridSearchTuningTask",
     "HyperParameterTuningSimulationTask",
 ]

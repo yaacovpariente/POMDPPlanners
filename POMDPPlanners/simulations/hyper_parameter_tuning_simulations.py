@@ -119,10 +119,27 @@ Note:
     - Results include optimized policies with their chosen hyperparameters
 """
 
+from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Protocol, Tuple, runtime_checkable
 
 import mlflow
+
+from POMDPPlanners.core.simulation.tasks import SimulationTask
+
+
+@runtime_checkable
+class _OptimizationMetadataProvider(Protocol):
+    """Structural type for tasks that expose optimization metadata.
+
+    The base optimizer's MLflow logging reads this metadata. Each concrete
+    optimizer's task class (Optuna, grid search, ...) must satisfy this
+    protocol — return a dict with the standard keys, or ``None`` when no
+    metadata is available yet.
+    """
+
+    def get_optimization_metadata(self) -> Optional[Dict[str, Any]]: ...
+
 
 from POMDPPlanners.core.simulation import (
     CategoricalHyperParameter,
@@ -147,8 +164,24 @@ from POMDPPlanners.utils.logger import cleanup_all_loggers, get_logger
 logger = get_logger(__name__)
 
 
-class HyperParameterOptimizer:
-    """Hyperparameter optimization for POMDP policies using Optuna and MLFlow.
+class BaseHyperParameterOptimizer(ABC):
+    """Abstract base for hyperparameter optimizers (Optuna, grid search, ...).
+
+    Holds all the optimizer-agnostic infrastructure: cache directory and
+    MLflow setup, batch validation and logging, parent-child run nesting,
+    final-evaluation rerun, and artifact serialization. Subclasses provide
+    one method — ``_create_tasks`` — to map a list of
+    :class:`HyperParameterRunParams` onto a list of :class:`SimulationTask`
+    instances. Each task is expected to return an
+    :class:`OptimizedPolicyResult` from its ``run()`` method and to expose a
+    ``get_optimization_metadata()`` method returning the standard metadata
+    dict (``best_pareto_score``, ``best_trial_metrics``,
+    ``best_trial_number``, ``n_trials``, ``optimization_time``,
+    ``config_id``).
+
+    See :class:`HyperParameterOptimizer` for the Optuna implementation and
+    :class:`POMDPPlanners.simulations.grid_search_simulations.GridSearchOptimizer`
+    for the grid-search implementation.
 
     This class provides a complete framework for optimizing POMDP policy hyperparameters
     using Optuna's advanced optimization algorithms with integrated MLFlow experiment
@@ -337,34 +370,18 @@ class HyperParameterOptimizer:
         except Exception:  # pylint: disable=broad-exception-caught
             pass
 
+    @abstractmethod
     def _create_tasks(
         self, configs: List[HyperParameterRunParams]
-    ) -> Tuple[List[HyperParameterTuningSimulationTask], List[str]]:
-        tasks = []
-        task_identifiers = []
-        for config in configs:
-            task = HyperParameterTuningSimulationTask(
-                environment=config.environment,
-                belief=config.belief,
-                policy_cls=config.hyper_param_planner_config.policy_cls,
-                hyper_parameters=config.hyper_param_planner_config.hyper_parameters,
-                constant_parameters=config.hyper_param_planner_config.constant_parameters,
-                num_episodes=config.num_episodes,
-                num_steps=config.num_steps,
-                parameters_to_optimize=config.parameters_to_optimize,
-                n_trials=config.n_trials,
-                cache_dir=self.cache_dir_path,
-                debug=False,
-                console_output=True,
-                n_jobs=self.n_jobs,
-                confidence_interval_level=self.confidence_interval_level,
-                alpha=self.alpha,
-                parallelization_level=self.parallelization_level,
-            )
-            tasks.append(task)
-            task_identifiers.append(task.get_config_id())
+    ) -> Tuple[List[SimulationTask], List[str]]:
+        """Build the list of optimization tasks for a batch of configs.
 
-        return tasks, task_identifiers
+        Each subclass implements this to produce its strategy-specific task
+        type (Optuna trials, grid combinations, etc.). Each task's ``run()``
+        must return an :class:`OptimizedPolicyResult`, and each task must
+        expose a ``get_optimization_metadata()`` method returning the
+        standard metadata dict used by the MLflow logging in the base class.
+        """
 
     def _validate_optimization_configs(self, configs: List[HyperParameterRunParams]) -> None:
         """Validate optimization configurations before execution.
@@ -484,7 +501,7 @@ class HyperParameterOptimizer:
 
     def _execute_optimization_tasks(
         self, configs: List[HyperParameterRunParams]
-    ) -> Tuple[List[OptimizedPolicyResult], List[HyperParameterTuningSimulationTask]]:
+    ) -> Tuple[List[OptimizedPolicyResult], List[SimulationTask]]:
         tasks, task_identifiers = self._create_tasks(configs)
 
         with self.task_manager:
@@ -498,7 +515,7 @@ class HyperParameterOptimizer:
         self,
         configs: List[HyperParameterRunParams],
         task_results: List[OptimizedPolicyResult],
-        tasks: List[HyperParameterTuningSimulationTask],
+        tasks: List[SimulationTask],
     ) -> List[OptimizedPolicyResult]:
         results = []
 
@@ -540,7 +557,7 @@ class HyperParameterOptimizer:
         self,
         original_index: int,
         config: HyperParameterRunParams,
-        task: "HyperParameterTuningSimulationTask",
+        task: _OptimizationMetadataProvider,
         task_result: "OptimizedPolicyResult",
     ) -> "OptimizedPolicyResult":  # type: ignore
         # Get parameters as a string for logging
@@ -676,7 +693,7 @@ class HyperParameterOptimizer:
     def _log_optimization_results(
         self,
         optimization_result: "OptimizedPolicyResult",
-        task: "HyperParameterTuningSimulationTask",
+        task: _OptimizationMetadataProvider,
     ) -> None:
         if optimization_result is not None:
             # Log optimization results (best hyperparameters)
@@ -814,7 +831,7 @@ class HyperParameterOptimizer:
         }
         mlflow.log_dict(planner_config, f"planner_chosen_config_{original_index+1}.json")
 
-    def _get_best_value_from_task(self, task: "HyperParameterTuningSimulationTask") -> str:
+    def _get_best_value_from_task(self, task: _OptimizationMetadataProvider) -> str:
         task_metadata = task.get_optimization_metadata()
         if task_metadata:
             # Format as "pareto_score: X (metrics: {...})"
@@ -850,3 +867,65 @@ class HyperParameterOptimizer:
             ),
         }
         mlflow.log_dict(batch_summary, "batch_optimization_summary.json")
+
+
+class HyperParameterOptimizer(BaseHyperParameterOptimizer):
+    """Optuna-based hyperparameter optimizer.
+
+    Concrete subclass of :class:`BaseHyperParameterOptimizer` that produces
+    one :class:`HyperParameterTuningSimulationTask` per
+    :class:`HyperParameterRunParams` config. Each task runs an Optuna study
+    with ``n_trials`` trials, evaluating each trial's hyperparameter
+    suggestion by simulating ``num_episodes`` episodes and aggregating the
+    target metrics. The base class handles MLflow logging and final
+    evaluation.
+
+    All initialization arguments and tracking behavior are inherited
+    unchanged from :class:`BaseHyperParameterOptimizer`. See that class's
+    docstring for examples and parameter documentation.
+    """
+
+    def _create_tasks(
+        self, configs: List[HyperParameterRunParams]
+    ) -> Tuple[List[SimulationTask], List[str]]:
+        tasks: List[SimulationTask] = []
+        task_identifiers: List[str] = []
+        for config in configs:
+            self._validate_optuna_hyperparameters(config)
+            task = HyperParameterTuningSimulationTask(
+                environment=config.environment,
+                belief=config.belief,
+                policy_cls=config.hyper_param_planner_config.policy_cls,
+                hyper_parameters=config.hyper_param_planner_config.hyper_parameters,  # type: ignore[arg-type]
+                constant_parameters=config.hyper_param_planner_config.constant_parameters,
+                num_episodes=config.num_episodes,
+                num_steps=config.num_steps,
+                parameters_to_optimize=config.parameters_to_optimize,
+                n_trials=config.n_trials,
+                cache_dir=self.cache_dir_path,
+                debug=False,
+                console_output=True,
+                n_jobs=self.n_jobs,
+                confidence_interval_level=self.confidence_interval_level,
+                alpha=self.alpha,
+                parallelization_level=self.parallelization_level,
+            )
+            tasks.append(task)
+            task_identifiers.append(task.get_config_id())
+
+        return tasks, task_identifiers
+
+    @staticmethod
+    def _validate_optuna_hyperparameters(config: HyperParameterRunParams) -> None:
+        """Reject NumericalGridSpec — that type is grid-search only."""
+        from POMDPPlanners.core.simulation.hyperparameter_tuning import (  # pylint: disable=import-outside-toplevel
+            NumericalGridSpec,
+        )
+
+        for param in config.hyper_param_planner_config.hyper_parameters:
+            if isinstance(param, NumericalGridSpec):
+                raise TypeError(
+                    f"HyperParameterOptimizer (Optuna) cannot optimize "
+                    f"NumericalGridSpec({param.name!r}). Use NumericalHyperParameter "
+                    f"for continuous ranges, or switch to GridSearchOptimizer."
+                )

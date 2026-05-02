@@ -6,9 +6,13 @@ from POMDPPlanners.core.simulation.history import (
 )
 from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     CategoricalHyperParameter,
+    GridHyperParameterFeature,
     HyperParameterFeature,
+    NumericalGridSpec,
     NumericalHyperParameter,
     ParallelizationLevel,
+    compute_pareto_scores,
+    expand_grid,
 )
 from POMDPPlanners.core.simulation.metrics import MetricValue
 from POMDPPlanners.core.simulation.simulation_configs import (
@@ -28,7 +32,9 @@ __all__ = [
     "History",
     "CategoricalHyperParameter",
     "NumericalHyperParameter",
+    "NumericalGridSpec",
     "HyperParameterFeature",
+    "GridHyperParameterFeature",
     "ParallelizationLevel",
     "MetricValue",
     "EnvironmentRunParams",
@@ -38,5 +44,7 @@ __all__ = [
     "TaskManager",
     "TaskManagerExternalDB",
     "ExperimentVisualizer",
+    "compute_pareto_scores",
+    "expand_grid",
     "history_to_discounted_return_value",
 ]
