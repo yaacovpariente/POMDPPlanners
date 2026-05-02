@@ -903,7 +903,7 @@ class TestHyperParamPlannerConfigValidation:
 
         with pytest.raises(
             TypeError,
-            match="hyper_parameters\\[0\\] must be either CategoricalHyperParameter or NumericalHyperParameter",
+            match=r"hyper_parameters\[0\] must be CategoricalHyperParameter, NumericalHyperParameter, or NumericalGridSpec",
         ):
             HyperParamPlannerConfig(
                 policy_cls=MockPolicy,
