@@ -266,6 +266,7 @@ class TestHyperParameterOptimizerTaskCreation:
         tasks, task_identifiers = optimizer._create_tasks(sample_configs)
 
         for i, task in enumerate(tasks):
+            assert isinstance(task, HyperParameterTuningSimulationTask)
             config = sample_configs[i]
             assert task.environment == config.environment
             assert task.policy_cls == config.hyper_param_planner_config.policy_cls
@@ -829,6 +830,7 @@ class TestHyperParameterOptimizerMLFlowIntegration:
 
         # Verify hyperparameter names are correctly set
         task = tasks[0]
+        assert isinstance(task, HyperParameterTuningSimulationTask)
         assert task.hyper_parameters[0].name == "branching_factor"
         assert task.hyper_parameters[1].name == "depth"
         # Cast to NumericalHyperParameter for type checking
@@ -1116,6 +1118,7 @@ class TestHyperParameterOptimizerMLFlowIntegration:
 
         # Verify the task has correct configuration
         task = tasks[0]
+        assert isinstance(task, HyperParameterTuningSimulationTask)
         assert task.policy_cls == POMCP
         assert task.constant_parameters["discount_factor"] == 0.95
         assert task.hyper_parameters[0].name == "exploration_constant"
@@ -1289,6 +1292,7 @@ class TestHyperParameterOptimizerWithTaskManagerConfigs:
 
         # Verify task parameters
         task = tasks[0]
+        assert isinstance(task, HyperParameterTuningSimulationTask)
         assert task.environment == real_environment
         assert task.policy_cls == SparseSamplingDiscreteActionsPlanner
         assert len(task.hyper_parameters) == 2
@@ -2871,6 +2875,7 @@ class TestHyperParameterOptimizerParallelizationLevel:
         tasks, _ = optimizer._create_tasks(sample_configs)
 
         for task in tasks:
+            assert isinstance(task, HyperParameterTuningSimulationTask)
             assert task.parallelization_level == ParallelizationLevel.EPISODES
 
     def test_default_parallelization_level_passed_to_tasks(self, temp_cache_dir, sample_configs):
@@ -2888,4 +2893,5 @@ class TestHyperParameterOptimizerParallelizationLevel:
         tasks, _ = optimizer._create_tasks(sample_configs)
 
         for task in tasks:
+            assert isinstance(task, HyperParameterTuningSimulationTask)
             assert task.parallelization_level == ParallelizationLevel.OPTUNA_TRIALS
