@@ -956,6 +956,102 @@ class TestContinuousPushPOMDPDiscreteActions:
         assert ns_down[1] < state[1]
 
 
+class TestContinuousPushDiscreteActionsHitProbability:
+    """Regression tests that ``obstacle_hit_probability`` is forwarded
+    through ``ContinuousPushPOMDPDiscreteActions.__init__`` to the
+    parent ``ContinuousPushPOMDP``.
+
+    Without the kwarg in the wrapper signature, planners constructing
+    the discrete-action env saw the parent default (1.0) regardless of
+    what they intended — masking risk-sensitive evaluation.
+    """
+
+    OBSTACLE_PENALTY = -10.0
+    COLLIDE_ACTION = "right"
+
+    @staticmethod
+    def _stochastic_env(hit_probability: float) -> ContinuousPushPOMDPDiscreteActions:
+        return ContinuousPushPOMDPDiscreteActions(
+            discount_factor=0.99,
+            grid_size=10,
+            obstacles=[(5.0, 5.0, 0.5)],
+            obstacle_penalty=TestContinuousPushDiscreteActionsHitProbability.OBSTACLE_PENALTY,
+            obstacle_hit_probability=hit_probability,
+            robot_radius=0.3,
+            state_transition_cov_matrix=np.eye(2) * 1e-8,
+        )
+
+    def test_default_hit_probability_is_one(self):
+        """Default kwarg preserves legacy deterministic behavior.
+
+        Purpose: Validates that omitting the kwarg yields the parent default.
+
+        Given: A wrapper constructed with no ``obstacle_hit_probability``.
+        When: ``obstacle_hit_probability`` is read on the instance.
+        Then: It equals ``1.0``.
+
+        Test type: unit
+        """
+        env = ContinuousPushPOMDPDiscreteActions(discount_factor=0.99)
+        assert env.obstacle_hit_probability == 1.0
+
+    @pytest.mark.parametrize("p", [0.0, 0.3, 0.7, 1.0])
+    def test_kwarg_forwarded_to_parent_attribute(self, p: float):
+        """Wrapper kwarg flows through to the parent's stored attribute.
+
+        Purpose: Regression — without the forwarding fix, this assertion
+            failed for every ``p != 1.0``.
+
+        Given: A wrapper constructed with ``obstacle_hit_probability=p``.
+        When: The instance attribute is read.
+        Then: It equals ``p``.
+
+        Test type: unit
+        """
+        env = self._stochastic_env(hit_probability=p)
+        assert env.obstacle_hit_probability == pytest.approx(p)
+
+    def test_hit_probability_zero_disables_penalty_via_string_action(self):
+        """Functional check that the forwarded kwarg actually gates the penalty.
+
+        Purpose: Regression — verifies the value reaches the reward path
+            and not just the attribute, when called through the wrapper's
+            string-action API.
+
+        Given: A wrapper with ``hit_probability=0`` and a state that would
+            otherwise collide with an obstacle on ``"right"``.
+        When: ``reward()`` is called many times via the string-action API.
+        Then: No reward sits at-or-below the obstacle-penalty floor.
+
+        Test type: unit
+        """
+        env = self._stochastic_env(hit_probability=0.0)
+        state = np.array([4.0, 5.0, 1.0, 1.0, 9.0, 9.0])
+        baseline = env.reward(state, self.COLLIDE_ACTION)
+        midpoint = baseline + self.OBSTACLE_PENALTY / 2.0
+        np.random.seed(0)
+        for _ in range(100):
+            assert env.reward(state, self.COLLIDE_ACTION) > midpoint
+
+    @pytest.mark.parametrize("bad_value", [-0.1, 1.5, 2.0, -1.0])
+    def test_invalid_hit_probability_raises(self, bad_value: float):
+        """Out-of-range values raise via the parent's validator.
+
+        Purpose: Validates that the wrapper does not silently swallow
+            invalid values — they reach the parent's ValueError.
+
+        Given: An ``obstacle_hit_probability`` outside ``[0, 1]``.
+        When: The wrapper is constructed.
+        Then: ``ValueError`` is raised mentioning the parameter name.
+
+        Test type: unit
+        """
+        with pytest.raises(ValueError, match="obstacle_hit_probability"):
+            ContinuousPushPOMDPDiscreteActions(
+                discount_factor=0.99, obstacle_hit_probability=bad_value
+            )
+
+
 # ------------------------------------------------------------------
 # Discrete-actions wrapper: str -> vector resolution parity
 # ------------------------------------------------------------------
