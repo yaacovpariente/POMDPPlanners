@@ -43,9 +43,14 @@ def _get_sparse_sampling_guarantees_exploration_v2(
             int(np.argmin(q_values + visit_count_penalty * visit_count_penalty_array))
         ]
 
-    x1 = 1 - belief_node.visit_count**horizon
-    x2 = delta * (1 - belief_node.visit_count)
-    x3 = np.log(x1 / x2)
+    # Log-space evaluation of x3 = log((belief_visits**horizon - 1) /
+    # (delta * (belief_visits - 1))). The naive form overflows float64
+    # for ``horizon * log10(belief_visits) > 308`` (silently returning
+    # index 0); the equivalent log-space expansion stays finite for any
+    # ``belief_visits >= 2`` and any non-negative ``horizon``. The
+    # ``visit_count <= 1`` guard above already rules out the singular
+    # log(0) case below.
+    x3 = horizon * np.log(belief_node.visit_count) - np.log(delta * (belief_node.visit_count - 1))
     x4 = alpha * visit_count_array
 
     guarantees_bound = (max_cost - min_cost) * np.sqrt(x3 / x4)
