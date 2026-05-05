@@ -115,7 +115,9 @@ class ICVaR_POMCPOW(ArenaPathSimulationPolicyCostSetting):
         ):
             return
 
-        action_id = self._select_action_with_progressive_widening(tree=tree, belief_id=belief_id)
+        action_id = self._select_action_with_progressive_widening(
+            tree=tree, belief_id=belief_id, depth=depth
+        )
         next_state, next_observation, reward = self.environment.sample_next_step(
             state=state, action=tree.action[action_id]
         )
@@ -153,7 +155,9 @@ class ICVaR_POMCPOW(ArenaPathSimulationPolicyCostSetting):
 
         return False
 
-    def _select_action_with_progressive_widening(self, tree: Tree, belief_id: int) -> int:
+    def _select_action_with_progressive_widening(
+        self, tree: Tree, belief_id: int, depth: int
+    ) -> int:
         return cvar_action_progressive_widening_arena(
             tree=tree,
             belief_id=belief_id,
@@ -163,7 +167,7 @@ class ICVaR_POMCPOW(ArenaPathSimulationPolicyCostSetting):
             k_a=self.k_a,
             min_immediate_cost=self.min_immediate_cost,
             max_immediate_cost=self.max_immediate_cost,
-            depth=self.depth,
+            depth=depth,
             max_depth=self.max_depth,
             gamma=self.discount_factor,
             min_visit_count_per_action=self.min_visit_count_per_action,
@@ -245,6 +249,14 @@ class ICVaR_POMCPOW(ArenaPathSimulationPolicyCostSetting):
         action_id: int,
         reward: float,
     ) -> None:
+        # Invariant: the only "subsequent-call" update path here is for
+        # WeightedParticleBeliefStateUpdate, which incrementally folds in
+        # the new particle's weight. For WeightedParticleBelief (the root
+        # belief) the cost is computed once on the first call and assumed
+        # constant across all sims of a single ``action()`` — relies on
+        # the root belief being the same object for every sim, which the
+        # current ``_learn_tree`` enforces. If a future caller swaps the
+        # root belief mid-action, this cached cost will go stale.
         belief = tree.belief[belief_id]
         action = tree.action[action_id]
         immediate_cost = tree.immediate_cost[action_id]
