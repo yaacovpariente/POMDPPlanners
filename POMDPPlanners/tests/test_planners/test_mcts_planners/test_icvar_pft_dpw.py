@@ -601,3 +601,56 @@ class TestICVaR_PFT_DPWEpisodeTests:
             assert planner.alpha_a == config["alpha_a"]
             assert planner.k_o == config["k_o"]
             assert planner.alpha_o == config["alpha_o"]
+
+
+def test_icvar_pft_dpw_action_selection_observes_varying_recursion_depth(
+    planner,
+    belief,
+):
+    """Planner threads recursion depth into action-PW selection.
+
+    Purpose: Regression test that ICVaR_PFT_DPW forwards the current
+        recursion depth (not the planner's configured max depth) into
+        ``cvar_action_progressive_widening_arena``, so the LCB
+        exploration horizon decays as the search descends. Without the
+        fix the planner passed ``depth=self.depth`` from ``__init__``
+        on every level, making horizon = max_depth - depth = 0
+        everywhere and forcing the LCB kernel to return a NaN-induced
+        action-index-0 default.
+
+    Given: A configured ICVaR_PFT_DPW planner with depth=3 and an
+        initial belief.
+    When: ``_learn_tree`` is run and every call to
+        ``cvar_action_progressive_widening_arena`` is recorded.
+    Then: The set of observed ``depth`` values has size > 1, and at
+        least one value is strictly less than ``planner.depth``.
+
+    Test type: regression
+    """
+    # pylint: disable=protected-access,import-outside-toplevel
+    from POMDPPlanners.planners.mcts_planners import icvar_pft_dpw as mod
+
+    observed_depths: list = []
+    original = mod.cvar_action_progressive_widening_arena
+
+    def spy(*args, depth, max_depth, **kwargs):
+        observed_depths.append(depth)
+        return original(*args, depth=depth, max_depth=max_depth, **kwargs)
+
+    mod.cvar_action_progressive_widening_arena = spy
+    try:
+        planner._learn_tree(belief=belief)
+    finally:
+        mod.cvar_action_progressive_widening_arena = original
+
+    assert observed_depths, "no action-PW calls recorded"
+    unique_depths = set(observed_depths)
+    assert len(unique_depths) > 1, (
+        f"expected multiple recursion depths threaded through action "
+        f"selection, got only {unique_depths}; the planner is passing "
+        f"a constant depth instead of the recursion depth"
+    )
+    assert any(d < planner.depth for d in unique_depths), (
+        f"expected some calls at depth < planner.depth={planner.depth}, "
+        f"saw {sorted(unique_depths)}"
+    )

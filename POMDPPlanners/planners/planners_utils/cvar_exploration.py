@@ -33,6 +33,15 @@ def _get_sparse_sampling_guarantees_exploration_v2(
         return belief_node.children[int(np.random.randint(len(belief_node.children)))]
 
     visit_count_penalty_array = 1 / (np.sqrt(visit_count_array) + 1)
+    q_values = np.array([child.q_value for child in belief_node.children])
+
+    if horizon == 0:
+        # Remaining-horizon is zero, so the LCB bound below is
+        # undefined (log(0) = -inf, sqrt of negative ⇒ NaN). Fall
+        # back to greedy q-min with the visit-count tie-breaker.
+        return belief_node.children[
+            int(np.argmin(q_values + visit_count_penalty * visit_count_penalty_array))
+        ]
 
     x1 = 1 - belief_node.visit_count**horizon
     x2 = delta * (1 - belief_node.visit_count)
@@ -41,10 +50,7 @@ def _get_sparse_sampling_guarantees_exploration_v2(
 
     guarantees_bound = (max_cost - min_cost) * np.sqrt(x3 / x4)
 
-    lower_confidence_bounds = (
-        np.array([child.q_value for child in belief_node.children])
-        - exploration_constant * guarantees_bound
-    )
+    lower_confidence_bounds = q_values - exploration_constant * guarantees_bound
     return belief_node.children[
         np.argmin(lower_confidence_bounds + visit_count_penalty * visit_count_penalty_array)
     ]

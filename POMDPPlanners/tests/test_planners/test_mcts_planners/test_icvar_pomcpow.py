@@ -1332,5 +1332,66 @@ class TestICVaR_POMCPOWArenaInvariants:
         )
 
 
+class TestICVaR_POMCPOWThreadsRecursionDepth:
+    """Regression: action selection must use the recursion depth, not the
+    planner's max depth, so the LCB exploration horizon decays as the
+    search descends. Otherwise horizon = max_depth - depth is identically
+    0, the LCB bound goes NaN, and the planner systematically returns
+    action index 0.
+    """
+
+    def test_action_selection_observes_varying_recursion_depth(
+        self,
+        planner,
+        belief,
+    ):
+        """Planner threads recursion depth into action-PW selection.
+
+        Purpose: Verifies that across a single ``_learn_tree`` call the
+            ``depth`` argument forwarded into
+            ``cvar_action_progressive_widening_arena`` takes at least two
+            distinct values, including a value strictly less than
+            ``planner.depth`` (the configured max). Without the fix the
+            planner passed ``depth=self.depth`` from ``__init__``, so
+            every selection saw the same depth and every horizon was 0.
+
+        Given: A configured ICVaR_POMCPOW planner with depth=3 and an
+            initial Tiger belief.
+        When: ``_learn_tree`` is run and every call to
+            ``cvar_action_progressive_widening_arena`` is recorded.
+        Then: The set of observed ``depth`` values has size > 1, and
+            includes at least one value strictly less than
+            ``planner.depth``.
+
+        Test type: regression
+        """
+        from POMDPPlanners.planners.mcts_planners import icvar_pomcpow as mod
+
+        observed_depths: list = []
+        original = mod.cvar_action_progressive_widening_arena
+
+        def spy(*args, depth, max_depth, **kwargs):
+            observed_depths.append(depth)
+            return original(*args, depth=depth, max_depth=max_depth, **kwargs)
+
+        mod.cvar_action_progressive_widening_arena = spy
+        try:
+            planner._learn_tree(belief=belief)
+        finally:
+            mod.cvar_action_progressive_widening_arena = original
+
+        assert observed_depths, "no action-PW calls recorded"
+        unique_depths = set(observed_depths)
+        assert len(unique_depths) > 1, (
+            f"expected multiple recursion depths threaded through action "
+            f"selection, got only {unique_depths}; the planner is passing "
+            f"a constant depth instead of the recursion depth"
+        )
+        assert any(d < planner.depth for d in unique_depths), (
+            f"expected some calls at depth < planner.depth={planner.depth}, "
+            f"saw {sorted(unique_depths)}"
+        )
+
+
 if __name__ == "__main__":
     pytest.main([__file__])
