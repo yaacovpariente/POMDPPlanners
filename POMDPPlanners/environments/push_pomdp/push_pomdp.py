@@ -53,6 +53,8 @@ class PushPOMDPMetrics(Enum):
     TOTAL_ROBOT_OBSTACLE_COLLISIONS = "total_robot_obstacle_collisions"
     TOTAL_OBJECT_OBSTACLE_COLLISIONS = "total_object_obstacle_collisions"
     TOTAL_ALL_OBSTACLE_COLLISIONS = "total_all_obstacle_collisions"
+    DANGEROUS_AREA_RATE = "dangerous_area_rate"
+    TOTAL_DANGEROUS_AREA_STEPS = "total_dangerous_area_steps"
 
 
 class FixedStateDistribution(Distribution):
@@ -153,6 +155,21 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
         deducts the penalty deterministically) is bypassed in favour of
         the pure-Python rollout so per-step Bernoulli draws survive.
 
+    Dangerous areas:
+        ``dangerous_areas`` is a separate, additive concept from
+        ``obstacles``. Each entry is a circular region centred at
+        ``(x, y)`` with radius ``dangerous_area_radius``. Entering a
+        dangerous area applies ``dangerous_area_penalty`` (a negative
+        number, added to reward — same sign convention as
+        ``obstacle_penalty``) but does NOT block movement. Penalty fires
+        when the robot's intended next position lies inside any
+        dangerous area; the object position is ignored. At most one
+        ``dangerous_area_penalty`` is applied per step even when
+        multiple zones overlap. Like obstacles, the penalty supports a
+        Bernoulli ``dangerous_area_hit_probability`` (default 1.0) for
+        risk-sensitive planning; ``< 1.0`` bypasses the deterministic
+        native rollout in favour of the Python path.
+
     Example:
         >>> import numpy as np
         >>> np.random.seed(42)  # For reproducible results
@@ -183,7 +200,7 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
         "left": (-1, 0),
     }
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments,too-many-locals
         self,
         discount_factor: float,
         grid_size: int = 10,
@@ -194,6 +211,10 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
         obstacle_radius: float = 0.5,
         obstacle_penalty: float = -10.0,
         obstacle_hit_probability: float = 1.0,
+        dangerous_areas: Optional[List[Tuple[float, float]]] = None,
+        dangerous_area_radius: float = 0.5,
+        dangerous_area_penalty: float = -10.0,
+        dangerous_area_hit_probability: float = 1.0,
         initial_state: Optional[np.ndarray] = None,
         transition_error_prob: float = 0.0,
         name: str = "PushPOMDP",
@@ -203,6 +224,8 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
     ):
         if not 0.0 <= obstacle_hit_probability <= 1.0:
             raise ValueError("obstacle_hit_probability must be between 0 and 1 (inclusive)")
+        if not 0.0 <= dangerous_area_hit_probability <= 1.0:
+            raise ValueError("dangerous_area_hit_probability must be between 0 and 1 (inclusive)")
 
         self.grid_size = grid_size
         self.push_threshold = push_threshold
@@ -212,6 +235,12 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
         self.obstacle_radius = obstacle_radius
         self.obstacle_penalty = obstacle_penalty
         self.obstacle_hit_probability = float(obstacle_hit_probability)
+        self.dangerous_areas: List[Tuple[float, float]] = (
+            list(dangerous_areas) if dangerous_areas is not None else []
+        )
+        self.dangerous_area_radius = float(dangerous_area_radius)
+        self.dangerous_area_penalty = float(dangerous_area_penalty)
+        self.dangerous_area_hit_probability = float(dangerous_area_hit_probability)
         self._initial_state = initial_state
         self.transition_error_prob = transition_error_prob
 
@@ -231,13 +260,17 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
             observation_space=SpaceType.CONTINUOUS,  # Observation space is positions with noise
         )
         # Calculate reward range based on maximum distance to target plus the
-        # additive obstacle penalty when obstacles are configured. Without the
-        # obstacle term, any robot action that drives the robot onto an obstacle
-        # produces a reward strictly more negative than the advertised lower
-        # bound (reward = -dist_to_target + obstacle_penalty < -max_distance).
-        # Maximum distance is diagonal from corner to corner: sqrt(2) * (grid_size - 1).
+        # additive obstacle and dangerous-area penalties when configured.
+        # Without those terms, any robot action that drives the robot into a
+        # penalised region produces a reward strictly more negative than the
+        # advertised lower bound. Maximum distance is diagonal from corner to
+        # corner: sqrt(2) * (grid_size - 1).
         max_distance = np.sqrt(2) * (grid_size - 1)
-        min_reward = -max_distance + min(0.0, obstacle_penalty if self.obstacles else 0.0)
+        min_reward = (
+            -max_distance
+            + min(0.0, obstacle_penalty if self.obstacles else 0.0)
+            + min(0.0, dangerous_area_penalty if self.dangerous_areas else 0.0)
+        )
         max_reward = 100.0  # Best case: at target with bonus reward
 
         super().__init__(
@@ -280,6 +313,15 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
             ).ravel()
         else:
             self._obstacles_flat_arr = np.empty((0,), dtype=np.float64)
+
+        # (K, 2) float64 buffer of dangerous-area centres for the native
+        # rollout kernel. Empty (0, 2) when no dangerous areas configured.
+        if self.dangerous_areas:
+            self._dangerous_areas_arr: np.ndarray = np.ascontiguousarray(
+                np.asarray(self.dangerous_areas, dtype=np.float64).reshape(-1, 2)
+            )
+        else:
+            self._dangerous_areas_arr = np.empty((0, 2), dtype=np.float64)
 
         # Per-action C++ transition kernel cache. Built lazily on first
         # dispatch so the env survives pickling without bundling pybind11
@@ -437,6 +479,30 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
                 return True
         return False
 
+    def _is_in_dangerous_area(self, position: np.ndarray, action: Optional[str] = None) -> bool:
+        """Check if ``position`` (optionally after ``action``) lies in any dangerous area."""
+        if not self.dangerous_areas:
+            return False
+        if action is not None:
+            dx, dy = self._ACTION_TO_DXY[action]
+            check_x = float(position[0]) + dx
+            check_y = float(position[1]) + dy
+        else:
+            check_x = float(position[0])
+            check_y = float(position[1])
+        return self._is_in_dangerous_area_scalar(check_x, check_y)
+
+    def _is_in_dangerous_area_scalar(self, pos_x: float, pos_y: float) -> bool:
+        if not self.dangerous_areas:
+            return False
+        r_sq = self.dangerous_area_radius * self.dangerous_area_radius
+        for danger_x, danger_y in self.dangerous_areas:
+            ddx = pos_x - danger_x
+            ddy = pos_y - danger_y
+            if ddx * ddx + ddy * ddy <= r_sq:
+                return True
+        return False
+
     def sample_observation(self, next_state: np.ndarray, action: str, n_samples: int = 1) -> Any:
         if n_samples == 1:
             return self._sample_one_observation(next_state)
@@ -562,6 +628,13 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
             ):
                 reward += self.obstacle_penalty
 
+        if self._is_in_dangerous_area(state[:2], action):
+            if (
+                self.dangerous_area_hit_probability >= 1.0
+                or np.random.random() < self.dangerous_area_hit_probability
+            ):
+                reward += self.dangerous_area_penalty
+
         return float(reward)
 
     def is_terminal(self, state: np.ndarray) -> bool:
@@ -639,10 +712,10 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
         if remaining <= 0 or self.is_terminal(state=state):
             return 0.0
 
-        if self.obstacle_hit_probability < 1.0:
-            # Native kernel applies the obstacle penalty deterministically;
-            # fall back to the Python rollout so per-step Bernoulli draws
-            # against ``obstacle_hit_probability`` survive.
+        if self.obstacle_hit_probability < 1.0 or self.dangerous_area_hit_probability < 1.0:
+            # Native kernel applies the obstacle and dangerous-area penalties
+            # deterministically; fall back to the Python rollout so per-step
+            # Bernoulli draws against the configured hit probabilities survive.
             actions = [self.actions[i] for i in np.random.randint(0, 4, size=remaining)]
             return self._python_simulate_random_rollout(
                 state=state,
@@ -669,6 +742,9 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
                 obstacles=obs_arr,
                 obstacle_radius=float(self.obstacle_radius),
                 obstacle_penalty=float(self.obstacle_penalty),
+                dangerous_areas=self._dangerous_areas_arr,
+                dangerous_area_radius=float(self.dangerous_area_radius),
+                dangerous_area_penalty=float(self.dangerous_area_penalty),
                 transition_error_prob=float(self.transition_error_prob),
             )
         )
@@ -761,6 +837,7 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
         rewards = -dist
         rewards = np.where(dist < 0.5, rewards + 100.0, rewards)
         rewards += self._obstacle_penalty_batch(states, action)
+        rewards += self._dangerous_area_penalty_batch(states, action)
         return rewards.astype(np.float64)
 
     def _obstacle_penalty_batch(self, states: np.ndarray, action: str) -> np.ndarray:
@@ -780,6 +857,19 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
             applied = np.random.random(len(states)) < self.obstacle_hit_probability
             colliding = colliding & applied
         return np.where(colliding, self.obstacle_penalty, 0.0).astype(np.float64)
+
+    def _dangerous_area_penalty_batch(self, states: np.ndarray, action: str) -> np.ndarray:
+        if not self.dangerous_areas or action not in self._ACTION_TO_DXY:
+            return np.zeros(len(states), dtype=np.float64)
+        dx, dy = self._ACTION_TO_DXY[action]
+        intended = states[:, :2] + np.array([dx, dy], dtype=float)
+        diff = intended[:, None, :] - self._dangerous_areas_arr[None, :, :]
+        dist_sq = np.sum(diff * diff, axis=2)
+        in_zone = np.any(dist_sq <= self.dangerous_area_radius * self.dangerous_area_radius, axis=1)
+        if self.dangerous_area_hit_probability < 1.0:
+            applied = np.random.random(len(states)) < self.dangerous_area_hit_probability
+            in_zone = in_zone & applied
+        return np.where(in_zone, self.dangerous_area_penalty, 0.0).astype(np.float64)
 
     def observation_log_probability_per_state(
         self, next_states: Any, action: str, observation: Any
@@ -823,16 +913,20 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
         """
         return [metric.value for metric in PushPOMDPMetrics]
 
-    def compute_metrics(self, histories: List[History]) -> List[MetricValue]:
+    def compute_metrics(  # pylint: disable=too-many-locals
+        self, histories: List[History]
+    ) -> List[MetricValue]:
         goal_reached = []
         robot_collisions = []
         object_collisions = []
         total_collisions = []
+        dangerous_steps_per_history: List[int] = []
 
         for history in histories:
             goal_reached_in_history = False
             history_robot_collisions = 0
             history_object_collisions = 0
+            history_dangerous_steps = 0
             total_steps = len(history.history)
 
             for step in history.history:
@@ -849,11 +943,15 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
                 if self._is_colliding_with_obstacle(object_pos):
                     history_object_collisions += 1
 
+                if self._is_in_dangerous_area(robot_pos):
+                    history_dangerous_steps += 1
+
             goal_reached.append(1 if goal_reached_in_history else 0)
             if total_steps > 0:
                 robot_collisions.append(history_robot_collisions)
                 object_collisions.append(history_object_collisions)
                 total_collisions.append(history_robot_collisions + history_object_collisions)
+                dangerous_steps_per_history.append(history_dangerous_steps)
 
         total_steps_all = sum(len(history.history) for history in histories)
         avg_robot_collisions = sum(robot_collisions) / total_steps_all if total_steps_all > 0 else 0
@@ -861,6 +959,9 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
             sum(object_collisions) / total_steps_all if total_steps_all > 0 else 0
         )
         avg_total_collisions = sum(total_collisions) / total_steps_all if total_steps_all > 0 else 0
+        avg_dangerous_rate = (
+            sum(dangerous_steps_per_history) / total_steps_all if total_steps_all > 0 else 0
+        )
 
         robot_collision_rates = [
             c / len(history.history) for c, history in zip(robot_collisions, histories)
@@ -871,14 +972,27 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
         total_collision_rates = [
             c / len(history.history) for c, history in zip(total_collisions, histories)
         ]
+        dangerous_rates = [
+            c / len(history.history) for c, history in zip(dangerous_steps_per_history, histories)
+        ]
 
         robot_collisions_ci = confidence_interval(data=robot_collision_rates, confidence=0.95)
         object_collisions_ci = confidence_interval(data=object_collision_rates, confidence=0.95)
         total_collisions_ci = confidence_interval(data=total_collision_rates, confidence=0.95)
+        dangerous_rate_ci = (
+            confidence_interval(data=dangerous_rates, confidence=0.95)
+            if dangerous_rates
+            else (0, 0)
+        )
 
         total_robot_collisions_ci = confidence_interval(data=robot_collisions, confidence=0.95)
         total_object_collisions_ci = confidence_interval(data=object_collisions, confidence=0.95)
         total_all_collisions_ci = confidence_interval(data=total_collisions, confidence=0.95)
+        total_dangerous_steps_ci = (
+            confidence_interval(data=dangerous_steps_per_history, confidence=0.95)
+            if dangerous_steps_per_history
+            else (0, 0)
+        )
 
         avg_goal_reached = float(np.mean(goal_reached))
         goal_reached_ci = confidence_interval(data=goal_reached, confidence=0.95)
@@ -925,5 +1039,21 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
                 value=float(np.mean(total_collisions)) if total_collisions else 0.0,
                 lower_confidence_bound=total_all_collisions_ci[0],
                 upper_confidence_bound=total_all_collisions_ci[1],
+            ),
+            MetricValue(
+                name=PushPOMDPMetrics.DANGEROUS_AREA_RATE.value,
+                value=avg_dangerous_rate,
+                lower_confidence_bound=dangerous_rate_ci[0],
+                upper_confidence_bound=dangerous_rate_ci[1],
+            ),
+            MetricValue(
+                name=PushPOMDPMetrics.TOTAL_DANGEROUS_AREA_STEPS.value,
+                value=(
+                    float(np.mean(dangerous_steps_per_history))
+                    if dangerous_steps_per_history
+                    else 0.0
+                ),
+                lower_confidence_bound=total_dangerous_steps_ci[0],
+                upper_confidence_bound=total_dangerous_steps_ci[1],
             ),
         ]

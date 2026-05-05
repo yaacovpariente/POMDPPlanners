@@ -513,6 +513,40 @@ std::vector<double> load_discrete_obstacles(const py::array_t<double> &obstacles
     return out;
 }
 
+// Load dangerous-area centres: shape (K, 2), (0, 2), or (0,) 1-D for empty.
+// Returns flat (cx, cy) pairs.
+std::vector<double> load_dangerous_areas(const py::array_t<double> &areas) {
+    if (areas.ndim() == 1 && areas.shape(0) == 0) {
+        return {};
+    }
+    if (areas.ndim() != 2 || areas.shape(1) != 2) {
+        throw std::invalid_argument("dangerous_areas must have shape (K, 2)");
+    }
+    const auto k = static_cast<std::size_t>(areas.shape(0));
+    std::vector<double> out(k * 2);
+    auto u = areas.unchecked<2>();
+    for (std::size_t i = 0; i < k; ++i) {
+        out[i * 2 + 0] = u(static_cast<py::ssize_t>(i), 0);
+        out[i * 2 + 1] = u(static_cast<py::ssize_t>(i), 1);
+    }
+    return out;
+}
+
+// Returns true if (px, py) is within dangerous_area_radius_sq of any centre.
+static inline bool point_in_dangerous_areas(double px, double py,
+                                            const std::vector<double> &areas,
+                                            double radius_sq) noexcept {
+    const std::size_t k = areas.size() / 2;
+    for (std::size_t i = 0; i < k; ++i) {
+        const double dx = px - areas[i * 2 + 0];
+        const double dy = py - areas[i * 2 + 1];
+        if (dx * dx + dy * dy <= radius_sq) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // Returns true if (px, py) is within obstacle_radius_sq of any obstacle.
 static inline bool discrete_collides(double px, double py,
                                      const std::vector<double> &obstacles,
@@ -538,6 +572,9 @@ static double discrete_step(const double *state, int action_idx, double *next_st
                              double push_scale, double obstacle_radius_sq,
                              const std::vector<double> &obstacles,
                              double obstacle_penalty,
+                             const std::vector<double> &dangerous_areas,
+                             double dangerous_area_radius_sq,
+                             double dangerous_area_penalty,
                              pomdp_native::RNGState &rng,
                              double transition_error_prob) {
     // Resolve action error ---------------------------------------------------
@@ -621,16 +658,22 @@ static double discrete_step(const double *state, int action_idx, double *next_st
     // Obstacle penalty: applied if the INTENDED robot position (state[:2]+dxy)
     // collides with an obstacle — mirrors _reward_from_next_state which calls
     // _is_colliding_with_obstacle(state[:2], action).
+    const int rdx_int = kDiscreteDXY[static_cast<std::size_t>(action_idx)][0];
+    const int rdy_int = kDiscreteDXY[static_cast<std::size_t>(action_idx)][1];
+    const double intended_rx = rx + static_cast<double>(rdx_int);
+    const double intended_ry = ry + static_cast<double>(rdy_int);
     if (!obstacles.empty()) {
-        // intended_robot = (state[0] + dx, state[1] + dy) — uses original
-        // action's dx/dy (action_idx, not actual_idx, because reward checks
-        // the intended move, not the noise-corrupted one).
-        const int rdx_int = kDiscreteDXY[static_cast<std::size_t>(action_idx)][0];
-        const int rdy_int = kDiscreteDXY[static_cast<std::size_t>(action_idx)][1];
-        const double intended_rx = rx + static_cast<double>(rdx_int);
-        const double intended_ry = ry + static_cast<double>(rdy_int);
         if (discrete_collides(intended_rx, intended_ry, obstacles, obstacle_radius_sq)) {
             reward += obstacle_penalty;
+        }
+    }
+    // Dangerous-area penalty: applied at most once per step when the intended
+    // robot position lies inside any dangerous area. Penalty is additive (negative)
+    // and parallels the obstacle penalty above.
+    if (!dangerous_areas.empty()) {
+        if (point_in_dangerous_areas(intended_rx, intended_ry, dangerous_areas,
+                                     dangerous_area_radius_sq)) {
+            reward += dangerous_area_penalty;
         }
     }
     return reward;
@@ -837,7 +880,10 @@ double simulate_rollout_discrete(
     int max_depth, int depth, double discount, double grid_size,
     double push_threshold, double friction_coefficient,
     py::array_t<double, py::array::c_style | py::array::forcecast> obstacles_arr,
-    double obstacle_radius, double obstacle_penalty, double transition_error_prob) {
+    double obstacle_radius, double obstacle_penalty,
+    py::array_t<double, py::array::c_style | py::array::forcecast> dangerous_areas_arr,
+    double dangerous_area_radius, double dangerous_area_penalty,
+    double transition_error_prob) {
     if (state_arr.ndim() != 1 || state_arr.shape(0) != 6) {
         throw std::invalid_argument("state must be a 1-D array of length 6");
     }
@@ -853,12 +899,16 @@ double simulate_rollout_discrete(
     const double push_threshold_sq = push_threshold * push_threshold;
     const double push_scale = 1.0 - friction_coefficient;
     const double obstacle_radius_sq = obstacle_radius * obstacle_radius;
+    const double dangerous_area_radius_sq = dangerous_area_radius * dangerous_area_radius;
 
     // Load obstacles (M, 2) flat.
     std::vector<double> obstacles;
     if (!(obstacles_arr.ndim() == 1 && obstacles_arr.shape(0) == 0)) {
         obstacles = load_discrete_obstacles(obstacles_arr);
     }
+
+    // Load dangerous areas (K, 2) flat.
+    std::vector<double> dangerous_areas = load_dangerous_areas(dangerous_areas_arr);
 
     // Copy initial state into a mutable buffer.
     double cur[6];  // NOLINT(modernize-avoid-c-arrays)
@@ -882,8 +932,11 @@ double simulate_rollout_discrete(
         const double r = discrete_step(cur, action_idx, nxt, grid_max,
                                        push_threshold_sq, push_scale,
                                        obstacle_radius_sq, obstacles,
-                                       obstacle_penalty, rng,
-                                       transition_error_prob);
+                                       obstacle_penalty,
+                                       dangerous_areas,
+                                       dangerous_area_radius_sq,
+                                       dangerous_area_penalty,
+                                       rng, transition_error_prob);
         total += gamma_power * r;
         gamma_power *= discount;
         std::copy(nxt, nxt + 6, cur);
@@ -1049,6 +1102,8 @@ double cont_simulate_rollout(
     double grid_size, double push_threshold, double friction_coefficient,
     double max_push, double robot_radius, double obstacle_penalty,
     const py::array_t<double, py::array::c_style | py::array::forcecast> &obstacles,
+    const py::array_t<double, py::array::c_style | py::array::forcecast> &dangerous_areas,
+    double dangerous_area_radius, double dangerous_area_penalty,
     const py::array_t<double> &covariance) {
 
     if (initial_state.ndim() != 1 ||
@@ -1080,6 +1135,9 @@ double cont_simulate_rollout(
             obs_flat[i * 4 + 3] = obs_v(static_cast<py::ssize_t>(i), 3);
         }
     }
+
+    std::vector<double> dangerous_flat = load_dangerous_areas(dangerous_areas);
+    const double dangerous_area_radius_sq = dangerous_area_radius * dangerous_area_radius;
 
     const auto noise = pomdp_native::GaussianND<kNoiseDim>::from_covariance(covariance);
 
@@ -1126,14 +1184,25 @@ double cont_simulate_rollout(
             reward += 100.0;
         }
 
+        double robot_after[kNoiseDim] = {  // NOLINT(modernize-avoid-c-arrays)
+            state[0] + action[0], state[1] + action[1]};
         if (n_obs > 0 && obstacle_penalty != 0.0) {
-            double robot_after[kNoiseDim] = {  // NOLINT(modernize-avoid-c-arrays)
-                state[0] + action[0], state[1] + action[1]};
             for (std::size_t i = 0; i < n_obs; ++i) {
                 if (cont_circle_aabb_overlap(robot_after, robot_radius, &obs_flat[i * 4])) {
                     reward += obstacle_penalty;
                     break;
                 }
+            }
+        }
+        // Dangerous-area penalty: applied at most once when the post-action
+        // robot position lies inside any dangerous area. Mirrors the Python
+        // ``_reward_batch_array`` block that calls
+        // ``_batch_robot_in_dangerous_areas``.
+        if (!dangerous_flat.empty() && dangerous_area_penalty != 0.0) {
+            if (point_in_dangerous_areas(robot_after[0], robot_after[1],
+                                         dangerous_flat,
+                                         dangerous_area_radius_sq)) {
+                reward += dangerous_area_penalty;
             }
         }
 
@@ -1401,19 +1470,30 @@ PYBIND11_MODULE(_native, m) {
           py::arg("max_depth"), py::arg("start_depth"), py::arg("discount_factor"),
           py::arg("grid_size"), py::arg("push_threshold"), py::arg("friction_coefficient"),
           py::arg("max_push"), py::arg("robot_radius"), py::arg("obstacle_penalty"),
-          py::arg("obstacles"), py::arg("covariance"),
+          py::arg("obstacles"), py::arg("dangerous_areas"),
+          py::arg("dangerous_area_radius"), py::arg("dangerous_area_penalty"),
+          py::arg("covariance"),
           "Native random rollout for ContinuousPushPOMDP. "
           "Returns discounted return from initial_state. "
           "action_indices must be a pre-drawn int32 array of shape (steps_left,). "
-          "obstacles must have shape (M, 4) with rows (cx, cy, hx, hy).");
+          "obstacles must have shape (M, 4) with rows (cx, cy, hx, hy). "
+          "dangerous_areas must have shape (K, 2) (or (0, 2) when empty); each "
+          "row is the (x, y) centre of a circular dangerous area of radius "
+          "``dangerous_area_radius``. Robots inside any zone after the action "
+          "incur ``dangerous_area_penalty`` (at most once per step).");
 
     m.def("simulate_rollout_discrete", &simulate_rollout_discrete,
           py::arg("state"), py::arg("action_indices"), py::arg("max_depth"),
           py::arg("depth"), py::arg("discount"), py::arg("grid_size"),
           py::arg("push_threshold"), py::arg("friction_coefficient"),
           py::arg("obstacles"), py::arg("obstacle_radius"),
-          py::arg("obstacle_penalty"), py::arg("transition_error_prob"),
-          "Run a full discrete Push rollout in C++. Returns discounted reward sum.");
+          py::arg("obstacle_penalty"),
+          py::arg("dangerous_areas"), py::arg("dangerous_area_radius"),
+          py::arg("dangerous_area_penalty"),
+          py::arg("transition_error_prob"),
+          "Run a full discrete Push rollout in C++. Returns discounted reward sum. "
+          "dangerous_areas must have shape (K, 2) (or empty). Penalty applied "
+          "once per step when the intended robot position lies in any zone.");
 
     m.def("belief_batch_transition_discrete", &belief_batch_transition_discrete,
           py::arg("particles"), py::arg("action_idx"), py::arg("transition_error_prob"),

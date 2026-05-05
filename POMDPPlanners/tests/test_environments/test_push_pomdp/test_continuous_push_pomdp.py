@@ -861,6 +861,477 @@ class TestContinuousPushStochasticObstacleHitProbability:
 
 
 # ------------------------------------------------------------------
+# Dangerous areas (continuous variant)
+# ------------------------------------------------------------------
+
+
+class TestContinuousPushDangerousAreas:
+    """Tests for ``dangerous_areas`` on ``ContinuousPushPOMDP``.
+
+    Geometry: a single circular zone centred at ``(5.0, 5.0)`` with
+    radius ``0.5``. The robot at ``(4.0, 5.0)`` taking action
+    ``(1.0, 0.0)`` lands at post-action position ``(5.0, 5.0)`` — inside
+    the zone. Transition covariance is set to a near-zero diagonal so
+    distance-to-target stays effectively constant and the dangerous-area
+    penalty cleanly separates hit from no-hit trials.
+    """
+
+    DANGER_PENALTY = -7.0
+    DANGER_ACTION = np.array([1.0, 0.0])
+
+    @staticmethod
+    def _danger_env(hit_probability: float = 1.0) -> ContinuousPushPOMDP:
+        return ContinuousPushPOMDP(
+            discount_factor=0.99,
+            grid_size=10,
+            dangerous_areas=[(5.0, 5.0)],
+            dangerous_area_radius=0.5,
+            dangerous_area_penalty=TestContinuousPushDangerousAreas.DANGER_PENALTY,
+            dangerous_area_hit_probability=hit_probability,
+            robot_radius=0.3,
+            state_transition_cov_matrix=np.eye(2) * 1e-8,
+        )
+
+    @staticmethod
+    def _enter_state() -> np.ndarray:
+        return np.array([4.0, 5.0, 1.0, 1.0, 9.0, 9.0])
+
+    @staticmethod
+    def _safe_state() -> np.ndarray:
+        # robot far from the zone AND from the object so tiny native-RNG noise
+        # cannot tip the post-action robot in/out of the push threshold
+        # (which would perturb the distance-to-target term across runs).
+        return np.array([1.0, 1.0, 8.0, 8.0, 9.0, 9.0])
+
+    def test_dangerous_area_penalty_applied(self):
+        """Penalty fires when post-action robot position lies in a zone.
+
+        Purpose: Validates the deterministic dangerous-area penalty path
+            in ``_reward_batch_array``.
+
+        Given: A ContinuousPushPOMDP with one zone; robot at (4, 5);
+            action (1, 0) lands at (5, 5).
+        When: ``reward()`` is called and compared against an env with no
+            zone.
+        Then: The configured-env reward is more negative by
+            ``DANGER_PENALTY`` (within transition-noise tolerance).
+
+        Test type: unit
+        """
+        env = self._danger_env()
+        env_safe = ContinuousPushPOMDP(
+            discount_factor=0.99,
+            grid_size=10,
+            robot_radius=0.3,
+            state_transition_cov_matrix=np.eye(2) * 1e-8,
+        )
+        state = self._enter_state()
+        np.random.seed(0)
+        baseline = env_safe.reward(state, self.DANGER_ACTION)
+        np.random.seed(0)
+        with_danger = env.reward(state, self.DANGER_ACTION)
+        assert with_danger == pytest.approx(baseline + self.DANGER_PENALTY, abs=1e-3)
+
+    def test_dangerous_area_default_empty(self):
+        """Default constructor leaves dangerous-area attributes empty.
+
+        Purpose: Validates backward-compatible defaults.
+
+        Given: A ContinuousPushPOMDP constructed with default parameters.
+        When: The dangerous-area attributes are inspected.
+        Then: ``dangerous_areas`` is empty, the packed array has shape
+            ``(0, 2)``, and ``dangerous_area_hit_probability`` is 1.0.
+
+        Test type: unit
+        """
+        env = ContinuousPushPOMDP(discount_factor=0.99)
+        assert not env.dangerous_areas
+        assert env._dangerous_areas_arr.shape == (0, 2)
+        assert env.dangerous_area_hit_probability == 1.0
+
+    def test_reward_batch_dangerous_area(self):
+        """Vectorised reward_batch applies the penalty per-row.
+
+        Purpose: Validates that the batched reward path matches the
+            single-state path on a mixed batch.
+
+        Given: A two-row batch (one in-zone, one safe) and a configured
+            danger env.
+        When: ``reward_batch`` is called.
+        Then: The in-zone row receives the penalty and the safe row does
+            not (within transition-noise tolerance).
+
+        Test type: unit
+        """
+        env = self._danger_env()
+        env_safe = ContinuousPushPOMDP(
+            discount_factor=0.99,
+            grid_size=10,
+            robot_radius=0.3,
+            state_transition_cov_matrix=np.eye(2) * 1e-8,
+        )
+        states = np.stack([self._enter_state(), self._safe_state()])
+        np.random.seed(0)
+        baselines = env_safe.reward_batch(states, self.DANGER_ACTION)
+        np.random.seed(0)
+        rewards = env.reward_batch(states, self.DANGER_ACTION)
+        assert rewards[0] == pytest.approx(baselines[0] + self.DANGER_PENALTY, abs=1e-3)
+        assert rewards[1] == pytest.approx(baselines[1], abs=1e-3)
+
+    def test_dangerous_area_single_penalty_for_overlapping_zones(self):
+        """Overlapping zones apply the penalty at most once per step.
+
+        Purpose: Validates that even when the post-action robot position
+            lies in multiple overlapping zones, only one
+            ``dangerous_area_penalty`` is applied per step (matches Push's
+            existing single-penalty obstacle convention and avoids
+            ambiguous accumulation semantics).
+
+        Given: A ContinuousPushPOMDP with two zones whose circles overlap
+            at the post-action robot position.
+        When: ``reward()`` is called.
+        Then: Exactly one penalty is applied (not two).
+
+        Test type: unit
+        """
+        env = ContinuousPushPOMDP(
+            discount_factor=0.99,
+            grid_size=10,
+            dangerous_areas=[(5.0, 5.0), (5.1, 5.0)],
+            dangerous_area_radius=0.5,
+            dangerous_area_penalty=self.DANGER_PENALTY,
+            robot_radius=0.3,
+            state_transition_cov_matrix=np.eye(2) * 1e-8,
+        )
+        env_safe = ContinuousPushPOMDP(
+            discount_factor=0.99,
+            grid_size=10,
+            robot_radius=0.3,
+            state_transition_cov_matrix=np.eye(2) * 1e-8,
+        )
+        state = self._enter_state()
+        np.random.seed(0)
+        baseline = env_safe.reward(state, self.DANGER_ACTION)
+        np.random.seed(0)
+        with_danger = env.reward(state, self.DANGER_ACTION)
+        # Single penalty, not 2x.
+        assert with_danger == pytest.approx(baseline + self.DANGER_PENALTY, abs=1e-3)
+
+    def test_compute_metrics_dangerous_area_steps(self):
+        """compute_metrics reports dangerous-area step counts.
+
+        Purpose: Validates the ``dangerous_area_rate`` and
+            ``total_dangerous_area_steps`` metrics on the continuous
+            variant.
+
+        Given: A ContinuousPushPOMDP with one zone and a hand-built
+            three-step history (two in-zone, one safe).
+        When: ``compute_metrics`` is called on a single-history list.
+        Then: Both metrics are present and reflect the correct counts.
+
+        Test type: unit
+        """
+        env = self._danger_env()
+        in_zone = np.array([5.0, 5.0, 1.0, 1.0, 9.0, 9.0])
+        out_zone = np.array([1.0, 1.0, 2.0, 2.0, 9.0, 9.0])
+        steps = [
+            StepData(
+                state=in_zone,
+                action=self.DANGER_ACTION,
+                next_state=in_zone,
+                observation=in_zone,
+                reward=0.0,
+                belief=None,  # type: ignore[arg-type]
+            ),
+            StepData(
+                state=in_zone,
+                action=self.DANGER_ACTION,
+                next_state=in_zone,
+                observation=in_zone,
+                reward=0.0,
+                belief=None,  # type: ignore[arg-type]
+            ),
+            StepData(
+                state=out_zone,
+                action=self.DANGER_ACTION,
+                next_state=out_zone,
+                observation=out_zone,
+                reward=0.0,
+                belief=None,  # type: ignore[arg-type]
+            ),
+        ]
+        history = History(
+            history=steps,
+            discount_factor=0.99,
+            average_state_sampling_time=0.0,
+            average_action_time=0.0,
+            average_observation_time=0.0,
+            average_belief_update_time=0.0,
+            average_reward_time=0.0,
+            actual_num_steps=len(steps),
+            reach_terminal_state=False,
+            policy_run_data=[PolicyRunData(info_variables=[])],
+        )
+        metrics = {m.name: m for m in env.compute_metrics([history])}
+        assert "dangerous_area_rate" in metrics
+        assert "total_dangerous_area_steps" in metrics
+        assert metrics["total_dangerous_area_steps"].value == pytest.approx(2.0)
+        assert metrics["dangerous_area_rate"].value == pytest.approx(2.0 / 3.0)
+
+    def test_native_rollout_bypassed_when_hit_probability_lt_one(self, monkeypatch):
+        """Native rollout is bypassed when dangerous_area_hit_probability < 1.
+
+        Purpose: Validates that ``simulate_random_rollout`` falls back to
+            the Python rollout so per-step Bernoulli draws survive.
+
+        Given: A ContinuousPushPOMDPDiscreteActions with
+            ``dangerous_area_hit_probability=0.5``.
+        When: ``simulate_random_rollout`` is invoked after monkeypatching
+            ``_native.cont_simulate_rollout`` to raise.
+        Then: No exception is raised because the native path was bypassed.
+
+        Test type: unit
+        """
+        env = ContinuousPushPOMDPDiscreteActions(
+            discount_factor=0.99,
+            grid_size=10,
+            dangerous_areas=[(5.0, 5.0)],
+            dangerous_area_radius=0.5,
+            dangerous_area_penalty=self.DANGER_PENALTY,
+            dangerous_area_hit_probability=0.5,
+            robot_radius=0.3,
+            state_transition_cov_matrix=np.eye(2) * 1e-8,
+        )
+
+        def _explode(**_kwargs):
+            raise AssertionError("native cont_simulate_rollout must not be called")
+
+        monkeypatch.setattr(_native, "cont_simulate_rollout", _explode)
+
+        class _Sampler:
+            def sample(self):
+                return "right"
+
+        env.simulate_random_rollout(
+            state=self._safe_state(),
+            action_sampler=_Sampler(),
+            max_depth=5,
+            discount_factor=0.99,
+        )
+
+
+class TestContinuousPushDangerousHitProbability:
+    """Tests for ``dangerous_area_hit_probability`` on ``ContinuousPushPOMDP``."""
+
+    DANGER_PENALTY = -7.0
+    DANGER_ACTION = np.array([1.0, 0.0])
+
+    @staticmethod
+    def _danger_env(hit_probability: float) -> ContinuousPushPOMDP:
+        return ContinuousPushPOMDP(
+            discount_factor=0.99,
+            grid_size=10,
+            dangerous_areas=[(5.0, 5.0)],
+            dangerous_area_radius=0.5,
+            dangerous_area_penalty=TestContinuousPushDangerousHitProbability.DANGER_PENALTY,
+            dangerous_area_hit_probability=hit_probability,
+            robot_radius=0.3,
+            state_transition_cov_matrix=np.eye(2) * 1e-8,
+        )
+
+    @staticmethod
+    def _enter_state() -> np.ndarray:
+        return np.array([4.0, 5.0, 1.0, 1.0, 9.0, 9.0])
+
+    def test_default_hit_probability_is_one(self):
+        """Default dangerous_area_hit_probability is 1.0.
+
+        Purpose: Validates the default value preserves deterministic
+            penalty semantics.
+
+        Given: A ContinuousPushPOMDP with default parameters.
+        When: ``dangerous_area_hit_probability`` is read.
+        Then: It equals 1.0.
+
+        Test type: unit
+        """
+        env = ContinuousPushPOMDP(discount_factor=0.99)
+        assert env.dangerous_area_hit_probability == 1.0
+
+    def test_hit_probability_zero_never_applies_penalty(self):
+        """hit_probability=0 disables the dangerous-area penalty.
+
+        Purpose: Validates lower bound of the stochastic regime.
+
+        Given: A ContinuousPushPOMDP with hit_probability=0.0.
+        When: ``reward()`` is called many times on an in-zone state.
+        Then: Every reward sits above the (baseline - penalty/2) midpoint.
+
+        Test type: unit
+        """
+        env = self._danger_env(hit_probability=0.0)
+        state = self._enter_state()
+        baseline = env.reward(state, self.DANGER_ACTION)
+        midpoint = baseline + self.DANGER_PENALTY / 2.0
+        np.random.seed(0)
+        for _ in range(200):
+            r = env.reward(state, self.DANGER_ACTION)
+            assert r > midpoint
+
+    def test_hit_probability_one_always_applies(self):
+        """hit_probability=1 applies the penalty deterministically.
+
+        Purpose: Validates upper bound of the stochastic regime.
+
+        Given: A ContinuousPushPOMDP with hit_probability=1.0 and an
+            in-zone state.
+        When: ``reward()`` is called many times.
+        Then: Every reward is below the (baseline - penalty/2) midpoint.
+
+        Test type: unit
+        """
+        env = self._danger_env(hit_probability=1.0)
+        state = self._enter_state()
+        env_no_pen = self._danger_env(hit_probability=0.0)
+        baseline = env_no_pen.reward(state, self.DANGER_ACTION)
+        for _ in range(50):
+            r = env.reward(state, self.DANGER_ACTION)
+            assert r == pytest.approx(baseline + self.DANGER_PENALTY, abs=1e-3)
+
+    def test_hit_probability_empirical_rate(self):
+        """Empirical hit rate matches hit_probability over many calls.
+
+        Purpose: Validates per-call Bernoulli draw frequency.
+
+        Given: A ContinuousPushPOMDP with hit_probability=0.3 on an
+            in-zone state.
+        When: ``reward()`` is called 2000 times with a fixed seed.
+        Then: Empirical hit rate is within 0.05 of 0.3.
+
+        Test type: unit
+        """
+        env = self._danger_env(hit_probability=0.3)
+        state = self._enter_state()
+        env_no_pen = self._danger_env(hit_probability=0.0)
+        baseline = env_no_pen.reward(state, self.DANGER_ACTION)
+        midpoint = baseline + self.DANGER_PENALTY / 2.0
+        np.random.seed(123)
+        n_trials = 2000
+        hits = 0
+        for _ in range(n_trials):
+            if env.reward(state, self.DANGER_ACTION) < midpoint:
+                hits += 1
+        empirical = hits / n_trials
+        assert abs(empirical - 0.3) < 0.05
+
+    @pytest.mark.parametrize("bad_value", [-0.1, 1.5, float("nan")])
+    def test_invalid_hit_probability_raises(self, bad_value: float):
+        """Invalid dangerous_area_hit_probability raises ValueError.
+
+        Purpose: Validates input validation on the new probability parameter.
+
+        Given: A hit_probability outside [0, 1].
+        When: ContinuousPushPOMDP is constructed.
+        Then: ValueError is raised mentioning the parameter name.
+
+        Test type: unit
+        """
+        with pytest.raises(ValueError, match="dangerous_area_hit_probability"):
+            ContinuousPushPOMDP(discount_factor=0.99, dangerous_area_hit_probability=bad_value)
+
+    def test_reward_batch_honours_hit_probability_zero(self):
+        """Batch reward with hit_probability=0 applies no dangerous-area penalty.
+
+        Purpose: Validates the lower-bound of the stochastic regime in
+            the batch path.
+
+        Given: A 200-row batch in-zone with hit_probability=0.
+        When: ``reward_batch`` is called.
+        Then: All returned rewards exceed the penalty floor.
+
+        Test type: unit
+        """
+        env = self._danger_env(hit_probability=0.0)
+        state = self._enter_state()
+        env_no_pen = self._danger_env(hit_probability=0.0)
+        baseline = env_no_pen.reward(state, self.DANGER_ACTION)
+        midpoint = baseline + self.DANGER_PENALTY / 2.0
+        states = np.tile(state, (200, 1))
+        np.random.seed(789)
+        rewards = env.reward_batch(states, self.DANGER_ACTION)
+        assert np.all(rewards > midpoint)
+
+
+class TestContinuousPushPOMDPDiscreteActionsDangerousAreas:
+    """Tests that the discrete-actions wrapper inherits dangerous-area behaviour."""
+
+    DANGER_PENALTY = -7.0
+
+    def test_kwarg_forwarded_to_parent_attribute(self):
+        """Subclass forwards dangerous-area kwargs to the parent class.
+
+        Purpose: Validates that the discrete-action subclass exposes the
+            same dangerous-area state as the base ``ContinuousPushPOMDP``.
+
+        Given: A ContinuousPushPOMDPDiscreteActions constructed with
+            dangerous-area kwargs.
+        When: The dangerous-area attributes are read.
+        Then: They reflect the values passed to the constructor.
+
+        Test type: unit
+        """
+        env = ContinuousPushPOMDPDiscreteActions(
+            discount_factor=0.99,
+            dangerous_areas=[(3.0, 3.0)],
+            dangerous_area_radius=0.4,
+            dangerous_area_penalty=self.DANGER_PENALTY,
+            dangerous_area_hit_probability=0.7,
+        )
+        assert env.dangerous_areas == [(3.0, 3.0)]
+        assert env.dangerous_area_radius == 0.4
+        assert env.dangerous_area_penalty == self.DANGER_PENALTY
+        assert env.dangerous_area_hit_probability == 0.7
+        assert env._dangerous_areas_arr.shape == (1, 2)
+
+    def test_dangerous_area_penalty_via_string_action(self):
+        """Penalty fires when reward is invoked with a string action label.
+
+        Purpose: Validates that the discrete-action wrapper resolves the
+            string action to a unit vector and the dangerous-area penalty
+            still fires when the resulting post-action position is inside
+            a zone.
+
+        Given: A ContinuousPushPOMDPDiscreteActions with one zone at
+            (5, 5) radius 0.5; robot at (4, 5); action ``"right"``.
+        When: ``reward`` is called with the string action.
+        Then: Reward includes the dangerous-area penalty.
+
+        Test type: unit
+        """
+        env = ContinuousPushPOMDPDiscreteActions(
+            discount_factor=0.99,
+            grid_size=10,
+            dangerous_areas=[(5.0, 5.0)],
+            dangerous_area_radius=0.5,
+            dangerous_area_penalty=self.DANGER_PENALTY,
+            robot_radius=0.3,
+            state_transition_cov_matrix=np.eye(2) * 1e-8,
+        )
+        env_safe = ContinuousPushPOMDPDiscreteActions(
+            discount_factor=0.99,
+            grid_size=10,
+            robot_radius=0.3,
+            state_transition_cov_matrix=np.eye(2) * 1e-8,
+        )
+        state = np.array([4.0, 5.0, 1.0, 1.0, 9.0, 9.0])
+        np.random.seed(0)
+        baseline = env_safe.reward(state, "right")
+        np.random.seed(0)
+        with_danger = env.reward(state, "right")
+        assert with_danger == pytest.approx(baseline + self.DANGER_PENALTY, abs=1e-3)
+
+
+# ------------------------------------------------------------------
 # Discrete Actions
 # ------------------------------------------------------------------
 
@@ -1525,3 +1996,97 @@ class TestNativeRolloutEquivalence:
             discount_factor=0.95,
         )
         assert np.isfinite(result)
+
+    def test_cont_simulate_rollout_with_dangerous_areas(self):
+        """Native rollout deducts dangerous-area penalty when zones present.
+
+        Purpose: Validates that ``cont_simulate_rollout`` applies the
+            ``dangerous_area_penalty`` per step when the post-action robot
+            position lies in a configured zone.
+
+        Given: Two ContinuousPushPOMDPDiscreteActions envs that differ
+            only in whether ``dangerous_areas`` is configured. The robot
+            starts at (4, 5); action ``"right"`` (resolved to (1, 0))
+            sends the robot to (5, 5) — inside the zone.
+        When: A single-step ``simulate_random_rollout`` is invoked on
+            each env after seeding the native RNG identically.
+        Then: The configured-env return is more negative by exactly the
+            dangerous-area penalty (within tolerance accounting for the
+            tiny transition noise).
+
+        Test type: integration
+        """
+        env_safe = ContinuousPushPOMDPDiscreteActions(
+            discount_factor=0.99,
+            grid_size=10,
+            push_threshold=1.0,
+            friction_coefficient=0.3,
+            robot_radius=0.3,
+            state_transition_cov_matrix=np.eye(2) * 1e-8,
+        )
+        env_danger = ContinuousPushPOMDPDiscreteActions(
+            discount_factor=0.99,
+            grid_size=10,
+            push_threshold=1.0,
+            friction_coefficient=0.3,
+            robot_radius=0.3,
+            state_transition_cov_matrix=np.eye(2) * 1e-8,
+            dangerous_areas=[(5.0, 5.0)],
+            dangerous_area_radius=0.5,
+            dangerous_area_penalty=-7.0,
+        )
+        state = np.array([4.0, 5.0, 1.0, 1.0, 9.0, 9.0])
+        sampler = _FixedActionSampler(["right"])
+        # Seed both runs identically so the post-noise robot lands at the
+        # same place; the only difference is the danger-zone penalty.
+        _native.set_seed(42)
+        np.random.seed(42)
+        return_safe = env_safe.simulate_random_rollout(
+            state=state, action_sampler=sampler, max_depth=1, discount_factor=0.99
+        )
+        _native.set_seed(42)
+        np.random.seed(42)
+        return_danger = env_danger.simulate_random_rollout(
+            state=state, action_sampler=sampler, max_depth=1, discount_factor=0.99
+        )
+        assert return_danger == pytest.approx(return_safe - 7.0, abs=1e-3)
+
+    def test_cont_simulate_rollout_without_dangerous_areas_is_unchanged(self):
+        """Native rollout without dangerous areas matches a fresh rollout.
+
+        Purpose: Backward-compat sanity. Adding the new pybind11 args with
+            an empty (0, 2) array must not change the discounted return
+            for envs that do not configure dangerous zones.
+
+        Given: Two ContinuousPushPOMDPDiscreteActions envs both with no
+            dangerous areas (default), under the same seed.
+        When: ``simulate_random_rollout`` runs on each.
+        Then: The discounted returns are identical.
+
+        Test type: integration
+        """
+        env_a = ContinuousPushPOMDPDiscreteActions(
+            discount_factor=0.99,
+            grid_size=10,
+            robot_radius=0.3,
+            state_transition_cov_matrix=np.eye(2) * 0.01,
+        )
+        env_b = ContinuousPushPOMDPDiscreteActions(
+            discount_factor=0.99,
+            grid_size=10,
+            robot_radius=0.3,
+            state_transition_cov_matrix=np.eye(2) * 0.01,
+        )
+        state = np.array([2.0, 2.0, 6.0, 6.0, 9.0, 9.0])
+        sampler = _FixedActionSampler(["right"] * 8)
+        _native.set_seed(123)
+        np.random.seed(123)
+        return_a = env_a.simulate_random_rollout(
+            state=state, action_sampler=sampler, max_depth=8, discount_factor=0.99
+        )
+        _native.set_seed(123)
+        np.random.seed(123)
+        return_b = env_b.simulate_random_rollout(
+            state=state, action_sampler=sampler, max_depth=8, discount_factor=0.99
+        )
+        assert return_a == return_b

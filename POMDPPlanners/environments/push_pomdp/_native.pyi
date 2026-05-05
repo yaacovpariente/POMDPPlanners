@@ -28,12 +28,20 @@ def simulate_rollout_discrete(
     obstacles: NDArray[np.float64],
     obstacle_radius: float,
     obstacle_penalty: float,
+    dangerous_areas: NDArray[np.floating],
+    dangerous_area_radius: float,
+    dangerous_area_penalty: float,
     transition_error_prob: float,
 ) -> float:
     """Run a full discrete Push POMDP rollout in C++.
 
     Returns the discounted sum of immediate rewards along the sampled
     trajectory, using pre-drawn action indices supplied by the caller.
+
+    ``dangerous_areas`` must have shape ``(K, 2)`` (rows ``(cx, cy)``) or
+    be empty. The penalty is applied at most once per step when the
+    intended robot position falls inside any zone of radius
+    ``dangerous_area_radius``.
     """
     ...
 
@@ -51,6 +59,9 @@ def cont_simulate_rollout(
     robot_radius: float,
     obstacle_penalty: float,
     obstacles: NDArray[np.floating],
+    dangerous_areas: NDArray[np.floating],
+    dangerous_area_radius: float,
+    dangerous_area_penalty: float,
     covariance: NDArray[np.floating],
 ) -> float:
     """Native random rollout for ContinuousPushPOMDP.
@@ -59,6 +70,11 @@ def cont_simulate_rollout(
     ``action_indices`` must be a pre-drawn int32 array of shape
     ``(steps_left,)``.  ``obstacles`` must have shape ``(M, 4)`` with
     rows ``(cx, cy, hx, hy)``.
+
+    ``dangerous_areas`` must have shape ``(K, 2)`` (rows ``(cx, cy)``) or
+    be empty. The penalty is applied at most once per step when the
+    post-action robot position lies inside any zone of radius
+    ``dangerous_area_radius``.
     """
     ...
 
