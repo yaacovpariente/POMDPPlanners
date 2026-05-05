@@ -110,3 +110,45 @@ def test_sparse_sampling_lcb_prefers_less_visited_child_when_q_tied():
     assert results == {expected}, (
         f"expected deterministic LCB pick of least-visited child[1]={expected}; " f"got {results}"
     )
+
+
+def test_sparse_sampling_lcb_falls_back_to_greedy_when_horizon_is_zero():
+    """At horizon=0 the LCB bound is undefined — fall back to greedy q-min.
+
+    Purpose: Validates that the LCB action selector does not return a
+        systematic action-index-0 default when horizon=0. Without the
+        fix, log(1 - belief_visits**0) = log(0) = -inf collapses every
+        per-action score to NaN, and the comparison ``score < best_score``
+        is False for NaN, so the kernel always returns index 0 — even
+        when later actions have strictly lower q-values.
+
+    Given: A belief node with 3 visited action children, all with
+        visit_count=5; child[2] has the strictly lowest q_value (0.1
+        vs. 5.0 for the others).
+    When: _sparse_sampling_guarantees_exploration_v2_arena is called
+        with horizon=0.
+    Then: Returns child[2] (lowest q), not child[0] by default.
+
+    Test type: unit
+    """
+    tree, parent_id, child_ids = _build_tree_with_visited_action_children(
+        q_values=[5.0, 5.0, 0.1],
+        visit_counts=[5, 5, 5],
+    )
+    expected = child_ids[2]
+    np.random.seed(0)
+    result = _sparse_sampling_guarantees_exploration_v2_arena(
+        tree=tree,
+        belief_id=parent_id,
+        exploration_constant=1.0,
+        alpha=0.1,
+        min_cost=-10.0,
+        max_cost=10.0,
+        horizon=0,
+        delta=0.1,
+        visit_count_penalty=0.0,
+    )
+    assert result == expected, (
+        f"horizon=0 should fall back to greedy q-min selection; "
+        f"got {result} (children={child_ids}, expected child[2]={expected})"
+    )
