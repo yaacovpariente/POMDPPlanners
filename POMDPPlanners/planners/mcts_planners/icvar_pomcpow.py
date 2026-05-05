@@ -27,7 +27,8 @@ from typing import Any, Optional
 
 import numpy as np
 
-from POMDPPlanners.core.belief import WeightedParticleBelief, WeightedParticleBeliefStateUpdate
+from POMDPPlanners.core.belief import WeightedParticleBeliefStateUpdate
+from POMDPPlanners.core.cost import belief_expectation_cost
 from POMDPPlanners.core.environment import Environment, SpaceType
 from POMDPPlanners.core.policy import PolicySpaceInfo
 from POMDPPlanners.core.tree.arena import Tree
@@ -263,17 +264,17 @@ class ICVaR_POMCPOW(ArenaPathSimulationPolicyCostSetting):
         if immediate_cost is None:
             if isinstance(belief, WeightedParticleBeliefStateUpdate):
                 tree.set_immediate_cost(action_id, -reward)
-            elif isinstance(belief, WeightedParticleBelief):
-                particle_weights = belief.normalized_weights
-                particle_costs = np.array(
-                    [
-                        -self.environment.reward(state=particle, action=action)
-                        for particle in belief.particles
-                    ]
-                )
-                tree.set_immediate_cost(action_id, float(np.sum(particle_costs * particle_weights)))
             else:
-                raise ValueError(f"Unsupported belief type: {type(belief)}")
+                # Root-frame path. Mirrors ICVaR_PFT_DPW by delegating to the
+                # polymorphic ``belief_expectation_cost`` helper, which handles
+                # ``WeightedParticleBelief``, ``VectorizedWeightedParticleBelief``,
+                # ``GaussianBelief``, and ``GaussianMixtureBelief``. Avoids a
+                # parallel isinstance-ladder here that previously raised on the
+                # default belief type returned by ``create_environment_belief``.
+                tree.set_immediate_cost(
+                    action_id,
+                    belief_expectation_cost(belief=belief, action=action, env=self.environment),
+                )
         elif isinstance(belief, WeightedParticleBeliefStateUpdate):
             old_weights_sum = belief.weights_sum - belief.weights[-1]
             new_cost = (

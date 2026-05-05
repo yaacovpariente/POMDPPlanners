@@ -539,6 +539,72 @@ class TestICVaR_POMCPOWIntegration:
         assert len(actions) > 0
         assert all(isinstance(action, (str, int, np.integer)) for action in actions)
 
+    def test_action_accepts_vectorized_weighted_particle_belief_at_root(
+        self, light_dark_env, light_dark_action_sampler
+    ):
+        """Root call with VectorizedWeightedParticleBelief returns a valid action.
+
+        Purpose: Validates that ``ICVaR_POMCPOW.action`` handles the
+            default belief type returned by
+            :func:`POMDPPlanners.utils.belief_factory.create_environment_belief`,
+            which is ``VectorizedWeightedParticleBelief`` for every
+            registered environment. Before the fix the planner's
+            ``_update_immediate_cost`` dispatched only on
+            ``WeightedParticleBeliefStateUpdate`` and
+            ``WeightedParticleBelief`` and raised
+            ``ValueError(f"Unsupported belief type: ...")`` on the very
+            first backprop, making the documented public-API call
+            ``policy.action(create_environment_belief(env))`` crash.
+
+        Given: A DiscreteLightDarkPOMDP environment, a
+            ``VectorizedWeightedParticleBelief`` produced by
+            ``create_environment_belief``, and an ICVaR_POMCPOW planner
+            with a small simulation budget.
+        When: ``planner.action(belief)`` is called.
+        Then: The call returns one of the environment's valid actions
+            without raising.
+
+        Test type: integration
+        """
+        # Local imports keep this test self-contained — the symbols are
+        # not used by any other test in this file.
+        from POMDPPlanners.core.belief.vectorized_weighted_particle_belief import (
+            VectorizedWeightedParticleBelief,
+        )
+        from POMDPPlanners.utils.belief_factory import create_environment_belief
+
+        belief = create_environment_belief(light_dark_env, n_particles=50)
+        assert isinstance(belief, VectorizedWeightedParticleBelief), (
+            "factory must return VectorizedWeightedParticleBelief for the default "
+            "config — otherwise this test does not exercise the bug it targets"
+        )
+        planner = ICVaR_POMCPOW(
+            environment=light_dark_env,
+            discount_factor=0.95,
+            depth=3,
+            exploration_constant=1.0,
+            k_o=1.0,
+            k_a=1.0,
+            alpha_o=0.5,
+            alpha_a=0.5,
+            min_immediate_cost=-10.0,
+            max_immediate_cost=10.0,
+            min_visit_count_per_action=1,
+            delta=0.1,
+            name="test_icvar_pomcpow_vec_belief",
+            action_sampler=light_dark_action_sampler,
+            n_simulations=10,
+            alpha=0.1,
+        )
+        np.random.seed(0)
+        action, policy_run_data = planner.action(belief)
+        assert isinstance(policy_run_data, PolicyRunData)
+        actual_action = action[0] if isinstance(action, list) and len(action) == 1 else action
+        assert actual_action in light_dark_env.get_actions(), (
+            f"planner returned action={actual_action!r}, which is not in the "
+            f"environment action set {light_dark_env.get_actions()}"
+        )
+
     def test_tree_structure_construction(self, planner, belief):
         """Test that the planner constructs proper tree structure."""
         tree = Tree()
