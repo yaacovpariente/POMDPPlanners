@@ -484,6 +484,18 @@ class RockSampleObservationCpp {
             return out;
         }
 
+        // Terminal-sentinel short-circuit: mirrors ``batch_log_likelihood``,
+        // which treats ``[-1, -1, ...]`` rows as having log-floor likelihood
+        // for any observation under a check action. Without this, the scalar
+        // path would compute Bernoulli(efficiency) from the sentinel coords
+        // and disagree with the batch path on terminal particles.
+        if (next_state_.size() >= 2 && next_state_[0] < 0.0 && next_state_[1] < 0.0) {
+            for (std::size_t i = 0; i < n; ++i) {
+                buf(static_cast<py::ssize_t>(i)) = kProbFloor;
+            }
+            return out;
+        }
+
         const double efficiency = check_efficiency(next_state_.data(), rock_idx);
         const bool rock_good =
             next_state_[static_cast<std::size_t>(2 + rock_idx)] > 0.5;
