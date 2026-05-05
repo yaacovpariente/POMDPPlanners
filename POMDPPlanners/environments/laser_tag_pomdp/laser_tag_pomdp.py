@@ -268,6 +268,23 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
             a: [b for b in (0, 1, 2, 3) if b != a] for a in (0, 1, 2, 3)
         }
 
+    def __getstate__(self) -> Dict[str, Any]:
+        # The native step / rollout / reward_batch caches and the vectorized
+        # updater cache hold pybind11 module/function references that aren't
+        # picklable (and would crash joblib's task-cache hashing — see the
+        # weekly-slow-tests JoblibTaskManager regression). Drop them at
+        # serialization time; the lazy ``_get_*`` accessors rebuild them on
+        # demand after unpickling.
+        state = self.__dict__.copy()
+        state.pop("_cached_native_step_params", None)
+        state.pop("_cached_native_rollout_params", None)
+        state.pop("_cached_native_reward_batch", None)
+        state.pop("_cached_vectorized_updater", None)
+        return state
+
+    def __setstate__(self, state: Dict[str, Any]) -> None:
+        vars(self).update(state)
+
     def _is_valid_position_inline(self, pos: Tuple[int, int]) -> bool:
         row, col = pos
         return (

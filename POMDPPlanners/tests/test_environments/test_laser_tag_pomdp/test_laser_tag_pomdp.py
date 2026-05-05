@@ -2087,6 +2087,68 @@ class TestNativeDiscreteRollout:
         assert abs(result) <= max_abs + 1e-9
 
 
+class TestLaserTagPOMDPPickling:
+    """Regression tests for joblib-hashing/pickling LaserTagPOMDP after the
+    cached-pybind11-kernel perf work landed (see issue: weekly-slow-tests
+    failing with PicklingError on pybind11_detail_function_record).
+    """
+
+    def test_joblib_hash_after_native_kernel_warmup(self):
+        """Hashing a LaserTagPOMDP whose native caches were populated must not raise.
+
+        Purpose: Regression for JoblibTaskManager memoize crash where the
+            cached pybind11 module/function references on LaserTagPOMDP made
+            the env unhashable for joblib.
+
+        Given: A LaserTagPOMDP whose native step / rollout / reward_batch
+            caches have been warmed by exercising the public API
+        When: joblib.hash and pickle.dumps are called on the env
+        Then: Both succeed (no PicklingError on pybind11 internals)
+
+        Test type: unit
+        """
+        # pylint: disable=import-outside-toplevel
+        import pickle
+
+        import joblib
+
+        env = _make_env()
+        # Warm every cache that previously held a pybind11 reference.
+        env._get_native_step_params()  # type: ignore[attr-defined]  # pylint: disable=protected-access
+        env._get_native_rollout_params()  # type: ignore[attr-defined]  # pylint: disable=protected-access
+        env._get_native_reward_batch()  # type: ignore[attr-defined]  # pylint: disable=protected-access
+        # Vectorized updater is built lazily by sample_next_state_batch.
+        state = env.initial_state_dist().sample()[0]
+        env.sample_next_state_batch(np.asarray([state]), action=0)
+
+        joblib.hash(env)
+        pickle.loads(pickle.dumps(env))
+
+    def test_unpickled_env_rebuilds_caches(self):
+        """A LaserTagPOMDP round-tripped through pickle still works.
+
+        Purpose: After __setstate__ drops the pybind11 caches, calling the
+            native fast paths on the restored env must lazily rebuild them
+            without error.
+
+        Given: A pickled-then-unpickled LaserTagPOMDP
+        When: A native fast-path entry point is invoked
+        Then: It returns a valid result identical in shape/type to the original
+
+        Test type: unit
+        """
+        # pylint: disable=import-outside-toplevel
+        import pickle
+
+        env = _make_env()
+        env._get_native_step_params()  # type: ignore[attr-defined]  # pylint: disable=protected-access
+        restored: LaserTagPOMDP = pickle.loads(pickle.dumps(env))
+        state = restored.initial_state_dist().sample()[0]
+        next_state = restored.sample_next_state(state, action=0, n_samples=1)
+        assert isinstance(next_state, np.ndarray)
+        assert next_state.shape == state.shape
+
+
 if __name__ == "__main__":
     # Run tests if script is executed directly
     pytest.main([__file__, "-v"])
