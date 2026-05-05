@@ -57,6 +57,8 @@ class ContinuousPushPOMDPMetrics(Enum):
     TOTAL_ROBOT_OBSTACLE_COLLISIONS = "total_robot_obstacle_collisions"
     TOTAL_OBJECT_OBSTACLE_COLLISIONS = "total_object_obstacle_collisions"
     TOTAL_ALL_OBSTACLE_COLLISIONS = "total_all_obstacle_collisions"
+    DANGEROUS_AREA_RATE = "dangerous_area_rate"
+    TOTAL_DANGEROUS_AREA_STEPS = "total_dangerous_area_steps"
 
 
 class _FixedStateDistribution(Distribution):
@@ -130,6 +132,21 @@ class ContinuousPushPOMDP(Environment):
         deducts the penalty deterministically) is bypassed in favour of
         the Python rollout so per-step Bernoulli draws survive.
 
+    Dangerous areas:
+        ``dangerous_areas`` is a separate, additive concept from
+        ``obstacles``. Each entry is a circular region centred at
+        ``(x, y)`` with radius ``dangerous_area_radius``. Entering a
+        dangerous area applies ``dangerous_area_penalty`` (a negative
+        number, added to reward) but does NOT block movement (unlike
+        obstacles, which act as walls in the continuous variant). The
+        penalty fires when the post-action robot position lies inside
+        any dangerous area; the object position is ignored. At most one
+        ``dangerous_area_penalty`` is applied per step even when
+        multiple zones overlap. Like obstacles, the penalty supports a
+        Bernoulli ``dangerous_area_hit_probability`` (default 1.0) for
+        risk-sensitive planning; ``< 1.0`` bypasses the deterministic
+        native rollout in favour of the Python rollout.
+
     Example:
         >>> import numpy as np
         >>> np.random.seed(42)
@@ -145,7 +162,7 @@ class ContinuousPushPOMDP(Environment):
         False
     """
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments,too-many-locals
         self,
         discount_factor: float,
         grid_size: int = 10,
@@ -156,6 +173,10 @@ class ContinuousPushPOMDP(Environment):
         obstacles: Optional[List[Tuple[float, float, float]]] = None,
         obstacle_penalty: float = -10.0,
         obstacle_hit_probability: float = 1.0,
+        dangerous_areas: Optional[List[Tuple[float, float]]] = None,
+        dangerous_area_radius: float = 0.5,
+        dangerous_area_penalty: float = -10.0,
+        dangerous_area_hit_probability: float = 1.0,
         robot_radius: float = 0.3,
         state_transition_cov_matrix: np.ndarray = np.eye(2) * 0.1,
         initial_state: Optional[np.ndarray] = None,
@@ -166,6 +187,8 @@ class ContinuousPushPOMDP(Environment):
     ):
         if not 0.0 <= obstacle_hit_probability <= 1.0:
             raise ValueError("obstacle_hit_probability must be between 0 and 1 (inclusive)")
+        if not 0.0 <= dangerous_area_hit_probability <= 1.0:
+            raise ValueError("dangerous_area_hit_probability must be between 0 and 1 (inclusive)")
 
         self.grid_size = grid_size
         self.push_threshold = push_threshold
@@ -182,6 +205,19 @@ class ContinuousPushPOMDP(Environment):
             obstacles if obstacles is not None else []
         )
         self.obstacles = self._build_obstacle_array(self._obstacle_tuples)
+
+        self.dangerous_areas: List[Tuple[float, float]] = (
+            list(dangerous_areas) if dangerous_areas is not None else []
+        )
+        self.dangerous_area_radius = float(dangerous_area_radius)
+        self.dangerous_area_penalty = float(dangerous_area_penalty)
+        self.dangerous_area_hit_probability = float(dangerous_area_hit_probability)
+        if self.dangerous_areas:
+            self._dangerous_areas_arr: np.ndarray = np.ascontiguousarray(
+                np.asarray(self.dangerous_areas, dtype=np.float64).reshape(-1, 2)
+            )
+        else:
+            self._dangerous_areas_arr = np.empty((0, 2), dtype=np.float64)
 
         self.target_pos = np.array([grid_size - 1.0, grid_size - 1.0])
 
@@ -217,6 +253,8 @@ class ContinuousPushPOMDP(Environment):
         )
         max_distance = np.sqrt(2) * (grid_size - 1)
         min_reward = -max_distance + self.obstacle_penalty
+        if self.dangerous_areas:
+            min_reward += min(0.0, self.dangerous_area_penalty)
         max_reward = 100.0
 
         super().__init__(
@@ -430,7 +468,28 @@ class ContinuousPushPOMDP(Environment):
             if np.any(collide):
                 rewards[collide] += self.obstacle_penalty
 
+        # Dangerous-area penalty: post-action robot position vs. circular
+        # zones. At most one penalty per row even when zones overlap.
+        if self._dangerous_areas_arr.shape[0] > 0:
+            robot_after = states[:, :2] + action  # (N, 2)
+            in_zone = self._batch_robot_in_dangerous_areas(robot_after)
+            if self.dangerous_area_hit_probability < 1.0:
+                applied = np.random.random(in_zone.shape[0]) < self.dangerous_area_hit_probability
+                in_zone = in_zone & applied
+            if np.any(in_zone):
+                rewards[in_zone] += self.dangerous_area_penalty
+
         return rewards
+
+    def _batch_robot_in_dangerous_areas(self, positions: np.ndarray) -> np.ndarray:
+        """Vectorised point-in-circle test against ``self._dangerous_areas_arr``.
+
+        ``positions`` is shape ``(N, 2)``. Returns an ``(N,)`` boolean mask
+        flagging rows that fall inside any dangerous-area circle.
+        """
+        diff = positions[:, None, :] - self._dangerous_areas_arr[None, :, :]
+        dist_sq = np.einsum("ijk,ijk->ij", diff, diff)
+        return np.any(dist_sq <= self.dangerous_area_radius * self.dangerous_area_radius, axis=1)
 
     def _batch_circle_obstacle_overlap(self, positions: np.ndarray, radius: float) -> np.ndarray:
         """Vectorised circle-vs-AABB overlap test against ``self.obstacles``.
@@ -526,10 +585,14 @@ class ContinuousPushPOMDP(Environment):
             return 0.0
 
         actions_array = self._get_rollout_actions_array()
-        if actions_array is None or self.obstacle_hit_probability < 1.0:
-            # Native kernel applies the obstacle penalty deterministically;
-            # fall back to the Python rollout so per-step Bernoulli draws
-            # against ``obstacle_hit_probability`` survive.
+        if (
+            actions_array is None
+            or self.obstacle_hit_probability < 1.0
+            or self.dangerous_area_hit_probability < 1.0
+        ):
+            # Native kernel applies the obstacle and dangerous-area penalties
+            # deterministically; fall back to the Python rollout so per-step
+            # Bernoulli draws against the configured hit probabilities survive.
             return python_random_rollout(
                 state=state,
                 depth=depth,
@@ -558,6 +621,9 @@ class ContinuousPushPOMDP(Environment):
                 robot_radius=float(self.robot_radius),
                 obstacle_penalty=float(self.obstacle_penalty),
                 obstacles=np.ascontiguousarray(self.obstacles, dtype=np.float64),
+                dangerous_areas=self._dangerous_areas_arr,
+                dangerous_area_radius=float(self.dangerous_area_radius),
+                dangerous_area_penalty=float(self.dangerous_area_penalty),
                 covariance=self._trans_cov_view,
             )
         )
@@ -625,6 +691,13 @@ class ContinuousPushPOMDP(Environment):
                 return True
         return False
 
+    def _is_robot_in_dangerous_area(self, pos: np.ndarray) -> bool:
+        if self._dangerous_areas_arr.shape[0] == 0:
+            return False
+        r_sq = self.dangerous_area_radius * self.dangerous_area_radius
+        diff = self._dangerous_areas_arr - np.asarray(pos, dtype=np.float64)
+        return bool(np.any(np.einsum("ij,ij->i", diff, diff) <= r_sq))
+
     # ------------------------------------------------------------------
     # Metrics
     # ------------------------------------------------------------------
@@ -637,16 +710,20 @@ class ContinuousPushPOMDP(Environment):
         """
         return [m.value for m in ContinuousPushPOMDPMetrics]
 
-    def compute_metrics(self, histories: List[History]) -> List[MetricValue]:
+    def compute_metrics(  # pylint: disable=too-many-locals
+        self, histories: List[History]
+    ) -> List[MetricValue]:
         goal_reached_list: List[int] = []
         robot_col_list: List[int] = []
         obj_col_list: List[int] = []
         total_col_list: List[int] = []
+        dangerous_steps_list: List[int] = []
 
         for history in histories:
             goal_hit = False
             r_cols = 0
             o_cols = 0
+            d_steps = 0
 
             for step in history.history:
                 if self.is_terminal(step.state):
@@ -655,24 +732,32 @@ class ContinuousPushPOMDP(Environment):
                     r_cols += 1
                 if self._is_point_colliding_with_obstacle(step.state[2:4]):
                     o_cols += 1
+                if self._is_robot_in_dangerous_area(step.state[:2]):
+                    d_steps += 1
 
             goal_reached_list.append(1 if goal_hit else 0)
             robot_col_list.append(r_cols)
             obj_col_list.append(o_cols)
             total_col_list.append(r_cols + o_cols)
+            dangerous_steps_list.append(d_steps)
 
         total_steps = sum(len(h.history) for h in histories)
         avg_r = sum(robot_col_list) / total_steps if total_steps > 0 else 0
         avg_o = sum(obj_col_list) / total_steps if total_steps > 0 else 0
         avg_t = sum(total_col_list) / total_steps if total_steps > 0 else 0
+        avg_d = sum(dangerous_steps_list) / total_steps if total_steps > 0 else 0
 
         r_rates = [c / len(h.history) for c, h in zip(robot_col_list, histories) if len(h.history)]
         o_rates = [c / len(h.history) for c, h in zip(obj_col_list, histories) if len(h.history)]
         t_rates = [c / len(h.history) for c, h in zip(total_col_list, histories) if len(h.history)]
+        d_rates = [
+            c / len(h.history) for c, h in zip(dangerous_steps_list, histories) if len(h.history)
+        ]
 
         r_ci = confidence_interval(data=r_rates, confidence=0.95) if r_rates else (0, 0)
         o_ci = confidence_interval(data=o_rates, confidence=0.95) if o_rates else (0, 0)
         t_ci = confidence_interval(data=t_rates, confidence=0.95) if t_rates else (0, 0)
+        d_ci = confidence_interval(data=d_rates, confidence=0.95) if d_rates else (0, 0)
 
         tr_ci = (
             confidence_interval(data=robot_col_list, confidence=0.95) if robot_col_list else (0, 0)
@@ -680,6 +765,11 @@ class ContinuousPushPOMDP(Environment):
         to_ci = confidence_interval(data=obj_col_list, confidence=0.95) if obj_col_list else (0, 0)
         ta_ci = (
             confidence_interval(data=total_col_list, confidence=0.95) if total_col_list else (0, 0)
+        )
+        td_ci = (
+            confidence_interval(data=dangerous_steps_list, confidence=0.95)
+            if dangerous_steps_list
+            else (0, 0)
         )
 
         avg_goal = float(np.mean(goal_reached_list)) if goal_reached_list else 0.0
@@ -729,6 +819,18 @@ class ContinuousPushPOMDP(Environment):
                 ta_ci[0],
                 ta_ci[1],
             ),
+            MetricValue(
+                ContinuousPushPOMDPMetrics.DANGEROUS_AREA_RATE.value,
+                avg_d,
+                d_ci[0],
+                d_ci[1],
+            ),
+            MetricValue(
+                ContinuousPushPOMDPMetrics.TOTAL_DANGEROUS_AREA_STEPS.value,
+                float(np.mean(dangerous_steps_list)) if dangerous_steps_list else 0.0,
+                td_ci[0],
+                td_ci[1],
+            ),
         ]
 
 
@@ -754,7 +856,7 @@ class ContinuousPushPOMDPDiscreteActions(ContinuousPushPOMDP, DiscreteActionsEnv
         False
     """
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments,too-many-locals
         self,
         discount_factor: float,
         grid_size: int = 10,
@@ -765,6 +867,10 @@ class ContinuousPushPOMDPDiscreteActions(ContinuousPushPOMDP, DiscreteActionsEnv
         obstacles: Optional[List[Tuple[float, float, float]]] = None,
         obstacle_penalty: float = -10.0,
         obstacle_hit_probability: float = 1.0,
+        dangerous_areas: Optional[List[Tuple[float, float]]] = None,
+        dangerous_area_radius: float = 0.5,
+        dangerous_area_penalty: float = -10.0,
+        dangerous_area_hit_probability: float = 1.0,
         robot_radius: float = 0.3,
         state_transition_cov_matrix: np.ndarray = np.eye(2) * 0.1,
         initial_state: Optional[np.ndarray] = None,
@@ -783,6 +889,10 @@ class ContinuousPushPOMDPDiscreteActions(ContinuousPushPOMDP, DiscreteActionsEnv
             obstacles=obstacles,
             obstacle_penalty=obstacle_penalty,
             obstacle_hit_probability=obstacle_hit_probability,
+            dangerous_areas=dangerous_areas,
+            dangerous_area_radius=dangerous_area_radius,
+            dangerous_area_penalty=dangerous_area_penalty,
+            dangerous_area_hit_probability=dangerous_area_hit_probability,
             robot_radius=robot_radius,
             state_transition_cov_matrix=state_transition_cov_matrix,
             initial_state=initial_state,

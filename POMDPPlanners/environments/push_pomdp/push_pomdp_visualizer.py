@@ -50,6 +50,8 @@ class PushPOMDPVisualizer:
         self.push_threshold = env.push_threshold
         self.obstacles = env.obstacles
         self.obstacle_radius = env.obstacle_radius
+        self.dangerous_areas = env.dangerous_areas
+        self.dangerous_area_radius = env.dangerous_area_radius
 
     def create_visualization(self, history: List[StepData], cache_path: Path) -> None:
         """Create animated visualization of a Push POMDP episode.
@@ -70,6 +72,7 @@ class PushPOMDPVisualizer:
         fig, ax = self._setup_visualization_figure()
         robot_scatter, object_scatter, target_scatter = self._initialize_entity_scatters(ax)
         self._initialize_obstacles(ax)
+        self._initialize_dangerous_areas(ax)
         push_arrow, connection_line = self._initialize_push_visuals(ax)
         action_arrow = self._initialize_action_arrow(ax)
         step_text, distance_text, reward_text, success_text, collision_text = (
@@ -191,6 +194,19 @@ class PushPOMDPVisualizer:
             ax.add_patch(obstacle_circle)
             if i == 0:  # Label only the first obstacle for legend
                 ax.scatter(obs_x, obs_y, s=1, c="red", label="Obstacles")
+
+    def _initialize_dangerous_areas(self, ax: Axes) -> None:
+        for i, (cx, cy) in enumerate(self.dangerous_areas):
+            danger_circle = plt.Circle(  # type: ignore[attr-defined]
+                (cx, cy),
+                float(self.dangerous_area_radius),  # type: ignore[arg-type]
+                facecolor="red",
+                edgecolor="none",
+                alpha=0.3,
+                zorder=1,
+                label="Dangerous Areas" if i == 0 else "",
+            )
+            ax.add_patch(danger_circle)
 
     def _initialize_push_visuals(self, ax: Axes) -> Tuple[Any, Line2D]:
         push_arrow = ax.annotate(
