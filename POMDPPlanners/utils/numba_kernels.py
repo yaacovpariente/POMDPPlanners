@@ -261,12 +261,27 @@ def sparse_sampling_lcb_min_idx_kernel(
     is smallest.
     """
     n = visit_counts.shape[0]
+    best_idx = 0
+    best_score = np.inf
+    if horizon == 0:
+        # Remaining-horizon is zero, so the LCB exploration bound is
+        # undefined: 1 - belief_visits**0 = 0 ⇒ log(0) = -inf ⇒ NaN
+        # bounds, and "NaN < best_score" is False so the comparison
+        # never updates best_idx — the kernel would return 0 by
+        # default. Fall back to greedy q-min with the visit-count
+        # tie-breaker that the LCB formula already uses.
+        for i in range(n):
+            nv = visit_counts[i]
+            penalty = visit_count_penalty / (np.sqrt(nv) + 1.0)
+            score = q_values[i] + penalty
+            if score < best_score:
+                best_score = score
+                best_idx = i
+        return best_idx
     x1 = 1.0 - belief_visits**horizon
     x2 = delta * (1.0 - belief_visits)
     x3 = np.log(x1 / x2)
     cost_range = max_cost - min_cost
-    best_idx = 0
-    best_score = np.inf
     for i in range(n):
         nv = visit_counts[i]
         x4 = alpha * nv
