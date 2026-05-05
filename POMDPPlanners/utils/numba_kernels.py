@@ -278,9 +278,15 @@ def sparse_sampling_lcb_min_idx_kernel(
                 best_score = score
                 best_idx = i
         return best_idx
-    x1 = 1.0 - belief_visits**horizon
-    x2 = delta * (1.0 - belief_visits)
-    x3 = np.log(x1 / x2)
+    # Log-space evaluation of x3 = log((belief_visits**horizon - 1) /
+    # (delta * (belief_visits - 1))). The naive form overflows float64
+    # whenever horizon * log10(belief_visits) > 308 (e.g. belief_visits
+    # = 10_000 with horizon = 90), at which point x1 = -inf, the bound
+    # collapses to +inf, every per-action score becomes -inf, and the
+    # strict "<" comparison below never updates best_idx — the kernel
+    # silently returns index 0. The caller filters belief_visits <= 1,
+    # so log(belief_visits - 1) is finite.
+    x3 = horizon * np.log(belief_visits) - np.log(delta * (belief_visits - 1.0))
     cost_range = max_cost - min_cost
     for i in range(n):
         nv = visit_counts[i]
