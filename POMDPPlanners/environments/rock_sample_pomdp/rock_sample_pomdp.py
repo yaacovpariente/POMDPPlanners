@@ -13,6 +13,7 @@ Classes:
 """
 
 import math
+import warnings
 from enum import Enum
 from pathlib import Path
 from collections.abc import Hashable
@@ -171,7 +172,7 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
         exit_reward: float = 10.0,
         dangerous_areas: Optional[List[Tuple[int, int]]] = None,
         dangerous_area_radius: float = 1.0,
-        dangerous_area_penalty: float = 5.0,
+        dangerous_area_penalty: float = -5.0,
         dangerous_area_hit_probability: float = 1.0,
         discount_factor: float = 0.95,
         name: str = "RockSample",
@@ -193,7 +194,11 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
             exit_reward: Exit reward. Defaults to 10.0.
             dangerous_areas: List of dangerous area center positions as (row, col) tuples. Defaults to None.
             dangerous_area_radius: Radius around dangerous area centers. Defaults to 1.0.
-            dangerous_area_penalty: Penalty magnitude applied randomly when in dangerous areas. Defaults to 5.0.
+            dangerous_area_penalty: Reward delta added to ``total_reward`` when the
+                robot's next position lies inside a dangerous area (per-step,
+                gated by ``dangerous_area_hit_probability``). Use a negative
+                value to penalize danger entry; positive values reward it (a
+                ``UserWarning`` is emitted in that case). Defaults to ``-5.0``.
             dangerous_area_hit_probability: Probability that the dangerous-area
                 penalty is actually applied to the reward when the robot's
                 next position is inside a dangerous area. Must lie in
@@ -211,9 +216,19 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
         if not 0.0 <= dangerous_area_hit_probability <= 1.0:
             raise ValueError("dangerous_area_hit_probability must be between 0 and 1 (inclusive)")
 
+        if dangerous_area_penalty > 0:
+            warnings.warn(
+                "dangerous_area_penalty is positive; with the additive reward "
+                "convention this rewards danger entry. Pass a negative value "
+                "to penalize.",
+                UserWarning,
+                stacklevel=2,
+            )
+
         # Calculate reward range based on parameters
-        min_reward = step_penalty + bad_rock_penalty + sensor_use_penalty
-        max_reward = step_penalty + exit_reward
+        danger_term = dangerous_area_penalty if dangerous_areas else 0.0
+        min_reward = step_penalty + bad_rock_penalty + sensor_use_penalty + min(0.0, danger_term)
+        max_reward = step_penalty + exit_reward + max(0.0, danger_term)
 
         space_info = SpaceInfo(
             action_space=SpaceType.DISCRETE, observation_space=SpaceType.DISCRETE

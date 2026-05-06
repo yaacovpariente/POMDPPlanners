@@ -460,7 +460,7 @@ class RiskAverseEnvironmentConfigsAPI:
             rock_positions=[(1, 1), (3, 2), (2, 4)],
             dangerous_areas=[(2, 2), (4, 1)],
             dangerous_area_radius=1.0,
-            dangerous_area_penalty=5.0,
+            dangerous_area_penalty=-5.0,
         )
 
         belief = get_initial_belief(pomdp=pomdp, n_particles=n_particles, resampling=True)
