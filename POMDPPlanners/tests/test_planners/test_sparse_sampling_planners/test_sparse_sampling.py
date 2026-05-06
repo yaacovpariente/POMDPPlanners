@@ -98,6 +98,80 @@ def test_belief_tree_construction(planner, initial_belief):
     assert tree.height == planner.depth * 2 + 1
 
 
+@pytest.mark.parametrize("branching_factor,depth", [(1, 1), (2, 2), (3, 1), (1, 3), (2, 3)])
+def test_belief_tree_has_correct_size(tiger_pomdp, initial_belief, branching_factor, depth):
+    """Test that the sparse sampling belief tree has the exact number of nodes required.
+
+    Purpose: Validates that _build_tree produces the tree size required by the
+        Kearns-Mansour-Ng sparse sampling algorithm. Every non-leaf ActionNode must
+        have exactly ``branching_factor`` BeliefNode children (one per sampled
+        next-state/observation), and every BeliefNode must have one ActionNode child
+        per environment action.
+
+    Given: TigerPOMDP with |A|=3 actions and a planner with the given branching_factor
+        C and depth D
+    When: _build_tree constructs the sparse sampling tree from a root BeliefNode at
+        current_depth=0
+    Then: For each level 0 <= d <= D the tree has (|A|*C)^d BeliefNodes; every
+        BeliefNode has exactly |A| ActionNode children; every non-leaf ActionNode has
+        exactly C BeliefNode children; every leaf ActionNode (under a depth-D belief)
+        has 0 children; total node counts match the closed-form sums.
+
+    Test type: unit
+    """
+    planner = SparseSamplingDiscreteActionsPlanner(
+        environment=tiger_pomdp, branching_factor=branching_factor, depth=depth
+    )
+    num_actions = len(tiger_pomdp.get_actions())
+
+    tree = BeliefNode(belief=initial_belief)
+    planner._build_tree(belief_node=tree, current_depth=0)
+
+    belief_nodes_at_level = {0: [tree]}
+    for level in range(depth):
+        next_level: list = []
+        for belief_node in belief_nodes_at_level[level]:
+            assert len(belief_node.children) == num_actions, (
+                f"BeliefNode at level {level} has {len(belief_node.children)} action "
+                f"children, expected {num_actions}"
+            )
+            for action_node in belief_node.children:
+                assert isinstance(action_node, ActionNode)
+                assert len(action_node.children) == branching_factor, (
+                    f"Non-leaf ActionNode at level {level} has "
+                    f"{len(action_node.children)} belief children, expected "
+                    f"{branching_factor} (branching_factor)"
+                )
+                for next_belief_node in action_node.children:
+                    assert isinstance(next_belief_node, BeliefNode)
+                    next_level.append(next_belief_node)
+        belief_nodes_at_level[level + 1] = next_level
+
+    for belief_node in belief_nodes_at_level[depth]:
+        assert len(belief_node.children) == num_actions
+        for leaf_action_node in belief_node.children:
+            assert isinstance(leaf_action_node, ActionNode)
+            assert len(leaf_action_node.children) == 0
+
+    expected_belief_count = sum((num_actions * branching_factor) ** d for d in range(depth + 1))
+    expected_non_leaf_action_count = num_actions * sum(
+        (num_actions * branching_factor) ** d for d in range(depth)
+    )
+    expected_leaf_action_count = num_actions * (num_actions * branching_factor) ** depth
+
+    actual_belief_count = sum(1 for node in PostOrderIter(tree) if isinstance(node, BeliefNode))
+    actual_action_count = sum(1 for node in PostOrderIter(tree) if isinstance(node, ActionNode))
+    actual_leaf_action_count = sum(
+        1
+        for node in PostOrderIter(tree)
+        if isinstance(node, ActionNode) and len(node.children) == 0
+    )
+
+    assert actual_belief_count == expected_belief_count
+    assert actual_action_count == expected_non_leaf_action_count + expected_leaf_action_count
+    assert actual_leaf_action_count == expected_leaf_action_count
+
+
 def test_node_statistics(planner, initial_belief):
     """Test that node statistics are updated correctly
 
@@ -423,7 +497,7 @@ def test_sparse_sampling_config_id_consistency_across_evaluations(tiger_pomdp):
     initial_belief = get_initial_belief(tiger_pomdp, n_particles=50)
 
     # Perform multiple policy evaluations
-    for i in range(3):
+    for _ in range(3):
         action, run_data = planner.action(initial_belief)
 
         # Check config_id remains the same
