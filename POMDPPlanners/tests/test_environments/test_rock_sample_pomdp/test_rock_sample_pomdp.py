@@ -996,7 +996,7 @@ class TestStochasticDangerousAreaPenalty:
     SOUTH_ACTION = 3
 
     @staticmethod
-    def _stochastic_env(hit_probability: float, penalty: float = 5.0) -> RockSamplePOMDP:
+    def _stochastic_env(hit_probability: float, penalty: float = -5.0) -> RockSamplePOMDP:
         return RockSamplePOMDP(
             map_size=(5, 5),
             rock_positions=[(4, 4)],
@@ -1057,7 +1057,7 @@ class TestStochasticDangerousAreaPenalty:
         env = self._stochastic_env(hit_probability=1.0)
         state = create_rock_sample_state((1, 0), (True,))
         for _ in range(50):
-            assert env.reward(state, self.SOUTH_ACTION) == pytest.approx(5.0)
+            assert env.reward(state, self.SOUTH_ACTION) == pytest.approx(-5.0)
 
     def test_hit_probability_zero_three_empirical_rate(self):
         """Empirical hit rate matches hit_probability over many calls.
@@ -1078,7 +1078,7 @@ class TestStochasticDangerousAreaPenalty:
         n_trials = 5000
         hits = 0
         for _ in range(n_trials):
-            if env.reward(state, self.SOUTH_ACTION) == pytest.approx(5.0):
+            if env.reward(state, self.SOUTH_ACTION) == pytest.approx(-5.0):
                 hits += 1
         empirical_rate = hits / n_trials
         assert abs(empirical_rate - 0.3) < 0.05
@@ -1102,7 +1102,7 @@ class TestStochasticDangerousAreaPenalty:
         states = np.tile(state, (n_trials, 1))
         np.random.seed(456)
         rewards = env.reward_batch(states, self.SOUTH_ACTION)
-        hits = int(np.sum(np.isclose(rewards, 5.0)))
+        hits = int(np.sum(np.isclose(rewards, -5.0)))
         empirical_rate = hits / n_trials
         assert abs(empirical_rate - 0.3) < 0.05
 
