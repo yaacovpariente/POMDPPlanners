@@ -40,7 +40,6 @@ class SparsePFT(ArenaPathSimulationPolicy):
         >>> planner = SparsePFT(
         ...     environment=tiger,
         ...     discount_factor=0.95,
-        ...     gamma=0.95,
         ...     depth=5,
         ...     c_ucb=1.0,
         ...     beta_ucb=2.0,
@@ -63,7 +62,6 @@ class SparsePFT(ArenaPathSimulationPolicy):
         self,
         environment: DiscreteActionsEnvironment,
         discount_factor: float,
-        gamma: float,
         depth: int,
         c_ucb: float,
         beta_ucb: float,
@@ -80,8 +78,6 @@ class SparsePFT(ArenaPathSimulationPolicy):
             raise TypeError("environment must be a DiscreteActionsEnvironment instance")
         if not isinstance(discount_factor, float):
             raise TypeError("discount_factor must be a float")
-        if not isinstance(gamma, float):
-            raise TypeError("gamma must be a float")
         if not isinstance(depth, int):
             raise TypeError("depth must be an int")
         if not isinstance(c_ucb, float):
@@ -106,7 +102,6 @@ class SparsePFT(ArenaPathSimulationPolicy):
             use_queue_logger=use_queue_logger,
         )
 
-        self.gamma = gamma
         self.depth = depth
         self.c_ucb = c_ucb
         self.beta_ucb = beta_ucb
@@ -136,7 +131,7 @@ class SparsePFT(ArenaPathSimulationPolicy):
         else:
             next_belief_id, immediate_reward = self._generate_belief(tree=tree, action_id=action_id)
 
-        return_sample = immediate_reward + self.gamma * self._simulate_path(
+        return_sample = immediate_reward + self.discount_factor * self._simulate_path(
             tree=tree, belief_id=next_belief_id, depth=depth + 1
         )
 
