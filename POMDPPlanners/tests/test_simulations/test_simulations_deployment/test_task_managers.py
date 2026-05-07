@@ -58,7 +58,6 @@ def policy(environment):
     return SparsePFT(
         environment=environment,
         discount_factor=0.95,
-        gamma=0.95,
         depth=3,
         c_ucb=1.0,
         beta_ucb=0.5,
