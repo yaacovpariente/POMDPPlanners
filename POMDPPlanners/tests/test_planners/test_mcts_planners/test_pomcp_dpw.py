@@ -478,6 +478,84 @@ def test_simulate_state_path_max_depth(planner, belief):
     assert return_value == 0
 
 
+def test_simulate_state_path_saturated_branch_uses_parent_state_for_reward(
+    planner, environment, belief
+):
+    """Saturated DPW branch must compute reward from the parent state, not the sampled next_state.
+
+    Purpose: pins the reward semantics in the DPW saturated branch. The
+    widening branch (line 158) computes ``environment.reward(state=state,
+    action=action)`` from the *parent* state. A previous implementation in
+    the saturated branch (line 199) used the sampled next_state instead, so
+    the two execution paths produced different reward signals whenever
+    progressive widening saturated — biasing Q-estimates against actions
+    whose successor states have systematically different per-state rewards.
+
+    Given: A POMCP_DPW tree with a root belief, a single action child
+        (visit_count=1), and a single belief grandchild whose particle
+        list contains a state distinct from the parent state. Planner
+        configured with ``k_o=0.1`` / ``alpha_o=0.5`` so the saturated
+        branch fires (1 child > 0.1 threshold), ``k_a=0.1`` /
+        ``alpha_a=0.5`` so action widening does not fire (UCB picks the
+        existing action child), and ``depth=0`` so the recursive
+        ``_simulate_state_path`` call short-circuits at depth=1.
+    When: ``_simulate_state_path`` runs from the root with the parent
+        state.
+    Then: ``environment.reward`` is invoked with the parent state, never
+        with the next-state particle stored in the belief grandchild.
+
+    Test type: unit
+    """
+    parent_state = "tiger_left"
+    particle_state = "tiger_right"  # distinct from parent_state
+    action_label = "listen"  # non-terminal for both states under TigerPOMDP
+
+    planner.k_o = 0.1
+    planner.alpha_o = 0.5
+    planner.k_a = 0.1
+    planner.alpha_a = 0.5
+    planner.depth = 0
+
+    tree = Tree()
+    root_id = tree.add_belief_node(belief)
+    tree.visit_count[root_id] = 1
+
+    action_id = tree.add_action_node(action=action_label, parent_id=root_id)
+    tree.visit_count[action_id] = 1
+
+    child_belief = UnweightedParticleBeliefStateUpdate()
+    child_belief.particles = [particle_state]
+    child_id = tree.add_belief_node(
+        belief=child_belief,
+        observation="dummy_obs",
+        parent_id=action_id,
+        weight=1.0,
+    )
+    tree.visit_count[child_id] = 1
+
+    captured_states = []
+    real_reward = environment.reward
+
+    def spy_reward(state, action):
+        captured_states.append(state)
+        return real_reward(state=state, action=action)
+
+    environment.reward = spy_reward
+    try:
+        planner._simulate_state_path(tree=tree, state=parent_state, belief_id=root_id, depth=0)
+    finally:
+        environment.reward = real_reward
+
+    assert parent_state in captured_states, (
+        f"saturated branch must call environment.reward(state=parent_state); "
+        f"captured states: {captured_states}"
+    )
+    assert particle_state not in captured_states, (
+        f"saturated branch must not call environment.reward with the sampled "
+        f"next_state from the belief child; captured states: {captured_states}"
+    )
+
+
 def test_get_space_info(planner):
     space_info = planner.get_space_info()
     assert hasattr(space_info, "action_space")
