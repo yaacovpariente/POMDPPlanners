@@ -52,7 +52,6 @@ class TestEpisodeSimulationTaskSerialization:
         self.policy = SparsePFT(
             environment=self.env,
             discount_factor=0.95,
-            gamma=0.95,
             depth=3,
             c_ucb=1.0,
             beta_ucb=0.5,
@@ -456,7 +455,6 @@ class TestTaskSerializationRoundTrip:
         self.policy = SparsePFT(
             environment=self.env,
             discount_factor=0.95,
-            gamma=0.95,
             depth=3,
             c_ucb=1.0,
             beta_ucb=0.5,
@@ -839,7 +837,6 @@ class TestTaskSerializationEdgeCases:
         self.policy = SparsePFT(
             environment=self.env,
             discount_factor=0.95,
-            gamma=0.95,
             depth=3,
             c_ucb=1.0,
             beta_ucb=0.5,

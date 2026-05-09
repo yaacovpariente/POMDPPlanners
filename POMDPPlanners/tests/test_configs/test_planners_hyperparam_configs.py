@@ -154,8 +154,7 @@ class TestPlannersHyperparamConfigs:
         expected_params = ["depth", "c_ucb", "beta_ucb", "belief_child_num"]
         assert set(param_names) == set(expected_params)
 
-        # Check unique parameter "gamma" instead of "discount_factor"
-        assert config.constant_parameters["gamma"] == self.discount_factor
+        assert config.constant_parameters["discount_factor"] == self.discount_factor
         assert "action_sampler" not in config.constant_parameters
 
     def test_sparse_sampling_config(self):
