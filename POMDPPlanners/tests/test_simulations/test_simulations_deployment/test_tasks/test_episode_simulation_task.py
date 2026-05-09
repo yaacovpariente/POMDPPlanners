@@ -72,7 +72,6 @@ def policy(environment):
     return SparsePFT(
         environment=environment,
         discount_factor=0.95,
-        gamma=0.95,
         depth=3,
         c_ucb=1.0,
         beta_ucb=0.5,
@@ -731,7 +730,6 @@ def test_episode_simulation_task_log_only_on_failure_successful_episode_no_logs(
     test_policy = SparsePFT(
         environment=test_env,
         discount_factor=0.95,
-        gamma=0.95,
         depth=3,
         c_ucb=1.0,
         beta_ucb=0.5,
@@ -864,7 +862,6 @@ def test_episode_simulation_task_log_only_on_failure_false_always_logs(tmp_path)
     test_policy = SparsePFT(
         environment=test_env,
         discount_factor=0.95,
-        gamma=0.95,
         depth=3,
         c_ucb=1.0,
         beta_ucb=0.5,

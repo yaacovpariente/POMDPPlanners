@@ -230,7 +230,6 @@ def bench_sparse_pft(time_budget_s: float = 1.0, repeats: int = 3) -> None:
         return SparsePFT(
             environment=env,
             discount_factor=PLANNER_PARAMS["discount_factor"],
-            gamma=PLANNER_PARAMS["discount_factor"],
             depth=PLANNER_PARAMS["depth"],
             c_ucb=1.0,
             beta_ucb=2.0,
