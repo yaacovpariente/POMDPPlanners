@@ -680,7 +680,11 @@ class BetaZero(ArenaDoubleProgressiveWideningMCTSPolicy, TrainablePolicy):
         half = len(policy_output) // 2
         mean = policy_output[:half]
         log_std = policy_output[half:]
-        std = np.exp(np.clip(log_std, -5.0, 2.0)) + 0.1
+        # No clip on log_std: the ``+ 0.1`` term already provides a positive
+        # std floor, and clipping here was inconsistent with the unclipped
+        # sampler in ``BetaZeroActionSampler._sample_continuous`` and the
+        # unclipped policy target in ``_compute_continuous_policy_target``.
+        std = np.exp(log_std) + 0.1
         return np.random.normal(mean, std).astype(np.float32)
 
     def _step_single_episode(self, episode: _BatchedEpisodeState, action: Any) -> None:
