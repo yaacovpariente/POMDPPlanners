@@ -491,11 +491,18 @@ class ConstrainedZero(BetaZero):
     def _finalize_episode_data(self, history) -> None:
         rewards = [step.reward for step in history.history if step.reward is not None]
         discounted_returns = self._compute_discounted_returns(rewards)
-        failure_targets = self._compute_per_timestep_failures(history)
+        # Match the ConstrainedZero.jl reference (BetaZero.jl ``safety``
+        # branch, ``run_simulation`` lines 745-757) and the documented
+        # semantic of ``ConstrainedTrainingExample.failure_target`` —
+        # a single episode-level "any failure occurred?" boolean,
+        # applied to every training example. Avoids the
+        # ``discounted_returns`` (None-filtered) vs. per-step
+        # ``failure_targets`` (full-history) length mismatch the previous
+        # implementation could hit.
+        failure_target = float(self._compute_episode_failure(history))
 
         for i, pending in enumerate(self._pending_examples):
             if i < len(discounted_returns):
-                failure_target = failure_targets[i] if i < len(failure_targets) else 0.0
                 self._buffer.add(
                     ConstrainedTrainingExample(
                         belief_features=pending.belief_features,
@@ -504,6 +511,14 @@ class ConstrainedZero(BetaZero):
                         failure_target=failure_target,
                     )
                 )
+
+    def _compute_episode_failure(self, history) -> bool:
+        for step in history.history:
+            if step.state is not None and self.failure_fn(step.state):
+                return True
+            if step.next_state is not None and self.failure_fn(step.next_state):
+                return True
+        return False
 
     def _compute_per_timestep_failures(self, history) -> List[float]:
         per_step_failure = self._extract_per_step_failure_flags(history)
