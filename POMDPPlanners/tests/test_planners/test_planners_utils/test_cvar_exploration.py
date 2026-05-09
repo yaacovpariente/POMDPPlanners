@@ -11,14 +11,14 @@ from POMDPPlanners.planners.planners_utils.cvar_exploration import (
 )
 
 
-def _build_tree_with_visited_action_children(q_values, visit_counts):
+def _build_tree_with_visited_action_children(q_values, visit_counts, belief_visits=100):
     tree = Tree()
     parent_id = tree.add_belief_node(
         belief=WeightedParticleBeliefStateUpdate(particles=[], weights=[]),
         parent_id=None,
         weight=1.0,
     )
-    tree.visit_count[parent_id] = 100
+    tree.visit_count[parent_id] = belief_visits
     child_ids = []
     for i, (q, v) in enumerate(zip(q_values, visit_counts)):
         cid = tree.add_action_node(action=i, parent_id=parent_id)
@@ -264,4 +264,69 @@ def test_sparse_sampling_lcb_matches_log_space_formula_on_safe_inputs():
         f"log-space LCB should match the analytic argmin; "
         f"got {result} (children={child_ids}, expected child[{expected_idx}]={expected}, "
         f"scores={expected_scores})"
+    )
+
+
+def test_sparse_sampling_lcb_matches_paper_formula_at_small_horizon():
+    """LCB term inside the log is ``(N_b^{T-t} - 1) / (delta * (N_b - 1))``.
+
+    Purpose: Pins the log-space expansion of the per-action confidence
+    bound to the formula from Theorem 1 of the ICVaR paper:
+    ``sqrt(ln((N_b^{T-t} - 1) / (delta * (N_b - 1))) / (2 N_b))``.
+    Under that formula, ``log((N_b^{T-t} - 1) / (delta * (N_b - 1)))``
+    must be used — *with* the ``- 1`` in the numerator. A previous
+    implementation dropped the ``- 1`` and used ``log(N_b^{T-t} / (delta
+    (N_b - 1)))`` instead, which collapses to ``T-t * log(N_b)`` for
+    small horizons and overstates the bound (e.g., for ``N_b = 2``,
+    ``T-t = 1``, the term is ``log(2) ≈ 0.693`` instead of the correct
+    ``log(1/0.5) = log(2)`` — wait this is the same — let me redo:
+    correct = log((2^1 - 1) / (0.5 * (2 - 1))) = log(2);
+    buggy   = log((2^1)     / (0.5 * (2 - 1))) = log(4) = 2*log(2)).
+    The 2x factor inside the sqrt is enough to flip the argmin between
+    two action children with carefully chosen ``q`` and visit counts.
+
+    Given: A belief node with ``visit_count = 2`` and two action
+        children (A: q=0.0, visits=4; B: q=1.0, visits=1), with
+        ``alpha=1.0``, ``delta=0.5``, ``min_cost=-1``, ``max_cost=1``,
+        ``horizon=1``, ``exploration_constant=1.0``.
+    When: ``_sparse_sampling_guarantees_exploration_v2_arena`` is called.
+    Then: Returns child A (q=0). Under the correct formula
+        ``x3 = log(2)``, child A's LCB ≈ -0.832 vs child B's ≈ -0.665,
+        so A wins. Under the buggy ``x3 = log(4)`` formula, child B's
+        LCB ≈ -1.354 vs child A's ≈ -1.177, so B would (wrongly) win.
+
+    Test type: unit
+    """
+    tree, parent_id, child_ids = _build_tree_with_visited_action_children(
+        q_values=[0.0, 1.0],
+        visit_counts=[4, 1],
+        belief_visits=2,
+    )
+    expected = child_ids[0]
+
+    # Closed-form check on the paper formula, included as documentation:
+    v, h, delta = 2, 1, 0.5
+    x3_correct = math.log((v**h - 1) / (delta * (v - 1)))
+    cost_range = 2.0  # max_cost - min_cost
+    bound_a = cost_range * math.sqrt(x3_correct / (1.0 * 4))
+    bound_b = cost_range * math.sqrt(x3_correct / (1.0 * 1))
+    lcb_a = 0.0 - 1.0 * bound_a
+    lcb_b = 1.0 - 1.0 * bound_b
+    assert lcb_a < lcb_b, "test setup error: correct formula should pick child A"
+
+    np.random.seed(0)
+    result = _sparse_sampling_guarantees_exploration_v2_arena(
+        tree=tree,
+        belief_id=parent_id,
+        exploration_constant=1.0,
+        alpha=1.0,
+        min_cost=-1.0,
+        max_cost=1.0,
+        horizon=h,
+        delta=delta,
+        visit_count_penalty=0.0,
+    )
+    assert result == expected, (
+        f"LCB selector must use paper's log((N_b^h - 1) / (delta(N_b - 1))) "
+        f"formula; got child[{child_ids.index(result)}], expected child[0]"
     )
