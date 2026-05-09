@@ -17,9 +17,13 @@ from POMDPPlanners.core.belief import WeightedParticleBelief, get_initial_belief
 from POMDPPlanners.core.simulation.history import History, StepData
 from POMDPPlanners.core.tree.arena import ACTION, BELIEF, Tree
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-from POMDPPlanners.planners.mcts_planners.beta_zero.beta_zero import BetaZero
+from POMDPPlanners.planners.mcts_planners.beta_zero.beta_zero import (
+    BetaZero,
+    _PendingExample,
+)
 from POMDPPlanners.planners.mcts_planners.constrained_zero.constrained_training_buffer import (
     ConstrainedTrainingBuffer,
+    ConstrainedTrainingExample,
 )
 from POMDPPlanners.planners.mcts_planners.constrained_zero.constrained_zero import (
     ConstrainedZero,
@@ -402,6 +406,71 @@ class TestConstrainedZeroHelpers:
         )
         result = planner._compute_per_timestep_failures(history)
         assert result == [1.0]
+
+    def test_finalize_episode_data_uses_episode_level_failure(self, tiger_env):
+        """All training examples from a failing episode get failure_target == 1.0.
+
+        Purpose: Validates that ``_finalize_episode_data`` records the
+        episode-level failure flag for every timestep — matching the
+        ConstrainedZero.jl reference (BetaZero.jl ``safety`` branch,
+        ``run_simulation`` lines 745-757) and the
+        ``ConstrainedTrainingExample.failure_target`` docstring which
+        already reads "Binary episode-level failure indicator (1.0 if
+        failure occurred)". The previous per-step backward-accumulation
+        rule produced 0.0 for examples added after the failure step,
+        contradicting both the reference and the documented intent.
+
+        Given: A 3-step history where only step 1 has a failure
+            (``failure_fn(next_state)`` is True), with three pending
+            examples seeded into the planner so each step contributes
+            one training datum.
+        When: ``_finalize_episode_data(history)`` runs.
+        Then: All three examples in the buffer carry ``failure_target ==
+            1.0`` (the episode-level "any failure occurred?" answer).
+
+        Test type: unit
+        """
+        sampler = DiscreteActionSampler(tiger_env.get_actions())
+        planner = ConstrainedZero(
+            environment=tiger_env,
+            discount_factor=0.95,
+            depth=3,
+            name="finalize_test",
+            action_sampler=sampler,
+            n_simulations=10,
+            state_dim=1,
+            failure_fn=_tiger_left_failure,
+        )
+
+        # Three steps; only step 1's next_state triggers failure.
+        history = _make_history(
+            [
+                _make_step_data(state="tiger_right", next_state="tiger_right"),
+                _make_step_data(state="tiger_right", next_state="tiger_left"),
+                _make_step_data(state="tiger_right", next_state="tiger_right"),
+            ]
+        )
+
+        for _ in range(3):
+            planner._pending_examples.append(
+                _PendingExample(
+                    belief_features=np.zeros(1, dtype=np.float32),
+                    policy_target=np.array([1 / 3, 1 / 3, 1 / 3], dtype=np.float32),
+                )
+            )
+        planner._buffer.begin_iteration()
+
+        planner._finalize_episode_data(history)
+
+        examples = planner._buffer._current
+        assert len(examples) == 3
+        assert all(isinstance(ex, ConstrainedTrainingExample) for ex in examples)
+        targets = [
+            ex.failure_target for ex in examples if isinstance(ex, ConstrainedTrainingExample)
+        ]
+        assert all(
+            t == 1.0 for t in targets
+        ), f"all examples must carry the episode-level failure flag; got {targets}"
 
 
 class TestConstrainedZeroPolicyTarget:
