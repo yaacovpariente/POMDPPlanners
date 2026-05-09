@@ -222,7 +222,6 @@ class TestPlannerSaveLoadInterface:
             {
                 "environment": self.tiger_env,
                 "discount_factor": 0.95,
-                "gamma": 0.95,
                 "depth": 10,
                 "c_ucb": 1.0,
                 "beta_ucb": 0.5,

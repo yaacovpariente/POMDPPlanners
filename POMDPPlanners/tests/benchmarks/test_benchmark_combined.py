@@ -133,7 +133,6 @@ def test_bench_sparse_pft_tiger(benchmark):
     planner = SparsePFT(
         environment=env,
         discount_factor=DISCOUNT,
-        gamma=DISCOUNT,
         depth=DEPTH,
         c_ucb=1.0,
         beta_ucb=0.5,
@@ -160,7 +159,6 @@ def test_bench_sparse_pft_discrete_ld(benchmark):
     planner = SparsePFT(
         environment=env,
         discount_factor=DISCOUNT,
-        gamma=DISCOUNT,
         depth=DEPTH,
         c_ucb=1.0,
         beta_ucb=0.5,
