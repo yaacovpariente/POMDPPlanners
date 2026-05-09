@@ -643,3 +643,45 @@ class TestBetaZero:
         assert len(priors) == len(tree.children_ids[root_id])
         assert np.all(priors >= 0.0)
         assert np.isclose(priors.sum(), 1.0, atol=1e-6)
+
+
+def test_sample_continuous_action_does_not_clip_log_std(tiger_planner):
+    """`_sample_continuous_action` must respect the network's `log_std` without clipping.
+
+    Purpose: Pins the continuous-action sampling formula to
+    ``std = exp(log_std) + 0.1`` (no clip on ``log_std``). Two other
+    code paths in this module — ``BetaZeroActionSampler._sample_continuous``
+    and ``_compute_continuous_policy_target`` — already store/sample
+    unclipped ``log_std``; a previous implementation of
+    ``_sample_continuous_action`` clipped to ``[-5, 2]``, producing a
+    train/sample mismatch where the policy target said one thing and
+    the sampler interpreted it as another.
+
+    Given: A BetaZero planner and a synthetic ``policy_output =
+        [mean=0, log_std=10]``. Under the clipped formula
+        ``std = exp(min(10, 2)) + 0.1 ≈ 7.49``; under the correct
+        formula ``std = exp(10) + 0.1 ≈ 22026.6``.
+    When: A large number of samples is drawn from
+        ``_sample_continuous_action(policy_output)``.
+    Then: The empirical std is consistent with the unclipped formula
+        (≫ 7.5), distinguishing it from the clipped path.
+
+    Test type: unit
+    """
+    np.random.seed(42)
+    mean_part = np.array([0.0], dtype=np.float64)
+    log_std_part = np.array([10.0], dtype=np.float64)
+    policy_output = np.concatenate([mean_part, log_std_part])
+
+    samples = np.array(
+        [tiger_planner._sample_continuous_action(policy_output)[0] for _ in range(10_000)]
+    )
+    empirical_std = float(samples.std())
+
+    # exp(2) + 0.1 ≈ 7.5 (clipped path); exp(10) + 0.1 ≈ 22026.6 (no clip).
+    # Use a generous lower bound that only the unclipped path can satisfy.
+    assert empirical_std > 1_000.0, (
+        f"sampler must not clip log_std; empirical std {empirical_std:.2f} "
+        f"is consistent with clipping (clipped expected ≈ 7.5, "
+        f"unclipped expected ≈ 22026)"
+    )
