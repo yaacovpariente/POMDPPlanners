@@ -196,7 +196,7 @@ class POMCP_DPW(ArenaDoubleProgressiveWideningMCTSPolicy):
         else:
             next_belief_id = tree.sample_belief_child(action_id)
             next_state = tree.belief[next_belief_id].sample()
-            reward = self.environment.reward(state=next_state, action=action)
+            reward = self.environment.reward(state=state, action=action)
             total = reward + self.discount_factor * self._simulate_state_path(
                 tree=tree, state=next_state, belief_id=next_belief_id, depth=depth + 1
             )
