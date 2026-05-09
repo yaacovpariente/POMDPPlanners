@@ -279,14 +279,16 @@ def sparse_sampling_lcb_min_idx_kernel(
                 best_idx = i
         return best_idx
     # Log-space evaluation of x3 = log((belief_visits**horizon - 1) /
-    # (delta * (belief_visits - 1))). The naive form overflows float64
-    # whenever horizon * log10(belief_visits) > 308 (e.g. belief_visits
-    # = 10_000 with horizon = 90), at which point x1 = -inf, the bound
-    # collapses to +inf, every per-action score becomes -inf, and the
-    # strict "<" comparison below never updates best_idx — the kernel
-    # silently returns index 0. The caller filters belief_visits <= 1,
-    # so log(belief_visits - 1) is finite.
-    x3 = horizon * np.log(belief_visits) - np.log(delta * (belief_visits - 1.0))
+    # (delta * (belief_visits - 1))) — the per-action confidence term
+    # from Theorem 1 of the ICVaR paper. The naive direct form overflows
+    # float64 whenever horizon * log10(belief_visits) > 308 (e.g.
+    # belief_visits = 10_000 with horizon = 90); this expansion stays
+    # finite for any belief_visits >= 2 and any non-negative horizon,
+    # and the ``log1p(-exp(-h*log v))`` term keeps the ``- 1`` in the
+    # numerator accurate at small horizons. The caller filters
+    # belief_visits <= 1, so log(belief_visits - 1) is finite.
+    log_v_h = horizon * np.log(belief_visits)
+    x3 = log_v_h + np.log1p(-np.exp(-log_v_h)) - np.log(delta * (belief_visits - 1.0))
     cost_range = max_cost - min_cost
     for i in range(n):
         nv = visit_counts[i]
