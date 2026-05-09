@@ -44,13 +44,14 @@ def _get_sparse_sampling_guarantees_exploration_v2(
         ]
 
     # Log-space evaluation of x3 = log((belief_visits**horizon - 1) /
-    # (delta * (belief_visits - 1))). The naive form overflows float64
-    # for ``horizon * log10(belief_visits) > 308`` (silently returning
-    # index 0); the equivalent log-space expansion stays finite for any
-    # ``belief_visits >= 2`` and any non-negative ``horizon``. The
-    # ``visit_count <= 1`` guard above already rules out the singular
-    # log(0) case below.
-    x3 = horizon * np.log(belief_node.visit_count) - np.log(delta * (belief_node.visit_count - 1))
+    # (delta * (belief_visits - 1))) — the bound's per-action confidence
+    # term from Theorem 1 of the ICVaR paper. The naive direct form
+    # overflows float64 for ``horizon * log10(belief_visits) > 308``;
+    # this expansion stays finite for any ``belief_visits >= 2`` and any
+    # non-negative ``horizon``, and keeps the ``- 1`` in the numerator
+    # accurate at small horizons via ``log1p(-exp(-h*log v))``.
+    log_v_h = horizon * np.log(belief_node.visit_count)
+    x3 = log_v_h + np.log1p(-np.exp(-log_v_h)) - np.log(delta * (belief_node.visit_count - 1))
     x4 = alpha * visit_count_array
 
     guarantees_bound = (max_cost - min_cost) * np.sqrt(x3 / x4)
