@@ -268,7 +268,7 @@ class BaseLightDarkPOMDP(Environment, ABC):
         )
 
     @abstractmethod
-    def reward(self, state: np.ndarray, action: Any) -> float:
+    def reward(self, state: np.ndarray, action: Any, next_state: Any = None) -> float:
         pass
 
     @abstractmethod

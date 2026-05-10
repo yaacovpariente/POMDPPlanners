@@ -332,7 +332,8 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
         self._trans_kernel_cache = {}
         self._obs_kernel_cache = {}
 
-    def reward(self, state: np.ndarray, action: int) -> float:
+    def reward(self, state: np.ndarray, action: int, next_state: Any = None) -> float:
+        del action, next_state
         terminated = self.is_terminal(state)
 
         if not terminated:
@@ -342,7 +343,13 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
 
         return reward
 
-    def reward_batch(self, states: Union[np.ndarray, Sequence[Any]], action: int) -> np.ndarray:
+    def reward_batch(
+        self,
+        states: Union[np.ndarray, Sequence[Any]],
+        action: int,
+        next_states: Optional[Union[np.ndarray, Sequence[Any]]] = None,
+    ) -> np.ndarray:
+        del action, next_states
         states_arr = np.asarray(states)
         x = states_arr[:, 0]
         theta = states_arr[:, 2]

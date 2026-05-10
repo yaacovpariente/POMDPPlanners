@@ -273,7 +273,8 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
             dtype=np.float64,
         )
 
-    def reward(self, state: Tuple[float, float], action: int) -> float:
+    def reward(self, state: Tuple[float, float], action: int, next_state: Any = None) -> float:
+        del action, next_state
         position, _ = state
 
         # Reward for reaching the goal
@@ -283,7 +284,13 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
         # Small negative reward for each step to encourage reaching the goal quickly
         return -1.0
 
-    def reward_batch(self, states: Union[np.ndarray, Sequence[Any]], action: int) -> np.ndarray:
+    def reward_batch(
+        self,
+        states: Union[np.ndarray, Sequence[Any]],
+        action: int,
+        next_states: Optional[Union[np.ndarray, Sequence[Any]]] = None,
+    ) -> np.ndarray:
+        del action, next_states
         states_arr = np.asarray(states)
         positions = states_arr[:, 0]
         return np.where(positions >= self.goal_position, 0.0, -1.0)

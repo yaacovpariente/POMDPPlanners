@@ -61,8 +61,8 @@ class _MockEnvironment(Environment):
         del state
         return False
 
-    def reward(self, state, action):
-        del state, action
+    def reward(self, state, action, next_state=None):
+        del state, action, next_state
         return 0.0
 
     def initial_state_dist(self):

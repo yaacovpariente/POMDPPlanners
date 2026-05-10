@@ -58,7 +58,8 @@ class MockEnvironment(Environment):
     def observation_log_probability(self, next_state, action, observations):
         return np.zeros(len(observations))
 
-    def reward(self, state, action):
+    def reward(self, state, action, next_state=None):
+        del state, action, next_state
         return 1.0
 
     def is_terminal(self, state):

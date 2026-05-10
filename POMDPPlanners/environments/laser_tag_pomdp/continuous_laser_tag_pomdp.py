@@ -515,11 +515,12 @@ class ContinuousLaserTagPOMDP(Environment):
             rows.append(act)
         return np.ascontiguousarray(np.stack(rows, axis=0))
 
-    def reward(self, state: np.ndarray, action: np.ndarray) -> float:
+    def reward(self, state: np.ndarray, action: np.ndarray, next_state: Any = None) -> float:
         # Single-state reward routes through the same C++ kernel used by
         # reward_batch — wrap the state as a (1, 5) row and unpack the
         # scalar. Keeps ``reward`` and ``reward_batch`` semantically and
         # numerically equivalent.
+        del next_state
         state_arr = np.ascontiguousarray(np.asarray(state, dtype=np.float64)).reshape(1, -1)
         action_arr = np.ascontiguousarray(np.asarray(action, dtype=np.float64)).ravel()
         rewards = _native.reward_batch(
@@ -553,7 +554,9 @@ class ContinuousLaserTagPOMDP(Environment):
         self,
         states: Union[np.ndarray, Sequence[Any]],
         action: np.ndarray,
+        next_states: Optional[Union[np.ndarray, Sequence[Any]]] = None,
     ) -> np.ndarray:
+        del next_states
         # Skip np.asarray re-allocation when the caller already passes a
         # C-contiguous float64 array of the right shape (the planners hot
         # path; matches the same short-circuit used by sample_next_state_batch
@@ -983,15 +986,20 @@ class ContinuousLaserTagPOMDPDiscreteActions(ContinuousLaserTagPOMDP, DiscreteAc
             self, next_states, self.action_to_vector[action], observation
         )
 
-    def reward(self, state: np.ndarray, action: Any) -> float:
-        return ContinuousLaserTagPOMDP.reward(self, state, self.action_to_vector[action])
+    def reward(self, state: np.ndarray, action: Any, next_state: Any = None) -> float:
+        return ContinuousLaserTagPOMDP.reward(
+            self, state, self.action_to_vector[action], next_state=next_state
+        )
 
     def reward_batch(
         self,
         states: Union[np.ndarray, Sequence[Any]],
         action: Any,
+        next_states: Optional[Union[np.ndarray, Sequence[Any]]] = None,
     ) -> np.ndarray:
-        return ContinuousLaserTagPOMDP.reward_batch(self, states, self.action_to_vector[action])
+        return ContinuousLaserTagPOMDP.reward_batch(
+            self, states, self.action_to_vector[action], next_states=next_states
+        )
 
     def simulate_random_rollout(
         self,
