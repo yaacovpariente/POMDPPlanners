@@ -87,6 +87,24 @@ class CartPoleInitialStateDistribution(Distribution):
         return list(samples_array)
 
 
+class CartPoleInitialObservationDistribution(Distribution):
+    """Initial observation distribution: state prior convolved with obs noise.
+
+    Marginal ``∫ p(o|s) p_0(s) ds`` produced by drawing a state from
+    :class:`CartPoleInitialStateDistribution` and adding zero-mean
+    Gaussian noise with the env's observation covariance.
+    """
+
+    def __init__(self, noise_cov: NDArray[np.floating[Any]]):
+        self._state_dist = CartPoleInitialStateDistribution()
+        self._obs_dist = CovarianceParameterizedMultivariateNormal(noise_cov)
+
+    def sample(self, n_samples: int = 1) -> List[np.ndarray]:
+        states = np.asarray(self._state_dist.sample(n_samples))
+        noise = self._obs_dist.sample(mean=np.zeros(states.shape[1]), n_samples=n_samples)
+        return list(states + noise)
+
+
 class CartPolePOMDP(DiscreteActionsEnvironment):
     """CartPole balancing task formulated as a POMDP.
 
@@ -399,13 +417,13 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
         return CartPoleInitialStateDistribution()
 
     def initial_observation_dist(self) -> Distribution:
-        return CartPoleInitialStateDistribution()
+        return CartPoleInitialObservationDistribution(self.noise_cov)
 
     def get_actions(self) -> List[int]:
         return [0, 1]
 
     def is_equal_observation(self, observation1: np.ndarray, observation2: np.ndarray) -> bool:
-        return np.array_equal(observation1, observation2)
+        return bool(np.allclose(observation1, observation2, rtol=1e-7, atol=1e-9))
 
     def hash_action(self, action: Any) -> Hashable:
         # Discrete int actions (0, 1); already hashable.

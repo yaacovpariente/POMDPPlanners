@@ -162,7 +162,9 @@ class ContinuousLightDarkObservationCpp:
 
     Picks between a near-beacon and a far-from-beacon covariance based on
     whether the next_state falls within ``beacon_radius`` of any beacon.
-    Samples are clipped to ``[0, grid_size]`` after Gaussian draw.
+    Samples are NOT clipped to the grid: ``observation_log_probability``
+    evaluates the unclipped Gaussian density, so clipping the sampler
+    would break importance weights near grid edges.
     """
 
     next_state: NDArray[np.float64]
@@ -177,7 +179,6 @@ class ContinuousLightDarkObservationCpp:
         covariance_far: NDArray[np.floating],
         beacons: NDArray[np.floating],
         beacon_radius: float,
-        grid_size: float,
     ) -> None: ...
     def sample(self, n_samples: int = 1) -> List[NDArray[np.float64]]: ...
     def probability(
