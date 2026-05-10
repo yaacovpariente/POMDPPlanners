@@ -698,10 +698,10 @@ class TestPacManPOMDP:
         Test type: unit
         """
         actions = self.pomdp.get_actions()
-        expected_actions = [0, 1, 2, 3]  # North, East, South, West
+        expected_actions = [0, 1, 2, 3, 4]  # North, East, South, West, Stay
 
         assert actions == expected_actions
-        assert len(actions) == 4
+        assert len(actions) == 5
 
     def test_initial_state_distribution(self):
         """Test initial state distribution.

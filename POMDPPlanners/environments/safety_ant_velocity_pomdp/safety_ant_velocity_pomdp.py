@@ -222,17 +222,24 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
             self._obs_kernel_cache[int(action)] = kernel
         return kernel
 
-    def reward(self, state: np.ndarray, action: int) -> float:
+    def reward(self, state: np.ndarray, action: int, next_state: Any = None) -> float:
         # ``hypot`` outperforms ``numpy.linalg.norm`` for fixed 2-D inputs:
         # cProfile attributed ~25% of POMCPOW wall time to the norm calls
         # in this method plus ``is_terminal``.
+        del action, next_state
         speed = hypot(float(state[2]), float(state[3]))
         reward = speed * self.movement_reward_scale
         if speed > self.safe_velocity_threshold:
             reward += self.safety_violation_penalty
         return float(reward)
 
-    def reward_batch(self, states: Union[np.ndarray, Sequence[Any]], action: int) -> np.ndarray:
+    def reward_batch(
+        self,
+        states: Union[np.ndarray, Sequence[Any]],
+        action: int,
+        next_states: Optional[Union[np.ndarray, Sequence[Any]]] = None,
+    ) -> np.ndarray:
+        del action, next_states
         states_arr = np.asarray(states)
         speeds = np.linalg.norm(states_arr[:, 2:4], axis=1)
         rewards = speeds * self.movement_reward_scale

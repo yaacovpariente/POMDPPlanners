@@ -342,21 +342,37 @@ class Environment(ABC):  # pylint: disable=too-many-public-methods
     def __hash__(self) -> int:
         return hash(self.config_id)
 
-    def reward(self, state: Any, action: Any) -> float:
-        """Calculate the immediate reward for a state-action pair.
+    def reward(self, state: Any, action: Any, next_state: Any = None) -> float:
+        """Calculate the immediate reward for a state-action(-next_state) tuple.
+
+        ``next_state`` is the realised post-transition state when known
+        (e.g. threaded by :meth:`sample_next_step`), allowing rewards that
+        depend on stochastic transition outcomes to use the same draw as
+        the trajectory instead of resampling. Subclasses whose reward is
+        a pure function of ``(state, action)`` may ignore it; subclasses
+        whose reward depends on the realised next state (collision
+        penalties, win bonuses) should consume it when provided and fall
+        back to drawing/computing one when ``None``.
 
         Args:
-            state: Current state
-            action: Action executed from the state
+            state: Current state.
+            action: Action executed from ``state``.
+            next_state: Realised next state, or ``None`` if the caller
+                did not pre-sample one. Defaults to ``None``.
 
         Returns:
-            Immediate reward value
+            Immediate reward value.
 
         Note:
             Subclasses must implement this method to define reward structure.
         """
 
-    def reward_batch(self, states: Union[np.ndarray, Sequence[Any]], action: Any) -> np.ndarray:
+    def reward_batch(
+        self,
+        states: Union[np.ndarray, Sequence[Any]],
+        action: Any,
+        next_states: Optional[Union[np.ndarray, Sequence[Any]]] = None,
+    ) -> np.ndarray:
         """Calculate rewards for a batch of states given a single action.
 
         Provides a loop-based default that subclasses can override with
@@ -365,11 +381,17 @@ class Environment(ABC):  # pylint: disable=too-many-public-methods
         Args:
             states: Sequence of states of length ``N``.
             action: Action executed from each state.
+            next_states: Optional realised next states (length ``N``)
+                threaded through to :meth:`reward`. Defaults to ``None``.
 
         Returns:
             1-D array of reward values with shape ``(N,)``.
         """
-        return np.array([self.reward(states[i], action) for i in range(len(states))])
+        if next_states is None:
+            return np.array([self.reward(states[i], action) for i in range(len(states))])
+        return np.array(
+            [self.reward(states[i], action, next_states[i]) for i in range(len(states))]
+        )
 
     @abstractmethod
     def is_terminal(self, state: Any) -> bool:
@@ -611,8 +633,11 @@ class Environment(ABC):  # pylint: disable=too-many-public-methods
         """
         next_state = self.sample_next_state(state=state, action=action)
         next_observation = self.sample_observation(next_state=next_state, action=action)
+        # Thread the realised next_state into reward() so subclasses with
+        # transition-dependent reward terms (collision penalties, win bonuses)
+        # score against the same draw as the trajectory rather than resampling.
         # pylint: disable-next=assignment-from-no-return
-        reward = self.reward(state=state, action=action)
+        reward = self.reward(state=state, action=action, next_state=next_state)
 
         return next_state, next_observation, reward
 
@@ -898,7 +923,7 @@ class DiscreteActionsEnvironment(Environment):
         self.logger.debug("Initialized DiscreteActionsEnvironment")
 
     @abstractmethod
-    def reward(self, state: Any, action: Any) -> float:
+    def reward(self, state: Any, action: Any, next_state: Any = None) -> float:
         pass
 
     @abstractmethod

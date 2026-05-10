@@ -2,7 +2,7 @@ import random
 from bisect import bisect
 from collections.abc import Hashable
 from enum import Enum
-from typing import Any, List, Sequence, Tuple, Union
+from typing import Any, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
@@ -613,18 +613,23 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
             action_offsets=self._action_offsets_array,
         )
 
-    def reward(self, state: np.ndarray, action: Any) -> float:
+    def reward(self, state: np.ndarray, action: Any, next_state: Any = None) -> float:
         if state.shape != (2,):
             raise ValueError("state must be a 2D vector")
 
-        next_state = state + self.action_to_vector[action]
+        # The transition is deterministic given the action, so the realised
+        # ``next_state`` (if supplied) and the recomputed one agree exactly.
+        # We still recompute locally to keep the obstacle/out-of-grid logic
+        # intact and ignore the kwarg.
+        del next_state
+        next_state_local = state + self.action_to_vector[action]
 
-        is_goal_state = np.all(next_state == self.goal_state)
-        is_obstacle_hit = np.any(np.all(next_state.reshape(-1, 1) == self.obstacles, axis=0))
-        is_out_of_grid = np.any(next_state < 0) or np.any(next_state > self.grid_size)
+        is_goal_state = np.all(next_state_local == self.goal_state)
+        is_obstacle_hit = np.any(np.all(next_state_local.reshape(-1, 1) == self.obstacles, axis=0))
+        is_out_of_grid = np.any(next_state_local < 0) or np.any(next_state_local > self.grid_size)
 
         # Start with base reward (fuel cost)
-        reward = -self.fuel_cost - np.linalg.norm(next_state - self.goal_state)
+        reward = -self.fuel_cost - np.linalg.norm(next_state_local - self.goal_state)
 
         if is_goal_state:
             reward += self.goal_reward
@@ -636,7 +641,13 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
 
         return float(reward)
 
-    def reward_batch(self, states: Union[np.ndarray, Sequence[Any]], action: str) -> np.ndarray:
+    def reward_batch(
+        self,
+        states: Union[np.ndarray, Sequence[Any]],
+        action: str,
+        next_states: Optional[Union[np.ndarray, Sequence[Any]]] = None,
+    ) -> np.ndarray:
+        del next_states
         states = np.asarray(states)
         next_states = states + self.action_to_vector[action]
         dists_to_goal = np.linalg.norm(next_states - self.goal_state, axis=1)

@@ -25,7 +25,7 @@ from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
 
 import numpy as np
 
-from POMDPPlanners.core.distributions import DiscreteDistribution
+from POMDPPlanners.core.distributions import DiscreteDistribution, Distribution
 from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
     SpaceInfo,
@@ -199,15 +199,22 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
         # Validate parameters
         self._validate_parameters()
 
-        # Define actions: 0=North, 1=East, 2=South, 3=West
-        self.action_names = ["north", "east", "south", "west"]
+        # Define actions: 0=North, 1=East, 2=South, 3=West, 4=Stay.
+        # ``Stay`` is supported by the C++ kernel and the precomputed
+        # neighbor table; previously it was hidden from ``get_actions``
+        # so planners could not select it.
+        self.action_names = ["north", "east", "south", "west", "stay"]
 
-        # Action to direction vector mapping for visualization
+        # Action to (row_delta, col_delta) mapping. Aligned with
+        # ``pacman_grid_utils._DIRECTION_OFFSETS`` so visualisers and
+        # Python-side simulators see the same axis convention as the
+        # neighbor table consumed by the C++ kernel.
         self.action_to_vector = {
-            0: (0, -1),  # north - up (negative row)
-            1: (1, 0),  # east - right (positive col)
-            2: (0, 1),  # south - down (positive row)
-            3: (-1, 0),  # west - left (negative col)
+            0: (-1, 0),  # north - up    (row - 1)
+            1: (0, 1),  # east  - right (col + 1)
+            2: (1, 0),  # south - down  (row + 1)
+            3: (0, -1),  # west  - left  (col - 1)
+            4: (0, 0),  # stay
         }
 
         # Patrol-direction state, mutated in place by the C++ transition kernel.
@@ -467,6 +474,16 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
             if ghost_pos in self.walls:
                 raise ValueError(f"Initial ghost {i} position {ghost_pos} is inside a wall")
 
+        # PacMan cannot start on top of a ghost — the env would begin in
+        # an immediate-collision (terminal) state and any rollout would
+        # accumulate zero reward from step zero.
+        for i, ghost_pos in enumerate(self.initial_ghost_positions):
+            if ghost_pos == self.initial_pacman_pos:
+                raise ValueError(
+                    f"Initial ghost {i} position {ghost_pos} coincides with "
+                    f"initial PacMan position {self.initial_pacman_pos}"
+                )
+
         # Validate ghost coordination strategy
         valid_coordination = ["independent", "coordinated", "mixed"]
         if self.ghost_coordination not in valid_coordination:
@@ -675,14 +692,25 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
             max_depth=remaining_depth,
         )
 
-    def reward(self, state: np.ndarray, action: int) -> float:
-        """Calculate immediate reward."""
+    def reward(self, state: np.ndarray, action: int, next_state: Any = None) -> float:
+        """Calculate immediate reward.
+
+        Uses the realised ``next_state`` when supplied (e.g. by
+        :meth:`Environment.sample_next_step`) so the collision penalty
+        and win bonus reflect the same stochastic ghost transition as
+        the trajectory rather than a fresh independent draw. When
+        ``next_state`` is ``None``, falls back to sampling one here.
+        """
         state = self._require_state_array(state)
         if state[self._idx_terminal] > 0.5:
             return 0.0
 
+        if next_state is None:
+            next_state = self.sample_next_state(state, action)
+        else:
+            next_state = self._require_state_array(next_state)
+
         total_reward = self.step_penalty
-        next_state = self.sample_next_state(state, action)
 
         next_pac_row = int(next_state[self._idx_pac_row])
         next_pac_col = int(next_state[self._idx_pac_col])
@@ -704,7 +732,10 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
         return total_reward
 
     def reward_batch(  # type: ignore[override]
-        self, states: Union[np.ndarray, Sequence[Any]], action: int
+        self,
+        states: Union[np.ndarray, Sequence[Any]],
+        action: int,
+        next_states: Optional[Union[np.ndarray, Sequence[Any]]] = None,
     ) -> np.ndarray:
         """Calculate rewards for a batch of states.
 
@@ -712,31 +743,50 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
         vectorized path, or a sequence of 1-D state arrays on the fallback
         per-particle path.
 
-        Computes deterministic reward components only: step penalty, pellet
-        collection, and win bonus. Ghost collision penalty is excluded because
-        it depends on stochastic ghost movement.
-
-        Args:
-            states: Array of shape ``(N, state_dim)`` or sequence of 1-D
-                state arrays.
-            action: Discrete action index (0-3).
-
-        Returns:
-            1-D array of reward values with shape ``(N,)``.
+        Without ``next_states``, computes deterministic reward components
+        only (step penalty, pellet collection, win bonus); ghost collision
+        penalty is excluded because it depends on the stochastic ghost
+        transition. When ``next_states`` is supplied (e.g. by a caller
+        that already realised the batch transition), the collision
+        penalty *is* included against those realised draws so the per-
+        particle batch reward agrees with the trajectory-driven
+        single-state path.
         """
         states_arr = np.asarray(states)
+        next_states_arr = self._coerce_next_states_arr(next_states)
         if states_arr.dtype.kind == "f":
             if states_arr.ndim == 1:
                 states_arr = states_arr.reshape(1, -1)
-            return self._compute_reward_batch(states_arr, action)
-        return np.array([self.reward(states[i], action) for i in range(len(states))])
+            return self._compute_reward_batch(states_arr, action, next_states_arr)
+        if next_states_arr is None:
+            return np.array([self.reward(states[i], action) for i in range(len(states))])
+        return np.array(
+            [self.reward(states[i], action, next_states_arr[i]) for i in range(len(states))]
+        )
 
-    def _compute_reward_batch(self, states_arr: np.ndarray, action: int) -> np.ndarray:
-        # Single-pass vectorised reward kernel. Ghost-collision penalty is
-        # intentionally excluded because it depends on the stochastic ghost
-        # transition, not the pre-transition state. Patrol-direction state is
-        # also untouched here — it is mutated only inside the C++ transition
-        # kernel and is not observable from this deterministic preview.
+    def _coerce_next_states_arr(
+        self,
+        next_states: Optional[Union[np.ndarray, Sequence[Any]]],
+    ) -> Optional[np.ndarray]:
+        if next_states is None:
+            return None
+        arr = np.asarray(next_states, dtype=np.float64)
+        if arr.ndim == 1:
+            arr = arr.reshape(1, -1)
+        return arr
+
+    def _compute_reward_batch(
+        self,
+        states_arr: np.ndarray,
+        action: int,
+        next_states_arr: Optional[np.ndarray] = None,
+    ) -> np.ndarray:
+        # Single-pass vectorised reward kernel. Without ``next_states_arr``
+        # the ghost-collision penalty is excluded because it depends on
+        # the stochastic ghost transition; when supplied (caller already
+        # realised the batch transition) the penalty is included against
+        # those realised draws. Patrol-direction state is left alone here
+        # — it is mutated only inside the C++ transition kernel.
         terminal = states_arr[:, self._idx_terminal] > 0.5
         rewards = np.where(terminal, 0.0, self.step_penalty)
 
@@ -747,10 +797,18 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
         new_pac_rows = new_positions[:, 0]
         new_pac_cols = new_positions[:, 1]
 
+        rewards = self._add_collision_penalty_batch(
+            rewards, terminal, new_pac_rows, new_pac_cols, next_states_arr
+        )
+
         if self._pellet_positions_arr.shape[0] == 0:
-            # No pellets exist → no pellet rewards, "all collected" trivially
-            # holds for non-terminal states (matches prior behaviour).
-            return rewards + np.where(~terminal, self.win_reward, 0.0)
+            # Degenerate config (env constructed with no pellets): there is
+            # nothing to collect and therefore nothing to "win". Returning
+            # rewards alone (step penalty for non-terminal, zero for
+            # terminal, plus optional collision) avoids the prior bug that
+            # paid out ``win_reward`` on every non-terminal step against
+            # an empty pellet set.
+            return rewards
 
         pellet_mask = states_arr[:, self._idx_pellets_start : self._idx_pellets_end]
         pellet_pos = self._pellet_positions_arr  # (P, 2) int32, static.
@@ -769,6 +827,25 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
         rewards += np.where(~terminal & collected, self.pellet_reward, 0.0)
         rewards += np.where(~terminal & all_collected, self.win_reward, 0.0)
         return rewards
+
+    def _add_collision_penalty_batch(
+        self,
+        rewards: np.ndarray,
+        terminal: np.ndarray,
+        new_pac_rows: np.ndarray,
+        new_pac_cols: np.ndarray,
+        next_states_arr: Optional[np.ndarray],
+    ) -> np.ndarray:
+        if next_states_arr is None or self.num_ghosts <= 0:
+            return rewards
+        # Use realised post-transition ghost positions; mark a collision
+        # for any ghost that ends on pacman's new cell.
+        collision = np.zeros(rewards.shape, dtype=bool)
+        for g in range(self.num_ghosts):
+            g_rows = next_states_arr[:, self._idx_ghosts_start + 2 * g].astype(np.int32)
+            g_cols = next_states_arr[:, self._idx_ghosts_start + 2 * g + 1].astype(np.int32)
+            collision |= (g_rows == new_pac_rows) & (g_cols == new_pac_cols)
+        return rewards + np.where(~terminal & collision, self.ghost_collision_penalty, 0.0)
 
     def _get_neighbor_table(self) -> np.ndarray:
         if self._cached_neighbor_table is None:
@@ -864,22 +941,35 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
         )
         return DiscreteDistribution(values=[initial_state], probs=np.array([1.0]))
 
-    def initial_observation_dist(self) -> DiscreteDistribution:
-        """Get initial observation distribution."""
-        # Initial observation is the true ghost position with some noise
-        initial_obs = self.sample_observation(
-            next_state=self.initial_state_dist().sample()[0], action=0  # Dummy action
-        )
+    def initial_observation_dist(self) -> Distribution:
+        """Get the initial observation distribution.
 
-        return DiscreteDistribution(values=[initial_obs], probs=np.array([1.0]))
+        Returns a live distribution that draws fresh noisy ghost-position
+        observations from the true initial state on each ``sample`` call,
+        instead of the previous Dirac wrapper around a single pre-drawn
+        sample (which collapsed the entire initial-belief observation
+        prior to a point mass).
+        """
+        return _PacManInitialObservationDistribution(self)
 
     def is_equal_observation(self, observation1: Any, observation2: Any) -> bool:
         """Check if two observations are equal."""
+        if not isinstance(observation1, tuple) or not isinstance(observation2, tuple):
+            raise TypeError(
+                "PacMan observations must be tuples of (row, col) ghost-position tuples"
+            )
         return observation1 == observation2
 
     def hash_action(self, action: Any) -> Hashable:
-        # Discrete int actions (movement directions); already hashable.
-        return action
+        # Discrete int actions (movement directions); reject non-integers
+        # so non-hashable / out-of-range actions surface immediately
+        # instead of silently corrupting tree-search action indices.
+        if not isinstance(action, (int, np.integer)):
+            raise TypeError(
+                f"PacMan actions must be int in 0..{len(self.action_names) - 1}, "
+                f"got {type(action).__name__}"
+            )
+        return int(action)
 
     # ------------------------------------------------------------------
     # Pickling
@@ -1163,6 +1253,27 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
 
         visualizer = PacManVisualizer(self)
         visualizer.cache_visualization(history, cache_path)
+
+
+class _PacManInitialObservationDistribution(Distribution):
+    """Live distribution over initial PacMan observations.
+
+    Holds a reference to the env and re-uses its observation kernel to
+    draw fresh noisy ghost-position observations on each ``sample`` call.
+    Replaces the previous Dirac wrapper that froze the initial belief
+    observation prior to a single pre-drawn point mass.
+    """
+
+    def __init__(self, env: "PacManPOMDP") -> None:
+        self._env = env
+
+    def sample(self, n_samples: int = 1) -> List[Any]:
+        initial_state = self._env.initial_state_dist().sample()[0]
+        if n_samples == 1:
+            return [self._env.sample_observation(next_state=initial_state, action=0)]
+        return list(
+            self._env.sample_observation(next_state=initial_state, action=0, n_samples=n_samples)
+        )
 
 
 def create_simple_maze_pacman(

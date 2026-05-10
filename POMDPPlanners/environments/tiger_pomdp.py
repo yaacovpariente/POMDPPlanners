@@ -180,7 +180,8 @@ class TigerPOMDP(DiscreteActionsEnvironment):
                 result[i] = 0.0 if obs == "hear_nothing" else -np.inf
         return result
 
-    def reward(self, state: str, action: str) -> float:
+    def reward(self, state: str, action: str, next_state: Any = None) -> float:
+        del next_state
         if action == "listen":
             return -1.0  # Cost of listening
         if action == "open_left":
@@ -192,7 +193,13 @@ class TigerPOMDP(DiscreteActionsEnvironment):
             return -100.0  # Opening door with tiger
         return 10.0  # Opening door with treasure
 
-    def reward_batch(self, states: Union[np.ndarray, Sequence[Any]], action: str) -> np.ndarray:
+    def reward_batch(
+        self,
+        states: Union[np.ndarray, Sequence[Any]],
+        action: str,
+        next_states: Optional[Union[np.ndarray, Sequence[Any]]] = None,
+    ) -> np.ndarray:
+        del next_states
         if action == "listen":
             return np.full(len(states), -1.0)
         # open_left: -100 if tiger_left, else +10

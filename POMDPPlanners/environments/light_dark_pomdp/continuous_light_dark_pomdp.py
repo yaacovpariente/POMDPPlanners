@@ -28,7 +28,7 @@ Classes:
 import math
 from collections.abc import Hashable
 from enum import Enum
-from typing import Any, Dict, List, Sequence, Tuple, Union
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
@@ -634,12 +634,17 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         m_sq = inv00 * dx * dx + 2.0 * inv01 * dx * dy + inv11 * dy * dy
         return log_norm - 0.5 * m_sq
 
-    def reward(self, state: np.ndarray, action: np.ndarray) -> float:
+    def reward(self, state: np.ndarray, action: np.ndarray, next_state: Any = None) -> float:
+        del next_state
         return self.reward_model.compute_reward(state, action)
 
     def reward_batch(
-        self, states: Union[np.ndarray, Sequence[Any]], action: np.ndarray
+        self,
+        states: Union[np.ndarray, Sequence[Any]],
+        action: np.ndarray,
+        next_states: Optional[Union[np.ndarray, Sequence[Any]]] = None,
     ) -> np.ndarray:
+        del next_states
         return self.reward_model.compute_reward_batch(np.asarray(states), action)
 
     def is_terminal(self, state: np.ndarray) -> bool:
@@ -908,12 +913,19 @@ class ContinuousLightDarkPOMDPDiscreteActions(ContinuousLightDarkPOMDP, Discrete
     def get_actions(self) -> List[Any]:
         return self.actions
 
-    def reward(self, state: np.ndarray, action: Any) -> float:
+    def reward(self, state: np.ndarray, action: Any, next_state: Any = None) -> float:
         action_vector = self.action_to_vector[action]
-        return super().reward(state, action_vector)
+        return super().reward(state, action_vector, next_state=next_state)
 
-    def reward_batch(self, states: Union[np.ndarray, Sequence[Any]], action: Any) -> np.ndarray:
-        return super().reward_batch(np.asarray(states), self.action_to_vector[action])
+    def reward_batch(
+        self,
+        states: Union[np.ndarray, Sequence[Any]],
+        action: Any,
+        next_states: Optional[Union[np.ndarray, Sequence[Any]]] = None,
+    ) -> np.ndarray:
+        return super().reward_batch(
+            np.asarray(states), self.action_to_vector[action], next_states=next_states
+        )
 
     def sample_next_state(self, state: np.ndarray, action: Any, n_samples: int = 1) -> np.ndarray:
         return super().sample_next_state(state, self.action_to_vector[action], n_samples=n_samples)

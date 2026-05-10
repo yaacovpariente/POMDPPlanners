@@ -757,8 +757,9 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
 
         return False
 
-    def reward(self, state: np.ndarray, action: int) -> float:
+    def reward(self, state: np.ndarray, action: int, next_state: Any = None) -> float:
         """Calculate the immediate reward for a state-action pair."""
+        del next_state
         if bool(state[4]):
             return 0.0  # No reward in terminal state
 
@@ -1012,17 +1013,18 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         self._wall_grid = grid
         return grid
 
-    def reward_batch(self, states: Any, action: int) -> np.ndarray:
+    def reward_batch(
+        self,
+        states: Any,
+        action: int,
+        next_states: Any = None,
+    ) -> np.ndarray:
         """Vectorised reward for a batch of states under a single action.
 
-        Args:
-            states: Array-like of shape (N, 5) or (5,) representing particle states.
-                Each state is [robot_row, robot_col, opp_row, opp_col, terminal_flag].
-            action: Integer action in {0, 1, 2, 3, 4}.
-
-        Returns:
-            Float64 array of shape (N,) with per-particle rewards.
+        ``next_states`` is accepted for interface compatibility and ignored;
+        the reward in this env is a pure function of ``(state, action)``.
         """
+        del next_states
         states_arr = np.asarray(states, dtype=np.float64)
         if states_arr.ndim == 1:
             states_arr = states_arr.reshape(1, -1)

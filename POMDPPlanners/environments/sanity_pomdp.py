@@ -248,10 +248,11 @@ class SanityPOMDP(DiscreteActionsEnvironment):
         probs = np.where(observations_arr == next_state, 1.0, 0.0)
         return np.log(probs + 1e-300)
 
-    def reward(self, state: int, action: int) -> float:
+    def reward(self, state: int, action: int, next_state: Any = None) -> float:
         # Transition is deterministic: action 0 -> next_state 0 (reward 1.0),
         # action != 0 -> next_state != 0 (reward 0.0). Inline to avoid the
         # sample_next_state call overhead on the hot path.
+        del state, next_state
         return 1.0 if action == 0 else 0.0
 
     def is_terminal(self, state: int) -> bool:
