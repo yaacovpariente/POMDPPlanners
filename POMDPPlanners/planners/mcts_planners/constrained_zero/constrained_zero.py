@@ -275,8 +275,8 @@ class ConstrainedZero(BetaZero):
         if depth > self.depth:
             return 0.0
 
-        if self.environment.is_terminal(tree.belief[belief_id].sample()):
-            tree.visit_count[belief_id] += 1
+        if self.environment.is_terminal(tree.get_belief(belief_id).sample()):
+            tree.increment_visit_count(belief_id)
             return 0.0
 
         action_priors = self._get_action_priors(tree=tree, belief_id=belief_id)
@@ -316,16 +316,16 @@ class ConstrainedZero(BetaZero):
         action_id: int,
         depth: int,
     ) -> Tuple[float, float]:
-        p_immediate = self._estimate_belief_failure_prob(tree.belief[belief_id])
+        p_immediate = self._estimate_belief_failure_prob(tree.get_belief(belief_id))
 
-        action_children_count = len(tree.children_ids[action_id])
-        action_visits = tree.visit_count[action_id]
+        action_children_count = len(tree.get_children_ids(action_id))
+        action_visits = tree.get_visit_count(action_id)
         if action_children_count <= self.k_o * action_visits**self.alpha_o:
             next_belief_id, immediate_reward = self._sample_new_belief_node(
                 tree=tree, belief_id=belief_id, action_id=action_id
             )
             leaf_value, leaf_failure = self._network_leaf_value_and_failure(
-                tree.belief[next_belief_id]
+                tree.get_belief(next_belief_id)
             )
             total = immediate_reward + self.discount_factor * leaf_value
             failure = self._compound_failure(p_immediate, leaf_failure)
@@ -348,13 +348,9 @@ class ConstrainedZero(BetaZero):
         total: float,
         failure: float,
     ) -> None:
-        tree.visit_count[belief_id] += 1
-        tree.visit_count[action_id] += 1
-        old_q = tree.q_value[action_id]
-        tree.q_value[action_id] = old_q + (total - old_q) / tree.visit_count[action_id]
-        tree.v_value[belief_id] = float(
-            np.max([tree.q_value[cid] for cid in tree.children_ids[belief_id]])
-        )
+        tree.increment_visit_count(belief_id)
+        tree.update_action_q_with_return(action_id, total)
+        tree.backup_belief_v_from_children(belief_id)
 
         self._update_action_failure(tree=tree, action_id=action_id, failure=failure)
         self._update_adaptive_delta(tree=tree, belief_id=belief_id, action_id=action_id)
@@ -371,11 +367,13 @@ class ConstrainedZero(BetaZero):
         return value
 
     def _discrete_action_priors(self, tree: Tree, belief_id: int) -> np.ndarray:
-        features = self._get_normalized_features(self.belief_representation(tree.belief[belief_id]))
+        features = self._get_normalized_features(
+            self.belief_representation(tree.get_belief(belief_id))
+        )
         policy, _, _ = self.network.predict(features)
         actions = self.environment.get_actions()  # type: ignore[attr-defined]
-        children = tree.children_ids[belief_id]
-        child_actions = [tree.action[cid] for cid in children]
+        children = tree.get_children_ids(belief_id)
+        child_actions = [tree.get_action(cid) for cid in children]
         priors = np.array(
             [
                 policy[actions.index(a)] if a in actions else 1.0 / len(child_actions)
@@ -405,7 +403,7 @@ class ConstrainedZero(BetaZero):
 
     def _update_action_failure(self, tree: Tree, action_id: int, failure: float) -> None:
         old = self._failure_dict.get(action_id, 0.0)
-        n = tree.visit_count[action_id]
+        n = tree.get_visit_count(action_id)
         self._failure_dict[action_id] = old + (failure - old) / max(n, 1)
 
     def _update_adaptive_delta(self, tree: Tree, belief_id: int, action_id: int) -> None:
@@ -419,7 +417,7 @@ class ConstrainedZero(BetaZero):
     def _compute_delta_bounds(self, tree: Tree, belief_id: int) -> Tuple[float, float]:
         child_failures = [
             self._failure_dict[cid]
-            for cid in tree.children_ids[belief_id]
+            for cid in tree.get_children_ids(belief_id)
             if cid in self._failure_dict
         ]
         if not child_failures:
@@ -427,23 +425,23 @@ class ConstrainedZero(BetaZero):
         return min(child_failures), max(child_failures)
 
     def _get_subtree_failure(self, tree: Tree, belief_id: int) -> float:
-        children = tree.children_ids[belief_id]
+        children = tree.get_children_ids(belief_id)
         if not children:
             return 0.0
-        total_visits = sum(tree.visit_count[cid] for cid in children)
+        total_visits = sum(tree.get_visit_count(cid) for cid in children)
         if total_visits == 0:
             return 0.0
         weighted_sum = sum(
-            self._failure_dict.get(cid, 0.0) * tree.visit_count[cid] for cid in children
+            self._failure_dict.get(cid, 0.0) * tree.get_visit_count(cid) for cid in children
         )
         return weighted_sum / total_visits
 
     # ── Constrained Q-weighted policy target ──────────────────────────
 
     def _compute_q_weighted_policy_target(self, tree: Tree, belief_id: int) -> np.ndarray:
-        children = tree.children_ids[belief_id]
-        q_values = np.array([tree.q_value[cid] for cid in children])
-        visit_counts = np.array([tree.visit_count[cid] for cid in children], dtype=np.float64)
+        children = tree.get_children_ids(belief_id)
+        q_values = np.array([tree.get_q_value(cid) for cid in children])
+        visit_counts = np.array([tree.get_visit_count(cid) for cid in children], dtype=np.float64)
         failure_probs = np.array([self._failure_dict.get(cid, 0.0) for cid in children])
 
         q_term = self._softmax_q_term(q_values)
