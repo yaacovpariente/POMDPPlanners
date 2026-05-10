@@ -111,20 +111,20 @@ class SparsePFT(ArenaPathSimulationPolicy):
         if depth > self.depth:
             return 0
 
-        if is_terminal_belief(belief=tree.belief[belief_id], env=self.environment):
-            tree.visit_count[belief_id] += 1
+        if is_terminal_belief(belief=tree.get_belief(belief_id), env=self.environment):
+            tree.increment_visit_count(belief_id)
             return 0
 
-        if not tree.children_ids[belief_id]:
+        if not tree.get_children_ids(belief_id):
             for action in self.environment.get_actions():  # type: ignore[attr-defined]
                 tree.add_action_node(action=action, parent_id=belief_id)
-            state = tree.belief[belief_id].sample()
-            tree.visit_count[belief_id] += 1
+            state = tree.get_belief(belief_id).sample()
+            tree.increment_visit_count(belief_id)
             return self.random_rollout(state=state, depth=depth)
 
         action_id = self.get_explored_action_node(tree=tree, belief_id=belief_id)
 
-        if len(tree.children_ids[action_id]) == self.belief_child_num:
+        if len(tree.get_children_ids(action_id)) == self.belief_child_num:
             next_belief_id, immediate_reward = self._sample_next_existing_belief(
                 tree=tree, action_id=action_id
             )
@@ -141,17 +141,17 @@ class SparsePFT(ArenaPathSimulationPolicy):
         return return_sample
 
     def get_explored_action_node(self, tree: Tree, belief_id: int) -> int:
-        children = tree.children_ids[belief_id]
-        children_visits = np.array([tree.visit_count[cid] for cid in children])
+        children = tree.get_children_ids(belief_id)
+        children_visits = np.array([tree.get_visit_count(cid) for cid in children])
         unvisited_indices = np.where(children_visits == 0)[0]
         if len(unvisited_indices) > 0:
             return children[int(np.random.choice(unvisited_indices))]
 
-        q_vals = np.array([tree.q_value[cid] for cid in children])
+        q_vals = np.array([tree.get_q_value(cid) for cid in children])
         sparse_addition = (
             self.c_ucb
             * self.beta_ucb
-            * tree.visit_count[belief_id]
+            * tree.get_visit_count(belief_id)
             * (1.0 / np.sqrt(children_visits))
         )
         return children[int(np.argmax(q_vals + sparse_addition))]
@@ -165,16 +165,16 @@ class SparsePFT(ArenaPathSimulationPolicy):
         # ``np.cumsum(visit_count) → searchsorted`` path.
         sampled_id = tree.sample_belief_child(action_id)
         tree.increment_weight(sampled_id, 1.0)
-        immediate_cost = tree.immediate_cost[sampled_id]
+        immediate_cost = tree.get_immediate_cost(sampled_id)
         expected_reward = -immediate_cost if immediate_cost is not None else 0.0
         return sampled_id, expected_reward
 
     def _generate_belief(self, tree: Tree, action_id: int) -> Tuple[int, float]:
         # Parent of an action node is always a belief node (never None for non-root).
-        parent_belief_id = tree.parent_id[action_id]
+        parent_belief_id = tree.get_parent_id(action_id)
         assert parent_belief_id is not None, "action node must have a parent belief"
-        belief = tree.belief[parent_belief_id]
-        action = tree.action[action_id]
+        belief = tree.get_belief(parent_belief_id)
+        action = tree.get_action(action_id)
         state = belief.sample()
         next_state = self.environment.sample_next_state(state=state, action=action)
         next_observation = self.environment.sample_observation(next_state=next_state, action=action)
@@ -205,23 +205,19 @@ class SparsePFT(ArenaPathSimulationPolicy):
     def update_nodes(
         self, tree: Tree, belief_id: int, action_id: int, return_sample: float
     ) -> None:
-        tree.visit_count[belief_id] += 1
-        tree.visit_count[action_id] += 1
-
-        if tree.immediate_cost[action_id] is None:
+        if tree.get_immediate_cost(action_id) is None:
             tree.set_immediate_cost(
                 action_id,
                 belief_expectation_cost(
-                    belief=tree.belief[belief_id],
-                    action=tree.action[action_id],
+                    belief=tree.get_belief(belief_id),
+                    action=tree.get_action(action_id),
                     env=self.environment,
                 ),
             )
 
-        tree.q_value[action_id] += (return_sample - tree.q_value[action_id]) / tree.visit_count[
-            action_id
-        ]
-        tree.v_value[belief_id] = max(tree.q_value[cid] for cid in tree.children_ids[belief_id])
+        tree.increment_visit_count(belief_id)
+        tree.update_action_q_with_return(action_id, return_sample)
+        tree.backup_belief_v_from_children(belief_id)
 
     @classmethod
     def get_space_info(cls) -> PolicySpaceInfo:
