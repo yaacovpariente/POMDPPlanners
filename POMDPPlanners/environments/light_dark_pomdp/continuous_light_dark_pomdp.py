@@ -321,7 +321,7 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
     # These replace the deleted Python wrapper classes
     # ContinuousLightDarkNormalNoiseNoObsInDarkObservationModel and
     # ContinuousLightDarkDistanceBasedObservationModel. The math is preserved
-    # bit-for-bit (RNG draw count, near-beacon predicate strictness, clipping).
+    # bit-for-bit (RNG draw count, near-beacon predicate strictness).
 
     def _near_beacon_continuous(self, next_state: np.ndarray) -> bool:
         return bool(
@@ -330,28 +330,25 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
             )
         )
 
-    def _sample_mvn_clipped(
+    def _sample_mvn(
         self,
         next_state: np.ndarray,
         dist: CovarianceParameterizedMultivariateNormal,
         n_samples: int,
     ) -> np.ndarray:
-        # Mirrors the wrapper sample path:
-        #   z = np.random.standard_normal((n_samples, 2))
-        #   obs = next_state + z @ dist._cholesky_L_T
-        #   obs = clip(obs, 0, grid_size)
+        # Sample MVN observations: obs = next_state + z @ chol_L_T.
+        # Samples are NOT clipped to the grid because observation_log_probability
+        # evaluates the unclipped Gaussian density — clipping the sampler while
+        # leaving the PDF unclipped breaks importance weights near grid edges.
         z = np.random.standard_normal((n_samples, 2))
         chol_L_T = dist._cholesky_L_T  # pylint: disable=protected-access
-        observations = mvn_sample_2d_kernel(next_state, z, chol_L_T)
-        return np.clip(observations, 0, self.grid_size)
+        return mvn_sample_2d_kernel(next_state, z, chol_L_T)
 
     def _sample_no_obs_in_dark(self, next_state: np.ndarray, n_samples: int) -> List[Any]:
         # Mirrors ContinuousLightDarkNormalNoiseNoObsInDarkObservationModel.sample():
         # near_beacon (strict <) → MVN samples from near-beacon dist, else "None".
         if self._near_beacon_continuous(next_state):
-            observations = self._sample_mvn_clipped(
-                next_state, self._obs_dist_near_beacon, n_samples
-            )
+            observations = self._sample_mvn(next_state, self._obs_dist_near_beacon, n_samples)
             return list(observations)
         return ["None"] * n_samples
 
@@ -368,7 +365,7 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
             if self._near_beacon_continuous(next_state)
             else self._obs_dist_far_from_beacon
         )
-        observations = self._sample_mvn_clipped(next_state, active_dist, n_samples)
+        observations = self._sample_mvn(next_state, active_dist, n_samples)
         return list(observations)
 
     def _log_prob_no_obs_in_dark(self, next_state: np.ndarray, observations: Any) -> np.ndarray:
@@ -483,7 +480,6 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
                 covariance_far=self._obs_cov_far_view,
                 beacons=self.beacons,
                 beacon_radius=float(self.beacon_radius),
-                grid_size=float(self.grid_size),
             )
             self._obs_kernel_cache[key] = kernel
         return kernel
