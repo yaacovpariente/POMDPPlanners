@@ -73,7 +73,6 @@ def planner(
     return SparsePFT(
         environment=environment,
         discount_factor=discount_factor,
-        gamma=discount_factor,
         depth=depth,
         c_ucb=c_ucb,
         beta_ucb=beta_ucb,
@@ -96,7 +95,6 @@ def test_initialization(planner, environment):
     """
     assert planner.environment == environment
     assert planner.discount_factor == 0.9
-    assert planner.gamma == 0.9
     assert planner.depth == 3
     assert planner.c_ucb == 1.0
     assert planner.beta_ucb == 1.0
@@ -388,7 +386,6 @@ def test_sanity_pomdp_action_selection():
     planner = SparsePFT(
         environment=environment,
         discount_factor=0.95,
-        gamma=0.95,
         depth=3,
         c_ucb=1.0,
         beta_ucb=1.0,
@@ -433,7 +430,6 @@ def test_sanity_pomdp_belief_children():
     planner = SparsePFT(
         environment=environment,
         discount_factor=0.95,
-        gamma=0.95,
         depth=3,
         c_ucb=1.0,
         beta_ucb=1.0,
@@ -479,7 +475,6 @@ def test_sparse_pft_config_id_consistency_identical_parameters():
     sparse_pft1 = SparsePFT(
         environment=environment,
         discount_factor=0.95,
-        gamma=0.95,
         depth=12,
         c_ucb=1.0,
         beta_ucb=2.0,
@@ -492,7 +487,6 @@ def test_sparse_pft_config_id_consistency_identical_parameters():
     sparse_pft2 = SparsePFT(
         environment=environment,
         discount_factor=0.95,
-        gamma=0.95,
         depth=12,
         c_ucb=1.0,
         beta_ucb=2.0,
@@ -527,7 +521,6 @@ def test_sparse_pft_config_id_different_c_ucb():
     sparse_pft1 = SparsePFT(
         environment=environment,
         discount_factor=0.95,
-        gamma=0.95,
         depth=12,
         c_ucb=1.0,
         beta_ucb=2.0,
@@ -540,7 +533,6 @@ def test_sparse_pft_config_id_different_c_ucb():
     sparse_pft2 = SparsePFT(
         environment=environment,
         discount_factor=0.95,
-        gamma=0.95,
         depth=12,
         c_ucb=1.5,  # Different c_ucb
         beta_ucb=2.0,
@@ -572,7 +564,6 @@ def test_sparse_pft_config_id_different_belief_child_num():
     sparse_pft1 = SparsePFT(
         environment=environment,
         discount_factor=0.95,
-        gamma=0.95,
         depth=12,
         c_ucb=1.0,
         beta_ucb=2.0,
@@ -585,7 +576,6 @@ def test_sparse_pft_config_id_different_belief_child_num():
     sparse_pft2 = SparsePFT(
         environment=environment,
         discount_factor=0.95,
-        gamma=0.95,
         depth=12,
         c_ucb=1.0,
         beta_ucb=2.0,
@@ -617,7 +607,6 @@ def test_sparse_pft_config_id_consistency_across_evaluations():
     sparse_pft = SparsePFT(
         environment=environment,
         discount_factor=0.95,
-        gamma=0.95,
         depth=5,  # Reduced for testing
         c_ucb=1.0,
         beta_ucb=2.0,
@@ -668,7 +657,6 @@ def test_sparse_pft_config_id_hash_properties():
     sparse_pft = SparsePFT(
         environment=environment,
         discount_factor=0.95,
-        gamma=0.95,
         depth=12,
         c_ucb=1.0,
         beta_ucb=2.0,
