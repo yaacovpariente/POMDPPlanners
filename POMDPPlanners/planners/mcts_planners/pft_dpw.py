@@ -201,10 +201,13 @@ class PFT_DPW(ArenaDoubleProgressiveWideningMCTSPolicy):
         immediate_reward = belief_expectation_reward(
             belief=belief, action=action, env=self.environment
         )
-        # Stash on parent belief so re-visits to this branch can recover the
-        # immediate reward without recomputing it.
-        tree.immediate_cost[belief_id] = -immediate_reward
-        tree.immediate_reward[belief_id] = immediate_reward
+        # Stash on the action node — ``action_id`` is unique per
+        # (parent_belief, action) and ``belief_expectation_reward`` is a
+        # function of exactly that pair, so every child belief generated
+        # under this action node shares the same immediate reward. Keying
+        # on the parent belief would let sibling actions overwrite each
+        # other.
+        tree.set_immediate_cost(action_id, -immediate_reward)
 
         _, next_observation, _ = self.environment.sample_next_step(
             state=belief.sample(), action=action
@@ -241,10 +244,13 @@ class PFT_DPW(ArenaDoubleProgressiveWideningMCTSPolicy):
         )
 
     def sample_existing_belief_node(
-        self, tree: Tree, belief_id: int, action_id: int
+        self, tree: Tree, belief_id: int, action_id: int  # pylint: disable=unused-argument
     ) -> Tuple[int, float]:
-        # Recover the immediate reward stashed on the belief at allocation.
-        cost = tree.immediate_cost[belief_id]
+        # Recover the immediate reward stashed on the action node (see
+        # _sample_new_belief_node). The parent ``belief_id`` is retained
+        # in the signature for API stability but is not needed here:
+        # ``action_id`` already encodes (parent_belief, action).
+        cost = tree.immediate_cost[action_id]
         immediate_reward = -cost if cost is not None else 0.0
         next_belief_id = tree.sample_belief_child(action_id)
         return next_belief_id, immediate_reward

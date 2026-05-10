@@ -685,3 +685,62 @@ def test_sample_continuous_action_does_not_clip_log_std(tiger_planner):
         f"is consistent with clipping (clipped expected ≈ 7.5, "
         f"unclipped expected ≈ 22026)"
     )
+
+
+def test_sample_existing_belief_node_recovers_per_action_immediate_reward(tiger_env):
+    """Pin per-action immediate reward stash so sibling actions don't overwrite each other.
+
+    Purpose: Regression — _sample_new_belief_node previously stashed immediate_reward on
+    the parent belief id, so sibling _sample_new_belief_node calls overwrote each other and
+    _sample_existing_belief_node read back the wrong action's reward. Same shape as the
+    PFT_DPW regression test.
+
+    Given: A tree with two action children of one belief root in TigerPOMDP, where the
+    two actions yield very different immediate rewards under a uniform 0.5/0.5 belief
+    (open_left ≈ open_right ≈ -45 are symmetric, so we use listen vs open_left whose
+    expected rewards differ by far more than any noise floor: listen costs -1, open_*
+    expected reward is (10-100)/2 = -45)
+    When: _sample_new_belief_node is called for both actions, then _sample_existing_belief_node
+    is called back for ``listen``
+    Then: The recovered immediate_reward equals the value originally returned for ``listen``,
+    not the value for ``open_left``
+
+    Test type: regression
+    """
+    np.random.seed(42)
+    random.seed(42)
+    sampler = DiscreteActionSampler(tiger_env.get_actions())
+    planner = BetaZero(
+        environment=tiger_env,
+        discount_factor=0.95,
+        depth=3,
+        name="test_per_action_stash",
+        action_sampler=sampler,
+        n_simulations=10,
+        state_dim=1,
+    )
+
+    belief = get_initial_belief(pomdp=tiger_env, n_particles=20, resampling=True)
+    tree = Tree()
+    root_id = tree.add_belief_node(belief)
+    listen_id = tree.add_action_node(action="listen", parent_id=root_id)
+    open_left_id = tree.add_action_node(action="open_left", parent_id=root_id)
+
+    _, r_listen_in = planner._sample_new_belief_node(
+        tree=tree, belief_id=root_id, action_id=listen_id
+    )
+    _, r_open_in = planner._sample_new_belief_node(
+        tree=tree, belief_id=root_id, action_id=open_left_id
+    )
+
+    assert (
+        abs(r_listen_in - r_open_in) > 10
+    ), f"setup invariant broken: r_listen={r_listen_in}, r_open={r_open_in}"
+
+    _, r_listen_recovered = planner._sample_existing_belief_node(
+        tree=tree, belief_id=root_id, action_id=listen_id
+    )
+    assert r_listen_recovered == pytest.approx(r_listen_in, abs=1e-9), (
+        f"_sample_existing_belief_node returned {r_listen_recovered}, "
+        f"expected {r_listen_in} (got {r_open_in} = open_left reward instead?)"
+    )
