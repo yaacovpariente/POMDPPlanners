@@ -47,31 +47,21 @@ class PacManVisualizer:
         module_dir = Path(__file__).parent
         sprite_dir = module_dir / "img"
         self.sprites = self._load_sprites(sprite_dir, tile_size)
-        self.font_regular: Any = self._load_font(13)
-        self.font_bold: Any = self._load_font(14, bold=True)
+        # Fonts are bundled in the same img/ directory so rendering is
+        # byte-identical across systems regardless of OS-installed fonts
+        # (golden-file tests run in a slim Docker image without DejaVu).
+        self.font_regular: Any = self._load_font(sprite_dir, 13)
+        self.font_bold: Any = self._load_font(sprite_dir, 14, bold=True)
 
     @staticmethod
-    def _load_font(size: int, bold: bool = False) -> Any:
-        """Load a TrueType font for sharp text; fall back to PIL's default."""
-        candidates = (
-            [
-                "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-                "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
-                "DejaVuSans-Bold.ttf",
-            ]
-            if bold
-            else [
-                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-                "/usr/share/fonts/dejavu/DejaVuSans.ttf",
-                "DejaVuSans.ttf",
-            ]
-        )
-        for path in candidates:
-            try:
-                return ImageFont.truetype(path, size)
-            except (OSError, IOError):
-                continue
-        return ImageFont.load_default()
+    def _load_font(sprite_dir: Path, size: int, bold: bool = False) -> Any:
+        """Load the bundled DejaVu Sans font; fall back to PIL's default."""
+        font_name = "DejaVuSans-Bold.ttf" if bold else "DejaVuSans.ttf"
+        font_path = sprite_dir / font_name
+        try:
+            return ImageFont.truetype(str(font_path), size)
+        except (OSError, IOError):
+            return ImageFont.load_default()
 
     def _colorize_sprite(self, image: Image.Image, color: Tuple[int, int, int, int]) -> Image.Image:
         """Apply color overlay to sprite image."""
