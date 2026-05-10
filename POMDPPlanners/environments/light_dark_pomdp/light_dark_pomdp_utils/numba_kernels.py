@@ -61,8 +61,7 @@ def is_terminal_kernel(
 
 @njit(cache=True)  # type: ignore[misc]
 def compute_reward_base_kernel(
-    state: np.ndarray,
-    action: np.ndarray,
+    next_state: np.ndarray,
     goal_state: np.ndarray,
     obstacles: np.ndarray,
     goal_state_radius: float,
@@ -79,9 +78,14 @@ def compute_reward_base_kernel(
     obstacle-hit contribution when ``is_obstacle_hit_region`` is ``True``,
     using its own ``np.random.rand()`` draw so seeded tests stay bit-identical.
     Used by Standard and DangerousStates reward models.
+
+    ``next_state`` is the realised post-transition position. The Python
+    caller threads either the draw from
+    :meth:`Environment.sample_next_step` or the deterministic
+    ``state + action`` fallback when no realised draw is available.
     """
-    next_x = state[0] + action[0]
-    next_y = state[1] + action[1]
+    next_x = next_state[0]
+    next_y = next_state[1]
     gx = next_x - goal_state[0]
     gy = next_y - goal_state[1]
     dist_to_goal = (gx * gx + gy * gy) ** 0.5
@@ -109,8 +113,7 @@ def compute_reward_base_kernel(
 
 @njit(cache=True)  # type: ignore[misc]
 def compute_reward_base_batch_kernel(
-    states: np.ndarray,
-    action: np.ndarray,
+    next_states: np.ndarray,
     goal_state: np.ndarray,
     obstacles: np.ndarray,
     goal_state_radius: float,
@@ -122,19 +125,20 @@ def compute_reward_base_batch_kernel(
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Batched form of :func:`compute_reward_base_kernel`.
 
-    Parameters mirror the scalar kernel; ``states`` is shape ``(N, 2)``.
-    Returns ``(rewards, obstacle_mask)`` both of length ``N``. ``rewards``
-    already includes fuel, goal-distance, goal bonus, and the out-of-grid
-    penalty. The Python caller must add the stochastic obstacle-hit
-    contribution at indices where ``obstacle_mask`` is ``True``, drawing
-    its own RNG so seeded tests stay bit-identical to the per-state path.
+    ``next_states`` is shape ``(N, 2)`` and contains the realised
+    post-transition positions threaded by the Python caller (or the
+    deterministic ``states + action`` fallback when no realised batch is
+    available). Returns ``(rewards, obstacle_mask)`` both of length
+    ``N``. ``rewards`` already includes fuel, goal-distance, goal bonus,
+    and the out-of-grid penalty. The Python caller must add the
+    stochastic obstacle-hit contribution at indices where
+    ``obstacle_mask`` is ``True``, drawing its own RNG so seeded tests
+    stay bit-identical to the per-state path.
     """
-    n_states = states.shape[0]
+    n_states = next_states.shape[0]
     n_obs = obstacles.shape[1]
     goal_radius_sq = goal_state_radius * goal_state_radius
     obs_radius_sq = obstacle_radius * obstacle_radius
-    ax = action[0]
-    ay = action[1]
     gx0 = goal_state[0]
     gy0 = goal_state[1]
 
@@ -142,8 +146,8 @@ def compute_reward_base_batch_kernel(
     obstacle_mask = np.zeros(n_states, dtype=np.bool_)
 
     for s in range(n_states):
-        next_x = states[s, 0] + ax
-        next_y = states[s, 1] + ay
+        next_x = next_states[s, 0]
+        next_y = next_states[s, 1]
         gx = next_x - gx0
         gy = next_y - gy0
         sq_dist_to_goal = gx * gx + gy * gy
@@ -175,8 +179,7 @@ def compute_reward_base_batch_kernel(
 
 @njit(cache=True)  # type: ignore[misc]
 def compute_reward_decaying_hit_prob_kernel(
-    state: np.ndarray,
-    action: np.ndarray,
+    next_state: np.ndarray,
     goal_state: np.ndarray,
     obstacles: np.ndarray,
     goal_state_radius: float,
@@ -189,12 +192,14 @@ def compute_reward_decaying_hit_prob_kernel(
 ) -> float:
     """Full reward for the Decaying-Hit-Probability model.
 
-    The caller draws a single ``uniform ~ U[0,1)`` (via ``np.random.rand()``)
-    and passes it in. Matches the pre-refactor RNG call pattern, which
-    unconditionally drew one uniform in ``_obstacle_reward``.
+    ``next_state`` is the realised post-transition position threaded by
+    the Python caller. The caller draws a single ``uniform ~ U[0,1)`` (via
+    ``np.random.rand()``) and passes it in — this matches the pre-refactor
+    RNG call pattern, which unconditionally drew one uniform in
+    ``_obstacle_reward``.
     """
-    next_x = state[0] + action[0]
-    next_y = state[1] + action[1]
+    next_x = next_state[0]
+    next_y = next_state[1]
     gx = next_x - goal_state[0]
     gy = next_y - goal_state[1]
     dist_to_goal = (gx * gx + gy * gy) ** 0.5

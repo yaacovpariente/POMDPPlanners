@@ -758,32 +758,41 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         return False
 
     def reward(self, state: np.ndarray, action: int, next_state: Any = None) -> float:
-        """Calculate the immediate reward for a state-action pair."""
-        del next_state
+        """Calculate the immediate reward for a state-action transition.
+
+        The wall / dangerous-area penalty is computed against the *realised*
+        post-action robot position taken from ``next_state``. When the caller
+        omits ``next_state`` (e.g., the open-loop scalar API path) the method
+        resamples a transition via :meth:`sample_next_state` so the penalty
+        is always scored against an actual draw from the transition kernel —
+        never against the open-loop ``state + action_vector`` intended
+        position. :meth:`Environment.sample_next_step` threads its sampled
+        ``next_state`` into this method so trajectory and reward agree on the
+        same realisation.
+        """
         if bool(state[4]):
             return 0.0  # No reward in terminal state
 
-        base_reward = 0.0
+        if next_state is None:
+            next_state_arr = self.sample_next_state(state=state, action=action)
+        else:
+            next_state_arr = np.asarray(next_state, dtype=np.float64)
+
         robot_pos = (int(state[0]), int(state[1]))
         opponent_pos = (int(state[2]), int(state[3]))
 
         if action == 4:  # Tag action
-            if robot_pos == opponent_pos:
-                base_reward = self.tag_reward  # Successful tag
-            else:
-                base_reward = -self.tag_penalty  # Failed tag attempt
+            base_reward = self.tag_reward if robot_pos == opponent_pos else -self.tag_penalty
         else:
             base_reward = -self.step_cost  # Movement cost
 
-        intended_pos = (robot_pos[0], robot_pos[1])
-        # Check for wall collision and apply dangerous area penalty
-        if action in [0, 1, 2, 3]:  # Movement actions
-            # Calculate intended position based on action
-            dr, dc = self._action_directions[action]
-            intended_pos = (robot_pos[0] + dr, robot_pos[1] + dc)
-
-        if intended_pos in self.walls or self._is_in_dangerous_area(intended_pos):
-            # Apply dangerous area penalty for wall collision and danerous area
+        # Penalty is applied against the realised next-state robot position.
+        # For walls this is effectively dead code (the transition kernel never
+        # leaves the robot inside a wall), but it is retained so the scalar
+        # path mirrors the batch path and so any future relaxation of that
+        # invariant remains correctly scored.
+        realised_pos = (int(next_state_arr[0]), int(next_state_arr[1]))
+        if realised_pos in self.walls or self._is_in_dangerous_area(realised_pos):
             base_reward -= self.dangerous_area_penalty
 
         return base_reward
@@ -1021,35 +1030,77 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
     ) -> np.ndarray:
         """Vectorised reward for a batch of states under a single action.
 
-        ``next_states`` is accepted for interface compatibility and ignored;
-        the reward in this env is a pure function of ``(state, action)``.
+        When ``next_states`` is supplied the danger-area / wall penalty is
+        evaluated against the realised positions in ``next_states[:, :2]``
+        (matching the contract honoured by
+        :meth:`Environment.sample_next_step`). When it is ``None`` the
+        method resamples via :meth:`sample_next_state_batch` and scores the
+        penalty against that draw, so reward and trajectory remain
+        consistent end-to-end.
+
+        The native ``lasertag_discrete_reward_batch`` kernel computes the
+        legacy intended-position penalty and is therefore only used as a
+        fast path when the caller does not thread a realised ``next_states``
+        and the env has no walls / dangerous areas (in which case the
+        intended- and realised-position branches collapse to the same pure
+        ``-step_cost`` / tag reward). All other cases fall through to the
+        Python path so the next-state semantics are honoured.
         """
-        del next_states
         states_arr = np.asarray(states, dtype=np.float64)
         if states_arr.ndim == 1:
             states_arr = states_arr.reshape(1, -1)
         states_arr = np.ascontiguousarray(states_arr)
-        native_fn = self._get_native_reward_batch()
-        if native_fn is not None:
-            return np.asarray(
-                native_fn(
-                    states=states_arr,
-                    action=int(action),
-                    rows=int(self.floor_shape[0]),
-                    cols=int(self.floor_shape[1]),
-                    walls_flat=self._reward_walls_flat,
-                    n_walls=self._reward_n_walls,
-                    dangerous_areas=self._dangerous_areas_arr,
-                    n_dangerous=int(self._dangerous_areas_arr.shape[0]),
-                    dangerous_area_radius=float(self.dangerous_area_radius),
-                    dangerous_area_penalty=float(self.dangerous_area_penalty),
-                    tag_reward=float(self.tag_reward),
-                    tag_penalty=float(self.tag_penalty),
-                    step_cost=float(self.step_cost),
-                    action_directions=self._action_directions_arr,
+
+        next_states_arr = self._normalise_next_states(states_arr, action, next_states)
+
+        if self._can_use_native_reward_batch(next_states_arr):
+            native_fn = self._get_native_reward_batch()
+            if native_fn is not None:
+                return np.asarray(
+                    native_fn(
+                        states=states_arr,
+                        action=int(action),
+                        rows=int(self.floor_shape[0]),
+                        cols=int(self.floor_shape[1]),
+                        walls_flat=self._reward_walls_flat,
+                        n_walls=self._reward_n_walls,
+                        dangerous_areas=self._dangerous_areas_arr,
+                        n_dangerous=int(self._dangerous_areas_arr.shape[0]),
+                        dangerous_area_radius=float(self.dangerous_area_radius),
+                        dangerous_area_penalty=float(self.dangerous_area_penalty),
+                        tag_reward=float(self.tag_reward),
+                        tag_penalty=float(self.tag_penalty),
+                        step_cost=float(self.step_cost),
+                        action_directions=self._action_directions_arr,
+                    )
                 )
-            )
-        return self._compute_reward_batch_python(states_arr, action)
+        return self._compute_reward_batch_python(states_arr, action, next_states_arr)
+
+    def _normalise_next_states(
+        self,
+        states_arr: np.ndarray,
+        action: int,
+        next_states: Any,
+    ) -> Optional[np.ndarray]:
+        if next_states is None:
+            # Only resample when penalties depend on the realised position;
+            # otherwise leave None so the native fast path can short-circuit.
+            if self.walls or self.dangerous_areas:
+                return np.ascontiguousarray(self.sample_next_state_batch(states_arr, action))
+            return None
+        ns_arr = np.asarray(next_states, dtype=np.float64)
+        if ns_arr.ndim == 1:
+            ns_arr = ns_arr.reshape(1, -1)
+        return np.ascontiguousarray(ns_arr)
+
+    def _can_use_native_reward_batch(self, next_states_arr: Optional[np.ndarray]) -> bool:
+        # The native kernel computes the intended-position penalty and does
+        # not accept a realised next_states buffer. It is therefore only
+        # safe when no penalty terms exist (intended == realised in that
+        # degenerate case).
+        if next_states_arr is not None:
+            return False
+        return not self.walls and not self.dangerous_areas
 
     def _get_native_reward_batch(self) -> Optional[Any]:
         cached = getattr(self, "_cached_native_reward_batch", None)
@@ -1068,7 +1119,12 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         self._cached_native_reward_batch = fn if fn is not None else False
         return fn
 
-    def _compute_reward_batch_python(self, states: np.ndarray, action: int) -> np.ndarray:
+    def _compute_reward_batch_python(
+        self,
+        states: np.ndarray,
+        action: int,
+        next_states: Optional[np.ndarray] = None,
+    ) -> np.ndarray:
         n = states.shape[0]
         terminal_mask = states[:, 4].astype(bool)
 
@@ -1078,7 +1134,19 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         opp_c = states[:, 3].astype(np.int64)
 
         rewards = self._compute_base_rewards(action, robot_r, robot_c, opp_r, opp_c, n)
-        self._apply_area_penalty_batch(rewards, action, robot_r, robot_c)
+
+        # Realised post-action robot positions for the penalty check. When
+        # ``next_states`` is None, fall back to the legacy intended-position
+        # branch so callers that explicitly invoke the python helper without
+        # threading a draw still observe deterministic behaviour identical
+        # to the pre-fix implementation.
+        if next_states is None:
+            int_r, int_c = self._compute_intended_positions(action, robot_r, robot_c)
+        else:
+            int_r = next_states[:, 0].astype(np.int64)
+            int_c = next_states[:, 1].astype(np.int64)
+
+        self._apply_area_penalty_batch_at(rewards, int_r, int_c)
 
         rewards[terminal_mask] = 0.0
         return rewards
@@ -1111,9 +1179,16 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         self, rewards: np.ndarray, action: int, robot_r: np.ndarray, robot_c: np.ndarray
     ) -> None:
         int_r, int_c = self._compute_intended_positions(action, robot_r, robot_c)
+        self._apply_area_penalty_batch_at(rewards, int_r, int_c)
 
-        wall_mask = self._compute_wall_hit_mask(int_r, int_c)
-        danger_mask = self._compute_danger_mask(int_r, int_c)
+    def _apply_area_penalty_batch_at(
+        self,
+        rewards: np.ndarray,
+        positions_r: np.ndarray,
+        positions_c: np.ndarray,
+    ) -> None:
+        wall_mask = self._compute_wall_hit_mask(positions_r, positions_c)
+        danger_mask = self._compute_danger_mask(positions_r, positions_c)
 
         penalty_mask = wall_mask | danger_mask
         rewards[penalty_mask] -= self.dangerous_area_penalty

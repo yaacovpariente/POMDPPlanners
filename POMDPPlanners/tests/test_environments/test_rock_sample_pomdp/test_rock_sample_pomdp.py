@@ -1859,5 +1859,124 @@ def test_scalar_obs_log_prob_un_floored_matches_batch_after_fix() -> None:
     np.testing.assert_allclose(scalar, batch, atol=1e-6)
 
 
+class TestRockSampleRewardBatchNextStateConsistency:
+    """Regression tests for ``reward_batch`` honouring passed ``next_states``.
+
+    The dangerous-area penalty in ``reward`` is checked against the
+    realised ``next_state`` (e.g. provided by
+    :meth:`Environment.sample_next_step`). ``reward_batch`` must
+    consume ``next_states`` the same way and not reconstruct the
+    next robot position via closed-form math, otherwise batch and
+    scalar paths disagree whenever the caller-supplied next state
+    differs from the closed-form prediction.
+    """
+
+    SOUTH_ACTION = 3
+
+    @staticmethod
+    def _danger_env(hit_probability: float = 1.0) -> RockSamplePOMDP:
+        return RockSamplePOMDP(
+            map_size=(5, 5),
+            rock_positions=[(4, 4)],
+            init_pos=(0, 0),
+            dangerous_areas=[(2, 0)],
+            dangerous_area_radius=1.0,
+            dangerous_area_penalty=-5.0,
+            dangerous_area_hit_probability=hit_probability,
+            step_penalty=0.0,
+        )
+
+    def test_reward_batch_uses_passed_next_states_per_row(self):
+        """reward_batch consults caller-supplied next_states for danger check.
+
+        Purpose: Validates that the dangerous-area penalty in
+            ``reward_batch`` fires based on the realised next-state
+            position, not on the closed-form reconstruction from
+            ``(state, action)``.
+
+        Given: A 2-row batch where the closed-form next position is
+            (1, 0) -- outside the danger zone centred at (2, 0) with
+            radius 1.0 -- but caller-supplied ``next_states`` place
+            row 0 at (2, 0) (inside the zone) and row 1 at (4, 4)
+            (outside the zone).
+        When: ``reward_batch(states, action=NORTH, next_states=...)``
+            is called with ``hit_probability=1.0``.
+        Then: Row 0 receives the dangerous-area penalty (-5.0) and
+            row 1 does not (0.0).
+
+        Test type: unit
+        """
+        env = self._danger_env(hit_probability=1.0)
+        # Action 1 is NORTH (-1, 0); from (1, 0) the closed-form
+        # next position is (0, 0), which is outside the danger zone.
+        north_action = 1
+        states = np.stack(
+            [
+                create_rock_sample_state((1, 0), (True,)).astype(np.float64),
+                create_rock_sample_state((1, 0), (True,)).astype(np.float64),
+            ]
+        )
+        next_states = np.stack(
+            [
+                # Hand-crafted realised next position (2, 0) -- inside
+                # the danger zone, disagreeing with closed-form (0, 0).
+                create_rock_sample_state((2, 0), (True,)).astype(np.float64),
+                # Realised next position (4, 4) -- outside the zone.
+                create_rock_sample_state((4, 4), (True,)).astype(np.float64),
+            ]
+        )
+
+        rewards = env.reward_batch(states, north_action, next_states=next_states)
+
+        assert rewards[0] == pytest.approx(-5.0)
+        assert rewards[1] == pytest.approx(0.0)
+
+    def test_reward_batch_matches_scalar_reward_per_row(self):
+        """reward_batch[i] equals reward(states[i], a, next_states[i]).
+
+        Purpose: Validates row-wise consistency between batch and
+            scalar paths when both consume the same caller-supplied
+            ``next_states`` and the same RNG seed.
+
+        Given: A 4-row batch with mixed in-zone and out-of-zone
+            realised next states under ``hit_probability=1.0`` (so
+            the danger penalty is deterministic and the test is
+            insensitive to RNG ordering between batch and scalar).
+        When: ``reward_batch(..., next_states=ns)`` is computed and
+            ``reward(states[i], a, next_states[i])`` is computed for
+            each row.
+        Then: The two reward arrays match element-wise.
+
+        Test type: unit
+        """
+        env = self._danger_env(hit_probability=1.0)
+        north_action = 1
+        states = np.stack(
+            [create_rock_sample_state((1, 0), (True,)).astype(np.float64) for _ in range(4)]
+        )
+        next_states = np.stack(
+            [
+                create_rock_sample_state((2, 0), (True,)).astype(np.float64),  # in zone
+                create_rock_sample_state((4, 4), (True,)).astype(np.float64),  # out
+                create_rock_sample_state((2, 1), (True,)).astype(np.float64),  # in zone
+                create_rock_sample_state((0, 0), (True,)).astype(np.float64),  # out
+            ]
+        )
+
+        np.random.seed(2024)
+        batch_rewards = env.reward_batch(states, north_action, next_states=next_states)
+
+        np.random.seed(2024)
+        scalar_rewards = np.array(
+            [
+                env.reward(states[i], north_action, next_state=next_states[i])
+                for i in range(states.shape[0])
+            ],
+            dtype=np.float64,
+        )
+
+        np.testing.assert_allclose(batch_rewards, scalar_rewards, atol=1e-12, rtol=0.0)
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

@@ -1378,13 +1378,24 @@ class TestLaserTagPOMDP:
         ), f"Expected 0.0 dangerous area steps, got {dangerous_area_metric.value}"
 
     def test_wall_collision_penalty(self):
-        """Test wall collision applies dangerous area penalty.
+        """Test wall collision does NOT apply the dangerous-area penalty.
 
-        Purpose: Validates wall collisions apply additional dangerous area penalty
+        Purpose: Validates the next-state-aware reward contract — when the
+            robot attempts to move into a wall, the transition kernel blocks
+            the move and the *realised* next-state robot position equals the
+            original cell (a clear interior cell). Because the dangerous-
+            area penalty is now scored against the realised position rather
+            than ``state + action_vector``, no penalty is applied.
 
-        Given: LaserTag environment with walls and robot attempting wall collision
-        When: Robot tries to move into a wall
-        Then: Reward includes both step cost and dangerous area penalty
+        Given: A LaserTag environment with a wall at (3, 3) and the robot
+            at (3, 2). The threaded ``next_state`` matches the realised
+            kernel output (robot stayed at (3, 2)).
+        When: ``reward(state, action=East, next_state=...)`` is invoked.
+        Then: The reward equals ``-step_cost`` only — the wall-collision
+            penalty is correctly skipped because the realised position is
+            clear. This matches the canonical Julia LaserTag (no wall
+            penalties at all) and replaces the prior behaviour that
+            applied the penalty against the open-loop intended position.
 
         Test type: unit
         """
@@ -1393,26 +1404,40 @@ class TestLaserTagPOMDP:
             discount_factor=0.95, walls=walls, dangerous_area_penalty=5.0, step_cost=1.0
         )
 
-        # Test wall collision penalty
+        # Robot at (3, 2); attempted East move into wall at (3, 3).
         state = np.array([3.0, 2.0, 1.0, 1.0, 0.0])
+        # Realised next_state: kernel blocked the move so the robot stayed
+        # at (3, 2). Threading this in disambiguates the new contract.
+        next_state = np.array([3.0, 2.0, 1.0, 1.0, 0.0])
 
-        # Try to move East into wall at (3, 3)
-        reward = env.reward(state, 2)  # East action
+        reward = env.reward(state, 2, next_state=next_state)  # East action
 
-        # Expected: -1.0 (step cost) - 5.0 (wall collision penalty) = -6.0
-        expected_reward = -env.step_cost - env.dangerous_area_penalty
+        # New behaviour: the realised position is clear → no penalty.
+        # Old (buggy) behaviour was -step_cost - dangerous_area_penalty = -6.0.
+        expected_reward = -env.step_cost
         assert (
             reward == expected_reward
-        ), f"Expected {expected_reward} for wall collision, got {reward}"
+        ), f"Expected {expected_reward} (no penalty on blocked move), got {reward}"
 
     def test_reward_difference_wall_collision_vs_safe(self):
-        """Test that rewards for actions leading to wall collision are lower than safe actions.
+        """Test that wall-blocked moves are scored identically to safe moves.
 
-        Purpose: Validates that wall collision actions receive lower rewards than safe actions
+        Purpose: Validates that under the next-state-aware contract, a wall-
+            blocked move and a successful move both yield the same
+            ``-step_cost`` reward — the realised next-state is what matters,
+            and in both cases the realised robot position is a clear cell.
 
-        Given: LaserTag environment with walls and two states (one leading to collision, one safe)
-        When: Same action is executed in both states
-        Then: Reward for collision action should be lower than safe action reward
+        Given: A LaserTag environment with a wall at (3, 3); two states
+            where one would attempt to move East into the wall and the
+            other would move East into open ground. In both cases the
+            ``next_state`` reflects the realised kernel output.
+        When: The same action is executed for both states with the
+            corresponding realised ``next_state`` threaded in.
+        Then: Both rewards equal ``-step_cost``. The "collision" no longer
+            accrues an extra penalty because the realised position is
+            clear (the kernel blocked the move). The previous test pinned
+            the buggy intended-position penalty and has been updated
+            accordingly.
 
         Test type: unit
         """
@@ -1421,40 +1446,29 @@ class TestLaserTagPOMDP:
             discount_factor=0.95, walls=walls, dangerous_area_penalty=5.0, step_cost=1.0
         )
 
-        # Create state where robot action will lead to wall collision
-        # Robot at (3, 2), wall at (3, 3), action East (2) will try to move to (3, 3) - collision!
+        # Will-collide: robot at (3, 2) attempting East move into wall
+        # (3, 3). Realised: robot stays at (3, 2).
         will_collide_state = np.array([3.0, 2.0, 1.0, 1.0, 0.0])
+        will_collide_next = np.array([3.0, 2.0, 1.0, 1.0, 0.0])
 
-        # Create state where robot action will NOT lead to wall collision
-        # Robot at (1, 1), action East (2) will move to (1, 2) - no collision
+        # Safe: robot at (1, 1) moving East → (1, 2). Realised: (1, 2).
         safe_state = np.array([1.0, 1.0, 1.0, 1.0, 0.0])
+        safe_next = np.array([1.0, 2.0, 1.0, 1.0, 0.0])
 
-        # Test movement action (East = 2)
-        # For will_collide_state: (3, 2) + East = (3, 3) which is a wall - collision!
-        # For safe_state: (1, 1) + East = (1, 2) which is safe - no collision
-        will_collide_reward = env.reward(will_collide_state, 2)  # East action
-        safe_reward = env.reward(safe_state, 2)  # East action
+        will_collide_reward = env.reward(will_collide_state, 2, next_state=will_collide_next)
+        safe_reward = env.reward(safe_state, 2, next_state=safe_next)
 
-        # Action leading to collision should get dangerous_area_penalty (-5.0) in addition to step_cost (-1.0)
-        # Safe action should only get step_cost (-1.0)
-
-        # The reward for collision action should be lower than safe action
+        # Both realised positions are clear cells → both rewards are -step_cost.
         assert (
-            will_collide_reward < safe_reward
-        ), f"Collision action reward ({will_collide_reward}) should be < safe action reward ({safe_reward})"
-
-        # Both should be negative (due to step cost)
+            will_collide_reward == -env.step_cost
+        ), f"Blocked-move reward should be -step_cost, got {will_collide_reward}"
         assert (
-            will_collide_reward < 0
-        ), f"Collision reward should be negative, got {will_collide_reward}"
-        assert safe_reward < 0, f"Safe reward should be negative, got {safe_reward}"
-
-        # Verify the difference is exactly the dangerous_area_penalty
-        expected_difference = env.dangerous_area_penalty
-        actual_difference = safe_reward - will_collide_reward
-        assert abs(actual_difference - expected_difference) < 1e-6, (
-            f"Reward difference should be {expected_difference} (dangerous_area_penalty), "
-            f"got {actual_difference}"
+            safe_reward == -env.step_cost
+        ), f"Safe-move reward should be -step_cost, got {safe_reward}"
+        assert will_collide_reward == safe_reward, (
+            "Wall-blocked and safe moves must score identically under the "
+            "realised-next-state contract; the old test pinned the buggy "
+            "intended-position penalty."
         )
 
     def test_compute_metrics_with_simulator_generated_history(self):
@@ -1899,6 +1913,208 @@ class TestLaserTagRewardBatch:
             scalar,
             atol=1e-12,
             err_msg="Mismatch for OOB-intended-position particles",
+        )
+
+
+class TestLaserTagRewardNextStateConsistency:
+    """Tests that LaserTagPOMDP.reward / reward_batch honour the realised next_state.
+
+    Purpose: Validates that the wall / dangerous-area collision penalty fires off
+        the *realised* next-state position threaded by
+        :meth:`Environment.sample_next_step`, not the open-loop ``state + action``
+        intended position. This is the LaserTag analogue of the ContinuousPushPOMDP
+        next-state-aware reward contract.
+
+    Given: A LaserTagPOMDP with a wall and/or dangerous area whose location can be
+        independently controlled via the supplied ``next_state``.
+    When: ``reward`` and ``reward_batch`` are called both with and without
+        ``next_state`` / ``next_states``, including the full
+        :meth:`Environment.sample_next_step` round-trip.
+    Then: Penalties are determined by the realised next-state (when supplied),
+        never by ``state + action_vector``.
+
+    Test type: unit
+    """
+
+    def test_reward_collision_penalty_uses_realised_next_state(self) -> None:
+        """Wall / danger penalty fires from the realised next_state, not the intended one.
+
+        Purpose: Validates that when ``next_state`` is supplied, the danger-area
+            penalty is applied only if the *realised* robot position (from
+            ``next_state``) lies in a dangerous cell, even if ``state + action``
+            does not.
+
+        Given: A LaserTagPOMDP with a single dangerous area at (5, 5). The
+            scalar state ``(4, 5, 0, 0, 0)`` with action East (2) yields
+            intended position (4, 6) which is NOT in the danger area, but the
+            caller threads in a realised ``next_state`` whose robot position is
+            (5, 5) — the danger cell.
+        When: ``reward(state, action, next_state=next_state)`` is invoked.
+        Then: The reward equals ``-step_cost - dangerous_area_penalty``,
+            confirming the penalty was applied based on the realised position
+            rather than the intended one.
+
+        Test type: unit
+        """
+        env = LaserTagPOMDP(
+            discount_factor=0.95,
+            walls=set(),
+            dangerous_areas={(5, 5)},
+            dangerous_area_radius=0.0,
+            dangerous_area_penalty=5.0,
+            step_cost=1.0,
+        )
+        state = np.array([4.0, 5.0, 0.0, 0.0, 0.0])  # robot at (4, 5)
+        # Realised next_state: robot landed at (5, 5) (the danger cell).
+        next_state = np.array([5.0, 5.0, 0.0, 0.0, 0.0])
+
+        reward = env.reward(state, action=2, next_state=next_state)  # East
+
+        # step_cost (-1) + danger penalty (-5) = -6
+        expected = -env.step_cost - env.dangerous_area_penalty
+        assert reward == expected, (
+            f"Expected {expected} when realised next_state lies in the danger cell, "
+            f"got {reward}"
+        )
+
+    def test_reward_collision_penalty_skipped_when_next_state_clear(self) -> None:
+        """No wall / danger penalty when the realised next_state is clear.
+
+        Purpose: Validates that when ``state + action`` lands ON a wall but the
+            realised ``next_state`` is a clear cell (e.g., the robot stayed put
+            because the wall blocked the move), the penalty is NOT applied.
+            This is the symmetric case to the previous test and is the
+            specific bug fixed.
+
+        Given: A LaserTagPOMDP with a wall at (3, 3) and dangerous area at
+            (3, 3). State ``(3, 2, 0, 0, 0)`` with action East (2) has
+            intended position (3, 3) — both a wall and the danger cell. The
+            caller threads in a realised ``next_state`` whose robot position
+            is the clear cell (3, 2) (move blocked by the wall).
+        When: ``reward(state, action, next_state=next_state)`` is invoked.
+        Then: The reward equals ``-step_cost`` only — no penalty applied,
+            because the realised position is clear.
+
+        Test type: unit
+        """
+        env = LaserTagPOMDP(
+            discount_factor=0.95,
+            walls={(3, 3)},
+            dangerous_areas={(3, 3)},
+            dangerous_area_radius=0.0,
+            dangerous_area_penalty=5.0,
+            step_cost=1.0,
+        )
+        state = np.array([3.0, 2.0, 0.0, 0.0, 0.0])
+        # Realised next_state: robot stayed at (3, 2) (wall blocked the East move).
+        next_state = np.array([3.0, 2.0, 0.0, 0.0, 0.0])
+
+        reward = env.reward(state, action=2, next_state=next_state)  # East
+
+        expected = -env.step_cost
+        assert reward == expected, (
+            f"Expected {expected} (no penalty) when realised next_state is clear, "
+            f"got {reward} — likely indicates open-loop intended-position bug"
+        )
+
+    def test_sample_next_step_reward_matches_returned_next_state(self) -> None:
+        """sample_next_step's reward must be consistent with its next_state for every draw.
+
+        Purpose: Validates the end-to-end contract that the reward returned by
+            :meth:`Environment.sample_next_step` is computed from the same
+            realised ``next_state`` that the method returns, across many
+            stochastic draws (transition_error_prob > 0 yields stochastic
+            transitions). Recomputing ``reward(state, action, next_state)`` on
+            the returned next_state must equal the returned reward exactly.
+
+        Given: A LaserTagPOMDP with a wall, a dangerous area, and a non-zero
+            transition_error_prob so that the realised next_state varies
+            stochastically across calls.
+        When: ``sample_next_step`` is called many times and the returned
+            reward is compared to ``reward(state, action, next_state)``.
+        Then: The two values are exactly equal on every call. This forbids
+            the resample-on-None path inside ``reward`` from drawing a
+            different realisation than the one ``sample_next_step`` already
+            committed to.
+
+        Test type: unit
+        """
+        env = LaserTagPOMDP(
+            discount_factor=0.95,
+            walls={(3, 3), (4, 5)},
+            dangerous_areas={(2, 5), (5, 3)},
+            dangerous_area_radius=1.0,
+            dangerous_area_penalty=5.0,
+            step_cost=1.0,
+            transition_error_prob=0.5,
+        )
+        np.random.seed(0)
+        state = np.array([3.0, 4.0, 1.0, 1.0, 0.0])
+
+        for _ in range(200):
+            for action in env.get_actions():
+                next_state, _, reward = env.sample_next_step(state, action)
+                recomputed = env.reward(state, action=action, next_state=next_state)
+                assert reward == recomputed, (
+                    f"sample_next_step reward {reward} must match reward() "
+                    f"on its own returned next_state (got {recomputed}) "
+                    f"for action {action}, next_state robot={next_state[:2]}"
+                )
+
+    def test_reward_batch_uses_realised_next_states(self) -> None:
+        """reward_batch honours the supplied next_states realised positions.
+
+        Purpose: Validates that the vectorised path mirrors the scalar
+            contract — when ``next_states`` is supplied, penalties are
+            computed from the realised positions in ``next_states[:, :2]``,
+            not from ``states + action_vector``.
+
+        Given: A LaserTagPOMDP with a wall at (3, 3) and a dangerous area at
+            (5, 5). A 2-row ``states`` batch where:
+              row 0: state=(4, 5, 0, 0, 0), action East — intended (4, 6)
+                clear; realised (5, 5) — danger.
+              row 1: state=(3, 2, 0, 0, 0), action East — intended (3, 3)
+                wall; realised (3, 2) — clear (move blocked).
+        When: ``reward_batch(states, action=2, next_states=...)`` is invoked.
+        Then: row 0 receives ``-step_cost - dangerous_area_penalty`` (penalty
+            from realised position) and row 1 receives ``-step_cost`` only
+            (no penalty despite intended-position colliding).
+
+        Test type: unit
+        """
+        env = LaserTagPOMDP(
+            discount_factor=0.95,
+            walls={(3, 3)},
+            dangerous_areas={(5, 5)},
+            dangerous_area_radius=0.0,
+            dangerous_area_penalty=5.0,
+            step_cost=1.0,
+        )
+        states = np.array(
+            [
+                [4.0, 5.0, 0.0, 0.0, 0.0],
+                [3.0, 2.0, 0.0, 0.0, 0.0],
+            ],
+            dtype=np.float64,
+        )
+        # Row 0 realised at (5, 5) (danger); row 1 realised at (3, 2) (clear).
+        next_states = np.array(
+            [
+                [5.0, 5.0, 0.0, 0.0, 0.0],
+                [3.0, 2.0, 0.0, 0.0, 0.0],
+            ],
+            dtype=np.float64,
+        )
+
+        rewards = env.reward_batch(states, action=2, next_states=next_states)
+
+        expected_row_0 = -env.step_cost - env.dangerous_area_penalty
+        expected_row_1 = -env.step_cost
+        np.testing.assert_allclose(
+            rewards,
+            np.array([expected_row_0, expected_row_1], dtype=np.float64),
+            atol=1e-12,
+            err_msg="reward_batch must use realised next_states, not intended positions",
         )
 
 
