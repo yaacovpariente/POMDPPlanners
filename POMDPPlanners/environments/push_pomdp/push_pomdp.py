@@ -614,6 +614,7 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
         self, state: np.ndarray, action: str, next_state: np.ndarray
     ) -> float:
         # State components: [robot_x, robot_y, object_x, object_y, target_x, target_y]
+        del state, action  # penalties consult the realised post-transition robot pos
         dx = next_state[2] - next_state[4]
         dy = next_state[3] - next_state[5]
         distance_to_target = math.sqrt(dx * dx + dy * dy)
@@ -625,14 +626,20 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
         if distance_to_target < 0.5:
             reward += 100.0
 
-        if self._is_colliding_with_obstacle(state[:2], action):
+        # Score obstacle/danger penalties against the realised robot
+        # position so reward and trajectory agree on the same draw —
+        # mirrors the ContinuousPushPOMDP fix. Action-blocking +
+        # transition_error_prob can move the robot somewhere other than
+        # ``state[:2] + dxdy``, so checking the intended position
+        # double-counts bounce-offs and miscredits orthogonal-error draws.
+        if self._is_colliding_with_obstacle(next_state[:2]):
             if (
                 self.obstacle_hit_probability >= 1.0
                 or np.random.random() < self.obstacle_hit_probability
             ):
                 reward += self.obstacle_penalty
 
-        if self._is_in_dangerous_area(state[:2], action):
+        if self._is_in_dangerous_area(next_state[:2]):
             if (
                 self.dangerous_area_hit_probability >= 1.0
                 or np.random.random() < self.dangerous_area_hit_probability
@@ -716,10 +723,23 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
         if remaining <= 0 or self.is_terminal(state=state):
             return 0.0
 
-        if self.obstacle_hit_probability < 1.0 or self.dangerous_area_hit_probability < 1.0:
-            # Native kernel applies the obstacle and dangerous-area penalties
-            # deterministically; fall back to the Python rollout so per-step
-            # Bernoulli draws against the configured hit probabilities survive.
+        # Bypass the native kernel whenever obstacle or dangerous-area
+        # penalties may fire: the C++ rollout still scores them against
+        # ``state + action_vector`` (intended position), while the Python
+        # ``reward`` path now consults the realised ``next_state``. The C++
+        # kernel needs a recompile to align — until then we route through
+        # Python whenever penalties are configured.
+        # The same fall-back is required for stochastic hit probabilities
+        # so per-step Bernoulli draws against the configured probabilities
+        # survive (the C++ kernel applies them deterministically).
+        has_obstacle_penalty = len(self.obstacles) > 0
+        has_dangerous_area_penalty = self._dangerous_areas_arr.shape[0] > 0
+        if (
+            self.obstacle_hit_probability < 1.0
+            or self.dangerous_area_hit_probability < 1.0
+            or has_obstacle_penalty
+            or has_dangerous_area_penalty
+        ):
             actions = [self.actions[i] for i in np.random.randint(0, 4, size=remaining)]
             return self._python_simulate_random_rollout(
                 state=state,
@@ -840,43 +860,49 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
     def _reward_batch_from_next_states(
         self, states: np.ndarray, action: str, next_states: np.ndarray
     ) -> np.ndarray:
+        # ``states``/``action`` are kept on the signature for symmetry with
+        # ``Environment.reward_batch``; the obstacle and dangerous-area
+        # penalties consume the realised post-transition robot position
+        # from ``next_states`` to stay in lockstep with the scalar
+        # ``_reward_from_next_state`` path (and the ContinuousPushPOMDP
+        # reference fix).
+        del states, action
         dx = next_states[:, 2] - next_states[:, 4]
         dy = next_states[:, 3] - next_states[:, 5]
         dist = np.sqrt(dx * dx + dy * dy)
         rewards = -dist
         rewards = np.where(dist < 0.5, rewards + 100.0, rewards)
-        rewards += self._obstacle_penalty_batch(states, action)
-        rewards += self._dangerous_area_penalty_batch(states, action)
+        rewards += self._obstacle_penalty_batch(next_states)
+        rewards += self._dangerous_area_penalty_batch(next_states)
         return rewards.astype(np.float64)
 
-    def _obstacle_penalty_batch(self, states: np.ndarray, action: str) -> np.ndarray:
-        if (
-            not self.obstacles or action not in self._ACTION_TO_DXY
-        ):  # pylint: disable=protected-access
-            return np.zeros(len(states), dtype=np.float64)
-        dx, dy = self._ACTION_TO_DXY[action]  # pylint: disable=protected-access
-        intended = states[:, :2] + np.array([dx, dy], dtype=float)
+    def _obstacle_penalty_batch(self, next_states: np.ndarray) -> np.ndarray:
+        # Score the obstacle penalty against the realised next robot
+        # position (``next_states[:, :2]``); mirrors the scalar path's
+        # post-fix ``_is_colliding_with_obstacle(next_state[:2])`` call.
+        if not self.obstacles:
+            return np.zeros(len(next_states), dtype=np.float64)
+        positions = next_states[:, :2]
         obs_arr = np.asarray(self.obstacles, dtype=float)  # (M, 2)
-        diff = intended[:, None, :] - obs_arr[None, :, :]  # (N, M, 2)
+        diff = positions[:, None, :] - obs_arr[None, :, :]  # (N, M, 2)
         dist_sq = np.sum(diff * diff, axis=2)  # (N, M)
         colliding = np.any(dist_sq <= self.obstacle_radius * self.obstacle_radius, axis=1)
         if self.obstacle_hit_probability < 1.0:
             # Per-row Bernoulli mask: refund the penalty for rows that collide
             # but lose the per-call coin flip.
-            applied = np.random.random(len(states)) < self.obstacle_hit_probability
+            applied = np.random.random(len(next_states)) < self.obstacle_hit_probability
             colliding = colliding & applied
         return np.where(colliding, self.obstacle_penalty, 0.0).astype(np.float64)
 
-    def _dangerous_area_penalty_batch(self, states: np.ndarray, action: str) -> np.ndarray:
-        if not self.dangerous_areas or action not in self._ACTION_TO_DXY:
-            return np.zeros(len(states), dtype=np.float64)
-        dx, dy = self._ACTION_TO_DXY[action]
-        intended = states[:, :2] + np.array([dx, dy], dtype=float)
-        diff = intended[:, None, :] - self._dangerous_areas_arr[None, :, :]
+    def _dangerous_area_penalty_batch(self, next_states: np.ndarray) -> np.ndarray:
+        if not self.dangerous_areas:
+            return np.zeros(len(next_states), dtype=np.float64)
+        positions = next_states[:, :2]
+        diff = positions[:, None, :] - self._dangerous_areas_arr[None, :, :]
         dist_sq = np.sum(diff * diff, axis=2)
         in_zone = np.any(dist_sq <= self.dangerous_area_radius * self.dangerous_area_radius, axis=1)
         if self.dangerous_area_hit_probability < 1.0:
-            applied = np.random.random(len(states)) < self.dangerous_area_hit_probability
+            applied = np.random.random(len(next_states)) < self.dangerous_area_hit_probability
             in_zone = in_zone & applied
         return np.where(in_zone, self.dangerous_area_penalty, 0.0).astype(np.float64)
 

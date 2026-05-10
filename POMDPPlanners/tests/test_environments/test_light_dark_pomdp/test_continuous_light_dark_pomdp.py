@@ -3135,3 +3135,307 @@ def test_observation_sampler_unbiased_near_grid_edge(obs_type: ObservationModelT
         f"next_state {next_state} by {bias} — sampler clipping while PDF "
         f"is unclipped breaks importance weights near edges."
     )
+
+
+class TestContinuousLightDarkRewardNextStateConsistency:
+    """Regression tests asserting reward honours the threaded ``next_state``.
+
+    Ensures the obstacle / goal / out-of-grid checks in :meth:`reward`,
+    :meth:`reward_batch`, the underlying reward models, and the Numba
+    kernels all score against the *realised* next state from
+    :meth:`Environment.sample_next_step` rather than the deterministic
+    ``state + action`` pre-noise position.
+    """
+
+    @staticmethod
+    def _make_env(obstacles, *, hit_probability=1.0, reward_model_type=RewardModelType.STANDARD):
+        return ContinuousLightDarkPOMDP(
+            discount_factor=0.95,
+            state_transition_cov_matrix=np.eye(2) * 1e-12,
+            observation_cov_matrix=np.eye(2),
+            obstacles=obstacles,
+            obstacle_hit_probability=hit_probability,
+            obstacle_reward=-25.0,
+            goal_reward=10.0,
+            fuel_cost=1.0,
+            grid_size=20,
+            goal_state=np.array([18, 5]),
+            goal_state_radius=1.0,
+            beacon_radius=1.0,
+            obstacle_radius=1.0,
+            reward_model_type=reward_model_type,
+            is_obstacle_hit_terminal=False,
+        )
+
+    def test_reward_obstacle_penalty_uses_realised_next_state(self):
+        """Penalty triggers when the realised ``next_state`` is in an obstacle.
+
+        Purpose: Validates that reward consumes the threaded ``next_state``
+        and applies the obstacle penalty even when ``state + action`` is
+        outside any obstacle.
+
+        Given: An env with an obstacle at (8, 5), a state at (4, 5) and
+            action (1, 0) so ``state + action`` lies clearly outside the
+            obstacle, and a hand-crafted realised ``next_state`` at (8, 5).
+        When: ``env.reward`` is called with the realised ``next_state``.
+        Then: The reward includes the deterministic obstacle penalty
+            (``hit_probability=1.0``) measured against (8, 5).
+
+        Test type: unit
+        """
+        env = self._make_env(obstacles=[(8.0, 5.0)], hit_probability=1.0)
+        state = np.array([4.0, 5.0])
+        action = np.array([1.0, 0.0])
+        clean_next = state + action  # (5, 5) — outside the obstacle.
+        realised = np.array([8.0, 5.0])  # inside the obstacle.
+
+        reward_clean = env.reward(state, action, next_state=clean_next)
+        reward_hit = env.reward(state, action, next_state=realised)
+
+        # Penalty is exactly ``obstacle_reward`` because the deterministic
+        # base reward (fuel + dist-to-goal) is computed from the threaded
+        # next_state in both cases when the fix is applied.
+        # The clean next_state has dist-to-goal sqrt((18-5)^2) = 13, fuel=1
+        # so reward_clean ~ -14. The realised hit has dist sqrt((18-8)^2)=10
+        # plus the -25 obstacle penalty.
+        assert reward_hit < reward_clean - 20.0, (
+            "Realised obstacle hit should incur the -25 obstacle reward; "
+            f"got reward_hit={reward_hit:.3f} vs reward_clean={reward_clean:.3f}"
+        )
+
+    def test_reward_obstacle_penalty_skipped_when_next_state_clear(self):
+        """No obstacle penalty when realised ``next_state`` is clear.
+
+        Purpose: Opposite of the above — an action that would put
+        ``state + action`` inside an obstacle should *not* trigger the
+        obstacle penalty when the threaded realised ``next_state`` is clear.
+
+        Given: An env with an obstacle at (5, 5) where ``state + action``
+            lands inside the obstacle, but a realised ``next_state`` is
+            outside the obstacle.
+        When: ``env.reward`` is called with the clean realised next state.
+        Then: No obstacle penalty is applied.
+
+        Test type: unit
+        """
+        env = self._make_env(obstacles=[(5.0, 5.0)], hit_probability=1.0)
+        state = np.array([4.0, 5.0])
+        action = np.array([1.0, 0.0])  # state+action == (5,5) (the obstacle).
+        clear_next = np.array([4.5, 7.0])  # realised away from obstacle.
+
+        reward_clear = env.reward(state, action, next_state=clear_next)
+
+        # Manually compute the expected base reward (no obstacle penalty,
+        # not in goal, in-grid):
+        # -fuel_cost - dist_to_goal where dist = ||(18,5)-(4.5,7)||
+        expected_base = -1.0 - float(np.linalg.norm(np.array([18.0, 5.0]) - clear_next))
+        assert abs(reward_clear - expected_base) < 1e-6, (
+            f"Clear realised next_state should yield base reward "
+            f"{expected_base:.4f}; got {reward_clear:.4f}"
+        )
+
+    def test_sample_next_step_reward_matches_returned_next_state(self):
+        """``sample_next_step`` reward equals ``reward(state, action, next_state)``.
+
+        Purpose: End-to-end check that the realised next_state threaded
+        through ``Environment.sample_next_step`` is the same draw used by
+        the reward calculation. Also covers stochastic transitions.
+
+        Given: An env with non-trivial transition noise and
+            ``hit_probability=1.0`` so the obstacle penalty is deterministic
+            given the realised position.
+        When: We seed the RNG, draw ``(next_state, _, reward)`` via
+            ``sample_next_step``, then re-seed past the transition draw and
+            recompute ``env.reward(state, action, next_state)``.
+        Then: The two reward values agree exactly.
+
+        Test type: unit
+        """
+        # Place an obstacle at the deterministic landing point and a state
+        # such that ``state + action`` is exactly inside the obstacle. With
+        # large transition noise many seeds draw a realised next_state
+        # *outside* the obstacle. Under the bug, ``sample_next_step`` uses
+        # ``state+action`` (always inside obstacle) → reward is heavily
+        # penalised. After the fix, the reward agrees with the realised
+        # ``next_state``, so penalty applies only when the realised state
+        # is in the obstacle. The fingerprint is a *distribution* of
+        # rewards rather than a single value.
+        env = ContinuousLightDarkPOMDP(
+            discount_factor=0.95,
+            state_transition_cov_matrix=np.eye(2) * 4.0,
+            observation_cov_matrix=np.eye(2),
+            obstacles=[(5.0, 5.0)],
+            obstacle_hit_probability=1.0,
+            obstacle_reward=-50.0,
+            goal_reward=10.0,
+            fuel_cost=2.0,
+            grid_size=11,
+            goal_state_radius=1.5,
+            obstacle_radius=0.5,
+            is_obstacle_hit_terminal=False,
+        )
+        state = np.array([4.0, 5.0])
+        action = np.array([1.0, 0.0])  # state+action == (5,5) — the obstacle
+
+        # Iterate; for each draw compare the threaded reward against the
+        # reward computed manually from the realised next_state. They must
+        # match exactly: reward_step must score against next_state, not
+        # against state+action. The kernel short-circuits in this order:
+        # goal > obstacle > out-of-grid (mirror that here).
+        any_realised_outside_obstacle = False
+        obstacle_radius_sq = 0.5 * 0.5
+        goal = np.array([10.0, 5.0])
+        for seed in range(100):
+            np.random.seed(seed)
+            next_state, _, reward_step = env.sample_next_step(state, action)
+            dx = next_state[0] - 5.0
+            dy = next_state[1] - 5.0
+            in_obstacle = (dx * dx + dy * dy) <= obstacle_radius_sq
+            if not in_obstacle:
+                any_realised_outside_obstacle = True
+            in_grid = 0.0 <= next_state[0] <= 11.0 and 0.0 <= next_state[1] <= 11.0
+            dist_to_goal = float(np.linalg.norm(next_state - goal))
+            in_goal = dist_to_goal <= 1.5
+            base = -2.0 - dist_to_goal
+            if in_goal:
+                expected = base + 10.0
+            elif in_obstacle:
+                # ``hit_probability=1`` so the deterministic Bernoulli refund
+                # always pays out: penalty = obstacle_reward (-50.0).
+                expected = base + (-50.0)
+            elif not in_grid:
+                expected = base + (-50.0)
+            else:
+                expected = base
+            assert reward_step == pytest.approx(expected, abs=1e-9), (
+                f"seed={seed}: sample_next_step reward {reward_step} != "
+                f"expected {expected} for realised next_state={next_state} "
+                f"(in_obstacle={in_obstacle}, in_grid={in_grid}, "
+                f"in_goal={in_goal})"
+            )
+        assert any_realised_outside_obstacle, (
+            "Test setup error: no seed produced a realised next_state outside "
+            "the obstacle; bump transition variance or seed count."
+        )
+
+    def test_reward_batch_obstacle_penalty_uses_realised_next_states(self):
+        """``reward_batch`` honours per-row realised ``next_states``.
+
+        Purpose: Batched variant of the next_state-aware obstacle check.
+
+        Given: A batch where ``states + action`` is clear but the threaded
+            ``next_states`` have been hand-placed inside an obstacle.
+        When: ``env.reward_batch`` is called with the realised ``next_states``.
+        Then: Each row gets the deterministic obstacle penalty.
+
+        Test type: unit
+        """
+        env = self._make_env(obstacles=[(8.0, 5.0)], hit_probability=1.0)
+        states = np.array([[4.0, 5.0], [4.0, 5.0], [4.0, 5.0]])
+        action = np.array([1.0, 0.0])
+        # Each realised next_state lies inside the obstacle at (8, 5).
+        next_states_hit = np.array([[8.0, 5.0], [7.5, 5.0], [8.0, 4.5]])
+        next_states_clear = np.array([[5.0, 5.0], [5.0, 5.0], [5.0, 5.0]])
+
+        rewards_hit = env.reward_batch(states, action, next_states=next_states_hit)
+        rewards_clear = env.reward_batch(states, action, next_states=next_states_clear)
+
+        # All rows must have the obstacle penalty applied vs. clear baseline.
+        for i in range(3):
+            assert rewards_hit[i] < rewards_clear[i] - 20.0, (
+                f"row {i}: realised obstacle hit should incur the -25 "
+                f"obstacle reward; got hit={rewards_hit[i]:.3f} vs "
+                f"clear={rewards_clear[i]:.3f}"
+            )
+
+    def test_reward_batch_decaying_hit_prob_uses_realised_next_states(self):
+        """Decaying-hit-probability batched reward consumes ``next_states``.
+
+        Purpose: The decaying-hit-probability reward model has its own
+        batched implementation that previously recomputed
+        ``next_states = states + action``. Check it now consumes the
+        threaded ``next_states``.
+
+        Given: An env with the DECAYING_HIT_PROBABILITY reward model and a
+            small ``penalty_decay`` so the hit probability is essentially 1
+            at the obstacle and ~0 well away from it.
+        When: ``env.reward_batch`` is called once with realised
+            ``next_states`` placed at the obstacle, and once with realised
+            ``next_states`` far from any obstacle.
+        Then: The on-obstacle batch is meaningfully more negative.
+
+        Test type: unit
+        """
+        env = ContinuousLightDarkPOMDP(
+            discount_factor=0.95,
+            state_transition_cov_matrix=np.eye(2) * 1e-12,
+            observation_cov_matrix=np.eye(2),
+            obstacles=[(8.0, 5.0)],
+            obstacle_reward=-25.0,
+            goal_reward=10.0,
+            fuel_cost=1.0,
+            grid_size=20,
+            goal_state=np.array([18, 5]),
+            goal_state_radius=1.0,
+            beacon_radius=1.0,
+            obstacle_radius=1.0,
+            reward_model_type=RewardModelType.DECAYING_HIT_PROBABILITY,
+            penalty_decay=0.1,
+            is_obstacle_hit_terminal=False,
+        )
+        states = np.array([[4.0, 5.0], [4.0, 5.0], [4.0, 5.0], [4.0, 5.0]])
+        action = np.array([1.0, 0.0])
+        next_at_obs = np.array([[8.0, 5.0], [8.0, 5.0], [8.0, 5.0], [8.0, 5.0]])
+        next_far = np.array([[15.0, 1.0], [15.0, 1.0], [15.0, 1.0], [15.0, 1.0]])
+
+        np.random.seed(0)
+        rewards_at_obs = env.reward_batch(states, action, next_states=next_at_obs)
+        np.random.seed(0)
+        rewards_far = env.reward_batch(states, action, next_states=next_far)
+
+        assert np.mean(rewards_at_obs) < np.mean(rewards_far) - 10.0, (
+            f"Decaying-hit-prob: realised obstacle batch should be more "
+            f"negative than far batch; got mean_obs="
+            f"{np.mean(rewards_at_obs):.3f} vs mean_far="
+            f"{np.mean(rewards_far):.3f}"
+        )
+
+    def test_discrete_actions_reward_threads_next_state(self):
+        """Discrete-action wrapper threads ``next_state`` to the parent.
+
+        Purpose: Confirm the ``ContinuousLightDarkPOMDPDiscreteActions``
+        wrapper does not silently drop the threaded ``next_state`` (it
+        delegates to the parent via ``super().reward``).
+
+        Given: A discrete-action env with an obstacle and a realised
+            ``next_state`` placed in the obstacle.
+        When: ``env.reward(state, "right", next_state=realised)`` is called.
+        Then: The reward picks up the obstacle penalty against the realised
+            position.
+
+        Test type: unit
+        """
+        env = ContinuousLightDarkPOMDPDiscreteActions(
+            discount_factor=0.95,
+            state_transition_cov_matrix=np.eye(2) * 1e-12,
+            observation_cov_matrix=np.eye(2),
+            obstacles=[(8.0, 5.0)],
+            obstacle_hit_probability=1.0,
+            obstacle_reward=-25.0,
+            goal_reward=10.0,
+            fuel_cost=1.0,
+            grid_size=20,
+            goal_state=np.array([18, 5]),
+            goal_state_radius=1.0,
+            obstacle_radius=1.0,
+            is_obstacle_hit_terminal=False,
+        )
+        state = np.array([4.0, 5.0])
+        clean = np.array([5.0, 5.0])
+        realised = np.array([8.0, 5.0])
+        reward_clean = env.reward(state, "right", next_state=clean)
+        reward_hit = env.reward(state, "right", next_state=realised)
+        assert reward_hit < reward_clean - 20.0, (
+            f"Discrete wrapper should thread next_state; got hit="
+            f"{reward_hit:.3f} vs clean={reward_clean:.3f}"
+        )

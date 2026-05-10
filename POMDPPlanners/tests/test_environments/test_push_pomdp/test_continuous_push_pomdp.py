@@ -2090,3 +2090,195 @@ class TestNativeRolloutEquivalence:
             state=state, action_sampler=sampler, max_depth=8, discount_factor=0.99
         )
         assert return_a == return_b
+
+
+# ------------------------------------------------------------------
+# Reward / sample_next_step consistency (next_state threading)
+# ------------------------------------------------------------------
+
+
+class TestContinuousPushRewardNextStateConsistency:
+    """Tests that ``reward`` consumes the threaded ``next_state`` and that
+    ``sample_next_step`` returns a reward consistent with the realised draw.
+
+    Geometry: a single obstacle AABB centred at ``(5.0, 5.0)`` with
+    half-side ``0.5``. The reward path computes obstacle and dangerous-area
+    penalties from the *realised* post-action robot position
+    (``next_state[:2]``), not the *intended* ``state[:2] + action`` —
+    these tests pin that contract by passing hand-crafted ``next_state``
+    values that disagree with ``state + action``.
+    """
+
+    OBSTACLE_PENALTY = -10.0
+    DANGER_PENALTY = -7.0
+
+    @staticmethod
+    def _obstacle_env() -> ContinuousPushPOMDP:
+        return ContinuousPushPOMDP(
+            discount_factor=0.99,
+            grid_size=10,
+            obstacles=[(5.0, 5.0, 0.5)],
+            obstacle_penalty=(TestContinuousPushRewardNextStateConsistency.OBSTACLE_PENALTY),
+            robot_radius=0.3,
+            state_transition_cov_matrix=np.eye(2) * 0.01,
+        )
+
+    @staticmethod
+    def _danger_env() -> ContinuousPushPOMDP:
+        return ContinuousPushPOMDP(
+            discount_factor=0.99,
+            grid_size=10,
+            dangerous_areas=[(5.0, 5.0)],
+            dangerous_area_radius=0.5,
+            dangerous_area_penalty=(TestContinuousPushRewardNextStateConsistency.DANGER_PENALTY),
+            robot_radius=0.3,
+            state_transition_cov_matrix=np.eye(2) * 0.01,
+        )
+
+    def test_reward_obstacle_penalty_uses_realised_next_state(self):
+        """Obstacle penalty fires on ``next_state[:2]``, not ``state + action``.
+
+        Purpose: Validates that the threaded ``next_state`` controls the
+            obstacle-penalty decision in ``_reward_batch_array``.
+
+        Given: A robot at ``(1, 1)`` taking action ``(1, 0)`` — intended
+            position ``(2, 1)`` is clear. The hand-crafted ``next_state``
+            puts the realised robot at ``(5, 5)`` — inside the obstacle.
+        When: ``reward(state, action, next_state)`` is called.
+        Then: The reward equals
+            ``-||object - target|| + OBSTACLE_PENALTY`` (penalty applied).
+
+        Test type: unit
+        """
+        env = self._obstacle_env()
+        state = np.array([1.0, 1.0, 0.0, 0.0, 9.0, 9.0])
+        action = np.array([1.0, 0.0])
+        next_state = np.array([5.0, 5.0, 0.0, 0.0, 9.0, 9.0])
+
+        r = env.reward(state, action, next_state=next_state)
+
+        expected = -np.sqrt(2.0) * 9.0 + self.OBSTACLE_PENALTY
+        assert r == pytest.approx(expected, abs=1e-9)
+
+    def test_reward_obstacle_penalty_skipped_when_next_state_clear(self):
+        """No obstacle penalty when ``next_state[:2]`` is clear, even if
+        ``state + action`` would collide.
+
+        Purpose: Symmetric check — ensures the realised position fully
+            controls the penalty, including the negative case.
+
+        Given: A robot at ``(4, 5)`` taking action ``(1, 0)`` — intended
+            position ``(5, 5)`` lands inside the obstacle. The hand-crafted
+            ``next_state`` puts the realised robot at ``(1, 1)`` — clear.
+        When: ``reward(state, action, next_state)`` is called.
+        Then: No obstacle penalty is applied; reward is just
+            ``-||object - target||``.
+
+        Test type: unit
+        """
+        env = self._obstacle_env()
+        state = np.array([4.0, 5.0, 0.0, 0.0, 9.0, 9.0])
+        action = np.array([1.0, 0.0])
+        next_state = np.array([1.0, 1.0, 0.0, 0.0, 9.0, 9.0])
+
+        r = env.reward(state, action, next_state=next_state)
+
+        expected = -np.sqrt(2.0) * 9.0
+        assert r == pytest.approx(expected, abs=1e-9)
+
+    def test_reward_dangerous_area_uses_realised_next_state(self):
+        """Dangerous-area penalty fires on ``next_state[:2]``.
+
+        Purpose: Same contract as the obstacle test, but for dangerous
+            areas (separate code path).
+
+        Given: A robot at ``(1, 1)`` taking action ``(1, 0)`` — intended
+            position ``(2, 1)`` is outside the danger zone. The hand-crafted
+            ``next_state`` puts the realised robot at ``(5, 5)`` — inside
+            the zone.
+        When: ``reward(state, action, next_state)`` is called.
+        Then: Reward equals
+            ``-||object - target|| + DANGER_PENALTY``.
+
+        Test type: unit
+        """
+        env = self._danger_env()
+        state = np.array([1.0, 1.0, 0.0, 0.0, 9.0, 9.0])
+        action = np.array([1.0, 0.0])
+        next_state = np.array([5.0, 5.0, 0.0, 0.0, 9.0, 9.0])
+
+        r = env.reward(state, action, next_state=next_state)
+
+        expected = -np.sqrt(2.0) * 9.0 + self.DANGER_PENALTY
+        assert r == pytest.approx(expected, abs=1e-9)
+
+    def test_reward_batch_uses_passed_next_states_per_row(self):
+        """``reward_batch`` consumes per-row ``next_states`` for penalties.
+
+        Purpose: Validates that the batched path threads ``next_states``
+            through to the obstacle / dangerous-area decisions.
+
+        Given: A two-row batch where row 0's realised robot is in the
+            obstacle and row 1's is clear; the *intended* positions are the
+            opposite (row 0 clear, row 1 collides) so any check against
+            ``states + action`` would invert the result.
+        When: ``reward_batch(states, action, next_states=...)`` is called.
+        Then: Row 0 carries the obstacle penalty; row 1 does not.
+
+        Test type: unit
+        """
+        env = self._obstacle_env()
+        states = np.stack(
+            [
+                np.array([1.0, 1.0, 0.0, 0.0, 9.0, 9.0]),  # +action -> (2,1) clear
+                np.array([4.0, 5.0, 0.0, 0.0, 9.0, 9.0]),  # +action -> (5,5) collides
+            ]
+        )
+        action = np.array([1.0, 0.0])
+        next_states = np.stack(
+            [
+                np.array([5.0, 5.0, 0.0, 0.0, 9.0, 9.0]),  # realised -> collides
+                np.array([1.0, 1.0, 0.0, 0.0, 9.0, 9.0]),  # realised -> clear
+            ]
+        )
+
+        rewards = env.reward_batch(states, action, next_states=next_states)
+
+        baseline = -np.sqrt(2.0) * 9.0
+        assert rewards[0] == pytest.approx(baseline + self.OBSTACLE_PENALTY, abs=1e-9)
+        assert rewards[1] == pytest.approx(baseline, abs=1e-9)
+
+    def test_sample_next_step_reward_matches_returned_next_state(self):
+        """``sample_next_step`` reward is consistent with the returned
+        ``next_state``.
+
+        Purpose: Pins the headline contract from the audit — ``reward``
+            and ``next_state`` returned by ``sample_next_step`` must agree
+            on the same stochastic draw, not separate ones.
+
+        Given: An env with non-trivial transition noise so that resampling
+            inside ``reward`` would diverge from the returned ``next_state``
+            with high probability.
+        When: ``sample_next_step`` is called many times; for each call we
+            recompute ``reward(state, action, returned_next_state)``.
+        Then: The returned reward equals the recomputed reward exactly,
+            for every call.
+
+        Test type: unit
+        """
+        env = ContinuousPushPOMDP(
+            discount_factor=0.99,
+            grid_size=10,
+            obstacles=[(5.0, 5.0, 0.5)],
+            obstacle_penalty=self.OBSTACLE_PENALTY,
+            robot_radius=0.3,
+            state_transition_cov_matrix=np.eye(2) * 0.5,
+        )
+        state = np.array([4.6, 5.0, 1.0, 1.0, 9.0, 9.0])
+        action = np.array([0.4, 0.0])
+
+        np.random.seed(2026)
+        for _ in range(50):
+            next_state, _, reward_returned = env.sample_next_step(state, action)
+            reward_recomputed = env.reward(state, action, next_state=next_state)
+            assert reward_returned == pytest.approx(reward_recomputed, abs=1e-12)

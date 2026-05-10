@@ -216,8 +216,13 @@ def test_compute_reward_base_kernel_matches_reference(
     Test type: unit
     """
     del expected_branch  # descriptive parameter only
+    # NOTE: ``compute_reward_base_kernel`` now consumes the realised
+    # ``next_state`` threaded by ``Environment.sample_next_step``. The
+    # original test predates that signature and exercised the
+    # deterministic ``state + action`` landing point — pass that here.
+    next_state = state + action
     reward, should_draw = compute_reward_base_kernel(
-        state, action, default_goal, default_obstacles, 1.5, 1.5, 11.0, 2.0, 10.0, -10.0
+        next_state, default_goal, default_obstacles, 1.5, 1.5, 11.0, 2.0, 10.0, -10.0
     )
     if should_draw and uniform < hit_prob:
         reward += -10.0
@@ -268,9 +273,12 @@ def test_compute_reward_decaying_hit_prob_kernel_matches_reference(
 
     Test type: unit
     """
+    # NOTE: kernel now consumes the realised ``next_state``; pass the
+    # deterministic ``state + action`` to preserve the original test
+    # intent (no transition noise).
+    next_state = state + action
     got = compute_reward_decaying_hit_prob_kernel(
-        state,
-        action,
+        next_state,
         default_goal,
         default_obstacles,
         1.5,
