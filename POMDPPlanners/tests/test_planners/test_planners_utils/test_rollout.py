@@ -8,6 +8,7 @@ This module tests the rollout planner utilities, focusing on:
 """
 
 import random
+from typing import Any
 
 import numpy as np
 import pytest
@@ -16,7 +17,10 @@ from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
 from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
-from POMDPPlanners.planners.planners_utils.rollout import random_rollout_action_sampler
+from POMDPPlanners.planners.planners_utils.rollout import (
+    python_random_rollout,
+    random_rollout_action_sampler,
+)
 
 # Set seeds for reproducible tests
 np.random.seed(42)
@@ -760,3 +764,47 @@ def test_rollout_action_sampler_integration():
         assert isinstance(rollout_value, float), f"Sampler {i} should return float value"
         # Values should be reasonable regardless of action space size
         assert -300 <= rollout_value <= 50, f"Sampler {i} value {rollout_value} outside range"
+
+
+class _NextStateProbeTigerPOMDP(TigerPOMDP):
+    """TigerPOMDP probe that reports whether the realised next_state is threaded.
+
+    Returns +1.0 when ``reward(...)`` is called with a non-None ``next_state``
+    and -1.0 otherwise. Used to verify that planner code threads the realised
+    transition outcome into ``Environment.reward``.
+    """
+
+    def reward(self, state: str, action: str, next_state: Any = None) -> float:
+        return 1.0 if next_state is not None else -1.0
+
+
+def test_python_random_rollout_threads_realised_next_state_to_reward():
+    """Test that python_random_rollout passes the sampled next_state to reward().
+
+    Purpose: Validates that the rollout helper threads the realised
+        post-transition state into Environment.reward(...) instead of dropping
+        it (which would force envs with transition-dependent rewards to
+        resample internally and diverge from the trajectory).
+
+    Given: A TigerPOMDP-derived probe whose reward returns +1 when
+        next_state is provided and -1 otherwise, plus a deterministic
+        action sampler driving a max_depth=4 rollout.
+    When: python_random_rollout is executed.
+    Then: The discounted return is strictly positive, proving every
+        per-step reward call received the realised next_state.
+
+    Test type: unit
+    """
+    env = _NextStateProbeTigerPOMDP(discount_factor=1.0)
+    sampler = DeterministicActionSampler("listen")
+
+    rollout_value = python_random_rollout(
+        state="tiger_left",
+        depth=0,
+        action_sampler=sampler,
+        environment=env,
+        discount_factor=1.0,
+        max_depth=4,
+    )
+
+    assert rollout_value == pytest.approx(4.0)
