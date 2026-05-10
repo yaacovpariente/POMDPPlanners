@@ -22,7 +22,7 @@ def python_random_rollout(
         return 0.0
     action = action_sampler.sample()
     next_state = environment.sample_next_state(state=state, action=action)
-    reward = environment.reward(state=state, action=action)
+    reward = environment.reward(state=state, action=action, next_state=next_state)
     return reward + discount_factor * python_random_rollout(
         state=next_state,
         depth=depth + 1,

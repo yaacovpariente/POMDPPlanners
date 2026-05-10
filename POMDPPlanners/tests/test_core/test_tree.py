@@ -67,7 +67,7 @@ class MockEnvironment(Environment):
         """Check if state is terminal."""
         return False
 
-    def reward(self, state, action):
+    def reward(self, state, action, next_state=None):
         """Return reward for state transition."""
         return 0.0
 

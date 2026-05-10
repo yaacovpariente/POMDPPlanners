@@ -412,25 +412,45 @@ class ContinuousPushPOMDP(Environment):
             dtype=np.float64,
         )
 
-    def reward(self, state: np.ndarray, action: np.ndarray) -> float:
+    def reward(self, state: np.ndarray, action: np.ndarray, next_state: Any = None) -> float:
         # Single-state reward routes through the same vectorised path used
         # by reward_batch — wrap the state as a (1, 6) row, reuse the
         # cached kernel, and unpack the scalar.
         state_arr = np.ascontiguousarray(np.asarray(state, dtype=np.float64)).reshape(1, -1)
         action_arr = np.ascontiguousarray(np.asarray(action, dtype=np.float64)).ravel()
-        rewards = self._reward_batch_array(state_arr, action_arr)
+        if next_state is None:
+            next_states_arr = None
+        else:
+            next_states_arr = np.ascontiguousarray(
+                np.asarray(next_state, dtype=np.float64)
+            ).reshape(1, -1)
+        rewards = self._reward_batch_array(state_arr, action_arr, next_states_arr)
         return float(rewards[0])
 
     def reward_batch(
-        self, states: Union[np.ndarray, Sequence[Any]], action: np.ndarray
+        self,
+        states: Union[np.ndarray, Sequence[Any]],
+        action: np.ndarray,
+        next_states: Optional[Union[np.ndarray, Sequence[Any]]] = None,
     ) -> np.ndarray:
         states_arr = np.ascontiguousarray(np.asarray(states, dtype=np.float64))
         if states_arr.ndim == 1:
             states_arr = states_arr.reshape(1, -1)
         action_arr = np.ascontiguousarray(np.asarray(action, dtype=np.float64)).ravel()
-        return self._reward_batch_array(states_arr, action_arr)
+        if next_states is None:
+            next_states_arr = None
+        else:
+            next_states_arr = np.ascontiguousarray(np.asarray(next_states, dtype=np.float64))
+            if next_states_arr.ndim == 1:
+                next_states_arr = next_states_arr.reshape(1, -1)
+        return self._reward_batch_array(states_arr, action_arr, next_states_arr)
 
-    def _reward_batch_array(self, states: np.ndarray, action: np.ndarray) -> np.ndarray:
+    def _reward_batch_array(
+        self,
+        states: np.ndarray,
+        action: np.ndarray,
+        next_states: Optional[np.ndarray] = None,
+    ) -> np.ndarray:
         """Vectorised reward computation reusing the cached transition kernel.
 
         ``states`` must be ``(N, 6)`` C-contiguous float64 and ``action``
@@ -920,15 +940,20 @@ class ContinuousPushPOMDPDiscreteActions(ContinuousPushPOMDP, DiscreteActionsEnv
     def get_actions(self) -> List[str]:
         return self.actions
 
-    def reward(self, state: np.ndarray, action: Any) -> float:
+    def reward(self, state: np.ndarray, action: Any, next_state: Any = None) -> float:
         if isinstance(action, str):
             action = self.action_to_vector[action]
-        return super().reward(state, action)
+        return super().reward(state, action, next_state=next_state)
 
-    def reward_batch(self, states: Union[np.ndarray, Sequence[Any]], action: Any) -> np.ndarray:
+    def reward_batch(
+        self,
+        states: Union[np.ndarray, Sequence[Any]],
+        action: Any,
+        next_states: Optional[Union[np.ndarray, Sequence[Any]]] = None,
+    ) -> np.ndarray:
         if isinstance(action, str):
             action = self.action_to_vector[action]
-        return super().reward_batch(states, action)
+        return super().reward_batch(states, action, next_states=next_states)
 
     def sample_next_state(self, state: np.ndarray, action: Any, n_samples: int = 1) -> Any:
         return super().sample_next_state(state, self.action_to_vector[action], n_samples=n_samples)

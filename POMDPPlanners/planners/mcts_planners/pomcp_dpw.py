@@ -155,7 +155,7 @@ class POMCP_DPW(ArenaDoubleProgressiveWideningMCTSPolicy):
         action_visits = tree.visit_count[action_id]
         if children_count <= self.k_o * action_visits**self.alpha_o:
             next_state = self.environment.sample_next_state(state=state, action=action)
-            reward = self.environment.reward(state=state, action=action)
+            reward = self.environment.reward(state=state, action=action, next_state=next_state)
             next_observation = self.environment.sample_observation(
                 next_state=next_state, action=action
             )
@@ -196,7 +196,7 @@ class POMCP_DPW(ArenaDoubleProgressiveWideningMCTSPolicy):
         else:
             next_belief_id = tree.sample_belief_child(action_id)
             next_state = tree.belief[next_belief_id].sample()
-            reward = self.environment.reward(state=state, action=action)
+            reward = self.environment.reward(state=state, action=action, next_state=next_state)
             total = reward + self.discount_factor * self._simulate_state_path(
                 tree=tree, state=next_state, belief_id=next_belief_id, depth=depth + 1
             )

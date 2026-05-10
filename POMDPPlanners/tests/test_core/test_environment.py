@@ -9,7 +9,7 @@ This module tests the environment base classes, focusing on:
 
 import random
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, List, Optional
 
 import numpy as np
 import pytest
@@ -72,7 +72,7 @@ class MockEnvironment(Environment):
     def observation_log_probability(self, next_state, action, observations) -> np.ndarray:
         return np.zeros(len(observations))
 
-    def reward(self, state: np.ndarray, action: np.ndarray) -> float:
+    def reward(self, state: np.ndarray, action: np.ndarray, next_state: Any = None) -> float:
         return 1.0
 
     def is_terminal(self, state: np.ndarray) -> bool:
@@ -125,7 +125,7 @@ class DifferentEnvironment(Environment):
     def observation_log_probability(self, next_state, action, observations) -> np.ndarray:
         return np.zeros(len(observations))
 
-    def reward(self, state: np.ndarray, action: np.ndarray) -> float:
+    def reward(self, state: np.ndarray, action: np.ndarray, next_state: Any = None) -> float:
         return 1.0
 
     def is_terminal(self, state: np.ndarray) -> bool:
