@@ -63,7 +63,8 @@ class MockEnvironment(Environment):
         del next_state, action
         return np.zeros(len(observations))
 
-    def reward(self, state, action):
+    def reward(self, state, action, next_state=None):
+        del state, action, next_state
         return 0.0
 
     def is_terminal(self, state):

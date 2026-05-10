@@ -533,12 +533,12 @@ def test_simulate_state_path_saturated_branch_uses_parent_state_for_reward(
     )
     tree.visit_count[child_id] = 1
 
-    captured_states = []
+    captured_calls = []
     real_reward = environment.reward
 
-    def spy_reward(state, action):
-        captured_states.append(state)
-        return real_reward(state=state, action=action)
+    def spy_reward(state, action, next_state=None):
+        captured_calls.append((state, next_state))
+        return real_reward(state=state, action=action, next_state=next_state)
 
     environment.reward = spy_reward
     try:
@@ -546,13 +546,87 @@ def test_simulate_state_path_saturated_branch_uses_parent_state_for_reward(
     finally:
         environment.reward = real_reward
 
+    captured_states = [s for s, _ in captured_calls]
+    captured_next_states = [ns for _, ns in captured_calls]
     assert parent_state in captured_states, (
         f"saturated branch must call environment.reward(state=parent_state); "
         f"captured states: {captured_states}"
     )
     assert particle_state not in captured_states, (
         f"saturated branch must not call environment.reward with the sampled "
-        f"next_state from the belief child; captured states: {captured_states}"
+        f"next_state as the parent state; captured states: {captured_states}"
+    )
+    assert particle_state in captured_next_states, (
+        f"saturated branch must thread the sampled next_state into "
+        f"environment.reward(..., next_state=...); captured next_states: "
+        f"{captured_next_states}"
+    )
+
+
+def test_simulate_state_path_widening_branch_threads_next_state_to_reward(
+    planner, environment, belief
+):
+    """Widening DPW branch must thread the freshly sampled next_state into reward().
+
+    Purpose: Pins reward semantics in the DPW widening branch
+        (``pomcp_dpw.py`` line 158). After ``sample_next_state`` draws the
+        post-transition state, ``environment.reward`` must be called with
+        ``next_state=`` set to that draw so transition-dependent reward
+        terms (collision penalties, win bonuses) score against the same
+        outcome as the trajectory rather than resampling.
+
+    Given: A POMCP_DPW tree whose root action child has zero existing
+        belief children and ``visit_count=1``, with ``k_o=10`` /
+        ``alpha_o=1.0`` so ``children_count <= k_o * action_visits**alpha_o``
+        holds and the widening branch fires; ``k_a=0.1`` / ``alpha_a=0.5``
+        so action widening does not add a new action; ``depth=0`` so the
+        recursive call short-circuits at depth=1.
+    When: ``_simulate_state_path`` runs from the root with ``parent_state``.
+    Then: ``environment.reward`` is invoked with ``state=parent_state`` and
+        ``next_state`` set to a non-None value (the just-sampled draw).
+
+    Test type: unit
+    """
+    parent_state = "tiger_left"
+    action_label = "listen"
+
+    planner.k_o = 10.0
+    planner.alpha_o = 1.0
+    planner.k_a = 0.1
+    planner.alpha_a = 0.5
+    planner.depth = 0
+
+    tree = Tree()
+    root_id = tree.add_belief_node(belief)
+    tree.visit_count[root_id] = 1
+
+    action_id = tree.add_action_node(action=action_label, parent_id=root_id)
+    tree.visit_count[action_id] = 1
+
+    captured_calls = []
+    real_reward = environment.reward
+
+    def spy_reward(state, action, next_state=None):
+        captured_calls.append((state, next_state))
+        return real_reward(state=state, action=action, next_state=next_state)
+
+    environment.reward = spy_reward
+    try:
+        planner._simulate_state_path(tree=tree, state=parent_state, belief_id=root_id, depth=0)
+    finally:
+        environment.reward = real_reward
+
+    assert captured_calls, "widening branch did not invoke environment.reward"
+    states = [s for s, _ in captured_calls]
+    next_states = [ns for _, ns in captured_calls]
+    assert parent_state in states, (
+        f"widening branch must call environment.reward(state=parent_state); "
+        f"captured states: {states}"
+    )
+    assert any(ns is not None for ns in next_states), (
+        f"widening branch must thread the sampled next_state into "
+        f"environment.reward(..., next_state=...); captured next_states: "
+        f"{next_states}"
     )
 
 

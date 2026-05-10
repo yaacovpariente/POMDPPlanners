@@ -443,11 +443,18 @@ void apply_transition(const TransitionEnv &env, int action, double *next_state,
     next_state[env.idx_pac_row] = static_cast<double>(new_pac_r);
     next_state[env.idx_pac_col] = static_cast<double>(new_pac_c);
 
-    // Collision check — terminal if pacman is at any ghost position.
+    // Collision check — terminal if pacman lands on a ghost (same-cell)
+    // OR pacman and a ghost swap cells in this step (a ghost that was
+    // previously at pacman's new cell ends up on pacman's old cell).
+    // Both arcs of the standard Pacman collision rule must be detected;
+    // omitting the swap arc lets a ghost walk through pacman.
     for (int g = 0; g < env.num_ghosts; ++g) {
         const int gr = static_cast<int>(next_state[env.idx_ghosts_start + 2 * g]);
         const int gc = static_cast<int>(next_state[env.idx_ghosts_start + 2 * g + 1]);
-        if (gr == new_pac_r && gc == new_pac_c) {
+        const bool same_cell = (gr == new_pac_r && gc == new_pac_c);
+        const bool swap = (ghost_rs[g] == new_pac_r && ghost_cs[g] == new_pac_c &&
+                           gr == pac_r && gc == pac_c);
+        if (same_cell || swap) {
             next_state[env.idx_terminal] = 1.0;
             return;
         }
@@ -478,8 +485,45 @@ void apply_transition(const TransitionEnv &env, int action, double *next_state,
 // Transition probability helpers (exact Python parity).
 // ---------------------------------------------------------------------------
 
+// Probability mass concentrated on argmin moves under a per-move scoring
+// function. Ties are split uniformly. ``score_fn`` returns the score for
+// the move that would land at (nr, nc) from (cur_r, cur_c).
+template <typename ScoreFn>
+inline double argmin_probability(const TransitionEnv &env, const int moves[], int n, int cur_r,
+                                 int cur_c, int tgt_r, int tgt_c, ScoreFn score_fn) {
+    double best_score = std::numeric_limits<double>::infinity();
+    int n_ties = 0;
+    bool target_is_tied = false;
+    for (int i = 0; i < n; ++i) {
+        const int m = moves[i];
+        const int nr = env.neighbor_table.row_of(cur_r, cur_c, m);
+        const int nc = env.neighbor_table.col_of(cur_r, cur_c, m);
+        const double s = score_fn(nr, nc);
+        if (s < best_score) {
+            best_score = s;
+            n_ties = 1;
+            target_is_tied = (nr == tgt_r && nc == tgt_c);
+        } else if (s == best_score) {
+            n_ties += 1;
+            if (nr == tgt_r && nc == tgt_c) {
+                target_is_tied = true;
+            }
+        }
+    }
+    if (!target_is_tied || n_ties <= 0) {
+        return 0.0;
+    }
+    return 1.0 / static_cast<double>(n_ties);
+}
+
 // Probability of a single ghost moving from current to target under its
-// assigned strategy (Python `_single_ghost_move_probability`).
+// assigned strategy (Python `_single_ghost_move_probability`). Ambush,
+// Coordinated, and the Coordinated branch of Mixed are deterministic
+// argmin policies; Patrol is deterministic on its current direction
+// when valid and uniform over the fallback set otherwise. Aggressive
+// uses softmax. Returning ``1/n`` for any non-Aggressive strategy (the
+// previous behaviour) misrepresented those distributions and silently
+// corrupted belief updates.
 double single_ghost_move_probability(const TransitionEnv &env, int ghost_id, int cur_r, int cur_c,
                                      int tgt_r, int tgt_c, int pacman_r, int pacman_c) {
     int moves[kNumMoves];
@@ -502,18 +546,71 @@ double single_ghost_move_probability(const TransitionEnv &env, int ghost_id, int
     if (target_idx < 0) {
         return 0.0;
     }
-    // Dispatch on coordination mode — Python's `_single_ghost_move_probability`.
+    // Dispatch on coordination mode — same predicate as ``move_one_ghost``.
     const GhostCoord coord = env.ghost_coordination;
     const bool use_coord_branch =
         (coord == GhostCoord::Coordinated) ||
         (coord == GhostCoord::Mixed && (ghost_id % 2 == 0));
     if (use_coord_branch) {
-        // `_coordinated_ghost_move_probability` — uniform over possible moves.
-        return 1.0 / static_cast<double>(n);
+        // Coordinated: ghost 0 chases pacman, others move toward predicted
+        // pacman escape route. Both use ``move_toward_target`` =
+        // deterministic argmin over Manhattan distance.
+        int target_r;
+        int target_c;
+        if (ghost_id == 0) {
+            target_r = pacman_r;
+            target_c = pacman_c;
+        } else {
+            // Reconstruct ``predict_pacman_escape_route`` requires all
+            // ghost positions; not available from the (cur_r, cur_c)
+            // signature alone. Fall back to ``move_toward_target`` from
+            // pacman's position as a conservative deterministic proxy
+            // when the caller did not pre-resolve the escape target.
+            // NOTE: callers that need exact coordinated-multi-ghost
+            // probabilities should resolve the escape target externally.
+            target_r = pacman_r;
+            target_c = pacman_c;
+        }
+        return argmin_probability(env, moves, n, cur_r, cur_c, tgt_r, tgt_c,
+                                  [&](int nr, int nc) {
+                                      return static_cast<double>(manhattan(nr, nc, target_r,
+                                                                           target_c));
+                                  });
     }
-    // Independent branch.
+    // Independent branch — dispatch on per-ghost strategy.
     const GhostStrategy strat = env.ghost_strategies[static_cast<std::size_t>(ghost_id)];
-    if (strat == GhostStrategy::Patrol || strat == GhostStrategy::Ambush) {
+    if (strat == GhostStrategy::Ambush) {
+        return argmin_probability(env, moves, n, cur_r, cur_c, tgt_r, tgt_c,
+                                  [&](int nr, int nc) {
+                                      const int dist = manhattan(nr, nc, pacman_r, pacman_c);
+                                      return (dist >= 2 && dist <= 4)
+                                                 ? static_cast<double>(dist)
+                                                 : static_cast<double>(dist + 10);
+                                  });
+    }
+    if (strat == GhostStrategy::Patrol) {
+        // Deterministic on current patrol_dir when its target is valid;
+        // otherwise rotates dir and uniform-samples from valid moves.
+        // Read patrol_dir without mutating (mutation only happens inside
+        // ``move_patrol`` when the fallback fires).
+        static constexpr int kPatrolDR[4] = {0, 1, 0, -1};
+        static constexpr int kPatrolDC[4] = {-1, 0, 1, 0};
+        const int dir = env.patrol_dir_state[ghost_id];
+        const int patrol_r = cur_r + kPatrolDR[dir];
+        const int patrol_c = cur_c + kPatrolDC[dir];
+        bool patrol_target_valid = false;
+        for (int i = 0; i < n; ++i) {
+            const int m = moves[i];
+            const int nr = env.neighbor_table.row_of(cur_r, cur_c, m);
+            const int nc = env.neighbor_table.col_of(cur_r, cur_c, m);
+            if (nr == patrol_r && nc == patrol_c) {
+                patrol_target_valid = true;
+                break;
+            }
+        }
+        if (patrol_target_valid) {
+            return (tgt_r == patrol_r && tgt_c == patrol_c) ? 1.0 : 0.0;
+        }
         return 1.0 / static_cast<double>(n);
     }
     // Aggressive — softmax over Manhattan distance to pacman.
@@ -665,11 +762,9 @@ class PacManTransitionCpp {
         double expected_score = cur_score;
         std::vector<bool> expected_active = cur_active;
         const int collected_pellet_idx = env_.pellet_positions.index_of(new_pac_r, new_pac_c);
-        bool pellet_collected_in_expected = false;
         if (collected_pellet_idx >= 0 && cur_active[collected_pellet_idx]) {
             expected_active[collected_pellet_idx] = false;
             expected_score += env_.pellet_reward;
-            pellet_collected_in_expected = true;
         }
 
         double total = 0.0;
@@ -712,11 +807,19 @@ class PacManTransitionCpp {
                 continue;
             }
             // 4. Terminal validity — collision OR all pellets collected.
+            // Collision detection mirrors apply_transition: same-cell
+            // collision OR pacman-ghost swap (a ghost that was at
+            // pacman's new cell ends up on pacman's old cell).
             bool collision = false;
             for (int g = 0; g < env_.num_ghosts; ++g) {
+                const int cur_gr = static_cast<int>(state_u(env_.idx_ghosts_start + 2 * g));
+                const int cur_gc = static_cast<int>(state_u(env_.idx_ghosts_start + 2 * g + 1));
                 const int tgt_gr = static_cast<int>(row[env_.idx_ghosts_start + 2 * g]);
                 const int tgt_gc = static_cast<int>(row[env_.idx_ghosts_start + 2 * g + 1]);
-                if (tgt_gr == new_pac_r && tgt_gc == new_pac_c) {
+                const bool same_cell = (tgt_gr == new_pac_r && tgt_gc == new_pac_c);
+                const bool swap = (cur_gr == new_pac_r && cur_gc == new_pac_c &&
+                                   tgt_gr == pac_r && tgt_gc == pac_c);
+                if (same_cell || swap) {
                     collision = true;
                     break;
                 }
@@ -735,7 +838,6 @@ class PacManTransitionCpp {
                 obuf(static_cast<py::ssize_t>(i)) = 0.0;
                 continue;
             }
-            (void)pellet_collected_in_expected;
             obuf(static_cast<py::ssize_t>(i)) = ghost_prob;
             total += ghost_prob;
         }
@@ -745,11 +847,17 @@ class PacManTransitionCpp {
                 obuf(static_cast<py::ssize_t>(i)) /= total;
             }
         }
-        // Symmetric defensive flooring: keep impossible candidates from
-        // emitting np.log(0) = -inf through the env API (mirrors the
-        // log-floor applied in batch_log_likelihood paths elsewhere).
+        // Defensive flooring: keep ``np.log(prob)`` finite for candidates
+        // that are *physically possible* but received a normalised mass
+        // below the floor (numeric underflow). True zeros — candidates
+        // ruled out by the validity checks above — must remain zero so
+        // they propagate as -inf log-probability and contribute zero
+        // importance weight; flooring them silently turns impossible
+        // candidates into improbable-but-allowed ones, breaking the
+        // sum-to-1 invariant of the normalised distribution.
         for (std::size_t i = 0; i < n; ++i) {
-            if (obuf(static_cast<py::ssize_t>(i)) < kProbFloor) {
+            const double p = obuf(static_cast<py::ssize_t>(i));
+            if (p > 0.0 && p < kProbFloor) {
                 obuf(static_cast<py::ssize_t>(i)) = kProbFloor;
             }
         }
@@ -890,7 +998,41 @@ inline void sample_observation_into(const ObservationEnv &env, const double *nex
     }
 }
 
+// Discrete log-probability mass of a single observation coordinate ``obs``
+// (an integer in [0, max_coord]) under a Gaussian centred at ``mean`` with
+// ``std`` standard deviation, after the round-and-clamp pipeline used by
+// the sampler. Bin (k) for 0 < k < max_coord covers (k-0.5, k+0.5];
+// bin 0 absorbs everything <= 0.5; bin max_coord absorbs everything
+// >= max_coord - 0.5. Computed via the standard normal CDF expressed as
+// std::erf to keep the implementation header-only.
+inline double clamped_round_log_prob(double obs, double mean, double std, int max_coord) {
+    const int k = static_cast<int>(obs);
+    if (k < 0 || k > max_coord) {
+        return -std::numeric_limits<double>::infinity();
+    }
+    const double inv_sqrt2_std = 1.0 / (std * std::sqrt(2.0));
+    auto cdf = [&](double x) { return 0.5 * (1.0 + std::erf((x - mean) * inv_sqrt2_std)); };
+    double mass;
+    if (k == 0) {
+        // (-inf, 0.5]
+        mass = cdf(0.5);
+    } else if (k == max_coord) {
+        // [max_coord - 0.5, +inf)
+        mass = 1.0 - cdf(static_cast<double>(max_coord) - 0.5);
+    } else {
+        // (k - 0.5, k + 0.5]
+        mass = cdf(static_cast<double>(k) + 0.5)
+               - cdf(static_cast<double>(k) - 0.5);
+    }
+    if (mass <= 0.0) {
+        return -std::numeric_limits<double>::infinity();
+    }
+    return std::log(mass);
+}
+
 // Log-likelihood of an observation given a (potentially terminal) next_state.
+// Matches the round-and-clamp sampling pipeline: per-axis discrete bin mass
+// from the Gaussian centred on the true ghost position, summed over ghosts.
 inline double observation_log_pdf(const ObservationEnv &env, const double *next_state,
                                   const double *observation) {
     const bool state_terminal = next_state[env.idx_terminal] > 0.5;
@@ -921,13 +1063,14 @@ inline double observation_log_pdf(const ObservationEnv &env, const double *next_
         const int gr = static_cast<int>(next_state[env.idx_ghosts_start + 2 * g]);
         const int gc = static_cast<int>(next_state[env.idx_ghosts_start + 2 * g + 1]);
         const double noise_std = observation_noise_std(env, gr, gc, pacman_r, pacman_c);
-        const double variance = noise_std * noise_std;
-        const double dr = obs_r - static_cast<double>(gr);
-        const double dc = obs_c - static_cast<double>(gc);
-        const double dist_sq = dr * dr + dc * dc;
-        // Isotropic 2-D Gaussian log-PDF: -log(2 pi variance) - dist_sq / (2 variance).
-        const double log_norm = -std::log(2.0 * M_PI * variance);
-        total_log += log_norm - dist_sq / (2.0 * variance);
+        const double log_p_row = clamped_round_log_prob(obs_r, static_cast<double>(gr),
+                                                        noise_std, env.maze_rows - 1);
+        const double log_p_col = clamped_round_log_prob(obs_c, static_cast<double>(gc),
+                                                        noise_std, env.maze_cols - 1);
+        if (!std::isfinite(log_p_row) || !std::isfinite(log_p_col)) {
+            return -std::numeric_limits<double>::infinity();
+        }
+        total_log += log_p_row + log_p_col;
     }
     return total_log;
 }
@@ -1100,13 +1243,23 @@ double simulate_rollout_impl(
         // Reward: step_penalty is always applied (matches Python).
         double r = step_penalty;
 
-        // Ghost collision: check if pacman landed on any ghost.
+        // Ghost collision: same-cell collision OR pacman-ghost swap, to
+        // match the canonical Pacman collision rule (see apply_transition
+        // for the matching predicate). The pre-transition pacman/ghost
+        // positions live in ``current`` (we have not yet swapped buffers).
         const int new_pac_r = static_cast<int>(next[env.idx_pac_row]);
         const int new_pac_c = static_cast<int>(next[env.idx_pac_col]);
+        const int prev_pac_r = static_cast<int>(current[env.idx_pac_row]);
+        const int prev_pac_c = static_cast<int>(current[env.idx_pac_col]);
         for (int g = 0; g < env.num_ghosts; ++g) {
             const int gr = static_cast<int>(next[env.idx_ghosts_start + 2 * g]);
             const int gc = static_cast<int>(next[env.idx_ghosts_start + 2 * g + 1]);
-            if (gr == new_pac_r && gc == new_pac_c) {
+            const int prev_gr = static_cast<int>(current[env.idx_ghosts_start + 2 * g]);
+            const int prev_gc = static_cast<int>(current[env.idx_ghosts_start + 2 * g + 1]);
+            const bool same_cell = (gr == new_pac_r && gc == new_pac_c);
+            const bool swap = (prev_gr == new_pac_r && prev_gc == new_pac_c &&
+                               gr == prev_pac_r && gc == prev_pac_c);
+            if (same_cell || swap) {
                 r += ghost_collision_penalty;
                 break;
             }

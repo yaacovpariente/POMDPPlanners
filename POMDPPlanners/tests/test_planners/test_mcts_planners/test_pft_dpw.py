@@ -747,7 +747,8 @@ class _StepCountingEnv(Environment):
     ) -> np.ndarray:
         return np.zeros(len(observations))
 
-    def reward(self, state: Any, action: Any) -> float:
+    def reward(self, state: Any, action: Any, next_state: Any = None) -> float:
+        del state, action, next_state
         return 1.0
 
     def is_terminal(self, state: Any) -> bool:

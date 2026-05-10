@@ -338,9 +338,21 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
         """Get all available actions."""
         return list(range(len(self.action_names)))
 
-    def reward(self, state: RockSampleState, action: int) -> float:
-        """Calculate immediate reward."""
-        next_state = self.sample_next_state(state=state, action=action)
+    def reward(
+        self,
+        state: RockSampleState,
+        action: int,
+        next_state: Any = None,
+    ) -> float:
+        """Calculate immediate reward.
+
+        Uses the realised ``next_state`` when supplied (e.g. by
+        :meth:`Environment.sample_next_step`) so the dangerous-area
+        penalty fires against the same outcome as the trajectory
+        instead of a fresh draw.
+        """
+        if next_state is None:
+            next_state = self.sample_next_state(state=state, action=action)
         return self._reward_from_next_state(state, action, next_state)
 
     def _reward_from_next_state(
@@ -375,21 +387,22 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
 
         return total_reward
 
-    def reward_batch(self, states: Any, action: int) -> np.ndarray:
+    def reward_batch(
+        self,
+        states: Any,
+        action: int,
+        next_states: Any = None,
+    ) -> np.ndarray:
         """Calculate rewards for a batch of states given a single action.
 
         Since RockSample transitions are deterministic, next states are
         computed in a single vectorised native call and the reward formula
         is applied with pure NumPy operations — no Python loop over
-        particles.
-
-        Args:
-            states: Sequence / array of states, shape ``(N, 2 + num_rocks)``.
-            action: Discrete action integer.
-
-        Returns:
-            1-D ``float64`` array of shape ``(N,)``.
+        particles. ``next_states`` is accepted for interface compatibility
+        and ignored (the dangerous-area penalty draw is made internally
+        in the vectorised path).
         """
+        del next_states
         states_array = np.ascontiguousarray(np.asarray(states, dtype=np.float64))
         if states_array.ndim == 1:
             states_array = states_array.reshape(1, -1)

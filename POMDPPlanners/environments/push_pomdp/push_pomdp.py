@@ -601,9 +601,13 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
         dy = float(observation[3]) - float(next_state[3])
         return self._obs_log_norm - 0.5 * (dx * dx + dy * dy) / self._obs_variance
 
-    def reward(self, state: np.ndarray, action: str) -> float:
-        # Compute next state to evaluate reward based on action result.
-        next_state = self.sample_next_state(state, action)
+    def reward(self, state: np.ndarray, action: str, next_state: Any = None) -> float:
+        # Use the realised ``next_state`` when supplied (e.g. by
+        # :meth:`Environment.sample_next_step`) so the obstacle/danger
+        # penalty fires against the same draw as the trajectory; otherwise
+        # sample a fresh next state to evaluate the action result.
+        if next_state is None:
+            next_state = self.sample_next_state(state, action)
         return self._reward_from_next_state(state, action, next_state)
 
     def _reward_from_next_state(
@@ -808,25 +812,30 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
             states_array = states_array.reshape(1, -1)
         return self._get_vectorized_updater().batch_transition(states_array, action)
 
-    def reward_batch(self, states: Any, action: str) -> np.ndarray:
+    def reward_batch(
+        self,
+        states: Any,
+        action: str,
+        next_states: Any = None,
+    ) -> np.ndarray:
         """Calculate rewards for a batch of states given a single action.
 
-        Samples N next states in one vectorised call via the cached
-        ``PushVectorizedUpdater``, then computes per-particle rewards with
-        pure NumPy operations — no Python loop over particles.
-
-        Args:
-            states: Sequence / array of states, shape ``(N, 6)``.
-            action: Discrete action string ("up", "down", "right", "left").
-
-        Returns:
-            1-D ``float64`` array of shape ``(N,)``.
+        When ``next_states`` is supplied (e.g. by a caller that has
+        already sampled the realised batch transition), it is used
+        directly; otherwise N next states are drawn here via the cached
+        ``PushVectorizedUpdater``. Per-particle rewards are then computed
+        with pure NumPy operations — no Python loop over particles.
         """
         states_array = np.ascontiguousarray(np.asarray(states, dtype=float))
         if states_array.ndim == 1:
             states_array = states_array.reshape(1, -1)
-        next_states = self._get_vectorized_updater().batch_transition(states_array, action)
-        return self._reward_batch_from_next_states(states_array, action, next_states)
+        if next_states is None:
+            next_states_arr = self._get_vectorized_updater().batch_transition(states_array, action)
+        else:
+            next_states_arr = np.ascontiguousarray(np.asarray(next_states, dtype=float))
+            if next_states_arr.ndim == 1:
+                next_states_arr = next_states_arr.reshape(1, -1)
+        return self._reward_batch_from_next_states(states_array, action, next_states_arr)
 
     def _reward_batch_from_next_states(
         self, states: np.ndarray, action: str, next_states: np.ndarray

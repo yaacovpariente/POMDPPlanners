@@ -336,7 +336,8 @@ class TestHyperParameterRunParamsIdUniqueness:
             def observation_log_probability(self, next_state, action, observations):  # type: ignore[override]
                 return np.zeros(len(observations))
 
-            def reward(self, state, action):
+            def reward(self, state, action, next_state=None):
+                del state, action, next_state
                 return 0.0
 
             def is_terminal(self, state):
@@ -436,7 +437,8 @@ class TestHyperParameterRunParamsIdUniqueness:
             def observation_log_probability(self, next_state, action, observations):  # type: ignore[override]
                 return np.zeros(len(observations))
 
-            def reward(self, state, action):
+            def reward(self, state, action, next_state=None):
+                del state, action, next_state
                 return 0.0
 
             def is_terminal(self, state):
@@ -540,7 +542,8 @@ class TestHyperParameterRunParamsIdUniqueness:
             def observation_log_probability(self, next_state, action, observations):  # type: ignore[override]
                 return np.zeros(len(observations))
 
-            def reward(self, state, action):
+            def reward(self, state, action, next_state=None):
+                del state, action, next_state
                 return 0.0
 
             def is_terminal(self, state):
@@ -646,7 +649,8 @@ class TestHyperParameterRunParamsIdUniqueness:
             def observation_log_probability(self, next_state, action, observations):  # type: ignore[override]
                 return np.zeros(len(observations))
 
-            def reward(self, state, action):
+            def reward(self, state, action, next_state=None):
+                del state, action, next_state
                 return 0.0
 
             def is_terminal(self, state):
@@ -1115,7 +1119,8 @@ class TestOptimizedPolicyResultValidation:
             def observation_log_probability(self, next_state, action, observations):  # type: ignore[override]
                 return np.zeros(len(observations))
 
-            def reward(self, state, action):
+            def reward(self, state, action, next_state=None):
+                del state, action, next_state
                 return 0.0
 
             def is_terminal(self, state):
