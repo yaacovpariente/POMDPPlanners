@@ -474,7 +474,12 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
         if dx == 0 and dy == 0:
             reward += self.goal_reward
         elif (nx, ny) in self._obstacle_tuples:
-            if random.random() < self.obstacle_hit_probability:
+            # Use numpy RNG to stay on the same stream as ``reward()`` —
+            # mixing ``random`` and ``np.random`` would split the obstacle
+            # Bernoulli into two independent draws, so ``sample_next_step``
+            # and ``reward(state, action, next_state)`` would disagree on
+            # the same triple.
+            if np.random.rand() < self.obstacle_hit_probability:
                 reward += self.obstacle_reward
         elif nx < 0 or ny < 0 or nx > self.grid_size or ny > self.grid_size:
             reward += self.obstacle_reward
@@ -778,7 +783,18 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
         # ``is_stochastic_reward`` is False the Python ``reward()`` path
         # would deterministically apply the obstacle penalty (rather than
         # drawing a Bernoulli) — fall back to Python in that case.
-        if not self.is_stochastic_reward:
+        # Also bypass when obstacles are configured AND transitions are
+        # stochastic: the C++ kernel scores the obstacle penalty against
+        # the *intended* action offset (state + action_vector), while the
+        # Python ``reward()`` path now consults the realised next_state.
+        # Until ``discrete_simulate_rollout`` is rebuilt to consume the
+        # realised position, route around it whenever the divergence can
+        # actually fire (``transition_error_prob > 0`` makes the realised
+        # action differ from the intended one).
+        bypass_native_for_realised_pos = (
+            self.transition_error_prob > 0.0 and self._obstacles_flat.shape[0] > 0
+        )
+        if not self.is_stochastic_reward or bypass_native_for_realised_pos:
             return python_random_rollout(
                 state=state,
                 depth=depth,

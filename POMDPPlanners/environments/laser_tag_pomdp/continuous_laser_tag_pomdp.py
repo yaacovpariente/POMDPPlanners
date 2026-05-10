@@ -471,8 +471,16 @@ class ContinuousLaserTagPOMDP(Environment):
         penalty deterministically per step, which contradicts the
         stochastic semantics; routing through Python ``reward()`` keeps
         the per-step Bernoulli intact.
+
+        Also falls back when ``dangerous_areas`` is non-empty: the C++
+        ``cont_simulate_rollout`` kernel scores the danger penalty
+        against the *pre-transition* robot position, while the Python
+        ``reward()`` path (post-fix) consumes the realised post-transition
+        position. Until the C++ kernel is rebuilt this is the only
+        correctness-preserving path for configs with danger areas.
         """
-        if self.dangerous_area_hit_probability < 1.0:
+        has_dangerous_areas = self._dangerous_areas_arr.shape[0] > 0
+        if self.dangerous_area_hit_probability < 1.0 or has_dangerous_areas:
             return python_random_rollout(
                 state=state,
                 depth=depth,
