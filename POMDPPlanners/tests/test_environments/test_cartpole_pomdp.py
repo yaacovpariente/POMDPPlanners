@@ -16,6 +16,7 @@ import numpy as np
 import pytest
 
 from POMDPPlanners.environments.cartpole_pomdp import (
+    CartPoleInitialObservationDistribution,
     CartPoleInitialStateDistribution,
     CartPolePOMDP,
     _native,
@@ -526,8 +527,9 @@ def test_cartpole_pomdp_models():
     Given: A CartPolePOMDP environment and state [0.0, 0.0, 0.0, 0.0] with action 0
     When: env.sample_next_state, env.sample_observation, and env.initial_state_dist /
         env.initial_observation_dist are exercised
-    Then: sample methods return 4D float ndarrays and the initial distributions are
-        CartPoleInitialStateDistribution instances
+    Then: sample methods return 4D float ndarrays, ``initial_state_dist`` is a
+        ``CartPoleInitialStateDistribution`` and ``initial_observation_dist`` is a
+        ``CartPoleInitialObservationDistribution`` (state prior + obs noise)
 
     Test type: unit
     """
@@ -549,7 +551,7 @@ def test_cartpole_pomdp_models():
     assert isinstance(initial_dist, CartPoleInitialStateDistribution)
 
     initial_obs_dist = env.initial_observation_dist()
-    assert isinstance(initial_obs_dist, CartPoleInitialStateDistribution)
+    assert isinstance(initial_obs_dist, CartPoleInitialObservationDistribution)
 
 
 def test_cartpole_observation_model_probability_shape_single_observation():
@@ -1134,3 +1136,65 @@ def test_scalar_obs_log_prob_un_floored_matches_batch_after_fix() -> None:
     # Post symmetric C++ floor: both paths floor at log(1e-300) ~= -690.776
     # for events past the floor, so they agree exactly.
     np.testing.assert_allclose(scalar, batch, atol=1e-6)
+
+
+def test_initial_observation_dist_applies_obs_noise() -> None:
+    """initial_observation_dist marginalises state through the obs noise.
+
+    Purpose: Pins the post-fix contract that ``initial_observation_dist``
+        returns samples drawn from ``∫ p(o|s) p_0(s) ds`` rather than
+        ``p_0(s)`` directly. Pre-fix, the method aliased
+        ``CartPoleInitialStateDistribution`` and produced noise-free
+        states bounded by [-0.05, 0.05] per coordinate, which is
+        impossible under the env's continuous Gaussian obs model.
+
+    Given: A CartPolePOMDP env with diagonal ``noise_cov=diag(0.04)``
+        (std=0.2 per coord), seeded NumPy.
+    When: ``5000`` samples are drawn from ``initial_observation_dist``.
+    Then: At least one coordinate of at least one sample escapes the
+        ``[-0.05, 0.05]`` band of the raw state prior (proves noise was
+        added), the empirical mean is close to zero, and the empirical
+        variance is close to ``0.04`` per coordinate.
+
+    Test type: unit
+    """
+    np.random.seed(0)
+    noise_cov = np.eye(4) * 0.04
+    env = CartPolePOMDP(discount_factor=0.95, noise_cov=noise_cov)
+
+    samples = np.asarray(env.initial_observation_dist().sample(n_samples=5000))
+
+    assert samples.shape == (5000, 4)
+    # Raw state prior is bounded to [-0.05, 0.05]; with std=0.2 noise the
+    # observation must routinely escape that band.
+    assert (np.abs(samples) > 0.05).any()
+    np.testing.assert_allclose(samples.mean(axis=0), np.zeros(4), atol=0.02)
+    np.testing.assert_allclose(samples.var(axis=0), np.full(4, 0.04), atol=0.01)
+
+
+def test_is_equal_observation_tolerates_float_roundoff() -> None:
+    """is_equal_observation accepts numerically-close continuous obs.
+
+    Purpose: Pins the post-fix contract that two observations differing
+        only by float roundoff (e.g. an obs vs. itself after a no-op
+        arithmetic round-trip) compare equal, while clearly distinct
+        obs and exact copies retain the expected behavior.
+
+    Given: A CartPolePOMDP env and three observations: ``a``, an
+        identical copy ``a_copy``, a roundoff-perturbed ``a_eps``
+        (``a + 1e-12``), and a clearly different ``b``.
+    When: ``is_equal_observation`` is called on each pair.
+    Then: ``a == a_copy`` and ``a == a_eps`` return True; ``a == b``
+        returns False.
+
+    Test type: unit
+    """
+    env = CartPolePOMDP(discount_factor=0.95, noise_cov=np.eye(4) * 0.1)
+    a = np.array([0.1, -0.2, 0.03, -0.04])
+    a_copy = a.copy()
+    a_eps = a + 1e-12
+    b = np.array([0.1, -0.2, 0.03, 0.5])
+
+    assert env.is_equal_observation(a, a_copy)
+    assert env.is_equal_observation(a, a_eps)
+    assert not env.is_equal_observation(a, b)
