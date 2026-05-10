@@ -207,7 +207,8 @@ class POMCP(ArenaPathSimulationPolicy):
         tree.increment_visit_count(belief_id)
         tree.update_action_q_with_return(action_id, return_sample)
         # POMCP's v-backup is over visited children only (zero-visit children
-        # have no real estimate yet); doesn't fit ``backup_belief_v_from_children``.
+        # have no real estimate yet); a generic max(q[child]) form would
+        # always pick the unvisited q=0.0 entries.
         tree.v_value[belief_id] = float(
             np.max(
                 [

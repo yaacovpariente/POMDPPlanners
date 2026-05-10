@@ -203,5 +203,7 @@ class POMCP_DPW(ArenaDoubleProgressiveWideningMCTSPolicy):
 
         tree.increment_visit_count(belief_id)
         tree.update_action_q_with_return(action_id, total)
-        tree.backup_belief_v_from_children(belief_id)
+        children = tree.get_children_ids(belief_id)
+        if children:
+            tree.v_value[belief_id] = float(max(tree.get_q_value(cid) for cid in children))
         return total
