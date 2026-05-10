@@ -395,20 +395,33 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
     ) -> np.ndarray:
         """Calculate rewards for a batch of states given a single action.
 
-        Since RockSample transitions are deterministic, next states are
-        computed in a single vectorised native call and the reward formula
-        is applied with pure NumPy operations — no Python loop over
-        particles. ``next_states`` is accepted for interface compatibility
-        and ignored (the dangerous-area penalty draw is made internally
-        in the vectorised path).
+        Threads caller-supplied ``next_states`` through to the
+        dangerous-area position check so the batch path agrees with
+        the scalar :meth:`reward` whenever ``Environment.sample_next_step``
+        (or any other caller) pre-samples next states. When
+        ``next_states is None``, we fall back to closed-form
+        reconstruction of the next robot position from
+        ``(state, action)``; RockSample transitions are deterministic,
+        so this fallback matches a fresh draw from
+        :meth:`sample_next_state`. The per-call Bernoulli refund for
+        the dangerous-area penalty is preserved in both branches.
         """
-        del next_states
         states_array = np.ascontiguousarray(np.asarray(states, dtype=np.float64))
         if states_array.ndim == 1:
             states_array = states_array.reshape(1, -1)
-        return self._reward_batch_vectorized(states_array, int(action))
+        next_states_array: Optional[np.ndarray] = None
+        if next_states is not None:
+            next_states_array = np.ascontiguousarray(np.asarray(next_states, dtype=np.float64))
+            if next_states_array.ndim == 1:
+                next_states_array = next_states_array.reshape(1, -1)
+        return self._reward_batch_vectorized(states_array, int(action), next_states_array)
 
-    def _reward_batch_vectorized(self, states: np.ndarray, action: int) -> np.ndarray:
+    def _reward_batch_vectorized(
+        self,
+        states: np.ndarray,
+        action: int,
+        next_states: Optional[np.ndarray] = None,
+    ) -> np.ndarray:
         n = states.shape[0]
         rewards = np.full(n, self.step_penalty, dtype=np.float64)
         map_cols = self.map_size[1]
@@ -437,15 +450,20 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
         if action >= 5:
             rewards += self.sensor_use_penalty
 
-        # Default config has no dangerous areas; skip the closed-form
-        # next-position computation entirely. RockSample transitions are
-        # deterministic and trivial, so when dangerous_areas is non-empty
-        # we recreate the next robot position with closed-form math instead
-        # of dispatching to the native batch kernel.
+        # Default config has no dangerous areas; skip the next-position
+        # computation entirely. Otherwise, prefer caller-supplied
+        # realised next positions and only reconstruct via closed-form
+        # math when ``next_states`` is None. RockSample transitions are
+        # deterministic, so the closed-form fallback agrees with a
+        # fresh draw from :meth:`sample_next_state`.
         if not self.dangerous_areas:
             return rewards
 
-        next_robot_rows, next_robot_cols = self._closed_form_next_robot_pos(states, action)
+        if next_states is not None:
+            next_robot_rows = next_states[:, 0].astype(int)
+            next_robot_cols = next_states[:, 1].astype(int)
+        else:
+            next_robot_rows, next_robot_cols = self._closed_form_next_robot_pos(states, action)
         deterministic = self.dangerous_area_hit_probability >= 1.0
         for j in range(n):
             if not self._is_in_dangerous_area((next_robot_rows[j], next_robot_cols[j])):
