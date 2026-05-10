@@ -62,8 +62,9 @@ ACTION: int = 1
 class Tree:
     """Column-store search tree."""
 
-    # pylint: disable=too-many-instance-attributes
+    # pylint: disable=too-many-instance-attributes,too-many-public-methods
     # The columns are the schema; one attribute per column is the design.
+    # Typed accessors per (kind × field) likewise expand the public surface.
 
     def __init__(self) -> None:
         # Topology
@@ -427,6 +428,82 @@ class Tree:
         if idx >= len(children):
             idx = len(children) - 1
         return children[idx]
+
+    # --- typed accessors ---
+    #
+    # These methods are the only API planners should use to read fields
+    # off the column store. The naming is deliberate: where a field is
+    # valid for both kinds (visit_count, parent_id), a single method
+    # reads it; where a field is kind-specific (q_value, immediate_reward,
+    # action, belief, v_value, observation), the method name reflects
+    # the semantic owner (action_* / belief_*). No runtime kind assertion
+    # is performed — callers are expected to pass an id of the correct
+    # kind. Wrapping the column reads here keeps the bare list reference
+    # out of planner code so column renames / per-kind splits stay
+    # localised.
+
+    # ----- shared (any node kind) -----
+
+    def get_visit_count(self, node_id: int) -> int:
+        return self.visit_count[node_id]
+
+    def get_parent_id(self, node_id: int) -> Optional[int]:
+        return self.parent_id[node_id]
+
+    def get_children_ids(self, node_id: int) -> List[int]:
+        return self.children_ids[node_id]
+
+    # ----- action-only -----
+
+    def get_action(self, action_id: int) -> Any:
+        return self.action[action_id]
+
+    def get_q_value(self, action_id: int) -> float:
+        return self.q_value[action_id]
+
+    def get_immediate_reward(self, action_id: int) -> Optional[float]:
+        return self.immediate_reward[action_id]
+
+    def get_immediate_cost(self, action_id: int) -> Optional[float]:
+        return self.immediate_cost[action_id]
+
+    # ----- belief-only -----
+
+    def get_belief(self, belief_id: int) -> Belief:
+        return self.belief[belief_id]
+
+    def get_v_value(self, belief_id: int) -> float:
+        return self.v_value[belief_id]
+
+    def get_observation(self, belief_id: int) -> Any:
+        return self.observation[belief_id]
+
+    def get_weight(self, belief_id: int) -> float:
+        return self.weight[belief_id]
+
+    # --- compound mutations ---
+    #
+    # The only writes planners should ever issue. Each method bundles the
+    # column writes that make up one logical step of MCTS so callers
+    # can't perform half a backup or stash a value on the wrong node.
+
+    def update_action_q_with_return(self, action_id: int, return_sample: float) -> None:
+        """Standard MCTS Q-update: bump visits and incrementally average ``return_sample``."""
+        self.visit_count[action_id] += 1
+        n = self.visit_count[action_id]
+        old_q = self.q_value[action_id]
+        self.q_value[action_id] = old_q + (return_sample - old_q) / n
+
+    def increment_visit_count(self, node_id: int) -> None:
+        """Increment ``visit_count[node_id]`` by one. Works for either node kind."""
+        self.visit_count[node_id] += 1
+
+    def backup_belief_v_from_children(self, belief_id: int) -> None:
+        """Set ``v_value[belief_id] = max(q_value[child])`` over its action children."""
+        children = self.children_ids[belief_id]
+        if not children:
+            return
+        self.v_value[belief_id] = float(max(self.q_value[c] for c in children))
 
     # --- mutations ---
 

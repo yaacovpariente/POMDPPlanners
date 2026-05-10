@@ -114,7 +114,7 @@ class POMCP(ArenaPathSimulationPolicy):
         self.exploration_constant = exploration_constant
 
     def _simulate_path(self, tree: Tree, belief_id: int, depth: int) -> float:
-        state = tree.belief[belief_id].sample()
+        state = tree.get_belief(belief_id).sample()
         return self._simulate_state_path(tree=tree, state=state, belief_id=belief_id, depth=depth)
 
     def _simulate_state_path(  # pylint: disable=too-many-locals
@@ -124,21 +124,21 @@ class POMCP(ArenaPathSimulationPolicy):
             return 0
 
         if self.environment.is_terminal(state=state):
-            tree.visit_count[belief_id] += 1
+            tree.increment_visit_count(belief_id)
             return 0
 
         # Leaf: expand action children for every available action, then rollout.
-        if not tree.children_ids[belief_id]:
+        if not tree.get_children_ids(belief_id):
             for action in self.environment.get_actions():  # type: ignore[attr-defined]
                 tree.add_action_node(action=action, parent_id=belief_id)
-            tree.visit_count[belief_id] += 1
+            tree.increment_visit_count(belief_id)
             return self.random_rollout(state=state, depth=depth)
 
         action_id = self.get_explored_action_node(tree=tree, belief_id=belief_id)
 
-        state = tree.belief[belief_id].sample()
+        state = tree.get_belief(belief_id).sample()
         next_state, next_observation, reward = self.environment.sample_next_step(
-            state=state, action=tree.action[action_id]
+            state=state, action=tree.get_action(action_id)
         )
 
         # Find existing belief child for this observation; create one if absent.
@@ -167,15 +167,15 @@ class POMCP(ArenaPathSimulationPolicy):
 
     def get_explored_action_node(self, tree: Tree, belief_id: int) -> int:
         """Pick an action child via UCB1; if any child has zero visits, pick uniformly from those."""
-        children = tree.children_ids[belief_id]
-        action_visits = np.array([tree.visit_count[cid] for cid in children])
+        children = tree.get_children_ids(belief_id)
+        action_visits = np.array([tree.get_visit_count(cid) for cid in children])
         unvisited_indices = np.where(action_visits == 0)[0]
         if len(unvisited_indices) > 0:
             return children[int(np.random.choice(unvisited_indices))]
 
-        q_values = np.array([tree.q_value[cid] for cid in children])
+        q_values = np.array([tree.get_q_value(cid) for cid in children])
         ucb = q_values + self.exploration_constant * np.sqrt(
-            np.log(tree.visit_count[belief_id]) / action_visits
+            np.log(tree.get_visit_count(belief_id)) / action_visits
         )
         return children[int(np.argmax(ucb))]
 
@@ -199,22 +199,21 @@ class POMCP(ArenaPathSimulationPolicy):
         state: Any,
     ) -> None:
         # Don't update the initial belief in place (matches legacy POMCP behaviour).
-        if tree.parent_id[belief_id] is not None:
-            tree.belief[belief_id].inplace_update(
+        if tree.get_parent_id(belief_id) is not None:
+            tree.get_belief(belief_id).inplace_update(
                 action=None, observation=None, pomdp=self.environment, state=state
             )
 
-        tree.visit_count[belief_id] += 1
-        tree.visit_count[action_id] += 1
-        tree.q_value[action_id] += (return_sample - tree.q_value[action_id]) / tree.visit_count[
-            action_id
-        ]
+        tree.increment_visit_count(belief_id)
+        tree.update_action_q_with_return(action_id, return_sample)
+        # POMCP's v-backup is over visited children only (zero-visit children
+        # have no real estimate yet); doesn't fit ``backup_belief_v_from_children``.
         tree.v_value[belief_id] = float(
             np.max(
                 [
-                    tree.q_value[cid]
-                    for cid in tree.children_ids[belief_id]
-                    if tree.visit_count[cid] > 0
+                    tree.get_q_value(cid)
+                    for cid in tree.get_children_ids(belief_id)
+                    if tree.get_visit_count(cid) > 0
                 ]
             )
         )

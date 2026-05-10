@@ -1,4 +1,4 @@
-# pylint: disable=protected-access  # Tests need to access protected members
+# pylint: disable=protected-access,too-many-lines  # Tests need to access protected members
 import random
 from typing import Any, List
 from unittest.mock import Mock
@@ -11,15 +11,22 @@ from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.core.environment import Environment, SpaceInfo, SpaceType
 from POMDPPlanners.core.tree import BeliefNode
 from POMDPPlanners.core.tree.arena import ACTION, BELIEF, Tree
+from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
     ContinuousLightDarkPOMDP,
+)
+from POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp import (
+    DiscreteLightDarkPOMDP,
 )
 from POMDPPlanners.planners.mcts_planners.pft_dpw import PFT_DPW
 from POMDPPlanners.planners.planners_utils.dpw import (
     ActionSampler,
     action_progressive_widening,
 )
-from POMDPPlanners.utils.action_samplers import UnitCircleActionSampler
+from POMDPPlanners.utils.action_samplers import (
+    DiscreteActionSampler,
+    UnitCircleActionSampler,
+)
 
 np.random.seed(42)
 random.seed(42)
@@ -984,3 +991,67 @@ def test_q_value_v_value_consistency(planner, initial_belief):
 
     # Sanity: at least the root should have been checked.
     assert n_belief_nodes_checked >= 1
+
+
+def test_sample_existing_belief_node_recovers_per_action_immediate_reward():
+    """Pin per-action immediate reward stash so sibling actions don't overwrite each other.
+
+    Purpose: Regression — _sample_new_belief_node previously stashed immediate_reward on
+    the parent belief id, so sibling _sample_new_belief_node calls overwrote each other and
+    sample_existing_belief_node read back the wrong action's reward.
+
+    Given: A tree with two action children of one belief root in DiscreteLightDarkPOMDP set
+    up so that ``right`` from (4, 5) lands on the obstacle (5, 5) (deterministic
+    -100 penalty) while ``up`` does not — making the per-action immediate rewards differ
+    by far more than any noise floor
+    When: _sample_new_belief_node is called for both actions in sequence (so each populates
+    its child belief), then sample_existing_belief_node is called back for ``right``
+    Then: The recovered immediate_reward equals the value originally returned by
+    _sample_new_belief_node for ``right``, not the one returned for ``up``
+
+    Test type: regression
+    """
+    np.random.seed(42)
+    random.seed(42)
+    env = DiscreteLightDarkPOMDP(
+        discount_factor=0.95,
+        obstacle_reward=-100.0,
+        obstacle_hit_probability=1.0,
+    )
+
+    n_particles = 20
+    particles: List[Any] = [np.array([4, 5]) for _ in range(n_particles)]
+    log_weights = np.full(n_particles, -np.log(n_particles))
+    belief = WeightedParticleBelief(particles=particles, log_weights=log_weights, resampling=True)
+
+    sampler = DiscreteActionSampler(env.get_actions())
+    planner = PFT_DPW(
+        environment=env,
+        discount_factor=0.95,
+        depth=3,
+        name="test_per_action_stash",
+        action_sampler=sampler,
+        n_simulations=10,
+    )
+
+    tree = Tree()
+    root_id = tree.add_belief_node(belief)
+    right_id = tree.add_action_node(action="right", parent_id=root_id)
+    up_id = tree.add_action_node(action="up", parent_id=root_id)
+
+    _, r_right_in = planner._sample_new_belief_node(
+        tree=tree, belief_id=root_id, action_id=right_id
+    )
+    _, r_up_in = planner._sample_new_belief_node(tree=tree, belief_id=root_id, action_id=up_id)
+
+    assert (
+        abs(r_right_in - r_up_in) > 50
+    ), f"setup invariant broken: r_right={r_right_in}, r_up={r_up_in}"
+
+    _, r_right_recovered = planner.sample_existing_belief_node(
+        tree=tree, belief_id=root_id, action_id=right_id
+    )
+    assert r_right_recovered == pytest.approx(r_right_in, abs=1e-9), (
+        f"sample_existing_belief_node returned {r_right_recovered}, "
+        f"expected {r_right_in} (got {r_up_in} = up reward instead?)"
+    )

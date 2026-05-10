@@ -106,7 +106,7 @@ class ICVaR_POMCPOW(ArenaPathSimulationPolicyCostSetting):
         self.discrete_actions = self.environment.space_info.action_space == SpaceType.DISCRETE
 
     def _simulate_path(self, tree: Tree, belief_id: int, depth: int) -> None:
-        state = tree.belief[belief_id].sample()
+        state = tree.get_belief(belief_id).sample()
         self._simulate_state_path(tree=tree, state=state, belief_id=belief_id, depth=depth)
 
     def _simulate_state_path(self, tree: Tree, state: Any, belief_id: int, depth: int) -> None:
@@ -120,7 +120,7 @@ class ICVaR_POMCPOW(ArenaPathSimulationPolicyCostSetting):
             tree=tree, belief_id=belief_id, depth=depth
         )
         next_state, next_observation, reward = self.environment.sample_next_step(
-            state=state, action=tree.action[action_id]
+            state=state, action=tree.get_action(action_id)
         )
         next_belief_id = self._select_or_create_observation_node(
             tree=tree, action_id=action_id, next_observation=next_observation
@@ -151,7 +151,7 @@ class ICVaR_POMCPOW(ArenaPathSimulationPolicyCostSetting):
             return True
 
         if self.environment.is_terminal(state=state):
-            tree.visit_count[belief_id] += 1
+            tree.increment_visit_count(belief_id)
             return True
 
         return False
@@ -182,8 +182,8 @@ class ICVaR_POMCPOW(ArenaPathSimulationPolicyCostSetting):
     def _select_or_create_observation_node(
         self, tree: Tree, action_id: int, next_observation: Any
     ) -> int:
-        children_count = len(tree.children_ids[action_id])
-        action_visits = tree.visit_count[action_id]
+        children_count = len(tree.get_children_ids(action_id))
+        action_visits = tree.get_visit_count(action_id)
         if children_count <= self.k_o * action_visits**self.alpha_o:
             try:
                 obs_key = self.environment.hash_observation(next_observation)
@@ -220,8 +220,8 @@ class ICVaR_POMCPOW(ArenaPathSimulationPolicyCostSetting):
         observation: Any,
         state: Any,
     ) -> None:
-        tree.belief[belief_id].inplace_update(
-            action=tree.action[action_id],
+        tree.get_belief(belief_id).inplace_update(
+            action=tree.get_action(action_id),
             observation=observation,
             pomdp=self.environment,
             state=state,
@@ -234,8 +234,8 @@ class ICVaR_POMCPOW(ArenaPathSimulationPolicyCostSetting):
         action_id: int,
         reward: float,
     ) -> None:
-        tree.visit_count[belief_id] += 1
-        tree.visit_count[action_id] += 1
+        tree.increment_visit_count(belief_id)
+        tree.increment_visit_count(action_id)
 
         self._update_immediate_cost(
             tree=tree, belief_id=belief_id, action_id=action_id, reward=reward
@@ -258,9 +258,9 @@ class ICVaR_POMCPOW(ArenaPathSimulationPolicyCostSetting):
         # the root belief being the same object for every sim, which the
         # current ``_learn_tree`` enforces. If a future caller swaps the
         # root belief mid-action, this cached cost will go stale.
-        belief = tree.belief[belief_id]
-        action = tree.action[action_id]
-        immediate_cost = tree.immediate_cost[action_id]
+        belief = tree.get_belief(belief_id)
+        action = tree.get_action(action_id)
+        immediate_cost = tree.get_immediate_cost(action_id)
         if immediate_cost is None:
             if isinstance(belief, WeightedParticleBeliefStateUpdate):
                 tree.set_immediate_cost(action_id, -reward)
@@ -283,8 +283,8 @@ class ICVaR_POMCPOW(ArenaPathSimulationPolicyCostSetting):
             tree.set_immediate_cost(action_id, new_cost)
 
     def _update_q_value(self, tree: Tree, action_id: int) -> None:
-        children = tree.children_ids[action_id]
-        immediate_cost = tree.immediate_cost[action_id]
+        children = tree.get_children_ids(action_id)
+        immediate_cost = tree.get_immediate_cost(action_id)
         if immediate_cost is None:
             raise ValueError("immediate_cost must be set before updating q_value")
 
@@ -292,22 +292,18 @@ class ICVaR_POMCPOW(ArenaPathSimulationPolicyCostSetting):
             tree.q_value[action_id] = immediate_cost
             return
 
-        visited_children = [cid for cid in children if tree.visit_count[cid] > 0]
+        visited_children = [cid for cid in children if tree.get_visit_count(cid) > 0]
         n_visited = len(visited_children)
         if n_visited == 0:
             tree.q_value[action_id] = immediate_cost
             return
 
-        # Single Python loop fills both arrays — faster than two np.fromiter
-        # calls over a Python-list source for small N (typical here).
-        tree_v_value = tree.v_value
-        tree_weight = tree.weight
         v_values = np.empty(n_visited, dtype=np.float64)
         weights = np.empty(n_visited, dtype=np.float64)
         weights_sum = 0.0
         for i, cid in enumerate(visited_children):
-            v_values[i] = tree_v_value[cid]
-            w = tree_weight[cid]
+            v_values[i] = tree.get_v_value(cid)
+            w = tree.get_weight(cid)
             weights[i] = w
             weights_sum += w
         if weights_sum > 0.0:
@@ -320,9 +316,9 @@ class ICVaR_POMCPOW(ArenaPathSimulationPolicyCostSetting):
 
     def _update_v_value(self, tree: Tree, belief_id: int) -> None:
         best_q: Optional[float] = None
-        for cid in tree.children_ids[belief_id]:
-            if tree.visit_count[cid] > 0:
-                q = tree.q_value[cid]
+        for cid in tree.get_children_ids(belief_id):
+            if tree.get_visit_count(cid) > 0:
+                q = tree.get_q_value(cid)
                 if best_q is None or q < best_q:
                     best_q = q
         if best_q is not None:

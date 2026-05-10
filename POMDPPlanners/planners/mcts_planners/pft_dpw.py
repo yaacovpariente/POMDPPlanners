@@ -40,8 +40,6 @@ Classes:
 from pathlib import Path
 from typing import Any, Optional, Tuple
 
-import numpy as np
-
 from POMDPPlanners.core.cost import belief_expectation_reward
 from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.tree.arena import Tree
@@ -149,8 +147,8 @@ class PFT_DPW(ArenaDoubleProgressiveWideningMCTSPolicy):
         if depth > self.depth:
             return 0
 
-        if self.environment.is_terminal(tree.belief[belief_id].sample()):
-            tree.visit_count[belief_id] += 1
+        if self.environment.is_terminal(tree.get_belief(belief_id).sample()):
+            tree.increment_visit_count(belief_id)
             return 0
 
         action_id = action_progressive_widening_arena(
@@ -174,13 +172,13 @@ class PFT_DPW(ArenaDoubleProgressiveWideningMCTSPolicy):
         return return_sample
 
     def _simulate_return(self, tree: Tree, belief_id: int, action_id: int, depth: int) -> float:
-        action_visits = tree.visit_count[action_id]
-        children_count = len(tree.children_ids[action_id])
+        action_visits = tree.get_visit_count(action_id)
+        children_count = len(tree.get_children_ids(action_id))
         if children_count <= self.k_o * action_visits**self.alpha_o:
             next_belief_id, immediate_reward = self._sample_new_belief_node(
                 tree=tree, belief_id=belief_id, action_id=action_id
             )
-            state = tree.belief[next_belief_id].sample()
+            state = tree.get_belief(next_belief_id).sample()
             total = immediate_reward + self.discount_factor * self._random_rollout(
                 state=state, depth=depth + 1
             )
@@ -196,15 +194,17 @@ class PFT_DPW(ArenaDoubleProgressiveWideningMCTSPolicy):
     def _sample_new_belief_node(
         self, tree: Tree, belief_id: int, action_id: int
     ) -> Tuple[int, float]:
-        action = tree.action[action_id]
-        belief = tree.belief[belief_id]
+        action = tree.get_action(action_id)
+        belief = tree.get_belief(belief_id)
         immediate_reward = belief_expectation_reward(
             belief=belief, action=action, env=self.environment
         )
-        # Stash on parent belief so re-visits to this branch can recover the
-        # immediate reward without recomputing it.
-        tree.immediate_cost[belief_id] = -immediate_reward
-        tree.immediate_reward[belief_id] = immediate_reward
+        # Stash on the action node — ``action_id`` is unique per
+        # (parent_belief, action) and ``belief_expectation_reward`` is a
+        # function of exactly that pair, so all child beliefs generated
+        # under this action share the same value with no cross-action
+        # contamination.
+        tree.set_immediate_reward(action_id, immediate_reward)
 
         _, next_observation, _ = self.environment.sample_next_step(
             state=belief.sample(), action=action
@@ -241,20 +241,21 @@ class PFT_DPW(ArenaDoubleProgressiveWideningMCTSPolicy):
         )
 
     def sample_existing_belief_node(
-        self, tree: Tree, belief_id: int, action_id: int
+        self, tree: Tree, belief_id: int, action_id: int  # pylint: disable=unused-argument
     ) -> Tuple[int, float]:
-        # Recover the immediate reward stashed on the belief at allocation.
-        cost = tree.immediate_cost[belief_id]
-        immediate_reward = -cost if cost is not None else 0.0
+        # Recover the immediate reward stashed on the action node when it
+        # was first expanded (see :meth:`_sample_new_belief_node`).
+        immediate_reward = tree.get_immediate_reward(action_id) or 0.0
         next_belief_id = tree.sample_belief_child(action_id)
         return next_belief_id, immediate_reward
 
     def _update_node_statistics(
-        self, tree: Tree, belief_id: int, action_id: int, total: float
+        self,
+        tree: Tree,
+        belief_id: int,
+        action_id: int,
+        total: float,
     ) -> None:
-        tree.visit_count[belief_id] += 1
-        tree.visit_count[action_id] += 1
-        tree.q_value[action_id] += (total - tree.q_value[action_id]) / tree.visit_count[action_id]
-        tree.v_value[belief_id] = float(
-            np.max([tree.q_value[cid] for cid in tree.children_ids[belief_id]])
-        )
+        tree.increment_visit_count(belief_id)
+        tree.update_action_q_with_return(action_id, total)
+        tree.backup_belief_v_from_children(belief_id)

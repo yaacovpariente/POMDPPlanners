@@ -1054,3 +1054,224 @@ def test_print_subtree_omits_lines_outside_subtree(belief, capsys):
     assert "ActionNode[1]" in out
     assert "BeliefNode[2]" in out
     assert "BeliefNode[0]" not in out
+
+
+# --- typed accessors ---
+
+
+def test_get_visit_count_reads_per_node_visit(belief):
+    """``get_visit_count`` returns the same int the column store holds.
+
+    Purpose: Validates the shared accessor reads from ``visit_count``
+    correctly for both belief and action nodes.
+
+    Given: A tree with a root belief and one action child, visit counts
+    bumped to known values via direct list write.
+    When: ``get_visit_count`` is called for each id.
+    Then: The returned int matches the underlying column entry.
+
+    Test type: unit
+    """
+    tree = Tree()
+    root = tree.add_belief_node(belief)
+    action = tree.add_action_node("a", parent_id=root)
+    tree.visit_count[root] = 7
+    tree.visit_count[action] = 3
+
+    assert tree.get_visit_count(root) == 7
+    assert tree.get_visit_count(action) == 3
+
+
+def test_get_parent_id_returns_none_for_root_and_id_for_child(belief):
+    """``get_parent_id`` returns ``None`` for the root and the parent id otherwise.
+
+    Purpose: Validates the shared parent accessor.
+
+    Given: A root belief with one action child.
+    When: ``get_parent_id`` is queried for each.
+    Then: Root returns ``None``; child returns the root id.
+
+    Test type: unit
+    """
+    tree = Tree()
+    root = tree.add_belief_node(belief)
+    action = tree.add_action_node("a", parent_id=root)
+
+    assert tree.get_parent_id(root) is None
+    assert tree.get_parent_id(action) == root
+
+
+def test_get_children_ids_returns_appended_children_in_order(belief):
+    """``get_children_ids`` returns the same list the column store holds, in order.
+
+    Purpose: Validates the children-id accessor preserves insertion order.
+
+    Given: A root belief with two action children added in order ``"a"``, ``"b"``.
+    When: ``get_children_ids`` is called on the root.
+    Then: The returned list is ``[a_id, b_id]``.
+
+    Test type: unit
+    """
+    tree = Tree()
+    root = tree.add_belief_node(belief)
+    a_id = tree.add_action_node("a", parent_id=root)
+    b_id = tree.add_action_node("b", parent_id=root)
+
+    assert tree.get_children_ids(root) == [a_id, b_id]
+
+
+def test_action_only_accessors_round_trip_action_q_and_immediate_reward(belief):
+    """Action-side accessors read the action payload, q-value, and immediate-reward.
+
+    Purpose: Validates ``get_action`` / ``get_q_value`` /
+    ``get_immediate_reward`` / ``get_immediate_cost`` read the same
+    values their column entries hold (after explicit writes for
+    setup).
+
+    Given: A root with one action child; q-value, immediate cost and
+    reward populated via the existing setters.
+    When: Each typed accessor is invoked.
+    Then: Each returns the populated value.
+
+    Test type: unit
+    """
+    tree = Tree()
+    root = tree.add_belief_node(belief)
+    action = tree.add_action_node("listen", parent_id=root)
+    tree.q_value[action] = 1.25
+    tree.set_immediate_reward(action, 4.0)
+
+    assert tree.get_action(action) == "listen"
+    assert tree.get_q_value(action) == pytest.approx(1.25)
+    assert tree.get_immediate_reward(action) == pytest.approx(4.0)
+    assert tree.get_immediate_cost(action) == pytest.approx(-4.0)
+
+
+def test_belief_only_accessors_round_trip_belief_v_observation_weight(belief):
+    """Belief-side accessors read the belief, v-value, observation, and weight.
+
+    Purpose: Validates ``get_belief`` / ``get_v_value`` /
+    ``get_observation`` / ``get_weight``.
+
+    Given: A tree with a child belief node attached under an action,
+    weight=2.0, observation="o", v-value=3.5 populated by direct
+    column write.
+    When: Each typed accessor is invoked on the child.
+    Then: Each returns the populated value.
+
+    Test type: unit
+    """
+    tree = Tree()
+    root = tree.add_belief_node(belief)
+    action = tree.add_action_node("a", parent_id=root)
+    child = tree.add_belief_node(belief, observation="o", weight=2.0, parent_id=action)
+    tree.v_value[child] = 3.5
+
+    assert tree.get_belief(child) is belief
+    assert tree.get_v_value(child) == pytest.approx(3.5)
+    assert tree.get_observation(child) == "o"
+    assert tree.get_weight(child) == pytest.approx(2.0)
+
+
+# --- compound mutations ---
+
+
+def test_update_action_q_with_return_increments_visits_and_running_average(belief):
+    """``update_action_q_with_return`` matches the standard MCTS Q-update.
+
+    Purpose: Validates the bundled "increment visits + incrementally
+    average return" mutation produces the same q-value sequence as
+    a manual incremental mean.
+
+    Given: Action child of a root belief, fresh (q=0, visits=0).
+    When: Returns 4.0, then 2.0 are backed up via
+    ``update_action_q_with_return``.
+    Then: After the first call q=4.0 and visits=1; after the second
+    q=3.0 and visits=2 (running mean of 4 and 2).
+
+    Test type: unit
+    """
+    tree = Tree()
+    root = tree.add_belief_node(belief)
+    action = tree.add_action_node("a", parent_id=root)
+
+    tree.update_action_q_with_return(action, 4.0)
+    assert tree.get_visit_count(action) == 1
+    assert tree.get_q_value(action) == pytest.approx(4.0)
+
+    tree.update_action_q_with_return(action, 2.0)
+    assert tree.get_visit_count(action) == 2
+    assert tree.get_q_value(action) == pytest.approx(3.0)
+
+
+def test_increment_visit_count_works_for_belief_and_action(belief):
+    """``increment_visit_count`` bumps either node kind by exactly one.
+
+    Purpose: Validates the shared visit-count incrementer.
+
+    Given: A tree with a root belief and one action child.
+    When: ``increment_visit_count`` is called twice on each.
+    Then: Each visit count is exactly two; siblings are unaffected.
+
+    Test type: unit
+    """
+    tree = Tree()
+    root = tree.add_belief_node(belief)
+    action = tree.add_action_node("a", parent_id=root)
+
+    tree.increment_visit_count(root)
+    tree.increment_visit_count(root)
+    tree.increment_visit_count(action)
+    tree.increment_visit_count(action)
+
+    assert tree.get_visit_count(root) == 2
+    assert tree.get_visit_count(action) == 2
+
+
+def test_backup_belief_v_from_children_picks_max_q_over_action_children(belief):
+    """``backup_belief_v_from_children`` sets v-value to ``max(q[child])``.
+
+    Purpose: Validates the standard MCTS v-backup over a belief's
+    action children.
+
+    Given: A root belief with three action children with q-values
+    ``[-1.0, 2.0, 0.5]``.
+    When: ``backup_belief_v_from_children`` is invoked on the root.
+    Then: ``v_value[root]`` equals 2.0.
+
+    Test type: unit
+    """
+    tree = Tree()
+    root = tree.add_belief_node(belief)
+    a1 = tree.add_action_node("a1", parent_id=root)
+    a2 = tree.add_action_node("a2", parent_id=root)
+    a3 = tree.add_action_node("a3", parent_id=root)
+    tree.q_value[a1] = -1.0
+    tree.q_value[a2] = 2.0
+    tree.q_value[a3] = 0.5
+
+    tree.backup_belief_v_from_children(root)
+
+    assert tree.get_v_value(root) == pytest.approx(2.0)
+
+
+def test_backup_belief_v_from_children_is_noop_when_no_children(belief):
+    """``backup_belief_v_from_children`` leaves v-value unchanged when childless.
+
+    Purpose: Validates the no-action-children corner case (typically
+    a freshly added leaf belief).
+
+    Given: A leaf belief with v-value seeded to 9.0 and no action
+    children.
+    When: ``backup_belief_v_from_children`` is invoked.
+    Then: v-value is still 9.0.
+
+    Test type: unit
+    """
+    tree = Tree()
+    root = tree.add_belief_node(belief)
+    tree.v_value[root] = 9.0
+
+    tree.backup_belief_v_from_children(root)
+
+    assert tree.get_v_value(root) == pytest.approx(9.0)

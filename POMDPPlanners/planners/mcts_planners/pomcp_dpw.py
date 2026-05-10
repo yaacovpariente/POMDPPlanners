@@ -126,7 +126,7 @@ class POMCP_DPW(ArenaDoubleProgressiveWideningMCTSPolicy):
         )
 
     def _simulate_path(self, tree: Tree, belief_id: int, depth: int) -> float:
-        state = tree.belief[belief_id].sample()
+        state = tree.get_belief(belief_id).sample()
         return self._simulate_state_path(tree=tree, state=state, belief_id=belief_id, depth=depth)
 
     def _simulate_state_path(  # pylint: disable=too-many-locals
@@ -136,7 +136,7 @@ class POMCP_DPW(ArenaDoubleProgressiveWideningMCTSPolicy):
             return 0
 
         if self.environment.is_terminal(state=state):
-            tree.visit_count[belief_id] += 1
+            tree.increment_visit_count(belief_id)
             return 0
 
         action_id = action_progressive_widening_arena(
@@ -149,10 +149,10 @@ class POMCP_DPW(ArenaDoubleProgressiveWideningMCTSPolicy):
             min_visit_count_per_action=self.min_visit_count_per_action,
             environment=self.environment,
         )
-        action = tree.action[action_id]
+        action = tree.get_action(action_id)
 
-        children_count = len(tree.children_ids[action_id])
-        action_visits = tree.visit_count[action_id]
+        children_count = len(tree.get_children_ids(action_id))
+        action_visits = tree.get_visit_count(action_id)
         if children_count <= self.k_o * action_visits**self.alpha_o:
             next_state = self.environment.sample_next_state(state=state, action=action)
             reward = self.environment.reward(state=state, action=action, next_state=next_state)
@@ -176,12 +176,12 @@ class POMCP_DPW(ArenaDoubleProgressiveWideningMCTSPolicy):
                 # Bump the weight of the existing belief child + patch parent CDF.
                 tree.increment_weight(next_belief_id, delta=1.0)
 
-            tree.belief[next_belief_id].inplace_update(
+            tree.get_belief(next_belief_id).inplace_update(
                 action=None, observation=None, pomdp=self.environment, state=next_state
             )
 
-            if tree.visit_count[next_belief_id] == 0:
-                tree.visit_count[next_belief_id] += 1
+            if tree.get_visit_count(next_belief_id) == 0:
+                tree.increment_visit_count(next_belief_id)
                 total = reward + self.discount_factor * random_rollout_action_sampler(
                     state=next_state,
                     depth=depth + 1,
@@ -195,15 +195,13 @@ class POMCP_DPW(ArenaDoubleProgressiveWideningMCTSPolicy):
                 )
         else:
             next_belief_id = tree.sample_belief_child(action_id)
-            next_state = tree.belief[next_belief_id].sample()
+            next_state = tree.get_belief(next_belief_id).sample()
             reward = self.environment.reward(state=state, action=action, next_state=next_state)
             total = reward + self.discount_factor * self._simulate_state_path(
                 tree=tree, state=next_state, belief_id=next_belief_id, depth=depth + 1
             )
 
-        # Backup
-        tree.visit_count[belief_id] += 1
-        tree.visit_count[action_id] += 1
-        tree.q_value[action_id] += (total - tree.q_value[action_id]) / tree.visit_count[action_id]
-        tree.v_value[belief_id] = max(tree.q_value[cid] for cid in tree.children_ids[belief_id])
+        tree.increment_visit_count(belief_id)
+        tree.update_action_q_with_return(action_id, total)
+        tree.backup_belief_v_from_children(belief_id)
         return total
