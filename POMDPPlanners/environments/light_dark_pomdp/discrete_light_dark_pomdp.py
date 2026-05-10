@@ -284,8 +284,11 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
         else:
             observation = next_state
 
-        # Inline reward — pure Python math avoids numpy overhead on 2-element arrays
-        reward = self._compute_reward_fast(state, action)
+        # Inline reward — pure Python math avoids numpy overhead on 2-element
+        # arrays. Score against the realised ``next_state`` rather than the
+        # intended ``state + action`` so transition-error draws are reflected
+        # in the obstacle / goal / out-of-grid checks.
+        reward = self._compute_reward_fast(state, next_state)
         return next_state, observation, reward
 
     # ── Helpers for non-NORMAL observation models (inlined post-PR-D) ───────
@@ -453,10 +456,14 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
                 out[i] = 0.0
         return out
 
-    def _compute_reward_fast(self, state: np.ndarray, action: Any) -> float:
-        av = self.action_to_vector[action]
-        nx = int(state[0]) + int(av[0])
-        ny = int(state[1]) + int(av[1])
+    def _compute_reward_fast(self, state: np.ndarray, next_state: np.ndarray) -> float:
+        # Score the obstacle / goal / out-of-grid checks against the realised
+        # ``next_state`` (threaded from :meth:`sample_next_step`) so the
+        # reward and trajectory agree on the same draw under transition
+        # stochasticity.
+        del state  # state is unused on this fast path; kept for signature parity
+        nx = int(next_state[0])
+        ny = int(next_state[1])
 
         dx = nx - self._goal_x
         dy = ny - self._goal_y
@@ -467,7 +474,12 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
         if dx == 0 and dy == 0:
             reward += self.goal_reward
         elif (nx, ny) in self._obstacle_tuples:
-            if random.random() < self.obstacle_hit_probability:
+            # Use numpy RNG to stay on the same stream as ``reward()`` —
+            # mixing ``random`` and ``np.random`` would split the obstacle
+            # Bernoulli into two independent draws, so ``sample_next_step``
+            # and ``reward(state, action, next_state)`` would disagree on
+            # the same triple.
+            if np.random.rand() < self.obstacle_hit_probability:
                 reward += self.obstacle_reward
         elif nx < 0 or ny < 0 or nx > self.grid_size or ny > self.grid_size:
             reward += self.obstacle_reward
@@ -617,12 +629,14 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
         if state.shape != (2,):
             raise ValueError("state must be a 2D vector")
 
-        # The transition is deterministic given the action, so the realised
-        # ``next_state`` (if supplied) and the recomputed one agree exactly.
-        # We still recompute locally to keep the obstacle/out-of-grid logic
-        # intact and ignore the kwarg.
-        del next_state
-        next_state_local = state + self.action_to_vector[action]
+        # Honour the realised ``next_state`` threaded by
+        # :meth:`Environment.sample_next_step` so the obstacle / goal /
+        # out-of-grid checks score against the same draw as the trajectory.
+        # Only resample locally when no realised next_state was supplied.
+        if next_state is None:
+            next_state_local = state + self.action_to_vector[action]
+        else:
+            next_state_local = np.asarray(next_state)
 
         is_goal_state = np.all(next_state_local == self.goal_state)
         is_obstacle_hit = np.any(np.all(next_state_local.reshape(-1, 1) == self.obstacles, axis=0))
@@ -647,17 +661,24 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
         action: str,
         next_states: Optional[Union[np.ndarray, Sequence[Any]]] = None,
     ) -> np.ndarray:
-        del next_states
         states = np.asarray(states)
-        next_states = states + self.action_to_vector[action]
-        dists_to_goal = np.linalg.norm(next_states - self.goal_state, axis=1)
+        # Honour per-row realised ``next_states`` threaded by callers so
+        # obstacle / goal / out-of-grid checks score against the realised
+        # trajectory. Only synthesise the deterministic-action next_states
+        # when nothing was supplied (legacy ``reward_batch(states, action)``
+        # call site contract).
+        if next_states is None:
+            next_states_arr = states + self.action_to_vector[action]
+        else:
+            next_states_arr = np.asarray(next_states)
+        dists_to_goal = np.linalg.norm(next_states_arr - self.goal_state, axis=1)
         rewards = -self.fuel_cost - dists_to_goal
 
-        goal_mask = np.all(next_states == self.goal_state, axis=1)
+        goal_mask = np.all(next_states_arr == self.goal_state, axis=1)
         rewards[goal_mask] += self.goal_reward
 
         obs_match = np.all(
-            next_states[:, :, np.newaxis] == self.obstacles[np.newaxis, :, :],
+            next_states_arr[:, :, np.newaxis] == self.obstacles[np.newaxis, :, :],
             axis=1,
         )
         in_obstacle = np.any(obs_match, axis=1)
@@ -667,7 +688,7 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
             hits = np.random.rand(n_obs) < self.obstacle_hit_probability
             rewards[obstacle_mask] += np.where(hits, self.obstacle_reward, 0.0)
 
-        oob = np.any(next_states < 0, axis=1) | np.any(next_states > self.grid_size, axis=1)
+        oob = np.any(next_states_arr < 0, axis=1) | np.any(next_states_arr > self.grid_size, axis=1)
         rewards[oob & ~goal_mask & ~in_obstacle] += self.obstacle_reward
         return rewards
 
@@ -762,7 +783,18 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
         # ``is_stochastic_reward`` is False the Python ``reward()`` path
         # would deterministically apply the obstacle penalty (rather than
         # drawing a Bernoulli) — fall back to Python in that case.
-        if not self.is_stochastic_reward:
+        # Also bypass when obstacles are configured AND transitions are
+        # stochastic: the C++ kernel scores the obstacle penalty against
+        # the *intended* action offset (state + action_vector), while the
+        # Python ``reward()`` path now consults the realised next_state.
+        # Until ``discrete_simulate_rollout`` is rebuilt to consume the
+        # realised position, route around it whenever the divergence can
+        # actually fire (``transition_error_prob > 0`` makes the realised
+        # action differ from the intended one).
+        bypass_native_for_realised_pos = (
+            self.transition_error_prob > 0.0 and self._obstacles_flat.shape[0] > 0
+        )
+        if not self.is_stochastic_reward or bypass_native_for_realised_pos:
             return python_random_rollout(
                 state=state,
                 depth=depth,

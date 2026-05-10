@@ -457,17 +457,23 @@ class ContinuousPushPOMDP(Environment):
         must be a 1-D float64 array; callers (``reward`` / ``reward_batch``)
         normalise the inputs.
 
-        For each row this draws a fresh next state via the cached kernel
-        (same RNG stream as ``sample_next_state_batch``) and computes:
-        - distance penalty to target,
+        When ``next_states`` is ``None`` this draws fresh next states via
+        the cached kernel (same RNG stream as ``sample_next_state_batch``);
+        otherwise it consumes the threaded draw from
+        :meth:`Environment.sample_next_step` so reward and trajectory agree
+        on the same Cholesky sample. Per row it computes:
+        - distance penalty to target (from ``next_states[:, 2:4]``),
         - +100 goal bonus when within 0.5 of the target,
-        - obstacle penalty when ``state[:2] + action`` would push the
-          robot into an obstacle.
+        - obstacle penalty when the *realised* robot position
+          ``next_states[:, :2]`` overlaps an obstacle AABB,
+        - dangerous-area penalty when the realised robot position lies in
+          any zone.
         """
-        kernel = self._get_trans_kernel(action)
-        # batch_sample reads per-row state from the input — no set_state
-        # required. C++ kernel returns shape (N, 6) float64.
-        next_states = np.asarray(kernel.batch_sample(states), dtype=np.float64)
+        if next_states is None:
+            kernel = self._get_trans_kernel(action)
+            # batch_sample reads per-row state from the input — no set_state
+            # required. C++ kernel returns shape (N, 6) float64.
+            next_states = np.asarray(kernel.batch_sample(states), dtype=np.float64)
 
         # Distance-to-target penalty + goal bonus, computed in one pass on
         # the (N, 2) object/target slices.
@@ -476,9 +482,9 @@ class ContinuousPushPOMDP(Environment):
         rewards = -dist_to_target
         rewards[dist_to_target < 0.5] += 100.0
 
-        # Obstacle penalty: post-action robot position vs. obstacle AABBs.
+        # Obstacle penalty: realised post-action robot position vs. AABBs.
         if self.obstacles.shape[0] > 0:
-            robot_after = states[:, :2] + action  # (N, 2)
+            robot_after = next_states[:, :2]
             collide = self._batch_circle_obstacle_overlap(robot_after, self.robot_radius)
             if self.obstacle_hit_probability < 1.0:
                 # Per-row Bernoulli mask: refund the penalty for rows that
@@ -488,10 +494,10 @@ class ContinuousPushPOMDP(Environment):
             if np.any(collide):
                 rewards[collide] += self.obstacle_penalty
 
-        # Dangerous-area penalty: post-action robot position vs. circular
-        # zones. At most one penalty per row even when zones overlap.
+        # Dangerous-area penalty: realised post-action robot position vs.
+        # circular zones. At most one penalty per row even when zones overlap.
         if self._dangerous_areas_arr.shape[0] > 0:
-            robot_after = states[:, :2] + action  # (N, 2)
+            robot_after = next_states[:, :2]
             in_zone = self._batch_robot_in_dangerous_areas(robot_after)
             if self.dangerous_area_hit_probability < 1.0:
                 applied = np.random.random(in_zone.shape[0]) < self.dangerous_area_hit_probability

@@ -523,6 +523,105 @@ class TestStochasticDangerousAreaPenalty:
             assert env.reward(state, "up") == -env.step_cost
 
 
+class TestContinuousLaserTagRewardNextStateConsistency:
+    """Tests that ``reward`` honours a threaded ``next_state`` argument.
+
+    The base :meth:`Environment.sample_next_step` threads the realised
+    ``next_state`` into ``reward`` so trajectories and reward share the
+    same draw. These tests pin that contract on
+    ``ContinuousLaserTagPOMDP``: the dangerous-area position check must
+    use ``next_state[:2]`` (post-transition robot position) rather than
+    re-using the pre-transition robot position.
+    """
+
+    @staticmethod
+    def _danger_env(hit_probability: float = 1.0) -> ContinuousLaserTagPOMDP:
+        return ContinuousLaserTagPOMDP(
+            discount_factor=0.95,
+            walls=[],
+            dangerous_areas=[(5.0, 3.0)],
+            dangerous_area_radius=1.0,
+            dangerous_area_penalty=5.0,
+            dangerous_area_hit_probability=hit_probability,
+        )
+
+    def test_reward_penalty_uses_realised_next_state(self):
+        """Penalty applies when the realised ``next_state`` lies in a danger zone.
+
+        Purpose: Validates that ``reward`` scores the dangerous-area
+        penalty against the realised ``next_state`` (post-transition
+        robot position), not the pre-transition state.
+
+        Given: A pre-transition state safely outside the danger zone but
+            a realised ``next_state`` whose robot position lies inside
+            the zone, and ``hit_probability=1.0``.
+        When: ``env.reward(state, action, next_state=next_state)`` is
+            called.
+        Then: The reward is ``-step_cost - dangerous_area_penalty``.
+
+        Test type: unit
+        """
+        env = self._danger_env(hit_probability=1.0)
+        state = np.array([0.5, 0.5, 8.0, 5.0, 0.0])
+        next_state = np.array([5.0, 3.0, 8.0, 5.0, 0.0])
+        action = np.array([1.0, 0.0, 0.0])
+        r = env.reward(state, action, next_state=next_state)
+        assert r == -env.step_cost - 5.0
+
+    def test_reward_penalty_skipped_when_next_state_clear(self):
+        """No penalty when realised ``next_state`` is outside any danger zone.
+
+        Purpose: Validates the contrapositive of
+        :meth:`test_reward_penalty_uses_realised_next_state` — when the
+        post-transition position is clear, no penalty is charged even
+        if the pre-transition position was inside a zone.
+
+        Given: A pre-transition state inside the danger zone but a
+            realised ``next_state`` whose robot position is well outside
+            the zone, and ``hit_probability=1.0``.
+        When: ``env.reward(state, action, next_state=next_state)`` is
+            called.
+        Then: The reward is just ``-step_cost`` (no danger penalty).
+
+        Test type: unit
+        """
+        env = self._danger_env(hit_probability=1.0)
+        state = np.array([5.0, 3.0, 8.0, 5.0, 0.0])
+        next_state = np.array([0.5, 0.5, 8.0, 5.0, 0.0])
+        action = np.array([1.0, 0.0, 0.0])
+        r = env.reward(state, action, next_state=next_state)
+        assert r == -env.step_cost
+
+    def test_sample_next_step_reward_matches_returned_next_state(self):
+        """``sample_next_step`` reward must agree with ``reward(state, action, ns)``.
+
+        Purpose: Pins that the reward returned by ``sample_next_step``
+        equals ``env.reward(state, action, returned_next_state)`` over
+        many draws — i.e. trajectory and reward share the same
+        transition draw rather than independently resampling.
+
+        Given: A ``ContinuousLaserTagPOMDP`` with a single danger zone
+            and ``hit_probability=1.0`` (so the per-call Bernoulli
+            refund is disabled — the danger penalty is now a
+            deterministic function of the realised ``next_state``).
+        When: ``sample_next_step(state, action)`` is called repeatedly
+            and we recompute the reward from the returned ``next_state``.
+        Then: Each pair of rewards is exactly equal.
+
+        Test type: unit
+        """
+        env = self._danger_env(hit_probability=1.0)
+        state = np.array([5.0, 3.0, 8.0, 5.0, 0.0])
+        action = np.array([1.0, 0.0, 0.0])
+        np.random.seed(0)
+        for _ in range(200):
+            step = env.sample_next_step(state, action)
+            next_state = step[0]
+            reward = step[2]
+            recomputed = env.reward(state, action, next_state=next_state)
+            assert reward == recomputed
+
+
 class TestRewardBatch:
     """Tests for reward_batch."""
 

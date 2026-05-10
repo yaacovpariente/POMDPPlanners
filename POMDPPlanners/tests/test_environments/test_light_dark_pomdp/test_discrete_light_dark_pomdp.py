@@ -2122,3 +2122,221 @@ def test_discrete_sample_outputs_lie_in_grid_or_are_none_sentinel(
         assert np.all(np.isfinite(value))
         assert np.all(value >= 0.0)
         assert np.all(value <= float(env.grid_size))
+
+
+class TestDiscreteLightDarkRewardNextStateConsistency:
+    """Verifies reward / reward_batch honour the threaded next_state.
+
+    The base ``Environment.sample_next_step`` threads the realised
+    ``next_state`` into ``reward(state, action, next_state=...)``. When the
+    discrete env's transition is stochastic (``transition_error_prob`` > 0)
+    the realised next_state can disagree with ``state + action_to_vector[action]``,
+    so reward checks (obstacle / goal / out-of-grid) must read the realised
+    next_state rather than recomputing locally.
+    """
+
+    def test_reward_obstacle_penalty_uses_realised_next_state(self):
+        """Obstacle penalty fires when realised next_state lies in an obstacle.
+
+        Purpose: Validates that ``reward`` honours a threaded ``next_state``
+            that lands in an obstacle even when ``state + action`` would not.
+
+        Given: A DiscreteLightDarkPOMDP with obstacle (5, 5) and
+            obstacle_hit_probability=1.0. State [4, 4], action "up" (intended
+            next_state = [4, 5], NOT an obstacle); but a realised next_state
+            of [5, 5] (transition error landed in the obstacle) is threaded in.
+        When: ``env.reward(state, action, next_state=realised_next)`` is
+            called with ``realised_next`` set to [5, 5].
+        Then: The returned reward includes the obstacle penalty.
+
+        Test type: unit
+        """
+        env = DiscreteLightDarkPOMDP(
+            discount_factor=0.95,
+            transition_error_prob=0.0,
+            obstacle_hit_probability=1.0,
+            obstacles=[(5, 5)],
+            goal_state=np.array([10, 5]),
+        )
+        state = np.array([4, 4])
+        action = "up"  # intended next = [4, 5] (clear)
+        realised_next = np.array([5, 5])  # transition-error landing on obstacle
+
+        reward_with_realised = env.reward(state, action, next_state=realised_next)
+
+        expected = (
+            -env.fuel_cost
+            - float(np.linalg.norm(realised_next - env.goal_state))
+            + env.obstacle_reward
+        )
+        assert reward_with_realised == pytest.approx(expected)
+
+    def test_reward_obstacle_penalty_skipped_when_next_state_clear(self):
+        """No obstacle penalty when realised next_state is clear.
+
+        Purpose: Validates that ``reward`` does NOT apply the obstacle
+            penalty when a clear realised ``next_state`` is threaded in,
+            even if ``state + action`` would land in an obstacle.
+
+        Given: A DiscreteLightDarkPOMDP with obstacle (5, 5) and
+            obstacle_hit_probability=1.0. State [4, 5], action "right"
+            (intended next_state = [5, 5], an obstacle); but a realised
+            next_state of [4, 4] (transition error) is threaded in.
+        When: ``env.reward(state, action, next_state=realised_next)`` is
+            called with ``realised_next`` set to [4, 4].
+        Then: No obstacle penalty is applied.
+
+        Test type: unit
+        """
+        env = DiscreteLightDarkPOMDP(
+            discount_factor=0.95,
+            transition_error_prob=0.0,
+            obstacle_hit_probability=1.0,
+            obstacles=[(5, 5)],
+            goal_state=np.array([10, 5]),
+        )
+        state = np.array([4, 5])
+        action = "right"  # intended next = [5, 5] (obstacle)
+        realised_next = np.array([4, 4])  # transition-error landing clear
+
+        reward_with_realised = env.reward(state, action, next_state=realised_next)
+
+        expected = -env.fuel_cost - float(np.linalg.norm(realised_next - env.goal_state))
+        assert reward_with_realised == pytest.approx(expected)
+
+    def test_sample_next_step_reward_matches_returned_next_state(self):
+        """sample_next_step's reward matches reward(state, action, returned_next).
+
+        Purpose: Validates that the reward returned by ``sample_next_step``
+            is consistent with calling ``reward`` against the same realised
+            next_state under non-trivial transition stochasticity.
+
+        Given: A DiscreteLightDarkPOMDP with transition_error_prob=0.5 (so
+            many calls realise an unintended next_state). Goal [10, 5],
+            obstacle (5, 5), obstacle_hit_probability=1.0 so obstacle
+            penalties are deterministic given next_state.
+        When: ``sample_next_step`` is called many times and we re-evaluate
+            ``reward(state, action, next_state=returned_next_state)``.
+        Then: Both reward values agree exactly across all calls.
+
+        Test type: unit
+        """
+        env = DiscreteLightDarkPOMDP(
+            discount_factor=0.95,
+            transition_error_prob=0.5,
+            obstacle_hit_probability=1.0,
+            obstacles=[(5, 5), (3, 7)],
+            goal_state=np.array([10, 5]),
+            observation_model_type=ObservationModelType.DISTANCE_BASED,
+        )
+
+        np.random.seed(7)
+        random.seed(7)
+        anchors = [
+            np.array([4, 5]),
+            np.array([5, 4]),
+            np.array([3, 6]),
+            np.array([6, 5]),
+            np.array([0, 0]),
+            np.array([10, 4]),
+        ]
+        for state in anchors:
+            for action in env.get_actions():
+                for _ in range(40):
+                    next_state, _, reward_from_step = env.sample_next_step(state, action)
+                    reward_recomputed = env.reward(state, action, next_state=next_state)
+                    assert reward_from_step == pytest.approx(reward_recomputed), (
+                        f"Mismatch for state={state} action={action} "
+                        f"next_state={next_state}: step={reward_from_step} "
+                        f"recomputed={reward_recomputed}"
+                    )
+
+    def test_reward_batch_obstacle_penalty_uses_realised_next_states(self):
+        """reward_batch obstacle penalty fires per realised next_state row.
+
+        Purpose: Validates ``reward_batch`` honours per-row threaded
+            ``next_states`` for obstacle / goal / out-of-grid checks rather
+            than recomputing ``states + action_to_vector[action]``.
+
+        Given: A DiscreteLightDarkPOMDP with obstacle (5, 5),
+            obstacle_hit_probability=1.0. ``states = [[4, 4], [4, 5]]``,
+            action ``"up"`` (intended next = [[4, 5], [4, 6]] — neither in
+            obstacle). Threaded ``next_states = [[5, 5], [4, 6]]`` so only
+            row 0 lands on the obstacle.
+        When: ``env.reward_batch(states, action, next_states=next_states)``.
+        Then: Row 0 includes obstacle_reward; row 1 does not.
+
+        Test type: unit
+        """
+        env = DiscreteLightDarkPOMDP(
+            discount_factor=0.95,
+            transition_error_prob=0.0,
+            obstacle_hit_probability=1.0,
+            obstacles=[(5, 5)],
+            goal_state=np.array([10, 5]),
+        )
+        states = np.array([[4, 4], [4, 5]], dtype=float)
+        next_states = np.array([[5, 5], [4, 6]], dtype=float)
+        action = "up"
+
+        rewards = env.reward_batch(states, action, next_states=next_states)
+
+        expected_row0 = (
+            -env.fuel_cost
+            - float(np.linalg.norm(next_states[0] - env.goal_state))
+            + env.obstacle_reward
+        )
+        expected_row1 = -env.fuel_cost - float(np.linalg.norm(next_states[1] - env.goal_state))
+        assert rewards[0] == pytest.approx(expected_row0)
+        assert rewards[1] == pytest.approx(expected_row1)
+
+    def test_sample_next_step_reward_seed_deterministic_with_stochastic_refund(self):
+        """Two seeded sample_next_step calls produce identical rewards under
+        ``obstacle_hit_probability < 1.0``.
+
+        Purpose: Regression test for the RNG-source mismatch that existed
+            before this fix. ``_compute_reward_fast`` previously drew the
+            obstacle Bernoulli from Python's stdlib ``random`` module while
+            the public ``reward()`` path drew from ``np.random``. With the
+            two streams independent, ``np.random.seed`` could not pin the
+            obstacle penalty draw, so two seeded calls returned different
+            rewards. The fix routes both paths through ``np.random.rand``.
+
+        Given: An env with ``obstacle_hit_probability=0.5`` and an obstacle
+            that ``state + action`` deterministically lands on, so the
+            Bernoulli draw is always exercised.
+        When: ``np.random.seed(seed)`` is set and ``sample_next_step`` is
+            called; the seed is reset and the call is repeated.
+        Then: The two rewards are identical (both runs share the np.random
+            stream now that ``_compute_reward_fast`` uses ``np.random.rand``).
+
+        Test type: unit
+        """
+        env = DiscreteLightDarkPOMDP(
+            discount_factor=0.95,
+            transition_error_prob=0.0,
+            obstacle_hit_probability=0.5,
+            obstacles=[(5, 5)],
+            goal_state=np.array([10, 5]),
+        )
+        state = np.array([4, 5])
+        action = "right"
+
+        any_bernoulli_resolved = False
+        baseline_unhit = -env.fuel_cost - float(np.linalg.norm(np.array([5, 5]) - env.goal_state))
+        for seed in range(20):
+            np.random.seed(seed)
+            _, _, r1 = env.sample_next_step(state, action)
+            np.random.seed(seed)
+            _, _, r2 = env.sample_next_step(state, action)
+            assert r1 == pytest.approx(r2), (
+                f"seed={seed}: sample_next_step rewards must be reproducible "
+                f"under np.random.seed (was r1={r1}, r2={r2}). RNG-source "
+                f"mismatch suspected."
+            )
+            if r1 != pytest.approx(baseline_unhit):
+                any_bernoulli_resolved = True
+        assert any_bernoulli_resolved, (
+            "test_setup_error: across 20 seeds, the obstacle Bernoulli never "
+            "fired — strengthen the action/state to land on the obstacle."
+        )

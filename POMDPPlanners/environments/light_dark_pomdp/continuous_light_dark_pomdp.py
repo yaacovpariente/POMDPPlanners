@@ -635,8 +635,12 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         return log_norm - 0.5 * m_sq
 
     def reward(self, state: np.ndarray, action: np.ndarray, next_state: Any = None) -> float:
-        del next_state
-        return self.reward_model.compute_reward(state, action)
+        # Thread the realised ``next_state`` from
+        # :meth:`Environment.sample_next_step` into the reward model so the
+        # obstacle / goal / out-of-grid checks score against the same draw
+        # as the trajectory rather than the deterministic ``state + action``
+        # pre-noise position.
+        return self.reward_model.compute_reward(state, action, next_state=next_state)
 
     def reward_batch(
         self,
@@ -644,8 +648,10 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         action: np.ndarray,
         next_states: Optional[Union[np.ndarray, Sequence[Any]]] = None,
     ) -> np.ndarray:
-        del next_states
-        return self.reward_model.compute_reward_batch(np.asarray(states), action)
+        next_states_arr = None if next_states is None else np.asarray(next_states)
+        return self.reward_model.compute_reward_batch(
+            np.asarray(states), action, next_states=next_states_arr
+        )
 
     def is_terminal(self, state: np.ndarray) -> bool:
         if state.shape != (2,):
@@ -983,8 +989,20 @@ class ContinuousLightDarkPOMDPDiscreteActions(ContinuousLightDarkPOMDP, Discrete
         Returns:
             Discounted sum of immediate rewards along the sampled trajectory.
         """
-        if not isinstance(self.reward_model, ContinuousLightDarkRewardModel) or isinstance(
-            self.reward_model, (ContinuousLDDangerousStatesRewardModel,)
+        # The native ``simulate_rollout`` kernel scores the obstacle/goal
+        # penalty against ``state + action`` (pre-noise intended position),
+        # while the Python ``reward()`` path now consults the realised
+        # noisy next_state. Whenever transition noise is non-trivial AND
+        # obstacles are configured, route through Python so the rollout
+        # reward agrees with ``reward()`` on the realised next_state.
+        # Until the C++ kernel is rebuilt this is the only correctness-
+        # preserving path for stochastic-transition configurations.
+        cov_diag_max = float(np.max(np.abs(self.state_transition_cov_matrix)))
+        bypass_native_for_realised_pos = cov_diag_max > 0.0 and self._obstacles_flat.shape[0] > 0
+        if (
+            not isinstance(self.reward_model, ContinuousLightDarkRewardModel)
+            or isinstance(self.reward_model, (ContinuousLDDangerousStatesRewardModel,))
+            or bypass_native_for_realised_pos
         ):
             return python_random_rollout(
                 state=state,
