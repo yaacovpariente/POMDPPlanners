@@ -187,7 +187,6 @@ class ContinuousLightDarkVectorizedUpdater(VectorizedParticleBeliefUpdater):
             covariance_far=self._obs_cov_far,
             beacons=self.beacons,
             beacon_radius=float(self.beacon_radius),
-            grid_size=float(self.grid_size),
         )
         return obs_model.batch_log_likelihood(next_particles, observation_arr)
 

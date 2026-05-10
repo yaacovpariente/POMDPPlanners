@@ -3086,3 +3086,52 @@ def test_scalar_and_batch_obs_log_prob_share_symmetric_floor_in_deep_underflow()
     np.testing.assert_allclose(scalar, expected_floor, atol=1e-6)
     np.testing.assert_allclose(batch, expected_floor, atol=1e-6)
     np.testing.assert_allclose(scalar, batch, atol=1e-6)
+
+
+@pytest.mark.parametrize(
+    "obs_type",
+    [
+        ObservationModelType.NORMAL_NOISE,
+        ObservationModelType.NORMAL_NOISE_NO_OBS_IN_DARK,
+        ObservationModelType.DISTANCE_BASED,
+    ],
+)
+def test_observation_sampler_unbiased_near_grid_edge(obs_type: ObservationModelType):
+    """Regression test: obs sampler must not clip while obs_pdf leaves density unclipped.
+
+    Purpose: Validates that observation samples follow the unclipped Gaussian
+    density used by ``observation_log_probability``. Previously the sampler
+    clipped to ``[0, grid_size]`` while the PDF stayed unclipped, biasing
+    importance weights near grid edges (audit: continuous_light_dark_pomdp.py
+    obs sampler clip-vs-pdf mismatch).
+
+    Given: A ContinuousLightDarkPOMDPDiscreteActions env with observation
+        covariance ``I`` (σ=1.0) and a next_state at (0.3, 0.3) — within
+        beacon_radius of beacon (0, 0) so NoObsInDark/DistanceBased return
+        real observations, and close enough to the lower grid edge that a
+        clipped sampler would shift the empirical mean upward by ≈0.27.
+    When: 10_000 observations are drawn and the per-component empirical mean
+        is compared to next_state.
+    Then: Empirical mean is within 0.05 of next_state in every component
+        (pre-fix bias was ≈0.27, ≫ 0.05).
+
+    Test type: unit
+    """
+    next_state = np.array([0.3, 0.3])
+    n_samples = 10_000
+    np.random.seed(0)
+
+    env = ContinuousLightDarkPOMDPDiscreteActions(
+        discount_factor=0.95,
+        observation_cov_matrix=np.eye(2),
+        observation_model_type=obs_type,
+    )
+    observations = env.sample_observation(next_state, "up", n_samples=n_samples)
+    observations_arr = np.asarray(observations, dtype=float)
+    empirical_mean = observations_arr.mean(axis=0)
+    bias = np.abs(empirical_mean - next_state)
+    assert bias.max() < 0.05, (
+        f"{obs_type.name}: empirical mean {empirical_mean} differs from "
+        f"next_state {next_state} by {bias} — sampler clipping while PDF "
+        f"is unclipped breaks importance weights near edges."
+    )
