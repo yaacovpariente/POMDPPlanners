@@ -2289,3 +2289,54 @@ class TestDiscreteLightDarkRewardNextStateConsistency:
         expected_row1 = -env.fuel_cost - float(np.linalg.norm(next_states[1] - env.goal_state))
         assert rewards[0] == pytest.approx(expected_row0)
         assert rewards[1] == pytest.approx(expected_row1)
+
+    def test_sample_next_step_reward_seed_deterministic_with_stochastic_refund(self):
+        """Two seeded sample_next_step calls produce identical rewards under
+        ``obstacle_hit_probability < 1.0``.
+
+        Purpose: Regression test for the RNG-source mismatch that existed
+            before this fix. ``_compute_reward_fast`` previously drew the
+            obstacle Bernoulli from Python's stdlib ``random`` module while
+            the public ``reward()`` path drew from ``np.random``. With the
+            two streams independent, ``np.random.seed`` could not pin the
+            obstacle penalty draw, so two seeded calls returned different
+            rewards. The fix routes both paths through ``np.random.rand``.
+
+        Given: An env with ``obstacle_hit_probability=0.5`` and an obstacle
+            that ``state + action`` deterministically lands on, so the
+            Bernoulli draw is always exercised.
+        When: ``np.random.seed(seed)`` is set and ``sample_next_step`` is
+            called; the seed is reset and the call is repeated.
+        Then: The two rewards are identical (both runs share the np.random
+            stream now that ``_compute_reward_fast`` uses ``np.random.rand``).
+
+        Test type: unit
+        """
+        env = DiscreteLightDarkPOMDP(
+            discount_factor=0.95,
+            transition_error_prob=0.0,
+            obstacle_hit_probability=0.5,
+            obstacles=[(5, 5)],
+            goal_state=np.array([10, 5]),
+        )
+        state = np.array([4, 5])
+        action = "right"
+
+        any_bernoulli_resolved = False
+        baseline_unhit = -env.fuel_cost - float(np.linalg.norm(np.array([5, 5]) - env.goal_state))
+        for seed in range(20):
+            np.random.seed(seed)
+            _, _, r1 = env.sample_next_step(state, action)
+            np.random.seed(seed)
+            _, _, r2 = env.sample_next_step(state, action)
+            assert r1 == pytest.approx(r2), (
+                f"seed={seed}: sample_next_step rewards must be reproducible "
+                f"under np.random.seed (was r1={r1}, r2={r2}). RNG-source "
+                f"mismatch suspected."
+            )
+            if r1 != pytest.approx(baseline_unhit):
+                any_bernoulli_resolved = True
+        assert any_bernoulli_resolved, (
+            "test_setup_error: across 20 seeds, the obstacle Bernoulli never "
+            "fired — strengthen the action/state to land on the obstacle."
+        )

@@ -989,8 +989,20 @@ class ContinuousLightDarkPOMDPDiscreteActions(ContinuousLightDarkPOMDP, Discrete
         Returns:
             Discounted sum of immediate rewards along the sampled trajectory.
         """
-        if not isinstance(self.reward_model, ContinuousLightDarkRewardModel) or isinstance(
-            self.reward_model, (ContinuousLDDangerousStatesRewardModel,)
+        # The native ``simulate_rollout`` kernel scores the obstacle/goal
+        # penalty against ``state + action`` (pre-noise intended position),
+        # while the Python ``reward()`` path now consults the realised
+        # noisy next_state. Whenever transition noise is non-trivial AND
+        # obstacles are configured, route through Python so the rollout
+        # reward agrees with ``reward()`` on the realised next_state.
+        # Until the C++ kernel is rebuilt this is the only correctness-
+        # preserving path for stochastic-transition configurations.
+        cov_diag_max = float(np.max(np.abs(self.state_transition_cov_matrix)))
+        bypass_native_for_realised_pos = cov_diag_max > 0.0 and self._obstacles_flat.shape[0] > 0
+        if (
+            not isinstance(self.reward_model, ContinuousLightDarkRewardModel)
+            or isinstance(self.reward_model, (ContinuousLDDangerousStatesRewardModel,))
+            or bypass_native_for_realised_pos
         ):
             return python_random_rollout(
                 state=state,
