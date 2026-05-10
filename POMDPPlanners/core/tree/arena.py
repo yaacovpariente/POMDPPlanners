@@ -498,13 +498,6 @@ class Tree:
         """Increment ``visit_count[node_id]`` by one. Works for either node kind."""
         self.visit_count[node_id] += 1
 
-    def backup_belief_v_from_children(self, belief_id: int) -> None:
-        """Set ``v_value[belief_id] = max(q_value[child])`` over its action children."""
-        children = self.children_ids[belief_id]
-        if not children:
-            return
-        self.v_value[belief_id] = float(max(self.q_value[c] for c in children))
-
     # --- mutations ---
 
     def update_belief(
