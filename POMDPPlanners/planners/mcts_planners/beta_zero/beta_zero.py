@@ -346,7 +346,7 @@ class BetaZero(ArenaDoubleProgressiveWideningMCTSPolicy, TrainablePolicy):
 
         if self._collecting_data and self._last_tree is not None:
             tree, root_id = self._last_tree
-            if tree.children_ids[root_id]:
+            if tree.get_children_ids(root_id):
                 features = self.belief_representation(belief)
                 policy_target = self._compute_q_weighted_policy_target(tree, root_id)
                 self._pending_examples.append(
@@ -359,8 +359,8 @@ class BetaZero(ArenaDoubleProgressiveWideningMCTSPolicy, TrainablePolicy):
         if depth > self.depth:
             return 0.0
 
-        if self.environment.is_terminal(tree.belief[belief_id].sample()):
-            tree.visit_count[belief_id] += 1
+        if self.environment.is_terminal(tree.get_belief(belief_id).sample()):
+            tree.increment_visit_count(belief_id)
             return 0.0
 
         action_priors = self._get_action_priors(tree=tree, belief_id=belief_id)
@@ -387,13 +387,13 @@ class BetaZero(ArenaDoubleProgressiveWideningMCTSPolicy, TrainablePolicy):
         return return_sample
 
     def _simulate_return(self, tree: Tree, belief_id: int, action_id: int, depth: int) -> float:
-        action_children_count = len(tree.children_ids[action_id])
-        action_visits = tree.visit_count[action_id]
+        action_children_count = len(tree.get_children_ids(action_id))
+        action_visits = tree.get_visit_count(action_id)
         if action_children_count <= self.k_o * action_visits**self.alpha_o:
             next_belief_id, immediate_reward = self._sample_new_belief_node(
                 tree=tree, belief_id=belief_id, action_id=action_id
             )
-            leaf_value = self._network_leaf_value(tree.belief[next_belief_id])
+            leaf_value = self._network_leaf_value(tree.get_belief(next_belief_id))
             total = immediate_reward + self.discount_factor * leaf_value
         else:
             next_belief_id, immediate_reward = self._sample_existing_belief_node(
@@ -407,18 +407,13 @@ class BetaZero(ArenaDoubleProgressiveWideningMCTSPolicy, TrainablePolicy):
     def _sample_new_belief_node(
         self, tree: Tree, belief_id: int, action_id: int
     ) -> Tuple[int, float]:
-        belief = tree.belief[belief_id]
-        action = tree.action[action_id]
+        belief = tree.get_belief(belief_id)
+        action = tree.get_action(action_id)
         immediate_reward = belief_expectation_reward(
             belief=belief, action=action, env=self.environment
         )
-        # Stash on the action node — ``action_id`` is unique per
-        # (parent_belief, action) and ``belief_expectation_reward`` is a
-        # function of exactly that pair, so every child belief generated
-        # under this action node shares the same immediate reward. Keying
-        # on the parent belief would let sibling actions overwrite each
-        # other.
-        tree.set_immediate_cost(action_id, -immediate_reward)
+        # Stash on the action node — see PFT-DPW for the same pattern.
+        tree.set_immediate_reward(action_id, immediate_reward)
 
         _, next_observation, _ = self.environment.sample_next_step(
             state=belief.sample(), action=action
@@ -436,22 +431,17 @@ class BetaZero(ArenaDoubleProgressiveWideningMCTSPolicy, TrainablePolicy):
     def _sample_existing_belief_node(
         self, tree: Tree, belief_id: int, action_id: int  # pylint: disable=unused-argument
     ) -> Tuple[int, float]:
-        action_immediate_cost = tree.immediate_cost[action_id]
-        assert action_immediate_cost is not None, "action immediate_cost must be set"
-        immediate_reward = -action_immediate_cost
+        immediate_reward = tree.get_immediate_reward(action_id)
+        assert immediate_reward is not None, "action immediate_reward must be set"
         next_belief_id = tree.sample_belief_child(action_id)
         return next_belief_id, immediate_reward
 
     def _update_node_statistics(
         self, tree: Tree, belief_id: int, action_id: int, total: float
     ) -> None:
-        tree.visit_count[belief_id] += 1
-        tree.visit_count[action_id] += 1
-        old_q = tree.q_value[action_id]
-        tree.q_value[action_id] = old_q + (total - old_q) / tree.visit_count[action_id]
-        tree.v_value[belief_id] = float(
-            np.max([tree.q_value[cid] for cid in tree.children_ids[belief_id]])
-        )
+        tree.increment_visit_count(belief_id)
+        tree.update_action_q_with_return(action_id, total)
+        tree.backup_belief_v_from_children(belief_id)
 
     # ── Network helpers ───────────────────────────────────────────────
 
@@ -461,18 +451,20 @@ class BetaZero(ArenaDoubleProgressiveWideningMCTSPolicy, TrainablePolicy):
         return self._get_denormalized_value(value)
 
     def _get_action_priors(self, tree: Tree, belief_id: int) -> Optional[np.ndarray]:
-        if not tree.children_ids[belief_id]:
+        if not tree.get_children_ids(belief_id):
             return None
         if self.network.action_space_type == "discrete":
             return self._discrete_action_priors(tree=tree, belief_id=belief_id)
         return None
 
     def _discrete_action_priors(self, tree: Tree, belief_id: int) -> np.ndarray:
-        features = self._get_normalized_features(self.belief_representation(tree.belief[belief_id]))
+        features = self._get_normalized_features(
+            self.belief_representation(tree.get_belief(belief_id))
+        )
         policy, _ = self.network.predict(features)
         actions = self.environment.get_actions()  # type: ignore[attr-defined]
-        children = tree.children_ids[belief_id]
-        child_actions = [tree.action[cid] for cid in children]
+        children = tree.get_children_ids(belief_id)
+        child_actions = [tree.get_action(cid) for cid in children]
         priors = np.array(
             [
                 policy[actions.index(a)] if a in actions else 1.0 / len(child_actions)
@@ -494,9 +486,9 @@ class BetaZero(ArenaDoubleProgressiveWideningMCTSPolicy, TrainablePolicy):
         Returns a probability distribution over ``belief_id``'s child actions.
         For discrete action spaces, maps to the full action-space vector.
         """
-        children = tree.children_ids[belief_id]
-        q_values = np.array([tree.q_value[cid] for cid in children])
-        visit_counts = np.array([tree.visit_count[cid] for cid in children], dtype=np.float64)
+        children = tree.get_children_ids(belief_id)
+        q_values = np.array([tree.get_q_value(cid) for cid in children])
+        visit_counts = np.array([tree.get_visit_count(cid) for cid in children], dtype=np.float64)
 
         q_term = self._softmax_q_term(q_values)
         n_term = self._visit_count_term(visit_counts)
@@ -515,7 +507,7 @@ class BetaZero(ArenaDoubleProgressiveWideningMCTSPolicy, TrainablePolicy):
     def _compute_continuous_policy_target(
         self, tree: Tree, children: List[int], probs: np.ndarray
     ) -> np.ndarray:
-        child_actions = np.array([tree.action[cid] for cid in children])
+        child_actions = np.array([tree.get_action(cid) for cid in children])
         weighted_mean = probs @ child_actions
         diff = child_actions - weighted_mean
         weighted_var = probs @ (diff**2)
@@ -539,7 +531,7 @@ class BetaZero(ArenaDoubleProgressiveWideningMCTSPolicy, TrainablePolicy):
         actions = self.environment.get_actions()  # type: ignore[attr-defined]
         full = np.zeros(len(actions), dtype=np.float64)
         for cid, p in zip(children, probs):
-            child_action = tree.action[cid]
+            child_action = tree.get_action(cid)
             if child_action in actions:
                 full[actions.index(child_action)] = p
         total = full.sum()

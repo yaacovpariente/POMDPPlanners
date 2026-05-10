@@ -132,7 +132,7 @@ class POMCPOW(
 
     def _simulate_path(self, tree: Tree, belief_id: int, depth: int) -> float:
         """Sample a state from the belief and recurse into the tree."""
-        state = tree.belief[belief_id].sample()
+        state = tree.get_belief(belief_id).sample()
         return self._simulate_state_path(tree=tree, state=state, belief_id=belief_id, depth=depth)
 
     def _simulate_state_path(  # pylint: disable=too-many-locals
@@ -143,7 +143,7 @@ class POMCPOW(
             return 0.0
 
         if self.environment.is_terminal(state=state):
-            tree.visit_count[belief_id] += 1
+            tree.increment_visit_count(belief_id)
             return 0.0
 
         action_id = action_progressive_widening_arena(
@@ -156,7 +156,7 @@ class POMCPOW(
             min_visit_count_per_action=self.min_visit_count_per_action,
             environment=self.environment,
         )
-        action = tree.action[action_id]
+        action = tree.get_action(action_id)
 
         next_state, next_observation, reward = self.environment.sample_next_step(
             state=state, action=action
@@ -164,15 +164,15 @@ class POMCPOW(
 
         next_belief_id = self._observation_widening(tree, action_id, next_observation)
 
-        tree.belief[next_belief_id].inplace_update(
+        tree.get_belief(next_belief_id).inplace_update(
             action=action,
             observation=next_observation,
             pomdp=self.environment,
             state=next_state,
         )
 
-        if tree.visit_count[next_belief_id] == 0:
-            tree.visit_count[next_belief_id] += 1
+        if tree.get_visit_count(next_belief_id) == 0:
+            tree.increment_visit_count(next_belief_id)
             total = reward + self.discount_factor * random_rollout_action_sampler(
                 state=next_state,
                 depth=depth + 1,
@@ -181,23 +181,20 @@ class POMCPOW(
                 discount_factor=self.discount_factor,
             )
         else:
-            next_state = tree.belief[next_belief_id].sample()
+            next_state = tree.get_belief(next_belief_id).sample()
             total = reward + self.discount_factor * self._simulate_state_path(
                 tree=tree, state=next_state, belief_id=next_belief_id, depth=depth + 1
             )
 
-        # Backpropagation
-        tree.visit_count[belief_id] += 1
-        tree.visit_count[action_id] += 1
-        old_q = tree.q_value[action_id]
-        tree.q_value[action_id] = old_q + (total - old_q) / tree.visit_count[action_id]
-        tree.v_value[belief_id] = max(tree.q_value[cid] for cid in tree.children_ids[belief_id])
+        tree.increment_visit_count(belief_id)
+        tree.update_action_q_with_return(action_id, total)
+        tree.backup_belief_v_from_children(belief_id)
         return total
 
     def _observation_widening(self, tree: Tree, action_id: int, observation: Any) -> int:
         """Get-or-add the belief child for ``observation`` under ``action_id``."""
-        children_count = len(tree.children_ids[action_id])
-        action_visits = tree.visit_count[action_id]
+        children_count = len(tree.get_children_ids(action_id))
+        action_visits = tree.get_visit_count(action_id)
         if children_count <= self.k_o * action_visits**self.alpha_o:
             try:
                 obs_key = self.environment.hash_observation(observation)

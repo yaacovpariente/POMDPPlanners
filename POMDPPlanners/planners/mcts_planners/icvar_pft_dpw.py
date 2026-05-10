@@ -108,8 +108,8 @@ class ICVaR_PFT_DPW(ArenaPathSimulationPolicyCostSetting):
         if depth > self.depth:
             return
 
-        if self.is_terminal_belief(belief=tree.belief[belief_id]):
-            tree.visit_count[belief_id] += 1
+        if self.is_terminal_belief(belief=tree.get_belief(belief_id)):
+            tree.increment_visit_count(belief_id)
             return
 
         action_id = cvar_action_progressive_widening_arena(
@@ -132,8 +132,8 @@ class ICVaR_PFT_DPW(ArenaPathSimulationPolicyCostSetting):
             environment=self.environment,
         )
 
-        action_children_count = len(tree.children_ids[action_id])
-        action_visits = tree.visit_count[action_id]
+        action_children_count = len(tree.get_children_ids(action_id))
+        action_visits = tree.get_visit_count(action_id)
         if action_children_count <= self.k_o * action_visits**self.alpha_o:
             next_belief_id = self._generate_belief(tree=tree, action_id=action_id)
         else:
@@ -160,10 +160,10 @@ class ICVaR_PFT_DPW(ArenaPathSimulationPolicyCostSetting):
         return sampled_id
 
     def _generate_belief(self, tree: Tree, action_id: int) -> int:
-        parent_belief_id = tree.parent_id[action_id]
+        parent_belief_id = tree.get_parent_id(action_id)
         assert parent_belief_id is not None, "action node must have a parent belief"
-        belief = tree.belief[parent_belief_id]
-        action = tree.action[action_id]
+        belief = tree.get_belief(parent_belief_id)
+        action = tree.get_action(action_id)
         state = belief.sample()
         next_state = self.environment.sample_next_state(state=state, action=action)
         next_observation = self.environment.sample_observation(next_state=next_state, action=action)
@@ -177,7 +177,7 @@ class ICVaR_PFT_DPW(ArenaPathSimulationPolicyCostSetting):
         )
         # Compute the (parent_belief, action) expected cost once and stash it on
         # the action node. ``update_nodes`` reads it back without recomputing.
-        if tree.immediate_cost[action_id] is None:
+        if tree.get_immediate_cost(action_id) is None:
             tree.set_immediate_cost(
                 action_id,
                 belief_expectation_cost(belief=belief, action=action, env=self.environment),
@@ -186,26 +186,26 @@ class ICVaR_PFT_DPW(ArenaPathSimulationPolicyCostSetting):
         return next_belief_id
 
     def update_nodes(self, tree: Tree, belief_id: int, action_id: int) -> None:
-        tree.visit_count[belief_id] += 1
-        tree.visit_count[action_id] += 1
+        tree.increment_visit_count(belief_id)
+        tree.increment_visit_count(action_id)
 
-        action_immediate_cost = tree.immediate_cost[action_id]
+        action_immediate_cost = tree.get_immediate_cost(action_id)
         if action_immediate_cost is None:
             # Action selected via LCB exploration on a never-expanded path.
             action_immediate_cost = belief_expectation_cost(
-                belief=tree.belief[belief_id],
-                action=tree.action[action_id],
+                belief=tree.get_belief(belief_id),
+                action=tree.get_action(action_id),
                 env=self.environment,
             )
             tree.set_immediate_cost(action_id, action_immediate_cost)
 
-        action_children = tree.children_ids[action_id]
+        action_children = tree.get_children_ids(action_id)
         n_action_children = len(action_children)
         if n_action_children == 0:
             tree.q_value[action_id] = action_immediate_cost
         else:
             visit_counts = np.fromiter(
-                (tree.visit_count[cid] for cid in action_children),
+                (tree.get_visit_count(cid) for cid in action_children),
                 dtype=np.float64,
                 count=n_action_children,
             )
@@ -221,7 +221,7 @@ class ICVaR_PFT_DPW(ArenaPathSimulationPolicyCostSetting):
                 tree.q_value[action_id] = action_immediate_cost
             else:
                 v_values = np.fromiter(
-                    (tree.v_value[cid] for cid in action_children),
+                    (tree.get_v_value(cid) for cid in action_children),
                     dtype=np.float64,
                     count=n_action_children,
                 )
@@ -234,11 +234,11 @@ class ICVaR_PFT_DPW(ArenaPathSimulationPolicyCostSetting):
                     )
                 )
 
-        belief_children = tree.children_ids[belief_id]
+        belief_children = tree.get_children_ids(belief_id)
         best_q: Optional[float] = None
         for cid in belief_children:
-            if tree.visit_count[cid] > 0:
-                q = tree.q_value[cid]
+            if tree.get_visit_count(cid) > 0:
+                q = tree.get_q_value(cid)
                 if best_q is None or q < best_q:
                     best_q = q
         if best_q is not None:
