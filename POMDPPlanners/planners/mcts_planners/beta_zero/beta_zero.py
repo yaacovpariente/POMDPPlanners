@@ -412,7 +412,13 @@ class BetaZero(ArenaDoubleProgressiveWideningMCTSPolicy, TrainablePolicy):
         immediate_reward = belief_expectation_reward(
             belief=belief, action=action, env=self.environment
         )
-        tree.set_immediate_cost(belief_id, -immediate_reward)
+        # Stash on the action node — ``action_id`` is unique per
+        # (parent_belief, action) and ``belief_expectation_reward`` is a
+        # function of exactly that pair, so every child belief generated
+        # under this action node shares the same immediate reward. Keying
+        # on the parent belief would let sibling actions overwrite each
+        # other.
+        tree.set_immediate_cost(action_id, -immediate_reward)
 
         _, next_observation, _ = self.environment.sample_next_step(
             state=belief.sample(), action=action
@@ -428,11 +434,11 @@ class BetaZero(ArenaDoubleProgressiveWideningMCTSPolicy, TrainablePolicy):
         return next_belief_id, immediate_reward
 
     def _sample_existing_belief_node(
-        self, tree: Tree, belief_id: int, action_id: int
+        self, tree: Tree, belief_id: int, action_id: int  # pylint: disable=unused-argument
     ) -> Tuple[int, float]:
-        parent_immediate_cost = tree.immediate_cost[belief_id]
-        assert parent_immediate_cost is not None, "parent belief immediate_cost must be set"
-        immediate_reward = -parent_immediate_cost
+        action_immediate_cost = tree.immediate_cost[action_id]
+        assert action_immediate_cost is not None, "action immediate_cost must be set"
+        immediate_reward = -action_immediate_cost
         next_belief_id = tree.sample_belief_child(action_id)
         return next_belief_id, immediate_reward
 
