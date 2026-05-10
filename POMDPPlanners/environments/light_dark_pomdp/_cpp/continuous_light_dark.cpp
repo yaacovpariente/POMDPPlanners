@@ -9,7 +9,9 @@
 //   ``state + action``.
 // * observation covariance is state-dependent: particles within ``beacon_radius``
 //   of any beacon use a tighter ("near") Gaussian, all others use the ("far")
-//   Gaussian. Post-sampling, observations are clipped to ``[0, grid_size]``.
+//   Gaussian. Observations are NOT clipped: ``observation_log_probability``
+//   evaluates the unclipped Gaussian density, so clipping the sampler would
+//   break importance weights near grid edges.
 //   This fits ``StateDependentObservationModelCpp<2>`` via an
 //   ``is_near_next_state`` hook that scans the packed beacon positions.
 //
@@ -108,15 +110,14 @@ class ContinuousLightDarkObservationCpp
                                       const py::array_t<double> &covariance_near,
                                       const py::array_t<double> &covariance_far,
                                       const py::array_t<double> &beacons,
-                                      double beacon_radius, double grid_size)
+                                      double beacon_radius)
         : pomdp_native::StateDependentObservationModelCpp<kLightDarkStateDim>(
               pomdp_native::to_array<kLightDarkStateDim>(next_state_obj, "next_state"),
               py::reinterpret_borrow<py::object>(action_arr),
               pomdp_native::GaussianND<kLightDarkStateDim>::from_covariance(covariance_near),
               pomdp_native::GaussianND<kLightDarkStateDim>::from_covariance(covariance_far)),
           beacons_packed_(flatten_beacons(beacons)),
-          beacon_radius_sq_(beacon_radius * beacon_radius),
-          grid_size_(grid_size) {}
+          beacon_radius_sq_(beacon_radius * beacon_radius) {}
 
     py::array_t<double> next_state_property() const {
         return pomdp_native::array_from_vector(next_state_.data(), next_state_.size());
@@ -147,16 +148,9 @@ class ContinuousLightDarkObservationCpp
         return false;
     }
 
-    void post_sample_transform(double *sample) const override {
-        for (std::size_t i = 0; i < kLightDarkStateDim; ++i) {
-            sample[i] = std::clamp(sample[i], 0.0, grid_size_);
-        }
-    }
-
   private:
     std::vector<double> beacons_packed_;  // [x0, y0, x1, y1, ...]
     double beacon_radius_sq_;
-    double grid_size_;
 };
 
 // ---------------------------------------------------------------------------
@@ -976,10 +970,9 @@ PYBIND11_MODULE(_native, m) {
     py::class_<ContinuousLightDarkObservationCpp>(m, "ContinuousLightDarkObservationCpp")
         .def(py::init<const py::object &, const py::array_t<double> &,
                       const py::array_t<double> &, const py::array_t<double> &,
-                      const py::array_t<double> &, double, double>(),
+                      const py::array_t<double> &, double>(),
              py::arg("next_state"), py::arg("action"), py::arg("covariance_near"),
-             py::arg("covariance_far"), py::arg("beacons"), py::arg("beacon_radius"),
-             py::arg("grid_size"))
+             py::arg("covariance_far"), py::arg("beacons"), py::arg("beacon_radius"))
         .def("sample", &ContinuousLightDarkObservationCpp::sample, py::arg("n_samples") = 1)
         .def("probability", &ContinuousLightDarkObservationCpp::probability, py::arg("values"))
         .def("batch_log_likelihood",

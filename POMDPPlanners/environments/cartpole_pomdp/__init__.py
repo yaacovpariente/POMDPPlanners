@@ -10,6 +10,7 @@ Classes:
 """
 
 from POMDPPlanners.environments.cartpole_pomdp.cartpole_pomdp import (
+    CartPoleInitialObservationDistribution,
     CartPoleInitialStateDistribution,
     CartPolePOMDP,
     CartPolePOMDPMetrics,
@@ -17,6 +18,7 @@ from POMDPPlanners.environments.cartpole_pomdp.cartpole_pomdp import (
 
 __all__ = [
     "CartPolePOMDP",
+    "CartPoleInitialObservationDistribution",
     "CartPoleInitialStateDistribution",
     "CartPolePOMDPMetrics",
 ]
