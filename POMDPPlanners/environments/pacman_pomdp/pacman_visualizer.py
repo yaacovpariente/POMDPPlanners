@@ -8,11 +8,12 @@ Classes:
 """
 
 from pathlib import Path
-from typing import TYPE_CHECKING, List, Tuple
+from typing import TYPE_CHECKING, Any, List, Optional, Tuple
 
 import numpy as np
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 
+from POMDPPlanners.core.belief import Belief, WeightedParticleBelief
 from POMDPPlanners.core.simulation import StepData
 
 if TYPE_CHECKING:
@@ -46,6 +47,31 @@ class PacManVisualizer:
         module_dir = Path(__file__).parent
         sprite_dir = module_dir / "img"
         self.sprites = self._load_sprites(sprite_dir, tile_size)
+        self.font_regular: Any = self._load_font(13)
+        self.font_bold: Any = self._load_font(14, bold=True)
+
+    @staticmethod
+    def _load_font(size: int, bold: bool = False) -> Any:
+        """Load a TrueType font for sharp text; fall back to PIL's default."""
+        candidates = (
+            [
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+                "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
+                "DejaVuSans-Bold.ttf",
+            ]
+            if bold
+            else [
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                "/usr/share/fonts/dejavu/DejaVuSans.ttf",
+                "DejaVuSans.ttf",
+            ]
+        )
+        for path in candidates:
+            try:
+                return ImageFont.truetype(path, size)
+            except (OSError, IOError):
+                continue
+        return ImageFont.load_default()
 
     def _colorize_sprite(self, image: Image.Image, color: Tuple[int, int, int, int]) -> Image.Image:
         """Apply color overlay to sprite image."""
@@ -131,6 +157,48 @@ class PacManVisualizer:
                         fill=(255, 255, 255, 255),
                     )
 
+    def _draw_ghost_belief(
+        self, belief: Optional[Belief], canvas: Image.Image, tile_size: int
+    ) -> None:
+        """Overlay the belief over ghost positions as a translucent red heatmap.
+
+        Each cell's red intensity is proportional to the marginal probability
+        (sum of normalized particle weights) that any ghost occupies that cell.
+        """
+        if belief is None or not isinstance(belief, WeightedParticleBelief):
+            return
+        particles = belief.particles
+        weights = belief.normalized_weights
+        if particles is None or weights is None or len(particles) == 0:
+            return
+
+        rows, cols = self.env.maze_size
+        heatmap = np.zeros((rows, cols), dtype=np.float64)
+        for particle, weight in zip(particles, weights):
+            for ghost_pos in self.env.get_ghost_positions(particle):
+                gr, gc = int(ghost_pos[0]), int(ghost_pos[1])
+                if 0 <= gr < rows and 0 <= gc < cols:
+                    heatmap[gr, gc] += float(weight)
+
+        max_w = float(heatmap.max())
+        if max_w <= 0.0:
+            return
+
+        overlay = Image.new("RGBA", canvas.size, (0, 0, 0, 0))  # type: ignore[arg-type]
+        draw_overlay = ImageDraw.Draw(overlay)
+        for r in range(rows):
+            for c in range(cols):
+                w = heatmap[r, c]
+                if w <= 0.0:
+                    continue
+                alpha = int(180.0 * (w / max_w))
+                x, y = c * tile_size, r * tile_size
+                draw_overlay.rectangle(
+                    [x, y, x + tile_size, y + tile_size],
+                    fill=(255, 0, 0, alpha),
+                )
+        canvas.alpha_composite(overlay)
+
     def _draw_ghosts(
         self, state: np.ndarray, canvas: Image.Image, sprites: dict, tile_size: int
     ) -> None:
@@ -193,34 +261,82 @@ class PacManVisualizer:
         action_name: str,
         tile_size: int,
     ) -> None:
-        """Draw text overlay with game state information."""
-        rows, _ = self.env.maze_size
-        text_y = rows * tile_size + 5
+        """Draw text overlay with game state information and legend."""
+        rows, cols = self.env.maze_size
+        canvas_w = cols * tile_size
+        panel_top = rows * tile_size
+        # Paint an opaque dark panel under the text so the white/grey
+        # foreground text isn't washed out by the GIF's transparent
+        # default background.
+        draw.rectangle(
+            [0, panel_top, canvas_w, panel_top + 80],
+            fill=(15, 15, 30, 255),
+        )
+
+        text_y = panel_top + 6
         pellets = self.env.get_pellets(state)
-        draw.text((5, text_y), f"Step {step_num}: {action_name}", fill=(255, 255, 255))
         score = self.env.get_score(state)
         score_display = int(score) if float(score).is_integer() else score
+
+        # Line 1: step + action
         draw.text(
-            (5, text_y + 15),
-            f"Score: {score_display}, Pellets: {len(pellets)}",
+            (6, text_y),
+            f"Step {step_num}: {action_name}",
             fill=(255, 255, 255),
+            font=self.font_bold,
+        )
+        # Line 2: score / pellets
+        draw.text(
+            (6, text_y + 18),
+            f"Score: {score_display}    Pellets: {len(pellets)}",
+            fill=(255, 255, 255),
+            font=self.font_regular,
+        )
+        # Line 3: belief legend (red swatch + caption). Caption text is
+        # kept short so it fits the maze-width canvas at small tile sizes.
+        legend_x = 6
+        legend_y = text_y + 36
+        draw.rectangle(
+            [legend_x, legend_y + 2, legend_x + 14, legend_y + 14],
+            fill=(255, 0, 0, 220),
+        )
+        draw.text(
+            (legend_x + 20, legend_y),
+            "= ghost belief",
+            fill=(255, 255, 255),
+            font=self.font_regular,
         )
 
         if self.env.get_terminal(state):
-            if len(pellets) == 0:
-                draw.text((5, text_y + 30), "🎉 YOU WIN! 🎉", fill=(0, 255, 0))
-            else:
-                draw.text((5, text_y + 30), "👻 GAME OVER! 👻", fill=(255, 0, 0))
+            banner = "YOU WIN!" if len(pellets) == 0 else "GAME OVER"
+            color = (0, 255, 0) if len(pellets) == 0 else (255, 80, 80)
+            draw.text(
+                (legend_x + 130, legend_y),
+                banner,
+                fill=color,
+                font=self.font_bold,
+            )
 
     def _render_frame(
-        self, state: np.ndarray, step_num: int, action_name: str, sprites: dict, tile_size: int
+        self,
+        state: np.ndarray,
+        step_num: int,
+        action_name: str,
+        sprites: dict,
+        tile_size: int,
+        belief: Optional[Belief] = None,
     ) -> Image.Image:
         """Render a single frame of the visualization."""
         rows, cols = self.env.maze_size
-        canvas = Image.new("RGBA", (cols * tile_size, rows * tile_size + 60))
+        # Reserve 80 px below the maze for: step+action, score+pellets,
+        # belief legend, and an optional terminal-state banner.
+        canvas = Image.new("RGBA", (cols * tile_size, rows * tile_size + 80))
         draw = ImageDraw.Draw(canvas)
 
         self._draw_maze_background(draw, tile_size)
+        # Belief overlay sits beneath pellets/ghosts/pacman so it doesn't
+        # obscure them; pellets remain visible on top of the heatmap.
+        self._draw_ghost_belief(belief, canvas, tile_size)
         self._draw_pellets(state, draw, tile_size)
         self._draw_ghosts(state, canvas, sprites, tile_size)
         self._draw_pacman(state, canvas, draw, sprites, tile_size)
@@ -229,7 +345,12 @@ class PacManVisualizer:
         return canvas
 
     def _generate_frames(
-        self, path: List[np.ndarray], actions: List[int], sprites: dict, tile_size: int
+        self,
+        path: List[np.ndarray],
+        actions: List[int],
+        sprites: dict,
+        tile_size: int,
+        beliefs: Optional[List[Optional[Belief]]] = None,
     ) -> List[Image.Image]:
         """Generate all frames for the visualization."""
         frames = []
@@ -238,8 +359,8 @@ class PacManVisualizer:
                 action_name = self.env.action_names[actions[i]]
             else:
                 action_name = "Terminal"
-
-            frame = self._render_frame(state, i + 1, action_name, sprites, tile_size)
+            belief = beliefs[i] if beliefs is not None and i < len(beliefs) else None
+            frame = self._render_frame(state, i + 1, action_name, sprites, tile_size, belief=belief)
             frames.append(frame)
 
         return frames
@@ -260,13 +381,22 @@ class PacManVisualizer:
         else:
             print("No frames generated for visualization")
 
-    def visualize_path(self, path: List[np.ndarray], actions: List[int], cache_path: Path) -> None:
+    def visualize_path(
+        self,
+        path: List[np.ndarray],
+        actions: List[int],
+        cache_path: Path,
+        beliefs: Optional[List[Optional[Belief]]] = None,
+    ) -> None:
         """Visualize PacMan path through the maze using sprite-based rendering.
 
         Args:
             path: List of state arrays representing the path through the maze.
             actions: List of actions taken at each step.
             cache_path: Path where the GIF should be saved.
+            beliefs: Optional per-frame beliefs. When supplied, each frame
+                overlays a translucent red heatmap over the cells the
+                belief assigns non-zero ghost-occupation probability.
 
         Raises:
             TypeError: If cache_path is not a Path object.
@@ -274,7 +404,7 @@ class PacManVisualizer:
         if not isinstance(cache_path, Path):
             raise TypeError("cache_path must be a Path object")
 
-        frames = self._generate_frames(path, actions, self.sprites, self.tile_size)
+        frames = self._generate_frames(path, actions, self.sprites, self.tile_size, beliefs=beliefs)
         self._save_animated_gif(frames, cache_path)
 
     def cache_visualization(self, history: List[StepData], cache_path: Path) -> None:
@@ -300,8 +430,9 @@ class PacManVisualizer:
         if not str(cache_path).endswith(".gif"):
             raise ValueError("cache_path must end with .gif")
 
-        # Extract path and actions
+        # Extract path, actions, and per-step beliefs from history.
         path = [step.state for step in history]
         actions = [step.action for step in history[:-1]]  # Last step has no action
+        beliefs: List[Optional[Belief]] = [step.belief for step in history]
 
-        self.visualize_path(path, actions, cache_path)
+        self.visualize_path(path, actions, cache_path, beliefs=beliefs)
