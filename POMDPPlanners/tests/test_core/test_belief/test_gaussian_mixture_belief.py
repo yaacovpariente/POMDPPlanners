@@ -636,10 +636,12 @@ class TestGaussianMixtureBeliefTerminal:
 class TestGaussianMixtureBeliefCostDispatch:
     def _make_mock_env(self):
         class _MockEnv:
-            def reward(self, state, action):
+            def reward(self, state, action, next_state=None):
+                del action, next_state
                 return float(np.sum(state))
 
-            def reward_batch(self, states, action):
+            def reward_batch(self, states, action, next_states=None):
+                del next_states
                 return np.array([self.reward(states[i], action) for i in range(len(states))])
 
         return _MockEnv()

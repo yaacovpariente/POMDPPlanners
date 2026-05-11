@@ -14,6 +14,7 @@ from POMDPPlanners.core.belief.vectorized_weighted_particle_belief import (
 )
 from POMDPPlanners.environments.safety_ant_velocity_pomdp import (
     SafeAntVelocityPOMDP,
+    _native,
 )
 from POMDPPlanners.environments.safety_ant_velocity_pomdp.safety_ant_velocity_pomdp_beliefs import (
     SafetyAntVelocityVectorizedUpdater,
@@ -26,6 +27,9 @@ from POMDPPlanners.tests.test_core.test_belief.belief_equivalence_utils import (
 from POMDPPlanners.tests.test_core.test_belief.vectorized_updater_test_utils import (
     assert_batch_obs_log_likelihood_matches_loop,
     assert_batch_transition_matches_loop,
+)
+from POMDPPlanners.utils.multivariate_normal import (
+    CovarianceParameterizedMultivariateNormal,
 )
 
 
@@ -303,10 +307,6 @@ class TestConfigId:
                 env.velocity_noise**2,
             ]
         )
-        from POMDPPlanners.utils.multivariate_normal import (
-            CovarianceParameterizedMultivariateNormal,
-        )
-
         obs_dist = CovarianceParameterizedMultivariateNormal(cov)
         u2 = SafetyAntVelocityVectorizedUpdater(
             obs_dist=obs_dist,
@@ -326,15 +326,15 @@ class TestConfigId:
 
 class TestEquivalenceWithPerParticleLoop:
     def test_batch_transition_matches_per_particle_loop(self, env, updater):
-        """Test vectorized batch_transition matches per-particle state_transition_model.
+        """Test vectorized batch_transition matches per-particle env.sample_next_state.
 
         Purpose: Verifies that batch_transition produces the same results as calling
-                 the environment's state_transition_model per particle with the same
+                 the environment's sample_next_state per particle with the same
                  random seed.
 
         Given: A set of particles, an action, and a fixed random seed.
         When: batch_transition is called, and the same transitions are computed
-              per-particle using the environment's state_transition_model.
+              per-particle using env.sample_next_state.
         Then: Results match within floating-point tolerance.
 
         Test type: integration
@@ -348,7 +348,7 @@ class TestEquivalenceWithPerParticleLoop:
         )
 
         def per_particle_fn(particle, action):
-            return env.state_transition_model(state=particle, action=action).sample()[0]
+            return env.sample_next_state(state=particle, action=action)
 
         assert_batch_transition_matches_loop(
             updater=updater,
@@ -356,21 +356,23 @@ class TestEquivalenceWithPerParticleLoop:
             action=2,
             per_particle_transition_fn=per_particle_fn,
             seed=999,
+            seed_fn=_native.set_seed,
         )
 
     def test_batch_observation_log_likelihood_matches_per_particle_loop(self, env, updater):
-        """Test vectorized log-likelihood matches per-particle observation probability up to constant.
+        """Test vectorized log-likelihood matches per-particle env.observation_log_probability up to constant.
 
         Purpose: Verifies that batch_observation_log_likelihood produces
                  log-likelihoods that differ from the per-particle
-                 log(observation_model.probability) only by a constant offset.
-                 The environment's probability() omits the Gaussian normalisation
-                 constant, while the vectorized updater uses the fully normalised
-                 log_pdf.  Relative differences between particles must still match.
+                 env.observation_log_probability only by a constant offset.
+                 The env-level path omits the Gaussian normalisation constant in
+                 the underlying probability(), while the vectorized updater uses
+                 the fully normalised log_pdf.  Relative differences between
+                 particles must still match.
 
         Given: A set of next-state particles and an observation.
         When: batch_observation_log_likelihood is called, and per-particle
-              log(observation_model.probability) is computed.
+              env.observation_log_probability is computed.
         Then: The pairwise differences between log-likelihoods match within
               floating-point tolerance.
 
@@ -386,8 +388,7 @@ class TestEquivalenceWithPerParticleLoop:
         observation = np.array([0.1, -0.1, 0.5, 0.2])
 
         def per_particle_ll_fn(particle, action, obs):
-            obs_model = env.observation_model(next_state=particle, action=action)
-            return np.log(obs_model.probability([obs])[0])
+            return env.observation_log_probability(particle, action, [obs])[0]
 
         assert_batch_obs_log_likelihood_matches_loop(
             updater=updater,
@@ -418,7 +419,13 @@ class TestBeliefEquivalenceWithBaseline:
         base, vec = _make_aligned_beliefs(updater)
         obs = np.array([0.1, -0.1, 0.5, 0.2])
         assert_update_particles_match(
-            base=base, vec=vec, action=2, observation=obs, pomdp=env, seed=999
+            base=base,
+            vec=vec,
+            action=2,
+            observation=obs,
+            pomdp=env,
+            seed=999,
+            seed_fn=_native.set_seed,
         )
 
     def test_update_weights_match(self, env, updater):
@@ -445,6 +452,7 @@ class TestBeliefEquivalenceWithBaseline:
             atol=1e-3,
             significance_threshold=1e-4,
             seed=999,
+            seed_fn=_native.set_seed,
         )
 
     def test_sample_distributions_match_post_update(self, env, updater):
@@ -460,9 +468,9 @@ class TestBeliefEquivalenceWithBaseline:
         """
         base, vec = _make_aligned_beliefs(updater)
         obs = np.array([0.1, -0.1, 0.5, 0.2])
-        np.random.seed(999)
+        _native.set_seed(999)
         vec = vec.update(action=1, observation=obs, pomdp=env)
-        np.random.seed(999)
+        _native.set_seed(999)
         base = base.update(action=1, observation=obs, pomdp=env)
 
         assert_sample_distributions_match(

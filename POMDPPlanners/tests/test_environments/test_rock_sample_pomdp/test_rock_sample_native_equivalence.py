@@ -7,17 +7,16 @@ RockSample's discrete-action, categorical-observation contract:
 * Transitions are deterministic, so there are no Gaussian moment tests
   or grid PDF parity tests. Instead we assert the deterministic next
   state is reproduced bit-exactly by both the per-particle path and the
-  batch path, and that ``probability(values)`` is an indicator.
+  batch path, and that ``transition_log_probability`` is an indicator
+  (0.0 for the deterministic next state, -inf for perturbed states).
 * Observations are categorical over ``{none, good, bad}``. The C++
-  boundary uses integer codes; the public shim translates to strings.
+  boundary uses integer codes; the env-API translates to strings.
   We assert the per-check Bernoulli probability matches the closed-form
   ``exp(-distance / sensor_efficiency)`` expression and that 200K-sample
   empirical frequencies match the analytic efficiency within 5e-3.
 * The batch equivalence tests compare the native batch entry points
-  against a per-particle loop over the public ``state_transition_model``
-  / ``observation_model`` APIs, exactly like the pre-port
-  ``test_rocksample_vectorized_updater.py::TestEquivalenceWithPerParticleLoop``
-  suite.
+  against a per-particle loop over the public ``env.sample_next_state``
+  / ``env.observation_log_probability`` env-API.
 """
 
 # pylint: disable=missing-function-docstring,missing-class-docstring
@@ -27,12 +26,9 @@ from typing import List, Tuple
 import numpy as np
 import pytest
 
-from POMDPPlanners.core.environment import ObservationModel, StateTransitionModel
 from POMDPPlanners.environments.rock_sample_pomdp import _native
 from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp import (
     RockSamplePOMDP,
-    RockSampleObservationModel,
-    RockSampleStateTransitionModel,
     create_rock_sample_state,
 )
 from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp_beliefs.rocksample_vectorized_updater import (
@@ -43,10 +39,6 @@ from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp_beliefs.rock
 )
 from POMDPPlanners.tests.test_core.test_belief.vectorized_updater_test_utils import (
     assert_batch_transition_matches_loop,
-)
-from POMDPPlanners.tests.test_environments._native_parity import (
-    assert_abc_registration,
-    assert_sample_shape_contract,
 )
 
 # Shared small-env fixture values used across tests. Rock 0 lives at the
@@ -78,159 +70,78 @@ def _env_fixture() -> RockSamplePOMDP:
     return _make_env()
 
 
-@pytest.fixture(name="transition")
-def _transition_fixture(env: RockSamplePOMDP) -> RockSampleStateTransitionModel:
-    state = _state(2, 2, (True, True, False, True))
-    # action=2 (East)
-    return RockSampleStateTransitionModel(state, 2, env)
-
-
-@pytest.fixture(name="observation_check")
-def _observation_check_fixture(env: RockSamplePOMDP) -> RockSampleObservationModel:
-    # Robot at (1, 1) queries rock 0 (also at (1, 1)) — distance zero,
-    # efficiency ~1.0, deterministic correct observation.
-    next_state = _state(1, 1, (True, False, True, False))
-    return RockSampleObservationModel(next_state, 5, env)
-
-
-@pytest.fixture(name="observation_move")
-def _observation_move_fixture(env: RockSamplePOMDP) -> RockSampleObservationModel:
-    next_state = _state(2, 2, (True, True, False, False))
-    return RockSampleObservationModel(next_state, 2, env)
-
-
 # ---------------------------------------------------------------------------
-# 1-2. ABC registration
+# Deterministic transition contract
 # ---------------------------------------------------------------------------
 
 
-def test_transition_is_registered_as_state_transition_model(
-    transition: RockSampleStateTransitionModel,
-) -> None:
-    """Purpose: Validates StateTransitionModel.register() wired the shim.
+def test_transition_sample_is_deterministic(env: RockSamplePOMDP) -> None:
+    """Purpose: Validates that env.sample_next_state(n) returns n identical states.
 
-    Given: A RockSampleStateTransitionModel instance.
-    When: isinstance(..., StateTransitionModel) is evaluated.
-    Then: Returns True.
-
-    Test type: unit
-    """
-    assert_abc_registration(transition, StateTransitionModel)
-
-
-def test_observation_is_registered_as_observation_model(
-    observation_check: RockSampleObservationModel,
-) -> None:
-    """Purpose: Validates ObservationModel subclassing for the shim.
-
-    Given: A RockSampleObservationModel instance (inherits from
-        ObservationModel directly; uses composition for the C++ backend).
-    When: isinstance(..., ObservationModel) is evaluated.
-    Then: Returns True.
-
-    Test type: unit
-    """
-    assert_abc_registration(observation_check, ObservationModel)
-
-
-# ---------------------------------------------------------------------------
-# 3-4. Not-abstract
-# ---------------------------------------------------------------------------
-
-
-def test_transition_is_not_abstract() -> None:
-    """Purpose: Ensures the shim has no unresolved abstract methods.
-
-    Given: The RockSampleStateTransitionModel class.
-    When: __abstractmethods__ is inspected.
-    Then: It is an empty frozenset.
-
-    Test type: unit
-    """
-    abstract = getattr(RockSampleStateTransitionModel, "__abstractmethods__", frozenset())
-    assert abstract == frozenset()
-
-
-def test_observation_is_not_abstract() -> None:
-    """Purpose: Ensures the shim has no unresolved abstract methods.
-
-    Given: The RockSampleObservationModel class.
-    When: __abstractmethods__ is inspected.
-    Then: It is an empty frozenset.
-
-    Test type: unit
-    """
-    abstract = getattr(RockSampleObservationModel, "__abstractmethods__", frozenset())
-    assert abstract == frozenset()
-
-
-# ---------------------------------------------------------------------------
-# 5-6. Deterministic transition contract
-# ---------------------------------------------------------------------------
-
-
-def test_transition_sample_is_deterministic(
-    transition: RockSampleStateTransitionModel,
-) -> None:
-    """Purpose: Validates that sample(n) returns n identical states.
-
-    Given: A transition with any action.
-    When: sample(5) is called.
+    Given: A live state and a movement action.
+    When: env.sample_next_state(state, action, n_samples=5) is called.
     Then: All 5 returned rows are equal.
 
     Test type: unit
     """
-    rows = transition.sample(5)
+    state = _state(2, 2, (True, True, False, True))
+    action = 2  # East
+    rows = env.sample_next_state(state=state, action=action, n_samples=5)
     assert len(rows) == 5
     reference = rows[0]
     for row in rows[1:]:
         np.testing.assert_array_equal(row, reference)
 
 
-def test_transition_probability_is_indicator(
-    transition: RockSampleStateTransitionModel,
-) -> None:
-    """Purpose: Validates probability() is 1.0 for the deterministic next
-    state and 0.0 for perturbed states.
+def test_transition_log_probability_is_indicator(env: RockSamplePOMDP) -> None:
+    """Purpose: Validates env.transition_log_probability returns 0.0 for the
+    deterministic next state and a large negative value (effectively -inf
+    after the +1e-300 floor) for perturbed states.
 
-    Given: A transition whose next state is known.
-    When: probability([next_state, perturbed]) is called.
-    Then: Returns [1.0, 0.0] exactly.
+    Given: A live state with a known deterministic next state.
+    When: env.transition_log_probability is called for [next_state, perturbed].
+    Then: probs[0] is approximately 0.0; probs[1] is large-negative.
 
     Test type: unit
     """
-    next_state = transition.sample()[0]
+    state = _state(2, 2, (True, True, False, True))
+    action = 2  # East
+    next_state = env.sample_next_state(state=state, action=action)
     perturbed = next_state.copy()
     perturbed[0] = perturbed[0] + 1  # shift robot_row by 1
 
-    probs = transition.probability([next_state, perturbed])
-    np.testing.assert_array_equal(probs, np.array([1.0, 0.0]))
+    log_p = env.transition_log_probability(state, action, [next_state, perturbed])
+    np.testing.assert_allclose(log_p[0], 0.0, atol=1e-12)
+    assert log_p[1] < -100  # log(0 + 1e-300) ≈ -690
 
 
 # ---------------------------------------------------------------------------
-# 7. Observation movement-only branch
+# Observation movement-only branch
 # ---------------------------------------------------------------------------
 
 
-def test_observation_movement_returns_none(
-    observation_move: RockSampleObservationModel,
-) -> None:
+def test_observation_movement_returns_none(env: RockSamplePOMDP) -> None:
     """Purpose: Movement actions must deterministically observe "none".
 
     Given: action=2 (East), any state.
-    When: sample(100) and probability(["none","good","bad"]) are called.
-    Then: All samples are "none"; probs are [1.0, 0.0, 0.0].
+    When: env.sample_observation(n=100) and env.observation_log_probability are
+        called for the canonical observation alphabet.
+    Then: All samples are "none"; log_probs are [0.0, -inf-ish, -inf-ish].
 
     Test type: unit
     """
-    samples = observation_move.sample(100)
+    next_state = _state(2, 2, (True, True, False, False))
+    samples = env.sample_observation(next_state=next_state, action=2, n_samples=100)
     assert all(s == "none" for s in samples)
-    probs = observation_move.probability(["none", "good", "bad"])
-    np.testing.assert_array_equal(probs, np.array([1.0, 0.0, 0.0]))
+
+    log_probs = env.observation_log_probability(next_state, 2, ["none", "good", "bad"])
+    np.testing.assert_allclose(log_probs[0], 0.0, atol=1e-12)
+    assert log_probs[1] < -100
+    assert log_probs[2] < -100
 
 
 # ---------------------------------------------------------------------------
-# 8. Check probability matches the closed-form Bernoulli
+# Check probability matches the closed-form Bernoulli
 # ---------------------------------------------------------------------------
 
 
@@ -253,8 +164,8 @@ def test_observation_check_probability_matches_python_formula(
     the analytic expression ``exp(-d / sensor_efficiency)``.
 
     Given: A next_state with known robot position and rock 0 quality.
-    When: probability(["good"]) and probability(["bad"]) are called for
-        action=5 (check rock 0 at (1,1)).
+    When: env.observation_log_probability for ["good", "bad", "none"] is
+        evaluated for action=5 (check rock 0 at (1,1)).
     Then: Returned probabilities equal efficiency or 1-efficiency
         depending on rock quality, to 1e-12 absolute tolerance.
 
@@ -262,20 +173,20 @@ def test_observation_check_probability_matches_python_formula(
     """
     rocks_tuple = (rock_quality, True, False, True)  # only rock 0 matters here
     next_state = _state(robot_pos[0], robot_pos[1], rocks_tuple)
-    obs_model = RockSampleObservationModel(next_state, 5, env)
 
     eff = expected_efficiency_close
     expected_good = eff if rock_quality else (1.0 - eff)
     expected_bad = (1.0 - eff) if rock_quality else eff
 
-    probs = obs_model.probability(["good", "bad", "none"])
+    log_probs = env.observation_log_probability(next_state, 5, ["good", "bad", "none"])
+    probs = np.exp(log_probs)
     np.testing.assert_allclose(probs[0], expected_good, atol=1e-12)
     np.testing.assert_allclose(probs[1], expected_bad, atol=1e-12)
-    assert probs[2] == 0.0
+    assert probs[2] < 1e-200
 
 
 # ---------------------------------------------------------------------------
-# 9. Check-action empirical sample frequency matches analytic efficiency
+# Check-action empirical sample frequency matches analytic efficiency
 # ---------------------------------------------------------------------------
 
 
@@ -286,7 +197,7 @@ def test_observation_check_sample_empirical_matches_probability(
     matches the analytic efficiency to statistical tolerance.
 
     Given: A check action at a known distance with a known rock quality.
-    When: 200_000 observations are sampled (seeded).
+    When: 200_000 observations are sampled (seeded) via env.sample_observation.
     Then: The empirical fraction of "correct" observations (good for a
         good rock) is within 5e-3 of the analytic efficiency.
 
@@ -294,87 +205,58 @@ def test_observation_check_sample_empirical_matches_probability(
     """
     rocks = (True, False, True, False)  # rock 0 good
     next_state = _state(5, 5, rocks)
-    obs_model = RockSampleObservationModel(next_state, 5, env)
 
     expected_efficiency = float(np.exp(-np.sqrt(32.0) / _SENSOR_EFFICIENCY))
 
     _native.set_seed(12345)
-    samples = obs_model.sample(200_000)
+    samples = env.sample_observation(next_state=next_state, action=5, n_samples=200_000)
     fraction_good = sum(1 for s in samples if s == "good") / len(samples)
 
     np.testing.assert_allclose(fraction_good, expected_efficiency, atol=5e-3)
 
 
 # ---------------------------------------------------------------------------
-# 10. Determinism under seed (observations)
+# Determinism under seed (observations)
 # ---------------------------------------------------------------------------
 
 
-def test_observation_sample_is_deterministic_under_set_seed(
-    observation_check: RockSampleObservationModel,
-) -> None:
+def test_observation_sample_is_deterministic_under_set_seed(env: RockSamplePOMDP) -> None:
     """Purpose: Seeding _native.set_seed reproduces identical samples.
 
-    Given: A check-action observation model.
-    When: set_seed(s) is called twice, interleaved with sample(N).
+    Given: A check-action observation invocation.
+    When: set_seed(s) is called twice, interleaved with env.sample_observation(N).
     Then: Both sample sequences are exactly equal.
 
     Test type: unit
     """
-    # The per-particle observation shim uses composition: its .sample()
-    # delegates to the stored _native instance, so we seed the module RNG
-    # and then call .sample() on the shim (which reads from the same RNG).
+    next_state = _state(1, 1, (True, False, True, False))
     _native.set_seed(7777)
-    first = observation_check.sample(32)
+    first = env.sample_observation(next_state=next_state, action=5, n_samples=32)
     _native.set_seed(7777)
-    second = observation_check.sample(32)
+    second = env.sample_observation(next_state=next_state, action=5, n_samples=32)
     assert first == second
 
 
 # ---------------------------------------------------------------------------
-# 11. Transition sample shape contract
+# Observation sample returns strings
 # ---------------------------------------------------------------------------
 
 
-def test_transition_sample_shape_contract(
-    transition: RockSampleStateTransitionModel,
-) -> None:
-    """Purpose: sample(k) must return a List[ndarray] of k rows, each 1-D
-    with length 2+num_rocks.
+def test_observation_sample_returns_list_of_strings(env: RockSamplePOMDP) -> None:
+    """Purpose: Validates the env-API string-translation contract.
 
-    Given: A transition with any action.
-    When: sample(3) is called.
-    Then: Returns a Python list of 3 ndarrays, each shape (state_dim,).
-
-    Test type: unit
-    """
-    assert_sample_shape_contract(
-        model=transition,
-        seed_fn=_native.set_seed,
-        n_samples=3,
-        expected_dim=_STATE_DIM,
-    )
-
-
-# ---------------------------------------------------------------------------
-# 12. Observation sample returns strings
-# ---------------------------------------------------------------------------
-
-
-def test_observation_sample_returns_list_of_strings(
-    observation_check: RockSampleObservationModel,
-    observation_move: RockSampleObservationModel,
-) -> None:
-    """Purpose: Validates the shim's string-translation contract.
-
-    Given: A check-action and a movement-action observation model.
-    When: sample(N) is called.
+    Given: A check-action and a movement-action observation invocation.
+    When: env.sample_observation(N) is called.
     Then: Returns a list of strings, each in {none, good, bad}.
 
     Test type: unit
     """
-    for model in (observation_check, observation_move):
-        samples = model.sample(8)
+    cases = [
+        (_state(1, 1, (True, False, True, False)), 5),  # check rock 0 colocated
+        (_state(2, 2, (True, True, False, False)), 2),  # movement
+    ]
+    for next_state, action in cases:
+        samples = env.sample_observation(next_state=next_state, action=action, n_samples=8)
         assert isinstance(samples, list)
         assert len(samples) == 8
         for s in samples:
@@ -383,7 +265,7 @@ def test_observation_sample_returns_list_of_strings(
 
 
 # ---------------------------------------------------------------------------
-# 13. batch_sample vs per-particle sample bit-exact equivalence
+# batch_sample vs per-particle sample bit-exact equivalence
 # ---------------------------------------------------------------------------
 
 
@@ -392,11 +274,11 @@ def test_transition_batch_sample_matches_per_particle_sample(
     env: RockSamplePOMDP, action: int
 ) -> None:
     """Purpose: The native batch_sample must produce bit-identical output
-    to N per-particle sample(1) calls (transitions are deterministic).
+    to N per-particle env.sample_next_state calls (transitions are deterministic).
 
     Given: 32 particles covering varied robot positions and rock configs.
     When: batch_sample(particles) is compared to a per-particle loop
-        over env.state_transition_model(...).sample(1)[0].
+        over env.sample_next_state(state=row, action=action).
     Then: np.testing.assert_array_equal passes (exact match).
 
     Test type: integration
@@ -414,12 +296,12 @@ def test_transition_batch_sample_matches_per_particle_sample(
     updater = RockSampleVectorizedUpdater.from_environment(env)
     batch_out = updater.batch_transition(particles, np.array(action))
 
-    loop_out = np.stack([env.state_transition_model(row, action).sample()[0] for row in particles])
+    loop_out = np.stack([env.sample_next_state(state=row, action=action) for row in particles])
     np.testing.assert_array_equal(batch_out, loop_out.astype(float))
 
 
 # ---------------------------------------------------------------------------
-# 14. batch_log_likelihood vs per-particle probability equivalence
+# batch_log_likelihood vs per-particle probability equivalence
 # ---------------------------------------------------------------------------
 
 
@@ -436,20 +318,21 @@ def test_observation_batch_log_likelihood_matches_per_particle(
     env: RockSamplePOMDP, action: int, obs_str: str, obs_code: int
 ) -> None:
     """Purpose: For check actions on live (non-terminal) particles, the
-    native batch_log_likelihood must agree with per-particle
-    ``np.log(probability([obs_str])[0])`` to 1e-10 atol.
+    native batch_log_likelihood agrees with the per-particle
+    ``env.observation_log_probability([obs_str])[0]`` across the entire
+    array (including impossible events).
 
-    The batch path treats terminal particles as -inf by design (same
-    as the pre-port Python vectorized updater), while the per-particle
-    path computes a finite value using the terminal sentinel as a real
-    position. That pre-existing divergence is tested separately in
-    ``test_batch_log_likelihood_terminal_semantics``; this test
-    intentionally uses only non-terminal particles so the two paths
-    are in the regime where they are contractually equivalent.
+    Post symmetric C++ floor: both
+    ``batch_log_likelihood`` (log-floor) and the scalar path
+    ``np.log(kernel.probability(...))`` (linear-floor then log) clamp
+    impossible events to ``log(kProbFloor) = log(1e-300) ~= -690.776``,
+    so the two paths produce bit-exact values everywhere — including
+    the impossible-event subset. The earlier relaxation that compared
+    only the finite-probability subset is no longer needed.
 
     Given: 32 random live next-particles (no terminal sentinel).
     When: batch_log_likelihood is compared to the per-particle loop.
-    Then: Arrays agree within 1e-10.
+    Then: Arrays agree within 1e-10 across all entries.
 
     Test type: integration
     """
@@ -467,8 +350,7 @@ def test_observation_batch_log_likelihood_matches_per_particle(
 
     expected = np.zeros(32)
     for i, row in enumerate(particles):
-        prob = env.observation_model(row, action).probability([obs_str])[0]
-        expected[i] = np.log(max(prob, 1e-300))
+        expected[i] = env.observation_log_probability(row, action, [obs_str])[0]
 
     np.testing.assert_allclose(batch_ll, expected, atol=1e-10)
 
@@ -478,8 +360,8 @@ def test_observation_batch_log_likelihood_matches_per_particle_movement(
 ) -> None:
     """Purpose: For movement actions with obs=none, the batch path
     returns 0 on every particle. The per-particle path agrees for
-    non-terminal particles (``probability(["none"])[0] == 1.0`` so
-    ``log 1 = 0``). This test verifies that specific agreement.
+    non-terminal particles (``observation_log_probability(["none"])[0] == 0``).
+    This test verifies that specific agreement.
 
     Given: 32 random live next-particles.
     When: batch_log_likelihood(particles, movement_action, OBS_NONE)
@@ -498,18 +380,13 @@ def test_observation_batch_log_likelihood_matches_per_particle_movement(
     updater = RockSampleVectorizedUpdater.from_environment(env)
     batch_ll = updater.batch_observation_log_likelihood(particles, np.array(2), np.array(OBS_NONE))
 
-    expected = np.array(
-        [
-            np.log(max(env.observation_model(row, 2).probability(["none"])[0], 1e-300))
-            for row in particles
-        ]
-    )
+    expected = np.array([env.observation_log_probability(row, 2, ["none"])[0] for row in particles])
     np.testing.assert_array_equal(batch_ll, np.zeros(32))
     np.testing.assert_array_equal(expected, np.zeros(32))
 
 
 # ---------------------------------------------------------------------------
-# 15-16. Batch output shape / dtype contracts
+# Batch output shape / dtype contracts
 # ---------------------------------------------------------------------------
 
 
@@ -552,18 +429,24 @@ def test_observation_batch_log_likelihood_shape_contract(env: RockSamplePOMDP) -
 
 
 # ---------------------------------------------------------------------------
-# 17. Terminal semantics on batch_log_likelihood
+# Terminal semantics on batch_log_likelihood
 # ---------------------------------------------------------------------------
 
 
 def test_batch_log_likelihood_terminal_semantics(env: RockSamplePOMDP) -> None:
-    """Purpose: Terminal particles get -inf for check actions regardless
-    of the observation; for movement actions + obs=none they get 0.0.
+    """Purpose: Terminal particles get the symmetric ``kLogProbFloor``
+    floor (~ -690.776) for check actions regardless of the observation;
+    for movement actions + obs=none they get 0.0.
+
+    Post symmetric C++ floor: the historical -inf for impossible events
+    is now floored to ``log(kProbFloor) = log(1e-300) ~= -690.776`` so
+    the C++ ``batch_log_likelihood`` and the env-API scalar
+    ``np.log(kernel.probability(...))`` paths agree on the same value.
 
     Given: A batch of particles: [live_at_rock, terminal].
     When: batch_log_likelihood is invoked for (check action, good obs)
         and (movement action, none obs).
-    Then: For check: [finite, -inf]. For movement + none: [0, 0].
+    Then: For check: [finite, ~ -690.776]. For movement + none: [0, 0].
 
     Test type: unit
     """
@@ -575,10 +458,11 @@ def test_batch_log_likelihood_terminal_semantics(env: RockSamplePOMDP) -> None:
         ],
         dtype=float,
     )
-    # Check action + good obs: live gets ~0 (log(efficiency)), terminal = -inf.
+    floor = float(np.log(1e-300))  # ~= -690.7755278982137
+    # Check action + good obs: live gets ~0 (log(efficiency)), terminal = floor.
     ll_check = updater.batch_observation_log_likelihood(particles, np.array(5), np.array(OBS_GOOD))
     assert np.isfinite(ll_check[0])
-    assert ll_check[1] == -np.inf
+    np.testing.assert_allclose(ll_check[1], floor, atol=1e-6)
 
     # Movement action + none obs: both rows get 0.
     ll_move = updater.batch_observation_log_likelihood(particles, np.array(2), np.array(OBS_NONE))
@@ -586,17 +470,22 @@ def test_batch_log_likelihood_terminal_semantics(env: RockSamplePOMDP) -> None:
 
 
 # ---------------------------------------------------------------------------
-# 18. Movement-action observation semantics on batch_log_likelihood
+# Movement-action observation semantics on batch_log_likelihood
 # ---------------------------------------------------------------------------
 
 
 def test_batch_log_likelihood_movement_action_semantics(env: RockSamplePOMDP) -> None:
     """Purpose: For any movement action, batch_log_likelihood is 0 for
-    obs=none and -inf for obs in {good, bad}.
+    obs=none and floored to ``log(1e-300) ~= -690.776`` for obs in
+    {good, bad}.
+
+    Post symmetric C++ floor: the historical -inf for impossible events
+    is now floored to ``kLogProbFloor`` so the batch and scalar API
+    paths agree on the same value.
 
     Given: Arbitrary particles.
     When: batch_log_likelihood is invoked with movement actions 0-4.
-    Then: All particles get 0 for none, -inf for good/bad.
+    Then: All particles get 0 for none, ~ -690.776 for good/bad.
 
     Test type: unit
     """
@@ -605,6 +494,7 @@ def test_batch_log_likelihood_movement_action_semantics(env: RockSamplePOMDP) ->
     particles[:, 0] = np.arange(5)
     particles[:, 1] = np.arange(5)
 
+    floor = float(np.log(1e-300))  # ~= -690.7755278982137
     for action in (0, 1, 2, 3, 4):
         ll_none = updater.batch_observation_log_likelihood(
             particles, np.array(action), np.array(OBS_NONE)
@@ -615,11 +505,11 @@ def test_batch_log_likelihood_movement_action_semantics(env: RockSamplePOMDP) ->
             ll = updater.batch_observation_log_likelihood(
                 particles, np.array(action), np.array(obs)
             )
-            assert np.all(ll == -np.inf)
+            np.testing.assert_allclose(ll, np.full(5, floor), atol=1e-6)
 
 
 # ---------------------------------------------------------------------------
-# 19. Full-parity sanity vs updater helper (preserves the pre-port contract)
+# Full-parity sanity vs updater helper (preserves the pre-port contract)
 # ---------------------------------------------------------------------------
 
 
@@ -631,7 +521,7 @@ def test_batch_transition_full_parity_against_updater(env: RockSamplePOMDP, acti
 
     Given: 16 particles covering varied robot positions and rock configs.
     When: assert_batch_transition_matches_loop compares updater
-        batch_transition to the per-particle state_transition_model sample.
+        batch_transition to the per-particle env.sample_next_state.
     Then: No assertion fires (bit-exact agreement).
 
     Test type: integration
@@ -646,7 +536,7 @@ def test_batch_transition_full_parity_against_updater(env: RockSamplePOMDP, acti
     updater = RockSampleVectorizedUpdater.from_environment(env)
 
     def per_particle(particle: np.ndarray, act: int) -> np.ndarray:
-        return env.state_transition_model(particle, act).sample()[0]
+        return env.sample_next_state(state=particle, action=act)
 
     assert_batch_transition_matches_loop(
         updater=updater,

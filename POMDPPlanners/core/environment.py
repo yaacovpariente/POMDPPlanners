@@ -17,10 +17,12 @@ Classes:
 import importlib
 import inspect
 import logging
+import math
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
+from collections.abc import Hashable
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
@@ -129,121 +131,7 @@ register_serializer(SpaceInfo, _serialize_space_info)
 register_deserializer(SpaceInfo, _deserialize_space_info)
 
 
-class ObservationModel(Distribution, ABC):
-    """Abstract base class for POMDP observation models.
-
-    This class defines the interface for observation models that generate
-    observations given a next state and action. Inherits from Distribution
-    to provide sampling and probability calculation capabilities.
-
-    Note:
-        This is an abstract base class and cannot be instantiated directly.
-        Subclasses must implement the sample() method.
-
-    Attributes:
-        next_state: The state after taking an action
-        action: The action that was taken
-    """
-
-    def __init__(self, next_state: Any, action: Any):
-        """Initialize the observation model.
-
-        Args:
-            next_state: The resulting state after taking an action
-            action: The action that was executed
-        """
-        self.next_state = next_state
-        self.action = action
-
-    @abstractmethod
-    def sample(self, n_samples: int = 1) -> List[Any]:
-        """Sample observations from the observation model.
-
-        Args:
-            n_samples: Number of observation samples to generate. Defaults to 1.
-
-        Returns:
-            List of sampled observations of length n_samples.
-
-        Note:
-            Subclasses must implement this method according to their
-            specific observation generation logic.
-        """
-
-    def probability(self, values: List[Any]) -> np.ndarray:
-        """Calculate observation probabilities for given values.
-
-        Args:
-            values: List of observation values to calculate probabilities for
-
-        Returns:
-            Array of probabilities corresponding to the input values
-
-        Raises:
-            NotImplementedError: This method is not implemented by default.
-                Subclasses should override if probability calculation is needed.
-        """
-        raise NotImplementedError("The method is not implemented for this observation model.")
-
-
-class StateTransitionModel(Distribution, ABC):
-    """Abstract base class for POMDP state transition models.
-
-    This class defines the interface for state transition models that generate
-    next states given a current state and action. Inherits from Distribution
-    to provide sampling and probability calculation capabilities.
-
-    Note:
-        This is an abstract base class and cannot be instantiated directly.
-        Subclasses must implement the sample() method.
-
-    Attributes:
-        state: The current state
-        action: The action to be taken
-    """
-
-    def __init__(self, state: Any, action: Any):
-        """Initialize the state transition model.
-
-        Args:
-            state: The current state
-            action: The action to be executed from the current state
-        """
-        self.state = state
-        self.action = action
-
-    @abstractmethod
-    def sample(self, n_samples: int = 1) -> List[Any]:
-        """Sample next states from the transition model.
-
-        Args:
-            n_samples: Number of next state samples to generate. Defaults to 1.
-
-        Returns:
-            List of sampled next states of length n_samples.
-
-        Note:
-            Subclasses must implement this method according to their
-            specific state transition dynamics.
-        """
-
-    def probability(self, values: List[Any]) -> np.ndarray:
-        """Calculate transition probabilities for given next states.
-
-        Args:
-            values: List of next state values to calculate probabilities for
-
-        Returns:
-            Array of transition probabilities corresponding to the input values
-
-        Raises:
-            NotImplementedError: This method is not implemented by default.
-                Subclasses should override if probability calculation is needed.
-        """
-        raise NotImplementedError("The method is not implemented for this state transition model.")
-
-
-class Environment(ABC):
+class Environment(ABC):  # pylint: disable=too-many-public-methods
     """Abstract base class for POMDP environments.
 
     This is the core abstract class that all POMDP environments must inherit from.
@@ -454,52 +342,37 @@ class Environment(ABC):
     def __hash__(self) -> int:
         return hash(self.config_id)
 
-    @abstractmethod
-    def state_transition_model(self, state: Any, action: Any) -> StateTransitionModel:
-        """Get the state transition model for a given state-action pair.
+    def reward(self, state: Any, action: Any, next_state: Any = None) -> float:
+        """Calculate the immediate reward for a state-action(-next_state) tuple.
+
+        ``next_state`` is the realised post-transition state when known
+        (e.g. threaded by :meth:`sample_next_step`), allowing rewards that
+        depend on stochastic transition outcomes to use the same draw as
+        the trajectory instead of resampling. Subclasses whose reward is
+        a pure function of ``(state, action)`` may ignore it; subclasses
+        whose reward depends on the realised next state (collision
+        penalties, win bonuses) should consume it when provided and fall
+        back to drawing/computing one when ``None``.
 
         Args:
-            state: Current state
-            action: Action to be executed
+            state: Current state.
+            action: Action executed from ``state``.
+            next_state: Realised next state, or ``None`` if the caller
+                did not pre-sample one. Defaults to ``None``.
 
         Returns:
-            State transition model that can sample next states
-
-        Note:
-            Subclasses must implement this method to define state dynamics.
-        """
-
-    @abstractmethod
-    def observation_model(self, next_state: Any, action: Any) -> ObservationModel:
-        """Get the observation model for a given next state and action.
-
-        Args:
-            next_state: The resulting state after taking an action
-            action: The action that was executed
-
-        Returns:
-            Observation model that can sample observations
-
-        Note:
-            Subclasses must implement this method to define observation generation.
-        """
-
-    @abstractmethod
-    def reward(self, state: Any, action: Any) -> float:
-        """Calculate the immediate reward for a state-action pair.
-
-        Args:
-            state: Current state
-            action: Action executed from the state
-
-        Returns:
-            Immediate reward value
+            Immediate reward value.
 
         Note:
             Subclasses must implement this method to define reward structure.
         """
 
-    def reward_batch(self, states: Union[np.ndarray, Sequence[Any]], action: Any) -> np.ndarray:
+    def reward_batch(
+        self,
+        states: Union[np.ndarray, Sequence[Any]],
+        action: Any,
+        next_states: Optional[Union[np.ndarray, Sequence[Any]]] = None,
+    ) -> np.ndarray:
         """Calculate rewards for a batch of states given a single action.
 
         Provides a loop-based default that subclasses can override with
@@ -508,11 +381,17 @@ class Environment(ABC):
         Args:
             states: Sequence of states of length ``N``.
             action: Action executed from each state.
+            next_states: Optional realised next states (length ``N``)
+                threaded through to :meth:`reward`. Defaults to ``None``.
 
         Returns:
             1-D array of reward values with shape ``(N,)``.
         """
-        return np.array([self.reward(states[i], action) for i in range(len(states))])
+        if next_states is None:
+            return np.array([self.reward(states[i], action) for i in range(len(states))])
+        return np.array(
+            [self.reward(states[i], action, next_states[i]) for i in range(len(states))]
+        )
 
     @abstractmethod
     def is_terminal(self, state: Any) -> bool:
@@ -566,6 +445,176 @@ class Environment(ABC):
             This is particularly important for discrete observation spaces.
         """
 
+    def hash_observation(self, observation: Any) -> Hashable:
+        """Return a hashable key consistent with :meth:`is_equal_observation`.
+
+        Used by tree-search planners to index belief children by observation
+        in O(1). The returned key MUST satisfy the contract::
+
+            is_equal_observation(a, b) implies hash_observation(a) == hash_observation(b)
+
+        Args:
+            observation: Observation to hash.
+
+        Returns:
+            A hashable key derived from ``observation`` (default: the
+            observation itself when it is already hashable).
+
+        Raises:
+            NotImplementedError: If the observation is not hashable and the
+                subclass has not provided an override. Subclasses with
+                non-hashable observations (e.g. ``np.ndarray``) MUST override.
+        """
+        try:
+            hash(observation)
+        except TypeError as exc:
+            raise NotImplementedError(
+                f"{type(self).__name__} must override hash_observation "
+                "for non-hashable observations"
+            ) from exc
+        return observation
+
+    @abstractmethod
+    def hash_action(self, action: Any) -> Hashable:
+        """Return a hashable key consistent with action equality.
+
+        Used by tree-search planners to index action children of a belief
+        node in O(1). The returned key MUST satisfy::
+
+            action_a == action_b   (per env's notion of equality)
+            ==> hash_action(action_a) == hash_action(action_b)
+
+        Subclasses with non-hashable actions (e.g. ``np.ndarray``) must
+        override to return a hashable surrogate (``tobytes()`` is the
+        standard choice for ndarray actions, which mirrors the
+        ``np.array_equal`` semantics used by the linear-scan fallback).
+
+        Args:
+            action: Action to hash.
+
+        Returns:
+            A hashable key derived from ``action``.
+        """
+
+    @abstractmethod
+    def sample_next_state(self, state: Any, action: Any, n_samples: int = 1) -> Any:
+        """Sample one or more next states for ``(state, action)``.
+
+        Hot-path entry point used by MCTS planners and particle filters.
+        Subclasses must implement.
+
+        Returns:
+            When ``n_samples == 1``: a single next state of the env's
+            native type. When ``n_samples > 1``: an array-like of length
+            ``n_samples`` (numeric envs return ``np.ndarray`` of shape
+            ``(n_samples, *dim)``; structured envs return ``List[T]``).
+        """
+
+    @abstractmethod
+    def sample_observation(self, next_state: Any, action: Any, n_samples: int = 1) -> Any:
+        """Sample one or more observations for ``(next_state, action)``.
+
+        Hot-path entry point used by MCTS planners and particle filters.
+        Subclasses must implement.
+
+        Returns:
+            When ``n_samples == 1``: a single observation. When
+            ``n_samples > 1``: an array-like of length ``n_samples``.
+        """
+
+    @abstractmethod
+    def transition_log_probability(self, state: Any, action: Any, next_states: Any) -> np.ndarray:
+        """Log-probability of each candidate next state under ``(state, action)``.
+
+        Returns ``np.ndarray`` of shape ``(N,)`` where N is the number of
+        candidate next states. Subclasses must implement.
+        """
+
+    @abstractmethod
+    def observation_log_probability(
+        self, next_state: Any, action: Any, observations: Any
+    ) -> np.ndarray:
+        """Log-probability of each candidate observation under ``(next_state, action)``.
+
+        Returns ``np.ndarray`` of shape ``(N,)`` where N is the number of
+        candidate observations. Subclasses must implement.
+        """
+
+    def observation_log_probability_single(
+        self, next_state: Any, action: Any, observation: Any
+    ) -> float:
+        """Scalar log-likelihood for one ``(next_state, observation)`` pair.
+
+        Per-state fast-path used by incremental belief updates
+        (e.g. POMCPOW's :meth:`WeightedParticleBeliefStateUpdate.inplace_update`)
+        to skip the per-call numpy setup overhead of the batched
+        :meth:`observation_log_probability` path on a singleton input.
+
+        The default falls back to the batched method with a one-element
+        observations list. Envs with cheap scalar likelihoods (e.g. the
+        2-D Gaussian on Push or the cached-inverse-cov path on
+        ContinuousLightDark) should override to skip array allocation.
+        """
+        arr = self.observation_log_probability(
+            next_state=next_state, action=action, observations=[observation]
+        )
+        return float(arr[0])
+
+    def sample_next_state_batch(self, states: Any, action: Any) -> Any:
+        """Sample one next state per input state, all under the same action.
+
+        Used by particle filters: given N current particles and one action,
+        draw N next states (one per particle) in a single vectorized call.
+
+        The default implementation falls back to a per-state Python loop
+        delegating to :meth:`sample_next_state`. Native-backed envs (those
+        whose state-transition kernel exposes ``batch_sample(states_array)``)
+        should override to avoid the loop.
+
+        Args:
+            states: A sequence (length N) or ndarray of shape ``(N, *dim)``
+                of input particles.
+            action: A single action to apply to every particle.
+
+        Returns:
+            For numeric envs: ``np.ndarray`` of shape ``(N, *dim)``.
+            For structured envs (Tiger strings, Pacman tuples): a list of
+            length N.
+        """
+        return [self.sample_next_state(state=s, action=action) for s in states]
+
+    def observation_log_probability_per_state(
+        self, next_states: Any, action: Any, observation: Any
+    ) -> np.ndarray:
+        """Log-probability of one observation under each candidate next-state.
+
+        Used by particle filters: given N candidate next-states and ONE
+        observation, return N log-likelihoods.
+
+        The default implementation falls back to a per-state Python loop
+        delegating to :meth:`observation_log_probability`. Native-backed envs
+        (those whose observation kernel exposes
+        ``batch_log_likelihood(next_states_array, observation_array)``) should
+        override to avoid the loop.
+
+        Args:
+            next_states: A sequence (length N) or ndarray of shape ``(N, *dim)``
+                of candidate next-states.
+            action: The action that was executed.
+            observation: A single observation.
+
+        Returns:
+            ndarray of shape ``(N,)`` with log-probabilities or log-PDFs.
+        """
+        return np.asarray(
+            [
+                self.observation_log_probability(
+                    next_state=ns, action=action, observations=[observation]
+                )[0]
+                for ns in next_states
+            ]
+        )
+
     def sample_next_step(self, state: Any, action: Any) -> Tuple[Any, Any, float]:
         """Sample a complete state transition step.
 
@@ -582,9 +631,13 @@ class Environment(ABC):
                 - next_observation: Sampled observation
                 - reward: Immediate reward
         """
-        next_state = self.state_transition_model(state=state, action=action).sample()[0]
-        next_observation = self.observation_model(next_state=next_state, action=action).sample()[0]
-        reward = self.reward(state=state, action=action)
+        next_state = self.sample_next_state(state=state, action=action)
+        next_observation = self.sample_observation(next_state=next_state, action=action)
+        # Thread the realised next_state into reward() so subclasses with
+        # transition-dependent reward terms (collision penalties, win bonuses)
+        # score against the same draw as the trajectory rather than resampling.
+        # pylint: disable-next=assignment-from-no-return
+        reward = self.reward(state=state, action=action, next_state=next_state)
 
         return next_state, next_observation, reward
 
@@ -870,15 +923,7 @@ class DiscreteActionsEnvironment(Environment):
         self.logger.debug("Initialized DiscreteActionsEnvironment")
 
     @abstractmethod
-    def state_transition_model(self, state: Any, action: Any) -> StateTransitionModel:
-        pass
-
-    @abstractmethod
-    def observation_model(self, next_state: Any, action: Any) -> ObservationModel:
-        pass
-
-    @abstractmethod
-    def reward(self, state: Any, action: Any) -> float:
+    def reward(self, state: Any, action: Any, next_state: Any = None) -> float:
         pass
 
     @abstractmethod

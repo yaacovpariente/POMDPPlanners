@@ -17,13 +17,12 @@ The LaserTag problem features:
 
 Classes:
     LaserTagState: State representation with robot and opponent positions
-    LaserTagStateTransition: State transition model for robot and opponent movement
-    LaserTagObservation: Observation model with noisy opponent position measurements
     LaserTagPOMDP: Main environment class implementing the LaserTag problem
 """
 
 from enum import Enum
 from pathlib import Path
+from collections.abc import Hashable
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 import numpy as np
@@ -31,16 +30,27 @@ import numpy as np
 from POMDPPlanners.core.distributions import DiscreteDistribution, Distribution
 from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
-    ObservationModel,
     SpaceInfo,
     SpaceType,
-    StateTransitionModel,
 )
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
 from POMDPPlanners.utils.statistics_utils import confidence_interval
 from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_visualizer import (  # pylint: disable=import-outside-toplevel
     LaserTagVisualizer,
 )
+
+
+# 8-directional laser measurements: N, NE, E, SE, S, SW, W, NW (matches LaserTagObservation)
+_LASER_DIRECTIONS: List[Tuple[int, int]] = [
+    (-1, 0),
+    (-1, 1),
+    (0, 1),
+    (1, 1),
+    (1, 0),
+    (1, -1),
+    (0, -1),
+    (-1, -1),
+]
 
 
 class LaserTagPOMDPMetrics(Enum):
@@ -77,513 +87,6 @@ class LaserTagPOMDPMetrics(Enum):
 #   opponent_col = int(state[3])
 #   opponent_pos = (int(state[2]), int(state[3]))
 #   is_terminal = bool(state[4])
-
-
-class LaserTagStateTransition(StateTransitionModel):
-    """State transition model for LaserTag POMDP.
-
-    Handles robot movement (deterministic based on action) and opponent movement
-    (probabilistic, with tendency to move toward robot's position).
-
-    Attributes:
-        state: Current state as numpy array (shape (5,))
-        action: Action to be executed (0=North, 1=South, 2=East, 3=West, 4=Tag)
-        floor_shape: Tuple of (rows, cols) for grid dimensions
-        walls: Set of wall positions
-
-    Example:
-        >>> import numpy as np
-        >>> np.random.seed(42)  # For reproducible results
-        >>> state = np.array([3.0, 5.0, 2.0, 4.0, 0.0])  # Robot at (3,5), opponent at (2,4)
-        >>> action_directions = {
-        ...     0: (-1, 0),  # North (up)
-        ...     1: (1, 0),   # South (down)
-        ...     2: (0, 1),   # East (right)
-        ...     3: (0, -1),  # West (left)
-        ...     4: (0, 0),   # Tag (no movement)
-        ... }
-        >>> transition = LaserTagStateTransition(
-        ...     state=state,
-        ...     action=0,  # North
-        ...     action_directions=action_directions,
-        ...     floor_shape=(7, 11),
-        ...     walls=set()
-        ... )
-        >>> next_states = transition.sample(n_samples=5)
-        >>> probabilities = transition.probability(next_states)
-    """
-
-    def __init__(
-        self,
-        state: np.ndarray,
-        action: int,
-        action_directions: Dict[int, Tuple[int, int]],
-        floor_shape: Tuple[int, int],
-        walls: Set[Tuple[int, int]],
-        transition_error_prob: float = 0.0,
-    ):
-        """Initialize the state transition model.
-
-        Args:
-            state: Current state as numpy array with shape (5,)
-            action: Action to execute (0=North, 1=South, 2=East, 3=West, 4=Tag)
-            floor_shape: Grid dimensions as (rows, cols)
-            walls: Set of wall positions as (row, col) tuples
-            transition_error_prob: Probability that the robot executes a random movement action
-                instead of the intended one. Only applies to movement actions (0-3), not Tag (4).
-                Defaults to 0.0 (deterministic transitions).
-        """
-        super().__init__(state, action)
-        self.floor_shape: Tuple[int, int] = floor_shape
-        self.walls: Set[Tuple[int, int]] = walls
-        self.action_directions: Dict[int, Tuple[int, int]] = action_directions
-        self.transition_error_prob = transition_error_prob
-
-    def _is_valid_position(self, pos: Tuple[int, int]) -> bool:
-        """Check if position is within bounds and not a wall."""
-        row, col = pos
-        return (
-            0 <= row < self.floor_shape[0]
-            and 0 <= col < self.floor_shape[1]
-            and pos not in self.walls
-        )
-
-    def _get_robot_next_position(self, action: Optional[int] = None) -> Tuple[int, int]:
-        """Get robot's next position based on action.
-
-        Args:
-            action: Action to execute. If None, uses self.action. Defaults to None.
-
-        Returns:
-            Robot's next position as (row, col) tuple.
-        """
-        actual_action = self.action if action is None else action
-
-        if actual_action == 4:  # Tag action
-            return (int(self.state[0]), int(self.state[1]))
-
-        dr, dc = self.action_directions[actual_action]
-        new_pos = (int(self.state[0]) + dr, int(self.state[1]) + dc)
-
-        # If new position is invalid, stay at current position
-        if self._is_valid_position(new_pos):
-            return new_pos
-        return (int(self.state[0]), int(self.state[1]))
-
-    def _create_position(
-        self, fixed_coord: int, moving_coord: int, is_horizontal: bool
-    ) -> Tuple[int, int]:
-        """Create a position tuple based on axis orientation."""
-        if is_horizontal:
-            return (fixed_coord, moving_coord)  # (row, col)
-        return (moving_coord, fixed_coord)  # (row, col)
-
-    def _calculate_directional_moves(
-        self, opponent_coord: int, robot_coord: int, fixed_coord: int, is_horizontal: bool
-    ) -> List[Tuple[Tuple[int, int], float]]:
-        """Calculate movement probabilities for one axis (horizontal or vertical)."""
-        moves = []
-
-        if robot_coord > opponent_coord:  # Robot is ahead
-            toward_pos = self._create_position(fixed_coord, opponent_coord + 1, is_horizontal)
-            away_pos = self._create_position(fixed_coord, opponent_coord - 1, is_horizontal)
-            toward_prob, away_prob = 0.4, 0.0
-        elif robot_coord < opponent_coord:  # Robot is behind
-            toward_pos = self._create_position(fixed_coord, opponent_coord - 1, is_horizontal)
-            away_pos = self._create_position(fixed_coord, opponent_coord + 1, is_horizontal)
-            toward_prob, away_prob = 0.4, 0.0
-        else:  # Same position on this axis — split 0.4 equally between both directions
-            toward_pos = self._create_position(fixed_coord, opponent_coord + 1, is_horizontal)
-            away_pos = self._create_position(fixed_coord, opponent_coord - 1, is_horizontal)
-            toward_prob, away_prob = 0.2, 0.2
-
-        if self._is_valid_position(toward_pos):
-            moves.append((toward_pos, toward_prob))
-        if self._is_valid_position(away_pos):
-            moves.append((away_pos, away_prob))
-
-        return moves
-
-    def _get_horizontal_moves(
-        self, robot_col: int, opp_row: int, opp_col: int
-    ) -> List[Tuple[Tuple[int, int], float]]:
-        """Get opponent's horizontal (column) movement options."""
-        return self._calculate_directional_moves(
-            opponent_coord=opp_col,
-            robot_coord=robot_col,
-            fixed_coord=opp_row,
-            is_horizontal=True,
-        )
-
-    def _get_vertical_moves(
-        self, robot_row: int, opp_row: int, opp_col: int
-    ) -> List[Tuple[Tuple[int, int], float]]:
-        """Get opponent's vertical (row) movement options."""
-        return self._calculate_directional_moves(
-            opponent_coord=opp_row,
-            robot_coord=robot_row,
-            fixed_coord=opp_col,
-            is_horizontal=False,
-        )
-
-    def _normalize_move_probabilities(
-        self,
-        directional_moves: List[Tuple[Tuple[int, int], float]],
-        stay_position: Tuple[int, int],
-        stay_prob: float,
-    ) -> List[Tuple[Tuple[int, int], float]]:
-        """Normalize movement probabilities and handle blocked moves."""
-        # Add stay option
-        move_probs = directional_moves + [(stay_position, stay_prob)]
-
-        # Calculate actual total probability
-        actual_total = sum(prob for _, prob in move_probs if prob > 0)
-
-        # Redistribute remaining probability to staying if moves are blocked
-        if actual_total < 1.0:
-            stay_index = len(move_probs) - 1
-            current_pos, current_stay_prob = move_probs[stay_index]
-            move_probs[stay_index] = (current_pos, current_stay_prob + (1.0 - actual_total))
-
-        # Filter out zero probability moves
-        return [(pos, prob) for pos, prob in move_probs if prob > 0]
-
-    def _get_opponent_move_probabilities(
-        self, robot_pos: Tuple[int, int]
-    ) -> List[Tuple[Tuple[int, int], float]]:
-        """Get opponent's movement probabilities based on robot position.
-
-        Uses the following movement model:
-        - 0.4 probability budget for x-direction movement
-        - 0.4 probability budget for y-direction movement
-        - 0.2 probability to stay in place
-
-        When robot and opponent differ on an axis, the full 0.4 goes toward
-        the robot.  When they share the same coordinate on an axis, the 0.4
-        is split equally (0.2 / 0.2) between both directions on that axis.
-        Blocked moves redistribute their mass to staying.
-        """
-        current_opp = (int(self.state[2]), int(self.state[3]))
-        robot_row, robot_col = robot_pos
-        opp_row, opp_col = current_opp
-
-        # Get movement options for each axis
-        x_moves = self._get_horizontal_moves(robot_col, opp_row, opp_col)
-        y_moves = self._get_vertical_moves(robot_row, opp_row, opp_col)
-
-        # Combine and normalize
-        return self._normalize_move_probabilities(x_moves + y_moves, current_opp, stay_prob=0.2)
-
-    def _get_actual_action(self) -> int:
-        """Get the actual action to execute, accounting for transition errors.
-
-        Returns:
-            The action that will actually be executed. For Tag action (4), always returns
-            the intended action. For movement actions (0-3), with probability (1-p)
-            returns the intended action, with probability p returns a uniformly random
-            action from {0,1,2,3} excluding the intended action.
-        """
-        # Tag action always executes correctly
-        if self.action == 4:
-            return self.action
-
-        # For movement actions, apply error probability
-        if np.random.random() < self.transition_error_prob:
-            # Select uniformly from {0,1,2,3} excluding the intended action
-            available_actions = [a for a in [0, 1, 2, 3] if a != self.action]
-            return np.random.choice(available_actions)
-        return self.action
-
-    def sample(self, n_samples: int = 1) -> List[np.ndarray]:
-        """Sample next states from the transition model."""
-        samples = []
-        # Get actual action to execute (may differ from intended due to errors)
-        actual_action = self._get_actual_action()
-        robot_next = self._get_robot_next_position(action=actual_action)
-        robot_current = (int(self.state[0]), int(self.state[1]))
-        opponent_current = (int(self.state[2]), int(self.state[3]))
-
-        # Check if tagging occurred (using actual action)
-        if actual_action == 4 and robot_current == opponent_current:
-            # Successful tag - terminal state
-            for _ in range(n_samples):
-                samples.append(
-                    np.array(
-                        [
-                            float(robot_next[0]),
-                            float(robot_next[1]),
-                            float(opponent_current[0]),
-                            float(opponent_current[1]),
-                            1.0,
-                        ]
-                    )
-                )
-        else:
-            # Regular transition
-            opp_moves = self._get_opponent_move_probabilities(robot_next)
-            positions, probabilities = zip(*opp_moves)
-
-            for _ in range(n_samples):
-                opp_next = np.random.choice(len(positions), p=probabilities)
-                opp_next_pos = positions[opp_next]
-                samples.append(
-                    np.array(
-                        [
-                            float(robot_next[0]),
-                            float(robot_next[1]),
-                            float(opp_next_pos[0]),
-                            float(opp_next_pos[1]),
-                            0.0,
-                        ]
-                    )
-                )
-
-        return samples
-
-    def _compute_transition_probability_for_action(
-        self, next_state: np.ndarray, action: int
-    ) -> float:
-        """Compute transition probability for a given next state and action.
-
-        Args:
-            next_state: The next state as numpy array with shape (5,)
-            action: The action to consider
-
-        Returns:
-            Probability of transitioning to next_state given action
-        """
-        if not isinstance(next_state, np.ndarray) or len(next_state) != 5:
-            return 0.0
-
-        robot_next = self._get_robot_next_position(action=action)
-        robot_current = (int(self.state[0]), int(self.state[1]))
-        opponent_current = (int(self.state[2]), int(self.state[3]))
-
-        next_robot = (int(next_state[0]), int(next_state[1]))
-        next_opponent = (int(next_state[2]), int(next_state[3]))
-        next_terminal = bool(next_state[4])
-
-        # Check if tagging occurred
-        if action == 4 and robot_current == opponent_current:
-            # Successful tag case
-            if next_robot == robot_next and next_opponent == opponent_current and next_terminal:
-                return 1.0
-            return 0.0
-        # Regular transition case
-        if next_robot == robot_next and not next_terminal:
-            opp_moves = self._get_opponent_move_probabilities(robot_next)
-            # Find probability for this opponent position
-            for opp_pos, prob in opp_moves:
-                if next_opponent == opp_pos:
-                    return prob
-        return 0.0
-
-    def probability(self, values: List[Any]) -> np.ndarray:
-        """Calculate transition probabilities for given next states."""
-        result = np.zeros(len(values))
-
-        # Tag action always executes correctly (no errors)
-        if self.action == 4:
-            for i, next_state in enumerate(values):
-                result[i] = self._compute_transition_probability_for_action(next_state, self.action)
-        else:
-            # Movement action: account for error probability
-            # With probability (1-p): execute intended action
-            # With probability p: execute one of 3 error actions uniformly
-            for i, next_state in enumerate(values):
-                # Probability from intended action
-                prob_intended = (1.0 - self.transition_error_prob) * (
-                    self._compute_transition_probability_for_action(next_state, self.action)
-                )
-
-                # Probability from error actions
-                error_actions = [a for a in [0, 1, 2, 3] if a != self.action]
-                prob_error = 0.0
-                if self.transition_error_prob > 0.0 and len(error_actions) > 0:
-                    error_prob_sum = sum(
-                        self._compute_transition_probability_for_action(next_state, error_action)
-                        for error_action in error_actions
-                    )
-                    prob_error = (
-                        self.transition_error_prob * (1.0 / len(error_actions)) * error_prob_sum
-                    )
-
-                result[i] = prob_intended + prob_error
-
-        return result
-
-
-class LaserTagObservation(ObservationModel):
-    """Observation model for LaserTag POMDP.
-
-    Provides 8-directional laser range measurements from the robot's position.
-    Each measurement represents the number of clear cells in that direction
-    before hitting a wall or boundary, with Gaussian noise.
-
-    Attributes:
-        next_state: The state after action execution as numpy array (shape (5,))
-        action: The action that was taken
-        measurement_noise: Standard deviation of Gaussian measurement noise
-        floor_shape: Grid dimensions as (rows, cols)
-        walls: Set of wall positions
-
-    Example:
-        >>> import numpy as np
-        >>> np.random.seed(42)  # For reproducible results
-        >>> state = np.array([3.0, 5.0, 2.0, 4.0, 0.0])  # Robot at (3,5), opponent at (2,4)
-        >>> obs_model = LaserTagObservation(
-        ...     next_state=state,
-        ...     action=0,
-        ...     measurement_noise=1.0,
-        ...     floor_shape=(7, 11),
-        ...     walls=set()
-        ... )
-        >>> observations = obs_model.sample(n_samples=3)  # doctest: +SKIP
-        >>> probabilities = obs_model.probability(observations)  # doctest: +SKIP
-    """
-
-    def __init__(
-        self,
-        next_state: np.ndarray,
-        action: int,
-        measurement_noise: float = 1.0,
-        floor_shape: Tuple[int, int] = (7, 11),
-        walls: Optional[Set[Tuple[int, int]]] = None,
-    ):
-        """Initialize the observation model.
-
-        Args:
-            next_state: State after taking the action as numpy array with shape (5,)
-            action: Action that was executed
-            measurement_noise: Standard deviation of Gaussian measurement noise
-            floor_shape: Grid dimensions as (rows, cols)
-            walls: Set of wall positions as (row, col) tuples
-        """
-        super().__init__(next_state, action)
-        self.measurement_noise = measurement_noise
-        self.floor_shape = floor_shape
-        self.walls = walls if walls is not None else set()
-
-        # 8-directional laser measurements: N, NE, E, SE, S, SW, W, NW
-        self._laser_directions = [
-            (-1, 0),  # North
-            (-1, 1),  # Northeast
-            (0, 1),  # East
-            (1, 1),  # Southeast
-            (1, 0),  # South
-            (1, -1),  # Southwest
-            (0, -1),  # West
-            (-1, -1),  # Northwest
-        ]
-
-    def _get_laser_measurement(
-        self, robot_pos: Tuple[int, int], direction: Tuple[int, int]
-    ) -> float:
-        """Get laser range measurement in a specific direction.
-
-        Args:
-            robot_pos: Robot's position as (row, col)
-            direction: Direction vector as (row_delta, col_delta)
-
-        Returns:
-            Number of clear cells in that direction before hitting obstacle/boundary
-        """
-        row, col = robot_pos
-        dr, dc = direction
-        distance = 0.0
-
-        # Cast ray in direction until hitting obstacle or boundary
-        while True:
-            row += dr
-            col += dc
-            distance += 1.0
-
-            # Check if hit boundary
-            if row < 0 or row >= self.floor_shape[0] or col < 0 or col >= self.floor_shape[1]:
-                break
-
-            # Check if hit wall
-            if (row, col) in self.walls or (row, col) == (
-                int(self.next_state[2]),
-                int(self.next_state[3]),
-            ):
-                break
-
-        return distance - 1.0  # Don't count the wall/boundary cell
-
-    def sample(self, n_samples: int = 1) -> List[Tuple[float, ...]]:
-        """Sample observations from the observation model.
-
-        Returns:
-            List of 8-tuple observations representing laser measurements in 8 directions
-        """
-        samples: List[Tuple[float, ...]] = []
-
-        if bool(self.next_state[4]):
-            # Terminal state - return special terminal observation
-            for _ in range(n_samples):
-                samples.append((-1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0))
-        else:
-            # Get true laser measurements from robot position
-            robot_pos = (int(self.next_state[0]), int(self.next_state[1]))
-            true_measurements = []
-
-            for direction in self._laser_directions:
-                measurement = self._get_laser_measurement(robot_pos, direction)
-                true_measurements.append(measurement)
-
-            # Add Gaussian noise to each measurement
-            for _ in range(n_samples):
-                noisy_measurements = []
-                for true_measure in true_measurements:
-                    noise = np.random.normal(0, self.measurement_noise)
-                    noisy_measure = max(0.0, true_measure + noise)  # Clamp to non-negative
-                    noisy_measurements.append(noisy_measure)
-
-                samples.append(tuple(noisy_measurements))
-
-        return samples
-
-    def probability(self, values: List[Any]) -> np.ndarray:
-        """Calculate observation probabilities for given values."""
-        result = np.zeros(len(values))
-
-        if bool(self.next_state[4]):
-            # Terminal state case
-            terminal_obs = (-1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0)
-            for i, obs in enumerate(values):
-                if np.array_equal(obs, terminal_obs):
-                    result[i] = 1.0
-        else:
-            # Get true laser measurements
-            robot_pos = (int(self.next_state[0]), int(self.next_state[1]))
-            true_measurements = []
-
-            for direction in self._laser_directions:
-                measurement = self._get_laser_measurement(robot_pos, direction)
-                true_measurements.append(measurement)
-
-            # Calculate Gaussian probability density for each observation
-            variance = self.measurement_noise**2
-
-            for i, obs in enumerate(values):
-                if isinstance(obs, (tuple, list, np.ndarray)) and len(obs) == 8:
-                    # Product of independent Gaussian PDFs for each direction
-                    prob = 1.0
-                    for _, (true_measure, observed_measure) in enumerate(
-                        zip(true_measurements, obs)
-                    ):
-                        if observed_measure >= 0:  # Valid measurement
-                            diff = observed_measure - true_measure
-                            prob *= np.exp(-0.5 * diff**2 / variance) / np.sqrt(
-                                2 * np.pi * variance
-                            )
-                        else:
-                            prob = 0.0  # Invalid negative measurement
-                            break
-                    result[i] = prob
-
-        return result
 
 
 class LaserTagPOMDP(DiscreteActionsEnvironment):
@@ -627,7 +130,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         False
     """
 
-    def __init__(
+    def __init__(  # pylint: disable=dangerous-default-value
         self,
         discount_factor: float,
         name: str = "LaserTagPOMDP",
@@ -731,27 +234,505 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
             3: (0, -1),  # West (left)
             4: (0, 0),  # Tag (no movement)
         }
+        # Pre-built C-contiguous int64 (4, 2) array of (dr, dc) for actions 0..3,
+        # consumed by the native ``lasertag_discrete_reward_batch`` kernel so the
+        # hot path doesn't repack a Python dict on every call.
+        self._action_directions_arr: np.ndarray = np.ascontiguousarray(
+            np.array(
+                [self._action_directions[a] for a in (0, 1, 2, 3)],
+                dtype=np.int64,
+            )
+        )
+        # Pre-built (D, 2) C-contiguous float64 array of dangerous-area centres
+        # (or empty (0, 2) when none are configured) so the native kernel can
+        # consume it directly without per-call reallocation.
+        if self.dangerous_areas:
+            self._dangerous_areas_arr: np.ndarray = np.ascontiguousarray(
+                np.asarray(self.dangerous_areas, dtype=np.float64).reshape(-1, 2)
+            )
+        else:
+            self._dangerous_areas_arr = np.empty((0, 2), dtype=np.float64)
+        # Flattened int64 walls buffer (length 2 * n_walls) for the native
+        # kernel; pairs are (row, col). Sorted for deterministic ordering.
+        walls_list = sorted(self.walls)
+        self._reward_walls_flat: np.ndarray = np.array(
+            [coord for pair in walls_list for coord in pair],
+            dtype=np.int64,
+        )
+        self._reward_n_walls: int = len(walls_list)
+        # Precomputed error-action lookup for the action-error coin in
+        # _resolve_actual_action / _python_sample_next_state. Avoids a
+        # per-call list comprehension + np.random.choice over a Python
+        # list (~5 µs → ~1.5 µs).
+        self._error_actions_for: Dict[int, List[int]] = {
+            a: [b for b in (0, 1, 2, 3) if b != a] for a in (0, 1, 2, 3)
+        }
 
-    def state_transition_model(self, state: np.ndarray, action: int) -> StateTransitionModel:
-        """Get the state transition model for a given state-action pair."""
-        return LaserTagStateTransition(
-            state=state,
-            action=action,
-            action_directions=self._action_directions,
-            floor_shape=self.floor_shape,
-            walls=self.walls,
-            transition_error_prob=self.transition_error_prob,
+    def __getstate__(self) -> Dict[str, Any]:
+        # The native step / rollout / reward_batch caches and the vectorized
+        # updater cache hold pybind11 module/function references that aren't
+        # picklable (and would crash joblib's task-cache hashing — see the
+        # weekly-slow-tests JoblibTaskManager regression). Drop them at
+        # serialization time; the lazy ``_get_*`` accessors rebuild them on
+        # demand after unpickling.
+        state = self.__dict__.copy()
+        state.pop("_cached_native_step_params", None)
+        state.pop("_cached_native_rollout_params", None)
+        state.pop("_cached_native_reward_batch", None)
+        state.pop("_cached_vectorized_updater", None)
+        return state
+
+    def __setstate__(self, state: Dict[str, Any]) -> None:
+        vars(self).update(state)
+
+    def _is_valid_position_inline(self, pos: Tuple[int, int]) -> bool:
+        row, col = pos
+        return (
+            0 <= row < self.floor_shape[0]
+            and 0 <= col < self.floor_shape[1]
+            and pos not in self.walls
         )
 
-    def observation_model(self, next_state: np.ndarray, action: int) -> ObservationModel:
-        """Get the observation model for a given next state and action."""
-        return LaserTagObservation(
-            next_state=next_state,
-            action=action,
-            measurement_noise=self.measurement_noise,
-            floor_shape=self.floor_shape,
-            walls=self.walls,
+    def _get_native_step_params(self) -> Optional[Any]:
+        """Return cached static params for the native single-step kernels."""
+        cached = getattr(self, "_cached_native_step_params", None)
+        if cached is not None:
+            return cached
+        try:
+            from POMDPPlanners.environments.laser_tag_pomdp import (  # pylint: disable=import-outside-toplevel
+                _native,
+            )
+        except ImportError:
+            return None
+        if not hasattr(_native, "sample_next_state_step"):
+            return None
+        walls_list = sorted(self.walls)
+        walls_flat = np.array([c for pair in walls_list for c in pair], dtype=np.int64)
+        params = (_native, int(self.floor_shape[0]), int(self.floor_shape[1]), walls_flat)
+        # pylint: disable=attribute-defined-outside-init
+        self._cached_native_step_params = params
+        return params
+
+    def sample_next_state(self, state: np.ndarray, action: int, n_samples: int = 1) -> Any:
+        # Fast path: native single-step C++ kernel for the n_samples == 1 case
+        # (the POMCPOW hot path). RNG draws are issued from numpy in the same
+        # order and quantity as the original Python implementation, then
+        # forwarded to C++ to preserve byte-identical reproducibility.
+        if n_samples == 1:
+            params = self._get_native_step_params()
+            if params is not None:
+                return self._native_sample_next_state_one(state, action, params)
+
+        # Slow / batch path: original numpy implementation.
+        return self._python_sample_next_state(state, action, n_samples)
+
+    def _native_sample_next_state_one(
+        self,
+        state: np.ndarray,
+        action: int,
+        params: Any,
+    ) -> np.ndarray:
+        # Resolve actual_action via the same numpy RNG draws as the original
+        # Python path (one np.random.random() coin for action != 4, plus an
+        # np.random.choice for the error branch when triggered).
+        actual_action = self._resolve_actual_action(action)
+
+        # Successful tag short-circuit: no opponent draw needed.
+        robot_current = (int(state[0]), int(state[1]))
+        opponent_current = (int(state[2]), int(state[3]))
+        if actual_action == 4 and robot_current == opponent_current:
+            return np.array(
+                [
+                    float(robot_current[0]),
+                    float(robot_current[1]),
+                    float(opponent_current[0]),
+                    float(opponent_current[1]),
+                    1.0,
+                ]
+            )
+
+        # Otherwise draw the opponent uniform via numpy and forward to C++.
+        opp_uniform = float(np.random.random())
+        native, rows, cols, walls_flat = params
+        return native.sample_next_state_step(
+            state=np.ascontiguousarray(np.asarray(state, dtype=np.float64)),
+            actual_action=int(actual_action),
+            opp_uniform=opp_uniform,
+            rows=rows,
+            cols=cols,
+            walls_flat=walls_flat,
         )
+
+    def _resolve_actual_action(self, action: int) -> int:
+        # Mirrors the action-error coin used by the original Python path.
+        if action == 4:
+            return 4
+        if np.random.random() < self.transition_error_prob:
+            available = self._error_actions_for[action]
+            return available[np.random.randint(3)]
+        return action
+
+    def _python_sample_next_state(self, state: np.ndarray, action: int, n_samples: int) -> Any:
+        # _get_actual_action: matches LaserTagStateTransition._get_actual_action
+        if action == 4:
+            actual_action = action
+        else:
+            if np.random.random() < self.transition_error_prob:
+                available = self._error_actions_for[action]
+                actual_action = available[np.random.randint(3)]
+            else:
+                actual_action = action
+
+        # _get_robot_next_position(actual_action)
+        robot_current = (int(state[0]), int(state[1]))
+        if actual_action == 4:
+            robot_next = robot_current
+        else:
+            dr, dc = self._action_directions[actual_action]
+            cand = (robot_current[0] + dr, robot_current[1] + dc)
+            robot_next = cand if self._is_valid_position_inline(cand) else robot_current
+
+        opponent_current = (int(state[2]), int(state[3]))
+
+        # Tag at same cell → terminal: no extra RNG draws regardless of n_samples
+        if actual_action == 4 and robot_current == opponent_current:
+            terminal_array = np.array(
+                [
+                    float(robot_next[0]),
+                    float(robot_next[1]),
+                    float(opponent_current[0]),
+                    float(opponent_current[1]),
+                    1.0,
+                ]
+            )
+            if n_samples == 1:
+                return terminal_array
+            return [terminal_array.copy() for _ in range(n_samples)]
+
+        # Regular transition: build opponent move distribution then draw indices
+        # in a single np.random.choice call (matches the wrapper's RNG draw order
+        # for any n_samples).
+        opp_moves = self._opponent_move_probabilities_inline(state, robot_next)
+        positions, probabilities = zip(*opp_moves)
+        opp_indices = np.random.choice(len(positions), size=n_samples, p=probabilities)
+        if n_samples == 1:
+            opp_next_pos = positions[opp_indices[0]]
+            return np.array(
+                [
+                    float(robot_next[0]),
+                    float(robot_next[1]),
+                    float(opp_next_pos[0]),
+                    float(opp_next_pos[1]),
+                    0.0,
+                ]
+            )
+        samples: List[np.ndarray] = []
+        for idx in opp_indices:
+            opp_next_pos = positions[idx]
+            samples.append(
+                np.array(
+                    [
+                        float(robot_next[0]),
+                        float(robot_next[1]),
+                        float(opp_next_pos[0]),
+                        float(opp_next_pos[1]),
+                        0.0,
+                    ]
+                )
+            )
+        return samples
+
+    def _opponent_move_probabilities_inline(
+        self, state: np.ndarray, robot_pos: Tuple[int, int]
+    ) -> List[Tuple[Tuple[int, int], float]]:
+        # Mirror of LaserTagStateTransition._get_opponent_move_probabilities,
+        # but operating on a state ndarray rather than self.state.
+        current_opp = (int(state[2]), int(state[3]))
+        robot_row, robot_col = robot_pos
+        opp_row, opp_col = current_opp
+
+        x_moves = self._directional_moves_inline(opp_col, robot_col, opp_row, True)
+        y_moves = self._directional_moves_inline(opp_row, robot_row, opp_col, False)
+
+        move_probs = x_moves + y_moves + [(current_opp, 0.2)]
+        actual_total = sum(prob for _, prob in move_probs if prob > 0)
+        if actual_total < 1.0:
+            stay_index = len(move_probs) - 1
+            current_pos, current_stay_prob = move_probs[stay_index]
+            move_probs[stay_index] = (current_pos, current_stay_prob + (1.0 - actual_total))
+        return [(pos, prob) for pos, prob in move_probs if prob > 0]
+
+    def _directional_moves_inline(
+        self, opponent_coord: int, robot_coord: int, fixed_coord: int, is_horizontal: bool
+    ) -> List[Tuple[Tuple[int, int], float]]:
+        if robot_coord > opponent_coord:
+            toward_pos = (
+                (fixed_coord, opponent_coord + 1)
+                if is_horizontal
+                else (opponent_coord + 1, fixed_coord)
+            )
+            away_pos = (
+                (fixed_coord, opponent_coord - 1)
+                if is_horizontal
+                else (opponent_coord - 1, fixed_coord)
+            )
+            toward_prob, away_prob = 0.4, 0.0
+        elif robot_coord < opponent_coord:
+            toward_pos = (
+                (fixed_coord, opponent_coord - 1)
+                if is_horizontal
+                else (opponent_coord - 1, fixed_coord)
+            )
+            away_pos = (
+                (fixed_coord, opponent_coord + 1)
+                if is_horizontal
+                else (opponent_coord + 1, fixed_coord)
+            )
+            toward_prob, away_prob = 0.4, 0.0
+        else:
+            toward_pos = (
+                (fixed_coord, opponent_coord + 1)
+                if is_horizontal
+                else (opponent_coord + 1, fixed_coord)
+            )
+            away_pos = (
+                (fixed_coord, opponent_coord - 1)
+                if is_horizontal
+                else (opponent_coord - 1, fixed_coord)
+            )
+            toward_prob, away_prob = 0.2, 0.2
+
+        moves: List[Tuple[Tuple[int, int], float]] = []
+        if self._is_valid_position_inline(toward_pos):
+            moves.append((toward_pos, toward_prob))
+        if self._is_valid_position_inline(away_pos):
+            moves.append((away_pos, away_prob))
+        return moves
+
+    def sample_observation(self, next_state: np.ndarray, action: int, n_samples: int = 1) -> Any:
+        if bool(next_state[4]):
+            terminal_obs = (-1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0)
+            if n_samples == 1:
+                return terminal_obs
+            return [terminal_obs] * n_samples
+
+        # Fast path: native single-step C++ kernel for n_samples == 1 (the
+        # POMCPOW hot path). The 8 noise samples are pre-drawn from numpy in
+        # the same order as the original Python path so byte-identical numpy
+        # RNG state is preserved across both paths.
+        if n_samples == 1:
+            params = self._get_native_step_params()
+            if params is not None:
+                native, rows, cols, walls_flat = params
+                noise = np.random.normal(0, self.measurement_noise, size=8)
+                obs_arr = native.sample_observation_step(
+                    next_state=np.ascontiguousarray(np.asarray(next_state, dtype=np.float64)),
+                    noise=np.ascontiguousarray(noise, dtype=np.float64),
+                    rows=rows,
+                    cols=cols,
+                    walls_flat=walls_flat,
+                )
+                # tolist() is ~8x faster than a per-element float() genexpr and
+                # produces a Python list of floats; tuple() wraps to match the
+                # historical return type.
+                return tuple(obs_arr.tolist())
+
+        robot_pos = (int(next_state[0]), int(next_state[1]))
+        opp_pos = (int(next_state[2]), int(next_state[3]))
+        # Compute true 8-direction laser measurements (no RNG)
+        true_measurements = [
+            self._laser_distance_inline(robot_pos, direction, opp_pos)
+            for direction in _LASER_DIRECTIONS
+        ]
+        # Add Gaussian noise to each measurement. Single batched np.random.normal
+        # call (size=8 for n=1, size=n*8 for n>1) replaces a per-direction
+        # scalar dispatch — same RNG draw count, lower per-call overhead.
+        sigma = self.measurement_noise
+        if n_samples == 1:
+            noise = np.random.normal(0.0, sigma, size=8)
+            return tuple(max(0.0, t + float(noise[i])) for i, t in enumerate(true_measurements))
+
+        noise_batch = np.random.normal(0.0, sigma, size=(n_samples, 8))
+        samples: List[Tuple[float, ...]] = []
+        for j in range(n_samples):
+            row = noise_batch[j]
+            samples.append(
+                tuple(max(0.0, t + float(row[i])) for i, t in enumerate(true_measurements))
+            )
+        return samples
+
+    def transition_log_probability(
+        self, state: np.ndarray, action: int, next_states: Any
+    ) -> np.ndarray:
+        # Inlined from the deleted LaserTagStateTransition.probability(): for Tag
+        # action (4), probability is deterministic; for movement actions, mix the
+        # intended-action probability with uniformly distributed error actions.
+        result = np.zeros(len(next_states))
+        if action == 4:
+            for i, next_state in enumerate(next_states):
+                result[i] = self._transition_probability_for_action(state, next_state, 4)
+        else:
+            error_actions = [a for a in (0, 1, 2, 3) if a != action]
+            error_weight = (
+                self.transition_error_prob / len(error_actions)
+                if (self.transition_error_prob > 0.0 and len(error_actions) > 0)
+                else 0.0
+            )
+            for i, next_state in enumerate(next_states):
+                prob_intended = (1.0 - self.transition_error_prob) * (
+                    self._transition_probability_for_action(state, next_state, action)
+                )
+                prob_error = 0.0
+                if error_weight > 0.0:
+                    prob_error = error_weight * sum(
+                        self._transition_probability_for_action(state, next_state, error_action)
+                        for error_action in error_actions
+                    )
+                result[i] = prob_intended + prob_error
+        with np.errstate(divide="ignore"):
+            return np.log(result)
+
+    def _transition_probability_for_action(
+        self, state: np.ndarray, next_state: Any, action: int
+    ) -> float:
+        # Inlined from the deleted LaserTagStateTransition._compute_transition_probability_for_action.
+        if not isinstance(next_state, np.ndarray) or len(next_state) != 5:
+            return 0.0
+
+        robot_current = (int(state[0]), int(state[1]))
+        opponent_current = (int(state[2]), int(state[3]))
+
+        if action == 4:
+            robot_next = robot_current
+        else:
+            dr, dc = self._action_directions[action]
+            cand = (robot_current[0] + dr, robot_current[1] + dc)
+            robot_next = cand if self._is_valid_position_inline(cand) else robot_current
+
+        next_robot = (int(next_state[0]), int(next_state[1]))
+        next_opponent = (int(next_state[2]), int(next_state[3]))
+        next_terminal = bool(next_state[4])
+
+        # Successful tag: deterministic transition into terminal state.
+        if action == 4 and robot_current == opponent_current:
+            if next_robot == robot_next and next_opponent == opponent_current and next_terminal:
+                return 1.0
+            return 0.0
+
+        # Regular transition: opponent moves stochastically, terminal flag stays 0.
+        if next_robot == robot_next and not next_terminal:
+            opp_moves = self._opponent_move_probabilities_inline(state, robot_next)
+            for opp_pos, prob in opp_moves:
+                if next_opponent == opp_pos:
+                    return prob
+        return 0.0
+
+    def observation_log_probability(
+        self, next_state: np.ndarray, action: int, observations: Any
+    ) -> np.ndarray:
+        # Inlined from the deleted LaserTagObservation.probability(): terminal
+        # states emit a sentinel observation deterministically; non-terminal states
+        # emit independent Gaussian-noise laser ranges in 8 directions.
+        del action  # observation distribution does not depend on action in LaserTag
+
+        # Fast path: native C++ kernel that mirrors the Python loop bit-for-bit
+        # but skips Python-level per-direction overhead (laser ray-casting,
+        # exp/sqrt, tuple iteration). The native entry handles the terminal
+        # sentinel branch and returns log-probabilities directly.
+        params = self._get_native_step_params()
+        if params is not None:
+            obs_arr = self._coerce_observations_array(observations)
+            if obs_arr is not None:
+                native, rows, cols, walls_flat = params
+                return np.asarray(
+                    native.observation_log_probability_step(
+                        next_state=np.ascontiguousarray(np.asarray(next_state, dtype=np.float64)),
+                        observations=obs_arr,
+                        measurement_noise=float(self.measurement_noise),
+                        rows=rows,
+                        cols=cols,
+                        walls_flat=walls_flat,
+                    )
+                )
+        return self._python_observation_log_probability(next_state, observations)
+
+    @staticmethod
+    def _coerce_observations_array(observations: Any) -> Optional[np.ndarray]:
+        # Convert a heterogeneous observation collection (tuple of tuples,
+        # list of ndarrays, etc.) into a contiguous (N, 8) float64 array. Any
+        # row that is not exactly length 8 disqualifies the fast path so the
+        # native kernel never sees malformed inputs.
+        if isinstance(observations, np.ndarray):
+            arr = observations
+        else:
+            try:
+                arr = np.asarray(observations, dtype=np.float64)
+            except (ValueError, TypeError):
+                return None
+        if arr.ndim == 1:
+            if arr.shape[0] != 8:
+                return None
+            arr = arr.reshape(1, -1)
+        if arr.ndim != 2 or arr.shape[1] != 8:
+            return None
+        return np.ascontiguousarray(arr, dtype=np.float64)
+
+    def _python_observation_log_probability(
+        self, next_state: np.ndarray, observations: Any
+    ) -> np.ndarray:
+        # Pure-Python fallback retained for parity testing and for unusual
+        # observation shapes the native fast path declines to handle.
+        result = np.zeros(len(observations))
+
+        if bool(next_state[4]):
+            terminal_obs = (-1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0)
+            for i, obs in enumerate(observations):
+                if np.array_equal(obs, terminal_obs):
+                    result[i] = 1.0
+            with np.errstate(divide="ignore"):
+                return np.log(result)
+
+        robot_pos = (int(next_state[0]), int(next_state[1]))
+        opp_pos = (int(next_state[2]), int(next_state[3]))
+        true_measurements = [
+            self._laser_distance_inline(robot_pos, direction, opp_pos)
+            for direction in _LASER_DIRECTIONS
+        ]
+        variance = self.measurement_noise**2
+        norm_const = 1.0 / np.sqrt(2 * np.pi * variance)
+
+        for i, obs in enumerate(observations):
+            if isinstance(obs, (tuple, list, np.ndarray)) and len(obs) == 8:
+                prob = 1.0
+                for true_measure, observed_measure in zip(true_measurements, obs):
+                    if observed_measure >= 0:
+                        diff = observed_measure - true_measure
+                        prob *= np.exp(-0.5 * diff**2 / variance) * norm_const
+                    else:
+                        prob = 0.0
+                        break
+                result[i] = prob
+        with np.errstate(divide="ignore"):
+            return np.log(result)
+
+    def _laser_distance_inline(
+        self,
+        robot_pos: Tuple[int, int],
+        direction: Tuple[int, int],
+        opp_pos: Tuple[int, int],
+    ) -> float:
+        row, col = robot_pos
+        dr, dc = direction
+        distance = 0.0
+        while True:
+            row += dr
+            col += dc
+            distance += 1.0
+            if row < 0 or row >= self.floor_shape[0] or col < 0 or col >= self.floor_shape[1]:
+                break
+            if (row, col) in self.walls or (row, col) == opp_pos:
+                break
+        return distance - 1.0
 
     def _is_in_dangerous_area(self, position: Tuple[int, int]) -> bool:
         """Check if a position is within any dangerous area.
@@ -766,41 +747,52 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
             return False
 
         pos_row, pos_col = position
-
+        # Square-distance comparison avoids np.sqrt per area (~400 ns each).
+        radius_sq = self.dangerous_area_radius * self.dangerous_area_radius
         for danger_row, danger_col in self.dangerous_areas:
-            # Calculate Euclidean distance
-            distance = np.sqrt((pos_row - danger_row) ** 2 + (pos_col - danger_col) ** 2)
-            if distance <= self.dangerous_area_radius:
+            dr = pos_row - danger_row
+            dc = pos_col - danger_col
+            if dr * dr + dc * dc <= radius_sq:
                 return True
 
         return False
 
-    def reward(self, state: np.ndarray, action: int) -> float:
-        """Calculate the immediate reward for a state-action pair."""
+    def reward(self, state: np.ndarray, action: int, next_state: Any = None) -> float:
+        """Calculate the immediate reward for a state-action transition.
+
+        The wall / dangerous-area penalty is computed against the *realised*
+        post-action robot position taken from ``next_state``. When the caller
+        omits ``next_state`` (e.g., the open-loop scalar API path) the method
+        resamples a transition via :meth:`sample_next_state` so the penalty
+        is always scored against an actual draw from the transition kernel —
+        never against the open-loop ``state + action_vector`` intended
+        position. :meth:`Environment.sample_next_step` threads its sampled
+        ``next_state`` into this method so trajectory and reward agree on the
+        same realisation.
+        """
         if bool(state[4]):
             return 0.0  # No reward in terminal state
 
-        base_reward = 0.0
+        if next_state is None:
+            next_state_arr = self.sample_next_state(state=state, action=action)
+        else:
+            next_state_arr = np.asarray(next_state, dtype=np.float64)
+
         robot_pos = (int(state[0]), int(state[1]))
         opponent_pos = (int(state[2]), int(state[3]))
 
         if action == 4:  # Tag action
-            if robot_pos == opponent_pos:
-                base_reward = self.tag_reward  # Successful tag
-            else:
-                base_reward = -self.tag_penalty  # Failed tag attempt
+            base_reward = self.tag_reward if robot_pos == opponent_pos else -self.tag_penalty
         else:
             base_reward = -self.step_cost  # Movement cost
 
-        intended_pos = (robot_pos[0], robot_pos[1])
-        # Check for wall collision and apply dangerous area penalty
-        if action in [0, 1, 2, 3]:  # Movement actions
-            # Calculate intended position based on action
-            dr, dc = self._action_directions[action]
-            intended_pos = (robot_pos[0] + dr, robot_pos[1] + dc)
-
-        if intended_pos in self.walls or self._is_in_dangerous_area(intended_pos):
-            # Apply dangerous area penalty for wall collision and danerous area
+        # Penalty is applied against the realised next-state robot position.
+        # For walls this is effectively dead code (the transition kernel never
+        # leaves the robot inside a wall), but it is retained so the scalar
+        # path mirrors the batch path and so any future relaxation of that
+        # invariant remains correctly scored.
+        realised_pos = (int(next_state_arr[0]), int(next_state_arr[1]))
+        if realised_pos in self.walls or self._is_in_dangerous_area(realised_pos):
             base_reward -= self.dangerous_area_penalty
 
         return base_reward
@@ -872,6 +864,355 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         Observations are 8-dimensional laser measurements or terminal observations.
         """
         return np.array_equal(observation1, observation2)
+
+    def hash_action(self, action: Any) -> Hashable:
+        # Discrete int actions (0..4); already hashable.
+        return action
+
+    def _get_native_rollout_params(
+        self,
+    ) -> Optional[Any]:
+        """Return cached static params for the native discrete rollout, or None."""
+        cached = getattr(self, "_cached_native_rollout_params", None)
+        if cached is not None:
+            return cached
+        try:
+            # pylint: disable=import-outside-toplevel
+            from POMDPPlanners.environments.laser_tag_pomdp import (
+                _native,
+            )
+        except ImportError:
+            return None
+        if not hasattr(_native, "simulate_rollout_discrete"):
+            return None
+        walls_list = sorted(self.walls)
+        walls_flat = np.array([coord for pair in walls_list for coord in pair], dtype=np.int64)
+        if self.dangerous_areas:
+            dangerous_areas_arr = np.array(self.dangerous_areas, dtype=np.float64)
+        else:
+            dangerous_areas_arr = np.empty((0,), dtype=np.float64)
+        params = (
+            _native,
+            self.floor_shape[0],
+            self.floor_shape[1],
+            walls_flat,
+            dangerous_areas_arr,
+            float(self.dangerous_area_radius),
+            float(self.dangerous_area_penalty),
+            float(self.tag_reward),
+            float(self.tag_penalty),
+            float(self.step_cost),
+            float(self.transition_error_prob),
+        )
+        # pylint: disable=attribute-defined-outside-init
+        self._cached_native_rollout_params = params
+        return params
+
+    def simulate_random_rollout(
+        self,
+        state: Any,
+        action_sampler: Any,
+        max_depth: int,
+        discount_factor: float,
+        depth: int = 0,
+    ) -> float:
+        # Attempt the native C++ rollout.  The C++ kernel draws actions
+        # uniformly from {0,1,2,3,4} using the module-level mt19937_64 RNG,
+        # which differs from the Python path's numpy mt19937 RNG; the two paths
+        # are therefore only equivalent in distribution, not bit-by-bit.
+        # If the action_sampler is not a uniform sampler over all 5 actions, fall
+        # back to the Python loop so planner-specific rollout policies still work.
+        params = self._get_native_rollout_params()
+        if params is not None:
+            state_arr = np.ascontiguousarray(np.asarray(state, dtype=np.float64))
+            (
+                _native,
+                rows,
+                cols,
+                walls_flat,
+                dangerous_areas_arr,
+                dangerous_area_radius,
+                dangerous_area_penalty,
+                tag_reward,
+                tag_penalty,
+                step_cost,
+                transition_error_prob,
+            ) = params
+            return float(
+                _native.simulate_rollout_discrete(
+                    initial_state=state_arr,
+                    max_depth=max_depth,
+                    discount=discount_factor,
+                    initial_depth=depth,
+                    rows=rows,
+                    cols=cols,
+                    walls_flat=walls_flat,
+                    dangerous_areas=dangerous_areas_arr,
+                    dangerous_area_radius=dangerous_area_radius,
+                    dangerous_area_penalty=dangerous_area_penalty,
+                    tag_reward=tag_reward,
+                    tag_penalty=tag_penalty,
+                    step_cost=step_cost,
+                    transition_error_prob=transition_error_prob,
+                )
+            )
+
+        # Python fallback (also used in equivalence tests via super()).
+        sample_next = self.sample_next_state
+        reward_fn = self.reward
+        action_sample = action_sampler.sample
+
+        total = 0.0
+        gamma_power = 1.0
+        current = state
+        while depth < max_depth and current[4] != 1.0:
+            action = action_sample()
+            r = reward_fn(state=current, action=action)
+            total += gamma_power * r
+            current = sample_next(state=current, action=action)
+            gamma_power *= discount_factor
+            depth += 1
+        return total
+
+    # ── Vectorized batch overrides ─────────────────────────────────
+    # PFT-DPW belief updates and any caller of the batch API otherwise hit
+    # the per-state Python fallback in ``Environment``. Delegate to the
+    # vectorized updater (which already exists for explicit belief
+    # filtering) so all-particle work happens inside NumPy, not a Python
+    # loop. The updater is built lazily on first call and cached.
+
+    def _get_vectorized_updater(self) -> Any:
+        cached = getattr(self, "_cached_vectorized_updater", None)
+        if cached is not None:
+            return cached
+        # pylint: disable=import-outside-toplevel
+        from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_beliefs.laser_tag_vectorized_updater import (
+            LaserTagVectorizedUpdater,
+        )
+
+        cached = LaserTagVectorizedUpdater.from_environment(self)
+        # pylint: disable=attribute-defined-outside-init
+        self._cached_vectorized_updater = cached
+        return cached
+
+    def sample_next_state_batch(self, states: Any, action: int) -> np.ndarray:
+        states_array = np.ascontiguousarray(np.asarray(states, dtype=float))
+        if states_array.ndim == 1:
+            states_array = states_array.reshape(1, -1)
+        return self._get_vectorized_updater().batch_transition(states_array, np.asarray(action))
+
+    def observation_log_probability_per_state(
+        self, next_states: Any, action: int, observation: Any
+    ) -> np.ndarray:
+        next_states_arr = np.ascontiguousarray(np.asarray(next_states, dtype=float))
+        if next_states_arr.ndim == 1:
+            next_states_arr = next_states_arr.reshape(1, -1)
+        return self._get_vectorized_updater().batch_observation_log_likelihood(
+            next_states_arr, np.asarray(action), np.asarray(observation, dtype=float)
+        )
+
+    def _get_wall_grid(self) -> np.ndarray:
+        cached = getattr(self, "_wall_grid", None)
+        if cached is not None:
+            return cached
+        grid = np.zeros(self.floor_shape, dtype=bool)
+        for row, col in self.walls:
+            grid[row, col] = True
+        # pylint: disable=attribute-defined-outside-init
+        self._wall_grid = grid
+        return grid
+
+    def reward_batch(
+        self,
+        states: Any,
+        action: int,
+        next_states: Any = None,
+    ) -> np.ndarray:
+        """Vectorised reward for a batch of states under a single action.
+
+        When ``next_states`` is supplied the danger-area / wall penalty is
+        evaluated against the realised positions in ``next_states[:, :2]``
+        (matching the contract honoured by
+        :meth:`Environment.sample_next_step`). When it is ``None`` the
+        method resamples via :meth:`sample_next_state_batch` and scores the
+        penalty against that draw, so reward and trajectory remain
+        consistent end-to-end.
+
+        The native ``lasertag_discrete_reward_batch`` kernel computes the
+        legacy intended-position penalty and is therefore only used as a
+        fast path when the caller does not thread a realised ``next_states``
+        and the env has no walls / dangerous areas (in which case the
+        intended- and realised-position branches collapse to the same pure
+        ``-step_cost`` / tag reward). All other cases fall through to the
+        Python path so the next-state semantics are honoured.
+        """
+        states_arr = np.asarray(states, dtype=np.float64)
+        if states_arr.ndim == 1:
+            states_arr = states_arr.reshape(1, -1)
+        states_arr = np.ascontiguousarray(states_arr)
+
+        next_states_arr = self._normalise_next_states(states_arr, action, next_states)
+
+        if self._can_use_native_reward_batch(next_states_arr):
+            native_fn = self._get_native_reward_batch()
+            if native_fn is not None:
+                return np.asarray(
+                    native_fn(
+                        states=states_arr,
+                        action=int(action),
+                        rows=int(self.floor_shape[0]),
+                        cols=int(self.floor_shape[1]),
+                        walls_flat=self._reward_walls_flat,
+                        n_walls=self._reward_n_walls,
+                        dangerous_areas=self._dangerous_areas_arr,
+                        n_dangerous=int(self._dangerous_areas_arr.shape[0]),
+                        dangerous_area_radius=float(self.dangerous_area_radius),
+                        dangerous_area_penalty=float(self.dangerous_area_penalty),
+                        tag_reward=float(self.tag_reward),
+                        tag_penalty=float(self.tag_penalty),
+                        step_cost=float(self.step_cost),
+                        action_directions=self._action_directions_arr,
+                    )
+                )
+        return self._compute_reward_batch_python(states_arr, action, next_states_arr)
+
+    def _normalise_next_states(
+        self,
+        states_arr: np.ndarray,
+        action: int,
+        next_states: Any,
+    ) -> Optional[np.ndarray]:
+        if next_states is None:
+            # Only resample when penalties depend on the realised position;
+            # otherwise leave None so the native fast path can short-circuit.
+            if self.walls or self.dangerous_areas:
+                return np.ascontiguousarray(self.sample_next_state_batch(states_arr, action))
+            return None
+        ns_arr = np.asarray(next_states, dtype=np.float64)
+        if ns_arr.ndim == 1:
+            ns_arr = ns_arr.reshape(1, -1)
+        return np.ascontiguousarray(ns_arr)
+
+    def _can_use_native_reward_batch(self, next_states_arr: Optional[np.ndarray]) -> bool:
+        # The native kernel computes the intended-position penalty and does
+        # not accept a realised next_states buffer. It is therefore only
+        # safe when no penalty terms exist (intended == realised in that
+        # degenerate case).
+        if next_states_arr is not None:
+            return False
+        return not self.walls and not self.dangerous_areas
+
+    def _get_native_reward_batch(self) -> Optional[Any]:
+        cached = getattr(self, "_cached_native_reward_batch", None)
+        if cached is not None:
+            return cached if cached is not False else None
+        try:
+            from POMDPPlanners.environments.laser_tag_pomdp import (  # pylint: disable=import-outside-toplevel
+                _native,
+            )
+        except ImportError:
+            # pylint: disable=attribute-defined-outside-init
+            self._cached_native_reward_batch = False
+            return None
+        fn = getattr(_native, "lasertag_discrete_reward_batch", None)
+        # pylint: disable=attribute-defined-outside-init
+        self._cached_native_reward_batch = fn if fn is not None else False
+        return fn
+
+    def _compute_reward_batch_python(
+        self,
+        states: np.ndarray,
+        action: int,
+        next_states: Optional[np.ndarray] = None,
+    ) -> np.ndarray:
+        n = states.shape[0]
+        terminal_mask = states[:, 4].astype(bool)
+
+        robot_r = states[:, 0].astype(np.int64)
+        robot_c = states[:, 1].astype(np.int64)
+        opp_r = states[:, 2].astype(np.int64)
+        opp_c = states[:, 3].astype(np.int64)
+
+        rewards = self._compute_base_rewards(action, robot_r, robot_c, opp_r, opp_c, n)
+
+        # Realised post-action robot positions for the penalty check. When
+        # ``next_states`` is None, fall back to the legacy intended-position
+        # branch so callers that explicitly invoke the python helper without
+        # threading a draw still observe deterministic behaviour identical
+        # to the pre-fix implementation.
+        if next_states is None:
+            int_r, int_c = self._compute_intended_positions(action, robot_r, robot_c)
+        else:
+            int_r = next_states[:, 0].astype(np.int64)
+            int_c = next_states[:, 1].astype(np.int64)
+
+        self._apply_area_penalty_batch_at(rewards, int_r, int_c)
+
+        rewards[terminal_mask] = 0.0
+        return rewards
+
+    def _compute_base_rewards(
+        self,
+        action: int,
+        robot_r: np.ndarray,
+        robot_c: np.ndarray,
+        opp_r: np.ndarray,
+        opp_c: np.ndarray,
+        n: int,
+    ) -> np.ndarray:
+        if action == 4:
+            at_same_pos = (robot_r == opp_r) & (robot_c == opp_c)
+            rewards = np.where(at_same_pos, float(self.tag_reward), float(-self.tag_penalty))
+        else:
+            rewards = np.full(n, float(-self.step_cost), dtype=np.float64)
+        return rewards
+
+    def _compute_intended_positions(
+        self, action: int, robot_r: np.ndarray, robot_c: np.ndarray
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        if action in (0, 1, 2, 3):
+            dr, dc = self._action_directions[action]
+            return robot_r + dr, robot_c + dc
+        return robot_r.copy(), robot_c.copy()
+
+    def _apply_area_penalty_batch(
+        self, rewards: np.ndarray, action: int, robot_r: np.ndarray, robot_c: np.ndarray
+    ) -> None:
+        int_r, int_c = self._compute_intended_positions(action, robot_r, robot_c)
+        self._apply_area_penalty_batch_at(rewards, int_r, int_c)
+
+    def _apply_area_penalty_batch_at(
+        self,
+        rewards: np.ndarray,
+        positions_r: np.ndarray,
+        positions_c: np.ndarray,
+    ) -> None:
+        wall_mask = self._compute_wall_hit_mask(positions_r, positions_c)
+        danger_mask = self._compute_danger_mask(positions_r, positions_c)
+
+        penalty_mask = wall_mask | danger_mask
+        rewards[penalty_mask] -= self.dangerous_area_penalty
+
+    def _compute_wall_hit_mask(self, int_r: np.ndarray, int_c: np.ndarray) -> np.ndarray:
+        rows, cols = self.floor_shape
+        wall_grid = self._get_wall_grid()
+
+        # Out-of-bounds positions are NOT in self.walls, so they return False here.
+        # We clip to grid bounds for safe indexing, then zero-out OOB entries via the mask.
+        clipped_r = np.clip(int_r, 0, rows - 1)
+        clipped_c = np.clip(int_c, 0, cols - 1)
+        in_bounds = (int_r >= 0) & (int_r < rows) & (int_c >= 0) & (int_c < cols)
+        return in_bounds & wall_grid[clipped_r, clipped_c]
+
+    def _compute_danger_mask(self, int_r: np.ndarray, int_c: np.ndarray) -> np.ndarray:
+        if not self.dangerous_areas:
+            return np.zeros(len(int_r), dtype=bool)
+        centers = np.array(self.dangerous_areas, dtype=np.float64)  # shape (D, 2)
+        # Euclidean distance from each intended position to each danger center: (N, D)
+        dr = int_r[:, np.newaxis] - centers[:, 0]
+        dc = int_c[:, np.newaxis] - centers[:, 1]
+        dist = np.sqrt(dr**2 + dc**2)
+        return np.asarray((dist <= self.dangerous_area_radius).any(axis=1), dtype=bool)
 
     def _count_episode_metrics(
         self, history: History, action_dirs: Dict[int, Tuple[int, int]]

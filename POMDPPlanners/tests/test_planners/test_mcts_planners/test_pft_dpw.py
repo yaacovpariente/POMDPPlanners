@@ -1,20 +1,32 @@
-# pylint: disable=protected-access  # Tests need to access protected members
+# pylint: disable=protected-access,too-many-lines  # Tests need to access protected members
 import random
+from typing import Any, List
+from unittest.mock import Mock
 
 import numpy as np
 import pytest
-from anytree import PostOrderIter
 
 from POMDPPlanners.core.belief import get_initial_belief
-from POMDPPlanners.core.tree import ActionNode, BeliefNode
+from POMDPPlanners.core.distributions import Distribution
+from POMDPPlanners.core.environment import Environment, SpaceInfo, SpaceType
+from POMDPPlanners.core.tree import BeliefNode
+from POMDPPlanners.core.tree.arena import ACTION, BELIEF, Tree
+from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
     ContinuousLightDarkPOMDP,
 )
+from POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp import (
+    DiscreteLightDarkPOMDP,
+)
 from POMDPPlanners.planners.mcts_planners.pft_dpw import PFT_DPW
 from POMDPPlanners.planners.planners_utils.dpw import (
+    ActionSampler,
     action_progressive_widening,
 )
-from POMDPPlanners.utils.action_samplers import UnitCircleActionSampler
+from POMDPPlanners.utils.action_samplers import (
+    DiscreteActionSampler,
+    UnitCircleActionSampler,
+)
 
 np.random.seed(42)
 random.seed(42)
@@ -135,7 +147,7 @@ def test_action_progressive_widening(planner, initial_belief):
             assert action_node2 in belief_node.children
             assert action_node1 != action_node2
             break
-        elif action_node2 != action_node1:
+        if action_node2 != action_node1:
             # Different action node was returned (shouldn't happen with same action)
             assert action_node2 in belief_node.children
             break
@@ -157,19 +169,15 @@ def test_simulate_path(planner, initial_belief, environment):
 
     Test type: unit
     """
-    belief_node = BeliefNode(belief=initial_belief)
+    tree = Tree()
+    root_id = tree.add_belief_node(initial_belief)
 
-    # Run a simulation
-    return_value = planner._simulate_path(belief_node=belief_node, depth=0)
+    return_value = planner._simulate_path(tree=tree, belief_id=root_id, depth=0)
 
-    # Verify node statistics were updated
-    assert belief_node.visit_count > 0
-    assert not belief_node.is_leaf
-
-    # Verify return value is within expected range
-    # For LightDarkPOMDP, rewards are typically between -10 (obstacle hit) and 10 (goal reached)
-    assert return_value >= (-10 - environment.grid_size * np.sqrt(2)) * 5  # Minimum possible reward
-    assert return_value <= 10  # Maximum possible reward
+    assert tree.visit_count[root_id] > 0
+    assert len(tree.children_ids[root_id]) > 0  # arena's "not is_leaf"
+    assert return_value >= (-10 - environment.grid_size * np.sqrt(2)) * 5
+    assert return_value <= 10
 
 
 # Config ID Tests
@@ -354,7 +362,7 @@ def test_pft_dpw_config_id_consistency_across_evaluations(environment, action_sa
     initial_belief = get_initial_belief(environment, n_particles=50)
 
     # Perform multiple policy evaluations
-    for i in range(3):
+    for _ in range(3):
         action, run_data = pft_dpw.action(initial_belief)
 
         # Check config_id remains the same
@@ -625,17 +633,17 @@ def test_min_visit_count_per_action_enforcement(environment, action_sampler):
     n_particles = 10
     belief = get_initial_belief(environment, n_particles=n_particles, resampling=True)
 
-    # ACT: Build tree using _learn_tree method
-    root_belief_node = planner._learn_tree(belief=belief)
+    tree, root_id = planner._learn_tree(belief=belief)
 
-    # ASSERT: Verify all action nodes at root have at least min_visit_count_per_action visits
-    action_nodes = [child for child in root_belief_node.children if isinstance(child, ActionNode)]
-    assert len(action_nodes) > 0, "At least one action node should be created"
+    action_ids = [cid for cid in tree.children_ids[root_id] if tree.kind[cid] == ACTION]
+    assert len(action_ids) > 0, "At least one action node should be created"
 
-    for action_node in action_nodes:
-        assert (
-            action_node.visit_count == min_visit_count
-        ), f"Action node {action_node.action} has {action_node.visit_count} visits, expected at least {min_visit_count}"
+    for action_id in action_ids:
+        visits = tree.visit_count[action_id]
+        assert visits == min_visit_count, (
+            f"Action node {tree.action[action_id]} has {visits} visits, "
+            f"expected at least {min_visit_count}"
+        )
 
 
 def test_max_depth_reached_with_timeout(environment, action_sampler):
@@ -669,38 +677,381 @@ def test_max_depth_reached_with_timeout(environment, action_sampler):
 
     n_particles = 10
     belief = get_initial_belief(environment, n_particles=n_particles, resampling=True)
-    root_belief_node = BeliefNode(belief=belief, observation=None)
+    tree = Tree()
+    root_id = tree.add_belief_node(belief)
 
-    planner._construct_tree_using_timeout(belief_node=root_belief_node)
+    planner._construct_tree_using_timeout(tree=tree, root_id=root_id)
 
-    # PFT_DPW with timeout may not reach full depth due to environment complexity
-    # Verify it reaches at least depth+1 and doesn't exceed 2*depth+2
-    assert depth + 1 <= root_belief_node.height <= 2 * depth + 2
-    for node in PostOrderIter(root_belief_node):
-        assert node.visit_count >= 0
-        if isinstance(node, BeliefNode):
-            assert node.belief is not None
-            assert node.v_value is not None
+    # Walk the arena tree to compute max depth (longest path from root).
+    max_observed_depth = 0
+    frontier = [(root_id, 0)]
+    while frontier:
+        node_id, d = frontier.pop()
+        max_observed_depth = max(max_observed_depth, d)
+        for cid in tree.children_ids[node_id]:
+            frontier.append((cid, d + 1))
+    assert depth + 1 <= max_observed_depth <= 2 * depth + 2
 
-            # For non-root nodes with children, check additional properties
-            if node != root_belief_node and node.height > 1 and node.depth > 0:
-                # PFT_DPW may structure nodes differently than POMCP, so we're more lenient
-                if node.v_value != 0:  # Only check if v_value is non-zero
-                    # For PFT_DPW with progressive widening, visit count relationship may differ
-                    n_children_visits = sum(child.visit_count for child in node.children)
-                    assert node.visit_count >= n_children_visits
+    # Per-node invariants on the arena tree.
+    for node_id in range(len(tree)):
+        assert tree.visit_count[node_id] >= 0
+        if tree.kind[node_id] == BELIEF:
+            assert tree.belief[node_id] is not None
+            assert tree.v_value[node_id] is not None
+        elif tree.kind[node_id] == ACTION:
+            assert tree.action[node_id] is not None
+            assert tree.q_value[node_id] is not None
 
-        elif isinstance(node, ActionNode):
-            assert node.action is not None
-            assert node.q_value is not None
-            if not node.is_leaf:
-                assert node.q_value != 0
-                # For PFT_DPW with progressive widening, visit count relationship may differ
-                assert node.visit_count >= sum(child.visit_count for child in node.children)
+    # Root belief node invariants in arena form.
+    assert tree.observation[root_id] is None
+    assert tree.parent_id[root_id] is None
+    assert len(tree.children_ids[root_id]) > 0
+    assert tree.visit_count[root_id] > 0
+    assert tree.v_value[root_id] is not None
 
-    # Verify root belief node
-    assert root_belief_node.observation is None
-    assert root_belief_node.parent is None
-    assert len(root_belief_node.children) > 0
-    assert root_belief_node.visit_count > 0
-    assert root_belief_node.v_value is not None
+
+# ---------------------------------------------------------------------------
+# Regression test for the native-rollout-dispatcher migration.
+#
+# Background: PFT-DPW used to roll out via a hand-rolled Python recursion
+# that allowed one final action at ``depth == self.depth`` (it returned 0
+# only when ``depth > self.depth``). The migration routes the rollout
+# through ``random_rollout_action_sampler`` whose Python fallback
+# returns 0 when ``depth >= max_depth``. To preserve the old boundary
+# we pass ``max_depth=self.depth + 1``.
+#
+# This test pins the step count down so a future change cannot silently
+# shift the boundary by one.
+# ---------------------------------------------------------------------------
+
+
+class _StepCountingEnv(Environment):
+    """Minimal env that counts ``sample_next_state`` calls. No native rollout kernel."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            discount_factor=0.95,
+            name="StepCountingEnv",
+            space_info=SpaceInfo(
+                action_space=SpaceType.DISCRETE,
+                observation_space=SpaceType.DISCRETE,
+            ),
+        )
+        self.sample_next_state_calls = 0
+
+    def sample_next_state(self, state: Any, action: Any, n_samples: int = 1) -> Any:
+        self.sample_next_state_calls += 1
+        return state if n_samples == 1 else [state] * n_samples
+
+    def sample_observation(self, next_state: Any, action: Any, n_samples: int = 1) -> Any:
+        return 0 if n_samples == 1 else [0] * n_samples
+
+    def transition_log_probability(self, state: Any, action: Any, next_states: Any) -> np.ndarray:
+        return np.zeros(len(next_states))
+
+    def observation_log_probability(
+        self, next_state: Any, action: Any, observations: Any
+    ) -> np.ndarray:
+        return np.zeros(len(observations))
+
+    def reward(self, state: Any, action: Any, next_state: Any = None) -> float:
+        del state, action, next_state
+        return 1.0
+
+    def is_terminal(self, state: Any) -> bool:
+        return False
+
+    def initial_state_dist(self) -> Distribution:
+        mock_dist = Mock(spec=Distribution)
+        mock_dist.sample = Mock(return_value=[0])
+        return mock_dist
+
+    def initial_observation_dist(self) -> Distribution:
+        mock_dist = Mock(spec=Distribution)
+        mock_dist.sample = Mock(return_value=[0])
+        return mock_dist
+
+    def is_equal_observation(self, observation1: Any, observation2: Any) -> bool:
+        return observation1 == observation2
+
+    def hash_action(self, action: Any) -> Any:
+        return action
+
+    def get_actions(self) -> List[Any]:
+        return [0, 1, 2]
+
+
+class _SingleActionSampler(ActionSampler):
+    """Always returns the same action; no randomness so step counts are deterministic."""
+
+    def sample(self, belief_node: Any = None) -> Any:
+        return 0
+
+    def get_space(self) -> List[Any]:
+        return [0]
+
+
+def _make_pft_dpw_with_step_counter(self_depth: int) -> PFT_DPW:
+    env = _StepCountingEnv()
+    return PFT_DPW(
+        environment=env,
+        discount_factor=0.95,
+        depth=self_depth,
+        name="StepCountPFT",
+        action_sampler=_SingleActionSampler(),
+        k_a=1.0,
+        alpha_a=0.5,
+        k_o=1.0,
+        alpha_o=0.5,
+        exploration_constant=1.0,
+        n_simulations=1,
+        min_visit_count_per_action=1,
+    )
+
+
+@pytest.mark.parametrize(
+    "self_depth, entry_depth, expected_steps",
+    [
+        # Old: while depth <= self_depth: action; recurse(depth+1). At entry=1,
+        # actions taken at depths 1..self_depth (= self_depth steps).
+        (5, 1, 5),
+        # Entry mid-rollout: actions at depths 3..5 (= 3 steps).
+        (5, 3, 3),
+        # Boundary case: entry == self_depth. Old code allowed exactly one
+        # final action, returning 0 on the recursive call at depth+1.
+        (5, 5, 1),
+        # Out-of-budget: entry == self_depth + 1. Old code returned 0
+        # immediately with no actions taken.
+        (5, 6, 0),
+        # depth == 0 at entry shouldn't happen in practice (rollouts enter
+        # at depth+1 from _simulate_return), but the bound still applies.
+        (3, 0, 4),
+    ],
+)
+def test_random_rollout_depth_semantics_preserved(
+    self_depth: int, entry_depth: int, expected_steps: int
+) -> None:
+    """Verify that routing through ``random_rollout_action_sampler`` preserves step count.
+
+    Purpose: Validates that the native-rollout dispatcher migration in PFT-DPW
+        preserves the original Python recursion's step count exactly. The old
+        code returned 0 when ``depth > self.depth`` (allowing one final action
+        at ``depth == self.depth``); the new code passes ``max_depth=self.depth + 1``
+        to ``random_rollout_action_sampler`` so the ``depth >= max_depth`` boundary
+        stops at the same point.
+
+    Given: A minimal counting environment with no ``simulate_random_rollout``
+        attribute (so the dispatcher falls through to ``python_random_rollout``),
+        a deterministic single-action sampler, a PFT-DPW planner constructed
+        with ``self.depth = self_depth``, and an entry depth ``entry_depth``.
+    When: ``planner._random_rollout(state=0, depth=entry_depth)`` is called once.
+    Then: The number of ``sample_next_state`` calls equals ``expected_steps``,
+        which matches what the original Python recursion would have produced.
+
+    Test type: unit
+    """
+    planner = _make_pft_dpw_with_step_counter(self_depth=self_depth)
+    env = planner.environment
+    assert isinstance(env, _StepCountingEnv)
+    # Sanity: the dispatcher should fall through to python_random_rollout
+    # (i.e. no native rollout on this minimal env).
+    assert not hasattr(env, "simulate_random_rollout")
+
+    env.sample_next_state_calls = 0
+    planner._random_rollout(state=0, depth=entry_depth)
+
+    assert env.sample_next_state_calls == expected_steps, (
+        f"Depth semantics changed: self.depth={self_depth}, entry_depth={entry_depth}, "
+        f"expected {expected_steps} steps, got {env.sample_next_state_calls}."
+    )
+
+
+def test_tree_structure_comprehensive(planner, initial_belief):
+    """Comprehensive structural invariants on a freshly-built PFT-DPW arena tree.
+
+    Purpose: Validates that ``_learn_tree`` produces an arena ``Tree`` whose
+        kind/parent/children/visit/value fields satisfy the documented invariants
+        for a PFT-DPW search: belief/action level alternation, populated payloads
+        per kind, non-negative visit counts, parent visits dominating the sum of
+        child visits, BFS depth bounded by ``2 * planner.depth + 2``, and
+        progressive widening bounds on per-node child counts.
+
+    Given: The ``planner`` fixture (PFT_DPW with depth=5, n_simulations=100,
+        k_a=k_o=1.0, alpha_a=alpha_o=0.5) and the ``initial_belief`` fixture
+        (continuous light-dark POMDP belief with 20 particles).
+    When: ``planner._learn_tree(initial_belief)`` builds the tree, then a BFS
+        from ``root_id`` collects ``(node_id, depth)`` tuples and per-node
+        invariants are checked across the full arena.
+    Then: Root is a BELIEF node with no parent/observation and at least one
+        child; every node has non-negative ``visit_count``; BELIEF nodes carry
+        a populated ``belief``; ACTION nodes carry a populated ``action`` and
+        ``q_value``; non-root nodes have a non-None parent; kinds alternate
+        along every parent-child edge; visit-count is conserved (parent >=
+        sum of children's visits); BFS depth <= ``2 * planner.depth + 2``;
+        and progressive-widening bounds hold at every visited node.
+
+    Test type: unit
+    """
+    tree, root_id = planner._learn_tree(initial_belief)
+
+    # Root invariants.
+    assert tree.kind[root_id] == BELIEF
+    assert tree.parent_id[root_id] is None
+    assert tree.observation[root_id] is None
+    assert len(tree.children_ids[root_id]) > 0
+
+    # BFS to collect (node_id, depth) for the bound check; meanwhile
+    # record per-node depth so kind alternation can be checked against it.
+    max_observed_depth = 0
+    frontier = [(root_id, 0)]
+    while frontier:
+        node_id, d = frontier.pop()
+        max_observed_depth = max(max_observed_depth, d)
+        for cid in tree.children_ids[node_id]:
+            frontier.append((cid, d + 1))
+
+    assert max_observed_depth <= 2 * planner.depth + 2
+
+    # Per-node invariants. Iterate over the full arena (every allocated id).
+    n_nodes = len(tree)
+    for node_id in range(n_nodes):
+        # Visit count non-negative everywhere.
+        assert tree.visit_count[node_id] >= 0
+
+        # Non-root nodes have a parent; root parent is None and was checked.
+        if node_id != root_id:
+            assert tree.parent_id[node_id] is not None
+
+        # Kind-specific payload presence.
+        if tree.kind[node_id] == BELIEF:
+            assert tree.belief[node_id] is not None
+        else:
+            assert tree.kind[node_id] == ACTION
+            assert tree.action[node_id] is not None
+            assert tree.q_value[node_id] is not None
+
+        # Kind alternation along every parent-child edge.
+        parent = tree.parent_id[node_id]
+        if parent is not None:
+            assert tree.kind[node_id] != tree.kind[parent]
+
+        # Visit-count consistency: parent visits >= sum of children's visits.
+        children = tree.children_ids[node_id]
+        if children:
+            child_visits_sum = sum(tree.visit_count[c] for c in children)
+            assert tree.visit_count[node_id] >= child_visits_sum
+
+        # Progressive-widening bounds at visited nodes only.
+        if tree.visit_count[node_id] > 0:
+            n_children = len(children)
+            if tree.kind[node_id] == BELIEF:
+                pw_bound = int(planner.k_a * (tree.visit_count[node_id] ** planner.alpha_a)) + 1
+                assert n_children <= pw_bound
+            else:
+                pw_bound = int(planner.k_o * (tree.visit_count[node_id] ** planner.alpha_o)) + 1
+                assert n_children <= pw_bound
+
+
+def test_q_value_v_value_consistency(planner, initial_belief):
+    """Verify ``v_value`` of every BELIEF node equals max ``q_value`` over its children.
+
+    Purpose: Pins down the contract enforced by ``_update_node_statistics``:
+        after every backup, the V-value at a belief node equals the max
+        Q-value across all of its action children (visited or not). This
+        guards against silent drift if a future change reorders updates,
+        filters by visit count, or computes a different aggregate.
+
+    Given: The ``planner`` fixture (PFT_DPW) and the ``initial_belief``
+        fixture; ``_learn_tree`` builds the arena tree.
+    When: Every BELIEF node with non-empty children is enumerated, and the
+        observed ``tree.v_value[belief_id]`` is compared against
+        ``max(tree.q_value[c] for c in tree.children_ids[belief_id])`` taken
+        over ALL children (no visit-count filter).
+    Then: The values agree within ``atol=1e-9`` (float-tolerant equality via
+        ``pytest.approx``).
+
+    Test type: unit
+    """
+    tree, root_id = planner._learn_tree(initial_belief)
+    assert tree.kind[root_id] == BELIEF  # sanity: root is a belief node
+
+    n_nodes = len(tree)
+    n_belief_nodes_checked = 0
+    for node_id in range(n_nodes):
+        if tree.kind[node_id] != BELIEF:
+            continue
+        children = tree.children_ids[node_id]
+        if not children:
+            continue
+        # PFT-DPW takes max over ALL children (including unvisited q=0.0).
+        expected_v = max(tree.q_value[c] for c in children)
+        observed_v = tree.v_value[node_id]
+        assert observed_v == pytest.approx(expected_v, abs=1e-9)
+        n_belief_nodes_checked += 1
+
+    # Sanity: at least the root should have been checked.
+    assert n_belief_nodes_checked >= 1
+
+
+def test_sample_existing_belief_node_recovers_per_action_immediate_reward():
+    """Pin per-action immediate reward stash so sibling actions don't overwrite each other.
+
+    Purpose: Regression — _sample_new_belief_node previously stashed immediate_reward on
+    the parent belief id, so sibling _sample_new_belief_node calls overwrote each other and
+    sample_existing_belief_node read back the wrong action's reward.
+
+    Given: A tree with two action children of one belief root in DiscreteLightDarkPOMDP set
+    up so that ``right`` from (4, 5) lands on the obstacle (5, 5) (deterministic
+    -100 penalty) while ``up`` does not — making the per-action immediate rewards differ
+    by far more than any noise floor
+    When: _sample_new_belief_node is called for both actions in sequence (so each populates
+    its child belief), then sample_existing_belief_node is called back for ``right``
+    Then: The recovered immediate_reward equals the value originally returned by
+    _sample_new_belief_node for ``right``, not the one returned for ``up``
+
+    Test type: regression
+    """
+    np.random.seed(42)
+    random.seed(42)
+    env = DiscreteLightDarkPOMDP(
+        discount_factor=0.95,
+        obstacle_reward=-100.0,
+        obstacle_hit_probability=1.0,
+    )
+
+    n_particles = 20
+    particles: List[Any] = [np.array([4, 5]) for _ in range(n_particles)]
+    log_weights = np.full(n_particles, -np.log(n_particles))
+    belief = WeightedParticleBelief(particles=particles, log_weights=log_weights, resampling=True)
+
+    sampler = DiscreteActionSampler(env.get_actions())
+    planner = PFT_DPW(
+        environment=env,
+        discount_factor=0.95,
+        depth=3,
+        name="test_per_action_stash",
+        action_sampler=sampler,
+        n_simulations=10,
+    )
+
+    tree = Tree()
+    root_id = tree.add_belief_node(belief)
+    right_id = tree.add_action_node(action="right", parent_id=root_id)
+    up_id = tree.add_action_node(action="up", parent_id=root_id)
+
+    _, r_right_in = planner._sample_new_belief_node(
+        tree=tree, belief_id=root_id, action_id=right_id
+    )
+    _, r_up_in = planner._sample_new_belief_node(tree=tree, belief_id=root_id, action_id=up_id)
+
+    assert (
+        abs(r_right_in - r_up_in) > 50
+    ), f"setup invariant broken: r_right={r_right_in}, r_up={r_up_in}"
+
+    _, r_right_recovered = planner.sample_existing_belief_node(
+        tree=tree, belief_id=root_id, action_id=right_id
+    )
+    assert r_right_recovered == pytest.approx(r_right_in, abs=1e-9), (
+        f"sample_existing_belief_node returned {r_right_recovered}, "
+        f"expected {r_right_in} (got {r_up_in} = up reward instead?)"
+    )

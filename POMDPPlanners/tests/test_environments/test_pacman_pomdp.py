@@ -17,14 +17,17 @@ import pytest
 from POMDPPlanners.core.belief import Belief, WeightedParticleBelief
 from POMDPPlanners.core.environment import SpaceType
 from POMDPPlanners.core.simulation import History, StepData
-from POMDPPlanners.environments.pacman_pomdp import (
-    PacManObservationModel,
-    PacManPOMDP,
-    PacManStateTransitionModel,
-    create_simple_maze_pacman,
+from POMDPPlanners.tests.test_utils.confidence_interval_utils import (
+    verify_metrics_within_confidence_intervals,
 )
-from POMDPPlanners.tests.test_utils.test_probability_utils import (
-    validate_probability_matches_empirical_distribution,
+from POMDPPlanners.tests.test_utils.metric_invariants_utils import (
+    verify_history_returns_bounded,
+    verify_metric_sanity,
+    verify_return_shift_linearity,
+)
+from POMDPPlanners.environments.pacman_pomdp import (
+    PacManPOMDP,
+    create_simple_maze_pacman,
 )
 
 # Set seeds for reproducible tests
@@ -158,8 +161,8 @@ class TestMakeState:
         assert self.pomdp.get_pellets(state) == ()
 
 
-class TestPacManStateTransitionModel:
-    """Test cases for PacManStateTransitionModel."""
+class TestPacManStateTransition:
+    """Test cases for PacManPOMDP state transitions via the env API."""
 
     def setup_method(self):
         """Set up test environment and states for each test."""
@@ -185,7 +188,7 @@ class TestPacManStateTransitionModel:
         Purpose: Validates that PacMan moves correctly when north action is executed
 
         Given: PacMan at position (1, 1) and north action (0)
-        When: State transition is computed
+        When: State transition is computed via env.sample_next_state
         Then: PacMan position changes to (0, 1) and other state elements remain unchanged
 
         Test type: unit
@@ -197,8 +200,7 @@ class TestPacManStateTransitionModel:
             pacman_pos=(1, 1), ghost_positions=((4, 4),), pellets=((3, 3),), score=0
         )
 
-        transition = PacManStateTransitionModel(state, action=0, pomdp=self.pomdp)  # North
-        next_state = transition.sample()[0]
+        next_state = self.pomdp.sample_next_state(state, action=0)  # North
 
         assert self.pomdp.get_pacman_pos(next_state) == (0, 1)  # Moved north
         # Ghost movement is stochastic, so we test that all ghost positions are valid
@@ -222,7 +224,7 @@ class TestPacManStateTransitionModel:
         Purpose: Validates that PacMan cannot move through walls and stays in place
 
         Given: PacMan adjacent to a wall and action directing into the wall
-        When: State transition is computed
+        When: State transition is computed via env.sample_next_state
         Then: PacMan position remains unchanged
 
         Test type: unit
@@ -232,8 +234,7 @@ class TestPacManStateTransitionModel:
         )
 
         # Try to move east into wall at (2, 2)
-        transition = PacManStateTransitionModel(state, action=1, pomdp=self.pomdp)  # East
-        next_state = transition.sample()[0]
+        next_state = self.pomdp.sample_next_state(state, action=1)  # East
 
         assert self.pomdp.get_pacman_pos(next_state) == (2, 1)  # Stayed in place due to wall
 
@@ -243,7 +244,7 @@ class TestPacManStateTransitionModel:
         Purpose: Validates that PacMan cannot move outside maze boundaries
 
         Given: PacMan at maze edge and action directing outside boundary
-        When: State transition is computed
+        When: State transition is computed via env.sample_next_state
         Then: PacMan position remains unchanged
 
         Test type: unit
@@ -253,8 +254,7 @@ class TestPacManStateTransitionModel:
         )
 
         # Try to move north from top boundary
-        transition = PacManStateTransitionModel(state, action=0, pomdp=self.pomdp)  # North
-        next_state = transition.sample()[0]
+        next_state = self.pomdp.sample_next_state(state, action=0)  # North
 
         assert self.pomdp.get_pacman_pos(next_state) == (0, 0)  # Stayed at boundary
 
@@ -264,7 +264,7 @@ class TestPacManStateTransitionModel:
         Purpose: Validates that pellets are collected and score increases correctly
 
         Given: PacMan moving to a position containing a pellet
-        When: State transition is computed
+        When: State transition is computed via env.sample_next_state
         Then: Pellet is removed from pellets tuple and score increases
 
         Test type: unit
@@ -277,8 +277,7 @@ class TestPacManStateTransitionModel:
         )
 
         # Move east to collect pellet at (1, 1)
-        transition = PacManStateTransitionModel(state, action=1, pomdp=self.pomdp)  # East
-        next_state = transition.sample()[0]
+        next_state = self.pomdp.sample_next_state(state, action=1)  # East
 
         assert self.pomdp.get_pacman_pos(next_state) == (1, 1)
         assert (1, 1) not in self.pomdp.get_pellets(next_state)
@@ -295,11 +294,7 @@ class TestPacManStateTransitionModel:
 
         Test type: unit
         """
-        # Test collision detection by checking if we can get a terminal state
-        # when PacMan and ghost end up at the same position after movement.
-        # Since ghost movement is stochastic, we'll test multiple scenarios.
-
-        # Scenario 1: Test with a state that already has collision
+        # Scenario 1: Test with a state that already has collision (terminal stays terminal)
         collision_state = self.pomdp.make_state(
             pacman_pos=(2, 2),
             ghost_positions=((2, 2),),  # Already at same position
@@ -309,13 +304,12 @@ class TestPacManStateTransitionModel:
         )
 
         # Terminal states should remain unchanged
-        transition = PacManStateTransitionModel(collision_state, action=0, pomdp=self.pomdp)
-        next_state = transition.sample()[0]
+        next_state = self.pomdp.sample_next_state(collision_state, action=0)
         assert self.pomdp.get_terminal(next_state)
         assert np.array_equal(next_state, collision_state)  # Should be unchanged
 
         # Scenario 2: Test collision detection in state transition logic
-        # Create a scenario where we can trigger collision by checking multiple samples
+        # Create a scenario where collision may occur by sampling multiple times
         test_state = self.pomdp.make_state(
             pacman_pos=(1, 1),
             ghost_positions=((1, 2),),  # Adjacent positions
@@ -323,17 +317,12 @@ class TestPacManStateTransitionModel:
             score=0,
         )
 
-        # Test multiple transitions to see if collision can occur
-        transition = PacManStateTransitionModel(test_state, action=1, pomdp=self.pomdp)  # East
-        collision_found = False
-
         # Sample multiple times since ghost movement is stochastic
-        for _ in range(20):  # Try multiple times
-            next_state = transition.sample()[0]
+        for _ in range(20):
+            next_state = self.pomdp.sample_next_state(test_state, action=1)  # East
             if self.pomdp.get_terminal(next_state) and self.pomdp.get_pacman_pos(
                 next_state
             ) in self.pomdp.get_ghost_positions(next_state):
-                collision_found = True
                 break
 
         # Note: Due to stochastic ghost movement, collision might not always occur
@@ -345,7 +334,7 @@ class TestPacManStateTransitionModel:
         Purpose: Validates that game becomes terminal when all pellets are collected
 
         Given: PacMan collecting the last remaining pellet
-        When: State transition is computed
+        When: State transition is computed via env.sample_next_state
         Then: Resulting state is terminal with empty pellets tuple
 
         Test type: unit
@@ -358,8 +347,7 @@ class TestPacManStateTransitionModel:
         )
 
         # Move east to collect last pellet at (1,1)
-        transition = PacManStateTransitionModel(state, action=1, pomdp=self.pomdp)  # East
-        next_state = transition.sample()[0]
+        next_state = self.pomdp.sample_next_state(state, action=1)  # East
 
         assert self.pomdp.get_terminal(next_state)
         assert len(self.pomdp.get_pellets(next_state)) == 0
@@ -371,7 +359,7 @@ class TestPacManStateTransitionModel:
         Purpose: Validates that no further transitions occur from terminal states
 
         Given: A terminal state
-        When: State transition is computed with any action
+        When: State transition is computed via env.sample_next_state with any action
         Then: State remains exactly the same
 
         Test type: unit
@@ -384,8 +372,7 @@ class TestPacManStateTransitionModel:
             terminal=True,
         )
 
-        transition = PacManStateTransitionModel(terminal_state, action=1, pomdp=self.pomdp)
-        next_state = transition.sample()[0]
+        next_state = self.pomdp.sample_next_state(terminal_state, action=1)
 
         assert np.array_equal(next_state, terminal_state)  # Unchanged
 
@@ -394,8 +381,8 @@ class TestPacManStateTransitionModel:
 
         Purpose: Validates that ghost position changes and shows stochastic behavior
 
-        Given: Multiple samples from the same state-action pair
-        When: State transitions are computed multiple times
+        Given: Multiple samples from the same state-action pair via env.sample_next_state
+        When: State transitions are sampled repeatedly
         Then: Ghost positions vary across samples demonstrating stochasticity
 
         Test type: unit
@@ -404,12 +391,11 @@ class TestPacManStateTransitionModel:
             pacman_pos=(0, 0), ghost_positions=((2, 2),), pellets=((4, 4),), score=0
         )
 
-        transition = PacManStateTransitionModel(state, action=0, pomdp=self.pomdp)
         ghost_positions = set()
 
         # Sample multiple times to see ghost movement variation
         for _ in range(20):
-            next_state = transition.sample()[0]
+            next_state = self.pomdp.sample_next_state(state, action=0)
             ghost_positions.add(
                 self.pomdp.get_ghost_positions(next_state)[0]
             )  # First ghost position
@@ -417,60 +403,9 @@ class TestPacManStateTransitionModel:
         # Ghost should move (not stay at (2, 2) every time)
         assert len(ghost_positions) > 1
 
-    def test_probability_vs_empirical_distribution(self):
-        """Test that computed probabilities match empirical sampling distribution.
 
-        Purpose: Validates that the probability() method correctly computes transition probabilities
-                 by comparing them to empirical frequencies from sampling
-
-        Given: A state-transition model with stochastic ghost movements
-        When: Computing probabilities for sampled states and comparing to empirical distribution
-        Then: Computed probabilities should closely match empirical frequencies from sampling
-
-        Test type: unit
-        """
-        # Set seed for reproducibility
-        np.random.seed(42)
-
-        # Create a simple environment for testing
-        pomdp = PacManPOMDP(
-            maze_size=(5, 5),
-            walls=set(),  # No walls for simplicity
-            initial_pellets=[(2, 2)],
-            initial_pacman_pos=(0, 0),
-            num_ghosts=1,
-            initial_ghost_positions=[(3, 3)],
-            ghost_aggressiveness=2.0,
-        )
-
-        # Create initial state
-        state = self.pomdp.make_state(
-            pacman_pos=(0, 0), ghost_positions=((3, 3),), pellets=((2, 2),), score=0
-        )
-
-        # Choose action (move east)
-        action = 1
-        transition_model = PacManStateTransitionModel(state, action, pomdp)
-
-        # Use the general utility function to validate probability method
-        results = validate_probability_matches_empirical_distribution(
-            transition_model, num_samples=1000, max_js_divergence=0.05
-        )
-
-        # Verify results
-        assert results["probabilities_normalized"]
-        assert results["distance"] < 0.05
-
-        print(f"\nProbability validation results:")
-        print(f"Number of unique states: {results['num_unique_states']}")
-        print(f"Computed probabilities: {results['computed_probs']}")
-        print(f"Empirical probabilities: {results['empirical_probs']}")
-        print(f"JS Divergence: {results['distance']:.6f}")
-        print(f"State counts: {results['state_counts']}")
-
-
-class TestPacManObservationModel:
-    """Test cases for PacManObservationModel."""
+class TestPacManObservation:
+    """Test cases for PacManPOMDP observation sampling/log-prob via the env API."""
 
     def setup_method(self):
         """Set up test environment for each test."""
@@ -485,14 +420,18 @@ class TestPacManObservationModel:
             initial_ghost_positions=[(4, 4)],
         )
 
+    def _sample_observations(self, next_state: np.ndarray, action: int, n: int):
+        """Repeatedly call env.sample_observation; returns a list of observation tuples."""
+        return [self.pomdp.sample_observation(next_state, action) for _ in range(n)]
+
     def test_observation_terminal_state(self):
         """Test observations from terminal states.
 
         Purpose: Validates that terminal states produce terminal observations
 
         Given: A terminal state
-        When: Observation is sampled
-        Then: Terminal observation (-1, -1) is returned
+        When: Observations are sampled via env.sample_observation
+        Then: Terminal observation (-1, -1) is returned for the ghost
 
         Test type: unit
         """
@@ -500,8 +439,7 @@ class TestPacManObservationModel:
             pacman_pos=(2, 2), ghost_positions=((2, 2),), pellets=(), terminal=True
         )
 
-        obs_model = PacManObservationModel(terminal_state, action=0, pomdp=self.pomdp)
-        observations = obs_model.sample(n_samples=5)
+        observations = self._sample_observations(terminal_state, action=0, n=5)
 
         # Multi-ghost observations: each observation is a tuple of ghost position observations
         expected_terminal_obs = ((-1, -1),)  # Tuple with one terminal observation
@@ -513,7 +451,7 @@ class TestPacManObservationModel:
         Purpose: Validates that close distances produce more accurate observations
 
         Given: PacMan and ghost at close distance
-        When: Multiple observations are sampled
+        When: Multiple observations are sampled via env.sample_observation
         Then: Observations cluster around true ghost position with low noise
 
         Test type: unit
@@ -524,8 +462,7 @@ class TestPacManObservationModel:
             pellets=((0, 0),),  # Close to PacMan
         )
 
-        obs_model = PacManObservationModel(state, action=0, pomdp=self.pomdp)
-        observations = obs_model.sample(n_samples=10)
+        observations = self._sample_observations(state, action=0, n=10)
 
         # Most observations should be close to true ghost position
         true_pos = self.pomdp.get_ghost_positions(state)[0]  # First ghost
@@ -545,7 +482,7 @@ class TestPacManObservationModel:
         Purpose: Validates that far distances produce noisier observations
 
         Given: PacMan and ghost at far distance
-        When: Multiple observations are sampled
+        When: Multiple observations are sampled via env.sample_observation
         Then: Observations show higher variance around true ghost position
 
         Test type: unit
@@ -556,8 +493,7 @@ class TestPacManObservationModel:
             pellets=((1, 1),),  # Far from PacMan
         )
 
-        obs_model = PacManObservationModel(state, action=0, pomdp=self.pomdp)
-        observations = obs_model.sample(n_samples=20)
+        observations = self._sample_observations(state, action=0, n=20)
 
         # Calculate variance in observations for the first ghost
         obs_rows = [obs[0][0] for obs in observations]  # First ghost row observations
@@ -574,8 +510,8 @@ class TestPacManObservationModel:
 
         Purpose: Validates that noisy observations don't exceed maze boundaries
 
-        Given: Observation model with potential noise that could exceed bounds
-        When: Multiple observations are sampled
+        Given: Sampling many observations via env.sample_observation
+        When: Observations are inspected
         Then: All observations are within valid maze coordinates
 
         Test type: unit
@@ -584,8 +520,7 @@ class TestPacManObservationModel:
             pacman_pos=(0, 0), ghost_positions=((4, 4),), pellets=((1, 1),)
         )
 
-        obs_model = PacManObservationModel(state, action=0, pomdp=self.pomdp)
-        observations = obs_model.sample(n_samples=50)
+        observations = self._sample_observations(state, action=0, n=50)
 
         for obs in observations:
             # Each observation is a tuple of ghost position observations
@@ -595,13 +530,13 @@ class TestPacManObservationModel:
                     assert 0 <= ghost_obs[1] < self.pomdp.maze_size[1]
 
     def test_observation_probability_calculation(self):
-        """Test observation probability calculation.
+        """Test observation probability calculation via env.observation_log_probability.
 
-        Purpose: Validates that observation probabilities are calculated correctly
+        Purpose: Validates that observation log-probabilities are calculated correctly
 
-        Given: Observation model with specific state and candidate observations
-        When: Probabilities are calculated for different observations
-        Then: Probabilities sum to reasonable total and favor closer observations
+        Given: A non-terminal next-state with known ghost position
+        When: env.observation_log_probability is called for true / nearby / terminal observations
+        Then: True position outranks nearby; terminal observation has -inf log-prob (0 probability)
 
         Test type: unit
         """
@@ -609,21 +544,18 @@ class TestPacManObservationModel:
             pacman_pos=(2, 2), ghost_positions=((2, 3),), pellets=((0, 0),)
         )
 
-        obs_model = PacManObservationModel(state, action=0, pomdp=self.pomdp)
-
-        # Test probabilities for multi-ghost observations at different distances
+        # Test log-probabilities for multi-ghost observations at different distances
         candidate_obs = [
             ((2, 3),),
             ((2, 4),),
             ((-1, -1),),
         ]  # True pos, nearby, terminal
-        probs = obs_model.probability(candidate_obs)
+        log_probs = self.pomdp.observation_log_probability(state, 0, candidate_obs)
 
-        assert len(probs) == 3
-        assert probs[0] > probs[1]  # True position should have higher probability
-        assert (
-            probs[2] == 0.0
-        )  # Terminal observation should have 0 probability for non-terminal state
+        assert len(log_probs) == 3
+        assert log_probs[0] > log_probs[1]  # True position should have higher log-probability
+        # Terminal observation has zero probability for a non-terminal state -> -inf log-prob
+        assert log_probs[2] == -np.inf or log_probs[2] < -600.0
 
 
 class TestPacManPOMDP:
@@ -766,10 +698,10 @@ class TestPacManPOMDP:
         Test type: unit
         """
         actions = self.pomdp.get_actions()
-        expected_actions = [0, 1, 2, 3]  # North, East, South, West
+        expected_actions = [0, 1, 2, 3, 4]  # North, East, South, West, Stay
 
         assert actions == expected_actions
-        assert len(actions) == 4
+        assert len(actions) == 5
 
     def test_initial_state_distribution(self):
         """Test initial state distribution.
@@ -1478,6 +1410,134 @@ class TestPacManPOMDPMetrics:
         assert collision_metric.lower_confidence_bound is not None
         assert collision_metric.upper_confidence_bound is not None
 
+    def test_compute_metrics_values_within_confidence_intervals(self):
+        """Test PacManPOMDP metric values are inside CIs and pass invariants.
+
+        Purpose: Validates that metrics produced by compute_metrics lie inside
+            their CI bounds and that all structural invariants hold (rate-in-[0,1],
+            counts >= 0, finite CI for n>=2, returns inside reward bounds, and
+            return-shift linearity).
+
+        Given: A PacManPOMDP and 3 hand-built histories with varied outcomes
+            (win, loss, in-progress). Rewards lie inside reward_range.
+        When: compute_metrics is called and the four invariant helpers are run.
+        Then: All checks pass without raising.
+
+        Test type: integration
+        """
+        dummy_belief = Mock(spec=Belief)
+
+        # History 0: win (no pellets remaining)
+        win_state = self.pomdp.make_state(
+            pacman_pos=(2, 2),
+            ghost_positions=((0, 0),),
+            pellets=(),
+            terminal=True,
+            score=100,
+        )
+        win_steps = [
+            StepData(
+                state=win_state,
+                action=None,
+                next_state=win_state,
+                observation=None,
+                reward=10.0,
+                belief=dummy_belief,
+            ),
+            StepData(
+                state=win_state,
+                action=None,
+                next_state=win_state,
+                observation=None,
+                reward=99.0,  # well within reward_range = (-101, 109)
+                belief=dummy_belief,
+            ),
+        ]
+
+        # History 1: loss (collision with ghost, pellets remaining)
+        loss_state = self.pomdp.make_state(
+            pacman_pos=(1, 1),
+            ghost_positions=((1, 1),),
+            pellets=((1, 1),),
+            terminal=True,
+            score=10.0,
+        )
+        loss_steps = [
+            StepData(
+                state=loss_state,
+                action=None,
+                next_state=loss_state,
+                observation=None,
+                reward=-1.0,
+                belief=dummy_belief,
+            ),
+            StepData(
+                state=loss_state,
+                action=None,
+                next_state=loss_state,
+                observation=None,
+                reward=-100.0,
+                belief=dummy_belief,
+            ),
+        ]
+
+        # History 2: in-progress (no terminal, pellets remaining, no collisions)
+        progress_state_a = self.pomdp.make_state(
+            pacman_pos=(0, 0),
+            ghost_positions=((4, 4),),
+            pellets=((1, 1), (3, 3)),
+        )
+        progress_state_b = self.pomdp.make_state(
+            pacman_pos=(0, 1),
+            ghost_positions=((4, 4),),
+            pellets=((1, 1), (3, 3)),
+        )
+        progress_steps = [
+            StepData(
+                state=progress_state_a,
+                action=None,
+                next_state=progress_state_b,
+                observation=None,
+                reward=-1.0,
+                belief=dummy_belief,
+            ),
+            StepData(
+                state=progress_state_b,
+                action=None,
+                next_state=progress_state_b,
+                observation=None,
+                reward=-1.0,
+                belief=dummy_belief,
+            ),
+        ]
+
+        histories = []
+        for steps, reach_terminal in (
+            (win_steps, True),
+            (loss_steps, True),
+            (progress_steps, False),
+        ):
+            histories.append(
+                History(
+                    history=steps,
+                    discount_factor=0.95,
+                    average_state_sampling_time=0.0,
+                    average_action_time=0.0,
+                    average_observation_time=0.0,
+                    average_belief_update_time=0.0,
+                    average_reward_time=0.0,
+                    actual_num_steps=len(steps),
+                    reach_terminal_state=reach_terminal,
+                    policy_run_data=[],
+                )
+            )
+
+        metrics = self.pomdp.compute_metrics(histories)
+        verify_metrics_within_confidence_intervals(metrics)
+        verify_metric_sanity(metrics, histories, self.pomdp)
+        verify_history_returns_bounded(histories, self.pomdp)
+        verify_return_shift_linearity(histories, self.pomdp, shift=1.5)
+
 
 class TestCreateSimpleMazePacman:
     """Test cases for create_simple_maze_pacman function."""
@@ -1678,10 +1738,8 @@ class TestMultiGhostFeatures:
             pellets=((0, 1),),
         )
 
-        # Create observation model explicitly
-
-        obs_model = PacManObservationModel(state, action=0, pomdp=pomdp)
-        obs = obs_model.sample(n_samples=1)[0]  # Sample one observation
+        # Sample observation through the env API
+        obs = pomdp.sample_observation(state, action=0)
 
         assert isinstance(obs, tuple)
         assert len(obs) == 2  # One observation per ghost
@@ -1826,10 +1884,8 @@ class TestMultiGhostFeatures:
             pacman_pos=(0, 0), ghost_positions=((3, 3), (4, 4)), pellets=((1, 1),)
         )
 
-        # Create state transition model explicitly
-
-        state_model = PacManStateTransitionModel(initial_state, action=1, pomdp=pomdp)
-        next_state = state_model.sample(n_samples=1)[0]  # Sample one next state
+        # Sample next state through the env API
+        next_state = pomdp.sample_next_state(initial_state, action=1)
 
         # Verify next state has correct ghost count
         ghosts = pomdp.get_ghost_positions(next_state)
@@ -2164,3 +2220,206 @@ class TestRewardBatch:
         ).reshape(1, -1)
         rewards = env.reward_batch(arr, 1)  # East -> (1,1)
         assert rewards[0] == env.step_penalty + env.pellet_reward
+
+
+class TestNativeSimulateRollout:
+    """Tests for PacManPOMDP.simulate_random_rollout C++ native override."""
+
+    def _make_env(self) -> PacManPOMDP:
+        return PacManPOMDP(
+            maze_size=(7, 7),
+            walls={(2, 2), (2, 3), (3, 2), (4, 4), (3, 5)},
+            initial_pellets=[(1, 1), (1, 5), (5, 1), (5, 5)],
+            initial_pacman_pos=(0, 0),
+            num_ghosts=1,
+            initial_ghost_positions=[(6, 6)],
+            pellet_reward=10.0,
+            ghost_collision_penalty=-100.0,
+            step_penalty=-1.0,
+            win_reward=100.0,
+            discount_factor=0.95,
+        )
+
+    def test_pacman_native_simulate_rollout_matches_python(self):
+        """Test native C++ rollout matches Python reference for same actions and RNG.
+
+        Purpose: Validates that simulate_random_rollout's C++ implementation
+            produces the same discounted cumulative reward as a Python reference
+            that uses the same pre-drawn action sequence and shares the C++ RNG.
+
+        Given: A deterministic PacManPOMDP instance and a fixed np.random.seed(0).
+            Pre-draw action indices for the rollout depth in Python.
+            Reset the C++ RNG to a known seed before both calls.
+        When: The native simulate_random_rollout and the Python reference (which
+            steps through the same actions using the same C++ RNG) are both called.
+        Then: The returned discounted rewards agree to atol=1e-9.
+
+        Test type: unit
+        """
+        from POMDPPlanners.environments.pacman_pomdp import (
+            _native,
+        )  # pylint: disable=import-outside-toplevel
+
+        env = self._make_env()
+        np.random.seed(0)
+        initial_state = env.initial_state_dist().sample()[0]
+        max_depth = 10
+        discount_factor = 0.95
+
+        # Pre-draw action indices; the native rollout will use these same actions.
+        action_indices = np.random.randint(0, 4, size=max_depth, dtype=np.int32)
+
+        # Python reference: step once per action and compute reward from the
+        # resulting next_state (same semantics as simulate_rollout_impl in C++).
+        _native.set_seed(12345)
+        py_total = _python_reference_rollout(
+            env, initial_state, action_indices, discount_factor, max_depth
+        )
+
+        # Native rollout with the same C++ RNG seed.
+        _native.set_seed(12345)
+        transition_kwargs = env.get_transition_cpp_ctor_kwargs()
+        native_total = _native.simulate_rollout(
+            state=initial_state,
+            action_indices=action_indices,
+            maze_rows=transition_kwargs["maze_rows"],
+            maze_cols=transition_kwargs["maze_cols"],
+            neighbor_table=transition_kwargs["neighbor_table"],
+            neighbor_validity=transition_kwargs["neighbor_validity"],
+            pellet_positions=transition_kwargs["pellet_positions"],
+            ghost_aggressiveness=transition_kwargs["ghost_aggressiveness"],
+            ghost_coordination_code=transition_kwargs["ghost_coordination_code"],
+            ghost_strategy_codes=transition_kwargs["ghost_strategy_codes"],
+            num_ghosts=transition_kwargs["num_ghosts"],
+            num_pellets=transition_kwargs["num_pellets"],
+            pellet_reward=transition_kwargs["pellet_reward"],
+            idx_pac_row=transition_kwargs["idx_pac_row"],
+            idx_pac_col=transition_kwargs["idx_pac_col"],
+            idx_ghosts_start=transition_kwargs["idx_ghosts_start"],
+            idx_pellets_start=transition_kwargs["idx_pellets_start"],
+            idx_pellets_end=transition_kwargs["idx_pellets_end"],
+            idx_score=transition_kwargs["idx_score"],
+            idx_terminal=transition_kwargs["idx_terminal"],
+            patrol_dir_state=env.ghost_patrol_directions,
+            ghost_collision_penalty=float(env.ghost_collision_penalty),
+            step_penalty=float(env.step_penalty),
+            win_reward=float(env.win_reward),
+            discount_factor=float(discount_factor),
+            depth=0,
+            max_depth=max_depth,
+        )
+
+        assert abs(native_total - py_total) <= 1e-9, (
+            f"Native rollout {native_total:.6f} != Python reference {py_total:.6f}, "
+            f"delta={abs(native_total - py_total):.2e}"
+        )
+
+    def test_native_rollout_returns_zero_for_terminal_state(self):
+        """Test native rollout returns zero when the initial state is terminal.
+
+        Purpose: Validates the early-exit path when state is already terminal.
+
+        Given: A terminal state.
+        When: simulate_random_rollout is called.
+        Then: 0.0 is returned immediately.
+
+        Test type: unit
+        """
+        env = self._make_env()
+        terminal_state = env.make_state(
+            pacman_pos=(0, 0),
+            ghost_positions=((0, 0),),  # collision → terminal
+            pellets=((1, 1), (1, 5), (5, 1), (5, 5)),
+            terminal=True,
+        )
+
+        class _DummySampler:
+            def sample(self) -> int:
+                return 0
+
+        result = env.simulate_random_rollout(
+            state=terminal_state,
+            action_sampler=_DummySampler(),
+            max_depth=20,
+            discount_factor=0.95,
+        )
+        assert result == 0.0
+
+    def test_native_rollout_respects_depth_offset(self):
+        """Test that depth parameter correctly reduces the number of steps.
+
+        Purpose: Validates the (max_depth - depth) remaining-depth calculation.
+
+        Given: max_depth=5, depth=5.
+        When: simulate_random_rollout is called.
+        Then: 0.0 is returned (no steps executed).
+
+        Test type: unit
+        """
+        env = self._make_env()
+        initial_state = env.initial_state_dist().sample()[0]
+
+        class _DummySampler:
+            def sample(self) -> int:
+                return 0
+
+        result = env.simulate_random_rollout(
+            state=initial_state,
+            action_sampler=_DummySampler(),
+            max_depth=5,
+            discount_factor=0.95,
+            depth=5,
+        )
+        assert result == 0.0
+
+
+def _python_reference_rollout(
+    env: PacManPOMDP,
+    initial_state: np.ndarray,
+    action_indices: np.ndarray,
+    discount_factor: float,
+    max_depth: int,
+) -> float:
+    """Python reference matching simulate_rollout_impl: sample once per step.
+
+    Steps through pre-drawn action_indices using the C++ transition kernel and
+    computes reward from the resulting next_state (not a second sample).
+    """
+    from POMDPPlanners.environments.pacman_pomdp import (
+        _native,
+    )  # pylint: disable=import-outside-toplevel
+
+    current = initial_state.copy()
+    total = 0.0
+    gamma_power = 1.0
+
+    for step in range(min(max_depth, len(action_indices))):
+        if env.get_terminal(current):
+            break
+        action = int(action_indices[step])
+        kernel = _native.PacManTransitionCpp(
+            state=current,
+            action=action,
+            **env.get_transition_cpp_ctor_kwargs(),
+            patrol_dir_state=env.ghost_patrol_directions,
+        )
+        next_state = kernel.sample(1)[0]
+
+        r = env.step_penalty
+        new_pac_pos = env.get_pacman_pos(next_state)
+        for ghost_pos in env.get_ghost_positions(next_state):
+            if ghost_pos == new_pac_pos:
+                r += env.ghost_collision_penalty
+                break
+
+        if env.get_score(next_state) > env.get_score(current):
+            r += env.pellet_reward
+
+        if env.get_terminal(next_state) and not env.get_pellets(next_state):
+            r += env.win_reward
+
+        total += gamma_power * r
+        gamma_power *= discount_factor
+        current = next_state
+
+    return total

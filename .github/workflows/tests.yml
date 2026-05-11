@@ -84,8 +84,14 @@ jobs:
         docker run --rm --entrypoint pyright pomdpplanners-test:latest POMDPPlanners/
 
     - name: Run unit tests inside Docker
+      # Run the full suite (slow tests included) on direct pushes to or PRs
+      # targeting master/develop, so regressions in slow integration tests
+      # are caught at PR time rather than by the weekly cron.
       run: |
-        if [ "${{ github.ref }}" = "refs/heads/master" ]; then
+        if [ "${{ github.ref }}" = "refs/heads/master" ] \
+          || [ "${{ github.ref }}" = "refs/heads/develop" ] \
+          || [ "${{ github.base_ref }}" = "master" ] \
+          || [ "${{ github.base_ref }}" = "develop" ]; then
           docker run --rm --entrypoint pytest pomdpplanners-test:latest POMDPPlanners/tests/ -v --cov=POMDPPlanners --cov-report=xml --cov-report=term-missing
         else
           docker run --rm --entrypoint pytest pomdpplanners-test:latest POMDPPlanners/tests/ -v --cov=POMDPPlanners --cov-report=xml --cov-report=term-missing -m "not slow"

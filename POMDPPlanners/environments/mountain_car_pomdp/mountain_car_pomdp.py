@@ -16,14 +16,13 @@ the mountain, so the agent must learn to build momentum by first moving away
 from the goal.
 
 Classes:
-    MountainCarTransition: Physics-based state transition model
-    MountainCarObservation: Gaussian noise observation model
     MountainCarPOMDP: Main Mountain Car environment with POMDP formulation
 """
 
 from enum import Enum
 from pathlib import Path
-from typing import Any, List, Optional, Sequence, Tuple, Union
+from collections.abc import Hashable
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import matplotlib
 import numpy as np
@@ -32,10 +31,8 @@ from numpy.typing import NDArray
 from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
-    ObservationModel,
     SpaceInfo,
     SpaceType,
-    StateTransitionModel,
 )
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
 from POMDPPlanners.environments.mountain_car_pomdp import _native
@@ -49,161 +46,6 @@ class MountainCarPOMDPMetrics(Enum):
     """Metric names for Mountain Car POMDP environment."""
 
     GOAL_REACHING_RATE = "goal_reaching_rate"
-
-
-class MountainCarTransition(_native.MountainCarTransitionCpp):
-    """Physics-based state transition model for Mountain Car POMDP.
-
-    This model implements the physics of a car on a sinusoidal hill surface
-    with additive Gaussian process noise. The car's velocity is affected by
-    both the applied action (engine force) and gravitational force that depends
-    on the slope of the hill.
-
-    The physics equations are:
-    - velocity += action * power + cos(3 * position) * (-gravity)
-    - position += velocity
-
-    After computing the deterministic next state, Normal noise is sampled
-    from the provided distribution and added. The result is then clipped
-    to respect position and velocity bounds.
-
-    The ``sample()`` and ``probability()`` methods execute entirely in C++
-    via the ``_native`` extension; this Python subclass only wraps the
-    constructor so existing call sites that pass a
-    :class:`CovarianceParameterizedMultivariateNormal` keep working.
-
-    Attributes:
-        state: Current state (position, velocity) tuple
-        action: Engine action (-1, 0, or 1)
-        power: Engine power scaling factor
-        gravity: Gravitational force constant
-        max_speed: Maximum velocity magnitude
-        min_position: Minimum position boundary
-        max_position: Maximum position boundary
-
-    Example:
-        Using the Mountain Car transition model::
-
-            >>> import numpy as np
-            >>> np.random.seed(42)  # For reproducible results
-            >>> from POMDPPlanners.environments.mountain_car_pomdp import _native
-            >>> _native.set_seed(42)
-            >>> from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
-            >>>
-            >>> # Define car state: position=-0.5 (in valley), velocity=0.0
-            >>> state = (-0.5, 0.0)
-            >>> action = 1  # Accelerate right/forward
-            >>>
-            >>> # Create transition model with noise
-            >>> state_transition_cov = np.diag([2.5e-5, 1e-6])
-            >>> state_transition_dist = CovarianceParameterizedMultivariateNormal(state_transition_cov)
-            >>> transition = MountainCarTransition(
-            ...     state=state,
-            ...     action=action,
-            ...     power=0.001,
-            ...     gravity=0.0025,
-            ...     max_speed=0.07,
-            ...     min_position=-1.2,
-            ...     max_position=0.6,
-            ...     state_transition_dist=state_transition_dist
-            ... )
-            >>>
-            >>> # Simulate physics step
-            >>> next_state = transition.sample()[0]
-            >>> # Returns new [position, velocity] with physics and noise applied
-            >>> len(next_state) == 2
-            True
-    """
-
-    def __init__(
-        self,
-        state: Tuple[float, float],
-        action: int,
-        power: float,
-        gravity: float,
-        max_speed: float,
-        min_position: float,
-        max_position: float,
-        state_transition_dist: CovarianceParameterizedMultivariateNormal,
-    ):
-        super().__init__(
-            state=state,
-            action=action,
-            power=power,
-            gravity=gravity,
-            max_speed=max_speed,
-            min_position=min_position,
-            max_position=max_position,
-            covariance=state_transition_dist.covariance,
-        )
-        self._state_transition_dist = state_transition_dist
-
-
-StateTransitionModel.register(MountainCarTransition)
-
-
-class MountainCarObservation(_native.MountainCarObservationCpp):
-    """Noisy observation model for Mountain Car POMDP.
-
-    This model adds Gaussian noise to the true car state (position, velocity)
-    to create partial observability. The agent receives noisy measurements
-    of both position and velocity, making state estimation challenging.
-
-    The ``sample()`` and ``probability()`` methods execute entirely in C++
-    via the ``_native`` extension.
-
-    Attributes:
-        next_state: True state after action execution
-        action: Action that was taken (not used in observation generation)
-        mean: Expected observation (equals true state)
-
-    Example:
-        Using the Mountain Car observation model::
-
-            >>> import numpy as np
-            >>> np.random.seed(42)  # For reproducible results
-            >>> from POMDPPlanners.environments.mountain_car_pomdp import _native
-            >>> _native.set_seed(42)
-            >>>
-            >>> # Define true state after physics step
-            >>> true_state = (-0.45, 0.02)  # [position, velocity]
-            >>> action = 1
-            >>>
-            >>> # Define observation noise covariance and create distribution
-            >>> from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
-            >>> cov_matrix = np.array([[0.1**2, 0], [0, 0.01**2]])  # Position and velocity noise
-            >>> obs_dist = CovarianceParameterizedMultivariateNormal(cov_matrix)
-            >>>
-            >>> # Create observation model
-            >>> obs_model = MountainCarObservation(
-            ...     next_state=true_state,
-            ...     action=action,
-            ...     obs_dist=obs_dist
-            ... )
-            >>>
-            >>> # Sample noisy observation
-            >>> observation = obs_model.sample()[0]
-            >>> # Returns noisy [position, velocity] close to true_state
-            >>> len(observation) == 2
-            True
-            >>>
-            >>> # Calculate observation probability
-            >>> prob = obs_model.probability([observation])
-            >>> prob.shape == (1,)
-            True
-    """
-
-    def __init__(
-        self,
-        next_state: Tuple[float, float],
-        action: int,
-        obs_dist: CovarianceParameterizedMultivariateNormal,
-    ):
-        super().__init__(next_state=next_state, action=action, covariance=obs_dist.covariance)
-        self._obs_dist = obs_dist
-
-
-ObservationModel.register(MountainCarObservation)
 
 
 class MountainCarPOMDP(DiscreteActionsEnvironment):
@@ -260,6 +102,9 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
 
         # Define actions: -1 (left), 0 (no acceleration), 1 (right)
         self.actions = [-1, 0, 1]
+        self._actions_int32: np.ndarray = np.ascontiguousarray(
+            np.array(self.actions, dtype=np.int32)
+        )
 
         # Define observation noise parameters
         self.position_noise = 0.1
@@ -295,26 +140,141 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
             use_queue_logger=use_queue_logger,
         )
 
-    def state_transition_model(
-        self, state: Tuple[float, float], action: int
-    ) -> StateTransitionModel:
-        return MountainCarTransition(  # pyright: ignore[reportReturnType]
-            state=state,
-            action=action,
-            power=self.power,
-            gravity=self.gravity,
-            max_speed=self.max_speed,
-            min_position=self.min_position,
-            max_position=self.max_position,
-            state_transition_dist=self._state_transition_dist,
+        # Per-action C++ kernel caches: actions are ``int`` so a plain
+        # ``Dict[int, Any]`` suffices. Lazily built by ``_get_trans_kernel``
+        # / ``_get_obs_kernel`` and reset on unpickle. The kernel keeps the
+        # frozen env params (action, power, gravity, max_speed,
+        # min_position, max_position, covariance) and is mutated only via
+        # ``set_state`` / ``set_next_state`` on hot paths.
+        self._trans_kernel_cache: Dict[int, Any] = {}
+        self._obs_kernel_cache: Dict[int, Any] = {}
+
+    def __getstate__(self) -> Dict[str, Any]:
+        # pybind11 kernels are not picklable; rebuild lazily on the receiver.
+        state = self.__dict__.copy()
+        state["_trans_kernel_cache"] = {}
+        state["_obs_kernel_cache"] = {}
+        return state
+
+    def __setstate__(self, state: Dict[str, Any]) -> None:
+        vars(self).update(state)
+        self._trans_kernel_cache = {}
+        self._obs_kernel_cache = {}
+
+    def _get_trans_kernel(self, action: int) -> Any:
+        kernel = self._trans_kernel_cache.get(int(action))
+        if kernel is None:
+            kernel = _native.MountainCarTransitionCpp(
+                state=np.zeros(2, dtype=np.float64),
+                action=int(action),
+                power=self.power,
+                gravity=self.gravity,
+                max_speed=self.max_speed,
+                min_position=self.min_position,
+                max_position=self.max_position,
+                covariance=self._state_transition_dist.covariance,
+            )
+            self._trans_kernel_cache[int(action)] = kernel
+        return kernel
+
+    def _get_obs_kernel(self, action: int) -> Any:
+        kernel = self._obs_kernel_cache.get(int(action))
+        if kernel is None:
+            kernel = _native.MountainCarObservationCpp(
+                next_state=np.zeros(2, dtype=np.float64),
+                action=int(action),
+                covariance=self._obs_dist.covariance,
+            )
+            self._obs_kernel_cache[int(action)] = kernel
+        return kernel
+
+    # ── Hot-path sampling overrides ─────────────────────────────────
+    # Each method fetches a cached per-action C++ kernel, mutates its
+    # stored state via ``set_state`` / ``set_next_state`` (when needed),
+    # and dispatches to the same native sample / probability /
+    # batch_sample / batch_log_likelihood entry points as before.
+
+    def sample_next_state(
+        self,
+        state: Union[Tuple[float, float], NDArray[np.float64]],
+        action: int,
+        n_samples: int = 1,
+    ) -> NDArray[np.float64]:
+        kernel = self._get_trans_kernel(int(action))
+        kernel.set_state(state)
+        samples = kernel.sample(n_samples)
+        if n_samples == 1:
+            return samples[0]
+        return np.asarray(samples)
+
+    def sample_observation(
+        self,
+        next_state: Union[Tuple[float, float], NDArray[np.float64]],
+        action: int,
+        n_samples: int = 1,
+    ) -> NDArray[np.float64]:
+        kernel = self._get_obs_kernel(int(action))
+        kernel.set_next_state(next_state)
+        samples = kernel.sample(n_samples)
+        if n_samples == 1:
+            return samples[0]
+        return np.asarray(samples)
+
+    def transition_log_probability(
+        self,
+        state: Union[Tuple[float, float], NDArray[np.float64]],
+        action: int,
+        next_states: Union[Sequence[Any], NDArray[np.float64]],
+    ) -> np.ndarray:
+        kernel = self._get_trans_kernel(int(action))
+        kernel.set_state(state)
+        probs = np.asarray(kernel.probability(next_states))
+        with np.errstate(divide="ignore"):
+            return np.log(probs)
+
+    def observation_log_probability(
+        self,
+        next_state: Union[Tuple[float, float], NDArray[np.float64]],
+        action: int,
+        observations: Union[Sequence[Any], NDArray[np.float64]],
+    ) -> np.ndarray:
+        kernel = self._get_obs_kernel(int(action))
+        kernel.set_next_state(next_state)
+        probs = np.asarray(kernel.probability(observations))
+        with np.errstate(divide="ignore"):
+            return np.log(probs)
+
+    def sample_next_state_batch(self, states: Any, action: int) -> np.ndarray:
+        states_array = np.ascontiguousarray(np.asarray(states, dtype=np.float64))
+        if states_array.ndim == 1:
+            states_array = states_array.reshape(1, -1)
+        # ``batch_sample`` reads each row's state from the input array;
+        # the kernel's stored ``state_`` is not consulted, so we skip
+        # ``set_state`` on this hot path.
+        kernel = self._get_trans_kernel(int(action))
+        return np.asarray(kernel.batch_sample(states_array), dtype=np.float64)
+
+    def observation_log_probability_per_state(
+        self, next_states: Any, action: int, observation: Any
+    ) -> np.ndarray:
+        next_states_array = np.ascontiguousarray(np.asarray(next_states, dtype=np.float64))
+        if next_states_array.ndim == 1:
+            next_states_array = next_states_array.reshape(1, -1)
+        observation_array = np.ascontiguousarray(np.asarray(observation, dtype=np.float64))
+        # ``batch_log_likelihood`` reads each row's next-state from the
+        # input array; ``next_state_`` on the kernel is unused, so we
+        # skip ``set_next_state`` on this hot path.
+        kernel = self._get_obs_kernel(int(action))
+        return np.asarray(
+            kernel.batch_log_likelihood(
+                next_particles=next_states_array,
+                observation=observation_array,
+            ),
+            dtype=np.float64,
         )
 
-    def observation_model(self, next_state: Tuple[float, float], action: int) -> ObservationModel:
-        return MountainCarObservation(  # pyright: ignore[reportReturnType]
-            next_state=next_state, action=action, obs_dist=self._obs_dist
-        )
-
-    def reward(self, state: Tuple[float, float], action: int) -> float:
+    def reward(self, state: Tuple[float, float], action: int, next_state: Any = None) -> float:
+        del action, next_state
         position, _ = state
 
         # Reward for reaching the goal
@@ -324,7 +284,13 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
         # Small negative reward for each step to encourage reaching the goal quickly
         return -1.0
 
-    def reward_batch(self, states: Union[np.ndarray, Sequence[Any]], action: int) -> np.ndarray:
+    def reward_batch(
+        self,
+        states: Union[np.ndarray, Sequence[Any]],
+        action: int,
+        next_states: Optional[Union[np.ndarray, Sequence[Any]]] = None,
+    ) -> np.ndarray:
+        del action, next_states
         states_arr = np.asarray(states)
         positions = states_arr[:, 0]
         return np.where(positions >= self.goal_position, 0.0, -1.0)
@@ -333,15 +299,59 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
         position, _ = state
         return bool(position >= self.goal_position)
 
+    def simulate_random_rollout(  # pylint: disable=unused-argument
+        self,
+        state: Any,
+        action_sampler: Any,
+        max_depth: int,
+        discount_factor: float,
+        depth: int = 0,
+    ) -> float:
+        """Random rollout via native C++.
+
+        Args:
+            state: Current 2-D car state ``[position, velocity]``.
+            action_sampler: Object with a ``sample()`` method (kept for API
+                parity with the base ``Environment`` contract; unused on the
+                native rollout path which draws indices directly via NumPy).
+            max_depth: Maximum rollout depth.
+            discount_factor: Per-step discount factor.
+            depth: Depth already consumed by the search tree. Defaults to 0.
+
+        Returns:
+            Discounted sum of immediate rewards along the sampled trajectory.
+        """
+        steps_left = max_depth - depth
+        if steps_left <= 0:
+            return 0.0
+
+        state_arr = np.ascontiguousarray(np.asarray(state, dtype=np.float64).ravel())
+        n_actions = len(self.actions)
+        action_indices = np.random.randint(0, n_actions, size=steps_left, dtype=np.int32)
+
+        return _native.simulate_rollout(
+            initial_state=state_arr,
+            actions=self._actions_int32,
+            action_indices=action_indices,
+            max_depth=max_depth,
+            start_depth=depth,
+            discount_factor=discount_factor,
+            power=self.power,
+            gravity=self.gravity,
+            max_speed=self.max_speed,
+            min_position=self.min_position,
+            max_position=self.max_position,
+            goal_position=self.goal_position,
+            covariance=self._state_transition_dist.covariance,
+        )
+
     def initial_state_dist(self) -> Distribution:
         class InitialState(Distribution):
             def sample(self, n_samples: int = 1) -> List[np.ndarray]:
-                samples = []
-                for _ in range(n_samples):
-                    position = np.random.uniform(-0.6, -0.4)
-                    velocity = 0.0
-                    samples.append(np.array([position, velocity]))
-                return samples
+                # Vectorized batch RNG draw + per-row np.array — avoids the
+                # per-iteration np.random.uniform dispatch for n_samples > 1.
+                positions = np.random.uniform(-0.6, -0.4, size=n_samples)
+                return [np.array([float(p), 0.0]) for p in positions]
 
         return InitialState()
 
@@ -363,6 +373,10 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
         self, observation1: Tuple[float, float], observation2: Tuple[float, float]
     ) -> bool:
         return np.array_equal(observation1, observation2)
+
+    def hash_action(self, action: Any) -> Hashable:
+        # Discrete int actions (-1, 0, 1); already hashable.
+        return action
 
     def get_metric_names(self) -> List[str]:
         """Get names of Mountain Car POMDP specific metrics.

@@ -36,10 +36,10 @@ def _validate_episode_inputs(
     if num_steps <= 0:
         raise ValueError(f"num_steps must be positive, got {num_steps}")
 
-    if not hasattr(environment, "state_transition_model") or not hasattr(
-        environment, "observation_model"
+    if not hasattr(environment, "sample_next_state") or not hasattr(
+        environment, "sample_observation"
     ):
-        raise ValueError("environment must implement state_transition_model and observation_model")
+        raise ValueError("environment must implement sample_next_state and sample_observation")
     if not hasattr(policy, "action"):
         raise ValueError("policy must implement action method")
     if not hasattr(initial_belief, "sample") or not hasattr(initial_belief, "update"):
@@ -152,7 +152,7 @@ class EpisodeRunner:
     def _sample_next_state(self, action: Any) -> Any:
         """Sample next state and update timing metric."""
         start_time = time()
-        next_state = self.environment.state_transition_model(self.state, action).sample()[0]
+        next_state = self.environment.sample_next_state(self.state, action)
         elapsed = time() - start_time
 
         step = self.current_step + 1
@@ -165,7 +165,7 @@ class EpisodeRunner:
     def _sample_observation(self, next_state: Any, action: Any) -> Any:
         """Sample observation and update timing metric."""
         start_time = time()
-        observation = self.environment.observation_model(next_state, action).sample()[0]
+        observation = self.environment.sample_observation(next_state, action)
         elapsed = time() - start_time
 
         step = self.current_step + 1

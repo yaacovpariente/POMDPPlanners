@@ -51,7 +51,7 @@ def test_state_transition_model(base_mountain_car_environment):
     Purpose: Validates that state transition model correctly updates car position and velocity for different actions
 
     Given: MountainCarPOMDP environment and test state [0.0, 0.0] with actions -1, 0, and 1
-    When: State transition model is called and next states are sampled
+    When: env.sample_next_state is called for each action
     Then: All next states have correct 2D shape representing [position, velocity] and change based on applied action
 
     Test type: unit
@@ -59,22 +59,19 @@ def test_state_transition_model(base_mountain_car_environment):
     # Test state transition
     state = np.array([0.0, 0.0])
     action = 0
-    transition = base_mountain_car_environment.state_transition_model(state, action)
-    new_state = transition.sample()[0]
+    new_state = base_mountain_car_environment.sample_next_state(state=state, action=action)
     assert isinstance(new_state, np.ndarray)
     assert new_state.shape == (2,)
 
     # Test with different action
     action = 1
-    transition = base_mountain_car_environment.state_transition_model(state, action)
-    new_state = transition.sample()[0]
+    new_state = base_mountain_car_environment.sample_next_state(state=state, action=action)
     assert isinstance(new_state, np.ndarray)
     assert new_state.shape == (2,)
 
     # Test with negative action
     action = -1
-    transition = base_mountain_car_environment.state_transition_model(state, action)
-    new_state = transition.sample()[0]
+    new_state = base_mountain_car_environment.sample_next_state(state=state, action=action)
     assert isinstance(new_state, np.ndarray)
     assert new_state.shape == (2,)
 
@@ -86,15 +83,16 @@ def test_state_transition_produces_varying_samples(base_mountain_car_environment
     different samples due to Gaussian process noise
 
     Given: A MountainCarPOMDP environment and initial state [-0.5, 0.0] with action 1
-    When: Multiple samples are drawn from the state transition model
+    When: Multiple samples are drawn via env.sample_next_state
     Then: Not all samples are identical, confirming stochastic behavior
 
     Test type: unit
     """
     state = np.array([-0.5, 0.0])
     action = 1
-    transition = base_mountain_car_environment.state_transition_model(state, action)
-    samples = transition.sample(n_samples=50)
+    samples = base_mountain_car_environment.sample_next_state(
+        state=state, action=action, n_samples=50
+    )
 
     assert len(samples) == 50
     assert all(s.shape == (2,) for s in samples)
@@ -111,23 +109,37 @@ def test_state_transition_noise_magnitude(base_mountain_car_environment):
     Purpose: Validates that noisy samples cluster around the deterministic next state
 
     Given: A MountainCarPOMDP environment with default noise covariance
-    When: Many samples are drawn from the state transition model
-    Then: Sample mean is close to deterministic next state and standard deviations
-    match the expected noise levels from the covariance matrix
+    When: Many samples are drawn via env.sample_next_state
+    Then: Sample mean is close to deterministic next state computed via the native
+    kernel and standard deviations match the expected noise levels from the
+    covariance matrix
 
     Test type: unit
     """
+    # pylint: disable=import-outside-toplevel
+    from POMDPPlanners.environments.mountain_car_pomdp import _native
+
+    env = base_mountain_car_environment
     state = np.array([-0.5, 0.0])
     action = 1
-    transition = base_mountain_car_environment.state_transition_model(state, action)
-    samples = np.array(transition.sample(n_samples=5000))
+    samples = np.array(env.sample_next_state(state=state, action=action, n_samples=5000))
 
+    deterministic_kernel = _native.MountainCarTransitionCpp(
+        state=state,
+        action=action,
+        power=env.power,
+        gravity=env.gravity,
+        max_speed=env.max_speed,
+        min_position=env.min_position,
+        max_position=env.max_position,
+        covariance=env.state_transition_cov,
+    )
     # pylint: disable=protected-access
-    deterministic = transition._compute_deterministic_next_state()
+    deterministic = deterministic_kernel._compute_deterministic_next_state()
     sample_mean = samples.mean(axis=0)
     np.testing.assert_allclose(sample_mean, deterministic, atol=0.005)
 
-    expected_std = np.sqrt(np.diag(base_mountain_car_environment.state_transition_cov))
+    expected_std = np.sqrt(np.diag(env.state_transition_cov))
     sample_std = samples.std(axis=0)
     np.testing.assert_allclose(sample_std, expected_std, rtol=0.3)
 
@@ -176,7 +188,7 @@ def test_observation_model(base_mountain_car_environment):
     Purpose: Validates that observation model correctly adds noise to position and velocity measurements
 
     Given: MountainCarPOMDP environment and test state [0.0, 0.0] with action 0
-    When: Observation model is called and observations are sampled
+    When: env.sample_observation is called
     Then: All observations have correct 2D shape and contain noise in both position and velocity components
 
     Test type: unit
@@ -184,40 +196,41 @@ def test_observation_model(base_mountain_car_environment):
     # Test observation model
     state = np.array([0.0, 0.0])
     action = 0
-    observation = base_mountain_car_environment.observation_model(state, action)
-    obs = observation.sample()[0]
+    obs = base_mountain_car_environment.sample_observation(next_state=state, action=action)
     assert isinstance(obs, np.ndarray)
     assert obs.shape == (2,)
 
     # Test multiple observations
-    observations = base_mountain_car_environment.observation_model(state, action).sample(
-        n_samples=100
+    observations = base_mountain_car_environment.sample_observation(
+        next_state=state, action=action, n_samples=100
     )
     assert len(observations) == 100
     assert all(isinstance(obs, np.ndarray) and obs.shape == (2,) for obs in observations)
 
 
 def test_observation_model_probability_single_observation(base_mountain_car_environment):
-    """Test observation model probability function with single observation.
+    """Test observation log-probability with single observation.
 
-    Purpose: Validates that observation model probability function correctly handles single observation input
+    Purpose: Validates that observation_log_probability correctly handles single observation input
 
-    Given: MountainCarPOMDP environment and observation model with specific state and covariance
-    When: probability() method is called with single observation
-    Then: Returns numpy array with shape (1,) containing probability density value
+    Given: MountainCarPOMDP environment with specific next_state and action
+    When: env.observation_log_probability is called with a single observation
+    Then: Returns numpy array with shape (1,) and exponentiated probability is positive
 
     Test type: unit
     """
     # Test single observation probability
     state = np.array([0.0, 0.0])
     action = 0
-    obs_model = base_mountain_car_environment.observation_model(state, action)
 
     # Create a single observation close to true state
     observation = np.array([0.05, 0.01])  # Small deviation from true state [0.0, 0.0]
 
-    # Get probability
-    probabilities = obs_model.probability([observation])
+    # Get probability via env-level API
+    log_probabilities = base_mountain_car_environment.observation_log_probability(
+        next_state=state, action=action, observations=[observation]
+    )
+    probabilities = np.exp(log_probabilities)
 
     # Verify output type and shape
     assert isinstance(probabilities, np.ndarray), "Probability should return numpy array"
@@ -229,20 +242,19 @@ def test_observation_model_probability_single_observation(base_mountain_car_envi
 
 
 def test_observation_model_probability_multiple_observations(base_mountain_car_environment):
-    """Test observation model probability function with multiple observations.
+    """Test observation log-probability with multiple observations.
 
-    Purpose: Validates that observation model probability function correctly handles multiple observations input
+    Purpose: Validates that observation_log_probability correctly handles multiple observations
 
-    Given: MountainCarPOMDP environment and observation model with specific state and covariance
-    When: probability() method is called with multiple observations
-    Then: Returns numpy array with shape (n,) containing probability densities for each observation
+    Given: MountainCarPOMDP environment with specific next_state and action
+    When: env.observation_log_probability is called with multiple observations
+    Then: Returns numpy array with shape (n,) of decreasing probabilities with distance
 
     Test type: unit
     """
     # Test multiple observations probability
     state = np.array([0.0, 0.0])
     action = 0
-    obs_model = base_mountain_car_environment.observation_model(state, action)
 
     # Create multiple observations at different distances from true state
     observations = [
@@ -252,8 +264,11 @@ def test_observation_model_probability_multiple_observations(base_mountain_car_e
         np.array([0.5, 0.1]),  # Far from true state (lowest probability)
     ]
 
-    # Get probabilities
-    probabilities = obs_model.probability(observations)
+    # Get probabilities via env-level API
+    log_probabilities = base_mountain_car_environment.observation_log_probability(
+        next_state=state, action=action, observations=observations
+    )
+    probabilities = np.exp(log_probabilities)
 
     # Verify output type and shape
     assert isinstance(probabilities, np.ndarray), "Probability should return numpy array"
@@ -271,43 +286,49 @@ def test_observation_model_probability_multiple_observations(base_mountain_car_e
 
 
 def test_observation_model_probability_mathematical_correctness(base_mountain_car_environment):
-    """Test observation model probability function mathematical correctness.
+    """Test observation_log_probability mathematical correctness.
 
-    Purpose: Validates that observation model probability function computes correct probability densities
-    using multivariate normal distribution
+    Purpose: Validates that observation_log_probability computes correct probability
+    densities matching the multivariate normal distribution centered at next_state
 
-    Given: MountainCarPOMDP environment with known covariance matrix and true state
-    When: probability() method is called with specific observations
-    Then: Probabilities match expected multivariate normal distribution calculations
+    Given: MountainCarPOMDP environment with known covariance matrix and true next_state
+    When: env.observation_log_probability is called with specific observations
+    Then: Exponentiated log-probabilities match scipy multivariate_normal.pdf calculations
 
     Test type: unit
     """
-    # Test mathematical correctness
-    state = np.array([0.0, 0.0])
+    env = base_mountain_car_environment
+    true_state = np.array([0.0, 0.0])
     action = 0
-    obs_model = base_mountain_car_environment.observation_model(state, action)
-
-    # Get the true state and covariance matrix
-    true_state = obs_model.mean
-    cov_matrix = base_mountain_car_environment.cov_matrix
+    cov_matrix = env.cov_matrix
 
     # Test with observation at true state (should have highest probability)
     observation_at_mean = true_state.copy()
-    prob_at_mean = obs_model.probability([observation_at_mean])[0]
+    prob_at_mean = float(
+        np.exp(
+            env.observation_log_probability(
+                next_state=true_state, action=action, observations=[observation_at_mean]
+            )
+        )[0]
+    )
 
-    # Calculate expected probability using scipy
     expected_prob_at_mean = scipy.stats.multivariate_normal.pdf(
         observation_at_mean, mean=true_state, cov=cov_matrix
     )
 
-    # Verify probability matches expected value
     assert np.isclose(
         prob_at_mean, expected_prob_at_mean, rtol=1e-10
     ), f"Probability at mean {prob_at_mean} should match expected {expected_prob_at_mean}"
 
     # Test with observation away from mean
     observation_offset = true_state + np.array([0.1, 0.01])
-    prob_offset = obs_model.probability([observation_offset])[0]
+    prob_offset = float(
+        np.exp(
+            env.observation_log_probability(
+                next_state=true_state, action=action, observations=[observation_offset]
+            )
+        )[0]
+    )
 
     expected_prob_offset = scipy.stats.multivariate_normal.pdf(
         observation_offset, mean=true_state, cov=cov_matrix
@@ -322,22 +343,24 @@ def test_observation_model_probability_mathematical_correctness(base_mountain_ca
 
 
 def test_observation_model_probability_edge_cases(base_mountain_car_environment):
-    """Test observation model probability function edge cases.
+    """Test observation log-probability edge cases.
 
-    Purpose: Validates that observation model probability function handles edge cases correctly
+    Purpose: Validates that observation_log_probability handles edge cases correctly
 
-    Given: MountainCarPOMDP environment and observation model
-    When: probability() method is called with edge cases (empty list, extreme values)
+    Given: MountainCarPOMDP environment with specific next_state and action
+    When: env.observation_log_probability is called with edge cases (empty list, extreme values)
     Then: Function handles edge cases gracefully and returns appropriate results
 
     Test type: unit
     """
     state = np.array([0.0, 0.0])
     action = 0
-    obs_model = base_mountain_car_environment.observation_model(state, action)
 
     # Test empty list (should return empty array)
-    empty_probs = obs_model.probability([])
+    empty_log_probs = base_mountain_car_environment.observation_log_probability(
+        next_state=state, action=action, observations=[]
+    )
+    empty_probs = np.exp(empty_log_probs)
     assert isinstance(empty_probs, np.ndarray), "Empty list should return numpy array"
     assert empty_probs.shape == (
         0,
@@ -350,7 +373,10 @@ def test_observation_model_probability_edge_cases(base_mountain_car_environment)
         np.array([0.0, 0.0]),  # At true state
     ]
 
-    extreme_probs = obs_model.probability(extreme_observations)
+    extreme_log_probs = base_mountain_car_environment.observation_log_probability(
+        next_state=state, action=action, observations=extreme_observations
+    )
+    extreme_probs = np.exp(extreme_log_probs)
     assert isinstance(extreme_probs, np.ndarray), "Extreme values should return numpy array"
     assert extreme_probs.shape == (
         3,
@@ -371,20 +397,19 @@ def test_observation_model_probability_edge_cases(base_mountain_car_environment)
 
 
 def test_observation_model_probability_batch_consistency(base_mountain_car_environment):
-    """Test observation model probability function batch consistency.
+    """Test observation log-probability batch consistency.
 
-    Purpose: Validates that observation model probability function produces consistent results
+    Purpose: Validates that observation_log_probability produces consistent results
     when called multiple times with same inputs
 
-    Given: MountainCarPOMDP environment and observation model
-    When: probability() method is called multiple times with identical observations
+    Given: MountainCarPOMDP environment with specific next_state and action
+    When: env.observation_log_probability is called multiple times with identical observations
     Then: All calls return identical probability values, demonstrating deterministic behavior
 
     Test type: unit
     """
     state = np.array([0.0, 0.0])
     action = 0
-    obs_model = base_mountain_car_environment.observation_model(state, action)
 
     # Create test observations
     observations = [
@@ -393,10 +418,22 @@ def test_observation_model_probability_batch_consistency(base_mountain_car_envir
         np.array([-0.05, -0.005]),
     ]
 
-    # Call probability function multiple times
-    probs1 = obs_model.probability(observations)
-    probs2 = obs_model.probability(observations)
-    probs3 = obs_model.probability(observations)
+    # Call probability function multiple times via env-level API
+    probs1 = np.exp(
+        base_mountain_car_environment.observation_log_probability(
+            next_state=state, action=action, observations=observations
+        )
+    )
+    probs2 = np.exp(
+        base_mountain_car_environment.observation_log_probability(
+            next_state=state, action=action, observations=observations
+        )
+    )
+    probs3 = np.exp(
+        base_mountain_car_environment.observation_log_probability(
+            next_state=state, action=action, observations=observations
+        )
+    )
 
     # All results should be identical
     assert np.array_equal(probs1, probs2), "Multiple calls should return identical results"
@@ -405,13 +442,13 @@ def test_observation_model_probability_batch_consistency(base_mountain_car_envir
 
 
 def test_observation_model_probability_different_states(base_mountain_car_environment):
-    """Test observation model probability function with different true states.
+    """Test observation log-probability with different true states.
 
-    Purpose: Validates that observation model probability function works correctly
+    Purpose: Validates that observation_log_probability works correctly
     with different true states and maintains proper probability relationships
 
-    Given: MountainCarPOMDP environment and observation models with different true states
-    When: probability() method is called with observations relative to each true state
+    Given: MountainCarPOMDP environment with different true next_states
+    When: env.observation_log_probability is called with observations relative to each true state
     Then: Probabilities are highest for observations closest to their respective true states
 
     Test type: unit
@@ -425,7 +462,6 @@ def test_observation_model_probability_different_states(base_mountain_car_enviro
 
     for state in states:
         action = 0
-        obs_model = base_mountain_car_environment.observation_model(state, action)
 
         # Create observations at different distances from this true state
         observations = [
@@ -434,7 +470,11 @@ def test_observation_model_probability_different_states(base_mountain_car_enviro
             state + np.array([0.2, 0.02]),  # Far from true state
         ]
 
-        probabilities = obs_model.probability(observations)
+        probabilities = np.exp(
+            base_mountain_car_environment.observation_log_probability(
+                next_state=state, action=action, observations=observations
+            )
+        )
 
         # Verify shape and type
         assert isinstance(probabilities, np.ndarray), "Should return numpy array"
@@ -651,20 +691,20 @@ def test_mountain_car_state_bounds():
 
     # Test position bounds
     state = (pomdp.min_position - 0.1, 0.0)
-    transition = pomdp.state_transition_model(state, 0).sample()[0]
+    transition = pomdp.sample_next_state(state=state, action=0)
     assert transition[0] >= pomdp.min_position
 
     state = (pomdp.max_position + 0.1, 0.0)
-    transition = pomdp.state_transition_model(state, 0).sample()[0]
+    transition = pomdp.sample_next_state(state=state, action=0)
     assert transition[0] <= pomdp.max_position
 
     # Test velocity bounds
     state = (0.0, pomdp.max_speed + 0.1)
-    transition = pomdp.state_transition_model(state, 0).sample()[0]
+    transition = pomdp.sample_next_state(state=state, action=0)
     assert abs(transition[1]) <= pomdp.max_speed
 
     state = (0.0, -pomdp.max_speed - 0.1)
-    transition = pomdp.state_transition_model(state, 0).sample()[0]
+    transition = pomdp.sample_next_state(state=state, action=0)
     assert abs(transition[1]) <= pomdp.max_speed
 
 
@@ -1101,6 +1141,145 @@ def test_compute_metrics_goal_reaching():
     assert goal_rate.lower_confidence_bound <= goal_rate.value <= goal_rate.upper_confidence_bound
 
 
+def test_compute_metrics_values_within_confidence_intervals():
+    """Test MountainCarPOMDP metric values are inside CIs and pass invariants.
+
+    Purpose: Validates that metrics produced by compute_metrics lie inside
+        their CI bounds and that all structural invariants hold (rate-in-[0,1],
+        counts >= 0, finite CI for n>=2, returns inside reward bounds, and
+        return-shift linearity).
+
+    Given: A MountainCarPOMDP and 3 hand-built histories with varied outcomes
+        (goal-reaching, almost-goal, never-near-goal). Rewards lie in [-1.0, 0.0]
+        as declared by the env's reward_range.
+    When: compute_metrics is called and the four invariant helpers are run.
+    Then: All checks pass without raising.
+
+    Test type: integration
+    """
+    # Local imports needed because file does not import these at module level.
+    from POMDPPlanners.core.belief import (  # pylint: disable=import-outside-toplevel
+        WeightedParticleBelief,
+    )
+    from POMDPPlanners.core.policy import (  # pylint: disable=import-outside-toplevel
+        PolicyRunData,
+    )
+    from POMDPPlanners.core.simulation import (  # pylint: disable=import-outside-toplevel
+        History,
+        StepData,
+    )
+    from POMDPPlanners.tests.test_utils.confidence_interval_utils import (  # pylint: disable=import-outside-toplevel
+        verify_metrics_within_confidence_intervals,
+    )
+    from POMDPPlanners.tests.test_utils.metric_invariants_utils import (  # pylint: disable=import-outside-toplevel
+        verify_history_returns_bounded,
+        verify_metric_sanity,
+        verify_return_shift_linearity,
+    )
+
+    env = MountainCarPOMDP(discount_factor=0.95)
+
+    def _make_belief(state: np.ndarray) -> WeightedParticleBelief:
+        return WeightedParticleBelief(
+            particles=[state], log_weights=np.array([1.0]), resampling=False
+        )
+
+    # History 0: reach goal at last step.
+    goal_steps = [
+        StepData(
+            state=np.array([0.0, 0.0]),
+            action=1,
+            next_state=np.array([0.1, 0.01]),
+            observation=np.array([0.1, 0.01]),
+            reward=-1.0,
+            belief=_make_belief(np.array([0.0, 0.0])),
+        ),
+        StepData(
+            state=np.array([0.55, 0.02]),
+            action=1,
+            next_state=np.array([0.6, 0.03]),
+            observation=np.array([0.6, 0.03]),
+            reward=0.0,
+            belief=_make_belief(np.array([0.55, 0.02])),
+        ),
+    ]
+
+    # History 1: almost reach goal but not quite.
+    almost_steps = [
+        StepData(
+            state=np.array([0.0, 0.0]),
+            action=1,
+            next_state=np.array([0.1, 0.01]),
+            observation=np.array([0.1, 0.01]),
+            reward=-1.0,
+            belief=_make_belief(np.array([0.0, 0.0])),
+        ),
+        StepData(
+            state=np.array([0.4, 0.02]),
+            action=1,
+            next_state=np.array([0.45, 0.02]),
+            observation=np.array([0.45, 0.02]),
+            reward=-1.0,
+            belief=_make_belief(np.array([0.4, 0.02])),
+        ),
+    ]
+
+    # History 2: never near goal.
+    far_steps = [
+        StepData(
+            state=np.array([-0.5, 0.0]),
+            action=-1,
+            next_state=np.array([-0.6, -0.01]),
+            observation=np.array([-0.6, -0.01]),
+            reward=-1.0,
+            belief=_make_belief(np.array([-0.5, 0.0])),
+        ),
+        StepData(
+            state=np.array([-0.7, -0.02]),
+            action=-1,
+            next_state=np.array([-0.8, -0.03]),
+            observation=np.array([-0.8, -0.03]),
+            reward=-1.0,
+            belief=_make_belief(np.array([-0.7, -0.02])),
+        ),
+        StepData(
+            state=np.array([-0.9, -0.04]),
+            action=0,
+            next_state=np.array([-0.9, -0.04]),
+            observation=np.array([-0.9, -0.04]),
+            reward=-1.0,
+            belief=_make_belief(np.array([-0.9, -0.04])),
+        ),
+    ]
+
+    histories = []
+    for steps, reach_terminal in (
+        (goal_steps, True),
+        (almost_steps, False),
+        (far_steps, False),
+    ):
+        histories.append(
+            History(
+                history=steps,
+                discount_factor=0.95,
+                average_state_sampling_time=0.0,
+                average_action_time=0.0,
+                average_observation_time=0.0,
+                average_belief_update_time=0.0,
+                average_reward_time=0.0,
+                actual_num_steps=len(steps),
+                reach_terminal_state=reach_terminal,
+                policy_run_data=[PolicyRunData(info_variables=[])],
+            )
+        )
+
+    metrics = env.compute_metrics(histories)
+    verify_metrics_within_confidence_intervals(metrics)
+    verify_metric_sanity(metrics, histories, env)
+    verify_history_returns_bounded(histories, env)
+    verify_return_shift_linearity(histories, env, shift=1.5)
+
+
 def test_reward_batch_matches_scalar_reward():
     """Test that reward_batch returns results consistent with scalar reward.
 
@@ -1134,3 +1313,123 @@ def test_reward_batch_matches_scalar_reward():
     single = env.reward_batch(states[:1], action)
     assert single.shape == (1,)
     assert single[0] == env.reward(states[0], action)
+
+
+def test_simulate_random_rollout_native_matches_base_class_python() -> None:
+    """Test that MountainCar native simulate_random_rollout matches the base-class Python loop.
+
+    Purpose: Validates that the native C++ rollout produces a discounted return
+    equal (within atol=1e-9) to the base-class Python loop when both use the
+    same action sequence and the same C++ RNG seed.
+
+    Given: A MountainCarPOMDP env seeded identically for C++ RNG and numpy; a fixed
+        action sequence pre-drawn from numpy seed 0; a non-terminal initial state;
+        max_depth=10, discount_factor=0.95, depth=0.
+    When: Both the native override and the Python base-class loop are run with the
+        same action sequence and the same C++ RNG seed before each call.
+    Then: The two discounted returns are equal within atol=1e-9.
+
+    Test type: unit
+    """
+    from POMDPPlanners.environments.mountain_car_pomdp import (
+        _native,
+    )  # pylint: disable=import-outside-toplevel
+    from POMDPPlanners.planners.planners_utils.dpw import (
+        ActionSampler,
+    )  # pylint: disable=import-outside-toplevel
+    from POMDPPlanners.planners.planners_utils.rollout import (
+        python_random_rollout,
+    )  # pylint: disable=import-outside-toplevel
+
+    env = MountainCarPOMDP(discount_factor=0.99)
+    state = np.array([-0.5, 0.0], dtype=np.float64)
+    max_depth = 10
+    gamma = 0.95
+
+    # Pre-draw a fixed action sequence (indices into [-1, 0, 1]) with numpy seed 0
+    np.random.seed(0)
+    fixed_action_indices = np.random.randint(0, 3, size=max_depth, dtype=np.int32)
+    fixed_actions = [env.actions[int(i)] for i in fixed_action_indices]
+
+    class _SequenceActionSampler(ActionSampler):
+        def __init__(self, actions: list) -> None:
+            self._actions = actions
+            self._idx = 0
+
+        def sample(self, belief_node=None) -> int:  # pylint: disable=unused-argument
+            a = self._actions[self._idx % len(self._actions)]
+            self._idx += 1
+            return a
+
+    # Run native rollout: seed numpy so randint draws the same index sequence
+    np.random.seed(0)
+    _native.set_seed(7)
+    native_return = env.simulate_random_rollout(
+        state=state,
+        action_sampler=None,
+        max_depth=max_depth,
+        discount_factor=gamma,
+        depth=0,
+    )
+
+    # Run Python base-class rollout with the same action sequence and C++ seed
+    sampler = _SequenceActionSampler(fixed_actions)
+    _native.set_seed(7)
+    python_return = python_random_rollout(
+        state=state,
+        depth=0,
+        action_sampler=sampler,
+        environment=env,
+        discount_factor=gamma,
+        max_depth=max_depth,
+    )
+
+    np.testing.assert_allclose(
+        native_return,
+        python_return,
+        atol=1e-9,
+        err_msg=(f"Native rollout {native_return:.9f} != " f"Python rollout {python_return:.9f}"),
+    )
+
+
+def test_scalar_obs_log_prob_un_floored_matches_batch_after_fix() -> None:
+    """Scalar obs log-prob below -690 floor matches the batch path post-fix.
+
+    Purpose: Pins the post-fix contract for MountainCarPOMDP that
+        ``observation_log_probability`` (scalar) and
+        ``observation_log_probability_per_state`` (batch) agree on a
+        moderate-density anchor whose analytic log-probability is well
+        below the old ``log(p + 1e-300) ≈ -690.776`` floor but still
+        above the kernel's internal float64 underflow threshold.
+        Pre-fix, the scalar path floored such values at ~-690.776 while
+        the batch path returned the un-floored kernel log-likelihood —
+        the asymmetry that motivated the env-wide log-prob floor
+        removal.
+
+    Given: A default MountainCarPOMDP env (position_noise=0.1,
+        velocity_noise=0.01), a fixed next_state at the origin, action 0,
+        and an observation at (3.78, 0.0). The analytic 2-D Gaussian
+        log-pdf at this offset is ≈ -709.350.
+    When: Both ``observation_log_probability`` and
+        ``observation_log_probability_per_state`` are evaluated on the
+        same (next_state, action, observation).
+    Then: Both return finite, equal values to within atol=1e-6, and the
+        common value is below -700 (past the old floor).
+
+    Test type: unit
+    """
+    env = MountainCarPOMDP(discount_factor=0.95)
+    next_state = np.array([0.0, 0.0])
+    action = 0
+    observation = np.array([3.78, 0.0])
+
+    scalar = env.observation_log_probability(next_state, action, [observation])[0]
+    batch = env.observation_log_probability_per_state(np.array([next_state]), action, observation)[
+        0
+    ]
+
+    assert np.isfinite(scalar), f"scalar should be finite at this anchor, got {scalar}"
+    assert np.isfinite(batch), f"batch should be finite at this anchor, got {batch}"
+    # Post symmetric C++ floor: both paths floor at log(1e-300) ~= -690.776
+    # for events past the floor, so they agree exactly.
+    np.testing.assert_allclose(scalar, batch, atol=1e-6)

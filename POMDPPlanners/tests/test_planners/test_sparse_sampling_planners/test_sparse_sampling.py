@@ -98,6 +98,82 @@ def test_belief_tree_construction(planner, initial_belief):
     assert tree.height == planner.depth * 2 + 1
 
 
+def test_tree_structure_invariants(planner, initial_belief):
+    """Validate the structural invariants of a fully built sparse-sampling tree.
+
+    Purpose: ``test_belief_tree_construction`` checks the root attributes and
+    total tree height but does not pin down the per-node shape. This test
+    walks the entire tree and asserts the five structural invariants the
+    algorithm relies on, so that a regression that violates any of them
+    (e.g. an ActionNode acquiring two BeliefNode children, or a BeliefNode
+    appearing as a leaf) fails immediately.
+
+    Given: StandardSparseSamplingPlanner (depth=2, |actions|=3 for TigerPOMDP)
+        and a uniform initial belief
+    When: ``_build_tree`` constructs the lookahead tree from the root
+    Then: 1) Levels strictly alternate Belief -> Action -> Belief -> ...
+          2) Every non-leaf BeliefNode has exactly |actions| ActionNode
+             children, one per action
+          3) Every non-leaf ActionNode has exactly ``branching_factor``
+             BeliefNode children, one per sampled outcome
+          4) Every leaf is an ActionNode
+          5) Every root-to-leaf path has the same length
+
+    Test type: unit
+    """
+    tree = BeliefNode(belief=initial_belief)
+    planner._build_tree(belief_node=tree, current_depth=0)
+
+    actions = list(planner.environment.get_actions())  # type: ignore[attr-defined]
+    leaf_depths: list[int] = []
+
+    for node in PostOrderIter(tree):
+        # 4) leaves are ActionNodes; collect leaf depths for invariant 5
+        if node.is_leaf:
+            assert isinstance(
+                node, ActionNode
+            ), f"Leaf is {type(node).__name__}, expected ActionNode"
+            leaf_depths.append(node.depth)
+            continue
+
+        # 1) type alternation + 2/3) child-count rules per parent type
+        if isinstance(node, BeliefNode):
+            child_actions = []
+            for child in node.children:
+                assert isinstance(
+                    child, ActionNode
+                ), f"BeliefNode child is {type(child).__name__}, expected ActionNode"
+                child_actions.append(child.action)
+            assert len(node.children) == len(actions), (
+                f"BeliefNode has {len(node.children)} action children, "
+                f"expected {len(actions)} (one per action)"
+            )
+            assert set(child_actions) == set(actions), (
+                f"BeliefNode action children {child_actions} do not cover the "
+                f"action set {actions}"
+            )
+        elif isinstance(node, ActionNode):
+            assert len(node.children) == planner.branching_factor, (
+                f"Non-leaf ActionNode has {len(node.children)} belief children, "
+                f"expected {planner.branching_factor} (one per sampled outcome)"
+            )
+            for child in node.children:
+                assert isinstance(
+                    child, BeliefNode
+                ), f"ActionNode child is {type(child).__name__}, expected BeliefNode"
+        else:
+            raise AssertionError(f"Unknown node type: {type(node).__name__}")
+
+    # 5) every root-to-leaf path is the same length
+    assert leaf_depths, "Tree has no leaves"
+    assert len(set(leaf_depths)) == 1, f"Leaves at differing depths: {sorted(set(leaf_depths))}"
+    # Sanity-check the leaf depth: belief at depth 2k, action at depth 2k+1.
+    expected_leaf_depth = planner.depth * 2 + 1
+    assert (
+        leaf_depths[0] == expected_leaf_depth
+    ), f"Leaf depth {leaf_depths[0]} != expected {expected_leaf_depth}"
+
+
 def test_node_statistics(planner, initial_belief):
     """Test that node statistics are updated correctly
 
@@ -148,6 +224,34 @@ def test_leaf_node_statistics(planner, initial_belief):
             assert isinstance(node, ActionNode)
             assert node.visit_count == 1
             assert node.q_value == node.immediate_cost
+
+
+def test_no_redundant_scans_after_tree_construction(planner, initial_belief):
+    """Validates that tree construction visits every ActionNode exactly once.
+
+    Purpose: ``_update_non_leaf_action_node_statistics`` increments
+    ``visit_count`` with ``+= 1`` so the counter doubles as a canary for
+    redundant scans. After a single ``PostOrderIter`` pass over a freshly
+    constructed tree every ``ActionNode`` (leaf or non-leaf) must end at
+    ``visit_count == 1``; any value > 1 means the node was revisited and tree
+    construction did wasted work.
+
+    Given: StandardSparseSamplingPlanner with uniform initial belief, learned
+        belief tree with depth=2
+    When: _learn_belief_tree constructs the full tree and runs node statistics
+        once
+    Then: Every ActionNode in the tree has visit_count == 1
+
+    Test type: unit
+    """
+    tree = planner._learn_belief_tree(initial_belief)
+
+    for node in PostOrderIter(tree):
+        if isinstance(node, ActionNode):
+            assert node.visit_count == 1, (
+                f"ActionNode revisited during tree construction: "
+                f"visit_count={node.visit_count} > 1"
+            )
 
 
 def test_non_leaf_action_node_statistics(planner, initial_belief):

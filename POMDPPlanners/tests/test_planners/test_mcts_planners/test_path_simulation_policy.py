@@ -22,8 +22,6 @@ from POMDPPlanners.core.environment import (
     Environment,
     SpaceInfo,
     SpaceType,
-    StateTransitionModel,
-    ObservationModel,
 )
 from POMDPPlanners.core.policy import PolicyInfoVariable, PolicyRunData, PolicySpaceInfo
 from POMDPPlanners.core.tree import ActionNode, BeliefNode
@@ -48,17 +46,20 @@ class MockEnvironment(Environment):
             space_info=space_info,
         )
 
-    def state_transition_model(self, state, action):
-        mock_model = Mock(spec=StateTransitionModel)
-        mock_model.probability.return_value = 1.0
-        return mock_model
+    def sample_next_state(self, state, action, n_samples=1):
+        return state if n_samples == 1 else [state] * n_samples
 
-    def observation_model(self, next_state, action):
-        mock_model = Mock(spec=ObservationModel)
-        mock_model.probability.return_value = 1.0
-        return mock_model
+    def sample_observation(self, next_state, action, n_samples=1):
+        return 0 if n_samples == 1 else [0] * n_samples
 
-    def reward(self, state, action):
+    def transition_log_probability(self, state, action, next_states):
+        return np.zeros(len(next_states))
+
+    def observation_log_probability(self, next_state, action, observations):
+        return np.zeros(len(observations))
+
+    def reward(self, state, action, next_state=None):
+        del state, action, next_state
         return 1.0
 
     def is_terminal(self, state):
@@ -76,6 +77,9 @@ class MockEnvironment(Environment):
 
     def is_equal_observation(self, observation1, observation2):
         return observation1 == observation2
+
+    def hash_action(self, action):
+        return action
 
     def is_equal_state(self, state1, state2):
         return state1 == state2

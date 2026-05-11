@@ -1,10 +1,12 @@
 """Tests for the BetaZero planner module.
 
 This module tests the BetaZero planner, which extends
-DoubleProgressiveWideningMCTSPolicy with PUCT action selection,
+ArenaDoubleProgressiveWideningMCTSPolicy with PUCT action selection,
 network-based leaf value estimation, Q-weighted policy targets,
 and policy iteration training via fit().
 """
+
+# pylint: disable=protected-access
 
 import random
 
@@ -13,7 +15,7 @@ import pytest
 
 from POMDPPlanners.core.belief import WeightedParticleBelief, get_initial_belief
 from POMDPPlanners.core.policy import PolicyRunData
-from POMDPPlanners.core.tree import ActionNode, BeliefNode
+from POMDPPlanners.core.tree.arena import ACTION, BELIEF, Tree
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.planners.mcts_planners.beta_zero.beta_zero import BetaZero
 from POMDPPlanners.training import PolicyTrainer
@@ -143,7 +145,7 @@ class TestBetaZero:
         # TigerPOMDP is non-terminal by default, but the planner should still
         # handle the case gracefully. Use a normal belief and verify it works.
         belief = get_initial_belief(pomdp=tiger_env, n_particles=5, resampling=True)
-        actions, run_data = planner.action(belief)
+        actions, _ = planner.action(belief)
 
         assert isinstance(actions, list)
         assert len(actions) >= 1
@@ -162,8 +164,7 @@ class TestBetaZero:
 
         Test type: unit
         """
-        belief_node = BeliefNode(belief=initial_belief)
-        value = tiger_planner._network_leaf_value(belief_node)
+        value = tiger_planner._network_leaf_value(initial_belief)
 
         assert isinstance(value, float)
 
@@ -197,17 +198,18 @@ class TestBetaZero:
         particles = [["tiger_left"], ["tiger_right"]]
         log_weights = np.log(np.array([0.5, 0.5]))
         belief = WeightedParticleBelief(particles, log_weights)
-        tree = BeliefNode(belief=belief)
+        tree = Tree()
+        root_id = tree.add_belief_node(belief)
 
-        child1 = ActionNode(action="listen", parent=tree)
-        child1.q_value = 2.0
-        child1.visit_count = 10
+        child1_id = tree.add_action_node(action="listen", parent_id=root_id)
+        tree.q_value[child1_id] = 2.0
+        tree.visit_count[child1_id] = 10
 
-        child2 = ActionNode(action="open_left", parent=tree)
-        child2.q_value = 1.0
-        child2.visit_count = 5
+        child2_id = tree.add_action_node(action="open_left", parent_id=root_id)
+        tree.q_value[child2_id] = 1.0
+        tree.visit_count[child2_id] = 5
 
-        target = planner._compute_q_weighted_policy_target(tree)
+        target = planner._compute_q_weighted_policy_target(tree, root_id)
 
         # Manual computation:
         # softmax(Q): Q = [2.0, 1.0], shifted = [1.0, 0.0],
@@ -272,17 +274,18 @@ class TestBetaZero:
         particles = [["tiger_left"], ["tiger_right"]]
         log_weights = np.log(np.array([0.5, 0.5]))
         belief = WeightedParticleBelief(particles, log_weights)
-        tree = BeliefNode(belief=belief)
+        tree = Tree()
+        root_id = tree.add_belief_node(belief)
 
-        child1 = ActionNode(action="listen", parent=tree)
-        child1.q_value = 100.0  # Extreme Q-value should not matter
-        child1.visit_count = 10
+        child1_id = tree.add_action_node(action="listen", parent_id=root_id)
+        tree.q_value[child1_id] = 100.0  # Extreme Q-value should not matter
+        tree.visit_count[child1_id] = 10
 
-        child2 = ActionNode(action="open_left", parent=tree)
-        child2.q_value = -100.0
-        child2.visit_count = 5
+        child2_id = tree.add_action_node(action="open_left", parent_id=root_id)
+        tree.q_value[child2_id] = -100.0
+        tree.visit_count[child2_id] = 5
 
-        target = planner._compute_q_weighted_policy_target(tree)
+        target = planner._compute_q_weighted_policy_target(tree, root_id)
 
         # With z_q=0, logits = 0*log(softmax_q) + 1*log(n_term)/1
         # = log([10/15, 5/15]) => probs proportional to [10, 5]
@@ -328,17 +331,18 @@ class TestBetaZero:
         particles = [["tiger_left"], ["tiger_right"]]
         log_weights = np.log(np.array([0.5, 0.5]))
         belief = WeightedParticleBelief(particles, log_weights)
-        tree = BeliefNode(belief=belief)
+        tree = Tree()
+        root_id = tree.add_belief_node(belief)
 
-        child1 = ActionNode(action="listen", parent=tree)
-        child1.q_value = 2.0
-        child1.visit_count = 1  # Very low visit count should not matter
+        child1_id = tree.add_action_node(action="listen", parent_id=root_id)
+        tree.q_value[child1_id] = 2.0
+        tree.visit_count[child1_id] = 1  # Very low visit count should not matter
 
-        child2 = ActionNode(action="open_left", parent=tree)
-        child2.q_value = 1.0
-        child2.visit_count = 1000  # Very high visit count should not matter
+        child2_id = tree.add_action_node(action="open_left", parent_id=root_id)
+        tree.q_value[child2_id] = 1.0
+        tree.visit_count[child2_id] = 1000  # Very high visit count should not matter
 
-        target = planner._compute_q_weighted_policy_target(tree)
+        target = planner._compute_q_weighted_policy_target(tree, root_id)
 
         # softmax([2.0, 1.0]): shifted = [1.0, 0.0], exp = [e, 1]
         q_vals = np.array([2.0, 1.0])
@@ -387,17 +391,18 @@ class TestBetaZero:
         particles = [["tiger_left"], ["tiger_right"]]
         log_weights = np.log(np.array([0.5, 0.5]))
         belief = WeightedParticleBelief(particles, log_weights)
-        tree = BeliefNode(belief=belief)
+        tree = Tree()
+        root_id = tree.add_belief_node(belief)
 
-        child1 = ActionNode(action="listen", parent=tree)
-        child1.q_value = 5.0
-        child1.visit_count = 20
+        child1_id = tree.add_action_node(action="listen", parent_id=root_id)
+        tree.q_value[child1_id] = 5.0
+        tree.visit_count[child1_id] = 20
 
-        child2 = ActionNode(action="open_left", parent=tree)
-        child2.q_value = 1.0
-        child2.visit_count = 5
+        child2_id = tree.add_action_node(action="open_left", parent_id=root_id)
+        tree.q_value[child2_id] = 1.0
+        tree.visit_count[child2_id] = 5
 
-        target = planner._compute_q_weighted_policy_target(tree)
+        target = planner._compute_q_weighted_policy_target(tree, root_id)
 
         assert (
             np.max(target) > 0.99
@@ -464,9 +469,8 @@ class TestBetaZero:
             training_batch_size=4,
         )
 
-        initial_belief_fn = lambda: get_initial_belief(
-            pomdp=tiger_env, n_particles=5, resampling=True
-        )
+        def initial_belief_fn():
+            return get_initial_belief(pomdp=tiger_env, n_particles=5, resampling=True)
 
         trainer = PolicyTrainer(
             policy=planner,
@@ -535,3 +539,208 @@ class TestBetaZero:
 
         assert isinstance(cid, str)
         assert len(cid) > 0
+
+    def test_tree_structure_after_plan(self, tiger_planner, initial_belief):
+        """Test that the tree built by _learn_tree satisfies arena invariants.
+
+        Purpose: Validates that BetaZero's _learn_tree produces an arena tree
+        with the expected structural and bookkeeping invariants after a real
+        planning call.
+
+        Given: A BetaZero planner and an initial belief for TigerPOMDP.
+        When: _learn_tree(belief) is called and the resulting tree is walked
+              from the root via BFS.
+        Then: The root is a BELIEF node with no parent and no observation;
+              every non-root node has a parent; visit_count is non-negative
+              everywhere; BELIEF and ACTION kinds strictly alternate down the
+              tree; BELIEF nodes carry a belief and ACTION nodes carry an
+              action; the maximum BFS depth is bounded by 2*planner.depth + 2;
+              and parent visit_count is at least the sum of children visits.
+
+        Test type: unit
+        """
+        tree, root_id = tiger_planner._learn_tree(initial_belief)
+
+        # Root invariants.
+        assert tree.kind[root_id] == BELIEF
+        assert tree.parent_id[root_id] is None
+        assert tree.observation[root_id] is None
+        assert len(tree.children_ids[root_id]) > 0
+
+        # Walk the tree via BFS to check invariants and depth bound.
+        max_observed_depth = 0
+        frontier = [(root_id, 0)]
+        while frontier:
+            node_id, depth_d = frontier.pop()
+            max_observed_depth = max(max_observed_depth, depth_d)
+
+            # Visit count non-negative everywhere.
+            assert tree.visit_count[node_id] >= 0
+
+            node_kind = tree.kind[node_id]
+            if node_kind == BELIEF:
+                assert tree.belief[node_id] is not None
+            elif node_kind == ACTION:
+                assert tree.action[node_id] is not None
+            else:
+                pytest.fail(f"Unexpected node kind {node_kind} at node {node_id}")
+
+            children = tree.children_ids[node_id]
+
+            # BELIEF <-> ACTION alternation.
+            for child_id in children:
+                if node_kind == BELIEF:
+                    assert tree.kind[child_id] == ACTION, (
+                        f"BELIEF node {node_id} has non-ACTION child {child_id} "
+                        f"with kind {tree.kind[child_id]}"
+                    )
+                else:
+                    assert tree.kind[child_id] == BELIEF, (
+                        f"ACTION node {node_id} has non-BELIEF child {child_id} "
+                        f"with kind {tree.kind[child_id]}"
+                    )
+                assert tree.parent_id[child_id] is not None
+
+            # Parent visits >= sum of children visits.
+            if children:
+                children_visits_sum = sum(tree.visit_count[cid] for cid in children)
+                assert tree.visit_count[node_id] >= children_visits_sum, (
+                    f"Node {node_id} visit_count {tree.visit_count[node_id]} "
+                    f"< sum of children visits {children_visits_sum}"
+                )
+
+            for child_id in children:
+                frontier.append((child_id, depth_d + 1))
+
+        assert max_observed_depth <= 2 * tiger_planner.depth + 2
+
+    def test_action_priors_sum_to_one(self, tiger_planner):
+        """Test that _discrete_action_priors returns a valid probability vector.
+
+        Purpose: Validates that BetaZero's _discrete_action_priors normalizes
+        the network output to a non-negative vector that sums to one over the
+        belief node's action children.
+
+        Given: A manually constructed arena tree with a root belief node and
+               two valid Tiger action children (listen, open_left).
+        When: _discrete_action_priors(tree=tree, belief_id=root_id) is called.
+        Then: The returned array has length equal to the number of action
+              children; all entries are non-negative; and the entries sum to 1.
+
+        Test type: unit
+        """
+        particles = [["tiger_left"], ["tiger_right"]]
+        log_weights = np.log(np.array([0.5, 0.5]))
+        belief = WeightedParticleBelief(particles, log_weights)
+        tree = Tree()
+        root_id = tree.add_belief_node(belief)
+
+        tree.add_action_node(action="listen", parent_id=root_id)
+        tree.add_action_node(action="open_left", parent_id=root_id)
+
+        priors = tiger_planner._discrete_action_priors(tree=tree, belief_id=root_id)
+
+        assert len(priors) == len(tree.children_ids[root_id])
+        assert np.all(priors >= 0.0)
+        assert np.isclose(priors.sum(), 1.0, atol=1e-6)
+
+
+def test_sample_continuous_action_does_not_clip_log_std(tiger_planner):
+    """`_sample_continuous_action` must respect the network's `log_std` without clipping.
+
+    Purpose: Pins the continuous-action sampling formula to
+    ``std = exp(log_std) + 0.1`` (no clip on ``log_std``). Two other
+    code paths in this module — ``BetaZeroActionSampler._sample_continuous``
+    and ``_compute_continuous_policy_target`` — already store/sample
+    unclipped ``log_std``; a previous implementation of
+    ``_sample_continuous_action`` clipped to ``[-5, 2]``, producing a
+    train/sample mismatch where the policy target said one thing and
+    the sampler interpreted it as another.
+
+    Given: A BetaZero planner and a synthetic ``policy_output =
+        [mean=0, log_std=10]``. Under the clipped formula
+        ``std = exp(min(10, 2)) + 0.1 ≈ 7.49``; under the correct
+        formula ``std = exp(10) + 0.1 ≈ 22026.6``.
+    When: A large number of samples is drawn from
+        ``_sample_continuous_action(policy_output)``.
+    Then: The empirical std is consistent with the unclipped formula
+        (≫ 7.5), distinguishing it from the clipped path.
+
+    Test type: unit
+    """
+    np.random.seed(42)
+    mean_part = np.array([0.0], dtype=np.float64)
+    log_std_part = np.array([10.0], dtype=np.float64)
+    policy_output = np.concatenate([mean_part, log_std_part])
+
+    samples = np.array(
+        [tiger_planner._sample_continuous_action(policy_output)[0] for _ in range(10_000)]
+    )
+    empirical_std = float(samples.std())
+
+    # exp(2) + 0.1 ≈ 7.5 (clipped path); exp(10) + 0.1 ≈ 22026.6 (no clip).
+    # Use a generous lower bound that only the unclipped path can satisfy.
+    assert empirical_std > 1_000.0, (
+        f"sampler must not clip log_std; empirical std {empirical_std:.2f} "
+        f"is consistent with clipping (clipped expected ≈ 7.5, "
+        f"unclipped expected ≈ 22026)"
+    )
+
+
+def test_sample_existing_belief_node_recovers_per_action_immediate_reward(tiger_env):
+    """Pin per-action immediate reward stash so sibling actions don't overwrite each other.
+
+    Purpose: Regression — _sample_new_belief_node previously stashed immediate_reward on
+    the parent belief id, so sibling _sample_new_belief_node calls overwrote each other and
+    _sample_existing_belief_node read back the wrong action's reward. Same shape as the
+    PFT_DPW regression test.
+
+    Given: A tree with two action children of one belief root in TigerPOMDP, where the
+    two actions yield very different immediate rewards under a uniform 0.5/0.5 belief
+    (open_left ≈ open_right ≈ -45 are symmetric, so we use listen vs open_left whose
+    expected rewards differ by far more than any noise floor: listen costs -1, open_*
+    expected reward is (10-100)/2 = -45)
+    When: _sample_new_belief_node is called for both actions, then _sample_existing_belief_node
+    is called back for ``listen``
+    Then: The recovered immediate_reward equals the value originally returned for ``listen``,
+    not the value for ``open_left``
+
+    Test type: regression
+    """
+    np.random.seed(42)
+    random.seed(42)
+    sampler = DiscreteActionSampler(tiger_env.get_actions())
+    planner = BetaZero(
+        environment=tiger_env,
+        discount_factor=0.95,
+        depth=3,
+        name="test_per_action_stash",
+        action_sampler=sampler,
+        n_simulations=10,
+        state_dim=1,
+    )
+
+    belief = get_initial_belief(pomdp=tiger_env, n_particles=20, resampling=True)
+    tree = Tree()
+    root_id = tree.add_belief_node(belief)
+    listen_id = tree.add_action_node(action="listen", parent_id=root_id)
+    open_left_id = tree.add_action_node(action="open_left", parent_id=root_id)
+
+    _, r_listen_in = planner._sample_new_belief_node(
+        tree=tree, belief_id=root_id, action_id=listen_id
+    )
+    _, r_open_in = planner._sample_new_belief_node(
+        tree=tree, belief_id=root_id, action_id=open_left_id
+    )
+
+    assert (
+        abs(r_listen_in - r_open_in) > 10
+    ), f"setup invariant broken: r_listen={r_listen_in}, r_open={r_open_in}"
+
+    _, r_listen_recovered = planner._sample_existing_belief_node(
+        tree=tree, belief_id=root_id, action_id=listen_id
+    )
+    assert r_listen_recovered == pytest.approx(r_listen_in, abs=1e-9), (
+        f"_sample_existing_belief_node returned {r_listen_recovered}, "
+        f"expected {r_listen_in} (got {r_open_in} = open_left reward instead?)"
+    )

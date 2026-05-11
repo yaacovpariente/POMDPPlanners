@@ -1,0 +1,95 @@
+"""Type stubs for the native C++ Safety Ant Velocity sampling extension.
+
+Declares the Python-visible API of the ``_native`` module so pyright can
+type-check modules that import from it. The runtime implementation lives
+in ``_cpp/safety_ant_velocity.cpp``.
+"""
+
+# pylint: disable=unused-argument,unnecessary-ellipsis
+
+from typing import List, Sequence, Union
+
+import numpy as np
+from numpy.typing import NDArray
+
+def set_seed(seed: int) -> None:
+    """Seed the module-level RNG used by ``sample()`` / ``batch_sample()`` calls."""
+    ...
+
+def simulate_rollout(
+    initial_state: NDArray[np.floating],
+    action_indices: NDArray[np.int32],
+    force_scales: NDArray[np.floating],
+    max_depth: int,
+    start_depth: int,
+    discount_factor: float,
+    dt: float,
+    mass: float,
+    damping: float,
+    max_force: float,
+    safe_velocity_threshold: float,
+    safety_violation_penalty: float,
+    movement_reward_scale: float,
+) -> float:
+    """Native random rollout for SafeAntVelocityPOMDP.
+
+    Walks the physics model in C++ for ``max_depth - start_depth`` steps
+    (or until terminal) and returns the discounted sum of rewards.
+    ``action_indices`` must be a pre-drawn integer array of length
+    ``max_depth - start_depth``.
+    """
+    ...
+
+class SafeAntVelocityTransitionCpp:
+    """Native damped-force + uniform-angle transition sampler."""
+
+    state: NDArray[np.float64]
+    action: int
+    dt: float
+    mass: float
+    damping: float
+    max_force: float
+    force_scales: NDArray[np.float64]
+
+    def __init__(
+        self,
+        state: Union[Sequence[float], NDArray[np.floating]],
+        action: int,
+        dt: float,
+        mass: float,
+        damping: float,
+        max_force: float,
+        force_scales: NDArray[np.floating],
+    ) -> None: ...
+    def sample(self, n_samples: int = 1) -> List[NDArray[np.float64]]: ...
+    def batch_sample(self, particles: NDArray[np.floating]) -> NDArray[np.float64]: ...
+    def set_state(self, state: Union[Sequence[float], NDArray[np.floating]]) -> None:
+        """Rewrite the kernel's stored state in-place. Use to reuse a cached kernel."""
+        ...
+
+class SafeAntVelocityObservationCpp:
+    """Native identity-mean diagonal-Gaussian observation sampler."""
+
+    next_state: NDArray[np.float64]
+    action: int
+    mean: NDArray[np.float64]
+
+    def __init__(
+        self,
+        next_state: Union[Sequence[float], NDArray[np.floating]],
+        action: int,
+        covariance: NDArray[np.floating],
+    ) -> None: ...
+    def sample(self, n_samples: int = 1) -> List[NDArray[np.float64]]: ...
+    def probability(
+        self,
+        values: Union[Sequence[NDArray[np.floating]], NDArray[np.floating]],
+    ) -> NDArray[np.float64]: ...
+    def batch_log_likelihood(
+        self,
+        next_particles: NDArray[np.floating],
+        observation: NDArray[np.floating],
+    ) -> NDArray[np.float64]: ...
+    def set_next_state(self, next_state: Union[Sequence[float], NDArray[np.floating]]) -> None:
+        """Rewrite the kernel's stored next_state in-place. Use to reuse a cached kernel."""
+        ...

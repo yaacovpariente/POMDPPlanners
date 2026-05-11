@@ -9,7 +9,7 @@ This module tests the environment base classes, focusing on:
 
 import random
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, List, Optional
 
 import numpy as np
 import pytest
@@ -17,10 +17,8 @@ import pytest
 from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.core.environment import (
     Environment,
-    ObservationModel,
     SpaceInfo,
     SpaceType,
-    StateTransitionModel,
 )
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.utils.logger import reset_logger_state
@@ -31,22 +29,6 @@ random.seed(42)
 
 
 class MockDistribution(Distribution):
-    def sample(self, n_samples: int = 1) -> List[np.ndarray]:
-        return [np.array([1, 2])] * n_samples
-
-    def probability(self, values: List[np.ndarray]) -> np.ndarray:
-        return np.array([1.0] * len(values))
-
-
-class MockStateTransitionModel(StateTransitionModel):
-    def sample(self, n_samples: int = 1) -> List[np.ndarray]:
-        return [np.array([1, 2])] * n_samples
-
-    def probability(self, values: List[np.ndarray]) -> np.ndarray:
-        return np.array([1.0] * len(values))
-
-
-class MockObservationModel(ObservationModel):
     def sample(self, n_samples: int = 1) -> List[np.ndarray]:
         return [np.array([1, 2])] * n_samples
 
@@ -74,13 +56,23 @@ class MockEnvironment(Environment):
         )
         self.test_array = test_array if test_array is not None else np.array([1, 2, 3])
 
-    def state_transition_model(self, state: np.ndarray, action: np.ndarray) -> StateTransitionModel:
-        return MockStateTransitionModel(state, action)
+    def sample_next_state(self, state, action, n_samples: int = 1):
+        if n_samples == 1:
+            return np.array([1, 2])
+        return [np.array([1, 2])] * n_samples
 
-    def observation_model(self, next_state: np.ndarray, action: np.ndarray) -> ObservationModel:
-        return MockObservationModel(next_state, action)
+    def sample_observation(self, next_state, action, n_samples: int = 1):
+        if n_samples == 1:
+            return np.array([1, 2])
+        return [np.array([1, 2])] * n_samples
 
-    def reward(self, state: np.ndarray, action: np.ndarray) -> float:
+    def transition_log_probability(self, state, action, next_states) -> np.ndarray:
+        return np.zeros(len(next_states))
+
+    def observation_log_probability(self, next_state, action, observations) -> np.ndarray:
+        return np.zeros(len(observations))
+
+    def reward(self, state: np.ndarray, action: np.ndarray, next_state: Any = None) -> float:
         return 1.0
 
     def is_terminal(self, state: np.ndarray) -> bool:
@@ -94,6 +86,9 @@ class MockEnvironment(Environment):
 
     def is_equal_observation(self, observation1: np.ndarray, observation2: np.ndarray) -> bool:
         return np.array_equal(observation1, observation2)
+
+    def hash_action(self, action):
+        return action
 
 
 class DifferentEnvironment(Environment):
@@ -114,13 +109,23 @@ class DifferentEnvironment(Environment):
             debug=debug,
         )
 
-    def state_transition_model(self, state: np.ndarray, action: np.ndarray) -> StateTransitionModel:
-        return MockStateTransitionModel(state, action)
+    def sample_next_state(self, state, action, n_samples: int = 1):
+        if n_samples == 1:
+            return np.array([1, 2])
+        return [np.array([1, 2])] * n_samples
 
-    def observation_model(self, next_state: np.ndarray, action: np.ndarray) -> ObservationModel:
-        return MockObservationModel(next_state, action)
+    def sample_observation(self, next_state, action, n_samples: int = 1):
+        if n_samples == 1:
+            return np.array([1, 2])
+        return [np.array([1, 2])] * n_samples
 
-    def reward(self, state: np.ndarray, action: np.ndarray) -> float:
+    def transition_log_probability(self, state, action, next_states) -> np.ndarray:
+        return np.zeros(len(next_states))
+
+    def observation_log_probability(self, next_state, action, observations) -> np.ndarray:
+        return np.zeros(len(observations))
+
+    def reward(self, state: np.ndarray, action: np.ndarray, next_state: Any = None) -> float:
         return 1.0
 
     def is_terminal(self, state: np.ndarray) -> bool:
@@ -134,6 +139,9 @@ class DifferentEnvironment(Environment):
 
     def is_equal_observation(self, observation1: np.ndarray, observation2: np.ndarray) -> bool:
         return np.array_equal(observation1, observation2)
+
+    def hash_action(self, action):
+        return action
 
 
 @pytest.fixture
@@ -476,3 +484,53 @@ class TestEnvironmentLogger:
         env.logger.info("Test message to trigger directory creation")
         # Note: In queue-based logging, the logs directory is created by the writer thread
         # when the first message is processed, so we can't immediately assert its existence
+
+
+class TestHashObservationDefault:
+    """Default ``Environment.hash_observation`` behaviour."""
+
+    def test_returns_observation_when_already_hashable(self, base_environment: MockEnvironment):
+        """Default hash_observation returns the observation if already hashable.
+
+        Purpose: Validates the default identity-based key for hashable observations
+
+        Given: MockEnvironment instance and a hashable observation (string)
+        When: hash_observation is called with the hashable observation
+        Then: The returned key equals the observation itself
+
+        Test type: unit
+        """
+        assert base_environment.hash_observation("o1") == "o1"
+        assert base_environment.hash_observation((1, 2, 3)) == (1, 2, 3)
+        assert base_environment.hash_observation(7) == 7
+
+    def test_raises_not_implemented_for_unhashable(self, base_environment: MockEnvironment):
+        """Default hash_observation raises NotImplementedError for unhashable inputs.
+
+        Purpose: Validates that unmigrated envs surface a clear error for ndarray observations
+
+        Given: MockEnvironment instance and a non-hashable np.ndarray observation
+        When: hash_observation is called with the ndarray
+        Then: NotImplementedError is raised mentioning the env class name
+
+        Test type: unit
+        """
+        observation = np.array([1.0, 2.0, 3.0])
+        with pytest.raises(NotImplementedError, match="MockEnvironment"):
+            base_environment.hash_observation(observation)
+
+    def test_returned_key_is_consistent_with_is_equal_observation(
+        self, base_environment: MockEnvironment
+    ):
+        """Default hash_observation respects the equality contract for hashables.
+
+        Purpose: Validates is_equal_observation(a, b) implies equal hashes for default impl
+
+        Given: MockEnvironment and two equal hashable observations plus an unequal pair
+        When: hash_observation is computed for each pair
+        Then: Equal observations share a key; unequal observations differ in key
+
+        Test type: unit
+        """
+        assert base_environment.hash_observation("a") == base_environment.hash_observation("a")
+        assert base_environment.hash_observation("a") != base_environment.hash_observation("b")

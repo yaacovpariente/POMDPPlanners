@@ -5,22 +5,19 @@ Python reference (geometry helpers in ``continuous_laser_tag_geometry`` +
 ``CovarianceParameterizedMultivariateNormal``) up to statistical noise in
 the samples and up to floating-point tolerance in the PDF / log-likelihood
 paths. Generic assertion helpers live in ``_native_parity.py``; this module
-wires the laser-tag-specific models through them and adds the batch-entry
-parity tests called out in the implementation plan.
+wires the laser-tag-specific C++ kernels through them and adds the batch-
+entry parity tests called out in the implementation plan.
 """
 
 import numpy as np
 import pytest
 
-from POMDPPlanners.core.environment import ObservationModel, StateTransitionModel
 from POMDPPlanners.environments.laser_tag_pomdp import _native
 from POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_geometry import (
     compute_laser_measurements,
 )
 from POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_pomdp import (
-    ContinuousLaserTagObservationModel,
     ContinuousLaserTagPOMDP,
-    ContinuousLaserTagStateTransitionModel,
 )
 from POMDPPlanners.tests.test_environments import _native_parity
 from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
@@ -33,89 +30,54 @@ def _env_fixture():
     return ContinuousLaserTagPOMDP(discount_factor=0.95, walls=[])
 
 
+def _build_transition_kernel(
+    env: ContinuousLaserTagPOMDP,
+    state: np.ndarray,
+    action: np.ndarray,
+) -> "_native.ContinuousLaserTagTransitionCpp":
+    """Construct a fresh C++ transition kernel matching the env's parameters."""
+    return _native.ContinuousLaserTagTransitionCpp(
+        state=np.asarray(state, dtype=np.float64),
+        action=np.asarray(action, dtype=np.float64),
+        robot_covariance=env.robot_transition_cov_matrix,
+        opponent_covariance=env.opponent_transition_cov_matrix,
+        pursuit_speed=env.pursuit_speed,
+        walls=np.asarray(env.walls, dtype=np.float64).reshape(-1, 4),
+        grid_size=np.asarray(env.grid_size, dtype=np.float64),
+        robot_radius=env.robot_radius,
+        opponent_radius=env.opponent_radius,
+        tag_radius=env.tag_radius,
+    )
+
+
+def _build_observation_kernel(
+    env: ContinuousLaserTagPOMDP,
+    next_state: np.ndarray,
+    action: np.ndarray,
+) -> "_native.ContinuousLaserTagObservationCpp":
+    """Construct a fresh C++ observation kernel matching the env's parameters."""
+    return _native.ContinuousLaserTagObservationCpp(
+        next_state=np.asarray(next_state, dtype=np.float64),
+        action=np.asarray(action, dtype=np.float64),
+        measurement_noise=env.measurement_noise,
+        walls=np.asarray(env.walls, dtype=np.float64).reshape(-1, 4),
+        grid_size=np.asarray(env.grid_size, dtype=np.float64),
+        opponent_radius=env.opponent_radius,
+    )
+
+
 @pytest.fixture(name="transition")
 def _transition_fixture(env):
     state = np.array([3.0, 3.0, 8.0, 5.0, 0.0])
     action = np.array([1.0, 0.0, 0.0])
-    return env.state_transition_model(state=state, action=action)
+    return _build_transition_kernel(env, state, action)
 
 
 @pytest.fixture(name="observation")
 def _observation_fixture(env):
     next_state = np.array([3.0, 3.0, 8.0, 5.0, 0.0])
     action = np.array([1.0, 0.0, 0.0])
-    return env.observation_model(next_state=next_state, action=action)
-
-
-# ---------------------------------------------------------------------------
-# ABC / typing contract
-# ---------------------------------------------------------------------------
-
-
-def test_transition_is_registered_as_state_transition_model(transition):
-    """Shim passes isinstance check for StateTransitionModel after register().
-
-    Purpose: Validates the ABC virtual-subclass registration applied in the
-    Python shim so downstream polymorphic callers see the C++ class as a
-    valid StateTransitionModel.
-
-    Given: A ContinuousLaserTagStateTransitionModel produced by the env's factory.
-    When: isinstance is checked against StateTransitionModel.
-    Then: It returns True.
-
-    Test type: unit
-    """
-    _native_parity.assert_abc_registration(transition, StateTransitionModel)
-
-
-def test_observation_is_registered_as_observation_model(observation):
-    """Shim passes isinstance check for ObservationModel after register().
-
-    Purpose: Same as the transition case, for the observation model.
-
-    Given: A ContinuousLaserTagObservationModel produced by the env's factory.
-    When: isinstance is checked against ObservationModel.
-    Then: It returns True.
-
-    Test type: unit
-    """
-    _native_parity.assert_abc_registration(observation, ObservationModel)
-
-
-def test_transition_is_not_abstract():
-    """ContinuousLaserTagStateTransitionModel is instantiable.
-
-    Purpose: Guards against ABC.register masking missing slot implementations
-    on the C++ side.
-
-    Given: The ContinuousLaserTagStateTransitionModel class object.
-    When: __abstractmethods__ is inspected.
-    Then: The set is empty.
-
-    Test type: unit
-    """
-    abstract_methods = getattr(
-        ContinuousLaserTagStateTransitionModel, "__abstractmethods__", frozenset()
-    )
-    assert abstract_methods == frozenset()
-
-
-def test_observation_is_not_abstract():
-    """ContinuousLaserTagObservationModel is instantiable.
-
-    Purpose: Guards against ABC.register masking missing slot implementations
-    on the C++ side.
-
-    Given: The ContinuousLaserTagObservationModel class object.
-    When: __abstractmethods__ is inspected.
-    Then: The set is empty.
-
-    Test type: unit
-    """
-    abstract_methods = getattr(
-        ContinuousLaserTagObservationModel, "__abstractmethods__", frozenset()
-    )
-    assert abstract_methods == frozenset()
+    return _build_observation_kernel(env, next_state, action)
 
 
 # ---------------------------------------------------------------------------
@@ -146,7 +108,7 @@ def test_transition_robot_move_moments_match_spec(env):
     """
     state = np.array([3.0, 3.0, 3.0, 3.0, 0.0])
     action = np.array([0.5, -0.2, 0.0])
-    transition = env.state_transition_model(state=state, action=action)
+    transition = _build_transition_kernel(env, state, action)
 
     _native.set_seed(12345)
     samples = np.asarray(transition.sample(200_000))
@@ -168,7 +130,7 @@ def test_observation_mean_matches_python_geometry(env):
     centre is bit-identical across both paths.
 
     Given: A non-terminal state with the robot in the arena interior.
-    When: ``observation.mean`` is read from the native model and
+    When: ``observation.mean`` is read from the native kernel and
         ``compute_laser_measurements`` is called on the same state in Python.
     Then: The two 8-vectors agree to absolute tolerance 1e-12.
 
@@ -176,7 +138,7 @@ def test_observation_mean_matches_python_geometry(env):
     """
     state = np.array([3.0, 3.0, 8.0, 5.0, 0.0])
     action = np.array([1.0, 0.0, 0.0])
-    obs_model = env.observation_model(next_state=state, action=action)
+    obs_model = _build_observation_kernel(env, state, action)
 
     native_mean = np.asarray(obs_model.mean)
     python_mean = compute_laser_measurements(
@@ -207,7 +169,7 @@ def test_observation_probability_matches_python_reference_on_grid(env):
     """
     next_state = np.array([3.0, 3.0, 8.0, 5.0, 0.0])
     action = np.array([1.0, 0.0, 0.0])
-    obs_model = env.observation_model(next_state=next_state, action=action)
+    obs_model = _build_observation_kernel(env, next_state, action)
 
     mean = compute_laser_measurements(
         next_state[:2], next_state[2:4], env.opponent_radius, env.walls, env.grid_size
@@ -244,7 +206,7 @@ def test_transition_sample_is_deterministic_under_set_seed(env):
     """
     state = np.array([3.0, 3.0, 8.0, 5.0, 0.0])
     action = np.array([1.0, 0.5, 0.0])
-    transition = env.state_transition_model(state=state, action=action)
+    transition = _build_transition_kernel(env, state, action)
     _native_parity.assert_determinism_under_seed(
         model=transition,
         seed_fn=_native.set_seed,
@@ -266,7 +228,7 @@ def test_observation_sample_is_deterministic_under_set_seed(env):
     """
     state = np.array([3.0, 3.0, 8.0, 5.0, 0.0])
     action = np.array([1.0, 0.0, 0.0])
-    obs_model = env.observation_model(next_state=state, action=action)
+    obs_model = _build_observation_kernel(env, state, action)
     _native_parity.assert_determinism_under_seed(
         model=obs_model,
         seed_fn=_native.set_seed,
@@ -278,9 +240,9 @@ def test_observation_sample_is_deterministic_under_set_seed(env):
 def test_transition_sample_returns_list_of_1d_ndarrays(transition):
     """transition.sample() preserves the pre-port List[np.ndarray] contract.
 
-    Purpose: Guards against accidental API drift on the transition model.
+    Purpose: Guards against accidental API drift on the transition kernel.
 
-    Given: A ContinuousLaserTagStateTransitionModel.
+    Given: A native ContinuousLaserTagTransitionCpp kernel.
     When: sample(3) is called.
     Then: The return value is a list of exactly three 1-D ndarrays of
         length 5.
@@ -298,9 +260,9 @@ def test_transition_sample_returns_list_of_1d_ndarrays(transition):
 def test_observation_sample_returns_list_of_1d_ndarrays(observation):
     """observation.sample() preserves the pre-port List[np.ndarray] contract.
 
-    Purpose: Guards against accidental API drift on the observation model.
+    Purpose: Guards against accidental API drift on the observation kernel.
 
-    Given: A ContinuousLaserTagObservationModel.
+    Given: A native ContinuousLaserTagObservationCpp kernel.
     When: sample(3) is called.
     Then: The return value is a list of exactly three 1-D ndarrays of
         length 8.
@@ -331,7 +293,7 @@ def test_transition_batch_sample_matches_per_particle_sample(env):
 
     Given: 32 particles spanning the continuous arena.
     When: batch_sample runs under _native.set_seed(777); then for each
-        particle a fresh state_transition_model is built and sample(1) is
+        particle a fresh transition kernel is built and sample(1) is
         called in the same order under the same seed.
     Then: The two (32, 5) arrays are bit-exact under np.testing.assert_array_equal.
 
@@ -350,13 +312,13 @@ def test_transition_batch_sample_matches_per_particle_sample(env):
     action = np.array([1.0, 0.5, 0.0])
 
     _native.set_seed(777)
-    transition = env.state_transition_model(state=particles[0], action=action)
+    transition = _build_transition_kernel(env, particles[0], action)
     batch_result = transition.batch_sample(particles)
 
     _native.set_seed(777)
     per_particle_rows = []
     for row in particles:
-        model = env.state_transition_model(state=row, action=action)
+        model = _build_transition_kernel(env, row, action)
         per_particle_rows.append(model.sample(1)[0])
     per_particle_result = np.stack(per_particle_rows, axis=0)
 
@@ -373,7 +335,7 @@ def test_observation_batch_log_likelihood_matches_per_particle(env):
     Given: 32 random non-terminal next-state particles and a single
         non-terminal observation.
     When: batch_log_likelihood(next_particles, observation) is called, and
-        for each particle a fresh observation_model is built and
+        for each particle a fresh observation kernel is built and
         probability([observation]) is computed.
     Then: The batch log-likelihoods equal np.log of the per-particle
         probabilities within atol=1e-10.
@@ -393,12 +355,12 @@ def test_observation_batch_log_likelihood_matches_per_particle(env):
     observation = rng.uniform(0.1, 5.0, 8)
     action = np.array([1.0, 0.0, 0.0])
 
-    obs_model = env.observation_model(next_state=next_particles[0], action=action)
+    obs_model = _build_observation_kernel(env, next_particles[0], action)
     batch_log_ll = obs_model.batch_log_likelihood(next_particles, observation)
 
     per_particle_log_ll = np.empty(len(next_particles))
     for i, next_state in enumerate(next_particles):
-        model = env.observation_model(next_state=next_state, action=action)
+        model = _build_observation_kernel(env, next_state, action)
         per_particle_log_ll[i] = np.log(model.probability([observation])[0])
 
     np.testing.assert_allclose(batch_log_ll, per_particle_log_ll, atol=1e-10, rtol=0.0)
@@ -409,7 +371,7 @@ def test_transition_batch_sample_shape_contract(env):
 
     Purpose: Guards the shape contract used by belief-level callers.
 
-    Given: A transition model and a (41, 5) particles ndarray.
+    Given: A transition kernel and a (41, 5) particles ndarray.
     When: batch_sample is called.
     Then: The result is an ndarray of shape (41, 5) and dtype float64.
 
@@ -417,7 +379,7 @@ def test_transition_batch_sample_shape_contract(env):
     """
     state = np.array([3.0, 3.0, 8.0, 5.0, 0.0])
     action = np.array([1.0, 0.0, 0.0])
-    transition = env.state_transition_model(state=state, action=action)
+    transition = _build_transition_kernel(env, state, action)
     particles = np.tile(state, (41, 1))
     _native.set_seed(0)
     result = transition.batch_sample(particles)
@@ -431,7 +393,7 @@ def test_observation_batch_log_likelihood_shape_contract(env):
 
     Purpose: Guards the shape contract used by belief-level callers.
 
-    Given: An observation model, 41 next-particles, and one observation.
+    Given: An observation kernel, 41 next-particles, and one observation.
     When: batch_log_likelihood is called.
     Then: The result is an ndarray of shape (41,) and dtype float64.
 
@@ -439,7 +401,7 @@ def test_observation_batch_log_likelihood_shape_contract(env):
     """
     next_state = np.array([3.0, 3.0, 8.0, 5.0, 0.0])
     action = np.array([1.0, 0.0, 0.0])
-    obs_model = env.observation_model(next_state=next_state, action=action)
+    obs_model = _build_observation_kernel(env, next_state, action)
     next_particles = np.tile(next_state, (41, 1))
     observation = np.full(8, 2.5)
     result = obs_model.batch_log_likelihood(next_particles, observation)
@@ -467,7 +429,7 @@ def test_batch_log_likelihood_terminal_semantics(env):
     """
     next_state = np.array([3.0, 3.0, 8.0, 5.0, 0.0])
     action = np.array([1.0, 0.0, 0.0])
-    obs_model = env.observation_model(next_state=next_state, action=action)
+    obs_model = _build_observation_kernel(env, next_state, action)
 
     particles = np.array(
         [

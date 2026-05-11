@@ -347,9 +347,7 @@ class TestEquivalenceWithPerParticleLoop:
         _native.set_seed(2024)
         scalar_rows = []
         for i in range(n):
-            scalar_rows.append(
-                env.state_transition_model(state=particles[i], action=action).sample()[0]
-            )
+            scalar_rows.append(env.sample_next_state(particles[i], action))
         scalar_result = np.stack(scalar_rows, axis=0)
 
         np.testing.assert_allclose(vec_result, scalar_result, atol=1e-12)
@@ -383,11 +381,7 @@ class TestEquivalenceWithPerParticleLoop:
         action = np.array([1.0, 0.0, 0.0])
 
         def per_particle_ll_fn(particle, act, observation):
-            obs_model = env.observation_model(next_state=particle, action=act)
-            prob = obs_model.probability([observation])[0]
-            if prob > 0:
-                return np.log(prob)
-            return -np.inf
+            return env.observation_log_probability(particle, act, [observation])[0]
 
         assert_batch_obs_log_likelihood_matches_loop(
             updater=updater,

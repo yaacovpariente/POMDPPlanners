@@ -1,7 +1,9 @@
 import numpy as np
 
+from POMDPPlanners.utils.numba_kernels import sparse_sampling_lcb_min_idx_kernel
 from POMDPPlanners.utils.statistics_utils import get_min_and_max_cost
 from POMDPPlanners.core.tree import BeliefNode, ActionNode
+from POMDPPlanners.core.tree.arena import Tree
 
 
 def _get_sparse_sampling_guarantees_exploration_v2(
@@ -15,23 +17,46 @@ def _get_sparse_sampling_guarantees_exploration_v2(
     visit_count_penalty: float = 0.0,
 ) -> ActionNode:
     visit_count_array = np.array([child.visit_count for child in belief_node.children])
-    unvisited_action_indices = np.where(visit_count_array >= 1)[0]
+    # Bug-fix: the original predicate was `visit_count_array >= 1` with
+    # variable name `unvisited_action_indices` — that always returned
+    # visited children and skipped the LCB calculation entirely. Correct
+    # semantic is "if any child is unvisited, explore it randomly".
+    unvisited_action_indices = np.where(visit_count_array == 0)[0]
     if len(unvisited_action_indices) > 0:
         return belief_node.children[np.random.choice(unvisited_action_indices)]
 
-    visit_count_penalty_array = 1 / (np.sqrt(visit_count_array) + 1)
+    # Guard: the LCB formula below has `delta * (1 - belief_visits)` in the
+    # denominator, which is 0 when belief_visits == 1 (the second visit to
+    # this belief node). Fall back to random visited-child selection in
+    # that edge case; LCB only becomes well-defined for belief_visits >= 2.
+    if belief_node.visit_count <= 1:
+        return belief_node.children[int(np.random.randint(len(belief_node.children)))]
 
-    x1 = 1 - belief_node.visit_count**horizon
-    x2 = delta * (1 - belief_node.visit_count)
-    x3 = np.log(x1 / x2)
+    visit_count_penalty_array = 1 / (np.sqrt(visit_count_array) + 1)
+    q_values = np.array([child.q_value for child in belief_node.children])
+
+    if horizon == 0:
+        # Remaining-horizon is zero, so the LCB bound below is
+        # undefined (log(0) = -inf, sqrt of negative ⇒ NaN). Fall
+        # back to greedy q-min with the visit-count tie-breaker.
+        return belief_node.children[
+            int(np.argmin(q_values + visit_count_penalty * visit_count_penalty_array))
+        ]
+
+    # Log-space evaluation of x3 = log((belief_visits**horizon - 1) /
+    # (delta * (belief_visits - 1))) — the bound's per-action confidence
+    # term from Theorem 1 of the ICVaR paper. The naive direct form
+    # overflows float64 for ``horizon * log10(belief_visits) > 308``;
+    # this expansion stays finite for any ``belief_visits >= 2`` and any
+    # non-negative ``horizon``, and keeps the ``- 1`` in the numerator
+    # accurate at small horizons via ``log1p(-exp(-h*log v))``.
+    log_v_h = horizon * np.log(belief_node.visit_count)
+    x3 = log_v_h + np.log1p(-np.exp(-log_v_h)) - np.log(delta * (belief_node.visit_count - 1))
     x4 = alpha * visit_count_array
 
     guarantees_bound = (max_cost - min_cost) * np.sqrt(x3 / x4)
 
-    lower_confidence_bounds = (
-        np.array([child.q_value for child in belief_node.children])
-        - exploration_constant * guarantees_bound
-    )
+    lower_confidence_bounds = q_values - exploration_constant * guarantees_bound
     return belief_node.children[
         np.argmin(lower_confidence_bounds + visit_count_penalty * visit_count_penalty_array)
     ]
@@ -84,6 +109,116 @@ def get_explored_action_node(
 
     return _get_sparse_sampling_guarantees_exploration_v2(
         belief_node=belief_node,
+        min_cost=min_cost,
+        max_cost=max_cost,
+        exploration_constant=exploration_constant,
+        alpha=alpha,
+        horizon=max_depth - depth,
+        delta=delta,
+        visit_count_penalty=visit_count_penalty,
+    )
+
+
+def _sparse_sampling_guarantees_exploration_v2_arena(
+    tree: Tree,
+    belief_id: int,
+    exploration_constant: float,
+    alpha: float,
+    min_cost: float,
+    max_cost: float,
+    horizon: int,
+    delta: float,
+    visit_count_penalty: float = 0.0,
+) -> int:
+    """Arena variant of :func:`_get_sparse_sampling_guarantees_exploration_v2`."""
+    children = tree.children_ids[belief_id]
+    n_children = len(children)
+    # Single Python loop fills both arrays — faster than two np.fromiter
+    # calls over a Python-list source for small N (typical here).
+    tree_visits = tree.visit_count
+    tree_q = tree.q_value
+    visit_count_array = np.empty(n_children, dtype=np.float64)
+    q_values = np.empty(n_children, dtype=np.float64)
+    unvisited_local: list = []
+    for i, cid in enumerate(children):
+        v = tree_visits[cid]
+        visit_count_array[i] = v
+        q_values[i] = tree_q[cid]
+        if v == 0:
+            unvisited_local.append(i)
+    if unvisited_local:
+        # Bug-fix: the original predicate was `visit_count_array >= 1` with
+        # variable name `unvisited_indices` — that always returned visited
+        # children and skipped the LCB calculation entirely. The intended
+        # semantic is "if any child is unvisited, explore it randomly".
+        return children[unvisited_local[int(np.random.randint(len(unvisited_local)))]]
+
+    # Guard: the LCB formula below has `delta * (1 - belief_visits)` in the
+    # denominator, which is 0 when belief_visits == 1 (the second visit to
+    # this belief node). Fall back to random visited-child selection in
+    # that edge case; LCB only becomes well-defined for belief_visits >= 2.
+    belief_visits = tree.visit_count[belief_id]
+    if belief_visits <= 1:
+        return children[int(np.random.randint(n_children))]
+
+    best_idx = sparse_sampling_lcb_min_idx_kernel(
+        visit_count_array,
+        q_values,
+        float(belief_visits),
+        int(horizon),
+        float(alpha),
+        float(delta),
+        float(min_cost),
+        float(max_cost),
+        float(exploration_constant),
+        float(visit_count_penalty),
+    )
+    return children[best_idx]
+
+
+def get_explored_action_node_arena(  # pylint: disable=too-many-arguments
+    tree: Tree,
+    belief_id: int,
+    min_immediate_cost: float,
+    max_immediate_cost: float,
+    depth: int,
+    max_depth: int,
+    gamma: float,
+    exploration_constant: float,
+    min_visit_count_per_action: int,
+    alpha: float,
+    delta: float,
+    visit_count_penalty: float = 0.0,
+) -> int:
+    """Arena variant of :func:`get_explored_action_node`. Returns action-node ID."""
+    children = tree.children_ids[belief_id]
+    # Plain loop is faster than np.fromiter over a Python-list source for
+    # the small N (action children) here. Builds the unvisited index set in
+    # one pass; np.fromiter + np.where would do the same work in two.
+    tree_visits = tree.visit_count
+    unvisited_local: list = []
+    for i, cid in enumerate(children):
+        if tree_visits[cid] == 0:
+            unvisited_local.append(i)
+    if unvisited_local:
+        return children[unvisited_local[int(np.random.randint(len(unvisited_local)))]]
+
+    if tree.parent_id[belief_id] is None:
+        for cid in children:
+            if tree.visit_count[cid] < min_visit_count_per_action:
+                return cid
+
+    min_cost, max_cost = get_min_and_max_cost(
+        min_immediate_cost=min_immediate_cost,
+        max_immediate_cost=max_immediate_cost,
+        depth=depth,
+        max_depth=max_depth,
+        gamma=gamma,
+    )
+
+    return _sparse_sampling_guarantees_exploration_v2_arena(
+        tree=tree,
+        belief_id=belief_id,
         min_cost=min_cost,
         max_cost=max_cost,
         exploration_constant=exploration_constant,

@@ -13,6 +13,8 @@ Reference:
 Functions:
     spuct_selection: Select among existing children using safety-masked PUCT.
     spuct_action_progressive_widening: Progressive widening with SPUCT selection.
+    spuct_selection_arena: Arena-tree variant of spuct_selection.
+    spuct_action_progressive_widening_arena: Arena variant of widening+SPUCT.
 """
 
 from typing import Dict, Optional
@@ -20,9 +22,11 @@ from typing import Dict, Optional
 import numpy as np
 
 from POMDPPlanners.core.tree import ActionNode, BeliefNode
+from POMDPPlanners.core.tree.arena import Tree
 from POMDPPlanners.planners.mcts_planners.beta_zero.puct import (
     _normalize_q_values,
     _should_widen,
+    _should_widen_arena,
 )
 from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
 
@@ -136,3 +140,80 @@ def _compute_safety_mask(failure_probs: np.ndarray, delta_prime: float) -> np.nd
     if mask.sum() == 0:
         return np.ones_like(mask)
     return mask
+
+
+def spuct_selection_arena(
+    tree: Tree,
+    belief_id: int,
+    exploration_constant: float,
+    failure_dict: Dict[int, float],
+    delta_prime: float,
+    action_priors: Optional[np.ndarray] = None,
+) -> int:
+    """Arena variant of :func:`spuct_selection`. Returns the action-node ID.
+
+    ``failure_dict`` is keyed by action-node integer ID (not ``id(node)``).
+    """
+    children = tree.children_ids[belief_id]
+    n_children = len(children)
+
+    if action_priors is None:
+        priors = np.ones(n_children) / n_children
+    else:
+        priors = action_priors
+
+    q_values = np.array([tree.q_value[cid] for cid in children])
+    visit_counts = np.array([tree.visit_count[cid] for cid in children])
+    failure_probs = np.array([failure_dict.get(cid, 0.0) for cid in children])
+
+    q_normalized = _normalize_q_values(q_values)
+
+    parent_visits = max(tree.visit_count[belief_id], 1)
+    exploration = exploration_constant * priors * np.sqrt(parent_visits) / (1.0 + visit_counts)
+
+    puct_scores = q_normalized + exploration
+    safety_mask = _compute_safety_mask(failure_probs, delta_prime)
+    masked_scores = safety_mask * puct_scores
+
+    return children[int(np.argmax(masked_scores))]
+
+
+def spuct_action_progressive_widening_arena(  # pylint: disable=too-many-arguments
+    tree: Tree,
+    belief_id: int,
+    alpha_a: float,
+    action_sampler: ActionSampler,
+    exploration_constant: float,
+    k_a: float,
+    failure_dict: Dict[int, float],
+    delta_prime: float,
+    action_priors: Optional[np.ndarray] = None,
+    min_visit_count_per_action: int = 1,
+) -> int:
+    """Arena variant of :func:`spuct_action_progressive_widening`.
+
+    Returns the action-node ID selected by progressive widening + SPUCT.
+    """
+    if tree.parent_id[belief_id] is None:
+        for cid in tree.children_ids[belief_id]:
+            if tree.visit_count[cid] < min_visit_count_per_action:
+                return cid
+
+    if _should_widen_arena(tree, belief_id, k_a, alpha_a):
+        action = action_sampler.sample()
+        existing_id = tree.get_action_child_indexed(belief_id, action)
+        if existing_id is not None:
+            return existing_id
+        existing_id = tree.get_action_child(belief_id, action)
+        if existing_id is not None:
+            return existing_id
+        return tree.add_action_node(action=action, parent_id=belief_id)
+
+    return spuct_selection_arena(
+        tree=tree,
+        belief_id=belief_id,
+        exploration_constant=exploration_constant,
+        failure_dict=failure_dict,
+        delta_prime=delta_prime,
+        action_priors=action_priors,
+    )

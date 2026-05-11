@@ -7,6 +7,8 @@ This module tests the CartPole POMDP environment, focusing on:
 - Terminal conditions
 """
 
+# pylint: disable=too-many-lines
+
 import copy
 import random
 
@@ -14,12 +16,11 @@ import numpy as np
 import pytest
 
 from POMDPPlanners.environments.cartpole_pomdp import (
+    CartPoleInitialObservationDistribution,
     CartPoleInitialStateDistribution,
-    CartPoleObservation,
     CartPolePOMDP,
-    CartPoleStateTransition,
+    _native,
 )
-from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
 
 # Set seeds for reproducible tests
 np.random.seed(42)
@@ -280,7 +281,7 @@ def test_state_transition_model(base_cartpole_environment):
     Purpose: Validates that CartPolePOMDP state transition model works correctly
 
     Given: A CartPolePOMDP environment and initial state [0.0, 0.0, 0.0, 0.0] with action 0
-    When: State transition model is created and next state is sampled
+    When: env.sample_next_state is called
     Then: Returns a 4D numpy array representing the next state after applying the action
 
     Test type: unit
@@ -288,8 +289,7 @@ def test_state_transition_model(base_cartpole_environment):
     # Test state transition
     state = np.array([0.0, 0.0, 0.0, 0.0])
     action = 0
-    transition = base_cartpole_environment.state_transition_model(state, action)
-    next_state = transition.sample()[0]
+    next_state = base_cartpole_environment.sample_next_state(state=state, action=action)
     assert isinstance(next_state, np.ndarray)
     assert next_state.shape == (4,)
 
@@ -301,15 +301,14 @@ def test_state_transition_produces_varying_samples(base_cartpole_environment):
     different samples due to Gaussian process noise
 
     Given: A CartPolePOMDP environment and initial state [0.0, 0.0, 0.1, 0.0] with action 1
-    When: Multiple samples are drawn from the state transition model
+    When: Multiple samples are drawn via env.sample_next_state
     Then: Not all samples are identical, confirming stochastic behavior
 
     Test type: unit
     """
     state = np.array([0.0, 0.0, 0.1, 0.0])
     action = 1
-    transition = base_cartpole_environment.state_transition_model(state, action)
-    samples = transition.sample(n_samples=50)
+    samples = base_cartpole_environment.sample_next_state(state=state, action=action, n_samples=50)
 
     assert len(samples) == 50
     assert all(s.shape == (4,) for s in samples)
@@ -327,25 +326,41 @@ def test_state_transition_noise_magnitude(base_cartpole_environment):
     Purpose: Validates that noisy samples cluster around the deterministic next state
 
     Given: A CartPolePOMDP environment with default noise covariance
-    When: Many samples are drawn from the state transition model
+    When: Many samples are drawn via env.sample_next_state
     Then: Sample mean is close to deterministic next state and standard deviations
     match the expected noise levels from the covariance matrix
 
     Test type: unit
     """
+    env = base_cartpole_environment
     state = np.array([0.0, 0.0, 0.1, 0.0])
     action = 1
-    transition = base_cartpole_environment.state_transition_model(state, action)
-    samples = np.array(transition.sample(n_samples=5000))
+    samples = np.asarray(env.sample_next_state(state=state, action=action, n_samples=5000))
 
-    # The mean of many samples should be close to the deterministic next state
+    # The mean of many samples should be close to the deterministic next state.
+    # Construct the native kernel directly to read the deterministic target,
+    # which is exactly what env.sample_next_state uses internally.
+    kernel = _native.CartPoleTransitionCpp(
+        state=state,
+        action=action,
+        force_mag=env.force_mag,
+        total_mass=env.total_mass,
+        polemass_length=env.polemass_length,
+        gravity=env.gravity,
+        length=env.length,
+        kinematics_integrator=env.kinematics_integrator,
+        tau=env.tau,
+        masspole=env.masspole,
+        covariance=env.state_transition_cov,
+    )
     # pylint: disable=protected-access
-    deterministic = transition._compute_deterministic_next_state()
+    deterministic = np.asarray(kernel._compute_deterministic_next_state())
+    # pylint: enable=protected-access
     sample_mean = samples.mean(axis=0)
     np.testing.assert_allclose(sample_mean, deterministic, atol=0.01)
 
     # Standard deviations should roughly match sqrt of diagonal of cov matrix
-    expected_std = np.sqrt(np.diag(base_cartpole_environment.state_transition_cov))
+    expected_std = np.sqrt(np.diag(env.state_transition_cov))
     sample_std = samples.std(axis=0)
     np.testing.assert_allclose(sample_std, expected_std, rtol=0.3)
 
@@ -392,10 +407,10 @@ def test_state_transition_custom_covariance():
 def test_observation_model(base_cartpole_environment):
     """Test observation model.
 
-    Purpose: Validates that CartPolePOMDP observation model works correctly
+    Purpose: Validates that CartPolePOMDP observation sampling works correctly
 
-    Given: A CartPolePOMDP environment and state [0.0, 0.0, 0.0, 0.0] with action 0
-    When: Observation model is created and observation is sampled
+    Given: A CartPolePOMDP environment and next_state [0.0, 0.0, 0.0, 0.0] with action 0
+    When: env.sample_observation is called
     Then: Returns a 4D numpy array representing the noisy observation of the state
 
     Test type: unit
@@ -403,8 +418,7 @@ def test_observation_model(base_cartpole_environment):
     # Test observation model
     state = np.array([0.0, 0.0, 0.0, 0.0])
     action = 0
-    observation = base_cartpole_environment.observation_model(state, action)
-    obs = observation.sample()[0]
+    obs = base_cartpole_environment.sample_observation(next_state=state, action=action)
     assert isinstance(obs, np.ndarray)
     assert obs.shape == (4,)
 
@@ -505,91 +519,97 @@ def test_cartpole_pomdp_terminal():
 
 
 def test_cartpole_pomdp_models():
-    """Test cartpole pomdp models.
+    """Test cartpole pomdp model entry points.
 
-    Purpose: Validates that CartPolePOMDP model creation methods work correctly
+    Purpose: Validates that CartPolePOMDP exposes the expected env-API methods
+    and initial-state distribution type.
 
-    Given: A CartPolePOMDP environment and state [0.0, 0.0, 0.0, 0.0] with action [0]
-    When: Various model creation methods are called (state_transition_model, observation_model, initial_state_dist, initial_observation_dist)
-    Then: Returns correct model types: CartPoleStateTransition, CartPoleObservation, and CartPoleInitialStateDistribution
+    Given: A CartPolePOMDP environment and state [0.0, 0.0, 0.0, 0.0] with action 0
+    When: env.sample_next_state, env.sample_observation, and env.initial_state_dist /
+        env.initial_observation_dist are exercised
+    Then: sample methods return 4D float ndarrays, ``initial_state_dist`` is a
+        ``CartPoleInitialStateDistribution`` and ``initial_observation_dist`` is a
+        ``CartPoleInitialObservationDistribution`` (state prior + obs noise)
 
     Test type: unit
     """
-    # Test model creation
     env = CartPolePOMDP(discount_factor=0.95, noise_cov=np.eye(4) * 0.1)
     state = np.array([0.0, 0.0, 0.0, 0.0])
     action = 0
 
-    # Test state transition model
-    transition_model = env.state_transition_model(state, action)
-    assert isinstance(transition_model, CartPoleStateTransition)
+    # Sample via env-level API
+    next_state = env.sample_next_state(state=state, action=action)
+    assert isinstance(next_state, np.ndarray)
+    assert next_state.shape == (4,)
 
-    # Test observation model
-    observation_model = env.observation_model(state, action)
-    assert isinstance(observation_model, CartPoleObservation)
+    observation = env.sample_observation(next_state=state, action=action)
+    assert isinstance(observation, np.ndarray)
+    assert observation.shape == (4,)
 
-    # Test initial state distribution
+    # Initial distributions
     initial_dist = env.initial_state_dist()
     assert isinstance(initial_dist, CartPoleInitialStateDistribution)
 
-    # Test initial observation distribution
     initial_obs_dist = env.initial_observation_dist()
-    assert isinstance(initial_obs_dist, CartPoleInitialStateDistribution)
+    assert isinstance(initial_obs_dist, CartPoleInitialObservationDistribution)
 
 
 def test_cartpole_observation_model_probability_shape_single_observation():
-    """Test that observation model probability returns correct shape for single observation.
+    """Test that observation_log_probability returns correct shape for single observation.
 
-    Purpose: Validates that CartPoleObservation.probability() returns a 1D array of scalars,
+    Purpose: Validates that env.observation_log_probability() returns a 1D array of scalars,
     not a 2D array, when given a single observation
 
-    Given: A CartPoleObservation model with state [0.1, 0.05, 0.02, -0.1] and a single observation
-    When: probability() method is called with a list containing one observation
-    Then: Returns 1D numpy array with shape (1,) containing a scalar probability value
+    Given: A CartPolePOMDP env with diag(0.1) noise_cov, next_state [0.1, 0.05, 0.02, -0.1]
+        and a single observation
+    When: env.observation_log_probability is called with a list containing one observation
+    Then: Returns 1D numpy array with shape (1,) containing a scalar log-probability value
 
     Test type: unit
     """
-    # ARRANGE: Create observation model
+    # ARRANGE: Create env with desired noise cov
     true_state = np.array([0.1, 0.05, 0.02, -0.1])
     action = 1
     noise_cov = np.diag([0.1, 0.1, 0.1, 0.1])
-    obs_dist = CovarianceParameterizedMultivariateNormal(noise_cov)
-    obs_model = CartPoleObservation(next_state=true_state, action=action, obs_dist=obs_dist)
+    env = CartPolePOMDP(discount_factor=0.95, noise_cov=noise_cov)
 
     # Create single observation
     observation = np.array([0.12, 0.06, 0.025, -0.09])
 
-    # ACT: Get probability
-    probs = obs_model.probability([observation])
+    # ACT: Get probability via env-level API
+    log_probs = env.observation_log_probability(
+        next_state=true_state, action=action, observations=[observation]
+    )
+    probs = np.exp(log_probs)
 
     # ASSERT: Check shape and type
-    assert isinstance(probs, np.ndarray), "probability() should return numpy array"
+    assert isinstance(probs, np.ndarray), "probability should return numpy array"
     assert (
         probs.ndim == 1
-    ), f"probability() should return 1D array, got {probs.ndim}D array with shape {probs.shape}"
-    assert probs.shape == (1,), f"probability([obs]) should have shape (1,), got {probs.shape}"
+    ), f"probability should return 1D array, got {probs.ndim}D array with shape {probs.shape}"
+    assert probs.shape == (1,), f"shape (1,) expected, got {probs.shape}"
     assert np.isscalar(probs[0]), f"Individual probability should be scalar, got {type(probs[0])}"
     assert probs[0] > 0.0, f"Probability density should be positive, got {probs[0]}"
 
 
 def test_cartpole_observation_model_probability_shape_multiple_observations():
-    """Test that observation model probability returns correct shape for multiple observations.
+    """Test that observation_log_probability returns correct shape for multiple observations.
 
-    Purpose: Validates that CartPoleObservation.probability() returns a 1D array of scalars
+    Purpose: Validates that env.observation_log_probability() returns a 1D array of scalars
     when given multiple observations, with length matching number of observations
 
-    Given: A CartPoleObservation model with state [0.1, 0.05, 0.02, -0.1] and three observations
-    When: probability() method is called with a list containing three observations
-    Then: Returns 1D numpy array with shape (3,) containing scalar probability values
+    Given: A CartPolePOMDP env with diag(0.1) noise_cov, next_state [0.1, 0.05, 0.02, -0.1]
+        and three observations
+    When: env.observation_log_probability is called with a list containing three observations
+    Then: Returns 1D numpy array with shape (3,) containing scalar log-probability values
 
     Test type: unit
     """
-    # ARRANGE: Create observation model
+    # ARRANGE: Create env with desired noise cov
     true_state = np.array([0.1, 0.05, 0.02, -0.1])
     action = 1
     noise_cov = np.diag([0.1, 0.1, 0.1, 0.1])
-    obs_dist = CovarianceParameterizedMultivariateNormal(noise_cov)
-    obs_model = CartPoleObservation(next_state=true_state, action=action, obs_dist=obs_dist)
+    env = CartPolePOMDP(discount_factor=0.95, noise_cov=noise_cov)
 
     # Create multiple observations
     observations = [
@@ -598,15 +618,19 @@ def test_cartpole_observation_model_probability_shape_multiple_observations():
         np.array([0.11, 0.055, 0.022, -0.095]),
     ]
 
-    # ACT: Get probabilities
-    probs = obs_model.probability(observations)
+    # ACT: Get probabilities via env-level API
+    probs = np.exp(
+        env.observation_log_probability(
+            next_state=true_state, action=action, observations=observations
+        )
+    )
 
     # ASSERT: Check shape and type
-    assert isinstance(probs, np.ndarray), "probability() should return numpy array"
+    assert isinstance(probs, np.ndarray), "probability should return numpy array"
     assert (
         probs.ndim == 1
-    ), f"probability() should return 1D array, got {probs.ndim}D array with shape {probs.shape}"
-    assert probs.shape == (3,), f"probability(3 obs) should have shape (3,), got {probs.shape}"
+    ), f"probability should return 1D array, got {probs.ndim}D array with shape {probs.shape}"
+    assert probs.shape == (3,), f"shape (3,) expected, got {probs.shape}"
 
     # Check each probability density is a scalar and positive
     for i, prob in enumerate(probs):
@@ -618,62 +642,65 @@ def test_cartpole_observation_model_probability_shape_multiple_observations():
 
 
 def test_cartpole_observation_model_probability_empty_list():
-    """Test that observation model probability handles empty observation list correctly.
+    """Test that observation_log_probability handles empty observation list correctly.
 
-    Purpose: Validates that CartPoleObservation.probability() returns empty 1D array for empty input
+    Purpose: Validates that env.observation_log_probability() returns empty 1D array for empty input
 
-    Given: A CartPoleObservation model and an empty list of observations
-    When: probability() method is called with empty list
+    Given: A CartPolePOMDP env with diag(0.1) noise_cov and an empty list of observations
+    When: env.observation_log_probability is called with empty list
     Then: Returns empty 1D numpy array with shape (0,)
 
     Test type: unit
     """
-    # ARRANGE: Create observation model
+    # ARRANGE: Create env with desired noise cov
     true_state = np.array([0.1, 0.05, 0.02, -0.1])
     action = 1
     noise_cov = np.diag([0.1, 0.1, 0.1, 0.1])
-    obs_dist = CovarianceParameterizedMultivariateNormal(noise_cov)
-    obs_model = CartPoleObservation(next_state=true_state, action=action, obs_dist=obs_dist)
+    env = CartPolePOMDP(discount_factor=0.95, noise_cov=noise_cov)
 
-    # ACT: Get probability for empty list
-    probs = obs_model.probability([])
+    # ACT: Get probability for empty list via env-level API
+    probs = np.exp(
+        env.observation_log_probability(next_state=true_state, action=action, observations=[])
+    )
 
     # ASSERT: Check shape
-    assert isinstance(probs, np.ndarray), "probability() should return numpy array"
-    assert probs.ndim == 1, f"probability() should return 1D array, got {probs.ndim}D array"
-    assert probs.shape == (0,), f"probability([]) should have shape (0,), got {probs.shape}"
+    assert isinstance(probs, np.ndarray), "probability should return numpy array"
+    assert probs.ndim == 1, f"probability should return 1D array, got {probs.ndim}D array"
+    assert probs.shape == (0,), f"shape (0,) expected, got {probs.shape}"
 
 
 def test_cartpole_observation_model_probability_values_reasonable():
-    """Test that observation model probability values are reasonable for noisy observations.
+    """Test that observation_log_probability values are reasonable for noisy observations.
 
-    Purpose: Validates that CartPoleObservation.probability() computes reasonable probability values
+    Purpose: Validates that env.observation_log_probability computes reasonable probability values
     based on Gaussian noise model, with closer observations having higher probability
 
-    Given: A CartPoleObservation model and observations at different distances from true state
-    When: probability() method is called with observations close to and far from true state
+    Given: A CartPolePOMDP env with diag(0.1) noise_cov and observations at different
+        distances from true state
+    When: env.observation_log_probability is called with close and far observations
     Then: Closer observations have higher probability than distant observations
 
     Test type: unit
     """
-    # ARRANGE: Create observation model
+    # ARRANGE: Create env with desired noise cov
     true_state = np.array([0.1, 0.05, 0.02, -0.1])
     action = 1
     noise_cov = np.diag([0.1, 0.1, 0.1, 0.1])
-    obs_dist = CovarianceParameterizedMultivariateNormal(noise_cov)
-    obs_model = CartPoleObservation(next_state=true_state, action=action, obs_dist=obs_dist)
+    env = CartPolePOMDP(discount_factor=0.95, noise_cov=noise_cov)
 
     # Create observations: one close to true state, one far
     close_obs = true_state + np.array([0.01, 0.01, 0.01, 0.01])  # Small deviation
     far_obs = true_state + np.array([1.0, 1.0, 1.0, 1.0])  # Large deviation
 
-    # ACT: Get probabilities
-    probs = obs_model.probability([close_obs, far_obs])
+    # ACT: Get probabilities via env-level API
+    probs = np.exp(
+        env.observation_log_probability(
+            next_state=true_state, action=action, observations=[close_obs, far_obs]
+        )
+    )
 
     # ASSERT: Close observation should have higher probability
-    assert (
-        probs[0] > probs[1]
-    ), f"Close observation prob ({probs[0]}) should be higher than far observation prob ({probs[1]})"
+    assert probs[0] > probs[1], f"Close prob ({probs[0]}) should exceed far prob ({probs[1]})"
 
     # Both should be positive (Gaussian has non-zero probability everywhere)
     assert probs[0] > 0.0, "Close observation should have positive probability"
@@ -821,6 +848,148 @@ def test_compute_metrics_goal_reaching():
     assert goal_rate.lower_confidence_bound <= goal_rate.value <= goal_rate.upper_confidence_bound
 
 
+def test_compute_metrics_values_within_confidence_intervals():
+    """Test CartPolePOMDP metric values are inside CIs and pass invariants.
+
+    Purpose: Validates that metrics produced by compute_metrics lie inside
+        their CI bounds and that all structural invariants hold (rate-in-[0,1],
+        counts >= 0, finite CI for n>=2, returns inside reward bounds, and
+        return-shift linearity).
+
+    Given: A CartPolePOMDP and 3 hand-built histories with varied outcomes
+        (no-crash, no-crash, crash). Rewards are 0.0/1.0, inside the env's
+        declared reward_range = (0.0, 1.0).
+    When: compute_metrics is called and the four invariant helpers are run.
+    Then: All checks pass without raising.
+
+    Test type: integration
+    """
+    from POMDPPlanners.core.belief import (  # pylint: disable=import-outside-toplevel
+        WeightedParticleBelief,
+    )
+    from POMDPPlanners.core.policy import (  # pylint: disable=import-outside-toplevel
+        PolicyRunData,
+    )
+    from POMDPPlanners.core.simulation import (  # pylint: disable=import-outside-toplevel
+        History,
+        StepData,
+    )
+    from POMDPPlanners.tests.test_utils.confidence_interval_utils import (  # pylint: disable=import-outside-toplevel
+        verify_metrics_within_confidence_intervals,
+    )
+    from POMDPPlanners.tests.test_utils.metric_invariants_utils import (  # pylint: disable=import-outside-toplevel
+        verify_history_returns_bounded,
+        verify_metric_sanity,
+        verify_return_shift_linearity,
+    )
+
+    noise_cov = np.eye(4) * 0.1
+    env = CartPolePOMDP(discount_factor=0.95, noise_cov=noise_cov)
+
+    def _make_belief(state: np.ndarray) -> WeightedParticleBelief:
+        return WeightedParticleBelief(
+            particles=[state], log_weights=np.array([1.0]), resampling=False
+        )
+
+    safe_state = np.array([0.0, 0.0, 0.0, 0.0])
+    crash_state = np.array([0.0, 0.0, 0.3, 0.0])  # theta > threshold
+
+    # History 0: no-crash, 3 steps.
+    no_crash_steps_a = [
+        StepData(
+            state=safe_state,
+            action=0,
+            next_state=safe_state,
+            observation=safe_state,
+            reward=1.0,
+            belief=_make_belief(safe_state),
+        ),
+        StepData(
+            state=safe_state,
+            action=1,
+            next_state=safe_state,
+            observation=safe_state,
+            reward=1.0,
+            belief=_make_belief(safe_state),
+        ),
+        StepData(
+            state=safe_state,
+            action=0,
+            next_state=safe_state,
+            observation=safe_state,
+            reward=1.0,
+            belief=_make_belief(safe_state),
+        ),
+    ]
+
+    # History 1: no-crash, 2 steps.
+    no_crash_steps_b = [
+        StepData(
+            state=safe_state,
+            action=1,
+            next_state=safe_state,
+            observation=safe_state,
+            reward=1.0,
+            belief=_make_belief(safe_state),
+        ),
+        StepData(
+            state=safe_state,
+            action=0,
+            next_state=safe_state,
+            observation=safe_state,
+            reward=1.0,
+            belief=_make_belief(safe_state),
+        ),
+    ]
+
+    # History 2: crash on second step.
+    crash_steps = [
+        StepData(
+            state=safe_state,
+            action=0,
+            next_state=crash_state,
+            observation=safe_state,
+            reward=1.0,
+            belief=_make_belief(safe_state),
+        ),
+        StepData(
+            state=crash_state,
+            action=0,
+            next_state=crash_state,
+            observation=crash_state,
+            reward=0.0,
+            belief=_make_belief(crash_state),
+        ),
+    ]
+
+    histories = []
+    for steps, reach_terminal in (
+        (no_crash_steps_a, False),
+        (no_crash_steps_b, False),
+        (crash_steps, True),
+    ):
+        histories.append(
+            History(
+                history=steps,
+                discount_factor=0.95,
+                average_state_sampling_time=0.0,
+                average_action_time=0.0,
+                average_observation_time=0.0,
+                average_belief_update_time=0.0,
+                average_reward_time=0.0,
+                actual_num_steps=len(steps),
+                reach_terminal_state=reach_terminal,
+                policy_run_data=[PolicyRunData(info_variables=[])],
+            )
+        )
+
+    metrics = env.compute_metrics(histories)
+    verify_metrics_within_confidence_intervals(metrics)
+    verify_metric_sanity(metrics, histories, env)
+    verify_history_returns_bounded(histories, env)
+    verify_return_shift_linearity(histories, env, shift=1.5)
+
+
 def test_reward_batch_matches_scalar_reward():
     """Test that reward_batch returns results consistent with scalar reward.
 
@@ -848,3 +1017,184 @@ def test_reward_batch_matches_scalar_reward():
     single = env.reward_batch(states[:1], action)
     assert single.shape == (1,)
     assert single[0] == env.reward(states[0], action)
+
+
+def test_simulate_random_rollout_native_matches_base_class_python() -> None:
+    """Test that CartPole native simulate_random_rollout matches the base-class Python loop.
+
+    Purpose: Validates that the native C++ rollout produces a discounted return
+    equal (within atol=1e-9) to the base-class Python loop when both use the
+    same action sequence and the same C++ RNG seed.
+
+    Given: A CartPolePOMDP env seeded identically for C++ RNG and numpy; a fixed
+        action sequence pre-drawn from numpy seed 0; a non-terminal initial state;
+        max_depth=10, discount_factor=0.95, depth=0.
+    When: Both the native override and the Python base-class loop are run with the
+        same action sequence and the same C++ RNG seed before each call.
+    Then: The two discounted returns are equal within atol=1e-9.
+
+    Test type: unit
+    """
+    from POMDPPlanners.environments.cartpole_pomdp import (
+        _native,
+    )  # pylint: disable=import-outside-toplevel
+    from POMDPPlanners.planners.planners_utils.dpw import (
+        ActionSampler,
+    )  # pylint: disable=import-outside-toplevel
+    from POMDPPlanners.planners.planners_utils.rollout import (
+        python_random_rollout,
+    )  # pylint: disable=import-outside-toplevel
+
+    env = CartPolePOMDP(discount_factor=0.99, noise_cov=np.diag([0.1, 0.1, 0.1, 0.1]))
+    state = np.array([0.0, 0.0, 0.0, 0.0], dtype=np.float64)
+    max_depth = 10
+    gamma = 0.95
+
+    # Pre-draw a fixed action sequence with numpy seed 0
+    np.random.seed(0)
+    fixed_actions = np.random.randint(0, 2, size=max_depth, dtype=np.int32)
+
+    class _SequenceActionSampler(ActionSampler):
+        def __init__(self, actions: np.ndarray) -> None:
+            self._actions = actions
+            self._idx = 0
+
+        def sample(self, belief_node=None) -> int:  # pylint: disable=unused-argument
+            a = int(self._actions[self._idx % len(self._actions)])
+            self._idx += 1
+            return a
+
+    # Run native rollout: seed numpy so randint draws the fixed_actions sequence
+    np.random.seed(0)
+    _native.set_seed(7)
+    native_return = env.simulate_random_rollout(
+        state=state,
+        action_sampler=None,
+        max_depth=max_depth,
+        discount_factor=gamma,
+        depth=0,
+    )
+
+    # Run Python base-class rollout with the same action sequence and C++ seed
+    sampler = _SequenceActionSampler(fixed_actions)
+    _native.set_seed(7)
+    python_return = python_random_rollout(
+        state=state,
+        depth=0,
+        action_sampler=sampler,
+        environment=env,
+        discount_factor=gamma,
+        max_depth=max_depth,
+    )
+
+    np.testing.assert_allclose(
+        native_return,
+        python_return,
+        atol=1e-9,
+        err_msg=(f"Native rollout {native_return:.9f} != " f"Python rollout {python_return:.9f}"),
+    )
+
+
+def test_scalar_obs_log_prob_un_floored_matches_batch_after_fix() -> None:
+    """Scalar obs log-prob below -690 floor matches the batch path post-fix.
+
+    Purpose: Pins the post-fix contract for CartPolePOMDP that
+        ``observation_log_probability`` (scalar) and
+        ``observation_log_probability_per_state`` (batch) agree on a
+        moderate-density anchor whose analytic log-probability is well
+        below the old ``log(p + 1e-300) ≈ -690.776`` floor but still
+        above the kernel's internal float64 underflow threshold.
+        Pre-fix, the scalar path floored such values at ~-690.776
+        while the batch path returned the un-floored kernel
+        log-likelihood — the asymmetry that motivated the env-wide
+        log-prob floor removal.
+
+    Given: A CartPolePOMDP env with ``noise_cov=np.eye(4)*0.01``, a
+        fixed next_state at the origin, action 0, and an observation
+        offset of (1.87, 1.87, 1.87, 1.87). The analytic 4-D Gaussian
+        log-pdf at this offset is ≈ -693.845.
+    When: Both ``observation_log_probability`` and
+        ``observation_log_probability_per_state`` are evaluated on the
+        same (next_state, action, observation).
+    Then: Both return finite, equal values to within atol=1e-6, and
+        the common value is below -690 (past the old floor).
+
+    Test type: unit
+    """
+    env = CartPolePOMDP(discount_factor=0.95, noise_cov=np.eye(4) * 0.01)
+    next_state = np.zeros(4)
+    action = 0
+    observation = np.array([1.87, 1.87, 1.87, 1.87])
+
+    scalar = env.observation_log_probability(next_state, action, [observation])[0]
+    batch = env.observation_log_probability_per_state(np.array([next_state]), action, observation)[
+        0
+    ]
+
+    assert np.isfinite(scalar), f"scalar should be finite at this anchor, got {scalar}"
+    assert np.isfinite(batch), f"batch should be finite at this anchor, got {batch}"
+    # Post symmetric C++ floor: both paths floor at log(1e-300) ~= -690.776
+    # for events past the floor, so they agree exactly.
+    np.testing.assert_allclose(scalar, batch, atol=1e-6)
+
+
+def test_initial_observation_dist_applies_obs_noise() -> None:
+    """initial_observation_dist marginalises state through the obs noise.
+
+    Purpose: Pins the post-fix contract that ``initial_observation_dist``
+        returns samples drawn from ``∫ p(o|s) p_0(s) ds`` rather than
+        ``p_0(s)`` directly. Pre-fix, the method aliased
+        ``CartPoleInitialStateDistribution`` and produced noise-free
+        states bounded by [-0.05, 0.05] per coordinate, which is
+        impossible under the env's continuous Gaussian obs model.
+
+    Given: A CartPolePOMDP env with diagonal ``noise_cov=diag(0.04)``
+        (std=0.2 per coord), seeded NumPy.
+    When: ``5000`` samples are drawn from ``initial_observation_dist``.
+    Then: At least one coordinate of at least one sample escapes the
+        ``[-0.05, 0.05]`` band of the raw state prior (proves noise was
+        added), the empirical mean is close to zero, and the empirical
+        variance is close to ``0.04`` per coordinate.
+
+    Test type: unit
+    """
+    np.random.seed(0)
+    noise_cov = np.eye(4) * 0.04
+    env = CartPolePOMDP(discount_factor=0.95, noise_cov=noise_cov)
+
+    samples = np.asarray(env.initial_observation_dist().sample(n_samples=5000))
+
+    assert samples.shape == (5000, 4)
+    # Raw state prior is bounded to [-0.05, 0.05]; with std=0.2 noise the
+    # observation must routinely escape that band.
+    assert (np.abs(samples) > 0.05).any()
+    np.testing.assert_allclose(samples.mean(axis=0), np.zeros(4), atol=0.02)
+    np.testing.assert_allclose(samples.var(axis=0), np.full(4, 0.04), atol=0.01)
+
+
+def test_is_equal_observation_tolerates_float_roundoff() -> None:
+    """is_equal_observation accepts numerically-close continuous obs.
+
+    Purpose: Pins the post-fix contract that two observations differing
+        only by float roundoff (e.g. an obs vs. itself after a no-op
+        arithmetic round-trip) compare equal, while clearly distinct
+        obs and exact copies retain the expected behavior.
+
+    Given: A CartPolePOMDP env and three observations: ``a``, an
+        identical copy ``a_copy``, a roundoff-perturbed ``a_eps``
+        (``a + 1e-12``), and a clearly different ``b``.
+    When: ``is_equal_observation`` is called on each pair.
+    Then: ``a == a_copy`` and ``a == a_eps`` return True; ``a == b``
+        returns False.
+
+    Test type: unit
+    """
+    env = CartPolePOMDP(discount_factor=0.95, noise_cov=np.eye(4) * 0.1)
+    a = np.array([0.1, -0.2, 0.03, -0.04])
+    a_copy = a.copy()
+    a_eps = a + 1e-12
+    b = np.array([0.1, -0.2, 0.03, 0.5])
+
+    assert env.is_equal_observation(a, a_copy)
+    assert env.is_equal_observation(a, a_eps)
+    assert not env.is_equal_observation(a, b)

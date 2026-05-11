@@ -16,23 +16,20 @@ build states via :meth:`PacManPOMDP.make_state` and read fields back with
 
 Classes:
     PacManPOMDP: The main POMDP environment implementation
-    PacManStateTransitionModel: Per-state transition model
-    PacManObservationModel: Per-state observation model
 """
 
 from enum import Enum
 from pathlib import Path
+from collections.abc import Hashable
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
 
 import numpy as np
 
-from POMDPPlanners.core.distributions import DiscreteDistribution
+from POMDPPlanners.core.distributions import DiscreteDistribution, Distribution
 from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
-    ObservationModel,
     SpaceInfo,
     SpaceType,
-    StateTransitionModel,
 )
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
 from POMDPPlanners.environments.pacman_pomdp import _native  # pylint: disable=no-name-in-module
@@ -50,140 +47,6 @@ class PacManPOMDPMetrics(Enum):
     AVG_EPISODE_LENGTH = "avg_episode_length"
     AVG_PACMAN_CLOSEST_GHOST_DISTANCE = "avg_pacman_closest_ghost_distance"
     AVG_COLLISION_ENCOUNTERS = "avg_collision_encounters"
-
-
-class PacManStateTransitionModel(_native.PacManTransitionCpp):
-    """State transition model for PacMan POMDP, backed by the C++ native kernel.
-
-    This is a thin shim over :class:`_native.PacManTransitionCpp`. All sampling
-    and probability evaluation runs in C++; the Python constructor only forwards
-    the env's precomputed ctor kwargs plus the shared patrol-direction buffer.
-    """
-
-    def __init__(self, state: np.ndarray, action: int, pomdp: "PacManPOMDP"):
-        """Initialize transition model.
-
-        Args:
-            state: Current state as the env's canonical ndarray.
-            action: Action to execute.
-            pomdp: Reference to the POMDP environment.
-        """
-        super().__init__(
-            state=state,
-            action=int(action),
-            **pomdp.get_transition_cpp_ctor_kwargs(),
-            patrol_dir_state=pomdp.ghost_patrol_directions,
-        )
-        self.pomdp = pomdp
-
-
-StateTransitionModel.register(PacManStateTransitionModel)
-
-
-class PacManObservationModel(_native.PacManObservationCpp):
-    """Observation model for PacMan POMDP, backed by the C++ native kernel.
-
-    The native kernel samples and evaluates observation log-likelihoods for
-    all ghosts as flat float64 ndarrays ``[g0_row, g0_col, ..., gN_row, gN_col]``.
-    The Python shim converts between this array shape and the public
-    tuple-of-(row, col) shape for backwards compatibility.
-    """
-
-    def __init__(self, next_state: np.ndarray, action: int, pomdp: "PacManPOMDP"):
-        """Initialize observation model.
-
-        Args:
-            next_state: Next state as the env's canonical ndarray.
-            action: Action that was executed.
-            pomdp: Reference to the POMDP environment.
-        """
-        super().__init__(
-            next_state=next_state,
-            action=int(action),
-            **pomdp.get_observation_cpp_ctor_kwargs(),
-        )
-        self.pomdp = pomdp
-        self._num_ghosts = pomdp.num_ghosts
-
-    def sample(  # type: ignore[override]
-        self, n_samples: int = 1
-    ) -> List[Tuple[Tuple[int, int], ...]]:
-        """Sample observations of all ghost positions with noise.
-
-        Returns tuples of ``(row, col)`` pairs (public API) by post-converting
-        the native ndarray outputs. The deliberate return-type widening
-        (ndarray → tuple-of-tuples) is why this override carries a type-ignore.
-        """
-        arrays = super().sample(n_samples)
-        return [self.pomdp.array_to_observation(arr) for arr in arrays]
-
-    def sample_closest_ghosts(
-        self, max_ghosts: int = 2, n_samples: int = 1
-    ) -> List[Tuple[Tuple[int, int], ...]]:
-        """Sample observations of only the closest ghosts (Python-only helper).
-
-        Not on the ObservationModel ABC; kept for backwards compatibility with
-        callers that want a reduced observation.
-        """
-        pacman_pos = self.pomdp.get_pacman_pos(self.next_state)
-        ghost_positions = self.pomdp.get_ghost_positions(self.next_state)
-        terminal = self.pomdp.get_terminal(self.next_state)
-        if terminal:
-            terminal_obs = tuple([(-1, -1)] * min(max_ghosts, len(ghost_positions)))
-            return [terminal_obs] * n_samples
-        ghost_distances = sorted(
-            (
-                (ghost_pos, abs(ghost_pos[0] - pacman_pos[0]) + abs(ghost_pos[1] - pacman_pos[1]))
-                for ghost_pos in ghost_positions
-            ),
-            key=lambda x: x[1],
-        )[:max_ghosts]
-        observations = []
-        for _ in range(n_samples):
-            ghost_obs = []
-            for ghost_pos, distance in ghost_distances:
-                noise_std = min(
-                    distance * self.pomdp.observation_noise_factor,
-                    self.pomdp.max_observation_noise,
-                )
-                noise_row = np.random.normal(0, noise_std)
-                noise_col = np.random.normal(0, noise_std)
-                observed_row = int(np.round(ghost_pos[0] + noise_row))
-                observed_col = int(np.round(ghost_pos[1] + noise_col))
-                observed_row = max(0, min(self.pomdp.maze_size[0] - 1, observed_row))
-                observed_col = max(0, min(self.pomdp.maze_size[1] - 1, observed_col))
-                ghost_obs.append((observed_row, observed_col))
-            observations.append(tuple(ghost_obs))
-        return observations
-
-    def probability(  # type: ignore[override]
-        self, values: List[Tuple[Tuple[int, int], ...]]
-    ) -> np.ndarray:
-        """Calculate observation probabilities for multi-ghost observations.
-
-        Accepts either the public tuple-of-tuples shape or a raw ndarray of
-        shape ``(N, 2 * num_ghosts)`` / ``(2 * num_ghosts,)``. Tuples of
-        wrong length (ghost count mismatch) receive probability 0.
-        """
-        if isinstance(values, np.ndarray):
-            return super().probability(values)
-        probs = np.zeros(len(values), dtype=np.float64)
-        usable_rows: List[np.ndarray] = []
-        usable_indices: List[int] = []
-        for i, obs_tuple in enumerate(values):
-            if len(obs_tuple) != self._num_ghosts:
-                continue  # wrong ghost count → probability 0
-            usable_rows.append(self.pomdp.observation_to_array(obs_tuple))
-            usable_indices.append(i)
-        if usable_rows:
-            stacked = np.stack(usable_rows)
-            sub_probs = super().probability(stacked)
-            for idx, p in zip(usable_indices, sub_probs):
-                probs[idx] = p
-        return probs
-
-
-ObservationModel.register(PacManObservationModel)
 
 
 class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-methods
@@ -225,7 +88,7 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
         False
     """
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-statements
         self,
         maze_size: Tuple[int, int] = (7, 7),
         walls: Optional[Set[Tuple[int, int]]] = None,
@@ -336,15 +199,22 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
         # Validate parameters
         self._validate_parameters()
 
-        # Define actions: 0=North, 1=East, 2=South, 3=West
-        self.action_names = ["north", "east", "south", "west"]
+        # Define actions: 0=North, 1=East, 2=South, 3=West, 4=Stay.
+        # ``Stay`` is supported by the C++ kernel and the precomputed
+        # neighbor table; previously it was hidden from ``get_actions``
+        # so planners could not select it.
+        self.action_names = ["north", "east", "south", "west", "stay"]
 
-        # Action to direction vector mapping for visualization
+        # Action to (row_delta, col_delta) mapping. Aligned with
+        # ``pacman_grid_utils._DIRECTION_OFFSETS`` so visualisers and
+        # Python-side simulators see the same axis convention as the
+        # neighbor table consumed by the C++ kernel.
         self.action_to_vector = {
-            0: (0, -1),  # north - up (negative row)
-            1: (1, 0),  # east - right (positive col)
-            2: (0, 1),  # south - down (positive row)
-            3: (-1, 0),  # west - left (negative col)
+            0: (-1, 0),  # north - up    (row - 1)
+            1: (0, 1),  # east  - right (col + 1)
+            2: (1, 0),  # south - down  (row + 1)
+            3: (0, -1),  # west  - left  (col - 1)
+            4: (0, 0),  # stay
         }
 
         # Patrol-direction state, mutated in place by the C++ transition kernel.
@@ -367,6 +237,15 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
         self._cached_neighbor_table: Optional[np.ndarray] = None
         self._cached_neighbor_validity: Optional[np.ndarray] = None
         self._cached_transition_cpp_ctor_kwargs: Optional[Dict[str, Any]] = None
+        # Per-action C++ kernel caches keyed by int action; static (P, 2)
+        # int32 pellet-position buffer reused by the vectorised reward path.
+        self._trans_kernel_cache: Dict[int, Any] = {}
+        self._obs_kernel_cache: Dict[int, Any] = {}
+        self._pellet_positions_arr: np.ndarray = (
+            np.asarray(self._all_pellet_positions, dtype=np.int32).reshape(-1, 2)
+            if self._num_initial_pellets > 0
+            else np.empty((0, 2), dtype=np.int32)
+        )
 
     @property
     def initial_ghost_pos(self) -> Tuple[int, int]:
@@ -595,6 +474,16 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
             if ghost_pos in self.walls:
                 raise ValueError(f"Initial ghost {i} position {ghost_pos} is inside a wall")
 
+        # PacMan cannot start on top of a ghost — the env would begin in
+        # an immediate-collision (terminal) state and any rollout would
+        # accumulate zero reward from step zero.
+        for i, ghost_pos in enumerate(self.initial_ghost_positions):
+            if ghost_pos == self.initial_pacman_pos:
+                raise ValueError(
+                    f"Initial ghost {i} position {ghost_pos} coincides with "
+                    f"initial PacMan position {self.initial_pacman_pos}"
+                )
+
         # Validate ghost coordination strategy
         valid_coordination = ["independent", "coordinated", "mixed"]
         if self.ghost_coordination not in valid_coordination:
@@ -610,22 +499,218 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
         """Get all available actions."""
         return list(range(len(self.action_names)))
 
-    def state_transition_model(self, state: np.ndarray, action: int) -> StateTransitionModel:
-        """Get state transition model."""
-        return PacManStateTransitionModel(self._require_state_array(state), action, self)
+    # ── Env-API sampling/log-prob methods ───────────────────────────
+    # These fetch a per-action cached C++ kernel and rewrite only the
+    # stored state/next_state via set_state / set_next_state. Building the
+    # kernel from scratch on every call dominated the hot path; with the
+    # cache, neighbor tables / ghost strategy codes / pellet positions are
+    # repacked exactly once per (env, action) pair.
 
-    def observation_model(self, next_state: np.ndarray, action: int) -> ObservationModel:
-        """Get observation model."""
-        return PacManObservationModel(self._require_state_array(next_state), action, self)
+    def _get_trans_kernel(self, action: int) -> Any:
+        key = int(action)
+        kernel = self._trans_kernel_cache.get(key)
+        if kernel is None:
+            kernel = _native.PacManTransitionCpp(
+                state=np.zeros(self._state_dim, dtype=np.float64),
+                action=key,
+                **self.get_transition_cpp_ctor_kwargs(),
+                patrol_dir_state=self.ghost_patrol_directions,
+            )
+            self._trans_kernel_cache[key] = kernel
+        return kernel
 
-    def reward(self, state: np.ndarray, action: int) -> float:
-        """Calculate immediate reward."""
+    def _get_obs_kernel(self, action: int) -> Any:
+        key = int(action)
+        kernel = self._obs_kernel_cache.get(key)
+        if kernel is None:
+            kernel = _native.PacManObservationCpp(
+                next_state=np.zeros(self._state_dim, dtype=np.float64),
+                action=key,
+                **self.get_observation_cpp_ctor_kwargs(),
+            )
+            self._obs_kernel_cache[key] = kernel
+        return kernel
+
+    def sample_next_state(self, state: np.ndarray, action: int, n_samples: int = 1) -> Any:
+        kernel = self._get_trans_kernel(action)
+        kernel.set_state(self._require_state_array(state))
+        samples = kernel.sample(n_samples)
+        if n_samples == 1:
+            return samples[0]
+        return samples
+
+    def sample_observation(self, next_state: np.ndarray, action: int, n_samples: int = 1) -> Any:
+        kernel = self._get_obs_kernel(action)
+        kernel.set_next_state(self._require_state_array(next_state))
+        arrays = kernel.sample(n_samples)
+        if n_samples == 1:
+            return self.array_to_observation(arrays[0])
+        return [self.array_to_observation(arr) for arr in arrays]
+
+    def transition_log_probability(
+        self, state: np.ndarray, action: int, next_states: Any
+    ) -> np.ndarray:
+        kernel = self._get_trans_kernel(action)
+        kernel.set_state(self._require_state_array(state))
+        # Accept either a sequence of 1-D state arrays or a 2-D ndarray.
+        if isinstance(next_states, np.ndarray) and next_states.ndim == 2:
+            stacked = next_states
+        else:
+            stacked = np.stack([np.asarray(s, dtype=np.float64) for s in next_states])
+        probs = np.asarray(kernel.probability(stacked))
+        with np.errstate(divide="ignore"):
+            return np.log(probs)
+
+    def observation_log_probability(
+        self, next_state: np.ndarray, action: int, observations: Any
+    ) -> np.ndarray:
+        kernel = self._get_obs_kernel(action)
+        kernel.set_next_state(self._require_state_array(next_state))
+        # Accept either a 2-D ndarray of shape (N, 2*num_ghosts) or a sequence
+        # of public tuple-of-(row, col) observations.
+        if isinstance(observations, np.ndarray) and observations.ndim == 2:
+            stacked = observations
+            probs = np.asarray(kernel.probability(stacked))
+            with np.errstate(divide="ignore"):
+                return np.log(probs)
+        n = len(observations)
+        probs = np.zeros(n, dtype=np.float64)
+        usable_rows: List[np.ndarray] = []
+        usable_indices: List[int] = []
+        for i, obs in enumerate(observations):
+            if len(obs) != self.num_ghosts:
+                continue  # wrong ghost count -> probability 0 -> -inf
+            usable_rows.append(self.observation_to_array(obs))
+            usable_indices.append(i)
+        if usable_rows:
+            stacked = np.stack(usable_rows)
+            sub_probs = np.asarray(kernel.probability(stacked))
+            for idx, p in zip(usable_indices, sub_probs):
+                probs[idx] = p
+        with np.errstate(divide="ignore"):
+            return np.log(probs)
+
+    def sample_next_state_batch(self, states: Any, action: int) -> np.ndarray:
+        if isinstance(states, np.ndarray) and states.ndim == 2:
+            states_array = np.ascontiguousarray(states, dtype=np.float64)
+        else:
+            states_array = np.ascontiguousarray(
+                np.stack([self._require_state_array(s) for s in states]),
+                dtype=np.float64,
+            )
+        # batch_sample reads the per-row state from the input, not the
+        # kernel's stored state, so no set_state is needed here.
+        kernel = self._get_trans_kernel(action)
+        return np.asarray(kernel.batch_sample(states_array), dtype=np.float64)
+
+    def observation_log_probability_per_state(
+        self, next_states: Any, action: int, observation: Any
+    ) -> np.ndarray:
+        if isinstance(next_states, np.ndarray) and next_states.ndim == 2:
+            next_states_array = np.ascontiguousarray(next_states, dtype=np.float64)
+        else:
+            next_states_array = np.ascontiguousarray(
+                np.stack([self._require_state_array(s) for s in next_states]),
+                dtype=np.float64,
+            )
+        if isinstance(observation, np.ndarray):
+            observation_array = np.ascontiguousarray(observation, dtype=np.float64).ravel()
+        else:
+            observation_array = np.ascontiguousarray(
+                self.observation_to_array(observation), dtype=np.float64
+            )
+        # batch_log_likelihood reads next_state per row from the input;
+        # no set_next_state needed.
+        kernel = self._get_obs_kernel(action)
+        return np.asarray(
+            kernel.batch_log_likelihood(
+                next_particles=next_states_array,
+                observation=observation_array,
+            ),
+            dtype=np.float64,
+        )
+
+    def simulate_random_rollout(
+        self,
+        state: Any,
+        action_sampler: "Any",
+        max_depth: int,
+        discount_factor: float,
+        depth: int = 0,
+    ) -> float:
+        """Estimate the value of ``state`` via a native C++ random rollout.
+
+        Pre-draws all action indices in NumPy, then delegates the entire
+        trajectory (transition + reward accumulation) to the C++ kernel.
+        This avoids per-step Python frame overhead for the common path.
+
+        Args:
+            state: Current state ndarray.
+            action_sampler: Object with a ``sample()`` method returning a
+                random action; only used to pre-draw action integers.
+            max_depth: Maximum rollout depth.
+            discount_factor: Per-step discount factor.
+            depth: Current depth consumed by the search tree. Defaults to 0.
+
+        Returns:
+            Discounted cumulative reward along the sampled trajectory.
+        """
+        state_arr = self._require_state_array(state)
+        remaining_depth = max_depth - depth
+        if remaining_depth <= 0 or self.is_terminal(state_arr):
+            return 0.0
+        num_actions = len(self.action_names)
+        action_indices = np.random.randint(0, num_actions, size=remaining_depth, dtype=np.int32)
+        transition_kwargs = self.get_transition_cpp_ctor_kwargs()
+        return _native.simulate_rollout(
+            state=state_arr,
+            action_indices=action_indices,
+            maze_rows=transition_kwargs["maze_rows"],
+            maze_cols=transition_kwargs["maze_cols"],
+            neighbor_table=transition_kwargs["neighbor_table"],
+            neighbor_validity=transition_kwargs["neighbor_validity"],
+            pellet_positions=transition_kwargs["pellet_positions"],
+            ghost_aggressiveness=transition_kwargs["ghost_aggressiveness"],
+            ghost_coordination_code=transition_kwargs["ghost_coordination_code"],
+            ghost_strategy_codes=transition_kwargs["ghost_strategy_codes"],
+            num_ghosts=transition_kwargs["num_ghosts"],
+            num_pellets=transition_kwargs["num_pellets"],
+            pellet_reward=transition_kwargs["pellet_reward"],
+            idx_pac_row=transition_kwargs["idx_pac_row"],
+            idx_pac_col=transition_kwargs["idx_pac_col"],
+            idx_ghosts_start=transition_kwargs["idx_ghosts_start"],
+            idx_pellets_start=transition_kwargs["idx_pellets_start"],
+            idx_pellets_end=transition_kwargs["idx_pellets_end"],
+            idx_score=transition_kwargs["idx_score"],
+            idx_terminal=transition_kwargs["idx_terminal"],
+            patrol_dir_state=self.ghost_patrol_directions,
+            ghost_collision_penalty=float(self.ghost_collision_penalty),
+            step_penalty=float(self.step_penalty),
+            win_reward=float(self.win_reward),
+            discount_factor=float(discount_factor),
+            depth=0,
+            max_depth=remaining_depth,
+        )
+
+    def reward(self, state: np.ndarray, action: int, next_state: Any = None) -> float:
+        """Calculate immediate reward.
+
+        Uses the realised ``next_state`` when supplied (e.g. by
+        :meth:`Environment.sample_next_step`) so the collision penalty
+        and win bonus reflect the same stochastic ghost transition as
+        the trajectory rather than a fresh independent draw. When
+        ``next_state`` is ``None``, falls back to sampling one here.
+        """
         state = self._require_state_array(state)
         if state[self._idx_terminal] > 0.5:
             return 0.0
 
+        if next_state is None:
+            next_state = self.sample_next_state(state, action)
+        else:
+            next_state = self._require_state_array(next_state)
+
         total_reward = self.step_penalty
-        next_state = self.state_transition_model(state, action).sample()[0]
 
         next_pac_row = int(next_state[self._idx_pac_row])
         next_pac_col = int(next_state[self._idx_pac_col])
@@ -647,7 +732,10 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
         return total_reward
 
     def reward_batch(  # type: ignore[override]
-        self, states: Union[np.ndarray, Sequence[Any]], action: int
+        self,
+        states: Union[np.ndarray, Sequence[Any]],
+        action: int,
+        next_states: Optional[Union[np.ndarray, Sequence[Any]]] = None,
     ) -> np.ndarray:
         """Calculate rewards for a batch of states.
 
@@ -655,69 +743,109 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
         vectorized path, or a sequence of 1-D state arrays on the fallback
         per-particle path.
 
-        Computes deterministic reward components only: step penalty, pellet
-        collection, and win bonus. Ghost collision penalty is excluded because
-        it depends on stochastic ghost movement.
-
-        Args:
-            states: Array of shape ``(N, state_dim)`` or sequence of 1-D
-                state arrays.
-            action: Discrete action index (0-3).
-
-        Returns:
-            1-D array of reward values with shape ``(N,)``.
+        Without ``next_states``, computes deterministic reward components
+        only (step penalty, pellet collection, win bonus); ghost collision
+        penalty is excluded because it depends on the stochastic ghost
+        transition. When ``next_states`` is supplied (e.g. by a caller
+        that already realised the batch transition), the collision
+        penalty *is* included against those realised draws so the per-
+        particle batch reward agrees with the trajectory-driven
+        single-state path.
         """
         states_arr = np.asarray(states)
+        next_states_arr = self._coerce_next_states_arr(next_states)
         if states_arr.dtype.kind == "f":
             if states_arr.ndim == 1:
                 states_arr = states_arr.reshape(1, -1)
-            return self._compute_reward_batch(states_arr, action)
-        return np.array([self.reward(states[i], action) for i in range(len(states))])
+            return self._compute_reward_batch(states_arr, action, next_states_arr)
+        if next_states_arr is None:
+            return np.array([self.reward(states[i], action) for i in range(len(states))])
+        return np.array(
+            [self.reward(states[i], action, next_states_arr[i]) for i in range(len(states))]
+        )
 
-    def _compute_reward_batch(self, states_arr: np.ndarray, action: int) -> np.ndarray:
+    def _coerce_next_states_arr(
+        self,
+        next_states: Optional[Union[np.ndarray, Sequence[Any]]],
+    ) -> Optional[np.ndarray]:
+        if next_states is None:
+            return None
+        arr = np.asarray(next_states, dtype=np.float64)
+        if arr.ndim == 1:
+            arr = arr.reshape(1, -1)
+        return arr
+
+    def _compute_reward_batch(
+        self,
+        states_arr: np.ndarray,
+        action: int,
+        next_states_arr: Optional[np.ndarray] = None,
+    ) -> np.ndarray:
+        # Single-pass vectorised reward kernel. Without ``next_states_arr``
+        # the ghost-collision penalty is excluded because it depends on
+        # the stochastic ghost transition; when supplied (caller already
+        # realised the batch transition) the penalty is included against
+        # those realised draws. Patrol-direction state is left alone here
+        # — it is mutated only inside the C++ transition kernel.
         terminal = states_arr[:, self._idx_terminal] > 0.5
         rewards = np.where(terminal, 0.0, self.step_penalty)
 
-        new_pac_rows, new_pac_cols = self._batch_move_pacman(states_arr, action)
-        pellet_collected, all_collected = self._batch_check_pellets(
-            states_arr, new_pac_rows, new_pac_cols
-        )
-        rewards += np.where(~terminal & pellet_collected, self.pellet_reward, 0.0)
-        rewards += np.where(~terminal & all_collected, self.win_reward, 0.0)
-        return rewards
-
-    def _batch_move_pacman(
-        self, states_arr: np.ndarray, action: int
-    ) -> Tuple[np.ndarray, np.ndarray]:
+        # Vectorised neighbor-table lookup: (rows, cols, action) -> next pos.
         pac_rows = states_arr[:, self._idx_pac_row].astype(np.int32)
         pac_cols = states_arr[:, self._idx_pac_col].astype(np.int32)
-        table = self._get_neighbor_table()
-        new_positions = table[pac_rows, pac_cols, action]
-        return new_positions[:, 0], new_positions[:, 1]
+        new_positions = self._get_neighbor_table()[pac_rows, pac_cols, action]
+        new_pac_rows = new_positions[:, 0]
+        new_pac_cols = new_positions[:, 1]
 
-    def _batch_check_pellets(
-        self,
-        states_arr: np.ndarray,
-        pac_rows: np.ndarray,
-        pac_cols: np.ndarray,
-    ) -> Tuple[np.ndarray, np.ndarray]:
-        n = states_arr.shape[0]
+        rewards = self._add_collision_penalty_batch(
+            rewards, terminal, new_pac_rows, new_pac_cols, next_states_arr
+        )
+
+        if self._pellet_positions_arr.shape[0] == 0:
+            # Degenerate config (env constructed with no pellets): there is
+            # nothing to collect and therefore nothing to "win". Returning
+            # rewards alone (step penalty for non-terminal, zero for
+            # terminal, plus optional collision) avoids the prior bug that
+            # paid out ``win_reward`` on every non-terminal step against
+            # an empty pellet set.
+            return rewards
+
         pellet_mask = states_arr[:, self._idx_pellets_start : self._idx_pellets_end]
-        pellet_pos = np.array(self._all_pellet_positions, dtype=np.int32)
+        pellet_pos = self._pellet_positions_arr  # (P, 2) int32, static.
 
-        if len(pellet_pos) == 0:
-            return np.zeros(n, dtype=bool), np.ones(n, dtype=bool)
-
-        # Check if new pacman position matches any active pellet
-        row_match = pac_rows[:, None] == pellet_pos[None, :, 0]
-        col_match = pac_cols[:, None] == pellet_pos[None, :, 1]
-        pos_match = row_match & col_match
+        # Broadcast (N, 1) vs (1, P): which pellet (if any) sits on the
+        # target cell, gated on it currently being active.
+        pos_match = (new_pac_rows[:, None] == pellet_pos[None, :, 0]) & (
+            new_pac_cols[:, None] == pellet_pos[None, :, 1]
+        )
         active_match = pos_match & (pellet_mask > 0.5)
         collected = active_match.any(axis=1)
 
         remaining_after = pellet_mask.sum(axis=1) - collected.astype(np.float64)
         all_collected = collected & (remaining_after < 0.5)
-        return collected, all_collected
+
+        rewards += np.where(~terminal & collected, self.pellet_reward, 0.0)
+        rewards += np.where(~terminal & all_collected, self.win_reward, 0.0)
+        return rewards
+
+    def _add_collision_penalty_batch(
+        self,
+        rewards: np.ndarray,
+        terminal: np.ndarray,
+        new_pac_rows: np.ndarray,
+        new_pac_cols: np.ndarray,
+        next_states_arr: Optional[np.ndarray],
+    ) -> np.ndarray:
+        if next_states_arr is None or self.num_ghosts <= 0:
+            return rewards
+        # Use realised post-transition ghost positions; mark a collision
+        # for any ghost that ends on pacman's new cell.
+        collision = np.zeros(rewards.shape, dtype=bool)
+        for g in range(self.num_ghosts):
+            g_rows = next_states_arr[:, self._idx_ghosts_start + 2 * g].astype(np.int32)
+            g_cols = next_states_arr[:, self._idx_ghosts_start + 2 * g + 1].astype(np.int32)
+            collision |= (g_rows == new_pac_rows) & (g_cols == new_pac_cols)
+        return rewards + np.where(~terminal & collision, self.ghost_collision_penalty, 0.0)
 
     def _get_neighbor_table(self) -> np.ndarray:
         if self._cached_neighbor_table is None:
@@ -813,18 +941,53 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
         )
         return DiscreteDistribution(values=[initial_state], probs=np.array([1.0]))
 
-    def initial_observation_dist(self) -> DiscreteDistribution:
-        """Get initial observation distribution."""
-        # Initial observation is the true ghost position with some noise
-        initial_obs = self.observation_model(
-            next_state=self.initial_state_dist().sample()[0], action=0  # Dummy action
-        ).sample()[0]
+    def initial_observation_dist(self) -> Distribution:
+        """Get the initial observation distribution.
 
-        return DiscreteDistribution(values=[initial_obs], probs=np.array([1.0]))
+        Returns a live distribution that draws fresh noisy ghost-position
+        observations from the true initial state on each ``sample`` call,
+        instead of the previous Dirac wrapper around a single pre-drawn
+        sample (which collapsed the entire initial-belief observation
+        prior to a point mass).
+        """
+        return _PacManInitialObservationDistribution(self)
 
     def is_equal_observation(self, observation1: Any, observation2: Any) -> bool:
         """Check if two observations are equal."""
+        if not isinstance(observation1, tuple) or not isinstance(observation2, tuple):
+            raise TypeError(
+                "PacMan observations must be tuples of (row, col) ghost-position tuples"
+            )
         return observation1 == observation2
+
+    def hash_action(self, action: Any) -> Hashable:
+        # Discrete int actions (movement directions); reject non-integers
+        # so non-hashable / out-of-range actions surface immediately
+        # instead of silently corrupting tree-search action indices.
+        if not isinstance(action, (int, np.integer)):
+            raise TypeError(
+                f"PacMan actions must be int in 0..{len(self.action_names) - 1}, "
+                f"got {type(action).__name__}"
+            )
+        return int(action)
+
+    # ------------------------------------------------------------------
+    # Pickling
+    # ------------------------------------------------------------------
+
+    def __getstate__(self) -> Dict[str, Any]:
+        # Per-action C++ kernel caches hold pybind11 objects that are not
+        # picklable by default. Drop them at serialization time;
+        # __setstate__ rebuilds empty caches that lazily refill on first use.
+        state = self.__dict__.copy()
+        state["_trans_kernel_cache"] = {}
+        state["_obs_kernel_cache"] = {}
+        return state
+
+    def __setstate__(self, state: Dict[str, Any]) -> None:
+        vars(self).update(state)
+        self._trans_kernel_cache = {}
+        self._obs_kernel_cache = {}
 
     def _check_episode_win_status(self, final_state: np.ndarray) -> int:
         pellet_mask = final_state[self._idx_pellets_start : self._idx_pellets_end]
@@ -1090,6 +1253,27 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
 
         visualizer = PacManVisualizer(self)
         visualizer.cache_visualization(history, cache_path)
+
+
+class _PacManInitialObservationDistribution(Distribution):
+    """Live distribution over initial PacMan observations.
+
+    Holds a reference to the env and re-uses its observation kernel to
+    draw fresh noisy ghost-position observations on each ``sample`` call.
+    Replaces the previous Dirac wrapper that froze the initial belief
+    observation prior to a single pre-drawn point mass.
+    """
+
+    def __init__(self, env: "PacManPOMDP") -> None:
+        self._env = env
+
+    def sample(self, n_samples: int = 1) -> List[Any]:
+        initial_state = self._env.initial_state_dist().sample()[0]
+        if n_samples == 1:
+            return [self._env.sample_observation(next_state=initial_state, action=0)]
+        return list(
+            self._env.sample_observation(next_state=initial_state, action=0, n_samples=n_samples)
+        )
 
 
 def create_simple_maze_pacman(

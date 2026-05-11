@@ -141,9 +141,11 @@ class Numpy2DDistribution(Distribution):
 
         self.values = values
         self.probs = probs
+        self._cumprobs = np.cumsum(probs)
 
     def sample(self, n_samples: int = 1) -> List[Any]:
-        indices = np.random.choice(len(self.probs), size=n_samples, p=self.probs)
+        indices = np.searchsorted(self._cumprobs, np.random.rand(n_samples))
+        np.clip(indices, 0, self.values.shape[1] - 1, out=indices)
         return [self.values[:, idx] for idx in indices]
 
     def probability(self, values: List[Any]) -> np.ndarray:

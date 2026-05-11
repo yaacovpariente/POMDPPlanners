@@ -203,7 +203,6 @@ def sparse_pft_planner(tiger_env):
     return SparsePFT(
         environment=tiger_env,
         discount_factor=DISCOUNT_FACTOR,
-        gamma=DISCOUNT_FACTOR,
         depth=DEPTH,
         c_ucb=1.0,
         beta_ucb=0.5,
