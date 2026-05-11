@@ -5,6 +5,48 @@ All notable changes to POMDPPlanners are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-05-11
+
+### Added
+- Stochastic obstacle-collision and dangerous-area mechanics in `PushPOMDP`, `ContinuousPushPOMDP`, `RockSamplePOMDP`, `LaserTagPOMDP`, and `ContinuousLaserTagPOMDP` (Bernoulli per-step penalty draws producing heavy-tailed return distributions for benchmarking risk-sensitive planners against expected-value MCTS on the same env).
+- PacMan particle-belief visualization: ghost-position particle overlay rendered on top of the sprite-based viewer, with bundled DejaVu fonts for deterministic CI rendering.
+- iCVaR-POMCPOW paper-formula tests pinning the LCB / CVaR-exploration formulas against the published reference.
+- Arena-tree coverage and MCTS planner tree-structure tests.
+- Env-API conformance tests for `hash_action` / `hash_observation` across all environments.
+- Metric-invariants sanity-check suite (rate bounds, count non-negativity, CI bounds, return-shift linearity, belief invariants) wired into per-env metric tests.
+
+### Changed
+- Arena tree: typed accessors and compound mutation helpers (`increment_visit_count`, `update_action_q_with_return`); all planners migrated to the typed surface.
+- PacMan state representation refactored to a raw NumPy `ndarray`; native batch path and obstacle/danger-penalty handling updated accordingly.
+- `Environment.reward` extended with an optional `next_state` parameter so penalty terms (obstacles, dangerous areas) can be scored against the realised post-transition state rather than a fresh sample. Threaded through rollout and POMCP-DPW.
+- PEP 639 license-file metadata; `setuptools>=77` build requirement.
+
+### Performance
+- PFT-DPW belief sampling: amortized O(log K) via inline CDF on weighted-particle beliefs.
+- iCVaR CVaR-computation kernels migrated to Numba; faster beacon-likelihood and systematic resampling on the iCVaR path.
+- Arena-tree column-store buffers pre-sized to avoid reallocations during tree growth.
+- Tiger-pattern sampling fast-path on environment sampling.
+
+### Fixed
+- PFT-DPW / BetaZero: immediate-reward stash now keyed on `action_id` (was overwriting across sibling actions).
+- POMCP-DPW: saturated branch-reward propagation.
+- ConstrainedZero: failure-target alignment.
+- CVaR exploration: corrected LCB formula; horizon-zero handling; LCB overflow on long horizons; vectorized-belief support.
+- Sparse-sampling iCVaR: unvisited-action mask was inverted.
+- Sparse-sampling: branching-factor loop off-by-one.
+- BetaZero: unified continuous sampling across rollout and tree-expansion paths.
+- PacMan: multiple audit-flagged environment bugs (state encoding, reward sign on capture, terminal handling, native/Python parity).
+- CartPole and ContinuousLightDark: observation-model corrections.
+- ContinuousLightDark: dropped the sampler grid-clip that biased particle weights.
+- LaserTag: scalar/batch log-probability asymmetry; pickling regression on the continuous variant; observation-log-probability for the B1/B2 kernels; terminal-sentinel guard on `kernel.probability`.
+- Tiger: listen-action impossible-observation handling and Push reward-range advertisement.
+- RockSample: dangerous-area sign correction.
+- Continuous Push (discrete-actions variant): obstacle-hit-probability handling.
+
+### Removed
+- `Tree.backup_belief_v_from_children` (per-algorithm V-backup formulas now inlined at the call sites — POMCP visited-only, iCVaR CVaR-over-children, others use `max`).
+- Redundant gamma in sparse PFT.
+
 ## [0.2.0] - 2026-04-20
 
 ### Added
