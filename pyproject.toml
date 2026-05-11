@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "POMDPPlanners"
-version = "0.3.0"
+version = "0.3.1"
 description = "A Python package for POMDP planning algorithms and environments"
 readme = "README.md"
 license = "MIT"
