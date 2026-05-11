@@ -412,13 +412,11 @@ class TestConstrainedZeroHelpers:
 
         Purpose: Validates that ``_finalize_episode_data`` records the
         episode-level failure flag for every timestep — matching the
-        ConstrainedZero.jl reference (BetaZero.jl ``safety`` branch,
-        ``run_simulation`` lines 745-757) and the
         ``ConstrainedTrainingExample.failure_target`` docstring which
         already reads "Binary episode-level failure indicator (1.0 if
         failure occurred)". The previous per-step backward-accumulation
         rule produced 0.0 for examples added after the failure step,
-        contradicting both the reference and the documented intent.
+        contradicting the documented intent.
 
         Given: A 3-step history where only step 1 has a failure
             (``failure_fn(next_state)`` is True), with three pending

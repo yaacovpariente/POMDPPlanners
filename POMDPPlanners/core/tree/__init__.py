@@ -7,8 +7,7 @@ Two implementations live here:
   implementation, preserved for backward compatibility.
 * :mod:`POMDPPlanners.core.tree.arena` — column-store SoA tree (``Tree``
   holds one list per node attribute, nodes are integer IDs). Faster on
-  every measured tree-side operation; the layout used by
-  JuliaPOMDP/POMCPOW.jl.
+  every measured tree-side operation.
 
 The legacy classes (``ActionNode``, ``BeliefNode``, ``BaseNode``,
 ``print_tree``, ``get_optimal_action_*``) are re-exported from this

@@ -70,7 +70,7 @@ class ArenaPathSimulationPolicy(Policy):
         self.n_simulations = n_simulations
         self.time_out_in_seconds = time_out_in_seconds
         self.action_sampler = action_sampler
-        # Optional sizehint for Tree column buffers (POMCPOW.jl-style).
+        # Optional sizehint for Tree column buffers.
         self.reserve_capacity = reserve_capacity
         # Adaptive sizehint: remember the last tree's final node count so
         # the next ``_learn_tree`` call can reserve a buffer that already

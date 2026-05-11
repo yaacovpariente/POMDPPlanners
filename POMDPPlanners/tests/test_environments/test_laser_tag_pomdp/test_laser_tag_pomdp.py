@@ -1393,7 +1393,7 @@ class TestLaserTagPOMDP:
         When: ``reward(state, action=East, next_state=...)`` is invoked.
         Then: The reward equals ``-step_cost`` only — the wall-collision
             penalty is correctly skipped because the realised position is
-            clear. This matches the canonical Julia LaserTag (no wall
+            clear. This matches the canonical LaserTag specification (no wall
             penalties at all) and replaces the prior behaviour that
             applied the penalty against the open-loop intended position.
 

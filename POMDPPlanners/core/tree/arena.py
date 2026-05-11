@@ -21,10 +21,10 @@ line to ``_allocate`` (the default value at allocation). Direct attribute
 access is used in ``_allocate`` rather than a generic ``setattr`` loop
 because the per-allocation cost is on the hot path.
 
-This layout follows JuliaPOMDP/POMCPOW.jl: contiguous typed vectors instead
-of a graph of Python objects, integer IDs instead of object references,
-and a single allocation point so per-node overhead is one append per
-column rather than a Python class instantiation plus GC bookkeeping.
+This layout uses contiguous typed vectors instead of a graph of Python
+objects, integer IDs instead of object references, and a single allocation
+point so per-node overhead is one append per column rather than a Python
+class instantiation plus GC bookkeeping.
 
 In addition to the columns, the tree maintains two per-parent indexes:
 
@@ -105,8 +105,7 @@ class Tree:
     def reserve(self, capacity: int) -> None:
         """Pre-allocate ``capacity`` slots in every per-node column.
 
-        Mirrors Julia's ``sizehint!`` / ``Vector{T}(undef, n)``. After this
-        call ``len(tree)`` is unchanged, but ``capacity`` slots are
+        After this call ``len(tree)`` is unchanged, but ``capacity`` slots are
         physically resident in each column so the first ``capacity``
         subsequent allocations write at a cursor instead of triggering
         ``list.append`` (and the periodic O(N) realloc bursts that come

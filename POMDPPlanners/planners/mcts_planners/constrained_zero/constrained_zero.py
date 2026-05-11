@@ -491,14 +491,12 @@ class ConstrainedZero(BetaZero):
     def _finalize_episode_data(self, history) -> None:
         rewards = [step.reward for step in history.history if step.reward is not None]
         discounted_returns = self._compute_discounted_returns(rewards)
-        # Match the ConstrainedZero.jl reference (BetaZero.jl ``safety``
-        # branch, ``run_simulation`` lines 745-757) and the documented
-        # semantic of ``ConstrainedTrainingExample.failure_target`` —
-        # a single episode-level "any failure occurred?" boolean,
-        # applied to every training example. Avoids the
-        # ``discounted_returns`` (None-filtered) vs. per-step
-        # ``failure_targets`` (full-history) length mismatch the previous
-        # implementation could hit.
+        # Match the documented semantic of
+        # ``ConstrainedTrainingExample.failure_target`` — a single
+        # episode-level "any failure occurred?" boolean, applied to every
+        # training example. Avoids the ``discounted_returns``
+        # (None-filtered) vs. per-step ``failure_targets`` (full-history)
+        # length mismatch the previous implementation could hit.
         failure_target = float(self._compute_episode_failure(history))
 
         for i, pending in enumerate(self._pending_examples):

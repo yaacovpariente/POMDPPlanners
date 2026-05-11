@@ -27,7 +27,7 @@ python bench_pacman_ndarray_state.py
 
 - **Every scalar per-call hot path drops ~7–11×** — the Python-scalar ndarray indexing tax from PR #87 is erased. `reward`, `state_transition_model.sample()`, `observation_model.sample()` all finish in ~4–5 µs where they previously took 35–44 µs. Random-policy rollouts drop from ~0.9 ms/episode to ~0.1 ms/episode (7.3× faster than pre-#87).
 - **Vectorized belief update drops 6.6×** — the batched kernel (`PacManVectorizedUpdater.batch_transition` / `batch_observation_log_likelihood`) dispatches straight into `PacManTransitionCpp.batch_sample` / `PacManObservationCpp.batch_log_likelihood`. Each 200-particle update is ~30 µs vs 200 µs before.
-- **POMCPOW sims/sec = 3,817** on a 30-second budget with the default Julia-POMCPOW.jl hyperparameters (`k_a = k_o = 10.0`, `α = 0.5`, `c = 1.0`, `depth = 20`, `γ = 0.95`, 200 particles). This is a number that can now be directly compared against Julia `POMCPOW.jl`'s throughput on matched environments.
+- **POMCPOW sims/sec = 3,817** on a 30-second budget with the default POMCPOW hyperparameters (`k_a = k_o = 10.0`, `α = 0.5`, `c = 1.0`, `depth = 20`, `γ = 0.95`, 200 particles).
 - Mixed-strategy rows confirm that the non-independent + patrol branches in C++ do not regress vs. the independent + aggressive configuration (both ~4 µs / sample, ~25 µs / belief update).
 
 The `make_state` row is unchanged from PR #87 since it's purely a ndarray builder (no transition work).
