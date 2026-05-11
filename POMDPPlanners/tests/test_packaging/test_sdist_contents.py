@@ -21,6 +21,23 @@ PACKAGE_ROOT = REPO_ROOT / "POMDPPlanners"
 NATIVE_SUFFIXES = {".cpp", ".hpp", ".h", ".pyi"}
 
 
+def _ensure_build_frontend_installed() -> None:
+    """Install the PyPA ``build`` frontend if the current interpreter lacks it.
+
+    The Docker CI image does not preinstall ``build``, and ``python -m build``
+    fails with "No module named build.__main__" when only an unrelated
+    ``build`` package shadows it. Self-heal so this test is self-contained.
+    """
+    probe = subprocess.run(
+        [sys.executable, "-m", "build", "--version"],
+        capture_output=True,
+        check=False,
+    )
+    if probe.returncode == 0:
+        return
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "--quiet", "build"])
+
+
 @pytest.fixture(scope="module")
 def built_sdist(tmp_path_factory: pytest.TempPathFactory) -> pathlib.Path:
     """Build the project sdist once per module run, return its path.
@@ -29,6 +46,7 @@ def built_sdist(tmp_path_factory: pytest.TempPathFactory) -> pathlib.Path:
     will silently override ``MANIFEST.in``, so this fixture deletes it
     first to mirror the state of a fresh CI checkout.
     """
+    _ensure_build_frontend_installed()
     egg_info = REPO_ROOT / "POMDPPlanners.egg-info"
     if egg_info.exists():
         shutil.rmtree(egg_info)

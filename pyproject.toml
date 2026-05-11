@@ -70,6 +70,7 @@ dev = [
     "nbformat>=5.0.0",
     "pytest-benchmark>=4.0.0",
     "pybind11>=2.12",
+    "build>=1.0.0",
 ]
 docs = [
     "sphinx>=5.0.0",

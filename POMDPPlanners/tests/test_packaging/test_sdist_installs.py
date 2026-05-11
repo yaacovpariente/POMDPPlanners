@@ -34,6 +34,13 @@ def test_sdist_installs_and_imports_in_clean_venv(tmp_path: pathlib.Path) -> Non
 
     Test type: integration
     """
+    probe = subprocess.run(
+        [sys.executable, "-m", "build", "--version"],
+        capture_output=True,
+        check=False,
+    )
+    if probe.returncode != 0:
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "--quiet", "build"])
     subprocess.check_call(
         [sys.executable, "-m", "build", "--sdist", "--outdir", str(tmp_path)],
         cwd=REPO_ROOT,
