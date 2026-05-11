@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from enum import Enum
 from pathlib import Path
+from collections.abc import Hashable
 from typing import Any, List, Optional, Tuple
 
 import logging
@@ -9,12 +10,11 @@ import numpy as np
 from POMDPPlanners.core.distributions import DiscreteDistribution, Distribution
 from POMDPPlanners.core.environment import (
     Environment,
-    ObservationModel,
     SpaceInfo,
     SpaceType,
-    StateTransitionModel,
 )
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
+from POMDPPlanners.utils.numba_kernels import any_point_within_radius_kernel
 from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_visualizer import (
     LightDarkPOMDPVisualizer,
 )
@@ -268,15 +268,7 @@ class BaseLightDarkPOMDP(Environment, ABC):
         )
 
     @abstractmethod
-    def state_transition_model(self, state: np.ndarray, action: Any) -> StateTransitionModel:
-        pass
-
-    @abstractmethod
-    def observation_model(self, next_state: np.ndarray, action: Any) -> ObservationModel:
-        pass
-
-    @abstractmethod
-    def reward(self, state: np.ndarray, action: Any) -> float:
+    def reward(self, state: np.ndarray, action: Any, next_state: Any = None) -> float:
         pass
 
     @abstractmethod
@@ -286,6 +278,19 @@ class BaseLightDarkPOMDP(Environment, ABC):
     @abstractmethod
     def compute_metrics(self, histories: List[History]) -> List[MetricValue]:
         pass
+
+    def is_state_near_beacon(self, state: np.ndarray) -> bool:
+        """Return True if ``state`` lies within ``beacon_radius`` of any beacon.
+
+        Used by tests and observation-model selection logic. Replaces the
+        previous wrapper-attribute access pattern (``model.near_beacon``)
+        with an env-level method that does not require the wrapper class.
+        """
+        return bool(
+            any_point_within_radius_kernel(
+                np.asarray(state, dtype=float), self.beacons, self.beacon_radius
+            )
+        )
 
     def initial_state_dist(self) -> Distribution:
         return DiscreteDistribution(values=[self.start_state], probs=np.array([1.0]))
@@ -332,6 +337,12 @@ class BaseLightDarkPOMDP(Environment, ABC):
 
     def is_equal_observation(self, observation1: Any, observation2: Any) -> bool:
         return np.array_equal(observation1, observation2)
+
+    def hash_observation(self, observation: Any) -> Hashable:
+        # ndarray observations are not hashable; ``tobytes()`` matches
+        # ``np.array_equal`` byte-for-byte for arrays of the same shape/dtype,
+        # which is invariant for this environment's observations.
+        return np.ascontiguousarray(observation).tobytes()
 
     @property
     def config_id(self) -> str:

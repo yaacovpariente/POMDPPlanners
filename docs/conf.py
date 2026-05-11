@@ -35,7 +35,12 @@ extensions = [
     "sphinx.ext.napoleon",  # For Google/NumPy style docstrings
     "sphinx.ext.intersphinx",
     "sphinx_autodoc_typehints",  # Better type hint formatting
+    "myst_parser",  # Markdown support for CHANGELOG / release notes
 ]
+
+# Allow `.. include::` of the repo-root CHANGELOG.md from a markdown wrapper.
+myst_enable_extensions = ["colon_fence"]
+source_suffix = {".rst": "restructuredtext", ".md": "markdown"}
 
 # Napoleon settings for Google-style docstrings
 napoleon_google_docstring = True

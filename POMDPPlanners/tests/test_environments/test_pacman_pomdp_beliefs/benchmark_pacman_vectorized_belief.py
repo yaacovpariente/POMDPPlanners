@@ -48,18 +48,17 @@ def _benchmark_single_ops(env: PacManPOMDP) -> None:
     state = env.initial_state_dist().sample()[0]
     action = 2
 
-    mean_t, std_t = _time_fn(
-        lambda: env.state_transition_model(state, action).sample()[0], n_runs=500
-    )
-    print(f"  state_transition_model.sample()     : {mean_t:.4f} +/- {std_t:.4f} ms")
+    mean_t, std_t = _time_fn(lambda: env.sample_next_state(state=state, action=action), n_runs=500)
+    print(f"  env.sample_next_state                : {mean_t:.4f} +/- {std_t:.4f} ms")
 
-    next_state = env.state_transition_model(state, action).sample()[0]
-    obs = env.observation_model(next_state, action).sample()[0]
+    next_state = env.sample_next_state(state=state, action=action)
+    obs = env.sample_observation(next_state=next_state, action=action)
 
     mean_t, std_t = _time_fn(
-        lambda: env.observation_model(next_state, action).probability([obs]), n_runs=500
+        lambda: np.exp(env.observation_log_probability(next_state, action, [obs])),
+        n_runs=500,
     )
-    print(f"  observation_model.probability()     : {mean_t:.4f} +/- {std_t:.4f} ms")
+    print(f"  env.observation_log_probability      : {mean_t:.4f} +/- {std_t:.4f} ms")
 
 
 def _benchmark_belief_update(env: PacManPOMDP, particle_counts: List[int]) -> None:
@@ -69,8 +68,8 @@ def _benchmark_belief_update(env: PacManPOMDP, particle_counts: List[int]) -> No
 
     action = 2
     state = env.initial_state_dist().sample()[0]
-    next_state = env.state_transition_model(state, action).sample()[0]
-    obs = env.observation_model(next_state, action).sample()[0]
+    next_state = env.sample_next_state(state=state, action=action)
+    obs = env.sample_observation(next_state=next_state, action=action)
     obs_arr = env.observation_to_array(obs)
 
     for n in particle_counts:
@@ -106,7 +105,7 @@ def _benchmark_reward_batch(env: PacManPOMDP, particle_counts: List[int]) -> Non
     for n in particle_counts:
         np.random.seed(42)
         states = env.initial_state_dist().sample(n_samples=n)
-        arr = env.states_to_array(states)
+        arr = np.stack(states)
 
         # Baseline: loop
         mean_base, _ = _time_fn(
@@ -161,7 +160,7 @@ def _benchmark_batch_transition(env: PacManPOMDP, particle_counts: List[int]) ->
     for n in particle_counts:
         np.random.seed(42)
         states = env.initial_state_dist().sample(n_samples=n)
-        arr = env.states_to_array(states)
+        arr = np.stack(states)
         mean_t, _ = _time_fn(
             lambda a=arr: updater.batch_transition(a, np.array(action)),  # type: ignore[arg-type]
             n_runs=100,

@@ -26,6 +26,7 @@ def assert_batch_transition_matches_loop(
     per_particle_transition_fn: Callable[[np.ndarray, Any], np.ndarray],
     atol: float = 1e-10,
     seed: Optional[int] = None,
+    seed_fn: Optional[Callable[[int], None]] = None,
     err_msg: str = "",
 ) -> None:
     """Assert that batch_transition matches a per-particle transition loop.
@@ -37,13 +38,20 @@ def assert_batch_transition_matches_loop(
         per_particle_transition_fn: Callable(particle_1d, action) -> next_state_1d
             that wraps the environment's per-particle transition logic.
         atol: Absolute tolerance for comparison.
-        seed: If provided, seeds np.random before each path so stochastic
+        seed: If provided, the RNG is seeded before each path so stochastic
             transitions consume the same random sequence.
+        seed_fn: Callable used to seed the RNG. Defaults to ``np.random.seed``.
+            Envs whose updater draws noise from a non-numpy RNG (e.g.
+            MountainCar's native C++ extension) should pass their own seeder,
+            e.g. ``_native.set_seed``.
         err_msg: Optional message appended on failure.
     """
-    vectorized_result = _run_vectorized_transition(updater, particles, action, seed)
+    effective_seed_fn = seed_fn if seed_fn is not None else np.random.seed
+    vectorized_result = _run_vectorized_transition(
+        updater, particles, action, seed, effective_seed_fn
+    )
     per_particle_result = _run_per_particle_transition(
-        particles, action, per_particle_transition_fn, seed
+        particles, action, per_particle_transition_fn, seed, effective_seed_fn
     )
     np.testing.assert_allclose(vectorized_result, per_particle_result, atol=atol, err_msg=err_msg)
 
@@ -100,9 +108,10 @@ def _run_vectorized_transition(
     particles: np.ndarray,
     action: Any,
     seed: Optional[int],
+    seed_fn: Callable[[int], None],
 ) -> np.ndarray:
     if seed is not None:
-        np.random.seed(seed)
+        seed_fn(seed)
     return updater.batch_transition(particles, action)
 
 
@@ -111,9 +120,10 @@ def _run_per_particle_transition(
     action: Any,
     per_particle_fn: Callable[[np.ndarray, Any], np.ndarray],
     seed: Optional[int],
+    seed_fn: Callable[[int], None],
 ) -> np.ndarray:
     if seed is not None:
-        np.random.seed(seed)
+        seed_fn(seed)
     n = len(particles)
     result = np.empty_like(particles)
     for i in range(n):

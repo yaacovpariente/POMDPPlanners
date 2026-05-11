@@ -1,6 +1,6 @@
 import tempfile
 from pathlib import Path
-from typing import List, cast
+from typing import Any, Dict, List, cast
 
 import pytest
 
@@ -2029,7 +2029,10 @@ class TestParallelizationLevel:
         Test type: unit
         """
         belief = create_test_belief(environment)
-        common_params = dict(
+        # Annotated as Dict[str, Any] so pyright accepts the ``**common_params``
+        # unpack below (otherwise it infers a union type from ``dict(...)`` and
+        # complains each positional kwarg mismatches the target parameter).
+        common_params: Dict[str, Any] = dict(
             environment=environment,
             belief=belief,
             policy_cls=SparseSamplingDiscreteActionsPlanner,

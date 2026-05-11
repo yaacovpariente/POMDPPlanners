@@ -54,12 +54,16 @@ from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp import LaserTagP
 from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_visualizer import (
     LaserTagVisualizer,
 )
+from POMDPPlanners.environments.laser_tag_pomdp import (
+    _native as _laser_tag_native,
+)
 from POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_pomdp import (
     ContinuousLaserTagPOMDP,
 )
 from POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_visualizer import (
     ContinuousLaserTagVisualizer,
 )
+from POMDPPlanners.environments.push_pomdp import _native as _push_native
 from POMDPPlanners.environments.push_pomdp.continuous_push_pomdp import (
     ContinuousPushPOMDP,
 )
@@ -236,7 +240,14 @@ def create_deterministic_pacman_episode(seed: int = 42) -> List[StepData]:
     Returns:
         List of StepData objects representing episode history
     """
+    # pylint: disable=import-outside-toplevel,no-name-in-module
+    from POMDPPlanners.environments.pacman_pomdp import _native as _pacman_native
+
     np.random.seed(seed)
+    # Transition / observation sampling now runs on the C++ RNG (see
+    # PacManTransitionCpp / PacManObservationCpp); seeding _native keeps
+    # the episode deterministic end-to-end.
+    _pacman_native.set_seed(seed)
     env = PacManPOMDP(
         maze_size=(7, 7),
         num_ghosts=2,
@@ -289,7 +300,14 @@ def create_deterministic_light_dark_episode(seed: int = 42) -> List[StepData]:
     Returns:
         List of StepData objects representing episode history
     """
+    # pylint: disable=import-outside-toplevel,no-name-in-module
+    from POMDPPlanners.environments.light_dark_pomdp import _native as _ld_native
+
     np.random.seed(seed)
+    # Transition / observation sampling runs on the C++ RNG now that the
+    # continuous light-dark models inherit from the native extension;
+    # seeding _native keeps the episode deterministic end-to-end.
+    _ld_native.set_seed(seed)
     env = ContinuousLightDarkPOMDP(
         discount_factor=0.95,
     )
@@ -455,7 +473,14 @@ def create_deterministic_safety_ant_velocity_episode(seed: int = 42) -> List[Ste
     Returns:
         List of StepData objects representing episode history
     """
+    # pylint: disable=import-outside-toplevel,no-name-in-module
+    from POMDPPlanners.environments.safety_ant_velocity_pomdp import _native as _sa_native
+
     np.random.seed(seed)
+    # Transition / observation sampling now runs on the C++ RNG (see
+    # SafeAntVelocityTransitionCpp / SafeAntVelocityObservationCpp); seeding
+    # _native keeps the episode deterministic end-to-end.
+    _sa_native.set_seed(seed)
     env = SafeAntVelocityPOMDP(
         discount_factor=0.95,
     )
@@ -507,6 +532,10 @@ def create_deterministic_continuous_laser_tag_episode(seed: int = 42) -> List[St
         List of StepData objects representing episode history
     """
     np.random.seed(seed)
+    # Continuous LaserTag transitions now execute in C++ via _native; seed
+    # that RNG too so the episode is fully deterministic. numpy's RNG is
+    # still used for initial state rejection sampling.
+    _laser_tag_native.set_seed(seed)
     env = ContinuousLaserTagPOMDP(
         discount_factor=0.95,
         robot_transition_cov_matrix=np.eye(2) * 0.01,
@@ -569,6 +598,11 @@ def create_deterministic_continuous_push_episode(seed: int = 42) -> List[StepDat
         List of StepData objects representing episode history
     """
     np.random.seed(seed)
+    # Continuous Push transition/observation sampling runs through the
+    # native C++ module's std::mt19937_64, so seeding numpy alone no
+    # longer fixes the sample sequence. Seed both to keep the golden
+    # visualization reproducible.
+    _push_native.set_seed(seed)
     env = ContinuousPushPOMDP(
         discount_factor=0.99,
         grid_size=10,

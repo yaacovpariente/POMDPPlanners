@@ -5,9 +5,16 @@ FROM ${BASE_IMAGE}
 
 WORKDIR /app
 
+# Needed to compile the MountainCar pybind11 extension. Harmless no-op once
+# the base image is rebuilt with g++ (see docker/Dockerfile.base); kept here
+# so PRs build successfully against older cached base images.
+RUN apt-get update && apt-get install -y --no-install-recommends g++ \
+    && rm -rf /var/lib/apt/lists/*
+
 # Copy the full source tree (the only layer that changes on code pushes)
 COPY . .
 
 # Re-install the package in editable mode so entry-points pick up new code.
-# Dependencies are already installed in the base image, so this is fast.
-RUN pip install --no-deps -e ".[dev,docs]"
+# Base image has most deps pre-installed; pip install reuses the cache for those
+# and picks up any newly-added deps on top.
+RUN pip install -e ".[dev,docs]"

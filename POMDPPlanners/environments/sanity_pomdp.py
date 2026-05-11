@@ -18,141 +18,23 @@ This environment is primarily used for:
 - Performance benchmarking baseline
 
 Classes:
-    SanityStateTransitionModel: Deterministic state transitions
-    SanityObservationModel: Perfect state observation
     SanityInitialStateDist: Always starts in good state
     SanityInitialObservationDist: Initial observation distribution
     SanityPOMDP: Main environment class for sanity testing
 """
 
 from pathlib import Path
-from typing import List, Optional
+from collections.abc import Hashable
+from typing import Any, List, Optional, Sequence, Union
 
 import numpy as np
 
 from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
-    ObservationModel,
     SpaceInfo,
     SpaceType,
-    StateTransitionModel,
 )
-
-
-class SanityStateTransitionModel(StateTransitionModel):
-    """Deterministic state transition model for Sanity POMDP.
-
-    This model implements completely deterministic state transitions where:
-    - Action 0 always leads to state 0 (good state)
-    - Action 1 always leads to state 1 (bad state)
-
-    The deterministic nature makes this ideal for testing and debugging
-    POMDP algorithms since the outcomes are predictable.
-
-    Attributes:
-        state: Current state (0 or 1)
-        action: Action to be executed (0 or 1)
-
-    Example:
-        Using the state transition model::
-
-            >>> import numpy as np
-            >>> np.random.seed(42)  # For reproducible results
-            >>> # Create transition model from bad state with good action
-            >>> transition_model = SanityStateTransitionModel(state=1, action=0)
-            >>>
-            >>> # Sample next state (always deterministic)
-            >>> next_state = transition_model.sample()[0]  # Returns 0 (good state)
-            >>> next_state == 0
-            True
-            >>>
-            >>> # Check probability of specific outcomes
-            >>> prob = transition_model.probability([0])  # Returns [1.0]
-            >>> bool(prob[0] == 1.0)
-            True
-            >>> prob_wrong = transition_model.probability([1])  # Returns [0.0]
-            >>> bool(prob_wrong[0] == 0.0)
-            True
-    """
-
-    def __init__(self, state: int, action: int):
-        """Initialize the state transition model.
-
-        Args:
-            state: Current state (0 for good, 1 for bad)
-            action: Action to execute (0 for go to good, 1 for go to bad)
-        """
-        super().__init__(state, action)
-
-    def sample(self, n_samples: int = 1) -> List[int]:
-        # Action 0 always leads to state 0 (good state)
-        # Action 1 always leads to state 1 (bad state)
-        next_state = 0 if self.action == 0 else 1
-        return [next_state] * n_samples
-
-    def probability(self, values: List[int]) -> np.ndarray:
-        result = np.zeros(len(values))
-        expected_next_state = 0 if self.action == 0 else 1
-        for i, value in enumerate(values):
-            if value == expected_next_state:
-                result[i] = 1.0
-        return result
-
-
-class SanityObservationModel(ObservationModel):
-    """Perfect observation model for Sanity POMDP.
-
-    This model provides perfect observability where the observation
-    always exactly matches the state. This eliminates partial observability
-    and makes the problem fully observable, which is ideal for testing
-    algorithms in the simplest possible setting.
-
-    Attributes:
-        next_state: The state after action execution
-        action: The action that was taken (not used in observation generation)
-
-    Example:
-        Using the observation model::
-
-            >>> import numpy as np
-            >>> np.random.seed(42)  # For reproducible results
-            >>> # Create observation model for good state
-            >>> obs_model = SanityObservationModel(next_state=0, action=0)
-            >>>
-            >>> # Sample observation (always matches state)
-            >>> observation = obs_model.sample()[0]  # Returns 0
-            >>> observation == 0
-            True
-            >>>
-            >>> # Check observation probabilities
-            >>> prob_correct = obs_model.probability([0])  # Returns [1.0]
-            >>> bool(prob_correct[0] == 1.0)
-            True
-            >>> prob_wrong = obs_model.probability([1])  # Returns [0.0]
-            >>> bool(prob_wrong[0] == 0.0)
-            True
-    """
-
-    def __init__(self, next_state: int, action: int):
-        """Initialize the observation model.
-
-        Args:
-            next_state: State after taking the action
-            action: Action that was executed (not used for observation)
-        """
-        super().__init__(next_state, action)
-
-    def sample(self, n_samples: int = 1) -> List[int]:
-        # Observation always matches the state
-        return [self.next_state] * n_samples
-
-    def probability(self, values: List[int]) -> np.ndarray:
-        result = np.zeros(len(values))
-        for i, value in enumerate(values):
-            if value == self.next_state:
-                result[i] = 1.0
-        return result
 
 
 class SanityInitialStateDist(Distribution):
@@ -327,16 +209,51 @@ class SanityPOMDP(DiscreteActionsEnvironment):
             use_queue_logger=use_queue_logger,
         )
 
-    def state_transition_model(self, state: int, action: int) -> SanityStateTransitionModel:
-        return SanityStateTransitionModel(state, action)
+    # Both transitions and observations are deterministic, so no RNG
+    # draws occur in any of the env-API methods below.
 
-    def observation_model(self, next_state: int, action: int) -> SanityObservationModel:
-        return SanityObservationModel(next_state, action)
+    def sample_next_state(
+        self, state: int, action: int, n_samples: int = 1
+    ) -> Union[int, np.ndarray]:
+        next_state = 0 if action == 0 else 1
+        if n_samples == 1:
+            return next_state
+        return np.full(n_samples, next_state, dtype=np.int64)
 
-    def reward(self, state: int, action: int) -> float:
-        # Higher reward for being in good state (0)
-        next_state = self.state_transition_model(state, action).sample()[0]
-        return 1.0 if next_state == 0 else 0.0
+    def sample_observation(
+        self, next_state: int, action: int, n_samples: int = 1
+    ) -> Union[int, np.ndarray]:
+        if n_samples == 1:
+            return next_state
+        return np.full(n_samples, next_state, dtype=np.int64)
+
+    def transition_log_probability(
+        self,
+        state: int,
+        action: int,
+        next_states: Union[Sequence[int], np.ndarray],
+    ) -> np.ndarray:
+        next_states_arr = np.asarray(next_states)
+        expected = 0 if action == 0 else 1
+        probs = np.where(next_states_arr == expected, 1.0, 0.0)
+        return np.log(probs + 1e-300)
+
+    def observation_log_probability(
+        self,
+        next_state: int,
+        action: int,
+        observations: Union[Sequence[int], np.ndarray],
+    ) -> np.ndarray:
+        observations_arr = np.asarray(observations)
+        probs = np.where(observations_arr == next_state, 1.0, 0.0)
+        return np.log(probs + 1e-300)
+
+    def reward(self, state: int, action: int, next_state: Any = None) -> float:
+        # Transition is deterministic: action 0 -> next_state 0 (reward 1.0),
+        # action != 0 -> next_state != 0 (reward 0.0). Inline to avoid the
+        # sample_next_state call overhead on the hot path.
+        del state, next_state
+        return 1.0 if action == 0 else 0.0
 
     def is_terminal(self, state: int) -> bool:
         return False  # No terminal states
@@ -352,3 +269,7 @@ class SanityPOMDP(DiscreteActionsEnvironment):
 
     def is_equal_observation(self, observation1: int, observation2: int) -> bool:
         return observation1 == observation2
+
+    def hash_action(self, action: Any) -> Hashable:
+        # Discrete int actions (0, 1); already hashable.
+        return action

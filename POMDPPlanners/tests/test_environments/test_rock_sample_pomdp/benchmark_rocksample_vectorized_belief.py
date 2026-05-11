@@ -14,6 +14,7 @@ import numpy as np
 from POMDPPlanners.core.belief.belief_utils import get_initial_belief
 from POMDPPlanners.environments.rock_sample_pomdp import (
     RockSamplePOMDP,
+    _native,
     create_random_rock_sample,
 )
 from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp_beliefs.rocksample_belief_factory import (
@@ -45,29 +46,27 @@ def _benchmark_single_ops(env: RockSamplePOMDP) -> None:
     state = env.initial_state_dist().sample()[0]
     action = 2  # East
 
-    mean_t, std_t = _time_fn(
-        lambda: env.state_transition_model(state, action).sample()[0], n_runs=500
-    )
-    print(f"  state_transition_model.sample()      : {mean_t:.4f} +/- {std_t:.4f} ms")
+    mean_t, std_t = _time_fn(lambda: env.sample_next_state(state=state, action=action), n_runs=500)
+    print(f"  env.sample_next_state()              : {mean_t:.4f} +/- {std_t:.4f} ms")
 
-    next_state = env.state_transition_model(state, action).sample()[0]
-    obs = env.observation_model(next_state, action).sample()[0]
+    next_state = env.sample_next_state(state=state, action=action)
+    obs = env.sample_observation(next_state=next_state, action=action)
 
     mean_t, std_t = _time_fn(
-        lambda: env.observation_model(next_state, action).probability([obs]),
+        lambda: env.observation_log_probability(next_state, action, [obs]),
         n_runs=500,
     )
-    print(f"  observation_model.probability()      : {mean_t:.4f} +/- {std_t:.4f} ms")
+    print(f"  env.observation_log_probability()    : {mean_t:.4f} +/- {std_t:.4f} ms")
 
     check_action = 5
-    next_state_check = env.state_transition_model(state, check_action).sample()[0]
-    obs_check = env.observation_model(next_state_check, check_action).sample()[0]
+    next_state_check = env.sample_next_state(state=state, action=check_action)
+    obs_check = env.sample_observation(next_state=next_state_check, action=check_action)
 
     mean_t, std_t = _time_fn(
-        lambda: env.observation_model(next_state_check, check_action).probability([obs_check]),
+        lambda: env.observation_log_probability(next_state_check, check_action, [obs_check]),
         n_runs=500,
     )
-    print(f"  observation_model.probability(check)  : {mean_t:.4f} +/- {std_t:.4f} ms")
+    print(f"  env.observation_log_probability(chk) : {mean_t:.4f} +/- {std_t:.4f} ms")
 
 
 def _benchmark_sample(env: RockSamplePOMDP, particle_counts: List[int]) -> None:
@@ -78,20 +77,20 @@ def _benchmark_sample(env: RockSamplePOMDP, particle_counts: List[int]) -> None:
     for n in particle_counts:
         np.random.seed(42)
         base_belief = get_initial_belief(env, n)
-        mean_base, _ = _time_fn(lambda: base_belief.sample(), n_runs=500)
+        mean_base, _ = _time_fn(lambda b=base_belief: b.sample(), n_runs=500)
 
         np.random.seed(42)
         vec_belief = create_rocksample_belief(
             env, belief_type=BeliefType.VECTORIZED_PARTICLE, n_particles=n
         )
-        mean_vec, _ = _time_fn(lambda: vec_belief.sample(), n_runs=500)
+        mean_vec, _ = _time_fn(lambda b=vec_belief: b.sample(), n_runs=500)
 
         speedup = mean_base / mean_vec if mean_vec > 0 else float("inf")
         print(f"{n:>6} | {mean_base:>14.4f} | {mean_vec:>16.4f} | {speedup:>7.1f}x")
 
 
 def _benchmark_batch_transition(env: RockSamplePOMDP, particle_counts: List[int]) -> None:
-    print("\n--- batch_transition vs loop of state_transition_model.sample() ---")
+    print("\n--- batch_transition vs loop of env.sample_next_state() ---")
     print(f"{'N':>6} | {'Loop (ms)':>14} | {'Vectorized (ms)':>16} | {'Speedup':>8}")
     print("-" * 55)
 
@@ -104,12 +103,12 @@ def _benchmark_batch_transition(env: RockSamplePOMDP, particle_counts: List[int]
         particles = np.stack(states)
 
         mean_loop, _ = _time_fn(
-            lambda: [env.state_transition_model(s, action).sample()[0] for s in states],
+            lambda s=states: [env.sample_next_state(state=x, action=action) for x in s],
             n_runs=100,
         )
 
         mean_vec, _ = _time_fn(
-            lambda: updater.batch_transition(particles, np.array(action)),
+            lambda p=particles: updater.batch_transition(p, np.array(action)),
             n_runs=100,
         )
 
@@ -118,7 +117,7 @@ def _benchmark_batch_transition(env: RockSamplePOMDP, particle_counts: List[int]
 
 
 def _benchmark_batch_log_likelihood(env: RockSamplePOMDP, particle_counts: List[int]) -> None:
-    print("\n--- batch_observation_log_likelihood vs loop of observation_model.probability() ---")
+    print("\n--- batch_observation_log_likelihood vs loop of env.observation_log_probability() ---")
     print(f"{'N':>6} | {'Loop (ms)':>14} | {'Vectorized (ms)':>16} | {'Speedup':>8}")
     print("-" * 55)
 
@@ -132,13 +131,13 @@ def _benchmark_batch_log_likelihood(env: RockSamplePOMDP, particle_counts: List[
         particles = np.stack(states)
 
         mean_loop, _ = _time_fn(
-            lambda: [env.observation_model(s, action).probability([obs_str])[0] for s in states],
+            lambda s=states: [env.observation_log_probability(x, action, [obs_str])[0] for x in s],
             n_runs=100,
         )
 
         mean_vec, _ = _time_fn(
-            lambda: updater.batch_observation_log_likelihood(
-                particles, np.array(action), np.array(OBS_GOOD)
+            lambda p=particles: updater.batch_observation_log_likelihood(
+                p, np.array(action), np.array(OBS_GOOD)
             ),
             n_runs=100,
         )
@@ -154,14 +153,14 @@ def _benchmark_belief_update(env: RockSamplePOMDP, particle_counts: List[int]) -
 
     action = 5
     state = env.initial_state_dist().sample()[0]
-    next_state = env.state_transition_model(state, action).sample()[0]
-    obs = env.observation_model(next_state, action).sample()[0]
+    next_state = env.sample_next_state(state=state, action=action)
+    obs = env.sample_observation(next_state=next_state, action=action)
 
     for n in particle_counts:
         np.random.seed(42)
         base_belief = get_initial_belief(env, n)
         mean_base, _ = _time_fn(
-            lambda: base_belief.update(action=action, observation=obs, pomdp=env),
+            lambda b=base_belief: b.update(action=action, observation=obs, pomdp=env),
             n_runs=20,
         )
 
@@ -170,7 +169,7 @@ def _benchmark_belief_update(env: RockSamplePOMDP, particle_counts: List[int]) -
             env, belief_type=BeliefType.VECTORIZED_PARTICLE, n_particles=n
         )
         mean_vec, _ = _time_fn(
-            lambda: vec_belief.update(action=action, observation=obs),
+            lambda b=vec_belief: b.update(action=action, observation=obs, pomdp=env),
             n_runs=20,
         )
 
@@ -183,8 +182,14 @@ def main() -> None:
     print("RockSample Vectorized Belief Benchmark")
     print("=" * 80)
 
+    # Fixed seeds for reproducible numbers across runs. The native C++
+    # extension has its own module-level RNG that numpy's seed does not
+    # reach; seed both so sample() paths are reproducible.
+    np.random.seed(0)
+    _native.set_seed(0)
+
     env = _create_env()
-    particle_counts = [50, 200, 500, 1000]
+    particle_counts = [200, 500, 1000]
 
     _benchmark_single_ops(env)
     _benchmark_sample(env, particle_counts)

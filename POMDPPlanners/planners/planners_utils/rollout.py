@@ -4,6 +4,35 @@ from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
 
 
+def python_random_rollout(
+    state: Any,
+    depth: int,
+    action_sampler: ActionSampler,
+    environment: Environment,
+    discount_factor: float,
+    max_depth: int = 10,
+) -> float:
+    """Recursive Python rollout that bypasses the env-level native dispatch.
+
+    Used as the fallback path inside env-specific ``simulate_random_rollout``
+    overrides (e.g. when the native kernel cannot handle a particular reward
+    model or parameter configuration).
+    """
+    if depth >= max_depth or environment.is_terminal(state=state):
+        return 0.0
+    action = action_sampler.sample()
+    next_state = environment.sample_next_state(state=state, action=action)
+    reward = environment.reward(state=state, action=action, next_state=next_state)
+    return reward + discount_factor * python_random_rollout(
+        state=next_state,
+        depth=depth + 1,
+        action_sampler=action_sampler,
+        environment=environment,
+        discount_factor=discount_factor,
+        max_depth=max_depth,
+    )
+
+
 def random_rollout_action_sampler(
     state: Any,
     depth: int,
@@ -61,16 +90,19 @@ def random_rollout_action_sampler(
         ...     max_depth=10
         ... )  # doctest: +SKIP
     """
-    if depth >= max_depth or environment.is_terminal(state=state):
-        return 0.0
+    native_rollout = getattr(environment, "simulate_random_rollout", None)
+    if native_rollout is not None:
+        return native_rollout(
+            state=state,
+            action_sampler=action_sampler,
+            max_depth=max_depth,
+            discount_factor=discount_factor,
+            depth=depth,
+        )
 
-    action = action_sampler.sample()
-    next_state = environment.state_transition_model(state=state, action=action).sample()[0]
-    reward = environment.reward(state=state, action=action)
-
-    return reward + discount_factor * random_rollout_action_sampler(
-        state=next_state,
-        depth=depth + 1,
+    return python_random_rollout(
+        state=state,
+        depth=depth,
         action_sampler=action_sampler,
         environment=environment,
         discount_factor=discount_factor,

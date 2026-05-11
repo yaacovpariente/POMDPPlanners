@@ -37,9 +37,18 @@ class TestBaseLightDarkRewardModel:
     def test_input_validation(self):
         """Test input validation for state and action shapes."""
 
-        # Create a concrete implementation for testing
+        # Create a concrete implementation for testing.
+        # NOTE: ``_compute_reward`` now also accepts the realised
+        # ``next_state`` threaded by ``Environment.sample_next_step``;
+        # this stub ignores it.
         class ConcreteRewardModel(BaseLightDarkRewardModel):
-            def _compute_reward(self, state: np.ndarray, action: np.ndarray) -> float:
+            def _compute_reward(
+                self,
+                state: np.ndarray,
+                action: np.ndarray,
+                next_state: np.ndarray,
+            ) -> float:
+                del state, action, next_state
                 return 0.0
 
         model = ConcreteRewardModel()
@@ -352,8 +361,12 @@ class TestContinuousLightDarkRewardModel:
         assert model._is_goal_state(next_state)
         assert model._is_in_obstacle_range(next_state)
 
-        # Goal should take priority - should get goal reward, not obstacle reward
-        reward = model._compute_reward(state, action)
+        # Goal should take priority - should get goal reward, not obstacle reward.
+        # NOTE: ``_compute_reward`` now consumes the realised ``next_state``
+        # threaded by ``Environment.sample_next_step``; pass the
+        # deterministic ``state + action`` to preserve the original test
+        # intent (no transition noise).
+        reward = model._compute_reward(state, action, next_state)
         expected_reward = (
             -model.fuel_cost + model.goal_reward - np.linalg.norm(next_state - goal_state)
         )
@@ -389,8 +402,10 @@ class TestContinuousLightDarkRewardModel:
         if model_boundary._is_in_obstacle_range(next_state) and model_boundary._is_out_of_grid(
             next_state
         ):
-            # Obstacle should take priority over out-of-grid
-            reward = model_boundary._compute_reward(state, action)
+            # Obstacle should take priority over out-of-grid.
+            # See note above: ``_compute_reward`` now consumes the realised
+            # ``next_state``; pass the deterministic ``state + action``.
+            reward = model_boundary._compute_reward(state, action, next_state)
             # Should have obstacle reward component (probabilistic), not just out-of-grid penalty
             # Base reward is negative, obstacle reward makes it more negative
             assert reward < -model_boundary.fuel_cost - np.linalg.norm(next_state - self.goal_state)

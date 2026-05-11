@@ -1,23 +1,57 @@
 from abc import ABC, abstractmethod
+from typing import Optional
 
 import numpy as np
+
+from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.numba_kernels import (
+    compute_reward_base_batch_kernel,
+    compute_reward_base_kernel,
+    compute_reward_decaying_hit_prob_kernel,
+)
 
 
 class BaseLightDarkRewardModel(ABC):
     @abstractmethod
-    def _compute_reward(self, state: np.ndarray, action: np.ndarray) -> float:
+    def _compute_reward(
+        self, state: np.ndarray, action: np.ndarray, next_state: np.ndarray
+    ) -> float:
         pass
 
-    def compute_reward(self, state: np.ndarray, action: np.ndarray) -> float:
+    def compute_reward(
+        self,
+        state: np.ndarray,
+        action: np.ndarray,
+        next_state: Optional[np.ndarray] = None,
+    ) -> float:
         if state.shape != (2,):
             raise ValueError("state must be a 2D vector")
         if action.shape != (2,):
             raise ValueError("action must be a 2D vector")
 
-        return self._compute_reward(state, action)
+        # Honour the realised ``next_state`` threaded by
+        # :meth:`Environment.sample_next_step` so obstacle / goal /
+        # out-of-grid checks score against the same draw as the trajectory.
+        # Fall back to the deterministic ``state + action`` only when no
+        # realised draw was supplied (legacy ``compute_reward(state, action)``
+        # callers).
+        next_state_local = state + action if next_state is None else np.asarray(next_state)
+        return self._compute_reward(state, action, next_state_local)
 
-    def compute_reward_batch(self, states: np.ndarray, action: np.ndarray) -> np.ndarray:
-        return np.array([self.compute_reward(states[i], action) for i in range(len(states))])
+    def compute_reward_batch(
+        self,
+        states: np.ndarray,
+        action: np.ndarray,
+        next_states: Optional[np.ndarray] = None,
+    ) -> np.ndarray:
+        if next_states is None:
+            return np.array([self.compute_reward(states[i], action) for i in range(len(states))])
+        next_states_arr = np.asarray(next_states)
+        return np.array(
+            [
+                self.compute_reward(states[i], action, next_state=next_states_arr[i])
+                for i in range(len(states))
+            ]
+        )
 
 
 class ContinuousLightDarkRewardModel(BaseLightDarkRewardModel):
@@ -60,45 +94,67 @@ class ContinuousLightDarkRewardModel(BaseLightDarkRewardModel):
         """Check if state is outside the grid boundaries."""
         return bool(np.any(state < 0) or np.any(state > self.grid_size))
 
-    def _compute_reward(self, state: np.ndarray, action: np.ndarray) -> float:
-        next_state = state + action
+    def _compute_reward(
+        self, state: np.ndarray, action: np.ndarray, next_state: np.ndarray
+    ) -> float:
+        del state, action  # Realised position threaded via ``next_state``.
+        reward, in_obstacle_region = compute_reward_base_kernel(
+            next_state,
+            self.goal_state,
+            self.obstacles,
+            self.goal_state_radius,
+            self.obstacle_radius,
+            float(self.grid_size),
+            self.fuel_cost,
+            self.goal_reward,
+            self.obstacle_reward,
+        )
+        if in_obstacle_region:
+            reward += self._obstacle_reward_scalar()
+        return float(reward)
 
-        is_goal_state = self._is_goal_state(next_state)
-        is_in_obstacle_range = self._is_in_obstacle_range(next_state)
-        is_out_of_grid = self._is_out_of_grid(next_state)
+    def _obstacle_reward_scalar(self) -> float:
+        """Stochastic obstacle-hit contribution.
 
-        reward = float(-self.fuel_cost - np.linalg.norm(next_state - self.goal_state))
-
-        if is_goal_state:
-            reward += self.goal_reward
-        elif is_in_obstacle_range:
-            reward += self._obstacle_reward(next_state)
-        elif is_out_of_grid:
-            reward += self.obstacle_reward
-
-        return reward
+        Called by ``_compute_reward`` only when the Numba kernel reports the
+        next state landed in an obstacle region but was not at goal / out-of-grid,
+        preserving the pre-refactor RNG call pattern.
+        """
+        return self.obstacle_reward if np.random.rand() < self.obstacle_hit_probability else 0.0
 
     def _obstacle_reward(self, state: np.ndarray) -> float:  # pylint: disable=unused-argument
         return self.obstacle_reward if np.random.rand() < self.obstacle_hit_probability else 0.0
 
-    def compute_reward_batch(self, states: np.ndarray, action: np.ndarray) -> np.ndarray:
-        next_states = states + action
-        dists_to_goal = np.linalg.norm(next_states - self.goal_state, axis=1)
-        rewards = -self.fuel_cost - dists_to_goal
-
-        goal_mask = dists_to_goal <= self.goal_state_radius
-        rewards[goal_mask] += self.goal_reward
-
-        diffs = next_states[:, :, np.newaxis] - self.obstacles[np.newaxis, :, :]
-        obs_dists = np.linalg.norm(diffs, axis=1)
-        in_range = np.any(obs_dists <= self.obstacle_radius, axis=1)
-        obstacle_mask = in_range & ~goal_mask
-        n_obs = int(np.sum(obstacle_mask))
+    def compute_reward_batch(
+        self,
+        states: np.ndarray,
+        action: np.ndarray,
+        next_states: Optional[np.ndarray] = None,
+    ) -> np.ndarray:
+        # Deterministic part runs in a Numba kernel. The mask flags the rows
+        # where the next state landed in an obstacle region but was not at
+        # goal / out-of-grid; those rows still need the stochastic obstacle
+        # contribution applied in Python so seeded RNG stays reproducible.
+        # Honour the realised ``next_states`` when threaded; otherwise fall
+        # back to the deterministic ``states + action`` pre-noise position.
+        if next_states is None:
+            next_states_arr = np.asarray(states) + np.asarray(action)
+        else:
+            next_states_arr = np.ascontiguousarray(np.asarray(next_states, dtype=np.float64))
+        rewards, obstacle_mask = compute_reward_base_batch_kernel(
+            next_states_arr,
+            self.goal_state,
+            self.obstacles,
+            self.goal_state_radius,
+            self.obstacle_radius,
+            float(self.grid_size),
+            self.fuel_cost,
+            self.goal_reward,
+            self.obstacle_reward,
+        )
+        n_obs = int(np.count_nonzero(obstacle_mask))
         if n_obs > 0:
             rewards[obstacle_mask] += self._obstacle_reward_batch(n_obs)
-
-        oob = np.any(next_states < 0, axis=1) | np.any(next_states > self.grid_size, axis=1)
-        rewards[oob & ~goal_mask & ~in_range] += self.obstacle_reward
         return rewards
 
     def _obstacle_reward_batch(self, n: int) -> np.ndarray:
@@ -107,6 +163,10 @@ class ContinuousLightDarkRewardModel(BaseLightDarkRewardModel):
 
 
 class ContinuousLDDangerousStatesRewardModel(ContinuousLightDarkRewardModel):
+    def _obstacle_reward_scalar(self) -> float:
+        """The expected reward is 0.0, but the variance is high."""
+        return self.obstacle_reward if np.random.rand() < 0.5 else -self.obstacle_reward
+
     def _obstacle_reward(self, state: np.ndarray) -> float:
         """The expected reward is 0.0, but the variance is high."""
         return self.obstacle_reward if np.random.rand() < 0.5 else -self.obstacle_reward
@@ -141,23 +201,25 @@ class ContinuousLightDarkDecayingHitProbabilityRewardModel(BaseLightDarkRewardMo
         self.fuel_cost = fuel_cost
         self.penalty_decay = penalty_decay
 
-    def _compute_reward(self, state: np.ndarray, action: np.ndarray) -> float:
-        next_state = state + action
-
-        is_goal_state = bool(np.linalg.norm(next_state - self.goal_state) <= self.goal_state_radius)
-
-        is_out_of_grid = bool(np.any(next_state < 0) or np.any(next_state > self.grid_size))
-
-        reward = float(-self.fuel_cost - np.linalg.norm(next_state - self.goal_state))
-
-        if is_goal_state:
-            reward += self.goal_reward
-        elif is_out_of_grid:
-            reward += self.obstacle_reward
-
-        reward += self._obstacle_reward(next_state)
-
-        return reward
+    def _compute_reward(
+        self, state: np.ndarray, action: np.ndarray, next_state: np.ndarray
+    ) -> float:
+        del state, action  # Realised position threaded via ``next_state``.
+        uniform = float(np.random.rand())
+        return float(
+            compute_reward_decaying_hit_prob_kernel(
+                next_state,
+                self.goal_state,
+                self.obstacles,
+                self.goal_state_radius,
+                float(self.grid_size),
+                self.fuel_cost,
+                self.goal_reward,
+                self.obstacle_reward,
+                self.penalty_decay,
+                uniform,
+            )
+        )
 
     def _obstacle_reward(self, state: np.ndarray) -> float:
         # Calculate distance to nearest obstacle
@@ -170,19 +232,32 @@ class ContinuousLightDarkDecayingHitProbabilityRewardModel(BaseLightDarkRewardMo
         # Return obstacle reward if random value is less than probability
         return self.obstacle_reward if np.random.rand() < p else 0.0
 
-    def compute_reward_batch(self, states: np.ndarray, action: np.ndarray) -> np.ndarray:
-        next_states = states + action
-        dists_to_goal = np.linalg.norm(next_states - self.goal_state, axis=1)
+    def compute_reward_batch(
+        self,
+        states: np.ndarray,
+        action: np.ndarray,
+        next_states: Optional[np.ndarray] = None,
+    ) -> np.ndarray:
+        # Honour the realised ``next_states`` threaded by callers so the
+        # distance-to-goal, out-of-grid, and decaying-hit-probability
+        # checks score against the same draw as the trajectory. Fall back
+        # to the deterministic ``states + action`` only when no realised
+        # batch was supplied.
+        if next_states is None:
+            next_states_arr = np.asarray(states) + np.asarray(action)
+        else:
+            next_states_arr = np.asarray(next_states)
+        dists_to_goal = np.linalg.norm(next_states_arr - self.goal_state, axis=1)
         rewards = -self.fuel_cost - dists_to_goal
 
         goal_mask = dists_to_goal <= self.goal_state_radius
         rewards[goal_mask] += self.goal_reward
 
-        oob = np.any(next_states < 0, axis=1) | np.any(next_states > self.grid_size, axis=1)
+        oob = np.any(next_states_arr < 0, axis=1) | np.any(next_states_arr > self.grid_size, axis=1)
         rewards[oob & ~goal_mask] += self.obstacle_reward
 
-        diffs = next_states[:, :, np.newaxis] - self.obstacles[np.newaxis, :, :]
+        diffs = next_states_arr[:, :, np.newaxis] - self.obstacles[np.newaxis, :, :]
         min_dists = np.min(np.linalg.norm(diffs, axis=1), axis=1)
         probs = np.exp(-min_dists / self.penalty_decay)
-        rewards[np.random.rand(len(next_states)) < probs] += self.obstacle_reward
+        rewards[np.random.rand(len(next_states_arr)) < probs] += self.obstacle_reward
         return rewards

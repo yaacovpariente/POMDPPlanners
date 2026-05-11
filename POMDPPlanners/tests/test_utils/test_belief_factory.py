@@ -11,6 +11,9 @@ from POMDPPlanners.core.belief.particle_beliefs import WeightedParticleBelief
 from POMDPPlanners.core.belief.vectorized_weighted_particle_belief import (
     VectorizedWeightedParticleBelief,
 )
+from POMDPPlanners.tests.test_utils.metric_invariants_utils import (
+    verify_belief_invariants,
+)
 from POMDPPlanners.utils.belief_factory import BeliefType, create_environment_belief
 
 
@@ -105,6 +108,7 @@ class TestFallbackEnvironments:
         """
         belief = create_environment_belief(tiger_env, n_particles=50)
         assert isinstance(belief, WeightedParticleBelief)
+        verify_belief_invariants(belief, expected_n_particles=50)
 
     def test_tiger_explicit_particle(self, tiger_env):
         """Test that Tiger POMDP accepts BeliefType.PARTICLE.
@@ -173,6 +177,7 @@ class TestCartPole:
         """
         belief = create_environment_belief(cartpole_env, n_particles=50)
         assert isinstance(belief, VectorizedWeightedParticleBelief)
+        verify_belief_invariants(belief, expected_n_particles=50)
 
     def test_particle_returns_weighted(self, cartpole_env):
         """Test CartPole PARTICLE type returns WeightedParticleBelief.
@@ -249,6 +254,7 @@ class TestMountainCar:
         """
         belief = create_environment_belief(mountain_car_env, n_particles=50)
         assert isinstance(belief, VectorizedWeightedParticleBelief)
+        verify_belief_invariants(belief, expected_n_particles=50)
 
     def test_sample_shape(self, mountain_car_env):
         """Test MountainCar belief sample has correct shape.
@@ -280,6 +286,7 @@ class TestContinuousLightDark:
         """
         belief = create_environment_belief(light_dark_env, n_particles=50)
         assert isinstance(belief, VectorizedWeightedParticleBelief)
+        verify_belief_invariants(belief, expected_n_particles=50)
 
     def test_gaussian_returns_gaussian_belief(self, light_dark_env):
         """Test Light-Dark GAUSSIAN type returns GaussianBelief.

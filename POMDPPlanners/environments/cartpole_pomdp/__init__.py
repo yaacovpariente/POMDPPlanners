@@ -5,24 +5,20 @@ components for pole-balancing tasks with noisy observations.
 
 Classes:
     CartPolePOMDP: Main CartPole environment with POMDP formulation
-    CartPoleStateTransition: Physics-based state transition model
-    CartPoleObservation: Gaussian noise observation model
     CartPoleInitialStateDistribution: Initial state sampling distribution
     CartPolePOMDPMetrics: Metric names for CartPole POMDP environment
 """
 
 from POMDPPlanners.environments.cartpole_pomdp.cartpole_pomdp import (
+    CartPoleInitialObservationDistribution,
     CartPoleInitialStateDistribution,
-    CartPoleObservation,
     CartPolePOMDP,
     CartPolePOMDPMetrics,
-    CartPoleStateTransition,
 )
 
 __all__ = [
     "CartPolePOMDP",
-    "CartPoleObservation",
+    "CartPoleInitialObservationDistribution",
     "CartPoleInitialStateDistribution",
-    "CartPoleStateTransition",
     "CartPolePOMDPMetrics",
 ]

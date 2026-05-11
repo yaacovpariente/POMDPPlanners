@@ -6,6 +6,7 @@ from scipy.stats import entropy
 
 from POMDPPlanners.core.policy import PolicyInfoVariable
 from POMDPPlanners.core.tree import ActionNode, BeliefNode
+from POMDPPlanners.core.tree.arena import Tree
 
 
 class TreeMetrics(Enum):
@@ -183,6 +184,73 @@ def compute_tree_metrics(tree: BeliefNode) -> List[PolicyInfoVariable]:
         PolicyInfoVariable(
             name=TreeMetrics.TREE_MAX_DEPTH.value,
             value=tree.height - 1,
+        ),
+        PolicyInfoVariable(
+            name=TreeMetrics.IS_LEAF.value,
+            value=0,
+        ),
+    ]
+
+
+def compute_arena_tree_metrics(tree: Tree, root_id: int) -> List[PolicyInfoVariable]:
+    """Arena variant of :func:`compute_tree_metrics`.
+
+    Walks ``tree.children_ids`` from ``root_id``; produces the same
+    :class:`TreeMetrics` set as the anytree-based variant.
+    """
+    root_children = tree.children_ids[root_id]
+    if not root_children:
+        return [
+            PolicyInfoVariable(name=TreeMetrics.MIN_ACTIONS_VISIT_COUNT.value, value=0),
+            PolicyInfoVariable(name=TreeMetrics.MAX_ACTIONS_VISIT_COUNT.value, value=0),
+            PolicyInfoVariable(name=TreeMetrics.ACTIONS_VISIT_COUNT_ENTROPY.value, value=0),
+            PolicyInfoVariable(name=TreeMetrics.IS_LEAF.value, value=1),
+        ]
+
+    visit_counts = np.array([tree.visit_count[cid] for cid in root_children])
+    n_actions_from_root = len(visit_counts)
+    root_visit_count = tree.visit_count[root_id]
+    total_visits: int = int(np.sum(visit_counts))
+    if total_visits > 0:
+        probabilities = visit_counts / total_visits
+        entropy_value = entropy(probabilities, base=2)
+    else:
+        entropy_value = 0.0
+
+    # Tree max depth: BFS over children_ids starting from root_id.
+    max_depth = 0
+    frontier = [(root_id, 0)]
+    while frontier:
+        node_id, depth = frontier.pop()
+        if depth > max_depth:
+            max_depth = depth
+        for cid in tree.children_ids[node_id]:
+            frontier.append((cid, depth + 1))
+
+    return [
+        PolicyInfoVariable(
+            name=TreeMetrics.MIN_ACTIONS_VISIT_COUNT.value,
+            value=int(np.min(visit_counts)),
+        ),
+        PolicyInfoVariable(
+            name=TreeMetrics.MAX_ACTIONS_VISIT_COUNT.value,
+            value=int(np.max(visit_counts)),
+        ),
+        PolicyInfoVariable(
+            name=TreeMetrics.ACTIONS_VISIT_COUNT_ENTROPY.value,
+            value=float(entropy_value),
+        ),
+        PolicyInfoVariable(
+            name=TreeMetrics.N_ACTIONS_FROM_ROOT.value,
+            value=n_actions_from_root,
+        ),
+        PolicyInfoVariable(
+            name=TreeMetrics.ROOT_VISIT_COUNT.value,
+            value=root_visit_count,
+        ),
+        PolicyInfoVariable(
+            name=TreeMetrics.TREE_MAX_DEPTH.value,
+            value=max_depth,
         ),
         PolicyInfoVariable(
             name=TreeMetrics.IS_LEAF.value,

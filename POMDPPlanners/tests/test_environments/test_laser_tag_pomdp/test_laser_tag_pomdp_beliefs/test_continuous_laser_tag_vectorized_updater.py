@@ -11,6 +11,7 @@ from POMDPPlanners.core.belief.particle_beliefs import WeightedParticleBelief
 from POMDPPlanners.core.belief.vectorized_weighted_particle_belief import (
     VectorizedWeightedParticleBelief,
 )
+from POMDPPlanners.environments.laser_tag_pomdp import _native
 from POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_pomdp import (
     ContinuousLaserTagPOMDP,
     ContinuousLaserTagPOMDPDiscreteActions,
@@ -19,7 +20,7 @@ from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_beliefs.continuo
     ContinuousLaserTagVectorizedUpdater,
 )
 from POMDPPlanners.tests.test_core.test_belief.belief_equivalence_utils import (
-    assert_update_particles_match_per_particle_seeded,
+    assert_update_particles_match,
 )
 from POMDPPlanners.tests.test_core.test_belief.vectorized_updater_test_utils import (
     assert_batch_obs_log_likelihood_matches_loop,
@@ -103,6 +104,7 @@ class TestFromEnvironment:
         Test type: unit
         """
         assert isinstance(updater_discrete, ContinuousLaserTagVectorizedUpdater)
+        # pylint: disable=protected-access
         assert updater_discrete._action_to_vector is not None
 
 
@@ -310,17 +312,18 @@ class TestEquivalenceWithPerParticleLoop:
     def test_batch_transition_matches_per_particle_loop(self, env, updater):
         """Test vectorized batch_transition matches per-particle state_transition_model.
 
-        Purpose: Verifies that batch_transition produces the same results as
-                 calling the environment's state_transition_model per particle.
-                 Because the vectorized path batches robot noise then opponent
-                 noise (different RNG order from the per-particle path which
-                 interleaves them), we compare each particle individually with
-                 its own seed.
+        Purpose: Verifies that batch_transition (which delegates to the
+            native ``ContinuousLaserTagTransitionCpp.batch_sample``) and
+            ``state_transition_model().sample()`` (the per-particle native
+            path) draw the same sequence from the shared C++ RNG when
+            seeded once, since both paths now hit the same
+            ``_native`` entry points.
 
         Given: A set of non-terminal continuous-space particles.
-        When: For each particle, batch_transition is called on a single
-              particle, and the per-particle state_transition_model is called
-              with the same seed.
+        When: batch_transition is run once on the whole particle set, then
+            the same RNG is re-seeded and per-particle
+            ``state_transition_model().sample()`` calls are issued in row
+            order.
         Then: Results match within floating-point tolerance.
 
         Test type: integration
@@ -338,23 +341,16 @@ class TestEquivalenceWithPerParticleLoop:
         )
         action = np.array([1.0, 0.5, 0.0])
 
+        _native.set_seed(2024)
+        vec_result = updater.batch_transition(particles, action)
+
+        _native.set_seed(2024)
+        scalar_rows = []
         for i in range(n):
-            single = particles[i : i + 1]
+            scalar_rows.append(env.sample_next_state(particles[i], action))
+        scalar_result = np.stack(scalar_rows, axis=0)
 
-            np.random.seed(1000 + i)
-            vec_result = updater.batch_transition(single, action)
-
-            np.random.seed(1000 + i)
-            scalar_result = env.state_transition_model(state=particles[i], action=action).sample()[
-                0
-            ]
-
-            np.testing.assert_allclose(
-                vec_result[0],
-                scalar_result,
-                atol=1e-10,
-                err_msg=f"Mismatch for particle {i}",
-            )
+        np.testing.assert_allclose(vec_result, scalar_result, atol=1e-12)
 
     def test_batch_obs_log_likelihood_matches_per_particle_loop(self, env, updater):
         """Test vectorized log-likelihood matches per-particle observation_model.probability.
@@ -385,11 +381,7 @@ class TestEquivalenceWithPerParticleLoop:
         action = np.array([1.0, 0.0, 0.0])
 
         def per_particle_ll_fn(particle, act, observation):
-            obs_model = env.observation_model(next_state=particle, action=act)
-            prob = obs_model.probability([observation])[0]
-            if prob > 0:
-                return np.log(prob)
-            return -np.inf
+            return env.observation_log_probability(particle, act, [observation])[0]
 
         assert_batch_obs_log_likelihood_matches_loop(
             updater=updater,
@@ -435,17 +427,17 @@ class TestConfigId:
 
 
 class TestBeliefEquivalenceWithBaseline:
-    def test_update_particles_match_per_particle_seeded(self, env, updater):
-        """Test vectorized and baseline beliefs agree on particles under per-particle seeding.
+    def test_update_particles_match_under_native_seed(self, env, updater):
+        """Test vectorized and baseline beliefs agree on particles under a single C++ seed.
 
         Purpose: Validates that VectorizedWeightedParticleBelief.update and
             WeightedParticleBelief.update produce identical next particles
-            when each particle's update is seeded independently. The
-            vectorized path samples robot and opponent continuous Gaussian
-            noise in bulk, which differs in RNG order from the baseline
-            per-particle loop. Per-particle seeding restores bit-for-bit
-            equivalence on the particle array (mirroring the updater-level
-            workaround in this file's TestEquivalenceWithPerParticleLoop).
+            when both paths share the same ``_native`` RNG. Since both
+            paths delegate row-by-row into C++ in the same order (robot
+            noise, opponent pursuit noise, opponent step noise per
+            particle), a single shared seed via ``_native.set_seed`` now
+            achieves bit-for-bit particle equivalence without the
+            per-particle seeding workaround the pre-port test used.
 
             Weights are not compared here: for out-of-distribution
             observations (like the random one used here) every particle's
@@ -455,21 +447,21 @@ class TestBeliefEquivalenceWithBaseline:
             when particles match.
 
         Given: 20 aligned continuous-space particles.
-        When: Each particle is updated individually with a shared
-            per-particle seed (base_seed + i) on both paths.
-        Then: Aggregate next-particle arrays agree within floating-point
-            tolerance.
+        When: Both beliefs are updated once each with ``_native.set_seed``
+            used to align the shared C++ RNG.
+        Then: Next-particle arrays agree within floating-point tolerance.
 
         Test type: integration
         """
         base, vec = _make_aligned_beliefs(updater)
         obs = np.random.rand(8) * 5
-        assert_update_particles_match_per_particle_seeded(
+        assert_update_particles_match(
             base=base,
             vec=vec,
             action=np.array([1.0, 0.5, 0.0]),
             observation=obs,
             pomdp=env,
             atol=1e-10,
-            base_seed=1000,
+            seed=1000,
+            seed_fn=_native.set_seed,
         )

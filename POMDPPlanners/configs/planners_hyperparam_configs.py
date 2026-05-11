@@ -122,7 +122,6 @@ class PlannersHyperparamConfigs:
 
         constant_parameters = {
             "discount_factor": self.discount_factor,
-            "gamma": self.discount_factor,
             "name": name,
             "environment": env,
             "time_out_in_seconds": time_out_in_seconds,

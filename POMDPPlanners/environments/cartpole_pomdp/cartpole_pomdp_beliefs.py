@@ -26,6 +26,7 @@ from POMDPPlanners.core.belief.vectorized_particle_belief_updater import (
 from POMDPPlanners.core.belief.vectorized_weighted_particle_belief import (
     VectorizedWeightedParticleBelief,
 )
+from POMDPPlanners.environments.cartpole_pomdp import _native
 from POMDPPlanners.environments.cartpole_pomdp.cartpole_pomdp_gaussian_beliefs import (
     GaussianBeliefUpdaterType,
     create_cartpole_gaussian_belief,
@@ -127,6 +128,11 @@ class CartPoleVectorizedUpdater(VectorizedParticleBeliefUpdater):
         self.polemass_length = polemass_length
         self.tau = tau
         self.kinematics_integrator = kinematics_integrator
+        # Cached covariance arrays for the native batch entry points. The
+        # MVN objects' ``covariance`` property returns a copy, so we pay the
+        # allocation once instead of on every batch_transition call.
+        self._state_transition_cov: np.ndarray = state_transition_dist.covariance
+        self._obs_cov: np.ndarray = obs_dist.covariance
 
     @classmethod
     def from_environment(cls, env: "CartPolePOMDP") -> "CartPoleVectorizedUpdater":
@@ -159,12 +165,31 @@ class CartPoleVectorizedUpdater(VectorizedParticleBeliefUpdater):
     # ------------------------------------------------------------------
 
     def batch_transition(self, particles: np.ndarray, action: np.ndarray) -> np.ndarray:
-        # particles: (N, 4) = [x, x_dot, theta, theta_dot]
-        next_particles = self._deterministic_next_state(particles, action)
-        noise = self.state_transition_dist.sample(np.zeros(4), n_samples=particles.shape[0])
-        return next_particles + noise
+        # particles: (N, 4) = [x, x_dot, theta, theta_dot]. Delegates to the
+        # native C++ batch sampler so both this path and the per-particle
+        # env.sample_next_state() (which also routes through
+        # _native.CartPoleTransitionCpp) share the same C++ RNG. The
+        # `state=particles[0]` passed to the ctor is unused on the batch
+        # path; only the ctor signature requires it.
+        transition = _native.CartPoleTransitionCpp(
+            state=particles[0],
+            action=int(action),
+            force_mag=self.force_mag,
+            total_mass=self.total_mass,
+            polemass_length=self.polemass_length,
+            gravity=self.gravity,
+            length=self.length,
+            kinematics_integrator=self.kinematics_integrator,
+            tau=self.tau,
+            masspole=self.masspole,
+            covariance=self._state_transition_cov,
+        )
+        return transition.batch_sample(particles)
 
     def _deterministic_next_state(self, particles: np.ndarray, action: np.ndarray) -> np.ndarray:
+        # Retained as a public-via-tests helper; mirrors the C++
+        # deterministic path so unit tests of physics don't depend on
+        # constructing a native object.
         force = self.force_mag if action == 1 else -self.force_mag
 
         theta = particles[:, 2]
@@ -199,8 +224,15 @@ class CartPoleVectorizedUpdater(VectorizedParticleBeliefUpdater):
         action: np.ndarray,
         observation: np.ndarray,
     ) -> np.ndarray:
-        observation = np.asarray(observation, dtype=float).ravel()
-        return self.obs_dist.log_pdf(next_particles, observation)
+        observation_arr = np.asarray(observation, dtype=float).ravel()
+        # Delegate to the native C++ observation likelihood. `next_state`
+        # passed to the ctor is unused on the batch path.
+        obs_model = _native.CartPoleObservationCpp(
+            next_state=next_particles[0],
+            action=int(action),
+            covariance=self._obs_cov,
+        )
+        return obs_model.batch_log_likelihood(next_particles, observation_arr)
 
     @property
     def config_id(self) -> str:

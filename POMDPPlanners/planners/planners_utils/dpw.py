@@ -3,7 +3,9 @@ from typing import Any, Dict, Optional
 
 import numpy as np
 
+from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.tree import ActionNode, BeliefNode
+from POMDPPlanners.core.tree.arena import Tree
 
 
 class ActionSampler(ABC):
@@ -551,3 +553,81 @@ def ucb1_exploration(belief_node: BeliefNode, exploration_constant: float) -> Ac
     )
 
     return belief_node.children[np.argmax(ucb)]
+
+
+def action_progressive_widening_arena(  # pylint: disable=too-many-arguments
+    tree: Tree,
+    belief_id: int,
+    alpha_a: float,
+    action_sampler: ActionSampler,
+    exploration_constant: float,
+    k_a: float,
+    min_visit_count_per_action: int = 1,
+    environment: Optional[Environment] = None,
+) -> int:
+    """Arena variant of :func:`action_progressive_widening`.
+
+    Returns the action-node ID (an int) selected by progressive widening +
+    UCB1 from belief node ``belief_id`` in ``tree``. Mirrors the
+    semantics of the legacy helper but operates on the column-store tree.
+
+    When ``environment`` is supplied, ``environment.hash_action`` is used to
+    index action children in O(1). When omitted, falls back to the legacy
+    linear-scan path for backwards compatibility.
+    """
+    # Root-only: ensure every existing action has been visited at least
+    # min_visit_count_per_action times before considering widening.
+    if tree.parent_id[belief_id] is None:
+        for cid in tree.children_ids[belief_id]:
+            if tree.visit_count[cid] < min_visit_count_per_action:
+                return cid
+
+    children = tree.children_ids[belief_id]
+    belief_visits = tree.visit_count[belief_id]
+    is_leaf = len(children) == 0
+
+    if is_leaf or belief_visits == 0 or len(children) <= k_a * belief_visits**alpha_a:
+        action = action_sampler.sample()
+        return _get_or_add_action_child(tree, belief_id, action, environment)
+
+    return ucb1_exploration_arena(
+        tree=tree, belief_id=belief_id, exploration_constant=exploration_constant
+    )
+
+
+def _get_or_add_action_child(
+    tree: Tree,
+    belief_id: int,
+    action: Any,
+    environment: Optional[Environment],
+) -> int:
+    if environment is not None:
+        action_key = environment.hash_action(action)
+        existing_id = tree.get_action_child_indexed(belief_id, action_key=action_key)
+        if existing_id is not None:
+            return existing_id
+        return tree.add_action_node(action=action, parent_id=belief_id, action_key=action_key)
+    # Legacy fallback for callers that did not pass an environment.
+    existing_id = tree.get_action_child_indexed(belief_id, action)
+    if existing_id is not None:
+        return existing_id
+    existing_id = tree.get_action_child(belief_id, action)
+    if existing_id is not None:
+        return existing_id
+    return tree.add_action_node(action=action, parent_id=belief_id)
+
+
+def ucb1_exploration_arena(tree: Tree, belief_id: int, exploration_constant: float) -> int:
+    """Arena variant of :func:`ucb1_exploration`. Returns the action-node ID."""
+    children = tree.children_ids[belief_id]
+    belief_visits = tree.visit_count[belief_id]
+    log_n = float(np.log(belief_visits))
+    best_id = children[0]
+    best_ucb = -float("inf")
+    for cid in children:
+        visits = max(tree.visit_count[cid], 1)
+        ucb = tree.q_value[cid] + exploration_constant * (log_n / visits) ** 0.5
+        if ucb > best_ucb:
+            best_ucb = ucb
+            best_id = cid
+    return best_id

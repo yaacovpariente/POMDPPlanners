@@ -26,6 +26,9 @@ from POMDPPlanners.core.tree import ActionNode, BeliefNode
 from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
 from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+from POMDPPlanners.tests.test_utils.metric_invariants_utils import (
+    verify_belief_invariants,
+)
 
 # Set seeds for reproducible tests
 np.random.seed(42)
@@ -665,6 +668,7 @@ def test_belief_update_basic():
     particles = [0, 1, 0, 1]  # Mix of states
     log_weights = np.array([0.1, 0.1, 0.1, 0.1])  # Non-zero weights
     belief = WeightedParticleBelief(particles=particles, log_weights=log_weights, resampling=False)
+    verify_belief_invariants(belief, expected_n_particles=len(particles))
 
     # Perform an update
     action = 0
@@ -680,6 +684,7 @@ def test_belief_update_basic():
 
     # Check that weights are still valid (not all zero)
     assert np.any(updated_belief.log_weights > -np.inf)
+    verify_belief_invariants(updated_belief, expected_n_particles=len(particles))
 
 
 def test_belief_update_with_resampling():
@@ -705,6 +710,7 @@ def test_belief_update_with_resampling():
     # Check that weights are normalized after resampling
     normalized_weights = np.exp(updated_belief.log_weights - np.max(updated_belief.log_weights))
     assert np.isclose(np.sum(normalized_weights), len(updated_belief.particles))
+    verify_belief_invariants(updated_belief, expected_n_particles=len(particles))
 
 
 def test_belief_update_state_transitions():
@@ -758,6 +764,7 @@ def test_belief_update_with_tiger_pomdp():
 
     # Check that weights have been updated
     assert not np.array_equal(updated_belief.log_weights, belief.log_weights)
+    verify_belief_invariants(updated_belief, expected_n_particles=len(particles))
 
 
 def test_belief_update_preserves_particle_count():
@@ -774,6 +781,7 @@ def test_belief_update_preserves_particle_count():
     updated_belief = belief.update(action=action, observation=observation, pomdp=env)
 
     assert len(updated_belief.particles) == n_particles
+    verify_belief_invariants(updated_belief, expected_n_particles=n_particles)
 
 
 def test_belief_update_weight_normalization():
@@ -810,6 +818,107 @@ def test_belief_update_with_extreme_weights():
     # Check that update doesn't crash with extreme weights
     assert isinstance(updated_belief, WeightedParticleBelief)
     assert len(updated_belief.particles) == len(belief.particles)
+
+
+def test_update_weights_skips_asarray_round_trip_on_native_path():
+    """Regression: _update_weights returns ndarray particles unchanged on native envs.
+
+    Purpose: Validates that WeightedParticleBelief._update_weights drops the
+        redundant ``np.asarray`` round-trip and per-particle list rebuild that
+        previously turned the native batch ndarray into N 0-d ndarray views.
+        Asserts the returned next-states are an ndarray (the load-bearing
+        type contract), the shape matches the env's batch output, and the
+        new log-weights equal the manual reference computation
+        ``log_weights + observation_log_probability_per_state`` (no
+        ``exp -> eps -> log`` round-trip) for envs that override the
+        observation kernel and therefore guarantee finite log-likelihoods.
+
+    Given: A WeightedParticleBelief over 8 particles drawn from a native
+        env (ContinuousLightDarkPOMDPDiscreteActions) and a fixed RNG seed.
+    When: ``_update_weights`` is called once to compute the next-particles
+        and updated log-weights for one (action, observation) pair.
+    Then: The returned ``next_particles`` is an ndarray of shape ``(N, d)``
+        (NOT a Python list rebuilt from per-particle 0-d views), and the
+        log-weights match the closed-form formula applied to the
+        observation log-likelihoods of those exact next-particles.
+
+    Test type: unit
+    """
+    # pylint: disable=protected-access,import-outside-toplevel
+    from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
+        ContinuousLightDarkPOMDPDiscreteActions,
+    )
+
+    env = ContinuousLightDarkPOMDPDiscreteActions(discount_factor=0.95)
+
+    np.random.seed(123)
+    init_particles = env.initial_state_dist().sample(n_samples=8)
+    log_weights = np.log(np.ones(8) / 8)
+    belief = WeightedParticleBelief(
+        particles=init_particles,
+        log_weights=log_weights,
+        resampling=False,
+    )
+
+    action = env.get_actions()[0]
+    observation = np.array([0.5, 0.5], dtype=float)
+
+    np.random.seed(2026)
+    next_particles, next_log_weights = belief._update_weights(
+        action=action, observation=observation, pomdp=env
+    )
+
+    # The fast path must produce an ndarray, not a Python list of 0-d
+    # ndarray views. This is the load-bearing assertion -- if it fails, the
+    # asarray + per-particle list rebuild is back.
+    assert isinstance(next_particles, np.ndarray)
+    assert next_particles.shape == (8, 2)
+
+    # The log-weights must match the manual formula applied to the very
+    # next-particles we just got back -- no covert list-rebuild detour
+    # between sample_next_state_batch and observation_log_probability_per_state.
+    # Native envs (those that override observation_log_probability_per_state)
+    # are contracted to return finite log-likelihoods, so _update_weights
+    # adds log_ll directly without the exp -> eps-floor -> log round-trip.
+    ref_log_ll = env.observation_log_probability_per_state(
+        next_states=next_particles, action=action, observation=observation
+    )
+    ref_log_weights = log_weights + ref_log_ll
+    np.testing.assert_allclose(next_log_weights, ref_log_weights)
+
+
+def test_update_weights_preserves_list_path_for_non_native_envs():
+    """Regression: _update_weights still returns a list when the env doesn't
+    override sample_next_state_batch (Tiger-style envs).
+
+    Purpose: Validates that the asarray-round-trip removal does not break
+        non-native envs whose ``sample_next_state_batch`` falls back to the
+        default list-returning loop. The downstream consumer must still
+        receive a Python list when the env returns a list.
+
+    Given: A WeightedParticleBelief over Tiger string states (a list), with
+        Tiger's default-loop sample_next_state_batch (returns a list).
+    When: ``_update_weights`` is called once.
+    Then: The returned ``next_particles`` is a Python ``list`` (preserving
+        the legacy contract for envs that produce non-numeric particles),
+        ``len(next_particles) == 3``, and log-weights are finite.
+
+    Test type: unit
+    """
+    # pylint: disable=protected-access
+    env = TigerPOMDP(discount_factor=0.95)
+    particles = ["tiger_left", "tiger_right", "tiger_left"]
+    log_weights = np.array([0.1, 0.1, 0.1])
+    belief = WeightedParticleBelief(particles=particles, log_weights=log_weights, resampling=False)
+
+    np.random.seed(7)
+    next_particles, next_log_weights = belief._update_weights(
+        action="listen", observation="hear_left", pomdp=env
+    )
+
+    assert isinstance(next_particles, list)
+    assert len(next_particles) == 3
+    assert np.all(np.isfinite(next_log_weights))
 
 
 def test_belief_update_consistency():
@@ -2329,7 +2438,7 @@ def test_weighted_particle_belief_immutable_updates_usage_example():
     child_beliefs = []
     for obs in observations:
         # Generate potential next state (from docstring)
-        next_state = env.state_transition_model(initial_state, action).sample()[0]
+        next_state = env.sample_next_state(initial_state, action)
 
         # Create new belief (immutable update) (from docstring)
         child_belief = belief.update(action, obs, env, next_state)
@@ -2411,7 +2520,7 @@ def test_weighted_particle_belief_mcts_integration_usage_example():
         # Add particles based on transition model (from docstring)
         for _ in range(5):  # Multiple particles per observation
             parent_state = root_belief.sample()
-            next_state = env.state_transition_model(parent_state, action).sample()[0]
+            next_state = env.sample_next_state(parent_state, action)
             child_belief.inplace_update(action, observation, env, next_state)
 
         # Create belief node for tree (from docstring)
@@ -2573,7 +2682,7 @@ def test_unweighted_particle_belief_state_update_mcts_with_uniform_beliefs_usage
         # Add particles uniformly based on environment dynamics
         for _ in range(5):  # Multiple simulations
             parent_state = root_belief.sample()
-            next_state = env.state_transition_model(parent_state, action).sample()[0]
+            next_state = env.sample_next_state(parent_state, action)
             child_belief.inplace_update(action, observation, env, next_state)
 
         # Create belief node
@@ -2677,7 +2786,7 @@ def test_unweighted_particle_belief_state_update_immutable_belief_trees_usage_ex
         # Generate next states uniformly
         for _ in range(3):  # Reduced for test speed
             current_state = root_belief.sample()
-            next_state = env.state_transition_model(current_state, action).sample()[0]
+            next_state = env.sample_next_state(current_state, action)
             # For simplicity, assume observation equals next state (fully observable case)
             child_belief = child_belief.update(action, next_state, env, next_state)
 

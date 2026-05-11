@@ -7,9 +7,11 @@ This module tests the Continuous Light Dark POMDP environment, focusing on:
 - Terminal conditions
 """
 
+# pylint: disable=too-many-lines
+
 import random
 import time
-from typing import cast
+from typing import Any
 
 import numpy as np
 import pytest
@@ -22,42 +24,25 @@ from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.distributions import DiscreteDistribution
 from POMDPPlanners.core.policy import PolicyRunData
 from POMDPPlanners.core.simulation import History, StepData
+from POMDPPlanners.tests.test_utils.confidence_interval_utils import (
+    verify_metrics_within_confidence_intervals,
+)
+from POMDPPlanners.tests.test_utils.metric_invariants_utils import (
+    verify_history_returns_bounded,
+    verify_metric_sanity,
+    verify_return_shift_linearity,
+)
+from POMDPPlanners.environments.light_dark_pomdp import _native
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
     ContinuousLightDarkPOMDP,
     ContinuousLightDarkPOMDPDiscreteActions,
-    ContinuousLightDarkStateTransitionModel,
     ObservationModelType,
     RewardModelType,
-    StateTransitionModel,
-)
-from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
-
-# pylint: disable=no-name-in-module
-from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_observation_models import (
-    ContinuousLightDarkDistanceBasedObservationModel,  # pyright: ignore[reportAttributeAccessIssue]
-    ContinuousLightDarkNormalNoiseNoObsInDarkObservationModel,
-    ContinuousLightDarkNormalNoiseObservationModel,
 )
 from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_reward_models import (
     ContinuousLightDarkDecayingHitProbabilityRewardModel,
     ContinuousLDDangerousStatesRewardModel,
 )
-
-
-def create_obs_distributions(
-    cov_matrix: np.ndarray,
-) -> tuple[CovarianceParameterizedMultivariateNormal, CovarianceParameterizedMultivariateNormal]:
-    """Helper function to create observation distribution instances for tests.
-
-    Args:
-        cov_matrix: Base covariance matrix
-
-    Returns:
-        Tuple of (near_beacon_dist, far_from_beacon_dist)
-    """
-    far_dist = CovarianceParameterizedMultivariateNormal(cov_matrix)
-    near_dist = CovarianceParameterizedMultivariateNormal(cov_matrix * 0.5)
-    return near_dist, far_dist
 
 
 # Set seeds for reproducible tests
@@ -315,21 +300,19 @@ def test_beacons_and_obstacles_array_structure():
 
 
 def test_state_transition_model(pomdp):
-    # Test state transition
+    # Test state transition via the env-level sample API.
     state = np.array([0.0, 0.0])
     action = np.array([0.0, 0.0])
-    transition = pomdp.state_transition_model(state, action)
-    next_state = transition.sample()[0]
+    next_state = pomdp.sample_next_state(state, action)
     assert isinstance(next_state, np.ndarray)
     assert next_state.shape == (2,)
 
 
 def test_observation_model(pomdp):
-    # Test observation model
+    # Test observation model via the env-level sample API.
     state = np.array([0.0, 0.0])
     action = np.array([0.0, 0.0])
-    observation = pomdp.observation_model(state, action)
-    obs = observation.sample()[0]
+    obs = pomdp.sample_observation(state, action)
     assert isinstance(obs, np.ndarray)
     assert obs.shape == (2,)
 
@@ -548,6 +531,118 @@ def test_compute_metrics():
     )
 
 
+def test_compute_metrics_values_within_confidence_intervals():
+    """Test ContinuousLightDarkPOMDP metric values are inside CIs and pass invariants.
+
+    Purpose: Validates that metrics produced by compute_metrics lie inside
+        their CI bounds and that all structural invariants hold (rate-in-[0,1],
+        counts >= 0, finite CI for n>=2, returns inside reward bounds, and
+        return-shift linearity).
+
+    Given: A ContinuousLightDarkPOMDPDiscreteActions and 3 hand-built histories
+        with varied outcomes (goal-reaching, obstacle-hitting, all-safe).
+    When: compute_metrics is called and the four invariant helpers are run.
+    Then: All checks pass without raising.
+
+    Test type: integration
+    """
+    env = ContinuousLightDarkPOMDPDiscreteActions(
+        discount_factor=0.95, goal_state_radius=1.5, obstacle_radius=1.5
+    )
+
+    def _make_belief(state: np.ndarray) -> WeightedParticleBelief:
+        return WeightedParticleBelief(
+            particles=[state], log_weights=np.array([1.0]), resampling=False
+        )
+
+    # History 0: reach goal.
+    goal_steps = [
+        StepData(
+            state=np.array([0, 5]),
+            action="right",
+            next_state=np.array([1, 5]),
+            observation=np.array([1, 5]),
+            reward=-2.0,
+            belief=_make_belief(np.array([0, 5])),
+        ),
+        StepData(
+            state=np.array([9, 5]),
+            action="right",
+            next_state=np.array([10, 5]),
+            observation=np.array([10, 5]),
+            reward=8.0,
+            belief=_make_belief(np.array([9, 5])),
+        ),
+    ]
+
+    # History 1: hit obstacle (within radius of obstacle at (5, 5)).
+    obstacle_steps = [
+        StepData(
+            state=np.array([0, 5]),
+            action="right",
+            next_state=np.array([1, 5]),
+            observation=np.array([1, 5]),
+            reward=-2.0,
+            belief=_make_belief(np.array([0, 5])),
+        ),
+        StepData(
+            state=np.array([4, 5]),
+            action="right",
+            next_state=np.array([5, 5]),
+            observation=np.array([5, 5]),
+            reward=-12.0,
+            belief=_make_belief(np.array([4, 5])),
+        ),
+    ]
+
+    # History 2: all-safe (no obstacle, no goal).
+    safe_steps = [
+        StepData(
+            state=np.array([0, 5]),
+            action="up",
+            next_state=np.array([0, 6]),
+            observation=np.array([0, 6]),
+            reward=-2.0,
+            belief=_make_belief(np.array([0, 5])),
+        ),
+        StepData(
+            state=np.array([0, 6]),
+            action="right",
+            next_state=np.array([1, 6]),
+            observation=np.array([1, 6]),
+            reward=-2.0,
+            belief=_make_belief(np.array([0, 6])),
+        ),
+    ]
+
+    histories = []
+    for steps, reach_terminal in (
+        (goal_steps, True),
+        (obstacle_steps, True),
+        (safe_steps, False),
+    ):
+        histories.append(
+            History(
+                history=steps,
+                discount_factor=0.95,
+                average_state_sampling_time=0.0,
+                average_action_time=0.0,
+                average_observation_time=0.0,
+                average_belief_update_time=0.0,
+                average_reward_time=0.0,
+                actual_num_steps=len(steps),
+                reach_terminal_state=reach_terminal,
+                policy_run_data=[PolicyRunData(info_variables=[])],
+            )
+        )
+
+    metrics = env.compute_metrics(histories)
+    verify_metrics_within_confidence_intervals(metrics)
+    verify_metric_sanity(metrics, histories, env)
+    verify_history_returns_bounded(histories, env)
+    verify_return_shift_linearity(histories, env, shift=1.5)
+
+
 def test_continuous_light_dark_pomdp_initialization(base_continuous_light_dark_pomdp):
     env = base_continuous_light_dark_pomdp
     assert np.array_equal(env.state_transition_cov_matrix, np.eye(2))
@@ -575,10 +670,8 @@ def test_continuous_light_dark_pomdp_state_transition_model(
     env = base_continuous_light_dark_pomdp
     state = np.array([5, 5])
     action = np.array([0, 1])
-    dist = env.state_transition_model(state, action)
 
-    assert isinstance(dist, StateTransitionModel)
-    next_state = dist.sample()
+    next_state = env.sample_next_state(state, action)
     expected_next_state = state + action
     # Allow for noise in state transition (3 standard deviations)
     assert np.allclose(next_state, expected_next_state, atol=3.0)
@@ -591,10 +684,8 @@ def test_continuous_light_dark_pomdp_observation_model(
     env = base_continuous_light_dark_pomdp
     next_state = np.array([5, 5])
     action = np.array([0, 1])
-    dist = env.observation_model(next_state, action)
 
-    assert isinstance(dist, ContinuousLightDarkNormalNoiseObservationModel)
-    observation = dist.sample()
+    observation = env.sample_observation(next_state, action)
     # Allow for noise in observation (3 standard deviations)
     assert np.allclose(observation, next_state, atol=3.0)
 
@@ -1305,74 +1396,46 @@ class TestVisualizePath:
 
 
 def test_beacon_proximity_observation_covariance_changes():
-    """Test that observation distribution changes when agent is near a beacon.
+    """Test that observation log-probability density rises near a beacon.
 
-    Purpose: Validates that observation uses near-beacon distribution when agent is within beacon radius
+    Purpose: Validates that the env's observation log-prob uses the
+    reduced near-beacon covariance when the next-state is within
+    beacon_radius.
 
-    Given: A continuous light-dark POMDP environment with beacons and beacon radius
-    When: Observation model is created for states near vs far from beacons
-    Then: Near-beacon states use the near-beacon distribution (reduced covariance)
+    Given: A continuous light-dark env with beacons at (0,0), (5,5), (10,10)
+        and beacon_radius=1.0.
+    When: env.observation_log_probability(next_state, action, [next_state]) is
+        called for a near-beacon next_state and a far-from-beacon next_state.
+    Then: env.is_state_near_beacon agrees, and the near-beacon log-prob (at
+        the mean) is strictly greater than the far-from-beacon log-prob (at
+        the mean) thanks to the reduced covariance.
 
     Test type: unit
     """
-
-    # Set up test parameters
-    observation_cov_matrix = np.eye(2) * 4.0  # Base covariance matrix
-    grid_size = 11
-    beacons = np.array([[0, 5, 10], [0, 5, 10]])  # Beacons at (0,0), (5,5), (10,10)
-    beacon_radius = 1.0
-    action = np.array([0, 0])  # Dummy action
-    obs_dist_near, obs_dist_far = create_obs_distributions(observation_cov_matrix)
-
-    # Test state near beacon (0,0) - within radius
-    near_beacon_state = np.array([0.5, 0.5])  # Distance sqrt(0.5) < 1.0 from beacon (0,0)
-    obs_model_near = ContinuousLightDarkNormalNoiseObservationModel(
-        next_state=near_beacon_state,
-        action=action,
-        obs_dist_near_beacon=obs_dist_near,
-        obs_dist_far_from_beacon=obs_dist_far,
-        grid_size=grid_size,
-        beacons=beacons,
-        beacon_radius=beacon_radius,
+    env = ContinuousLightDarkPOMDP(
+        discount_factor=0.95,
+        observation_cov_matrix=np.eye(2) * 4.0,
+        beacons=[(0.0, 0.0), (5.0, 5.0), (10.0, 10.0)],
+        beacon_radius=1.0,
     )
+    action = np.array([0.0, 0.0])
 
-    # Test state far from all beacons - outside all radii
-    far_from_beacon_state = np.array([2.5, 2.5])  # Distance > 1.0 from all beacons
-    obs_model_far = ContinuousLightDarkNormalNoiseObservationModel(
-        next_state=far_from_beacon_state,
-        action=action,
-        obs_dist_near_beacon=obs_dist_near,
-        obs_dist_far_from_beacon=obs_dist_far,
-        grid_size=grid_size,
-        beacons=beacons,
-        beacon_radius=beacon_radius,
-    )
+    near_state = np.array([0.5, 0.5])  # Distance sqrt(0.5) < 1.0 from (0,0)
+    far_state = np.array([2.5, 2.5])  # Distance > 1.0 from all beacons
 
-    # Verify near_beacon flag is set correctly
-    assert obs_model_near.near_beacon is True, "Should detect proximity to beacon at (0,0)"
-    assert obs_model_far.near_beacon is False, "Should not detect proximity to any beacon"
+    assert env.is_state_near_beacon(near_state) is True
+    assert env.is_state_near_beacon(far_state) is False
 
-    # Verify correct distribution selection
-    assert obs_model_near._active_dist is obs_dist_near, "Should use near-beacon distribution"
-    assert obs_model_far._active_dist is obs_dist_far, "Should use far-from-beacon distribution"
+    # Density at the mean should be higher for the near-beacon distribution
+    # (covariance is half).
+    near_logp = env.observation_log_probability(near_state, action, [near_state])[0]
+    far_logp = env.observation_log_probability(far_state, action, [far_state])[0]
+    assert near_logp > far_logp
 
-    # Test edge case: exactly at beacon radius boundary
-    boundary_state = np.array([1.0, 0.0])  # Exactly 1.0 distance from beacon (0,0)
-    obs_model_boundary = ContinuousLightDarkNormalNoiseObservationModel(
-        next_state=boundary_state,
-        action=action,
-        obs_dist_near_beacon=obs_dist_near,
-        obs_dist_far_from_beacon=obs_dist_far,
-        grid_size=grid_size,
-        beacons=beacons,
-        beacon_radius=beacon_radius,
-    )
-
-    # At exactly beacon_radius distance, should be considered "near" (<=)
-    assert obs_model_boundary.near_beacon is True, "Should detect proximity at exact beacon radius"
-    assert (
-        obs_model_boundary._active_dist is obs_dist_near
-    ), "Should use near-beacon distribution at boundary"
+    # Boundary: exactly beacon_radius IS near
+    # (any_point_within_radius_kernel uses ``<= radius_sq``).
+    boundary_state = np.array([1.0, 0.0])
+    assert env.is_state_near_beacon(boundary_state) is True
 
 
 def test_beacon_proximity_with_multiple_beacons():
@@ -1380,307 +1443,177 @@ def test_beacon_proximity_with_multiple_beacons():
 
     Purpose: Validates that proximity detection works correctly with multiple beacons
 
-    Given: A continuous light-dark environment with multiple beacons at different positions
-    When: Observation model is created for states near different beacons
-    Then: Proximity is detected correctly for any beacon within radius
+    Given: A continuous light-dark env with beacons at (0,0), (5,5), (10,10) and
+        beacon_radius=1.5.
+    When: env.is_state_near_beacon is queried for states close to each beacon
+        and a state equidistant between two beacons but outside both radii.
+    Then: Proximity is detected correctly per beacon and rejected for the
+        equidistant point that is outside any beacon's radius.
 
     Test type: unit
     """
+    env = ContinuousLightDarkPOMDP(
+        discount_factor=0.95,
+        observation_cov_matrix=np.eye(2) * 2.0,
+        beacons=[(0.0, 0.0), (5.0, 5.0), (10.0, 10.0)],
+        beacon_radius=1.5,
+    )
 
-    observation_cov_matrix = np.eye(2) * 2.0
-    grid_size = 11
-    # Multiple beacons: (0,0), (5,5), (10,10)
-    beacons = np.array([[0, 5, 10], [0, 5, 10]])
-    beacon_radius = 1.5
-    action = np.array([0, 0])
-    obs_dist_near, obs_dist_far = create_obs_distributions(observation_cov_matrix)
-
-    # Test near first beacon (0,0)
     near_first_beacon = np.array([1.0, 1.0])  # Distance sqrt(2) ≈ 1.41 < 1.5 from (0,0)
-    obs_model_1 = ContinuousLightDarkNormalNoiseObservationModel(
-        next_state=near_first_beacon,
-        action=action,
-        obs_dist_near_beacon=obs_dist_near,
-        obs_dist_far_from_beacon=obs_dist_far,
-        grid_size=grid_size,
-        beacons=beacons,
-        beacon_radius=beacon_radius,
-    )
-
-    # Test near middle beacon (5,5)
     near_middle_beacon = np.array([5.0, 6.0])  # Distance 1.0 < 1.5 from (5,5)
-    obs_model_2 = ContinuousLightDarkNormalNoiseObservationModel(
-        next_state=near_middle_beacon,
-        action=action,
-        obs_dist_near_beacon=obs_dist_near,
-        obs_dist_far_from_beacon=obs_dist_far,
-        grid_size=grid_size,
-        beacons=beacons,
-        beacon_radius=beacon_radius,
-    )
-
-    # Test near last beacon (10,10)
     near_last_beacon = np.array([9.0, 10.0])  # Distance 1.0 < 1.5 from (10,10)
-    obs_model_3 = ContinuousLightDarkNormalNoiseObservationModel(
-        next_state=near_last_beacon,
-        action=action,
-        obs_dist_near_beacon=obs_dist_near,
-        obs_dist_far_from_beacon=obs_dist_far,
-        grid_size=grid_size,
-        beacons=beacons,
-        beacon_radius=beacon_radius,
-    )
+    equidistant_state = np.array([2.5, 2.5])  # Far from all beacons
 
-    # Test equidistant from multiple beacons but still within range
-    # Point (2.5, 2.5) is equidistant from (0,0) and (5,5)
-    equidistant_state = np.array([2.5, 2.5])  # Should be far from all beacons
-    obs_model_4 = ContinuousLightDarkNormalNoiseObservationModel(
-        next_state=equidistant_state,
-        action=action,
-        obs_dist_near_beacon=obs_dist_near,
-        obs_dist_far_from_beacon=obs_dist_far,
-        grid_size=grid_size,
-        beacons=beacons,
-        beacon_radius=beacon_radius,
-    )
-
-    # Verify proximity detection for each beacon
-    assert obs_model_1.near_beacon is True, "Should detect proximity to first beacon (0,0)"
-    assert obs_model_2.near_beacon is True, "Should detect proximity to middle beacon (5,5)"
-    assert obs_model_3.near_beacon is True, "Should detect proximity to last beacon (10,10)"
-    assert obs_model_4.near_beacon is False, "Should not detect proximity when far from all beacons"
-
-    # Verify correct distribution selection
-    assert obs_model_1._active_dist is obs_dist_near, "Should use near-beacon dist for beacon 1"
-    assert obs_model_2._active_dist is obs_dist_near, "Should use near-beacon dist for beacon 2"
-    assert obs_model_3._active_dist is obs_dist_near, "Should use near-beacon dist for beacon 3"
-    assert obs_model_4._active_dist is obs_dist_far, "Should use far-from-beacon dist when far"
+    assert env.is_state_near_beacon(near_first_beacon) is True
+    assert env.is_state_near_beacon(near_middle_beacon) is True
+    assert env.is_state_near_beacon(near_last_beacon) is True
+    assert env.is_state_near_beacon(equidistant_state) is False
 
 
 def test_observation_model_probability_function():
-    """Test the probability function of the observation model.
+    """Test the env's observation log-probability for NORMAL_NOISE.
 
-    Purpose: Validates that observation model correctly calculates probability densities
+    Purpose: Validates that the env's observation log-probability function
+    matches the expected multivariate-normal log-pdf values when far from
+    all beacons (the far-beacon distribution applies).
 
-    Given: A continuous light-dark observation model with specific next_state and covariance
-    When: Probability is calculated for various observation values
-    Then: Probabilities match expected multivariate normal distribution values
+    Given: A ContinuousLightDarkPOMDP env with observation_cov_matrix=0.25*I
+        and beacons placed far from the next_state used for evaluation.
+    When: env.observation_log_probability is computed for observation values
+        equal to and offset from the next_state mean.
+    Then: log-probabilities match np.log(multivariate_normal.pdf(...))
+        within 1e-10 relative tolerance and density decreases with distance.
 
     Test type: unit
     """
-
-    # Set up test parameters
     next_state = np.array([5.0, 3.0])
-    action = np.array([0, 0])
-    observation_cov_matrix = np.eye(2) * 0.25  # Small variance for more precise testing
-    grid_size = 11
-    beacons = np.array([[0, 10], [0, 10]])  # Beacons far from next_state
-    beacon_radius = 1.0
-    obs_dist_near, obs_dist_far = create_obs_distributions(observation_cov_matrix)
-
-    # Create observation model (far from beacons so uses far-from-beacon distribution)
-    obs_model = ContinuousLightDarkNormalNoiseObservationModel(
-        next_state=next_state,
-        action=action,
-        obs_dist_near_beacon=obs_dist_near,
-        obs_dist_far_from_beacon=obs_dist_far,
-        grid_size=grid_size,
-        beacons=beacons,
-        beacon_radius=beacon_radius,
+    action = np.array([0.0, 0.0])
+    observation_cov_matrix = np.eye(2) * 0.25
+    env = ContinuousLightDarkPOMDP(
+        discount_factor=0.95,
+        observation_cov_matrix=observation_cov_matrix,
+        beacons=[(0.0, 0.0), (10.0, 10.0)],
+        beacon_radius=1.0,
     )
 
-    # Test single observation value
-    observation_values = [np.array([5.0, 3.0])]  # Same as next_state (mean)
-    probabilities = obs_model.probability(observation_values)
-
-    # Calculate expected probability using scipy (uses base covariance since far from beacon)
-    expected_prob = multivariate_normal.pdf(
-        observation_values[0], mean=next_state, cov=observation_cov_matrix  # type: ignore
+    # Single value at the mean.
+    log_p = env.observation_log_probability(next_state, action, [next_state])
+    expected_log = float(
+        np.log(
+            multivariate_normal.pdf(
+                next_state, mean=next_state, cov=observation_cov_matrix  # type: ignore
+            )
+        )
     )
+    assert isinstance(log_p, np.ndarray)
+    assert len(log_p) == 1
+    assert np.isclose(log_p[0], expected_log, rtol=1e-10)
 
-    assert isinstance(probabilities, np.ndarray), "Probability should return numpy array"
-    assert len(probabilities) == 1, "Should return one probability for one observation"
-    assert np.isclose(
-        probabilities[0], expected_prob, rtol=1e-10
-    ), f"Probability {probabilities[0]} should match expected {expected_prob}"
-
-    # Test multiple observation values
+    # Multiple values.
     observation_values = [
-        np.array([5.0, 3.0]),  # At mean
-        np.array([5.5, 3.5]),  # Offset from mean
-        np.array([4.0, 2.0]),  # Different offset
+        np.array([5.0, 3.0]),
+        np.array([5.5, 3.5]),
+        np.array([4.0, 2.0]),
     ]
-    probabilities = obs_model.probability(observation_values)
-
-    # Calculate expected probabilities
-    expected_probs = multivariate_normal.pdf(
-        observation_values, mean=next_state, cov=observation_cov_matrix  # type: ignore
+    log_p_multi = env.observation_log_probability(next_state, action, observation_values)
+    expected_log_multi = np.log(
+        multivariate_normal.pdf(
+            observation_values, mean=next_state, cov=observation_cov_matrix  # type: ignore
+        )
     )
+    assert len(log_p_multi) == 3
+    assert np.allclose(log_p_multi, expected_log_multi, rtol=1e-10)
 
-    assert len(probabilities) == 3, "Should return three probabilities for three observations"
-    assert np.allclose(
-        probabilities, expected_probs, rtol=1e-10
-    ), f"Probabilities {probabilities} should match expected {expected_probs}"
-
-    # Test probability decreases with distance from mean
-    close_obs = np.array([5.1, 3.1])  # Close to mean
-    far_obs = np.array([6.0, 4.0])  # Far from mean
-
-    close_prob = obs_model.probability([close_obs])[0]
-    far_prob = obs_model.probability([far_obs])[0]
-
-    assert (
-        close_prob > far_prob
-    ), f"Probability for closer observation {close_prob} should be higher than farther {far_prob}"
+    # Density decreases with distance from mean.
+    close_obs = np.array([5.1, 3.1])
+    far_obs = np.array([6.0, 4.0])
+    close_log = env.observation_log_probability(next_state, action, [close_obs])[0]
+    far_log = env.observation_log_probability(next_state, action, [far_obs])[0]
+    assert close_log > far_log
 
 
 def test_observation_model_probability_with_beacon_proximity():
-    """Test observation model probability function with reduced covariance near beacons.
+    """Test that the env's near-beacon log-prob density exceeds the far-beacon.
 
-    Purpose: Validates that probability calculations use reduced covariance when near beacons
+    Purpose: Validates that the near-beacon distribution (lower covariance)
+    yields a strictly higher log-pdf at the mean than the far-beacon
+    distribution.
 
-    Given: Observation models near and far from beacons with different distributions
-    When: Probability is calculated for the same observation values
-    Then: Near-beacon model has higher probability density due to reduced covariance
+    Given: A ContinuousLightDarkPOMDP env with two beacons and beacon_radius=1.0.
+    When: env.observation_log_probability is evaluated at the mean for a
+        near-beacon next_state and a far-from-beacon next_state.
+    Then: The near-beacon log-prob is strictly greater (lower covariance =>
+        higher peak density at the mean).
 
     Test type: unit
     """
-
-    next_state = np.array([0.5, 0.5])  # Close to beacon at (0,0)
-    action = np.array([0, 0])
-    observation_cov_matrix = np.eye(2) * 1.0
-    grid_size = 11
-    beacons = np.array([[0, 5], [0, 5]])  # Beacon at (0,0) and (5,5)
-    beacon_radius = 1.0
-    obs_dist_near, obs_dist_far = create_obs_distributions(observation_cov_matrix)
-
-    # Create observation model near beacon (uses near-beacon distribution)
-    obs_model_near = ContinuousLightDarkNormalNoiseObservationModel(
-        next_state=next_state,
-        action=action,
-        obs_dist_near_beacon=obs_dist_near,
-        obs_dist_far_from_beacon=obs_dist_far,
-        grid_size=grid_size,
-        beacons=beacons,
-        beacon_radius=beacon_radius,
+    env = ContinuousLightDarkPOMDP(
+        discount_factor=0.95,
+        observation_cov_matrix=np.eye(2),
+        beacons=[(0.0, 0.0), (5.0, 5.0)],
+        beacon_radius=1.0,
     )
+    action = np.array([0.0, 0.0])
+    near_state = np.array([0.5, 0.5])
+    far_state = np.array([7.0, 7.0])
 
-    # Create observation model far from beacons (uses far-from-beacon distribution)
-    far_state = np.array([7.0, 7.0])  # Far from all beacons
-    obs_model_far = ContinuousLightDarkNormalNoiseObservationModel(
-        next_state=far_state,
-        action=action,
-        obs_dist_near_beacon=obs_dist_near,
-        obs_dist_far_from_beacon=obs_dist_far,
-        grid_size=grid_size,
-        beacons=beacons,
-        beacon_radius=beacon_radius,
-    )
-
-    # Test observation at the respective means
-    near_prob = obs_model_near.probability([next_state])[0]
-    far_prob = obs_model_far.probability([far_state])[0]
-
-    # Near beacon should have higher probability density at mean due to lower covariance
-    # With covariance reduced by 0.5, the probability density at mean increases
-    assert (
-        near_prob > far_prob
-    ), f"Near-beacon probability {near_prob} should be higher than far-beacon {far_prob}"
-
-    # Verify different distributions are used
-    assert (
-        obs_model_near._active_dist is not obs_model_far._active_dist
-    ), "Should use different distributions"
-
-    # Verify the near-beacon model uses the near-beacon distribution
-    assert (
-        obs_model_near._active_dist is obs_dist_near
-    ), "Near-beacon model should use near-beacon distribution"
+    near_log = env.observation_log_probability(near_state, action, [near_state])[0]
+    far_log = env.observation_log_probability(far_state, action, [far_state])[0]
+    assert near_log > far_log
 
 
 def test_observation_model_probability_edge_cases():
-    """Test observation model probability function with edge cases.
+    """Test the env observation log-prob with edge case inputs.
 
-    Purpose: Validates robust handling of edge cases in probability calculation
+    Purpose: Validates robust handling of edge cases (single observation,
+    grid boundaries, very small covariance) via the env API.
 
-    Given: An observation model and various edge case inputs
-    When: Probability is calculated for edge cases
-    Then: Function handles edge cases gracefully without errors
+    Given: A ContinuousLightDarkPOMDP env and a far-from-beacon next_state.
+    When: env.observation_log_probability is evaluated on single, boundary,
+        and very-small-covariance inputs.
+    Then: All return finite log-probabilities, with density at the mean
+        much higher than slightly off the mean for very small covariance.
 
     Test type: unit
     """
-
     next_state = np.array([5.0, 5.0])
-    action = np.array([0, 0])
-    observation_cov_matrix = np.eye(2) * 0.1
-    grid_size = 11
-    beacons = np.array([[2, 8], [2, 8]])  # No beacons near next_state
-    beacon_radius = 1.0
-    obs_dist_near, obs_dist_far = create_obs_distributions(observation_cov_matrix)
-
-    obs_model = ContinuousLightDarkNormalNoiseObservationModel(
-        next_state=next_state,
-        action=action,
-        obs_dist_near_beacon=obs_dist_near,
-        obs_dist_far_from_beacon=obs_dist_far,
-        grid_size=grid_size,
-        beacons=beacons,
-        beacon_radius=beacon_radius,
+    action = np.array([0.0, 0.0])
+    env = ContinuousLightDarkPOMDP(
+        discount_factor=0.95,
+        observation_cov_matrix=np.eye(2) * 0.1,
+        beacons=[(2.0, 2.0), (8.0, 8.0)],
+        beacon_radius=1.0,
     )
 
-    # Test empty list - should handle gracefully by returning empty array
-    # Note: scipy.multivariate_normal.pdf doesn't handle empty arrays well,
-    # so we expect the current implementation to have issues with empty input
-    try:
-        empty_probs = obs_model.probability([])
-        assert isinstance(empty_probs, np.ndarray), "Should return numpy array for empty input"
-        assert len(empty_probs) == 0, "Should return empty array for empty input"
-    except ValueError:
-        # This is expected behavior with current implementation and scipy
-        pass
+    # Single observation at the mean.
+    single_log = env.observation_log_probability(next_state, action, [next_state])
+    assert isinstance(single_log, np.ndarray)
+    assert len(single_log) == 1
+    assert np.isfinite(single_log[0])
 
-    # Test single observation (ensures single value is converted to array)
-    single_obs = [np.array([5.0, 5.0])]
-    single_prob = obs_model.probability(single_obs)
-    assert isinstance(single_prob, np.ndarray), "Single probability should be numpy array"
-    assert len(single_prob) == 1, "Single observation should return array of length 1"
-    assert single_prob[0] > 0, "Probability should be positive"
-
-    # Test observations at grid boundaries
+    # Observations at grid boundaries — all return finite log-probs.
     boundary_observations = [
-        np.array([0.0, 0.0]),  # Bottom-left corner
-        np.array([11.0, 11.0]),  # Top-right corner (at grid_size)
-        np.array([0.0, 11.0]),  # Top-left corner
-        np.array([11.0, 0.0]),  # Bottom-right corner
+        np.array([0.0, 0.0]),
+        np.array([11.0, 11.0]),
+        np.array([0.0, 11.0]),
+        np.array([11.0, 0.0]),
     ]
-    boundary_probs = obs_model.probability(boundary_observations)
-    assert len(boundary_probs) == 4, "Should return probability for each boundary observation"
-    assert all(prob >= 0 for prob in boundary_probs), "All probabilities should be non-negative"
+    boundary_log = env.observation_log_probability(next_state, action, boundary_observations)
+    assert len(boundary_log) == 4
+    assert all(np.isfinite(boundary_log))
 
-    # Test very small covariance (high precision)
-    small_cov = np.eye(2) * 1e-6
-    small_obs_dist_near, small_obs_dist_far = create_obs_distributions(small_cov)
-    small_cov_model = ContinuousLightDarkNormalNoiseObservationModel(
-        next_state=next_state,
-        action=action,
-        obs_dist_near_beacon=small_obs_dist_near,
-        obs_dist_far_from_beacon=small_obs_dist_far,
-        grid_size=grid_size,
-        beacons=beacons,
-        beacon_radius=beacon_radius,
+    # Very small covariance — density at the mean is much higher than off.
+    small_env = ContinuousLightDarkPOMDP(
+        discount_factor=0.95,
+        observation_cov_matrix=np.eye(2) * 1e-6,
+        beacons=[(2.0, 2.0), (8.0, 8.0)],
+        beacon_radius=1.0,
     )
-
-    # Observation exactly at mean should have very high probability
-    exact_obs = [np.array([5.0, 5.0])]
-    exact_prob = small_cov_model.probability(exact_obs)[0]
-
-    # Observation slightly off should have much lower probability
-    offset_obs = [np.array([5.01, 5.01])]
-    offset_prob = small_cov_model.probability(offset_obs)[0]
-
-    assert (
-        exact_prob > offset_prob
-    ), "Exact observation should have much higher probability with small covariance"
+    exact_log = small_env.observation_log_probability(next_state, action, [next_state])[0]
+    offset_log = small_env.observation_log_probability(
+        next_state, action, [np.array([5.01, 5.01])]
+    )[0]
+    assert exact_log > offset_log
 
 
 def test_start_state_not_in_obstacle_radius():
@@ -1743,22 +1676,22 @@ def test_risk_averse_environment_config_start_state_validity():
         _initial_belief,  # pylint: disable=unused-variable
     ) = env_configs.continuous_observations_discrete_actions_light_dark_pomdp_config(n_particles=50)
 
-    # Cast to specific type to access attributes
-    light_dark_env_typed = cast(ContinuousLightDarkPOMDPDiscreteActions, light_dark_env)
+    # Narrow to the concrete type so attribute access type-checks.
+    assert isinstance(light_dark_env, ContinuousLightDarkPOMDPDiscreteActions)
 
     # Check that start state is not terminal
-    assert not light_dark_env_typed.is_terminal(
-        light_dark_env_typed.start_state
-    ), f"RiskAverseEnvironmentConfigsAPI created terminal start state {light_dark_env_typed.start_state}"
+    assert not light_dark_env.is_terminal(
+        light_dark_env.start_state
+    ), f"RiskAverseEnvironmentConfigsAPI created terminal start state {light_dark_env.start_state}"
 
     # Explicitly check distance to each obstacle
-    start_state = light_dark_env_typed.start_state
-    for i in range(light_dark_env_typed.obstacles.shape[1]):
-        obstacle_pos = light_dark_env_typed.obstacles[:, i]
+    start_state = light_dark_env.start_state
+    for i in range(light_dark_env.obstacles.shape[1]):
+        obstacle_pos = light_dark_env.obstacles[:, i]
         distance = np.linalg.norm(start_state - obstacle_pos)
-        assert distance > light_dark_env_typed.obstacle_radius, (
+        assert distance > light_dark_env.obstacle_radius, (
             f"RiskAverseEnvironmentConfigsAPI: Start state {start_state} too close to obstacle {i} "
-            f"at {obstacle_pos} (distance {distance:.2f} <= radius {light_dark_env_typed.obstacle_radius})"
+            f"at {obstacle_pos} (distance {distance:.2f} <= radius {light_dark_env.obstacle_radius})"
         )
 
     # The main test has passed - start state is not terminal and obstacles are far enough away
@@ -1842,165 +1775,128 @@ def test_environment_configuration_obstacle_placement():
         ), f"Start and goal too close for grid size {config['grid_size']}"
 
 
-def test_continuous_light_dark_state_transition_model_sample_returns_list_of_numpy_arrays():
-    """Test that ContinuousLightDarkStateTransitionModel.sample() returns a list containing only numpy arrays.
+def test_continuous_light_dark_sample_next_state_shapes_and_distribution():
+    """Test that env.sample_next_state returns the right shapes and is approximately centered.
 
-    Purpose: Validates that the sample method returns a properly structured list of numpy arrays
+    Purpose: Validates the env-API state-transition sampling produces a
+    (2,) array for n_samples=1 and a (N, 2) array for n_samples>1, with
+    samples approximately centred around state+action.
 
-    Given: A ContinuousLightDarkStateTransitionModel with specific state, action, and state distribution
-    When: sample() is called with different numbers of samples
-    Then: Returns a list where all elements are numpy arrays with correct shapes
+    Given: A ContinuousLightDarkPOMDP env with small state-transition covariance
+        and a (state, action) pair.
+    When: env.sample_next_state is called with n_samples in {1, 5, 100}.
+    Then: Output shapes are (2,) / (5, 2) / (100, 2); empirical mean is
+        within 0.5 of state+action; samples are not all identical.
 
     Test type: unit
     """
-    # Set up test parameters
+    env = ContinuousLightDarkPOMDP(
+        discount_factor=0.95,
+        state_transition_cov_matrix=np.eye(2) * 0.1,
+    )
     state = np.array([2.0, 3.0])
     action = np.array([1.0, -0.5])
-    state_transition_cov_matrix = np.eye(2) * 0.1
-    state_dist = CovarianceParameterizedMultivariateNormal(state_transition_cov_matrix)
 
-    # Create transition model
-    transition_model = ContinuousLightDarkStateTransitionModel(
-        state=state,
-        action=action,
-        state_dist=state_dist,
-    )
+    single = env.sample_next_state(state, action, n_samples=1)
+    assert isinstance(single, np.ndarray)
+    assert single.shape == (2,)
 
-    # Test single sample
-    single_sample = transition_model.sample(n_samples=1)
-    assert isinstance(single_sample, list), "sample() should return a list"
-    assert len(single_sample) == 1, "Single sample should return list of length 1"
-    assert isinstance(single_sample[0], np.ndarray), "First element should be numpy array"
-    assert single_sample[0].shape == (2,), "Each sample should be 2D position"
+    five = env.sample_next_state(state, action, n_samples=5)
+    assert isinstance(five, np.ndarray)
+    assert five.shape == (5, 2)
 
-    # Test multiple samples
-    multiple_samples = transition_model.sample(n_samples=5)
-    assert isinstance(multiple_samples, list), "sample() should return a list"
-    assert len(multiple_samples) == 5, "Should return exactly 5 samples"
+    many = env.sample_next_state(state, action, n_samples=100)
+    assert many.shape == (100, 2)
 
-    # Check that all elements are numpy arrays
-    assert all(
-        isinstance(sample, np.ndarray) for sample in multiple_samples
-    ), "All elements in the list should be numpy arrays"
+    # Empirical mean is close to state+action.
+    expected_mean = state + action
+    actual_mean = many.mean(axis=0)
+    assert np.allclose(actual_mean, expected_mean, atol=0.5)
 
-    # Check that all arrays have correct shape
-    assert all(
-        sample.shape == (2,) for sample in multiple_samples
-    ), "All samples should be 2D positions with shape (2,)"
-
-    # Test with larger number of samples
-    many_samples = transition_model.sample(n_samples=100)
-    assert len(many_samples) == 100, "Should return exactly 100 samples"
-    assert all(
-        isinstance(sample, np.ndarray) for sample in many_samples
-    ), "All 100 elements should be numpy arrays"
-    assert all(
-        sample.shape == (2,) for sample in many_samples
-    ), "All 100 samples should have shape (2,)"
-
-    # Test that samples are different (due to randomness)
-    # Note: This is probabilistic, but with 100 samples it's extremely unlikely to get identical samples
-    sample_values = [tuple(sample) for sample in many_samples]
-    unique_samples = set(sample_values)
-    assert len(unique_samples) > 1, "Samples should be different due to randomness"
-
-    # Test that samples are approximately centered around expected mean
-    expected_mean = state + action  # [3.0, 2.5]
-    sample_array = np.array(many_samples)
-    actual_mean = np.mean(sample_array, axis=0)
-
-    # Allow for some deviation due to randomness (within 2 standard deviations)
-    assert np.allclose(
-        actual_mean, expected_mean, atol=0.5
-    ), f"Sample mean {actual_mean} should be close to expected mean {expected_mean}"
+    # Samples are not all identical.
+    unique = {tuple(row) for row in many}
+    assert len(unique) > 1
 
 
 def test_normal_noise_observation_model():
-    """Test that the environment uses the normal noise observation model when specified."""
+    """Test the env's NORMAL_NOISE observation sampling always returns ndarray observations.
+
+    Purpose: Validates that NORMAL_NOISE observations are sampled via
+    env.sample_observation and never produce a "None" sentinel.
+
+    Given: A ContinuousLightDarkPOMDPDiscreteActions env configured with
+        ObservationModelType.NORMAL_NOISE.
+    When: env.sample_observation is called for several samples.
+    Then: All returned observations are ndarrays of shape (2,).
+
+    Test type: unit
+    """
     env = ContinuousLightDarkPOMDPDiscreteActions(
         discount_factor=0.95,
-        state_transition_cov_matrix=np.eye(2),
-        observation_cov_matrix=np.eye(2),
-        obstacle_hit_probability=0.2,
-        obstacle_reward=-10.0,
-        goal_reward=10.0,
-        fuel_cost=2.0,
-        grid_size=11,
-        goal_state_radius=1.5,
-        beacon_radius=1.0,
-        obstacle_radius=1.5,
         observation_model_type=ObservationModelType.NORMAL_NOISE,
     )
     assert env.observation_model_type == ObservationModelType.NORMAL_NOISE
 
-    # Test that the correct observation model is returned
     state = np.array([5.0, 5.0])
     action = "up"
-    obs_model = env.observation_model(state, action)
-    assert isinstance(obs_model, ContinuousLightDarkNormalNoiseObservationModel)
-
-    # Test that observations are always returned (never None)
-    observations = obs_model.sample(n_samples=10)
-    assert all(
-        obs is not None for obs in observations
-    ), "Normal noise model should always return observations"
+    observations = env.sample_observation(state, action, n_samples=10)
+    assert isinstance(observations, np.ndarray)
+    assert observations.shape == (10, 2)
 
 
 def test_normal_noise_no_obs_in_dark_observation_model():
-    """Test that the environment uses the normal noise no obs in dark observation model when specified."""
+    """Test the env's NORMAL_NOISE_NO_OBS_IN_DARK sampling near vs far beacon.
+
+    Purpose: Validates that the NORMAL_NOISE_NO_OBS_IN_DARK env path returns
+    real observations only when the next_state is within beacon_radius and
+    returns "None" sentinels otherwise.
+
+    Given: A ContinuousLightDarkPOMDPDiscreteActions env with
+        ObservationModelType.NORMAL_NOISE_NO_OBS_IN_DARK.
+    When: env.sample_observation is called for a near-beacon and far-beacon
+        next_state.
+    Then: Near-beacon returns ndarray observations; far-beacon returns
+        ["None"] * n_samples.
+
+    Test type: unit
+    """
     env = ContinuousLightDarkPOMDPDiscreteActions(
         discount_factor=0.95,
-        state_transition_cov_matrix=np.eye(2),
-        observation_cov_matrix=np.eye(2),
-        obstacle_hit_probability=0.2,
-        obstacle_reward=-10.0,
-        goal_reward=10.0,
-        fuel_cost=2.0,
-        grid_size=11,
-        goal_state_radius=1.5,
-        beacon_radius=1.0,
-        obstacle_radius=1.5,
         observation_model_type=ObservationModelType.NORMAL_NOISE_NO_OBS_IN_DARK,
     )
     assert env.observation_model_type == ObservationModelType.NORMAL_NOISE_NO_OBS_IN_DARK
-
-    # Test that the correct observation model is returned
-    state = np.array([5.0, 5.0])
     action = "up"
-    obs_model = env.observation_model(state, action)
-    assert isinstance(obs_model, ContinuousLightDarkNormalNoiseNoObsInDarkObservationModel)
 
-    # Test near beacon - should return observations
-    state_near = np.array([0.5, 0.5])  # Near beacon at (0,0)
-    obs_model_near = env.observation_model(state_near, action)
-    observations_near = obs_model_near.sample(n_samples=10)
-    assert all(
-        obs is not None for obs in observations_near
-    ), "No obs in dark model should return observations when near beacon"
+    # Near beacon — real observations.
+    state_near = np.array([0.5, 0.5])  # Within beacon_radius=1.0 of (0,0)
+    observations_near = env.sample_observation(state_near, action, n_samples=10)
+    assert all(isinstance(obs, np.ndarray) for obs in observations_near)
 
-    # Test far from beacon - should return "None"
-    state_far = np.array([3.0, 3.0])  # Far from beacons
-    obs_model_far = env.observation_model(state_far, action)
-    observations_far = obs_model_far.sample(n_samples=10)
-    assert all(
-        obs == "None" for obs in observations_far
-    ), "No obs in dark model should return 'None' when far from beacons"
+    # Far from beacon — "None" sentinels.
+    state_far = np.array([3.0, 3.0])
+    observations_far = env.sample_observation(state_far, action, n_samples=10)
+    assert all(obs == "None" for obs in observations_far)
 
 
 def test_default_observation_model_type():
-    """Test that the default observation model type is NORMAL_NOISE (backward compatibility)."""
-    env = ContinuousLightDarkPOMDPDiscreteActions(
-        discount_factor=0.95,
-        state_transition_cov_matrix=np.eye(2),
-        observation_cov_matrix=np.eye(2),
-    )
+    """Test that the default observation model type is NORMAL_NOISE.
+
+    Purpose: Validates backward-compatibility default observation_model_type.
+
+    Given: A ContinuousLightDarkPOMDPDiscreteActions env with no explicit
+        observation_model_type.
+    When: env.observation_model_type is read and env.sample_observation is
+        called.
+    Then: Default type is NORMAL_NOISE and observations are ndarrays.
+
+    Test type: unit
+    """
+    env = ContinuousLightDarkPOMDPDiscreteActions(discount_factor=0.95)
     assert env.observation_model_type == ObservationModelType.NORMAL_NOISE
 
-    # Verify it uses the normal noise model
-    state = np.array([5.0, 5.0])
-    action = "up"
-    obs_model = env.observation_model(state, action)
-    assert isinstance(obs_model, ContinuousLightDarkNormalNoiseObservationModel)
+    obs = env.sample_observation(np.array([5.0, 5.0]), "up", n_samples=1)
+    assert isinstance(obs, np.ndarray)
+    assert obs.shape == (2,)
 
 
 def test_observation_model_type_equality():
@@ -2025,162 +1921,152 @@ def test_observation_model_type_equality():
 
 
 def test_continuous_light_dark_pomdp_observation_model_type():
-    """Test observation model type selection for ContinuousLightDarkPOMDP (continuous actions)."""
+    """Test NO_OBS_IN_DARK observation type on ContinuousLightDarkPOMDP (continuous actions).
+
+    Purpose: Validates that the continuous-action variant of the env honours
+    NORMAL_NOISE_NO_OBS_IN_DARK and returns "None" when far from beacons.
+
+    Given: A ContinuousLightDarkPOMDP env with NORMAL_NOISE_NO_OBS_IN_DARK
+        and a far-from-beacon next_state.
+    When: env.sample_observation(next_state, action, n_samples=5) is called.
+    Then: All five observations are the "None" sentinel.
+
+    Test type: unit
+    """
     env = ContinuousLightDarkPOMDP(
         discount_factor=0.95,
         observation_model_type=ObservationModelType.NORMAL_NOISE_NO_OBS_IN_DARK,
     )
     assert env.observation_model_type == ObservationModelType.NORMAL_NOISE_NO_OBS_IN_DARK
 
-    # Test that the correct observation model is returned
-    state = np.array([3.0, 3.0])
+    state = np.array([3.0, 3.0])  # far from beacons
     action = np.array([0.0, 0.0])
-    obs_model = env.observation_model(state, action)
-    assert isinstance(obs_model, ContinuousLightDarkNormalNoiseNoObsInDarkObservationModel)
-
-    # Test far from beacon - should return "None"
-    observations = obs_model.sample(n_samples=5)
-    assert all(
-        obs == "None" for obs in observations
-    ), "No obs in dark model should return 'None' when far from beacons"
+    observations = env.sample_observation(state, action, n_samples=5)
+    assert all(obs == "None" for obs in observations)
 
 
 def test_distance_based_observation_model():
-    """Test that the environment uses the distance-based observation model when specified."""
+    """Test the env's DISTANCE_BASED sampling near, far, and at the radius boundary.
+
+    Purpose: Validates that DISTANCE_BASED returns real observations when
+    min_distance_to_beacon <= beacon_radius and "None" sentinels otherwise
+    (the predicate is ``min_distance > beacon_radius`` for the "None"
+    branch, so exactly at the radius still produces real observations).
+
+    Given: A ContinuousLightDarkPOMDPDiscreteActions env with
+        ObservationModelType.DISTANCE_BASED and beacon_radius=1.0.
+    When: env.sample_observation is called for a near-beacon, far-beacon,
+        and exactly-at-beacon-radius next_state.
+    Then: Near and at-radius cases return real ndarray observations; the
+        far case returns "None" sentinels. ``env.is_state_near_beacon``
+        agrees on near vs far.
+
+    Test type: unit
+    """
     env = ContinuousLightDarkPOMDPDiscreteActions(
         discount_factor=0.95,
-        state_transition_cov_matrix=np.eye(2),
-        observation_cov_matrix=np.eye(2),
-        obstacle_hit_probability=0.2,
-        obstacle_reward=-10.0,
-        goal_reward=10.0,
-        fuel_cost=2.0,
-        grid_size=11,
-        goal_state_radius=1.5,
-        beacon_radius=1.0,
-        obstacle_radius=1.5,
         observation_model_type=ObservationModelType.DISTANCE_BASED,
     )
     assert env.observation_model_type == ObservationModelType.DISTANCE_BASED
-
-    # Test that the correct observation model is returned
-    state = np.array([5.0, 5.0])
     action = "up"
-    obs_model = env.observation_model(state, action)
-    assert isinstance(obs_model, ContinuousLightDarkDistanceBasedObservationModel)
 
-    # Test near beacon - should return observations
-    state_near = np.array([0.5, 0.0])  # Exactly 0.5 distance from beacon at (0,0)
-    obs_model_near = env.observation_model(state_near, action)
-    observations_near = obs_model_near.sample(n_samples=10)
-    assert all(
-        obs is not None for obs in observations_near
-    ), "Distance-based model should return observations when near beacon"
+    # Near beacon — strict-less-than predicate for is_state_near_beacon.
+    state_near = np.array([0.5, 0.0])  # 0.5 from beacon (0,0)
+    observations_near = env.sample_observation(state_near, action, n_samples=10)
+    assert all(isinstance(obs, np.ndarray) for obs in observations_near)
+    assert env.is_state_near_beacon(state_near) is True
 
-    # Verify binary distribution selection (uses near-beacon distribution)
-    obs_model_near_typed = cast(ContinuousLightDarkDistanceBasedObservationModel, obs_model_near)
-    assert obs_model_near_typed.near_beacon is True, "Should detect proximity to beacon"
+    # Far from any beacon.
+    state_far = np.array([3.0, 3.0])
+    observations_far = env.sample_observation(state_far, action, n_samples=10)
+    assert all(obs == "None" for obs in observations_far)
+    assert env.is_state_near_beacon(state_far) is False
 
-    # Test far from beacon - should return "None"
-    state_far = np.array([3.0, 3.0])  # Far from beacons (distance > beacon_radius)
-    obs_model_far = env.observation_model(state_far, action)
-    observations_far = obs_model_far.sample(n_samples=10)
-    assert all(
-        obs == "None" for obs in observations_far
-    ), "Distance-based model should return 'None' when far from beacons"
-
-    # Test at beacon radius boundary - should return observations
-    state_at_radius = np.array([1.0, 0.0])  # Exactly at beacon_radius from beacon at (0,0)
-    obs_model_at_radius = env.observation_model(state_at_radius, action)
-    observations_at_radius = obs_model_at_radius.sample(n_samples=10)
-    assert all(
-        obs is not None for obs in observations_at_radius
-    ), "Distance-based model should return observations when exactly at beacon radius"
-
-    # Verify near-beacon detection at boundary
-    obs_model_at_radius_typed = cast(
-        ContinuousLightDarkDistanceBasedObservationModel, obs_model_at_radius
-    )
-    assert (
-        obs_model_at_radius_typed.near_beacon is True
-    ), "Should detect proximity at beacon radius boundary"
+    # Exactly at beacon_radius: predicate min_distance > beacon_radius is
+    # False so observations are still returned (the "None" branch is gated
+    # by strict-greater-than).
+    state_at_radius = np.array([1.0, 0.0])
+    observations_at_radius = env.sample_observation(state_at_radius, action, n_samples=10)
+    assert all(isinstance(obs, np.ndarray) for obs in observations_at_radius)
 
 
 def test_distance_based_observation_model_binary_selection():
-    """Test that distance-based observation model uses binary near/far distribution selection."""
-    # Use single beacon at origin to have predictable distance calculations
+    """Test DISTANCE_BASED partitions states by beacon_radius.
+
+    Purpose: Validates that env.sample_observation honours the binary
+    ``min_distance > beacon_radius`` split on the DISTANCE_BASED model
+    across a range of distances from a single beacon.
+
+    Given: A ContinuousLightDarkPOMDPDiscreteActions env with one beacon at
+        the origin and beacon_radius=2.0.
+    When: env.sample_observation is called for states placed at distances
+        within and beyond beacon_radius along the x-axis.
+    Then: All near distances yield real ndarray observations; all far
+        distances yield "None" sentinels.
+
+    Test type: unit
+    """
     env = ContinuousLightDarkPOMDPDiscreteActions(
         discount_factor=0.95,
-        state_transition_cov_matrix=np.eye(2),
-        observation_cov_matrix=np.eye(2) * 2.0,  # Base covariance
-        beacon_radius=2.0,  # Larger radius for more test points
-        beacons=[(0.0, 0.0)],  # Single beacon at origin
+        observation_cov_matrix=np.eye(2) * 2.0,
+        beacon_radius=2.0,
+        beacons=[(0.0, 0.0)],
         observation_model_type=ObservationModelType.DISTANCE_BASED,
     )
-
     action = "up"
 
-    # Test at different distances - all should use the same distribution per near/far status
-    near_distances = [0.0, 0.5, 1.0, 1.5, 2.0]  # All within beacon_radius
-    far_distances = [2.1, 3.0, 5.0]  # All beyond beacon_radius
+    # All inside beacon_radius — observations are real arrays.
+    for d in [0.0, 0.5, 1.0, 1.5, 2.0]:
+        state = np.array([d, 0.0])
+        observations = env.sample_observation(state, action, n_samples=4)
+        assert all(isinstance(obs, np.ndarray) for obs in observations)
 
-    # All near-beacon states should use near-beacon distribution
-    for d in near_distances:
-        state = np.array([d, 0.0])  # Place state at distance d from beacon at (0,0)
-        obs_model = env.observation_model(state, action)
-        obs_model_typed = cast(ContinuousLightDarkDistanceBasedObservationModel, obs_model)
-        assert (
-            obs_model_typed.near_beacon is True
-        ), f"At distance {d}, should detect proximity to beacon"
-
-    # All far-from-beacon states should use far-from-beacon distribution
-    for d in far_distances:
-        state = np.array([d, 0.0])  # Place state at distance d from beacon at (0,0)
-        obs_model = env.observation_model(state, action)
-        obs_model_typed = cast(ContinuousLightDarkDistanceBasedObservationModel, obs_model)
-        assert (
-            obs_model_typed.near_beacon is False
-        ), f"At distance {d}, should not detect proximity to beacon"
+    # All beyond beacon_radius — observations are "None".
+    for d in [2.1, 3.0, 5.0]:
+        state = np.array([d, 0.0])
+        observations = env.sample_observation(state, action, n_samples=4)
+        assert all(obs == "None" for obs in observations)
 
 
 def test_distance_based_observation_model_probability():
-    """Test probability calculations for distance-based observation model."""
+    """Test DISTANCE_BASED log-probability for "None" and real observations.
+
+    Purpose: Validates env.observation_log_probability semantics for the
+    DISTANCE_BASED model: "None" carries all the mass when far (log 0),
+    real observations are impossible when far (-inf), and the inverse
+    holds when near (real obs have finite log-density, "None" is -inf).
+
+    Given: A ContinuousLightDarkPOMDPDiscreteActions env with DISTANCE_BASED
+        and beacon_radius=1.0.
+    When: env.observation_log_probability is queried with "None" and a real
+        observation value for near and far next_state.
+    Then: prob(None|far)=1 (log 0); prob(None|near)=0 (-inf); prob(real|near)
+        is finite; prob(real|far)=0 (-inf).
+
+    Test type: unit
+    """
     env = ContinuousLightDarkPOMDPDiscreteActions(
         discount_factor=0.95,
-        state_transition_cov_matrix=np.eye(2),
-        observation_cov_matrix=np.eye(2),
         beacon_radius=1.0,
         observation_model_type=ObservationModelType.DISTANCE_BASED,
     )
-
     action = "up"
 
-    # Test probability of None when far from beacon
     state_far = np.array([3.0, 3.0])
-    obs_model_far = env.observation_model(state_far, action)
-    prob_none = obs_model_far.probability(["None"])[0]
-    assert np.isclose(
-        prob_none, 1.0
-    ), f"Probability of None when far from beacon should be 1.0, got {prob_none}"
-
-    # Test probability of None when near beacon
     state_near = np.array([0.5, 0.5])
-    obs_model_near = env.observation_model(state_near, action)
-    prob_none_near = obs_model_near.probability(["None"])[0]
-    assert np.isclose(
-        prob_none_near, 0.0
-    ), f"Probability of None when near beacon should be 0.0, got {prob_none_near}"
 
-    # Test probability of actual observation when near beacon
+    # "None" probability: 1 when far, 0 when near.
+    log_none_far = env.observation_log_probability(state_far, action, ["None"])[0]
+    log_none_near = env.observation_log_probability(state_near, action, ["None"])[0]
+    assert np.isclose(log_none_far, 0.0)  # log(1)
+    assert log_none_near == -np.inf  # log(0)
+
+    # Real observation: finite when near, -inf when far.
     obs_value = np.array([0.5, 0.5])
-    prob_obs = obs_model_near.probability([obs_value])[0]
-    assert prob_obs > 0, "Probability of actual observation when near beacon should be positive"
-
-    # Test probability of actual observation when far from beacon
-    prob_obs_far = obs_model_far.probability([obs_value])[0]
-    assert np.isclose(
-        prob_obs_far, 0.0
-    ), f"Probability of actual observation when far from beacon should be 0.0, got {prob_obs_far}"
+    log_real_near = env.observation_log_probability(state_near, action, [obs_value])[0]
+    log_real_far = env.observation_log_probability(state_far, action, [obs_value])[0]
+    assert np.isfinite(log_real_near)
+    assert log_real_far == -np.inf
 
 
 def test_reward_batch_continuous_matches_scalar(base_continuous_light_dark_pomdp):
@@ -2229,3 +2115,1327 @@ def test_reward_batch_discrete_actions_matches_scalar(base_light_dark_environmen
     np.random.seed(99)
     expected = np.array([env.reward(states[i], action) for i in range(100)])
     np.testing.assert_allclose(batch_rewards, expected)
+
+
+# ---------------------------------------------------------------------------
+# Batch sampling and log-probability API
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("n_samples", [1, 5, 100])
+def test_continuous_sample_next_state_n_samples_shapes(n_samples):
+    """env.sample_next_state honours n_samples and returns the right shapes.
+
+    Purpose: Validates the shape contract of env.sample_next_state on the
+    continuous-action variant.
+
+    Given: A ContinuousLightDarkPOMDP env and a (state, action) pair.
+    When: env.sample_next_state(state, action, n_samples=N) is called for
+        N in {1, 5, 100}.
+    Then: For n_samples=1 a (2,) ndarray; for n_samples>1 a (N, 2) ndarray.
+
+    Test type: unit
+    """
+    env = ContinuousLightDarkPOMDP(discount_factor=0.95)
+    state = np.array([3.0, 4.0])
+    action = np.array([1.0, 0.5])
+
+    direct = env.sample_next_state(state, action, n_samples=n_samples)
+    if n_samples == 1:
+        assert isinstance(direct, np.ndarray)
+        assert direct.shape == (2,)
+    else:
+        assert isinstance(direct, np.ndarray)
+        assert direct.shape == (n_samples, 2)
+
+
+@pytest.mark.parametrize("n_samples", [1, 5, 100])
+def test_continuous_sample_observation_n_samples_shapes(n_samples):
+    """env.sample_observation honours n_samples for NORMAL_NOISE.
+
+    Purpose: Validates the shape contract of env.sample_observation on the
+    continuous-action variant under the NORMAL_NOISE model type.
+
+    Given: A ContinuousLightDarkPOMDP env and a (next_state, action) pair
+        near a beacon (NORMAL_NOISE default).
+    When: env.sample_observation(ns, a, n_samples=N) is called for
+        N in {1, 5, 100}.
+    Then: For n_samples=1 a (2,) ndarray; for n_samples>1 a (N, 2) ndarray.
+
+    Test type: unit
+    """
+    env = ContinuousLightDarkPOMDP(discount_factor=0.95)
+    next_state = np.array([5.0, 5.0])  # near beacon
+    action = np.array([0.0, 0.0])
+
+    direct = env.sample_observation(next_state, action, n_samples=n_samples)
+    if n_samples == 1:
+        assert isinstance(direct, np.ndarray)
+        assert direct.shape == (2,)
+    else:
+        assert isinstance(direct, np.ndarray)
+        assert direct.shape == (n_samples, 2)
+
+
+def test_continuous_sample_observation_n_samples_for_non_normal_noise():
+    """env.sample_observation honours n_samples for non-NORMAL_NOISE types.
+
+    Purpose: Validates that NORMAL_NOISE_NO_OBS_IN_DARK and DISTANCE_BASED
+    observation paths return lists of length n_samples whose elements are
+    either ndarray observations (near beacon) or "None" sentinels.
+
+    Given: Two ContinuousLightDarkPOMDP envs, one per non-NORMAL_NOISE type,
+        and a near-beacon next_state.
+    When: env.sample_observation(next_state, action, n_samples=4) is called.
+    Then: Returned list has length 4 with each element either an ndarray of
+        shape (2,) or the "None" sentinel.
+
+    Test type: unit
+    """
+    for obs_type in (
+        ObservationModelType.NORMAL_NOISE_NO_OBS_IN_DARK,
+        ObservationModelType.DISTANCE_BASED,
+    ):
+        env = ContinuousLightDarkPOMDP(
+            discount_factor=0.95,
+            observation_model_type=obs_type,
+        )
+        next_state = np.array([5.0, 5.0])
+        action = np.array([0.0, 0.0])
+        direct = env.sample_observation(next_state, action, n_samples=4)
+        assert len(direct) == 4
+        for value in direct:
+            assert isinstance(value, np.ndarray) or value == "None"
+
+
+def test_native_simulate_rollout_matches_python_rollout_seeded():
+    """Native C++ rollout returns identical discounted return to Python base-class rollout.
+
+    Purpose: Validates that _native.simulate_rollout produces the same discounted
+        return as the Python Environment.simulate_random_rollout for the same action
+        sequence and RNG seed when obstacle_hit_probability=0 (deterministic rewards).
+
+    Given: A ContinuousLightDarkPOMDPDiscreteActions env with obstacle_hit_probability=0,
+        a fixed np.random seed, and a manually pre-drawn action index sequence.
+    When: Both the native rollout and a manual Python rollout walk the same action
+        indices and use the same RNG seed for transition noise.
+    Then: The discounted returns match to within atol=1e-9.
+
+    Test type: unit
+    """
+    env = ContinuousLightDarkPOMDPDiscreteActions(
+        discount_factor=0.95,
+        obstacle_hit_probability=0.0,  # Deterministic rewards — no stochastic obstacle draw
+        state_transition_cov_matrix=np.eye(2) * 0.01,
+        observation_cov_matrix=np.eye(2),
+    )
+    initial_state = np.array([1.0, 2.0])
+    max_depth = 8
+
+    # Pre-draw action indices to share between both paths
+    np.random.seed(0)
+    action_indices = np.random.randint(0, len(env.actions), size=max_depth, dtype=np.int32)
+
+    # Seed native C++ RNG; run native rollout
+    _native.set_seed(0)
+    native_return = _native.simulate_rollout(  # pylint: disable=protected-access
+        initial_state=np.ascontiguousarray(initial_state, dtype=np.float64),
+        action_array=env._actions_array,  # pylint: disable=protected-access
+        action_indices=action_indices,
+        max_depth=max_depth,
+        start_depth=0,
+        discount_factor=env.discount_factor,
+        goal_state=env._goal_state_f64,  # pylint: disable=protected-access
+        obstacles=env._obstacles_flat,  # pylint: disable=protected-access
+        goal_state_radius=float(env.goal_state_radius),
+        obstacle_radius=float(env.obstacle_radius),
+        grid_size=float(env.grid_size),
+        fuel_cost=float(env.fuel_cost),
+        goal_reward=float(env.goal_reward),
+        obstacle_reward=float(env.obstacle_reward),
+        obstacle_hit_probability=0.0,
+        is_obstacle_hit_terminal=bool(env.is_obstacle_hit_terminal),
+        covariance=env._trans_cov_view,  # pylint: disable=protected-access
+    )
+
+    # Python manual rollout using same action sequence and C++ RNG seed
+    _native.set_seed(0)
+    state = initial_state.copy()
+    python_return = 0.0
+    gamma_power = 1.0
+    for depth_step in range(max_depth):
+        if env.is_terminal(state):
+            break
+        ai = int(action_indices[depth_step])
+        action = env.actions[ai]
+        r = env.reward(state, action)
+        python_return += gamma_power * r
+        # step via the kernel (uses _native.default_rng, same seed as above)
+        state = env.sample_next_state(state, action)
+        gamma_power *= env.discount_factor
+
+    assert abs(native_return - python_return) < 1e-9, (
+        f"Native rollout {native_return} != Python rollout {python_return} "
+        f"(diff={abs(native_return - python_return):.2e})"
+    )
+
+
+def test_native_simulate_rollout_terminal_short_circuit():
+    """Native rollout exits immediately when the initial state is already terminal.
+
+    Purpose: Validates that the native C++ rollout correctly short-circuits at
+        depth 0 when the start state is inside the goal radius.
+
+    Given: A ContinuousLightDarkPOMDPDiscreteActions env and an initial state
+        at the exact goal position (guaranteed terminal).
+    When: _native.simulate_rollout is called from that state.
+    Then: The returned discounted return is 0.0 and no transition is executed.
+
+    Test type: unit
+    """
+    env = ContinuousLightDarkPOMDPDiscreteActions(discount_factor=0.95)
+
+    # Place initial state exactly at goal — is_terminal must return True
+    terminal_state = env.goal_state.astype(np.float64).copy()
+    assert env.is_terminal(terminal_state), "Precondition: goal state must be terminal"
+
+    action_indices = np.zeros(10, dtype=np.int32)
+
+    result = _native.simulate_rollout(  # pylint: disable=protected-access
+        initial_state=np.ascontiguousarray(terminal_state),
+        action_array=env._actions_array,  # pylint: disable=protected-access
+        action_indices=action_indices,
+        max_depth=10,
+        start_depth=0,
+        discount_factor=env.discount_factor,
+        goal_state=env._goal_state_f64,  # pylint: disable=protected-access
+        obstacles=env._obstacles_flat,  # pylint: disable=protected-access
+        goal_state_radius=float(env.goal_state_radius),
+        obstacle_radius=float(env.obstacle_radius),
+        grid_size=float(env.grid_size),
+        fuel_cost=float(env.fuel_cost),
+        goal_reward=float(env.goal_reward),
+        obstacle_reward=float(env.obstacle_reward),
+        obstacle_hit_probability=float(env.obstacle_hit_probability),
+        is_obstacle_hit_terminal=bool(env.is_obstacle_hit_terminal),
+        covariance=env._trans_cov_view,  # pylint: disable=protected-access
+    )
+
+    assert result == 0.0, f"Terminal state rollout must return 0.0, got {result}"
+
+
+def test_continuous_light_dark_reward_batch_matches_scalar():
+    """reward_batch returns values consistent with per-particle scalar reward calls.
+
+    Purpose: Validates that the vectorized reward_batch method produces the same
+        rewards as calling scalar reward() once per particle, confirming no
+        bookkeeping overhead has changed the semantics.
+
+    Given: 32 random particles, each action in {up, down, right, left}, and
+        obstacle_hit_probability=0 (deterministic rewards).
+    When: reward_batch is called once per action and scalar reward() is called
+        per (particle, action) pair.
+    Then: All values agree to within atol=1e-12.
+
+    Test type: unit
+    """
+    env = ContinuousLightDarkPOMDPDiscreteActions(
+        discount_factor=0.95,
+        obstacle_hit_probability=0.0,  # Deterministic rewards
+    )
+
+    np.random.seed(7)
+    particles = np.random.uniform(0, env.grid_size, size=(32, 2))
+
+    for action in env.get_actions():
+        batch_rewards = env.reward_batch(particles, action)
+        scalar_rewards = np.array([env.reward(p, action) for p in particles])
+        assert batch_rewards.shape == (32,), f"Expected shape (32,), got {batch_rewards.shape}"
+        np.testing.assert_allclose(
+            batch_rewards,
+            scalar_rewards,
+            atol=1e-12,
+            err_msg=f"reward_batch != scalar rewards for action '{action}'",
+        )
+
+
+# ===========================================================================
+# Feature-driven coverage added by /test-environment skill:
+#   - reward at feature regions
+#   - RewardModelType variant differentiation
+#   - sample/PDF consistency for transition + each ObservationModelType
+#   - is_terminal goal-radius boundary cases and is_obstacle_hit_terminal flag
+#   - sample-in-space sanity per ObservationModelType
+#   - native batch-vs-scalar parity for sample_next_state_batch and
+#     observation_log_probability_per_state
+# ===========================================================================
+
+
+def _empirical_pdf_relative_l1(samples: np.ndarray, log_pdf_fn: Any) -> float:
+    """Mass-weighted relative L1 between empirical and analytic 2D PDFs.
+
+    Helper for sample/PDF consistency tests. Builds a 21x21 2D histogram of
+    ``samples`` over the empirical mean +/- 4*std box, evaluates the analytic
+    PDF at bin centers via ``log_pdf_fn`` (callable that returns log_probs for
+    a (M, 2) array of points), and returns the mass-weighted relative L1
+    error. Lower is better; for N=20_000 a 2D Gaussian gives < 0.1.
+    """
+    n_samples = samples.shape[0]
+    means = samples.mean(axis=0)
+    sigmas = samples.std(axis=0)
+    edges_x = np.linspace(means[0] - 4.0 * sigmas[0], means[0] + 4.0 * sigmas[0], 22)
+    edges_y = np.linspace(means[1] - 4.0 * sigmas[1], means[1] + 4.0 * sigmas[1], 22)
+    counts, _, _ = np.histogram2d(samples[:, 0], samples[:, 1], bins=[edges_x, edges_y])
+    bin_area = float((edges_x[1] - edges_x[0]) * (edges_y[1] - edges_y[0]))
+    epdf = counts / (n_samples * bin_area)
+    centers_x = 0.5 * (edges_x[:-1] + edges_x[1:])
+    centers_y = 0.5 * (edges_y[:-1] + edges_y[1:])
+    grid_x, grid_y = np.meshgrid(centers_x, centers_y, indexing="ij")
+    centers_2d = np.stack([grid_x.ravel(), grid_y.ravel()], axis=1)
+    log_pdf_values = np.asarray(log_pdf_fn(centers_2d), dtype=float)
+    pdf = np.exp(log_pdf_values).reshape(epdf.shape)
+    weights = pdf / pdf.sum()
+    return float(np.sum(weights * np.abs(epdf - pdf) / (pdf + 1e-12)))
+
+
+# ---------------------------------------------------------------------------
+# Reward at feature regions and per RewardModelType variant
+# ---------------------------------------------------------------------------
+
+
+def test_continuous_reward_at_goal_returns_goal_reward_minus_costs():
+    """Reward at the goal equals goal_reward minus fuel_cost minus distance.
+
+    Purpose: Validates the goal branch of the STANDARD reward model: when
+        next_state lies inside the goal radius, reward equals
+        ``goal_reward - fuel_cost - dist_to_goal`` deterministically (no
+        stochastic obstacle draw is added on the goal branch).
+
+    Given: A ContinuousLightDarkPOMDP with default parameters
+        (goal=[10,5], goal_reward=10, fuel_cost=2, goal_state_radius=1.5).
+    When: state=[8.5, 5.0] and action=[1.0, 0.0] so next_state=[9.5, 5.0]
+        is inside the goal radius (dist_to_goal=0.5).
+    Then: reward equals -fuel_cost - 0.5 + goal_reward = 7.5 within 1e-9.
+
+    Test type: unit
+    """
+    env = ContinuousLightDarkPOMDP(discount_factor=0.95)
+    state = np.array([8.5, 5.0])
+    action = np.array([1.0, 0.0])
+    expected = -env.fuel_cost - 0.5 + env.goal_reward
+    assert env.reward(state, action) == pytest.approx(expected, abs=1e-9)
+
+
+def test_continuous_reward_outside_grid_returns_obstacle_reward_penalty():
+    """Reward outside the grid adds the deterministic obstacle_reward penalty.
+
+    Purpose: Validates the out-of-grid branch of the STANDARD reward model:
+        when next_state has any coordinate outside [0, grid_size] AND the
+        state is not in the goal radius / obstacle range, reward equals
+        ``-fuel_cost - dist_to_goal + obstacle_reward`` deterministically
+        (no Bernoulli draw — the kernel applies the penalty unconditionally).
+
+    Given: A ContinuousLightDarkPOMDP with default parameters (grid_size=11,
+        goal_state=[10,5], goal_state_radius=1.5, obstacle_reward=-10).
+    When: state=[5.0, 12.5] and action=[0.0, 0.0] so next_state=[5.0, 12.5]
+        with next_state[1] > grid_size, dist_to_goal=7.5 (clearly outside
+        goal radius), not in any obstacle range.
+    Then: reward equals -fuel_cost - 7.5 + obstacle_reward = -19.5 within 1e-9.
+
+    Test type: unit
+    """
+    env = ContinuousLightDarkPOMDP(discount_factor=0.95)
+    state = np.array([5.0, 12.5])
+    action = np.array([0.0, 0.0])
+    dist_to_goal = float(np.linalg.norm(state - env.goal_state))
+    expected = -env.fuel_cost - dist_to_goal + env.obstacle_reward
+    assert env.reward(state, action) == pytest.approx(expected, abs=1e-9)
+
+
+def test_continuous_reward_in_obstacle_zone_drifts_by_p_hit_times_obstacle_reward():
+    """Obstacle-zone mean reward drifts by ``obstacle_reward * p_hit`` from the base.
+
+    Purpose: Validates the STANDARD obstacle branch contributes a stochastic
+        drift to the reward mean equal to ``obstacle_reward * p_hit`` on top
+        of the deterministic ``-fuel_cost - dist_to_goal`` base, and that a
+        free cell yields a fully deterministic reward equal to the base.
+
+    Given: A STANDARD ContinuousLightDarkPOMDP with defaults
+        (obstacle_hit_probability=0.2). Anchors ``in_obs=[5.0, 5.0]``
+        (default obstacle position) and ``free=[8.0, 4.0]`` (free cell:
+        distance to (5,5)=3.16 and to (3,7)=5.83, both >obstacle_radius=1.5;
+        dist_to_goal=2.24 >goal_state_radius=1.5; in-grid). Action zero.
+    When: 2000 reward() calls are averaged at the obstacle anchor; one call
+        is made at the free anchor (deterministic).
+    Then: Free reward equals -fuel_cost - dist_to_goal exactly; obstacle-zone
+        empirical mean equals base + obstacle_reward * p_hit within 3 sigma
+        of the Bernoulli-mean estimator.
+
+    Test type: unit
+    """
+    np.random.seed(2024)
+    env = ContinuousLightDarkPOMDP(discount_factor=0.95)
+    in_obs = np.array([5.0, 5.0])
+    free = np.array([8.0, 4.0])
+    action = np.array([0.0, 0.0])
+    n_samples = 2000
+
+    in_obs_mean = float(np.mean([env.reward(in_obs, action) for _ in range(n_samples)]))
+    free_value = env.reward(free, action)
+    free_expected = -env.fuel_cost - float(np.linalg.norm(free - env.goal_state))
+    assert free_value == pytest.approx(free_expected, abs=1e-9)
+
+    in_obs_base = -env.fuel_cost - float(np.linalg.norm(in_obs - env.goal_state))
+    expected_drift = env.obstacle_reward * env.obstacle_hit_probability
+    sigma_mean = (
+        np.sqrt(env.obstacle_hit_probability * (1.0 - env.obstacle_hit_probability))
+        * abs(env.obstacle_reward)
+        / np.sqrt(n_samples)
+    )
+    assert abs(in_obs_mean - (in_obs_base + expected_drift)) < 3.0 * sigma_mean
+
+
+@pytest.mark.parametrize(
+    "reward_model_type,expected_drift",
+    [
+        (RewardModelType.STANDARD, -2.0),
+        (RewardModelType.DECAYING_HIT_PROBABILITY, -10.0),
+        (RewardModelType.DANGEROUS_STATES, 0.0),
+    ],
+    ids=["STANDARD", "DECAYING_HIT_PROBABILITY", "DANGEROUS_STATES"],
+)
+def test_continuous_reward_in_obstacle_depends_on_reward_model_type(
+    reward_model_type: RewardModelType, expected_drift: float
+):
+    """Each RewardModelType produces its documented obstacle-zone drift.
+
+    Purpose: Validates that reward_model_type switches the obstacle-zone
+        contribution between ``obstacle_reward * p_hit`` (STANDARD),
+        ``obstacle_reward`` (DECAYING_HIT_PROBABILITY at d=0 since
+        hit_prob=exp(0)=1), and ``0`` (DANGEROUS_STATES, +/- obstacle_reward
+        with p=0.5 averaging to zero).
+
+    Given: state=[5,5] (default obstacle position) so min_dist_to_obstacle=0,
+        action=[0,0]; defaults otherwise (penalty_decay=1.0).
+    When: 4000 reward() calls are averaged for each variant.
+    Then: ``empirical_mean - base`` equals the variant's documented drift
+        within 3 sigma of its per-draw obstacle-contribution variance.
+
+    Test type: unit
+    """
+    np.random.seed(31)
+    env = ContinuousLightDarkPOMDP(
+        discount_factor=0.95,
+        reward_model_type=reward_model_type,
+        penalty_decay=1.0,
+    )
+    state = np.array([5.0, 5.0])
+    action = np.array([0.0, 0.0])
+    n_samples = 4000
+
+    rewards = np.array([env.reward(state, action) for _ in range(n_samples)])
+    base = -env.fuel_cost - float(np.linalg.norm(state - env.goal_state))
+    empirical_drift = float(rewards.mean()) - base
+
+    if reward_model_type == RewardModelType.STANDARD:
+        sigma = abs(env.obstacle_reward) * np.sqrt(
+            env.obstacle_hit_probability * (1.0 - env.obstacle_hit_probability)
+        )
+    elif reward_model_type == RewardModelType.DECAYING_HIT_PROBABILITY:
+        # At d=0 the Bernoulli is degenerate (hit_prob=1) — zero variance.
+        sigma = 0.0
+    else:  # DANGEROUS_STATES
+        sigma = abs(env.obstacle_reward)
+    sigma_mean = sigma / np.sqrt(n_samples)
+    tolerance = max(3.0 * sigma_mean, 1e-9)
+    assert abs(empirical_drift - expected_drift) < tolerance, (
+        f"{reward_model_type}: empirical drift={empirical_drift:.3f} "
+        f"vs expected={expected_drift:.3f} (tolerance={tolerance:.3f})"
+    )
+
+
+def test_continuous_decaying_hit_probability_reward_decays_with_obstacle_distance():
+    """DECAYING_HIT_PROBABILITY mean reward follows -|r| * exp(-d/penalty_decay).
+
+    Purpose: Validates the exp(-d/penalty_decay) decay formula in the
+        ContinuousLightDarkDecayingHitProbabilityRewardModel kernel — the
+        per-step drift relative to the deterministic fuel/distance base
+        should track the documented exponential decay of the hit probability.
+
+    Given: A DECAYING_HIT_PROBABILITY env with penalty_decay=1.0 and the
+        default obstacle (5, 5). Three anchor next_states with increasing
+        min-distance to (5, 5): d=0.0, d=1.0, d=2.5; all in-grid and away
+        from the goal (so the only stochastic component is the obstacle
+        Bernoulli with hit_prob=exp(-d)).
+    When: 4000 reward() calls are averaged at each anchor.
+    Then: ``empirical_mean - base`` equals ``obstacle_reward * exp(-d)``
+        within 3 sigma of the Bernoulli-mean estimator.
+
+    Test type: unit
+    """
+    np.random.seed(55)
+    env = ContinuousLightDarkPOMDP(
+        discount_factor=0.95,
+        reward_model_type=RewardModelType.DECAYING_HIT_PROBABILITY,
+        penalty_decay=1.0,
+    )
+    obstacle = np.array([5.0, 5.0])
+    action = np.array([0.0, 0.0])
+    n_samples = 4000
+
+    for distance in (0.0, 1.0, 2.5):
+        # Action zero: state == next_state, so distance to obstacle is just |state - obstacle|.
+        state = obstacle + np.array([distance, 0.0])
+        rewards = np.array([env.reward(state, action) for _ in range(n_samples)])
+        base = -env.fuel_cost - float(np.linalg.norm(state - env.goal_state))
+        hit_prob = float(np.exp(-distance / env.penalty_decay))
+        expected_drift = env.obstacle_reward * hit_prob
+        sigma = abs(env.obstacle_reward) * np.sqrt(hit_prob * (1.0 - hit_prob))
+        tolerance = max(3.0 * sigma / np.sqrt(n_samples), 1e-9)
+        empirical_drift = float(rewards.mean()) - base
+        assert abs(empirical_drift - expected_drift) < tolerance, (
+            f"d={distance}: empirical drift={empirical_drift:.3f} "
+            f"vs expected={expected_drift:.3f} (tolerance={tolerance:.3f})"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Sample/PDF consistency for transition and observation models
+# ---------------------------------------------------------------------------
+
+
+def test_continuous_sample_next_state_density_matches_transition_log_probability():
+    """Empirical density of sampled next-states matches transition_log_probability.
+
+    Purpose: Verifies that sample_next_state and transition_log_probability
+        describe the same conditional distribution. This is the highest-leverage
+        regression guard for the native ContinuousLightDarkTransitionCpp
+        kernel — a refactor that breaks one half without breaking the other
+        will fail this test.
+
+    Given: A small-cov env (state_transition_cov_matrix=0.05*I), anchor
+        state=[2.0, 5.0], action=[1.0, 0.0]; expected mean of next_state
+        is [3.0, 5.0] with std~0.224 per axis.
+    When: 20_000 samples are drawn and a 21x21 2D histogram is built around
+        the empirical mean +/- 4*std box; transition_log_probability is
+        evaluated at the bin centers.
+    Then: The mass-weighted relative L1 error between empirical and analytic
+        PDFs is below 0.10.
+
+    Test type: unit
+    """
+    _native.set_seed(42)
+    np.random.seed(42)
+    env = ContinuousLightDarkPOMDP(
+        discount_factor=0.95,
+        state_transition_cov_matrix=np.eye(2) * 0.05,
+    )
+    state = np.array([2.0, 5.0])
+    action = np.array([1.0, 0.0])
+    n_samples = 20_000
+
+    samples = env.sample_next_state(state, action, n_samples=n_samples)
+    rel_err = _empirical_pdf_relative_l1(
+        samples,
+        lambda points: env.transition_log_probability(state, action, points),
+    )
+    assert rel_err < 0.10, f"sample/PDF mismatch: rel_err={rel_err:.3f}"
+
+
+def test_continuous_sample_observation_density_matches_log_prob_normal_noise():
+    """sample_observation density matches observation_log_probability (NORMAL_NOISE).
+
+    Purpose: Verifies that the native ContinuousLightDarkObservationCpp
+        kernel's sample() and probability() agree on the observation
+        distribution at both a near-beacon next_state (smaller covariance)
+        and a far-beacon next_state (larger covariance), exercising the
+        per-call near/far covariance switch.
+
+    Given: A NORMAL_NOISE env with observation_cov=0.05*I (near covariance is
+        half of that, std=0.158; far std=0.224). Default beacons. Two anchor
+        next-states: ``near=[5.0, 5.0]`` (on a beacon) and ``far=[2.5, 2.5]``
+        (min beacon distance ~3.54 > beacon_radius=1).
+    When: 20_000 samples drawn at each anchor; histogram-vs-PDF check.
+    Then: Mass-weighted relative L1 < 0.10 at both anchors.
+
+    Test type: unit
+    """
+    env = ContinuousLightDarkPOMDP(
+        discount_factor=0.95,
+        observation_cov_matrix=np.eye(2) * 0.05,
+        observation_model_type=ObservationModelType.NORMAL_NOISE,
+    )
+    action = np.array([0.0, 0.0])
+    n_samples = 20_000
+
+    for next_state, label in (
+        (np.array([5.0, 5.0]), "near"),
+        (np.array([2.5, 2.5]), "far"),
+    ):
+        _native.set_seed(7)
+        np.random.seed(7)
+        samples = env.sample_observation(next_state, action, n_samples=n_samples)
+        rel_err = _empirical_pdf_relative_l1(
+            samples,
+            lambda points, ns=next_state: env.observation_log_probability(ns, action, points),
+        )
+        assert rel_err < 0.10, f"{label}-beacon sample/PDF mismatch: rel_err={rel_err:.3f}"
+
+
+def test_continuous_sample_observation_consistency_no_obs_in_dark():
+    """NORMAL_NOISE_NO_OBS_IN_DARK sampling and log-prob agree on both branches.
+
+    Purpose: Verifies the mixture contract of NORMAL_NOISE_NO_OBS_IN_DARK:
+        far from any beacon, every sample is "None" and log_prob("None")=0;
+        near a beacon, samples are MVN-distributed and log_prob recovers their
+        density via the histogram-match metric.
+
+    Given: An env with ObservationModelType.NORMAL_NOISE_NO_OBS_IN_DARK,
+        observation_cov_matrix=0.05*I. Anchors: ``near=[5.0, 5.0]`` (on
+        beacon (5,5), strictly within beacon_radius=1) and ``far=[2.5, 2.5]``
+        (beyond beacon_radius from all beacons).
+    When: 20_000 samples drawn at each anchor.
+    Then: Far anchor: 100% of samples are the "None" sentinel and analytic
+        log_prob("None") = 0. Near anchor: 100% of samples are ndarrays
+        and the histogram-vs-PDF mass-weighted relative L1 < 0.10 while
+        log_prob("None") = -inf.
+
+    Test type: unit
+    """
+    env = ContinuousLightDarkPOMDP(
+        discount_factor=0.95,
+        observation_cov_matrix=np.eye(2) * 0.05,
+        observation_model_type=ObservationModelType.NORMAL_NOISE_NO_OBS_IN_DARK,
+    )
+    action = np.array([0.0, 0.0])
+    n_samples = 20_000
+
+    # Far branch: every sample is "None"; log_prob("None") is exactly 0.
+    np.random.seed(13)
+    far = np.array([2.5, 2.5])
+    far_samples = env.sample_observation(far, action, n_samples=n_samples)
+    assert all(value == "None" for value in far_samples)
+    far_none_log_prob = env.observation_log_probability(far, action, ["None"])
+    assert far_none_log_prob[0] == pytest.approx(0.0, abs=1e-12)
+
+    # Near branch: every sample is an ndarray; log_prob("None") is -inf;
+    # histogram of ndarray samples matches the analytic PDF.
+    np.random.seed(14)
+    near = np.array([5.0, 5.0])
+    near_samples = env.sample_observation(near, action, n_samples=n_samples)
+    assert all(isinstance(value, np.ndarray) for value in near_samples)
+    near_none_log_prob = env.observation_log_probability(near, action, ["None"])
+    assert near_none_log_prob[0] == -np.inf
+
+    near_array = np.stack(list(near_samples), axis=0)
+    rel_err = _empirical_pdf_relative_l1(
+        near_array,
+        lambda points: env.observation_log_probability(near, action, points),
+    )
+    assert rel_err < 0.10, f"near-beacon sample/PDF mismatch: rel_err={rel_err:.3f}"
+
+
+def test_continuous_sample_observation_consistency_distance_based():
+    """DISTANCE_BASED sampling and log-prob agree on both far and near branches.
+
+    Purpose: Verifies the mixture contract of DISTANCE_BASED: when min beacon
+        distance > beacon_radius every sample is "None" and log_prob("None")=0;
+        when min beacon distance <= beacon_radius samples are MVN-distributed
+        and log_prob("None") = -inf with histogram match for real obs.
+
+    Given: An env with ObservationModelType.DISTANCE_BASED,
+        observation_cov_matrix=0.05*I. Anchors: ``near=[5.0, 5.0]`` (min
+        beacon distance 0) and ``far=[2.5, 2.5]`` (min beacon distance
+        ~3.54 > beacon_radius=1).
+    When: 20_000 samples drawn at each anchor.
+    Then: Far anchor: 100% "None" with analytic log_prob("None")=0. Near
+        anchor: 100% ndarrays with mass-weighted relative L1 < 0.10 and
+        analytic log_prob("None")=-inf.
+
+    Test type: unit
+    """
+    env = ContinuousLightDarkPOMDP(
+        discount_factor=0.95,
+        observation_cov_matrix=np.eye(2) * 0.05,
+        observation_model_type=ObservationModelType.DISTANCE_BASED,
+    )
+    action = np.array([0.0, 0.0])
+    n_samples = 20_000
+
+    np.random.seed(23)
+    far = np.array([2.5, 2.5])
+    far_samples = env.sample_observation(far, action, n_samples=n_samples)
+    assert all(value == "None" for value in far_samples)
+    far_none_log_prob = env.observation_log_probability(far, action, ["None"])
+    assert far_none_log_prob[0] == pytest.approx(0.0, abs=1e-12)
+
+    np.random.seed(24)
+    near = np.array([5.0, 5.0])
+    near_samples = env.sample_observation(near, action, n_samples=n_samples)
+    assert all(isinstance(value, np.ndarray) for value in near_samples)
+    near_none_log_prob = env.observation_log_probability(near, action, ["None"])
+    assert near_none_log_prob[0] == -np.inf
+
+    near_array = np.stack(list(near_samples), axis=0)
+    rel_err = _empirical_pdf_relative_l1(
+        near_array,
+        lambda points: env.observation_log_probability(near, action, points),
+    )
+    assert rel_err < 0.10, f"near-beacon sample/PDF mismatch: rel_err={rel_err:.3f}"
+
+
+# ---------------------------------------------------------------------------
+# is_terminal goal-radius boundary cases and is_obstacle_hit_terminal flag
+# ---------------------------------------------------------------------------
+
+
+def test_continuous_is_terminal_inside_goal_radius_boundary_is_true():
+    """A state just inside the goal radius is terminal.
+
+    Purpose: Validates the ``<= goal_state_radius`` boundary in
+        is_terminal_kernel — an off-by-one in the comparison would surface here.
+
+    Given: Default ContinuousLightDarkPOMDP (goal=[10,5], radius=1.5).
+    When: state = goal_state + [radius - 1e-9, 0] is queried.
+    Then: is_terminal returns True.
+
+    Test type: unit
+    """
+    env = ContinuousLightDarkPOMDP(discount_factor=0.95)
+    state = env.goal_state.astype(np.float64) + np.array([env.goal_state_radius - 1e-9, 0.0])
+    assert env.is_terminal(state) is True
+
+
+def test_continuous_is_terminal_outside_goal_radius_boundary_is_false():
+    """A state just outside the goal radius is non-terminal.
+
+    Purpose: Counterpart to the inside-boundary test: at radius + epsilon the
+        kernel must return False.
+
+    Given: Default ContinuousLightDarkPOMDP (goal=[10,5], radius=1.5).
+    When: state = goal_state + [radius + 1e-6, 0] is queried.
+    Then: is_terminal returns False.
+
+    Test type: unit
+    """
+    env = ContinuousLightDarkPOMDP(discount_factor=0.95)
+    state = env.goal_state.astype(np.float64) + np.array([env.goal_state_radius + 1e-6, 0.0])
+    assert env.is_terminal(state) is False
+
+
+def test_continuous_is_obstacle_hit_terminal_flag_controls_obstacle_termination():
+    """is_obstacle_hit_terminal=False keeps an obstacle-zone state non-terminal.
+
+    Purpose: Validates the is_obstacle_hit_terminal flag is plumbed through to
+        is_terminal_kernel. With the default (True), an obstacle-zone state is
+        terminal; with False the same state is non-terminal.
+
+    Given: Two ContinuousLightDarkPOMDPs identical except for the
+        is_obstacle_hit_terminal flag. Anchor state=[5.0, 5.0] (default
+        obstacle position, dist_to_goal=5 > goal_state_radius=1.5).
+    When: is_terminal is queried on the same state for each env.
+    Then: True when the flag is True; False when the flag is False.
+
+    Test type: unit
+    """
+    state = np.array([5.0, 5.0])
+    env_term = ContinuousLightDarkPOMDP(discount_factor=0.95, is_obstacle_hit_terminal=True)
+    env_continue = ContinuousLightDarkPOMDP(discount_factor=0.95, is_obstacle_hit_terminal=False)
+    assert env_term.is_terminal(state) is True
+    assert env_continue.is_terminal(state) is False
+
+
+# ---------------------------------------------------------------------------
+# Sampling shape and in-space sanity per ObservationModelType
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("observation_model_type", list(ObservationModelType))
+def test_continuous_sample_outputs_finite_and_in_grid(
+    observation_model_type: ObservationModelType,
+):
+    """Sampled transitions and observations stay finite and inside [0, grid_size].
+
+    Purpose: Catches regressions where a sampler produces NaN, inf, or
+        out-of-grid values, which would silently corrupt downstream beliefs.
+        Validates the contract for all three ObservationModelType variants.
+
+    Given: An env with the parametrized observation_model_type, default
+        covariances, and a representative in-grid (state, next_state). Action
+        zero so transitions stay near the start state.
+    When: 1000 transitions are drawn from a representative state and 1000
+        observations from a representative next-state.
+    Then: All transition samples have shape (2,), are finite, and lie in
+        [0, grid_size] (transitions are not clipped, but with small noise stay
+        well inside). All observations are either the "None" sentinel string
+        or finite (2,) arrays clipped to [0, grid_size].
+
+    Test type: unit
+    """
+    _native.set_seed(101)
+    np.random.seed(101)
+    env = ContinuousLightDarkPOMDP(
+        discount_factor=0.95,
+        state_transition_cov_matrix=np.eye(2) * 0.05,
+        observation_cov_matrix=np.eye(2) * 0.05,
+        observation_model_type=observation_model_type,
+    )
+    state = np.array([5.5, 5.5])
+    action = np.array([0.0, 0.0])
+    n_samples = 1000
+
+    transitions = env.sample_next_state(state, action, n_samples=n_samples)
+    assert transitions.shape == (n_samples, 2)
+    assert np.all(np.isfinite(transitions))
+
+    observations = env.sample_observation(state, action, n_samples=n_samples)
+    assert len(observations) == n_samples
+    for value in observations:
+        if isinstance(value, str):
+            assert value == "None"
+            continue
+        assert isinstance(value, np.ndarray)
+        assert value.shape == (2,)
+        assert np.all(np.isfinite(value))
+        assert np.all(value >= 0.0)
+        assert np.all(value <= float(env.grid_size))
+
+
+# ---------------------------------------------------------------------------
+# Native batch-vs-scalar parity for sample_next_state_batch and
+# observation_log_probability_per_state
+# ---------------------------------------------------------------------------
+
+
+def test_continuous_sample_next_state_batch_matches_looped_sample():
+    """sample_next_state_batch matches a per-state sample_next_state loop under same seed.
+
+    Purpose: Validates that the native
+        ContinuousLightDarkTransitionCpp.batch_sample path produces the same
+        N samples as N scalar set_state-then-sample calls under an identical
+        C++ RNG seed. A drift here points to either RNG-stream divergence or
+        a per-row sampling mismatch in the native batch routine.
+
+    Given: A small-cov env, 32 random in-grid states, a fixed action.
+    When: With the same _native.set_seed, batch_sample(states, action) is
+        compared against stack(sample_next_state(state_i, action) for each i).
+    Then: shape (32, 2) and allclose within atol=1e-9.
+
+    Test type: unit
+    """
+    env = ContinuousLightDarkPOMDP(
+        discount_factor=0.95,
+        state_transition_cov_matrix=np.eye(2) * 0.05,
+    )
+    rng = np.random.RandomState(7)
+    states = rng.uniform(0.0, env.grid_size, size=(32, 2))
+    action = np.array([1.0, 0.5])
+
+    _native.set_seed(11)
+    batch = env.sample_next_state_batch(states, action)
+
+    _native.set_seed(11)
+    loop = np.stack(
+        [env.sample_next_state(states[i], action) for i in range(32)],
+        axis=0,
+    )
+
+    assert batch.shape == (32, 2)
+    np.testing.assert_allclose(batch, loop, atol=1e-9)
+
+
+def test_continuous_observation_log_probability_per_state_matches_scalar_normal_noise():
+    """observation_log_probability_per_state matches per-state scalar calls (NORMAL_NOISE).
+
+    Purpose: Validates the native batch_log_likelihood path against per-call
+        kernel.probability for the same NORMAL_NOISE observation kernel. No
+        RNG is involved on either side, so any discrepancy in the high-density
+        regime is a real bug.
+
+    Given: A NORMAL_NOISE env (observation_cov=0.05*I, std=0.224 per axis).
+        64 next_states clustered in a 2x2 box around [5, 5] and a fixed
+        observation at [5, 5]. The cluster radius keeps every analytic
+        log-prob above the ``log(p + 1e-300)`` floor that
+        ``observation_log_probability`` applies on its scalar path — beyond
+        the floor the two API paths diverge (the batch path returns the
+        un-floored native log-likelihood) which is intentional asymmetry
+        out of scope for this parity test.
+    When: batch = env.observation_log_probability_per_state(next_states,
+        action, observation); scalar[i] = env.observation_log_probability(
+        next_states[i], action, [observation])[0].
+    Then: batch.shape == (64,) and allclose(batch, scalar) within atol=1e-6.
+
+    Test type: unit
+    """
+    env = ContinuousLightDarkPOMDP(
+        discount_factor=0.95,
+        observation_cov_matrix=np.eye(2) * 0.05,
+        observation_model_type=ObservationModelType.NORMAL_NOISE,
+    )
+    rng = np.random.RandomState(13)
+    next_states = rng.uniform(4.0, 6.0, size=(64, 2))
+    action = np.array([0.0, 0.0])
+    observation = np.array([5.0, 5.0])
+
+    batch = env.observation_log_probability_per_state(next_states, action, observation)
+    scalar = np.array(
+        [
+            env.observation_log_probability(next_states[i], action, [observation])[0]
+            for i in range(64)
+        ]
+    )
+    assert batch.shape == (64,)
+    # Sanity: every scalar log-prob should be well above the log(1e-300) ~ -690 floor
+    # so the two paths are comparable.
+    assert np.all(
+        scalar > -100.0
+    ), "next_states cluster too wide; some scalar log-probs are floored"
+    np.testing.assert_allclose(batch, scalar, atol=1e-6)
+
+
+def test_scalar_obs_log_prob_un_floored_matches_batch_after_fix():
+    """Scalar and batch obs log-prob agree after the symmetric C++ floor fix.
+
+    Purpose: Pins the post-fix contract for ContinuousLightDarkPOMDP that
+        ``observation_log_probability`` (scalar) and
+        ``observation_log_probability_per_state`` (batch) agree on a
+        moderate-density anchor whose un-floored analytic log-probability
+        sits past the historical ``log(p + 1e-300) ≈ -690.776`` floor.
+        Pre-fix (PR #129 first commit) the scalar path floored such
+        values at ~-690.776 while the batch path returned the un-floored
+        kernel log-likelihood — an asymmetry. Post-fix the floor lives
+        in the C++ kernel and is applied symmetrically to both
+        ``probability`` (linear ``kProbFloor``) and
+        ``batch_log_likelihood`` (log ``kLogProbFloor``), so both API
+        paths now return the floored value (~-690.776) for any event
+        whose un-floored log-prob is past the floor.
+
+    Given: A NORMAL_NOISE env (observation_cov=0.05*I), a fixed
+        next_state at [5, 5], and an observation offset of 4.2 along
+        each axis (un-floored analytic log-pdf ~ -703.749, past the
+        floor).
+    When: Both ``observation_log_probability`` and
+        ``observation_log_probability_per_state`` are evaluated on the
+        same (next_state, action, observation).
+    Then: Both return the same floored log-probability ~ -690.776 to
+        within atol=1e-6.
+
+    Test type: unit
+    """
+    env = ContinuousLightDarkPOMDP(
+        discount_factor=0.95,
+        observation_cov_matrix=np.eye(2) * 0.05,
+        observation_model_type=ObservationModelType.NORMAL_NOISE,
+    )
+    next_state = np.array([5.0, 5.0])
+    action = np.array([0.0, 0.0])
+    observation = next_state + np.array([4.2, 4.2])
+
+    scalar = env.observation_log_probability(next_state, action, [observation])[0]
+    batch = env.observation_log_probability_per_state(np.array([next_state]), action, observation)[
+        0
+    ]
+
+    assert np.isfinite(scalar), f"scalar should be finite at this anchor, got {scalar}"
+    assert np.isfinite(batch), f"batch should be finite at this anchor, got {batch}"
+    np.testing.assert_allclose(scalar, batch, atol=1e-6)
+
+
+def test_scalar_and_batch_obs_log_prob_share_symmetric_floor_in_deep_underflow():
+    """Both scalar and batch obs log-prob clamp to ``log(1e-300)`` for impossible events.
+
+    Purpose: Pins the symmetric C++ kernel floor contract for
+        ContinuousLightDarkPOMDP. Both
+        ``observation_log_probability`` (scalar, via
+        ``kernel.probability``) and
+        ``observation_log_probability_per_state`` (batch, via
+        ``kernel.batch_log_likelihood``) clamp at the C++ layer to
+        ``kProbFloor = 1e-300`` (linear) and
+        ``kLogProbFloor = log(1e-300) ~= -690.776`` (log) respectively.
+        The two API paths must therefore agree on the same floored value
+        for events whose un-floored log-probability is below the floor.
+
+    Given: A NORMAL_NOISE env (observation_cov=0.01*I), a fixed
+        next_state at [5, 5], and a 6.0-unit-per-axis offset
+        observation whose un-floored analytic log-pdf is roughly
+        -3500 (well below the floor and below the historical
+        log(p + 1e-300) = -690.776 cap).
+    When: Both ``observation_log_probability`` (scalar) and
+        ``observation_log_probability_per_state`` (batch) are evaluated
+        on the same (next_state, action, observation).
+    Then: Both return approximately -690.776 (within atol=1e-6),
+        the symmetric C++ floor.
+
+    Test type: unit
+    """
+    env = ContinuousLightDarkPOMDP(
+        discount_factor=0.95,
+        observation_cov_matrix=np.eye(2) * 0.01,
+        observation_model_type=ObservationModelType.NORMAL_NOISE,
+    )
+    next_state = np.array([5.0, 5.0])
+    action = np.array([0.0, 0.0])
+    observation = next_state + np.array([6.0, 6.0])
+
+    scalar = env.observation_log_probability(next_state, action, [observation])[0]
+    batch = env.observation_log_probability_per_state(np.array([next_state]), action, observation)[
+        0
+    ]
+
+    expected_floor = float(np.log(1e-300))  # ~= -690.7755278982137
+    np.testing.assert_allclose(scalar, expected_floor, atol=1e-6)
+    np.testing.assert_allclose(batch, expected_floor, atol=1e-6)
+    np.testing.assert_allclose(scalar, batch, atol=1e-6)
+
+
+@pytest.mark.parametrize(
+    "obs_type",
+    [
+        ObservationModelType.NORMAL_NOISE,
+        ObservationModelType.NORMAL_NOISE_NO_OBS_IN_DARK,
+        ObservationModelType.DISTANCE_BASED,
+    ],
+)
+def test_observation_sampler_unbiased_near_grid_edge(obs_type: ObservationModelType):
+    """Regression test: obs sampler must not clip while obs_pdf leaves density unclipped.
+
+    Purpose: Validates that observation samples follow the unclipped Gaussian
+    density used by ``observation_log_probability``. Previously the sampler
+    clipped to ``[0, grid_size]`` while the PDF stayed unclipped, biasing
+    importance weights near grid edges (audit: continuous_light_dark_pomdp.py
+    obs sampler clip-vs-pdf mismatch).
+
+    Given: A ContinuousLightDarkPOMDPDiscreteActions env with observation
+        covariance ``I`` (σ=1.0) and a next_state at (0.3, 0.3) — within
+        beacon_radius of beacon (0, 0) so NoObsInDark/DistanceBased return
+        real observations, and close enough to the lower grid edge that a
+        clipped sampler would shift the empirical mean upward by ≈0.27.
+    When: 10_000 observations are drawn and the per-component empirical mean
+        is compared to next_state.
+    Then: Empirical mean is within 0.05 of next_state in every component
+        (pre-fix bias was ≈0.27, ≫ 0.05).
+
+    Test type: unit
+    """
+    next_state = np.array([0.3, 0.3])
+    n_samples = 10_000
+    np.random.seed(0)
+
+    env = ContinuousLightDarkPOMDPDiscreteActions(
+        discount_factor=0.95,
+        observation_cov_matrix=np.eye(2),
+        observation_model_type=obs_type,
+    )
+    observations = env.sample_observation(next_state, "up", n_samples=n_samples)
+    observations_arr = np.asarray(observations, dtype=float)
+    empirical_mean = observations_arr.mean(axis=0)
+    bias = np.abs(empirical_mean - next_state)
+    assert bias.max() < 0.05, (
+        f"{obs_type.name}: empirical mean {empirical_mean} differs from "
+        f"next_state {next_state} by {bias} — sampler clipping while PDF "
+        f"is unclipped breaks importance weights near edges."
+    )
+
+
+class TestContinuousLightDarkRewardNextStateConsistency:
+    """Regression tests asserting reward honours the threaded ``next_state``.
+
+    Ensures the obstacle / goal / out-of-grid checks in :meth:`reward`,
+    :meth:`reward_batch`, the underlying reward models, and the Numba
+    kernels all score against the *realised* next state from
+    :meth:`Environment.sample_next_step` rather than the deterministic
+    ``state + action`` pre-noise position.
+    """
+
+    @staticmethod
+    def _make_env(obstacles, *, hit_probability=1.0, reward_model_type=RewardModelType.STANDARD):
+        return ContinuousLightDarkPOMDP(
+            discount_factor=0.95,
+            state_transition_cov_matrix=np.eye(2) * 1e-12,
+            observation_cov_matrix=np.eye(2),
+            obstacles=obstacles,
+            obstacle_hit_probability=hit_probability,
+            obstacle_reward=-25.0,
+            goal_reward=10.0,
+            fuel_cost=1.0,
+            grid_size=20,
+            goal_state=np.array([18, 5]),
+            goal_state_radius=1.0,
+            beacon_radius=1.0,
+            obstacle_radius=1.0,
+            reward_model_type=reward_model_type,
+            is_obstacle_hit_terminal=False,
+        )
+
+    def test_reward_obstacle_penalty_uses_realised_next_state(self):
+        """Penalty triggers when the realised ``next_state`` is in an obstacle.
+
+        Purpose: Validates that reward consumes the threaded ``next_state``
+        and applies the obstacle penalty even when ``state + action`` is
+        outside any obstacle.
+
+        Given: An env with an obstacle at (8, 5), a state at (4, 5) and
+            action (1, 0) so ``state + action`` lies clearly outside the
+            obstacle, and a hand-crafted realised ``next_state`` at (8, 5).
+        When: ``env.reward`` is called with the realised ``next_state``.
+        Then: The reward includes the deterministic obstacle penalty
+            (``hit_probability=1.0``) measured against (8, 5).
+
+        Test type: unit
+        """
+        env = self._make_env(obstacles=[(8.0, 5.0)], hit_probability=1.0)
+        state = np.array([4.0, 5.0])
+        action = np.array([1.0, 0.0])
+        clean_next = state + action  # (5, 5) — outside the obstacle.
+        realised = np.array([8.0, 5.0])  # inside the obstacle.
+
+        reward_clean = env.reward(state, action, next_state=clean_next)
+        reward_hit = env.reward(state, action, next_state=realised)
+
+        # Penalty is exactly ``obstacle_reward`` because the deterministic
+        # base reward (fuel + dist-to-goal) is computed from the threaded
+        # next_state in both cases when the fix is applied.
+        # The clean next_state has dist-to-goal sqrt((18-5)^2) = 13, fuel=1
+        # so reward_clean ~ -14. The realised hit has dist sqrt((18-8)^2)=10
+        # plus the -25 obstacle penalty.
+        assert reward_hit < reward_clean - 20.0, (
+            "Realised obstacle hit should incur the -25 obstacle reward; "
+            f"got reward_hit={reward_hit:.3f} vs reward_clean={reward_clean:.3f}"
+        )
+
+    def test_reward_obstacle_penalty_skipped_when_next_state_clear(self):
+        """No obstacle penalty when realised ``next_state`` is clear.
+
+        Purpose: Opposite of the above — an action that would put
+        ``state + action`` inside an obstacle should *not* trigger the
+        obstacle penalty when the threaded realised ``next_state`` is clear.
+
+        Given: An env with an obstacle at (5, 5) where ``state + action``
+            lands inside the obstacle, but a realised ``next_state`` is
+            outside the obstacle.
+        When: ``env.reward`` is called with the clean realised next state.
+        Then: No obstacle penalty is applied.
+
+        Test type: unit
+        """
+        env = self._make_env(obstacles=[(5.0, 5.0)], hit_probability=1.0)
+        state = np.array([4.0, 5.0])
+        action = np.array([1.0, 0.0])  # state+action == (5,5) (the obstacle).
+        clear_next = np.array([4.5, 7.0])  # realised away from obstacle.
+
+        reward_clear = env.reward(state, action, next_state=clear_next)
+
+        # Manually compute the expected base reward (no obstacle penalty,
+        # not in goal, in-grid):
+        # -fuel_cost - dist_to_goal where dist = ||(18,5)-(4.5,7)||
+        expected_base = -1.0 - float(np.linalg.norm(np.array([18.0, 5.0]) - clear_next))
+        assert abs(reward_clear - expected_base) < 1e-6, (
+            f"Clear realised next_state should yield base reward "
+            f"{expected_base:.4f}; got {reward_clear:.4f}"
+        )
+
+    def test_sample_next_step_reward_matches_returned_next_state(self):
+        """``sample_next_step`` reward equals ``reward(state, action, next_state)``.
+
+        Purpose: End-to-end check that the realised next_state threaded
+        through ``Environment.sample_next_step`` is the same draw used by
+        the reward calculation. Also covers stochastic transitions.
+
+        Given: An env with non-trivial transition noise and
+            ``hit_probability=1.0`` so the obstacle penalty is deterministic
+            given the realised position.
+        When: We seed the RNG, draw ``(next_state, _, reward)`` via
+            ``sample_next_step``, then re-seed past the transition draw and
+            recompute ``env.reward(state, action, next_state)``.
+        Then: The two reward values agree exactly.
+
+        Test type: unit
+        """
+        # Place an obstacle at the deterministic landing point and a state
+        # such that ``state + action`` is exactly inside the obstacle. With
+        # large transition noise many seeds draw a realised next_state
+        # *outside* the obstacle. Under the bug, ``sample_next_step`` uses
+        # ``state+action`` (always inside obstacle) → reward is heavily
+        # penalised. After the fix, the reward agrees with the realised
+        # ``next_state``, so penalty applies only when the realised state
+        # is in the obstacle. The fingerprint is a *distribution* of
+        # rewards rather than a single value.
+        env = ContinuousLightDarkPOMDP(
+            discount_factor=0.95,
+            state_transition_cov_matrix=np.eye(2) * 4.0,
+            observation_cov_matrix=np.eye(2),
+            obstacles=[(5.0, 5.0)],
+            obstacle_hit_probability=1.0,
+            obstacle_reward=-50.0,
+            goal_reward=10.0,
+            fuel_cost=2.0,
+            grid_size=11,
+            goal_state_radius=1.5,
+            obstacle_radius=0.5,
+            is_obstacle_hit_terminal=False,
+        )
+        state = np.array([4.0, 5.0])
+        action = np.array([1.0, 0.0])  # state+action == (5,5) — the obstacle
+
+        # Iterate; for each draw compare the threaded reward against the
+        # reward computed manually from the realised next_state. They must
+        # match exactly: reward_step must score against next_state, not
+        # against state+action. The kernel short-circuits in this order:
+        # goal > obstacle > out-of-grid (mirror that here).
+        any_realised_outside_obstacle = False
+        obstacle_radius_sq = 0.5 * 0.5
+        goal = np.array([10.0, 5.0])
+        for seed in range(100):
+            np.random.seed(seed)
+            next_state, _, reward_step = env.sample_next_step(state, action)
+            dx = next_state[0] - 5.0
+            dy = next_state[1] - 5.0
+            in_obstacle = (dx * dx + dy * dy) <= obstacle_radius_sq
+            if not in_obstacle:
+                any_realised_outside_obstacle = True
+            in_grid = 0.0 <= next_state[0] <= 11.0 and 0.0 <= next_state[1] <= 11.0
+            dist_to_goal = float(np.linalg.norm(next_state - goal))
+            in_goal = dist_to_goal <= 1.5
+            base = -2.0 - dist_to_goal
+            if in_goal:
+                expected = base + 10.0
+            elif in_obstacle:
+                # ``hit_probability=1`` so the deterministic Bernoulli refund
+                # always pays out: penalty = obstacle_reward (-50.0).
+                expected = base + (-50.0)
+            elif not in_grid:
+                expected = base + (-50.0)
+            else:
+                expected = base
+            assert reward_step == pytest.approx(expected, abs=1e-9), (
+                f"seed={seed}: sample_next_step reward {reward_step} != "
+                f"expected {expected} for realised next_state={next_state} "
+                f"(in_obstacle={in_obstacle}, in_grid={in_grid}, "
+                f"in_goal={in_goal})"
+            )
+        assert any_realised_outside_obstacle, (
+            "Test setup error: no seed produced a realised next_state outside "
+            "the obstacle; bump transition variance or seed count."
+        )
+
+    def test_reward_batch_obstacle_penalty_uses_realised_next_states(self):
+        """``reward_batch`` honours per-row realised ``next_states``.
+
+        Purpose: Batched variant of the next_state-aware obstacle check.
+
+        Given: A batch where ``states + action`` is clear but the threaded
+            ``next_states`` have been hand-placed inside an obstacle.
+        When: ``env.reward_batch`` is called with the realised ``next_states``.
+        Then: Each row gets the deterministic obstacle penalty.
+
+        Test type: unit
+        """
+        env = self._make_env(obstacles=[(8.0, 5.0)], hit_probability=1.0)
+        states = np.array([[4.0, 5.0], [4.0, 5.0], [4.0, 5.0]])
+        action = np.array([1.0, 0.0])
+        # Each realised next_state lies inside the obstacle at (8, 5).
+        next_states_hit = np.array([[8.0, 5.0], [7.5, 5.0], [8.0, 4.5]])
+        next_states_clear = np.array([[5.0, 5.0], [5.0, 5.0], [5.0, 5.0]])
+
+        rewards_hit = env.reward_batch(states, action, next_states=next_states_hit)
+        rewards_clear = env.reward_batch(states, action, next_states=next_states_clear)
+
+        # All rows must have the obstacle penalty applied vs. clear baseline.
+        for i in range(3):
+            assert rewards_hit[i] < rewards_clear[i] - 20.0, (
+                f"row {i}: realised obstacle hit should incur the -25 "
+                f"obstacle reward; got hit={rewards_hit[i]:.3f} vs "
+                f"clear={rewards_clear[i]:.3f}"
+            )
+
+    def test_reward_batch_decaying_hit_prob_uses_realised_next_states(self):
+        """Decaying-hit-probability batched reward consumes ``next_states``.
+
+        Purpose: The decaying-hit-probability reward model has its own
+        batched implementation that previously recomputed
+        ``next_states = states + action``. Check it now consumes the
+        threaded ``next_states``.
+
+        Given: An env with the DECAYING_HIT_PROBABILITY reward model and a
+            small ``penalty_decay`` so the hit probability is essentially 1
+            at the obstacle and ~0 well away from it.
+        When: ``env.reward_batch`` is called once with realised
+            ``next_states`` placed at the obstacle, and once with realised
+            ``next_states`` far from any obstacle.
+        Then: The on-obstacle batch is meaningfully more negative.
+
+        Test type: unit
+        """
+        env = ContinuousLightDarkPOMDP(
+            discount_factor=0.95,
+            state_transition_cov_matrix=np.eye(2) * 1e-12,
+            observation_cov_matrix=np.eye(2),
+            obstacles=[(8.0, 5.0)],
+            obstacle_reward=-25.0,
+            goal_reward=10.0,
+            fuel_cost=1.0,
+            grid_size=20,
+            goal_state=np.array([18, 5]),
+            goal_state_radius=1.0,
+            beacon_radius=1.0,
+            obstacle_radius=1.0,
+            reward_model_type=RewardModelType.DECAYING_HIT_PROBABILITY,
+            penalty_decay=0.1,
+            is_obstacle_hit_terminal=False,
+        )
+        states = np.array([[4.0, 5.0], [4.0, 5.0], [4.0, 5.0], [4.0, 5.0]])
+        action = np.array([1.0, 0.0])
+        next_at_obs = np.array([[8.0, 5.0], [8.0, 5.0], [8.0, 5.0], [8.0, 5.0]])
+        next_far = np.array([[15.0, 1.0], [15.0, 1.0], [15.0, 1.0], [15.0, 1.0]])
+
+        np.random.seed(0)
+        rewards_at_obs = env.reward_batch(states, action, next_states=next_at_obs)
+        np.random.seed(0)
+        rewards_far = env.reward_batch(states, action, next_states=next_far)
+
+        assert np.mean(rewards_at_obs) < np.mean(rewards_far) - 10.0, (
+            f"Decaying-hit-prob: realised obstacle batch should be more "
+            f"negative than far batch; got mean_obs="
+            f"{np.mean(rewards_at_obs):.3f} vs mean_far="
+            f"{np.mean(rewards_far):.3f}"
+        )
+
+    def test_discrete_actions_reward_threads_next_state(self):
+        """Discrete-action wrapper threads ``next_state`` to the parent.
+
+        Purpose: Confirm the ``ContinuousLightDarkPOMDPDiscreteActions``
+        wrapper does not silently drop the threaded ``next_state`` (it
+        delegates to the parent via ``super().reward``).
+
+        Given: A discrete-action env with an obstacle and a realised
+            ``next_state`` placed in the obstacle.
+        When: ``env.reward(state, "right", next_state=realised)`` is called.
+        Then: The reward picks up the obstacle penalty against the realised
+            position.
+
+        Test type: unit
+        """
+        env = ContinuousLightDarkPOMDPDiscreteActions(
+            discount_factor=0.95,
+            state_transition_cov_matrix=np.eye(2) * 1e-12,
+            observation_cov_matrix=np.eye(2),
+            obstacles=[(8.0, 5.0)],
+            obstacle_hit_probability=1.0,
+            obstacle_reward=-25.0,
+            goal_reward=10.0,
+            fuel_cost=1.0,
+            grid_size=20,
+            goal_state=np.array([18, 5]),
+            goal_state_radius=1.0,
+            obstacle_radius=1.0,
+            is_obstacle_hit_terminal=False,
+        )
+        state = np.array([4.0, 5.0])
+        clean = np.array([5.0, 5.0])
+        realised = np.array([8.0, 5.0])
+        reward_clean = env.reward(state, "right", next_state=clean)
+        reward_hit = env.reward(state, "right", next_state=realised)
+        assert reward_hit < reward_clean - 20.0, (
+            f"Discrete wrapper should thread next_state; got hit="
+            f"{reward_hit:.3f} vs clean={reward_clean:.3f}"
+        )

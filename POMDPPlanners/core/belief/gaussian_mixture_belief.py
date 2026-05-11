@@ -154,6 +154,7 @@ class GaussianMixtureBelief(Belief):
         self.means = means
         self.covariances = covariances
         self.weights = weights
+        self._cum_weights = np.cumsum(weights)
         self.updater = updater
         self.n_terminal_check_samples = n_terminal_check_samples
         self._mvns = [CovarianceParameterizedMultivariateNormal(c) for c in covariances]
@@ -198,7 +199,9 @@ class GaussianMixtureBelief(Belief):
         Returns:
             A state vector of shape (d,).
         """
-        k = np.random.choice(len(self.weights), p=self.weights)
+        k = int(np.searchsorted(self._cum_weights, np.random.random()))
+        if k >= len(self.weights):
+            k = len(self.weights) - 1
         return self._mvns[k].sample(self.means[k], n_samples=1)[0]
 
     def update(

@@ -1,3 +1,5 @@
+import numpy as np
+
 from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     CategoricalHyperParameter,
     NumericalHyperParameter,
@@ -322,13 +324,20 @@ class TestHyperParameterRunParamsIdUniqueness:
             def config_id(self):
                 return "env1"
 
-            def state_transition_model(self, state, action):  # type: ignore[override]
-                pass
+            def sample_next_state(self, state, action, n_samples=1):  # type: ignore[override]
+                return state if n_samples == 1 else [state] * n_samples
 
-            def observation_model(self, next_state, action):  # type: ignore[override]
-                pass
+            def sample_observation(self, next_state, action, n_samples=1):  # type: ignore[override]
+                return next_state if n_samples == 1 else [next_state] * n_samples
 
-            def reward(self, state, action):
+            def transition_log_probability(self, state, action, next_states):  # type: ignore[override]
+                return np.zeros(len(next_states))
+
+            def observation_log_probability(self, next_state, action, observations):  # type: ignore[override]
+                return np.zeros(len(observations))
+
+            def reward(self, state, action, next_state=None):
+                del state, action, next_state
                 return 0.0
 
             def is_terminal(self, state):
@@ -342,6 +351,9 @@ class TestHyperParameterRunParamsIdUniqueness:
 
             def is_equal_observation(self, observation1, observation2):
                 return observation1 == observation2
+
+            def hash_action(self, action):
+                return action
 
         class MockBelief(Belief):
             @property
@@ -413,13 +425,20 @@ class TestHyperParameterRunParamsIdUniqueness:
             def config_id(self):
                 return "env1"
 
-            def state_transition_model(self, state, action):  # type: ignore[override]
-                pass
+            def sample_next_state(self, state, action, n_samples=1):  # type: ignore[override]
+                return state if n_samples == 1 else [state] * n_samples
 
-            def observation_model(self, next_state, action):  # type: ignore[override]
-                pass
+            def sample_observation(self, next_state, action, n_samples=1):  # type: ignore[override]
+                return next_state if n_samples == 1 else [next_state] * n_samples
 
-            def reward(self, state, action):
+            def transition_log_probability(self, state, action, next_states):  # type: ignore[override]
+                return np.zeros(len(next_states))
+
+            def observation_log_probability(self, next_state, action, observations):  # type: ignore[override]
+                return np.zeros(len(observations))
+
+            def reward(self, state, action, next_state=None):
+                del state, action, next_state
                 return 0.0
 
             def is_terminal(self, state):
@@ -433,6 +452,9 @@ class TestHyperParameterRunParamsIdUniqueness:
 
             def is_equal_observation(self, observation1, observation2):
                 return observation1 == observation2
+
+            def hash_action(self, action):
+                return action
 
         class MockBelief(Belief):
             @property
@@ -508,13 +530,20 @@ class TestHyperParameterRunParamsIdUniqueness:
             def config_id(self):
                 return "env1"
 
-            def state_transition_model(self, state, action):  # type: ignore[override]
-                pass
+            def sample_next_state(self, state, action, n_samples=1):  # type: ignore[override]
+                return state if n_samples == 1 else [state] * n_samples
 
-            def observation_model(self, next_state, action):  # type: ignore[override]
-                pass
+            def sample_observation(self, next_state, action, n_samples=1):  # type: ignore[override]
+                return next_state if n_samples == 1 else [next_state] * n_samples
 
-            def reward(self, state, action):
+            def transition_log_probability(self, state, action, next_states):  # type: ignore[override]
+                return np.zeros(len(next_states))
+
+            def observation_log_probability(self, next_state, action, observations):  # type: ignore[override]
+                return np.zeros(len(observations))
+
+            def reward(self, state, action, next_state=None):
+                del state, action, next_state
                 return 0.0
 
             def is_terminal(self, state):
@@ -528,6 +557,9 @@ class TestHyperParameterRunParamsIdUniqueness:
 
             def is_equal_observation(self, observation1, observation2):
                 return observation1 == observation2
+
+            def hash_action(self, action):
+                return action
 
         class MockBelief(Belief):
             @property
@@ -605,13 +637,20 @@ class TestHyperParameterRunParamsIdUniqueness:
             def config_id(self):
                 return "env1"
 
-            def state_transition_model(self, state, action):  # type: ignore[override]
-                pass
+            def sample_next_state(self, state, action, n_samples=1):  # type: ignore[override]
+                return state if n_samples == 1 else [state] * n_samples
 
-            def observation_model(self, next_state, action):  # type: ignore[override]
-                pass
+            def sample_observation(self, next_state, action, n_samples=1):  # type: ignore[override]
+                return next_state if n_samples == 1 else [next_state] * n_samples
 
-            def reward(self, state, action):
+            def transition_log_probability(self, state, action, next_states):  # type: ignore[override]
+                return np.zeros(len(next_states))
+
+            def observation_log_probability(self, next_state, action, observations):  # type: ignore[override]
+                return np.zeros(len(observations))
+
+            def reward(self, state, action, next_state=None):
+                del state, action, next_state
                 return 0.0
 
             def is_terminal(self, state):
@@ -625,6 +664,9 @@ class TestHyperParameterRunParamsIdUniqueness:
 
             def is_equal_observation(self, observation1, observation2):
                 return observation1 == observation2
+
+            def hash_action(self, action):
+                return action
 
         class MockBelief(Belief):
             @property
@@ -1065,13 +1107,20 @@ class TestOptimizedPolicyResultValidation:
             def config_id(self):
                 return "mock_env_id"
 
-            def state_transition_model(self, state, action):  # type: ignore[override]
-                pass
+            def sample_next_state(self, state, action, n_samples=1):  # type: ignore[override]
+                return state if n_samples == 1 else [state] * n_samples
 
-            def observation_model(self, next_state, action):  # type: ignore[override]
-                pass
+            def sample_observation(self, next_state, action, n_samples=1):  # type: ignore[override]
+                return next_state if n_samples == 1 else [next_state] * n_samples
 
-            def reward(self, state, action):
+            def transition_log_probability(self, state, action, next_states):  # type: ignore[override]
+                return np.zeros(len(next_states))
+
+            def observation_log_probability(self, next_state, action, observations):  # type: ignore[override]
+                return np.zeros(len(observations))
+
+            def reward(self, state, action, next_state=None):
+                del state, action, next_state
                 return 0.0
 
             def is_terminal(self, state):
@@ -1085,6 +1134,9 @@ class TestOptimizedPolicyResultValidation:
 
             def is_equal_observation(self, observation1, observation2):
                 return observation1 == observation2
+
+            def hash_action(self, action):
+                return action
 
         return MockEnv()
 

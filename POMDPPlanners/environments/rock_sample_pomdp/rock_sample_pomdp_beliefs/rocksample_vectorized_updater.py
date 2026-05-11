@@ -1,8 +1,11 @@
 """Vectorized particle belief updater for RockSample POMDP.
 
-This module provides a NumPy-vectorized implementation of particle belief
-updates for the RockSample environment, eliminating Python-level loops
-over individual particles.
+This module provides the batched transition and observation log-likelihood
+entry points used by :class:`VectorizedWeightedParticleBelief`. Both hot
+paths delegate to the native C++ extension
+(``POMDPPlanners.environments.rock_sample_pomdp._native``); this file is a
+thin Python adapter that owns the stored environment parameters and the
+observation string-to-int convention.
 
 Classes:
     RockSampleVectorizedUpdater: Batched transition and observation
@@ -18,6 +21,7 @@ import numpy as np
 from POMDPPlanners.core.belief.vectorized_particle_belief_updater import (
     VectorizedParticleBeliefUpdater,
 )
+from POMDPPlanners.environments.rock_sample_pomdp import _native
 from POMDPPlanners.utils.config_to_id import config_to_id
 
 if TYPE_CHECKING:
@@ -34,9 +38,9 @@ OBS_BAD = 2
 class RockSampleVectorizedUpdater(VectorizedParticleBeliefUpdater):
     """Vectorized particle belief updater for the RockSample POMDP.
 
-    Stores precomputed environment parameters and performs all-particle
-    transitions and observation log-likelihood evaluations using NumPy
-    operations.  State layout per particle is
+    Stores precomputed environment parameters and dispatches batched
+    transitions and observation log-likelihood evaluations to the native
+    C++ extension. State layout per particle is
     ``[robot_row, robot_col, rock_0_quality, ..., rock_{R-1}_quality]``.
 
     Attributes:
@@ -58,7 +62,7 @@ class RockSampleVectorizedUpdater(VectorizedParticleBeliefUpdater):
         self.map_rows = map_rows
         self.map_cols = map_cols
         self.num_rocks = num_rocks
-        self.rock_positions = rock_positions
+        self.rock_positions = np.asarray(rock_positions, dtype=np.int32)
         self.sensor_efficiency = sensor_efficiency
 
     @classmethod
@@ -87,21 +91,19 @@ class RockSampleVectorizedUpdater(VectorizedParticleBeliefUpdater):
         Returns:
             Next-state particles of shape (N, 2 + num_rocks).
         """
-        action_idx = int(action)
-        result = particles.copy()
-
-        live = self._live_mask(result)
-        if not np.any(live):
-            return result
-
-        if action_idx == 0:
-            self._apply_sample(result, live)
-        elif 1 <= action_idx <= 4:
-            self._apply_movement(result, live, action_idx)
-        # action >= 5 (check): no state change
-
-        self._apply_exit(result, live)
-        return result
+        action_idx = int(np.asarray(action).item())
+        particles_arr = np.asarray(particles, dtype=float)
+        ref_state = self._reference_state(particles_arr)
+        transition = _native.RockSampleTransitionCpp(
+            state=ref_state,
+            action=action_idx,
+            map_rows=self.map_rows,
+            map_cols=self.map_cols,
+            num_rocks=self.num_rocks,
+            rock_positions=self.rock_positions,
+            sensor_efficiency=self.sensor_efficiency,
+        )
+        return transition.batch_sample(particles_arr)
 
     def batch_observation_log_likelihood(
         self,
@@ -119,21 +121,20 @@ class RockSampleVectorizedUpdater(VectorizedParticleBeliefUpdater):
         Returns:
             Log-likelihoods of shape (N,).
         """
-        action_idx = int(action)
+        action_idx = int(np.asarray(action).item())
         obs_int = int(np.asarray(observation).item())
-        n_particles = next_particles.shape[0]
-
-        if action_idx <= 4:
-            return self._log_ll_movement(n_particles, obs_int)
-
-        rock_idx = action_idx - 5
-        if rock_idx >= self.num_rocks:
-            return self._log_ll_movement(n_particles, obs_int)
-
-        if obs_int == OBS_NONE:
-            return np.full(n_particles, -np.inf)
-
-        return self._log_ll_check(next_particles, rock_idx, obs_int)
+        next_arr = np.asarray(next_particles, dtype=float)
+        ref_state = self._reference_state(next_arr)
+        obs_model = _native.RockSampleObservationCpp(
+            next_state=ref_state,
+            action=action_idx,
+            map_rows=self.map_rows,
+            map_cols=self.map_cols,
+            num_rocks=self.num_rocks,
+            rock_positions=self.rock_positions,
+            sensor_efficiency=self.sensor_efficiency,
+        )
+        return obs_model.batch_log_likelihood(next_arr, obs_int)
 
     @property
     def config_id(self) -> str:
@@ -149,70 +150,15 @@ class RockSampleVectorizedUpdater(VectorizedParticleBeliefUpdater):
         return config_to_id(cfg)
 
     # ------------------------------------------------------------------
-    # Private helpers — transition
+    # Private helpers
     # ------------------------------------------------------------------
 
-    @staticmethod
-    def _live_mask(particles: np.ndarray) -> np.ndarray:
-        return (particles[:, 0] >= 0) | (particles[:, 1] >= 0)
-
-    def _apply_movement(self, result: np.ndarray, live: np.ndarray, action_idx: int) -> None:
-        if action_idx == 1:  # North
-            result[live, 0] = np.maximum(0, result[live, 0] - 1)
-        elif action_idx == 2:  # East
-            result[live, 1] = result[live, 1] + 1
-        elif action_idx == 3:  # South
-            result[live, 0] = np.minimum(self.map_rows - 1, result[live, 0] + 1)
-        elif action_idx == 4:  # West
-            result[live, 1] = np.maximum(0, result[live, 1] - 1)
-
-    def _apply_sample(self, result: np.ndarray, live: np.ndarray) -> None:
-        robot_row = result[:, 0].astype(np.int32)
-        robot_col = result[:, 1].astype(np.int32)
-        for i in range(self.num_rocks):
-            rock_r, rock_c = self.rock_positions[i]
-            at_rock = live & (robot_row == rock_r) & (robot_col == rock_c)
-            result[at_rock, 2 + i] = 0.0
-
-    def _apply_exit(self, result: np.ndarray, live: np.ndarray) -> None:
-        exited = live & (result[:, 1] >= self.map_cols)
-        result[exited, 0] = -1.0
-        result[exited, 1] = -1.0
-
-    # ------------------------------------------------------------------
-    # Private helpers — observation log-likelihood
-    # ------------------------------------------------------------------
-
-    @staticmethod
-    def _log_ll_movement(n_particles: int, obs_int: int) -> np.ndarray:
-        if obs_int == OBS_NONE:
-            return np.zeros(n_particles)
-        return np.full(n_particles, -np.inf)
-
-    def _log_ll_check(
-        self,
-        next_particles: np.ndarray,
-        rock_idx: int,
-        obs_int: int,
-    ) -> np.ndarray:
-        rock_r, rock_c = self.rock_positions[rock_idx]
-        robot_row = next_particles[:, 0]
-        robot_col = next_particles[:, 1]
-
-        distance = np.sqrt((robot_row - rock_r) ** 2 + (robot_col - rock_c) ** 2)
-        efficiency = np.exp(-distance / self.sensor_efficiency)
-
-        is_good = next_particles[:, 2 + rock_idx] > 0.5
-
-        if obs_int == OBS_GOOD:
-            prob = np.where(is_good, efficiency, 1.0 - efficiency)
-        else:  # OBS_BAD
-            prob = np.where(is_good, 1.0 - efficiency, efficiency)
-
-        prob = np.maximum(prob, 1e-300)
-        log_ll = np.log(prob)
-
-        is_terminal = (next_particles[:, 0] < 0) & (next_particles[:, 1] < 0)
-        log_ll[is_terminal] = -np.inf
-
-        return log_ll
+    def _reference_state(self, particles_arr: np.ndarray) -> np.ndarray:
+        # The C++ constructor requires a state row; it is only read by the
+        # per-particle sample() / probability() entry points, not by the
+        # batch entry points. An empty-particles batch call is not expected
+        # on the hot path, but we still provide a valid shape to avoid
+        # touching uninitialized memory inside C++.
+        if particles_arr.shape[0] > 0:
+            return particles_arr[0]
+        return np.zeros(2 + self.num_rocks, dtype=float)

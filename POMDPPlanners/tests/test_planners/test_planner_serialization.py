@@ -157,7 +157,6 @@ class TestPlannerSerialization:
             {
                 "environment": self.tiger_env,
                 "discount_factor": 0.95,
-                "gamma": 0.95,
                 "depth": 10,
                 "c_ucb": 10.0,
                 "beta_ucb": 0.5,
@@ -358,7 +357,6 @@ class TestPlannerSerializationRoundTrip:
             SparsePFT(
                 environment=self.env,
                 discount_factor=0.95,
-                gamma=0.95,
                 depth=10,
                 c_ucb=10.0,
                 beta_ucb=0.5,
@@ -530,7 +528,6 @@ class TestPlannerSerializationEdgeCases:
             "sparse_pft": SparsePFT(
                 environment=self.env,
                 discount_factor=0.95,
-                gamma=0.95,
                 depth=10,
                 c_ucb=10.0,
                 beta_ucb=0.5,
@@ -590,7 +587,6 @@ class TestAllPlannersPicklable:
             SparsePFT(
                 environment=self.env,
                 discount_factor=0.95,
-                gamma=0.95,
                 depth=10,
                 c_ucb=10.0,
                 beta_ucb=0.5,

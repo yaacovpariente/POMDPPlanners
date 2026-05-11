@@ -6,7 +6,7 @@ import pytest
 
 from POMDPPlanners.core.environment import SpaceType
 from POMDPPlanners.core.belief import WeightedParticleBelief, get_initial_belief
-from POMDPPlanners.core.tree import BeliefNode, ActionNode
+from POMDPPlanners.core.tree.arena import ACTION, BELIEF, Tree
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
     ContinuousLightDarkPOMDP,
 )
@@ -88,68 +88,61 @@ def test_is_terminal_belief(planner, env):
 
 
 def test_generate_belief(planner, belief):
-    belief_node = BeliefNode(belief=belief)
-    action = np.array([1.0, 0.0])  # Unit vector in x direction
-    action_node = ActionNode(action=action, parent=belief_node)
+    tree = Tree()
+    root_id = tree.add_belief_node(belief)
+    action = np.array([1.0, 0.0])
+    action_id = tree.add_action_node(action=action, parent_id=root_id)
 
-    next_belief_node, immediate_reward = planner._generate_belief(action_node)
+    next_belief_id = planner._generate_belief(tree=tree, action_id=action_id)
 
-    assert isinstance(next_belief_node, BeliefNode)
-    assert isinstance(immediate_reward, float)
-    assert next_belief_node.parent == action_node
+    assert tree.kind[next_belief_id] == BELIEF
+    assert tree.parent_id[next_belief_id] == action_id
 
 
 def test_sample_next_existing_belief(planner, belief):
-    belief_node = BeliefNode(belief=belief)
-    action = np.array([1.0, 0.0])  # Unit vector in x direction
-    action_node = ActionNode(action=action, parent=belief_node)
+    tree = Tree()
+    root_id = tree.add_belief_node(belief)
+    action = np.array([1.0, 0.0])
+    action_id = tree.add_action_node(action=action, parent_id=root_id)
 
-    # Create some child belief nodes with continuous states
-    children = []
     for i in range(3):
         particles = [np.array([i * 1.0, i * 1.0]), np.array([(i + 1) * 1.0, (i + 1) * 1.0])]
         log_weights = np.log(np.ones(len(particles)) / len(particles))
-        child = BeliefNode(
+        child_id = tree.add_belief_node(
             belief=WeightedParticleBelief(particles=particles, log_weights=log_weights),
-            parent=action_node,
+            parent_id=action_id,
         )
-        child.visit_count = i
-        child.immediate_cost = -i
-        children.append(child)
-    action_node.children = tuple(children)
+        tree.visit_count[child_id] = i
+        tree.set_immediate_cost(child_id, -float(i))
 
-    next_belief_node, immediate_reward = planner._sample_next_existing_belief(action_node)
+    next_belief_id = planner._sample_next_existing_belief(tree=tree, action_id=action_id)
 
-    assert isinstance(next_belief_node, BeliefNode)
-    assert isinstance(immediate_reward, float)
-    assert next_belief_node in action_node.children
+    assert tree.kind[next_belief_id] == BELIEF
+    assert next_belief_id in tree.children_ids[action_id]
 
 
 def test_update_nodes(planner, belief):
-    belief_node = BeliefNode(belief=belief)
-    action = np.array([1.0, 0.0])  # Unit vector in x direction
-    action_node = ActionNode(action=action, parent=belief_node)
+    tree = Tree()
+    root_id = tree.add_belief_node(belief)
+    action = np.array([1.0, 0.0])
+    action_id = tree.add_action_node(action=action, parent_id=root_id)
 
-    # Create some child belief nodes with continuous states
-    children = []
     for i in range(3):
         particles = [np.array([i * 1.0, i * 1.0]), np.array([(i + 1) * 1.0, (i + 1) * 1.0])]
         log_weights = np.log(np.ones(len(particles)) / len(particles))
-        child = BeliefNode(
+        child_id = tree.add_belief_node(
             belief=WeightedParticleBelief(particles=particles, log_weights=log_weights),
-            parent=action_node,
+            parent_id=action_id,
         )
-        child.visit_count = i
-        child.v_value = -i
-        children.append(child)
-    action_node.children = tuple(children)
+        tree.visit_count[child_id] = i
+        tree.v_value[child_id] = -float(i)
 
-    initial_visit_count = belief_node.visit_count
-    planner.update_nodes(belief_node, action_node)
+    initial_visit_count = tree.visit_count[root_id]
+    planner.update_nodes(tree=tree, belief_id=root_id, action_id=action_id)
 
-    assert belief_node.visit_count == initial_visit_count + 1
-    assert action_node.visit_count == 1
-    assert action_node.q_value is not None
+    assert tree.visit_count[root_id] == initial_visit_count + 1
+    assert tree.visit_count[action_id] == 1
+    assert tree.q_value[action_id] is not None
 
 
 def test_get_space_info(planner):
@@ -158,120 +151,21 @@ def test_get_space_info(planner):
     assert space_info.observation_space == SpaceType.CONTINUOUS
 
 
-def test_entropy_weight_initialization(env, action_sampler):
-    """Test that entropy_weight is properly initialized."""
-    planner = ICVaR_PFT_DPW(
-        environment=env,
-        name="test_planner_entropy",
-        depth=3,
-        discount_factor=0.95,
-        n_simulations=100,
-        alpha=0.1,
-        delta=0.1,
-        k_o=5,
-        min_immediate_cost=0.0,
-        max_immediate_cost=1.0,
-        min_visit_count_per_action=1,
-        exploration_constant=1.0,
-        action_sampler=action_sampler,
-        k_a=2.0,
-        alpha_a=0.0,
-        alpha_o=0.0,
-        entropy_weight=0.5,
-    )
-    assert planner.entropy_weight == 0.5
+def test_immediate_cost_computed_once_per_action(planner, belief):
+    """After _generate_belief, the action node carries the (parent_belief, action) cost
+    and update_nodes does not recompute it."""
+    tree = Tree()
+    root_id = tree.add_belief_node(belief)
+    action = np.array([1.0, 0.0])
+    action_id = tree.add_action_node(action=action, parent_id=root_id)
 
-    # Test default value
-    planner_default = ICVaR_PFT_DPW(
-        environment=env,
-        name="test_planner_default",
-        depth=3,
-        discount_factor=0.95,
-        n_simulations=100,
-        alpha=0.1,
-        delta=0.1,
-        k_o=5,
-        min_immediate_cost=0.0,
-        max_immediate_cost=1.0,
-        min_visit_count_per_action=1,
-        exploration_constant=1.0,
-        action_sampler=action_sampler,
-        k_a=2.0,
-        alpha_a=0.0,
-        alpha_o=0.0,
-    )
-    assert planner_default.entropy_weight == 0.0
+    assert tree.immediate_cost[action_id] is None
+    planner._generate_belief(tree=tree, action_id=action_id)
+    after_generate = tree.immediate_cost[action_id]
+    assert after_generate is not None
 
-
-def test_entropy_weight_affects_cost(env, action_sampler, belief):
-    """Test that entropy_weight affects the immediate cost calculation."""
-    # Create planner with entropy_weight=0
-    planner_no_entropy = ICVaR_PFT_DPW(
-        environment=env,
-        name="test_planner_no_entropy",
-        depth=3,
-        discount_factor=0.95,
-        n_simulations=50,
-        alpha=0.1,
-        delta=0.1,
-        k_o=5,
-        min_immediate_cost=0.0,
-        max_immediate_cost=1.0,
-        min_visit_count_per_action=1,
-        exploration_constant=1.0,
-        action_sampler=action_sampler,
-        k_a=2.0,
-        alpha_a=0.0,
-        alpha_o=0.0,
-        entropy_weight=0.0,
-    )
-
-    # Create planner with entropy_weight>0
-    planner_with_entropy = ICVaR_PFT_DPW(
-        environment=env,
-        name="test_planner_with_entropy",
-        depth=3,
-        discount_factor=0.95,
-        n_simulations=50,
-        alpha=0.1,
-        delta=0.1,
-        k_o=5,
-        min_immediate_cost=0.0,
-        max_immediate_cost=1.0,
-        min_visit_count_per_action=1,
-        exploration_constant=1.0,
-        action_sampler=action_sampler,
-        k_a=2.0,
-        alpha_a=0.0,
-        alpha_o=0.0,
-        entropy_weight=0.5,
-    )
-
-    # Build trees with both planners and check that costs differ
-    tree_no_entropy = planner_no_entropy._learn_tree(belief=belief)
-    tree_with_entropy = planner_with_entropy._learn_tree(belief=belief)
-
-    # Check that immediate costs are set (they should be)
-    def get_action_node_costs(node):
-        costs = []
-        if isinstance(node, ActionNode) and node.immediate_cost is not None:
-            costs.append(node.immediate_cost)
-        for child in node.children:
-            costs.extend(get_action_node_costs(child))
-        return costs
-
-    costs_no_entropy = get_action_node_costs(tree_no_entropy)
-    costs_with_entropy = get_action_node_costs(tree_with_entropy)
-
-    # Both should have computed costs
-    assert len(costs_no_entropy) > 0
-    assert len(costs_with_entropy) > 0
-
-    # When entropy_weight > 0, costs should generally be different
-    # (though they might be the same in some cases due to clipping)
-    # At minimum, both planners should produce valid cost values
-    assert all(isinstance(cost, (int, float)) for cost in costs_no_entropy)
-    assert all(isinstance(cost, (int, float)) for cost in costs_with_entropy)
+    planner.update_nodes(tree=tree, belief_id=root_id, action_id=action_id)
+    assert tree.immediate_cost[action_id] == after_generate
 
 
 def test_action(planner, belief):
@@ -285,74 +179,145 @@ def test_action(planner, belief):
 
 def test_progressive_widening_constraints(planner, belief):
     """Test that progressive widening constraints are respected in the tree."""
-    # Build the tree using the planner's internal method
-    tree = planner._learn_tree(belief=belief)
+    tree, _ = planner._learn_tree(belief=belief)
 
-    # Helper function to recursively traverse and check all nodes in the tree
-    def check_node_constraints(node):
-        if isinstance(node, BeliefNode):
-            # For belief nodes: check that number of children <= k_a * visit_count^alpha_a
-            # Note: Progressive widening allows expansion when len(children) <= threshold,
-            # so we check that actual children don't exceed threshold + 1
-            max_children_threshold = planner.k_a + 1
-            actual_children = len(node.children)
-            # The implementation uses <= in the condition, so actual children can be at most floor(threshold) + 1
-            max_allowed = int(max_children_threshold)
-            assert actual_children <= max_allowed, (
-                f"Belief node has {actual_children} children but should have at most "
-                f"{max_allowed} (threshold={max_children_threshold:.3f}, k_a={planner.k_a}, "
-                f"visit_count={node.visit_count}, alpha_a={planner.alpha_a})"
-            )
-
-            # Recursively check all action node children
-            for child in node.children:
-                check_node_constraints(child)
-
-        elif isinstance(node, ActionNode):
-            # For action nodes: check that number of children <= k_o * visit_count^alpha_o
-            # Note: Progressive widening allows expansion when len(children) <= threshold,
-            # so we check that actual children don't exceed threshold + 1
-            max_children_threshold = planner.k_o + 1
-            actual_children = len(node.children)
-            # The implementation uses <= in the condition, so actual children can be at most floor(threshold) + 1
-            max_allowed = int(max_children_threshold)
-            assert actual_children <= max_allowed, (
-                f"Action node has {actual_children} children but should have at most "
-                f"{max_allowed} (threshold={max_children_threshold:.3f}, k_o={planner.k_o}, "
-                f"visit_count={node.visit_count}, alpha_o={planner.alpha_o})"
-            )
-
-            # Recursively check all belief node children
-            for child in node.children:
-                check_node_constraints(child)
-
-    # Start the constraint checking from the root
-    check_node_constraints(tree)
-
-    # Additional verification: count total nodes and verify tree structure
-    def count_nodes(node, belief_count=0, action_count=0):
-        if isinstance(node, BeliefNode):
+    belief_count = 0
+    action_count = 0
+    for node_id in range(len(tree)):
+        children = tree.children_ids[node_id]
+        if tree.kind[node_id] == BELIEF:
             belief_count += 1
-            for child in node.children:
-                belief_count, action_count = count_nodes(child, belief_count, action_count)
-        elif isinstance(node, ActionNode):
+            max_allowed = int(planner.k_a + 1)
+            assert len(children) <= max_allowed, (
+                f"Belief node {node_id} has {len(children)} children but should have at most "
+                f"{max_allowed} (k_a={planner.k_a}, visit_count={tree.visit_count[node_id]}, "
+                f"alpha_a={planner.alpha_a})"
+            )
+        else:
             action_count += 1
-            for child in node.children:
-                belief_count, action_count = count_nodes(child, belief_count, action_count)
-        return belief_count, action_count
+            max_allowed = int(planner.k_o + 1)
+            assert len(children) <= max_allowed, (
+                f"Action node {node_id} has {len(children)} children but should have at most "
+                f"{max_allowed} (k_o={planner.k_o}, visit_count={tree.visit_count[node_id]}, "
+                f"alpha_o={planner.alpha_o})"
+            )
 
-    belief_nodes, action_nodes = count_nodes(tree)
+    assert belief_count >= 1, "Tree should contain at least the root belief node"
+    assert action_count >= 0, "Tree should contain zero or more action nodes"
 
-    # Verify we have a meaningful tree (at least some nodes were created)
-    assert belief_nodes >= 1, "Tree should contain at least the root belief node"
-    assert action_nodes >= 0, "Tree should contain zero or more action nodes"
 
-    print(
-        f"Progressive widening test passed: {belief_nodes} belief nodes, {action_nodes} action nodes"
+def test_tree_structure_comprehensive(planner, belief):
+    """Comprehensive structural validation of the iCVaR PFT-DPW search tree.
+
+    Purpose: Validates that the search tree built by ICVaR_PFT_DPW respects all
+    structural invariants: root metadata, BELIEF/ACTION kind alternation, parent
+    pointers, value/visit-count consistency, the cost-channel V=min(Q) backup at
+    BELIEF nodes (note: min, not max, since iCVaR is a cost channel), BFS depth
+    bounds, and progressive widening bounds for both action and observation
+    branches.
+
+    Given: An ICVaR_PFT_DPW planner with progressive-widening parameters and a
+    WeightedParticleBelief with two particles in the continuous light-dark POMDP.
+    When: A full search tree is constructed via planner._learn_tree(belief) and
+    every node is visited via BFS with depth tracking.
+    Then: All structural invariants hold simultaneously across every node in
+    the tree, and the cost-channel V=min(Q) backup matches within float
+    tolerance at every BELIEF node with at least one visited action child.
+
+    Test type: unit
+    """
+    tree, root_id = planner._learn_tree(belief=belief)
+
+    # Root-level invariants
+    assert tree.kind[root_id] == BELIEF
+    assert tree.parent_id[root_id] is None
+    assert tree.observation[root_id] is None
+    assert len(tree.children_ids[root_id]) > 0
+
+    # BFS walk tracking depth
+    max_bfs_depth = 0
+    frontier: list[tuple[int, int]] = [(root_id, 0)]
+    while frontier:
+        node_id, depth = frontier.pop(0)
+        max_bfs_depth = max(max_bfs_depth, depth)
+        _assert_node_invariants(tree, node_id, root_id)
+        _assert_pw_bounds(tree, node_id, planner)
+        for child_id in tree.children_ids[node_id]:
+            frontier.append((child_id, depth + 1))
+
+    max_depth_bound = 2 * planner.depth + 2
+    assert max_bfs_depth <= max_depth_bound, (
+        f"Max BFS depth {max_bfs_depth} exceeds bound {max_depth_bound} "
+        f"(2 * planner.depth + 2 with planner.depth={planner.depth})"
     )
-    print(
-        f"k_a={planner.k_a}, alpha_a={planner.alpha_a}, k_o={planner.k_o}, alpha_o={planner.alpha_o}"
+
+
+def _assert_node_invariants(tree, node_id, root_id):
+    assert (
+        tree.visit_count[node_id] >= 0
+    ), f"Node {node_id} has negative visit_count {tree.visit_count[node_id]}"
+    if node_id != root_id:
+        assert tree.parent_id[node_id] is not None, f"Non-root node {node_id} has no parent"
+
+    children = tree.children_ids[node_id]
+    node_kind = tree.kind[node_id]
+
+    if node_kind == BELIEF:
+        assert tree.belief[node_id] is not None, f"BELIEF node {node_id} has no belief"
+        assert tree.v_value[node_id] is not None, f"BELIEF node {node_id} has no v_value"
+        for child_id in children:
+            assert (
+                tree.kind[child_id] == ACTION
+            ), f"Child {child_id} of BELIEF node {node_id} is not ACTION"
+        _assert_v_min_backup(tree, node_id, children)
+    else:
+        assert node_kind == ACTION
+        assert tree.action[node_id] is not None, f"ACTION node {node_id} has no action"
+        assert tree.q_value[node_id] is not None, f"ACTION node {node_id} has no q_value"
+        for child_id in children:
+            assert (
+                tree.kind[child_id] == BELIEF
+            ), f"Child {child_id} of ACTION node {node_id} is not BELIEF"
+
+    if children:
+        children_visit_sum = sum(tree.visit_count[c] for c in children)
+        assert tree.visit_count[node_id] >= children_visit_sum, (
+            f"Node {node_id} visit_count {tree.visit_count[node_id]} is less than "
+            f"sum of children visit counts {children_visit_sum}"
+        )
+
+
+def _assert_v_min_backup(tree, belief_node_id, children):
+    visited_action_children = [c for c in children if tree.visit_count[c] > 0]
+    if not visited_action_children:
+        return
+    expected_v = min(tree.q_value[c] for c in visited_action_children)
+    actual_v = tree.v_value[belief_node_id]
+    assert actual_v == pytest.approx(expected_v), (
+        f"BELIEF node {belief_node_id}: v_value={actual_v} does not equal "
+        f"min over visited action children q_values={expected_v}"
     )
+
+
+def _assert_pw_bounds(tree, node_id, planner):
+    visit_count = tree.visit_count[node_id]
+    if visit_count <= 0:
+        return
+    children = tree.children_ids[node_id]
+    if tree.kind[node_id] == BELIEF:
+        max_allowed = int(planner.k_a * (visit_count**planner.alpha_a)) + 1
+        assert len(children) <= max_allowed, (
+            f"BELIEF node {node_id} has {len(children)} children, exceeds "
+            f"PW bound {max_allowed} (k_a={planner.k_a}, alpha_a={planner.alpha_a}, "
+            f"visit_count={visit_count})"
+        )
+    else:
+        max_allowed = int(planner.k_o * (visit_count**planner.alpha_o)) + 1
+        assert len(children) <= max_allowed, (
+            f"ACTION node {node_id} has {len(children)} children, exceeds "
+            f"PW bound {max_allowed} (k_o={planner.k_o}, alpha_o={planner.alpha_o}, "
+            f"visit_count={visit_count})"
+        )
 
 
 class TestICVaR_PFT_DPWEpisodeTests:
@@ -636,3 +601,56 @@ class TestICVaR_PFT_DPWEpisodeTests:
             assert planner.alpha_a == config["alpha_a"]
             assert planner.k_o == config["k_o"]
             assert planner.alpha_o == config["alpha_o"]
+
+
+def test_icvar_pft_dpw_action_selection_observes_varying_recursion_depth(
+    planner,
+    belief,
+):
+    """Planner threads recursion depth into action-PW selection.
+
+    Purpose: Regression test that ICVaR_PFT_DPW forwards the current
+        recursion depth (not the planner's configured max depth) into
+        ``cvar_action_progressive_widening_arena``, so the LCB
+        exploration horizon decays as the search descends. Without the
+        fix the planner passed ``depth=self.depth`` from ``__init__``
+        on every level, making horizon = max_depth - depth = 0
+        everywhere and forcing the LCB kernel to return a NaN-induced
+        action-index-0 default.
+
+    Given: A configured ICVaR_PFT_DPW planner with depth=3 and an
+        initial belief.
+    When: ``_learn_tree`` is run and every call to
+        ``cvar_action_progressive_widening_arena`` is recorded.
+    Then: The set of observed ``depth`` values has size > 1, and at
+        least one value is strictly less than ``planner.depth``.
+
+    Test type: regression
+    """
+    # pylint: disable=protected-access,import-outside-toplevel
+    from POMDPPlanners.planners.mcts_planners import icvar_pft_dpw as mod
+
+    observed_depths: list = []
+    original = mod.cvar_action_progressive_widening_arena
+
+    def spy(*args, depth, max_depth, **kwargs):
+        observed_depths.append(depth)
+        return original(*args, depth=depth, max_depth=max_depth, **kwargs)
+
+    mod.cvar_action_progressive_widening_arena = spy
+    try:
+        planner._learn_tree(belief=belief)
+    finally:
+        mod.cvar_action_progressive_widening_arena = original
+
+    assert observed_depths, "no action-PW calls recorded"
+    unique_depths = set(observed_depths)
+    assert len(unique_depths) > 1, (
+        f"expected multiple recursion depths threaded through action "
+        f"selection, got only {unique_depths}; the planner is passing "
+        f"a constant depth instead of the recursion depth"
+    )
+    assert any(d < planner.depth for d in unique_depths), (
+        f"expected some calls at depth < planner.depth={planner.depth}, "
+        f"saw {sorted(unique_depths)}"
+    )

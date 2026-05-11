@@ -3,7 +3,6 @@ import random
 
 import numpy as np
 import pytest
-from anytree import PostOrderIter
 
 from POMDPPlanners.core.belief import (
     UnweightedParticleBeliefStateUpdate,
@@ -12,6 +11,7 @@ from POMDPPlanners.core.belief import (
 )
 from POMDPPlanners.core.environment import SpaceType
 from POMDPPlanners.core.tree import ActionNode, BeliefNode
+from POMDPPlanners.core.tree.arena import ACTION, BELIEF, Tree
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
     ContinuousLightDarkPOMDP,
     ContinuousLightDarkPOMDPDiscreteActions,
@@ -26,9 +26,6 @@ from POMDPPlanners.planners.planners_utils.dpw import (
     ucb1_exploration,
 )
 from POMDPPlanners.planners.planners_utils.rollout import random_rollout_action_sampler
-from POMDPPlanners.tests.test_planners.test_mcts_planners.test_utils import (
-    validate_tree_structure_with_progressive_widening,
-)
 from POMDPPlanners.utils.action_samplers import UnitCircleActionSampler
 
 np.random.seed(42)
@@ -349,7 +346,7 @@ def test_pomcp_dpw_progressive_widening_adds_new_action_to_unvisited_node(belief
     assert action_node.q_value == 0.0  # Initial Q-value
 
 
-def test_action_progressive_widening_existing_action(planner, belief, action_sampler):
+def test_action_progressive_widening_existing_action(planner, belief):
     belief_node = BeliefNode(belief=belief, observation=None)
 
     # Add some children first
@@ -446,38 +443,191 @@ def test_rollout_max_depth(planner):
 
 
 def test_simulate_path(planner, belief):
-    belief_node = BeliefNode(belief=belief, observation=None)
-    depth = 0
+    tree = Tree()
+    root_id = tree.add_belief_node(belief)
 
-    return_value = planner._simulate_path(belief_node=belief_node, depth=depth)
+    return_value = planner._simulate_path(tree=tree, belief_id=root_id, depth=0)
     assert isinstance(return_value, float)
-    assert belief_node.visit_count >= 1
+    assert tree.visit_count[root_id] >= 1
 
 
 def test_simulate_state_path_terminal_state(planner, belief):
-    belief_node = BeliefNode(belief=belief, observation=None)
-    depth = 0
+    tree = Tree()
+    root_id = tree.add_belief_node(belief)
 
-    # Mock terminal state
     original_is_terminal = planner.environment.is_terminal
     planner.environment.is_terminal = lambda state: True
 
     state = belief.sample()
-    return_value = planner._simulate_state_path(state=state, belief_node=belief_node, depth=depth)
+    return_value = planner._simulate_state_path(tree=tree, state=state, belief_id=root_id, depth=0)
     assert return_value == 0
-    assert belief_node.visit_count == 1
+    assert tree.visit_count[root_id] == 1
 
-    # Restore original method
     planner.environment.is_terminal = original_is_terminal
 
 
 def test_simulate_state_path_max_depth(planner, belief):
-    belief_node = BeliefNode(belief=belief, observation=None)
+    tree = Tree()
+    root_id = tree.add_belief_node(belief)
     state = belief.sample()
     depth = planner.depth + 1
 
-    return_value = planner._simulate_state_path(state=state, belief_node=belief_node, depth=depth)
+    return_value = planner._simulate_state_path(
+        tree=tree, state=state, belief_id=root_id, depth=depth
+    )
     assert return_value == 0
+
+
+def test_simulate_state_path_saturated_branch_uses_parent_state_for_reward(
+    planner, environment, belief
+):
+    """Saturated DPW branch must compute reward from the parent state, not the sampled next_state.
+
+    Purpose: pins the reward semantics in the DPW saturated branch. The
+    widening branch (line 158) computes ``environment.reward(state=state,
+    action=action)`` from the *parent* state. A previous implementation in
+    the saturated branch (line 199) used the sampled next_state instead, so
+    the two execution paths produced different reward signals whenever
+    progressive widening saturated — biasing Q-estimates against actions
+    whose successor states have systematically different per-state rewards.
+
+    Given: A POMCP_DPW tree with a root belief, a single action child
+        (visit_count=1), and a single belief grandchild whose particle
+        list contains a state distinct from the parent state. Planner
+        configured with ``k_o=0.1`` / ``alpha_o=0.5`` so the saturated
+        branch fires (1 child > 0.1 threshold), ``k_a=0.1`` /
+        ``alpha_a=0.5`` so action widening does not fire (UCB picks the
+        existing action child), and ``depth=0`` so the recursive
+        ``_simulate_state_path`` call short-circuits at depth=1.
+    When: ``_simulate_state_path`` runs from the root with the parent
+        state.
+    Then: ``environment.reward`` is invoked with the parent state, never
+        with the next-state particle stored in the belief grandchild.
+
+    Test type: unit
+    """
+    parent_state = "tiger_left"
+    particle_state = "tiger_right"  # distinct from parent_state
+    action_label = "listen"  # non-terminal for both states under TigerPOMDP
+
+    planner.k_o = 0.1
+    planner.alpha_o = 0.5
+    planner.k_a = 0.1
+    planner.alpha_a = 0.5
+    planner.depth = 0
+
+    tree = Tree()
+    root_id = tree.add_belief_node(belief)
+    tree.visit_count[root_id] = 1
+
+    action_id = tree.add_action_node(action=action_label, parent_id=root_id)
+    tree.visit_count[action_id] = 1
+
+    child_belief = UnweightedParticleBeliefStateUpdate()
+    child_belief.particles = [particle_state]
+    child_id = tree.add_belief_node(
+        belief=child_belief,
+        observation="dummy_obs",
+        parent_id=action_id,
+        weight=1.0,
+    )
+    tree.visit_count[child_id] = 1
+
+    captured_calls = []
+    real_reward = environment.reward
+
+    def spy_reward(state, action, next_state=None):
+        captured_calls.append((state, next_state))
+        return real_reward(state=state, action=action, next_state=next_state)
+
+    environment.reward = spy_reward
+    try:
+        planner._simulate_state_path(tree=tree, state=parent_state, belief_id=root_id, depth=0)
+    finally:
+        environment.reward = real_reward
+
+    captured_states = [s for s, _ in captured_calls]
+    captured_next_states = [ns for _, ns in captured_calls]
+    assert parent_state in captured_states, (
+        f"saturated branch must call environment.reward(state=parent_state); "
+        f"captured states: {captured_states}"
+    )
+    assert particle_state not in captured_states, (
+        f"saturated branch must not call environment.reward with the sampled "
+        f"next_state as the parent state; captured states: {captured_states}"
+    )
+    assert particle_state in captured_next_states, (
+        f"saturated branch must thread the sampled next_state into "
+        f"environment.reward(..., next_state=...); captured next_states: "
+        f"{captured_next_states}"
+    )
+
+
+def test_simulate_state_path_widening_branch_threads_next_state_to_reward(
+    planner, environment, belief
+):
+    """Widening DPW branch must thread the freshly sampled next_state into reward().
+
+    Purpose: Pins reward semantics in the DPW widening branch
+        (``pomcp_dpw.py`` line 158). After ``sample_next_state`` draws the
+        post-transition state, ``environment.reward`` must be called with
+        ``next_state=`` set to that draw so transition-dependent reward
+        terms (collision penalties, win bonuses) score against the same
+        outcome as the trajectory rather than resampling.
+
+    Given: A POMCP_DPW tree whose root action child has zero existing
+        belief children and ``visit_count=1``, with ``k_o=10`` /
+        ``alpha_o=1.0`` so ``children_count <= k_o * action_visits**alpha_o``
+        holds and the widening branch fires; ``k_a=0.1`` / ``alpha_a=0.5``
+        so action widening does not add a new action; ``depth=0`` so the
+        recursive call short-circuits at depth=1.
+    When: ``_simulate_state_path`` runs from the root with ``parent_state``.
+    Then: ``environment.reward`` is invoked with ``state=parent_state`` and
+        ``next_state`` set to a non-None value (the just-sampled draw).
+
+    Test type: unit
+    """
+    parent_state = "tiger_left"
+    action_label = "listen"
+
+    planner.k_o = 10.0
+    planner.alpha_o = 1.0
+    planner.k_a = 0.1
+    planner.alpha_a = 0.5
+    planner.depth = 0
+
+    tree = Tree()
+    root_id = tree.add_belief_node(belief)
+    tree.visit_count[root_id] = 1
+
+    action_id = tree.add_action_node(action=action_label, parent_id=root_id)
+    tree.visit_count[action_id] = 1
+
+    captured_calls = []
+    real_reward = environment.reward
+
+    def spy_reward(state, action, next_state=None):
+        captured_calls.append((state, next_state))
+        return real_reward(state=state, action=action, next_state=next_state)
+
+    environment.reward = spy_reward
+    try:
+        planner._simulate_state_path(tree=tree, state=parent_state, belief_id=root_id, depth=0)
+    finally:
+        environment.reward = real_reward
+
+    assert captured_calls, "widening branch did not invoke environment.reward"
+    states = [s for s, _ in captured_calls]
+    next_states = [ns for _, ns in captured_calls]
+    assert parent_state in states, (
+        f"widening branch must call environment.reward(state=parent_state); "
+        f"captured states: {states}"
+    )
+    assert any(ns is not None for ns in next_states), (
+        f"widening branch must thread the sampled next_state into "
+        f"environment.reward(..., next_state=...); captured next_states: "
+        f"{next_states}"
+    )
 
 
 def test_get_space_info(planner):
@@ -491,15 +641,15 @@ def test_get_space_info(planner):
 def test_integration_with_tiger_pomdp(planner, belief, environment, n_particles):
     current_belief = belief
     for _ in range(3):
-        action, policy_run_data = planner.action(current_belief)
+        action, _ = planner.action(current_belief)
         assert isinstance(action, list)
         assert len(action) == 1
         assert action[0] in planner.action_sampler.get_space()
 
         # Simulate environment step
         state = current_belief.sample()
-        next_state = environment.state_transition_model(state, action[0]).sample()[0]
-        observation = environment.observation_model(next_state, action[0]).sample()[0]
+        next_state = environment.sample_next_state(state=state, action=action[0])
+        observation = environment.sample_observation(next_state=next_state, action=action[0])
 
         # Update belief
         current_belief = current_belief.update(action[0], observation, environment)
@@ -517,9 +667,6 @@ def test_progressive_widening_parameters(planner, belief):
     action_node = ActionNode(action=0, parent=belief_node)
     action_node.visit_count = 50
 
-    # Create mock observation
-    observation = "tiger_growl_left"
-
     # Test observation progressive widening condition
     max_observations = planner.k_o * action_node.visit_count**planner.alpha_o
     assert max_observations > 0
@@ -532,18 +679,19 @@ def test_progressive_widening_parameters(planner, belief):
 
 def test_belief_node_data_structure(planner, belief):
     """Test that belief nodes maintain proper belief structure for states and weights."""
-    belief_node = BeliefNode(belief=belief, observation=None)
+    tree = Tree()
+    root_id = tree.add_belief_node(belief)
 
-    # Simulate one path to set up the data structure
-    planner._simulate_path(belief_node=belief_node, depth=0)
+    planner._simulate_path(tree=tree, belief_id=root_id, depth=0)
 
-    # Check that children have proper belief structure
-    for action_node in belief_node.children:
-        for child_belief_node in action_node.children:
-            # Check that the belief is an UnweightedParticleBeliefStateUpdate instance (POMCP tradition)
-            assert isinstance(child_belief_node.belief, UnweightedParticleBeliefStateUpdate)
-            assert hasattr(child_belief_node.belief, "particles")
-            assert isinstance(child_belief_node.belief.particles, list)
+    for action_id in tree.children_ids[root_id]:
+        assert tree.kind[action_id] == ACTION
+        for child_belief_id in tree.children_ids[action_id]:
+            assert tree.kind[child_belief_id] == BELIEF
+            child_belief = tree.belief[child_belief_id]
+            assert isinstance(child_belief, UnweightedParticleBeliefStateUpdate)
+            assert hasattr(child_belief, "particles")
+            assert isinstance(child_belief.particles, list)
 
 
 @pytest.mark.slow
@@ -573,7 +721,7 @@ def test_sanity_pomdp_action_selection():
     action_0_count = 0
 
     for _ in range(n_trials):
-        action, policy_run_data = planner.action(belief)
+        action, _ = planner.action(belief)
         assert isinstance(action, list)
         assert len(action) == 1
         assert action[0] in [0, 1]
@@ -588,146 +736,113 @@ def test_sanity_pomdp_action_selection():
 
 
 def test_tree_structure_after_construction(planner, belief):
-    """Test that the tree structure is properly constructed."""
-    belief_node = BeliefNode(belief=belief, observation=None)
+    """Test that the arena tree structure is properly constructed."""
+    tree = Tree()
+    root_id = tree.add_belief_node(belief)
 
-    # Run several simulations to build the tree
     for _ in range(50):
-        planner._simulate_path(belief_node=belief_node, depth=0)
+        planner._simulate_path(tree=tree, belief_id=root_id, depth=0)
 
-    # Verify tree structure
-    assert len(belief_node.children) > 0
-    assert all(isinstance(child, ActionNode) for child in belief_node.children)
+    action_ids = tree.children_ids[root_id]
+    assert len(action_ids) > 0
+    assert all(tree.kind[cid] == ACTION for cid in action_ids)
 
-    # Check that action nodes have proper structure
-    for action_node in belief_node.children:
-        assert action_node.parent == belief_node
-        assert action_node.visit_count > 0
-        assert action_node.q_value is not None
+    for action_id in action_ids:
+        assert tree.parent_id[action_id] == root_id
+        assert tree.visit_count[action_id] > 0
+        assert tree.q_value[action_id] is not None
 
-        # Check belief node children of action nodes
-        for belief_child in action_node.children:
-            assert isinstance(belief_child, BeliefNode)
-            assert belief_child.parent == action_node
-            assert hasattr(belief_child, "data")
+        for belief_child_id in tree.children_ids[action_id]:
+            assert tree.kind[belief_child_id] == BELIEF
+            assert tree.parent_id[belief_child_id] == action_id
 
 
 def test_q_value_updates(planner, belief):
-    """Test that Q-values are properly updated during simulation."""
-    belief_node = BeliefNode(belief=belief, observation=None)
+    """Test that Q-values are properly updated during simulation on the arena tree."""
+    tree = Tree()
+    root_id = tree.add_belief_node(belief)
 
-    # Create an action node
-    action_node = ActionNode(action=0, parent=belief_node)
-    initial_q_value = action_node.q_value
-    initial_visit_count = action_node.visit_count
+    planner._simulate_path(tree=tree, belief_id=root_id, depth=0)
 
-    # Run simulation
-    planner._simulate_path(belief_node=belief_node, depth=0)
-
-    # Check that some action node's Q-value was updated
-    action_updated = False
-    for child in belief_node.children:
-        if isinstance(child, ActionNode) and child.visit_count > initial_visit_count:
-            action_updated = True
-            break
-
+    action_updated = any(
+        tree.kind[cid] == ACTION and tree.visit_count[cid] > 0 for cid in tree.children_ids[root_id]
+    )
     assert action_updated, "No action node was updated during simulation"
 
 
 def test_visit_count_consistency(planner, belief):
-    """Test that visit counts are consistent throughout the tree."""
-    belief_node = BeliefNode(belief=belief, observation=None)
+    """Test that visit counts are consistent throughout the arena tree."""
+    tree = Tree()
+    root_id = tree.add_belief_node(belief)
 
-    # Run several simulations
     n_sims = 20
     for _ in range(n_sims):
-        planner._simulate_path(belief_node=belief_node, depth=0)
+        planner._simulate_path(tree=tree, belief_id=root_id, depth=0)
 
-    # Check visit count consistency
-    assert belief_node.visit_count == n_sims
+    assert tree.visit_count[root_id] == n_sims
 
-    # Check that action node visit counts sum correctly
     total_action_visits = sum(
-        child.visit_count for child in belief_node.children if isinstance(child, ActionNode)
+        tree.visit_count[cid] for cid in tree.children_ids[root_id] if tree.kind[cid] == ACTION
     )
-    assert (
-        total_action_visits <= belief_node.visit_count
-    )  # Allow for some variance due to tree structure
+    assert total_action_visits <= tree.visit_count[root_id]
 
 
 @pytest.mark.slow
 def test_pomcp_dpw_vs_pomcp_differences(planner, belief):
-    """Test that POMCP_DPW has distinct behavior from standard POMCP due to progressive widening."""
-    belief_node = BeliefNode(belief=belief, observation=None)
+    """Test POMCP_DPW progressive widening behavior on the arena tree."""
+    tree = Tree()
+    root_id = tree.add_belief_node(belief)
 
-    # Run simulations to build tree
     for _ in range(100):
-        planner._simulate_path(belief_node=belief_node, depth=0)
+        planner._simulate_path(tree=tree, belief_id=root_id, depth=0)
 
-    # POMCP_DPW should show progressive widening behavior:
-    # 1. Action nodes should be added progressively based on alpha_a
-    # 2. Observation nodes should be limited by k_o and alpha_o parameters
+    action_ids = tree.children_ids[root_id]
+    assert len(action_ids) > 0
 
-    # Check action progressive widening - number of action children should be reasonable
-    num_action_children = len(belief_node.children)
-    assert num_action_children > 0
-    # Note: Progressive widening may create more nodes than unique actions due to how it samples
-    # So we just check that some actions were created and it's reasonable
-    assert num_action_children >= 1
-
-    # Check observation progressive widening for action nodes
-    for action_node in belief_node.children:
-        if action_node.visit_count > 0:
-            max_allowed_observations = planner.k_o * action_node.visit_count**planner.alpha_o
-            actual_observations = len(action_node.children)
-            # Should respect the progressive widening constraint (within reasonable bounds)
-            assert actual_observations <= max_allowed_observations + 1  # Allow small variance
+    for action_id in action_ids:
+        action_visits = tree.visit_count[action_id]
+        if action_visits > 0:
+            max_allowed = planner.k_o * action_visits**planner.alpha_o
+            actual = len(tree.children_ids[action_id])
+            assert actual <= max_allowed + 1
 
 
 def test_unweighted_particle_belief_usage(planner, belief):
-    """Test that POMCP_DPW properly uses unweighted particle beliefs in observation nodes."""
-    belief_node = BeliefNode(belief=belief, observation=None)
+    """Test that POMCP_DPW properly uses unweighted particle beliefs (arena tree)."""
+    tree = Tree()
+    root_id = tree.add_belief_node(belief)
     state = belief.sample()
 
-    # Simulate one path to create observation nodes
-    planner._simulate_state_path(state=state, belief_node=belief_node, depth=0)
+    planner._simulate_state_path(tree=tree, state=state, belief_id=root_id, depth=0)
 
-    # Check that any created observation nodes use UnweightedParticleBeliefStateUpdate
-    for action_node in belief_node.children:
-        for observation_node in action_node.children:
-            assert isinstance(observation_node.belief, UnweightedParticleBeliefStateUpdate)
-            # Verify it has the expected structure
-            assert hasattr(observation_node.belief, "particles")
-            assert isinstance(observation_node.belief.particles, list)
+    for action_id in tree.children_ids[root_id]:
+        for obs_belief_id in tree.children_ids[action_id]:
+            obs_belief = tree.belief[obs_belief_id]
+            assert isinstance(obs_belief, UnweightedParticleBeliefStateUpdate)
+            assert hasattr(obs_belief, "particles")
+            assert isinstance(obs_belief.particles, list)
 
 
 @pytest.mark.slow
 def test_double_progressive_widening_integration(planner, belief):
-    """Test that both action and observation progressive widening work together."""
-    belief_node = BeliefNode(belief=belief, observation=None)
+    """Test that both action and observation progressive widening work together on arena."""
+    tree = Tree()
+    root_id = tree.add_belief_node(belief)
 
-    # Run enough simulations to see progressive widening effects
     for _ in range(200):
-        planner._simulate_path(belief_node=belief_node, depth=0)
+        planner._simulate_path(tree=tree, belief_id=root_id, depth=0)
 
-    # Verify double progressive widening is working:
-    # 1. Actions are added progressively
-    # 2. Observations are constrained by progressive widening
-
-    action_nodes = [child for child in belief_node.children if isinstance(child, ActionNode)]
-    assert len(action_nodes) > 0
+    action_ids = [cid for cid in tree.children_ids[root_id] if tree.kind[cid] == ACTION]
+    assert len(action_ids) > 0
 
     total_observations = 0
-    for action_node in action_nodes:
-        total_observations += len(action_node.children)
+    for action_id in action_ids:
+        total_observations += len(tree.children_ids[action_id])
+        action_visits = tree.visit_count[action_id]
+        if action_visits > 1:
+            max_obs = planner.k_o * action_visits**planner.alpha_o
+            assert len(tree.children_ids[action_id]) <= max_obs + 2
 
-        # Check that this action node respects observation progressive widening
-        if action_node.visit_count > 1:
-            max_obs = planner.k_o * action_node.visit_count**planner.alpha_o
-            actual_obs = len(action_node.children)
-            assert actual_obs <= max_obs + 2  # Allow some variance due to sampling
-
-    # Should have created some observations but be constrained by progressive widening
     assert total_observations >= 0
 
 
@@ -770,34 +885,29 @@ def test_basic_tree_structure(
     n_particles = 100
     belief = get_initial_belief(environment, n_particles=n_particles, resampling=True)
 
-    # ACT: Build minimal tree using _learn_tree method
-    root_belief_node = planner._learn_tree(belief=belief)
+    tree, root_id = planner._learn_tree(belief=belief)
 
-    # ASSERT: Verify basic tree structure properties for all nodes
-    for node in PostOrderIter(root_belief_node):
-        if isinstance(node, BeliefNode):
-            # BeliefNode basic validations
-            assert node.visit_count == 1, "BeliefNode visit count must be 1 with single simulation"
-            assert isinstance(node.v_value, (int, float)), "BeliefNode must have numeric v_value"
-
-            # Root vs non-root belief node properties
-            if node.depth > 0:
-                assert node.observation is not None, "Non-root BeliefNode must have observation"
-                assert node.parent is not None, "Non-root BeliefNode must have parent"
-                assert isinstance(node.parent, ActionNode), "BeliefNode parent must be ActionNode"
+    for node_id in range(len(tree)):
+        if tree.kind[node_id] == BELIEF:
+            assert tree.visit_count[node_id] == 1
+            assert isinstance(tree.v_value[node_id], (int, float))
+            if node_id == root_id:
+                assert tree.observation[node_id] is None
+                assert tree.parent_id[node_id] is None
             else:
-                assert node.observation is None, "Root BeliefNode must have no observation"
-                assert node.parent is None, "Root BeliefNode must have no parent"
-
-        elif isinstance(node, ActionNode):
-            # ActionNode basic validations
-            assert node.visit_count == 1, "ActionNode visit count must be 1 with single simulation"
-            assert isinstance(node.q_value, (int, float)), "ActionNode must have numeric q_value"
-            assert node.parent is not None, "ActionNode must have parent"
-            assert isinstance(node.parent, BeliefNode), "ActionNode parent must be BeliefNode"
-            assert node.action is not None, "ActionNode must have action"
+                assert tree.observation[node_id] is not None
+                parent_id = tree.parent_id[node_id]
+                assert parent_id is not None
+                assert tree.kind[parent_id] == ACTION
+        elif tree.kind[node_id] == ACTION:
+            assert tree.visit_count[node_id] == 1
+            assert isinstance(tree.q_value[node_id], (int, float))
+            parent_id = tree.parent_id[node_id]
+            assert parent_id is not None
+            assert tree.kind[parent_id] == BELIEF
+            assert tree.action[node_id] is not None
         else:
-            raise ValueError(f"Unknown node type: {type(node)}")
+            raise ValueError(f"Unknown kind: {tree.kind[node_id]}")
 
 
 def test_pomcp_dpw_tree_structure_construction(
@@ -839,23 +949,21 @@ def test_pomcp_dpw_tree_structure_construction(
     n_particles = 100
     belief = get_initial_belief(environment, n_particles=n_particles, resampling=True)
 
-    # ACT: Build complete tree using _learn_tree method
-    root_belief_node = planner._learn_tree(belief=belief)
+    tree, root_id = planner._learn_tree(belief=belief)
 
-    # ASSERT: Use shared validation function with POMCP_DPW-specific belief type
-    validate_tree_structure_with_progressive_widening(
-        root_belief_node=root_belief_node,
-        planner=planner,
-        n_simulations=n_simulations,
-        depth=depth,
-        k_o=k_o,
-        k_a=k_a,
-        alpha_o=alpha_o,
-        alpha_a=alpha_a,
-        action_sampler=action_sampler,
-        expected_belief_type=UnweightedParticleBeliefStateUpdate,  # POMCP_DPW uses unweighted particles
-        planner_type="POMCP_DPW",  # Maintain original POMCP_DPW logic
-    )
+    # Inline arena-aware validation (replaces the legacy
+    # validate_tree_structure_with_progressive_widening helper, which still
+    # serves planners not yet migrated to the arena tree).
+    del environment, discount_factor, depth, exploration_constant, k_o, alpha_o, action_sampler
+    assert tree.kind[root_id] == BELIEF
+    assert tree.visit_count[root_id] == n_simulations
+    action_children = [cid for cid in tree.children_ids[root_id] if tree.kind[cid] == ACTION]
+    assert len(action_children) > 0
+    assert len(action_children) <= k_a * (n_simulations**alpha_a) + 1
+    for action_id in action_children:
+        for belief_id in tree.children_ids[action_id]:
+            assert tree.kind[belief_id] == BELIEF
+            assert isinstance(tree.belief[belief_id], UnweightedParticleBeliefStateUpdate)
 
 
 def test_numpy_array_observation_comparison():
@@ -904,16 +1012,16 @@ def test_numpy_array_observation_comparison():
         name="TestObservationComparison",
     )
 
-    # Create minimal belief
     belief = UnweightedParticleBeliefStateUpdate(particles=[np.array([0.0, 0.0])])
 
-    # Test the simulate_state_path method with numpy observations
-    belief_node = BeliefNode(belief=belief, observation=None)
+    tree = Tree()
+    root_id = tree.add_belief_node(belief)
     state = np.array([0.0, 0.0])
 
-    # This should not raise an error about array truth values
     try:
-        return_value = planner._simulate_state_path(state=state, belief_node=belief_node, depth=0)
+        return_value = planner._simulate_state_path(
+            tree=tree, state=state, belief_id=root_id, depth=0
+        )
         assert isinstance(return_value, (int, float))
     except ValueError as e:
         if "truth value of an array" in str(e):
@@ -1114,7 +1222,7 @@ def test_pomcp_dpw_config_id_consistency_across_evaluations(environment, discret
     initial_belief = get_initial_belief(environment, n_particles=50)
 
     # Perform multiple policy evaluations
-    for i in range(3):
+    for _ in range(3):
         action, run_data = pomcp_dpw.action(initial_belief)
 
         # Check config_id remains the same
@@ -1201,14 +1309,100 @@ def test_min_visit_count_per_action_enforcement(environment, discrete_action_sam
     n_particles = 10
     belief = get_initial_belief(environment, n_particles=n_particles, resampling=True)
 
-    # ACT: Build tree using _learn_tree method
-    root_belief_node = planner._learn_tree(belief=belief)
+    tree, root_id = planner._learn_tree(belief=belief)
 
-    # ASSERT: Verify all action nodes at root have at least min_visit_count_per_action visits
-    action_nodes = [child for child in root_belief_node.children if isinstance(child, ActionNode)]
-    assert len(action_nodes) >= 0, "At least one action node should be created"
+    action_ids = [cid for cid in tree.children_ids[root_id] if tree.kind[cid] == ACTION]
+    assert len(action_ids) >= 0
 
-    for action_node in action_nodes:
+    for action_id in action_ids:
+        visits = tree.visit_count[action_id]
         assert (
-            action_node.visit_count >= min_visit_count
-        ), f"Action node {action_node.action} has {action_node.visit_count} visits, expected at least {min_visit_count}"
+            visits >= min_visit_count
+        ), f"Action {tree.action[action_id]} has {visits} visits, expected at least {min_visit_count}"
+
+
+def test_observation_cdf_consistency(
+    environment,
+    discount_factor,
+    depth,
+    exploration_constant,
+    k_o,
+    k_a,
+    alpha_o,
+    alpha_a,
+):
+    """Test that the per-parent children_cdf invariants hold throughout the tree.
+
+    Purpose: Validates the arena tree's ``children_cdf`` (used by
+    ``sample_belief_child`` for O(log K) weighted sampling at observation-widening
+    action nodes) is monotonically non-decreasing and totals to the sum of
+    children weights for every parent in the tree.
+
+    Given: POMCP_DPW planner built with sufficient simulations to expand at least
+    one action node with multiple belief children (n_simulations=300). The action
+    sampler uses the environment's real action space so that observations are not
+    collapsed to a single sentinel by the environment.
+    When: The tree is built via ``_learn_tree`` and every parent (belief and
+    action) is walked.
+    Then: For every parent with children, the CDF length matches children count,
+    is monotonically non-decreasing, and ``cdf[-1]`` equals the sum of children
+    weights within absolute tolerance ``1e-6``. At least one action node has
+    multiple belief children (otherwise the OW invariant is vacuous).
+
+    Test type: unit
+    """
+    cdf_action_sampler = MockActionSampler(environment.get_actions())
+    planner = POMCP_DPW(
+        environment=environment,
+        discount_factor=discount_factor,
+        depth=depth,
+        exploration_constant=exploration_constant,
+        k_o=k_o,
+        k_a=k_a,
+        alpha_o=alpha_o,
+        alpha_a=alpha_a,
+        n_simulations=300,
+        action_sampler=cdf_action_sampler,
+        name="TestPOMCP_DPW_CDF",
+    )
+
+    n_particles = 100
+    belief = get_initial_belief(environment, n_particles=n_particles, resampling=True)
+
+    tree, root_id = planner._learn_tree(belief=belief)
+    del root_id  # walk all parents in the arena instead of subtree-only
+
+    multi_child_action_seen = False
+    for parent_id in range(len(tree)):
+        children = tree.children_ids[parent_id]
+        if not children:
+            continue
+        cdf = tree.children_cdf[parent_id]
+
+        # Length matches.
+        assert len(cdf) == len(children), (
+            f"Parent {parent_id} (kind={tree.kind[parent_id]}) has {len(children)} "
+            f"children but CDF has {len(cdf)} entries"
+        )
+
+        # Monotonic non-decreasing (allow tiny float slack).
+        for i in range(1, len(cdf)):
+            assert cdf[i] >= cdf[i - 1] - 1e-9, (
+                f"Parent {parent_id} CDF not monotone at index {i}: "
+                f"cdf[{i - 1}]={cdf[i - 1]}, cdf[{i}]={cdf[i]}"
+            )
+
+        # Total equals sum of children weights.
+        total_weight = sum(tree.weight[cid] for cid in children)
+        assert abs(cdf[-1] - total_weight) < 1e-6, (
+            f"Parent {parent_id} CDF total {cdf[-1]} != sum of child weights "
+            f"{total_weight} (kind={tree.kind[parent_id]})"
+        )
+
+        if tree.kind[parent_id] == ACTION and len(children) >= 2:
+            multi_child_action_seen = True
+
+    assert multi_child_action_seen, (
+        "No action node with multiple belief children found; observation-widening "
+        "CDF invariant is vacuous on this tree. Increase n_simulations."
+    )

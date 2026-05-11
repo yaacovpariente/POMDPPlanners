@@ -19,30 +19,31 @@ Key aspects:
 - Safety metrics track violation rates over episodes
 
 Classes:
-    SafeAntVelocityStateTransition: Physics simulation with force control
-    SafeAntVelocityObservation: Noisy position and velocity observations
     SafeAntVelocityPOMDP: Main safety-critical velocity control environment
 """
 
 from enum import Enum
+from math import hypot
 from pathlib import Path
-from typing import Any, List, Optional, Sequence, Tuple, Union
+from collections.abc import Hashable
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
 from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
-    ObservationModel,
     SpaceInfo,
     SpaceType,
-    StateTransitionModel,
 )
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
+from POMDPPlanners.environments.safety_ant_velocity_pomdp import _native
 from POMDPPlanners.environments.safety_ant_velocity_pomdp.safety_ant_velocity_visualizer import (
     SafeAntVelocityVisualizer,
 )
 from POMDPPlanners.utils.statistics_utils import confidence_interval
+
+DEFAULT_FORCE_SCALES: np.ndarray = np.array([0.0, 0.33, 0.67, 1.0])
 
 
 class SafeAntVelocityPOMDPMetrics(Enum):
@@ -54,265 +55,15 @@ class SafeAntVelocityPOMDPMetrics(Enum):
     TOTAL_CRITICAL_VIOLATIONS = "total_critical_violations"
 
 
-class SafeAntVelocityStateTransition(StateTransitionModel):
-    """Physics-based state transition model for Safety Ant Velocity POMDP.
-
-    This model simulates simplified physics with force application, damping, and
-    random force directions. The agent can choose different force magnitudes
-    but cannot control the direction, creating uncertainty in the outcomes.
-
-    Physics equations:
-    - acceleration = (force - damping * velocity) / mass
-    - velocity += acceleration * dt
-    - position += velocity * dt
-
-    Attributes:
-        state: Current state [position_x, position_y, velocity_x, velocity_y]
-        action: Force magnitude index (0=no force, 1=small, 2=medium, 3=large)
-        dt: Time step for physics integration
-        mass: Mass of the agent (affects acceleration)
-        damping: Damping coefficient (opposes velocity)
-        max_force: Maximum force magnitude
-        force_scales: Force scaling factors for each action [0.0, 0.33, 0.67, 1.0]
-        position: Current position [x, y]
-        velocity: Current velocity [vx, vy]
-
-    Example:
-        >>> import numpy as np
-        >>> np.random.seed(42)  # For reproducible results
-        >>> # Define current state [pos_x, pos_y, vel_x, vel_y]
-        >>> state = np.array([0.5, -0.2, 1.0, 0.5])
-        >>> action = 2  # Apply medium force
-        >>>
-        >>> # Create transition model
-        >>> transition = SafeAntVelocityStateTransition(
-        ...     state=state,
-        ...     action=action,
-        ...     dt=0.1,
-        ...     mass=1.0,
-        ...     damping=0.1,
-        ...     max_force=1.0
-        ... )
-        >>>
-        >>> # Simulate physics step with random force direction
-        >>> next_state = transition.sample()[0]  # doctest: +SKIP
-        >>> # Returns new [pos_x, pos_y, vel_x, vel_y] after physics
-        >>> new_pos = next_state[:2]  # doctest: +SKIP
-        >>> new_vel = next_state[2:4]  # doctest: +SKIP
-    """
-
-    def __init__(
-        self,
-        state: np.ndarray,
-        action: int,
-        dt: float = 0.1,
-        mass: float = 1.0,
-        damping: float = 0.1,
-        max_force: float = 1.0,
-    ):
-        super().__init__(state, action)
-        self.dt = dt
-        self.mass = mass
-        self.damping = damping
-        self.max_force = max_force
-
-        # Convert action index to force magnitude
-        self.force_scales = [0.0, 0.33, 0.67, 1.0]  # Different force magnitudes
-
-        # State components
-        self.position = state[:2]
-        self.velocity = state[2:4]
-
-    def sample(self, n_samples: int = 1) -> List[Any]:
-        next_states = []
-        for _ in range(n_samples):
-            # Get force magnitude from action
-            force_magnitude = self.force_scales[self.action] * self.max_force
-
-            # Random force direction
-            force_direction = np.random.uniform(-np.pi, np.pi)
-            force = force_magnitude * np.array([np.cos(force_direction), np.sin(force_direction)])
-
-            # Physics simulation (simplified)
-            acceleration = (force - self.damping * self.velocity) / self.mass
-            new_velocity = self.velocity + acceleration * self.dt
-            new_position = self.position + new_velocity * self.dt
-
-            # Combine into new state
-            next_state = np.concatenate([new_position, new_velocity])
-            next_states.append(next_state)
-
-        return next_states
-
-    def probability(self, values: List[Any]) -> np.ndarray:
-        """Calculate transition probabilities for given next states.
-
-        Since the force direction is uniformly random over [-π, π], the probability
-        distribution is continuous and depends on the distance from expected dynamics.
-        We approximate this using a mixture of Gaussians representing the random
-        force direction uncertainty.
-
-        Args:
-            values: List of potential next states
-
-        Returns:
-            Array of (unnormalized) probabilities for each state
-        """
-        # Get force magnitude from action
-        force_magnitude = self.force_scales[self.action] * self.max_force
-
-        if force_magnitude == 0:
-            # No force applied - deterministic transition
-            # Only damping affects the dynamics
-            acceleration = -self.damping * self.velocity / self.mass
-            expected_velocity = self.velocity + acceleration * self.dt
-            expected_position = self.position + expected_velocity * self.dt
-            expected_state = np.concatenate([expected_position, expected_velocity])
-
-            # For zero force, transition is deterministic
-            probs = np.array(
-                [
-                    1.0 if np.allclose(state, expected_state, rtol=1e-5, atol=1e-8) else 0.0
-                    for state in values
-                ]
-            )
-        else:
-            # Force is applied with random direction uniformly sampled from [-π, π]
-            # The resulting next states form a continuous distribution on a ring
-            # All states consistent with the force magnitude have equal probability density
-
-            # Tolerance for checking consistency
-            position_tolerance = 0.01
-            force_tolerance = 0.05
-
-            probs = []
-            for next_state in values:
-                # Extract components from the next state
-                next_position = next_state[:2]
-                next_velocity = next_state[2:4]
-
-                # Check if position is consistent with velocity
-                # next_position = position + next_velocity * dt
-                expected_position = self.position + next_velocity * self.dt
-                position_error = np.linalg.norm(next_position - expected_position)
-
-                # Check if velocity is consistent with some force direction
-                # next_velocity = velocity + (force - damping * velocity) / mass * dt
-                # Solving for force: force = (next_velocity - velocity) * mass / dt + damping * velocity
-                required_force = (
-                    next_velocity - self.velocity
-                ) * self.mass / self.dt + self.damping * self.velocity
-                required_force_magnitude = np.linalg.norm(required_force)
-                force_magnitude_error = abs(required_force_magnitude - force_magnitude)
-
-                # Assign uniform probability if state is consistent with physics
-                if position_error < position_tolerance and force_magnitude_error < force_tolerance:
-                    prob = 1.0  # Uniform over consistent states
-                else:
-                    prob = 0.0  # Zero for inconsistent states
-
-                probs.append(prob)
-
-            probs = np.array(probs)
-
-        # Normalize probabilities
-        total = np.sum(probs)
-        if total > 0:
-            probs = probs / total
-
-        return probs
-
-
-class SafeAntVelocityObservation(ObservationModel):
-    """Noisy observation model for Safety Ant Velocity POMDP.
-
-    This model adds Gaussian noise to both position and velocity measurements,
-    creating partial observability that makes velocity estimation challenging.
-    Higher noise in velocity measurements reflects the difficulty of measuring
-    velocity precisely in practice.
-
-    Attributes:
-        next_state: True state after action execution
-        action: Action that was taken (not used in observation generation)
-        position_noise: Standard deviation of Gaussian noise for position
-        velocity_noise: Standard deviation of Gaussian noise for velocity
-        position: True position [x, y]
-        velocity: True velocity [vx, vy]
-
-    Example:
-        >>> import numpy as np
-        >>> np.random.seed(42)  # For reproducible results
-        >>> # True state after physics simulation
-        >>> true_state = np.array([0.6, -0.1, 1.2, 0.8])  # [x, y, vx, vy]
-        >>> action = 2
-        >>>
-        >>> # Create observation model
-        >>> obs_model = SafeAntVelocityObservation(
-        ...     next_state=true_state,
-        ...     action=action,
-        ...     position_noise=0.1,
-        ...     velocity_noise=0.2
-        ... )
-        >>>
-        >>> # Sample noisy observation
-        >>> observation = obs_model.sample()[0]  # doctest: +SKIP
-        >>> # Returns [noisy_x, noisy_y, noisy_vx, noisy_vy]
-        >>> # Position noise: ±0.1, velocity noise: ±0.2
-        >>>
-        >>> # Calculate observation probability
-        >>> prob = obs_model.probability([observation])  # doctest: +SKIP
-    """
-
-    def __init__(
-        self,
-        next_state: np.ndarray,
-        action: int,
-        position_noise: float = 0.1,
-        velocity_noise: float = 0.2,
-    ):
-        super().__init__(next_state=next_state, action=action)
-        self.position_noise = position_noise
-        self.velocity_noise = velocity_noise
-
-        # State components
-        self.position = next_state[:2]
-        self.velocity = next_state[2:4]
-
-    def sample(self, n_samples: int = 1) -> List[Any]:
-        observations = []
-        for _ in range(n_samples):
-            # Add noise to position and velocity observations
-            noisy_position = self.position + np.random.normal(0, self.position_noise, size=2)
-            noisy_velocity = self.velocity + np.random.normal(0, self.velocity_noise, size=2)
-
-            # Combine observations
-            observation = np.concatenate([noisy_position, noisy_velocity])
-            observations.append(observation)
-        return observations
-
-    def probability(self, values: List[Any]) -> np.ndarray:
-        # Calculate probabilities based on Gaussian noise model for list of observations
-        probabilities = []
-        for observation in values:
-            # Ensure observation is numpy array with correct shape
-            if not isinstance(observation, np.ndarray) or observation.size == 0:
-                raise ValueError(
-                    f"Expected non-empty numpy array observation, got {type(observation)} with shape {getattr(observation, 'shape', 'unknown')}"
-                )
-
-            if observation.shape != (4,):
-                raise ValueError(f"Expected observation shape (4,), got {observation.shape}")
-
-            position_diff = observation[:2] - self.position
-            velocity_diff = observation[2:4] - self.velocity
-
-            position_log_prob = -0.5 * np.sum(position_diff**2) / (self.position_noise**2)
-            velocity_log_prob = -0.5 * np.sum(velocity_diff**2) / (self.velocity_noise**2)
-
-            prob = np.exp(position_log_prob + velocity_log_prob)
-            probabilities.append(prob)
-
-        return np.array(probabilities)
+def _build_safe_ant_obs_covariance(position_noise: float, velocity_noise: float) -> np.ndarray:
+    return np.diag(
+        [
+            position_noise**2,
+            position_noise**2,
+            velocity_noise**2,
+            velocity_noise**2,
+        ]
+    )
 
 
 class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
@@ -408,39 +159,87 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
             use_queue_logger=use_queue_logger,
         )
 
-    def state_transition_model(self, state: np.ndarray, action: int) -> StateTransitionModel:
-        return SafeAntVelocityStateTransition(
-            state=state,
-            action=action,
-            dt=self.dt,
-            mass=self.mass,
-            damping=self.damping,
-            max_force=self.max_force,
+        # Cached observation covariance — built once from env params; identical
+        # to what the per-call observation wrapper builds via
+        # ``_build_safe_ant_obs_covariance``. Reused on the hot-path native-
+        # kernel observation override to skip the per-call allocation.
+        self._observation_covariance = _build_safe_ant_obs_covariance(
+            position_noise, velocity_noise
         )
 
-    def observation_model(self, next_state: np.ndarray, action: int) -> ObservationModel:
-        return SafeAntVelocityObservation(
-            next_state=next_state,
-            action=action,
-            position_noise=self.position_noise,
-            velocity_noise=self.velocity_noise,
+        # Cached force scales as a contiguous float64 array for the native
+        # simulate_rollout kernel.
+        self._force_scales_f64: np.ndarray = np.ascontiguousarray(
+            DEFAULT_FORCE_SCALES, dtype=np.float64
         )
 
-    def reward(self, state: np.ndarray, action: int) -> float:
-        # Extract velocity components
-        velocity = state[2:4]
-        speed = np.linalg.norm(velocity)
+        # Per-action native-kernel caches. The transition kernel only depends on
+        # ``(action, dt, mass, damping, max_force, force_scales)``; the
+        # observation kernel only depends on ``(action, covariance)``. The
+        # state / next_state argument is a per-call mutable. We construct one
+        # kernel per discrete action on first use and reuse it across
+        # subsequent calls via ``set_state`` / ``set_next_state`` -- this
+        # collapses the 5x per-call ``numpy.asarray`` + Cholesky + GIL
+        # round-trip overhead that showed up in cProfile.
+        self._trans_kernel_cache: Dict[int, Any] = {}
+        self._obs_kernel_cache: Dict[int, Any] = {}
 
-        # Base reward is proportional to movement (encourage exploration)
+    def __getstate__(self) -> dict:
+        # pybind11 kernels are not picklable; rebuild lazily on the receiver.
+        state = self.__dict__.copy()
+        state["_trans_kernel_cache"] = {}
+        state["_obs_kernel_cache"] = {}
+        return state
+
+    def __setstate__(self, state: dict) -> None:
+        vars(self).update(state)
+        self._trans_kernel_cache = {}
+        self._obs_kernel_cache = {}
+
+    def _get_trans_kernel(self, action: int) -> Any:
+        kernel = self._trans_kernel_cache.get(int(action))
+        if kernel is None:
+            kernel = _native.SafeAntVelocityTransitionCpp(
+                state=np.zeros(4, dtype=np.float64),
+                action=int(action),
+                dt=self.dt,
+                mass=self.mass,
+                damping=self.damping,
+                max_force=self.max_force,
+                force_scales=DEFAULT_FORCE_SCALES,
+            )
+            self._trans_kernel_cache[int(action)] = kernel
+        return kernel
+
+    def _get_obs_kernel(self, action: int) -> Any:
+        kernel = self._obs_kernel_cache.get(int(action))
+        if kernel is None:
+            kernel = _native.SafeAntVelocityObservationCpp(
+                next_state=np.zeros(4, dtype=np.float64),
+                action=int(action),
+                covariance=self._observation_covariance,
+            )
+            self._obs_kernel_cache[int(action)] = kernel
+        return kernel
+
+    def reward(self, state: np.ndarray, action: int, next_state: Any = None) -> float:
+        # ``hypot`` outperforms ``numpy.linalg.norm`` for fixed 2-D inputs:
+        # cProfile attributed ~25% of POMCPOW wall time to the norm calls
+        # in this method plus ``is_terminal``.
+        del action, next_state
+        speed = hypot(float(state[2]), float(state[3]))
         reward = speed * self.movement_reward_scale
-
-        # Penalty for exceeding safe velocity
         if speed > self.safe_velocity_threshold:
             reward += self.safety_violation_penalty
-
         return float(reward)
 
-    def reward_batch(self, states: Union[np.ndarray, Sequence[Any]], action: int) -> np.ndarray:
+    def reward_batch(
+        self,
+        states: Union[np.ndarray, Sequence[Any]],
+        action: int,
+        next_states: Optional[Union[np.ndarray, Sequence[Any]]] = None,
+    ) -> np.ndarray:
+        del action, next_states
         states_arr = np.asarray(states)
         speeds = np.linalg.norm(states_arr[:, 2:4], axis=1)
         rewards = speeds * self.movement_reward_scale
@@ -448,9 +247,10 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
         return rewards
 
     def is_terminal(self, state: np.ndarray) -> bool:
-        # Episode ends if velocity exceeds safe threshold by too much
-        velocity = state[2:4]
-        speed = np.linalg.norm(velocity)
+        # Episode ends if velocity exceeds safe threshold by too much.
+        # ``hypot`` is significantly faster than ``numpy.linalg.norm`` on
+        # 2-element input — see ``reward`` for the same optimisation.
+        speed = hypot(float(state[2]), float(state[3]))
         return bool(speed > self.safe_velocity_threshold * 1.5)  # 50% margin
 
     def initial_state_dist(self) -> Distribution:
@@ -475,6 +275,10 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
 
     def is_equal_observation(self, observation1: np.ndarray, observation2: np.ndarray) -> bool:
         return np.array_equal(observation1, observation2)
+
+    def hash_action(self, action: Any) -> Hashable:
+        # Discrete int actions (force levels); already hashable.
+        return action
 
     def cache_visualization(self, history: List[StepData], cache_path: Path) -> None:
         """Cache animated visualization of the safety ant velocity episode.
@@ -514,9 +318,9 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
             total_steps = len(history.history)
 
             for step in history.history:
-                # Get velocity from state
-                velocity = step.state[2:4]  # [vx, vy]
-                speed = np.linalg.norm(velocity)
+                # Get velocity from state — ``hypot`` is used for the same
+                # reason as in ``reward`` / ``is_terminal``.
+                speed = hypot(float(step.state[2]), float(step.state[3]))
 
                 # Count safety violations
                 if speed > self.safe_velocity_threshold:
@@ -568,23 +372,188 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
             ),
             MetricValue(
                 name=SafeAntVelocityPOMDPMetrics.TOTAL_SAFETY_VIOLATIONS.value,
-                value=sum(safety_violations),
+                value=float(np.mean(safety_violations)) if safety_violations else 0.0,
                 lower_confidence_bound=total_safety_violations_ci[0],
                 upper_confidence_bound=total_safety_violations_ci[1],
             ),
             MetricValue(
                 name=SafeAntVelocityPOMDPMetrics.TOTAL_CRITICAL_VIOLATIONS.value,
-                value=sum(critical_violations),
+                value=float(np.mean(critical_violations)) if critical_violations else 0.0,
                 lower_confidence_bound=total_critical_violations_ci[0],
                 upper_confidence_bound=total_critical_violations_ci[1],
             ),
         ]
 
+    # ── Env-API sampling and density methods ─────────────────────────
+    # These methods construct the native C++ kernel directly and
+    # provide the canonical sampling/density entry points used
+    # throughout the simulator and belief-update paths.
+
+    def sample_next_state(self, state: np.ndarray, action: int, n_samples: int = 1) -> Any:
+        kernel = self._get_trans_kernel(action)
+        kernel.set_state(state)
+        samples = kernel.sample(n_samples)
+        if n_samples == 1:
+            return samples[0]
+        return samples
+
+    def sample_observation(self, next_state: np.ndarray, action: int, n_samples: int = 1) -> Any:
+        kernel = self._get_obs_kernel(action)
+        kernel.set_next_state(next_state)
+        samples = kernel.sample(n_samples)
+        if n_samples == 1:
+            return samples[0]
+        return samples
+
+    def transition_log_probability(
+        self, state: np.ndarray, action: int, next_states: Any
+    ) -> np.ndarray:
+        # The force-direction distribution is uniform on a ring (no closed-form
+        # density). We use a tolerance-based consistency check: each candidate
+        # next state either matches the deterministic damped-integration step
+        # (zero-force regime) or lies on the action's force-magnitude ring
+        # within position/force tolerances (non-zero-force regime).
+        probs = np.asarray(self._transition_probability(state, action, list(next_states)))
+        return np.log(probs + 1e-300)
+
+    def _transition_probability(
+        self, state: np.ndarray, action: int, values: List[Any]
+    ) -> np.ndarray:
+        position = np.asarray(state, dtype=float)[:2]
+        velocity = np.asarray(state, dtype=float)[2:4]
+        force_magnitude = float(DEFAULT_FORCE_SCALES[action]) * self.max_force
+
+        if force_magnitude == 0:
+            acceleration = -self.damping * velocity / self.mass
+            expected_velocity = velocity + acceleration * self.dt
+            expected_position = position + expected_velocity * self.dt
+            expected_state = np.concatenate([expected_position, expected_velocity])
+            probs = np.array(
+                [
+                    1.0 if np.allclose(s, expected_state, rtol=1e-5, atol=1e-8) else 0.0
+                    for s in values
+                ]
+            )
+        else:
+            position_tolerance = 0.01
+            force_tolerance = 0.05
+
+            probs_list: List[float] = []
+            for next_state in values:
+                next_position = next_state[:2]
+                next_velocity = next_state[2:4]
+
+                expected_position = position + next_velocity * self.dt
+                position_error = np.linalg.norm(next_position - expected_position)
+
+                required_force = (
+                    next_velocity - velocity
+                ) * self.mass / self.dt + self.damping * velocity
+                required_force_magnitude = np.linalg.norm(required_force)
+                force_magnitude_error = abs(required_force_magnitude - force_magnitude)
+
+                if position_error < position_tolerance and force_magnitude_error < force_tolerance:
+                    probs_list.append(1.0)
+                else:
+                    probs_list.append(0.0)
+
+            probs = np.array(probs_list)
+
+        total = np.sum(probs)
+        if total > 0:
+            probs = probs / total
+
+        return probs
+
+    def observation_log_probability(
+        self, next_state: np.ndarray, action: int, observations: Any
+    ) -> np.ndarray:
+        kernel = self._get_obs_kernel(action)
+        kernel.set_next_state(next_state)
+        probs = np.asarray(kernel.probability(observations))
+        return np.log(probs + 1e-300)
+
+    def sample_next_state_batch(self, states: Any, action: int) -> np.ndarray:
+        states_array = np.ascontiguousarray(np.asarray(states, dtype=np.float64))
+        if states_array.ndim == 1:
+            states_array = states_array.reshape(1, -1)
+        # batch_sample reads the per-row state from ``states_array`` and never
+        # touches the kernel's stored state, so no set_state is needed here.
+        kernel = self._get_trans_kernel(action)
+        return np.asarray(kernel.batch_sample(states_array), dtype=np.float64)
+
+    def observation_log_probability_per_state(
+        self, next_states: Any, action: int, observation: Any
+    ) -> np.ndarray:
+        next_states_array = np.ascontiguousarray(np.asarray(next_states, dtype=np.float64))
+        if next_states_array.ndim == 1:
+            next_states_array = next_states_array.reshape(1, -1)
+        observation_array = np.ascontiguousarray(np.asarray(observation, dtype=np.float64))
+        # batch_log_likelihood reads per-row from ``next_states_array``; no
+        # set_next_state needed.
+        kernel = self._get_obs_kernel(action)
+        return np.asarray(
+            kernel.batch_log_likelihood(
+                next_particles=next_states_array,
+                observation=observation_array,
+            ),
+            dtype=np.float64,
+        )
+
+    def simulate_random_rollout(  # pylint: disable=unused-argument
+        self,
+        state: Any,
+        action_sampler: Any,
+        max_depth: int,
+        discount_factor: float,
+        depth: int = 0,
+    ) -> float:
+        """Random rollout via native C++ physics and reward kernel.
+
+        Pre-draws action indices and runs the full rollout in a single C++
+        call, avoiding per-step Python dispatch.
+
+        Args:
+            state: Current 4-D state ``[px, py, vx, vy]``.
+            action_sampler: Accepted for interface compatibility with the
+                base ``simulate_random_rollout`` signature; the native
+                rollout draws action indices via ``np.random.randint``
+                directly and never invokes the sampler.
+            max_depth: Maximum rollout depth.
+            discount_factor: Per-step discount factor.
+            depth: Depth already consumed by the search tree. Defaults to 0.
+
+        Returns:
+            Discounted sum of immediate rewards along the sampled trajectory.
+        """
+        steps_left = max_depth - depth
+        if steps_left <= 0:
+            return 0.0
+
+        state_arr = np.ascontiguousarray(np.asarray(state, dtype=np.float64).ravel())
+        action_indices = np.random.randint(0, len(self.actions), size=steps_left, dtype=np.int32)
+
+        return _native.simulate_rollout(
+            initial_state=state_arr,
+            action_indices=action_indices,
+            force_scales=self._force_scales_f64,
+            max_depth=max_depth,
+            start_depth=depth,
+            discount_factor=discount_factor,
+            dt=float(self.dt),
+            mass=float(self.mass),
+            damping=float(self.damping),
+            max_force=float(self.max_force),
+            safe_velocity_threshold=float(self.safe_velocity_threshold),
+            safety_violation_penalty=float(self.safety_violation_penalty),
+            movement_reward_scale=float(self.movement_reward_scale),
+        )
+
     def sample_next_step(
         self, state: np.ndarray, action: int
     ) -> Tuple[np.ndarray, np.ndarray, float]:
-        next_state = self.state_transition_model(state=state, action=action).sample()[0]
-        next_observation = self.observation_model(next_state=next_state, action=action).sample()[0]
+        next_state = self.sample_next_state(state=state, action=action)
+        next_observation = self.sample_observation(next_state=next_state, action=action)
         reward = self.reward(state=next_state, action=action)
 
         return next_state, next_observation, reward

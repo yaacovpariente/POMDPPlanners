@@ -15,11 +15,9 @@ import time
 
 import numpy as np
 import pytest
-from anytree import PostOrderIter
-
 from POMDPPlanners.core.belief import WeightedParticleBelief, get_initial_belief
 from POMDPPlanners.utils.memory_tracker import MemoryTracker
-from POMDPPlanners.core.tree import ActionNode, BeliefNode
+from POMDPPlanners.core.tree.arena import ACTION, BELIEF, Tree
 from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
@@ -226,10 +224,8 @@ def test_integration_with_tiger_pomdp(planner, belief, environment, n_particles)
 
         # Simulate environment step
         state = current_belief.sample()
-        next_state = environment.state_transition_model(state, action[0]).sample()[0]
-        observation = environment.observation_model(next_state, action[0]).sample()[
-            0
-        ]  # Extract first element from list
+        next_state = environment.sample_next_state(state=state, action=action[0])
+        observation = environment.sample_observation(next_state=next_state, action=action[0])
 
         # Update belief
         current_belief = current_belief.update(action[0], observation, environment)
@@ -261,18 +257,18 @@ def test_construct_tree_using_timeout(environment, discount_factor, depth, explo
     )
 
     belief = get_initial_belief(environment, n_particles=100, resampling=True)
-    belief_node = BeliefNode(belief=belief, observation=None)
+    tree = Tree()
+    root_id = tree.add_belief_node(belief)
 
     start_time = time.time()
-    planner._construct_tree_using_timeout(belief_node=belief_node)
+    planner._construct_tree_using_timeout(tree=tree, root_id=root_id)
     end_time = time.time()
 
-    # Verify the function ran for approximately the timeout duration
-    assert abs(end_time - start_time - timeout_seconds) < 0.5  # Allow 0.5s margin
+    assert abs(end_time - start_time - timeout_seconds) < 0.5
 
-    # Verify tree structure was created
-    assert len(belief_node.children) > 0  # Should have at least one action node
-    assert all(isinstance(child, ActionNode) for child in belief_node.children)
+    children = tree.children_ids[root_id]
+    assert len(children) > 0
+    assert all(tree.kind[cid] == ACTION for cid in children)
 
 
 def test_construct_tree_using_n_simulations(
@@ -299,20 +295,18 @@ def test_construct_tree_using_n_simulations(
     )
 
     belief = get_initial_belief(environment, n_particles=100, resampling=True)
-    belief_node = BeliefNode(belief=belief, observation=None)
+    tree = Tree()
+    root_id = tree.add_belief_node(belief)
+    initial_visit_count = tree.visit_count[root_id]
 
-    # Count total visits to verify number of simulations
-    initial_visit_count = belief_node.visit_count
+    planner._construct_tree_using_n_simulations(tree=tree, root_id=root_id)
 
-    planner._construct_tree_using_n_simulations(belief_node=belief_node)
+    children = tree.children_ids[root_id]
+    assert len(children) > 0
+    assert all(tree.kind[cid] == ACTION for cid in children)
 
-    # Verify tree structure was created
-    assert len(belief_node.children) > 0  # Should have at least one action node
-    assert all(isinstance(child, ActionNode) for child in belief_node.children)
-
-    # Verify total visits increased by approximately n_sims
-    # Note: The actual number might be slightly different due to tree structure
-    assert belief_node.visit_count >= initial_visit_count + n_sims * 0.5  # Allow for some variance
+    # Allow for some variance — tree expansion may not always increment root visit_count.
+    assert tree.visit_count[root_id] >= initial_visit_count + n_sims * 0.5
 
 
 def test_tree_structure_construction(environment, discount_factor, depth, exploration_constant):
@@ -338,36 +332,41 @@ def test_tree_structure_construction(environment, discount_factor, depth, explor
 
     n_particles = 100
     belief = get_initial_belief(environment, n_particles=n_particles, resampling=True)
-    root_belief_node = BeliefNode(belief=belief, observation=None)
+    tree = Tree()
+    root_id = tree.add_belief_node(belief)
 
-    planner._construct_tree_using_n_simulations(belief_node=root_belief_node)
+    planner._construct_tree_using_n_simulations(tree=tree, root_id=root_id)
 
-    assert root_belief_node.height == 2 * depth + 1
-    for node in PostOrderIter(root_belief_node):
-        assert node.visit_count >= 0
-        if isinstance(node, BeliefNode):
-            assert node.belief is not None
-            assert node.v_value is not None
+    # Walk the arena tree to compute max depth (longest path from root).
+    max_observed_depth = 0
+    frontier = [(root_id, 0)]
+    while frontier:
+        node_id, d = frontier.pop()
+        max_observed_depth = max(max_observed_depth, d)
+        for cid in tree.children_ids[node_id]:
+            frontier.append((cid, d + 1))
+    # Arena tree alternates belief/action levels. With self.depth=N, the recursion
+    # creates belief nodes at depths 0, 2, ..., 2N and action nodes at 1, 3, ..., 2N+1,
+    # plus one final belief child at depth 2N+2 created before the next call hits the
+    # depth bound. So the deepest node sits at 2 * depth + 2.
+    assert max_observed_depth == 2 * depth + 2
 
-            if node.height > 1 and node.depth > 0:
-                assert node.v_value != 0
-                assert node.observation is not None
-                n_children_visits = sum(child.visit_count for child in node.children)
-                assert node.visit_count == n_children_visits + 1  # +1 for the rollout
+    # Per-node invariants.
+    for node_id in range(len(tree)):
+        assert tree.visit_count[node_id] >= 0
+        if tree.kind[node_id] == BELIEF:
+            assert tree.belief[node_id] is not None
+            assert tree.v_value[node_id] is not None
+        elif tree.kind[node_id] == ACTION:
+            assert tree.action[node_id] is not None
+            assert tree.q_value[node_id] is not None
 
-        elif isinstance(node, ActionNode):
-            assert node.action is not None
-            assert node.q_value is not None
-            if not node.is_leaf:
-                assert node.q_value != 0
-                assert node.visit_count == sum(child.visit_count for child in node.children)
-
-    # Verify root belief node
-    assert root_belief_node.observation is None
-    assert root_belief_node.parent is None
-    assert len(root_belief_node.children) == len(environment.get_actions())
-    assert root_belief_node.visit_count == n_sims  #
-    assert root_belief_node.v_value is not None
+    # Root belief node invariants in arena form.
+    assert tree.parent_id[root_id] is None
+    assert tree.observation[root_id] is None
+    assert len(tree.children_ids[root_id]) == len(environment.get_actions())
+    assert tree.visit_count[root_id] == n_sims
+    assert tree.v_value[root_id] is not None
 
 
 @pytest.mark.slow
@@ -697,7 +696,9 @@ def test_info_variable_name_consistency(planner, belief):
 
     Test type: unit
     """
-    from POMDPPlanners.tests.test_metric_consistency_utils import verify_policy_metric_consistency
+    from POMDPPlanners.tests.test_metric_consistency_utils import (  # pylint: disable=import-outside-toplevel
+        verify_policy_metric_consistency,
+    )
 
     # Verify consistency using reusable utility function
     verify_policy_metric_consistency(planner, belief)

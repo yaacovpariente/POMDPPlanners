@@ -218,9 +218,7 @@ class TestBatchObservationLogLikelihood:
             vectorized_ll = updater.batch_observation_log_likelihood(particles, action, obs)
             per_particle_ll = np.empty(n)
             for j in range(n):
-                obs_model = env.observation_model(next_state=particles[j], action=action)
-                prob = obs_model.probability([obs])[0]
-                per_particle_ll[j] = np.log(prob) if prob > 0 else -np.inf
+                per_particle_ll[j] = env.observation_log_probability(particles[j], action, [obs])[0]
 
             np.testing.assert_allclose(vectorized_ll, per_particle_ll, atol=1e-10)
 
@@ -353,26 +351,28 @@ class TestNoObsInDarkLogLikelihood:
         action = "right"
         particles = np.random.randint(0, 10, size=(n, 2)).astype(float)
 
-        # Test "None" observation
+        # Test "None" observation via env.observation_log_probability — the
+        # NO_OBS_IN_DARK env path returns exact -inf for impossible
+        # observations, matching the vectorized updater's strict -inf floor.
         vectorized_ll = no_obs_updater.batch_observation_log_likelihood(particles, action, "None")
         per_particle_ll = np.empty(n)
-        for i in range(n):
-            obs_model = no_obs_env.observation_model(next_state=particles[i], action=action)
-            prob = obs_model.probability(["None"])[0]
-            per_particle_ll[i] = np.log(prob) if prob > 0 else -np.inf
+        for i, particle in enumerate(particles):
+            per_particle_ll[i] = no_obs_env.observation_log_probability(
+                next_state=particle, action=action, observations=["None"]
+            )[0]
 
         np.testing.assert_allclose(vectorized_ll, per_particle_ll, atol=1e-10)
 
-        # Test exact-match observation for a near-beacon particle
+        # Test exact-match observation for a near-beacon particle.
         near_particles = np.array([[0.0, 0.0], [5.0, 5.0], [2.5, 2.5]])
         for particle in near_particles:
             obs = particle.copy()
             v_ll = no_obs_updater.batch_observation_log_likelihood(near_particles, action, obs)
             pp_ll = np.empty(len(near_particles))
             for j, np_j in enumerate(near_particles):
-                obs_model = no_obs_env.observation_model(next_state=np_j, action=action)
-                prob = obs_model.probability([obs])[0]
-                pp_ll[j] = np.log(prob) if prob > 0 else -np.inf
+                pp_ll[j] = no_obs_env.observation_log_probability(
+                    next_state=np_j, action=action, observations=[obs]
+                )[0]
 
             np.testing.assert_allclose(v_ll, pp_ll, atol=1e-10)
 
@@ -493,26 +493,28 @@ class TestDistanceBasedLogLikelihood:
         action = "right"
         particles = np.random.randint(0, 10, size=(n, 2)).astype(float)
 
-        # Test "None" observation
+        # Test "None" observation via env.observation_log_probability — the
+        # DISTANCE_BASED env path returns exact -inf for impossible
+        # observations, matching the vectorized updater's strict -inf floor.
         vectorized_ll = dist_updater.batch_observation_log_likelihood(particles, action, "None")
         per_particle_ll = np.empty(n)
-        for i in range(n):
-            obs_model = dist_env.observation_model(next_state=particles[i], action=action)
-            prob = obs_model.probability(["None"])[0]
-            per_particle_ll[i] = np.log(prob) if prob > 0 else -np.inf
+        for i, particle in enumerate(particles):
+            per_particle_ll[i] = dist_env.observation_log_probability(
+                next_state=particle, action=action, observations=["None"]
+            )[0]
 
         np.testing.assert_allclose(vectorized_ll, per_particle_ll, atol=1e-10)
 
-        # Test exact-match observation
+        # Test exact-match observation.
         test_particles = np.array([[0.0, 0.0], [0.5, 0.0], [2.5, 2.5]])
         for particle in test_particles:
             obs = particle.copy()
             v_ll = dist_updater.batch_observation_log_likelihood(test_particles, action, obs)
             pp_ll = np.empty(len(test_particles))
             for j, tp in enumerate(test_particles):
-                obs_model = dist_env.observation_model(next_state=tp, action=action)
-                prob = obs_model.probability([obs])[0]
-                pp_ll[j] = np.log(prob) if prob > 0 else -np.inf
+                pp_ll[j] = dist_env.observation_log_probability(
+                    next_state=tp, action=action, observations=[obs]
+                )[0]
 
             np.testing.assert_allclose(v_ll, pp_ll, atol=1e-10)
 

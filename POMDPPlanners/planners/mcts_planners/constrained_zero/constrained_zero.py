@@ -12,6 +12,12 @@ Reference:
     Joint Conference on Artificial Intelligence (IJCAI), 6752-6760.
     https://www.ijcai.org/proceedings/2024/746
 
+Implementation note:
+    Operates on the column-store arena
+    :class:`POMDPPlanners.core.tree.arena.Tree` via its BetaZero parent.
+    ``_failure_dict`` and ``_delta_dict`` are keyed by integer node IDs
+    (instead of ``id(node)`` as in the legacy anytree version).
+
 Classes:
     ConstrainedZero: Main planner extending ``BetaZero``.
 """
@@ -23,7 +29,7 @@ import numpy as np
 
 from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.core.environment import Environment, SpaceType
-from POMDPPlanners.core.tree import ActionNode, BeliefNode
+from POMDPPlanners.core.tree.arena import Tree
 from POMDPPlanners.planners.mcts_planners.beta_zero.belief_representation import (
     BeliefRepresentation,
 )
@@ -32,7 +38,7 @@ from POMDPPlanners.planners.mcts_planners.beta_zero.beta_zero_network import (
     AbstractBetaZeroNetwork,
 )
 from POMDPPlanners.planners.mcts_planners.constrained_zero.constrained_puct import (
-    spuct_action_progressive_widening,
+    spuct_action_progressive_widening_arena,
 )
 from POMDPPlanners.planners.mcts_planners.constrained_zero.constrained_training import (
     train_constrained_network,
@@ -260,25 +266,25 @@ class ConstrainedZero(BetaZero):
 
     # ── MCTS overrides ────────────────────────────────────────────────
 
-    def _learn_tree(self, belief: Belief) -> BeliefNode:
+    def _learn_tree(self, belief: Belief) -> Tuple[Tree, int]:
         self._failure_dict.clear()
         self._delta_dict.clear()
         return super()._learn_tree(belief)
 
-    def _simulate_path(self, belief_node: BeliefNode, depth: int) -> float:
+    def _simulate_path(self, tree: Tree, belief_id: int, depth: int) -> float:
         if depth > self.depth:
-            belief_node.parent = None
             return 0.0
 
-        if self.environment.is_terminal(belief_node.belief.sample()):
-            belief_node.visit_count += 1
+        if self.environment.is_terminal(tree.get_belief(belief_id).sample()):
+            tree.increment_visit_count(belief_id)
             return 0.0
 
-        action_priors = self._get_action_priors(belief_node)
-        delta_prime = self._get_delta_prime(belief_node)
+        action_priors = self._get_action_priors(tree=tree, belief_id=belief_id)
+        delta_prime = self._get_delta_prime(belief_id)
 
-        action_node = spuct_action_progressive_widening(
-            belief_node=belief_node,
+        action_id = spuct_action_progressive_widening_arena(
+            tree=tree,
+            belief_id=belief_id,
             alpha_a=self.alpha_a,
             action_sampler=self.action_sampler,
             exploration_constant=self.exploration_constant,
@@ -290,12 +296,13 @@ class ConstrainedZero(BetaZero):
         )
 
         return_sample, failure_sample = self._simulate_return_constrained(
-            belief_node=belief_node, action_node=action_node, depth=depth
+            tree=tree, belief_id=belief_id, action_id=action_id, depth=depth
         )
 
         self._update_node_statistics_constrained(
-            belief_node=belief_node,
-            action_node=action_node,
+            tree=tree,
+            belief_id=belief_id,
+            action_id=action_id,
             total=return_sample,
             failure=failure_sample,
         )
@@ -304,61 +311,71 @@ class ConstrainedZero(BetaZero):
 
     def _simulate_return_constrained(
         self,
-        belief_node: BeliefNode,
-        action_node: ActionNode,
+        tree: Tree,
+        belief_id: int,
+        action_id: int,
         depth: int,
     ) -> Tuple[float, float]:
-        p_immediate = self._estimate_belief_failure_prob(belief_node.belief)
+        p_immediate = self._estimate_belief_failure_prob(tree.get_belief(belief_id))
 
-        if len(action_node.children) <= self.k_o * action_node.visit_count**self.alpha_o:
-            next_belief_node, immediate_reward = self._sample_new_belief_node(
-                belief_node=belief_node, action_node=action_node
+        action_children_count = len(tree.get_children_ids(action_id))
+        action_visits = tree.get_visit_count(action_id)
+        if action_children_count <= self.k_o * action_visits**self.alpha_o:
+            next_belief_id, immediate_reward = self._sample_new_belief_node(
+                tree=tree, belief_id=belief_id, action_id=action_id
             )
-            leaf_value, leaf_failure = self._network_leaf_value_and_failure(next_belief_node)
+            leaf_value, leaf_failure = self._network_leaf_value_and_failure(
+                tree.get_belief(next_belief_id)
+            )
             total = immediate_reward + self.discount_factor * leaf_value
             failure = self._compound_failure(p_immediate, leaf_failure)
         else:
-            next_belief_node, immediate_reward = self._sample_existing_belief_node(
-                belief_node=belief_node, action_node=action_node
+            next_belief_id, immediate_reward = self._sample_existing_belief_node(
+                tree=tree, belief_id=belief_id, action_id=action_id
             )
-            next_return = self._simulate_path(belief_node=next_belief_node, depth=depth + 1)
+            next_return = self._simulate_path(tree=tree, belief_id=next_belief_id, depth=depth + 1)
             total = immediate_reward + self.discount_factor * next_return
-            p_next = self._get_subtree_failure(next_belief_node)
+            p_next = self._get_subtree_failure(tree, next_belief_id)
             failure = self._compound_failure(p_immediate, p_next)
 
         return total, failure
 
     def _update_node_statistics_constrained(
         self,
-        belief_node: BeliefNode,
-        action_node: ActionNode,
+        tree: Tree,
+        belief_id: int,
+        action_id: int,
         total: float,
         failure: float,
     ) -> None:
-        belief_node.visit_count += 1
-        action_node.visit_count += 1
-        action_node.q_value += (total - action_node.q_value) / action_node.visit_count
-        belief_node.v_value = np.max([child.q_value for child in belief_node.children])
+        tree.increment_visit_count(belief_id)
+        tree.update_action_q_with_return(action_id, total)
+        children = tree.get_children_ids(belief_id)
+        if children:
+            tree.v_value[belief_id] = float(max(tree.get_q_value(cid) for cid in children))
 
-        self._update_action_failure(action_node, failure)
-        self._update_adaptive_delta(belief_node, action_node)
+        self._update_action_failure(tree=tree, action_id=action_id, failure=failure)
+        self._update_adaptive_delta(tree=tree, belief_id=belief_id, action_id=action_id)
 
     # ── Network helpers ───────────────────────────────────────────────
 
-    def _network_leaf_value_and_failure(self, belief_node: BeliefNode) -> Tuple[float, float]:
-        features = self._get_normalized_features(self.belief_representation(belief_node.belief))
+    def _network_leaf_value_and_failure(self, belief: Belief) -> Tuple[float, float]:
+        features = self._get_normalized_features(self.belief_representation(belief))
         _, value, failure_prob = self.network.predict(features)
         return self._get_denormalized_value(value), failure_prob
 
-    def _network_leaf_value(self, belief_node: BeliefNode) -> float:
-        value, _ = self._network_leaf_value_and_failure(belief_node)
+    def _network_leaf_value(self, belief: Belief) -> float:
+        value, _ = self._network_leaf_value_and_failure(belief)
         return value
 
-    def _discrete_action_priors(self, belief_node: BeliefNode) -> np.ndarray:
-        features = self._get_normalized_features(self.belief_representation(belief_node.belief))
+    def _discrete_action_priors(self, tree: Tree, belief_id: int) -> np.ndarray:
+        features = self._get_normalized_features(
+            self.belief_representation(tree.get_belief(belief_id))
+        )
         policy, _, _ = self.network.predict(features)
         actions = self.environment.get_actions()  # type: ignore[attr-defined]
-        child_actions = [child.action for child in belief_node.children]
+        children = tree.get_children_ids(belief_id)
+        child_actions = [tree.get_action(cid) for cid in children]
         priors = np.array(
             [
                 policy[actions.index(a)] if a in actions else 1.0 / len(child_actions)
@@ -382,51 +399,52 @@ class ConstrainedZero(BetaZero):
     def _compound_failure(self, p_immediate: float, p_next: float) -> float:
         return p_immediate + self.delta_compounding * (1.0 - p_immediate) * p_next
 
-    def _get_delta_prime(self, belief_node: BeliefNode) -> float:
-        stored = self._delta_dict.get(id(belief_node), self.delta_0)
+    def _get_delta_prime(self, belief_id: int) -> float:
+        stored = self._delta_dict.get(belief_id, self.delta_0)
         return max(self.delta_0, stored)
 
-    def _update_action_failure(self, action_node: ActionNode, failure: float) -> None:
-        node_id = id(action_node)
-        old = self._failure_dict.get(node_id, 0.0)
-        n = action_node.visit_count
-        self._failure_dict[node_id] = old + (failure - old) / max(n, 1)
+    def _update_action_failure(self, tree: Tree, action_id: int, failure: float) -> None:
+        old = self._failure_dict.get(action_id, 0.0)
+        n = tree.get_visit_count(action_id)
+        self._failure_dict[action_id] = old + (failure - old) / max(n, 1)
 
-    def _update_adaptive_delta(self, belief_node: BeliefNode, action_node: ActionNode) -> None:
-        f = self._failure_dict.get(id(action_node), 0.0)
-        node_id = id(belief_node)
-        current_delta = self._delta_dict.get(node_id, self.delta_0)
+    def _update_adaptive_delta(self, tree: Tree, belief_id: int, action_id: int) -> None:
+        f = self._failure_dict.get(action_id, 0.0)
+        current_delta = self._delta_dict.get(belief_id, self.delta_0)
         err = 1.0 if f > current_delta else 0.0
         new_delta = current_delta + self.eta * (err - self.delta_0)
-        lb, ub = self._compute_delta_bounds(belief_node)
-        self._delta_dict[node_id] = float(np.clip(new_delta, lb, ub))
+        lb, ub = self._compute_delta_bounds(tree, belief_id)
+        self._delta_dict[belief_id] = float(np.clip(new_delta, lb, ub))
 
-    def _compute_delta_bounds(self, belief_node: BeliefNode) -> Tuple[float, float]:
+    def _compute_delta_bounds(self, tree: Tree, belief_id: int) -> Tuple[float, float]:
         child_failures = [
-            self._failure_dict[id(c)] for c in belief_node.children if id(c) in self._failure_dict
+            self._failure_dict[cid]
+            for cid in tree.get_children_ids(belief_id)
+            if cid in self._failure_dict
         ]
         if not child_failures:
             return self.delta_0 * 0.1, min(1.0, self.delta_0 * 10.0)
         return min(child_failures), max(child_failures)
 
-    def _get_subtree_failure(self, belief_node: BeliefNode) -> float:
-        if not belief_node.children:
+    def _get_subtree_failure(self, tree: Tree, belief_id: int) -> float:
+        children = tree.get_children_ids(belief_id)
+        if not children:
             return 0.0
-        total_visits = sum(c.visit_count for c in belief_node.children)
+        total_visits = sum(tree.get_visit_count(cid) for cid in children)
         if total_visits == 0:
             return 0.0
         weighted_sum = sum(
-            self._failure_dict.get(id(c), 0.0) * c.visit_count for c in belief_node.children
+            self._failure_dict.get(cid, 0.0) * tree.get_visit_count(cid) for cid in children
         )
         return weighted_sum / total_visits
 
     # ── Constrained Q-weighted policy target ──────────────────────────
 
-    def _compute_q_weighted_policy_target(self, tree: BeliefNode) -> np.ndarray:
-        children = tree.children
-        q_values = np.array([child.q_value for child in children])
-        visit_counts = np.array([child.visit_count for child in children], dtype=np.float64)
-        failure_probs = np.array([self._failure_dict.get(id(child), 0.0) for child in children])
+    def _compute_q_weighted_policy_target(self, tree: Tree, belief_id: int) -> np.ndarray:
+        children = tree.get_children_ids(belief_id)
+        q_values = np.array([tree.get_q_value(cid) for cid in children])
+        visit_counts = np.array([tree.get_visit_count(cid) for cid in children], dtype=np.float64)
+        failure_probs = np.array([self._failure_dict.get(cid, 0.0) for cid in children])
 
         q_term = self._softmax_q_term(q_values)
         n_term = self._visit_count_term(visit_counts)
@@ -438,7 +456,7 @@ class ConstrainedZero(BetaZero):
         probs = np.exp(logits)
 
         # Apply safety mask
-        delta_prime = self._get_delta_prime(tree)
+        delta_prime = self._get_delta_prime(belief_id)
         safety_mask = (failure_probs <= delta_prime).astype(np.float64)
         if safety_mask.sum() == 0:
             safety_mask = np.ones_like(safety_mask)
@@ -450,8 +468,8 @@ class ConstrainedZero(BetaZero):
             probs = np.ones(len(children)) / len(children)
 
         if self.network.action_space_type == "discrete":
-            return self._map_to_full_action_vector(children, probs)
-        return self._compute_continuous_policy_target(children, probs)
+            return self._map_to_full_action_vector(tree, children, probs)
+        return self._compute_continuous_policy_target(tree, children, probs)
 
     # ── TrainablePolicy overrides ────────────────────────────────────
 
@@ -473,11 +491,16 @@ class ConstrainedZero(BetaZero):
     def _finalize_episode_data(self, history) -> None:
         rewards = [step.reward for step in history.history if step.reward is not None]
         discounted_returns = self._compute_discounted_returns(rewards)
-        failure_targets = self._compute_per_timestep_failures(history)
+        # Match the documented semantic of
+        # ``ConstrainedTrainingExample.failure_target`` — a single
+        # episode-level "any failure occurred?" boolean, applied to every
+        # training example. Avoids the ``discounted_returns``
+        # (None-filtered) vs. per-step ``failure_targets`` (full-history)
+        # length mismatch the previous implementation could hit.
+        failure_target = float(self._compute_episode_failure(history))
 
         for i, pending in enumerate(self._pending_examples):
             if i < len(discounted_returns):
-                failure_target = failure_targets[i] if i < len(failure_targets) else 0.0
                 self._buffer.add(
                     ConstrainedTrainingExample(
                         belief_features=pending.belief_features,
@@ -486,6 +509,14 @@ class ConstrainedZero(BetaZero):
                         failure_target=failure_target,
                     )
                 )
+
+    def _compute_episode_failure(self, history) -> bool:
+        for step in history.history:
+            if step.state is not None and self.failure_fn(step.state):
+                return True
+            if step.next_state is not None and self.failure_fn(step.next_state):
+                return True
+        return False
 
     def _compute_per_timestep_failures(self, history) -> List[float]:
         per_step_failure = self._extract_per_step_failure_flags(history)

@@ -13,21 +13,22 @@ Classes:
 """
 
 import math
+import warnings
 from enum import Enum
 from pathlib import Path
-from typing import Any, List, Optional, Tuple
+from collections.abc import Hashable
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
 from POMDPPlanners.core.distributions import DiscreteDistribution
 from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
-    ObservationModel,
     SpaceInfo,
     SpaceType,
-    StateTransitionModel,
 )
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
+from POMDPPlanners.environments.rock_sample_pomdp import _native
 from POMDPPlanners.utils.statistics_utils import confidence_interval
 
 
@@ -100,175 +101,32 @@ def states_equal(state1: RockSampleState, state2: RockSampleState) -> bool:
     return np.array_equal(state1, state2)
 
 
-class RockSampleStateTransitionModel(StateTransitionModel):
-    """State transition model for RockSample POMDP."""
-
-    def __init__(self, state: RockSampleState, action: int, pomdp: "RockSamplePOMDP"):
-        """Initialize transition model.
-
-        Args:
-            state: Current state
-            action: Action to execute
-            pomdp: Reference to the POMDP environment
-        """
-        super().__init__(state=state, action=action)
-        self.pomdp = pomdp
-
-    def sample(self, n_samples: int = 1) -> List[RockSampleState]:
-        """Sample next states (deterministic transitions)."""
-        next_state = self._compute_next_state()
-        return [next_state] * n_samples
-
-    def probability(self, values: List[RockSampleState]) -> np.ndarray:
-        """Calculate transition probabilities for given next states.
-
-        Since RockSample has deterministic transitions, the probability is 1.0
-        for the correct next state and 0.0 for all others.
-
-        Args:
-            values: List of next state values to calculate probabilities for
-
-        Returns:
-            Array of transition probabilities (1.0 for correct state, 0.0 otherwise)
-        """
-        # Compute the deterministic next state
-        expected_next_state = self._compute_next_state()
-
-        # Check which states match the expected next state
-        probs = np.array(
-            [1.0 if states_equal(state, expected_next_state) else 0.0 for state in values]
-        )
-
-        return probs
-
-    def _compute_next_state(self) -> RockSampleState:
-        """Compute the deterministic next state."""
-        robot_row, robot_col = get_robot_pos(self.state)
-        rocks = list(get_rocks(self.state))
-
-        # Handle terminal state
-        if robot_col >= self.pomdp.map_size[1]:
-            return create_rock_sample_state((-1, -1), tuple(rocks))
-
-        # Movement actions
-        if self.action == 1:  # North
-            new_pos = (max(0, robot_row - 1), robot_col)
-        elif self.action == 2:  # East
-            new_pos = (
-                robot_row,
-                robot_col + 1,
-            )  # Allow moving beyond boundary for exit
-        elif self.action == 3:  # South
-            new_pos = (min(self.pomdp.map_size[0] - 1, robot_row + 1), robot_col)
-        elif self.action == 4:  # West
-            new_pos = (robot_row, max(0, robot_col - 1))
-        elif self.action == 0:  # Sample
-            new_pos = (robot_row, robot_col)
-            # Check if robot is at a rock position and sample it
-            for i, rock_pos in enumerate(self.pomdp.rock_positions):
-                if (robot_row, robot_col) == rock_pos:
-                    rocks[i] = False  # Rock becomes bad after sampling
-                    break
-        else:  # Check actions (5 and above)
-            new_pos = (robot_row, robot_col)  # Stay in place for checking
-
-        # Handle exit condition - robot must move beyond right boundary to exit
-        if new_pos[1] >= self.pomdp.map_size[1]:
-            return create_rock_sample_state((-1, -1), tuple(rocks))
-
-        return create_rock_sample_state(new_pos, tuple(rocks))
+_OBS_CODE_TO_STR = ("none", "good", "bad")
+_OBS_STR_TO_CODE = {"none": 0, "good": 1, "bad": 2}
 
 
-class RockSampleObservationModel(ObservationModel):
-    """Observation model for RockSample POMDP."""
-
-    def __init__(self, next_state: RockSampleState, action: int, pomdp: "RockSamplePOMDP"):
-        """Initialize observation model.
-
-        Args:
-            next_state: Next state after transition
-            action: Action that was executed
-            pomdp: Reference to the POMDP environment
-        """
-        super().__init__(next_state=next_state, action=action)
-        self.pomdp = pomdp
-
-    def sample(self, n_samples: int = 1) -> List[str]:
-        """Sample observations."""
-        if self.action <= 4:  # Movement or sample actions
-            return ["none"] * n_samples
-
-        # Check actions (5 and above)
-        rock_idx = self.action - 5
-        if rock_idx >= len(self.pomdp.rock_positions):
-            return ["none"] * n_samples
-
-        # Calculate observation probabilities based on distance and rock quality
-        robot_pos = get_robot_pos(self.next_state)
-        rock_pos = self.pomdp.rock_positions[rock_idx]
-        rocks = get_rocks(self.next_state)
-        rock_quality = rocks[rock_idx]
-
-        # Calculate Euclidean distance
-        distance = math.sqrt((robot_pos[0] - rock_pos[0]) ** 2 + (robot_pos[1] - rock_pos[1]) ** 2)
-
-        # Sensor efficiency decreases exponentially with distance
-        efficiency = math.exp(-distance / self.pomdp.sensor_efficiency)
-
-        observations = []
-        for _ in range(n_samples):
-            if np.random.random() < efficiency:
-                # Correct observation with high probability
-                obs = "good" if rock_quality else "bad"
-            else:
-                # Incorrect observation
-                obs = "bad" if rock_quality else "good"
-            observations.append(obs)
-
-        return observations
-
-    def probability(self, values: List[str]) -> np.ndarray:
-        """Calculate observation probabilities."""
-        if self.action <= 4:  # Movement or sample actions
-            probs = np.array([1.0 if obs == "none" else 0.0 for obs in values])
-            return probs
-
-        # Check actions
-        rock_idx = self.action - 5
-        if rock_idx >= len(self.pomdp.rock_positions):
-            probs = np.array([1.0 if obs == "none" else 0.0 for obs in values])
-            return probs
-
-        robot_pos = get_robot_pos(self.next_state)
-        rock_pos = self.pomdp.rock_positions[rock_idx]
-        rocks = get_rocks(self.next_state)
-        rock_quality = rocks[rock_idx]
-
-        distance = math.sqrt((robot_pos[0] - rock_pos[0]) ** 2 + (robot_pos[1] - rock_pos[1]) ** 2)
-
-        efficiency = math.exp(-distance / self.pomdp.sensor_efficiency)
-
-        probs = []
-        for obs in values:
-            if obs == "none":
-                prob = 0.0
-            elif obs == "good":
-                prob = efficiency if rock_quality else (1.0 - efficiency)
-            elif obs == "bad":
-                prob = (1.0 - efficiency) if rock_quality else efficiency
-            else:
-                prob = 0.0
-            probs.append(prob)
-
-        return np.array(probs)
-
-
-class RockSamplePOMDP(DiscreteActionsEnvironment):
+class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-methods
     """RockSample POMDP environment
 
     This environment implements the classic rock sampling problem where a robot
     must navigate a grid, use sensors to evaluate rocks, and decide which ones
     to sample while balancing exploration costs and sampling rewards.
+
+    Stochasticity:
+        The dangerous-area penalty can be applied either deterministically
+        (the default) or stochastically. When
+        ``dangerous_area_hit_probability == 1.0`` (default), the penalty is
+        applied every time the robot's next position lies inside a
+        dangerous area, matching legacy behavior. When
+        ``dangerous_area_hit_probability < 1.0``, the penalty is applied
+        only with that probability per ``reward()`` / ``reward_batch()``
+        call (one Bernoulli draw per state), producing a heavy-tailed
+        return distribution suitable for benchmarking risk-sensitive
+        planners (e.g. ICVaR-aware MCTS) against expected-value MCTS on
+        the same env. Note that this makes ``reward(state, action)``
+        non-deterministic given a state-action pair, so any external
+        caching that assumes deterministic rewards must be aware of this.
+        ``transition_log_probability`` is unaffected.
 
     Attributes:
         map_size: Grid dimensions as (rows, cols)
@@ -314,7 +172,8 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
         exit_reward: float = 10.0,
         dangerous_areas: Optional[List[Tuple[int, int]]] = None,
         dangerous_area_radius: float = 1.0,
-        dangerous_area_penalty: float = 5.0,
+        dangerous_area_penalty: float = -5.0,
+        dangerous_area_hit_probability: float = 1.0,
         discount_factor: float = 0.95,
         name: str = "RockSample",
         output_dir: Optional[Path] = None,
@@ -335,15 +194,41 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
             exit_reward: Exit reward. Defaults to 10.0.
             dangerous_areas: List of dangerous area center positions as (row, col) tuples. Defaults to None.
             dangerous_area_radius: Radius around dangerous area centers. Defaults to 1.0.
-            dangerous_area_penalty: Penalty magnitude applied randomly when in dangerous areas. Defaults to 5.0.
+            dangerous_area_penalty: Reward delta added to ``total_reward`` when the
+                robot's next position lies inside a dangerous area (per-step,
+                gated by ``dangerous_area_hit_probability``). Use a negative
+                value to penalize danger entry; positive values reward it (a
+                ``UserWarning`` is emitted in that case). Defaults to ``-5.0``.
+            dangerous_area_hit_probability: Probability that the dangerous-area
+                penalty is actually applied to the reward when the robot's
+                next position is inside a dangerous area. Must lie in
+                ``[0, 1]``. Defaults to ``1.0`` (deterministic penalty,
+                matching legacy behavior). Values below ``1.0`` make the
+                reward stochastic (per-call Bernoulli draw), useful for
+                risk-sensitive planning benchmarks. Note that this makes
+                ``reward(state, action)`` non-deterministic given a
+                state-action pair.
             discount_factor: Discount factor. Defaults to 0.95.
             name: Environment name. Defaults to "RockSample".
             output_dir: Output directory for logging. Defaults to None.
             debug: Enable debug logging. Defaults to False.
         """
+        if not 0.0 <= dangerous_area_hit_probability <= 1.0:
+            raise ValueError("dangerous_area_hit_probability must be between 0 and 1 (inclusive)")
+
+        if dangerous_area_penalty > 0:
+            warnings.warn(
+                "dangerous_area_penalty is positive; with the additive reward "
+                "convention this rewards danger entry. Pass a negative value "
+                "to penalize.",
+                UserWarning,
+                stacklevel=2,
+            )
+
         # Calculate reward range based on parameters
-        min_reward = step_penalty + bad_rock_penalty + sensor_use_penalty
-        max_reward = step_penalty + exit_reward
+        danger_term = dangerous_area_penalty if dangerous_areas else 0.0
+        min_reward = step_penalty + bad_rock_penalty + sensor_use_penalty + min(0.0, danger_term)
+        max_reward = step_penalty + exit_reward + max(0.0, danger_term)
 
         space_info = SpaceInfo(
             action_space=SpaceType.DISCRETE, observation_space=SpaceType.DISCRETE
@@ -375,9 +260,21 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
         )
         self.dangerous_area_radius = dangerous_area_radius
         self.dangerous_area_penalty = dangerous_area_penalty
+        self.dangerous_area_hit_probability = float(dangerous_area_hit_probability)
 
         # Validate parameters
         self._validate_parameters()
+
+        # Cached int32 rock positions array; identical to what the per-call
+        # wrappers build via ``np.asarray(...)``. Reused on the hot-path
+        # native-kernel sample overrides to skip the per-call allocation.
+        self._rock_positions_int32 = np.asarray(self.rock_positions, dtype=np.int32)
+
+        # Flat interleaved [row0, col0, row1, col1, ...] version for the
+        # native simulate_rollout_discrete kernel.
+        self._rock_positions_flat: np.ndarray = np.asarray(
+            [coord for rp in self.rock_positions for coord in rp], dtype=np.int32
+        )
 
         # Define actions: 0=sample, 1=north, 2=east, 3=south, 4=west, 5+=check_rock_i
         self.action_names = ["sample", "north", "east", "south", "west"]
@@ -394,6 +291,12 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
         # Check actions don't involve movement
         for i in range(5, len(self.action_names)):
             self.action_to_vector[i] = (0, 0)
+
+        # Per-action C++ kernel caches: actions are ``int`` so a plain
+        # ``Dict[int, Any]`` suffices. Lazily built by ``_get_trans_kernel``
+        # / ``_get_obs_kernel`` and reset on unpickle.
+        self._trans_kernel_cache: Dict[int, Any] = {}
+        self._obs_kernel_cache: Dict[int, Any] = {}
 
     def _validate_parameters(self):
         """Validate environment parameters."""
@@ -435,21 +338,21 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
         """Get all available actions."""
         return list(range(len(self.action_names)))
 
-    def state_transition_model(
-        self, state: RockSampleState, action: int
-    ) -> RockSampleStateTransitionModel:
-        """Get state transition model."""
-        return RockSampleStateTransitionModel(state, action, self)
+    def reward(
+        self,
+        state: RockSampleState,
+        action: int,
+        next_state: Any = None,
+    ) -> float:
+        """Calculate immediate reward.
 
-    def observation_model(
-        self, next_state: RockSampleState, action: int
-    ) -> RockSampleObservationModel:
-        """Get observation model."""
-        return RockSampleObservationModel(next_state, action, self)
-
-    def reward(self, state: RockSampleState, action: int) -> float:
-        """Calculate immediate reward."""
-        next_state = self.state_transition_model(state, action).sample()[0]
+        Uses the realised ``next_state`` when supplied (e.g. by
+        :meth:`Environment.sample_next_step`) so the dangerous-area
+        penalty fires against the same outcome as the trajectory
+        instead of a fresh draw.
+        """
+        if next_state is None:
+            next_state = self.sample_next_state(state=state, action=action)
         return self._reward_from_next_state(state, action, next_state)
 
     def _reward_from_next_state(
@@ -476,22 +379,333 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
             total_reward += self.sensor_use_penalty
 
         if self._is_in_dangerous_area(get_robot_pos(next_state)):
-            total_reward += self.dangerous_area_penalty
+            if (
+                self.dangerous_area_hit_probability >= 1.0
+                or np.random.random() < self.dangerous_area_hit_probability
+            ):
+                total_reward += self.dangerous_area_penalty
 
         return total_reward
+
+    def reward_batch(
+        self,
+        states: Any,
+        action: int,
+        next_states: Any = None,
+    ) -> np.ndarray:
+        """Calculate rewards for a batch of states given a single action.
+
+        Threads caller-supplied ``next_states`` through to the
+        dangerous-area position check so the batch path agrees with
+        the scalar :meth:`reward` whenever ``Environment.sample_next_step``
+        (or any other caller) pre-samples next states. When
+        ``next_states is None``, we fall back to closed-form
+        reconstruction of the next robot position from
+        ``(state, action)``; RockSample transitions are deterministic,
+        so this fallback matches a fresh draw from
+        :meth:`sample_next_state`. The per-call Bernoulli refund for
+        the dangerous-area penalty is preserved in both branches.
+        """
+        states_array = np.ascontiguousarray(np.asarray(states, dtype=np.float64))
+        if states_array.ndim == 1:
+            states_array = states_array.reshape(1, -1)
+        next_states_array: Optional[np.ndarray] = None
+        if next_states is not None:
+            next_states_array = np.ascontiguousarray(np.asarray(next_states, dtype=np.float64))
+            if next_states_array.ndim == 1:
+                next_states_array = next_states_array.reshape(1, -1)
+        return self._reward_batch_vectorized(states_array, int(action), next_states_array)
+
+    def _reward_batch_vectorized(
+        self,
+        states: np.ndarray,
+        action: int,
+        next_states: Optional[np.ndarray] = None,
+    ) -> np.ndarray:
+        n = states.shape[0]
+        rewards = np.full(n, self.step_penalty, dtype=np.float64)
+        map_cols = self.map_size[1]
+
+        if action == 2:
+            # East exit: robot at last column exits
+            exits = states[:, 1].astype(int) == (map_cols - 1)
+            # Terminal-sentinel rows are already exited; treat as exit
+            terminal = (states[:, 0] < 0) & (states[:, 1] < 0)
+            rewards[exits | terminal] += self.exit_reward
+            return rewards
+
+        if action == 0:
+            # Sample action: reward depends on rock quality at robot position
+            robot_rows = states[:, 0].astype(int)
+            robot_cols = states[:, 1].astype(int)
+            for i, (rr, rc) in enumerate(self.rock_positions):
+                at_rock = (robot_rows == rr) & (robot_cols == rc)
+                if not np.any(at_rock):
+                    continue
+                rock_slot = 2 + i
+                rock_good = states[:, rock_slot] > 0.5
+                rewards[at_rock & rock_good] += self.good_rock_reward
+                rewards[at_rock & ~rock_good] += self.bad_rock_penalty
+
+        if action >= 5:
+            rewards += self.sensor_use_penalty
+
+        # Default config has no dangerous areas; skip the next-position
+        # computation entirely. Otherwise, prefer caller-supplied
+        # realised next positions and only reconstruct via closed-form
+        # math when ``next_states`` is None. RockSample transitions are
+        # deterministic, so the closed-form fallback agrees with a
+        # fresh draw from :meth:`sample_next_state`.
+        if not self.dangerous_areas:
+            return rewards
+
+        if next_states is not None:
+            next_robot_rows = next_states[:, 0].astype(int)
+            next_robot_cols = next_states[:, 1].astype(int)
+        else:
+            next_robot_rows, next_robot_cols = self._closed_form_next_robot_pos(states, action)
+        deterministic = self.dangerous_area_hit_probability >= 1.0
+        for j in range(n):
+            if not self._is_in_dangerous_area((next_robot_rows[j], next_robot_cols[j])):
+                continue
+            if deterministic or np.random.random() < self.dangerous_area_hit_probability:
+                rewards[j] += self.dangerous_area_penalty
+
+        return rewards
+
+    def _closed_form_next_robot_pos(
+        self, states: np.ndarray, action: int
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        # Closed-form post-transition robot position for the dangerous-area
+        # check. RockSample movement actions translate by ``(dr, dc)`` and
+        # clip to map bounds; sample / sense actions leave position
+        # unchanged. Terminal-sentinel rows (state[:, 0] < 0) keep their
+        # negative coordinates so they never match a dangerous-area cell,
+        # mirroring the batch-kernel semantics for that path.
+        robot_rows = states[:, 0].astype(int)
+        robot_cols = states[:, 1].astype(int)
+        if action == 1:
+            dr, dc = -1, 0
+        elif action == 3:
+            dr, dc = 1, 0
+        elif action == 4:
+            dr, dc = 0, -1
+        else:
+            dr, dc = 0, 0
+        new_rows = robot_rows + dr
+        new_cols = robot_cols + dc
+        terminal = (states[:, 0] < 0) & (states[:, 1] < 0)
+        new_rows = np.clip(new_rows, 0, self.map_size[0] - 1)
+        new_cols = np.clip(new_cols, 0, self.map_size[1] - 1)
+        # Restore terminal-sentinel rows so they stay "in their own row".
+        new_rows[terminal] = robot_rows[terminal]
+        new_cols[terminal] = robot_cols[terminal]
+        return new_rows, new_cols
+
+    # ── Native-backed env-API implementations ────────────────────────
+    # Each method fetches a cached per-action C++ kernel, mutates its
+    # stored state via ``set_state`` / ``set_next_state`` (when needed),
+    # and dispatches to the same native sample / probability /
+    # batch_sample / batch_log_likelihood entry points as before. The
+    # kernel itself caches frozen env geometry (rock positions, grid
+    # size, sensor efficiency) so we no longer rebuild those per call.
+
+    def _get_trans_kernel(self, action: int) -> Any:
+        kernel = self._trans_kernel_cache.get(action)
+        if kernel is None:
+            placeholder = np.zeros(2 + len(self.rock_positions), dtype=np.float64)
+            kernel = _native.RockSampleTransitionCpp(
+                state=placeholder,
+                action=int(action),
+                map_rows=self.map_size[0],
+                map_cols=self.map_size[1],
+                num_rocks=len(self.rock_positions),
+                rock_positions=self._rock_positions_int32,
+                sensor_efficiency=self.sensor_efficiency,
+            )
+            self._trans_kernel_cache[action] = kernel
+        return kernel
+
+    def _get_obs_kernel(self, action: int) -> Any:
+        kernel = self._obs_kernel_cache.get(action)
+        if kernel is None:
+            placeholder = np.zeros(2 + len(self.rock_positions), dtype=np.float64)
+            kernel = _native.RockSampleObservationCpp(
+                next_state=placeholder,
+                action=int(action),
+                map_rows=self.map_size[0],
+                map_cols=self.map_size[1],
+                num_rocks=len(self.rock_positions),
+                rock_positions=self._rock_positions_int32,
+                sensor_efficiency=self.sensor_efficiency,
+            )
+            self._obs_kernel_cache[action] = kernel
+        return kernel
+
+    def sample_next_state(self, state: RockSampleState, action: int, n_samples: int = 1) -> Any:
+        kernel = self._get_trans_kernel(int(action))
+        kernel.set_state(np.asarray(state, dtype=float))
+        samples = kernel.sample(n_samples)
+        if n_samples == 1:
+            return samples[0]
+        return samples
+
+    def sample_observation(
+        self, next_state: RockSampleState, action: int, n_samples: int = 1
+    ) -> Any:
+        kernel = self._get_obs_kernel(int(action))
+        kernel.set_next_state(np.asarray(next_state, dtype=float))
+        codes = kernel.sample(n_samples)
+        if n_samples == 1:
+            return _OBS_CODE_TO_STR[codes[0]]
+        return [_OBS_CODE_TO_STR[c] for c in codes]
+
+    def transition_log_probability(
+        self, state: RockSampleState, action: int, next_states: Any
+    ) -> np.ndarray:
+        kernel = self._get_trans_kernel(int(action))
+        kernel.set_state(np.asarray(state, dtype=float))
+        probs = np.asarray(kernel.probability(next_states))
+        with np.errstate(divide="ignore"):
+            return np.log(probs)
+
+    def observation_log_probability(
+        self, next_state: RockSampleState, action: int, observations: Any
+    ) -> np.ndarray:
+        kernel = self._get_obs_kernel(int(action))
+        kernel.set_next_state(np.asarray(next_state, dtype=float))
+        # Length-1 fast path: skip the list comprehension + np.array allocation.
+        if hasattr(observations, "__len__") and len(observations) == 1:
+            codes = np.array([_OBS_STR_TO_CODE.get(observations[0], -1)], dtype=np.int32)
+        else:
+            codes = np.fromiter(
+                (_OBS_STR_TO_CODE.get(v, -1) for v in observations),
+                dtype=np.int32,
+                count=len(observations) if hasattr(observations, "__len__") else -1,
+            )
+        probs = np.asarray(kernel.probability(codes))
+        with np.errstate(divide="ignore"):
+            return np.log(probs)
+
+    def sample_next_state_batch(self, states: Any, action: int) -> np.ndarray:
+        states_array = np.ascontiguousarray(np.asarray(states, dtype=np.float64))
+        if states_array.ndim == 1:
+            states_array = states_array.reshape(1, -1)
+        # ``batch_sample`` reads each row's state from the input array;
+        # the kernel's stored ``state_`` is not consulted, so we skip
+        # ``set_state`` on this hot path.
+        kernel = self._get_trans_kernel(int(action))
+        return np.asarray(kernel.batch_sample(states_array), dtype=np.float64)
+
+    def observation_log_probability_per_state(
+        self, next_states: Any, action: int, observation: Any
+    ) -> np.ndarray:
+        next_states_array = np.ascontiguousarray(np.asarray(next_states, dtype=np.float64))
+        if next_states_array.ndim == 1:
+            next_states_array = next_states_array.reshape(1, -1)
+        # ``batch_log_likelihood`` reads each row's next-state from the
+        # input array; ``next_state_`` on the kernel is unused, so we
+        # skip ``set_next_state`` on this hot path.
+        kernel = self._get_obs_kernel(int(action))
+        observation_code = _OBS_STR_TO_CODE.get(observation, -1)
+        return np.asarray(
+            kernel.batch_log_likelihood(
+                next_particles=next_states_array,
+                observation=int(observation_code),
+            ),
+            dtype=np.float64,
+        )
+
+    def simulate_random_rollout(
+        self,
+        state: Any,
+        action_sampler: Any,
+        max_depth: int,
+        discount_factor: float,
+        depth: int = 0,
+    ) -> float:
+        """Random rollout via native C++ deterministic transition and reward kernel.
+
+        Falls back to the base-class Python loop when dangerous areas are
+        configured (their stochastic-penalty semantics are not ported to C++).
+
+        Args:
+            state: Current RockSample state array.
+            action_sampler: Object with a ``sample()`` method returning an
+                integer action; used only on the Python fallback path.
+            max_depth: Maximum rollout depth.
+            discount_factor: Per-step discount factor.
+            depth: Depth already consumed by the search tree. Defaults to 0.
+
+        Returns:
+            Discounted sum of immediate rewards along the sampled trajectory.
+        """
+        if self.dangerous_areas:
+            # pylint: disable-next=import-outside-toplevel
+            from POMDPPlanners.planners.planners_utils.rollout import (
+                python_random_rollout,
+            )
+
+            return python_random_rollout(
+                state=state,
+                depth=depth,
+                action_sampler=action_sampler,
+                environment=self,
+                discount_factor=discount_factor,
+                max_depth=max_depth,
+            )
+
+        steps_left = max_depth - depth
+        if steps_left <= 0:
+            return 0.0
+
+        state_arr = np.ascontiguousarray(np.asarray(state, dtype=np.float64).ravel())
+        n_actions = len(self.action_names)
+        action_indices = np.random.randint(0, n_actions, size=steps_left, dtype=np.int32)
+
+        return _native.simulate_rollout_discrete(
+            initial_state=state_arr,
+            action_indices=action_indices,
+            rock_positions_flat=self._rock_positions_flat,
+            max_depth=max_depth,
+            start_depth=depth,
+            discount_factor=discount_factor,
+            map_rows=int(self.map_size[0]),
+            map_cols=int(self.map_size[1]),
+            n_actions=n_actions,
+            step_penalty=float(self.step_penalty),
+            exit_reward=float(self.exit_reward),
+            good_rock_reward=float(self.good_rock_reward),
+            bad_rock_penalty=float(self.bad_rock_penalty),
+            sensor_use_penalty=float(self.sensor_use_penalty),
+        )
 
     def sample_next_step(
         self, state: RockSampleState, action: int
     ) -> Tuple[RockSampleState, str, float]:
         """Override to avoid reward() recomputing next state."""
-        next_state = self.state_transition_model(state, action).sample()[0]
-        observation = self.observation_model(next_state, action).sample()[0]
+        next_state = self.sample_next_state(state=state, action=action)
+        observation = self.sample_observation(next_state=next_state, action=action)
         reward = self._reward_from_next_state(state, action, next_state)
         return next_state, observation, reward
 
     def is_terminal(self, state: RockSampleState) -> bool:
         """Check if state is terminal."""
         return int(state[0]) == -1 and int(state[1]) == -1
+
+    def __getstate__(self) -> Dict[str, Any]:
+        # Per-action C++ kernel caches hold pybind11 objects that aren't
+        # picklable. Drop them at serialization time; ``__setstate__``
+        # rebuilds empty caches so the env works after unpickling.
+        state = self.__dict__.copy()
+        state["_trans_kernel_cache"] = {}
+        state["_obs_kernel_cache"] = {}
+        return state
+
+    def __setstate__(self, state: Dict[str, Any]) -> None:
+        vars(self).update(state)
+        self._trans_kernel_cache = {}
+        self._obs_kernel_cache = {}
 
     def initial_state_dist(self) -> DiscreteDistribution:
         """Get initial state distribution."""
@@ -517,6 +731,10 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
     def is_equal_observation(self, observation1: Any, observation2: Any) -> bool:
         """Check if two observations are equal."""
         return observation1 == observation2
+
+    def hash_action(self, action: Any) -> Hashable:
+        # Discrete int actions; already hashable.
+        return action
 
     def get_metric_names(self) -> List[str]:
         """Get names of RockSample POMDP specific metrics.

@@ -78,6 +78,6 @@ def _create_particle_belief(env: "PacManPOMDP", n_particles: int) -> "Belief":
 def _create_vectorized_belief(env: "PacManPOMDP", n_particles: int) -> "Belief":
     updater = PacManVectorizedUpdater.from_environment(env)
     initial_states = env.initial_state_dist().sample(n_samples=n_particles)
-    particles = env.states_to_array(initial_states)
+    particles = np.stack(initial_states)
     log_weights = np.log(np.ones(n_particles) / n_particles)
     return VectorizedWeightedParticleBelief(particles, log_weights, updater)

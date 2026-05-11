@@ -1,3 +1,4 @@
+# pylint: disable=too-many-lines
 """Push POMDP Environment Implementation.
 
 This module implements a robotic push task as a POMDP, where a robot must
@@ -19,27 +20,25 @@ Key mechanics:
 - Episode terminates when object reaches target
 
 Classes:
-    PushStateTransition: Physics-based pushing dynamics
-    PushObservation: Noisy object position observations
     PushPOMDP: Main push task environment with POMDP formulation
 """
 
 import math
 from enum import Enum
 from pathlib import Path
-from typing import Any, List, Optional, Tuple
+from collections.abc import Hashable
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
 from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
-    ObservationModel,
     SpaceInfo,
     SpaceType,
-    StateTransitionModel,
 )
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
+from POMDPPlanners.environments.push_pomdp import _native
 from POMDPPlanners.environments.push_pomdp.push_pomdp_visualizer import PushPOMDPVisualizer
 from POMDPPlanners.utils.statistics_utils import confidence_interval
 
@@ -54,353 +53,8 @@ class PushPOMDPMetrics(Enum):
     TOTAL_ROBOT_OBSTACLE_COLLISIONS = "total_robot_obstacle_collisions"
     TOTAL_OBJECT_OBSTACLE_COLLISIONS = "total_object_obstacle_collisions"
     TOTAL_ALL_OBSTACLE_COLLISIONS = "total_all_obstacle_collisions"
-
-
-class PushStateTransition(StateTransitionModel):
-    """State transition model for Push POMDP with physics-based pushing.
-
-    This model implements robot movement and object pushing dynamics on a 2D grid.
-    The robot moves according to discrete actions, and can push objects when
-    within the push threshold distance. Friction reduces push effectiveness.
-
-    State representation: [robot_x, robot_y, object_x, object_y, target_x, target_y]
-
-    Attributes:
-        state: Current state vector containing all entity positions
-        action: Movement action ("up", "down", "left", "right")
-        grid_size: Size of the grid environment
-        push_threshold: Maximum distance for robot to push object
-        friction_coefficient: Friction that reduces push force (0=no friction, 1=max friction)
-        robot_pos: Current robot position [x, y]
-        object_pos: Current object position [x, y]
-        target_pos: Target position [x, y] (fixed)
-
-    Example:
-        >>> import numpy as np
-        >>> np.random.seed(42)  # For reproducible results
-        >>> # Define state: [robot_x, robot_y, object_x, object_y, target_x, target_y]
-        >>> state = np.array([2.0, 3.0, 2.5, 3.1, 8.0, 8.0])
-        >>> action = "right"  # Move robot right
-
-        >>> # Create transition model
-        >>> transition = PushStateTransition(
-        ...     state=state,
-        ...     action=action,
-        ...     grid_size=10,
-        ...     push_threshold=1.0,
-        ...     friction_coefficient=0.3
-        ... )
-
-        >>> # Simulate step
-        >>> next_state = transition.sample()[0]
-        >>> len(next_state) == 6  # [robot_x, robot_y, object_x, object_y, target_x, target_y]
-        True
-        >>> isinstance(next_state, np.ndarray)
-        True
-        >>> bool(next_state[0] > state[0])  # Robot moved right
-        True
-    """
-
-    # Class-level constants shared across all instances
-    _AVAILABLE_ACTIONS = ["up", "down", "right", "left"]
-    _ACTION_TO_DXY = {
-        "up": (0, 1),
-        "down": (0, -1),
-        "right": (1, 0),
-        "left": (-1, 0),
-    }
-    # Keep numpy version for compatibility with code that uses action_to_vector
-    _ACTION_TO_VECTOR = {
-        "up": np.array([0, 1]),
-        "down": np.array([0, -1]),
-        "right": np.array([1, 0]),
-        "left": np.array([-1, 0]),
-    }
-
-    def __init__(
-        self,
-        state: np.ndarray,
-        action: str,
-        grid_size: int,
-        push_threshold: float,
-        friction_coefficient: float,
-        obstacles: Optional[List[Tuple[float, float]]] = None,
-        obstacle_radius: float = 0.5,
-        transition_error_prob: float = 0.0,
-    ):
-        super().__init__(state, action)
-        self.grid_size = grid_size
-        self.push_threshold = push_threshold
-        self.friction_coefficient = friction_coefficient
-        self.obstacles = obstacles if obstacles is not None else []
-        self.obstacle_radius = obstacle_radius
-        self.obstacle_radius_sq = obstacle_radius * obstacle_radius
-        self.transition_error_prob = transition_error_prob
-
-        # State components: [robot_x, robot_y, object_x, object_y, target_x, target_y]
-        self.robot_pos = state[:2]
-        self.object_pos = state[2:4]
-        self.target_pos = state[4:6]
-
-        # Available actions
-        self.available_actions = self._AVAILABLE_ACTIONS
-
-        # Action to movement mapping (reference class-level constant)
-        self.action_to_vector = self._ACTION_TO_VECTOR
-
-        # Pre-compute grid bounds
-        self._grid_max = grid_size - 1
-        self._push_threshold_sq = push_threshold * push_threshold
-
-    def _get_actual_action(self) -> str:
-        """Get the actual action to execute, accounting for transition errors.
-
-        Returns:
-            The action that will actually be executed. With probability (1-p)
-            returns the intended action, with probability p returns a uniformly
-            random action from the available actions excluding the intended action.
-        """
-        # Apply error probability
-        if np.random.random() < self.transition_error_prob:
-            # Select uniformly from available actions excluding the intended action
-            error_actions = [a for a in self.available_actions if a != self.action]
-            return np.random.choice(error_actions)
-        return self.action
-
-    def sample(self, n_samples: int = 1) -> List[Any]:
-        next_states = []
-        for _ in range(n_samples):
-            # Get the actual action to execute (may differ from intended due to errors)
-            actual_action = self._get_actual_action()
-            # Compute next state for this actual action
-            next_state = self._compute_next_state_for_action(actual_action)
-            next_states.append(next_state)
-        return next_states
-
-    def probability(self, values: List[Any]) -> np.ndarray:
-        """Calculate probability of transitioning to given next states.
-
-        Accounts for transition error probability. With probability (1-p), the
-        intended action executes. With probability p, a random error action
-        (excluding the intended one) is selected uniformly.
-
-        Args:
-            values: List of potential next states to evaluate
-
-        Returns:
-            Array of probabilities for each state in values
-        """
-        probabilities = []
-
-        # Compute next state for intended action
-        intended_next_state = self._compute_next_state_for_action(self.action)
-
-        # Get error actions (all actions except intended)
-        error_actions = [a for a in self.available_actions if a != self.action]
-        num_error_actions = len(error_actions)
-
-        for state in values:
-            # Probability from intended action
-            prob_intended = 0.0
-            if np.array_equal(state, intended_next_state):
-                prob_intended = 1.0
-
-            # Probability from error actions
-            prob_error = 0.0
-            if self.transition_error_prob > 0.0 and num_error_actions > 0:
-                error_prob_sum = 0.0
-                for error_action in error_actions:
-                    error_next_state = self._compute_next_state_for_action(error_action)
-                    if np.array_equal(state, error_next_state):
-                        error_prob_sum += 1.0
-                prob_error = self.transition_error_prob * (1.0 / num_error_actions) * error_prob_sum
-
-            # Total probability is sum of intended and error contributions
-            total_prob = (1.0 - self.transition_error_prob) * prob_intended + prob_error
-            probabilities.append(total_prob)
-
-        return np.array(probabilities)
-
-    def _compute_next_state_for_action(self, action: str) -> np.ndarray:
-        dx, dy = self._ACTION_TO_DXY[action]
-
-        # Extract scalar positions
-        rx, ry = float(self.robot_pos[0]), float(self.robot_pos[1])
-        ox, oy = float(self.object_pos[0]), float(self.object_pos[1])
-        tx, ty = float(self.target_pos[0]), float(self.target_pos[1])
-
-        # Calculate intended new robot position
-        irx, iry = rx + dx, ry + dy
-
-        # Check for collision with obstacles - if colliding, robot doesn't move
-        if self._is_colliding_with_obstacle_scalar(irx, iry):
-            nrx, nry = rx, ry
-        else:
-            nrx, nry = irx, iry
-
-        # Check if robot is close enough to push object (squared distance)
-        ddx, ddy = nrx - ox, nry - oy
-        dist_sq = ddx * ddx + ddy * ddy
-
-        if dist_sq < self._push_threshold_sq:
-            push_scale = 1.0 - self.friction_coefficient
-            iox = ox + dx * push_scale
-            ioy = oy + dy * push_scale
-
-            if self._is_colliding_with_obstacle_scalar(iox, ioy):
-                nox, noy = ox, oy
-            else:
-                nox, noy = iox, ioy
-        else:
-            nox, noy = ox, oy
-
-        # Clip to grid bounds using min/max (faster than np.clip for scalars)
-        gmax = self._grid_max
-        nrx = max(0.0, min(nrx, gmax))
-        nry = max(0.0, min(nry, gmax))
-        nox = max(0.0, min(nox, gmax))
-        noy = max(0.0, min(noy, gmax))
-
-        # Build result array directly
-        result = np.empty(6)
-        result[0] = nrx
-        result[1] = nry
-        result[2] = nox
-        result[3] = noy
-        result[4] = tx
-        result[5] = ty
-        return result
-
-    def _is_colliding_with_obstacle(self, position: np.ndarray) -> bool:
-        """Check if a position collides with any obstacle."""
-        if not self.obstacles:
-            return False
-
-        pos_x, pos_y = float(position[0]), float(position[1])
-        return self._is_colliding_with_obstacle_scalar(pos_x, pos_y)
-
-    def _is_colliding_with_obstacle_scalar(self, pos_x: float, pos_y: float) -> bool:
-        obs_r_sq = self.obstacle_radius_sq
-        for obs_x, obs_y in self.obstacles:
-            ddx = pos_x - obs_x
-            ddy = pos_y - obs_y
-            if ddx * ddx + ddy * ddy <= obs_r_sq:
-                return True
-        return False
-
-
-class PushObservation(ObservationModel):
-    """Noisy observation model for Push POMDP.
-
-    This model provides partial observability by adding Gaussian noise to
-    the object's position while keeping robot and target positions fully observable.
-    This creates uncertainty about the exact object location, making planning challenging.
-
-    Observation format: [robot_x, robot_y, noisy_object_x, noisy_object_y, target_x, target_y]
-
-    Attributes:
-        next_state: True state after action execution
-        action: Action that was taken (not used in observation generation)
-        observation_noise: Standard deviation of Gaussian noise for object position
-        grid_size: Size of the grid environment
-        robot_pos: Robot position (observed exactly)
-        object_pos: True object position (observed with noise)
-        target_pos: Target position (observed exactly)
-
-    Example:
-        >>> import numpy as np
-        >>> np.random.seed(42)  # For reproducible results
-        >>> # True state after robot movement
-        >>> true_state = np.array([3.0, 3.0, 2.8, 3.2, 8.0, 8.0])
-        >>> action = "right"
-
-        >>> # Create observation model
-        >>> obs_model = PushObservation(
-        ...     next_state=true_state,
-        ...     action=action,
-        ...     observation_noise=0.1,
-        ...     grid_size=10
-        ... )
-
-        >>> # Sample noisy observation
-        >>> observation = obs_model.sample()[0]
-        >>> len(observation) == 6  # [robot_x, robot_y, noisy_obj_x, noisy_obj_y, target_x, target_y]
-        True
-        >>> bool(observation[0] == 3.0)  # Robot position exact
-        True
-        >>> bool(observation[1] == 3.0)  # Robot position exact
-        True
-        >>> bool(observation[4] == 8.0)  # Target position exact
-        True
-
-        >>> # Calculate observation probability
-        >>> prob = obs_model.probability([observation])
-        >>> len(prob) == 1
-        True
-    """
-
-    def __init__(
-        self,
-        next_state: np.ndarray,
-        action: str,
-        observation_noise: float,
-        grid_size: int,
-    ):
-        super().__init__(next_state=next_state, action=action)
-        self.observation_noise = observation_noise
-        self.grid_size = grid_size
-
-        # State components: [robot_x, robot_y, object_x, object_y, target_x, target_y]
-        self.robot_pos = next_state[:2]
-        self.object_pos = next_state[2:4]
-        self.target_pos = next_state[4:6]
-
-    def sample(self, n_samples: int = 1) -> List[Any]:
-        observations = []
-        gmax = self.grid_size - 1
-        rx, ry = float(self.robot_pos[0]), float(self.robot_pos[1])
-        ox, oy = float(self.object_pos[0]), float(self.object_pos[1])
-        tx, ty = float(self.target_pos[0]), float(self.target_pos[1])
-        noise_std = self.observation_noise
-
-        for _ in range(n_samples):
-            # Add noise to object position observation
-            nox = max(0.0, min(ox + np.random.normal(0, noise_std), gmax))
-            noy = max(0.0, min(oy + np.random.normal(0, noise_std), gmax))
-
-            observation = np.empty(6)
-            observation[0] = rx
-            observation[1] = ry
-            observation[2] = nox
-            observation[3] = noy
-            observation[4] = tx
-            observation[5] = ty
-            observations.append(observation)
-        return observations
-
-    def probability(self, values: List[Any]) -> np.ndarray:
-        # Calculate probabilities based on Gaussian noise model for list of observations
-        # Using 2D Gaussian PDF: (1/(2*pi*sigma^2)) * exp(-0.5 * ||diff||^2 / sigma^2)
-        probabilities = []
-        variance = self.observation_noise**2
-        normalization = 1.0 / (2.0 * np.pi * variance)
-
-        for observation in values:
-            # Ensure observation is numpy array with correct shape
-            if not isinstance(observation, np.ndarray) or observation.size == 0:
-                raise ValueError(
-                    f"Expected non-empty numpy array observation, got {type(observation)} with shape {getattr(observation, 'shape', 'unknown')}"
-                )
-
-            if observation.shape != (6,):
-                raise ValueError(f"Expected observation shape (6,), got {observation.shape}")
-
-            object_pos_diff = observation[2:4] - self.object_pos
-            log_prob = -0.5 * np.sum(object_pos_diff**2) / variance
-            prob = normalization * np.exp(log_prob)
-            probabilities.append(prob)
-
-        return np.array(probabilities)
+    DANGEROUS_AREA_RATE = "dangerous_area_rate"
+    TOTAL_DANGEROUS_AREA_STEPS = "total_dangerous_area_steps"
 
 
 class FixedStateDistribution(Distribution):
@@ -443,9 +97,8 @@ class RandomInitialStateDistribution(Distribution):
         max_attempts = 100
         for _ in range(max_attempts):
             robot_pos = np.random.uniform(0, self.grid_size - 1, size=2)
-            if not self.parent._is_colliding_with_obstacle(
-                robot_pos
-            ):  # pylint: disable=protected-access
+            # pylint: disable-next=protected-access
+            if not self.parent._is_colliding_with_obstacle(robot_pos):
                 return robot_pos
         return np.random.uniform(0, self.grid_size - 1, size=2)
 
@@ -453,16 +106,14 @@ class RandomInitialStateDistribution(Distribution):
         max_attempts = 100
         for _ in range(max_attempts):
             object_pos = np.random.uniform(0, self.grid_size - 1, size=2)
-            if np.linalg.norm(
-                object_pos - self.target_pos
-            ) >= 2.0 and not self.parent._is_colliding_with_obstacle(
-                object_pos
-            ):  # pylint: disable=protected-access
+            # pylint: disable-next=protected-access
+            colliding = self.parent._is_colliding_with_obstacle(object_pos)
+            if np.linalg.norm(object_pos - self.target_pos) >= 2.0 and not colliding:
                 return object_pos
         return np.random.uniform(0, self.grid_size - 1, size=2)
 
 
-class PushPOMDP(DiscreteActionsEnvironment):
+class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-methods
     """Robotic push task formulated as a POMDP.
 
     This environment simulates a robot that must push an object to a target location
@@ -484,6 +135,41 @@ class PushPOMDP(DiscreteActionsEnvironment):
     - Obstacle collision detection with configurable penalties
     - Obstacles prevent robot and object movement through them
 
+    Stochasticity:
+        The obstacle-collision penalty can be applied either
+        deterministically (the default) or stochastically. When
+        ``obstacle_hit_probability == 1.0`` (default), the penalty is
+        applied every time the robot's intended next position lies inside
+        an obstacle, matching legacy behavior. When
+        ``obstacle_hit_probability < 1.0``, the penalty is applied only
+        with that probability per ``reward()`` / ``reward_batch()`` call
+        (one Bernoulli draw per state), producing a heavy-tailed return
+        distribution suitable for benchmarking risk-sensitive planners
+        (e.g. ICVaR-aware MCTS) against expected-value MCTS on the same
+        env. Note that this makes ``reward(state, action)`` non-
+        deterministic given a state-action pair, so any external caching
+        that assumes deterministic rewards must be aware of this.
+        ``transition_log_probability`` is unaffected; the obstacle still
+        deterministically blocks movement. When
+        ``obstacle_hit_probability < 1.0`` the native C++ rollout (which
+        deducts the penalty deterministically) is bypassed in favour of
+        the pure-Python rollout so per-step Bernoulli draws survive.
+
+    Dangerous areas:
+        ``dangerous_areas`` is a separate, additive concept from
+        ``obstacles``. Each entry is a circular region centred at
+        ``(x, y)`` with radius ``dangerous_area_radius``. Entering a
+        dangerous area applies ``dangerous_area_penalty`` (a negative
+        number, added to reward — same sign convention as
+        ``obstacle_penalty``) but does NOT block movement. Penalty fires
+        when the robot's intended next position lies inside any
+        dangerous area; the object position is ignored. At most one
+        ``dangerous_area_penalty`` is applied per step even when
+        multiple zones overlap. Like obstacles, the penalty supports a
+        Bernoulli ``dangerous_area_hit_probability`` (default 1.0) for
+        risk-sensitive planning; ``< 1.0`` bypasses the deterministic
+        native rollout in favour of the Python path.
+
     Example:
         >>> import numpy as np
         >>> np.random.seed(42)  # For reproducible results
@@ -504,7 +190,17 @@ class PushPOMDP(DiscreteActionsEnvironment):
         False
     """
 
-    def __init__(
+    # Class-level action -> (dx, dy) offset table. Shared across instances
+    # and referenced by both the deterministic next-state helper and the
+    # obstacle-collision check.
+    _ACTION_TO_DXY = {
+        "up": (0, 1),
+        "down": (0, -1),
+        "right": (1, 0),
+        "left": (-1, 0),
+    }
+
+    def __init__(  # pylint: disable=too-many-arguments,too-many-locals
         self,
         discount_factor: float,
         grid_size: int = 10,
@@ -514,6 +210,11 @@ class PushPOMDP(DiscreteActionsEnvironment):
         obstacles: Optional[List[Tuple[float, float]]] = None,
         obstacle_radius: float = 0.5,
         obstacle_penalty: float = -10.0,
+        obstacle_hit_probability: float = 1.0,
+        dangerous_areas: Optional[List[Tuple[float, float]]] = None,
+        dangerous_area_radius: float = 0.5,
+        dangerous_area_penalty: float = -10.0,
+        dangerous_area_hit_probability: float = 1.0,
         initial_state: Optional[np.ndarray] = None,
         transition_error_prob: float = 0.0,
         name: str = "PushPOMDP",
@@ -521,6 +222,11 @@ class PushPOMDP(DiscreteActionsEnvironment):
         debug: bool = False,
         use_queue_logger: bool = False,
     ):
+        if not 0.0 <= obstacle_hit_probability <= 1.0:
+            raise ValueError("obstacle_hit_probability must be between 0 and 1 (inclusive)")
+        if not 0.0 <= dangerous_area_hit_probability <= 1.0:
+            raise ValueError("dangerous_area_hit_probability must be between 0 and 1 (inclusive)")
+
         self.grid_size = grid_size
         self.push_threshold = push_threshold
         self.friction_coefficient = friction_coefficient
@@ -528,8 +234,20 @@ class PushPOMDP(DiscreteActionsEnvironment):
         self.obstacles: List[Tuple[float, float]] = obstacles if obstacles is not None else []
         self.obstacle_radius = obstacle_radius
         self.obstacle_penalty = obstacle_penalty
+        self.obstacle_hit_probability = float(obstacle_hit_probability)
+        self.dangerous_areas: List[Tuple[float, float]] = (
+            list(dangerous_areas) if dangerous_areas is not None else []
+        )
+        self.dangerous_area_radius = float(dangerous_area_radius)
+        self.dangerous_area_penalty = float(dangerous_area_penalty)
+        self.dangerous_area_hit_probability = float(dangerous_area_hit_probability)
         self._initial_state = initial_state
         self.transition_error_prob = transition_error_prob
+
+        # Cached constants for the scalar observation log-probability fast-path
+        # used by POMCPOW's WeightedParticleBeliefStateUpdate.inplace_update.
+        self._obs_variance = float(observation_noise) * float(observation_noise)
+        self._obs_log_norm = -math.log(2.0 * math.pi * self._obs_variance)
 
         # Define actions
         self.actions = ["up", "down", "right", "left"]
@@ -541,10 +259,18 @@ class PushPOMDP(DiscreteActionsEnvironment):
             action_space=SpaceType.DISCRETE,  # Action space is discrete positions
             observation_space=SpaceType.CONTINUOUS,  # Observation space is positions with noise
         )
-        # Calculate reward range based on maximum distance to target
-        # Maximum distance is diagonal from corner to corner: sqrt(2) * (grid_size - 1)
+        # Calculate reward range based on maximum distance to target plus the
+        # additive obstacle and dangerous-area penalties when configured.
+        # Without those terms, any robot action that drives the robot into a
+        # penalised region produces a reward strictly more negative than the
+        # advertised lower bound. Maximum distance is diagonal from corner to
+        # corner: sqrt(2) * (grid_size - 1).
         max_distance = np.sqrt(2) * (grid_size - 1)
-        min_reward = -max_distance  # Worst case: maximum distance to target
+        min_reward = (
+            -max_distance
+            + min(0.0, obstacle_penalty if self.obstacles else 0.0)
+            + min(0.0, dangerous_area_penalty if self.dangerous_areas else 0.0)
+        )
         max_reward = 100.0  # Best case: at target with bonus reward
 
         super().__init__(
@@ -564,6 +290,44 @@ class PushPOMDP(DiscreteActionsEnvironment):
             "left": np.array([-1, 0]),
         }
 
+        # Pre-built per-action (dx, dy) C-contiguous float64 buffers; one
+        # array per label, shared across all transition kernel calls so the
+        # cached C++ kernel doesn't need to repack on every dispatch.
+        self._action_dxdy_map: Dict[str, np.ndarray] = {
+            label: np.array([float(dx), float(dy)], dtype=np.float64)
+            for label, (dx, dy) in self._ACTION_TO_DXY.items()
+        }
+
+        # Precomputed error-action list per action label. Avoids per-call
+        # list comprehension + np.random.choice over a Python list (~5 µs)
+        # in _sample_one_next_state's error branch.
+        self._error_actions_for: Dict[str, List[str]] = {
+            a: [b for b in self.actions if b != a] for a in self.actions
+        }
+
+        # Flat (M*2,) float64 buffer of obstacle centres; shared across all
+        # cached kernels (they each copy it at construction).
+        if self.obstacles:
+            self._obstacles_flat_arr: np.ndarray = np.asarray(
+                self.obstacles, dtype=np.float64
+            ).ravel()
+        else:
+            self._obstacles_flat_arr = np.empty((0,), dtype=np.float64)
+
+        # (K, 2) float64 buffer of dangerous-area centres for the native
+        # rollout kernel. Empty (0, 2) when no dangerous areas configured.
+        if self.dangerous_areas:
+            self._dangerous_areas_arr: np.ndarray = np.ascontiguousarray(
+                np.asarray(self.dangerous_areas, dtype=np.float64).reshape(-1, 2)
+            )
+        else:
+            self._dangerous_areas_arr = np.empty((0, 2), dtype=np.float64)
+
+        # Per-action C++ transition kernel cache. Built lazily on first
+        # dispatch so the env survives pickling without bundling pybind11
+        # objects.
+        self._trans_kernel_cache: Dict[str, Any] = {}
+
     def _is_colliding_with_obstacle(
         self, position: np.ndarray, action: Optional[str] = None
     ) -> bool:
@@ -580,7 +344,7 @@ class PushPOMDP(DiscreteActionsEnvironment):
             return False
 
         if action is not None:
-            dx, dy = PushStateTransition._ACTION_TO_DXY[action]
+            dx, dy = self._ACTION_TO_DXY[action]
             check_x = float(position[0]) + dx
             check_y = float(position[1]) + dy
         else:
@@ -596,41 +360,261 @@ class PushPOMDP(DiscreteActionsEnvironment):
 
         return False
 
-    def state_transition_model(self, state: np.ndarray, action: str) -> StateTransitionModel:
-        return PushStateTransition(
-            state=state,
-            action=action,
-            grid_size=self.grid_size,
-            push_threshold=self.push_threshold,
-            friction_coefficient=self.friction_coefficient,
-            obstacles=self.obstacles,
-            obstacle_radius=self.obstacle_radius,
-            transition_error_prob=self.transition_error_prob,
-        )
-
-    def observation_model(self, next_state: np.ndarray, action: str) -> ObservationModel:
-        return PushObservation(
-            next_state=next_state,
-            action=action,
-            observation_noise=self.observation_noise,
-            grid_size=self.grid_size,
-        )
-
     def sample_next_step(self, state: Any, action: Any) -> Tuple[Any, Any, float]:
-        next_state = self.state_transition_model(state=state, action=action).sample()[0]
-        next_observation = self.observation_model(next_state=next_state, action=action).sample()[0]
+        next_state = self.sample_next_state(state=state, action=action)
+        next_observation = self.sample_observation(next_state=next_state, action=action)
         r = self._reward_from_next_state(state, action, next_state)
         return next_state, next_observation, r
 
-    def reward(self, state: np.ndarray, action: str) -> float:
-        # Compute next state to evaluate reward based on action result
-        next_state = self.state_transition_model(state, action).sample()[0]
+    # ── Env-API sampling implementations ────────────────────────────
+    # These methods inline the per-call physics (push, friction, obstacle
+    # collision, grid clipping) and the per-call RNG draws so callers
+    # never need to allocate a per-(state, action) wrapper object.
+
+    def sample_next_state(self, state: np.ndarray, action: str, n_samples: int = 1) -> Any:
+        if n_samples == 1:
+            return self._sample_one_next_state(state, action)
+        samples: List[np.ndarray] = []
+        for _ in range(n_samples):
+            samples.append(self._sample_one_next_state(state, action))
+        return samples
+
+    def _sample_one_next_state(self, state: np.ndarray, action: str) -> np.ndarray:
+        # RNG order: one np.random.random() call, optionally one
+        # np.random.randint() call indexing into the precomputed error list.
+        # randint+index is ~3.5x faster than np.random.choice over a Python list.
+        if self.transition_error_prob > 0.0 and np.random.random() < self.transition_error_prob:
+            error_actions = self._error_actions_for[action]
+            actual_action = error_actions[np.random.randint(len(error_actions))]
+        else:
+            actual_action = action
+        return self._compute_next_state_for_action(state, actual_action)
+
+    def _get_trans_kernel(self, action: str) -> Any:
+        # Per-action native transition kernel cache. Each kernel freezes the
+        # (dx, dy) for ``action`` and copies obstacles_flat once at
+        # construction; per-call work is just set_state + compute_next_state.
+        cached = self._trans_kernel_cache.get(action)
+        if cached is not None:
+            return cached
+        action_dxdy = self._action_dxdy_map[action]
+        kernel = _native.PushDiscreteTransitionCpp(
+            state=np.zeros(6, dtype=np.float64),
+            action_dxdy=action_dxdy,
+            grid_size=float(self.grid_size),
+            push_threshold=float(self.push_threshold),
+            friction_coefficient=float(self.friction_coefficient),
+            obstacles_flat=self._obstacles_flat_arr,
+            n_obstacles=len(self.obstacles),
+            obstacle_radius=float(self.obstacle_radius),
+        )
+        self._trans_kernel_cache[action] = kernel
+        return kernel
+
+    def _compute_next_state_for_action(self, state: np.ndarray, action: str) -> np.ndarray:
+        # Native dispatch path: route the closed-form deterministic transition
+        # through the cached PushDiscreteTransitionCpp kernel. Used by both
+        # the sampling path (after error-action selection) and the closed-form
+        # transition_log_probability path.
+        kernel = self._get_trans_kernel(action)
+        kernel.set_state(np.ascontiguousarray(state, dtype=np.float64))
+        return np.asarray(kernel.compute_next_state())
+
+    def _compute_next_state_for_action_python(self, state: np.ndarray, action: str) -> np.ndarray:
+        # Pure-Python reference implementation kept for the parity test.
+        dx, dy = self._ACTION_TO_DXY[action]
+
+        # Extract scalar positions from the 6-D state.
+        rx, ry = float(state[0]), float(state[1])
+        ox, oy = float(state[2]), float(state[3])
+        tx, ty = float(state[4]), float(state[5])
+
+        # Intended new robot position; obstacle collision blocks movement.
+        irx, iry = rx + dx, ry + dy
+        if self._is_colliding_with_obstacle_scalar(irx, iry):
+            nrx, nry = rx, ry
+        else:
+            nrx, nry = irx, iry
+
+        # Push if robot is within push_threshold of the object.
+        ddx, ddy = nrx - ox, nry - oy
+        dist_sq = ddx * ddx + ddy * ddy
+        push_threshold_sq = self.push_threshold * self.push_threshold
+
+        if dist_sq < push_threshold_sq:
+            push_scale = 1.0 - self.friction_coefficient
+            iox = ox + dx * push_scale
+            ioy = oy + dy * push_scale
+            if self._is_colliding_with_obstacle_scalar(iox, ioy):
+                nox, noy = ox, oy
+            else:
+                nox, noy = iox, ioy
+        else:
+            nox, noy = ox, oy
+
+        # Clip to grid bounds.
+        gmax = self.grid_size - 1
+        nrx = max(0.0, min(nrx, gmax))
+        nry = max(0.0, min(nry, gmax))
+        nox = max(0.0, min(nox, gmax))
+        noy = max(0.0, min(noy, gmax))
+
+        result = np.empty(6)
+        result[0] = nrx
+        result[1] = nry
+        result[2] = nox
+        result[3] = noy
+        result[4] = tx
+        result[5] = ty
+        return result
+
+    def _is_colliding_with_obstacle_scalar(self, pos_x: float, pos_y: float) -> bool:
+        if not self.obstacles:
+            return False
+        obs_r_sq = self.obstacle_radius * self.obstacle_radius
+        for obs_x, obs_y in self.obstacles:
+            ddx = pos_x - obs_x
+            ddy = pos_y - obs_y
+            if ddx * ddx + ddy * ddy <= obs_r_sq:
+                return True
+        return False
+
+    def _is_in_dangerous_area(self, position: np.ndarray, action: Optional[str] = None) -> bool:
+        """Check if ``position`` (optionally after ``action``) lies in any dangerous area."""
+        if not self.dangerous_areas:
+            return False
+        if action is not None:
+            dx, dy = self._ACTION_TO_DXY[action]
+            check_x = float(position[0]) + dx
+            check_y = float(position[1]) + dy
+        else:
+            check_x = float(position[0])
+            check_y = float(position[1])
+        return self._is_in_dangerous_area_scalar(check_x, check_y)
+
+    def _is_in_dangerous_area_scalar(self, pos_x: float, pos_y: float) -> bool:
+        if not self.dangerous_areas:
+            return False
+        r_sq = self.dangerous_area_radius * self.dangerous_area_radius
+        for danger_x, danger_y in self.dangerous_areas:
+            ddx = pos_x - danger_x
+            ddy = pos_y - danger_y
+            if ddx * ddx + ddy * ddy <= r_sq:
+                return True
+        return False
+
+    def sample_observation(self, next_state: np.ndarray, action: str, n_samples: int = 1) -> Any:
+        if n_samples == 1:
+            return self._sample_one_observation(next_state)
+        samples: List[np.ndarray] = []
+        for _ in range(n_samples):
+            samples.append(self._sample_one_observation(next_state))
+        return samples
+
+    def _sample_one_observation(self, next_state: np.ndarray) -> np.ndarray:
+        # Two Gaussian draws (object-x, object-y), clamped to [0, grid_size - 1].
+        # Robot and target slices are observed exactly. Single size=2 draw beats
+        # two scalar np.random.normal calls by avoiding dispatch overhead.
+        gmax = self.grid_size - 1
+        rx, ry = float(next_state[0]), float(next_state[1])
+        ox, oy = float(next_state[2]), float(next_state[3])
+        tx, ty = float(next_state[4]), float(next_state[5])
+
+        noise = np.random.normal(0.0, self.observation_noise, size=2)
+        nox = max(0.0, min(ox + float(noise[0]), gmax))
+        noy = max(0.0, min(oy + float(noise[1]), gmax))
+
+        observation = np.empty(6)
+        observation[0] = rx
+        observation[1] = ry
+        observation[2] = nox
+        observation[3] = noy
+        observation[4] = tx
+        observation[5] = ty
+        return observation
+
+    def transition_log_probability(
+        self, state: np.ndarray, action: str, next_states: Any
+    ) -> np.ndarray:
+        # Closed-form discrete probability:
+        #   P(next | s, a) = (1 - p_err) * 1[next == intended(s, a)]
+        #                  + p_err * (1 / n_err) * sum_a' 1[next == intended(s, a')]
+        # where the second sum runs over error_actions = actions \ {a}.
+        # Single cached kernel handles every action label: set_state once,
+        # compute_next_state for the intended action and
+        # compute_next_state_for_action(other_dxdy) for the error branch.
+        kernel = self._get_trans_kernel(action)
+        kernel.set_state(np.ascontiguousarray(state, dtype=np.float64))
+        intended_next = np.asarray(kernel.compute_next_state())
+        error_actions = [a for a in self.actions if a != action]
+        num_error_actions = len(error_actions)
+        error_results: List[np.ndarray] = []
+        if self.transition_error_prob > 0.0 and num_error_actions > 0:
+            error_results = [
+                np.asarray(
+                    kernel.compute_next_state_for_action(self._action_dxdy_map[error_action])
+                )
+                for error_action in error_actions
+            ]
+
+        probabilities = np.empty(len(next_states), dtype=float)
+        for i, candidate in enumerate(next_states):
+            prob_intended = 1.0 if np.array_equal(candidate, intended_next) else 0.0
+            prob_error = 0.0
+            if error_results:
+                error_match_count = sum(1 for er in error_results if np.array_equal(candidate, er))
+                prob_error = (
+                    self.transition_error_prob
+                    * (1.0 / num_error_actions)
+                    * float(error_match_count)
+                )
+            total = (1.0 - self.transition_error_prob) * prob_intended + prob_error
+            probabilities[i] = total
+
+        with np.errstate(divide="ignore"):
+            return np.log(probabilities)
+
+    def observation_log_probability(
+        self, next_state: np.ndarray, action: str, observations: Any
+    ) -> np.ndarray:
+        # Closed-form 2-D Gaussian log-pdf on the object-position slice
+        # (cols 2:4) against next_state[2:4]. Robot/target dims are observed
+        # exactly so they don't affect the likelihood.
+        variance = self.observation_noise * self.observation_noise
+        log_norm = -float(np.log(2.0 * np.pi * variance))
+        obs_arr = np.asarray(observations, dtype=float)
+        if obs_arr.ndim == 1:
+            obs_arr = obs_arr.reshape(1, -1)
+        diffs = obs_arr[:, 2:4] - np.asarray(next_state, dtype=float)[2:4]
+        sq = np.sum(diffs * diffs, axis=1)
+        return log_norm - 0.5 * sq / variance
+
+    def observation_log_probability_single(
+        self, next_state: Any, action: Any, observation: Any
+    ) -> float:
+        # Scalar fast-path used by POMCPOW's incremental belief update.
+        # Same 2-D Gaussian on object position (cols 2:4) as the batched path
+        # above, but skips numpy array allocation per call. Cached
+        # ``_obs_variance`` and ``_obs_log_norm`` are set in __init__.
+        del action  # unused; obs noise is action-independent for this env
+        dx = float(observation[2]) - float(next_state[2])
+        dy = float(observation[3]) - float(next_state[3])
+        return self._obs_log_norm - 0.5 * (dx * dx + dy * dy) / self._obs_variance
+
+    def reward(self, state: np.ndarray, action: str, next_state: Any = None) -> float:
+        # Use the realised ``next_state`` when supplied (e.g. by
+        # :meth:`Environment.sample_next_step`) so the obstacle/danger
+        # penalty fires against the same draw as the trajectory; otherwise
+        # sample a fresh next state to evaluate the action result.
+        if next_state is None:
+            next_state = self.sample_next_state(state, action)
         return self._reward_from_next_state(state, action, next_state)
 
     def _reward_from_next_state(
         self, state: np.ndarray, action: str, next_state: np.ndarray
     ) -> float:
         # State components: [robot_x, robot_y, object_x, object_y, target_x, target_y]
+        del state, action  # penalties consult the realised post-transition robot pos
         dx = next_state[2] - next_state[4]
         dy = next_state[3] - next_state[5]
         distance_to_target = math.sqrt(dx * dx + dy * dy)
@@ -642,8 +626,25 @@ class PushPOMDP(DiscreteActionsEnvironment):
         if distance_to_target < 0.5:
             reward += 100.0
 
-        if self._is_colliding_with_obstacle(state[:2], action):
-            reward += self.obstacle_penalty
+        # Score obstacle/danger penalties against the realised robot
+        # position so reward and trajectory agree on the same draw —
+        # mirrors the ContinuousPushPOMDP fix. Action-blocking +
+        # transition_error_prob can move the robot somewhere other than
+        # ``state[:2] + dxdy``, so checking the intended position
+        # double-counts bounce-offs and miscredits orthogonal-error draws.
+        if self._is_colliding_with_obstacle(next_state[:2]):
+            if (
+                self.obstacle_hit_probability >= 1.0
+                or np.random.random() < self.obstacle_hit_probability
+            ):
+                reward += self.obstacle_penalty
+
+        if self._is_in_dangerous_area(next_state[:2]):
+            if (
+                self.dangerous_area_hit_probability >= 1.0
+                or np.random.random() < self.dangerous_area_hit_probability
+            ):
+                reward += self.dangerous_area_penalty
 
         return float(reward)
 
@@ -671,6 +672,257 @@ class PushPOMDP(DiscreteActionsEnvironment):
     def is_equal_observation(self, observation1: np.ndarray, observation2: np.ndarray) -> bool:
         return np.array_equal(observation1, observation2)
 
+    def hash_observation(self, observation: Any) -> Hashable:
+        # ndarray observations are unhashable; ``tobytes()`` is consistent with
+        # ``np.array_equal`` for fixed-shape/dtype observations of this env.
+        return np.ascontiguousarray(observation).tobytes()
+
+    def hash_action(self, action: Any) -> Hashable:
+        # Discrete-action env: actions are str labels (e.g. "up").
+        return action
+
+    def __getstate__(self) -> Dict[str, Any]:
+        # Per-action C++ kernel cache holds pybind11 objects that are not
+        # picklable. Drop them at serialization time; ``__setstate__``
+        # rebuilds an empty cache on the receiving end.
+        state = self.__dict__.copy()
+        state["_trans_kernel_cache"] = {}
+        return state
+
+    def __setstate__(self, state: Dict[str, Any]) -> None:
+        vars(self).update(state)
+        self._trans_kernel_cache = {}
+
+    def _get_native_rollout_obstacles(self) -> np.ndarray:
+        # Returns (M, 2) float64 array of obstacle centres; cached on first call.
+        cached = getattr(self, "_cached_native_rollout_obstacles", None)
+        if cached is not None:
+            return cached  # type: ignore[return-value]
+        if self.obstacles:
+            obs_arr: np.ndarray = np.array(self.obstacles, dtype=np.float64)
+        else:
+            obs_arr = np.empty((0,), dtype=np.float64)
+        # pylint: disable=attribute-defined-outside-init
+        self._cached_native_rollout_obstacles: np.ndarray = obs_arr
+        return obs_arr
+
+    def simulate_random_rollout(
+        self,
+        state: Any,
+        action_sampler: Any,
+        max_depth: int,
+        discount_factor: float,
+        depth: int = 0,
+    ) -> float:
+        # Fast path: delegate the entire rollout to the C++ kernel.
+        # Pre-draw action indices in Python so np's random stream (used by
+        # belief updates etc.) remains the caller's random stream. ``_native``
+        # is imported at module top.
+        del action_sampler  # rollouts use the module-level np RNG directly
+        remaining = max_depth - depth
+        if remaining <= 0 or self.is_terminal(state=state):
+            return 0.0
+
+        # Bypass the native kernel whenever obstacle or dangerous-area
+        # penalties may fire: the C++ rollout still scores them against
+        # ``state + action_vector`` (intended position), while the Python
+        # ``reward`` path now consults the realised ``next_state``. The C++
+        # kernel needs a recompile to align — until then we route through
+        # Python whenever penalties are configured.
+        # The same fall-back is required for stochastic hit probabilities
+        # so per-step Bernoulli draws against the configured probabilities
+        # survive (the C++ kernel applies them deterministically).
+        has_obstacle_penalty = len(self.obstacles) > 0
+        has_dangerous_area_penalty = self._dangerous_areas_arr.shape[0] > 0
+        if (
+            self.obstacle_hit_probability < 1.0
+            or self.dangerous_area_hit_probability < 1.0
+            or has_obstacle_penalty
+            or has_dangerous_area_penalty
+        ):
+            actions = [self.actions[i] for i in np.random.randint(0, 4, size=remaining)]
+            return self._python_simulate_random_rollout(
+                state=state,
+                actions=actions,
+                max_depth=max_depth,
+                discount_factor=discount_factor,
+                depth=depth,
+            )
+
+        action_indices = np.random.randint(0, 4, size=remaining, dtype=np.int64)
+        obs_arr = self._get_native_rollout_obstacles()
+        state_arr = np.asarray(state, dtype=np.float64)
+
+        return float(
+            _native.simulate_rollout_discrete(
+                state=state_arr,
+                action_indices=action_indices,
+                max_depth=max_depth,
+                depth=depth,
+                discount=discount_factor,
+                grid_size=float(self.grid_size),
+                push_threshold=float(self.push_threshold),
+                friction_coefficient=float(self.friction_coefficient),
+                obstacles=obs_arr,
+                obstacle_radius=float(self.obstacle_radius),
+                obstacle_penalty=float(self.obstacle_penalty),
+                dangerous_areas=self._dangerous_areas_arr,
+                dangerous_area_radius=float(self.dangerous_area_radius),
+                dangerous_area_penalty=float(self.dangerous_area_penalty),
+                transition_error_prob=float(self.transition_error_prob),
+            )
+        )
+
+    def _python_simulate_random_rollout(
+        self,
+        state: Any,
+        actions: List[str],
+        max_depth: int,
+        discount_factor: float,
+        depth: int = 0,
+    ) -> float:
+        # Pure-Python reference rollout: mirrors the pre-native logic but
+        # accepts a pre-drawn action list (to allow exact comparison with the
+        # C++ path when transition_error_prob=0 and the actions are held fixed).
+        sample_one = self._sample_one_next_state
+        reward_from_next = self._reward_from_next_state
+        is_terminal = self.is_terminal
+
+        total = 0.0
+        gamma_power = 1.0
+        current = state
+        cursor = 0
+        while depth < max_depth and not is_terminal(state=current):
+            if cursor >= len(actions):
+                break
+            action = actions[cursor]
+            cursor += 1
+            next_state = sample_one(current, action)
+            r = reward_from_next(current, action, next_state)
+            total += gamma_power * r
+            current = next_state
+            gamma_power *= discount_factor
+            depth += 1
+        return total
+
+    # ── Vectorized batch overrides ─────────────────────────────────
+    # PFT-DPW belief updates and any caller of the batch API otherwise hit
+    # the per-state Python fallback in ``Environment``. Delegate to the
+    # vectorized updater (which already exists for explicit belief
+    # filtering) so all-particle work happens inside NumPy, not a Python
+    # loop. The updater is built lazily on first call and cached.
+
+    def _get_vectorized_updater(self) -> Any:
+        cached = getattr(self, "_cached_vectorized_updater", None)
+        if cached is not None:
+            return cached
+        # pylint: disable=import-outside-toplevel
+        from POMDPPlanners.environments.push_pomdp.push_pomdp_beliefs.push_vectorized_updater import (
+            PushVectorizedUpdater,
+        )
+
+        cached = PushVectorizedUpdater.from_environment(self)
+        # pylint: disable=attribute-defined-outside-init
+        self._cached_vectorized_updater = cached
+        return cached
+
+    def sample_next_state_batch(self, states: Any, action: str) -> np.ndarray:
+        states_array = np.ascontiguousarray(np.asarray(states, dtype=float))
+        if states_array.ndim == 1:
+            states_array = states_array.reshape(1, -1)
+        return self._get_vectorized_updater().batch_transition(states_array, action)
+
+    def reward_batch(
+        self,
+        states: Any,
+        action: str,
+        next_states: Any = None,
+    ) -> np.ndarray:
+        """Calculate rewards for a batch of states given a single action.
+
+        When ``next_states`` is supplied (e.g. by a caller that has
+        already sampled the realised batch transition), it is used
+        directly; otherwise N next states are drawn here via the cached
+        ``PushVectorizedUpdater``. Per-particle rewards are then computed
+        with pure NumPy operations — no Python loop over particles.
+        """
+        states_array = np.ascontiguousarray(np.asarray(states, dtype=float))
+        if states_array.ndim == 1:
+            states_array = states_array.reshape(1, -1)
+        if next_states is None:
+            next_states_arr = self._get_vectorized_updater().batch_transition(states_array, action)
+        else:
+            next_states_arr = np.ascontiguousarray(np.asarray(next_states, dtype=float))
+            if next_states_arr.ndim == 1:
+                next_states_arr = next_states_arr.reshape(1, -1)
+        return self._reward_batch_from_next_states(states_array, action, next_states_arr)
+
+    def _reward_batch_from_next_states(
+        self, states: np.ndarray, action: str, next_states: np.ndarray
+    ) -> np.ndarray:
+        # ``states``/``action`` are kept on the signature for symmetry with
+        # ``Environment.reward_batch``; the obstacle and dangerous-area
+        # penalties consume the realised post-transition robot position
+        # from ``next_states`` to stay in lockstep with the scalar
+        # ``_reward_from_next_state`` path (and the ContinuousPushPOMDP
+        # reference fix).
+        del states, action
+        dx = next_states[:, 2] - next_states[:, 4]
+        dy = next_states[:, 3] - next_states[:, 5]
+        dist = np.sqrt(dx * dx + dy * dy)
+        rewards = -dist
+        rewards = np.where(dist < 0.5, rewards + 100.0, rewards)
+        rewards += self._obstacle_penalty_batch(next_states)
+        rewards += self._dangerous_area_penalty_batch(next_states)
+        return rewards.astype(np.float64)
+
+    def _obstacle_penalty_batch(self, next_states: np.ndarray) -> np.ndarray:
+        # Score the obstacle penalty against the realised next robot
+        # position (``next_states[:, :2]``); mirrors the scalar path's
+        # post-fix ``_is_colliding_with_obstacle(next_state[:2])`` call.
+        if not self.obstacles:
+            return np.zeros(len(next_states), dtype=np.float64)
+        positions = next_states[:, :2]
+        obs_arr = np.asarray(self.obstacles, dtype=float)  # (M, 2)
+        diff = positions[:, None, :] - obs_arr[None, :, :]  # (N, M, 2)
+        dist_sq = np.sum(diff * diff, axis=2)  # (N, M)
+        colliding = np.any(dist_sq <= self.obstacle_radius * self.obstacle_radius, axis=1)
+        if self.obstacle_hit_probability < 1.0:
+            # Per-row Bernoulli mask: refund the penalty for rows that collide
+            # but lose the per-call coin flip.
+            applied = np.random.random(len(next_states)) < self.obstacle_hit_probability
+            colliding = colliding & applied
+        return np.where(colliding, self.obstacle_penalty, 0.0).astype(np.float64)
+
+    def _dangerous_area_penalty_batch(self, next_states: np.ndarray) -> np.ndarray:
+        if not self.dangerous_areas:
+            return np.zeros(len(next_states), dtype=np.float64)
+        positions = next_states[:, :2]
+        diff = positions[:, None, :] - self._dangerous_areas_arr[None, :, :]
+        dist_sq = np.sum(diff * diff, axis=2)
+        in_zone = np.any(dist_sq <= self.dangerous_area_radius * self.dangerous_area_radius, axis=1)
+        if self.dangerous_area_hit_probability < 1.0:
+            applied = np.random.random(len(next_states)) < self.dangerous_area_hit_probability
+            in_zone = in_zone & applied
+        return np.where(in_zone, self.dangerous_area_penalty, 0.0).astype(np.float64)
+
+    def observation_log_probability_per_state(
+        self, next_states: Any, action: str, observation: Any
+    ) -> np.ndarray:
+        next_states_arr = np.ascontiguousarray(np.asarray(next_states, dtype=float))
+        if next_states_arr.ndim == 1:
+            next_states_arr = next_states_arr.reshape(1, -1)
+        # The closed-form 2-D Gaussian on cols 2:4 doesn't depend on action,
+        # so we inline it directly rather than going through the updater
+        # (which uses CovarianceParameterizedMultivariateNormal). Keeps a
+        # single source of truth for the noise model.
+        variance = self.observation_noise * self.observation_noise
+        log_norm = -float(np.log(2.0 * np.pi * variance))
+        obs_obj = np.asarray(observation, dtype=float).ravel()[2:4]
+        diffs = next_states_arr[:, 2:4] - obs_obj[None, :]
+        sq = np.sum(diffs * diffs, axis=1)
+        return log_norm - 0.5 * sq / variance
+
     def cache_visualization(self, history: List[StepData], cache_path: Path) -> None:
         """Cache animated visualization of the push episode.
 
@@ -696,16 +948,20 @@ class PushPOMDP(DiscreteActionsEnvironment):
         """
         return [metric.value for metric in PushPOMDPMetrics]
 
-    def compute_metrics(self, histories: List[History]) -> List[MetricValue]:
+    def compute_metrics(  # pylint: disable=too-many-locals
+        self, histories: List[History]
+    ) -> List[MetricValue]:
         goal_reached = []
         robot_collisions = []
         object_collisions = []
         total_collisions = []
+        dangerous_steps_per_history: List[int] = []
 
         for history in histories:
             goal_reached_in_history = False
             history_robot_collisions = 0
             history_object_collisions = 0
+            history_dangerous_steps = 0
             total_steps = len(history.history)
 
             for step in history.history:
@@ -722,29 +978,15 @@ class PushPOMDP(DiscreteActionsEnvironment):
                 if self._is_colliding_with_obstacle(object_pos):
                     history_object_collisions += 1
 
+                if self._is_in_dangerous_area(robot_pos):
+                    history_dangerous_steps += 1
+
             goal_reached.append(1 if goal_reached_in_history else 0)
             if total_steps > 0:
                 robot_collisions.append(history_robot_collisions)
                 object_collisions.append(history_object_collisions)
                 total_collisions.append(history_robot_collisions + history_object_collisions)
-            history_robot_collisions = 0
-            history_object_collisions = 0
-            total_steps = len(history.history)
-
-            for step in history.history:
-                robot_pos = step.state[:2]  # [robot_x, robot_y]
-                object_pos = step.state[2:4]  # [object_x, object_y]
-
-                if self._is_colliding_with_obstacle(robot_pos):
-                    history_robot_collisions += 1
-
-                if self._is_colliding_with_obstacle(object_pos):
-                    history_object_collisions += 1
-
-            if total_steps > 0:
-                robot_collisions.append(history_robot_collisions)
-                object_collisions.append(history_object_collisions)
-                total_collisions.append(history_robot_collisions + history_object_collisions)
+                dangerous_steps_per_history.append(history_dangerous_steps)
 
         total_steps_all = sum(len(history.history) for history in histories)
         avg_robot_collisions = sum(robot_collisions) / total_steps_all if total_steps_all > 0 else 0
@@ -752,6 +994,9 @@ class PushPOMDP(DiscreteActionsEnvironment):
             sum(object_collisions) / total_steps_all if total_steps_all > 0 else 0
         )
         avg_total_collisions = sum(total_collisions) / total_steps_all if total_steps_all > 0 else 0
+        avg_dangerous_rate = (
+            sum(dangerous_steps_per_history) / total_steps_all if total_steps_all > 0 else 0
+        )
 
         robot_collision_rates = [
             c / len(history.history) for c, history in zip(robot_collisions, histories)
@@ -762,14 +1007,27 @@ class PushPOMDP(DiscreteActionsEnvironment):
         total_collision_rates = [
             c / len(history.history) for c, history in zip(total_collisions, histories)
         ]
+        dangerous_rates = [
+            c / len(history.history) for c, history in zip(dangerous_steps_per_history, histories)
+        ]
 
         robot_collisions_ci = confidence_interval(data=robot_collision_rates, confidence=0.95)
         object_collisions_ci = confidence_interval(data=object_collision_rates, confidence=0.95)
         total_collisions_ci = confidence_interval(data=total_collision_rates, confidence=0.95)
+        dangerous_rate_ci = (
+            confidence_interval(data=dangerous_rates, confidence=0.95)
+            if dangerous_rates
+            else (0, 0)
+        )
 
         total_robot_collisions_ci = confidence_interval(data=robot_collisions, confidence=0.95)
         total_object_collisions_ci = confidence_interval(data=object_collisions, confidence=0.95)
         total_all_collisions_ci = confidence_interval(data=total_collisions, confidence=0.95)
+        total_dangerous_steps_ci = (
+            confidence_interval(data=dangerous_steps_per_history, confidence=0.95)
+            if dangerous_steps_per_history
+            else (0, 0)
+        )
 
         avg_goal_reached = float(np.mean(goal_reached))
         goal_reached_ci = confidence_interval(data=goal_reached, confidence=0.95)
@@ -801,20 +1059,36 @@ class PushPOMDP(DiscreteActionsEnvironment):
             ),
             MetricValue(
                 name=PushPOMDPMetrics.TOTAL_ROBOT_OBSTACLE_COLLISIONS.value,
-                value=sum(robot_collisions),
+                value=float(np.mean(robot_collisions)) if robot_collisions else 0.0,
                 lower_confidence_bound=total_robot_collisions_ci[0],
                 upper_confidence_bound=total_robot_collisions_ci[1],
             ),
             MetricValue(
                 name=PushPOMDPMetrics.TOTAL_OBJECT_OBSTACLE_COLLISIONS.value,
-                value=sum(object_collisions),
+                value=float(np.mean(object_collisions)) if object_collisions else 0.0,
                 lower_confidence_bound=total_object_collisions_ci[0],
                 upper_confidence_bound=total_object_collisions_ci[1],
             ),
             MetricValue(
                 name=PushPOMDPMetrics.TOTAL_ALL_OBSTACLE_COLLISIONS.value,
-                value=sum(total_collisions),
+                value=float(np.mean(total_collisions)) if total_collisions else 0.0,
                 lower_confidence_bound=total_all_collisions_ci[0],
                 upper_confidence_bound=total_all_collisions_ci[1],
+            ),
+            MetricValue(
+                name=PushPOMDPMetrics.DANGEROUS_AREA_RATE.value,
+                value=avg_dangerous_rate,
+                lower_confidence_bound=dangerous_rate_ci[0],
+                upper_confidence_bound=dangerous_rate_ci[1],
+            ),
+            MetricValue(
+                name=PushPOMDPMetrics.TOTAL_DANGEROUS_AREA_STEPS.value,
+                value=(
+                    float(np.mean(dangerous_steps_per_history))
+                    if dangerous_steps_per_history
+                    else 0.0
+                ),
+                lower_confidence_bound=total_dangerous_steps_ci[0],
+                upper_confidence_bound=total_dangerous_steps_ci[1],
             ),
         ]

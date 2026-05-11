@@ -4,9 +4,9 @@ This module provides a buffer that stores training tuples (φ(b), π_qw, g_t)
 collected during BetaZero policy iteration.  The buffer is partitioned into
 *iteration slots*: each call to :meth:`TrainingBuffer.begin_iteration` commits
 the current slot to history and opens a fresh one.  At most ``n_buffer``
-iteration slots are retained; older slots are evicted automatically, which
-mirrors the ``CircularBuffer`` design used in the reference Julia implementation
-(BetaZero.jl, ``n_buffer`` parameter).
+iteration slots are retained; older slots are evicted automatically, mirroring
+the ``CircularBuffer`` design used in the BetaZero reference implementation
+(``n_buffer`` parameter).
 
 With the default ``n_buffer=1`` only the current iteration's data is ever in
 the buffer, keeping training fully on-policy.  Set ``n_buffer > 1`` to retain
@@ -55,7 +55,7 @@ class TrainingBuffer:
 
     With ``n_buffer=1`` (the default) the history deque has capacity 0, so
     only the current iteration's data is ever visible to training — matching
-    the on-policy behaviour of the Julia reference implementation.
+    the on-policy behaviour of the BetaZero reference implementation.
 
     Args:
         n_buffer: Number of iteration slots to retain (including the current

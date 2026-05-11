@@ -6,18 +6,28 @@ observation model, reward, terminal conditions, metrics, and
 registry integration.
 """
 
+import math
+
 import numpy as np
 import pytest
 
 from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.policy import PolicyRunData
 from POMDPPlanners.core.simulation import History, StepData
+from POMDPPlanners.environments.laser_tag_pomdp import _native
 from POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_pomdp import (
     ContinuousLaserTagPOMDP,
     ContinuousLaserTagPOMDPDiscreteActions,
 )
+from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
+from POMDPPlanners.planners.planners_utils.rollout import python_random_rollout
 from POMDPPlanners.tests.test_utils.confidence_interval_utils import (
     verify_metrics_within_confidence_intervals,
+)
+from POMDPPlanners.tests.test_utils.metric_invariants_utils import (
+    verify_history_returns_bounded,
+    verify_metric_sanity,
+    verify_return_shift_linearity,
 )
 
 
@@ -102,8 +112,8 @@ class TestContinuousLaserTagPOMDPInit:
         assert env_default.walls.shape[1] == 4
 
 
-class TestStateTransitionModel:
-    """Tests for the ContinuousLaserTagStateTransitionModel."""
+class TestSampleNextState:
+    """Tests for env.sample_next_state behaviour."""
 
     def test_sample_returns_correct_shape(self, env):
         """Test that transition samples have shape (5,).
@@ -111,7 +121,7 @@ class TestStateTransitionModel:
         Purpose: Validates transition sample output shape.
 
         Given: A non-terminal state and a movement action.
-        When: Transition model samples are generated.
+        When: env.sample_next_state is called with n_samples=5.
         Then: Each sample has shape (5,).
 
         Test type: unit
@@ -119,8 +129,7 @@ class TestStateTransitionModel:
         np.random.seed(42)
         state = np.array([5.0, 3.0, 8.0, 5.0, 0.0])
         action = np.array([1.0, 0.0, 0.0])
-        model = env.state_transition_model(state, action)
-        samples = model.sample(n_samples=5)
+        samples = env.sample_next_state(state, action, n_samples=5)
         assert len(samples) == 5
         for s in samples:
             assert s.shape == (5,)
@@ -131,7 +140,7 @@ class TestStateTransitionModel:
         Purpose: Validates that terminal states remain terminal.
 
         Given: A terminal state.
-        When: Transition model samples are generated.
+        When: env.sample_next_state is called.
         Then: The returned state is unchanged.
 
         Test type: unit
@@ -139,8 +148,7 @@ class TestStateTransitionModel:
         np.random.seed(42)
         state = np.array([5.0, 3.0, 8.0, 5.0, 1.0])
         action = np.array([1.0, 0.0, 0.0])
-        model = env.state_transition_model(state, action)
-        samples = model.sample(n_samples=3)
+        samples = env.sample_next_state(state, action, n_samples=3)
         for s in samples:
             np.testing.assert_array_equal(s, state)
 
@@ -150,17 +158,15 @@ class TestStateTransitionModel:
         Purpose: Validates tag success condition.
 
         Given: Robot and opponent at near-identical positions.
-        When: Tag action is executed.
-        Then: The next state should be terminal.
+        When: Tag action is executed via env.sample_next_state.
+        Then: At least one of the next states is terminal.
 
         Test type: unit
         """
         np.random.seed(42)
         state = np.array([5.0, 3.0, 5.0, 3.0, 0.0])
         action = np.array([0.0, 0.0, 1.0])  # tag
-        model = env.state_transition_model(state, action)
-        # With very close positions, tag should succeed
-        samples = model.sample(n_samples=10)
+        samples = env.sample_next_state(state, action, n_samples=10)
         terminal_count = sum(1 for s in samples if bool(s[4]))
         assert terminal_count > 0
 
@@ -170,23 +176,22 @@ class TestStateTransitionModel:
         Purpose: Validates that robot moves with action.
 
         Given: A non-terminal state and movement action.
-        When: Multiple samples are generated.
-        Then: Robot positions differ from original (with noise).
+        When: Multiple samples are generated via env.sample_next_state.
+        Then: Mean robot x position is approximately the original + action[0].
 
         Test type: unit
         """
         np.random.seed(42)
         state = np.array([5.0, 3.0, 8.0, 5.0, 0.0])
         action = np.array([1.0, 0.0, 0.0])
-        model = env.state_transition_model(state, action)
-        samples = model.sample(n_samples=20)
+        samples = env.sample_next_state(state, action, n_samples=20)
         # Mean robot x should be approximately 6.0
         mean_x = np.mean([s[0] for s in samples])
         assert abs(mean_x - 6.0) < 1.0
 
 
-class TestObservationModel:
-    """Tests for the ContinuousLaserTagObservationModel."""
+class TestSampleObservation:
+    """Tests for env.sample_observation behaviour."""
 
     def test_sample_returns_correct_shape(self, env):
         """Test that observation samples have shape (8,).
@@ -194,7 +199,7 @@ class TestObservationModel:
         Purpose: Validates observation output shape.
 
         Given: A non-terminal state.
-        When: Observation model generates samples.
+        When: env.sample_observation is called with n_samples=5.
         Then: Each sample has shape (8,).
 
         Test type: unit
@@ -202,8 +207,7 @@ class TestObservationModel:
         np.random.seed(42)
         state = np.array([5.0, 3.0, 8.0, 5.0, 0.0])
         action = np.array([1.0, 0.0, 0.0])
-        model = env.observation_model(state, action)
-        samples = model.sample(n_samples=5)
+        samples = env.sample_observation(state, action, n_samples=5)
         assert len(samples) == 5
         for obs in samples:
             assert obs.shape == (8,)
@@ -214,15 +218,14 @@ class TestObservationModel:
         Purpose: Validates terminal observation is all -1.
 
         Given: A terminal state.
-        When: Observation model generates samples.
+        When: env.sample_observation is called.
         Then: All observations are np.full(8, -1.0).
 
         Test type: unit
         """
         state = np.array([5.0, 3.0, 8.0, 5.0, 1.0])
         action = np.array([1.0, 0.0, 0.0])
-        model = env.observation_model(state, action)
-        samples = model.sample(n_samples=3)
+        samples = env.sample_observation(state, action, n_samples=3)
         for obs in samples:
             np.testing.assert_array_equal(obs, np.full(8, -1.0))
 
@@ -232,7 +235,7 @@ class TestObservationModel:
         Purpose: Validates that clamped measurements are >= 0.
 
         Given: A non-terminal state.
-        When: Observations are sampled.
+        When: Observations are sampled via env.sample_observation.
         Then: All values are >= 0.
 
         Test type: unit
@@ -240,8 +243,7 @@ class TestObservationModel:
         np.random.seed(42)
         state = np.array([5.0, 3.0, 8.0, 5.0, 0.0])
         action = np.array([1.0, 0.0, 0.0])
-        model = env.observation_model(state, action)
-        samples = model.sample(n_samples=20)
+        samples = env.sample_observation(state, action, n_samples=20)
         for obs in samples:
             assert np.all(obs >= 0)
 
@@ -334,6 +336,290 @@ class TestReward:
         action = np.array([1.0, 0.0, 0.0])
         r = env.reward(state, action)
         assert r == -env.step_cost - 5.0
+
+
+class TestStochasticDangerousAreaPenalty:
+    """Tests for the ``dangerous_area_hit_probability`` parameter."""
+
+    @staticmethod
+    def _stochastic_env(hit_probability: float, penalty: float = 5.0) -> ContinuousLaserTagPOMDP:
+        return ContinuousLaserTagPOMDP(
+            discount_factor=0.95,
+            walls=[],
+            dangerous_areas=[(5.0, 3.0)],
+            dangerous_area_radius=1.0,
+            dangerous_area_penalty=penalty,
+            dangerous_area_hit_probability=hit_probability,
+        )
+
+    def test_default_hit_probability_is_one(self, env_default):
+        """Test that the default hit probability preserves legacy behavior.
+
+        Purpose: Validates that omitting the new parameter keeps the
+        deterministic dangerous-area penalty active.
+
+        Given: An env constructed with default parameters.
+        When: ``dangerous_area_hit_probability`` is read.
+        Then: It equals ``1.0`` (deterministic-penalty regime).
+
+        Test type: unit
+        """
+        assert env_default.dangerous_area_hit_probability == 1.0
+
+    def test_hit_probability_zero_never_applies_penalty(self):
+        """Test that hit_probability=0 disables the dangerous-area penalty.
+
+        Purpose: Validates the lower-bound of the stochastic penalty.
+
+        Given: A state inside a dangerous area and hit_probability=0.
+        When: reward() is called many times.
+        Then: The dangerous-area penalty is never applied.
+
+        Test type: unit
+        """
+        env = self._stochastic_env(hit_probability=0.0)
+        state = np.array([5.0, 3.0, 8.0, 5.0, 0.0])
+        action = np.array([1.0, 0.0, 0.0])
+        np.random.seed(0)
+        for _ in range(200):
+            assert env.reward(state, action) == -env.step_cost
+
+    def test_hit_probability_one_matches_deterministic(self):
+        """Test that hit_probability=1 matches the legacy deterministic penalty.
+
+        Purpose: Validates the upper-bound of the stochastic penalty
+        (regression check that the default behavior is preserved).
+
+        Given: A state inside a dangerous area and hit_probability=1.
+        When: reward() is called many times.
+        Then: The dangerous-area penalty is always applied.
+
+        Test type: unit
+        """
+        env = self._stochastic_env(hit_probability=1.0)
+        state = np.array([5.0, 3.0, 8.0, 5.0, 0.0])
+        action = np.array([1.0, 0.0, 0.0])
+        for _ in range(50):
+            assert env.reward(state, action) == -env.step_cost - 5.0
+
+    def test_hit_probability_zero_three_empirical_rate(self):
+        """Test empirical hit rate matches hit_probability over many calls.
+
+        Purpose: Validates that the per-call Bernoulli draw matches the
+        configured probability over a large sample.
+
+        Given: An in-zone state and hit_probability=0.3.
+        When: reward() is called 5000 times.
+        Then: Empirical hit rate is within 0.05 of 0.3.
+
+        Test type: unit
+        """
+        env = self._stochastic_env(hit_probability=0.3)
+        state = np.array([5.0, 3.0, 8.0, 5.0, 0.0])
+        action = np.array([1.0, 0.0, 0.0])
+        np.random.seed(123)
+        n_trials = 5000
+        hits = 0
+        penalty_reward = -env.step_cost - 5.0
+        for _ in range(n_trials):
+            if env.reward(state, action) == penalty_reward:
+                hits += 1
+        empirical_rate = hits / n_trials
+        assert abs(empirical_rate - 0.3) < 0.05
+
+    def test_reward_batch_honours_hit_probability(self):
+        """Test that reward_batch applies stochastic penalty consistently.
+
+        Purpose: Validates that the batched reward path uses the same
+        Bernoulli mechanism as the single-state path.
+
+        Given: 5000 copies of an in-zone state and hit_probability=0.3.
+        When: reward_batch() is called once.
+        Then: Empirical hit rate across the batch is within 0.05 of 0.3.
+
+        Test type: unit
+        """
+        env = self._stochastic_env(hit_probability=0.3)
+        state = np.array([5.0, 3.0, 8.0, 5.0, 0.0])
+        action = np.array([1.0, 0.0, 0.0])
+        n_trials = 5000
+        states = np.tile(state, (n_trials, 1))
+        np.random.seed(456)
+        rewards = env.reward_batch(states, action)
+        penalty_reward = -env.step_cost - 5.0
+        hits = int(np.sum(np.isclose(rewards, penalty_reward)))
+        empirical_rate = hits / n_trials
+        assert abs(empirical_rate - 0.3) < 0.05
+
+    def test_reward_batch_terminal_states_unaffected(self):
+        """Test that terminal rows in reward_batch ignore the stochastic refund.
+
+        Purpose: Validates that the kernel's zero-reward semantics for
+        terminal states is preserved under the Python refund pass.
+
+        Given: A batch with mixed terminal/non-terminal in-zone states.
+        When: reward_batch() is called with hit_probability=0.0.
+        Then: Terminal rows return 0.0 unchanged; non-terminal rows
+              return only the step cost (full refund).
+
+        Test type: unit
+        """
+        env = self._stochastic_env(hit_probability=0.0)
+        states = np.array(
+            [
+                [5.0, 3.0, 8.0, 5.0, 0.0],
+                [5.0, 3.0, 8.0, 5.0, 1.0],
+            ]
+        )
+        action = np.array([1.0, 0.0, 0.0])
+        rewards = env.reward_batch(states, action)
+        assert rewards[0] == -env.step_cost
+        assert rewards[1] == 0.0
+
+    @pytest.mark.parametrize("bad_value", [-0.1, 1.5, 2.0, -1.0])
+    def test_invalid_hit_probability_raises(self, bad_value: float):
+        """Test that out-of-range hit_probability raises ValueError.
+
+        Purpose: Validates input validation on the new parameter.
+
+        Given: A hit_probability value outside [0, 1].
+        When: ContinuousLaserTagPOMDP is constructed.
+        Then: ValueError is raised.
+
+        Test type: unit
+        """
+        with pytest.raises(ValueError, match="dangerous_area_hit_probability"):
+            ContinuousLaserTagPOMDP(
+                discount_factor=0.95,
+                dangerous_area_hit_probability=bad_value,
+            )
+
+    def test_discrete_actions_wrapper_forwards_hit_probability(self):
+        """Test that the discrete-actions wrapper forwards the new parameter.
+
+        Purpose: Validates that constructing
+        ``ContinuousLaserTagPOMDPDiscreteActions`` with a custom
+        ``dangerous_area_hit_probability`` propagates to the underlying
+        reward path.
+
+        Given: A discrete-actions env with hit_probability=0.0 and an
+            in-zone state.
+        When: reward() is called many times with the ``"up"`` action.
+        Then: No dangerous-area penalty is ever applied.
+
+        Test type: unit
+        """
+        env = ContinuousLaserTagPOMDPDiscreteActions(
+            discount_factor=0.95,
+            walls=[],
+            dangerous_areas=[(5.0, 3.0)],
+            dangerous_area_radius=1.0,
+            dangerous_area_penalty=5.0,
+            dangerous_area_hit_probability=0.0,
+        )
+        assert env.dangerous_area_hit_probability == 0.0
+        state = np.array([5.0, 3.0, 8.0, 5.0, 0.0])
+        for _ in range(100):
+            assert env.reward(state, "up") == -env.step_cost
+
+
+class TestContinuousLaserTagRewardNextStateConsistency:
+    """Tests that ``reward`` honours a threaded ``next_state`` argument.
+
+    The base :meth:`Environment.sample_next_step` threads the realised
+    ``next_state`` into ``reward`` so trajectories and reward share the
+    same draw. These tests pin that contract on
+    ``ContinuousLaserTagPOMDP``: the dangerous-area position check must
+    use ``next_state[:2]`` (post-transition robot position) rather than
+    re-using the pre-transition robot position.
+    """
+
+    @staticmethod
+    def _danger_env(hit_probability: float = 1.0) -> ContinuousLaserTagPOMDP:
+        return ContinuousLaserTagPOMDP(
+            discount_factor=0.95,
+            walls=[],
+            dangerous_areas=[(5.0, 3.0)],
+            dangerous_area_radius=1.0,
+            dangerous_area_penalty=5.0,
+            dangerous_area_hit_probability=hit_probability,
+        )
+
+    def test_reward_penalty_uses_realised_next_state(self):
+        """Penalty applies when the realised ``next_state`` lies in a danger zone.
+
+        Purpose: Validates that ``reward`` scores the dangerous-area
+        penalty against the realised ``next_state`` (post-transition
+        robot position), not the pre-transition state.
+
+        Given: A pre-transition state safely outside the danger zone but
+            a realised ``next_state`` whose robot position lies inside
+            the zone, and ``hit_probability=1.0``.
+        When: ``env.reward(state, action, next_state=next_state)`` is
+            called.
+        Then: The reward is ``-step_cost - dangerous_area_penalty``.
+
+        Test type: unit
+        """
+        env = self._danger_env(hit_probability=1.0)
+        state = np.array([0.5, 0.5, 8.0, 5.0, 0.0])
+        next_state = np.array([5.0, 3.0, 8.0, 5.0, 0.0])
+        action = np.array([1.0, 0.0, 0.0])
+        r = env.reward(state, action, next_state=next_state)
+        assert r == -env.step_cost - 5.0
+
+    def test_reward_penalty_skipped_when_next_state_clear(self):
+        """No penalty when realised ``next_state`` is outside any danger zone.
+
+        Purpose: Validates the contrapositive of
+        :meth:`test_reward_penalty_uses_realised_next_state` — when the
+        post-transition position is clear, no penalty is charged even
+        if the pre-transition position was inside a zone.
+
+        Given: A pre-transition state inside the danger zone but a
+            realised ``next_state`` whose robot position is well outside
+            the zone, and ``hit_probability=1.0``.
+        When: ``env.reward(state, action, next_state=next_state)`` is
+            called.
+        Then: The reward is just ``-step_cost`` (no danger penalty).
+
+        Test type: unit
+        """
+        env = self._danger_env(hit_probability=1.0)
+        state = np.array([5.0, 3.0, 8.0, 5.0, 0.0])
+        next_state = np.array([0.5, 0.5, 8.0, 5.0, 0.0])
+        action = np.array([1.0, 0.0, 0.0])
+        r = env.reward(state, action, next_state=next_state)
+        assert r == -env.step_cost
+
+    def test_sample_next_step_reward_matches_returned_next_state(self):
+        """``sample_next_step`` reward must agree with ``reward(state, action, ns)``.
+
+        Purpose: Pins that the reward returned by ``sample_next_step``
+        equals ``env.reward(state, action, returned_next_state)`` over
+        many draws — i.e. trajectory and reward share the same
+        transition draw rather than independently resampling.
+
+        Given: A ``ContinuousLaserTagPOMDP`` with a single danger zone
+            and ``hit_probability=1.0`` (so the per-call Bernoulli
+            refund is disabled — the danger penalty is now a
+            deterministic function of the realised ``next_state``).
+        When: ``sample_next_step(state, action)`` is called repeatedly
+            and we recompute the reward from the returned ``next_state``.
+        Then: Each pair of rewards is exactly equal.
+
+        Test type: unit
+        """
+        env = self._danger_env(hit_probability=1.0)
+        state = np.array([5.0, 3.0, 8.0, 5.0, 0.0])
+        action = np.array([1.0, 0.0, 0.0])
+        np.random.seed(0)
+        for _ in range(200):
+            step = env.sample_next_step(state, action)
+            next_state = step[0]
+            reward = step[2]
+            recomputed = env.reward(state, action, next_state=next_state)
+            assert reward == recomputed
 
 
 class TestRewardBatch:
@@ -551,6 +837,48 @@ class TestDiscreteActionsVariant:
         rewards = env_discrete.reward_batch(states, "right")
         assert rewards.shape == (2,)
         assert rewards[1] == 0.0  # terminal
+
+    def test_discrete_sample_next_state_translates_action(self, env_discrete):
+        """Test that discrete sample_next_state translates string action to vector.
+
+        Purpose: Validates that the discrete-actions subclass routes string actions
+            through action_to_vector before sampling, producing a valid next state.
+
+        Given: A discrete-action environment, a non-terminal state, and the "up"
+            string action.
+        When: env.sample_next_state(state, "up") is called.
+        Then: The returned next state has shape (5,) and is non-terminal, and the
+            mean robot y-coordinate over many samples is approximately state[1] + 1
+            (since "up" maps to [0, 1, 0]).
+
+        Test type: unit
+        """
+        np.random.seed(42)
+        state = np.array([5.0, 3.0, 8.0, 5.0, 0.0])
+        ns = env_discrete.sample_next_state(state, "up")
+        assert ns.shape == (5,)
+        samples = env_discrete.sample_next_state(state, "up", n_samples=200)
+        mean_y = np.mean([s[1] for s in samples])
+        assert abs(mean_y - 4.0) < 0.5
+
+    def test_discrete_sample_observation_translates_action(self, env_discrete):
+        """Test that discrete sample_observation translates string action to vector.
+
+        Purpose: Validates that the discrete-actions subclass routes string actions
+            through action_to_vector when generating observations.
+
+        Given: A discrete-action environment, a non-terminal state, and the "right"
+            string action.
+        When: env.sample_observation(state, "right") is called.
+        Then: The returned observation has shape (8,) and all values are >= 0.
+
+        Test type: unit
+        """
+        np.random.seed(42)
+        state = np.array([5.0, 3.0, 8.0, 5.0, 0.0])
+        obs = env_discrete.sample_observation(state, "right")
+        assert obs.shape == (8,)
+        assert np.all(obs >= 0)
 
 
 class TestMetrics:
@@ -921,6 +1249,10 @@ class TestMetrics:
 
         # With 3 episodes, confidence bounds should be finite (not -inf/inf)
         verify_metrics_within_confidence_intervals(metrics)
+        histories = [h1, h2, h3]
+        verify_metric_sanity(metrics, histories, env)
+        verify_history_returns_bounded(histories, env)
+        verify_return_shift_linearity(histories, env, shift=1.5)
         for m in metrics:
             assert np.isfinite(
                 m.lower_confidence_bound
@@ -1000,3 +1332,441 @@ class TestEnvironmentRegistry:
 
         env_d = get_environment("ContinuousLaserTagPOMDPDiscreteActions", discount_factor=0.95)
         assert isinstance(env_d, ContinuousLaserTagPOMDPDiscreteActions)
+
+
+class TestObservationLogProbabilityTerminal:
+    """Tests for observation_log_probability terminal-state semantics."""
+
+    def test_observation_log_probability_terminal_state(self) -> None:
+        """observation_log_probability handles terminal next_state (-inf for non-terminal obs).
+
+        Purpose: Validates the terminal-sentinel branch of observation_log_probability
+            returns log(1)=0 for the terminal observation and -inf otherwise.
+
+        Given: A ContinuousLaserTagPOMDP and a terminal next_state.
+        When: Querying log-prob for the terminal sentinel and an arbitrary non-terminal obs.
+        Then: First entry is 0.0, second is -inf.
+
+        Test type: unit
+        """
+        env = ContinuousLaserTagPOMDP(discount_factor=0.95, walls=[], dangerous_areas=[])
+        terminal_state = np.array([3.0, 3.0, 8.0, 5.0, 1.0])
+        action = np.array([0.0, 0.0, 1.0])
+        terminal_obs = np.full(8, -1.0)
+        non_terminal_obs = np.array([3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0])
+
+        actual = env.observation_log_probability(
+            terminal_state, action, [terminal_obs, non_terminal_obs]
+        )
+
+        assert actual.shape == (2,)
+        assert actual[0] == 0.0
+        assert np.isneginf(actual[1])
+
+
+class TestObservationLogProbabilityScalarBatchTerminalParity:
+    """Parity tests for scalar/batch terminal-sentinel handling (regression for B2).
+
+    The scalar ``observation_log_probability`` path (which routes through the
+    C++ ``kernel.probability`` method) must agree with the batch
+    ``observation_log_probability_per_state`` path (which routes through
+    ``kernel.batch_log_likelihood``) on the three terminal-sentinel cases.
+
+    The batch path has had an explicit terminal-sentinel guard since the
+    native port; the scalar path historically computed the Gaussian PDF at
+    the all--1 sentinel against any non-terminal mean, returning a small
+    finite value (~exp(-139)) instead of -inf. This regression suite locks
+    in the corrected contract:
+      - next_state terminal AND obs terminal sentinel -> log = 0.0
+      - next_state terminal XOR obs terminal sentinel -> log = -inf
+    """
+
+    def _build_env(self) -> ContinuousLaserTagPOMDP:
+        return ContinuousLaserTagPOMDP(discount_factor=0.95, walls=[], dangerous_areas=[])
+
+    def test_scalar_matches_batch_nonterminal_state_terminal_obs(self) -> None:
+        """Non-terminal next_state with terminal-sentinel obs returns -inf on both paths.
+
+        Purpose: Validates that the scalar observation_log_probability path
+            agrees with the batch observation_log_probability_per_state path
+            when the next_state is non-terminal but the observation is the
+            all--1 terminal sentinel; both must return -inf (impossible).
+
+        Given: A non-terminal next_state, an arbitrary action, and the
+            terminal-sentinel observation [-1, ..., -1].
+        When: We query the scalar log-prob via observation_log_probability and
+            the batch log-prob via observation_log_probability_per_state with a
+            single-row particle batch.
+        Then: Both calls return -inf, and they agree.
+
+        Test type: unit
+        """
+        env = self._build_env()
+        next_state = np.array([3.0, 3.0, 8.0, 5.0, 0.0])
+        action = np.array([1.0, 0.0, 0.0])
+        terminal_obs = np.full(8, -1.0)
+
+        scalar = env.observation_log_probability(next_state, action, [terminal_obs])
+        batch = env.observation_log_probability_per_state(
+            np.tile(next_state, (1, 1)), action, terminal_obs
+        )
+
+        assert scalar.shape == (1,)
+        assert batch.shape == (1,)
+        assert np.isneginf(scalar[0])
+        assert np.isneginf(batch[0])
+        assert scalar[0] == batch[0]
+
+    def test_scalar_matches_batch_terminal_state_nonterminal_obs(self) -> None:
+        """Terminal next_state with non-sentinel obs returns -inf on both paths.
+
+        Purpose: Validates that the scalar observation_log_probability path
+            agrees with the batch observation_log_probability_per_state path
+            when the next_state is terminal but the observation is not the
+            terminal sentinel; both must return -inf (impossible).
+
+        Given: A terminal next_state (terminal_flag=1.0), an arbitrary action,
+            and a non-sentinel observation.
+        When: We query both the scalar and batch log-prob entry points.
+        Then: Both calls return -inf, and they agree.
+
+        Test type: unit
+        """
+        env = self._build_env()
+        terminal_state = np.array([3.0, 3.0, 8.0, 5.0, 1.0])
+        action = np.array([1.0, 0.0, 0.0])
+        non_terminal_obs = np.array([3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0])
+
+        scalar = env.observation_log_probability(terminal_state, action, [non_terminal_obs])
+        batch = env.observation_log_probability_per_state(
+            np.tile(terminal_state, (1, 1)), action, non_terminal_obs
+        )
+
+        assert scalar.shape == (1,)
+        assert batch.shape == (1,)
+        assert np.isneginf(scalar[0])
+        assert np.isneginf(batch[0])
+        assert scalar[0] == batch[0]
+
+    def test_scalar_matches_batch_terminal_state_terminal_obs(self) -> None:
+        """Terminal next_state with terminal-sentinel obs returns log(1)=0 on both paths.
+
+        Purpose: Validates that the scalar observation_log_probability path
+            agrees with the batch observation_log_probability_per_state path
+            when both the next_state and the observation are terminal; both
+            must return 0.0 (certainty).
+
+        Given: A terminal next_state and the terminal-sentinel observation.
+        When: We query both the scalar and batch log-prob entry points.
+        Then: Both calls return 0.0, and they agree exactly.
+
+        Test type: unit
+        """
+        env = self._build_env()
+        terminal_state = np.array([3.0, 3.0, 8.0, 5.0, 1.0])
+        action = np.array([1.0, 0.0, 0.0])
+        terminal_obs = np.full(8, -1.0)
+
+        scalar = env.observation_log_probability(terminal_state, action, [terminal_obs])
+        batch = env.observation_log_probability_per_state(
+            np.tile(terminal_state, (1, 1)), action, terminal_obs
+        )
+
+        assert scalar.shape == (1,)
+        assert batch.shape == (1,)
+        assert scalar[0] == 0.0
+        assert batch[0] == 0.0
+
+
+class TestContinuousLaserTagNativeRollout:
+    """Tests for the native cont_simulate_rollout entry point."""
+
+    def test_continuous_lasertag_native_rollout_matches_python(self) -> None:
+        """Native cont_simulate_rollout return matches python_random_rollout.
+
+        Purpose: Validates that cont_simulate_rollout in the C++ _native extension
+            produces a discounted return numerically identical to the Python
+            python_random_rollout baseline when given the same RNG
+            seed and action sequence.
+
+        Given: A ContinuousLaserTagPOMDP with no walls, a fixed initial state, a
+            deterministic action sampler that replays a pre-drawn action sequence,
+            and the module-level _native RNG seeded to the same value before each
+            call.
+        When: We compute the rollout return via the Python base-class loop (using
+            the deterministic action sampler to ensure both paths see the same
+            action sequence) and via env.simulate_random_rollout (which delegates
+            to cont_simulate_rollout after pre-sampling actions).
+        Then: The two return values agree within atol=1e-9.
+
+        Test type: unit
+        """
+        env = ContinuousLaserTagPOMDP(
+            discount_factor=0.95,
+            walls=[],
+            dangerous_areas=[],
+        )
+        state = np.array([3.0, 3.0, 8.0, 5.0, 0.0])
+        max_depth = 10
+        depth = 2
+        steps_left = max_depth - depth
+
+        # Pre-draw the action sequence that both paths will use.
+        np.random.seed(0)
+        raw_actions = [
+            np.ascontiguousarray(
+                np.array(
+                    [np.random.uniform(-1, 1), np.random.uniform(-1, 1), 0.0], dtype=np.float64
+                )
+            )
+            for _ in range(steps_left)
+        ]
+
+        # A deterministic action sampler that replays the pre-drawn actions.
+        class _ReplayActionSampler(ActionSampler):
+            def __init__(self, actions):
+                self._actions = list(actions)
+                self._idx = 0
+
+            def sample(self, belief_node=None):  # pylint: disable=unused-argument
+                act = self._actions[self._idx % len(self._actions)]
+                self._idx += 1
+                return act
+
+        # Python baseline: call python_random_rollout directly.
+        _native.set_seed(0)
+        python_result = python_random_rollout(
+            state=state,
+            depth=depth,
+            action_sampler=_ReplayActionSampler(raw_actions),
+            environment=env,
+            discount_factor=env.discount_factor,
+            max_depth=max_depth,
+        )
+
+        # Native path: call env.simulate_random_rollout (delegates to cont_simulate_rollout).
+        _native.set_seed(0)
+        native_result = env.simulate_random_rollout(
+            state=state,
+            action_sampler=_ReplayActionSampler(raw_actions),
+            max_depth=max_depth,
+            discount_factor=env.discount_factor,
+            depth=depth,
+        )
+
+        np.testing.assert_allclose(native_result, python_result, atol=1e-9)
+
+    def test_continuous_lasertag_native_rollout_terminal_state_returns_zero(self) -> None:
+        """Native rollout returns 0.0 for a terminal initial state.
+
+        Purpose: Validates the early-exit path when the initial state is terminal.
+
+        Given: A ContinuousLaserTagPOMDP and a terminal state (terminal_flag=1).
+        When: simulate_random_rollout is called.
+        Then: Returns 0.0.
+
+        Test type: unit
+        """
+
+        class _DummySampler:
+            def sample(self, belief_node=None):  # pylint: disable=unused-argument
+                return np.array([1.0, 0.0, 0.0])
+
+        env = ContinuousLaserTagPOMDP(discount_factor=0.95, walls=[], dangerous_areas=[])
+        terminal_state = np.array([5.0, 3.0, 5.0, 3.0, 1.0])
+        result = env.simulate_random_rollout(
+            state=terminal_state,
+            action_sampler=_DummySampler(),
+            max_depth=10,
+            discount_factor=env.discount_factor,
+            depth=0,
+        )
+        assert result == 0.0
+
+    def test_continuous_lasertag_native_rollout_zero_depth_returns_zero(self) -> None:
+        """Native rollout returns 0.0 when depth equals max_depth.
+
+        Purpose: Validates the early-exit path when no steps remain.
+
+        Given: A ContinuousLaserTagPOMDP and depth == max_depth.
+        When: simulate_random_rollout is called.
+        Then: Returns 0.0.
+
+        Test type: unit
+        """
+
+        class _DummySampler:
+            def sample(self, belief_node=None):  # pylint: disable=unused-argument
+                return np.array([1.0, 0.0, 0.0])
+
+        env = ContinuousLaserTagPOMDP(discount_factor=0.95, walls=[], dangerous_areas=[])
+        state = np.array([3.0, 3.0, 8.0, 5.0, 0.0])
+        result = env.simulate_random_rollout(
+            state=state,
+            action_sampler=_DummySampler(),
+            max_depth=5,
+            discount_factor=env.discount_factor,
+            depth=5,
+        )
+        assert result == 0.0
+
+    def test_discrete_actions_native_rollout_matches_python(self) -> None:
+        """DiscreteActions variant native rollout matches Python baseline.
+
+        Purpose: Validates that ContinuousLaserTagPOMDPDiscreteActions.simulate_random_rollout
+            produces the same result as the Python loop for a deterministic action
+            sequence.
+
+        Given: A ContinuousLaserTagPOMDPDiscreteActions, a fixed initial state, a
+            deterministic string-action sampler, and identical _native RNG seeds.
+        When: Both Python and native paths are called.
+        Then: The two return values agree within atol=1e-9.
+
+        Test type: unit
+        """
+        env = ContinuousLaserTagPOMDPDiscreteActions(
+            discount_factor=0.95,
+            walls=[],
+            dangerous_areas=[],
+        )
+        state = np.array([3.0, 3.0, 8.0, 5.0, 0.0])
+        max_depth = 8
+        depth = 1
+        steps_left = max_depth - depth
+
+        action_sequence = ["right", "up", "left", "down", "tag", "right", "up"] * 10
+        action_sequence = action_sequence[:steps_left]
+
+        class _DiscreteSampler(ActionSampler):
+            def __init__(self, actions):
+                self._actions = list(actions)
+                self._idx = 0
+
+            def sample(self, belief_node=None):  # pylint: disable=unused-argument
+                act = self._actions[self._idx % len(self._actions)]
+                self._idx += 1
+                return act
+
+        _native.set_seed(7)
+        python_result = python_random_rollout(
+            state=state,
+            depth=depth,
+            action_sampler=_DiscreteSampler(action_sequence),
+            environment=env,
+            discount_factor=env.discount_factor,
+            max_depth=max_depth,
+        )
+
+        _native.set_seed(7)
+        native_result = env.simulate_random_rollout(
+            state=state,
+            action_sampler=_DiscreteSampler(action_sequence),
+            max_depth=max_depth,
+            discount_factor=env.discount_factor,
+            depth=depth,
+        )
+
+        np.testing.assert_allclose(native_result, python_result, atol=1e-9)
+
+
+class TestObservationLogProbabilityLowDensityB1:
+    """Regression tests for B1 — scalar/batch log-prob underflow asymmetry."""
+
+    def test_scalar_log_probability_low_density_obs_matches_batch(self) -> None:
+        """Scalar observation_log_probability matches batch path on a low-density obs.
+
+        Purpose: Regression for B1. The scalar ``observation_log_probability``
+            previously round-tripped through ``np.exp(log_pdf)`` inside the C++
+            ``probability`` kernel and then took ``np.log`` in Python; for an
+            observation whose ``log_pdf`` is well below IEEE-754 double-precision
+            ``exp`` underflow (~ -745), ``exp(log_pdf)`` collapses to ``0.0`` and
+            the wrapper returned ``-inf``. Meanwhile the batched
+            ``observation_log_probability_per_state`` returns ``log_pdf``
+            directly via ``batch_log_likelihood``, never paying the round-trip.
+            After the fix, the scalar path must return the same finite,
+            large-negative value as the batch path.
+
+        Given: A ContinuousLaserTagPOMDP with no walls, a non-terminal
+            next_state, and a far-from-mean (non-terminal-sentinel) observation
+            chosen so that ``log_pdf`` is approximately -1e6 — well past the
+            ``exp`` underflow boundary.
+        When: We compute the log-probability of that single observation via
+            both the scalar ``env.observation_log_probability`` (passing a
+            list-of-one) and the batch
+            ``env.observation_log_probability_per_state`` (passing a
+            list-of-one next_state).
+        Then: The scalar value is finite (not ``-inf``), is large and negative
+            (less than ``-1e5``), and agrees with the batch value within
+            ``atol=1e-6``.
+
+        Test type: unit
+        """
+        env = ContinuousLaserTagPOMDP(discount_factor=0.95, walls=[], dangerous_areas=[])
+        action = np.array([1.0, 0.0, 0.0])
+        next_state = np.array([3.0, 3.0, 8.0, 5.0, 0.0])
+
+        # Compute the kernel mean so we can place the observation far from it
+        # without depending on internal layout. log_pdf for an 8-D Gaussian
+        # with sigma=1 is 8 * log_norm_1d_ - 0.5 * sum_sq_diff. With per-dim
+        # diff = 500, sum_sq_diff = 8 * 250000 = 2e6, so log_pdf is ~ -1e6.
+        kernel = env._get_obs_kernel(action)  # pylint: disable=protected-access
+        kernel.set_next_state(next_state)
+        mean = np.asarray(kernel.mean, dtype=np.float64)
+        far_obs = mean + 500.0
+        # Sanity: this is *not* the terminal sentinel (np.full(8, -1.0)),
+        # so we are exercising B1 (low-density Gaussian) and not B2.
+        assert not np.allclose(far_obs, -1.0)
+
+        scalar_log_probs = env.observation_log_probability(next_state, action, [far_obs])
+        batch_log_probs = env.observation_log_probability_per_state(
+            np.asarray([next_state], dtype=np.float64), action, far_obs
+        )
+
+        assert scalar_log_probs.shape == (1,)
+        assert batch_log_probs.shape == (1,)
+        assert np.isfinite(
+            scalar_log_probs[0]
+        ), f"scalar log-prob underflowed to {scalar_log_probs[0]} — B1 not fixed"
+        assert scalar_log_probs[0] < -1e5
+        np.testing.assert_allclose(scalar_log_probs[0], batch_log_probs[0], atol=1e-6)
+
+    def test_scalar_log_probability_single_low_density_obs_matches_batch(self) -> None:
+        """observation_log_probability_single returns finite value on low-density obs.
+
+        Purpose: Regression for B1 on the scalar fast-path used by POMCPOW's
+            ``WeightedParticleBeliefStateUpdate``. Pre-fix, this method called
+            ``kernel.probability([obs])[0]`` and clamped to ``-math.inf`` when
+            ``prob <= 0.0``, masking the underflow. Post-fix, it must return a
+            finite log-prob agreeing with the batch path.
+
+        Given: A ContinuousLaserTagPOMDP with no walls, a non-terminal
+            next_state, and a far-from-mean (non-terminal-sentinel) observation
+            with ``log_pdf`` well past the ``exp`` underflow boundary.
+        When: We compute the log-probability via
+            ``env.observation_log_probability_single`` and via
+            ``env.observation_log_probability_per_state`` (single-row batch).
+        Then: The scalar value is finite, large negative, and agrees with the
+            batch value within ``atol=1e-6``.
+
+        Test type: unit
+        """
+        env = ContinuousLaserTagPOMDP(discount_factor=0.95, walls=[], dangerous_areas=[])
+        action = np.array([1.0, 0.0, 0.0])
+        next_state = np.array([3.0, 3.0, 8.0, 5.0, 0.0])
+
+        kernel = env._get_obs_kernel(action)  # pylint: disable=protected-access
+        kernel.set_next_state(next_state)
+        mean = np.asarray(kernel.mean, dtype=np.float64)
+        far_obs = mean + 500.0
+        assert not np.allclose(far_obs, -1.0)
+
+        scalar_value = env.observation_log_probability_single(next_state, action, far_obs)
+        batch_log_probs = env.observation_log_probability_per_state(
+            np.asarray([next_state], dtype=np.float64), action, far_obs
+        )
+
+        assert math.isfinite(
+            scalar_value
+        ), f"scalar single log-prob underflowed to {scalar_value} — B1 not fixed"
+        assert scalar_value < -1e5
+        np.testing.assert_allclose(scalar_value, batch_log_probs[0], atol=1e-6)

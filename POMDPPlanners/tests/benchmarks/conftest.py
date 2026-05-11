@@ -9,9 +9,13 @@ import pytest
 
 from POMDPPlanners.core.belief import get_initial_belief
 from POMDPPlanners.environments.laser_tag_pomdp import LaserTagPOMDP
+from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
+    ContinuousLightDarkPOMDPDiscreteActions,
+)
 from POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp import (
     DiscreteLightDarkPOMDP,
 )
+from POMDPPlanners.environments.mountain_car_pomdp import MountainCarPOMDP
 from POMDPPlanners.environments.rock_sample_pomdp import RockSamplePOMDP
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.planners.mcts_planners.pft_dpw import PFT_DPW
@@ -46,6 +50,12 @@ def discrete_ld_env():
 
 
 @pytest.fixture
+def continuous_ld_env():
+    """ContinuousLightDarkPOMDPDiscreteActions environment for benchmarking."""
+    return ContinuousLightDarkPOMDPDiscreteActions(discount_factor=DISCOUNT_FACTOR)
+
+
+@pytest.fixture
 def rock_sample_env():
     """RockSamplePOMDP environment for benchmarking."""
     return RockSamplePOMDP(discount_factor=DISCOUNT_FACTOR)
@@ -55,6 +65,12 @@ def rock_sample_env():
 def laser_tag_env():
     """LaserTagPOMDP environment for benchmarking."""
     return LaserTagPOMDP(discount_factor=DISCOUNT_FACTOR)
+
+
+@pytest.fixture
+def mountain_car_env():
+    """MountainCarPOMDP environment for benchmarking."""
+    return MountainCarPOMDP(discount_factor=DISCOUNT_FACTOR)
 
 
 # ---------------------------------------------------------------------------
@@ -81,6 +97,15 @@ def discrete_ld_state_action(discrete_ld_env):
 
 
 @pytest.fixture
+def continuous_ld_state_action(continuous_ld_env):
+    """Initial state and action for ContinuousLightDarkPOMDPDiscreteActions."""
+    np.random.seed(SEED)
+    state = continuous_ld_env.initial_state_dist().sample()[0]
+    action = continuous_ld_env.get_actions()[0]
+    return continuous_ld_env, state, action
+
+
+@pytest.fixture
 def rock_sample_state_action(rock_sample_env):
     """Initial state and action for RockSamplePOMDP."""
     np.random.seed(SEED)
@@ -96,6 +121,15 @@ def laser_tag_state_action(laser_tag_env):
     state = laser_tag_env.initial_state_dist().sample()[0]
     action = laser_tag_env.get_actions()[0]
     return laser_tag_env, state, action
+
+
+@pytest.fixture
+def mountain_car_state_action(mountain_car_env):
+    """Initial state and action for MountainCarPOMDP."""
+    np.random.seed(SEED)
+    state = mountain_car_env.initial_state_dist().sample()[0]
+    action = mountain_car_env.get_actions()[0]
+    return mountain_car_env, state, action
 
 
 # ---------------------------------------------------------------------------
@@ -118,6 +152,13 @@ def discrete_ld_belief(discrete_ld_env):
 
 
 @pytest.fixture
+def continuous_ld_belief(continuous_ld_env):
+    """Initial belief for ContinuousLightDarkPOMDPDiscreteActions."""
+    np.random.seed(SEED)
+    return get_initial_belief(pomdp=continuous_ld_env, n_particles=N_PARTICLES)
+
+
+@pytest.fixture
 def rock_sample_belief(rock_sample_env):
     """Initial belief for RockSamplePOMDP."""
     np.random.seed(SEED)
@@ -129,6 +170,13 @@ def laser_tag_belief(laser_tag_env):
     """Initial belief for LaserTagPOMDP."""
     np.random.seed(SEED)
     return get_initial_belief(pomdp=laser_tag_env, n_particles=N_PARTICLES)
+
+
+@pytest.fixture
+def mountain_car_belief(mountain_car_env):
+    """Initial belief for MountainCarPOMDP."""
+    np.random.seed(SEED)
+    return get_initial_belief(pomdp=mountain_car_env, n_particles=N_PARTICLES)
 
 
 # ---------------------------------------------------------------------------
@@ -155,7 +203,6 @@ def sparse_pft_planner(tiger_env):
     return SparsePFT(
         environment=tiger_env,
         discount_factor=DISCOUNT_FACTOR,
-        gamma=DISCOUNT_FACTOR,
         depth=DEPTH,
         c_ucb=1.0,
         beta_ucb=0.5,

@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=65.0.0", "wheel"]
+requires = ["setuptools>=77.0.0", "wheel", "pybind11>=2.12"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -50,6 +50,7 @@ dependencies = [
     "memory_profiler>=0.60.0",
     "psutil>=5.8.0",
     "bokeh>=3.0.0",
+    "numba>=0.59,<0.62",
 ]
 
 [project.optional-dependencies]
@@ -63,11 +64,12 @@ dev = [
     "pytest-asyncio>=0.21.0",
     "nbval>=0.9.6",
     "papermill>=2.6.0",
-    "setuptools>=65.0.0",
+    "setuptools>=77.0.0",
     "ipykernel>=6.0.0",
     "jupyter-client>=7.0.0",
     "nbformat>=5.0.0",
     "pytest-benchmark>=4.0.0",
+    "pybind11>=2.12",
 ]
 docs = [
     "sphinx>=5.0.0",
@@ -133,6 +135,17 @@ markers = [
 [tool.pylint.master]
 ignore = "CVS"
 persistent = true
+extension-pkg-allow-list = [
+    "POMDPPlanners.core._native",
+    "POMDPPlanners.environments.mountain_car_pomdp._native",
+    "POMDPPlanners.environments.cartpole_pomdp._native",
+    "POMDPPlanners.environments.light_dark_pomdp._native",
+    "POMDPPlanners.environments.laser_tag_pomdp._native",
+    "POMDPPlanners.environments.push_pomdp._native",
+    "POMDPPlanners.environments.pacman_pomdp._native",
+    "POMDPPlanners.environments.rock_sample_pomdp._native",
+    "POMDPPlanners.environments.safety_ant_velocity_pomdp._native",
+]
 
 [tool.pylint.messages_control]
 disable = [
@@ -187,7 +200,24 @@ ignore-docstrings = true
 ignore-imports = false
 
 [tool.pylint.typecheck]
-ignored-modules = ["numpy", "cvxopt"]
+# `_native` entries cover compiled pybind11 extensions whose `.so` may not be
+# built locally in every venv. The matching `.pyi` stubs satisfy pyright, but
+# pylint can only resolve the name if the extension is importable, so list
+# each environment's `_native` submodule here to silence E0611 / E0401 when
+# the binary is missing.
+ignored-modules = [
+    "numpy",
+    "cvxopt",
+    "POMDPPlanners.core._native",
+    "POMDPPlanners.environments.mountain_car_pomdp._native",
+    "POMDPPlanners.environments.cartpole_pomdp._native",
+    "POMDPPlanners.environments.light_dark_pomdp._native",
+    "POMDPPlanners.environments.laser_tag_pomdp._native",
+    "POMDPPlanners.environments.push_pomdp._native",
+    "POMDPPlanners.environments.pacman_pomdp._native",
+    "POMDPPlanners.environments.rock_sample_pomdp._native",
+    "POMDPPlanners.environments.safety_ant_velocity_pomdp._native",
+]
 ignored-classes = ["SQLObject"]
 
 [tool.pylint.variables]

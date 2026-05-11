@@ -4,7 +4,9 @@ This module tests the vectorized batch transition and observation
 log-likelihood methods for the Continuous Push POMDP.
 """
 
-# pylint: disable=protected-access
+# pylint: disable=protected-access,attribute-defined-outside-init,unsubscriptable-object
+# ``unsubscriptable-object``: pylint can't infer that .sample() returns list
+# and .probability() / batch_transition return ndarray; both support [i].
 
 import numpy as np
 
@@ -12,6 +14,7 @@ from POMDPPlanners.core.belief.particle_beliefs import WeightedParticleBelief
 from POMDPPlanners.core.belief.vectorized_weighted_particle_belief import (
     VectorizedWeightedParticleBelief,
 )
+from POMDPPlanners.environments.push_pomdp import _native
 from POMDPPlanners.environments.push_pomdp.continuous_push_pomdp import (
     ContinuousPushPOMDP,
     ContinuousPushPOMDPDiscreteActions,
@@ -172,15 +175,15 @@ class TestContinuousPushVectorizedUpdater:
         assert self.updater.config_id == updater2.config_id
 
     def test_batch_transition_matches_per_particle_loop(self):
-        """Test vectorized batch_transition matches per-particle state_transition_model.
+        """Test vectorized batch_transition matches per-particle env.sample_next_state.
 
         Purpose: Verifies that batch_transition produces the same results as
-                 calling the environment's state_transition_model per particle
+                 calling the environment's sample_next_state per particle
                  with the same random seed.
 
         Given: A set of particles with varied positions and a continuous action.
         When: batch_transition is called, and the same transitions are
-              computed per-particle via state_transition_model.
+              computed per-particle via env.sample_next_state.
         Then: Results match within floating-point tolerance.
 
         Test type: integration
@@ -192,7 +195,7 @@ class TestContinuousPushVectorizedUpdater:
         action = np.array([0.5, 0.3])
 
         def per_particle_fn(particle, act):
-            return self.env.state_transition_model(state=particle, action=act).sample()[0]
+            return self.env.sample_next_state(particle, act)
 
         assert_batch_transition_matches_loop(
             updater=self.updater,
@@ -200,14 +203,15 @@ class TestContinuousPushVectorizedUpdater:
             action=action,
             per_particle_transition_fn=per_particle_fn,
             seed=999,
+            seed_fn=_native.set_seed,
         )
 
     def test_batch_obs_log_likelihood_matches_per_particle_loop(self):
-        """Test vectorized log-likelihood matches per-particle observation_model.probability.
+        """Test vectorized log-likelihood matches per-particle env.observation_log_probability.
 
         Purpose: Verifies that batch_observation_log_likelihood matches the
-                 per-particle log(observation_model.probability) from the
-                 environment.
+                 per-particle env.observation_log_probability output for the
+                 same (particle, action, observation) triples.
 
         Given: A set of particles with object positions near the observation.
         When: batch_observation_log_likelihood is called, and per-particle
@@ -228,11 +232,7 @@ class TestContinuousPushVectorizedUpdater:
         action = np.array([0.5, 0.0])
 
         def per_particle_ll_fn(particle, act, obs):
-            obs_model = self.env.observation_model(next_state=particle, action=act)
-            prob = obs_model.probability([obs])[0]
-            if prob > 0:
-                return np.log(prob)
-            return -np.inf
+            return float(self.env.observation_log_probability(particle, act, [obs])[0])
 
         assert_batch_obs_log_likelihood_matches_loop(
             updater=self.updater,
@@ -291,8 +291,18 @@ class TestBeliefEquivalenceWithBaseline:
         base, vec = _make_aligned_beliefs(self.updater)
         action = np.array([0.5, 0.3])
         obs = np.array([2.0, 2.0, 2.0, 2.0, 3.5, 3.5])
+        # Both paths now consume noise from the native C++ RNG (the baseline
+        # auto-dispatches to ContinuousPushTransitionCpp.batch_sample via
+        # hasattr, and the vectorized updater delegates there directly); seed
+        # the native RNG to align the two sample sequences.
         assert_update_particles_match(
-            base=base, vec=vec, action=action, observation=obs, pomdp=self.env, seed=999
+            base=base,
+            vec=vec,
+            action=action,
+            observation=obs,
+            pomdp=self.env,
+            seed=999,
+            seed_fn=_native.set_seed,
         )
 
     def test_update_weights_match(self):
@@ -318,6 +328,7 @@ class TestBeliefEquivalenceWithBaseline:
             pomdp=self.env,
             atol=1e-6,
             seed=999,
+            seed_fn=_native.set_seed,
         )
 
     def test_sample_distributions_match_post_update(self):
@@ -334,8 +345,13 @@ class TestBeliefEquivalenceWithBaseline:
         base, vec = _make_aligned_beliefs(self.updater)
         action = np.array([0.5, 0.3])
         obs = np.array([2.0, 2.0, 2.0, 2.0, 3.5, 3.5])
+        # Seed both the native C++ RNG (governs batch_sample) and numpy's
+        # (belief.sample() still uses numpy); without the native seed the
+        # two beliefs hold different post-update particle sets.
+        _native.set_seed(999)
         np.random.seed(999)
         vec = vec.update(action=action, observation=obs, pomdp=self.env)
+        _native.set_seed(999)
         np.random.seed(999)
         base = base.update(action=action, observation=obs, pomdp=self.env)
 

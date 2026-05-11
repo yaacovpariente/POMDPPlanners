@@ -12,15 +12,16 @@ The CartPole POMDP features:
 - Episode termination when pole falls beyond threshold or cart moves too far
 
 Classes:
-    CartPoleStateTransition: Physics-based state transition model
-    CartPoleObservation: Gaussian noise observation model
     CartPolePOMDP: Main CartPole environment with POMDP formulation
 """
 
 import math
 from enum import Enum
 from pathlib import Path
-from typing import Any, List, Optional, Sequence, Union
+from collections.abc import Hashable
+from typing import Any, Dict, List, Optional, Sequence, Union
+
+_INTEGRATOR_CODES: dict[str, int] = {"euler": 0, "semi-implicit euler": 1}
 
 import numpy as np
 from numpy.typing import NDArray
@@ -28,12 +29,11 @@ from numpy.typing import NDArray
 from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
-    ObservationModel,
     SpaceInfo,
     SpaceType,
-    StateTransitionModel,
 )
 from POMDPPlanners.core.simulation import History, MetricValue
+from POMDPPlanners.environments.cartpole_pomdp import _native
 from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
 from POMDPPlanners.utils.statistics_utils import confidence_interval
 
@@ -42,188 +42,6 @@ class CartPolePOMDPMetrics(Enum):
     """Metric names for CartPole POMDP environment."""
 
     GOAL_REACHING_RATE = "goal_reaching_rate"
-
-
-class CartPoleStateTransition(StateTransitionModel):
-    """Physics-based state transition model for CartPole POMDP.
-
-    This model implements the classical cart-pole dynamics with Gaussian
-    process noise. The cart experiences forces that affect both cart
-    acceleration and pole angular acceleration through coupled equations
-    of motion, with additive Normal noise on the resulting next state.
-
-    Attributes:
-        state: Current state [cart_position, cart_velocity, pole_angle, pole_velocity]
-        action: Force direction (0 for left, 1 for right)
-        force_mag: Magnitude of applied force
-        total_mass: Combined mass of cart and pole
-        polemass_length: Pole mass times pole length (moment calculation)
-        gravity: Gravitational acceleration constant
-        length: Half the pole's length
-        kinematics_integrator: Integration method ("euler" or "semi-implicit euler")
-        tau: Time step for integration
-        masspole: Mass of the pole
-
-    Example:
-        >>> import numpy as np
-        >>> np.random.seed(42)  # For reproducible results
-        >>> from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
-        >>> # Define initial state [position, velocity, angle, angular_velocity]
-        >>> state = np.array([0.0, 0.0, 0.1, 0.0])
-        >>> action = 1  # Apply right force
-
-        >>> # Create transition model with physics parameters and noise
-        >>> state_transition_cov = np.diag([1e-4, 1e-4, 2.5e-5, 1e-4])
-        >>> state_transition_dist = CovarianceParameterizedMultivariateNormal(state_transition_cov)
-        >>> transition = CartPoleStateTransition(
-        ...     state=state,
-        ...     action=action,
-        ...     force_mag=10.0,
-        ...     total_mass=1.1,
-        ...     polemass_length=0.05,
-        ...     gravity=9.8,
-        ...     length=0.5,
-        ...     kinematics_integrator="euler",
-        ...     tau=0.02,
-        ...     masspole=0.1,
-        ...     state_transition_dist=state_transition_dist
-        ... )
-
-        >>> # Simulate physics step
-        >>> next_state = transition.sample()[0]
-        >>> len(next_state) == 4  # [pos, vel, angle, ang_vel]
-        True
-        >>> isinstance(next_state, np.ndarray)
-        True
-    """
-
-    def __init__(
-        self,
-        state: np.ndarray,
-        action: int,
-        force_mag: float,
-        total_mass: float,
-        polemass_length: float,
-        gravity: float,
-        length: float,
-        kinematics_integrator: str,
-        tau: float,
-        masspole: float,
-        state_transition_dist: CovarianceParameterizedMultivariateNormal,
-    ):
-        super().__init__(state, action)
-
-        self.force_mag = force_mag
-        self.total_mass = total_mass
-        self.polemass_length = polemass_length
-        self.gravity = gravity
-        self.length = length
-        self.kinematics_integrator = kinematics_integrator
-        self.tau = tau
-        self.masspole = masspole
-        self._state_transition_dist = state_transition_dist
-
-    def sample(self, n_samples: int = 1) -> List[np.ndarray]:
-        deterministic_next_state = self._compute_deterministic_next_state()
-        noise_samples = self._state_transition_dist.sample(np.zeros(4), n_samples=n_samples)
-        return [deterministic_next_state + noise_samples[i] for i in range(n_samples)]
-
-    def _compute_deterministic_next_state(self) -> np.ndarray:
-        x, x_dot, theta, theta_dot = self.state
-        force = self.force_mag if self.action == 1 else -self.force_mag
-        costheta = math.cos(theta)
-        sintheta = math.sin(theta)
-
-        # For the interested reader:
-        # https://coneural.org/florian/papers/05_cart_pole.pdf
-        temp = (force + self.polemass_length * theta_dot**2 * sintheta) / self.total_mass
-        thetaacc = (self.gravity * sintheta - costheta * temp) / (
-            self.length * (4.0 / 3.0 - self.masspole * costheta**2 / self.total_mass)
-        )
-        xacc = temp - self.polemass_length * thetaacc * costheta / self.total_mass
-
-        if self.kinematics_integrator == "euler":
-            x = x + self.tau * x_dot
-            x_dot = x_dot + self.tau * xacc
-            theta = theta + self.tau * theta_dot
-            theta_dot = theta_dot + self.tau * thetaacc
-        else:  # semi-implicit euler
-            x_dot = x_dot + self.tau * xacc
-            x = x + self.tau * x_dot
-            theta_dot = theta_dot + self.tau * thetaacc
-            theta = theta + self.tau * theta_dot
-
-        return np.array([x, x_dot, theta, theta_dot])
-
-    def probability(self, values: List[np.ndarray]) -> np.ndarray:
-        deterministic_next_state = self._compute_deterministic_next_state()
-        values_array = np.array(values)
-        return self._state_transition_dist.pdf(values_array, deterministic_next_state)
-
-
-class CartPoleObservation(ObservationModel):
-    """Noisy observation model for CartPole POMDP.
-
-    This model adds Gaussian noise to the true state to create partial observability.
-    The agent receives a noisy version of the full state vector, making it challenging
-    to determine the exact cart-pole configuration.
-
-    Attributes:
-        next_state: True state after action execution
-        action: Action that was taken (not used in observation generation)
-        obs_dist: Pre-computed multivariate normal distribution for efficient sampling/PDF
-
-    Example:
-        >>> import numpy as np
-        >>> np.random.seed(42)  # For reproducible results
-        >>> from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
-        >>> # Define true state after action
-        >>> true_state = np.array([0.1, 0.05, 0.02, -0.1])
-        >>> action = 1
-
-        >>> # Define observation noise covariance and create distribution
-        >>> noise_cov = np.diag([0.1, 0.1, 0.1, 0.1])
-        >>> obs_dist = CovarianceParameterizedMultivariateNormal(noise_cov)
-
-        >>> # Create observation model
-        >>> obs_model = CartPoleObservation(
-        ...     next_state=true_state,
-        ...     action=action,
-        ...     obs_dist=obs_dist
-        ... )
-
-        >>> # Sample noisy observation
-        >>> observation = obs_model.sample()[0]
-        >>> len(observation) == 4  # Same dimensionality as state
-        True
-        >>> isinstance(observation, np.ndarray)
-        True
-
-        >>> # Calculate probability of specific observation
-        >>> prob = obs_model.probability([observation])
-        >>> len(prob) == 1
-        True
-    """
-
-    def __init__(
-        self,
-        next_state: np.ndarray,
-        action: int,
-        obs_dist: CovarianceParameterizedMultivariateNormal,
-    ):
-        super().__init__(next_state=next_state, action=action)
-        self.obs_dist = obs_dist
-
-    def sample(self, n_samples: int = 1) -> List[np.ndarray]:
-        samples = self.obs_dist.sample(self.next_state, n_samples)
-        return [samples[i] for i in range(n_samples)]
-
-    def probability(self, values: List[np.ndarray]) -> np.ndarray:
-        if len(values) == 0:
-            return np.array([])
-
-        values_array = np.array(values)
-        return self.obs_dist.pdf(values_array, self.next_state)
 
 
 class CartPoleInitialStateDistribution(Distribution):
@@ -267,6 +85,24 @@ class CartPoleInitialStateDistribution(Distribution):
         # Generate all samples at once using vectorized uniform distribution
         samples_array = np.random.uniform(low=-0.05, high=0.05, size=(n_samples, 4))
         return list(samples_array)
+
+
+class CartPoleInitialObservationDistribution(Distribution):
+    """Initial observation distribution: state prior convolved with obs noise.
+
+    Marginal ``∫ p(o|s) p_0(s) ds`` produced by drawing a state from
+    :class:`CartPoleInitialStateDistribution` and adding zero-mean
+    Gaussian noise with the env's observation covariance.
+    """
+
+    def __init__(self, noise_cov: NDArray[np.floating[Any]]):
+        self._state_dist = CartPoleInitialStateDistribution()
+        self._obs_dist = CovarianceParameterizedMultivariateNormal(noise_cov)
+
+    def sample(self, n_samples: int = 1) -> List[np.ndarray]:
+        states = np.asarray(self._state_dist.sample(n_samples))
+        noise = self._obs_dist.sample(mean=np.zeros(states.shape[1]), n_samples=n_samples)
+        return list(states + noise)
 
 
 class CartPolePOMDP(DiscreteActionsEnvironment):
@@ -336,6 +172,7 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
         self.force_mag = 10.0
         self.tau = 0.02  # seconds between state updates
         self.kinematics_integrator = "euler"
+        self._kinematics_integrator_int: int = _INTEGRATOR_CODES[self.kinematics_integrator]
         self.theta_threshold_radians = 12 * 2 * math.pi / 360
         self.x_threshold = 2.4
         self.screen_width = 600
@@ -361,25 +198,142 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
             use_queue_logger=use_queue_logger,
         )
 
-    def state_transition_model(self, state: np.ndarray, action: int) -> StateTransitionModel:
-        return CartPoleStateTransition(
-            state=state,
-            action=action,
-            force_mag=self.force_mag,
-            total_mass=self.total_mass,
-            polemass_length=self.polemass_length,
-            gravity=self.gravity,
-            length=self.length,
-            kinematics_integrator=self.kinematics_integrator,
-            tau=self.tau,
-            masspole=self.masspole,
-            state_transition_dist=self._state_transition_dist,
+        # Per-action C++ kernel caches: actions are ``int`` (0 / 1) so a
+        # plain ``Dict[int, Any]`` suffices. Lazily built by
+        # ``_get_trans_kernel`` / ``_get_obs_kernel`` and reset on
+        # unpickle. Mirrors the RockSample / Pacman pattern.
+        self._trans_kernel_cache: Dict[int, Any] = {}
+        self._obs_kernel_cache: Dict[int, Any] = {}
+
+    # ── Native-backed env-API implementations ────────────────────────
+    # Each method fetches a cached per-action C++ kernel, mutates its
+    # stored state via ``set_state`` / ``set_next_state`` (when needed),
+    # and dispatches to the same native sample / probability /
+    # batch_sample / batch_log_likelihood entry points as before. The
+    # kernel itself caches frozen physics params, action int, and
+    # covariance so we no longer rebuild those per call.
+
+    def _get_trans_kernel(self, action: int) -> Any:
+        kernel = self._trans_kernel_cache.get(action)
+        if kernel is None:
+            placeholder = np.zeros(4, dtype=np.float64)
+            kernel = _native.CartPoleTransitionCpp(
+                state=placeholder,
+                action=int(action),
+                force_mag=self.force_mag,
+                total_mass=self.total_mass,
+                polemass_length=self.polemass_length,
+                gravity=self.gravity,
+                length=self.length,
+                kinematics_integrator=self.kinematics_integrator,
+                tau=self.tau,
+                masspole=self.masspole,
+                covariance=self._state_transition_dist.covariance,
+            )
+            self._trans_kernel_cache[action] = kernel
+        return kernel
+
+    def _get_obs_kernel(self, action: int) -> Any:
+        kernel = self._obs_kernel_cache.get(action)
+        if kernel is None:
+            placeholder = np.zeros(4, dtype=np.float64)
+            kernel = _native.CartPoleObservationCpp(
+                next_state=placeholder,
+                action=int(action),
+                covariance=self._obs_dist.covariance,
+            )
+            self._obs_kernel_cache[action] = kernel
+        return kernel
+
+    def sample_next_state(
+        self, state: np.ndarray, action: int, n_samples: int = 1
+    ) -> NDArray[np.float64]:
+        kernel = self._get_trans_kernel(int(action))
+        kernel.set_state(np.asarray(state, dtype=np.float64))
+        samples = kernel.sample(n_samples)
+        if n_samples == 1:
+            return samples[0]
+        return np.asarray(samples)
+
+    def sample_observation(
+        self, next_state: np.ndarray, action: int, n_samples: int = 1
+    ) -> NDArray[np.float64]:
+        kernel = self._get_obs_kernel(int(action))
+        kernel.set_next_state(np.asarray(next_state, dtype=np.float64))
+        samples = kernel.sample(n_samples)
+        if n_samples == 1:
+            return samples[0]
+        return np.asarray(samples)
+
+    def transition_log_probability(
+        self,
+        state: np.ndarray,
+        action: int,
+        next_states: Union[Sequence[Any], np.ndarray],
+    ) -> np.ndarray:
+        kernel = self._get_trans_kernel(int(action))
+        kernel.set_state(np.asarray(state, dtype=np.float64))
+        probs = np.asarray(kernel.probability(next_states))
+        with np.errstate(divide="ignore"):
+            return np.log(probs)
+
+    def observation_log_probability(
+        self,
+        next_state: np.ndarray,
+        action: int,
+        observations: Union[Sequence[Any], np.ndarray],
+    ) -> np.ndarray:
+        kernel = self._get_obs_kernel(int(action))
+        kernel.set_next_state(np.asarray(next_state, dtype=np.float64))
+        probs = np.asarray(kernel.probability(observations))
+        with np.errstate(divide="ignore"):
+            return np.log(probs)
+
+    def sample_next_state_batch(self, states: Any, action: int) -> np.ndarray:
+        states_array = np.ascontiguousarray(np.asarray(states, dtype=np.float64))
+        if states_array.ndim == 1:
+            states_array = states_array.reshape(1, -1)
+        # ``batch_sample`` reads each row's state from the input array;
+        # the kernel's stored ``state_`` is not consulted, so we skip
+        # ``set_state`` on this hot path.
+        kernel = self._get_trans_kernel(int(action))
+        return np.asarray(kernel.batch_sample(states_array), dtype=np.float64)
+
+    def observation_log_probability_per_state(
+        self, next_states: Any, action: int, observation: Any
+    ) -> np.ndarray:
+        next_states_array = np.ascontiguousarray(np.asarray(next_states, dtype=np.float64))
+        if next_states_array.ndim == 1:
+            next_states_array = next_states_array.reshape(1, -1)
+        observation_array = np.ascontiguousarray(np.asarray(observation, dtype=np.float64))
+        # ``batch_log_likelihood`` reads each row's next-state from the
+        # input array; ``next_state_`` on the kernel is unused, so we
+        # skip ``set_next_state`` on this hot path.
+        kernel = self._get_obs_kernel(int(action))
+        return np.asarray(
+            kernel.batch_log_likelihood(
+                next_particles=next_states_array,
+                observation=observation_array,
+            ),
+            dtype=np.float64,
         )
 
-    def observation_model(self, next_state: np.ndarray, action: int) -> ObservationModel:
-        return CartPoleObservation(next_state=next_state, action=action, obs_dist=self._obs_dist)
+    def __getstate__(self) -> Dict[str, Any]:
+        # Per-action C++ kernel caches hold pybind11 objects that aren't
+        # picklable. Drop them at serialization time; ``__setstate__``
+        # rebuilds empty caches so the env works after unpickling.
+        state = self.__dict__.copy()
+        state["_trans_kernel_cache"] = {}
+        state["_obs_kernel_cache"] = {}
+        return state
 
-    def reward(self, state: np.ndarray, action: int) -> float:
+    def __setstate__(self, state: Dict[str, Any]) -> None:
+        vars(self).update(state)
+        self._trans_kernel_cache = {}
+        self._obs_kernel_cache = {}
+
+    def reward(self, state: np.ndarray, action: int, next_state: Any = None) -> float:
+        del action, next_state
         terminated = self.is_terminal(state)
 
         if not terminated:
@@ -389,7 +343,13 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
 
         return reward
 
-    def reward_batch(self, states: Union[np.ndarray, Sequence[Any]], action: int) -> np.ndarray:
+    def reward_batch(
+        self,
+        states: Union[np.ndarray, Sequence[Any]],
+        action: int,
+        next_states: Optional[Union[np.ndarray, Sequence[Any]]] = None,
+    ) -> np.ndarray:
+        del action, next_states
         states_arr = np.asarray(states)
         x = states_arr[:, 0]
         theta = states_arr[:, 2]
@@ -413,17 +373,68 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
 
         return terminated
 
+    def simulate_random_rollout(  # pylint: disable=unused-argument
+        self,
+        state: Any,
+        action_sampler: Any,
+        max_depth: int,
+        discount_factor: float,
+        depth: int = 0,
+    ) -> float:
+        """Random rollout via native C++.
+
+        Args:
+            state: Current 4-D cart-pole state ``[x, x_dot, theta, theta_dot]``.
+            action_sampler: Object with a ``sample()`` method (used only on the
+                Python fallback path).
+            max_depth: Maximum rollout depth.
+            discount_factor: Per-step discount factor.
+            depth: Depth already consumed by the search tree. Defaults to 0.
+
+        Returns:
+            Discounted sum of immediate rewards along the sampled trajectory.
+        """
+        steps_left = max_depth - depth
+        if steps_left <= 0:
+            return 0.0
+
+        state_arr = np.ascontiguousarray(np.asarray(state, dtype=np.float64).ravel())
+        action_indices = np.random.randint(0, 2, size=steps_left, dtype=np.int32)
+
+        return _native.simulate_rollout(
+            initial_state=state_arr,
+            action_indices=action_indices,
+            max_depth=max_depth,
+            start_depth=depth,
+            discount_factor=discount_factor,
+            force_mag=self.force_mag,
+            total_mass=self.total_mass,
+            polemass_length=self.polemass_length,
+            gravity=self.gravity,
+            length=self.length,
+            kinematics_integrator=self._kinematics_integrator_int,
+            tau=self.tau,
+            masspole=self.masspole,
+            x_threshold=self.x_threshold,
+            theta_threshold=self.theta_threshold_radians,
+            covariance=self._state_transition_dist.covariance,
+        )
+
     def initial_state_dist(self) -> Distribution:
         return CartPoleInitialStateDistribution()
 
     def initial_observation_dist(self) -> Distribution:
-        return CartPoleInitialStateDistribution()
+        return CartPoleInitialObservationDistribution(self.noise_cov)
 
     def get_actions(self) -> List[int]:
         return [0, 1]
 
     def is_equal_observation(self, observation1: np.ndarray, observation2: np.ndarray) -> bool:
-        return np.array_equal(observation1, observation2)
+        return bool(np.allclose(observation1, observation2, rtol=1e-7, atol=1e-9))
+
+    def hash_action(self, action: Any) -> Hashable:
+        # Discrete int actions (0, 1); already hashable.
+        return action
 
     def get_metric_names(self) -> List[str]:
         """Get names of CartPole POMDP specific metrics.

@@ -1,7 +1,7 @@
-"""Tests for the SPUCT action selection module.
+"""Tests for the SPUCT action selection module (arena backend).
 
 This module tests the safety-constrained PUCT selection and progressive
-widening functions used by ConstrainedZero.
+widening helpers used by ConstrainedZero.
 """
 
 import random
@@ -9,11 +9,11 @@ import random
 import numpy as np
 
 from POMDPPlanners.core.belief import WeightedParticleBelief
-from POMDPPlanners.core.tree import ActionNode, BeliefNode
+from POMDPPlanners.core.tree.arena import Tree
 from POMDPPlanners.planners.mcts_planners.constrained_zero.constrained_puct import (
     _compute_safety_mask,
-    spuct_action_progressive_widening,
-    spuct_selection,
+    spuct_action_progressive_widening_arena,
+    spuct_selection_arena,
 )
 from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
 
@@ -30,19 +30,20 @@ class SimpleActionSampler(ActionSampler):
         return f"new_action_{self._counter}"
 
 
-def _make_belief_node_with_children(q_values, visit_counts, parent_visits):
+def _make_tree_with_children(q_values, visit_counts, parent_visits):
     particles = [[0.0], [1.0]]
     log_weights = np.log([0.5, 0.5])
     belief = WeightedParticleBelief(particles, log_weights)
-    node = BeliefNode(belief=belief)
-    node.visit_count = parent_visits
-    children = []
+    tree = Tree()
+    root_id = tree.add_belief_node(belief)
+    tree.visit_count[root_id] = parent_visits
+    child_ids = []
     for i, (q, n) in enumerate(zip(q_values, visit_counts)):
-        child = ActionNode(action=f"a_{i}", parent=node)
-        child.q_value = q
-        child.visit_count = n
-        children.append(child)
-    return node, children
+        cid = tree.add_action_node(action=f"a_{i}", parent_id=root_id)
+        tree.q_value[cid] = q
+        tree.visit_count[cid] = n
+        child_ids.append(cid)
+    return tree, root_id, child_ids
 
 
 class TestComputeSafetyMask:
@@ -106,7 +107,7 @@ class TestComputeSafetyMask:
 
 
 class TestSpuctSelection:
-    """Tests for the spuct_selection function."""
+    """Tests for the spuct_selection_arena function."""
 
     def test_safe_action_preferred_over_unsafe(self):
         """Test SPUCT prefers safe actions over unsafe ones.
@@ -114,24 +115,25 @@ class TestSpuctSelection:
         Purpose: Validates that unsafe actions are masked out.
 
         Given: Two actions with equal Q/visits but action 0 is safe, action 1 is unsafe.
-        When: spuct_selection is called.
+        When: spuct_selection_arena is called.
         Then: The safe action (a_0) is selected.
 
         Test type: unit
         """
-        node, children = _make_belief_node_with_children(
+        tree, root_id, child_ids = _make_tree_with_children(
             q_values=[1.0, 2.0], visit_counts=[5, 5], parent_visits=10
         )
         # action 1 has higher Q but is unsafe
-        failure_dict = {id(children[0]): 0.05, id(children[1]): 0.5}
+        failure_dict = {child_ids[0]: 0.05, child_ids[1]: 0.5}
 
-        selected = spuct_selection(
-            belief_node=node,
+        selected_id = spuct_selection_arena(
+            tree=tree,
+            belief_id=root_id,
             exploration_constant=1.0,
             failure_dict=failure_dict,
             delta_prime=0.1,
         )
-        assert selected.action == "a_0"
+        assert tree.action[selected_id] == "a_0"
 
     def test_all_unsafe_selects_best_q(self):
         """Test all-unsafe fallback selects highest PUCT score.
@@ -139,23 +141,24 @@ class TestSpuctSelection:
         Purpose: Validates unconstrained fallback when all actions unsafe.
 
         Given: Two unsafe actions with Q=[1.0, 3.0] and many visits.
-        When: spuct_selection is called.
+        When: spuct_selection_arena is called.
         Then: The higher-Q action is selected (fallback to unconstrained).
 
         Test type: unit
         """
-        node, children = _make_belief_node_with_children(
+        tree, root_id, child_ids = _make_tree_with_children(
             q_values=[1.0, 3.0], visit_counts=[100, 100], parent_visits=200
         )
-        failure_dict = {id(children[0]): 0.5, id(children[1]): 0.8}
+        failure_dict = {child_ids[0]: 0.5, child_ids[1]: 0.8}
 
-        selected = spuct_selection(
-            belief_node=node,
+        selected_id = spuct_selection_arena(
+            tree=tree,
+            belief_id=root_id,
             exploration_constant=1.0,
             failure_dict=failure_dict,
             delta_prime=0.1,
         )
-        assert selected.action == "a_1"
+        assert tree.action[selected_id] == "a_1"
 
     def test_matches_puct_when_all_safe(self):
         """Test SPUCT matches PUCT when all actions are safe.
@@ -163,24 +166,24 @@ class TestSpuctSelection:
         Purpose: Validates SPUCT reduces to standard PUCT when safety mask is all ones.
 
         Given: Two actions with Q=[1.0, 3.0], both safe.
-        When: spuct_selection is called.
+        When: spuct_selection_arena is called.
         Then: Selects the same action as standard PUCT (higher Q with many visits).
 
         Test type: unit
         """
-        node, children = _make_belief_node_with_children(
+        tree, root_id, child_ids = _make_tree_with_children(
             q_values=[1.0, 3.0], visit_counts=[100, 100], parent_visits=200
         )
-        failure_dict = {id(children[0]): 0.01, id(children[1]): 0.02}
+        failure_dict = {child_ids[0]: 0.01, child_ids[1]: 0.02}
 
-        selected = spuct_selection(
-            belief_node=node,
+        selected_id = spuct_selection_arena(
+            tree=tree,
+            belief_id=root_id,
             exploration_constant=1.0,
             failure_dict=failure_dict,
             delta_prime=0.1,
         )
-        # With many visits, exploration is small, so higher Q wins
-        assert selected.action == "a_1"
+        assert tree.action[selected_id] == "a_1"
 
     def test_uniform_priors_when_none(self):
         """Test SPUCT uses uniform priors when action_priors is None.
@@ -188,38 +191,39 @@ class TestSpuctSelection:
         Purpose: Validates default prior behavior.
 
         Given: Three actions with different Q-values, no explicit priors.
-        When: spuct_selection is called with action_priors=None.
+        When: spuct_selection_arena is called with action_priors=None.
         Then: Returns a valid action (no error).
 
         Test type: unit
         """
-        node, _ = _make_belief_node_with_children(
+        tree, root_id, _ = _make_tree_with_children(
             q_values=[1.0, 2.0, 3.0],
             visit_counts=[10, 10, 10],
             parent_visits=30,
         )
-        failure_dict = {}  # all zero failures
+        failure_dict = {}
 
-        selected = spuct_selection(
-            belief_node=node,
+        selected_id = spuct_selection_arena(
+            tree=tree,
+            belief_id=root_id,
             exploration_constant=1.0,
             failure_dict=failure_dict,
             delta_prime=0.5,
             action_priors=None,
         )
-        assert selected.action in ["a_0", "a_1", "a_2"]
+        assert tree.action[selected_id] in ["a_0", "a_1", "a_2"]
 
 
 class TestSpuctActionProgressiveWidening:
-    """Tests for the spuct_action_progressive_widening function."""
+    """Tests for the spuct_action_progressive_widening_arena function."""
 
     def test_creates_new_action_on_empty_node(self):
         """Test new action is created for a leaf belief node.
 
         Purpose: Validates widening creates new action on first visit.
 
-        Given: A leaf belief node with no children.
-        When: spuct_action_progressive_widening is called.
+        Given: A leaf belief node with no children (not root: has parent).
+        When: spuct_action_progressive_widening_arena is called.
         Then: A new action node is created and returned.
 
         Test type: unit
@@ -227,11 +231,16 @@ class TestSpuctActionProgressiveWidening:
         particles = [[0.0], [1.0]]
         log_weights = np.log([0.5, 0.5])
         belief = WeightedParticleBelief(particles, log_weights)
-        node = BeliefNode(belief=belief)
+        parent_belief = WeightedParticleBelief(particles, log_weights)
+        tree = Tree()
+        parent_root_id = tree.add_belief_node(parent_belief)
+        bridge_action_id = tree.add_action_node(action="bridge", parent_id=parent_root_id)
+        node_id = tree.add_belief_node(belief=belief, parent_id=bridge_action_id)
 
         sampler = SimpleActionSampler()
-        action_node = spuct_action_progressive_widening(
-            belief_node=node,
+        action_id = spuct_action_progressive_widening_arena(
+            tree=tree,
+            belief_id=node_id,
             alpha_a=0.5,
             action_sampler=sampler,
             exploration_constant=1.0,
@@ -239,8 +248,7 @@ class TestSpuctActionProgressiveWidening:
             failure_dict={},
             delta_prime=0.1,
         )
-        assert action_node is not None
-        assert action_node.action.startswith("new_action_")
+        assert tree.action[action_id].startswith("new_action_")
 
     def test_selects_via_spuct_when_not_widening(self):
         """Test SPUCT selection when widening threshold not met.
@@ -248,23 +256,36 @@ class TestSpuctActionProgressiveWidening:
         Purpose: Validates SPUCT is used instead of creating new actions.
 
         Given: A node with many children relative to k_a * N^alpha_a.
-        When: spuct_action_progressive_widening is called.
+        When: spuct_action_progressive_widening_arena is called.
         Then: An existing child is selected via SPUCT.
 
         Test type: unit
         """
-        # With k_a=0.1, alpha_a=0.5, N=150: threshold = 0.1 * 150^0.5 ~ 1.22
+        # With k_a=0.1, alpha_a=0.5, N=150: threshold ~ 1.22
         # 3 children > 1.22 -> no widening -> SPUCT selection
-        node, children = _make_belief_node_with_children(
-            q_values=[1.0, 2.0, 3.0],
-            visit_counts=[50, 50, 50],
-            parent_visits=150,
-        )
-        failure_dict = {id(c): 0.01 for c in children}
+        # Need non-root belief node for widening gate to apply
+        particles = [[0.0], [1.0]]
+        log_weights = np.log([0.5, 0.5])
+        belief = WeightedParticleBelief(particles, log_weights)
+        parent_belief = WeightedParticleBelief(particles, log_weights)
+        tree = Tree()
+        parent_root_id = tree.add_belief_node(parent_belief)
+        bridge_action_id = tree.add_action_node(action="bridge", parent_id=parent_root_id)
+        node_id = tree.add_belief_node(belief=belief, parent_id=bridge_action_id)
+        tree.visit_count[node_id] = 150
+
+        child_ids = []
+        for i, (q, n) in enumerate(zip([1.0, 2.0, 3.0], [50, 50, 50])):
+            cid = tree.add_action_node(action=f"a_{i}", parent_id=node_id)
+            tree.q_value[cid] = q
+            tree.visit_count[cid] = n
+            child_ids.append(cid)
+        failure_dict = {cid: 0.01 for cid in child_ids}
 
         sampler = SimpleActionSampler()
-        selected = spuct_action_progressive_widening(
-            belief_node=node,
+        selected_id = spuct_action_progressive_widening_arena(
+            tree=tree,
+            belief_id=node_id,
             alpha_a=0.5,
             action_sampler=sampler,
             exploration_constant=1.0,
@@ -272,7 +293,7 @@ class TestSpuctActionProgressiveWidening:
             failure_dict=failure_dict,
             delta_prime=0.5,
         )
-        assert selected.action in ["a_0", "a_1", "a_2"]
+        assert tree.action[selected_id] in ["a_0", "a_1", "a_2"]
 
     def test_min_visit_count_at_root(self):
         """Test min_visit_count_per_action enforced at root.
@@ -280,7 +301,7 @@ class TestSpuctActionProgressiveWidening:
         Purpose: Validates that at depth 0, unvisited children are returned first.
 
         Given: A root node with two children, one unvisited.
-        When: spuct_action_progressive_widening is called with min_visit_count=1.
+        When: spuct_action_progressive_widening_arena is called with min_visit_count=1.
         Then: The unvisited child is returned.
 
         Test type: unit
@@ -288,19 +309,21 @@ class TestSpuctActionProgressiveWidening:
         particles = [[0.0], [1.0]]
         log_weights = np.log([0.5, 0.5])
         belief = WeightedParticleBelief(particles, log_weights)
-        node = BeliefNode(belief=belief)
-        node.visit_count = 10
+        tree = Tree()
+        root_id = tree.add_belief_node(belief)
+        tree.visit_count[root_id] = 10
 
-        child1 = ActionNode(action="a_0", parent=node)
-        child1.visit_count = 5
-        child2 = ActionNode(action="a_1", parent=node)
-        child2.visit_count = 0  # unvisited
+        cid1 = tree.add_action_node(action="a_0", parent_id=root_id)
+        tree.visit_count[cid1] = 5
+        cid2 = tree.add_action_node(action="a_1", parent_id=root_id)
+        tree.visit_count[cid2] = 0  # unvisited
 
         failure_dict = {}
         sampler = SimpleActionSampler()
 
-        selected = spuct_action_progressive_widening(
-            belief_node=node,
+        selected_id = spuct_action_progressive_widening_arena(
+            tree=tree,
+            belief_id=root_id,
             alpha_a=0.5,
             action_sampler=sampler,
             exploration_constant=1.0,
@@ -309,4 +332,4 @@ class TestSpuctActionProgressiveWidening:
             delta_prime=0.1,
             min_visit_count_per_action=1,
         )
-        assert selected.action == "a_1"
+        assert tree.action[selected_id] == "a_1"
