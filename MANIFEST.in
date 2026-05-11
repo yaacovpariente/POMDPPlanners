@@ -1,1 +1,16 @@
-include CHANGELOG.md
+include LICENSE.md
+include README.md
+include pyproject.toml
+include setup.py
+
+# C++ sources and headers for pybind11 extensions. Without these in the
+# sdist, `pip install` from PyPI fails to compile because setup.py's
+# `include_dirs=[...]` points at paths that don't exist in the tarball.
+recursive-include POMDPPlanners *.cpp *.hpp *.h
+recursive-include POMDPPlanners *.pyi
+
+# Drop build/test artifacts that sometimes get picked up.
+global-exclude __pycache__
+global-exclude *.py[cod]
+global-exclude *.so
+prune **/__pycache__
