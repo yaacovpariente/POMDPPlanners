@@ -1,6 +1,8 @@
-from typing import Any
+from typing import Any, Tuple
 
-from POMDPPlanners.core.environment import Environment
+import numpy as np
+
+from POMDPPlanners.core.environment import ConstrainedEnvironment, Environment
 from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
 
 
@@ -108,3 +110,69 @@ def random_rollout_action_sampler(
         discount_factor=discount_factor,
         max_depth=max_depth,
     )
+
+
+def cost_aware_random_rollout(
+    state: Any,
+    depth: int,
+    action_sampler: ActionSampler,
+    environment: ConstrainedEnvironment,
+    discount_factor: float,
+    max_depth: int,
+    n_constraints: int,
+) -> Tuple[float, np.ndarray]:
+    """Random rollout that returns ``(discounted_reward, discounted_cost_vector)``.
+
+    Used by constrained planners (CPOMCPOW, CPFT_DPW) at leaf expansion so
+    constraint cost is accumulated across the rollout trajectory rather than
+    approximated as zero. The cost vector is read from
+    :meth:`ConstrainedEnvironment.constraint_cost` at every transition.
+
+    Iterative (no recursion) so deep rollouts don't hit Python's stack limit.
+    Does NOT dispatch to native rollout kernels — those compute reward only
+    and have no constraint-cost channel.
+
+    Args:
+        state: Starting state.
+        depth: Current depth (rollout runs from ``depth`` to ``max_depth``).
+        action_sampler: Sampler for rollout actions.
+        environment: Constrained POMDP env. Must expose ``constraint_cost``.
+        discount_factor: Per-step discount.
+        max_depth: Exclusive upper bound on rollout depth.
+        n_constraints: Length of the constraint-cost vector. Used to size
+            the zero return and validate per-step ``constraint_cost`` shape.
+
+    Returns:
+        ``(discounted_reward, discounted_cost_vector)``. The cost vector has
+        shape ``(n_constraints,)``.
+
+    Raises:
+        ValueError: If ``constraint_cost`` returns a vector whose length
+            does not match ``n_constraints``.
+    """
+    total_r = 0.0
+    total_c = np.zeros(n_constraints, dtype=np.float64)
+    discount = 1.0
+    current_state = state
+    current_depth = depth
+    while current_depth < max_depth:
+        if environment.is_terminal(state=current_state):
+            break
+        action = action_sampler.sample()
+        next_state, _, reward = environment.sample_next_step(state=current_state, action=action)
+        cost = np.asarray(
+            environment.constraint_cost(current_state, action, next_state),
+            dtype=np.float64,
+        )
+        if cost.shape != (n_constraints,):
+            raise ValueError(
+                f"constraint_cost returned shape {cost.shape}, expected ({n_constraints},)"
+            )
+        if not np.isfinite(cost).all():
+            raise ValueError(f"constraint_cost returned non-finite values during rollout: {cost}")
+        total_r += discount * float(reward)
+        total_c += discount * cost
+        discount *= discount_factor
+        current_state = next_state
+        current_depth += 1
+    return total_r, total_c
