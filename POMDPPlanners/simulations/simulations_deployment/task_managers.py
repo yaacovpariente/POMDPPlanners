@@ -1,4 +1,5 @@
 import gc
+import logging
 import os
 import time
 from enum import Enum
@@ -20,6 +21,8 @@ from POMDPPlanners.core.simulation import (
     TaskManager,
     TaskManagerExternalDB,
 )
+
+_dask_logger = logging.getLogger(__name__)
 
 
 class TaskManagerType(Enum):
@@ -55,7 +58,36 @@ class DaskTaskManager(TaskManager):
         self.client: Optional[Client] = None
         self.cache = None
         self.cache_registered = False  # Track if cache was registered
+        self._on_progress: Optional[Callable[[], None]] = None
         self._initialize_client()
+
+    def set_progress_callback(self, callback: Optional[Callable[[], None]]) -> None:
+        """Register a callback invoked once per completed task.
+
+        The callback runs in a Dask client thread (parent process) as each
+        :class:`dask.distributed.Future` resolves. It is safe to touch
+        parent-only resources (e.g. SQLite connections); ``ProgressDB``
+        already opens a fresh connection per call and uses WAL +
+        ``busy_timeout=5000`` so concurrent client-thread callbacks
+        serialise cleanly. Exceptions raised by the callback are caught
+        and logged at DEBUG level so a flaky callback cannot break the
+        run.
+
+        Args:
+            callback: A zero-argument callable, or ``None`` to clear an
+                existing callback.
+        """
+        self._on_progress = callback
+
+    def _on_done_callback(self, future: Future) -> None:
+        del future  # callback only needs the side-effect, not the result
+        callback = self._on_progress
+        if callback is None:
+            return
+        try:
+            callback()
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            _dask_logger.debug("Dask progress callback raised: %s", exc)
 
     def _initialize_client(self):
         """Initialize Dask client and cache with persistence."""
@@ -95,6 +127,8 @@ class DaskTaskManager(TaskManager):
             future = self.client.submit(
                 task.run, key=task.get_config_id()  # Use task's public config ID as key
             )
+            if self._on_progress is not None:
+                future.add_done_callback(self._on_done_callback)
             futures.append(future)
 
         return futures
