@@ -5,9 +5,10 @@ import io
 import pstats
 import shutil
 import tempfile
+import uuid
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
 import mlflow
 import pandas as pd
@@ -23,6 +24,12 @@ from POMDPPlanners.core.simulation import (
 )
 from POMDPPlanners.simulations.simulation_statistics import (
     metrics_dict_to_dataframe,
+)
+from POMDPPlanners.simulations.simulations_deployment.run_progress import (
+    NotificationConfig,
+    Notifier,
+    build_notifier,
+    install_signal_handlers,
 )
 from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import (
     TaskManagerConfig,
@@ -130,6 +137,7 @@ class BaseSimulator(ABC):
         console_output: bool = True,
         no_logs: bool = False,
         visualizer: Optional[ExperimentVisualizer] = None,
+        notification_config: Optional[NotificationConfig] = None,
     ):
         """Initialize the simulator.
 
@@ -145,6 +153,12 @@ class BaseSimulator(ABC):
             no_logs: Whether to disable all logging (default: False)
             visualizer: Strategy for rendering aggregated experiment artifacts after
                 each comparison run. Defaults to :class:`EpisodeReturnsVisualizer`.
+            notification_config: Optional :class:`NotificationConfig` controlling
+                Slack + progress-DB notifications. When ``None``, defaults to
+                :meth:`NotificationConfig.disabled`, meaning no notifications
+                will fire. The ``SimulationsAPI`` layer is responsible for
+                building a config from env vars and threading it in; direct
+                callers (tests, workflows) get silent behaviour by default.
         """
         self.cache_dir_path = cache_dir_path
         self.experiment_name = experiment_name
@@ -168,6 +182,40 @@ class BaseSimulator(ABC):
 
         if cache_dir_path is not None:
             self._setup_mlflow_tracking()
+
+        self.notification_config: NotificationConfig = (
+            notification_config
+            if notification_config is not None
+            else NotificationConfig.disabled()
+        )
+        self._run_id: str = uuid.uuid4().hex
+        self._notifier: Notifier = build_notifier(
+            experiment_name=self.experiment_name,
+            config=self.notification_config,
+            logger=self.logger,
+        )
+        self._uninstall_signals: Callable[[], None] = install_signal_handlers(
+            self._notifier, self._run_id
+        )
+        self.task_manager.set_progress_callback(
+            lambda: self._notifier.episode_completed(self._run_id)
+        )
+
+    def __getstate__(self) -> Dict:
+        # The signal-handler uninstall callable is a closure created by
+        # :func:`install_signal_handlers` and is therefore not picklable.
+        # Drop it on pickle; restore as a no-op on unpickle. Unpickled
+        # simulators are not the live process that installed the handlers,
+        # so they have nothing to uninstall.
+        state = self.__dict__.copy()
+        state["_uninstall_signals"] = None
+        return state
+
+    def __setstate__(self, state: Dict) -> None:
+        for key, value in state.items():
+            setattr(self, key, value)
+        if getattr(self, "_uninstall_signals", None) is None:
+            self._uninstall_signals = lambda: None
 
     def _setup_mlflow_tracking(self) -> None:
         """Configure MLFlow tracking."""
@@ -201,6 +249,19 @@ class BaseSimulator(ABC):
         self.task_manager.__exit__(exc_type, exc_val, exc_tb)
 
         try:
+            if exc_type is None:
+                self._notifier.run_finished(self._run_id)
+            else:
+                self._notifier.run_failed(self._run_id, f"{exc_type.__name__}: {exc_val}")
+        except Exception:  # pylint: disable=broad-exception-caught
+            pass
+
+        try:
+            self._uninstall_signals()
+        except Exception:  # pylint: disable=broad-exception-caught
+            pass
+
+        try:
             cleanup_all_loggers()
         except Exception:  # pylint: disable=broad-exception-caught
             pass
@@ -225,6 +286,15 @@ class BaseSimulator(ABC):
         Returns:
             Tuple of results dictionary and statistics DataFrame
         """
+        self._notifier.run_started(
+            self._run_id,
+            metadata={
+                "num_environments": len(environment_run_params),
+                "environment_names": [params.environment.name for params in environment_run_params],
+                "n_jobs": n_jobs,
+            },
+        )
+
         if self.enable_profiling:
             self.profiler = cProfile.Profile()
             self.profiler.enable()

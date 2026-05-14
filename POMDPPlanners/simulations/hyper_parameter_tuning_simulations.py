@@ -119,8 +119,9 @@ Note:
     - Results include optimized policies with their chosen hyperparameters
 """
 
+import uuid
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 import mlflow
 
@@ -133,6 +134,12 @@ from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     HyperParameterRunParams,
     OptimizedPolicyResult,
     ParallelizationLevel,
+)
+from POMDPPlanners.simulations.simulations_deployment.run_progress import (
+    NotificationConfig,
+    Notifier,
+    build_notifier,
+    install_signal_handlers,
 )
 from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import (
     JoblibConfig,
@@ -246,6 +253,7 @@ class HyperParameterOptimizer:
         mlflow_tracking_uri: Optional[Path] = None,
         use_queue_logger: bool = False,
         parallelization_level: ParallelizationLevel = ParallelizationLevel.OPTUNA_TRIALS,
+        notification_config: Optional[NotificationConfig] = None,
     ):
         """Initialize the hyperparameter optimizer.
 
@@ -307,6 +315,21 @@ class HyperParameterOptimizer:
             cache_dir=str(self.cache_dir_path / "task_manager_cache")
         )
 
+        self.notification_config: NotificationConfig = (
+            notification_config
+            if notification_config is not None
+            else NotificationConfig.disabled()
+        )
+        self._run_id: str = uuid.uuid4().hex
+        self._notifier: Notifier = build_notifier(
+            experiment_name=self.experiment_name,
+            config=self.notification_config,
+            logger=logger,
+        )
+        self._uninstall_signals: Callable[[], None] = install_signal_handlers(
+            self._notifier, self._run_id
+        )
+
     def __enter__(self):
         """Context manager entry."""
         return self
@@ -314,6 +337,21 @@ class HyperParameterOptimizer:
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Context manager exit with proper cleanup."""
         self.cleanup()
+
+    def __getstate__(self) -> Dict:
+        # The signal-handler uninstall callable is a closure and not
+        # picklable; drop it. The unpickled optimizer is not the live
+        # process that installed the handlers, so the no-op restore is
+        # correct.
+        state = self.__dict__.copy()
+        state["_uninstall_signals"] = None
+        return state
+
+    def __setstate__(self, state: Dict) -> None:
+        for key, value in state.items():
+            setattr(self, key, value)
+        if getattr(self, "_uninstall_signals", None) is None:
+            self._uninstall_signals = lambda: None
 
     def cleanup(self):
         """Clean up resources including loggers and task managers."""
@@ -331,6 +369,14 @@ class HyperParameterOptimizer:
         except Exception:  # pylint: disable=broad-exception-caught
             pass
 
+        # Uninstall SIGTERM/SIGINT handlers installed at __init__ time.
+        try:
+            uninstall = getattr(self, "_uninstall_signals", None)
+            if callable(uninstall):
+                uninstall()
+        except Exception:  # pylint: disable=broad-exception-caught
+            pass
+
         # Clean up logger resources to prevent hanging
         try:
             cleanup_all_loggers()
@@ -340,8 +386,10 @@ class HyperParameterOptimizer:
     def _create_tasks(
         self, configs: List[HyperParameterRunParams]
     ) -> Tuple[List[HyperParameterTuningSimulationTask], List[str]]:
+        total_trials = sum(config.n_trials for config in configs)
         tasks = []
         task_identifiers = []
+        running_offset = 0
         for config in configs:
             task = HyperParameterTuningSimulationTask(
                 environment=config.environment,
@@ -360,9 +408,21 @@ class HyperParameterOptimizer:
                 confidence_interval_level=self.confidence_interval_level,
                 alpha=self.alpha,
                 parallelization_level=self.parallelization_level,
+                experiment_name=self.experiment_name,
+                parent_run_id=self._run_id,
+                webhook_url=(
+                    self.notification_config.webhook_url
+                    if self.notification_config.is_active()
+                    else None
+                ),
+                trial_interval=self.notification_config.trial_interval,
+                trial_offset=running_offset,
+                total_trials_globally=total_trials,
+                progress_db_path=self.notification_config.progress_db_path,
             )
             tasks.append(task)
             task_identifiers.append(task.get_config_id())
+            running_offset += config.n_trials
 
         return tasks, task_identifiers
 
@@ -434,25 +494,52 @@ class HyperParameterOptimizer:
             len(configs),
         )
 
-        # Prepare MLflow session and execute optimization tasks
-        self._prepare_mlflow_session()
-
-        with mlflow.start_run(run_name=f"optimize_batch_{len(configs)}_configs"):
-            # Log batch-level information
-            self._log_batch_level_parameters(configs)
-
-            # Execute optimization tasks
-            task_results, tasks = self._execute_optimization_tasks(configs)
-
-            # Process results and log to MLflow
-            results = self._process_task_results_with_mlflow_logging(configs, task_results, tasks)
-
-            # Log batch-level summary
-            self._log_batch_level_summary(configs, results)
-
-        logger.info(
-            "All %s configurations optimized successfully with MLflow tracking", len(configs)
+        total_trials = sum(config.n_trials for config in configs)
+        self._notifier.run_started(
+            self._run_id,
+            metadata={
+                "num_configs": len(configs),
+                "total_trials": total_trials,
+                "trial_notification_interval": self.notification_config.trial_interval,
+                "n_jobs": self.n_jobs,
+            },
         )
+
+        try:
+            # Prepare MLflow session and execute optimization tasks
+            self._prepare_mlflow_session()
+
+            with mlflow.start_run(run_name=f"optimize_batch_{len(configs)}_configs"):
+                # Log batch-level information
+                self._log_batch_level_parameters(configs)
+
+                # Execute optimization tasks
+                task_results, tasks = self._execute_optimization_tasks(configs)
+
+                # Process results and log to MLflow
+                results = self._process_task_results_with_mlflow_logging(
+                    configs, task_results, tasks
+                )
+
+                # Log batch-level summary
+                self._log_batch_level_summary(configs, results)
+
+            logger.info(
+                "All %s configurations optimized successfully with MLflow tracking",
+                len(configs),
+            )
+        except Exception as exc:
+            try:
+                self._notifier.run_failed(self._run_id, f"{type(exc).__name__}: {exc}")
+            except Exception:  # pylint: disable=broad-exception-caught
+                pass
+            raise
+
+        try:
+            self._notifier.run_finished(self._run_id)
+        except Exception:  # pylint: disable=broad-exception-caught
+            pass
+
         return results
 
     def _prepare_mlflow_session(self) -> None:

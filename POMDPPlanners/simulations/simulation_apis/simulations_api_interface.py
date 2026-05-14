@@ -20,6 +20,9 @@ from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     OptimizedPolicyResult,
     ParallelizationLevel,
 )
+from POMDPPlanners.simulations.simulations_deployment.run_progress import (
+    NotificationConfig,
+)
 
 
 class SimulationsAPIInterface(ABC):
@@ -43,12 +46,21 @@ class SimulationsAPIInterface(ABC):
     """
 
     @abstractmethod
-    def __init__(self, cache_dir_path: Optional[Path] = None, debug: bool = False):
+    def __init__(
+        self,
+        cache_dir_path: Optional[Path] = None,
+        debug: bool = False,
+        notification_config: Optional[NotificationConfig] = None,
+    ):
         """Initialize the SimulationsAPI.
 
         Args:
             cache_dir_path: Optional path for storing simulation results and logs
             debug: Whether to enable debug-level logging output
+            notification_config: Optional :class:`NotificationConfig` controlling
+                Slack + progress-DB notifications. Implementations default to
+                :meth:`NotificationConfig.from_env` when ``None`` is passed,
+                preserving the env-var-driven zero-config UX.
         """
 
     @abstractmethod
