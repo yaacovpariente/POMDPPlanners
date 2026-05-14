@@ -18,6 +18,9 @@ from POMDPPlanners.simulations.workflows.hyperparameter_tuning_evaluation_workfl
 from POMDPPlanners.simulations.hyper_parameter_tuning_simulations import (
     HyperParameterOptimizer,
 )
+from POMDPPlanners.simulations.simulations_deployment.run_progress import (
+    NotificationConfig,
+)
 from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import PBSConfig
 from POMDPPlanners.simulations.simulator import POMDPSimulator
 from POMDPPlanners.simulations.simulation_apis.simulations_api_interface import (
@@ -101,6 +104,7 @@ class PBSSimulationsAPI(SimulationsAPIInterface):
         dashboard_prefix: Optional[str] = None,
         cache_dir_path: Optional[Path] = None,
         debug: bool = False,
+        notification_config: Optional[NotificationConfig] = None,
     ):
         """Initialize the PBSSimulationsAPI.
 
@@ -118,6 +122,8 @@ class PBSSimulationsAPI(SimulationsAPIInterface):
             dashboard_prefix: URL prefix for dashboard (useful with reverse proxies)
             cache_dir_path: Optional path for storing simulation results and logs
             debug: Whether to enable debug-level logging output
+            notification_config: Optional :class:`NotificationConfig`. When
+                ``None``, defaults to :meth:`NotificationConfig.from_env`.
         """
         # Store PBS-specific configuration
         self.queue = queue
@@ -133,6 +139,11 @@ class PBSSimulationsAPI(SimulationsAPIInterface):
         self.dashboard_prefix = dashboard_prefix
         self.cache_dir_path = cache_dir_path
         self.debug = debug
+        self.notification_config: NotificationConfig = (
+            notification_config
+            if notification_config is not None
+            else NotificationConfig.from_env()
+        )
 
         self.logger = get_logger(name="pbs_simulations_api", output_dir=cache_dir_path, debug=debug)
         self.logger.info("Initialized PBSSimulationsAPI")
@@ -266,6 +277,7 @@ class PBSSimulationsAPI(SimulationsAPIInterface):
             enable_profiling=enable_profiling,
             profiling_output_limit=profiling_output_limit,
             use_queue_logger=True,
+            notification_config=self.notification_config,
         ) as simulator:
             self.logger.info("Running PBS cluster simulation comparison")
             results = simulator.compare_multiple_environments_policies(
@@ -429,6 +441,7 @@ class PBSSimulationsAPI(SimulationsAPIInterface):
             alpha=alpha,
             use_queue_logger=use_queue_logger,
             parallelization_level=parallelization_level,
+            notification_config=self.notification_config,
         )
 
         self.logger.info("Running PBS cluster hyperparameter optimization")

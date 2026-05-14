@@ -221,6 +221,89 @@ def test_joblib_task_manager_with_cache_clear(cache_db):
         assert len(list(items)) == 0
 
 
+def test_joblib_task_manager_progress_callback_fires_per_task(cache_db, environment, policy):
+    """Test that set_progress_callback fires once per completed task.
+
+    Purpose: Validates the per-episode heartbeat hook used by the simulator
+    to write heartbeats into the run-progress DB.
+
+    Given: A JoblibTaskManager with a counting callback registered via
+        set_progress_callback, and 3 real EpisodeSimulationTask instances.
+    When: run_tasks is called with the three tasks.
+    Then: The counter equals the number of tasks (3) — one callback fire
+        per completed task, all in the parent process.
+
+    Test type: integration
+    """
+    with JoblibTaskManager(cache_db=cache_db, n_jobs=1) as task_manager:
+        call_count = [0]
+
+        def on_progress() -> None:
+            call_count[0] += 1
+
+        task_manager.set_progress_callback(on_progress)
+
+        tasks = []
+        identifiers = []
+        for i in range(3):
+            tasks.append(
+                EpisodeSimulationTask(
+                    environment=environment,
+                    policy=policy,
+                    initial_belief=create_test_belief(),
+                    num_steps=2,
+                    episode_id=i,
+                    seed=42 + i,
+                    console_output=False,
+                )
+            )
+            identifiers.append(f"episode_{i}")
+
+        task_manager.run_tasks(tasks, identifiers)
+
+        assert call_count[0] == 3
+
+
+def test_joblib_task_manager_progress_callback_exception_is_swallowed(
+    cache_db, environment, policy
+):
+    """Test that a raising progress callback does not break task execution.
+
+    Purpose: Validates the robustness clause documented on
+        :meth:`JoblibTaskManager.set_progress_callback` — a flaky callback
+        cannot derail a 2-week run.
+
+    Given: A JoblibTaskManager with a callback that always raises, and
+        one real EpisodeSimulationTask.
+    When: run_tasks is called.
+    Then: The task completes successfully (one History returned) and no
+        exception propagates from the callback.
+
+    Test type: integration
+    """
+    with JoblibTaskManager(cache_db=cache_db, n_jobs=1) as task_manager:
+
+        def on_progress() -> None:
+            raise RuntimeError("callback broken")
+
+        task_manager.set_progress_callback(on_progress)
+
+        task = EpisodeSimulationTask(
+            environment=environment,
+            policy=policy,
+            initial_belief=create_test_belief(),
+            num_steps=2,
+            episode_id=0,
+            seed=42,
+            console_output=False,
+        )
+
+        results, ids = task_manager.run_tasks([task], ["episode_0"])
+
+        assert len(results) == 1
+        assert ids == ["episode_0"]
+
+
 def test_joblib_task_manager_run_tasks(cache_db, environment, policy):
     """Test running tasks with JoblibTaskManager.
 

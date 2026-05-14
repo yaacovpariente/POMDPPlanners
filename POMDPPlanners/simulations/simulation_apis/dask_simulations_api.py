@@ -18,6 +18,9 @@ from POMDPPlanners.simulations.workflows.hyperparameter_tuning_evaluation_workfl
 from POMDPPlanners.simulations.hyper_parameter_tuning_simulations import (
     HyperParameterOptimizer,
 )
+from POMDPPlanners.simulations.simulations_deployment.run_progress import (
+    NotificationConfig,
+)
 from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import (
     DaskConfig,
 )
@@ -93,15 +96,23 @@ class DaskSimulationsAPI(SimulationsAPIInterface):
         debug: bool = False,
         scheduler_address: Optional[str] = None,
         cache_size: int = int(2e9),
+        notification_config: Optional[NotificationConfig] = None,
     ):
         """Initialize the DaskSimulationsAPI.
 
         Args:
             cache_dir_path: Optional path for storing simulation results and logs
             debug: Whether to enable debug-level logging output
+            notification_config: Optional :class:`NotificationConfig`. When
+                ``None``, defaults to :meth:`NotificationConfig.from_env`.
         """
         self.logger = get_logger(
             name="dask_simulations_api", output_dir=cache_dir_path, debug=debug
+        )
+        self.notification_config: NotificationConfig = (
+            notification_config
+            if notification_config is not None
+            else NotificationConfig.from_env()
         )
         self.logger.info("Initialized DaskSimulationsAPI")
 
@@ -229,6 +240,7 @@ class DaskSimulationsAPI(SimulationsAPIInterface):
             debug=debug,
             enable_profiling=enable_profiling,
             profiling_output_limit=profiling_output_limit,
+            notification_config=self.notification_config,
         ) as simulator:
             self.logger.info("Running simulation comparison")
             results = simulator.compare_multiple_environments_policies(
@@ -397,6 +409,7 @@ class DaskSimulationsAPI(SimulationsAPIInterface):
             alpha=alpha,
             use_queue_logger=use_queue_logger,
             parallelization_level=parallelization_level,
+            notification_config=self.notification_config,
         )
 
         try:

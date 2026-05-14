@@ -4,7 +4,7 @@ import random
 import time
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Type, Union
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Type, Union
 
 import numpy as np
 import optuna
@@ -30,6 +30,11 @@ from POMDPPlanners.simulations.simulation_statistics import (
     compute_statistics_environment_policy_pair,
 )
 from POMDPPlanners.simulations.simulations_deployment.cache_dbs import DiskCacheDB
+from POMDPPlanners.simulations.simulations_deployment.run_progress import (
+    NotificationConfig,
+    ProgressDB,
+    post_trial_milestone,
+)
 from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import (
     JoblibConfig,
 )
@@ -38,6 +43,23 @@ from POMDPPlanners.utils.config_to_id import config_to_id
 from POMDPPlanners.utils.logger import get_logger
 
 HyperParameterFeature = Union[CategoricalHyperParameter, NumericalHyperParameter]
+
+
+def _best_value_or_none(study: optuna.study.Study) -> Optional[float]:
+    """Return ``study.best_value`` for single-objective studies, else None.
+
+    Multi-objective Optuna studies do not expose a single ``best_value`` —
+    they have a Pareto front instead. For milestone messages we just want
+    a representative scalar, so we return ``None`` in that case and let the
+    caller render ``"n/a"``.
+    """
+    if len(study.directions) != 1:
+        return None
+    try:
+        return float(study.best_value)
+    except ValueError:
+        # No completed trials yet.
+        return None
 
 
 class HyperParameterTuningSimulationTask(SimulationTask):
@@ -64,6 +86,12 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         use_queue_logger: bool = False,
         training_hyper_parameters: Optional[Sequence[HyperParameterFeature]] = None,
         training_constant_parameters: Optional[Dict[str, Any]] = None,
+        parent_run_id: Optional[str] = None,
+        webhook_url: Optional[str] = None,
+        trial_interval: int = 0,
+        trial_offset: int = 0,
+        total_trials_globally: int = 0,
+        progress_db_path: Optional[Path] = None,
     ):
         """Initialize a hyperparameter tuning simulation task.
 
@@ -149,6 +177,16 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         self.use_queue_logger = use_queue_logger
         self.training_hyper_parameters = training_hyper_parameters or ()
         self.training_constant_parameters = training_constant_parameters or {}
+        self.experiment_name = experiment_name
+
+        # Notification / heartbeat plumbing used by the in-task Optuna callback.
+        self.parent_run_id = parent_run_id
+        self.webhook_url = webhook_url
+        self.trial_interval = trial_interval
+        self.trial_offset = trial_offset
+        self.total_trials_globally = total_trials_globally
+        self.progress_db_path = progress_db_path
+
         # Create task manager config for joblib
         task_manager_config = JoblibConfig(n_jobs=n_jobs, console_output=False, no_logs=True)
 
@@ -160,6 +198,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
             use_queue_logger=use_queue_logger,
             console_output=False,
             no_logs=True,
+            notification_config=NotificationConfig.disabled(),
         )
 
         if self.cache_dir is not None:
@@ -741,14 +780,79 @@ class HyperParameterTuningSimulationTask(SimulationTask):
 
         study = optuna.create_study(directions=directions)
 
+        callbacks = [self._build_progress_callback()]
+
         self.logger.info("Starting optimization trials...")
-        study.optimize(objective_function, n_trials=n_trials, n_jobs=n_jobs)
+        study.optimize(
+            objective_function,
+            n_trials=n_trials,
+            n_jobs=n_jobs,
+            callbacks=callbacks,
+        )
 
         # Log optimization completion
         self.logger.info("Optimization completed successfully!")
         self.logger.info("Found %d Pareto-optimal trials", len(study.best_trials))
 
         return study
+
+    def _build_progress_callback(
+        self,
+    ) -> Callable[[optuna.study.Study, FrozenTrial], None]:
+        """Build an Optuna callback that heartbeats the DB and fires milestones.
+
+        The returned callable is intended to be passed in
+        ``study.optimize(callbacks=[...])``. Per trial it:
+
+        - Calls ``ProgressDB.heartbeat(parent_run_id)`` so the external
+          watcher sees forward progress (silent — no Slack).
+        - If a non-zero ``trial_interval`` is configured and the global
+          completed-trial counter (``trial_offset + trial.number + 1``)
+          crosses a multiple of it, calls :func:`post_trial_milestone` to
+          send a Slack progress update.
+
+        Both side effects are best-effort: any exception inside the callback
+        is logged and swallowed so a flaky network or DB cannot abort the
+        Optuna run.
+        """
+
+        def _on_trial(study: optuna.study.Study, trial: FrozenTrial) -> None:
+            try:
+                self._heartbeat_progress_db()
+                self._maybe_post_milestone(study, trial)
+            except Exception as exc:  # pylint: disable=broad-exception-caught
+                self.logger.debug("Trial progress callback raised: %s", exc)
+
+        return _on_trial
+
+    def _heartbeat_progress_db(self) -> None:
+        if not self.parent_run_id:
+            return
+        ProgressDB(path=self.progress_db_path).heartbeat(self.parent_run_id)
+
+    def _maybe_post_milestone(
+        self,
+        study: optuna.study.Study,
+        trial: FrozenTrial,
+    ) -> None:
+        if not self.webhook_url or self.trial_interval <= 0:
+            return
+        if not self.parent_run_id:
+            return
+        global_completed = self.trial_offset + trial.number + 1
+        if global_completed % self.trial_interval != 0:
+            return
+        best_score = _best_value_or_none(study)
+        post_trial_milestone(
+            self.webhook_url,
+            experiment_name=self.experiment_name,
+            run_id=self.parent_run_id,
+            completed_trials=global_completed,
+            total_trials=self.total_trials_globally or global_completed,
+            config_name=self.get_config_id(),
+            best_score=best_score,
+            logger=self.logger,
+        )
 
     def _build_optimization_results(self, study, optimization_time: float) -> OptimizedPolicyResult:
         """Build OptimizedPolicyResult using Pareto-optimal policy selection.
@@ -1077,6 +1181,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
             use_queue_logger=self.use_queue_logger,
             console_output=False,
             no_logs=True,
+            notification_config=NotificationConfig.disabled(),
         )
 
     def _reconstruct_study_storage(self):
