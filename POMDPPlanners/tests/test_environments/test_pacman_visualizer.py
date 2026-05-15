@@ -235,5 +235,67 @@ def test_cache_visualization_vectorized_belief_renders_red_overlay() -> None:
         ), "Expected at least one red-dominant pixel inside the belief-concentrated tile"
 
 
+def test_draw_dangerous_areas_renders_red_overlay_on_configured_cell() -> None:
+    """Dangerous-area overlay tints the configured center cell red.
+
+    Purpose: Smoke-tests :meth:`PacManVisualizer._draw_dangerous_areas` so
+        that future refactors of the visualizer cannot silently drop the
+        hazard rendering — without it, planners and reviewers reading a
+        cached GIF would have no visual cue that the danger penalty was
+        active.
+
+    Given: A PacManPOMDP with one configured zone at (2, 2) radius 1.0 and
+        a fresh blank RGBA canvas matching the visualizer dimensions.
+    When: ``_draw_dangerous_areas`` is invoked on the canvas.
+    Then: The center pixel of tile (2, 2) has alpha > 0 (red overlay
+        present), and a clearly distant tile (0, 0) still has alpha == 0.
+
+    Test type: unit
+    """
+    env = PacManPOMDP(
+        maze_size=(5, 5),
+        walls=set(),
+        initial_pacman_pos=(0, 0),
+        num_ghosts=1,
+        initial_ghost_positions=[(4, 4)],
+        initial_pellets=[(2, 2)],
+        dangerous_areas={(2, 2)},
+        dangerous_area_radius=1.0,
+        dangerous_area_penalty=5.0,
+    )
+    visualizer = PacManVisualizer(env, tile_size=16)
+    canvas = _blank_canvas(env, visualizer.tile_size)
+
+    visualizer._draw_dangerous_areas(canvas, visualizer.tile_size)
+
+    assert _tile_center_alpha(canvas, 2, 2, visualizer.tile_size) > 0
+    assert _tile_center_alpha(canvas, 0, 0, visualizer.tile_size) == 0
+
+
+def test_draw_dangerous_areas_noop_when_feature_disabled() -> None:
+    """No danger zones configured ⇒ no overlay touches the canvas.
+
+    Purpose: Guards the opt-in contract — vanilla PacMan envs (default
+        ``dangerous_areas``) should produce pixel-identical canvases before
+        and after the new hook fires.
+
+    Given: A PacManPOMDP constructed without ``dangerous_areas``.
+    When: ``_draw_dangerous_areas`` is invoked on a fresh canvas.
+    Then: Every tile center still has alpha == 0.
+
+    Test type: unit
+    """
+    env = _make_env()
+    visualizer = PacManVisualizer(env, tile_size=16)
+    canvas = _blank_canvas(env, visualizer.tile_size)
+
+    visualizer._draw_dangerous_areas(canvas, visualizer.tile_size)
+
+    rows, cols = env.maze_size
+    for r in range(rows):
+        for c in range(cols):
+            assert _tile_center_alpha(canvas, r, c, visualizer.tile_size) == 0
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
