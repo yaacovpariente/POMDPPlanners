@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any, List, Optional, Tuple
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
-from POMDPPlanners.core.belief import Belief, WeightedParticleBelief
+from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.core.simulation import StepData
 
 if TYPE_CHECKING:
@@ -155,10 +155,10 @@ class PacManVisualizer:
         Each cell's red intensity is proportional to the marginal probability
         (sum of normalized particle weights) that any ghost occupies that cell.
         """
-        if belief is None or not isinstance(belief, WeightedParticleBelief):
+        if belief is None:
             return
-        particles = belief.particles
-        weights = belief.normalized_weights
+        particles = getattr(belief, "particles", None)
+        weights = getattr(belief, "normalized_weights", None)
         if particles is None or weights is None or len(particles) == 0:
             return
 
