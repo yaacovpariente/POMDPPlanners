@@ -51,7 +51,7 @@ from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.numba_ke
 from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
 from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_reward_models import (
     BaseLightDarkRewardModel,
-    ContinuousLDDangerousStatesRewardModel,
+    ContinuousLDHighVarianceStatesRewardModel,
     ContinuousLightDarkDecayingHitProbabilityRewardModel,
     ContinuousLightDarkRewardModel,
 )
@@ -71,13 +71,13 @@ class ContinuousLightDarkPOMDPMetrics(Enum):
     OBSTACLE_HIT_RATE = "obstacle_hit_rate"
     AVG_OBSTACLE_HIT_COUNTER = "avg_obstacle_hit_counter"
     OUT_OF_GRID_RATE = "out_of_grid_rate"
-    AVG_DANGEROUS_STATES_COUNTER = "avg_dangerous_states_counter"
+    AVG_HIGH_VARIANCE_STATES_COUNTER = "avg_high_variance_states_counter"
 
 
 class RewardModelType(Enum):
     STANDARD = "standard"
     DECAYING_HIT_PROBABILITY = "decaying_hit_probability"
-    DANGEROUS_STATES = "dangerous_states"
+    HIGH_VARIANCE_STATES = "high_variance_states"
 
 
 class ObservationModelType(Enum):
@@ -97,7 +97,7 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
     - Continuous 2D state and action spaces
     - Light beacons reduce observation noise when nearby
     - Multiple observation models available (normal noise, normal noise with no observation in dark)
-    - Multiple reward models available (standard, decaying hit probability, dangerous states)
+    - Multiple reward models available (standard, decaying hit probability, high-variance states)
     - Optional obstacles with configurable hit penalties
     - Terminal conditions for goal reaching, obstacle hits, and boundary violations
 
@@ -176,7 +176,7 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
             # Max: -fuel_cost - 0 + goal_reward (at goal, no penalty)
             min_reward = -fuel_cost - max_distance_to_goal + obstacle_reward
             max_reward = -fuel_cost + goal_reward
-        elif reward_model_type == RewardModelType.DANGEROUS_STATES:
+        elif reward_model_type == RewardModelType.HIGH_VARIANCE_STATES:
             # Min: -fuel_cost - max_distance + obstacle_reward (negative)
             # Max: -fuel_cost - 0 + goal_reward OR -fuel_cost - distance - obstacle_reward (if obstacle_reward is negative)
             min_reward = -fuel_cost - max_distance_to_goal + obstacle_reward
@@ -283,8 +283,8 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
                 fuel_cost=self.fuel_cost,
                 penalty_decay=self.penalty_decay,
             )
-        elif reward_model_type == RewardModelType.DANGEROUS_STATES:
-            self.reward_model = ContinuousLDDangerousStatesRewardModel(
+        elif reward_model_type == RewardModelType.HIGH_VARIANCE_STATES:
+            self.reward_model = ContinuousLDHighVarianceStatesRewardModel(
                 goal_state=self.goal_state,
                 obstacles=self.obstacles,
                 goal_state_radius=self.goal_state_radius,
@@ -670,7 +670,7 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
 
         Returns:
             List containing metric names: goal_reaching_rate, obstacle_hit_rate,
-            avg_obstacle_hit_counter, out_of_grid_rate, and avg_dangerous_states_counter
+            avg_obstacle_hit_counter, out_of_grid_rate, and avg_high_variance_states_counter
         """
         return [metric.value for metric in ContinuousLightDarkPOMDPMetrics]
 
@@ -679,7 +679,7 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         obstacle_hits = []
         obstacle_hit_counter = []
         out_of_grid = []
-        dangerous_states_counter = []
+        high_variance_states_counter = []
         for history in histories:
             goal_reached_in_history = False
             obstacle_hit_in_history = False
@@ -708,8 +708,8 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
             obstacle_hits.append(1 if obstacle_hit_in_history else 0)
             obstacle_hit_counter.append(obstacle_hit_counter_in_history)
             out_of_grid.append(1 if out_of_grid_in_history else 0)
-            # Sum obstacle hits and out-of-grid occurrences as dangerous states
-            dangerous_states_counter.append(
+            # Sum obstacle hits and out-of-grid occurrences as high-variance states
+            high_variance_states_counter.append(
                 obstacle_hit_counter_in_history + out_of_grid_counter_in_history
             )
 
@@ -717,13 +717,13 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         avg_obstacle_hits = float(np.mean(obstacle_hits))
         avg_obstacle_hit_counter = float(np.mean(obstacle_hit_counter))
         avg_out_of_grid = float(np.mean(out_of_grid))
-        avg_dangerous_states_counter = float(np.mean(dangerous_states_counter))
+        avg_high_variance_states_counter = float(np.mean(high_variance_states_counter))
         goal_reached_ci = confidence_interval(data=goal_reached, confidence=0.95)
         obstacle_hits_ci = confidence_interval(data=obstacle_hits, confidence=0.95)
         obstacle_hit_counter_ci = confidence_interval(data=obstacle_hit_counter, confidence=0.95)
         out_of_grid_ci = confidence_interval(data=out_of_grid, confidence=0.95)
-        dangerous_states_counter_ci = confidence_interval(
-            data=dangerous_states_counter, confidence=0.95
+        high_variance_states_counter_ci = confidence_interval(
+            data=high_variance_states_counter, confidence=0.95
         )
 
         return [
@@ -752,10 +752,10 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
                 upper_confidence_bound=out_of_grid_ci[1],
             ),
             MetricValue(
-                name=ContinuousLightDarkPOMDPMetrics.AVG_DANGEROUS_STATES_COUNTER.value,
-                value=avg_dangerous_states_counter,
-                lower_confidence_bound=dangerous_states_counter_ci[0],
-                upper_confidence_bound=dangerous_states_counter_ci[1],
+                name=ContinuousLightDarkPOMDPMetrics.AVG_HIGH_VARIANCE_STATES_COUNTER.value,
+                value=avg_high_variance_states_counter,
+                lower_confidence_bound=high_variance_states_counter_ci[0],
+                upper_confidence_bound=high_variance_states_counter_ci[1],
             ),
         ]
 
@@ -974,7 +974,7 @@ class ContinuousLightDarkPOMDPDiscreteActions(ContinuousLightDarkPOMDP, Discrete
         """Random rollout via native C++ for the STANDARD reward model.
 
         Falls back to the base-class Python loop for non-STANDARD reward
-        models (DECAYING_HIT_PROBABILITY, DANGEROUS_STATES) which have
+        models (DECAYING_HIT_PROBABILITY, HIGH_VARIANCE_STATES) which have
         different stochastic semantics not yet ported to C++.
 
         Args:
@@ -1001,7 +1001,7 @@ class ContinuousLightDarkPOMDPDiscreteActions(ContinuousLightDarkPOMDP, Discrete
         bypass_native_for_realised_pos = cov_diag_max > 0.0 and self._obstacles_flat.shape[0] > 0
         if (
             not isinstance(self.reward_model, ContinuousLightDarkRewardModel)
-            or isinstance(self.reward_model, (ContinuousLDDangerousStatesRewardModel,))
+            or isinstance(self.reward_model, (ContinuousLDHighVarianceStatesRewardModel,))
             or bypass_native_for_realised_pos
         ):
             return python_random_rollout(

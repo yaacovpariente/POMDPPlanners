@@ -3,7 +3,7 @@
 This module tests the reward models from light_dark_reward_models.py, focusing on:
 - Base reward model functionality
 - Continuous light dark reward model with obstacles
-- Dangerous states reward model with high variance
+- High-variance states reward model
 - Decaying hit probability reward model
 """
 
@@ -16,7 +16,7 @@ import pytest
 
 from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_reward_models import (
     BaseLightDarkRewardModel,
-    ContinuousLDDangerousStatesRewardModel,
+    ContinuousLDHighVarianceStatesRewardModel,
     ContinuousLightDarkDecayingHitProbabilityRewardModel,
     ContinuousLightDarkRewardModel,
 )
@@ -411,8 +411,8 @@ class TestContinuousLightDarkRewardModel:
             assert reward < -model_boundary.fuel_cost - np.linalg.norm(next_state - self.goal_state)
 
 
-class TestContinuousLDDangerousStatesRewardModel:
-    """Test cases for dangerous states reward model."""
+class TestContinuousLDHighVarianceStatesRewardModel:
+    """Test cases for high-variance states reward model."""
 
     def setup_method(self):
         """Set up test environment before each test method."""
@@ -426,7 +426,7 @@ class TestContinuousLDDangerousStatesRewardModel:
         self.goal_reward = 100.0
         self.fuel_cost = 1.0
 
-        self.model = ContinuousLDDangerousStatesRewardModel(
+        self.model = ContinuousLDHighVarianceStatesRewardModel(
             goal_state=self.goal_state,
             obstacles=self.obstacles,
             goal_state_radius=self.goal_state_radius,
@@ -488,7 +488,7 @@ class TestContinuousLDDangerousStatesRewardModel:
         assert 0.4 < bonus_ratio < 0.6, f"Bonus ratio {bonus_ratio} not close to 0.5"
 
     def test_inheritance_from_base(self):
-        """Test that dangerous states model inherits correctly from base."""
+        """Test that high-variance states model inherits correctly from base."""
         # Should have all the same methods as base class
         assert hasattr(self.model, "compute_reward")
         assert hasattr(self.model, "_compute_reward")
@@ -754,7 +754,7 @@ class TestRewardModelBatch:
             fuel_cost=self.fuel_cost,
         )
 
-        self.dangerous_model = ContinuousLDDangerousStatesRewardModel(
+        self.high_variance_model = ContinuousLDHighVarianceStatesRewardModel(
             goal_state=self.goal_state,
             obstacles=self.obstacles,
             goal_state_radius=self.goal_state_radius,
@@ -801,12 +801,12 @@ class TestRewardModelBatch:
         expected = np.array([self.model.compute_reward(states[i], action) for i in range(100)])
         np.testing.assert_allclose(batch_rewards, expected)
 
-    def test_dangerous_model_batch_matches_scalar(self):
-        """Test ContinuousLDDangerousStatesRewardModel batch matches scalar with same seed.
+    def test_high_variance_model_batch_matches_scalar(self):
+        """Test ContinuousLDHighVarianceStatesRewardModel batch matches scalar with same seed.
 
         Purpose: Validates vectorized compute_reward_batch matches per-element compute_reward
 
-        Given: A ContinuousLDDangerousStatesRewardModel and 100 random states
+        Given: A ContinuousLDHighVarianceStatesRewardModel and 100 random states
         When: compute_reward_batch and scalar calls are made with same seed
         Then: Both produce identical reward arrays
 
@@ -816,12 +816,12 @@ class TestRewardModelBatch:
         action = np.array([0.5, 0.5])
 
         np.random.seed(99)
-        batch_rewards = self.dangerous_model.compute_reward_batch(states, action)
+        batch_rewards = self.high_variance_model.compute_reward_batch(states, action)
         assert batch_rewards.shape == (100,)
 
         np.random.seed(99)
         expected = np.array(
-            [self.dangerous_model.compute_reward(states[i], action) for i in range(100)]
+            [self.high_variance_model.compute_reward(states[i], action) for i in range(100)]
         )
         np.testing.assert_allclose(batch_rewards, expected)
 

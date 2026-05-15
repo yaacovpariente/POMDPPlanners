@@ -41,7 +41,7 @@ from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp imp
 )
 from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_reward_models import (
     ContinuousLightDarkDecayingHitProbabilityRewardModel,
-    ContinuousLDDangerousStatesRewardModel,
+    ContinuousLDHighVarianceStatesRewardModel,
 )
 
 
@@ -826,8 +826,8 @@ def test_decaying_hit_probability_reward_model():
     assert isinstance(env.reward_model, ContinuousLightDarkDecayingHitProbabilityRewardModel)
 
 
-def test_dangerous_states_reward_model():
-    """Test that the environment uses the dangerous states reward model when specified."""
+def test_high_variance_states_reward_model():
+    """Test that the environment uses the high-variance states reward model when specified."""
     env = ContinuousLightDarkPOMDPDiscreteActions(
         discount_factor=0.95,
         state_transition_cov_matrix=np.eye(2),
@@ -840,11 +840,11 @@ def test_dangerous_states_reward_model():
         goal_state_radius=1.5,
         beacon_radius=1.0,
         obstacle_radius=1.5,
-        reward_model_type=RewardModelType.DANGEROUS_STATES,
+        reward_model_type=RewardModelType.HIGH_VARIANCE_STATES,
     )
 
     # Test that the correct reward model is initialized
-    assert isinstance(env.reward_model, ContinuousLDDangerousStatesRewardModel)
+    assert isinstance(env.reward_model, ContinuousLDHighVarianceStatesRewardModel)
 
     # Test that the reward model produces both positive and negative rewards near obstacles
     state = np.array([4, 5])  # Near obstacle at (5, 5) - distance 1.0
@@ -2500,9 +2500,9 @@ def test_continuous_reward_in_obstacle_zone_drifts_by_p_hit_times_obstacle_rewar
     [
         (RewardModelType.STANDARD, -2.0),
         (RewardModelType.DECAYING_HIT_PROBABILITY, -10.0),
-        (RewardModelType.DANGEROUS_STATES, 0.0),
+        (RewardModelType.HIGH_VARIANCE_STATES, 0.0),
     ],
-    ids=["STANDARD", "DECAYING_HIT_PROBABILITY", "DANGEROUS_STATES"],
+    ids=["STANDARD", "DECAYING_HIT_PROBABILITY", "HIGH_VARIANCE_STATES"],
 )
 def test_continuous_reward_in_obstacle_depends_on_reward_model_type(
     reward_model_type: RewardModelType, expected_drift: float
@@ -2512,7 +2512,7 @@ def test_continuous_reward_in_obstacle_depends_on_reward_model_type(
     Purpose: Validates that reward_model_type switches the obstacle-zone
         contribution between ``obstacle_reward * p_hit`` (STANDARD),
         ``obstacle_reward`` (DECAYING_HIT_PROBABILITY at d=0 since
-        hit_prob=exp(0)=1), and ``0`` (DANGEROUS_STATES, +/- obstacle_reward
+        hit_prob=exp(0)=1), and ``0`` (HIGH_VARIANCE_STATES, +/- obstacle_reward
         with p=0.5 averaging to zero).
 
     Given: state=[5,5] (default obstacle position) so min_dist_to_obstacle=0,
@@ -2544,7 +2544,7 @@ def test_continuous_reward_in_obstacle_depends_on_reward_model_type(
     elif reward_model_type == RewardModelType.DECAYING_HIT_PROBABILITY:
         # At d=0 the Bernoulli is degenerate (hit_prob=1) — zero variance.
         sigma = 0.0
-    else:  # DANGEROUS_STATES
+    else:  # HIGH_VARIANCE_STATES
         sigma = abs(env.obstacle_reward)
     sigma_mean = sigma / np.sqrt(n_samples)
     tolerance = max(3.0 * sigma_mean, 1e-9)
