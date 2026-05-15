@@ -67,6 +67,9 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
         ghost_aggressiveness: Temperature parameter for ghost movement policy
         observation_noise_factor: Multiplier for observation noise based on distance
         max_observation_noise: Maximum noise standard deviation
+        dangerous_areas: List of (row, col) centers of circular hazard zones
+        dangerous_area_radius: Radius (in grid cells) defining each hazard zone
+        dangerous_area_penalty: Penalty subtracted when PacMan ends a step inside a zone
 
     Example:
         >>> import numpy as np
@@ -86,6 +89,24 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
         >>> # Check terminal condition
         >>> env.is_terminal(initial_state)
         False
+
+    Example:
+        Construct an env with a circular hazard zone — PacMan is penalised by
+        ``dangerous_area_penalty`` whenever its realised next position lies
+        inside the zone, but the zone does not block movement or terminate.
+
+        >>> import numpy as np
+        >>> np.random.seed(0)
+        >>> env = PacManPOMDP(
+        ...     maze_size=(7, 7),
+        ...     dangerous_areas={(3, 3)},
+        ...     dangerous_area_radius=1.0,
+        ...     dangerous_area_penalty=5.0,
+        ... )
+        >>> state = env.initial_state_dist().sample()[0]
+        >>> _ = env.sample_next_step(state, env.get_actions()[0])
+        >>> env.dangerous_area_penalty
+        5.0
     """
 
     def __init__(  # pylint: disable=too-many-statements
@@ -106,6 +127,9 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
         ghost_strategies: Optional[List[str]] = None,
         observation_noise_factor: float = 0.3,
         max_observation_noise: float = 1.5,
+        dangerous_areas: Optional[Set[Tuple[int, int]]] = None,
+        dangerous_area_radius: float = 1.0,
+        dangerous_area_penalty: float = 5.0,
         discount_factor: float = 0.95,
         name: str = "PacManPOMDP",
         output_dir: Optional[Path] = None,
@@ -130,13 +154,25 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
             ghost_strategies: Individual ghost strategies (list of "aggressive", "patrol", "ambush"). Defaults to None.
             observation_noise_factor: Observation noise factor. Defaults to 0.3.
             max_observation_noise: Maximum observation noise. Defaults to 1.5.
+            dangerous_areas: Set of (row, col) centers of circular hazard zones. ``None``
+                or an empty set disables the feature. Defaults to ``None`` (opt-in).
+            dangerous_area_radius: Radius (in grid cells) defining each hazard zone via
+                Euclidean distance. Defaults to 1.0.
+            dangerous_area_penalty: Non-negative penalty subtracted from the reward when
+                PacMan's realised next position lies inside any hazard zone. Defaults to 5.0.
             discount_factor: Discount factor. Defaults to 0.95.
             name: Environment name. Defaults to "PacManPOMDP".
             output_dir: Output directory for logging. Defaults to None.
             debug: Enable debug logging. Defaults to False.
         """
-        # Calculate reward range based on parameters
+        # Calculate reward range based on parameters. The dangerous-area
+        # penalty only contributes to ``min_reward`` when at least one zone
+        # is configured, so disabling the feature preserves the historical
+        # reward range exactly.
+        _has_dangerous_areas = bool(dangerous_areas)
         min_reward = step_penalty + ghost_collision_penalty
+        if _has_dangerous_areas:
+            min_reward -= float(dangerous_area_penalty)
         max_reward = step_penalty + pellet_reward + win_reward
 
         space_info = SpaceInfo(
@@ -167,6 +203,19 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
         self.ghost_strategies = ghost_strategies or ["aggressive"] * num_ghosts
         self.observation_noise_factor = observation_noise_factor
         self.max_observation_noise = max_observation_noise
+        self.dangerous_areas: List[Tuple[int, int]] = (
+            list(dangerous_areas) if dangerous_areas else []
+        )
+        self.dangerous_area_radius = float(dangerous_area_radius)
+        self.dangerous_area_penalty = float(dangerous_area_penalty)
+        # Pre-built (D, 2) float64 array reused by the vectorised batch-reward
+        # path. Kept C-contiguous so future native callers can consume it
+        # without an extra copy.
+        self._dangerous_areas_arr: np.ndarray = (
+            np.ascontiguousarray(np.asarray(self.dangerous_areas, dtype=np.float64))
+            if self.dangerous_areas
+            else np.empty((0, 2), dtype=np.float64)
+        )
 
         # Handle ghost positions (backward compatibility)
         if initial_ghost_positions is not None:
@@ -495,6 +544,24 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
             if strategy not in valid_strategies:
                 raise ValueError(f"ghost_strategies[{i}] must be one of {valid_strategies}")
 
+        # Validate dangerous-area configuration. Overlap with walls, pellets,
+        # or agent positions is intentionally permitted (matches laser_tag).
+        if self.dangerous_area_radius < 0:
+            raise ValueError(
+                f"dangerous_area_radius must be non-negative, got {self.dangerous_area_radius}"
+            )
+        if self.dangerous_area_penalty < 0:
+            raise ValueError(
+                f"dangerous_area_penalty must be non-negative, got {self.dangerous_area_penalty}"
+            )
+        for i, danger_pos in enumerate(self.dangerous_areas):
+            if not (
+                0 <= danger_pos[0] < self.maze_size[0] and 0 <= danger_pos[1] < self.maze_size[1]
+            ):
+                raise ValueError(
+                    f"Dangerous area {i} position {danger_pos} is outside maze bounds {self.maze_size}"
+                )
+
     def get_actions(self) -> List[int]:
         """Get all available actions."""
         return list(range(len(self.action_names)))
@@ -692,6 +759,20 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
             max_depth=remaining_depth,
         )
 
+    def _is_in_dangerous_area(self, position: Tuple[int, int]) -> bool:
+        # Squared-distance check matches laser_tag's discrete implementation
+        # and avoids a sqrt per call on a hot path.
+        if not self.dangerous_areas:
+            return False
+        pos_row, pos_col = position
+        radius_sq = self.dangerous_area_radius * self.dangerous_area_radius
+        for danger_row, danger_col in self.dangerous_areas:
+            dr = pos_row - danger_row
+            dc = pos_col - danger_col
+            if dr * dr + dc * dc <= radius_sq:
+                return True
+        return False
+
     def reward(self, state: np.ndarray, action: int, next_state: Any = None) -> float:
         """Calculate immediate reward.
 
@@ -723,6 +804,9 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
 
         if next_state[self._idx_score] > state[self._idx_score]:
             total_reward += self.pellet_reward
+
+        if self._is_in_dangerous_area((next_pac_row, next_pac_col)):
+            total_reward -= self.dangerous_area_penalty
 
         if next_state[self._idx_terminal] > 0.5:
             pellet_mask = next_state[self._idx_pellets_start : self._idx_pellets_end]
@@ -801,6 +885,10 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
             rewards, terminal, new_pac_rows, new_pac_cols, next_states_arr
         )
 
+        rewards = self._add_dangerous_area_penalty_batch(
+            rewards, terminal, new_pac_rows, new_pac_cols
+        )
+
         if self._pellet_positions_arr.shape[0] == 0:
             # Degenerate config (env constructed with no pellets): there is
             # nothing to collect and therefore nothing to "win". Returning
@@ -846,6 +934,25 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
             g_cols = next_states_arr[:, self._idx_ghosts_start + 2 * g + 1].astype(np.int32)
             collision |= (g_rows == new_pac_rows) & (g_cols == new_pac_cols)
         return rewards + np.where(~terminal & collision, self.ghost_collision_penalty, 0.0)
+
+    def _add_dangerous_area_penalty_batch(
+        self,
+        rewards: np.ndarray,
+        terminal: np.ndarray,
+        new_pac_rows: np.ndarray,
+        new_pac_cols: np.ndarray,
+    ) -> np.ndarray:
+        if self._dangerous_areas_arr.shape[0] == 0:
+            return rewards
+        # Vectorised squared-distance check across all configured zones;
+        # ``any`` collapses the (N, D) matrix to a per-particle mask. Uses
+        # squared distance to stay consistent with ``_is_in_dangerous_area``.
+        centers = self._dangerous_areas_arr  # (D, 2) float64
+        dr = new_pac_rows[:, None] - centers[:, 0]
+        dc = new_pac_cols[:, None] - centers[:, 1]
+        radius_sq = self.dangerous_area_radius * self.dangerous_area_radius
+        in_danger = (dr * dr + dc * dc <= radius_sq).any(axis=1)
+        return rewards + np.where(~terminal & in_danger, -self.dangerous_area_penalty, 0.0)
 
     def _get_neighbor_table(self) -> np.ndarray:
         if self._cached_neighbor_table is None:

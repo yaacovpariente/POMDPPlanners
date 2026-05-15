@@ -2423,3 +2423,267 @@ def _python_reference_rollout(
         current = next_state
 
     return total
+
+
+class TestPacManDangerousAreas:
+    """Test cases for PacMan dangerous-area hazard zones."""
+
+    def setup_method(self):
+        """Set up a PacMan env with a single configured danger cell."""
+        # Maze placed so the danger center (3, 3) is reachable from (3, 2)
+        # by moving east, and (3, 4) sits exactly at distance 1.0 from the
+        # center to exercise the squared-distance boundary check.
+        self.pomdp = PacManPOMDP(
+            maze_size=(7, 7),
+            walls=set(),
+            initial_pellets=[(0, 6)],
+            initial_pacman_pos=(0, 0),
+            num_ghosts=1,
+            initial_ghost_positions=[(6, 6)],
+            dangerous_areas={(3, 3)},
+            dangerous_area_radius=1.0,
+            dangerous_area_penalty=5.0,
+        )
+
+    def _state_with_pac(self, pos: Tuple[int, int], score: float = 0.0) -> np.ndarray:
+        return self.pomdp.make_state(
+            pacman_pos=pos,
+            ghost_positions=((6, 6),),
+            pellets=((0, 6),),
+            score=score,
+        )
+
+    def test_dangerous_areas_default_empty_keeps_existing_reward_contract(self):
+        """Default constructor opts out so the historical reward contract holds.
+
+        Purpose: Validates that omitting ``dangerous_areas`` leaves the env's
+            reward path unchanged — a regression guard for existing PacMan
+            configs that should not start picking up a danger penalty.
+
+        Given: A PacManPOMDP constructed without the ``dangerous_areas`` kwarg.
+        When: ``reward()`` is invoked for a step that lands PacMan on a cell
+            that would have been hazardous in another env.
+        Then: The returned reward equals only the step penalty (no danger
+            term), and ``reward_range`` matches the legacy ``step_penalty +
+            ghost_collision_penalty`` lower bound.
+
+        Test type: unit
+        """
+        plain = PacManPOMDP(
+            maze_size=(7, 7),
+            walls=set(),
+            initial_pellets=[(0, 6)],
+            initial_pacman_pos=(0, 0),
+            num_ghosts=1,
+            initial_ghost_positions=[(6, 6)],
+        )
+        state = plain.make_state(pacman_pos=(3, 2), ghost_positions=((6, 6),), pellets=((0, 6),))
+        next_state = plain.make_state(
+            pacman_pos=(3, 3), ghost_positions=((6, 6),), pellets=((0, 6),)
+        )
+
+        assert not plain.dangerous_areas
+        assert plain.reward(state, action=1, next_state=next_state) == plain.step_penalty
+        assert plain.reward_range == (
+            plain.step_penalty + plain.ghost_collision_penalty,
+            plain.step_penalty + plain.pellet_reward + plain.win_reward,
+        )
+
+    def test_dangerous_area_penalty_applied_when_pacman_enters_zone(self):
+        """Penalty fires when the realised next position falls inside a zone.
+
+        Purpose: Validates that ``reward()`` subtracts
+            ``dangerous_area_penalty`` when PacMan's realised next position
+            lies inside any configured hazard zone.
+
+        Given: An env with one zone centered at (3, 3) radius 1.0, a state
+            at (3, 2), and an explicit next_state that places PacMan at (3, 3).
+        When: ``reward(state, action=East, next_state=next_state)`` is called.
+        Then: Reward equals ``step_penalty - dangerous_area_penalty`` (no
+            pellet collection, no ghost collision, no win bonus).
+
+        Test type: unit
+        """
+        state = self._state_with_pac((3, 2))
+        next_state = self._state_with_pac((3, 3))
+
+        reward = self.pomdp.reward(state, action=1, next_state=next_state)
+
+        assert reward == self.pomdp.step_penalty - self.pomdp.dangerous_area_penalty
+
+    def test_dangerous_area_penalty_skipped_when_pacman_outside_zone(self):
+        """No penalty when PacMan's realised next position sits outside all zones.
+
+        Purpose: Validates the symmetric negative case of penalty application.
+
+        Given: The same env as above and a transition that ends outside the
+            single zone (distance > radius).
+        When: ``reward(state, action, next_state)`` is called.
+        Then: Reward equals only ``step_penalty``.
+
+        Test type: unit
+        """
+        state = self._state_with_pac((0, 0))
+        next_state = self._state_with_pac((0, 1))
+
+        reward = self.pomdp.reward(state, action=1, next_state=next_state)
+
+        assert reward == self.pomdp.step_penalty
+
+    def test_dangerous_area_radius_uses_squared_distance_boundary(self):
+        """Threshold is inclusive: distance == radius counts as inside.
+
+        Purpose: Pins the squared-distance boundary semantics so future
+            changes to the helper cannot silently flip the inequality.
+
+        Given: A zone at (3, 3) radius 1.0.
+        When: PacMan ends a step at (3, 4) (distance == 1.0, inside) and
+            separately at (3, 5) (distance == 2.0, outside).
+        Then: Only the (3, 4) transition incurs the penalty.
+
+        Test type: unit
+        """
+        state_inside = self._state_with_pac((3, 3))
+        next_inside = self._state_with_pac((3, 4))
+        reward_inside = self.pomdp.reward(state_inside, action=1, next_state=next_inside)
+        assert reward_inside == (self.pomdp.step_penalty - self.pomdp.dangerous_area_penalty)
+
+        state_outside = self._state_with_pac((3, 4))
+        next_outside = self._state_with_pac((3, 5))
+        reward_outside = self.pomdp.reward(state_outside, action=1, next_state=next_outside)
+        assert reward_outside == self.pomdp.step_penalty
+
+    def test_reward_batch_applies_dangerous_area_penalty(self):
+        """Vectorised batch reward agrees with the scalar path on the same inputs.
+
+        Purpose: Validates that ``_compute_reward_batch`` mirrors
+            ``reward()`` so per-particle rollouts and trajectory rollouts
+            stay consistent under dangerous-area configuration.
+
+        Given: A batch of two (state, next_state) pairs — one entering the
+            zone, one outside.
+        When: ``reward_batch(states, action, next_states)`` is called.
+        Then: The returned array matches the scalar ``reward()`` outputs
+            element-wise.
+
+        Test type: unit
+        """
+        s0 = self._state_with_pac((3, 2))
+        ns0 = self._state_with_pac((3, 3))  # inside zone
+        s1 = self._state_with_pac((0, 0))
+        ns1 = self._state_with_pac((0, 1))  # outside zone
+
+        states = np.stack([s0, s1], axis=0)
+        next_states = np.stack([ns0, ns1], axis=0)
+
+        batch = self.pomdp.reward_batch(states, action=1, next_states=next_states)
+        scalar = np.array(
+            [
+                self.pomdp.reward(s0, action=1, next_state=ns0),
+                self.pomdp.reward(s1, action=1, next_state=ns1),
+            ]
+        )
+
+        np.testing.assert_allclose(batch, scalar)
+
+    def test_dangerous_area_position_out_of_bounds_raises(self):
+        """Out-of-bounds dangerous-area centers are rejected at construction.
+
+        Purpose: Validates the new validation branch in
+            ``_validate_parameters`` so users discover misconfigured zones
+            up front instead of silently mis-rendering them or hitting a
+            zero-penalty edge case.
+
+        Given: A request to build a PacManPOMDP with a danger center outside
+            the configured maze bounds.
+        When: ``PacManPOMDP(...)`` is invoked.
+        Then: ``ValueError`` is raised with a message naming the offending
+            position and the maze bounds.
+
+        Test type: unit
+        """
+        with pytest.raises(ValueError, match=r"Dangerous area .* is outside maze bounds"):
+            PacManPOMDP(
+                maze_size=(5, 5),
+                walls=set(),
+                initial_pellets=[(1, 1)],
+                initial_pacman_pos=(0, 0),
+                num_ghosts=1,
+                initial_ghost_positions=[(4, 4)],
+                dangerous_areas={(5, 0)},
+            )
+
+    def test_dangerous_area_negative_radius_or_penalty_raises(self):
+        """Negative radius or penalty values are rejected.
+
+        Purpose: Pins the non-negative invariants on the two scalar danger
+            parameters so silently-accepted negatives can never flip the
+            sign of the penalty term.
+
+        Given: A request to build an env with either negative radius or
+            negative penalty.
+        When: ``PacManPOMDP(...)`` is invoked.
+        Then: ``ValueError`` is raised in each case.
+
+        Test type: unit
+        """
+        common = {
+            "maze_size": (5, 5),
+            "walls": set(),
+            "initial_pellets": [(1, 1)],
+            "initial_pacman_pos": (0, 0),
+            "num_ghosts": 1,
+            "initial_ghost_positions": [(4, 4)],
+            "dangerous_areas": {(2, 2)},
+        }
+        with pytest.raises(ValueError, match=r"dangerous_area_radius must be non-negative"):
+            PacManPOMDP(dangerous_area_radius=-0.1, **common)  # type: ignore[arg-type]
+        with pytest.raises(ValueError, match=r"dangerous_area_penalty must be non-negative"):
+            PacManPOMDP(dangerous_area_penalty=-1.0, **common)  # type: ignore[arg-type]
+
+    def test_dangerous_areas_do_not_block_movement_or_terminate(self):
+        """Walking through a zone is allowed and non-terminal.
+
+        Purpose: Pins the laser_tag-equivalent contract that dangerous areas
+            are reward-only — they do not block the transition kernel and
+            do not flip the terminal flag.
+
+        Given: A state with PacMan adjacent to a danger zone.
+        When: ``sample_next_step(state, action_east)`` is called repeatedly
+            from inside / outside the zone.
+        Then: The next state is reachable (no exception), and the terminal
+            flag stays ``False`` (no ghost in this scenario).
+
+        Test type: integration
+        """
+        state = self._state_with_pac((3, 2))
+
+        for _ in range(5):
+            next_state, obs, reward = self.pomdp.sample_next_step(state, action=1)
+            assert isinstance(obs, tuple)
+            assert isinstance(reward, (int, float))
+            assert not self.pomdp.is_terminal(next_state)
+            state = next_state
+
+    def test_dangerous_area_reward_range_includes_penalty_when_configured(self):
+        """``reward_range`` lower bound shifts down when a zone is configured.
+
+        Purpose: Validates that the constructor accounts for the danger
+            penalty in ``min_reward`` so downstream consumers reading the
+            range (e.g. planners normalising returns) see a faithful bound.
+
+        Given: An env with ``dangerous_areas={(3, 3)}`` and
+            ``dangerous_area_penalty=5.0``.
+        When: ``reward_range`` is read.
+        Then: Lower bound equals ``step_penalty + ghost_collision_penalty -
+            dangerous_area_penalty``.
+
+        Test type: unit
+        """
+        expected_min = (
+            self.pomdp.step_penalty
+            + self.pomdp.ghost_collision_penalty
+            - self.pomdp.dangerous_area_penalty
+        )
+        expected_max = self.pomdp.step_penalty + self.pomdp.pellet_reward + self.pomdp.win_reward
+        assert self.pomdp.reward_range == (expected_min, expected_max)
