@@ -1,7 +1,7 @@
 """Light-Dark-specific Numba-JIT kernels.
 
 Holds kernels whose signatures or logic hardcode light-dark concepts
-(goal+obstacles+out-of-grid shape, standard / dangerous-states / decaying-
+(goal+obstacles+out-of-grid shape, standard / high-variance-states / decaying-
 hit-probability reward formulas). Generic geometric / numerical primitives
 used here also by other envs live in
 ``POMDPPlanners.utils.numba_kernels`` instead.
@@ -14,7 +14,7 @@ Public kernels
 --------------
 - :func:`is_terminal_kernel` — replaces ``ContinuousLightDarkPOMDP.is_terminal``.
 - :func:`compute_reward_base_kernel` — deterministic part of the Standard /
-  DangerousStates reward model plus an ``is_obstacle_hit_region`` flag so the
+  HighVarianceStates reward model plus an ``is_obstacle_hit_region`` flag so the
   Python caller can decide whether to draw a uniform.
 - :func:`compute_reward_base_batch_kernel` — batched version of
   :func:`compute_reward_base_kernel`. Returns ``(rewards, obstacle_mask)`` so
@@ -77,7 +77,7 @@ def compute_reward_base_kernel(
     out-of-grid penalty. The caller (Python) must add the stochastic
     obstacle-hit contribution when ``is_obstacle_hit_region`` is ``True``,
     using its own ``np.random.rand()`` draw so seeded tests stay bit-identical.
-    Used by Standard and DangerousStates reward models.
+    Used by Standard and HighVarianceStates reward models.
 
     ``next_state`` is the realised post-transition position. The Python
     caller threads either the draw from
