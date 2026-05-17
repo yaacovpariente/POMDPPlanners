@@ -40,7 +40,11 @@ from POMDPPlanners.core.environment import (
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
 from POMDPPlanners.environments.push_pomdp import _native
 from POMDPPlanners.environments.push_pomdp.push_pomdp_utils.push_reward_models import (
+    BasePushRewardModel,
+    DiscretePushDecayingHitProbabilityRewardModel,
+    DiscretePushHighVarianceStatesRewardModel,
     DiscretePushRewardModel,
+    RewardModelType,
 )
 from POMDPPlanners.environments.push_pomdp.push_pomdp_visualizer import PushPOMDPVisualizer
 from POMDPPlanners.utils.statistics_utils import confidence_interval
@@ -218,6 +222,8 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
         dangerous_area_radius: float = 0.5,
         dangerous_area_penalty: float = -10.0,
         dangerous_area_hit_probability: float = 1.0,
+        reward_model_type: RewardModelType = RewardModelType.STANDARD,
+        penalty_decay: float = 1.0,
         initial_state: Optional[np.ndarray] = None,
         transition_error_prob: float = 0.0,
         name: str = "PushPOMDP",
@@ -229,6 +235,8 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
             raise ValueError("obstacle_hit_probability must be between 0 and 1 (inclusive)")
         if not 0.0 <= dangerous_area_hit_probability <= 1.0:
             raise ValueError("dangerous_area_hit_probability must be between 0 and 1 (inclusive)")
+        if reward_model_type == RewardModelType.DECAYING_HIT_PROBABILITY and penalty_decay <= 0.0:
+            raise ValueError("penalty_decay must be strictly positive")
 
         self.grid_size = grid_size
         self.push_threshold = push_threshold
@@ -244,6 +252,8 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
         self.dangerous_area_radius = float(dangerous_area_radius)
         self.dangerous_area_penalty = float(dangerous_area_penalty)
         self.dangerous_area_hit_probability = float(dangerous_area_hit_probability)
+        self.reward_model_type = reward_model_type
+        self.penalty_decay = float(penalty_decay)
         self._initial_state = initial_state
         self.transition_error_prob = transition_error_prob
 
@@ -331,16 +341,32 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
         # objects.
         self._trans_kernel_cache: Dict[str, Any] = {}
 
-        self.reward_model: DiscretePushRewardModel = DiscretePushRewardModel(
-            obstacles=self.obstacles,
-            obstacle_radius=self.obstacle_radius,
-            obstacle_penalty=self.obstacle_penalty,
-            obstacle_hit_probability=self.obstacle_hit_probability,
-            dangerous_areas_arr=self._dangerous_areas_arr,
-            dangerous_area_radius=self.dangerous_area_radius,
-            dangerous_area_penalty=self.dangerous_area_penalty,
-            dangerous_area_hit_probability=self.dangerous_area_hit_probability,
-        )
+        self.reward_model: BasePushRewardModel = self._build_reward_model()
+
+    def _build_reward_model(self) -> BasePushRewardModel:
+        # ``Dict[str, Any]`` opt-out is required so pyright doesn't narrow
+        # the value type to the lub of obstacles + scalars and reject the
+        # ``**`` unpack as incompatible with each reward-model __init__.
+        common_kwargs: Dict[str, Any] = {
+            "obstacles": self.obstacles,
+            "obstacle_radius": self.obstacle_radius,
+            "obstacle_penalty": self.obstacle_penalty,
+            "obstacle_hit_probability": self.obstacle_hit_probability,
+            "dangerous_areas": self.dangerous_areas,
+            "dangerous_areas_arr": self._dangerous_areas_arr,
+            "dangerous_area_radius": self.dangerous_area_radius,
+            "dangerous_area_penalty": self.dangerous_area_penalty,
+            "dangerous_area_hit_probability": self.dangerous_area_hit_probability,
+        }
+        if self.reward_model_type == RewardModelType.STANDARD:
+            return DiscretePushRewardModel(**common_kwargs)
+        if self.reward_model_type == RewardModelType.HIGH_VARIANCE_STATES:
+            return DiscretePushHighVarianceStatesRewardModel(**common_kwargs)
+        if self.reward_model_type == RewardModelType.DECAYING_HIT_PROBABILITY:
+            return DiscretePushDecayingHitProbabilityRewardModel(
+                penalty_decay=self.penalty_decay, **common_kwargs
+            )
+        raise ValueError(f"Unknown reward model type: {self.reward_model_type}")
 
     def _is_colliding_with_obstacle(
         self, position: np.ndarray, action: Optional[str] = None
