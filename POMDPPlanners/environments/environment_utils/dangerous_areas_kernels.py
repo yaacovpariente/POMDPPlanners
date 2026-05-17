@@ -47,6 +47,40 @@ from numba import njit
 
 
 @njit(cache=True)  # type: ignore[misc]
+def membership_within_radius_batch_kernel(
+    points: np.ndarray,
+    centers: np.ndarray,
+    radius_sq: float,
+) -> np.ndarray:
+    """Batched dangerous-area membership test.
+
+    Returns a length-``N`` boolean array; entry ``i`` is ``True`` iff
+    ``points[i]`` lies within ``sqrt(radius_sq)`` of *any* centre in
+    ``centers``. ``points`` is shape ``(N, 2)``, ``centers`` is shape
+    ``(2, D)`` (x on row 0, y on row 1, matching the convention of the
+    other kernels in this module).
+
+    Use this when the caller wants the in-zone mask separately from the
+    reward contribution (e.g. so it can keep RNG handling in Python and
+    preserve bit-identical seeded behaviour with a non-batched reference
+    implementation).
+    """
+    n_points = points.shape[0]
+    out = np.zeros(n_points, dtype=np.bool_)
+    n_centers = centers.shape[1]
+    for s in range(n_points):
+        x = points[s, 0]
+        y = points[s, 1]
+        for i in range(n_centers):
+            dx = x - centers[0, i]
+            dy = y - centers[1, i]
+            if dx * dx + dy * dy <= radius_sq:
+                out[s] = True
+                break
+    return out
+
+
+@njit(cache=True)  # type: ignore[misc]
 def constant_prob_penalty_kernel(
     point: np.ndarray,
     centers: np.ndarray,
