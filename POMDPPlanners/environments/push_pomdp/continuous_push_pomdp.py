@@ -40,6 +40,9 @@ from POMDPPlanners.environments.push_pomdp.continuous_push_geometry import (
     circle_aabb_overlap,
     point_inside_aabb,
 )
+from POMDPPlanners.environments.push_pomdp.push_pomdp_utils.push_reward_models import (
+    ContinuousPushRewardModel,
+)
 from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
 from POMDPPlanners.utils.statistics_utils import confidence_interval
 from POMDPPlanners.environments.push_pomdp.continuous_push_pomdp_visualizer import (  # pylint: disable=import-outside-toplevel
@@ -267,6 +270,17 @@ class ContinuousPushPOMDP(Environment):
             use_queue_logger=use_queue_logger,
         )
 
+        self.reward_model: ContinuousPushRewardModel = ContinuousPushRewardModel(
+            obstacles=self.obstacles,
+            robot_radius=self.robot_radius,
+            obstacle_penalty=self.obstacle_penalty,
+            obstacle_hit_probability=self.obstacle_hit_probability,
+            dangerous_areas_arr=self._dangerous_areas_arr,
+            dangerous_area_radius=self.dangerous_area_radius,
+            dangerous_area_penalty=self.dangerous_area_penalty,
+            dangerous_area_hit_probability=self.dangerous_area_hit_probability,
+        )
+
     def _build_obstacle_array(
         self, obstacle_tuples: List[Tuple[float, float, float]]
     ) -> np.ndarray:
@@ -419,12 +433,14 @@ class ContinuousPushPOMDP(Environment):
         state_arr = np.ascontiguousarray(np.asarray(state, dtype=np.float64)).reshape(1, -1)
         action_arr = np.ascontiguousarray(np.asarray(action, dtype=np.float64)).ravel()
         if next_state is None:
-            next_states_arr = None
+            next_states_arr = np.asarray(
+                self._get_trans_kernel(action_arr).batch_sample(state_arr), dtype=np.float64
+            )
         else:
             next_states_arr = np.ascontiguousarray(
                 np.asarray(next_state, dtype=np.float64)
             ).reshape(1, -1)
-        rewards = self._reward_batch_array(state_arr, action_arr, next_states_arr)
+        rewards = self.reward_model.compute_reward_batch(state_arr, action_arr, next_states_arr)
         return float(rewards[0])
 
     def reward_batch(
@@ -438,108 +454,18 @@ class ContinuousPushPOMDP(Environment):
             states_arr = states_arr.reshape(1, -1)
         action_arr = np.ascontiguousarray(np.asarray(action, dtype=np.float64)).ravel()
         if next_states is None:
-            next_states_arr = None
+            # batch_sample reads per-row state from the input — no set_state
+            # required. C++ kernel returns shape (N, 6) float64. Sampling
+            # lives here (and not in the reward model) so the model stays a
+            # pure reward function with no kernel dependency.
+            next_states_arr = np.asarray(
+                self._get_trans_kernel(action_arr).batch_sample(states_arr), dtype=np.float64
+            )
         else:
             next_states_arr = np.ascontiguousarray(np.asarray(next_states, dtype=np.float64))
             if next_states_arr.ndim == 1:
                 next_states_arr = next_states_arr.reshape(1, -1)
-        return self._reward_batch_array(states_arr, action_arr, next_states_arr)
-
-    def _reward_batch_array(
-        self,
-        states: np.ndarray,
-        action: np.ndarray,
-        next_states: Optional[np.ndarray] = None,
-    ) -> np.ndarray:
-        """Vectorised reward computation reusing the cached transition kernel.
-
-        ``states`` must be ``(N, 6)`` C-contiguous float64 and ``action``
-        must be a 1-D float64 array; callers (``reward`` / ``reward_batch``)
-        normalise the inputs.
-
-        When ``next_states`` is ``None`` this draws fresh next states via
-        the cached kernel (same RNG stream as ``sample_next_state_batch``);
-        otherwise it consumes the threaded draw from
-        :meth:`Environment.sample_next_step` so reward and trajectory agree
-        on the same Cholesky sample. Per row it computes:
-        - distance penalty to target (from ``next_states[:, 2:4]``),
-        - +100 goal bonus when within 0.5 of the target,
-        - obstacle penalty when the *realised* robot position
-          ``next_states[:, :2]`` overlaps an obstacle AABB,
-        - dangerous-area penalty when the realised robot position lies in
-          any zone.
-        """
-        if next_states is None:
-            kernel = self._get_trans_kernel(action)
-            # batch_sample reads per-row state from the input — no set_state
-            # required. C++ kernel returns shape (N, 6) float64.
-            next_states = np.asarray(kernel.batch_sample(states), dtype=np.float64)
-
-        # Distance-to-target penalty + goal bonus, computed in one pass on
-        # the (N, 2) object/target slices.
-        delta = next_states[:, 2:4] - next_states[:, 4:6]
-        dist_to_target = np.sqrt(np.einsum("ij,ij->i", delta, delta))
-        rewards = -dist_to_target
-        rewards[dist_to_target < 0.5] += 100.0
-
-        # Obstacle penalty: realised post-action robot position vs. AABBs.
-        if self.obstacles.shape[0] > 0:
-            robot_after = next_states[:, :2]
-            collide = self._batch_circle_obstacle_overlap(robot_after, self.robot_radius)
-            if self.obstacle_hit_probability < 1.0:
-                # Per-row Bernoulli mask: refund the penalty for rows that
-                # collide but lose the per-call coin flip.
-                applied = np.random.random(collide.shape[0]) < self.obstacle_hit_probability
-                collide = collide & applied
-            if np.any(collide):
-                rewards[collide] += self.obstacle_penalty
-
-        # Dangerous-area penalty: realised post-action robot position vs.
-        # circular zones. At most one penalty per row even when zones overlap.
-        if self._dangerous_areas_arr.shape[0] > 0:
-            robot_after = next_states[:, :2]
-            in_zone = self._batch_robot_in_dangerous_areas(robot_after)
-            if self.dangerous_area_hit_probability < 1.0:
-                applied = np.random.random(in_zone.shape[0]) < self.dangerous_area_hit_probability
-                in_zone = in_zone & applied
-            if np.any(in_zone):
-                rewards[in_zone] += self.dangerous_area_penalty
-
-        return rewards
-
-    def _batch_robot_in_dangerous_areas(self, positions: np.ndarray) -> np.ndarray:
-        """Vectorised point-in-circle test against ``self._dangerous_areas_arr``.
-
-        ``positions`` is shape ``(N, 2)``. Returns an ``(N,)`` boolean mask
-        flagging rows that fall inside any dangerous-area circle.
-        """
-        diff = positions[:, None, :] - self._dangerous_areas_arr[None, :, :]
-        dist_sq = np.einsum("ijk,ijk->ij", diff, diff)
-        return np.any(dist_sq <= self.dangerous_area_radius * self.dangerous_area_radius, axis=1)
-
-    def _batch_circle_obstacle_overlap(self, positions: np.ndarray, radius: float) -> np.ndarray:
-        """Vectorised circle-vs-AABB overlap test against ``self.obstacles``.
-
-        ``positions`` is shape ``(N, 2)``. Returns an ``(N,)`` boolean mask
-        flagging rows that overlap any obstacle. Mirrors the per-wall logic
-        of :func:`continuous_push_geometry.circle_aabb_overlap` but
-        broadcast across all walls in one shot.
-        """
-        walls = self.obstacles
-        # Broadcast positions (N, 1, 2) against walls (M, 4): closest point
-        # on each AABB to each position, then squared distance < r**2.
-        cx = walls[:, 0]
-        cy = walls[:, 1]
-        hx = walls[:, 2]
-        hy = walls[:, 3]
-        px = positions[:, 0:1]
-        py = positions[:, 1:2]
-        closest_x = np.clip(px, cx - hx, cx + hx)
-        closest_y = np.clip(py, cy - hy, cy + hy)
-        dx = px - closest_x
-        dy = py - closest_y
-        dist_sq = dx * dx + dy * dy
-        return np.any(dist_sq < radius * radius, axis=1)
+        return self.reward_model.compute_reward_batch(states_arr, action_arr, next_states_arr)
 
     def __getstate__(self):
         # Per-action C++ kernel cache holds pybind11 objects that aren't
