@@ -330,6 +330,21 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
             [coord for rp in self.rock_positions for coord in rp], dtype=np.int32
         )
 
+        # Cached (K, 2) float64 dangerous-area centres for the native
+        # reward / rollout kernels. Empty (0, 2) array when no danger
+        # zones are configured.
+        if self.dangerous_areas:
+            self._dangerous_areas_arr: np.ndarray = np.ascontiguousarray(
+                np.asarray(self.dangerous_areas, dtype=np.float64)
+            )
+        else:
+            self._dangerous_areas_arr = np.empty((0, 2), dtype=np.float64)
+        self._reward_variant_code: int = {
+            RewardModelType.STANDARD: 0,
+            RewardModelType.HIGH_VARIANCE_STATES: 1,
+            RewardModelType.DECAYING_HIT_PROBABILITY: 2,
+        }[self.reward_model_type]
+
         # Define actions: 0=sample, 1=north, 2=east, 3=south, 4=west, 5+=check_rock_i
         self.action_names = ["sample", "north", "east", "south", "west"]
         self.action_names.extend([f"check_rock_{i}" for i in range(len(self.rock_positions))])
@@ -462,7 +477,32 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
         action: int,
         next_states: Optional[np.ndarray] = None,
     ) -> np.ndarray:
-        return self.reward_model.compute_reward_batch(states, action, next_states=next_states)
+        # Fallback to the Python reward model when caller did not pre-sample
+        # next states (closed-form reconstruction lives there).
+        if next_states is None:
+            return self.reward_model.compute_reward_batch(states, action, next_states=None)
+        return np.asarray(
+            _native.reward_batch(
+                states=np.ascontiguousarray(states, dtype=np.float64),
+                action=int(action),
+                next_states=np.ascontiguousarray(next_states, dtype=np.float64),
+                map_rows=int(self.map_size[0]),
+                map_cols=int(self.map_size[1]),
+                rock_positions=self._rock_positions_int32,
+                step_penalty=float(self.step_penalty),
+                bad_rock_penalty=float(self.bad_rock_penalty),
+                good_rock_reward=float(self.good_rock_reward),
+                sensor_use_penalty=float(self.sensor_use_penalty),
+                exit_reward=float(self.exit_reward),
+                dangerous_areas=self._dangerous_areas_arr,
+                dangerous_area_radius=float(self.dangerous_area_radius),
+                dangerous_area_penalty=float(self.dangerous_area_penalty),
+                dangerous_area_hit_probability=float(self.dangerous_area_hit_probability),
+                reward_variant_code=int(self._reward_variant_code),
+                penalty_decay=float(self.penalty_decay),
+            ),
+            dtype=np.float64,
+        )
 
     # ── Native-backed env-API implementations ────────────────────────
     # Each method fetches a cached per-action C++ kernel, mutates its
@@ -581,20 +621,22 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
     def simulate_random_rollout(
         self,
         state: Any,
-        action_sampler: Any,
+        action_sampler: Any,  # pylint: disable=unused-argument
         max_depth: int,
         discount_factor: float,
         depth: int = 0,
     ) -> float:
         """Random rollout via native C++ deterministic transition and reward kernel.
 
-        Falls back to the base-class Python loop when dangerous areas are
-        configured (their stochastic-penalty semantics are not ported to C++).
+        The C++ kernel applies the variant-aware dangerous-area reward term
+        directly, so no Python fallback is required when danger zones are
+        configured.
 
         Args:
             state: Current RockSample state array.
             action_sampler: Object with a ``sample()`` method returning an
-                integer action; used only on the Python fallback path.
+                integer action. Currently unused — actions are drawn
+                uniformly by the native kernel.
             max_depth: Maximum rollout depth.
             discount_factor: Per-step discount factor.
             depth: Depth already consumed by the search tree. Defaults to 0.
@@ -602,21 +644,6 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
         Returns:
             Discounted sum of immediate rewards along the sampled trajectory.
         """
-        if self.dangerous_areas:
-            # pylint: disable-next=import-outside-toplevel
-            from POMDPPlanners.planners.planners_utils.rollout import (
-                python_random_rollout,
-            )
-
-            return python_random_rollout(
-                state=state,
-                depth=depth,
-                action_sampler=action_sampler,
-                environment=self,
-                discount_factor=discount_factor,
-                max_depth=max_depth,
-            )
-
         steps_left = max_depth - depth
         if steps_left <= 0:
             return 0.0
@@ -640,6 +667,12 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
             good_rock_reward=float(self.good_rock_reward),
             bad_rock_penalty=float(self.bad_rock_penalty),
             sensor_use_penalty=float(self.sensor_use_penalty),
+            dangerous_areas=self._dangerous_areas_arr,
+            dangerous_area_radius=float(self.dangerous_area_radius),
+            dangerous_area_penalty=float(self.dangerous_area_penalty),
+            dangerous_area_hit_probability=float(self.dangerous_area_hit_probability),
+            reward_variant_code=int(self._reward_variant_code),
+            penalty_decay=float(self.penalty_decay),
         )
 
     def sample_next_step(

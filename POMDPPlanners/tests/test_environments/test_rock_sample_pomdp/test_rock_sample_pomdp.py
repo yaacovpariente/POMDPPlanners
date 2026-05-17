@@ -1721,6 +1721,12 @@ def test_native_simulate_rollout_rocksample_matches_python_reference():
         good_rock_reward=float(env_local.good_rock_reward),
         bad_rock_penalty=float(env_local.bad_rock_penalty),
         sensor_use_penalty=float(env_local.sensor_use_penalty),
+        dangerous_areas=np.empty((0, 2), dtype=np.float64),
+        dangerous_area_radius=1.0,
+        dangerous_area_penalty=0.0,
+        dangerous_area_hit_probability=1.0,
+        reward_variant_code=0,
+        penalty_decay=1.0,
     )
 
     python_result = _rs_python_rollout_native_semantics(

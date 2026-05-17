@@ -63,6 +63,15 @@ class RewardModelType(Enum):
     DECAYING_HIT_PROBABILITY = "decaying_hit_probability"
 
 
+# Numeric variant codes consumed by the C++ ``reward_batch`` / ``simulate_rollout``
+# kernels. Kept in lock-step with the C++ ``dangerous_area_contribution`` switch.
+_REWARD_VARIANT_CODES: Dict[RewardModelType, int] = {
+    RewardModelType.STANDARD: 0,
+    RewardModelType.HIGH_VARIANCE_STATES: 1,
+    RewardModelType.DECAYING_HIT_PROBABILITY: 2,
+}
+
+
 class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-methods
     """PacMan POMDP environment inspired by the classic arcade game.
 
@@ -826,6 +835,11 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
             discount_factor=float(discount_factor),
             depth=0,
             max_depth=remaining_depth,
+            dangerous_areas=self._dangerous_areas_arr,
+            dangerous_area_radius=float(self.dangerous_area_radius),
+            dangerous_area_penalty=float(self.dangerous_area_penalty),
+            reward_variant_code=_REWARD_VARIANT_CODES[self.reward_model_type],
+            penalty_decay=float(self.penalty_decay),
         )
 
     def reward(self, state: np.ndarray, action: int, next_state: Any = None) -> float:
@@ -874,6 +888,8 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
         if states_arr.dtype.kind == "f":
             if states_arr.ndim == 1:
                 states_arr = states_arr.reshape(1, -1)
+            if next_states_arr is not None:
+                return self._reward_batch_cpp(states_arr, action, next_states_arr)
             return self.reward_model.compute_reward_batch(
                 states_arr, action, next_states=next_states_arr
             )
@@ -881,6 +897,45 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
             return np.array([self.reward(states[i], action) for i in range(len(states))])
         return np.array(
             [self.reward(states[i], action, next_states_arr[i]) for i in range(len(states))]
+        )
+
+    def _reward_batch_cpp(
+        self,
+        states_arr: np.ndarray,
+        action: int,
+        next_states_arr: np.ndarray,
+    ) -> np.ndarray:
+        # Route the fast (states, next_states) batch path through the C++
+        # ``reward_batch`` kernel. The kernel covers all three reward-model
+        # variants via ``reward_variant_code`` and matches the Python kernels
+        # in sample mean. ``penalty_decay`` is consulted only by the decaying
+        # variant.
+        states_c = np.ascontiguousarray(states_arr, dtype=np.float64)
+        next_states_c = np.ascontiguousarray(next_states_arr, dtype=np.float64)
+        return np.asarray(
+            _native.reward_batch(
+                states=states_c,
+                action=int(action),
+                next_states=next_states_c,
+                reward_variant_code=_REWARD_VARIANT_CODES[self.reward_model_type],
+                penalty_decay=float(self.penalty_decay),
+                dangerous_areas=self._dangerous_areas_arr,
+                dangerous_area_radius=float(self.dangerous_area_radius),
+                dangerous_area_penalty=float(self.dangerous_area_penalty),
+                num_ghosts=int(self.num_ghosts),
+                step_penalty=float(self.step_penalty),
+                ghost_collision_penalty=float(self.ghost_collision_penalty),
+                pellet_reward=float(self.pellet_reward),
+                win_reward=float(self.win_reward),
+                idx_pac_row=int(self._idx_pac_row),
+                idx_pac_col=int(self._idx_pac_col),
+                idx_ghosts_start=int(self._idx_ghosts_start),
+                idx_pellets_start=int(self._idx_pellets_start),
+                idx_pellets_end=int(self._idx_pellets_end),
+                idx_score=int(self._idx_score),
+                idx_terminal=int(self._idx_terminal),
+            ),
+            dtype=np.float64,
         )
 
     def _coerce_next_states_arr(

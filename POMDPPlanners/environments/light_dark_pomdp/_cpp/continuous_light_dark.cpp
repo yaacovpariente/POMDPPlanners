@@ -154,42 +154,6 @@ class ContinuousLightDarkObservationCpp
 };
 
 // ---------------------------------------------------------------------------
-// Reward helper: Standard / DangerousStates model (STANDARD variant).
-// Returns (reward, in_obstacle_range) as a std::pair.
-// ---------------------------------------------------------------------------
-static std::pair<double, bool> compute_reward_standard(
-    const double *state, const double *action, const double *goal_state,
-    const std::vector<double> &obstacles_packed,  // interleaved [x0,y0,x1,y1,...]
-    double goal_state_radius, double obstacle_radius, double grid_size,
-    double fuel_cost, double goal_reward, double obstacle_reward) {
-    const double next_x = state[0] + action[0];
-    const double next_y = state[1] + action[1];
-    const double gx = next_x - goal_state[0];
-    const double gy = next_y - goal_state[1];
-    const double dist_to_goal = std::sqrt(gx * gx + gy * gy);
-    double reward = -fuel_cost - dist_to_goal;
-
-    if (dist_to_goal <= goal_state_radius) {
-        return {reward + goal_reward, false};
-    }
-
-    const double obs_r_sq = obstacle_radius * obstacle_radius;
-    const std::size_t n_obs = obstacles_packed.size() / kLightDarkStateDim;
-    for (std::size_t j = 0; j < n_obs; ++j) {
-        const double ox = next_x - obstacles_packed[j * 2];
-        const double oy = next_y - obstacles_packed[j * 2 + 1];
-        if (ox * ox + oy * oy <= obs_r_sq) {
-            return {reward, true};
-        }
-    }
-
-    if (next_x < 0.0 || next_y < 0.0 || next_x > grid_size || next_y > grid_size) {
-        return {reward + obstacle_reward, false};
-    }
-    return {reward, false};
-}
-
-// ---------------------------------------------------------------------------
 // Terminal check matching ContinuousLightDarkPOMDP.is_terminal.
 // goal OR (is_obstacle_hit_terminal AND in any obstacle).
 // ---------------------------------------------------------------------------
@@ -218,13 +182,34 @@ static bool is_terminal_cpp(
     return false;
 }
 
+// Forward declarations for the variant-aware reward row helpers (defined
+// further down alongside ``compute_reward_batch``). Used by both the batched
+// reward kernel and the rollout kernel so the two paths share semantics.
+static double reward_row_standard_or_hv(double nx, double ny, double goal_x, double goal_y,
+                                        const std::vector<double> &obstacles_packed,
+                                        double goal_state_radius, double obstacle_radius_sq,
+                                        double grid_size, double fuel_cost, double goal_reward,
+                                        double obstacle_reward, double obstacle_hit_probability,
+                                        bool high_variance,
+                                        pomdp_native::RNGState &rng,
+                                        std::uniform_real_distribution<double> &uniform01);
+
+static double reward_row_decaying(double nx, double ny, double goal_x, double goal_y,
+                                  const std::vector<double> &obstacles_packed,
+                                  double goal_state_radius, double grid_size, double fuel_cost,
+                                  double goal_reward, double obstacle_reward, double penalty_decay,
+                                  pomdp_native::RNGState &rng,
+                                  std::uniform_real_distribution<double> &uniform01);
+
 // ---------------------------------------------------------------------------
-// Native simulate_rollout for STANDARD reward model.
+// Native simulate_rollout for all reward model variants.
 //
 // Walk a single random rollout from initial_state. At each depth:
 //   1. check terminal — break if true
 //   2. pick action_array[action_indices[depth]]
-//   3. compute reward (STANDARD model, stochastic obstacle draw via C++ RNG)
+//   3. compute reward via variant-aware helper (STANDARD / HIGH_VARIANCE /
+//      DECAYING_HIT_PROBABILITY); stochastic obstacle / penalty draws use
+//      the module-level C++ RNG
 //   4. step transition (same additive-Gaussian kernel as the transition class)
 //   5. accumulate gamma^depth * reward
 //
@@ -232,6 +217,9 @@ static bool is_terminal_cpp(
 // action_indices: shape (max_depth,)  — pre-drawn integer action indices
 // obstacles: interleaved [x0, y0, x1, y1, ...]  (flat 1-D array)
 // covariance: shape (2, 2)  — state transition covariance
+// reward_variant_code: 0 = STANDARD, 1 = HIGH_VARIANCE_STATES,
+//                      2 = DECAYING_HIT_PROBABILITY
+// penalty_decay: only consumed when reward_variant_code == 2
 // ---------------------------------------------------------------------------
 double simulate_rollout(
     const py::array_t<double, py::array::c_style | py::array::forcecast> &initial_state,
@@ -251,6 +239,8 @@ double simulate_rollout(
     double obstacle_reward,
     double obstacle_hit_probability,
     bool is_obstacle_hit_terminal,
+    int reward_variant_code,
+    double penalty_decay,
     // transition params
     const py::array_t<double> &covariance) {
     if (initial_state.ndim() != 1 || static_cast<std::size_t>(initial_state.shape(0)) != kLightDarkStateDim) {
@@ -267,10 +257,15 @@ double simulate_rollout(
     if (obstacles_arr.ndim() != 1) {
         throw std::invalid_argument("obstacles must be a flat 1-D array [x0,y0,x1,y1,...]");
     }
+    if (reward_variant_code < 0 || reward_variant_code > 2) {
+        throw std::invalid_argument("reward_variant_code must be in {0, 1, 2}");
+    }
 
     // Unpack goal state
     auto gs_view = goal_state_arr.unchecked<1>();
     const double goal_state[kLightDarkStateDim] = {gs_view(0), gs_view(1)};
+    const double goal_x = goal_state[0];
+    const double goal_y = goal_state[1];
 
     // Unpack obstacles into a local vector
     const auto n_obs_flat = static_cast<std::size_t>(obstacles_arr.shape(0));
@@ -279,6 +274,7 @@ double simulate_rollout(
     for (std::size_t i = 0; i < n_obs_flat; ++i) {
         obstacles_packed[i] = obs_view(static_cast<py::ssize_t>(i));
     }
+    const double obstacle_radius_sq = obstacle_radius * obstacle_radius;
 
     // Build Gaussian noise kernel from covariance (Cholesky once)
     const auto noise = pomdp_native::GaussianND<kLightDarkStateDim>::from_covariance(covariance);
@@ -315,25 +311,33 @@ double simulate_rollout(
         }
         const double action_x = aa_view(static_cast<py::ssize_t>(ai), 0);
         const double action_y = aa_view(static_cast<py::ssize_t>(ai), 1);
-        const double action[kLightDarkStateDim] = {action_x, action_y};
 
-        // Compute reward (STANDARD model)
-        auto [base_reward, in_obstacle_range] = compute_reward_standard(
-            state, action, goal_state, obstacles_packed, goal_state_radius, obstacle_radius,
-            grid_size, fuel_cost, goal_reward, obstacle_reward);
+        // Reward is scored against the pre-noise intended next position
+        // (state + action). The realised-position correctness gate on the
+        // Python side routes noisy + obstacle configs through the Python
+        // path so this approximation is only used when the rollout reward
+        // can match reward() bit-exactly on the deterministic next state.
+        const double nx = state[0] + action_x;
+        const double ny = state[1] + action_y;
 
-        double step_reward = base_reward;
-        if (in_obstacle_range) {
-            if (uniform01(rng.engine()) < obstacle_hit_probability) {
-                step_reward += obstacle_reward;
-            }
+        double step_reward;
+        if (reward_variant_code == 2) {
+            step_reward = reward_row_decaying(
+                nx, ny, goal_x, goal_y, obstacles_packed, goal_state_radius, grid_size,
+                fuel_cost, goal_reward, obstacle_reward, penalty_decay, rng, uniform01);
+        } else {
+            const bool high_variance = (reward_variant_code == 1);
+            step_reward = reward_row_standard_or_hv(
+                nx, ny, goal_x, goal_y, obstacles_packed, goal_state_radius, obstacle_radius_sq,
+                grid_size, fuel_cost, goal_reward, obstacle_reward, obstacle_hit_probability,
+                high_variance, rng, uniform01);
         }
 
         total += gamma_power * step_reward;
         gamma_power *= discount_factor;
 
         // Step transition: next_state = state + action + Gaussian noise
-        const double mean[kLightDarkStateDim] = {state[0] + action_x, state[1] + action_y};
+        const double mean[kLightDarkStateDim] = {nx, ny};
         noise.sample_into(next_state, mean, rng);
         state[0] = next_state[0];
         state[1] = next_state[1];
@@ -341,6 +345,206 @@ double simulate_rollout(
     }
 
     return total;
+}
+
+// ---------------------------------------------------------------------------
+// compute_reward_batch
+//
+// Variant-aware vectorised reward kernel. Mirrors the Python reward models
+// in expectation (RNG draws come from ``pomdp_native::default_rng()``, so
+// the C++ and Python paths agree on sample means but not bit-exact rows).
+//
+// Inputs:
+//   states:        (N, 2) float64 — current positions (unused except for
+//                  legacy parity; reward depends on ``next_states``).
+//   action:        (2,)  float64 — action vector (unused beyond shape parity;
+//                  rewards are computed against the realised ``next_states``).
+//   next_states:   (N, 2) float64 — realised next-state positions.
+//   reward_variant_code:
+//                  0 = STANDARD, 1 = HIGH_VARIANCE_STATES, 2 = DECAYING_HIT_PROBABILITY.
+//   penalty_decay: double — only consumed when variant == 2.
+//   goal_state:    (2,)  float64.
+//   obstacles:     flat 1-D float64 [x0, y0, x1, y1, ...].
+//   goal_state_radius / obstacle_radius / grid_size / fuel_cost /
+//   goal_reward / obstacle_reward / obstacle_hit_probability: scalars.
+//
+// Output: (N,) float64 — per-row reward, deterministic geometry plus a single
+//          RNG-gated obstacle penalty draw (matching the Python row-major draw
+//          pattern in expectation).
+// ---------------------------------------------------------------------------
+static double base_reward_from_next(double nx, double ny, double goal_x, double goal_y,
+                                    double fuel_cost) {
+    const double gx = nx - goal_x;
+    const double gy = ny - goal_y;
+    const double dist_to_goal = std::sqrt(gx * gx + gy * gy);
+    return -fuel_cost - dist_to_goal;
+}
+
+static bool point_in_any_obstacle(double nx, double ny,
+                                  const std::vector<double> &obstacles_packed,
+                                  double obstacle_radius_sq) {
+    const std::size_t n_obs = obstacles_packed.size() / kLightDarkStateDim;
+    for (std::size_t j = 0; j < n_obs; ++j) {
+        const double ox = nx - obstacles_packed[j * 2];
+        const double oy = ny - obstacles_packed[j * 2 + 1];
+        if (ox * ox + oy * oy <= obstacle_radius_sq) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static double min_distance_to_obstacles(double nx, double ny,
+                                        const std::vector<double> &obstacles_packed) {
+    double min_d_sq = std::numeric_limits<double>::infinity();
+    const std::size_t n_obs = obstacles_packed.size() / kLightDarkStateDim;
+    for (std::size_t j = 0; j < n_obs; ++j) {
+        const double ox = nx - obstacles_packed[j * 2];
+        const double oy = ny - obstacles_packed[j * 2 + 1];
+        const double d_sq = ox * ox + oy * oy;
+        if (d_sq < min_d_sq) {
+            min_d_sq = d_sq;
+        }
+    }
+    return std::sqrt(min_d_sq);
+}
+
+static std::vector<double> pack_obstacles_1d(
+    const py::array_t<double, py::array::c_style | py::array::forcecast> &obstacles_arr) {
+    if (obstacles_arr.ndim() != 1) {
+        throw std::invalid_argument("obstacles must be a flat 1-D array [x0,y0,x1,y1,...]");
+    }
+    auto view = obstacles_arr.unchecked<1>();
+    const std::size_t n_flat = static_cast<std::size_t>(view.shape(0));
+    std::vector<double> packed(n_flat);
+    for (std::size_t i = 0; i < n_flat; ++i) {
+        packed[i] = view(static_cast<py::ssize_t>(i));
+    }
+    return packed;
+}
+
+static double reward_row_standard_or_hv(double nx, double ny, double goal_x, double goal_y,
+                                        const std::vector<double> &obstacles_packed,
+                                        double goal_state_radius, double obstacle_radius_sq,
+                                        double grid_size, double fuel_cost, double goal_reward,
+                                        double obstacle_reward, double obstacle_hit_probability,
+                                        bool high_variance,
+                                        pomdp_native::RNGState &rng,
+                                        std::uniform_real_distribution<double> &uniform01) {
+    double reward = base_reward_from_next(nx, ny, goal_x, goal_y, fuel_cost);
+    const double gx = nx - goal_x;
+    const double gy = ny - goal_y;
+    const double dist_to_goal = std::sqrt(gx * gx + gy * gy);
+    if (dist_to_goal <= goal_state_radius) {
+        return reward + goal_reward;
+    }
+    if (point_in_any_obstacle(nx, ny, obstacles_packed, obstacle_radius_sq)) {
+        if (high_variance) {
+            reward += (uniform01(rng.engine()) < 0.5) ? obstacle_reward : -obstacle_reward;
+        } else if (uniform01(rng.engine()) < obstacle_hit_probability) {
+            reward += obstacle_reward;
+        }
+        return reward;
+    }
+    if (nx < 0.0 || ny < 0.0 || nx > grid_size || ny > grid_size) {
+        reward += obstacle_reward;
+    }
+    return reward;
+}
+
+static double reward_row_decaying(double nx, double ny, double goal_x, double goal_y,
+                                  const std::vector<double> &obstacles_packed,
+                                  double goal_state_radius, double grid_size, double fuel_cost,
+                                  double goal_reward, double obstacle_reward, double penalty_decay,
+                                  pomdp_native::RNGState &rng,
+                                  std::uniform_real_distribution<double> &uniform01) {
+    double reward = base_reward_from_next(nx, ny, goal_x, goal_y, fuel_cost);
+    const double gx = nx - goal_x;
+    const double gy = ny - goal_y;
+    const double dist_to_goal = std::sqrt(gx * gx + gy * gy);
+    if (dist_to_goal <= goal_state_radius) {
+        reward += goal_reward;
+    }
+    const bool oob = (nx < 0.0 || ny < 0.0 || nx > grid_size || ny > grid_size);
+    if (oob && dist_to_goal > goal_state_radius) {
+        reward += obstacle_reward;
+    }
+    if (!obstacles_packed.empty() && penalty_decay > 0.0) {
+        const double min_d = min_distance_to_obstacles(nx, ny, obstacles_packed);
+        const double p = std::exp(-min_d / penalty_decay);
+        if (uniform01(rng.engine()) < p) {
+            reward += obstacle_reward;
+        }
+    }
+    return reward;
+}
+
+py::array_t<double> compute_reward_batch(
+    const py::array_t<double, py::array::c_style | py::array::forcecast> &states,
+    const py::array_t<double, py::array::c_style | py::array::forcecast> &action,
+    const py::array_t<double, py::array::c_style | py::array::forcecast> &next_states,
+    int reward_variant_code,
+    double penalty_decay,
+    const py::array_t<double, py::array::c_style | py::array::forcecast> &goal_state,
+    const py::array_t<double, py::array::c_style | py::array::forcecast> &obstacles,
+    double goal_state_radius,
+    double obstacle_radius,
+    double grid_size,
+    double fuel_cost,
+    double goal_reward,
+    double obstacle_reward,
+    double obstacle_hit_probability) {
+    (void)action;
+    if (states.ndim() != 2 ||
+        static_cast<std::size_t>(states.shape(1)) != kLightDarkStateDim) {
+        throw std::invalid_argument("states must have shape (N, 2)");
+    }
+    if (next_states.ndim() != 2 ||
+        static_cast<std::size_t>(next_states.shape(1)) != kLightDarkStateDim ||
+        next_states.shape(0) != states.shape(0)) {
+        throw std::invalid_argument("next_states must have shape (N, 2) matching states");
+    }
+    if (goal_state.ndim() != 1 ||
+        static_cast<std::size_t>(goal_state.shape(0)) != kLightDarkStateDim) {
+        throw std::invalid_argument("goal_state must have shape (2,)");
+    }
+    if (reward_variant_code < 0 || reward_variant_code > 2) {
+        throw std::invalid_argument("reward_variant_code must be in {0, 1, 2}");
+    }
+
+    auto gs_view = goal_state.unchecked<1>();
+    const double goal_x = gs_view(0);
+    const double goal_y = gs_view(1);
+    const std::vector<double> obstacles_packed = pack_obstacles_1d(obstacles);
+    const double obstacle_radius_sq = obstacle_radius * obstacle_radius;
+
+    const std::size_t n_rows = static_cast<std::size_t>(next_states.shape(0));
+    auto ns_view = next_states.unchecked<2>();
+    py::array_t<double> result(static_cast<py::ssize_t>(n_rows));
+    auto out = result.mutable_unchecked<1>();
+
+    pomdp_native::RNGState &rng = pomdp_native::default_rng();
+    std::uniform_real_distribution<double> uniform01(0.0, 1.0);
+
+    for (std::size_t i = 0; i < n_rows; ++i) {
+        const double nx = ns_view(static_cast<py::ssize_t>(i), 0);
+        const double ny = ns_view(static_cast<py::ssize_t>(i), 1);
+        double r;
+        if (reward_variant_code == 2) {
+            r = reward_row_decaying(nx, ny, goal_x, goal_y, obstacles_packed,
+                                    goal_state_radius, grid_size, fuel_cost, goal_reward,
+                                    obstacle_reward, penalty_decay, rng, uniform01);
+        } else {
+            const bool high_variance = (reward_variant_code == 1);
+            r = reward_row_standard_or_hv(nx, ny, goal_x, goal_y, obstacles_packed,
+                                          goal_state_radius, obstacle_radius_sq, grid_size,
+                                          fuel_cost, goal_reward, obstacle_reward,
+                                          obstacle_hit_probability, high_variance, rng,
+                                          uniform01);
+        }
+        out(static_cast<py::ssize_t>(i)) = r;
+    }
+    return result;
 }
 
 // ===========================================================================
@@ -905,11 +1109,28 @@ PYBIND11_MODULE(_native, m) {
           py::arg("obstacle_radius"), py::arg("grid_size"), py::arg("fuel_cost"),
           py::arg("goal_reward"), py::arg("obstacle_reward"),
           py::arg("obstacle_hit_probability"), py::arg("is_obstacle_hit_terminal"),
+          py::arg("reward_variant_code"), py::arg("penalty_decay"),
           py::arg("covariance"),
-          "Native random rollout for the STANDARD reward model. "
+          "Native random rollout for all reward model variants. "
           "Returns discounted return from initial_state. "
           "action_indices must be a pre-drawn array of int indices (shape (max_depth-start_depth,)). "
-          "obstacles must be a flat 1-D array [x0, y0, x1, y1, ...].");
+          "obstacles must be a flat 1-D array [x0, y0, x1, y1, ...]. "
+          "reward_variant_code: 0 = STANDARD, 1 = HIGH_VARIANCE_STATES, "
+          "2 = DECAYING_HIT_PROBABILITY. penalty_decay is only consumed when "
+          "reward_variant_code == 2.");
+
+    m.def("compute_reward_batch", &compute_reward_batch,
+          py::arg("states"), py::arg("action"), py::arg("next_states"),
+          py::kw_only(),
+          py::arg("reward_variant_code"), py::arg("penalty_decay"),
+          py::arg("goal_state"), py::arg("obstacles"), py::arg("goal_state_radius"),
+          py::arg("obstacle_radius"), py::arg("grid_size"), py::arg("fuel_cost"),
+          py::arg("goal_reward"), py::arg("obstacle_reward"),
+          py::arg("obstacle_hit_probability"),
+          "Variant-aware batched reward kernel. reward_variant_code: "
+          "0 = STANDARD, 1 = HIGH_VARIANCE_STATES, 2 = DECAYING_HIT_PROBABILITY. "
+          "Stochastic obstacle / penalty draws use the module-level C++ RNG; "
+          "expectation matches the Python reward models row-for-row.");
 
     py::class_<ContinuousLightDarkTransitionCpp>(m, "ContinuousLightDarkTransitionCpp")
         .def(py::init<const py::object &, const py::array_t<double> &,

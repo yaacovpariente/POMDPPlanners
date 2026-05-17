@@ -223,7 +223,7 @@ class LaserTagRewardModel(BaseLaserTagRewardModel):
                 ns_arr = ns_arr.reshape(1, -1)
             next_states_arr = np.ascontiguousarray(ns_arr)
 
-        if self._can_use_native_reward_batch(next_states_arr):
+        if self._can_use_native_reward_batch():
             native_fn = self._get_native_reward_batch()
             if native_fn is not None:
                 return np.asarray(
@@ -242,18 +242,33 @@ class LaserTagRewardModel(BaseLaserTagRewardModel):
                         tag_penalty=float(self.tag_penalty),
                         step_cost=float(self.step_cost),
                         action_directions=self._action_directions_arr,
+                        next_states=(
+                            next_states_arr
+                            if next_states_arr is not None
+                            else np.empty((0, 0), dtype=np.float64)
+                        ),
+                        reward_variant_code=self._reward_variant_code(),
+                        penalty_decay=float(self._penalty_decay_for_native()),
                     )
                 )
         return self._compute_reward_batch_python(states_arr, action, next_states_arr)
 
-    def _can_use_native_reward_batch(self, next_states_arr: Optional[np.ndarray]) -> bool:
-        # The native kernel computes the intended-position penalty and does
-        # not accept a realised next_states buffer. It is therefore only
-        # safe when no penalty terms exist (intended == realised in that
-        # degenerate case).
-        if next_states_arr is not None:
-            return False
-        return not self.walls and not self.dangerous_areas
+    def _can_use_native_reward_batch(self) -> bool:
+        # The variant-aware native kernel handles all three reward-model
+        # variants (STANDARD, HIGH_VARIANCE_STATES, DECAYING_HIT_PROBABILITY)
+        # and both the intended-position fallback and the realised-position
+        # path, so it is always preferred when available.
+        return True
+
+    def _reward_variant_code(self) -> int:
+        # Base class is the STANDARD variant. Subclasses override.
+        return 0
+
+    def _penalty_decay_for_native(self) -> float:
+        # STANDARD / HIGH_VARIANCE_STATES ignore penalty_decay; pass a sentinel
+        # positive value so the C++ kernel's "must be > 0 for DECAYING" guard
+        # does not need to special-case the unused-parameter path.
+        return 1.0
 
     def _get_native_reward_batch(self) -> Optional[Any]:
         cached = getattr(self, "_cached_native_reward_batch", None)
@@ -383,6 +398,9 @@ class LaserTagHighVarianceStatesRewardModel(LaserTagRewardModel):
     is both a wall and inside a danger zone receives both contributions.
     """
 
+    def _reward_variant_code(self) -> int:
+        return 1
+
     def _compute_area_penalty_scalar(self, position: Tuple[int, int]) -> float:
         contrib = 0.0
         if position in self.walls:
@@ -453,6 +471,12 @@ class LaserTagDecayingHitProbabilityRewardModel(LaserTagRewardModel):
         if penalty_decay <= 0.0:
             raise ValueError("penalty_decay must be strictly positive")
         self.penalty_decay = penalty_decay
+
+    def _reward_variant_code(self) -> int:
+        return 2
+
+    def _penalty_decay_for_native(self) -> float:
+        return float(self.penalty_decay)
 
     def _compute_area_penalty_scalar(self, position: Tuple[int, int]) -> float:
         contrib = 0.0

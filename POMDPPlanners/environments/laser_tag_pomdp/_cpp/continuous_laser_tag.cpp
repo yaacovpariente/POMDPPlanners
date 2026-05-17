@@ -852,22 +852,148 @@ py::array_t<double> reward_batch(
     return out;
 }
 
+// Reward-variant codes shared by the discrete reward batch kernel and the
+// random-rollout kernel. Match
+// POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp.RewardModelType.
+//
+// STANDARD                 : deterministic single ``-penalty`` on wall OR
+//                            danger membership (matches
+//                            LaserTagRewardModel._compute_area_penalty_scalar
+//                            and the legacy kernel).
+// HIGH_VARIANCE_STATES     : wall always emits ``-penalty``; danger emits
+//                            ``±penalty`` 50/50 via the shared C++ RNG.
+// DECAYING_HIT_PROBABILITY : wall always emits ``-penalty``; danger emits
+//                            ``-penalty`` with probability
+//                            ``exp(-min_dist / penalty_decay)`` against the
+//                            nearest centre (no radius cutoff).
+constexpr int kVariantStandard = 0;
+constexpr int kVariantHighVariance = 1;
+constexpr int kVariantDecaying = 2;
+
+// Build the packed wall hash set from the (2 * n_walls,) int64 buffer.
+std::unordered_set<int64_t> build_wall_cells(
+    const py::array_t<int64_t, py::array::c_style | py::array::forcecast> &walls_flat,
+    int n_walls, int cols) {
+    auto walls_view = walls_flat.unchecked<1>();
+    std::unordered_set<int64_t> wall_cells;
+    wall_cells.reserve(static_cast<std::size_t>(n_walls) * 2 + 1);
+    for (int i = 0; i < n_walls; ++i) {
+        const int64_t wr = walls_view(static_cast<py::ssize_t>(2 * i));
+        const int64_t wc = walls_view(static_cast<py::ssize_t>(2 * i + 1));
+        wall_cells.insert(wr * static_cast<int64_t>(cols) + wc);
+    }
+    return wall_cells;
+}
+
+// Pack dangerous-area centres from the (D, 2) float64 buffer (or empty).
+std::vector<std::pair<double, double>> build_areas(
+    const py::array_t<double, py::array::c_style | py::array::forcecast> &dangerous_areas,
+    int n_dangerous) {
+    std::vector<std::pair<double, double>> areas;
+    if (n_dangerous <= 0) {
+        return areas;
+    }
+    if (dangerous_areas.ndim() != 2 || dangerous_areas.shape(0) != n_dangerous ||
+        dangerous_areas.shape(1) != 2) {
+        throw std::invalid_argument("dangerous_areas must have shape (n_dangerous, 2)");
+    }
+    areas.reserve(static_cast<std::size_t>(n_dangerous));
+    auto da_view = dangerous_areas.unchecked<2>();
+    for (int i = 0; i < n_dangerous; ++i) {
+        areas.emplace_back(da_view(static_cast<py::ssize_t>(i), 0),
+                           da_view(static_cast<py::ssize_t>(i), 1));
+    }
+    return areas;
+}
+
+// Return true iff (int_r, int_c) is an in-bounds wall cell.
+inline bool wall_hit(int64_t int_r, int64_t int_c, int rows, int cols,
+                     const std::unordered_set<int64_t> &wall_cells) {
+    if (int_r < 0 || int_r >= static_cast<int64_t>(rows) || int_c < 0 ||
+        int_c >= static_cast<int64_t>(cols)) {
+        return false;
+    }
+    const int64_t key = int_r * static_cast<int64_t>(cols) + int_c;
+    return wall_cells.find(key) != wall_cells.end();
+}
+
+// Return true iff (pr, pc) lies within ``r_sq`` (squared radius) of any area.
+inline bool danger_hit_within(double pr, double pc, double r_sq,
+                              const std::vector<std::pair<double, double>> &areas) {
+    for (const auto &area : areas) {
+        const double ddr = pr - area.first;
+        const double ddc = pc - area.second;
+        if (ddr * ddr + ddc * ddc <= r_sq) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Compute the variant's danger-area contribution (already excludes the wall
+// contribution; wall handling is shared upstream). ``uniform`` is used by
+// stochastic variants only — pass any value for STANDARD.
+inline double variant_danger_contribution(
+    int variant_code, double pr, double pc, double r_sq, double penalty_decay,
+    double dangerous_area_penalty,
+    const std::vector<std::pair<double, double>> &areas, double uniform) {
+    if (areas.empty()) {
+        return 0.0;
+    }
+    if (variant_code == kVariantHighVariance) {
+        if (!danger_hit_within(pr, pc, r_sq, areas)) {
+            return 0.0;
+        }
+        return (uniform < 0.5) ? -dangerous_area_penalty : dangerous_area_penalty;
+    }
+    if (variant_code == kVariantDecaying) {
+        double min_sq = std::numeric_limits<double>::infinity();
+        for (const auto &area : areas) {
+            const double ddr = pr - area.first;
+            const double ddc = pc - area.second;
+            const double dsq = ddr * ddr + ddc * ddc;
+            if (dsq < min_sq) {
+                min_sq = dsq;
+            }
+        }
+        const double min_dist = std::sqrt(min_sq);
+        const double hit_prob = std::exp(-min_dist / penalty_decay);
+        if (uniform < hit_prob) {
+            return -dangerous_area_penalty;
+        }
+        return 0.0;
+    }
+    // STANDARD: handled by the caller via the combined OR-mask path; this
+    // helper should not be invoked for STANDARD.
+    return 0.0;
+}
+
 // Vectorised reward kernel for the discrete LaserTagPOMDP.
 //
-// Mirrors LaserTagPOMDP._compute_reward_batch in pure C++:
+// Mirrors LaserTagPOMDP.reward_model.compute_reward_batch across the three
+// :class:`RewardModelType` variants:
 //   - terminal-flag rows yield 0.0;
 //   - on the tag action (action == 4): live rows get +tag_reward when the
 //     robot grid cell equals the opponent grid cell, else -tag_penalty;
 //   - on a movement action (0..3): live rows pay -step_cost;
-//   - the intended-position penalty (-dangerous_area_penalty) is applied
-//     when the intended cell hits a wall (in-bounds + walls hit) or lies
-//     within ``dangerous_area_radius`` (Euclidean) of any dangerous-area
-//     centre. For action == 4 the intended cell is the current robot cell;
-//     for actions 0..3 it is the robot cell shifted by ``action_directions``.
+//   - the danger / wall contribution is scored against the *realised*
+//     post-action position read from ``next_states[:, :2]`` when
+//     ``next_states`` is provided (preferred path); when it is empty/null
+//     the intended cell is used (legacy ``compute_reward_batch_python``
+//     fallback). STANDARD applies a single -penalty on (wall OR danger);
+//     HIGH_VARIANCE_STATES and DECAYING_HIT_PROBABILITY apply the wall
+//     penalty deterministically and resolve the danger contribution via
+//     ``pomdp_native::default_rng``.
 //
 // dangerous_areas: shape (D, 2) float64 (or (0, 2) / 1-D length-0 for empty).
 // walls_flat: 1-D int64 array of (row, col) pairs flattened (length = 2 * n_walls).
 // action_directions: shape (4, 2) int64 with row r = (dr, dc) for action r.
+// next_states: shape (N, 5) float64 or empty (0, 0) / (0, 5) for "intended
+//   position" fallback. When non-empty its row count must equal ``states``'.
+// reward_variant_code: see kVariant* constants above.
+// penalty_decay: decay length for the DECAYING_HIT_PROBABILITY variant
+//   (must be strictly positive when ``reward_variant_code == kVariantDecaying``);
+//   ignored otherwise.
 py::array_t<double> lasertag_discrete_reward_batch(
     const py::array_t<double, py::array::c_style | py::array::forcecast> &states,
     int action,
@@ -881,7 +1007,10 @@ py::array_t<double> lasertag_discrete_reward_batch(
     double tag_reward,
     double tag_penalty,
     double step_cost,
-    const py::array_t<int64_t, py::array::c_style | py::array::forcecast> &action_directions) {
+    const py::array_t<int64_t, py::array::c_style | py::array::forcecast> &action_directions,
+    const py::array_t<double, py::array::c_style | py::array::forcecast> &next_states,
+    int reward_variant_code,
+    double penalty_decay) {
     if (states.ndim() != 2 || states.shape(1) != static_cast<py::ssize_t>(kStateDim)) {
         throw std::invalid_argument("states must have shape (N, 5)");
     }
@@ -894,30 +1023,31 @@ py::array_t<double> lasertag_discrete_reward_batch(
         throw std::invalid_argument("action_directions must have shape (4, 2)");
     }
 
-    // Pack walls into a hash set of row * cols + col for O(1) wall hits.
-    auto walls_view = walls_flat.unchecked<1>();
-    std::unordered_set<int64_t> wall_cells;
-    wall_cells.reserve(static_cast<std::size_t>(n_walls) * 2 + 1);
-    for (int i = 0; i < n_walls; ++i) {
-        const int64_t wr = walls_view(static_cast<py::ssize_t>(2 * i));
-        const int64_t wc = walls_view(static_cast<py::ssize_t>(2 * i + 1));
-        wall_cells.insert(wr * static_cast<int64_t>(cols) + wc);
+    const auto n = static_cast<std::size_t>(states.shape(0));
+    // next_states is optional: empty (0, 0) / (0, 5) / 1-D length-0 means
+    // "fall back to intended position". When non-empty its row count must
+    // equal ``states``'s row count.
+    const bool has_next_states =
+        (next_states.ndim() == 2 && next_states.shape(0) == states.shape(0) &&
+         next_states.shape(1) == static_cast<py::ssize_t>(kStateDim));
+    if (!has_next_states) {
+        const bool is_empty =
+            (next_states.ndim() == 1 && next_states.shape(0) == 0) ||
+            (next_states.ndim() == 2 && next_states.shape(0) == 0);
+        if (!is_empty) {
+            throw std::invalid_argument(
+                "next_states must have shape (N, 5) matching states, or be empty");
+        }
+    }
+    if (reward_variant_code == kVariantDecaying && !(penalty_decay > 0.0)) {
+        throw std::invalid_argument(
+            "penalty_decay must be strictly positive for the DECAYING_HIT_PROBABILITY variant");
     }
 
-    // Pack dangerous-area centres.
-    std::vector<std::pair<double, double>> areas;
-    if (n_dangerous > 0) {
-        if (dangerous_areas.ndim() != 2 || dangerous_areas.shape(0) != n_dangerous ||
-            dangerous_areas.shape(1) != 2) {
-            throw std::invalid_argument("dangerous_areas must have shape (n_dangerous, 2)");
-        }
-        areas.reserve(static_cast<std::size_t>(n_dangerous));
-        auto da_view = dangerous_areas.unchecked<2>();
-        for (int i = 0; i < n_dangerous; ++i) {
-            areas.emplace_back(da_view(static_cast<py::ssize_t>(i), 0),
-                               da_view(static_cast<py::ssize_t>(i), 1));
-        }
-    }
+    const std::unordered_set<int64_t> wall_cells =
+        build_wall_cells(walls_flat, n_walls, cols);
+    const std::vector<std::pair<double, double>> areas =
+        build_areas(dangerous_areas, n_dangerous);
     const double r_sq = dangerous_area_radius * dangerous_area_radius;
 
     // Resolve the action's grid delta. For action 4 (tag) the intended cell is
@@ -932,10 +1062,16 @@ py::array_t<double> lasertag_discrete_reward_batch(
     }
     const bool is_tag = (action == 4);
 
-    const auto n = static_cast<std::size_t>(states.shape(0));
     auto state_view = states.unchecked<2>();
     auto out = py::array_t<double>(static_cast<py::ssize_t>(n));
     auto buf = out.mutable_unchecked<1>();
+
+    pomdp_native::RNGState &rng = pomdp_native::default_rng();
+    std::uniform_real_distribution<double> uniform_dist(0.0, 1.0);
+    const bool needs_uniform =
+        (reward_variant_code == kVariantHighVariance ||
+         reward_variant_code == kVariantDecaying) &&
+        !areas.empty();
 
     for (std::size_t i = 0; i < n; ++i) {
         const py::ssize_t row = static_cast<py::ssize_t>(i);
@@ -956,31 +1092,50 @@ py::array_t<double> lasertag_discrete_reward_batch(
             r = -step_cost;
         }
 
-        const int64_t int_r = robot_r + dr;
-        const int64_t int_c = robot_c + dc;
+        // Resolve the position used to evaluate the wall / danger penalty.
+        // Prefer the realised next_state position when provided; fall back to
+        // the intended cell otherwise (legacy compute_reward_batch_python
+        // behaviour).
+        int64_t eval_r;
+        int64_t eval_c;
+        if (has_next_states) {
+            auto ns_view = next_states.unchecked<2>();
+            eval_r = static_cast<int64_t>(ns_view(row, 0));
+            eval_c = static_cast<int64_t>(ns_view(row, 1));
+        } else {
+            eval_r = robot_r + dr;
+            eval_c = robot_c + dc;
+        }
 
-        bool penalty = false;
-        if (int_r >= 0 && int_r < static_cast<int64_t>(rows) &&
-            int_c >= 0 && int_c < static_cast<int64_t>(cols)) {
-            const int64_t key = int_r * static_cast<int64_t>(cols) + int_c;
-            if (wall_cells.find(key) != wall_cells.end()) {
-                penalty = true;
+        const bool is_wall = wall_hit(eval_r, eval_c, rows, cols, wall_cells);
+
+        if (reward_variant_code == kVariantStandard) {
+            // Single -penalty on (wall OR danger).
+            bool penalty = is_wall;
+            if (!penalty && !areas.empty()) {
+                penalty = danger_hit_within(static_cast<double>(eval_r),
+                                            static_cast<double>(eval_c), r_sq, areas);
             }
-        }
-        if (!penalty && !areas.empty()) {
-            const double pr = static_cast<double>(int_r);
-            const double pc = static_cast<double>(int_c);
-            for (const auto &area : areas) {
-                const double ddr = pr - area.first;
-                const double ddc = pc - area.second;
-                if (ddr * ddr + ddc * ddc <= r_sq) {
-                    penalty = true;
-                    break;
-                }
+            if (penalty) {
+                r -= dangerous_area_penalty;
             }
-        }
-        if (penalty) {
-            r -= dangerous_area_penalty;
+        } else {
+            // HIGH_VARIANCE_STATES / DECAYING: wall and danger contributions
+            // are independent. Wall hit always subtracts ``penalty`` exactly
+            // like the STANDARD variant.
+            if (is_wall) {
+                r -= dangerous_area_penalty;
+            }
+            if (needs_uniform) {
+                // One uniform per row (preserving the Python batch path's
+                // one-draw-per-row contract); the variant helper decides
+                // whether to consume it.
+                const double u = uniform_dist(rng.engine());
+                r += variant_danger_contribution(
+                    reward_variant_code, static_cast<double>(eval_r),
+                    static_cast<double>(eval_c), r_sq, penalty_decay,
+                    dangerous_area_penalty, areas, u);
+            }
         }
         buf(row) = r;
     }
@@ -1215,6 +1370,9 @@ struct DiscreteEnvParams {
     double tag_penalty;
     double step_cost;
     double transition_error_prob;
+    // Reward-variant fields (default to STANDARD, penalty_decay=1.0).
+    int reward_variant_code = kVariantStandard;
+    double penalty_decay = 1.0;
 };
 
 DiscreteEnvParams make_discrete_env_params(
@@ -1223,12 +1381,16 @@ DiscreteEnvParams make_discrete_env_params(
     const py::array_t<double, py::array::c_style | py::array::forcecast> &dangerous_areas_arr,
     double dangerous_area_radius, double dangerous_area_penalty,
     double tag_reward, double tag_penalty, double step_cost,
-    double transition_error_prob) {
+    double transition_error_prob,
+    int reward_variant_code = kVariantStandard,
+    double penalty_decay = 1.0) {
 
     DiscreteEnvParams p;
     p.rows = rows;
     p.cols = cols;
     p.wall_grid.assign(static_cast<std::size_t>(rows * cols), false);
+    p.reward_variant_code = reward_variant_code;
+    p.penalty_decay = penalty_decay;
 
     // walls_flat: 1-D int64 array of length 2*M: [r0, c0, r1, c1, ...]
     if (walls_flat.ndim() != 1) {
@@ -1289,7 +1451,28 @@ inline bool disc_is_dangerous(int r, int c, const DiscreteEnvParams &env) {
     return false;
 }
 
-double disc_reward(const double *state, int action, const DiscreteEnvParams &env) {
+// Returns the minimum Euclidean distance from (pr, pc) to any dangerous-area
+// centre, or +infinity if no centres are configured.
+inline double disc_min_danger_distance(double pr, double pc, const DiscreteEnvParams &env) {
+    double min_sq = std::numeric_limits<double>::infinity();
+    for (const auto &area : env.dangerous_areas) {
+        const double ddr = pr - area.first;
+        const double ddc = pc - area.second;
+        const double dsq = ddr * ddr + ddc * ddc;
+        if (dsq < min_sq) {
+            min_sq = dsq;
+        }
+    }
+    return std::sqrt(min_sq);
+}
+
+// Variant-aware discrete reward. Wall hit is always evaluated against the
+// realised position (the intended-cell + transition handles wall-blocked
+// movement in the rollout caller). The danger contribution depends on
+// ``env.reward_variant_code``; stochastic variants consume one uniform from
+// the supplied RNG.
+double disc_reward(const double *state, int action, const DiscreteEnvParams &env,
+                   pomdp_native::RNGState &rng) {
     if (state[4] != 0.0) {
         return 0.0;
     }
@@ -1318,8 +1501,40 @@ double disc_reward(const double *state, int action, const DiscreteEnvParams &env
     const bool is_wall =
         intended_in_bounds &&
         env.wall_grid[static_cast<std::size_t>(int_r * env.cols + int_c)];
-    if (is_wall || disc_is_dangerous(int_r, int_c, env)) {
+    const bool is_danger = disc_is_dangerous(int_r, int_c, env);
+
+    if (env.reward_variant_code == kVariantStandard) {
+        if (is_wall || is_danger) {
+            base -= env.dangerous_area_penalty;
+        }
+        return base;
+    }
+
+    // HV / Decaying: wall always emits ``-penalty``; danger uses the variant
+    // helper with one RNG draw per evaluation (only when areas exist).
+    if (is_wall) {
         base -= env.dangerous_area_penalty;
+    }
+    if (env.dangerous_areas.empty()) {
+        return base;
+    }
+    std::uniform_real_distribution<double> uniform_dist(0.0, 1.0);
+    const double u = uniform_dist(rng.engine());
+    if (env.reward_variant_code == kVariantHighVariance) {
+        if (!is_danger) {
+            return base;
+        }
+        return base + ((u < 0.5) ? -env.dangerous_area_penalty
+                                 : env.dangerous_area_penalty);
+    }
+    if (env.reward_variant_code == kVariantDecaying) {
+        const double min_dist = disc_min_danger_distance(
+            static_cast<double>(int_r), static_cast<double>(int_c), env);
+        const double hit_prob = std::exp(-min_dist / env.penalty_decay);
+        if (u < hit_prob) {
+            base -= env.dangerous_area_penalty;
+        }
+        return base;
     }
     return base;
 }
@@ -1408,16 +1623,23 @@ double simulate_rollout_discrete(
     const py::array_t<double, py::array::c_style | py::array::forcecast> &dangerous_areas,
     double dangerous_area_radius, double dangerous_area_penalty,
     double tag_reward, double tag_penalty, double step_cost,
-    double transition_error_prob) {
+    double transition_error_prob,
+    int reward_variant_code,
+    double penalty_decay) {
 
     if (initial_state.ndim() != 1 || initial_state.shape(0) != 5) {
         throw std::invalid_argument("initial_state must have shape (5,)");
+    }
+    if (reward_variant_code == kVariantDecaying && !(penalty_decay > 0.0)) {
+        throw std::invalid_argument(
+            "penalty_decay must be strictly positive for the DECAYING_HIT_PROBABILITY variant");
     }
 
     const DiscreteEnvParams env = make_discrete_env_params(
         rows, cols, walls_flat, dangerous_areas,
         dangerous_area_radius, dangerous_area_penalty,
-        tag_reward, tag_penalty, step_cost, transition_error_prob);
+        tag_reward, tag_penalty, step_cost, transition_error_prob,
+        reward_variant_code, penalty_decay);
 
     pomdp_native::RNGState &rng = pomdp_native::default_rng();
     std::uniform_int_distribution<int> action_dist(0, 4);
@@ -1434,7 +1656,7 @@ double simulate_rollout_discrete(
         const int action = action_dist(rng.engine());
 
         // Reward computed on current state before transition.
-        total += gamma_power * disc_reward(state, action, env);
+        total += gamma_power * disc_reward(state, action, env, rng);
         gamma_power *= discount;
 
         // Actual action (with possible error on movement actions).
@@ -2273,13 +2495,23 @@ PYBIND11_MODULE(_native, m) {
           py::arg("dangerous_area_radius"), py::arg("dangerous_area_penalty"),
           py::arg("tag_reward"), py::arg("tag_penalty"), py::arg("step_cost"),
           py::arg("action_directions"),
+          py::arg("next_states") = py::array_t<double>(std::vector<py::ssize_t>{0, 0}),
+          py::arg("reward_variant_code") = 0,
+          py::arg("penalty_decay") = 1.0,
           "Vectorised reward computation for the discrete LaserTagPOMDP. "
-          "Returns shape (N,) float64. Mirrors LaserTagPOMDP._compute_reward_batch "
-          "semantics: terminal rows yield 0, action 4 yields +tag_reward / "
-          "-tag_penalty, actions 0..3 pay -step_cost, and the intended cell "
-          "(robot + action_directions[action] for actions 0..3, robot for tag) "
-          "incurs -dangerous_area_penalty when it hits a wall (in-bounds) or "
-          "lies within dangerous_area_radius of any dangerous-area centre.");
+          "Returns shape (N,) float64. Mirrors "
+          "LaserTagRewardModel.compute_reward_batch across the three "
+          "RewardModelType variants: STANDARD (0) applies a single "
+          "-dangerous_area_penalty on (wall OR danger) at the realised cell, "
+          "HIGH_VARIANCE_STATES (1) emits +/-dangerous_area_penalty on danger "
+          "(50/50) with deterministic wall penalty, and "
+          "DECAYING_HIT_PROBABILITY (2) emits -dangerous_area_penalty on "
+          "danger with probability exp(-min_dist / penalty_decay) with "
+          "deterministic wall penalty. When ``next_states`` is shape (N, 5), "
+          "the penalty is scored against next_states[:, :2]; when it is empty "
+          "(default) the legacy intended-position fallback is used. "
+          "Stochastic variants consume randomness from "
+          "pomdp_native::default_rng().");
 
     py::class_<ContinuousLaserTagTransitionCpp>(m, "ContinuousLaserTagTransitionCpp")
         .def(py::init<const py::object &, const py::object &, const py::array_t<double> &,
@@ -2337,9 +2569,16 @@ PYBIND11_MODULE(_native, m) {
         py::arg("dangerous_area_radius"), py::arg("dangerous_area_penalty"),
         py::arg("tag_reward"), py::arg("tag_penalty"), py::arg("step_cost"),
         py::arg("transition_error_prob"),
+        py::arg("reward_variant_code") = 0,
+        py::arg("penalty_decay") = 1.0,
         "Run a full random-action rollout for the discrete LaserTagPOMDP in one C++ frame.\n\n"
         "Actions are drawn uniformly from {0,1,2,3,4} using pomdp_native::default_rng().\n"
         "Seed via set_seed() before calling to obtain reproducible trajectories.\n"
+        "``reward_variant_code`` selects the LaserTag reward-model variant:\n"
+        "  0 = STANDARD (deterministic wall/danger -penalty on OR);\n"
+        "  1 = HIGH_VARIANCE_STATES (wall always -penalty; danger +/-penalty 50/50);\n"
+        "  2 = DECAYING_HIT_PROBABILITY (wall always -penalty; danger -penalty\n"
+        "      with probability exp(-min_dist / penalty_decay), no radius cutoff).\n"
         "Returns the discounted sum of immediate rewards along the sampled trajectory.");
 
     // ── Discrete LaserTag belief-update kernels ─────────────────────────────

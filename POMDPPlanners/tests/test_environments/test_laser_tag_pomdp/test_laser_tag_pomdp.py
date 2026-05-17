@@ -2303,6 +2303,145 @@ class TestNativeDiscreteRollout:
         assert abs(result) <= max_abs + 1e-9
 
 
+class TestNativeDiscreteRolloutRewardVariantGating:
+    """Native C++ rollout is variant-aware: the ``reward_variant_code`` /
+    ``penalty_decay`` parameters select the STANDARD / HIGH_VARIANCE_STATES /
+    DECAYING_HIT_PROBABILITY danger formulae inside the kernel, so dispatch
+    targets the native path for all three reward-model variants.
+    """
+
+    def test_native_kernel_used_for_standard_reward_model(self) -> None:
+        """STANDARD reward model dispatches to the native C++ kernel.
+
+        Purpose: Guards against accidentally widening the fallback to STANDARD
+            (which would silently drop the perf optimisation for the default
+            reward variant).
+
+        Given: A LaserTagPOMDP with default (STANDARD) reward_model_type.
+        When: ``simulate_random_rollout`` is invoked.
+        Then: The native ``simulate_rollout_discrete`` is called exactly once.
+
+        Test type: unit
+        """
+        # pylint: disable=import-outside-toplevel
+        from unittest.mock import patch
+
+        from POMDPPlanners.environments.laser_tag_pomdp import _native
+        from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp import (
+            RewardModelType,
+        )
+
+        env = LaserTagPOMDP(
+            discount_factor=0.95,
+            reward_model_type=RewardModelType.STANDARD,
+        )
+        state = np.array([0.0, 0.0, 6.0, 5.0, 0.0])
+
+        _native.set_seed(0)
+        with patch.object(
+            _native, "simulate_rollout_discrete", wraps=_native.simulate_rollout_discrete
+        ) as spy:
+            env.simulate_random_rollout(
+                state=state,
+                action_sampler=_UniformActionSampler(),
+                max_depth=5,
+                discount_factor=0.95,
+            )
+            assert spy.call_count == 1, (
+                "STANDARD reward model must keep using the native rollout kernel; "
+                f"got {spy.call_count} calls."
+            )
+
+    def test_native_kernel_used_for_high_variance_reward_model(self) -> None:
+        """HIGH_VARIANCE_STATES variant dispatches to the native rollout kernel.
+
+        Purpose: Regression for the variant-rollout integration — the C++
+            kernel now implements the HV danger formula via
+            ``reward_variant_code = 1``, so dispatch targets C++ instead of
+            the Python loop.
+
+        Given: A LaserTagPOMDP configured with ``HIGH_VARIANCE_STATES``.
+        When: ``simulate_random_rollout`` is invoked.
+        Then: ``_native.simulate_rollout_discrete`` is called exactly once with
+            ``reward_variant_code = 1``.
+
+        Test type: unit
+        """
+        # pylint: disable=import-outside-toplevel
+        from unittest.mock import patch
+
+        from POMDPPlanners.environments.laser_tag_pomdp import _native
+        from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp import (
+            RewardModelType,
+        )
+
+        env = LaserTagPOMDP(
+            discount_factor=0.95,
+            reward_model_type=RewardModelType.HIGH_VARIANCE_STATES,
+        )
+        state = np.array([0.0, 0.0, 6.0, 5.0, 0.0])
+
+        _native.set_seed(0)
+        with patch.object(
+            _native, "simulate_rollout_discrete", wraps=_native.simulate_rollout_discrete
+        ) as spy:
+            env.simulate_random_rollout(
+                state=state,
+                action_sampler=_UniformActionSampler(),
+                max_depth=5,
+                discount_factor=0.95,
+            )
+            assert spy.call_count == 1
+            kwargs = spy.call_args.kwargs
+            assert kwargs["reward_variant_code"] == 1
+
+    def test_native_kernel_used_for_decaying_hit_reward_model(self) -> None:
+        """DECAYING_HIT_PROBABILITY variant dispatches to the native rollout kernel.
+
+        Purpose: Regression for the variant-rollout integration — the C++
+            kernel now implements the distance-decaying danger formula via
+            ``reward_variant_code = 2`` and the ``penalty_decay`` argument,
+            so dispatch targets C++ instead of the Python loop.
+
+        Given: A LaserTagPOMDP configured with ``DECAYING_HIT_PROBABILITY`` and
+            ``penalty_decay = 1.5``.
+        When: ``simulate_random_rollout`` is invoked.
+        Then: ``_native.simulate_rollout_discrete`` is called exactly once with
+            ``reward_variant_code = 2`` and ``penalty_decay = 1.5``.
+
+        Test type: unit
+        """
+        # pylint: disable=import-outside-toplevel
+        from unittest.mock import patch
+
+        from POMDPPlanners.environments.laser_tag_pomdp import _native
+        from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp import (
+            RewardModelType,
+        )
+
+        env = LaserTagPOMDP(
+            discount_factor=0.95,
+            reward_model_type=RewardModelType.DECAYING_HIT_PROBABILITY,
+            penalty_decay=1.5,
+        )
+        state = np.array([0.0, 0.0, 6.0, 5.0, 0.0])
+
+        _native.set_seed(0)
+        with patch.object(
+            _native, "simulate_rollout_discrete", wraps=_native.simulate_rollout_discrete
+        ) as spy:
+            env.simulate_random_rollout(
+                state=state,
+                action_sampler=_UniformActionSampler(),
+                max_depth=5,
+                discount_factor=0.95,
+            )
+            assert spy.call_count == 1
+            kwargs = spy.call_args.kwargs
+            assert kwargs["reward_variant_code"] == 2
+            assert kwargs["penalty_decay"] == 1.5
+
+
 class TestLaserTagPOMDPPickling:
     """Regression tests for joblib-hashing/pickling LaserTagPOMDP after the
     cached-pybind11-kernel perf work landed (see issue: weekly-slow-tests

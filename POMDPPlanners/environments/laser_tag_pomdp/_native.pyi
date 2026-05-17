@@ -45,13 +45,24 @@ def lasertag_discrete_reward_batch(
     tag_penalty: float,
     step_cost: float,
     action_directions: NDArray[np.integer],
+    next_states: NDArray[np.floating] = ...,
+    reward_variant_code: int = ...,
+    penalty_decay: float = ...,
 ) -> NDArray[np.float64]:
     """Vectorised reward kernel for the discrete LaserTagPOMDP.
 
-    Mirrors ``LaserTagPOMDP._compute_reward_batch``. ``walls_flat`` is the
-    flattened (row, col) wall list (length ``2 * n_walls``). ``action_directions``
-    is a (4, 2) int64 array mapping action index 0..3 to its (dr, dc) cell delta.
-    Returns shape (N,) float64.
+    Mirrors ``LaserTagRewardModel.compute_reward_batch`` across all three
+    :class:`RewardModelType` variants. ``walls_flat`` is the flattened
+    ``(row, col)`` wall list (length ``2 * n_walls``). ``action_directions``
+    is a ``(4, 2)`` int64 array mapping action index ``0..3`` to its
+    ``(dr, dc)`` cell delta. When ``next_states`` is shape ``(N, 5)``, the
+    danger / wall penalty is scored against ``next_states[:, :2]``; when it
+    is empty (the default) the legacy intended-position fallback is used.
+    ``reward_variant_code`` selects the variant: ``0`` = STANDARD,
+    ``1`` = HIGH_VARIANCE_STATES, ``2`` = DECAYING_HIT_PROBABILITY.
+    ``penalty_decay`` is the decay length used by the
+    ``DECAYING_HIT_PROBABILITY`` variant (ignored otherwise). Returns shape
+    ``(N,)`` float64.
     """
     ...
 
@@ -137,12 +148,18 @@ def simulate_rollout_discrete(
     tag_penalty: float,
     step_cost: float,
     transition_error_prob: float,
+    reward_variant_code: int = ...,
+    penalty_decay: float = ...,
 ) -> float:
     """Run a full random-action rollout for the discrete LaserTagPOMDP in one C++ frame.
 
-    Actions are drawn uniformly from {0,1,2,3,4} using the module-level mt19937_64 RNG.
-    Seed via set_seed() before calling for reproducible results.
-    Returns the discounted sum of immediate rewards along the sampled trajectory.
+    Actions are drawn uniformly from ``{0,1,2,3,4}`` using the module-level
+    mt19937_64 RNG. Seed via :func:`set_seed` before calling for reproducible
+    results. ``reward_variant_code`` selects the reward variant:
+    ``0`` = STANDARD, ``1`` = HIGH_VARIANCE_STATES,
+    ``2`` = DECAYING_HIT_PROBABILITY. ``penalty_decay`` is consulted only by
+    the ``DECAYING_HIT_PROBABILITY`` variant. Returns the discounted sum of
+    immediate rewards along the sampled trajectory.
     """
     ...
 
