@@ -630,13 +630,183 @@ class RockSampleObservationCpp {
 };
 
 // ---------------------------------------------------------------------------
+// Reward-variant codes mirror the Python ``RewardModelType`` enum used by
+// :class:`RockSamplePOMDP`:
+//
+//   0 -> STANDARD             (constant-probability dangerous-area penalty)
+//   1 -> HIGH_VARIANCE_STATES (+/- 50/50 dangerous-area perturbation)
+//   2 -> DECAYING_HIT_PROBABILITY (exp(-min_dist/decay) hit probability)
+// ---------------------------------------------------------------------------
+constexpr int kRewardVariantStandard = 0;
+constexpr int kRewardVariantHighVariance = 1;
+constexpr int kRewardVariantDecaying = 2;
+
+// Base reward shared across all variants: step / exit / sample / sense.
+// ``state_row`` is the current state row (length state_dim) so this
+// matches the Python ``compute_reward`` which uses the CURRENT robot
+// position for the exit / sample / sense terms.
+inline double base_reward_term(const double *state_row, int action, int map_cols,
+                               int num_rocks, const std::int32_t *rock_rows,
+                               const std::int32_t *rock_cols, std::size_t state_dim,
+                               double step_penalty, double exit_reward,
+                               double good_rock_reward, double bad_rock_penalty,
+                               double sensor_use_penalty) {
+    double r = step_penalty;
+    const int robot_row = static_cast<int>(state_row[0]);
+    const int robot_col = static_cast<int>(state_row[1]);
+    if (action == 2 && robot_col == map_cols - 1) {
+        r += exit_reward;
+        return r;
+    }
+    if (action == 0) {
+        for (int k = 0; k < num_rocks; ++k) {
+            if (rock_rows[k] == robot_row && rock_cols[k] == robot_col) {
+                const std::size_t slot = static_cast<std::size_t>(2 + k);
+                if (slot < state_dim) {
+                    r += (state_row[slot] > 0.5) ? good_rock_reward : bad_rock_penalty;
+                }
+                break;
+            }
+        }
+    }
+    if (action >= 5) {
+        r += sensor_use_penalty;
+    }
+    return r;
+}
+
+// Minimum squared distance from ``(row, col)`` to any dangerous-area centre.
+// ``dangerous_areas`` is a (K, 2) row-major float64 array.
+inline double min_dist_to_danger_sq(double row, double col, const double *dangers,
+                                    std::size_t k) {
+    double best = std::numeric_limits<double>::infinity();
+    for (std::size_t j = 0; j < k; ++j) {
+        const double dr = row - dangers[j * 2];
+        const double dc = col - dangers[j * 2 + 1];
+        const double d2 = dr * dr + dc * dc;
+        if (d2 < best) best = d2;
+    }
+    return best;
+}
+
+// Compute the dangerous-area reward contribution for a single
+// (next_row, next_col) under variant ``reward_variant_code``. ``k`` is the
+// number of dangerous-area centres (zero means no contribution).
+inline double dangerous_area_term(double next_row, double next_col,
+                                  const double *dangers, std::size_t k,
+                                  double dangerous_area_radius,
+                                  double dangerous_area_penalty,
+                                  double dangerous_area_hit_probability,
+                                  int reward_variant_code, double penalty_decay) {
+    if (k == 0) {
+        return 0.0;
+    }
+    pomdp_native::RNGState &rng = pomdp_native::default_rng();
+    std::uniform_real_distribution<double> uniform(0.0, 1.0);
+    if (reward_variant_code == kRewardVariantDecaying) {
+        const double min_d = std::sqrt(min_dist_to_danger_sq(next_row, next_col, dangers, k));
+        const double p = std::exp(-min_d / penalty_decay);
+        return (uniform(rng.engine()) < p) ? dangerous_area_penalty : 0.0;
+    }
+    const double radius_sq = dangerous_area_radius * dangerous_area_radius;
+    const double min_d2 = min_dist_to_danger_sq(next_row, next_col, dangers, k);
+    if (min_d2 > radius_sq) {
+        return 0.0;
+    }
+    if (reward_variant_code == kRewardVariantHighVariance) {
+        return (uniform(rng.engine()) < 0.5) ? dangerous_area_penalty
+                                             : -dangerous_area_penalty;
+    }
+    // STANDARD: constant-probability hit
+    if (dangerous_area_hit_probability >= 1.0 ||
+        uniform(rng.engine()) < dangerous_area_hit_probability) {
+        return dangerous_area_penalty;
+    }
+    return 0.0;
+}
+
+// Standalone reward batch kernel. Returns a (N,) float64 array where each
+// entry is the per-row reward under the configured variant.
+py::array_t<double> reward_batch(
+    const py::array_t<double, py::array::c_style | py::array::forcecast> &states,
+    int action,
+    const py::array_t<double, py::array::c_style | py::array::forcecast> &next_states,
+    int map_rows, int map_cols,
+    const py::array_t<std::int32_t, py::array::c_style | py::array::forcecast>
+        &rock_positions,
+    double step_penalty, double bad_rock_penalty, double good_rock_reward,
+    double sensor_use_penalty, double exit_reward,
+    const py::array_t<double, py::array::c_style | py::array::forcecast> &dangerous_areas,
+    double dangerous_area_radius, double dangerous_area_penalty,
+    double dangerous_area_hit_probability, int reward_variant_code,
+    double penalty_decay) {
+    (void)map_rows;  // currently unused; kept for parity with the kernel API
+    if (states.ndim() != 2 || states.shape(1) < 2) {
+        throw std::invalid_argument("states must have shape (N, 2 + num_rocks)");
+    }
+    if (next_states.ndim() != 2 || next_states.shape(0) != states.shape(0) ||
+        next_states.shape(1) < 2) {
+        throw std::invalid_argument("next_states must have same shape as states");
+    }
+    if (rock_positions.ndim() != 2 || rock_positions.shape(1) != 2) {
+        throw std::invalid_argument("rock_positions must have shape (num_rocks, 2)");
+    }
+    if (dangerous_areas.ndim() != 2 || dangerous_areas.shape(1) != 2) {
+        throw std::invalid_argument("dangerous_areas must have shape (K, 2)");
+    }
+
+    const auto n_rows = static_cast<std::size_t>(states.shape(0));
+    const auto state_dim = static_cast<std::size_t>(states.shape(1));
+    const int num_rocks = static_cast<int>(rock_positions.shape(0));
+    const std::size_t n_dangers = static_cast<std::size_t>(dangerous_areas.shape(0));
+
+    std::vector<std::int32_t> rock_rows_local(static_cast<std::size_t>(num_rocks));
+    std::vector<std::int32_t> rock_cols_local(static_cast<std::size_t>(num_rocks));
+    auto rp_view = rock_positions.unchecked<2>();
+    for (int k = 0; k < num_rocks; ++k) {
+        rock_rows_local[static_cast<std::size_t>(k)] = rp_view(k, 0);
+        rock_cols_local[static_cast<std::size_t>(k)] = rp_view(k, 1);
+    }
+
+    const double *states_data = states.data();
+    const double *next_data = next_states.data();
+    const std::size_t next_dim = static_cast<std::size_t>(next_states.shape(1));
+    const double *dangers_data = (n_dangers > 0) ? dangerous_areas.data() : nullptr;
+
+    auto out = py::array_t<double>(static_cast<py::ssize_t>(n_rows));
+    double *out_data = out.mutable_data();
+
+    for (std::size_t i = 0; i < n_rows; ++i) {
+        const double *cur_row = states_data + i * state_dim;
+        const double *nxt_row = next_data + i * next_dim;
+        double r = base_reward_term(cur_row, action, map_cols, num_rocks,
+                                    rock_rows_local.data(), rock_cols_local.data(),
+                                    state_dim, step_penalty, exit_reward,
+                                    good_rock_reward, bad_rock_penalty,
+                                    sensor_use_penalty);
+        // Skip dangerous-area term for the exit case (Python returns early).
+        const int robot_col = static_cast<int>(cur_row[1]);
+        const bool is_exit = (action == 2 && robot_col == map_cols - 1);
+        if (!is_exit && n_dangers > 0) {
+            r += dangerous_area_term(nxt_row[0], nxt_row[1], dangers_data, n_dangers,
+                                     dangerous_area_radius, dangerous_area_penalty,
+                                     dangerous_area_hit_probability,
+                                     reward_variant_code, penalty_decay);
+        }
+        out_data[i] = r;
+    }
+    return out;
+}
+
+// ---------------------------------------------------------------------------
 // simulate_rollout_discrete: run a full rollout from ``initial_state``.
 //
 // Each step:
 //   1. check terminal (robot_row == -1, robot_col == -1) — break if true
 //   2. pick action from action_indices
 //   3. deterministic transition via transition_into
-//   4. compute reward matching _reward_from_next_state (without dangerous_areas)
+//   4. compute reward matching _reward_from_next_state (variant-aware
+//      dangerous-area term)
 //   5. accumulate gamma^depth * reward
 //
 // action_indices: pre-drawn int32 array of length (max_depth - start_depth).
@@ -657,7 +827,13 @@ double simulate_rollout_discrete(
     double exit_reward,
     double good_rock_reward,
     double bad_rock_penalty,
-    double sensor_use_penalty) {
+    double sensor_use_penalty,
+    const py::array_t<double, py::array::c_style | py::array::forcecast> &dangerous_areas,
+    double dangerous_area_radius,
+    double dangerous_area_penalty,
+    double dangerous_area_hit_probability,
+    int reward_variant_code,
+    double penalty_decay) {
     if (initial_state.ndim() != 1 || initial_state.shape(0) < 2) {
         throw std::invalid_argument("initial_state must be a 1-D array with length >= 2");
     }
@@ -667,6 +843,11 @@ double simulate_rollout_discrete(
     if (action_indices.ndim() != 1) {
         throw std::invalid_argument("action_indices must be 1-D");
     }
+    if (dangerous_areas.ndim() != 2 || dangerous_areas.shape(1) != 2) {
+        throw std::invalid_argument("dangerous_areas must have shape (K, 2)");
+    }
+    const std::size_t n_dangers = static_cast<std::size_t>(dangerous_areas.shape(0));
+    const double *dangers_data = (n_dangers > 0) ? dangerous_areas.data() : nullptr;
     const int n_indices = static_cast<int>(action_indices.shape(0));
 
     const std::size_t state_dim = static_cast<std::size_t>(initial_state.shape(0));
@@ -723,28 +904,20 @@ double simulate_rollout_discrete(
         // Deterministic transition
         transition_into(cur.data(), nxt.data(), ai, env_local, state_dim);
 
-        // Reward: matches _reward_from_next_state (no dangerous_area term)
-        double r = step_penalty;
-        const int robot_col = static_cast<int>(cur[1]);
-        if (ai == 2 && robot_col == map_cols - 1) {
-            r += exit_reward;
-        } else {
-            if (ai == 0) {
-                const int robot_row = static_cast<int>(cur[0]);
-                for (int k = 0; k < num_rocks; ++k) {
-                    if (env_local.rock_rows[static_cast<std::size_t>(k)] == robot_row &&
-                        env_local.rock_cols[static_cast<std::size_t>(k)] == robot_col) {
-                        const std::size_t slot = static_cast<std::size_t>(2 + k);
-                        if (slot < state_dim) {
-                            r += (cur[slot] > 0.5) ? good_rock_reward : bad_rock_penalty;
-                        }
-                        break;
-                    }
-                }
-            }
-            if (ai >= 5) {
-                r += sensor_use_penalty;
-            }
+        // Reward: matches _reward_from_next_state with variant-aware
+        // dangerous-area term.
+        double r = base_reward_term(cur.data(), ai, map_cols, num_rocks,
+                                    env_local.rock_rows.data(),
+                                    env_local.rock_cols.data(), state_dim,
+                                    step_penalty, exit_reward, good_rock_reward,
+                                    bad_rock_penalty, sensor_use_penalty);
+        const int robot_col_cur = static_cast<int>(cur[1]);
+        const bool is_exit = (ai == 2 && robot_col_cur == map_cols - 1);
+        if (!is_exit && n_dangers > 0) {
+            r += dangerous_area_term(nxt[0], nxt[1], dangers_data, n_dangers,
+                                     dangerous_area_radius, dangerous_area_penalty,
+                                     dangerous_area_hit_probability,
+                                     reward_variant_code, penalty_decay);
         }
 
         total += gamma_power * r;
@@ -770,10 +943,29 @@ PYBIND11_MODULE(_native, m) {
           py::arg("n_actions"), py::arg("step_penalty"), py::arg("exit_reward"),
           py::arg("good_rock_reward"), py::arg("bad_rock_penalty"),
           py::arg("sensor_use_penalty"),
-          "Native random rollout for RockSamplePOMDP (no dangerous-area term). "
-          "Returns discounted reward sum. "
+          py::arg("dangerous_areas"), py::arg("dangerous_area_radius"),
+          py::arg("dangerous_area_penalty"),
+          py::arg("dangerous_area_hit_probability"),
+          py::arg("reward_variant_code"), py::arg("penalty_decay"),
+          "Native random rollout for RockSamplePOMDP with variant-aware "
+          "dangerous-area reward term. Returns discounted reward sum. "
           "action_indices must be a pre-drawn int32 array of length (max_depth-start_depth). "
-          "rock_positions_flat is a 1-D int32 array [row0, col0, row1, col1, ...].");
+          "rock_positions_flat is a 1-D int32 array [row0, col0, row1, col1, ...]. "
+          "dangerous_areas is a (K, 2) float64 array (may be empty). "
+          "reward_variant_code: 0=STANDARD, 1=HIGH_VARIANCE_STATES, 2=DECAYING_HIT_PROBABILITY.");
+
+    m.def("reward_batch", &reward_batch,
+          py::arg("states"), py::arg("action"), py::arg("next_states"),
+          py::arg("map_rows"), py::arg("map_cols"), py::arg("rock_positions"),
+          py::arg("step_penalty"), py::arg("bad_rock_penalty"),
+          py::arg("good_rock_reward"), py::arg("sensor_use_penalty"),
+          py::arg("exit_reward"), py::arg("dangerous_areas"),
+          py::arg("dangerous_area_radius"), py::arg("dangerous_area_penalty"),
+          py::arg("dangerous_area_hit_probability"),
+          py::arg("reward_variant_code"), py::arg("penalty_decay"),
+          "Variant-aware standalone batch reward kernel for RockSamplePOMDP. "
+          "Returns a (N,) float64 array of rewards. "
+          "reward_variant_code: 0=STANDARD, 1=HIGH_VARIANCE_STATES, 2=DECAYING_HIT_PROBABILITY.");
 
     py::class_<RockSampleTransitionCpp>(m, "RockSampleTransitionCpp")
         .def(py::init<const py::object &, int, int, int, int,

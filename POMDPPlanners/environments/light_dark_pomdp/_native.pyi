@@ -38,14 +38,53 @@ def simulate_rollout(
     obstacle_reward: float,
     obstacle_hit_probability: float,
     is_obstacle_hit_terminal: bool,
+    reward_variant_code: int,
+    penalty_decay: float,
     covariance: NDArray[np.float64],
 ) -> float:
-    """Native random rollout for the STANDARD reward model.
+    """Native random rollout for all reward model variants.
 
-    Returns the discounted return from ``initial_state`` using the STANDARD
-    reward model. ``action_indices`` must be a pre-drawn 1-D int array with
-    at least ``max_depth - start_depth`` entries. ``obstacles`` must be a flat
-    1-D array ``[x0, y0, x1, y1, ...]`` (row-major interleaved).
+    Returns the discounted return from ``initial_state`` using the reward
+    model selected by ``reward_variant_code`` (``0 = STANDARD``,
+    ``1 = HIGH_VARIANCE_STATES``, ``2 = DECAYING_HIT_PROBABILITY``).
+    ``penalty_decay`` is only consumed when ``reward_variant_code == 2``.
+    Stochastic obstacle / penalty draws use the module-level C++ RNG; the
+    rollout matches the Python reward models in expectation rather than
+    bit-exact per-step.
+
+    ``action_indices`` must be a pre-drawn 1-D int array with at least
+    ``max_depth - start_depth`` entries. ``obstacles`` must be a flat 1-D
+    array ``[x0, y0, x1, y1, ...]`` (row-major interleaved).
+    """
+    ...
+
+def compute_reward_batch(
+    states: NDArray[np.float64],
+    action: NDArray[np.float64],
+    next_states: NDArray[np.float64],
+    *,
+    reward_variant_code: int,
+    penalty_decay: float,
+    goal_state: NDArray[np.float64],
+    obstacles: NDArray[np.float64],
+    goal_state_radius: float,
+    obstacle_radius: float,
+    grid_size: float,
+    fuel_cost: float,
+    goal_reward: float,
+    obstacle_reward: float,
+    obstacle_hit_probability: float,
+) -> NDArray[np.float64]:
+    """Variant-aware batched reward kernel for the Continuous Light-Dark POMDP.
+
+    ``reward_variant_code`` selects the reward model:
+    ``0 = STANDARD``, ``1 = HIGH_VARIANCE_STATES``, ``2 = DECAYING_HIT_PROBABILITY``.
+    ``penalty_decay`` is only consumed when ``reward_variant_code == 2``.
+    Stochastic obstacle / penalty draws are taken from the module-level C++
+    RNG; the kernel matches the Python reward models in expectation
+    (sample-mean parity) rather than bit-exact per-row.
+
+    ``obstacles`` is a flat 1-D array ``[x0, y0, x1, y1, ...]``.
     """
     ...
 

@@ -157,10 +157,10 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
         deterministic given a state-action pair, so any external caching
         that assumes deterministic rewards must be aware of this.
         ``transition_log_probability`` is unaffected; the obstacle still
-        deterministically blocks movement. When
-        ``obstacle_hit_probability < 1.0`` the native C++ rollout (which
-        deducts the penalty deterministically) is bypassed in favour of
-        the pure-Python rollout so per-step Bernoulli draws survive.
+        deterministically blocks movement. The native C++ rollout applies
+        the Bernoulli ``obstacle_hit_probability`` draw internally, so
+        ``simulate_random_rollout`` always routes through the native
+        kernel.
 
     Dangerous areas:
         ``dangerous_areas`` is a separate, additive concept from
@@ -174,8 +174,9 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
         ``dangerous_area_penalty`` is applied per step even when
         multiple zones overlap. Like obstacles, the penalty supports a
         Bernoulli ``dangerous_area_hit_probability`` (default 1.0) for
-        risk-sensitive planning; ``< 1.0`` bypasses the deterministic
-        native rollout in favour of the Python path.
+        risk-sensitive planning. The native C++ rollout applies the
+        Bernoulli draw internally, so all rollouts route through the
+        native kernel regardless of the configured probability.
 
     Example:
         >>> import numpy as np
@@ -731,35 +732,16 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
         if remaining <= 0 or self.is_terminal(state=state):
             return 0.0
 
-        # Bypass the native kernel whenever obstacle or dangerous-area
-        # penalties may fire: the C++ rollout still scores them against
-        # ``state + action_vector`` (intended position), while the Python
-        # ``reward`` path now consults the realised ``next_state``. The C++
-        # kernel needs a recompile to align — until then we route through
-        # Python whenever penalties are configured.
-        # The same fall-back is required for stochastic hit probabilities
-        # so per-step Bernoulli draws against the configured probabilities
-        # survive (the C++ kernel applies them deterministically).
-        has_obstacle_penalty = len(self.obstacles) > 0
-        has_dangerous_area_penalty = self._dangerous_areas_arr.shape[0] > 0
-        if (
-            self.obstacle_hit_probability < 1.0
-            or self.dangerous_area_hit_probability < 1.0
-            or has_obstacle_penalty
-            or has_dangerous_area_penalty
-        ):
-            actions = [self.actions[i] for i in np.random.randint(0, 4, size=remaining)]
-            return self._python_simulate_random_rollout(
-                state=state,
-                actions=actions,
-                max_depth=max_depth,
-                discount_factor=discount_factor,
-                depth=depth,
-            )
-
+        # Native kernel is variant-aware and scores obstacle / dangerous-area
+        # penalties against the REALISED post-action robot position
+        # (``next_state[:2]``), matching ``DiscretePushRewardModel``. Pass the
+        # variant code + penalty decay so the C++ rollout dispatches
+        # STANDARD / HIGH_VARIANCE_STATES / DECAYING_HIT_PROBABILITY exactly
+        # like the standalone ``push_reward_batch`` kernel.
         action_indices = np.random.randint(0, 4, size=remaining, dtype=np.int64)
         obs_arr = self._get_native_rollout_obstacles()
         state_arr = np.asarray(state, dtype=np.float64)
+        variant_code, penalty_decay = self._reward_variant_native_params()
 
         return float(
             _native.simulate_rollout_discrete(
@@ -778,6 +760,10 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
                 dangerous_area_radius=float(self.dangerous_area_radius),
                 dangerous_area_penalty=float(self.dangerous_area_penalty),
                 transition_error_prob=float(self.transition_error_prob),
+                obstacle_hit_probability=float(self.obstacle_hit_probability),
+                dangerous_area_hit_probability=float(self.dangerous_area_hit_probability),
+                reward_variant_code=variant_code,
+                penalty_decay=penalty_decay,
             )
         )
 
@@ -851,8 +837,10 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
         When ``next_states`` is supplied (e.g. by a caller that has
         already sampled the realised batch transition), it is used
         directly; otherwise N next states are drawn here via the cached
-        ``PushVectorizedUpdater``. Per-particle rewards are then computed
-        with pure NumPy operations — no Python loop over particles.
+        ``PushVectorizedUpdater``. Per-particle rewards are computed in
+        the C++ ``push_reward_batch`` kernel (variant-aware: STANDARD,
+        HIGH_VARIANCE_STATES, DECAYING_HIT_PROBABILITY) so the batch
+        cost is a single round-trip into native code.
         """
         states_array = np.ascontiguousarray(np.asarray(states, dtype=float))
         if states_array.ndim == 1:
@@ -863,7 +851,45 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
             next_states_arr = np.ascontiguousarray(np.asarray(next_states, dtype=float))
             if next_states_arr.ndim == 1:
                 next_states_arr = next_states_arr.reshape(1, -1)
-        return self._compute_reward_batch(states_array, action, next_states_arr)
+        return self._native_reward_batch(states_array, action, next_states_arr)
+
+    def _native_reward_batch(
+        self,
+        states_array: np.ndarray,
+        action: str,
+        next_states_arr: np.ndarray,
+    ) -> np.ndarray:
+        obstacles_arr = self._get_native_rollout_obstacles()
+        if obstacles_arr.ndim == 1 and obstacles_arr.shape[0] == 0:
+            obstacles_native = np.empty((0, 2), dtype=np.float64)
+        else:
+            obstacles_native = np.ascontiguousarray(obstacles_arr, dtype=np.float64)
+        variant_code, penalty_decay = self._reward_variant_native_params()
+        return np.asarray(
+            _native.push_reward_batch(
+                states=states_array,
+                action_idx=int(self.actions.index(action)),
+                next_states=next_states_arr,
+                obstacles=obstacles_native,
+                obstacle_radius=float(self.obstacle_radius),
+                obstacle_penalty=float(self.obstacle_penalty),
+                obstacle_hit_probability=float(self.obstacle_hit_probability),
+                dangerous_areas=self._dangerous_areas_arr,
+                dangerous_area_radius=float(self.dangerous_area_radius),
+                dangerous_area_penalty=float(self.dangerous_area_penalty),
+                dangerous_area_hit_probability=float(self.dangerous_area_hit_probability),
+                reward_variant_code=variant_code,
+                penalty_decay=penalty_decay,
+            ),
+            dtype=np.float64,
+        )
+
+    def _reward_variant_native_params(self) -> Tuple[int, float]:
+        if self.reward_model_type == RewardModelType.HIGH_VARIANCE_STATES:
+            return 1, 0.0
+        if self.reward_model_type == RewardModelType.DECAYING_HIT_PROBABILITY:
+            return 2, float(getattr(self.reward_model, "penalty_decay", 1.0))
+        return 0, 0.0
 
     def observation_log_probability_per_state(
         self, next_states: Any, action: str, observation: Any

@@ -32,6 +32,10 @@ def simulate_rollout_discrete(
     dangerous_area_radius: float,
     dangerous_area_penalty: float,
     transition_error_prob: float,
+    obstacle_hit_probability: float = 1.0,
+    dangerous_area_hit_probability: float = 1.0,
+    reward_variant_code: int = 0,
+    penalty_decay: float = 1.0,
 ) -> float:
     """Run a full discrete Push POMDP rollout in C++.
 
@@ -39,9 +43,13 @@ def simulate_rollout_discrete(
     trajectory, using pre-drawn action indices supplied by the caller.
 
     ``dangerous_areas`` must have shape ``(K, 2)`` (rows ``(cx, cy)``) or
-    be empty. The penalty is applied at most once per step when the
-    intended robot position falls inside any zone of radius
-    ``dangerous_area_radius``.
+    be empty. Per-step reward consults the REALISED post-action robot
+    position (``next_state[:2]``) for obstacle and dangerous-area tests,
+    with Bernoulli ``*_hit_probability`` gating.
+    ``reward_variant_code`` selects the dangerous-area contract
+    (``0=STANDARD``, ``1=HIGH_VARIANCE_STATES``,
+    ``2=DECAYING_HIT_PROBABILITY``); ``penalty_decay`` is the decay
+    length used by variant 2.
     """
     ...
 
@@ -63,6 +71,10 @@ def cont_simulate_rollout(
     dangerous_area_radius: float,
     dangerous_area_penalty: float,
     covariance: NDArray[np.floating],
+    obstacle_hit_probability: float = 1.0,
+    dangerous_area_hit_probability: float = 1.0,
+    reward_variant_code: int = 0,
+    penalty_decay: float = 1.0,
 ) -> float:
     """Native random rollout for ContinuousPushPOMDP.
 
@@ -72,9 +84,13 @@ def cont_simulate_rollout(
     rows ``(cx, cy, hx, hy)``.
 
     ``dangerous_areas`` must have shape ``(K, 2)`` (rows ``(cx, cy)``) or
-    be empty. The penalty is applied at most once per step when the
-    post-action robot position lies inside any zone of radius
-    ``dangerous_area_radius``.
+    be empty. Per-step reward consults the REALISED post-action robot
+    position (``next_state[:2]``) for obstacle and dangerous-area tests,
+    with Bernoulli ``*_hit_probability`` gating.
+    ``reward_variant_code`` selects the dangerous-area contract
+    (``0=STANDARD``, ``1=HIGH_VARIANCE_STATES``,
+    ``2=DECAYING_HIT_PROBABILITY``); ``penalty_decay`` is the decay
+    length used by variant 2.
     """
     ...
 
@@ -174,6 +190,55 @@ def belief_batch_obs_log_likelihood_discrete(
     Returns the per-particle log N(obs[2:4] | particle[2:4], sigma**2 * I_2)
     over all (N, 6) particles. Bit-for-bit equivalent to the Python
     ``PushVectorizedUpdater.batch_observation_log_likelihood`` (no RNG).
+    """
+    ...
+
+def push_reward_batch(
+    states: NDArray[np.floating],
+    action_idx: int,
+    next_states: NDArray[np.floating],
+    obstacles: NDArray[np.floating],
+    obstacle_radius: float,
+    obstacle_penalty: float,
+    obstacle_hit_probability: float,
+    dangerous_areas: NDArray[np.floating],
+    dangerous_area_radius: float,
+    dangerous_area_penalty: float,
+    dangerous_area_hit_probability: float,
+    reward_variant_code: int,
+    penalty_decay: float,
+) -> NDArray[np.float64]:
+    """Standalone variant-aware reward-batch kernel for the discrete PushPOMDP.
+
+    ``reward_variant_code`` selects the dangerous-area contract:
+        * 0 — STANDARD (deterministic / optional Bernoulli per zone).
+        * 1 — HIGH_VARIANCE_STATES (``±penalty`` 50/50 in zone).
+        * 2 — DECAYING_HIT_PROBABILITY (penalty fires with probability
+          ``exp(-min_dist / penalty_decay)``, no radius cutoff).
+    Returns a ``(N,)`` float64 array of per-row rewards.
+    """
+    ...
+
+def cont_push_reward_batch(
+    states: NDArray[np.floating],
+    action: NDArray[np.floating],
+    next_states: NDArray[np.floating],
+    obstacles: NDArray[np.floating],
+    robot_radius: float,
+    obstacle_penalty: float,
+    obstacle_hit_probability: float,
+    dangerous_areas: NDArray[np.floating],
+    dangerous_area_radius: float,
+    dangerous_area_penalty: float,
+    dangerous_area_hit_probability: float,
+    reward_variant_code: int,
+    penalty_decay: float,
+) -> NDArray[np.float64]:
+    """Standalone variant-aware reward-batch kernel for ContinuousPushPOMDP.
+
+    Mirrors :func:`push_reward_batch` but uses a circle-vs-AABB overlap on
+    ``next_state[:2]`` with ``robot_radius`` for the obstacle penalty.
+    ``obstacles`` rows are ``(cx, cy, hx, hy)``.
     """
     ...
 

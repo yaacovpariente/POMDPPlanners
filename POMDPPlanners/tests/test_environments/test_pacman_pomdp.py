@@ -2307,6 +2307,11 @@ class TestNativeSimulateRollout:
             discount_factor=float(discount_factor),
             depth=0,
             max_depth=max_depth,
+            dangerous_areas=env._dangerous_areas_arr,  # pylint: disable=protected-access
+            dangerous_area_radius=float(env.dangerous_area_radius),
+            dangerous_area_penalty=float(env.dangerous_area_penalty),
+            reward_variant_code=0,
+            penalty_decay=float(env.penalty_decay),
         )
 
         assert abs(native_total - py_total) <= 1e-9, (

@@ -2236,7 +2236,7 @@ def test_native_simulate_rollout_matches_python_rollout_seeded():
     np.random.seed(0)
     action_indices = np.random.randint(0, len(env.actions), size=max_depth, dtype=np.int32)
 
-    # Seed native C++ RNG; run native rollout
+    # Seed native C++ RNG; run native rollout (STANDARD variant: code 0)
     _native.set_seed(0)
     native_return = _native.simulate_rollout(  # pylint: disable=protected-access
         initial_state=np.ascontiguousarray(initial_state, dtype=np.float64),
@@ -2255,6 +2255,8 @@ def test_native_simulate_rollout_matches_python_rollout_seeded():
         obstacle_reward=float(env.obstacle_reward),
         obstacle_hit_probability=0.0,
         is_obstacle_hit_terminal=bool(env.is_obstacle_hit_terminal),
+        reward_variant_code=0,
+        penalty_decay=0.0,
         covariance=env._trans_cov_view,  # pylint: disable=protected-access
     )
 
@@ -2318,6 +2320,8 @@ def test_native_simulate_rollout_terminal_short_circuit():
         obstacle_reward=float(env.obstacle_reward),
         obstacle_hit_probability=float(env.obstacle_hit_probability),
         is_obstacle_hit_terminal=bool(env.is_obstacle_hit_terminal),
+        reward_variant_code=0,
+        penalty_decay=0.0,
         covariance=env._trans_cov_view,  # pylint: disable=protected-access
     )
 

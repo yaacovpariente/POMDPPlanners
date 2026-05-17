@@ -1196,6 +1196,175 @@ class PacManObservationCpp {
 };
 
 // ---------------------------------------------------------------------------
+// Reward helpers: variant-aware dangerous-area contribution + standalone
+// reward_batch kernel. The danger contribution is computed against the
+// realised next pacman position. Three variants are supported:
+//
+//   reward_variant_code = 0  STANDARD               deterministic ``-penalty``
+//                                                   when inside any zone
+//                                                   (radius cutoff).
+//   reward_variant_code = 1  HIGH_VARIANCE_STATES   ``+/- penalty`` 50/50
+//                                                   when inside any zone.
+//   reward_variant_code = 2  DECAYING_HIT_PROB      ``-penalty`` with
+//                                                   probability
+//                                                   ``exp(-min_dist /
+//                                                   penalty_decay)`` against
+//                                                   the closest zone centre
+//                                                   (no radius cutoff).
+// ---------------------------------------------------------------------------
+
+// Contribution of the dangerous-area term for a single (next_pac_row,
+// next_pac_col). ``dangerous_areas`` is a flat (D, 2) float64 buffer.
+inline double dangerous_area_contribution(int variant_code, int new_pac_row, int new_pac_col,
+                                          const double *dangerous_areas, int n_dangerous,
+                                          double dangerous_area_radius,
+                                          double dangerous_area_penalty, double penalty_decay,
+                                          std::mt19937_64 &rng) {
+    if (n_dangerous <= 0) {
+        return 0.0;
+    }
+    std::uniform_real_distribution<double> unif(0.0, 1.0);
+    if (variant_code == 2) {
+        // DECAYING_HIT_PROBABILITY — no radius cutoff; use closest centre.
+        double min_sq = std::numeric_limits<double>::infinity();
+        for (int d = 0; d < n_dangerous; ++d) {
+            const double dr = static_cast<double>(new_pac_row) - dangerous_areas[d * 2];
+            const double dc = static_cast<double>(new_pac_col) - dangerous_areas[d * 2 + 1];
+            const double d_sq = dr * dr + dc * dc;
+            if (d_sq < min_sq) {
+                min_sq = d_sq;
+            }
+        }
+        const double min_dist = std::sqrt(min_sq);
+        const double hit_prob = std::exp(-min_dist / penalty_decay);
+        if (unif(rng) < hit_prob) {
+            return -dangerous_area_penalty;
+        }
+        return 0.0;
+    }
+    // STANDARD / HIGH_VARIANCE_STATES both use the radius cutoff.
+    const double radius_sq = dangerous_area_radius * dangerous_area_radius;
+    bool in_zone = false;
+    for (int d = 0; d < n_dangerous; ++d) {
+        const double dr = static_cast<double>(new_pac_row) - dangerous_areas[d * 2];
+        const double dc = static_cast<double>(new_pac_col) - dangerous_areas[d * 2 + 1];
+        if (dr * dr + dc * dc <= radius_sq) {
+            in_zone = true;
+            break;
+        }
+    }
+    if (!in_zone) {
+        return 0.0;
+    }
+    if (variant_code == 1) {
+        // HIGH_VARIANCE_STATES: ±penalty 50/50.
+        return (unif(rng) < 0.5) ? dangerous_area_penalty : -dangerous_area_penalty;
+    }
+    // STANDARD (or unknown — fall back to deterministic).
+    return -dangerous_area_penalty;
+}
+
+// Per-row base reward for the standalone reward_batch kernel. Detects pellet
+// pickup via ``next_state.score > state.score`` (the transition kernel writes
+// ``score += pellet_reward`` exactly when a pellet is collected) and win-bonus
+// via ``next_state.terminal && all pellets gone in next_state`` — both checks
+// match the Python ``compute_reward_scalar_kernel`` semantics. Reading the
+// realised pacman position from ``next_state`` keeps the entry-point free of
+// neighbor-table / pellet-position dependencies.
+inline double reward_batch_base_row(const double *state, const double *next_state, int num_ghosts,
+                                    double step_penalty, double ghost_collision_penalty,
+                                    double pellet_reward, double win_reward, int idx_pac_row,
+                                    int idx_pac_col, int idx_ghosts_start, int idx_pellets_start,
+                                    int idx_pellets_end, int idx_score, int idx_terminal) {
+    if (state[idx_terminal] > 0.5) {
+        return 0.0;
+    }
+    double reward = step_penalty;
+    const int new_pac_row = static_cast<int>(next_state[idx_pac_row]);
+    const int new_pac_col = static_cast<int>(next_state[idx_pac_col]);
+    for (int g = 0; g < num_ghosts; ++g) {
+        const int gr = static_cast<int>(next_state[idx_ghosts_start + 2 * g]);
+        const int gc = static_cast<int>(next_state[idx_ghosts_start + 2 * g + 1]);
+        if (gr == new_pac_row && gc == new_pac_col) {
+            reward += ghost_collision_penalty;
+            break;
+        }
+    }
+    if (next_state[idx_score] > state[idx_score]) {
+        reward += pellet_reward;
+    }
+    if (next_state[idx_terminal] > 0.5 && idx_pellets_end > idx_pellets_start) {
+        bool all_collected = true;
+        for (int p = idx_pellets_start; p < idx_pellets_end; ++p) {
+            if (next_state[p] > 0.5) {
+                all_collected = false;
+                break;
+            }
+        }
+        if (all_collected) {
+            reward += win_reward;
+        }
+    }
+    return reward;
+}
+
+// Standalone batched reward kernel — variant-aware. Inputs:
+//   states            (N, state_dim) float64
+//   next_states       (N, state_dim) float64
+//   dangerous_areas   (D, 2) float64
+//   variant scalars   (radius, penalty, penalty_decay)
+//   reward scalars    (step / collision / pellet / win)
+// Returns (N,) float64. RNG is the module-local default rng (used only by the
+// HV / Decaying variants).
+py::array_t<double> reward_batch_impl(
+    py::array_t<double> states, py::array_t<double> next_states,
+    py::array_t<double> dangerous_areas, int num_ghosts, double dangerous_area_radius,
+    double dangerous_area_penalty, int reward_variant_code, double penalty_decay,
+    double step_penalty, double ghost_collision_penalty, double pellet_reward, double win_reward,
+    int idx_pac_row, int idx_pac_col, int idx_ghosts_start, int idx_pellets_start,
+    int idx_pellets_end, int idx_score, int idx_terminal) {
+    if (states.ndim() != 2) {
+        throw std::invalid_argument("states must be 2-D");
+    }
+    if (next_states.ndim() != 2) {
+        throw std::invalid_argument("next_states must be 2-D");
+    }
+    const py::ssize_t n_rows = states.shape(0);
+    const py::ssize_t state_dim = states.shape(1);
+    if (next_states.shape(0) != n_rows || next_states.shape(1) != state_dim) {
+        throw std::invalid_argument("next_states must have matching shape to states");
+    }
+    if (dangerous_areas.ndim() != 2 || dangerous_areas.shape(1) != 2) {
+        throw std::invalid_argument("dangerous_areas must have shape (D, 2)");
+    }
+    const int n_dangerous = static_cast<int>(dangerous_areas.shape(0));
+    auto out = py::array_t<double>(static_cast<py::ssize_t>(n_rows));
+    auto obuf = out.mutable_unchecked<1>();
+    const double *states_ptr = states.data();
+    const double *next_states_ptr = next_states.data();
+    const double *danger_ptr = (n_dangerous > 0) ? dangerous_areas.data() : nullptr;
+    auto &rng = pomdp_native::default_rng().engine();
+    for (py::ssize_t i = 0; i < n_rows; ++i) {
+        const double *state = states_ptr + i * state_dim;
+        const double *next_state = next_states_ptr + i * state_dim;
+        double reward = reward_batch_base_row(state, next_state, num_ghosts, step_penalty,
+                                              ghost_collision_penalty, pellet_reward, win_reward,
+                                              idx_pac_row, idx_pac_col, idx_ghosts_start,
+                                              idx_pellets_start, idx_pellets_end, idx_score,
+                                              idx_terminal);
+        if (state[idx_terminal] <= 0.5) {
+            const int new_pac_row = static_cast<int>(next_state[idx_pac_row]);
+            const int new_pac_col = static_cast<int>(next_state[idx_pac_col]);
+            reward += dangerous_area_contribution(reward_variant_code, new_pac_row, new_pac_col,
+                                                  danger_ptr, n_dangerous, dangerous_area_radius,
+                                                  dangerous_area_penalty, penalty_decay, rng);
+        }
+        obuf(i) = reward;
+    }
+    return out;
+}
+
+// ---------------------------------------------------------------------------
 // simulate_rollout: run a full random rollout from `state` using pre-drawn
 // action indices, returning the discounted cumulative reward.
 //
@@ -1204,6 +1373,7 @@ class PacManObservationCpp {
 //       + ghost_collision_penalty  (if pacman lands on a ghost)
 //       + pellet_reward            (if a pellet is collected — already in env_)
 //       + win_reward               (if all pellets gone at terminal step)
+//       + dangerous_area_contribution (variant-aware)
 // Ghost-collision detection uses the *post-transition* state, matching the
 // Python reference which calls state_transition_model().sample() inside reward().
 // ---------------------------------------------------------------------------
@@ -1218,7 +1388,13 @@ double simulate_rollout_impl(
     double win_reward,
     double discount_factor,
     int depth,
-    int max_depth)
+    int max_depth,
+    const double *dangerous_areas,
+    int n_dangerous,
+    double dangerous_area_radius,
+    double dangerous_area_penalty,
+    int reward_variant_code,
+    double penalty_decay)
 {
     const int state_dim = env.state_dim;
     std::vector<double> current(initial_state, initial_state + state_dim);
@@ -1283,6 +1459,12 @@ double simulate_rollout_impl(
                 r += win_reward;
             }
         }
+
+        // Variant-aware dangerous-area contribution. Previously omitted —
+        // this matches the parity contract enforced by reward_batch.
+        r += dangerous_area_contribution(reward_variant_code, new_pac_r, new_pac_c,
+                                         dangerous_areas, n_dangerous, dangerous_area_radius,
+                                         dangerous_area_penalty, penalty_decay, rng);
 
         total += gamma_power * r;
         gamma_power *= discount_factor;
@@ -1370,7 +1552,12 @@ PYBIND11_MODULE(_native, m) {
            double win_reward,
            double discount_factor,
            int depth,
-           int max_depth) -> double {
+           int max_depth,
+           py::array_t<double> dangerous_areas,
+           double dangerous_area_radius,
+           double dangerous_area_penalty,
+           int reward_variant_code,
+           double penalty_decay) -> double {
             if (state.ndim() != 1) {
                 throw std::invalid_argument("state must be 1-D");
             }
@@ -1404,6 +1591,11 @@ PYBIND11_MODULE(_native, m) {
             }
             env.patrol_dir_state = patrol_dir_state.mutable_data();
 
+            if (dangerous_areas.ndim() != 2 || dangerous_areas.shape(1) != 2) {
+                throw std::invalid_argument("dangerous_areas must have shape (D, 2)");
+            }
+            const int n_dangerous = static_cast<int>(dangerous_areas.shape(0));
+            const double *danger_ptr = (n_dangerous > 0) ? dangerous_areas.data() : nullptr;
             return simulate_rollout_impl(
                 env,
                 state.data(),
@@ -1414,7 +1606,13 @@ PYBIND11_MODULE(_native, m) {
                 win_reward,
                 discount_factor,
                 depth,
-                max_depth);
+                max_depth,
+                danger_ptr,
+                n_dangerous,
+                dangerous_area_radius,
+                dangerous_area_penalty,
+                reward_variant_code,
+                penalty_decay);
         },
         py::arg("state"),
         py::arg("action_indices"),
@@ -1443,6 +1641,55 @@ PYBIND11_MODULE(_native, m) {
         py::arg("discount_factor"),
         py::arg("depth") = 0,
         py::arg("max_depth"),
+        py::arg("dangerous_areas"),
+        py::arg("dangerous_area_radius"),
+        py::arg("dangerous_area_penalty"),
+        py::arg("reward_variant_code"),
+        py::arg("penalty_decay"),
         "Run a random rollout from state using pre-drawn action_indices; "
         "returns the discounted cumulative reward.");
+
+    // reward_batch: standalone variant-aware reward kernel. Computes per-row
+    // rewards for a batch of (state, action, next_state) triples under a
+    // chosen reward-model variant (STANDARD / HIGH_VARIANCE_STATES /
+    // DECAYING_HIT_PROBABILITY). Mirrors the Python reward_model.compute_reward_batch
+    // semantics — sample-mean parity (not bit-exact) is the design target.
+    m.def(
+        "reward_batch",
+        [](py::array_t<double> states, int action, py::array_t<double> next_states,
+           int reward_variant_code, double penalty_decay, py::array_t<double> dangerous_areas,
+           double dangerous_area_radius, double dangerous_area_penalty, int num_ghosts,
+           double step_penalty, double ghost_collision_penalty, double pellet_reward,
+           double win_reward, int idx_pac_row, int idx_pac_col, int idx_ghosts_start,
+           int idx_pellets_start, int idx_pellets_end, int idx_score,
+           int idx_terminal) -> py::array_t<double> {
+            (void)action;
+            return reward_batch_impl(states, next_states, dangerous_areas, num_ghosts,
+                                     dangerous_area_radius, dangerous_area_penalty,
+                                     reward_variant_code, penalty_decay, step_penalty,
+                                     ghost_collision_penalty, pellet_reward, win_reward,
+                                     idx_pac_row, idx_pac_col, idx_ghosts_start, idx_pellets_start,
+                                     idx_pellets_end, idx_score, idx_terminal);
+        },
+        py::arg("states"),
+        py::arg("action"),
+        py::arg("next_states"),
+        py::arg("reward_variant_code"),
+        py::arg("penalty_decay"),
+        py::arg("dangerous_areas"),
+        py::arg("dangerous_area_radius"),
+        py::arg("dangerous_area_penalty"),
+        py::arg("num_ghosts"),
+        py::arg("step_penalty"),
+        py::arg("ghost_collision_penalty"),
+        py::arg("pellet_reward"),
+        py::arg("win_reward"),
+        py::arg("idx_pac_row"),
+        py::arg("idx_pac_col"),
+        py::arg("idx_ghosts_start"),
+        py::arg("idx_pellets_start"),
+        py::arg("idx_pellets_end"),
+        py::arg("idx_score"),
+        py::arg("idx_terminal"),
+        "Variant-aware standalone batch reward kernel. Returns (N,) float64.");
 }

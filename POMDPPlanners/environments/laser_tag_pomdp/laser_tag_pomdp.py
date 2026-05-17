@@ -892,6 +892,20 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         # Discrete int actions (0..4); already hashable.
         return action
 
+    def _native_reward_variant_code(self) -> int:
+        """Map ``self.reward_model_type`` to the native kernel's variant code.
+
+        Matches the integer code emitted by the C++ kernel (``0`` = STANDARD,
+        ``1`` = HIGH_VARIANCE_STATES, ``2`` = DECAYING_HIT_PROBABILITY).
+        """
+        if self.reward_model_type == RewardModelType.STANDARD:
+            return 0
+        if self.reward_model_type == RewardModelType.HIGH_VARIANCE_STATES:
+            return 1
+        if self.reward_model_type == RewardModelType.DECAYING_HIT_PROBABILITY:
+            return 2
+        raise ValueError(f"Unknown reward model type: {self.reward_model_type}")
+
     def _get_native_rollout_params(
         self,
     ) -> Optional[Any]:
@@ -945,6 +959,9 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         # are therefore only equivalent in distribution, not bit-by-bit.
         # If the action_sampler is not a uniform sampler over all 5 actions, fall
         # back to the Python loop so planner-specific rollout policies still work.
+        # The native kernel handles all three reward-model variants via the
+        # ``reward_variant_code`` argument; stochastic variants consume
+        # additional draws from the same module-level mt19937_64 RNG.
         params = self._get_native_rollout_params()
         if params is not None:
             state_arr = np.ascontiguousarray(np.asarray(state, dtype=np.float64))
@@ -977,6 +994,8 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
                     tag_penalty=tag_penalty,
                     step_cost=step_cost,
                     transition_error_prob=transition_error_prob,
+                    reward_variant_code=self._native_reward_variant_code(),
+                    penalty_decay=float(self.penalty_decay),
                 )
             )
 

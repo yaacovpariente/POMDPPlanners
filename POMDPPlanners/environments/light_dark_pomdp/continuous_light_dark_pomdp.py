@@ -80,6 +80,16 @@ class RewardModelType(Enum):
     HIGH_VARIANCE_STATES = "high_variance_states"
 
 
+# Integer dispatch codes consumed by the native ``_native.compute_reward_batch``
+# kernel. Must stay in sync with the C++ ``reward_variant_code`` switch in
+# ``_cpp/continuous_light_dark.cpp``.
+_REWARD_VARIANT_CODE_BY_TYPE: Dict[RewardModelType, int] = {
+    RewardModelType.STANDARD: 0,
+    RewardModelType.HIGH_VARIANCE_STATES: 1,
+    RewardModelType.DECAYING_HIT_PROBABILITY: 2,
+}
+
+
 class ObservationModelType(Enum):
     NORMAL_NOISE = "normal_noise"
     NORMAL_NOISE_NO_OBS_IN_DARK = "normal_noise_no_obs_in_dark"
@@ -256,6 +266,14 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         self._cls_obs_log_norm_far = self._build_log_norm_2d(observation_cov_matrix)
         self._cls_obs_log_norm_near = self._build_log_norm_2d(observation_cov_matrix * 0.5)
         self._cls_beacon_radius_sq = float(beacon_radius) * float(beacon_radius)
+        # Native dispatch code + pre-flattened obstacle/goal buffers for the
+        # ``_native.compute_reward_batch`` and ``_native.simulate_rollout``
+        # kernels (interleaved ``[x0, y0, x1, y1, ...]`` layout).
+        self._reward_variant_code: int = _REWARD_VARIANT_CODE_BY_TYPE[reward_model_type]
+        self._obstacles_flat: np.ndarray = np.ascontiguousarray(
+            self.obstacles.T.ravel(), dtype=np.float64
+        )
+        self._goal_state_f64: np.ndarray = np.ascontiguousarray(self.goal_state, dtype=np.float64)
         # Initialize reward model based on type
         self.reward_model: BaseLightDarkRewardModel
         if reward_model_type == RewardModelType.STANDARD:
@@ -648,6 +666,11 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         action: np.ndarray,
         next_states: Optional[Union[np.ndarray, Sequence[Any]]] = None,
     ) -> np.ndarray:
+        # Python-backed dispatch preserves the pre-refactor scalar↔batch RNG
+        # parity (both branches consume ``np.random`` draws in the same order).
+        # The variant-aware native ``_native.compute_reward_batch`` is exposed
+        # separately for callers that opt into sample-mean parity (e.g.
+        # belief-tree expansion paths and the C++/Python parity tests).
         next_states_arr = None if next_states is None else np.asarray(next_states)
         return self.reward_model.compute_reward_batch(
             np.asarray(states), action, next_states=next_states_arr
@@ -904,17 +927,11 @@ class ContinuousLightDarkPOMDPDiscreteActions(ContinuousLightDarkPOMDP, Discrete
             "left": np.ascontiguousarray([-1.0, 0.0], dtype=np.float64),
         }
 
-        # Pre-built arrays for native simulate_rollout.
-        # _actions_array: shape (n_actions, 2) — action vectors stacked row-wise.
-        # _obstacles_flat: shape (2*n_obstacles,) — interleaved [x0,y0,x1,y1,...].
+        # Pre-stacked action vectors for native ``simulate_rollout``; the
+        # ``_obstacles_flat`` / ``_goal_state_f64`` buffers live on the parent.
         self._actions_array: np.ndarray = np.ascontiguousarray(
             np.stack(list(self.action_to_vector.values()), axis=0), dtype=np.float64
         )
-        # self.obstacles is stored as (2, N); flatten to [x0,y0,x1,y1,...].
-        self._obstacles_flat: np.ndarray = np.ascontiguousarray(
-            self.obstacles.T.ravel(), dtype=np.float64
-        )
-        self._goal_state_f64: np.ndarray = np.ascontiguousarray(self.goal_state, dtype=np.float64)
 
     def get_actions(self) -> List[Any]:
         return self.actions
@@ -971,11 +988,14 @@ class ContinuousLightDarkPOMDPDiscreteActions(ContinuousLightDarkPOMDP, Discrete
         discount_factor: float,
         depth: int = 0,
     ) -> float:
-        """Random rollout via native C++ for the STANDARD reward model.
+        """Random rollout via native C++.
 
-        Falls back to the base-class Python loop for non-STANDARD reward
-        models (DECAYING_HIT_PROBABILITY, HIGH_VARIANCE_STATES) which have
-        different stochastic semantics not yet ported to C++.
+        The variant-aware ``_native.simulate_rollout`` kernel covers all three
+        reward models in expectation (the rollout RNG draws come from the
+        module-level C++ RNG and match the Python reward models sample-mean,
+        not bit-exact), so no variant gate is required here. The Python
+        fallback is retained only for the realised-position correctness case
+        below.
 
         Args:
             state: Current 2-D position ``[x, y]``.
@@ -995,15 +1015,9 @@ class ContinuousLightDarkPOMDPDiscreteActions(ContinuousLightDarkPOMDP, Discrete
         # noisy next_state. Whenever transition noise is non-trivial AND
         # obstacles are configured, route through Python so the rollout
         # reward agrees with ``reward()`` on the realised next_state.
-        # Until the C++ kernel is rebuilt this is the only correctness-
-        # preserving path for stochastic-transition configurations.
         cov_diag_max = float(np.max(np.abs(self.state_transition_cov_matrix)))
         bypass_native_for_realised_pos = cov_diag_max > 0.0 and self._obstacles_flat.shape[0] > 0
-        if (
-            not isinstance(self.reward_model, ContinuousLightDarkRewardModel)
-            or isinstance(self.reward_model, (ContinuousLDHighVarianceStatesRewardModel,))
-            or bypass_native_for_realised_pos
-        ):
+        if bypass_native_for_realised_pos:
             return python_random_rollout(
                 state=state,
                 depth=depth,
@@ -1037,6 +1051,8 @@ class ContinuousLightDarkPOMDPDiscreteActions(ContinuousLightDarkPOMDP, Discrete
             obstacle_reward=float(self.obstacle_reward),
             obstacle_hit_probability=float(self.obstacle_hit_probability),
             is_obstacle_hit_terminal=bool(self.is_obstacle_hit_terminal),
+            reward_variant_code=self._reward_variant_code,
+            penalty_decay=float(self.penalty_decay),
             covariance=self._trans_cov_view,
         )
 
