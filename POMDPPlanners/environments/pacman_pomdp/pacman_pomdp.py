@@ -35,6 +35,8 @@ from POMDPPlanners.core.simulation import History, MetricValue, StepData
 from POMDPPlanners.environments.pacman_pomdp import _native  # pylint: disable=no-name-in-module
 from POMDPPlanners.environments.pacman_pomdp.pacman_pomdp_utils.pacman_reward_models import (
     BasePacManRewardModel,
+    PacManDecayingHitProbabilityRewardModel,
+    PacManHighVarianceStatesRewardModel,
     PacManRewardModel,
 )
 from POMDPPlanners.utils.statistics_utils import confidence_interval
@@ -51,6 +53,14 @@ class PacManPOMDPMetrics(Enum):
     AVG_EPISODE_LENGTH = "avg_episode_length"
     AVG_PACMAN_CLOSEST_GHOST_DISTANCE = "avg_pacman_closest_ghost_distance"
     AVG_COLLISION_ENCOUNTERS = "avg_collision_encounters"
+
+
+class RewardModelType(Enum):
+    """Reward-model variants selectable on :class:`PacManPOMDP`."""
+
+    STANDARD = "standard"
+    HIGH_VARIANCE_STATES = "high_variance_states"
+    DECAYING_HIT_PROBABILITY = "decaying_hit_probability"
 
 
 class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-methods
@@ -138,6 +148,8 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
         name: str = "PacManPOMDP",
         output_dir: Optional[Path] = None,
         debug: bool = False,
+        reward_model_type: RewardModelType = RewardModelType.STANDARD,
+        penalty_decay: float = 1.0,
     ):
         """Initialize PacMan POMDP.
 
@@ -168,6 +180,18 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
             name: Environment name. Defaults to "PacManPOMDP".
             output_dir: Output directory for logging. Defaults to None.
             debug: Enable debug logging. Defaults to False.
+            reward_model_type: Selects the reward variant. ``STANDARD`` (default)
+                deterministically subtracts ``dangerous_area_penalty`` whenever
+                PacMan's realised next position lies inside a hazard zone.
+                ``HIGH_VARIANCE_STATES`` emits ``±dangerous_area_penalty``
+                (50/50) on a zone hit (expected 0, high variance).
+                ``DECAYING_HIT_PROBABILITY`` applies ``-dangerous_area_penalty``
+                with probability ``exp(-min_dist / penalty_decay)`` against
+                the nearest zone centre (no radius cutoff). Mirrors the
+                light-dark / laser-tag / rock-sample reward-model variants.
+            penalty_decay: Decay length used by the
+                ``DECAYING_HIT_PROBABILITY`` reward model. Ignored by the other
+                variants. Must be strictly positive. Defaults to ``1.0``.
         """
         # Calculate reward range based on parameters. The dangerous-area
         # penalty only contributes to ``min_reward`` when at least one zone
@@ -300,26 +324,46 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
             else np.empty((0, 2), dtype=np.int32)
         )
 
-        self.reward_model: BasePacManRewardModel = PacManRewardModel(
-            num_ghosts=self.num_ghosts,
-            pellet_positions_arr=self._pellet_positions_arr,
-            dangerous_areas=self.dangerous_areas,
-            dangerous_areas_arr=self._dangerous_areas_arr,
-            dangerous_area_radius=self.dangerous_area_radius,
-            dangerous_area_penalty=self.dangerous_area_penalty,
-            step_penalty=self.step_penalty,
-            ghost_collision_penalty=self.ghost_collision_penalty,
-            pellet_reward=self.pellet_reward,
-            win_reward=self.win_reward,
-            idx_pac_row=self._idx_pac_row,
-            idx_pac_col=self._idx_pac_col,
-            idx_ghosts_start=self._idx_ghosts_start,
-            idx_pellets_start=self._idx_pellets_start,
-            idx_pellets_end=self._idx_pellets_end,
-            idx_score=self._idx_score,
-            idx_terminal=self._idx_terminal,
-            neighbor_table_getter=self._get_neighbor_table,
+        self.reward_model_type = reward_model_type
+        self.penalty_decay = float(penalty_decay)
+        self.reward_model: BasePacManRewardModel = self._build_reward_model(
+            reward_model_type, self.penalty_decay
         )
+
+    def _build_reward_model(
+        self,
+        reward_model_type: RewardModelType,
+        penalty_decay: float,
+    ) -> BasePacManRewardModel:
+        common_kwargs = {
+            "num_ghosts": self.num_ghosts,
+            "pellet_positions_arr": self._pellet_positions_arr,
+            "dangerous_areas": self.dangerous_areas,
+            "dangerous_areas_arr": self._dangerous_areas_arr,
+            "dangerous_area_radius": self.dangerous_area_radius,
+            "dangerous_area_penalty": self.dangerous_area_penalty,
+            "step_penalty": self.step_penalty,
+            "ghost_collision_penalty": self.ghost_collision_penalty,
+            "pellet_reward": self.pellet_reward,
+            "win_reward": self.win_reward,
+            "idx_pac_row": self._idx_pac_row,
+            "idx_pac_col": self._idx_pac_col,
+            "idx_ghosts_start": self._idx_ghosts_start,
+            "idx_pellets_start": self._idx_pellets_start,
+            "idx_pellets_end": self._idx_pellets_end,
+            "idx_score": self._idx_score,
+            "idx_terminal": self._idx_terminal,
+            "neighbor_table_getter": self._get_neighbor_table,
+        }
+        if reward_model_type == RewardModelType.STANDARD:
+            return PacManRewardModel(**common_kwargs)
+        if reward_model_type == RewardModelType.HIGH_VARIANCE_STATES:
+            return PacManHighVarianceStatesRewardModel(**common_kwargs)
+        if reward_model_type == RewardModelType.DECAYING_HIT_PROBABILITY:
+            return PacManDecayingHitProbabilityRewardModel(
+                **common_kwargs, penalty_decay=penalty_decay
+            )
+        raise ValueError(f"Unknown reward model type: {reward_model_type}")
 
     @property
     def initial_ghost_pos(self) -> Tuple[int, int]:
