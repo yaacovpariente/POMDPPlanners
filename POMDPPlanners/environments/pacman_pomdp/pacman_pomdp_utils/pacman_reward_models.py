@@ -19,6 +19,11 @@ from typing import Callable, List, Optional, Tuple
 
 import numpy as np
 
+from POMDPPlanners.environments.pacman_pomdp.pacman_pomdp_utils.numba_kernels import (
+    compute_reward_batch_kernel,
+    compute_reward_scalar_kernel,
+)
+
 
 class BasePacManRewardModel(ABC):
     """Abstract reward model for PacMan POMDP variants."""
@@ -106,20 +111,6 @@ class PacManRewardModel(BasePacManRewardModel):
         self._idx_terminal = idx_terminal
         self._neighbor_table_getter = neighbor_table_getter
 
-    def _is_in_dangerous_area(self, position: Tuple[int, int]) -> bool:
-        # Squared-distance check matches laser_tag's discrete implementation
-        # and avoids a sqrt per call on a hot path.
-        if not self.dangerous_areas:
-            return False
-        pos_row, pos_col = position
-        radius_sq = self.dangerous_area_radius * self.dangerous_area_radius
-        for danger_row, danger_col in self.dangerous_areas:
-            dr = pos_row - danger_row
-            dc = pos_col - danger_col
-            if dr * dr + dc * dc <= radius_sq:
-                return True
-        return False
-
     def compute_reward(
         self,
         state: np.ndarray,
@@ -127,32 +118,27 @@ class PacManRewardModel(BasePacManRewardModel):
         next_state: np.ndarray,
     ) -> float:
         del action  # Realised post-transition state already encodes the choice.
-        if state[self._idx_terminal] > 0.5:
-            return 0.0
-
-        total_reward = self.step_penalty
-
-        next_pac_row = int(next_state[self._idx_pac_row])
-        next_pac_col = int(next_state[self._idx_pac_col])
-        for g in range(self.num_ghosts):
-            g_row = int(next_state[self._idx_ghosts_start + 2 * g])
-            g_col = int(next_state[self._idx_ghosts_start + 2 * g + 1])
-            if next_pac_row == g_row and next_pac_col == g_col:
-                total_reward += self.ghost_collision_penalty
-                break
-
-        if next_state[self._idx_score] > state[self._idx_score]:
-            total_reward += self.pellet_reward
-
-        if self._is_in_dangerous_area((next_pac_row, next_pac_col)):
-            total_reward -= self.dangerous_area_penalty
-
-        if next_state[self._idx_terminal] > 0.5:
-            pellet_mask = next_state[self._idx_pellets_start : self._idx_pellets_end]
-            if not np.any(pellet_mask > 0.5):
-                total_reward += self.win_reward
-
-        return total_reward
+        return float(
+            compute_reward_scalar_kernel(
+                np.ascontiguousarray(state, dtype=np.float64),
+                np.ascontiguousarray(next_state, dtype=np.float64),
+                self._dangerous_areas_arr,
+                int(self.num_ghosts),
+                int(self._pellet_positions_arr.shape[0]),
+                float(self.step_penalty),
+                float(self.ghost_collision_penalty),
+                float(self.pellet_reward),
+                float(self.win_reward),
+                float(self.dangerous_area_penalty),
+                float(self.dangerous_area_radius),
+                int(self._idx_pac_row),
+                int(self._idx_pac_col),
+                int(self._idx_ghosts_start),
+                int(self._idx_pellets_start),
+                int(self._idx_score),
+                int(self._idx_terminal),
+            )
+        )
 
     def compute_reward_batch(
         self,
@@ -160,91 +146,41 @@ class PacManRewardModel(BasePacManRewardModel):
         action: int,
         next_states: Optional[np.ndarray] = None,
     ) -> np.ndarray:
-        # Single-pass vectorised reward kernel. Without ``next_states`` the
-        # ghost-collision penalty is excluded because it depends on the
-        # stochastic ghost transition; when supplied (caller already
-        # realised the batch transition) the penalty is included against
-        # those realised draws. Patrol-direction state is left alone here
-        # — it is mutated only inside the C++ transition kernel.
-        terminal = states[:, self._idx_terminal] > 0.5
-        rewards = np.where(terminal, 0.0, self.step_penalty)
+        # Single-pass fused reward kernel. The Numba kernel fuses the
+        # terminal / collision / dangerous-area / pellet / win
+        # contributions into one loop over rows, replacing ~15-20 numpy
+        # operator calls. Without ``next_states`` the ghost-collision
+        # penalty is excluded because it depends on the stochastic ghost
+        # transition; when supplied (caller already realised the batch
+        # transition) the penalty is included against those realised
+        # draws. Patrol-direction state is left alone here — it is
+        # mutated only inside the C++ transition kernel.
+        states_arr = np.ascontiguousarray(states, dtype=np.float64)
+        if next_states is None:
+            next_states_arr = np.empty((0, states_arr.shape[1]), dtype=np.float64)
+            has_next_states = False
+        else:
+            next_states_arr = np.ascontiguousarray(next_states, dtype=np.float64)
+            has_next_states = True
 
-        # Vectorised neighbor-table lookup: (rows, cols, action) -> next pos.
-        pac_rows = states[:, self._idx_pac_row].astype(np.int32)
-        pac_cols = states[:, self._idx_pac_col].astype(np.int32)
-        new_positions = self._neighbor_table_getter()[pac_rows, pac_cols, action]
-        new_pac_rows = new_positions[:, 0]
-        new_pac_cols = new_positions[:, 1]
-
-        rewards = self._add_collision_penalty_batch(
-            rewards, terminal, new_pac_rows, new_pac_cols, next_states
+        return compute_reward_batch_kernel(
+            states_arr,
+            int(action),
+            next_states_arr,
+            has_next_states,
+            np.ascontiguousarray(self._neighbor_table_getter(), dtype=np.int32),
+            self._pellet_positions_arr,
+            self._dangerous_areas_arr,
+            int(self.num_ghosts),
+            float(self.step_penalty),
+            float(self.ghost_collision_penalty),
+            float(self.pellet_reward),
+            float(self.win_reward),
+            float(self.dangerous_area_penalty),
+            float(self.dangerous_area_radius),
+            int(self._idx_pac_row),
+            int(self._idx_pac_col),
+            int(self._idx_ghosts_start),
+            int(self._idx_pellets_start),
+            int(self._idx_terminal),
         )
-
-        rewards = self._add_dangerous_area_penalty_batch(
-            rewards, terminal, new_pac_rows, new_pac_cols
-        )
-
-        if self._pellet_positions_arr.shape[0] == 0:
-            # Degenerate config (env constructed with no pellets): there is
-            # nothing to collect and therefore nothing to "win". Returning
-            # rewards alone (step penalty for non-terminal, zero for
-            # terminal, plus optional collision) avoids the prior bug that
-            # paid out ``win_reward`` on every non-terminal step against
-            # an empty pellet set.
-            return rewards
-
-        pellet_mask = states[:, self._idx_pellets_start : self._idx_pellets_end]
-        pellet_pos = self._pellet_positions_arr  # (P, 2) int32, static.
-
-        # Broadcast (N, 1) vs (1, P): which pellet (if any) sits on the
-        # target cell, gated on it currently being active.
-        pos_match = (new_pac_rows[:, None] == pellet_pos[None, :, 0]) & (
-            new_pac_cols[:, None] == pellet_pos[None, :, 1]
-        )
-        active_match = pos_match & (pellet_mask > 0.5)
-        collected = active_match.any(axis=1)
-
-        remaining_after = pellet_mask.sum(axis=1) - collected.astype(np.float64)
-        all_collected = collected & (remaining_after < 0.5)
-
-        rewards += np.where(~terminal & collected, self.pellet_reward, 0.0)
-        rewards += np.where(~terminal & all_collected, self.win_reward, 0.0)
-        return rewards
-
-    def _add_collision_penalty_batch(
-        self,
-        rewards: np.ndarray,
-        terminal: np.ndarray,
-        new_pac_rows: np.ndarray,
-        new_pac_cols: np.ndarray,
-        next_states: Optional[np.ndarray],
-    ) -> np.ndarray:
-        if next_states is None or self.num_ghosts <= 0:
-            return rewards
-        # Use realised post-transition ghost positions; mark a collision
-        # for any ghost that ends on pacman's new cell.
-        collision = np.zeros(rewards.shape, dtype=bool)
-        for g in range(self.num_ghosts):
-            g_rows = next_states[:, self._idx_ghosts_start + 2 * g].astype(np.int32)
-            g_cols = next_states[:, self._idx_ghosts_start + 2 * g + 1].astype(np.int32)
-            collision |= (g_rows == new_pac_rows) & (g_cols == new_pac_cols)
-        return rewards + np.where(~terminal & collision, self.ghost_collision_penalty, 0.0)
-
-    def _add_dangerous_area_penalty_batch(
-        self,
-        rewards: np.ndarray,
-        terminal: np.ndarray,
-        new_pac_rows: np.ndarray,
-        new_pac_cols: np.ndarray,
-    ) -> np.ndarray:
-        if self._dangerous_areas_arr.shape[0] == 0:
-            return rewards
-        # Vectorised squared-distance check across all configured zones;
-        # ``any`` collapses the (N, D) matrix to a per-particle mask. Uses
-        # squared distance to stay consistent with ``_is_in_dangerous_area``.
-        centers = self._dangerous_areas_arr  # (D, 2) float64
-        dr = new_pac_rows[:, None] - centers[:, 0]
-        dc = new_pac_cols[:, None] - centers[:, 1]
-        radius_sq = self.dangerous_area_radius * self.dangerous_area_radius
-        in_danger = (dr * dr + dc * dc <= radius_sq).any(axis=1)
-        return rewards + np.where(~terminal & in_danger, -self.dangerous_area_penalty, 0.0)
