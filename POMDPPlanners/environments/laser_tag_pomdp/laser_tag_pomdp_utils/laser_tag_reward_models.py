@@ -17,6 +17,11 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 import numpy as np
 
+from POMDPPlanners.environments.environment_utils.dangerous_areas_kernels import (
+    decaying_prob_penalty_batch_kernel,
+    decaying_prob_penalty_kernel,
+)
+
 
 class BaseLaserTagRewardModel(ABC):
     """Abstract reward model for LaserTag POMDP variants."""
@@ -103,6 +108,18 @@ class LaserTagRewardModel(BaseLaserTagRewardModel):
             dtype=np.int64,
         )
         self._reward_n_walls: int = len(walls_list)
+        # Pre-built (2, D) C-contiguous float64 view of dangerous-area centres
+        # for the generic environment_utils.dangerous_areas_kernels (which
+        # expect ``(2, D)`` with axis 0 holding the two coordinate components).
+        if self.dangerous_areas:
+            self._dangerous_centers_xy: np.ndarray = np.ascontiguousarray(
+                self._dangerous_areas_arr.T
+            )
+        else:
+            self._dangerous_centers_xy = np.empty((2, 0), dtype=np.float64)
+        self._dangerous_radius_sq: float = float(dangerous_area_radius) * float(
+            dangerous_area_radius
+        )
 
     def __getstate__(self) -> Dict[str, Any]:
         # The native reward-batch cache holds a pybind11 function reference that
@@ -160,10 +177,22 @@ class LaserTagRewardModel(BaseLaserTagRewardModel):
         else:
             base_reward = -self.step_cost
 
-        if realised_pos in self.walls or self._is_in_dangerous_area(realised_pos):
-            base_reward -= self.dangerous_area_penalty
+        base_reward += self._compute_area_penalty_scalar(realised_pos)
 
         return base_reward
+
+    def _compute_area_penalty_scalar(self, position: Tuple[int, int]) -> float:
+        """Combined wall + dangerous-area contribution (single ``-penalty`` on OR).
+
+        Standard semantics: one ``-dangerous_area_penalty`` is subtracted iff
+        ``position`` is on a wall *or* inside any dangerous-area zone. Subclasses
+        override to apply wall and danger contributions independently (e.g. so
+        the danger contribution can be stochastic or distance-decaying while
+        wall hits remain deterministic).
+        """
+        if position in self.walls or self._is_in_dangerous_area(position):
+            return -self.dangerous_area_penalty
+        return 0.0
 
     def compute_reward_batch(
         self,
@@ -341,3 +370,127 @@ class LaserTagRewardModel(BaseLaserTagRewardModel):
         # pylint: disable=attribute-defined-outside-init
         self._wall_grid = grid
         return grid
+
+
+class LaserTagHighVarianceStatesRewardModel(LaserTagRewardModel):
+    """Dangerous-area penalty has zero mean and high variance.
+
+    Wall hits remain deterministically penalised by ``-dangerous_area_penalty``.
+    Dangerous-area hits emit ``+dangerous_area_penalty`` or
+    ``-dangerous_area_penalty`` with equal probability, mirroring
+    :class:`~POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_reward_models.ContinuousLDHighVarianceStatesRewardModel`.
+    Walls and danger zones are scored independently — a position that
+    is both a wall and inside a danger zone receives both contributions.
+    """
+
+    def _compute_area_penalty_scalar(self, position: Tuple[int, int]) -> float:
+        contrib = 0.0
+        if position in self.walls:
+            contrib -= self.dangerous_area_penalty
+        if self._is_in_dangerous_area(position):
+            # ±dangerous_area_penalty with 50/50 split (expected 0, variance penalty^2).
+            if np.random.rand() < 0.5:
+                contrib -= self.dangerous_area_penalty
+            else:
+                contrib += self.dangerous_area_penalty
+        return contrib
+
+    def _apply_area_penalty_batch_at(
+        self,
+        rewards: np.ndarray,
+        positions_r: np.ndarray,
+        positions_c: np.ndarray,
+    ) -> None:
+        wall_mask = self._compute_wall_hit_mask(positions_r, positions_c)
+        rewards[wall_mask] -= self.dangerous_area_penalty
+
+        danger_mask = self._compute_danger_mask(positions_r, positions_c)
+        n_in = int(np.count_nonzero(danger_mask))
+        if n_in > 0:
+            # ``signs`` matches the per-row independent ±penalty draw. Single
+            # batched ``np.random.rand`` keeps seed semantics aligned with the
+            # light-dark HV batch path.
+            signs = np.where(np.random.rand(n_in) < 0.5, 1.0, -1.0)
+            rewards[danger_mask] += self.dangerous_area_penalty * signs
+
+
+class LaserTagDecayingHitProbabilityRewardModel(LaserTagRewardModel):
+    """Dangerous-area penalty fires with distance-decaying probability.
+
+    Wall hits remain deterministically penalised by ``-dangerous_area_penalty``.
+    The dangerous-area contribution is ``-dangerous_area_penalty`` with
+    probability ``exp(-min_dist / penalty_decay)`` where ``min_dist`` is
+    the Euclidean distance from the realised position to the nearest
+    dangerous-area centre. No radius cutoff is applied, so even faraway
+    positions feel a (vanishingly small) penalty risk. Mirrors
+    :class:`~POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_reward_models.ContinuousLightDarkDecayingHitProbabilityRewardModel`.
+    """
+
+    def __init__(
+        self,
+        floor_shape: Tuple[int, int],
+        walls: Set[Tuple[int, int]],
+        dangerous_areas: List[Tuple[int, int]],
+        dangerous_area_radius: float,
+        dangerous_area_penalty: float,
+        tag_reward: float,
+        tag_penalty: float,
+        step_cost: float,
+        action_directions: Dict[int, Tuple[int, int]],
+        penalty_decay: float,
+    ):
+        super().__init__(
+            floor_shape=floor_shape,
+            walls=walls,
+            dangerous_areas=dangerous_areas,
+            dangerous_area_radius=dangerous_area_radius,
+            dangerous_area_penalty=dangerous_area_penalty,
+            tag_reward=tag_reward,
+            tag_penalty=tag_penalty,
+            step_cost=step_cost,
+            action_directions=action_directions,
+        )
+        if penalty_decay <= 0.0:
+            raise ValueError("penalty_decay must be strictly positive")
+        self.penalty_decay = penalty_decay
+
+    def _compute_area_penalty_scalar(self, position: Tuple[int, int]) -> float:
+        contrib = 0.0
+        if position in self.walls:
+            contrib -= self.dangerous_area_penalty
+        if self._dangerous_centers_xy.shape[1] > 0:
+            point = np.array([float(position[0]), float(position[1])])
+            contrib += decaying_prob_penalty_kernel(
+                point,
+                self._dangerous_centers_xy,
+                -self.dangerous_area_penalty,
+                self.penalty_decay,
+                float(np.random.rand()),
+            )
+        return contrib
+
+    def _apply_area_penalty_batch_at(
+        self,
+        rewards: np.ndarray,
+        positions_r: np.ndarray,
+        positions_c: np.ndarray,
+    ) -> None:
+        wall_mask = self._compute_wall_hit_mask(positions_r, positions_c)
+        rewards[wall_mask] -= self.dangerous_area_penalty
+
+        if self._dangerous_centers_xy.shape[1] == 0:
+            return
+        # Decay penalty is applied to *every* row (no radius cutoff). One
+        # uniform draw per row keeps seed semantics aligned with the
+        # light-dark Decaying batch path.
+        points = np.ascontiguousarray(
+            np.column_stack([positions_r.astype(np.float64), positions_c.astype(np.float64)])
+        )
+        uniforms = np.random.rand(points.shape[0])
+        rewards += decaying_prob_penalty_batch_kernel(
+            points,
+            self._dangerous_centers_xy,
+            -self.dangerous_area_penalty,
+            self.penalty_decay,
+            uniforms,
+        )

@@ -40,6 +40,8 @@ from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_visualizer import (  #
 )
 from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_utils.laser_tag_reward_models import (
     BaseLaserTagRewardModel,
+    LaserTagDecayingHitProbabilityRewardModel,
+    LaserTagHighVarianceStatesRewardModel,
     LaserTagRewardModel,
 )
 
@@ -67,6 +69,14 @@ class LaserTagPOMDPMetrics(Enum):
     AVERAGE_OBSTACLE_COLLISIONS = "average_obstacle_collisions"
     AVERAGE_DANGEROUS_AREA_STEPS = "average_dangerous_area_steps"
     AVERAGE_ALL_DANGEROUS_ENCOUNTERS = "average_all_dangerous_encounters"
+
+
+class RewardModelType(Enum):
+    """Reward-model variants selectable on :class:`LaserTagPOMDP`."""
+
+    STANDARD = "standard"
+    HIGH_VARIANCE_STATES = "high_variance_states"
+    DECAYING_HIT_PROBABILITY = "decaying_hit_probability"
 
 
 # State representation for LaserTag POMDP as numpy array
@@ -161,6 +171,8 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         use_queue_logger: bool = False,
         initial_state: Optional[np.ndarray] = None,
         transition_error_prob: float = 0.0,
+        reward_model_type: RewardModelType = RewardModelType.STANDARD,
+        penalty_decay: float = 1.0,
     ):
         """Initialize the LaserTag POMDP environment.
 
@@ -187,10 +199,24 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
                 With probability (1-p), the intended action is executed. With probability p, a random
                 action is selected uniformly from {0,1,2,3} excluding the intended action.
                 Defaults to 0.0 (deterministic transitions).
+            reward_model_type: Selects the reward variant. ``STANDARD`` (default)
+                deterministically subtracts ``dangerous_area_penalty`` on a wall
+                or dangerous-area hit. ``HIGH_VARIANCE_STATES`` keeps the wall
+                penalty deterministic but emits ``±dangerous_area_penalty``
+                (50/50) on a dangerous-area hit (expected 0, high variance).
+                ``DECAYING_HIT_PROBABILITY`` keeps the wall penalty
+                deterministic and applies ``-dangerous_area_penalty`` with
+                probability ``exp(-min_dist / penalty_decay)`` against the
+                nearest dangerous-area centre (no radius cutoff). Mirrors the
+                light-dark reward-model variants.
+            penalty_decay: Decay length used by the
+                ``DECAYING_HIT_PROBABILITY`` reward model. Ignored by the other
+                variants. Must be strictly positive. Defaults to ``1.0``.
 
         Raises:
-            ValueError: If discount_factor is not in valid range [0, 1] or if transition_error_prob
-                is not in valid range [0, 1]
+            ValueError: If discount_factor is not in valid range [0, 1], if
+                transition_error_prob is not in valid range [0, 1], or if
+                reward_model_type is unknown.
         """
         if not 0.0 <= discount_factor <= 1.0:
             raise ValueError("discount_factor must be between 0 and 1 (inclusive)")
@@ -238,16 +264,10 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
             3: (0, -1),  # West (left)
             4: (0, 0),  # Tag (no movement)
         }
-        self.reward_model: BaseLaserTagRewardModel = LaserTagRewardModel(
-            floor_shape=self.floor_shape,
-            walls=self.walls,
-            dangerous_areas=self.dangerous_areas,
-            dangerous_area_radius=self.dangerous_area_radius,
-            dangerous_area_penalty=self.dangerous_area_penalty,
-            tag_reward=self.tag_reward,
-            tag_penalty=self.tag_penalty,
-            step_cost=self.step_cost,
-            action_directions=self._action_directions,
+        self.reward_model_type = reward_model_type
+        self.penalty_decay = penalty_decay
+        self.reward_model: BaseLaserTagRewardModel = self._build_reward_model(
+            reward_model_type, penalty_decay
         )
         # Precomputed error-action lookup for the action-error coin in
         # _resolve_actual_action / _python_sample_next_state. Avoids a
@@ -256,6 +276,48 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         self._error_actions_for: Dict[int, List[int]] = {
             a: [b for b in (0, 1, 2, 3) if b != a] for a in (0, 1, 2, 3)
         }
+
+    def _build_reward_model(
+        self, reward_model_type: RewardModelType, penalty_decay: float
+    ) -> BaseLaserTagRewardModel:
+        if reward_model_type == RewardModelType.STANDARD:
+            return LaserTagRewardModel(
+                floor_shape=self.floor_shape,
+                walls=self.walls,
+                dangerous_areas=self.dangerous_areas,
+                dangerous_area_radius=self.dangerous_area_radius,
+                dangerous_area_penalty=self.dangerous_area_penalty,
+                tag_reward=self.tag_reward,
+                tag_penalty=self.tag_penalty,
+                step_cost=self.step_cost,
+                action_directions=self._action_directions,
+            )
+        if reward_model_type == RewardModelType.HIGH_VARIANCE_STATES:
+            return LaserTagHighVarianceStatesRewardModel(
+                floor_shape=self.floor_shape,
+                walls=self.walls,
+                dangerous_areas=self.dangerous_areas,
+                dangerous_area_radius=self.dangerous_area_radius,
+                dangerous_area_penalty=self.dangerous_area_penalty,
+                tag_reward=self.tag_reward,
+                tag_penalty=self.tag_penalty,
+                step_cost=self.step_cost,
+                action_directions=self._action_directions,
+            )
+        if reward_model_type == RewardModelType.DECAYING_HIT_PROBABILITY:
+            return LaserTagDecayingHitProbabilityRewardModel(
+                floor_shape=self.floor_shape,
+                walls=self.walls,
+                dangerous_areas=self.dangerous_areas,
+                dangerous_area_radius=self.dangerous_area_radius,
+                dangerous_area_penalty=self.dangerous_area_penalty,
+                tag_reward=self.tag_reward,
+                tag_penalty=self.tag_penalty,
+                step_cost=self.step_cost,
+                action_directions=self._action_directions,
+                penalty_decay=penalty_decay,
+            )
+        raise ValueError(f"Unknown reward model type: {reward_model_type}")
 
     def __getstate__(self) -> Dict[str, Any]:
         # The native step / rollout / reward_batch caches and the vectorized
