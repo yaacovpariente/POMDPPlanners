@@ -40,6 +40,13 @@ from POMDPPlanners.environments.environment_utils.dangerous_areas_kernels import
     decaying_prob_penalty_batch_kernel,
 )
 
+# Module-level binding of the scalar uniform draw. Reading
+# ``np.random.random_sample`` once at import time turns the hot-path call
+# from LOAD_GLOBAL np / LOAD_ATTR random / LOAD_ATTR random_sample into a
+# single LOAD_GLOBAL (~50–100 ns saved per call). Uses the same global
+# numpy RNG state so ``np.random.seed`` semantics are preserved.
+_scalar_random = np.random.random_sample  # pylint: disable=no-member
+
 
 class RewardModelType(Enum):
     """Reward model variants supported by the Push POMDP family."""
@@ -331,24 +338,37 @@ class DiscretePushDecayingHitProbabilityRewardModel(DiscretePushRewardModel):
         if penalty_decay <= 0.0:
             raise ValueError("penalty_decay must be strictly positive")
         self.penalty_decay = float(penalty_decay)
+        # Pre-square the decay so the squared-form scalar fast-path avoids
+        # an extra multiply per call.
+        self._decay_sq = float(penalty_decay) * float(penalty_decay)
 
     def _dangerous_area_contribution_scalar(self, robot_x: float, robot_y: float) -> float:
         # Inlined Python scan — for the typical D=2..3 zone counts in this
         # env the per-call numba dispatch (~1 µs) dominates the actual
         # work (~100–200 ns), so iterating the Python list-of-tuples and
-        # computing ``exp`` here is ~5–10× faster than dispatching to
+        # computing here is ~5–10× faster than dispatching to
         # :func:`decaying_prob_penalty_kernel`. The batch path keeps the
         # numba kernel because dispatch amortises across N rows.
-        if not self.dangerous_areas:
+        #
+        # Squared-form hit test: the original predicate is
+        #     rand < exp(-sqrt(min_sq) / decay)
+        # ⇔  log(rand) < -sqrt(min_sq) / decay        (log monotone)
+        # ⇔  -decay·log(rand) > sqrt(min_sq)          (both sides ≥ 0)
+        # ⇔  decay² · log(rand)² > min_sq             (square, sides ≥ 0)
+        # which drops sqrt + exp in favour of a single log + square. Saves
+        # ~50–100 ns per call vs the literal form.
+        zones = self.dangerous_areas
+        if not zones:
             return 0.0
         min_sq = math.inf
-        for danger_x, danger_y in self.dangerous_areas:
+        for danger_x, danger_y in zones:
             ddx = robot_x - danger_x
             ddy = robot_y - danger_y
             d_sq = ddx * ddx + ddy * ddy
-            min_sq = min(min_sq, d_sq)
-        hit_prob = math.exp(-math.sqrt(min_sq) / self.penalty_decay)
-        if np.random.rand() < hit_prob:
+            if d_sq < min_sq:  # pylint: disable=consider-using-min-builtin
+                min_sq = d_sq
+        log_u = math.log(_scalar_random())
+        if self._decay_sq * log_u * log_u > min_sq:
             return self.dangerous_area_penalty
         return 0.0
 
