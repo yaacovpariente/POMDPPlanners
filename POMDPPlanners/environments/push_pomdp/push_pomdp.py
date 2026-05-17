@@ -39,6 +39,9 @@ from POMDPPlanners.core.environment import (
 )
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
 from POMDPPlanners.environments.push_pomdp import _native
+from POMDPPlanners.environments.push_pomdp.push_pomdp_utils.push_reward_models import (
+    DiscretePushRewardModel,
+)
 from POMDPPlanners.environments.push_pomdp.push_pomdp_visualizer import PushPOMDPVisualizer
 from POMDPPlanners.utils.statistics_utils import confidence_interval
 
@@ -328,6 +331,17 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
         # objects.
         self._trans_kernel_cache: Dict[str, Any] = {}
 
+        self.reward_model: DiscretePushRewardModel = DiscretePushRewardModel(
+            obstacles=self.obstacles,
+            obstacle_radius=self.obstacle_radius,
+            obstacle_penalty=self.obstacle_penalty,
+            obstacle_hit_probability=self.obstacle_hit_probability,
+            dangerous_areas_arr=self._dangerous_areas_arr,
+            dangerous_area_radius=self.dangerous_area_radius,
+            dangerous_area_penalty=self.dangerous_area_penalty,
+            dangerous_area_hit_probability=self.dangerous_area_hit_probability,
+        )
+
     def _is_colliding_with_obstacle(
         self, position: np.ndarray, action: Optional[str] = None
     ) -> bool:
@@ -363,7 +377,7 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
     def sample_next_step(self, state: Any, action: Any) -> Tuple[Any, Any, float]:
         next_state = self.sample_next_state(state=state, action=action)
         next_observation = self.sample_observation(next_state=next_state, action=action)
-        r = self._reward_from_next_state(state, action, next_state)
+        r = self.reward_model.compute_reward(state, action, next_state)
         return next_state, next_observation, r
 
     # ── Env-API sampling implementations ────────────────────────────
@@ -608,45 +622,7 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
         # sample a fresh next state to evaluate the action result.
         if next_state is None:
             next_state = self.sample_next_state(state, action)
-        return self._reward_from_next_state(state, action, next_state)
-
-    def _reward_from_next_state(
-        self, state: np.ndarray, action: str, next_state: np.ndarray
-    ) -> float:
-        # State components: [robot_x, robot_y, object_x, object_y, target_x, target_y]
-        del state, action  # penalties consult the realised post-transition robot pos
-        dx = next_state[2] - next_state[4]
-        dy = next_state[3] - next_state[5]
-        distance_to_target = math.sqrt(dx * dx + dy * dy)
-
-        # Base reward is negative distance to encourage moving closer to target
-        reward = -distance_to_target
-
-        # Additional reward for reaching target
-        if distance_to_target < 0.5:
-            reward += 100.0
-
-        # Score obstacle/danger penalties against the realised robot
-        # position so reward and trajectory agree on the same draw —
-        # mirrors the ContinuousPushPOMDP fix. Action-blocking +
-        # transition_error_prob can move the robot somewhere other than
-        # ``state[:2] + dxdy``, so checking the intended position
-        # double-counts bounce-offs and miscredits orthogonal-error draws.
-        if self._is_colliding_with_obstacle(next_state[:2]):
-            if (
-                self.obstacle_hit_probability >= 1.0
-                or np.random.random() < self.obstacle_hit_probability
-            ):
-                reward += self.obstacle_penalty
-
-        if self._is_in_dangerous_area(next_state[:2]):
-            if (
-                self.dangerous_area_hit_probability >= 1.0
-                or np.random.random() < self.dangerous_area_hit_probability
-            ):
-                reward += self.dangerous_area_penalty
-
-        return float(reward)
+        return self.reward_model.compute_reward(state, action, next_state)
 
     def is_terminal(self, state: np.ndarray) -> bool:
         # Episode ends when object is close to target
@@ -785,7 +761,7 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
         # accepts a pre-drawn action list (to allow exact comparison with the
         # C++ path when transition_error_prob=0 and the actions are held fixed).
         sample_one = self._sample_one_next_state
-        reward_from_next = self._reward_from_next_state
+        reward_from_next = self.reward_model.compute_reward
         is_terminal = self.is_terminal
 
         total = 0.0
@@ -855,56 +831,7 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
             next_states_arr = np.ascontiguousarray(np.asarray(next_states, dtype=float))
             if next_states_arr.ndim == 1:
                 next_states_arr = next_states_arr.reshape(1, -1)
-        return self._reward_batch_from_next_states(states_array, action, next_states_arr)
-
-    def _reward_batch_from_next_states(
-        self, states: np.ndarray, action: str, next_states: np.ndarray
-    ) -> np.ndarray:
-        # ``states``/``action`` are kept on the signature for symmetry with
-        # ``Environment.reward_batch``; the obstacle and dangerous-area
-        # penalties consume the realised post-transition robot position
-        # from ``next_states`` to stay in lockstep with the scalar
-        # ``_reward_from_next_state`` path (and the ContinuousPushPOMDP
-        # reference fix).
-        del states, action
-        dx = next_states[:, 2] - next_states[:, 4]
-        dy = next_states[:, 3] - next_states[:, 5]
-        dist = np.sqrt(dx * dx + dy * dy)
-        rewards = -dist
-        rewards = np.where(dist < 0.5, rewards + 100.0, rewards)
-        rewards += self._obstacle_penalty_batch(next_states)
-        rewards += self._dangerous_area_penalty_batch(next_states)
-        return rewards.astype(np.float64)
-
-    def _obstacle_penalty_batch(self, next_states: np.ndarray) -> np.ndarray:
-        # Score the obstacle penalty against the realised next robot
-        # position (``next_states[:, :2]``); mirrors the scalar path's
-        # post-fix ``_is_colliding_with_obstacle(next_state[:2])`` call.
-        if not self.obstacles:
-            return np.zeros(len(next_states), dtype=np.float64)
-        positions = next_states[:, :2]
-        obs_arr = np.asarray(self.obstacles, dtype=float)  # (M, 2)
-        diff = positions[:, None, :] - obs_arr[None, :, :]  # (N, M, 2)
-        dist_sq = np.sum(diff * diff, axis=2)  # (N, M)
-        colliding = np.any(dist_sq <= self.obstacle_radius * self.obstacle_radius, axis=1)
-        if self.obstacle_hit_probability < 1.0:
-            # Per-row Bernoulli mask: refund the penalty for rows that collide
-            # but lose the per-call coin flip.
-            applied = np.random.random(len(next_states)) < self.obstacle_hit_probability
-            colliding = colliding & applied
-        return np.where(colliding, self.obstacle_penalty, 0.0).astype(np.float64)
-
-    def _dangerous_area_penalty_batch(self, next_states: np.ndarray) -> np.ndarray:
-        if not self.dangerous_areas:
-            return np.zeros(len(next_states), dtype=np.float64)
-        positions = next_states[:, :2]
-        diff = positions[:, None, :] - self._dangerous_areas_arr[None, :, :]
-        dist_sq = np.sum(diff * diff, axis=2)
-        in_zone = np.any(dist_sq <= self.dangerous_area_radius * self.dangerous_area_radius, axis=1)
-        if self.dangerous_area_hit_probability < 1.0:
-            applied = np.random.random(len(next_states)) < self.dangerous_area_hit_probability
-            in_zone = in_zone & applied
-        return np.where(in_zone, self.dangerous_area_penalty, 0.0).astype(np.float64)
+        return self.reward_model.compute_reward_batch(states_array, action, next_states_arr)
 
     def observation_log_probability_per_state(
         self, next_states: Any, action: str, observation: Any

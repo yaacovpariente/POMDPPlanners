@@ -2332,7 +2332,7 @@ class TestLaserTagPOMDPPickling:
         # Warm every cache that previously held a pybind11 reference.
         env._get_native_step_params()  # type: ignore[attr-defined]  # pylint: disable=protected-access
         env._get_native_rollout_params()  # type: ignore[attr-defined]  # pylint: disable=protected-access
-        env._get_native_reward_batch()  # type: ignore[attr-defined]  # pylint: disable=protected-access
+        env.reward_model._get_native_reward_batch()  # type: ignore[attr-defined]  # pylint: disable=protected-access
         # Vectorized updater is built lazily by sample_next_state_batch.
         state = env.initial_state_dist().sample()[0]
         env.sample_next_state_batch(np.asarray([state]), action=0)
