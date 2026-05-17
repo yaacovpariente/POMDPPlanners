@@ -342,6 +342,12 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
         self._trans_kernel_cache: Dict[str, Any] = {}
 
         self.reward_model: BasePushRewardModel = self._build_reward_model()
+        # Cache the bound methods so the hot path skips ``self.reward_model``
+        # attribute lookup on each call (~50–100 ns saved per call). Bound
+        # methods pickle correctly via ``(class, name, instance)``, so
+        # __setstate__ doesn't need to rebuild them.
+        self._compute_reward = self.reward_model.compute_reward
+        self._compute_reward_batch = self.reward_model.compute_reward_batch
 
     def _build_reward_model(self) -> BasePushRewardModel:
         # ``Dict[str, Any]`` opt-out is required so pyright doesn't narrow
@@ -403,7 +409,7 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
     def sample_next_step(self, state: Any, action: Any) -> Tuple[Any, Any, float]:
         next_state = self.sample_next_state(state=state, action=action)
         next_observation = self.sample_observation(next_state=next_state, action=action)
-        r = self.reward_model.compute_reward(state, action, next_state)
+        r = self._compute_reward(state, action, next_state)
         return next_state, next_observation, r
 
     # ── Env-API sampling implementations ────────────────────────────
@@ -648,7 +654,7 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
         # sample a fresh next state to evaluate the action result.
         if next_state is None:
             next_state = self.sample_next_state(state, action)
-        return self.reward_model.compute_reward(state, action, next_state)
+        return self._compute_reward(state, action, next_state)
 
     def is_terminal(self, state: np.ndarray) -> bool:
         # Episode ends when object is close to target
@@ -787,7 +793,7 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
         # accepts a pre-drawn action list (to allow exact comparison with the
         # C++ path when transition_error_prob=0 and the actions are held fixed).
         sample_one = self._sample_one_next_state
-        reward_from_next = self.reward_model.compute_reward
+        reward_from_next = self._compute_reward
         is_terminal = self.is_terminal
 
         total = 0.0
@@ -857,7 +863,7 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
             next_states_arr = np.ascontiguousarray(np.asarray(next_states, dtype=float))
             if next_states_arr.ndim == 1:
                 next_states_arr = next_states_arr.reshape(1, -1)
-        return self.reward_model.compute_reward_batch(states_array, action, next_states_arr)
+        return self._compute_reward_batch(states_array, action, next_states_arr)
 
     def observation_log_probability_per_state(
         self, next_states: Any, action: str, observation: Any

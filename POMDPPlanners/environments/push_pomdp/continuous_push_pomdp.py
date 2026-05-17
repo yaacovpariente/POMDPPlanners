@@ -281,6 +281,12 @@ class ContinuousPushPOMDP(Environment):
         )
 
         self.reward_model: BasePushRewardModel = self._build_reward_model()
+        # Cache the bound method so the hot path skips ``self.reward_model``
+        # attribute lookup on each call (~50–100 ns saved per call). Only
+        # the batch path is used here; ``reward()`` re-enters
+        # ``reward_batch`` via the (1, 6) reshape wrapper, so caching the
+        # batch ref covers both entry points.
+        self._compute_reward_batch = self.reward_model.compute_reward_batch
 
     def _build_reward_model(self) -> BasePushRewardModel:
         # ``Dict[str, Any]`` opt-out is required so pyright doesn't narrow
@@ -466,7 +472,7 @@ class ContinuousPushPOMDP(Environment):
             next_states_arr = np.ascontiguousarray(
                 np.asarray(next_state, dtype=np.float64)
             ).reshape(1, -1)
-        rewards = self.reward_model.compute_reward_batch(state_arr, action_arr, next_states_arr)
+        rewards = self._compute_reward_batch(state_arr, action_arr, next_states_arr)
         return float(rewards[0])
 
     def reward_batch(
@@ -491,7 +497,7 @@ class ContinuousPushPOMDP(Environment):
             next_states_arr = np.ascontiguousarray(np.asarray(next_states, dtype=np.float64))
             if next_states_arr.ndim == 1:
                 next_states_arr = next_states_arr.reshape(1, -1)
-        return self.reward_model.compute_reward_batch(states_arr, action_arr, next_states_arr)
+        return self._compute_reward_batch(states_arr, action_arr, next_states_arr)
 
     def __getstate__(self):
         # Per-action C++ kernel cache holds pybind11 objects that aren't
