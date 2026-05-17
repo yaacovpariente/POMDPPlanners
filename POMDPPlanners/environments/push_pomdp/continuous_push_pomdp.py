@@ -41,7 +41,11 @@ from POMDPPlanners.environments.push_pomdp.continuous_push_geometry import (
     point_inside_aabb,
 )
 from POMDPPlanners.environments.push_pomdp.push_pomdp_utils.push_reward_models import (
+    BasePushRewardModel,
+    ContinuousPushDecayingHitProbabilityRewardModel,
+    ContinuousPushHighVarianceStatesRewardModel,
     ContinuousPushRewardModel,
+    RewardModelType,
 )
 from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
 from POMDPPlanners.utils.statistics_utils import confidence_interval
@@ -180,6 +184,8 @@ class ContinuousPushPOMDP(Environment):
         dangerous_area_radius: float = 0.5,
         dangerous_area_penalty: float = -10.0,
         dangerous_area_hit_probability: float = 1.0,
+        reward_model_type: RewardModelType = RewardModelType.STANDARD,
+        penalty_decay: float = 1.0,
         robot_radius: float = 0.3,
         state_transition_cov_matrix: np.ndarray = np.eye(2) * 0.1,
         initial_state: Optional[np.ndarray] = None,
@@ -192,6 +198,8 @@ class ContinuousPushPOMDP(Environment):
             raise ValueError("obstacle_hit_probability must be between 0 and 1 (inclusive)")
         if not 0.0 <= dangerous_area_hit_probability <= 1.0:
             raise ValueError("dangerous_area_hit_probability must be between 0 and 1 (inclusive)")
+        if reward_model_type == RewardModelType.DECAYING_HIT_PROBABILITY and penalty_decay <= 0.0:
+            raise ValueError("penalty_decay must be strictly positive")
 
         self.grid_size = grid_size
         self.push_threshold = push_threshold
@@ -215,6 +223,8 @@ class ContinuousPushPOMDP(Environment):
         self.dangerous_area_radius = float(dangerous_area_radius)
         self.dangerous_area_penalty = float(dangerous_area_penalty)
         self.dangerous_area_hit_probability = float(dangerous_area_hit_probability)
+        self.reward_model_type = reward_model_type
+        self.penalty_decay = float(penalty_decay)
         if self.dangerous_areas:
             self._dangerous_areas_arr: np.ndarray = np.ascontiguousarray(
                 np.asarray(self.dangerous_areas, dtype=np.float64).reshape(-1, 2)
@@ -270,16 +280,38 @@ class ContinuousPushPOMDP(Environment):
             use_queue_logger=use_queue_logger,
         )
 
-        self.reward_model: ContinuousPushRewardModel = ContinuousPushRewardModel(
-            obstacles=self.obstacles,
-            robot_radius=self.robot_radius,
-            obstacle_penalty=self.obstacle_penalty,
-            obstacle_hit_probability=self.obstacle_hit_probability,
-            dangerous_areas_arr=self._dangerous_areas_arr,
-            dangerous_area_radius=self.dangerous_area_radius,
-            dangerous_area_penalty=self.dangerous_area_penalty,
-            dangerous_area_hit_probability=self.dangerous_area_hit_probability,
-        )
+        self.reward_model: BasePushRewardModel = self._build_reward_model()
+        # Cache the bound method so the hot path skips ``self.reward_model``
+        # attribute lookup on each call (~50–100 ns saved per call). Only
+        # the batch path is used here; ``reward()`` re-enters
+        # ``reward_batch`` via the (1, 6) reshape wrapper, so caching the
+        # batch ref covers both entry points.
+        self._compute_reward_batch = self.reward_model.compute_reward_batch
+
+    def _build_reward_model(self) -> BasePushRewardModel:
+        # ``Dict[str, Any]`` opt-out is required so pyright doesn't narrow
+        # the value type to ``ndarray | float`` (the lub of obstacles +
+        # scalars) and then reject the ``**`` unpack as incompatible with
+        # each reward-model __init__'s typed parameters.
+        common_kwargs: Dict[str, Any] = {
+            "obstacles": self.obstacles,
+            "robot_radius": self.robot_radius,
+            "obstacle_penalty": self.obstacle_penalty,
+            "obstacle_hit_probability": self.obstacle_hit_probability,
+            "dangerous_areas_arr": self._dangerous_areas_arr,
+            "dangerous_area_radius": self.dangerous_area_radius,
+            "dangerous_area_penalty": self.dangerous_area_penalty,
+            "dangerous_area_hit_probability": self.dangerous_area_hit_probability,
+        }
+        if self.reward_model_type == RewardModelType.STANDARD:
+            return ContinuousPushRewardModel(**common_kwargs)
+        if self.reward_model_type == RewardModelType.HIGH_VARIANCE_STATES:
+            return ContinuousPushHighVarianceStatesRewardModel(**common_kwargs)
+        if self.reward_model_type == RewardModelType.DECAYING_HIT_PROBABILITY:
+            return ContinuousPushDecayingHitProbabilityRewardModel(
+                penalty_decay=self.penalty_decay, **common_kwargs
+            )
+        raise ValueError(f"Unknown reward model type: {self.reward_model_type}")
 
     def _build_obstacle_array(
         self, obstacle_tuples: List[Tuple[float, float, float]]
@@ -440,7 +472,7 @@ class ContinuousPushPOMDP(Environment):
             next_states_arr = np.ascontiguousarray(
                 np.asarray(next_state, dtype=np.float64)
             ).reshape(1, -1)
-        rewards = self.reward_model.compute_reward_batch(state_arr, action_arr, next_states_arr)
+        rewards = self._compute_reward_batch(state_arr, action_arr, next_states_arr)
         return float(rewards[0])
 
     def reward_batch(
@@ -465,7 +497,7 @@ class ContinuousPushPOMDP(Environment):
             next_states_arr = np.ascontiguousarray(np.asarray(next_states, dtype=np.float64))
             if next_states_arr.ndim == 1:
                 next_states_arr = next_states_arr.reshape(1, -1)
-        return self.reward_model.compute_reward_batch(states_arr, action_arr, next_states_arr)
+        return self._compute_reward_batch(states_arr, action_arr, next_states_arr)
 
     def __getstate__(self):
         # Per-action C++ kernel cache holds pybind11 objects that aren't
@@ -823,6 +855,8 @@ class ContinuousPushPOMDPDiscreteActions(ContinuousPushPOMDP, DiscreteActionsEnv
         dangerous_area_radius: float = 0.5,
         dangerous_area_penalty: float = -10.0,
         dangerous_area_hit_probability: float = 1.0,
+        reward_model_type: RewardModelType = RewardModelType.STANDARD,
+        penalty_decay: float = 1.0,
         robot_radius: float = 0.3,
         state_transition_cov_matrix: np.ndarray = np.eye(2) * 0.1,
         initial_state: Optional[np.ndarray] = None,
@@ -845,6 +879,8 @@ class ContinuousPushPOMDPDiscreteActions(ContinuousPushPOMDP, DiscreteActionsEnv
             dangerous_area_radius=dangerous_area_radius,
             dangerous_area_penalty=dangerous_area_penalty,
             dangerous_area_hit_probability=dangerous_area_hit_probability,
+            reward_model_type=reward_model_type,
+            penalty_decay=penalty_decay,
             robot_radius=robot_radius,
             state_transition_cov_matrix=state_transition_cov_matrix,
             initial_state=initial_state,
