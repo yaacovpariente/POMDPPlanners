@@ -31,6 +31,8 @@ from POMDPPlanners.core.simulation import History, MetricValue, StepData
 from POMDPPlanners.environments.rock_sample_pomdp import _native
 from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp_utils.rock_sample_reward_models import (
     BaseRockSampleRewardModel,
+    RockSampleDecayingHitProbabilityRewardModel,
+    RockSampleHighVarianceRewardModel,
     RockSampleRewardModel,
 )
 from POMDPPlanners.utils.statistics_utils import confidence_interval
@@ -42,6 +44,21 @@ class RockSamplePOMDPMetrics(Enum):
     AVG_ROCKS_SAMPLED = "avg_rocks_sampled"
     EXIT_SUCCESS_RATE = "exit_success_rate"
     AVERAGE_DANGEROUS_AREA_STEPS = "average_dangerous_area_steps"
+
+
+class RewardModelType(Enum):
+    """Reward-model variants for :class:`RockSamplePOMDP`.
+
+    Variants differ only in how the dangerous-area penalty is applied —
+    base scoring (exit / sample / sense / step) is identical across all
+    three. See
+    :mod:`POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp_utils.rock_sample_reward_models`
+    for the per-variant semantics.
+    """
+
+    STANDARD = "standard"
+    DECAYING_HIT_PROBABILITY = "decaying_hit_probability"
+    HIGH_VARIANCE_STATES = "high_variance_states"
 
 
 # Type alias for RockSampleState
@@ -178,6 +195,8 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
         dangerous_area_radius: float = 1.0,
         dangerous_area_penalty: float = -5.0,
         dangerous_area_hit_probability: float = 1.0,
+        reward_model_type: RewardModelType = RewardModelType.STANDARD,
+        penalty_decay: float = 1.0,
         discount_factor: float = 0.95,
         name: str = "RockSample",
         output_dir: Optional[Path] = None,
@@ -211,7 +230,23 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
                 reward stochastic (per-call Bernoulli draw), useful for
                 risk-sensitive planning benchmarks. Note that this makes
                 ``reward(state, action)`` non-deterministic given a
-                state-action pair.
+                state-action pair. Ignored by ``HIGH_VARIANCE_STATES``
+                and ``DECAYING_HIT_PROBABILITY`` reward models.
+            reward_model_type: Which dangerous-area penalty model to use.
+                Defaults to ``RewardModelType.STANDARD`` (legacy
+                constant-probability behaviour). ``HIGH_VARIANCE_STATES``
+                applies ``±dangerous_area_penalty`` 50/50 in-zone (zero
+                expected contribution, high variance — useful for
+                risk-sensitive planner benchmarks).
+                ``DECAYING_HIT_PROBABILITY`` applies the penalty with
+                probability ``exp(-min_dist / penalty_decay)`` based on
+                distance to the closest dangerous-area centre (no radius
+                cutoff). See
+                :class:`~POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp.RewardModelType`.
+            penalty_decay: Distance-decay constant for the
+                ``DECAYING_HIT_PROBABILITY`` reward model. Must be
+                positive. Ignored by other reward models. Defaults to
+                ``1.0``.
             discount_factor: Discount factor. Defaults to 0.95.
             name: Environment name. Defaults to "RockSample".
             output_dir: Output directory for logging. Defaults to None.
@@ -229,10 +264,21 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
                 stacklevel=2,
             )
 
-        # Calculate reward range based on parameters
-        danger_term = dangerous_area_penalty if dangerous_areas else 0.0
-        min_reward = step_penalty + bad_rock_penalty + sensor_use_penalty + min(0.0, danger_term)
-        max_reward = step_penalty + exit_reward + max(0.0, danger_term)
+        # Calculate reward range based on parameters. HIGH_VARIANCE_STATES
+        # can flip the sign of the dangerous-area contribution, so its
+        # effective danger term spans ``[-|penalty|, +|penalty|]``.
+        if dangerous_areas:
+            if reward_model_type == RewardModelType.HIGH_VARIANCE_STATES:
+                danger_term_min = -abs(dangerous_area_penalty)
+                danger_term_max = abs(dangerous_area_penalty)
+            else:
+                danger_term_min = min(0.0, dangerous_area_penalty)
+                danger_term_max = max(0.0, dangerous_area_penalty)
+        else:
+            danger_term_min = 0.0
+            danger_term_max = 0.0
+        min_reward = step_penalty + bad_rock_penalty + sensor_use_penalty + danger_term_min
+        max_reward = step_penalty + exit_reward + danger_term_max
 
         space_info = SpaceInfo(
             action_space=SpaceType.DISCRETE, observation_space=SpaceType.DISCRETE
@@ -265,20 +311,10 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
         self.dangerous_area_radius = dangerous_area_radius
         self.dangerous_area_penalty = dangerous_area_penalty
         self.dangerous_area_hit_probability = float(dangerous_area_hit_probability)
+        self.reward_model_type = reward_model_type
+        self.penalty_decay = float(penalty_decay)
 
-        self.reward_model: BaseRockSampleRewardModel = RockSampleRewardModel(
-            map_size=self.map_size,
-            rock_positions=self.rock_positions,
-            step_penalty=self.step_penalty,
-            bad_rock_penalty=self.bad_rock_penalty,
-            good_rock_reward=self.good_rock_reward,
-            sensor_use_penalty=self.sensor_use_penalty,
-            exit_reward=self.exit_reward,
-            dangerous_areas=self.dangerous_areas,
-            dangerous_area_radius=self.dangerous_area_radius,
-            dangerous_area_penalty=self.dangerous_area_penalty,
-            dangerous_area_hit_probability=self.dangerous_area_hit_probability,
-        )
+        self.reward_model: BaseRockSampleRewardModel = self._build_reward_model()
 
         # Validate parameters
         self._validate_parameters()
@@ -315,6 +351,30 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
         # / ``_get_obs_kernel`` and reset on unpickle.
         self._trans_kernel_cache: Dict[int, Any] = {}
         self._obs_kernel_cache: Dict[int, Any] = {}
+
+    def _build_reward_model(self) -> BaseRockSampleRewardModel:
+        common_kwargs = {
+            "map_size": self.map_size,
+            "rock_positions": self.rock_positions,
+            "step_penalty": self.step_penalty,
+            "bad_rock_penalty": self.bad_rock_penalty,
+            "good_rock_reward": self.good_rock_reward,
+            "sensor_use_penalty": self.sensor_use_penalty,
+            "exit_reward": self.exit_reward,
+            "dangerous_areas": self.dangerous_areas,
+            "dangerous_area_radius": self.dangerous_area_radius,
+            "dangerous_area_penalty": self.dangerous_area_penalty,
+            "dangerous_area_hit_probability": self.dangerous_area_hit_probability,
+        }
+        if self.reward_model_type == RewardModelType.STANDARD:
+            return RockSampleRewardModel(**common_kwargs)
+        if self.reward_model_type == RewardModelType.HIGH_VARIANCE_STATES:
+            return RockSampleHighVarianceRewardModel(**common_kwargs)
+        if self.reward_model_type == RewardModelType.DECAYING_HIT_PROBABILITY:
+            return RockSampleDecayingHitProbabilityRewardModel(
+                **common_kwargs, penalty_decay=self.penalty_decay
+            )
+        raise ValueError(f"Unknown reward model type: {self.reward_model_type}")
 
     def _validate_parameters(self):
         """Validate environment parameters."""
