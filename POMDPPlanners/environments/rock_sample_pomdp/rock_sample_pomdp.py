@@ -29,6 +29,10 @@ from POMDPPlanners.core.environment import (
 )
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
 from POMDPPlanners.environments.rock_sample_pomdp import _native
+from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp_utils.rock_sample_reward_models import (
+    BaseRockSampleRewardModel,
+    RockSampleRewardModel,
+)
 from POMDPPlanners.utils.statistics_utils import confidence_interval
 
 
@@ -262,6 +266,20 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
         self.dangerous_area_penalty = dangerous_area_penalty
         self.dangerous_area_hit_probability = float(dangerous_area_hit_probability)
 
+        self.reward_model: BaseRockSampleRewardModel = RockSampleRewardModel(
+            map_size=self.map_size,
+            rock_positions=self.rock_positions,
+            step_penalty=self.step_penalty,
+            bad_rock_penalty=self.bad_rock_penalty,
+            good_rock_reward=self.good_rock_reward,
+            sensor_use_penalty=self.sensor_use_penalty,
+            exit_reward=self.exit_reward,
+            dangerous_areas=self.dangerous_areas,
+            dangerous_area_radius=self.dangerous_area_radius,
+            dangerous_area_penalty=self.dangerous_area_penalty,
+            dangerous_area_hit_probability=self.dangerous_area_hit_probability,
+        )
+
         # Validate parameters
         self._validate_parameters()
 
@@ -313,25 +331,14 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
             )
 
     def _is_in_dangerous_area(self, position: Tuple[int, int]) -> bool:
-        """Check if a position is within any dangerous area.
-
-        Args:
-            position: Position to check as (row, col) tuple
-
-        Returns:
-            True if position is within radius of any dangerous area center
-        """
+        """Check if a position is within any dangerous area (metrics helper)."""
         if not self.dangerous_areas:
             return False
-
         pos_row, pos_col = position
-
         for danger_row, danger_col in self.dangerous_areas:
-            # Calculate Euclidean distance
             distance = math.sqrt((pos_row - danger_row) ** 2 + (pos_col - danger_col) ** 2)
             if distance <= self.dangerous_area_radius:
                 return True
-
         return False
 
     def get_actions(self) -> List[int]:
@@ -358,34 +365,7 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
     def _reward_from_next_state(
         self, state: RockSampleState, action: int, next_state: RockSampleState
     ) -> float:
-        total_reward = self.step_penalty
-
-        robot_row, robot_col = get_robot_pos(state)
-        if action == 2 and robot_col == self.map_size[1] - 1:
-            total_reward += self.exit_reward
-            return total_reward
-
-        if action == 0:
-            rocks = get_rocks(state)
-            for i, rock_pos in enumerate(self.rock_positions):
-                if (robot_row, robot_col) == rock_pos:
-                    if rocks[i]:
-                        total_reward += self.good_rock_reward
-                    else:
-                        total_reward += self.bad_rock_penalty
-                    break
-
-        if action >= 5:
-            total_reward += self.sensor_use_penalty
-
-        if self._is_in_dangerous_area(get_robot_pos(next_state)):
-            if (
-                self.dangerous_area_hit_probability >= 1.0
-                or np.random.random() < self.dangerous_area_hit_probability
-            ):
-                total_reward += self.dangerous_area_penalty
-
-        return total_reward
+        return self.reward_model.compute_reward(state, action, next_state=next_state)
 
     def reward_batch(
         self,
@@ -422,85 +402,7 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
         action: int,
         next_states: Optional[np.ndarray] = None,
     ) -> np.ndarray:
-        n = states.shape[0]
-        rewards = np.full(n, self.step_penalty, dtype=np.float64)
-        map_cols = self.map_size[1]
-
-        if action == 2:
-            # East exit: robot at last column exits
-            exits = states[:, 1].astype(int) == (map_cols - 1)
-            # Terminal-sentinel rows are already exited; treat as exit
-            terminal = (states[:, 0] < 0) & (states[:, 1] < 0)
-            rewards[exits | terminal] += self.exit_reward
-            return rewards
-
-        if action == 0:
-            # Sample action: reward depends on rock quality at robot position
-            robot_rows = states[:, 0].astype(int)
-            robot_cols = states[:, 1].astype(int)
-            for i, (rr, rc) in enumerate(self.rock_positions):
-                at_rock = (robot_rows == rr) & (robot_cols == rc)
-                if not np.any(at_rock):
-                    continue
-                rock_slot = 2 + i
-                rock_good = states[:, rock_slot] > 0.5
-                rewards[at_rock & rock_good] += self.good_rock_reward
-                rewards[at_rock & ~rock_good] += self.bad_rock_penalty
-
-        if action >= 5:
-            rewards += self.sensor_use_penalty
-
-        # Default config has no dangerous areas; skip the next-position
-        # computation entirely. Otherwise, prefer caller-supplied
-        # realised next positions and only reconstruct via closed-form
-        # math when ``next_states`` is None. RockSample transitions are
-        # deterministic, so the closed-form fallback agrees with a
-        # fresh draw from :meth:`sample_next_state`.
-        if not self.dangerous_areas:
-            return rewards
-
-        if next_states is not None:
-            next_robot_rows = next_states[:, 0].astype(int)
-            next_robot_cols = next_states[:, 1].astype(int)
-        else:
-            next_robot_rows, next_robot_cols = self._closed_form_next_robot_pos(states, action)
-        deterministic = self.dangerous_area_hit_probability >= 1.0
-        for j in range(n):
-            if not self._is_in_dangerous_area((next_robot_rows[j], next_robot_cols[j])):
-                continue
-            if deterministic or np.random.random() < self.dangerous_area_hit_probability:
-                rewards[j] += self.dangerous_area_penalty
-
-        return rewards
-
-    def _closed_form_next_robot_pos(
-        self, states: np.ndarray, action: int
-    ) -> Tuple[np.ndarray, np.ndarray]:
-        # Closed-form post-transition robot position for the dangerous-area
-        # check. RockSample movement actions translate by ``(dr, dc)`` and
-        # clip to map bounds; sample / sense actions leave position
-        # unchanged. Terminal-sentinel rows (state[:, 0] < 0) keep their
-        # negative coordinates so they never match a dangerous-area cell,
-        # mirroring the batch-kernel semantics for that path.
-        robot_rows = states[:, 0].astype(int)
-        robot_cols = states[:, 1].astype(int)
-        if action == 1:
-            dr, dc = -1, 0
-        elif action == 3:
-            dr, dc = 1, 0
-        elif action == 4:
-            dr, dc = 0, -1
-        else:
-            dr, dc = 0, 0
-        new_rows = robot_rows + dr
-        new_cols = robot_cols + dc
-        terminal = (states[:, 0] < 0) & (states[:, 1] < 0)
-        new_rows = np.clip(new_rows, 0, self.map_size[0] - 1)
-        new_cols = np.clip(new_cols, 0, self.map_size[1] - 1)
-        # Restore terminal-sentinel rows so they stay "in their own row".
-        new_rows[terminal] = robot_rows[terminal]
-        new_cols[terminal] = robot_cols[terminal]
-        return new_rows, new_cols
+        return self.reward_model.compute_reward_batch(states, action, next_states=next_states)
 
     # ── Native-backed env-API implementations ────────────────────────
     # Each method fetches a cached per-action C++ kernel, mutates its
