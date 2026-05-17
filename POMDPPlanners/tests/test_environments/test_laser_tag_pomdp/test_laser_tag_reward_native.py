@@ -2,11 +2,12 @@
 
 Verifies that the ``_native.lasertag_discrete_reward_batch`` C++ free
 function produces results bit-for-bit equivalent to the legacy pure-
-Python implementation (now retained as ``_compute_reward_batch_python``
-when invoked without a ``next_states`` argument — i.e., the legacy
-intended-position branch). Covers all five discrete actions and both the
-default and explicit ``dangerous_areas`` configurations, plus the
-``ndim`` normalisation paths.
+Python implementation (now retained as
+``LaserTagRewardModel._compute_reward_batch_python`` when invoked
+without a ``next_states`` argument — i.e., the legacy intended-position
+branch). Covers all five discrete actions and both the default and
+explicit ``dangerous_areas`` configurations, plus the ``ndim``
+normalisation paths.
 
 Note: ``LaserTagPOMDP.reward_batch`` no longer routes through this
 native kernel when penalty terms exist (walls / dangerous areas) because
@@ -14,8 +15,9 @@ the public API now scores the wall / danger penalty against the
 *realised* next-state position (matching ``Environment.sample_next_step``
 semantics). The native kernel still encodes the legacy intended-position
 formula, so these tests invoke it directly via
-``_native.lasertag_discrete_reward_batch`` and compare to
-``_compute_reward_batch_python(states, action)`` with no ``next_states``.
+``_native.lasertag_discrete_reward_batch`` and compare to the reward
+model's ``_compute_reward_batch_python(states, action)`` with no
+``next_states``.
 """
 
 import numpy as np
@@ -23,26 +25,44 @@ import pytest
 
 from POMDPPlanners.environments.laser_tag_pomdp import LaserTagPOMDP
 from POMDPPlanners.environments.laser_tag_pomdp import _native
+from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_utils.laser_tag_reward_models import (
+    LaserTagRewardModel,
+)
+
+
+def _reference_reward_batch_python(
+    env: LaserTagPOMDP, states: np.ndarray, action: int
+) -> np.ndarray:
+    """Invoke the reward model's legacy Python intended-position branch."""
+    assert isinstance(env.reward_model, LaserTagRewardModel)
+    states_arr = np.asarray(states, dtype=np.float64)
+    if states_arr.ndim == 1:
+        states_arr = states_arr.reshape(1, -1)
+    return env.reward_model._compute_reward_batch_python(  # pylint: disable=protected-access
+        np.ascontiguousarray(states_arr), action
+    )
 
 
 def _native_reward_batch(env: LaserTagPOMDP, states: np.ndarray, action: int) -> np.ndarray:
     """Invoke the native legacy intended-position kernel directly."""
+    assert isinstance(env.reward_model, LaserTagRewardModel)
+    rm = env.reward_model
     return np.asarray(
         _native.lasertag_discrete_reward_batch(
             states=np.ascontiguousarray(states),
             action=int(action),
             rows=int(env.floor_shape[0]),
             cols=int(env.floor_shape[1]),
-            walls_flat=env._reward_walls_flat,  # pylint: disable=protected-access
-            n_walls=env._reward_n_walls,  # pylint: disable=protected-access
-            dangerous_areas=env._dangerous_areas_arr,  # pylint: disable=protected-access
-            n_dangerous=int(env._dangerous_areas_arr.shape[0]),  # pylint: disable=protected-access
+            walls_flat=rm._reward_walls_flat,  # pylint: disable=protected-access
+            n_walls=rm._reward_n_walls,  # pylint: disable=protected-access
+            dangerous_areas=rm._dangerous_areas_arr,  # pylint: disable=protected-access
+            n_dangerous=int(rm._dangerous_areas_arr.shape[0]),  # pylint: disable=protected-access
             dangerous_area_radius=float(env.dangerous_area_radius),
             dangerous_area_penalty=float(env.dangerous_area_penalty),
             tag_reward=float(env.tag_reward),
             tag_penalty=float(env.tag_penalty),
             step_cost=float(env.step_cost),
-            action_directions=env._action_directions_arr,  # pylint: disable=protected-access
+            action_directions=rm._action_directions_arr,  # pylint: disable=protected-access
         )
     )
 
@@ -115,9 +135,7 @@ def test_native_reward_batch_default_env_matches_python(
     """
     states = _build_state_batch()
     native = _native_reward_batch(default_env, states, action)
-    reference = default_env._compute_reward_batch_python(  # pylint: disable=protected-access
-        np.ascontiguousarray(states), action
-    )
+    reference = _reference_reward_batch_python(default_env, states, action)
     assert native.shape == (states.shape[0],)
     assert native.dtype == np.float64
     assert np.allclose(native, reference, atol=1e-12)
@@ -144,9 +162,7 @@ def test_native_reward_batch_explicit_dangerous_areas_matches_python(
     """
     states = _build_state_batch()
     native = _native_reward_batch(explicit_env, states, action)
-    reference = explicit_env._compute_reward_batch_python(  # pylint: disable=protected-access
-        np.ascontiguousarray(states), action
-    )
+    reference = _reference_reward_batch_python(explicit_env, states, action)
     assert np.allclose(native, reference, atol=1e-12)
 
 
@@ -169,9 +185,7 @@ def test_native_reward_batch_single_row_returns_shape_one(
     """
     states = np.array([[4.0, 3.0, 0.0, 0.0, 0.0]], dtype=np.float64)
     native = _native_reward_batch(default_env, states, 0)
-    reference = default_env._compute_reward_batch_python(  # pylint: disable=protected-access
-        states, 0
-    )
+    reference = _reference_reward_batch_python(default_env, states, 0)
     assert native.shape == (1,)
     assert native.dtype == np.float64
     assert np.allclose(native, reference, atol=1e-12)
@@ -197,9 +211,7 @@ def test_native_reward_batch_ndim_one_state_matches_python(
     """
     state = np.array([3.0, 3.0, 3.0, 3.0, 0.0], dtype=np.float64)
     native = _native_reward_batch(default_env, state.reshape(1, -1), 4)
-    reference = default_env._compute_reward_batch_python(  # pylint: disable=protected-access
-        state.reshape(1, -1), 4
-    )
+    reference = _reference_reward_batch_python(default_env, state.reshape(1, -1), 4)
     assert native.shape == (1,)
     assert native.dtype == np.float64
     assert np.allclose(native, reference, atol=1e-12)
