@@ -3,6 +3,9 @@ from typing import Optional
 
 import numpy as np
 
+from POMDPPlanners.environments.environment_utils.dangerous_areas_kernels import (
+    decaying_prob_penalty_batch_kernel,
+)
 from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.numba_kernels import (
     compute_reward_base_batch_kernel,
     compute_reward_base_kernel,
@@ -118,7 +121,11 @@ class ContinuousLightDarkRewardModel(BaseLightDarkRewardModel):
 
         Called by ``_compute_reward`` only when the Numba kernel reports the
         next state landed in an obstacle region but was not at goal / out-of-grid,
-        preserving the pre-refactor RNG call pattern.
+        preserving the pre-refactor RNG call pattern. The contribution is a
+        single ``penalty if uniform < hit_probability else 0`` check — too
+        trivial to amortise the Python→njit boundary cost of dispatching to
+        :mod:`environment_utils.dangerous_areas_kernels`, so the model keeps
+        the inline form here for hot-path efficiency.
         """
         return self.obstacle_reward if np.random.rand() < self.obstacle_hit_probability else 0.0
 
@@ -158,6 +165,15 @@ class ContinuousLightDarkRewardModel(BaseLightDarkRewardModel):
         return rewards
 
     def _obstacle_reward_batch(self, n: int) -> np.ndarray:
+        """Stochastic obstacle-hit contribution applied to the in-zone subset.
+
+        Kept as inline NumPy rather than dispatched to
+        :mod:`environment_utils.dangerous_areas_kernels` for the same reason
+        as :meth:`_obstacle_reward_scalar`: the per-row work is a single
+        threshold compare, and ``np.where`` over a length-``n_obs`` array
+        beats the Python→njit boundary plus the kernel's redundant zone-scan
+        pass (which the geometry kernel already performed).
+        """
         hits = np.random.rand(n) < self.obstacle_hit_probability
         return np.where(hits, self.obstacle_reward, 0.0)
 
@@ -167,7 +183,7 @@ class ContinuousLDHighVarianceStatesRewardModel(ContinuousLightDarkRewardModel):
         """The expected reward is 0.0, but the variance is high."""
         return self.obstacle_reward if np.random.rand() < 0.5 else -self.obstacle_reward
 
-    def _obstacle_reward(self, state: np.ndarray) -> float:
+    def _obstacle_reward(self, state: np.ndarray) -> float:  # pylint: disable=unused-argument
         """The expected reward is 0.0, but the variance is high."""
         return self.obstacle_reward if np.random.rand() < 0.5 else -self.obstacle_reward
 
@@ -244,9 +260,11 @@ class ContinuousLightDarkDecayingHitProbabilityRewardModel(BaseLightDarkRewardMo
         # to the deterministic ``states + action`` only when no realised
         # batch was supplied.
         if next_states is None:
-            next_states_arr = np.asarray(states) + np.asarray(action)
+            next_states_arr = np.ascontiguousarray(
+                np.asarray(states, dtype=np.float64) + np.asarray(action, dtype=np.float64)
+            )
         else:
-            next_states_arr = np.asarray(next_states)
+            next_states_arr = np.ascontiguousarray(np.asarray(next_states, dtype=np.float64))
         dists_to_goal = np.linalg.norm(next_states_arr - self.goal_state, axis=1)
         rewards = -self.fuel_cost - dists_to_goal
 
@@ -256,8 +274,16 @@ class ContinuousLightDarkDecayingHitProbabilityRewardModel(BaseLightDarkRewardMo
         oob = np.any(next_states_arr < 0, axis=1) | np.any(next_states_arr > self.grid_size, axis=1)
         rewards[oob & ~goal_mask] += self.obstacle_reward
 
-        diffs = next_states_arr[:, :, np.newaxis] - self.obstacles[np.newaxis, :, :]
-        min_dists = np.min(np.linalg.norm(diffs, axis=1), axis=1)
-        probs = np.exp(-min_dists / self.penalty_decay)
-        rewards[np.random.rand(len(next_states_arr)) < probs] += self.obstacle_reward
+        # Danger contribution via the generic decaying-prob batch kernel.
+        # Draws one uniform per row to preserve the pre-refactor RNG call
+        # pattern, then delegates min-distance + probability gating to the
+        # njit kernel (replaces the prior (N, D, 2) NumPy broadcast).
+        uniforms = np.random.rand(next_states_arr.shape[0])
+        rewards += decaying_prob_penalty_batch_kernel(
+            next_states_arr,
+            self.obstacles,
+            self.obstacle_reward,
+            self.penalty_decay,
+            uniforms,
+        )
         return rewards

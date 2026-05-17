@@ -29,6 +29,10 @@ from typing import Tuple
 import numpy as np
 from numba import njit
 
+from POMDPPlanners.environments.environment_utils.dangerous_areas_kernels import (
+    decaying_prob_penalty_kernel,  # called from compute_reward_decaying_hit_prob_kernel
+)
+
 # pylint: disable=no-value-for-parameter,not-an-iterable
 
 
@@ -212,15 +216,11 @@ def compute_reward_decaying_hit_prob_kernel(
     elif is_out_of_grid:
         reward += obstacle_reward
 
-    n_obs = obstacles.shape[1]
-    min_obs_sq = np.inf
-    for i in range(n_obs):
-        ox = next_x - obstacles[0, i]
-        oy = next_y - obstacles[1, i]
-        d_sq = ox * ox + oy * oy
-        min_obs_sq = min(min_obs_sq, d_sq)
-    min_obs_dist = min_obs_sq**0.5
-    hit_prob = np.exp(-min_obs_dist / penalty_decay)
-    if uniform < hit_prob:
-        reward += obstacle_reward
+    # Delegate the decaying-hit-probability contribution to the generic
+    # kernel (njit-to-njit, free at call time). Keeps this kernel's outer
+    # signature unchanged for back-compat with the Python caller while
+    # routing the danger logic through the shared environment_utils path.
+    reward += decaying_prob_penalty_kernel(
+        next_state, obstacles, obstacle_reward, penalty_decay, uniform
+    )
     return reward
