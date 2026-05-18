@@ -28,15 +28,15 @@ from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp imp
 
 
 _REWARD_VARIANT_CODES = {
-    RewardModelType.STANDARD: 0,
-    RewardModelType.HIGH_VARIANCE_STATES: 1,
-    RewardModelType.DECAYING_HIT_PROBABILITY: 2,
+    RewardModelType.CONSTANT_HAZARD_PENALTY: 0,
+    RewardModelType.ZERO_MEAN_HAZARD_SHOCK: 1,
+    RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY: 2,
 }
 
 _PENALTY_DECAY_BY_VARIANT = {
-    RewardModelType.STANDARD: 0.0,
-    RewardModelType.HIGH_VARIANCE_STATES: 0.0,
-    RewardModelType.DECAYING_HIT_PROBABILITY: 1.5,
+    RewardModelType.CONSTANT_HAZARD_PENALTY: 0.0,
+    RewardModelType.ZERO_MEAN_HAZARD_SHOCK: 0.0,
+    RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY: 1.5,
 }
 
 
@@ -114,9 +114,9 @@ class TestLightDarkRewardCppParity:
     @pytest.mark.parametrize(
         "variant",
         [
-            RewardModelType.STANDARD,
-            RewardModelType.HIGH_VARIANCE_STATES,
-            RewardModelType.DECAYING_HIT_PROBABILITY,
+            RewardModelType.CONSTANT_HAZARD_PENALTY,
+            RewardModelType.ZERO_MEAN_HAZARD_SHOCK,
+            RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY,
         ],
     )
     def test_cpp_python_reward_means_match(self, variant: RewardModelType) -> None:

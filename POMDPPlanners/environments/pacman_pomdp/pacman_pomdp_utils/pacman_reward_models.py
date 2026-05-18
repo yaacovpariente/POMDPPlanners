@@ -11,15 +11,15 @@ area scoring (step / collision / pellet / win) via the
 ``PacManRewardModel`` base; each variant only customises the dangerous-
 area contribution:
 
-* :class:`PacManRewardModel` (STANDARD): deterministic
+* :class:`PacManRewardModel` (CONSTANT_HAZARD_PENALTY): deterministic
   ``-dangerous_area_penalty`` whenever the realised next pacman position
   lies inside any configured circular hazard zone (squared-distance
   check against ``dangerous_area_radius``).
-* :class:`PacManHighVarianceStatesRewardModel` (HIGH_VARIANCE_STATES):
+* :class:`PacManZeroMeanHazardShockRewardModel` (ZERO_MEAN_HAZARD_SHOCK):
   ``±dangerous_area_penalty`` 50/50 in-zone — zero expected
   contribution, high variance.
-* :class:`PacManDecayingHitProbabilityRewardModel`
-  (DECAYING_HIT_PROBABILITY): ``-dangerous_area_penalty`` is applied
+* :class:`PacManDistanceDecayedHazardPenaltyRewardModel`
+  (DISTANCE_DECAYED_HAZARD_PENALTY): ``-dangerous_area_penalty`` is applied
   with probability ``exp(-min_dist / penalty_decay)`` based on the
   *closest* zone centre — no radius cutoff.
 
@@ -335,17 +335,17 @@ class PacManRewardModel(BasePacManRewardModel):
         return in_zone
 
 
-class PacManHighVarianceStatesRewardModel(PacManRewardModel):
-    """HIGH_VARIANCE_STATES variant.
+class PacManZeroMeanHazardShockRewardModel(PacManRewardModel):
+    """ZERO_MEAN_HAZARD_SHOCK variant.
 
     Replaces the deterministic in-zone penalty with a 50/50 split between
     ``+dangerous_area_penalty`` and ``-dangerous_area_penalty`` whenever
     the realised next pacman position is in any dangerous area. Expected
     contribution is ``0``; variance is ``dangerous_area_penalty**2``.
     Mirrors
-    :class:`~POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_reward_models.ContinuousLDHighVarianceStatesRewardModel`
+    :class:`~POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_reward_models.ContinuousLDZeroMeanHazardShockRewardModel`
     and
-    :class:`~POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_utils.laser_tag_reward_models.LaserTagHighVarianceStatesRewardModel`.
+    :class:`~POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_utils.laser_tag_reward_models.LaserTagZeroMeanHazardShockRewardModel`.
     All non-dangerous-area scoring (collision / pellet / win / step
     penalty) is identical to the standard model.
     """
@@ -404,8 +404,8 @@ class PacManHighVarianceStatesRewardModel(PacManRewardModel):
         return rewards
 
 
-class PacManDecayingHitProbabilityRewardModel(PacManRewardModel):
-    """DECAYING_HIT_PROBABILITY variant.
+class PacManDistanceDecayedHazardPenaltyRewardModel(PacManRewardModel):
+    """DISTANCE_DECAYED_HAZARD_PENALTY variant.
 
     Penalty is applied with probability
     ``exp(-min_dist / penalty_decay)`` where ``min_dist`` is the

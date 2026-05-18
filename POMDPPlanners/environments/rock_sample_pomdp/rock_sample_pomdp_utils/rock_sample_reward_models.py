@@ -12,13 +12,13 @@ non-dangerous-area scoring (exit, sample, sense, step-penalty) via the
 ``RockSampleRewardModel`` base; each variant only customises the
 dangerous-area contribution:
 
-* :class:`RockSampleRewardModel` (STANDARD): constant-probability
+* :class:`RockSampleRewardModel` (CONSTANT_HAZARD_PENALTY): constant-probability
   penalty when the realised next position is in any dangerous area.
-* :class:`RockSampleHighVarianceRewardModel` (HIGH_VARIANCE_STATES):
+* :class:`RockSampleZeroMeanHazardShockRewardModel` (ZERO_MEAN_HAZARD_SHOCK):
   ``±dangerous_area_penalty`` 50/50 in-zone — zero expected
   contribution, high variance.
-* :class:`RockSampleDecayingHitProbabilityRewardModel`
-  (DECAYING_HIT_PROBABILITY): penalty applied with probability
+* :class:`RockSampleDistanceDecayedHazardPenaltyRewardModel`
+  (DISTANCE_DECAYED_HAZARD_PENALTY): penalty applied with probability
   ``exp(-min_dist / penalty_decay)`` based on the *closest* zone
   centre — no radius cutoff.
 """
@@ -299,8 +299,8 @@ class RockSampleRewardModel(BaseRockSampleRewardModel):
         return new_rows, new_cols
 
 
-class RockSampleHighVarianceRewardModel(RockSampleRewardModel):
-    """HIGH_VARIANCE_STATES variant.
+class RockSampleZeroMeanHazardShockRewardModel(RockSampleRewardModel):
+    """ZERO_MEAN_HAZARD_SHOCK variant.
 
     Replaces the constant-probability penalty with a 50/50 split between
     ``+dangerous_area_penalty`` and ``-dangerous_area_penalty`` whenever
@@ -335,8 +335,8 @@ class RockSampleHighVarianceRewardModel(RockSampleRewardModel):
         rewards[in_zone_indices] += signs * self.dangerous_area_penalty
 
 
-class RockSampleDecayingHitProbabilityRewardModel(RockSampleRewardModel):
-    """DECAYING_HIT_PROBABILITY variant.
+class RockSampleDistanceDecayedHazardPenaltyRewardModel(RockSampleRewardModel):
+    """DISTANCE_DECAYED_HAZARD_PENALTY variant.
 
     Penalty is applied with probability
     ``exp(-min_dist / penalty_decay)`` where ``min_dist`` is the

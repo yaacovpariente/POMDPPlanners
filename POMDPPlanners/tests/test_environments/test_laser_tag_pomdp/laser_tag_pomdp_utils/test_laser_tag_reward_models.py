@@ -16,8 +16,8 @@ from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp import (
 )
 from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_utils.laser_tag_reward_models import (
     BaseLaserTagRewardModel,
-    LaserTagDecayingHitProbabilityRewardModel,
-    LaserTagHighVarianceStatesRewardModel,
+    LaserTagDistanceDecayedHazardPenaltyRewardModel,
+    LaserTagZeroMeanHazardShockRewardModel,
     LaserTagRewardModel,
 )
 
@@ -51,8 +51,8 @@ _DEFAULT_ACTION_DIRS = {
 }
 
 
-def _make_hv_model() -> LaserTagHighVarianceStatesRewardModel:
-    return LaserTagHighVarianceStatesRewardModel(
+def _make_hv_model() -> LaserTagZeroMeanHazardShockRewardModel:
+    return LaserTagZeroMeanHazardShockRewardModel(
         floor_shape=_DEFAULT_FLOOR,
         walls=_DEFAULT_WALLS,
         dangerous_areas=_DEFAULT_DANGER_AREAS,
@@ -65,8 +65,10 @@ def _make_hv_model() -> LaserTagHighVarianceStatesRewardModel:
     )
 
 
-def _make_decay_model(penalty_decay: float = 1.0) -> LaserTagDecayingHitProbabilityRewardModel:
-    return LaserTagDecayingHitProbabilityRewardModel(
+def _make_decay_model(
+    penalty_decay: float = 1.0,
+) -> LaserTagDistanceDecayedHazardPenaltyRewardModel:
+    return LaserTagDistanceDecayedHazardPenaltyRewardModel(
         floor_shape=_DEFAULT_FLOOR,
         walls=_DEFAULT_WALLS,
         dangerous_areas=_DEFAULT_DANGER_AREAS,
@@ -80,7 +82,7 @@ def _make_decay_model(penalty_decay: float = 1.0) -> LaserTagDecayingHitProbabil
     )
 
 
-class TestLaserTagHighVarianceStatesRewardModel:
+class TestLaserTagZeroMeanHazardShockRewardModel:
     """Behavioural tests for the HV variant."""
 
     def test_subclass_inherits_base(self):
@@ -89,7 +91,7 @@ class TestLaserTagHighVarianceStatesRewardModel:
         Purpose: Validates the class hierarchy so callers that expect either
             base type can interchangeably use the HV variant.
 
-        Given: A constructed ``LaserTagHighVarianceStatesRewardModel``.
+        Given: A constructed ``LaserTagZeroMeanHazardShockRewardModel``.
         When: ``isinstance`` is checked against the abstract and concrete bases.
         Then: Both checks return True.
 
@@ -186,7 +188,7 @@ class TestLaserTagHighVarianceStatesRewardModel:
         assert abs(float(np.mean(contributions))) < 0.5
 
 
-class TestLaserTagDecayingHitProbabilityRewardModel:
+class TestLaserTagDistanceDecayedHazardPenaltyRewardModel:
     """Behavioural tests for the Decaying-Hit-Probability variant."""
 
     def test_rejects_non_positive_decay(self):
@@ -296,9 +298,12 @@ class TestLaserTagPOMDPRewardModelTypeWiring:
     @pytest.mark.parametrize(
         "rmt, expected_cls",
         [
-            (RewardModelType.STANDARD, LaserTagRewardModel),
-            (RewardModelType.HIGH_VARIANCE_STATES, LaserTagHighVarianceStatesRewardModel),
-            (RewardModelType.DECAYING_HIT_PROBABILITY, LaserTagDecayingHitProbabilityRewardModel),
+            (RewardModelType.CONSTANT_HAZARD_PENALTY, LaserTagRewardModel),
+            (RewardModelType.ZERO_MEAN_HAZARD_SHOCK, LaserTagZeroMeanHazardShockRewardModel),
+            (
+                RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY,
+                LaserTagDistanceDecayedHazardPenaltyRewardModel,
+            ),
         ],
     )
     def test_env_instantiates_correct_reward_model_subclass(self, rmt, expected_cls):

@@ -565,9 +565,9 @@ static inline bool discrete_collides(double px, double py,
 
 // Reward-variant codes shared between the standalone batch kernels and the
 // inline rollout reward paths. Mirrors the Python ``RewardModelType`` enum.
-constexpr int kRewardVariantStandard = 0;
+constexpr int kRewardVariantConstantHazardPenalty = 0;
 constexpr int kRewardVariantHighVar = 1;
-constexpr int kRewardVariantDecaying = 2;
+constexpr int kRewardVariantDistanceDecayedHazardPenalty = 2;
 
 // Squared Euclidean distance from (px, py) to the nearest dangerous-area
 // centre. Used by the Decaying variant to evaluate the exponential
@@ -588,15 +588,15 @@ static inline double dangerous_min_dist_sq(double px, double py_,
 }
 
 // Per-row dangerous-area reward contribution. Branches on ``variant_code``:
-// STANDARD (with optional Bernoulli), HIGH_VARIANCE_STATES (``±penalty``
-// 50/50 when in zone) and DECAYING_HIT_PROBABILITY (penalty fires with
+// CONSTANT_HAZARD_PENALTY (with optional Bernoulli), ZERO_MEAN_HAZARD_SHOCK (``±penalty``
+// 50/50 when in zone) and DISTANCE_DECAYED_HAZARD_PENALTY (penalty fires with
 // ``exp(-min_dist / penalty_decay)`` over every row, no radius cutoff).
 static inline double dangerous_contribution(int variant_code, bool in_zone,
                                             double penalty, double hit_prob,
                                             double min_dist_sq, double penalty_decay,
                                             pomdp_native::RNGState &rng) {
     std::uniform_real_distribution<double> uni(0.0, 1.0);
-    if (variant_code == kRewardVariantStandard) {
+    if (variant_code == kRewardVariantConstantHazardPenalty) {
         if (!in_zone) {
             return 0.0;
         }
@@ -665,7 +665,7 @@ static double discrete_step_reward(double nrx, double nry, double nox, double no
     if (!dangerous_areas.empty()) {
         const bool in_zone = point_in_dangerous_areas(nrx, nry, dangerous_areas,
                                                      cfg.dangerous_area_radius_sq);
-        const double min_sq = (cfg.reward_variant_code == kRewardVariantDecaying)
+        const double min_sq = (cfg.reward_variant_code == kRewardVariantDistanceDecayedHazardPenalty)
                                   ? dangerous_min_dist_sq(nrx, nry, dangerous_areas)
                                   : 0.0;
         reward += dangerous_contribution(cfg.reward_variant_code, in_zone,
@@ -1230,7 +1230,7 @@ static double cont_step_reward(const double *next_state,
         const bool in_zone = point_in_dangerous_areas(robot_after[0], robot_after[1],
                                                      dangerous_flat,
                                                      cfg.dangerous_area_radius_sq);
-        const double min_sq = (cfg.reward_variant_code == kRewardVariantDecaying)
+        const double min_sq = (cfg.reward_variant_code == kRewardVariantDistanceDecayedHazardPenalty)
                                   ? dangerous_min_dist_sq(robot_after[0], robot_after[1],
                                                           dangerous_flat)
                                   : 0.0;
@@ -1600,11 +1600,11 @@ py::array_t<double> push_observation_log_probability_step(
 //     circle-vs-AABB overlap (continuous) on the REALISED post-action robot
 //     position ``next_state[:2]`` with optional Bernoulli ``hit_probability``.
 //   * dangerous-area penalty: variant-driven.
-//        - reward_variant_code 0 (STANDARD): per-row penalty when in zone,
+//        - reward_variant_code 0 (CONSTANT_HAZARD_PENALTY): per-row penalty when in zone,
 //          optional Bernoulli ``dangerous_area_hit_probability``.
-//        - reward_variant_code 1 (HIGH_VARIANCE_STATES): ``±penalty`` 50/50
+//        - reward_variant_code 1 (ZERO_MEAN_HAZARD_SHOCK): ``±penalty`` 50/50
 //          when in zone; expectation is 0.
-//        - reward_variant_code 2 (DECAYING_HIT_PROBABILITY): penalty fires
+//        - reward_variant_code 2 (DISTANCE_DECAYED_HAZARD_PENALTY): penalty fires
 //          with probability ``exp(-min_dist / penalty_decay)`` over every
 //          row (no radius cutoff).
 // All RNG draws come from ``pomdp_native::default_rng()``. The variant
@@ -1670,7 +1670,7 @@ py::array_t<double> push_reward_batch(
         if (has_areas) {
             const bool in_zone =
                 point_in_dangerous_areas(rx, ry, areas_flat, area_r_sq);
-            const double min_sq = (reward_variant_code == kRewardVariantDecaying)
+            const double min_sq = (reward_variant_code == kRewardVariantDistanceDecayedHazardPenalty)
                                       ? dangerous_min_dist_sq(rx, ry, areas_flat)
                                       : 0.0;
             reward += dangerous_contribution(reward_variant_code, in_zone,
@@ -1748,7 +1748,7 @@ py::array_t<double> cont_push_reward_batch(
         if (has_areas) {
             const bool in_zone =
                 point_in_dangerous_areas(rx, ry, areas_flat, area_r_sq);
-            const double min_sq = (reward_variant_code == kRewardVariantDecaying)
+            const double min_sq = (reward_variant_code == kRewardVariantDistanceDecayedHazardPenalty)
                                       ? dangerous_min_dist_sq(rx, ry, areas_flat)
                                       : 0.0;
             reward += dangerous_contribution(reward_variant_code, in_zone,
@@ -1791,7 +1791,7 @@ PYBIND11_MODULE(_native, m) {
           "post-action robot position (next_state[:2]) for obstacle / danger "
           "tests, with Bernoulli ``*_hit_probability`` gating. "
           "``reward_variant_code`` selects the dangerous-area contract "
-          "(0=STANDARD, 1=HIGH_VARIANCE_STATES, 2=DECAYING_HIT_PROBABILITY); "
+          "(0=CONSTANT_HAZARD_PENALTY, 1=ZERO_MEAN_HAZARD_SHOCK, 2=DISTANCE_DECAYED_HAZARD_PENALTY); "
           "``penalty_decay`` is the decay length used by variant 2.");
 
     m.def("simulate_rollout_discrete", &simulate_rollout_discrete,
@@ -1812,7 +1812,7 @@ PYBIND11_MODULE(_native, m) {
           "consults the REALISED post-action robot position (next_state[:2]) "
           "for obstacle / danger tests, with Bernoulli ``*_hit_probability`` "
           "gating. ``reward_variant_code`` selects the dangerous-area contract "
-          "(0=STANDARD, 1=HIGH_VARIANCE_STATES, 2=DECAYING_HIT_PROBABILITY); "
+          "(0=CONSTANT_HAZARD_PENALTY, 1=ZERO_MEAN_HAZARD_SHOCK, 2=DISTANCE_DECAYED_HAZARD_PENALTY); "
           "``penalty_decay`` is the decay length used by variant 2.");
 
     m.def("belief_batch_transition_discrete", &belief_batch_transition_discrete,
@@ -1845,9 +1845,9 @@ PYBIND11_MODULE(_native, m) {
           py::arg("reward_variant_code"), py::arg("penalty_decay"),
           "Standalone variant-aware reward batch for PushPOMDP (discrete).\n\n"
           "Implements all three RewardModelType variants:\n"
-          "  0 = STANDARD: deterministic per-zone penalty (optional Bernoulli).\n"
-          "  1 = HIGH_VARIANCE_STATES: ±penalty 50/50 when in zone.\n"
-          "  2 = DECAYING_HIT_PROBABILITY: penalty fires with probability\n"
+          "  0 = CONSTANT_HAZARD_PENALTY: deterministic per-zone penalty (optional Bernoulli).\n"
+          "  1 = ZERO_MEAN_HAZARD_SHOCK: ±penalty 50/50 when in zone.\n"
+          "  2 = DISTANCE_DECAYED_HAZARD_PENALTY: penalty fires with probability\n"
           "      exp(-min_dist / penalty_decay) for every row (no radius cutoff).\n"
           "Obstacle penalty fires on next_state[:2] (realised position).");
 

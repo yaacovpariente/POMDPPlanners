@@ -45,8 +45,8 @@ def simulate_rollout(
     """Native random rollout for all reward model variants.
 
     Returns the discounted return from ``initial_state`` using the reward
-    model selected by ``reward_variant_code`` (``0 = STANDARD``,
-    ``1 = HIGH_VARIANCE_STATES``, ``2 = DECAYING_HIT_PROBABILITY``).
+    model selected by ``reward_variant_code`` (``0 = CONSTANT_HAZARD_PENALTY``,
+    ``1 = ZERO_MEAN_HAZARD_SHOCK``, ``2 = DISTANCE_DECAYED_HAZARD_PENALTY``).
     ``penalty_decay`` is only consumed when ``reward_variant_code == 2``.
     Stochastic obstacle / penalty draws use the module-level C++ RNG; the
     rollout matches the Python reward models in expectation rather than
@@ -78,7 +78,7 @@ def compute_reward_batch(
     """Variant-aware batched reward kernel for the Continuous Light-Dark POMDP.
 
     ``reward_variant_code`` selects the reward model:
-    ``0 = STANDARD``, ``1 = HIGH_VARIANCE_STATES``, ``2 = DECAYING_HIT_PROBABILITY``.
+    ``0 = CONSTANT_HAZARD_PENALTY``, ``1 = ZERO_MEAN_HAZARD_SHOCK``, ``2 = DISTANCE_DECAYED_HAZARD_PENALTY``.
     ``penalty_decay`` is only consumed when ``reward_variant_code == 2``.
     Stochastic obstacle / penalty draws are taken from the module-level C++
     RNG; the kernel matches the Python reward models in expectation

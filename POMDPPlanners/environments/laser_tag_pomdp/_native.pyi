@@ -58,10 +58,10 @@ def lasertag_discrete_reward_batch(
     ``(dr, dc)`` cell delta. When ``next_states`` is shape ``(N, 5)``, the
     danger / wall penalty is scored against ``next_states[:, :2]``; when it
     is empty (the default) the legacy intended-position fallback is used.
-    ``reward_variant_code`` selects the variant: ``0`` = STANDARD,
-    ``1`` = HIGH_VARIANCE_STATES, ``2`` = DECAYING_HIT_PROBABILITY.
+    ``reward_variant_code`` selects the variant: ``0`` = CONSTANT_HAZARD_PENALTY,
+    ``1`` = ZERO_MEAN_HAZARD_SHOCK, ``2`` = DISTANCE_DECAYED_HAZARD_PENALTY.
     ``penalty_decay`` is the decay length used by the
-    ``DECAYING_HIT_PROBABILITY`` variant (ignored otherwise). Returns shape
+    ``DISTANCE_DECAYED_HAZARD_PENALTY`` variant (ignored otherwise). Returns shape
     ``(N,)`` float64.
     """
     ...
@@ -156,9 +156,9 @@ def simulate_rollout_discrete(
     Actions are drawn uniformly from ``{0,1,2,3,4}`` using the module-level
     mt19937_64 RNG. Seed via :func:`set_seed` before calling for reproducible
     results. ``reward_variant_code`` selects the reward variant:
-    ``0`` = STANDARD, ``1`` = HIGH_VARIANCE_STATES,
-    ``2`` = DECAYING_HIT_PROBABILITY. ``penalty_decay`` is consulted only by
-    the ``DECAYING_HIT_PROBABILITY`` variant. Returns the discounted sum of
+    ``0`` = CONSTANT_HAZARD_PENALTY, ``1`` = ZERO_MEAN_HAZARD_SHOCK,
+    ``2`` = DISTANCE_DECAYED_HAZARD_PENALTY. ``penalty_decay`` is consulted only by
+    the ``DISTANCE_DECAYED_HAZARD_PENALTY`` variant. Returns the discounted sum of
     immediate rewards along the sampled trajectory.
     """
     ...

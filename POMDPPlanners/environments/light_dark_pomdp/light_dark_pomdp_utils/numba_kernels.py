@@ -14,7 +14,7 @@ Public kernels
 --------------
 - :func:`is_terminal_kernel` — replaces ``ContinuousLightDarkPOMDP.is_terminal``.
 - :func:`compute_reward_base_kernel` — deterministic part of the Standard /
-  HighVarianceStates reward model plus an ``is_obstacle_hit_region`` flag so the
+  ZeroMeanHazardShock reward model plus an ``is_obstacle_hit_region`` flag so the
   Python caller can decide whether to draw a uniform.
 - :func:`compute_reward_base_batch_kernel` — batched version of
   :func:`compute_reward_base_kernel`. Returns ``(rewards, obstacle_mask)`` so
@@ -81,7 +81,7 @@ def compute_reward_base_kernel(
     out-of-grid penalty. The caller (Python) must add the stochastic
     obstacle-hit contribution when ``is_obstacle_hit_region`` is ``True``,
     using its own ``np.random.rand()`` draw so seeded tests stay bit-identical.
-    Used by Standard and HighVarianceStates reward models.
+    Used by Standard and ZeroMeanHazardShock reward models.
 
     ``next_state`` is the realised post-transition position. The Python
     caller threads either the draw from

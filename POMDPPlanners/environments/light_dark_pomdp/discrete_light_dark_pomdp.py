@@ -25,7 +25,7 @@ class DiscreteLightDarkPOMDPMetrics(Enum):
     OBSTACLE_HIT_RATE = "obstacle_hit_rate"
     AVG_OBSTACLE_HIT_COUNTER = "avg_obstacle_hit_counter"
     OUT_OF_GRID_RATE = "out_of_grid_rate"
-    AVG_HIGH_VARIANCE_STATES_COUNTER = "avg_high_variance_states_counter"
+    AVG_ZERO_MEAN_HAZARD_SHOCK_COUNTER = "avg_high_variance_states_counter"
 
 
 class ObservationModelType(Enum):
@@ -909,7 +909,7 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
                 upper_confidence_bound=out_of_grid_ci[1],
             ),
             MetricValue(
-                name=DiscreteLightDarkPOMDPMetrics.AVG_HIGH_VARIANCE_STATES_COUNTER.value,
+                name=DiscreteLightDarkPOMDPMetrics.AVG_ZERO_MEAN_HAZARD_SHOCK_COUNTER.value,
                 value=avg_high_variance_states_counter,
                 lower_confidence_bound=high_variance_states_counter_ci[0],
                 upper_confidence_bound=high_variance_states_counter_ci[1],

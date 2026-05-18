@@ -14,7 +14,7 @@ Three reward-model variants are provided, each as a scalar / batch pair:
   case ``hit_probability=1.0``).
 - **high_variance**: ``±penalty`` with 50/50 split whenever the point
   lies inside any zone. Zero expected contribution, high variance.
-  Matches the light-dark HIGH_VARIANCE_STATES reward model.
+  Matches the light-dark ZERO_MEAN_HAZARD_SHOCK reward model.
 - **decaying_prob**: penalty applied with probability
   ``exp(-min_dist / penalty_decay)`` based on the *closest* zone centre
   (no radius cutoff). Matches the light-dark Decaying-Hit-Probability

@@ -41,8 +41,8 @@ from POMDPPlanners.core.simulation import History, MetricValue, StepData
 from POMDPPlanners.environments.push_pomdp import _native
 from POMDPPlanners.environments.push_pomdp.push_pomdp_utils.push_reward_models import (
     BasePushRewardModel,
-    DiscretePushDecayingHitProbabilityRewardModel,
-    DiscretePushHighVarianceStatesRewardModel,
+    DiscretePushDistanceDecayedHazardPenaltyRewardModel,
+    DiscretePushZeroMeanHazardShockRewardModel,
     DiscretePushRewardModel,
     RewardModelType,
 )
@@ -223,7 +223,7 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
         dangerous_area_radius: float = 0.5,
         dangerous_area_penalty: float = -10.0,
         dangerous_area_hit_probability: float = 1.0,
-        reward_model_type: RewardModelType = RewardModelType.STANDARD,
+        reward_model_type: RewardModelType = RewardModelType.CONSTANT_HAZARD_PENALTY,
         penalty_decay: float = 1.0,
         initial_state: Optional[np.ndarray] = None,
         transition_error_prob: float = 0.0,
@@ -236,7 +236,10 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
             raise ValueError("obstacle_hit_probability must be between 0 and 1 (inclusive)")
         if not 0.0 <= dangerous_area_hit_probability <= 1.0:
             raise ValueError("dangerous_area_hit_probability must be between 0 and 1 (inclusive)")
-        if reward_model_type == RewardModelType.DECAYING_HIT_PROBABILITY and penalty_decay <= 0.0:
+        if (
+            reward_model_type == RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY
+            and penalty_decay <= 0.0
+        ):
             raise ValueError("penalty_decay must be strictly positive")
 
         self.grid_size = grid_size
@@ -365,12 +368,12 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
             "dangerous_area_penalty": self.dangerous_area_penalty,
             "dangerous_area_hit_probability": self.dangerous_area_hit_probability,
         }
-        if self.reward_model_type == RewardModelType.STANDARD:
+        if self.reward_model_type == RewardModelType.CONSTANT_HAZARD_PENALTY:
             return DiscretePushRewardModel(**common_kwargs)
-        if self.reward_model_type == RewardModelType.HIGH_VARIANCE_STATES:
-            return DiscretePushHighVarianceStatesRewardModel(**common_kwargs)
-        if self.reward_model_type == RewardModelType.DECAYING_HIT_PROBABILITY:
-            return DiscretePushDecayingHitProbabilityRewardModel(
+        if self.reward_model_type == RewardModelType.ZERO_MEAN_HAZARD_SHOCK:
+            return DiscretePushZeroMeanHazardShockRewardModel(**common_kwargs)
+        if self.reward_model_type == RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY:
+            return DiscretePushDistanceDecayedHazardPenaltyRewardModel(
                 penalty_decay=self.penalty_decay, **common_kwargs
             )
         raise ValueError(f"Unknown reward model type: {self.reward_model_type}")
@@ -736,7 +739,7 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
         # penalties against the REALISED post-action robot position
         # (``next_state[:2]``), matching ``DiscretePushRewardModel``. Pass the
         # variant code + penalty decay so the C++ rollout dispatches
-        # STANDARD / HIGH_VARIANCE_STATES / DECAYING_HIT_PROBABILITY exactly
+        # CONSTANT_HAZARD_PENALTY / ZERO_MEAN_HAZARD_SHOCK / DISTANCE_DECAYED_HAZARD_PENALTY exactly
         # like the standalone ``push_reward_batch`` kernel.
         action_indices = np.random.randint(0, 4, size=remaining, dtype=np.int64)
         obs_arr = self._get_native_rollout_obstacles()
@@ -838,8 +841,8 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
         already sampled the realised batch transition), it is used
         directly; otherwise N next states are drawn here via the cached
         ``PushVectorizedUpdater``. Per-particle rewards are computed in
-        the C++ ``push_reward_batch`` kernel (variant-aware: STANDARD,
-        HIGH_VARIANCE_STATES, DECAYING_HIT_PROBABILITY) so the batch
+        the C++ ``push_reward_batch`` kernel (variant-aware: CONSTANT_HAZARD_PENALTY,
+        ZERO_MEAN_HAZARD_SHOCK, DISTANCE_DECAYED_HAZARD_PENALTY) so the batch
         cost is a single round-trip into native code.
         """
         states_array = np.ascontiguousarray(np.asarray(states, dtype=float))
@@ -885,9 +888,9 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
         )
 
     def _reward_variant_native_params(self) -> Tuple[int, float]:
-        if self.reward_model_type == RewardModelType.HIGH_VARIANCE_STATES:
+        if self.reward_model_type == RewardModelType.ZERO_MEAN_HAZARD_SHOCK:
             return 1, 0.0
-        if self.reward_model_type == RewardModelType.DECAYING_HIT_PROBABILITY:
+        if self.reward_model_type == RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY:
             return 2, float(getattr(self.reward_model, "penalty_decay", 1.0))
         return 0, 0.0
 

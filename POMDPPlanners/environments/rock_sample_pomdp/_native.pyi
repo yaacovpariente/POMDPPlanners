@@ -50,7 +50,7 @@ def simulate_rollout_discrete(
     length ``max_depth - start_depth``. ``rock_positions_flat`` is a 1-D
     int32 array ``[row0, col0, row1, col1, …]``. ``dangerous_areas`` is a
     ``(K, 2)`` float64 array (may be empty). ``reward_variant_code``:
-    ``0=STANDARD``, ``1=HIGH_VARIANCE_STATES``, ``2=DECAYING_HIT_PROBABILITY``.
+    ``0=CONSTANT_HAZARD_PENALTY``, ``1=ZERO_MEAN_HAZARD_SHOCK``, ``2=DISTANCE_DECAYED_HAZARD_PENALTY``.
     """
     ...
 
@@ -76,9 +76,9 @@ def reward_batch(
     """Variant-aware standalone batch reward kernel for RockSamplePOMDP.
 
     Returns a ``(N,)`` float64 array of rewards. The dangerous-area term
-    is selected by ``reward_variant_code``: ``0=STANDARD`` (constant-
-    probability hit), ``1=HIGH_VARIANCE_STATES`` (50/50 ±penalty in zone),
-    ``2=DECAYING_HIT_PROBABILITY`` (hit with probability
+    is selected by ``reward_variant_code``: ``0=CONSTANT_HAZARD_PENALTY`` (constant-
+    probability hit), ``1=ZERO_MEAN_HAZARD_SHOCK`` (50/50 ±penalty in zone),
+    ``2=DISTANCE_DECAYED_HAZARD_PENALTY`` (hit with probability
     ``exp(-min_dist / penalty_decay)``).
     """
     ...

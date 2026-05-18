@@ -31,8 +31,8 @@ from POMDPPlanners.core.simulation import History, MetricValue, StepData
 from POMDPPlanners.environments.rock_sample_pomdp import _native
 from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp_utils.rock_sample_reward_models import (
     BaseRockSampleRewardModel,
-    RockSampleDecayingHitProbabilityRewardModel,
-    RockSampleHighVarianceRewardModel,
+    RockSampleDistanceDecayedHazardPenaltyRewardModel,
+    RockSampleZeroMeanHazardShockRewardModel,
     RockSampleRewardModel,
 )
 from POMDPPlanners.utils.statistics_utils import confidence_interval
@@ -56,9 +56,9 @@ class RewardModelType(Enum):
     for the per-variant semantics.
     """
 
-    STANDARD = "standard"
-    DECAYING_HIT_PROBABILITY = "decaying_hit_probability"
-    HIGH_VARIANCE_STATES = "high_variance_states"
+    CONSTANT_HAZARD_PENALTY = "constant_hazard_penalty"
+    DISTANCE_DECAYED_HAZARD_PENALTY = "distance_decayed_hazard_penalty"
+    ZERO_MEAN_HAZARD_SHOCK = "zero_mean_hazard_shock"
 
 
 # Type alias for RockSampleState
@@ -195,7 +195,7 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
         dangerous_area_radius: float = 1.0,
         dangerous_area_penalty: float = -5.0,
         dangerous_area_hit_probability: float = 1.0,
-        reward_model_type: RewardModelType = RewardModelType.STANDARD,
+        reward_model_type: RewardModelType = RewardModelType.CONSTANT_HAZARD_PENALTY,
         penalty_decay: float = 1.0,
         discount_factor: float = 0.95,
         name: str = "RockSample",
@@ -230,21 +230,21 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
                 reward stochastic (per-call Bernoulli draw), useful for
                 risk-sensitive planning benchmarks. Note that this makes
                 ``reward(state, action)`` non-deterministic given a
-                state-action pair. Ignored by ``HIGH_VARIANCE_STATES``
-                and ``DECAYING_HIT_PROBABILITY`` reward models.
+                state-action pair. Ignored by ``ZERO_MEAN_HAZARD_SHOCK``
+                and ``DISTANCE_DECAYED_HAZARD_PENALTY`` reward models.
             reward_model_type: Which dangerous-area penalty model to use.
-                Defaults to ``RewardModelType.STANDARD`` (legacy
-                constant-probability behaviour). ``HIGH_VARIANCE_STATES``
+                Defaults to ``RewardModelType.CONSTANT_HAZARD_PENALTY`` (legacy
+                constant-probability behaviour). ``ZERO_MEAN_HAZARD_SHOCK``
                 applies ``±dangerous_area_penalty`` 50/50 in-zone (zero
                 expected contribution, high variance — useful for
                 risk-sensitive planner benchmarks).
-                ``DECAYING_HIT_PROBABILITY`` applies the penalty with
+                ``DISTANCE_DECAYED_HAZARD_PENALTY`` applies the penalty with
                 probability ``exp(-min_dist / penalty_decay)`` based on
                 distance to the closest dangerous-area centre (no radius
                 cutoff). See
                 :class:`~POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp.RewardModelType`.
             penalty_decay: Distance-decay constant for the
-                ``DECAYING_HIT_PROBABILITY`` reward model. Must be
+                ``DISTANCE_DECAYED_HAZARD_PENALTY`` reward model. Must be
                 positive. Ignored by other reward models. Defaults to
                 ``1.0``.
             discount_factor: Discount factor. Defaults to 0.95.
@@ -264,11 +264,11 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
                 stacklevel=2,
             )
 
-        # Calculate reward range based on parameters. HIGH_VARIANCE_STATES
+        # Calculate reward range based on parameters. ZERO_MEAN_HAZARD_SHOCK
         # can flip the sign of the dangerous-area contribution, so its
         # effective danger term spans ``[-|penalty|, +|penalty|]``.
         if dangerous_areas:
-            if reward_model_type == RewardModelType.HIGH_VARIANCE_STATES:
+            if reward_model_type == RewardModelType.ZERO_MEAN_HAZARD_SHOCK:
                 danger_term_min = -abs(dangerous_area_penalty)
                 danger_term_max = abs(dangerous_area_penalty)
             else:
@@ -340,9 +340,9 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
         else:
             self._dangerous_areas_arr = np.empty((0, 2), dtype=np.float64)
         self._reward_variant_code: int = {
-            RewardModelType.STANDARD: 0,
-            RewardModelType.HIGH_VARIANCE_STATES: 1,
-            RewardModelType.DECAYING_HIT_PROBABILITY: 2,
+            RewardModelType.CONSTANT_HAZARD_PENALTY: 0,
+            RewardModelType.ZERO_MEAN_HAZARD_SHOCK: 1,
+            RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY: 2,
         }[self.reward_model_type]
 
         # Define actions: 0=sample, 1=north, 2=east, 3=south, 4=west, 5+=check_rock_i
@@ -381,12 +381,12 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
             "dangerous_area_penalty": self.dangerous_area_penalty,
             "dangerous_area_hit_probability": self.dangerous_area_hit_probability,
         }
-        if self.reward_model_type == RewardModelType.STANDARD:
+        if self.reward_model_type == RewardModelType.CONSTANT_HAZARD_PENALTY:
             return RockSampleRewardModel(**common_kwargs)
-        if self.reward_model_type == RewardModelType.HIGH_VARIANCE_STATES:
-            return RockSampleHighVarianceRewardModel(**common_kwargs)
-        if self.reward_model_type == RewardModelType.DECAYING_HIT_PROBABILITY:
-            return RockSampleDecayingHitProbabilityRewardModel(
+        if self.reward_model_type == RewardModelType.ZERO_MEAN_HAZARD_SHOCK:
+            return RockSampleZeroMeanHazardShockRewardModel(**common_kwargs)
+        if self.reward_model_type == RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY:
+            return RockSampleDistanceDecayedHazardPenaltyRewardModel(
                 **common_kwargs, penalty_decay=self.penalty_decay
             )
         raise ValueError(f"Unknown reward model type: {self.reward_model_type}")

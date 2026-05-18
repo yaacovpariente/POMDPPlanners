@@ -2305,19 +2305,19 @@ class TestNativeDiscreteRollout:
 
 class TestNativeDiscreteRolloutRewardVariantGating:
     """Native C++ rollout is variant-aware: the ``reward_variant_code`` /
-    ``penalty_decay`` parameters select the STANDARD / HIGH_VARIANCE_STATES /
-    DECAYING_HIT_PROBABILITY danger formulae inside the kernel, so dispatch
+    ``penalty_decay`` parameters select the CONSTANT_HAZARD_PENALTY / ZERO_MEAN_HAZARD_SHOCK /
+    DISTANCE_DECAYED_HAZARD_PENALTY danger formulae inside the kernel, so dispatch
     targets the native path for all three reward-model variants.
     """
 
     def test_native_kernel_used_for_standard_reward_model(self) -> None:
-        """STANDARD reward model dispatches to the native C++ kernel.
+        """CONSTANT_HAZARD_PENALTY reward model dispatches to the native C++ kernel.
 
-        Purpose: Guards against accidentally widening the fallback to STANDARD
+        Purpose: Guards against accidentally widening the fallback to CONSTANT_HAZARD_PENALTY
             (which would silently drop the perf optimisation for the default
             reward variant).
 
-        Given: A LaserTagPOMDP with default (STANDARD) reward_model_type.
+        Given: A LaserTagPOMDP with default (CONSTANT_HAZARD_PENALTY) reward_model_type.
         When: ``simulate_random_rollout`` is invoked.
         Then: The native ``simulate_rollout_discrete`` is called exactly once.
 
@@ -2333,7 +2333,7 @@ class TestNativeDiscreteRolloutRewardVariantGating:
 
         env = LaserTagPOMDP(
             discount_factor=0.95,
-            reward_model_type=RewardModelType.STANDARD,
+            reward_model_type=RewardModelType.CONSTANT_HAZARD_PENALTY,
         )
         state = np.array([0.0, 0.0, 6.0, 5.0, 0.0])
 
@@ -2348,19 +2348,19 @@ class TestNativeDiscreteRolloutRewardVariantGating:
                 discount_factor=0.95,
             )
             assert spy.call_count == 1, (
-                "STANDARD reward model must keep using the native rollout kernel; "
+                "CONSTANT_HAZARD_PENALTY reward model must keep using the native rollout kernel; "
                 f"got {spy.call_count} calls."
             )
 
     def test_native_kernel_used_for_high_variance_reward_model(self) -> None:
-        """HIGH_VARIANCE_STATES variant dispatches to the native rollout kernel.
+        """ZERO_MEAN_HAZARD_SHOCK variant dispatches to the native rollout kernel.
 
         Purpose: Regression for the variant-rollout integration — the C++
             kernel now implements the HV danger formula via
             ``reward_variant_code = 1``, so dispatch targets C++ instead of
             the Python loop.
 
-        Given: A LaserTagPOMDP configured with ``HIGH_VARIANCE_STATES``.
+        Given: A LaserTagPOMDP configured with ``ZERO_MEAN_HAZARD_SHOCK``.
         When: ``simulate_random_rollout`` is invoked.
         Then: ``_native.simulate_rollout_discrete`` is called exactly once with
             ``reward_variant_code = 1``.
@@ -2377,7 +2377,7 @@ class TestNativeDiscreteRolloutRewardVariantGating:
 
         env = LaserTagPOMDP(
             discount_factor=0.95,
-            reward_model_type=RewardModelType.HIGH_VARIANCE_STATES,
+            reward_model_type=RewardModelType.ZERO_MEAN_HAZARD_SHOCK,
         )
         state = np.array([0.0, 0.0, 6.0, 5.0, 0.0])
 
@@ -2396,14 +2396,14 @@ class TestNativeDiscreteRolloutRewardVariantGating:
             assert kwargs["reward_variant_code"] == 1
 
     def test_native_kernel_used_for_decaying_hit_reward_model(self) -> None:
-        """DECAYING_HIT_PROBABILITY variant dispatches to the native rollout kernel.
+        """DISTANCE_DECAYED_HAZARD_PENALTY variant dispatches to the native rollout kernel.
 
         Purpose: Regression for the variant-rollout integration — the C++
             kernel now implements the distance-decaying danger formula via
             ``reward_variant_code = 2`` and the ``penalty_decay`` argument,
             so dispatch targets C++ instead of the Python loop.
 
-        Given: A LaserTagPOMDP configured with ``DECAYING_HIT_PROBABILITY`` and
+        Given: A LaserTagPOMDP configured with ``DISTANCE_DECAYED_HAZARD_PENALTY`` and
             ``penalty_decay = 1.5``.
         When: ``simulate_random_rollout`` is invoked.
         Then: ``_native.simulate_rollout_discrete`` is called exactly once with
@@ -2421,7 +2421,7 @@ class TestNativeDiscreteRolloutRewardVariantGating:
 
         env = LaserTagPOMDP(
             discount_factor=0.95,
-            reward_model_type=RewardModelType.DECAYING_HIT_PROBABILITY,
+            reward_model_type=RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY,
             penalty_decay=1.5,
         )
         state = np.array([0.0, 0.0, 6.0, 5.0, 0.0])

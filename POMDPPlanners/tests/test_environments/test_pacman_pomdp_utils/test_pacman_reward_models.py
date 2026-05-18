@@ -18,8 +18,8 @@ from POMDPPlanners.environments.pacman_pomdp.pacman_pomdp import (
 )
 from POMDPPlanners.environments.pacman_pomdp.pacman_pomdp_utils.pacman_reward_models import (
     BasePacManRewardModel,
-    PacManDecayingHitProbabilityRewardModel,
-    PacManHighVarianceStatesRewardModel,
+    PacManDistanceDecayedHazardPenaltyRewardModel,
+    PacManZeroMeanHazardShockRewardModel,
     PacManRewardModel,
 )
 
@@ -67,7 +67,7 @@ def _state_with_pac(env: PacManPOMDP, pacman_pos: Tuple[int, int]) -> np.ndarray
     )
 
 
-class TestPacManHighVarianceStatesRewardModel:
+class TestPacManZeroMeanHazardShockRewardModel:
     """Behavioural tests for the HV variant."""
 
     def test_subclass_inherits_base(self):
@@ -82,10 +82,10 @@ class TestPacManHighVarianceStatesRewardModel:
 
         Test type: unit
         """
-        env = _make_env(RewardModelType.HIGH_VARIANCE_STATES)
+        env = _make_env(RewardModelType.ZERO_MEAN_HAZARD_SHOCK)
         assert isinstance(env.reward_model, PacManRewardModel)
         assert isinstance(env.reward_model, BasePacManRewardModel)
-        assert isinstance(env.reward_model, PacManHighVarianceStatesRewardModel)
+        assert isinstance(env.reward_model, PacManZeroMeanHazardShockRewardModel)
 
     def test_outside_zone_matches_step_penalty(self):
         """Positions outside every zone score exactly the step penalty.
@@ -101,7 +101,7 @@ class TestPacManHighVarianceStatesRewardModel:
 
         Test type: unit
         """
-        env = _make_env(RewardModelType.HIGH_VARIANCE_STATES)
+        env = _make_env(RewardModelType.ZERO_MEAN_HAZARD_SHOCK)
         state = _state_with_pac(env, (0, 0))
         next_state = _state_with_pac(env, (0, 1))
         reward = env.reward_model.compute_reward(state, action=1, next_state=next_state)
@@ -124,7 +124,7 @@ class TestPacManHighVarianceStatesRewardModel:
         Test type: unit
         """
         np.random.seed(42)
-        env = _make_env(RewardModelType.HIGH_VARIANCE_STATES)
+        env = _make_env(RewardModelType.ZERO_MEAN_HAZARD_SHOCK)
         state = _state_with_pac(env, (3, 2))
         next_state = _state_with_pac(env, _DANGER_CENTRE)
         rewards = np.array(
@@ -154,7 +154,7 @@ class TestPacManHighVarianceStatesRewardModel:
         Test type: unit
         """
         np.random.seed(123)
-        env = _make_env(RewardModelType.HIGH_VARIANCE_STATES)
+        env = _make_env(RewardModelType.ZERO_MEAN_HAZARD_SHOCK)
         n = 4000
         state = _state_with_pac(env, (3, 2))
         next_state = _state_with_pac(env, _DANGER_CENTRE)
@@ -179,7 +179,7 @@ class TestPacManHighVarianceStatesRewardModel:
         Test type: unit
         """
         np.random.seed(7)
-        env = _make_env(RewardModelType.HIGH_VARIANCE_STATES)
+        env = _make_env(RewardModelType.ZERO_MEAN_HAZARD_SHOCK)
         state = env.make_state(
             pacman_pos=(3, 3),
             ghost_positions=((6, 6),),
@@ -192,7 +192,7 @@ class TestPacManHighVarianceStatesRewardModel:
             assert env.reward_model.compute_reward(state, action=1, next_state=next_state) == 0.0
 
 
-class TestPacManDecayingHitProbabilityRewardModel:
+class TestPacManDistanceDecayedHazardPenaltyRewardModel:
     """Behavioural tests for the Decaying-Hit-Probability variant."""
 
     def test_rejects_non_positive_decay(self):
@@ -207,9 +207,9 @@ class TestPacManDecayingHitProbabilityRewardModel:
         Test type: unit
         """
         with pytest.raises(ValueError, match="penalty_decay"):
-            _make_env(RewardModelType.DECAYING_HIT_PROBABILITY, penalty_decay=0.0)
+            _make_env(RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY, penalty_decay=0.0)
         with pytest.raises(ValueError, match="penalty_decay"):
-            _make_env(RewardModelType.DECAYING_HIT_PROBABILITY, penalty_decay=-1.0)
+            _make_env(RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY, penalty_decay=-1.0)
 
     def test_at_centre_always_triggers_penalty(self):
         """When the realised position equals a centre, penalty fires every time.
@@ -225,7 +225,7 @@ class TestPacManDecayingHitProbabilityRewardModel:
         Test type: unit
         """
         np.random.seed(7)
-        env = _make_env(RewardModelType.DECAYING_HIT_PROBABILITY, penalty_decay=1.0)
+        env = _make_env(RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY, penalty_decay=1.0)
         state = _state_with_pac(env, (3, 2))
         next_state = _state_with_pac(env, _DANGER_CENTRE)
         for _ in range(50):
@@ -251,7 +251,7 @@ class TestPacManDecayingHitProbabilityRewardModel:
         """
         np.random.seed(99)
         decay = 2.0
-        env = _make_env(RewardModelType.DECAYING_HIT_PROBABILITY, penalty_decay=decay)
+        env = _make_env(RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY, penalty_decay=decay)
         n = 6000
         # Position (3, 1): nearest centre (3, 3) at distance 2.0. Use action 4
         # (stay) so the batch path's neighbor-table lookup keeps the realised
@@ -290,7 +290,7 @@ class TestPacManDecayingHitProbabilityRewardModel:
             ghost_collision_penalty=-100.0,
             pellet_reward=10.0,
             win_reward=100.0,
-            reward_model_type=RewardModelType.DECAYING_HIT_PROBABILITY,
+            reward_model_type=RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY,
             penalty_decay=1.0,
         )
         state = _state_with_pac(env, (0, 0))
@@ -311,7 +311,7 @@ class TestPacManDecayingHitProbabilityRewardModel:
         Test type: unit
         """
         np.random.seed(7)
-        env = _make_env(RewardModelType.DECAYING_HIT_PROBABILITY, penalty_decay=1.0)
+        env = _make_env(RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY, penalty_decay=1.0)
         state = env.make_state(
             pacman_pos=(3, 3),
             ghost_positions=((6, 6),),
@@ -330,9 +330,12 @@ class TestPacManPOMDPRewardModelTypeWiring:
     @pytest.mark.parametrize(
         "rmt, expected_cls",
         [
-            (RewardModelType.STANDARD, PacManRewardModel),
-            (RewardModelType.HIGH_VARIANCE_STATES, PacManHighVarianceStatesRewardModel),
-            (RewardModelType.DECAYING_HIT_PROBABILITY, PacManDecayingHitProbabilityRewardModel),
+            (RewardModelType.CONSTANT_HAZARD_PENALTY, PacManRewardModel),
+            (RewardModelType.ZERO_MEAN_HAZARD_SHOCK, PacManZeroMeanHazardShockRewardModel),
+            (
+                RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY,
+                PacManDistanceDecayedHazardPenaltyRewardModel,
+            ),
         ],
     )
     def test_env_instantiates_correct_reward_model_subclass(self, rmt, expected_cls):
@@ -428,7 +431,7 @@ class TestPacManGhostSwapCollisionDetection:
 
         Test type: unit
         """
-        env = _make_env(RewardModelType.STANDARD)
+        env = _make_env(RewardModelType.CONSTANT_HAZARD_PENALTY)
         # Use cells well clear of the danger zone (centred at (3, 3), radius 1)
         # so the expected reward depends only on step + collision penalties.
         # Action 1 (east) moves pacman (0, 0) -> (0, 1); ghost (0, 1) -> (0, 0)
@@ -457,7 +460,7 @@ class TestPacManGhostSwapCollisionDetection:
 
         Test type: unit
         """
-        env = _make_env(RewardModelType.STANDARD)
+        env = _make_env(RewardModelType.CONSTANT_HAZARD_PENALTY)
         # Use cells well clear of the danger zone (centred at (3, 3), radius 1)
         # so the expected reward depends only on step + collision penalties.
         state = _make_swap_state(env, pacman_pos=(0, 0), ghost_pos=(0, 1))
@@ -482,7 +485,7 @@ class TestPacManGhostSwapCollisionDetection:
 
         Test type: unit
         """
-        env = _make_env(RewardModelType.STANDARD)
+        env = _make_env(RewardModelType.CONSTANT_HAZARD_PENALTY)
         # Use cells well clear of the danger zone (centred at (3, 3), radius 1)
         # so the expected reward depends only on step + collision penalties.
         state = _make_swap_state(env, pacman_pos=(0, 0), ghost_pos=(0, 1))

@@ -51,8 +51,8 @@ from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.numba_ke
 from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
 from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_reward_models import (
     BaseLightDarkRewardModel,
-    ContinuousLDHighVarianceStatesRewardModel,
-    ContinuousLightDarkDecayingHitProbabilityRewardModel,
+    ContinuousLDZeroMeanHazardShockRewardModel,
+    ContinuousLightDarkDistanceDecayedHazardPenaltyRewardModel,
     ContinuousLightDarkRewardModel,
 )
 from POMDPPlanners.utils.numba_kernels import (
@@ -75,18 +75,18 @@ class ContinuousLightDarkPOMDPMetrics(Enum):
 
 
 class RewardModelType(Enum):
-    STANDARD = "standard"
-    DECAYING_HIT_PROBABILITY = "decaying_hit_probability"
-    HIGH_VARIANCE_STATES = "high_variance_states"
+    CONSTANT_HAZARD_PENALTY = "constant_hazard_penalty"
+    DISTANCE_DECAYED_HAZARD_PENALTY = "distance_decayed_hazard_penalty"
+    ZERO_MEAN_HAZARD_SHOCK = "zero_mean_hazard_shock"
 
 
 # Integer dispatch codes consumed by the native ``_native.compute_reward_batch``
 # kernel. Must stay in sync with the C++ ``reward_variant_code`` switch in
 # ``_cpp/continuous_light_dark.cpp``.
 _REWARD_VARIANT_CODE_BY_TYPE: Dict[RewardModelType, int] = {
-    RewardModelType.STANDARD: 0,
-    RewardModelType.HIGH_VARIANCE_STATES: 1,
-    RewardModelType.DECAYING_HIT_PROBABILITY: 2,
+    RewardModelType.CONSTANT_HAZARD_PENALTY: 0,
+    RewardModelType.ZERO_MEAN_HAZARD_SHOCK: 1,
+    RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY: 2,
 }
 
 
@@ -163,7 +163,7 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         goal_state_radius: float = 1.5,
         beacon_radius: float = 1.0,
         obstacle_radius: float = 1.5,
-        reward_model_type: RewardModelType = RewardModelType.STANDARD,
+        reward_model_type: RewardModelType = RewardModelType.CONSTANT_HAZARD_PENALTY,
         observation_model_type: ObservationModelType = ObservationModelType.NORMAL_NOISE,
         penalty_decay: float = 1.0,
         is_obstacle_hit_terminal: bool = True,
@@ -175,18 +175,18 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         # Maximum distance to goal is diagonal of grid: sqrt(2) * grid_size
         max_distance_to_goal = np.sqrt(2) * grid_size
 
-        if reward_model_type == RewardModelType.STANDARD:
+        if reward_model_type == RewardModelType.CONSTANT_HAZARD_PENALTY:
             # Min: -fuel_cost - max_distance + obstacle_reward (always negative)
             # Max: -fuel_cost - 0 + goal_reward (at goal)
             min_reward = -fuel_cost - max_distance_to_goal + obstacle_reward
             max_reward = -fuel_cost + goal_reward
-        elif reward_model_type == RewardModelType.DECAYING_HIT_PROBABILITY:
+        elif reward_model_type == RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY:
             # Similar to standard but with distance-based penalties
             # Min: -fuel_cost - max_distance + obstacle_reward (max penalty)
             # Max: -fuel_cost - 0 + goal_reward (at goal, no penalty)
             min_reward = -fuel_cost - max_distance_to_goal + obstacle_reward
             max_reward = -fuel_cost + goal_reward
-        elif reward_model_type == RewardModelType.HIGH_VARIANCE_STATES:
+        elif reward_model_type == RewardModelType.ZERO_MEAN_HAZARD_SHOCK:
             # Min: -fuel_cost - max_distance + obstacle_reward (negative)
             # Max: -fuel_cost - 0 + goal_reward OR -fuel_cost - distance - obstacle_reward (if obstacle_reward is negative)
             min_reward = -fuel_cost - max_distance_to_goal + obstacle_reward
@@ -276,7 +276,7 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         self._goal_state_f64: np.ndarray = np.ascontiguousarray(self.goal_state, dtype=np.float64)
         # Initialize reward model based on type
         self.reward_model: BaseLightDarkRewardModel
-        if reward_model_type == RewardModelType.STANDARD:
+        if reward_model_type == RewardModelType.CONSTANT_HAZARD_PENALTY:
             self.reward_model = ContinuousLightDarkRewardModel(
                 goal_state=self.goal_state,
                 obstacles=self.obstacles,
@@ -288,8 +288,8 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
                 goal_reward=self.goal_reward,
                 fuel_cost=self.fuel_cost,
             )
-        elif reward_model_type == RewardModelType.DECAYING_HIT_PROBABILITY:
-            self.reward_model = ContinuousLightDarkDecayingHitProbabilityRewardModel(
+        elif reward_model_type == RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY:
+            self.reward_model = ContinuousLightDarkDistanceDecayedHazardPenaltyRewardModel(
                 goal_state=self.goal_state,
                 obstacles=self.obstacles,
                 goal_state_radius=self.goal_state_radius,
@@ -301,8 +301,8 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
                 fuel_cost=self.fuel_cost,
                 penalty_decay=self.penalty_decay,
             )
-        elif reward_model_type == RewardModelType.HIGH_VARIANCE_STATES:
-            self.reward_model = ContinuousLDHighVarianceStatesRewardModel(
+        elif reward_model_type == RewardModelType.ZERO_MEAN_HAZARD_SHOCK:
+            self.reward_model = ContinuousLDZeroMeanHazardShockRewardModel(
                 goal_state=self.goal_state,
                 obstacles=self.obstacles,
                 goal_state_radius=self.goal_state_radius,
@@ -884,7 +884,7 @@ class ContinuousLightDarkPOMDPDiscreteActions(ContinuousLightDarkPOMDP, Discrete
         goal_state: np.ndarray = np.array([10, 5]),
         start_state: np.ndarray = np.array([0, 5]),
         obstacles: List[Tuple[float, float]] = [(3, 7), (5, 5)],
-        reward_model_type: RewardModelType = RewardModelType.STANDARD,
+        reward_model_type: RewardModelType = RewardModelType.CONSTANT_HAZARD_PENALTY,
         observation_model_type: ObservationModelType = ObservationModelType.NORMAL_NOISE,
         penalty_decay: float = 1.0,
         is_obstacle_hit_terminal: bool = True,
