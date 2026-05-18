@@ -366,3 +366,129 @@ class TestPacManPOMDPRewardModelTypeWiring:
         env = PacManPOMDP(maze_size=_MAZE_SIZE)
         # pylint: disable-next=unidiomatic-typecheck
         assert type(env.reward_model) is PacManRewardModel
+
+
+# Helper builders for swap-collision tests. The standard ``_state_with_pac``
+# uses a fixed ghost cell at (6, 6) which is incompatible with a swap test —
+# the swap test needs the ghost adjacent to pacman in the pre-state.
+def _make_swap_state(
+    env: PacManPOMDP, pacman_pos: Tuple[int, int], ghost_pos: Tuple[int, int]
+) -> np.ndarray:
+    return env.make_state(
+        pacman_pos=pacman_pos,
+        ghost_positions=(ghost_pos,),
+        pellets=((1, 1),),
+        score=0.0,
+        terminal=False,
+    )
+
+
+def _make_terminal_after_swap(
+    env: PacManPOMDP,
+    pacman_pos: Tuple[int, int],
+    ghost_pos: Tuple[int, int],
+) -> np.ndarray:
+    return env.make_state(
+        pacman_pos=pacman_pos,
+        ghost_positions=(ghost_pos,),
+        pellets=((1, 1),),
+        score=0.0,
+        terminal=True,
+    )
+
+
+class TestPacManGhostSwapCollisionDetection:
+    """Regression coverage for the ghost-swap arm of the collision rule.
+
+    The C++ transition (``apply_transition``) and C++ rollout reward both
+    treat pacman and a ghost trading cells in a single step as a collision
+    that terminates and accrues ``ghost_collision_penalty``. The Python
+    reward kernels previously only detected same-cell collisions and so
+    silently lost the penalty on every swap, breaking C++/Python reward
+    parity at the per-step level.
+    """
+
+    def test_scalar_swap_arm_credits_collision_penalty(self):
+        """Scalar kernel charges ghost_collision_penalty on a pacman-ghost swap.
+
+        Purpose: Validates that ``compute_reward`` detects the swap arm
+            of the canonical Pacman collision rule (pacman and a ghost
+            trade cells) and credits ``ghost_collision_penalty`` exactly
+            like the C++ rollout reward kernel.
+
+        Given: A standard reward model with pacman at (0, 0) and a ghost
+            at (0, 1) in the pre-state, a next-state where pacman moved
+            east to (0, 1) and the ghost is now at (0, 0) with terminal
+            flag set (mirroring what the C++ transition writes on a swap
+            collision). Positions sit well outside the danger zone so the
+            expected value isolates the step + collision contributions.
+        When: ``compute_reward(state, action=1, next_state=next_state)``
+            is called on the env's reward model.
+        Then: Reward equals ``step_penalty + ghost_collision_penalty``.
+
+        Test type: unit
+        """
+        env = _make_env(RewardModelType.STANDARD)
+        # Use cells well clear of the danger zone (centred at (3, 3), radius 1)
+        # so the expected reward depends only on step + collision penalties.
+        # Action 1 (east) moves pacman (0, 0) -> (0, 1); ghost (0, 1) -> (0, 0)
+        # completes the swap.
+        state = _make_swap_state(env, pacman_pos=(0, 0), ghost_pos=(0, 1))
+        next_state = _make_terminal_after_swap(env, pacman_pos=(0, 1), ghost_pos=(0, 0))
+        reward = env.reward_model.compute_reward(state, action=1, next_state=next_state)
+        assert reward == pytest.approx(_STEP_PENALTY + env.ghost_collision_penalty)
+
+    def test_batch_swap_arm_credits_collision_penalty(self):
+        """Batch kernel charges ghost_collision_penalty on a pacman-ghost swap.
+
+        Purpose: Validates that ``compute_reward_batch`` detects the same
+            swap arm as the scalar path so vectorised callers (e.g. PFT
+            planners) do not silently drop the collision penalty.
+
+        Given: A standard reward model, a batch with one row whose
+            pre-state has pacman at (0, 0) and a ghost at (0, 1), and a
+            matching next-state batch where pacman moved east to (0, 1)
+            and the ghost is at (0, 0) (a swap, with terminal set).
+            Positions are clear of the danger zone.
+        When: ``compute_reward_batch(states, action=1, next_states=...)``
+            is called.
+        Then: The single returned reward equals
+            ``step_penalty + ghost_collision_penalty``.
+
+        Test type: unit
+        """
+        env = _make_env(RewardModelType.STANDARD)
+        # Use cells well clear of the danger zone (centred at (3, 3), radius 1)
+        # so the expected reward depends only on step + collision penalties.
+        state = _make_swap_state(env, pacman_pos=(0, 0), ghost_pos=(0, 1))
+        next_state = _make_terminal_after_swap(env, pacman_pos=(0, 1), ghost_pos=(0, 0))
+        states = state.reshape(1, -1)
+        next_states = next_state.reshape(1, -1)
+        rewards = env.reward_model.compute_reward_batch(states, action=1, next_states=next_states)
+        assert rewards.shape == (1,)
+        assert float(rewards[0]) == pytest.approx(_STEP_PENALTY + env.ghost_collision_penalty)
+
+    def test_scalar_and_batch_agree_on_swap(self):
+        """Scalar and batch reward kernels agree on a swap-collision row.
+
+        Purpose: Pins scalar/batch parity for the swap arm so future
+            kernel edits cannot diverge the two code paths.
+
+        Given: The same swap-collision (state, action, next_state) used
+            by the dedicated scalar and batch tests above.
+        When: Both ``compute_reward`` and ``compute_reward_batch`` are
+            invoked on the standard reward model.
+        Then: The two outputs are exactly equal.
+
+        Test type: unit
+        """
+        env = _make_env(RewardModelType.STANDARD)
+        # Use cells well clear of the danger zone (centred at (3, 3), radius 1)
+        # so the expected reward depends only on step + collision penalties.
+        state = _make_swap_state(env, pacman_pos=(0, 0), ghost_pos=(0, 1))
+        next_state = _make_terminal_after_swap(env, pacman_pos=(0, 1), ghost_pos=(0, 0))
+        scalar = env.reward_model.compute_reward(state, action=1, next_state=next_state)
+        batch = env.reward_model.compute_reward_batch(
+            state.reshape(1, -1), action=1, next_states=next_state.reshape(1, -1)
+        )
+        assert float(batch[0]) == pytest.approx(scalar)

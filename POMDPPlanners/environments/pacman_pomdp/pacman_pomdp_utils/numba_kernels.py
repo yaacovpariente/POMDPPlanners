@@ -71,11 +71,26 @@ def compute_reward_batch_kernel(
         new_pac_row = int(neighbor_table[pac_row, pac_col, action, 0])
         new_pac_col = int(neighbor_table[pac_row, pac_col, action, 1])
 
+        # Collision detection mirrors the C++ rollout kernel
+        # (_cpp/pacman.cpp lines 1435-1438): same-cell OR pacman-ghost
+        # swap. The swap arm fires when a ghost previously at pacman's
+        # new cell ends up at pacman's old cell — the transition writes
+        # the ghost back to the old pacman position and sets terminal=1.
+        # Only one penalty per step (break after first hit) to match C++.
         if has_next_states and num_ghosts > 0:
             for g in range(num_ghosts):
                 g_row = int(next_states[i, idx_ghosts_start + 2 * g])
                 g_col = int(next_states[i, idx_ghosts_start + 2 * g + 1])
-                if g_row == new_pac_row and g_col == new_pac_col:
+                prev_g_row = int(states[i, idx_ghosts_start + 2 * g])
+                prev_g_col = int(states[i, idx_ghosts_start + 2 * g + 1])
+                same_cell = g_row == new_pac_row and g_col == new_pac_col
+                swap = (
+                    prev_g_row == new_pac_row
+                    and prev_g_col == new_pac_col
+                    and g_row == pac_row
+                    and g_col == pac_col
+                )
+                if same_cell or swap:
                     reward += ghost_collision_penalty
                     break
 
@@ -149,11 +164,29 @@ def compute_reward_scalar_kernel(
     reward = step_penalty
     next_pac_row = int(next_state[idx_pac_row])
     next_pac_col = int(next_state[idx_pac_col])
+    prev_pac_row = int(state[idx_pac_row])
+    prev_pac_col = int(state[idx_pac_col])
 
+    # Collision detection mirrors the C++ rollout kernel (_cpp/pacman.cpp
+    # lines 1435-1438): same-cell OR pacman-ghost swap. The swap arm fires
+    # when a ghost previously at pacman's new cell ends up on pacman's old
+    # cell — the transition kernel then writes the ghost at the old pacman
+    # position and sets terminal=1 (see apply_transition lines 454-457).
+    # Penalty is credited at most once per step (break after first hit) to
+    # match the C++ break.
     for g in range(num_ghosts):
         g_row = int(next_state[idx_ghosts_start + 2 * g])
         g_col = int(next_state[idx_ghosts_start + 2 * g + 1])
-        if g_row == next_pac_row and g_col == next_pac_col:
+        prev_g_row = int(state[idx_ghosts_start + 2 * g])
+        prev_g_col = int(state[idx_ghosts_start + 2 * g + 1])
+        same_cell = g_row == next_pac_row and g_col == next_pac_col
+        swap = (
+            prev_g_row == next_pac_row
+            and prev_g_col == next_pac_col
+            and g_row == prev_pac_row
+            and g_col == prev_pac_col
+        )
+        if same_cell or swap:
             reward += ghost_collision_penalty
             break
 
