@@ -530,6 +530,37 @@ class TestContinuousLightDarkDecayingHitProbabilityRewardModel:
             penalty_decay=self.penalty_decay,
         )
 
+    def test_invalid_penalty_decay_rejected(self):
+        """Regression: penalty_decay <= 0 must be rejected at construction.
+
+        Purpose: Validates that the decaying-hit-probability reward model rejects
+        non-positive ``penalty_decay`` at construction, matching the validation already
+        enforced by the pacman and rock_sample decaying-reward variants. Without this
+        guard a misconfigured planner would crash mid-rollout with a divide-by-zero
+        inside ``np.exp(-d / penalty_decay)``.
+
+        Given: The standard decaying-reward constructor kwargs
+        When: ``ContinuousLightDarkDecayingHitProbabilityRewardModel`` is instantiated
+            with ``penalty_decay`` equal to 0.0 or a negative value
+        Then: ``ValueError`` is raised at construction; no instance is produced
+
+        Test type: unit
+        """
+        for bad_decay in (0.0, -1.0):
+            with pytest.raises(ValueError):
+                ContinuousLightDarkDecayingHitProbabilityRewardModel(
+                    goal_state=self.goal_state,
+                    obstacles=self.obstacles,
+                    goal_state_radius=self.goal_state_radius,
+                    obstacle_radius=self.obstacle_radius,
+                    grid_size=self.grid_size,
+                    obstacle_hit_probability=self.obstacle_hit_probability,
+                    obstacle_reward=self.obstacle_reward,
+                    goal_reward=self.goal_reward,
+                    fuel_cost=self.fuel_cost,
+                    penalty_decay=bad_decay,
+                )
+
     def test_decaying_obstacle_probability(self):
         """Test that obstacle hit probability decreases with distance."""
         # Test positions at different distances from obstacles
