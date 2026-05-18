@@ -983,7 +983,7 @@ def test_numpy_array_observation_comparison():
         grid_size=2,
         goal_state_radius=0.5,
         beacon_radius=1.0,
-        reward_model_type=RewardModelType.STANDARD,
+        reward_model_type=RewardModelType.CONSTANT_HAZARD_PENALTY,
     )
 
     # Test that the environment's is_equal_observation method works correctly

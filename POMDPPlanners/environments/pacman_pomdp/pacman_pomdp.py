@@ -35,8 +35,8 @@ from POMDPPlanners.core.simulation import History, MetricValue, StepData
 from POMDPPlanners.environments.pacman_pomdp import _native  # pylint: disable=no-name-in-module
 from POMDPPlanners.environments.pacman_pomdp.pacman_pomdp_utils.pacman_reward_models import (
     BasePacManRewardModel,
-    PacManDecayingHitProbabilityRewardModel,
-    PacManHighVarianceStatesRewardModel,
+    PacManDistanceDecayedHazardPenaltyRewardModel,
+    PacManZeroMeanHazardShockRewardModel,
     PacManRewardModel,
 )
 from POMDPPlanners.utils.statistics_utils import confidence_interval
@@ -58,17 +58,17 @@ class PacManPOMDPMetrics(Enum):
 class RewardModelType(Enum):
     """Reward-model variants selectable on :class:`PacManPOMDP`."""
 
-    STANDARD = "standard"
-    HIGH_VARIANCE_STATES = "high_variance_states"
-    DECAYING_HIT_PROBABILITY = "decaying_hit_probability"
+    CONSTANT_HAZARD_PENALTY = "constant_hazard_penalty"
+    ZERO_MEAN_HAZARD_SHOCK = "zero_mean_hazard_shock"
+    DISTANCE_DECAYED_HAZARD_PENALTY = "distance_decayed_hazard_penalty"
 
 
 # Numeric variant codes consumed by the C++ ``reward_batch`` / ``simulate_rollout``
 # kernels. Kept in lock-step with the C++ ``dangerous_area_contribution`` switch.
 _REWARD_VARIANT_CODES: Dict[RewardModelType, int] = {
-    RewardModelType.STANDARD: 0,
-    RewardModelType.HIGH_VARIANCE_STATES: 1,
-    RewardModelType.DECAYING_HIT_PROBABILITY: 2,
+    RewardModelType.CONSTANT_HAZARD_PENALTY: 0,
+    RewardModelType.ZERO_MEAN_HAZARD_SHOCK: 1,
+    RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY: 2,
 }
 
 
@@ -157,7 +157,7 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
         name: str = "PacManPOMDP",
         output_dir: Optional[Path] = None,
         debug: bool = False,
-        reward_model_type: RewardModelType = RewardModelType.STANDARD,
+        reward_model_type: RewardModelType = RewardModelType.CONSTANT_HAZARD_PENALTY,
         penalty_decay: float = 1.0,
     ):
         """Initialize PacMan POMDP.
@@ -189,17 +189,17 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
             name: Environment name. Defaults to "PacManPOMDP".
             output_dir: Output directory for logging. Defaults to None.
             debug: Enable debug logging. Defaults to False.
-            reward_model_type: Selects the reward variant. ``STANDARD`` (default)
+            reward_model_type: Selects the reward variant. ``CONSTANT_HAZARD_PENALTY`` (default)
                 deterministically subtracts ``dangerous_area_penalty`` whenever
                 PacMan's realised next position lies inside a hazard zone.
-                ``HIGH_VARIANCE_STATES`` emits ``±dangerous_area_penalty``
+                ``ZERO_MEAN_HAZARD_SHOCK`` emits ``±dangerous_area_penalty``
                 (50/50) on a zone hit (expected 0, high variance).
-                ``DECAYING_HIT_PROBABILITY`` applies ``-dangerous_area_penalty``
+                ``DISTANCE_DECAYED_HAZARD_PENALTY`` applies ``-dangerous_area_penalty``
                 with probability ``exp(-min_dist / penalty_decay)`` against
                 the nearest zone centre (no radius cutoff). Mirrors the
                 light-dark / laser-tag / rock-sample reward-model variants.
             penalty_decay: Decay length used by the
-                ``DECAYING_HIT_PROBABILITY`` reward model. Ignored by the other
+                ``DISTANCE_DECAYED_HAZARD_PENALTY`` reward model. Ignored by the other
                 variants. Must be strictly positive. Defaults to ``1.0``.
         """
         # Calculate reward range based on parameters. The dangerous-area
@@ -364,12 +364,12 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
             "idx_terminal": self._idx_terminal,
             "neighbor_table_getter": self._get_neighbor_table,
         }
-        if reward_model_type == RewardModelType.STANDARD:
+        if reward_model_type == RewardModelType.CONSTANT_HAZARD_PENALTY:
             return PacManRewardModel(**common_kwargs)
-        if reward_model_type == RewardModelType.HIGH_VARIANCE_STATES:
-            return PacManHighVarianceStatesRewardModel(**common_kwargs)
-        if reward_model_type == RewardModelType.DECAYING_HIT_PROBABILITY:
-            return PacManDecayingHitProbabilityRewardModel(
+        if reward_model_type == RewardModelType.ZERO_MEAN_HAZARD_SHOCK:
+            return PacManZeroMeanHazardShockRewardModel(**common_kwargs)
+        if reward_model_type == RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY:
+            return PacManDistanceDecayedHazardPenaltyRewardModel(
                 **common_kwargs, penalty_decay=penalty_decay
             )
         raise ValueError(f"Unknown reward model type: {reward_model_type}")

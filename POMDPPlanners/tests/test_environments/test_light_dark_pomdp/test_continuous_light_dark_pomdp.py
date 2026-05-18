@@ -40,8 +40,8 @@ from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp imp
     RewardModelType,
 )
 from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_reward_models import (
-    ContinuousLightDarkDecayingHitProbabilityRewardModel,
-    ContinuousLDHighVarianceStatesRewardModel,
+    ContinuousLightDarkDistanceDecayedHazardPenaltyRewardModel,
+    ContinuousLDZeroMeanHazardShockRewardModel,
 )
 
 
@@ -404,7 +404,7 @@ def test_reward_range():
         grid_size=11,
     )
 
-    # Expected calculation for STANDARD reward model:
+    # Expected calculation for CONSTANT_HAZARD_PENALTY reward model:
     # Maximum distance to goal is diagonal of grid: sqrt(2) * grid_size
     max_distance_to_goal = np.sqrt(2) * 11  # grid_size=11
     # Min: -fuel_cost - max_distance + obstacle_reward
@@ -820,10 +820,10 @@ def test_decaying_hit_probability_reward_model():
         goal_state_radius=1.5,
         beacon_radius=1.0,
         obstacle_radius=1.5,
-        reward_model_type=RewardModelType.DECAYING_HIT_PROBABILITY,
+        reward_model_type=RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY,
         penalty_decay=0.5,
     )
-    assert isinstance(env.reward_model, ContinuousLightDarkDecayingHitProbabilityRewardModel)
+    assert isinstance(env.reward_model, ContinuousLightDarkDistanceDecayedHazardPenaltyRewardModel)
 
 
 def test_high_variance_states_reward_model():
@@ -840,11 +840,11 @@ def test_high_variance_states_reward_model():
         goal_state_radius=1.5,
         beacon_radius=1.0,
         obstacle_radius=1.5,
-        reward_model_type=RewardModelType.HIGH_VARIANCE_STATES,
+        reward_model_type=RewardModelType.ZERO_MEAN_HAZARD_SHOCK,
     )
 
     # Test that the correct reward model is initialized
-    assert isinstance(env.reward_model, ContinuousLDHighVarianceStatesRewardModel)
+    assert isinstance(env.reward_model, ContinuousLDZeroMeanHazardShockRewardModel)
 
     # Test that the reward model produces both positive and negative rewards near obstacles
     state = np.array([4, 5])  # Near obstacle at (5, 5) - distance 1.0
@@ -2236,7 +2236,7 @@ def test_native_simulate_rollout_matches_python_rollout_seeded():
     np.random.seed(0)
     action_indices = np.random.randint(0, len(env.actions), size=max_depth, dtype=np.int32)
 
-    # Seed native C++ RNG; run native rollout (STANDARD variant: code 0)
+    # Seed native C++ RNG; run native rollout (CONSTANT_HAZARD_PENALTY variant: code 0)
     _native.set_seed(0)
     native_return = _native.simulate_rollout(  # pylint: disable=protected-access
         initial_state=np.ascontiguousarray(initial_state, dtype=np.float64),
@@ -2410,7 +2410,7 @@ def _empirical_pdf_relative_l1(samples: np.ndarray, log_pdf_fn: Any) -> float:
 def test_continuous_reward_at_goal_returns_goal_reward_minus_costs():
     """Reward at the goal equals goal_reward minus fuel_cost minus distance.
 
-    Purpose: Validates the goal branch of the STANDARD reward model: when
+    Purpose: Validates the goal branch of the CONSTANT_HAZARD_PENALTY reward model: when
         next_state lies inside the goal radius, reward equals
         ``goal_reward - fuel_cost - dist_to_goal`` deterministically (no
         stochastic obstacle draw is added on the goal branch).
@@ -2433,7 +2433,7 @@ def test_continuous_reward_at_goal_returns_goal_reward_minus_costs():
 def test_continuous_reward_outside_grid_returns_obstacle_reward_penalty():
     """Reward outside the grid adds the deterministic obstacle_reward penalty.
 
-    Purpose: Validates the out-of-grid branch of the STANDARD reward model:
+    Purpose: Validates the out-of-grid branch of the CONSTANT_HAZARD_PENALTY reward model:
         when next_state has any coordinate outside [0, grid_size] AND the
         state is not in the goal radius / obstacle range, reward equals
         ``-fuel_cost - dist_to_goal + obstacle_reward`` deterministically
@@ -2459,12 +2459,12 @@ def test_continuous_reward_outside_grid_returns_obstacle_reward_penalty():
 def test_continuous_reward_in_obstacle_zone_drifts_by_p_hit_times_obstacle_reward():
     """Obstacle-zone mean reward drifts by ``obstacle_reward * p_hit`` from the base.
 
-    Purpose: Validates the STANDARD obstacle branch contributes a stochastic
+    Purpose: Validates the CONSTANT_HAZARD_PENALTY obstacle branch contributes a stochastic
         drift to the reward mean equal to ``obstacle_reward * p_hit`` on top
         of the deterministic ``-fuel_cost - dist_to_goal`` base, and that a
         free cell yields a fully deterministic reward equal to the base.
 
-    Given: A STANDARD ContinuousLightDarkPOMDP with defaults
+    Given: A CONSTANT_HAZARD_PENALTY ContinuousLightDarkPOMDP with defaults
         (obstacle_hit_probability=0.2). Anchors ``in_obs=[5.0, 5.0]``
         (default obstacle position) and ``free=[8.0, 4.0]`` (free cell:
         distance to (5,5)=3.16 and to (3,7)=5.83, both >obstacle_radius=1.5;
@@ -2502,11 +2502,11 @@ def test_continuous_reward_in_obstacle_zone_drifts_by_p_hit_times_obstacle_rewar
 @pytest.mark.parametrize(
     "reward_model_type,expected_drift",
     [
-        (RewardModelType.STANDARD, -2.0),
-        (RewardModelType.DECAYING_HIT_PROBABILITY, -10.0),
-        (RewardModelType.HIGH_VARIANCE_STATES, 0.0),
+        (RewardModelType.CONSTANT_HAZARD_PENALTY, -2.0),
+        (RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY, -10.0),
+        (RewardModelType.ZERO_MEAN_HAZARD_SHOCK, 0.0),
     ],
-    ids=["STANDARD", "DECAYING_HIT_PROBABILITY", "HIGH_VARIANCE_STATES"],
+    ids=["CONSTANT_HAZARD_PENALTY", "DISTANCE_DECAYED_HAZARD_PENALTY", "ZERO_MEAN_HAZARD_SHOCK"],
 )
 def test_continuous_reward_in_obstacle_depends_on_reward_model_type(
     reward_model_type: RewardModelType, expected_drift: float
@@ -2514,9 +2514,9 @@ def test_continuous_reward_in_obstacle_depends_on_reward_model_type(
     """Each RewardModelType produces its documented obstacle-zone drift.
 
     Purpose: Validates that reward_model_type switches the obstacle-zone
-        contribution between ``obstacle_reward * p_hit`` (STANDARD),
-        ``obstacle_reward`` (DECAYING_HIT_PROBABILITY at d=0 since
-        hit_prob=exp(0)=1), and ``0`` (HIGH_VARIANCE_STATES, +/- obstacle_reward
+        contribution between ``obstacle_reward * p_hit`` (CONSTANT_HAZARD_PENALTY),
+        ``obstacle_reward`` (DISTANCE_DECAYED_HAZARD_PENALTY at d=0 since
+        hit_prob=exp(0)=1), and ``0`` (ZERO_MEAN_HAZARD_SHOCK, +/- obstacle_reward
         with p=0.5 averaging to zero).
 
     Given: state=[5,5] (default obstacle position) so min_dist_to_obstacle=0,
@@ -2541,14 +2541,14 @@ def test_continuous_reward_in_obstacle_depends_on_reward_model_type(
     base = -env.fuel_cost - float(np.linalg.norm(state - env.goal_state))
     empirical_drift = float(rewards.mean()) - base
 
-    if reward_model_type == RewardModelType.STANDARD:
+    if reward_model_type == RewardModelType.CONSTANT_HAZARD_PENALTY:
         sigma = abs(env.obstacle_reward) * np.sqrt(
             env.obstacle_hit_probability * (1.0 - env.obstacle_hit_probability)
         )
-    elif reward_model_type == RewardModelType.DECAYING_HIT_PROBABILITY:
+    elif reward_model_type == RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY:
         # At d=0 the Bernoulli is degenerate (hit_prob=1) — zero variance.
         sigma = 0.0
-    else:  # HIGH_VARIANCE_STATES
+    else:  # ZERO_MEAN_HAZARD_SHOCK
         sigma = abs(env.obstacle_reward)
     sigma_mean = sigma / np.sqrt(n_samples)
     tolerance = max(3.0 * sigma_mean, 1e-9)
@@ -2559,14 +2559,14 @@ def test_continuous_reward_in_obstacle_depends_on_reward_model_type(
 
 
 def test_continuous_decaying_hit_probability_reward_decays_with_obstacle_distance():
-    """DECAYING_HIT_PROBABILITY mean reward follows -|r| * exp(-d/penalty_decay).
+    """DISTANCE_DECAYED_HAZARD_PENALTY mean reward follows -|r| * exp(-d/penalty_decay).
 
     Purpose: Validates the exp(-d/penalty_decay) decay formula in the
-        ContinuousLightDarkDecayingHitProbabilityRewardModel kernel — the
+        ContinuousLightDarkDistanceDecayedHazardPenaltyRewardModel kernel — the
         per-step drift relative to the deterministic fuel/distance base
         should track the documented exponential decay of the hit probability.
 
-    Given: A DECAYING_HIT_PROBABILITY env with penalty_decay=1.0 and the
+    Given: A DISTANCE_DECAYED_HAZARD_PENALTY env with penalty_decay=1.0 and the
         default obstacle (5, 5). Three anchor next_states with increasing
         min-distance to (5, 5): d=0.0, d=1.0, d=2.5; all in-grid and away
         from the goal (so the only stochastic component is the obstacle
@@ -2580,7 +2580,7 @@ def test_continuous_decaying_hit_probability_reward_decays_with_obstacle_distanc
     np.random.seed(55)
     env = ContinuousLightDarkPOMDP(
         discount_factor=0.95,
-        reward_model_type=RewardModelType.DECAYING_HIT_PROBABILITY,
+        reward_model_type=RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY,
         penalty_decay=1.0,
     )
     obstacle = np.array([5.0, 5.0])
@@ -3152,7 +3152,9 @@ class TestContinuousLightDarkRewardNextStateConsistency:
     """
 
     @staticmethod
-    def _make_env(obstacles, *, hit_probability=1.0, reward_model_type=RewardModelType.STANDARD):
+    def _make_env(
+        obstacles, *, hit_probability=1.0, reward_model_type=RewardModelType.CONSTANT_HAZARD_PENALTY
+    ):
         return ContinuousLightDarkPOMDP(
             discount_factor=0.95,
             state_transition_cov_matrix=np.eye(2) * 1e-12,
@@ -3360,7 +3362,7 @@ class TestContinuousLightDarkRewardNextStateConsistency:
         ``next_states = states + action``. Check it now consumes the
         threaded ``next_states``.
 
-        Given: An env with the DECAYING_HIT_PROBABILITY reward model and a
+        Given: An env with the DISTANCE_DECAYED_HAZARD_PENALTY reward model and a
             small ``penalty_decay`` so the hit probability is essentially 1
             at the obstacle and ~0 well away from it.
         When: ``env.reward_batch`` is called once with realised
@@ -3383,7 +3385,7 @@ class TestContinuousLightDarkRewardNextStateConsistency:
             goal_state_radius=1.0,
             beacon_radius=1.0,
             obstacle_radius=1.0,
-            reward_model_type=RewardModelType.DECAYING_HIT_PROBABILITY,
+            reward_model_type=RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY,
             penalty_decay=0.1,
             is_obstacle_hit_terminal=False,
         )

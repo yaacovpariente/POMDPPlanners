@@ -178,7 +178,7 @@ class ContinuousLightDarkRewardModel(BaseLightDarkRewardModel):
         return np.where(hits, self.obstacle_reward, 0.0)
 
 
-class ContinuousLDHighVarianceStatesRewardModel(ContinuousLightDarkRewardModel):
+class ContinuousLDZeroMeanHazardShockRewardModel(ContinuousLightDarkRewardModel):
     def _obstacle_reward_scalar(self) -> float:
         """The expected reward is 0.0, but the variance is high."""
         return self.obstacle_reward if np.random.rand() < 0.5 else -self.obstacle_reward
@@ -192,7 +192,7 @@ class ContinuousLDHighVarianceStatesRewardModel(ContinuousLightDarkRewardModel):
         return self.obstacle_reward * signs
 
 
-class ContinuousLightDarkDecayingHitProbabilityRewardModel(BaseLightDarkRewardModel):
+class ContinuousLightDarkDistanceDecayedHazardPenaltyRewardModel(BaseLightDarkRewardModel):
     def __init__(
         self,
         goal_state: np.ndarray,

@@ -1200,10 +1200,10 @@ class PacManObservationCpp {
 // reward_batch kernel. The danger contribution is computed against the
 // realised next pacman position. Three variants are supported:
 //
-//   reward_variant_code = 0  STANDARD               deterministic ``-penalty``
+//   reward_variant_code = 0  CONSTANT_HAZARD_PENALTY               deterministic ``-penalty``
 //                                                   when inside any zone
 //                                                   (radius cutoff).
-//   reward_variant_code = 1  HIGH_VARIANCE_STATES   ``+/- penalty`` 50/50
+//   reward_variant_code = 1  ZERO_MEAN_HAZARD_SHOCK   ``+/- penalty`` 50/50
 //                                                   when inside any zone.
 //   reward_variant_code = 2  DECAYING_HIT_PROB      ``-penalty`` with
 //                                                   probability
@@ -1225,7 +1225,7 @@ inline double dangerous_area_contribution(int variant_code, int new_pac_row, int
     }
     std::uniform_real_distribution<double> unif(0.0, 1.0);
     if (variant_code == 2) {
-        // DECAYING_HIT_PROBABILITY — no radius cutoff; use closest centre.
+        // DISTANCE_DECAYED_HAZARD_PENALTY — no radius cutoff; use closest centre.
         double min_sq = std::numeric_limits<double>::infinity();
         for (int d = 0; d < n_dangerous; ++d) {
             const double dr = static_cast<double>(new_pac_row) - dangerous_areas[d * 2];
@@ -1242,7 +1242,7 @@ inline double dangerous_area_contribution(int variant_code, int new_pac_row, int
         }
         return 0.0;
     }
-    // STANDARD / HIGH_VARIANCE_STATES both use the radius cutoff.
+    // CONSTANT_HAZARD_PENALTY / ZERO_MEAN_HAZARD_SHOCK both use the radius cutoff.
     const double radius_sq = dangerous_area_radius * dangerous_area_radius;
     bool in_zone = false;
     for (int d = 0; d < n_dangerous; ++d) {
@@ -1257,10 +1257,10 @@ inline double dangerous_area_contribution(int variant_code, int new_pac_row, int
         return 0.0;
     }
     if (variant_code == 1) {
-        // HIGH_VARIANCE_STATES: ±penalty 50/50.
+        // ZERO_MEAN_HAZARD_SHOCK: ±penalty 50/50.
         return (unif(rng) < 0.5) ? dangerous_area_penalty : -dangerous_area_penalty;
     }
-    // STANDARD (or unknown — fall back to deterministic).
+    // CONSTANT_HAZARD_PENALTY (or unknown — fall back to deterministic).
     return -dangerous_area_penalty;
 }
 
@@ -1651,8 +1651,8 @@ PYBIND11_MODULE(_native, m) {
 
     // reward_batch: standalone variant-aware reward kernel. Computes per-row
     // rewards for a batch of (state, action, next_state) triples under a
-    // chosen reward-model variant (STANDARD / HIGH_VARIANCE_STATES /
-    // DECAYING_HIT_PROBABILITY). Mirrors the Python reward_model.compute_reward_batch
+    // chosen reward-model variant (CONSTANT_HAZARD_PENALTY / ZERO_MEAN_HAZARD_SHOCK /
+    // DISTANCE_DECAYED_HAZARD_PENALTY). Mirrors the Python reward_model.compute_reward_batch
     // semantics — sample-mean parity (not bit-exact) is the design target.
     m.def(
         "reward_batch",

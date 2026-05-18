@@ -14,16 +14,16 @@ observation paths and delegates ``reward()`` / ``reward_batch()`` to the
 model.
 
 Reward-model variants (selected via :class:`RewardModelType`):
-    * ``STANDARD`` — dangerous-area penalty fires deterministically (or
+    * ``CONSTANT_HAZARD_PENALTY`` — dangerous-area penalty fires deterministically (or
       with ``dangerous_area_hit_probability`` Bernoulli) whenever the
       realised post-action robot position lies inside any zone.
-    * ``HIGH_VARIANCE_STATES`` — dangerous-area penalty becomes
+    * ``ZERO_MEAN_HAZARD_SHOCK`` — dangerous-area penalty becomes
       ``±dangerous_area_penalty`` with 50/50 split when in zone; obstacle
       penalty is unchanged. Expected dangerous-area contribution is zero,
       variance is ``dangerous_area_penalty**2``. Useful for benchmarking
       risk-sensitive planners against expected-value MCTS on the same
       mean.
-    * ``DECAYING_HIT_PROBABILITY`` — dangerous-area penalty fires with
+    * ``DISTANCE_DECAYED_HAZARD_PENALTY`` — dangerous-area penalty fires with
       probability ``exp(-min_dist / penalty_decay)`` based on the
       Euclidean distance to the nearest dangerous-area centre, with no
       radius cutoff. Obstacle penalty is unchanged.
@@ -51,9 +51,9 @@ _scalar_random = np.random.random_sample  # pylint: disable=no-member
 class RewardModelType(Enum):
     """Reward model variants supported by the Push POMDP family."""
 
-    STANDARD = "standard"
-    HIGH_VARIANCE_STATES = "high_variance_states"
-    DECAYING_HIT_PROBABILITY = "decaying_hit_probability"
+    CONSTANT_HAZARD_PENALTY = "constant_hazard_penalty"
+    ZERO_MEAN_HAZARD_SHOCK = "zero_mean_hazard_shock"
+    DISTANCE_DECAYED_HAZARD_PENALTY = "distance_decayed_hazard_penalty"
 
 
 class BasePushRewardModel(ABC):
@@ -263,16 +263,16 @@ class DiscretePushRewardModel(BasePushRewardModel):
         return np.any(dist_sq <= self.dangerous_area_radius * self.dangerous_area_radius, axis=1)
 
 
-class DiscretePushHighVarianceStatesRewardModel(DiscretePushRewardModel):
+class DiscretePushZeroMeanHazardShockRewardModel(DiscretePushRewardModel):
     """High-variance dangerous-area contribution for :class:`PushPOMDP`.
 
     Dangerous-area hits emit ``+dangerous_area_penalty`` or
     ``-dangerous_area_penalty`` with equal probability — expected
     contribution is zero, variance is ``dangerous_area_penalty**2``.
     Obstacle penalty is unchanged. Mirrors
-    :class:`~POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_reward_models.ContinuousLDHighVarianceStatesRewardModel`
+    :class:`~POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_reward_models.ContinuousLDZeroMeanHazardShockRewardModel`
     and
-    :class:`~POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_utils.laser_tag_reward_models.LaserTagHighVarianceStatesRewardModel`.
+    :class:`~POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_utils.laser_tag_reward_models.LaserTagZeroMeanHazardShockRewardModel`.
     """
 
     def _dangerous_area_contribution_scalar(self, robot_x: float, robot_y: float) -> float:
@@ -298,7 +298,7 @@ class DiscretePushHighVarianceStatesRewardModel(DiscretePushRewardModel):
         return out
 
 
-class DiscretePushDecayingHitProbabilityRewardModel(DiscretePushRewardModel):
+class DiscretePushDistanceDecayedHazardPenaltyRewardModel(DiscretePushRewardModel):
     """Distance-decaying dangerous-area contribution for :class:`PushPOMDP`.
 
     Penalty fires with probability ``exp(-min_dist / penalty_decay)`` based
@@ -306,9 +306,9 @@ class DiscretePushDecayingHitProbabilityRewardModel(DiscretePushRewardModel):
     nearest dangerous-area centre. No radius cutoff — every position
     feels a (vanishingly small at large distance) penalty risk. Obstacle
     penalty is unchanged. Mirrors
-    :class:`~POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_reward_models.ContinuousLightDarkDecayingHitProbabilityRewardModel`
+    :class:`~POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_reward_models.ContinuousLightDarkDistanceDecayedHazardPenaltyRewardModel`
     and
-    :class:`~POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_utils.laser_tag_reward_models.LaserTagDecayingHitProbabilityRewardModel`.
+    :class:`~POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_utils.laser_tag_reward_models.LaserTagDistanceDecayedHazardPenaltyRewardModel`.
     """
 
     def __init__(
@@ -493,7 +493,7 @@ class ContinuousPushRewardModel(BasePushRewardModel):
         return np.any(dist_sq < radius * radius, axis=1)
 
 
-class ContinuousPushHighVarianceStatesRewardModel(ContinuousPushRewardModel):
+class ContinuousPushZeroMeanHazardShockRewardModel(ContinuousPushRewardModel):
     """High-variance dangerous-area contribution for :class:`ContinuousPushPOMDP`."""
 
     def _dangerous_area_penalty_batch(self, next_states: np.ndarray) -> np.ndarray:
@@ -508,7 +508,7 @@ class ContinuousPushHighVarianceStatesRewardModel(ContinuousPushRewardModel):
         return out
 
 
-class ContinuousPushDecayingHitProbabilityRewardModel(ContinuousPushRewardModel):
+class ContinuousPushDistanceDecayedHazardPenaltyRewardModel(ContinuousPushRewardModel):
     """Distance-decaying dangerous-area contribution for :class:`ContinuousPushPOMDP`.
 
     Penalty fires with probability ``exp(-min_dist / penalty_decay)`` based

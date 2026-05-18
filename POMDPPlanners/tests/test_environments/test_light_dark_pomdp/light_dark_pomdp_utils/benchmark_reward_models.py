@@ -5,8 +5,8 @@ Times the public Environment-API reward methods
 :meth:`ContinuousLightDarkPOMDP.reward_batch`) end-to-end so the numbers
 include the thin Python wrapper at ``continuous_light_dark_pomdp.py:637``
 on top of the reward model's ``compute_reward`` / ``compute_reward_batch``.
-Covers all three reward-model variants (Standard, HIGH_VARIANCE_STATES,
-DECAYING_HIT_PROBABILITY) on a fixed workload. Used to compare BEFORE vs
+Covers all three reward-model variants (Standard, ZERO_MEAN_HAZARD_SHOCK,
+DISTANCE_DECAYED_HAZARD_PENALTY) on a fixed workload. Used to compare BEFORE vs
 AFTER the dangerous-area generic-kernel refactor.
 
 Note: the C++ ``_native.simulate_rollout`` path is a separate hot path
@@ -73,19 +73,21 @@ def _build_envs() -> List[Tuple[str, ContinuousLightDarkPOMDP]]:
     }
     return [
         (
-            "Standard",
-            ContinuousLightDarkPOMDP(reward_model_type=RewardModelType.STANDARD, **common),
-        ),
-        (
-            "HighVariance",
+            "ConstantHazardPenalty",
             ContinuousLightDarkPOMDP(
-                reward_model_type=RewardModelType.HIGH_VARIANCE_STATES, **common
+                reward_model_type=RewardModelType.CONSTANT_HAZARD_PENALTY, **common
             ),
         ),
         (
-            "Decaying",
+            "ZeroMeanHazardShock",
             ContinuousLightDarkPOMDP(
-                reward_model_type=RewardModelType.DECAYING_HIT_PROBABILITY, **common
+                reward_model_type=RewardModelType.ZERO_MEAN_HAZARD_SHOCK, **common
+            ),
+        ),
+        (
+            "DistanceDecayedHazardPenalty",
+            ContinuousLightDarkPOMDP(
+                reward_model_type=RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY, **common
             ),
         ),
     ]

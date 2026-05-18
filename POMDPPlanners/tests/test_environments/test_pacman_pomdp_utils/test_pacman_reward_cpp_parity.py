@@ -4,7 +4,7 @@ Stage 1 (red step) of the upcoming native reward-kernel work. These
 tests assert that ``_native.reward_batch`` — the forthcoming standalone
 C++ reward kernel — produces sample means that agree with the Python
 reward-model implementations across all three reward variants
-(``STANDARD``, ``HIGH_VARIANCE_STATES``, ``DECAYING_HIT_PROBABILITY``).
+(``CONSTANT_HAZARD_PENALTY``, ``ZERO_MEAN_HAZARD_SHOCK``, ``DISTANCE_DECAYED_HAZARD_PENALTY``).
 
 The tests are expected to fail today: ``_native.reward_batch`` does not
 exist yet (reward is currently inlined inside ``_native.simulate_rollout``
@@ -40,9 +40,9 @@ _PENALTY_DECAY = 1.5
 _N_PARTICLES = 2000
 
 _VARIANT_CODES = {
-    RewardModelType.STANDARD: 0,
-    RewardModelType.HIGH_VARIANCE_STATES: 1,
-    RewardModelType.DECAYING_HIT_PROBABILITY: 2,
+    RewardModelType.CONSTANT_HAZARD_PENALTY: 0,
+    RewardModelType.ZERO_MEAN_HAZARD_SHOCK: 1,
+    RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY: 2,
 }
 
 
@@ -211,9 +211,9 @@ class TestPacManRewardCppParity:
     @pytest.mark.parametrize(
         "variant",
         [
-            RewardModelType.STANDARD,
-            RewardModelType.HIGH_VARIANCE_STATES,
-            RewardModelType.DECAYING_HIT_PROBABILITY,
+            RewardModelType.CONSTANT_HAZARD_PENALTY,
+            RewardModelType.ZERO_MEAN_HAZARD_SHOCK,
+            RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY,
         ],
     )
     def test_reward_batch_sample_mean_matches_python(self, variant: RewardModelType):
@@ -243,7 +243,7 @@ class TestPacManRewardCppParity:
         env = _make_env(variant)
         states = _seed_states(env, _N_PARTICLES)
         penalty_decay = (
-            env.penalty_decay if variant == RewardModelType.DECAYING_HIT_PROBABILITY else 0.0
+            env.penalty_decay if variant == RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY else 0.0
         )
         py_rewards, cpp_rewards = _gather_rewards_across_actions(
             env,

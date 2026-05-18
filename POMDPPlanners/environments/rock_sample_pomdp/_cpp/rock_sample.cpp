@@ -633,13 +633,13 @@ class RockSampleObservationCpp {
 // Reward-variant codes mirror the Python ``RewardModelType`` enum used by
 // :class:`RockSamplePOMDP`:
 //
-//   0 -> STANDARD             (constant-probability dangerous-area penalty)
-//   1 -> HIGH_VARIANCE_STATES (+/- 50/50 dangerous-area perturbation)
-//   2 -> DECAYING_HIT_PROBABILITY (exp(-min_dist/decay) hit probability)
+//   0 -> CONSTANT_HAZARD_PENALTY             (constant-probability dangerous-area penalty)
+//   1 -> ZERO_MEAN_HAZARD_SHOCK (+/- 50/50 dangerous-area perturbation)
+//   2 -> DISTANCE_DECAYED_HAZARD_PENALTY (exp(-min_dist/decay) hit probability)
 // ---------------------------------------------------------------------------
-constexpr int kRewardVariantStandard = 0;
-constexpr int kRewardVariantHighVariance = 1;
-constexpr int kRewardVariantDecaying = 2;
+constexpr int kRewardVariantConstantHazardPenalty = 0;
+constexpr int kRewardVariantZeroMeanHazardShock = 1;
+constexpr int kRewardVariantDistanceDecayedHazardPenalty = 2;
 
 // Base reward shared across all variants: step / exit / sample / sense.
 // ``state_row`` is the current state row (length state_dim) so this
@@ -703,7 +703,7 @@ inline double dangerous_area_term(double next_row, double next_col,
     }
     pomdp_native::RNGState &rng = pomdp_native::default_rng();
     std::uniform_real_distribution<double> uniform(0.0, 1.0);
-    if (reward_variant_code == kRewardVariantDecaying) {
+    if (reward_variant_code == kRewardVariantDistanceDecayedHazardPenalty) {
         const double min_d = std::sqrt(min_dist_to_danger_sq(next_row, next_col, dangers, k));
         const double p = std::exp(-min_d / penalty_decay);
         return (uniform(rng.engine()) < p) ? dangerous_area_penalty : 0.0;
@@ -713,11 +713,11 @@ inline double dangerous_area_term(double next_row, double next_col,
     if (min_d2 > radius_sq) {
         return 0.0;
     }
-    if (reward_variant_code == kRewardVariantHighVariance) {
+    if (reward_variant_code == kRewardVariantZeroMeanHazardShock) {
         return (uniform(rng.engine()) < 0.5) ? dangerous_area_penalty
                                              : -dangerous_area_penalty;
     }
-    // STANDARD: constant-probability hit
+    // CONSTANT_HAZARD_PENALTY: constant-probability hit
     if (dangerous_area_hit_probability >= 1.0 ||
         uniform(rng.engine()) < dangerous_area_hit_probability) {
         return dangerous_area_penalty;
@@ -952,7 +952,7 @@ PYBIND11_MODULE(_native, m) {
           "action_indices must be a pre-drawn int32 array of length (max_depth-start_depth). "
           "rock_positions_flat is a 1-D int32 array [row0, col0, row1, col1, ...]. "
           "dangerous_areas is a (K, 2) float64 array (may be empty). "
-          "reward_variant_code: 0=STANDARD, 1=HIGH_VARIANCE_STATES, 2=DECAYING_HIT_PROBABILITY.");
+          "reward_variant_code: 0=CONSTANT_HAZARD_PENALTY, 1=ZERO_MEAN_HAZARD_SHOCK, 2=DISTANCE_DECAYED_HAZARD_PENALTY.");
 
     m.def("reward_batch", &reward_batch,
           py::arg("states"), py::arg("action"), py::arg("next_states"),
@@ -965,7 +965,7 @@ PYBIND11_MODULE(_native, m) {
           py::arg("reward_variant_code"), py::arg("penalty_decay"),
           "Variant-aware standalone batch reward kernel for RockSamplePOMDP. "
           "Returns a (N,) float64 array of rewards. "
-          "reward_variant_code: 0=STANDARD, 1=HIGH_VARIANCE_STATES, 2=DECAYING_HIT_PROBABILITY.");
+          "reward_variant_code: 0=CONSTANT_HAZARD_PENALTY, 1=ZERO_MEAN_HAZARD_SHOCK, 2=DISTANCE_DECAYED_HAZARD_PENALTY.");
 
     py::class_<RockSampleTransitionCpp>(m, "RockSampleTransitionCpp")
         .def(py::init<const py::object &, int, int, int, int,

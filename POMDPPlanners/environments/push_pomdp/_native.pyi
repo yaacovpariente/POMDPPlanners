@@ -47,8 +47,8 @@ def simulate_rollout_discrete(
     position (``next_state[:2]``) for obstacle and dangerous-area tests,
     with Bernoulli ``*_hit_probability`` gating.
     ``reward_variant_code`` selects the dangerous-area contract
-    (``0=STANDARD``, ``1=HIGH_VARIANCE_STATES``,
-    ``2=DECAYING_HIT_PROBABILITY``); ``penalty_decay`` is the decay
+    (``0=CONSTANT_HAZARD_PENALTY``, ``1=ZERO_MEAN_HAZARD_SHOCK``,
+    ``2=DISTANCE_DECAYED_HAZARD_PENALTY``); ``penalty_decay`` is the decay
     length used by variant 2.
     """
     ...
@@ -88,8 +88,8 @@ def cont_simulate_rollout(
     position (``next_state[:2]``) for obstacle and dangerous-area tests,
     with Bernoulli ``*_hit_probability`` gating.
     ``reward_variant_code`` selects the dangerous-area contract
-    (``0=STANDARD``, ``1=HIGH_VARIANCE_STATES``,
-    ``2=DECAYING_HIT_PROBABILITY``); ``penalty_decay`` is the decay
+    (``0=CONSTANT_HAZARD_PENALTY``, ``1=ZERO_MEAN_HAZARD_SHOCK``,
+    ``2=DISTANCE_DECAYED_HAZARD_PENALTY``); ``penalty_decay`` is the decay
     length used by variant 2.
     """
     ...
@@ -211,9 +211,9 @@ def push_reward_batch(
     """Standalone variant-aware reward-batch kernel for the discrete PushPOMDP.
 
     ``reward_variant_code`` selects the dangerous-area contract:
-        * 0 — STANDARD (deterministic / optional Bernoulli per zone).
-        * 1 — HIGH_VARIANCE_STATES (``±penalty`` 50/50 in zone).
-        * 2 — DECAYING_HIT_PROBABILITY (penalty fires with probability
+        * 0 — CONSTANT_HAZARD_PENALTY (deterministic / optional Bernoulli per zone).
+        * 1 — ZERO_MEAN_HAZARD_SHOCK (``±penalty`` 50/50 in zone).
+        * 2 — DISTANCE_DECAYED_HAZARD_PENALTY (penalty fires with probability
           ``exp(-min_dist / penalty_decay)``, no radius cutoff).
     Returns a ``(N,)`` float64 array of per-row rewards.
     """

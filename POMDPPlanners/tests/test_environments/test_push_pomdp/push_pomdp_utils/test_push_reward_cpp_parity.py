@@ -4,8 +4,8 @@ Verifies that the future native reward kernels
 ``_native.push_reward_batch`` (discrete) and
 ``_native.cont_push_reward_batch`` (continuous) reproduce — in
 expectation — the Python reward-model output across all three
-:class:`RewardModelType` variants: ``STANDARD``,
-``HIGH_VARIANCE_STATES`` and ``DECAYING_HIT_PROBABILITY``.
+:class:`RewardModelType` variants: ``CONSTANT_HAZARD_PENALTY``,
+``ZERO_MEAN_HAZARD_SHOCK`` and ``DISTANCE_DECAYED_HAZARD_PENALTY``.
 
 Today no standalone C++ reward kernel exists for the Push family —
 reward is inlined inside ``_native.simulate_rollout_discrete`` /
@@ -44,15 +44,15 @@ _DANGEROUS_AREAS_DISCRETE = [(3.0, 3.0), (6.0, 6.0), (8.0, 2.0)]
 _DANGEROUS_AREAS_CONTINUOUS = [(3.0, 3.0), (6.0, 6.0), (8.0, 2.0)]
 
 _REWARD_VARIANT_CODES = {
-    RewardModelType.STANDARD: 0,
-    RewardModelType.HIGH_VARIANCE_STATES: 1,
-    RewardModelType.DECAYING_HIT_PROBABILITY: 2,
+    RewardModelType.CONSTANT_HAZARD_PENALTY: 0,
+    RewardModelType.ZERO_MEAN_HAZARD_SHOCK: 1,
+    RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY: 2,
 }
 
 _PENALTY_DECAY_BY_VARIANT = {
-    RewardModelType.STANDARD: 0.0,
-    RewardModelType.HIGH_VARIANCE_STATES: 0.0,
-    RewardModelType.DECAYING_HIT_PROBABILITY: _PENALTY_DECAY,
+    RewardModelType.CONSTANT_HAZARD_PENALTY: 0.0,
+    RewardModelType.ZERO_MEAN_HAZARD_SHOCK: 0.0,
+    RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY: _PENALTY_DECAY,
 }
 
 
@@ -76,7 +76,7 @@ def _build_discrete_env(variant: RewardModelType) -> PushPOMDP:
         reward_model_type=variant,
         penalty_decay=(
             _PENALTY_DECAY_BY_VARIANT[variant]
-            if variant == RewardModelType.DECAYING_HIT_PROBABILITY
+            if variant == RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY
             else 1.0
         ),
     )
@@ -94,7 +94,7 @@ def _build_continuous_env(variant: RewardModelType) -> ContinuousPushPOMDP:
         reward_model_type=variant,
         penalty_decay=(
             _PENALTY_DECAY_BY_VARIANT[variant]
-            if variant == RewardModelType.DECAYING_HIT_PROBABILITY
+            if variant == RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY
             else 1.0
         ),
     )
@@ -211,9 +211,9 @@ class TestDiscretePushRewardCppParity:
     @pytest.mark.parametrize(
         "variant",
         [
-            RewardModelType.STANDARD,
-            RewardModelType.HIGH_VARIANCE_STATES,
-            RewardModelType.DECAYING_HIT_PROBABILITY,
+            RewardModelType.CONSTANT_HAZARD_PENALTY,
+            RewardModelType.ZERO_MEAN_HAZARD_SHOCK,
+            RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY,
         ],
     )
     def test_cpp_python_reward_means_match(self, variant: RewardModelType) -> None:
@@ -228,7 +228,7 @@ class TestDiscretePushRewardCppParity:
         Given: A discrete :class:`PushPOMDP` constructed with the chosen
             ``reward_model_type``, non-empty ``dangerous_areas``,
             ``dangerous_area_penalty = -10.0``,
-            ``dangerous_area_hit_probability = 1.0`` (so STANDARD is
+            ``dangerous_area_hit_probability = 1.0`` (so CONSTANT_HAZARD_PENALTY is
             deterministic) and (for the Decaying variant)
             ``penalty_decay = 1.5``. A seeded batch of ``N = 2000``
             states is generated mixing dangerous-area and clear cells,
@@ -275,9 +275,9 @@ class TestContinuousPushRewardCppParity:
     @pytest.mark.parametrize(
         "variant",
         [
-            RewardModelType.STANDARD,
-            RewardModelType.HIGH_VARIANCE_STATES,
-            RewardModelType.DECAYING_HIT_PROBABILITY,
+            RewardModelType.CONSTANT_HAZARD_PENALTY,
+            RewardModelType.ZERO_MEAN_HAZARD_SHOCK,
+            RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY,
         ],
     )
     def test_cpp_python_reward_means_match(self, variant: RewardModelType) -> None:

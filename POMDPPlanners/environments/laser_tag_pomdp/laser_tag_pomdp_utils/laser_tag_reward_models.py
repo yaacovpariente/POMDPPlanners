@@ -255,17 +255,17 @@ class LaserTagRewardModel(BaseLaserTagRewardModel):
 
     def _can_use_native_reward_batch(self) -> bool:
         # The variant-aware native kernel handles all three reward-model
-        # variants (STANDARD, HIGH_VARIANCE_STATES, DECAYING_HIT_PROBABILITY)
+        # variants (CONSTANT_HAZARD_PENALTY, ZERO_MEAN_HAZARD_SHOCK, DISTANCE_DECAYED_HAZARD_PENALTY)
         # and both the intended-position fallback and the realised-position
         # path, so it is always preferred when available.
         return True
 
     def _reward_variant_code(self) -> int:
-        # Base class is the STANDARD variant. Subclasses override.
+        # Base class is the CONSTANT_HAZARD_PENALTY variant. Subclasses override.
         return 0
 
     def _penalty_decay_for_native(self) -> float:
-        # STANDARD / HIGH_VARIANCE_STATES ignore penalty_decay; pass a sentinel
+        # CONSTANT_HAZARD_PENALTY / ZERO_MEAN_HAZARD_SHOCK ignore penalty_decay; pass a sentinel
         # positive value so the C++ kernel's "must be > 0 for DECAYING" guard
         # does not need to special-case the unused-parameter path.
         return 1.0
@@ -387,13 +387,13 @@ class LaserTagRewardModel(BaseLaserTagRewardModel):
         return grid
 
 
-class LaserTagHighVarianceStatesRewardModel(LaserTagRewardModel):
+class LaserTagZeroMeanHazardShockRewardModel(LaserTagRewardModel):
     """Dangerous-area penalty has zero mean and high variance.
 
     Wall hits remain deterministically penalised by ``-dangerous_area_penalty``.
     Dangerous-area hits emit ``+dangerous_area_penalty`` or
     ``-dangerous_area_penalty`` with equal probability, mirroring
-    :class:`~POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_reward_models.ContinuousLDHighVarianceStatesRewardModel`.
+    :class:`~POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_reward_models.ContinuousLDZeroMeanHazardShockRewardModel`.
     Walls and danger zones are scored independently — a position that
     is both a wall and inside a danger zone receives both contributions.
     """
@@ -432,7 +432,7 @@ class LaserTagHighVarianceStatesRewardModel(LaserTagRewardModel):
             rewards[danger_mask] += self.dangerous_area_penalty * signs
 
 
-class LaserTagDecayingHitProbabilityRewardModel(LaserTagRewardModel):
+class LaserTagDistanceDecayedHazardPenaltyRewardModel(LaserTagRewardModel):
     """Dangerous-area penalty fires with distance-decaying probability.
 
     Wall hits remain deterministically penalised by ``-dangerous_area_penalty``.
@@ -441,7 +441,7 @@ class LaserTagDecayingHitProbabilityRewardModel(LaserTagRewardModel):
     the Euclidean distance from the realised position to the nearest
     dangerous-area centre. No radius cutoff is applied, so even faraway
     positions feel a (vanishingly small) penalty risk. Mirrors
-    :class:`~POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_reward_models.ContinuousLightDarkDecayingHitProbabilityRewardModel`.
+    :class:`~POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_reward_models.ContinuousLightDarkDistanceDecayedHazardPenaltyRewardModel`.
     """
 
     def __init__(

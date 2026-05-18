@@ -856,19 +856,19 @@ py::array_t<double> reward_batch(
 // random-rollout kernel. Match
 // POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp.RewardModelType.
 //
-// STANDARD                 : deterministic single ``-penalty`` on wall OR
+// CONSTANT_HAZARD_PENALTY                 : deterministic single ``-penalty`` on wall OR
 //                            danger membership (matches
 //                            LaserTagRewardModel._compute_area_penalty_scalar
 //                            and the legacy kernel).
-// HIGH_VARIANCE_STATES     : wall always emits ``-penalty``; danger emits
+// ZERO_MEAN_HAZARD_SHOCK     : wall always emits ``-penalty``; danger emits
 //                            ``±penalty`` 50/50 via the shared C++ RNG.
-// DECAYING_HIT_PROBABILITY : wall always emits ``-penalty``; danger emits
+// DISTANCE_DECAYED_HAZARD_PENALTY : wall always emits ``-penalty``; danger emits
 //                            ``-penalty`` with probability
 //                            ``exp(-min_dist / penalty_decay)`` against the
 //                            nearest centre (no radius cutoff).
-constexpr int kVariantStandard = 0;
-constexpr int kVariantHighVariance = 1;
-constexpr int kVariantDecaying = 2;
+constexpr int kVariantConstantHazardPenalty = 0;
+constexpr int kVariantZeroMeanHazardShock = 1;
+constexpr int kVariantDistanceDecayedHazardPenalty = 2;
 
 // Build the packed wall hash set from the (2 * n_walls,) int64 buffer.
 std::unordered_set<int64_t> build_wall_cells(
@@ -932,7 +932,7 @@ inline bool danger_hit_within(double pr, double pc, double r_sq,
 
 // Compute the variant's danger-area contribution (already excludes the wall
 // contribution; wall handling is shared upstream). ``uniform`` is used by
-// stochastic variants only — pass any value for STANDARD.
+// stochastic variants only — pass any value for CONSTANT_HAZARD_PENALTY.
 inline double variant_danger_contribution(
     int variant_code, double pr, double pc, double r_sq, double penalty_decay,
     double dangerous_area_penalty,
@@ -940,13 +940,13 @@ inline double variant_danger_contribution(
     if (areas.empty()) {
         return 0.0;
     }
-    if (variant_code == kVariantHighVariance) {
+    if (variant_code == kVariantZeroMeanHazardShock) {
         if (!danger_hit_within(pr, pc, r_sq, areas)) {
             return 0.0;
         }
         return (uniform < 0.5) ? -dangerous_area_penalty : dangerous_area_penalty;
     }
-    if (variant_code == kVariantDecaying) {
+    if (variant_code == kVariantDistanceDecayedHazardPenalty) {
         double min_sq = std::numeric_limits<double>::infinity();
         for (const auto &area : areas) {
             const double ddr = pr - area.first;
@@ -963,8 +963,8 @@ inline double variant_danger_contribution(
         }
         return 0.0;
     }
-    // STANDARD: handled by the caller via the combined OR-mask path; this
-    // helper should not be invoked for STANDARD.
+    // CONSTANT_HAZARD_PENALTY: handled by the caller via the combined OR-mask path; this
+    // helper should not be invoked for CONSTANT_HAZARD_PENALTY.
     return 0.0;
 }
 
@@ -980,8 +980,8 @@ inline double variant_danger_contribution(
 //     post-action position read from ``next_states[:, :2]`` when
 //     ``next_states`` is provided (preferred path); when it is empty/null
 //     the intended cell is used (legacy ``compute_reward_batch_python``
-//     fallback). STANDARD applies a single -penalty on (wall OR danger);
-//     HIGH_VARIANCE_STATES and DECAYING_HIT_PROBABILITY apply the wall
+//     fallback). CONSTANT_HAZARD_PENALTY applies a single -penalty on (wall OR danger);
+//     ZERO_MEAN_HAZARD_SHOCK and DISTANCE_DECAYED_HAZARD_PENALTY apply the wall
 //     penalty deterministically and resolve the danger contribution via
 //     ``pomdp_native::default_rng``.
 //
@@ -991,8 +991,8 @@ inline double variant_danger_contribution(
 // next_states: shape (N, 5) float64 or empty (0, 0) / (0, 5) for "intended
 //   position" fallback. When non-empty its row count must equal ``states``'.
 // reward_variant_code: see kVariant* constants above.
-// penalty_decay: decay length for the DECAYING_HIT_PROBABILITY variant
-//   (must be strictly positive when ``reward_variant_code == kVariantDecaying``);
+// penalty_decay: decay length for the DISTANCE_DECAYED_HAZARD_PENALTY variant
+//   (must be strictly positive when ``reward_variant_code == kVariantDistanceDecayedHazardPenalty``);
 //   ignored otherwise.
 py::array_t<double> lasertag_discrete_reward_batch(
     const py::array_t<double, py::array::c_style | py::array::forcecast> &states,
@@ -1039,9 +1039,9 @@ py::array_t<double> lasertag_discrete_reward_batch(
                 "next_states must have shape (N, 5) matching states, or be empty");
         }
     }
-    if (reward_variant_code == kVariantDecaying && !(penalty_decay > 0.0)) {
+    if (reward_variant_code == kVariantDistanceDecayedHazardPenalty && !(penalty_decay > 0.0)) {
         throw std::invalid_argument(
-            "penalty_decay must be strictly positive for the DECAYING_HIT_PROBABILITY variant");
+            "penalty_decay must be strictly positive for the DISTANCE_DECAYED_HAZARD_PENALTY variant");
     }
 
     const std::unordered_set<int64_t> wall_cells =
@@ -1069,8 +1069,8 @@ py::array_t<double> lasertag_discrete_reward_batch(
     pomdp_native::RNGState &rng = pomdp_native::default_rng();
     std::uniform_real_distribution<double> uniform_dist(0.0, 1.0);
     const bool needs_uniform =
-        (reward_variant_code == kVariantHighVariance ||
-         reward_variant_code == kVariantDecaying) &&
+        (reward_variant_code == kVariantZeroMeanHazardShock ||
+         reward_variant_code == kVariantDistanceDecayedHazardPenalty) &&
         !areas.empty();
 
     for (std::size_t i = 0; i < n; ++i) {
@@ -1109,7 +1109,7 @@ py::array_t<double> lasertag_discrete_reward_batch(
 
         const bool is_wall = wall_hit(eval_r, eval_c, rows, cols, wall_cells);
 
-        if (reward_variant_code == kVariantStandard) {
+        if (reward_variant_code == kVariantConstantHazardPenalty) {
             // Single -penalty on (wall OR danger).
             bool penalty = is_wall;
             if (!penalty && !areas.empty()) {
@@ -1120,9 +1120,9 @@ py::array_t<double> lasertag_discrete_reward_batch(
                 r -= dangerous_area_penalty;
             }
         } else {
-            // HIGH_VARIANCE_STATES / DECAYING: wall and danger contributions
+            // ZERO_MEAN_HAZARD_SHOCK / DECAYING: wall and danger contributions
             // are independent. Wall hit always subtracts ``penalty`` exactly
-            // like the STANDARD variant.
+            // like the CONSTANT_HAZARD_PENALTY variant.
             if (is_wall) {
                 r -= dangerous_area_penalty;
             }
@@ -1370,8 +1370,8 @@ struct DiscreteEnvParams {
     double tag_penalty;
     double step_cost;
     double transition_error_prob;
-    // Reward-variant fields (default to STANDARD, penalty_decay=1.0).
-    int reward_variant_code = kVariantStandard;
+    // Reward-variant fields (default to CONSTANT_HAZARD_PENALTY, penalty_decay=1.0).
+    int reward_variant_code = kVariantConstantHazardPenalty;
     double penalty_decay = 1.0;
 };
 
@@ -1382,7 +1382,7 @@ DiscreteEnvParams make_discrete_env_params(
     double dangerous_area_radius, double dangerous_area_penalty,
     double tag_reward, double tag_penalty, double step_cost,
     double transition_error_prob,
-    int reward_variant_code = kVariantStandard,
+    int reward_variant_code = kVariantConstantHazardPenalty,
     double penalty_decay = 1.0) {
 
     DiscreteEnvParams p;
@@ -1503,7 +1503,7 @@ double disc_reward(const double *state, int action, const DiscreteEnvParams &env
         env.wall_grid[static_cast<std::size_t>(int_r * env.cols + int_c)];
     const bool is_danger = disc_is_dangerous(int_r, int_c, env);
 
-    if (env.reward_variant_code == kVariantStandard) {
+    if (env.reward_variant_code == kVariantConstantHazardPenalty) {
         if (is_wall || is_danger) {
             base -= env.dangerous_area_penalty;
         }
@@ -1520,14 +1520,14 @@ double disc_reward(const double *state, int action, const DiscreteEnvParams &env
     }
     std::uniform_real_distribution<double> uniform_dist(0.0, 1.0);
     const double u = uniform_dist(rng.engine());
-    if (env.reward_variant_code == kVariantHighVariance) {
+    if (env.reward_variant_code == kVariantZeroMeanHazardShock) {
         if (!is_danger) {
             return base;
         }
         return base + ((u < 0.5) ? -env.dangerous_area_penalty
                                  : env.dangerous_area_penalty);
     }
-    if (env.reward_variant_code == kVariantDecaying) {
+    if (env.reward_variant_code == kVariantDistanceDecayedHazardPenalty) {
         const double min_dist = disc_min_danger_distance(
             static_cast<double>(int_r), static_cast<double>(int_c), env);
         const double hit_prob = std::exp(-min_dist / env.penalty_decay);
@@ -1630,9 +1630,9 @@ double simulate_rollout_discrete(
     if (initial_state.ndim() != 1 || initial_state.shape(0) != 5) {
         throw std::invalid_argument("initial_state must have shape (5,)");
     }
-    if (reward_variant_code == kVariantDecaying && !(penalty_decay > 0.0)) {
+    if (reward_variant_code == kVariantDistanceDecayedHazardPenalty && !(penalty_decay > 0.0)) {
         throw std::invalid_argument(
-            "penalty_decay must be strictly positive for the DECAYING_HIT_PROBABILITY variant");
+            "penalty_decay must be strictly positive for the DISTANCE_DECAYED_HAZARD_PENALTY variant");
     }
 
     const DiscreteEnvParams env = make_discrete_env_params(
@@ -2501,11 +2501,11 @@ PYBIND11_MODULE(_native, m) {
           "Vectorised reward computation for the discrete LaserTagPOMDP. "
           "Returns shape (N,) float64. Mirrors "
           "LaserTagRewardModel.compute_reward_batch across the three "
-          "RewardModelType variants: STANDARD (0) applies a single "
+          "RewardModelType variants: CONSTANT_HAZARD_PENALTY (0) applies a single "
           "-dangerous_area_penalty on (wall OR danger) at the realised cell, "
-          "HIGH_VARIANCE_STATES (1) emits +/-dangerous_area_penalty on danger "
+          "ZERO_MEAN_HAZARD_SHOCK (1) emits +/-dangerous_area_penalty on danger "
           "(50/50) with deterministic wall penalty, and "
-          "DECAYING_HIT_PROBABILITY (2) emits -dangerous_area_penalty on "
+          "DISTANCE_DECAYED_HAZARD_PENALTY (2) emits -dangerous_area_penalty on "
           "danger with probability exp(-min_dist / penalty_decay) with "
           "deterministic wall penalty. When ``next_states`` is shape (N, 5), "
           "the penalty is scored against next_states[:, :2]; when it is empty "
@@ -2575,9 +2575,9 @@ PYBIND11_MODULE(_native, m) {
         "Actions are drawn uniformly from {0,1,2,3,4} using pomdp_native::default_rng().\n"
         "Seed via set_seed() before calling to obtain reproducible trajectories.\n"
         "``reward_variant_code`` selects the LaserTag reward-model variant:\n"
-        "  0 = STANDARD (deterministic wall/danger -penalty on OR);\n"
-        "  1 = HIGH_VARIANCE_STATES (wall always -penalty; danger +/-penalty 50/50);\n"
-        "  2 = DECAYING_HIT_PROBABILITY (wall always -penalty; danger -penalty\n"
+        "  0 = CONSTANT_HAZARD_PENALTY (deterministic wall/danger -penalty on OR);\n"
+        "  1 = ZERO_MEAN_HAZARD_SHOCK (wall always -penalty; danger +/-penalty 50/50);\n"
+        "  2 = DISTANCE_DECAYED_HAZARD_PENALTY (wall always -penalty; danger -penalty\n"
         "      with probability exp(-min_dist / penalty_decay), no radius cutoff).\n"
         "Returns the discounted sum of immediate rewards along the sampled trajectory.");
 

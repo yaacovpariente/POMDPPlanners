@@ -40,8 +40,8 @@ from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_visualizer import (  #
 )
 from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_utils.laser_tag_reward_models import (
     BaseLaserTagRewardModel,
-    LaserTagDecayingHitProbabilityRewardModel,
-    LaserTagHighVarianceStatesRewardModel,
+    LaserTagDistanceDecayedHazardPenaltyRewardModel,
+    LaserTagZeroMeanHazardShockRewardModel,
     LaserTagRewardModel,
 )
 
@@ -74,9 +74,9 @@ class LaserTagPOMDPMetrics(Enum):
 class RewardModelType(Enum):
     """Reward-model variants selectable on :class:`LaserTagPOMDP`."""
 
-    STANDARD = "standard"
-    HIGH_VARIANCE_STATES = "high_variance_states"
-    DECAYING_HIT_PROBABILITY = "decaying_hit_probability"
+    CONSTANT_HAZARD_PENALTY = "constant_hazard_penalty"
+    ZERO_MEAN_HAZARD_SHOCK = "zero_mean_hazard_shock"
+    DISTANCE_DECAYED_HAZARD_PENALTY = "distance_decayed_hazard_penalty"
 
 
 # State representation for LaserTag POMDP as numpy array
@@ -171,7 +171,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         use_queue_logger: bool = False,
         initial_state: Optional[np.ndarray] = None,
         transition_error_prob: float = 0.0,
-        reward_model_type: RewardModelType = RewardModelType.STANDARD,
+        reward_model_type: RewardModelType = RewardModelType.CONSTANT_HAZARD_PENALTY,
         penalty_decay: float = 1.0,
     ):
         """Initialize the LaserTag POMDP environment.
@@ -199,18 +199,18 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
                 With probability (1-p), the intended action is executed. With probability p, a random
                 action is selected uniformly from {0,1,2,3} excluding the intended action.
                 Defaults to 0.0 (deterministic transitions).
-            reward_model_type: Selects the reward variant. ``STANDARD`` (default)
+            reward_model_type: Selects the reward variant. ``CONSTANT_HAZARD_PENALTY`` (default)
                 deterministically subtracts ``dangerous_area_penalty`` on a wall
-                or dangerous-area hit. ``HIGH_VARIANCE_STATES`` keeps the wall
+                or dangerous-area hit. ``ZERO_MEAN_HAZARD_SHOCK`` keeps the wall
                 penalty deterministic but emits ``±dangerous_area_penalty``
                 (50/50) on a dangerous-area hit (expected 0, high variance).
-                ``DECAYING_HIT_PROBABILITY`` keeps the wall penalty
+                ``DISTANCE_DECAYED_HAZARD_PENALTY`` keeps the wall penalty
                 deterministic and applies ``-dangerous_area_penalty`` with
                 probability ``exp(-min_dist / penalty_decay)`` against the
                 nearest dangerous-area centre (no radius cutoff). Mirrors the
                 light-dark reward-model variants.
             penalty_decay: Decay length used by the
-                ``DECAYING_HIT_PROBABILITY`` reward model. Ignored by the other
+                ``DISTANCE_DECAYED_HAZARD_PENALTY`` reward model. Ignored by the other
                 variants. Must be strictly positive. Defaults to ``1.0``.
 
         Raises:
@@ -280,7 +280,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
     def _build_reward_model(
         self, reward_model_type: RewardModelType, penalty_decay: float
     ) -> BaseLaserTagRewardModel:
-        if reward_model_type == RewardModelType.STANDARD:
+        if reward_model_type == RewardModelType.CONSTANT_HAZARD_PENALTY:
             return LaserTagRewardModel(
                 floor_shape=self.floor_shape,
                 walls=self.walls,
@@ -292,8 +292,8 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
                 step_cost=self.step_cost,
                 action_directions=self._action_directions,
             )
-        if reward_model_type == RewardModelType.HIGH_VARIANCE_STATES:
-            return LaserTagHighVarianceStatesRewardModel(
+        if reward_model_type == RewardModelType.ZERO_MEAN_HAZARD_SHOCK:
+            return LaserTagZeroMeanHazardShockRewardModel(
                 floor_shape=self.floor_shape,
                 walls=self.walls,
                 dangerous_areas=self.dangerous_areas,
@@ -304,8 +304,8 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
                 step_cost=self.step_cost,
                 action_directions=self._action_directions,
             )
-        if reward_model_type == RewardModelType.DECAYING_HIT_PROBABILITY:
-            return LaserTagDecayingHitProbabilityRewardModel(
+        if reward_model_type == RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY:
+            return LaserTagDistanceDecayedHazardPenaltyRewardModel(
                 floor_shape=self.floor_shape,
                 walls=self.walls,
                 dangerous_areas=self.dangerous_areas,
@@ -895,14 +895,14 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
     def _native_reward_variant_code(self) -> int:
         """Map ``self.reward_model_type`` to the native kernel's variant code.
 
-        Matches the integer code emitted by the C++ kernel (``0`` = STANDARD,
-        ``1`` = HIGH_VARIANCE_STATES, ``2`` = DECAYING_HIT_PROBABILITY).
+        Matches the integer code emitted by the C++ kernel (``0`` = CONSTANT_HAZARD_PENALTY,
+        ``1`` = ZERO_MEAN_HAZARD_SHOCK, ``2`` = DISTANCE_DECAYED_HAZARD_PENALTY).
         """
-        if self.reward_model_type == RewardModelType.STANDARD:
+        if self.reward_model_type == RewardModelType.CONSTANT_HAZARD_PENALTY:
             return 0
-        if self.reward_model_type == RewardModelType.HIGH_VARIANCE_STATES:
+        if self.reward_model_type == RewardModelType.ZERO_MEAN_HAZARD_SHOCK:
             return 1
-        if self.reward_model_type == RewardModelType.DECAYING_HIT_PROBABILITY:
+        if self.reward_model_type == RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY:
             return 2
         raise ValueError(f"Unknown reward model type: {self.reward_model_type}")
 

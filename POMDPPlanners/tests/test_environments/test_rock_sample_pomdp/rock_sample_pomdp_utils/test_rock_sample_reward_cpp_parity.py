@@ -17,9 +17,9 @@ The contract being asserted here is:
   environment scoring parameters, plus ``reward_variant_code`` (int) and
   ``penalty_decay`` (float) selecting one of the three reward variants:
 
-  * ``reward_variant_code=0`` -> STANDARD
-  * ``reward_variant_code=1`` -> HIGH_VARIANCE_STATES
-  * ``reward_variant_code=2`` -> DECAYING_HIT_PROBABILITY
+  * ``reward_variant_code=0`` -> CONSTANT_HAZARD_PENALTY
+  * ``reward_variant_code=1`` -> ZERO_MEAN_HAZARD_SHOCK
+  * ``reward_variant_code=2`` -> DISTANCE_DECAYED_HAZARD_PENALTY
 
 * For each variant, the sample-mean of the C++ rewards over a seeded
   ``N=2000`` batch matches the sample-mean of the Python reward model
@@ -176,11 +176,11 @@ def _collect_py_rewards(
 @pytest.mark.parametrize(
     ("variant", "reward_variant_code", "penalty_decay"),
     [
-        (RewardModelType.STANDARD, 0, 0.0),
-        (RewardModelType.HIGH_VARIANCE_STATES, 1, 0.0),
-        (RewardModelType.DECAYING_HIT_PROBABILITY, 2, _PENALTY_DECAY_DECAYING_VARIANT),
+        (RewardModelType.CONSTANT_HAZARD_PENALTY, 0, 0.0),
+        (RewardModelType.ZERO_MEAN_HAZARD_SHOCK, 1, 0.0),
+        (RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY, 2, _PENALTY_DECAY_DECAYING_VARIANT),
     ],
-    ids=["standard", "high_variance_states", "decaying_hit_probability"],
+    ids=["constant_hazard_penalty", "zero_mean_hazard_shock", "distance_decayed_hazard_penalty"],
 )
 class TestRockSampleRewardCppParity:
     """C++ vs Python reward-mean parity across all RockSample reward variants."""

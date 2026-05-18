@@ -42,8 +42,8 @@ from POMDPPlanners.environments.push_pomdp.continuous_push_geometry import (
 )
 from POMDPPlanners.environments.push_pomdp.push_pomdp_utils.push_reward_models import (
     BasePushRewardModel,
-    ContinuousPushDecayingHitProbabilityRewardModel,
-    ContinuousPushHighVarianceStatesRewardModel,
+    ContinuousPushDistanceDecayedHazardPenaltyRewardModel,
+    ContinuousPushZeroMeanHazardShockRewardModel,
     ContinuousPushRewardModel,
     RewardModelType,
 )
@@ -185,7 +185,7 @@ class ContinuousPushPOMDP(Environment):
         dangerous_area_radius: float = 0.5,
         dangerous_area_penalty: float = -10.0,
         dangerous_area_hit_probability: float = 1.0,
-        reward_model_type: RewardModelType = RewardModelType.STANDARD,
+        reward_model_type: RewardModelType = RewardModelType.CONSTANT_HAZARD_PENALTY,
         penalty_decay: float = 1.0,
         robot_radius: float = 0.3,
         state_transition_cov_matrix: np.ndarray = np.eye(2) * 0.1,
@@ -199,7 +199,10 @@ class ContinuousPushPOMDP(Environment):
             raise ValueError("obstacle_hit_probability must be between 0 and 1 (inclusive)")
         if not 0.0 <= dangerous_area_hit_probability <= 1.0:
             raise ValueError("dangerous_area_hit_probability must be between 0 and 1 (inclusive)")
-        if reward_model_type == RewardModelType.DECAYING_HIT_PROBABILITY and penalty_decay <= 0.0:
+        if (
+            reward_model_type == RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY
+            and penalty_decay <= 0.0
+        ):
             raise ValueError("penalty_decay must be strictly positive")
 
         self.grid_size = grid_size
@@ -304,12 +307,12 @@ class ContinuousPushPOMDP(Environment):
             "dangerous_area_penalty": self.dangerous_area_penalty,
             "dangerous_area_hit_probability": self.dangerous_area_hit_probability,
         }
-        if self.reward_model_type == RewardModelType.STANDARD:
+        if self.reward_model_type == RewardModelType.CONSTANT_HAZARD_PENALTY:
             return ContinuousPushRewardModel(**common_kwargs)
-        if self.reward_model_type == RewardModelType.HIGH_VARIANCE_STATES:
-            return ContinuousPushHighVarianceStatesRewardModel(**common_kwargs)
-        if self.reward_model_type == RewardModelType.DECAYING_HIT_PROBABILITY:
-            return ContinuousPushDecayingHitProbabilityRewardModel(
+        if self.reward_model_type == RewardModelType.ZERO_MEAN_HAZARD_SHOCK:
+            return ContinuousPushZeroMeanHazardShockRewardModel(**common_kwargs)
+        if self.reward_model_type == RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY:
+            return ContinuousPushDistanceDecayedHazardPenaltyRewardModel(
                 penalty_decay=self.penalty_decay, **common_kwargs
             )
         raise ValueError(f"Unknown reward model type: {self.reward_model_type}")
@@ -527,9 +530,9 @@ class ContinuousPushPOMDP(Environment):
         )
 
     def _reward_variant_native_params(self) -> Tuple[int, float]:
-        if self.reward_model_type == RewardModelType.HIGH_VARIANCE_STATES:
+        if self.reward_model_type == RewardModelType.ZERO_MEAN_HAZARD_SHOCK:
             return 1, 0.0
-        if self.reward_model_type == RewardModelType.DECAYING_HIT_PROBABILITY:
+        if self.reward_model_type == RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY:
             return 2, float(getattr(self.reward_model, "penalty_decay", 1.0))
         return 0, 0.0
 
@@ -890,7 +893,7 @@ class ContinuousPushPOMDPDiscreteActions(ContinuousPushPOMDP, DiscreteActionsEnv
         dangerous_area_radius: float = 0.5,
         dangerous_area_penalty: float = -10.0,
         dangerous_area_hit_probability: float = 1.0,
-        reward_model_type: RewardModelType = RewardModelType.STANDARD,
+        reward_model_type: RewardModelType = RewardModelType.CONSTANT_HAZARD_PENALTY,
         penalty_decay: float = 1.0,
         robot_radius: float = 0.3,
         state_transition_cov_matrix: np.ndarray = np.eye(2) * 0.1,

@@ -1,7 +1,7 @@
-"""Tests for the RockSample HIGH_VARIANCE_STATES and DECAYING_HIT_PROBABILITY
+"""Tests for the RockSample ZERO_MEAN_HAZARD_SHOCK and DISTANCE_DECAYED_HAZARD_PENALTY
 reward-model variants.
 
-The STANDARD model is exercised by the env-level parity tests in
+The CONSTANT_HAZARD_PENALTY model is exercised by the env-level parity tests in
 ``test_rock_sample_pomdp.py`` / ``test_rock_sample_kernel_cache.py`` and
 is not re-tested here. These tests target only the new variants and
 their integration with :class:`RockSamplePOMDP` via the
@@ -19,8 +19,8 @@ from POMDPPlanners.environments.rock_sample_pomdp import (
     create_rock_sample_state,
 )
 from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp_utils.rock_sample_reward_models import (
-    RockSampleDecayingHitProbabilityRewardModel,
-    RockSampleHighVarianceRewardModel,
+    RockSampleDistanceDecayedHazardPenaltyRewardModel,
+    RockSampleZeroMeanHazardShockRewardModel,
     RockSampleRewardModel,
 )
 
@@ -31,7 +31,7 @@ from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp_utils.rock_s
 
 
 def test_env_builds_standard_reward_model_by_default():
-    """Default ``reward_model_type`` produces a STANDARD ``RockSampleRewardModel``.
+    """Default ``reward_model_type`` produces a CONSTANT_HAZARD_PENALTY ``RockSampleRewardModel``.
 
     Purpose: Validates the default dispatch path through ``_build_reward_model``.
 
@@ -47,14 +47,14 @@ def test_env_builds_standard_reward_model_by_default():
 
 
 def test_env_builds_high_variance_reward_model_on_request():
-    """HIGH_VARIANCE_STATES dispatch path constructs the right subclass.
+    """ZERO_MEAN_HAZARD_SHOCK dispatch path constructs the right subclass.
 
     Purpose: Validates that the env's reward-model factory picks the
         high-variance subclass when asked.
 
-    Given: A ``RockSamplePOMDP`` with ``reward_model_type=HIGH_VARIANCE_STATES``.
+    Given: A ``RockSamplePOMDP`` with ``reward_model_type=ZERO_MEAN_HAZARD_SHOCK``.
     When: The env is built.
-    Then: ``env.reward_model`` is a ``RockSampleHighVarianceRewardModel``
+    Then: ``env.reward_model`` is a ``RockSampleZeroMeanHazardShockRewardModel``
         and the env-level reward_range spans both signs of the penalty.
 
     Test type: unit
@@ -62,9 +62,9 @@ def test_env_builds_high_variance_reward_model_on_request():
     env = RockSamplePOMDP(
         dangerous_areas=[(2, 2)],
         dangerous_area_penalty=-5.0,
-        reward_model_type=RewardModelType.HIGH_VARIANCE_STATES,
+        reward_model_type=RewardModelType.ZERO_MEAN_HAZARD_SHOCK,
     )
-    assert isinstance(env.reward_model, RockSampleHighVarianceRewardModel)
+    assert isinstance(env.reward_model, RockSampleZeroMeanHazardShockRewardModel)
     # HIGH_VARIANCE flips the penalty sign with probability 0.5, so the
     # reward_range must include the positive sign too.
     assert env.reward_range is not None
@@ -74,25 +74,25 @@ def test_env_builds_high_variance_reward_model_on_request():
 
 
 def test_env_builds_decaying_reward_model_on_request():
-    """DECAYING_HIT_PROBABILITY dispatch path constructs the right subclass.
+    """DISTANCE_DECAYED_HAZARD_PENALTY dispatch path constructs the right subclass.
 
     Purpose: Validates the env's reward-model factory picks the
         decaying-probability subclass and threads ``penalty_decay`` through.
 
-    Given: A ``RockSamplePOMDP`` with reward_model_type=DECAYING_HIT_PROBABILITY
+    Given: A ``RockSamplePOMDP`` with reward_model_type=DISTANCE_DECAYED_HAZARD_PENALTY
         and penalty_decay=2.5.
     When: The env is built.
-    Then: ``env.reward_model`` is a ``RockSampleDecayingHitProbabilityRewardModel``
+    Then: ``env.reward_model`` is a ``RockSampleDistanceDecayedHazardPenaltyRewardModel``
         with ``penalty_decay`` 2.5.
 
     Test type: unit
     """
     env = RockSamplePOMDP(
         dangerous_areas=[(2, 2)],
-        reward_model_type=RewardModelType.DECAYING_HIT_PROBABILITY,
+        reward_model_type=RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY,
         penalty_decay=2.5,
     )
-    assert isinstance(env.reward_model, RockSampleDecayingHitProbabilityRewardModel)
+    assert isinstance(env.reward_model, RockSampleDistanceDecayedHazardPenaltyRewardModel)
     assert env.reward_model.penalty_decay == 2.5
 
 
@@ -101,7 +101,7 @@ def test_decaying_model_rejects_non_positive_penalty_decay():
 
     Purpose: Validates the decaying-model constructor refuses zero / negative decay.
 
-    Given: A direct ``RockSampleDecayingHitProbabilityRewardModel`` build with
+    Given: A direct ``RockSampleDistanceDecayedHazardPenaltyRewardModel`` build with
         ``penalty_decay=0.0`` (and again with a negative value).
     When: The constructor is called.
     Then: ``ValueError`` is raised in both cases.
@@ -109,7 +109,7 @@ def test_decaying_model_rejects_non_positive_penalty_decay():
     Test type: unit
     """
     with pytest.raises(ValueError, match="penalty_decay must be positive"):
-        RockSampleDecayingHitProbabilityRewardModel(
+        RockSampleDistanceDecayedHazardPenaltyRewardModel(
             map_size=(5, 5),
             rock_positions=[(0, 0)],
             step_penalty=0.0,
@@ -124,7 +124,7 @@ def test_decaying_model_rejects_non_positive_penalty_decay():
             penalty_decay=0.0,
         )
     with pytest.raises(ValueError, match="penalty_decay must be positive"):
-        RockSampleDecayingHitProbabilityRewardModel(
+        RockSampleDistanceDecayedHazardPenaltyRewardModel(
             map_size=(5, 5),
             rock_positions=[(0, 0)],
             step_penalty=0.0,
@@ -141,7 +141,7 @@ def test_decaying_model_rejects_non_positive_penalty_decay():
 
 
 # ---------------------------------------------------------------------------
-# HIGH_VARIANCE_STATES semantics
+# ZERO_MEAN_HAZARD_SHOCK semantics
 # ---------------------------------------------------------------------------
 
 
@@ -151,7 +151,7 @@ def _make_high_variance_env() -> RockSamplePOMDP:
         rock_positions=[(0, 0), (2, 2), (3, 3), (5, 5)],
         dangerous_areas=[(2, 2), (4, 4)],
         dangerous_area_penalty=-5.0,
-        reward_model_type=RewardModelType.HIGH_VARIANCE_STATES,
+        reward_model_type=RewardModelType.ZERO_MEAN_HAZARD_SHOCK,
     )
 
 
@@ -252,7 +252,7 @@ def test_high_variance_batch_seeded_parity_with_scalar_loop():
 
 
 # ---------------------------------------------------------------------------
-# DECAYING_HIT_PROBABILITY semantics
+# DISTANCE_DECAYED_HAZARD_PENALTY semantics
 # ---------------------------------------------------------------------------
 
 
@@ -262,7 +262,7 @@ def _make_decaying_env(penalty_decay: float = 1.0) -> RockSamplePOMDP:
         rock_positions=[(0, 0), (2, 2), (3, 3), (5, 5)],
         dangerous_areas=[(3, 3)],
         dangerous_area_penalty=-5.0,
-        reward_model_type=RewardModelType.DECAYING_HIT_PROBABILITY,
+        reward_model_type=RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY,
         penalty_decay=penalty_decay,
     )
 

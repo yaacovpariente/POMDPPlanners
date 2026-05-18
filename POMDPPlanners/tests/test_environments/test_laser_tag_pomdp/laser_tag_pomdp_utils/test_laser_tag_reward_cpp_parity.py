@@ -3,12 +3,12 @@
 Verifies that the native ``_native.lasertag_discrete_reward_batch`` C++
 kernel produces results that match the Python reward-model
 implementation across all three :class:`RewardModelType` variants —
-``STANDARD``, ``HIGH_VARIANCE_STATES`` and ``DECAYING_HIT_PROBABILITY``.
+``CONSTANT_HAZARD_PENALTY``, ``ZERO_MEAN_HAZARD_SHOCK`` and ``DISTANCE_DECAYED_HAZARD_PENALTY``.
 
 This is a TDD red-step test for Stage 2. The current native kernel does
 not accept a ``reward_variant_code`` / ``penalty_decay`` keyword pair,
 so today the calls below either raise ``TypeError`` (kwargs unknown)
-or — once the kernel grows the kwargs but still hard-codes STANDARD
+or — once the kernel grows the kwargs but still hard-codes CONSTANT_HAZARD_PENALTY
 semantics — produce values that fail the sample-mean parity check on
 the stochastic variants. The Stage 2 agent will teach the kernel about
 the variant code and decay length; this test will go green then.
@@ -38,11 +38,11 @@ _DANGEROUS_AREA_PENALTY = 5.0
 
 def _variant_code(rmt: RewardModelType) -> int:
     """Map a :class:`RewardModelType` to the integer code the C++ kernel expects."""
-    if rmt == RewardModelType.STANDARD:
+    if rmt == RewardModelType.CONSTANT_HAZARD_PENALTY:
         return 0
-    if rmt == RewardModelType.HIGH_VARIANCE_STATES:
+    if rmt == RewardModelType.ZERO_MEAN_HAZARD_SHOCK:
         return 1
-    if rmt == RewardModelType.DECAYING_HIT_PROBABILITY:
+    if rmt == RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY:
         return 2
     raise ValueError(f"Unknown reward model type: {rmt}")
 
@@ -147,9 +147,9 @@ class TestLaserTagDiscreteRewardCppParity:
     @pytest.mark.parametrize(
         "rmt, penalty_decay",
         [
-            (RewardModelType.STANDARD, 0.0),
-            (RewardModelType.HIGH_VARIANCE_STATES, 0.0),
-            (RewardModelType.DECAYING_HIT_PROBABILITY, _PENALTY_DECAY),
+            (RewardModelType.CONSTANT_HAZARD_PENALTY, 0.0),
+            (RewardModelType.ZERO_MEAN_HAZARD_SHOCK, 0.0),
+            (RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY, _PENALTY_DECAY),
         ],
     )
     def test_cpp_matches_python_in_mean(self, rmt: RewardModelType, penalty_decay: float) -> None:
@@ -179,7 +179,7 @@ class TestLaserTagDiscreteRewardCppParity:
         Then: The two sample means agree within
             ``3 * py.std() / sqrt(N) + 1e-9``. Today this either raises
             ``TypeError`` (kernel lacks the kwargs) or fails the mean
-            check on HV / Decaying (kernel hard-codes STANDARD); both
+            check on HV / Decaying (kernel hard-codes CONSTANT_HAZARD_PENALTY); both
             failure modes confirm the kernel is not yet variant-aware.
 
         Test type: integration
@@ -211,14 +211,14 @@ class TestLaserTagDiscreteRewardCppParity:
         )
 
     def test_tag_action_path_is_also_covered(self) -> None:
-        """Tag-action (action=4) C++ mean matches Python mean for the STANDARD variant.
+        """Tag-action (action=4) C++ mean matches Python mean for the CONSTANT_HAZARD_PENALTY variant.
 
         Purpose: Ensures the tag-action branch is exercised on top of the
             movement-action branch covered by the parametrised test, so a
             kernel that handles tag rewards differently from movement
             rewards is caught.
 
-        Given: A STANDARD discrete LaserTag env with default walls and
+        Given: A CONSTANT_HAZARD_PENALTY discrete LaserTag env with default walls and
             dangerous areas, and a 2000-row state batch covering both
             danger-zone and clear cells.
         When: ``env.reward_model.compute_reward_batch`` and
@@ -230,7 +230,7 @@ class TestLaserTagDiscreteRewardCppParity:
         Test type: integration
         """
         np.random.seed(42)
-        env = _build_env(RewardModelType.STANDARD)
+        env = _build_env(RewardModelType.CONSTANT_HAZARD_PENALTY)
         states = _build_states_with_danger_and_clear(env, _BATCH_SIZE)
         action = 4
         next_states = env.sample_next_state_batch(states, action)
@@ -241,13 +241,13 @@ class TestLaserTagDiscreteRewardCppParity:
             states,
             action,
             next_states,
-            variant_code=_variant_code(RewardModelType.STANDARD),
+            variant_code=_variant_code(RewardModelType.CONSTANT_HAZARD_PENALTY),
             penalty_decay=0.0,
         )
 
         delta, tol = _sample_mean_parity(py_rewards, cpp_rewards)
         assert delta < tol, (
-            f"C++/Python reward mean mismatch for variant STANDARD (tag action): "
+            f"C++/Python reward mean mismatch for variant CONSTANT_HAZARD_PENALTY (tag action): "
             f"|py.mean - cpp.mean| = {delta:.6f} >= tol = {tol:.6f} "
             f"(py.mean={py_rewards.mean():.6f}, cpp.mean={cpp_rewards.mean():.6f}, "
             f"N={py_rewards.shape[0]})"

@@ -207,8 +207,8 @@ static double reward_row_decaying(double nx, double ny, double goal_x, double go
 // Walk a single random rollout from initial_state. At each depth:
 //   1. check terminal — break if true
 //   2. pick action_array[action_indices[depth]]
-//   3. compute reward via variant-aware helper (STANDARD / HIGH_VARIANCE /
-//      DECAYING_HIT_PROBABILITY); stochastic obstacle / penalty draws use
+//   3. compute reward via variant-aware helper (CONSTANT_HAZARD_PENALTY / HIGH_VARIANCE /
+//      DISTANCE_DECAYED_HAZARD_PENALTY); stochastic obstacle / penalty draws use
 //      the module-level C++ RNG
 //   4. step transition (same additive-Gaussian kernel as the transition class)
 //   5. accumulate gamma^depth * reward
@@ -217,8 +217,8 @@ static double reward_row_decaying(double nx, double ny, double goal_x, double go
 // action_indices: shape (max_depth,)  — pre-drawn integer action indices
 // obstacles: interleaved [x0, y0, x1, y1, ...]  (flat 1-D array)
 // covariance: shape (2, 2)  — state transition covariance
-// reward_variant_code: 0 = STANDARD, 1 = HIGH_VARIANCE_STATES,
-//                      2 = DECAYING_HIT_PROBABILITY
+// reward_variant_code: 0 = CONSTANT_HAZARD_PENALTY, 1 = ZERO_MEAN_HAZARD_SHOCK,
+//                      2 = DISTANCE_DECAYED_HAZARD_PENALTY
 // penalty_decay: only consumed when reward_variant_code == 2
 // ---------------------------------------------------------------------------
 double simulate_rollout(
@@ -361,7 +361,7 @@ double simulate_rollout(
 //                  rewards are computed against the realised ``next_states``).
 //   next_states:   (N, 2) float64 — realised next-state positions.
 //   reward_variant_code:
-//                  0 = STANDARD, 1 = HIGH_VARIANCE_STATES, 2 = DECAYING_HIT_PROBABILITY.
+//                  0 = CONSTANT_HAZARD_PENALTY, 1 = ZERO_MEAN_HAZARD_SHOCK, 2 = DISTANCE_DECAYED_HAZARD_PENALTY.
 //   penalty_decay: double — only consumed when variant == 2.
 //   goal_state:    (2,)  float64.
 //   obstacles:     flat 1-D float64 [x0, y0, x1, y1, ...].
@@ -1115,8 +1115,8 @@ PYBIND11_MODULE(_native, m) {
           "Returns discounted return from initial_state. "
           "action_indices must be a pre-drawn array of int indices (shape (max_depth-start_depth,)). "
           "obstacles must be a flat 1-D array [x0, y0, x1, y1, ...]. "
-          "reward_variant_code: 0 = STANDARD, 1 = HIGH_VARIANCE_STATES, "
-          "2 = DECAYING_HIT_PROBABILITY. penalty_decay is only consumed when "
+          "reward_variant_code: 0 = CONSTANT_HAZARD_PENALTY, 1 = ZERO_MEAN_HAZARD_SHOCK, "
+          "2 = DISTANCE_DECAYED_HAZARD_PENALTY. penalty_decay is only consumed when "
           "reward_variant_code == 2.");
 
     m.def("compute_reward_batch", &compute_reward_batch,
@@ -1128,7 +1128,7 @@ PYBIND11_MODULE(_native, m) {
           py::arg("goal_reward"), py::arg("obstacle_reward"),
           py::arg("obstacle_hit_probability"),
           "Variant-aware batched reward kernel. reward_variant_code: "
-          "0 = STANDARD, 1 = HIGH_VARIANCE_STATES, 2 = DECAYING_HIT_PROBABILITY. "
+          "0 = CONSTANT_HAZARD_PENALTY, 1 = ZERO_MEAN_HAZARD_SHOCK, 2 = DISTANCE_DECAYED_HAZARD_PENALTY. "
           "Stochastic obstacle / penalty draws use the module-level C++ RNG; "
           "expectation matches the Python reward models row-for-row.");
 
