@@ -206,6 +206,8 @@ class ContinuousLightDarkDecayingHitProbabilityRewardModel(BaseLightDarkRewardMo
         fuel_cost: float,
         penalty_decay: float,
     ):
+        if penalty_decay <= 0.0:
+            raise ValueError("penalty_decay must be strictly positive")
         self.goal_state = goal_state
         self.obstacles = obstacles
         self.goal_state_radius = goal_state_radius
@@ -215,7 +217,7 @@ class ContinuousLightDarkDecayingHitProbabilityRewardModel(BaseLightDarkRewardMo
         self.obstacle_reward = obstacle_reward
         self.goal_reward = goal_reward
         self.fuel_cost = fuel_cost
-        self.penalty_decay = penalty_decay
+        self.penalty_decay = float(penalty_decay)
 
     def _compute_reward(
         self, state: np.ndarray, action: np.ndarray, next_state: np.ndarray

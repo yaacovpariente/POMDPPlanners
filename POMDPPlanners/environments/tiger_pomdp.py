@@ -289,6 +289,8 @@ class TigerPOMDP(DiscreteActionsEnvironment):
         total_episodes = len(histories)
 
         for history in histories:
+            if not history.history:
+                continue
             # Check if the last action was opening a door
             last_step = history.history[-1]
             if last_step.action in ["open_left", "open_right"]:

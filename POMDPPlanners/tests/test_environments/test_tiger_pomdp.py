@@ -6,7 +6,7 @@ import pytest
 
 from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.core.policy import PolicyRunData
-from POMDPPlanners.core.simulation import StepData
+from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.environments.tiger_pomdp import STATES, TigerPOMDP
 from POMDPPlanners.tests.test_utils.confidence_interval_utils import (
     verify_metrics_within_confidence_intervals,
@@ -592,6 +592,38 @@ class TestTigerPOMDPMetrics:
 
         # Should have 0 listens
         listens_metric = next(m for m in metrics if m.name == "average_listens")
+        assert listens_metric.value == 0.0
+
+    def test_compute_metrics_history_with_zero_steps(self, tiger_pomdp: TigerPOMDP):
+        """Regression: compute_metrics must not IndexError when an episode has zero steps.
+
+        Purpose: Validates that TigerPOMDP compute_metrics tolerates History objects whose
+        ``history`` step-list is empty (e.g., episode terminated before any action was taken)
+
+        Given: A TigerPOMDP environment and a list containing one History with history=[]
+        When: compute_metrics is called
+        Then: The call returns metrics without raising IndexError; the zero-step episode is
+            treated as a non-success contributing 0 listens
+
+        Test type: unit
+        """
+        empty_history = History(
+            history=[],
+            discount_factor=0.95,
+            average_state_sampling_time=0.0,
+            average_action_time=0.0,
+            average_observation_time=0.0,
+            average_belief_update_time=0.0,
+            average_reward_time=0.0,
+            actual_num_steps=0,
+            reach_terminal_state=False,
+            policy_run_data=[],
+        )
+        metrics = tiger_pomdp.compute_metrics([empty_history])
+
+        success_metric = next(m for m in metrics if m.name == "success_rate")
+        listens_metric = next(m for m in metrics if m.name == "average_listens")
+        assert success_metric.value == 0.0
         assert listens_metric.value == 0.0
 
 
