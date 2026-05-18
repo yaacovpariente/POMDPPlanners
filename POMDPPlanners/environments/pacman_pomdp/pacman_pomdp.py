@@ -53,6 +53,8 @@ class PacManPOMDPMetrics(Enum):
     AVG_EPISODE_LENGTH = "avg_episode_length"
     AVG_PACMAN_CLOSEST_GHOST_DISTANCE = "avg_pacman_closest_ghost_distance"
     AVG_COLLISION_ENCOUNTERS = "avg_collision_encounters"
+    AVG_DANGEROUS_AREA_STEPS = "avg_dangerous_area_steps"
+    AVG_ALL_DANGEROUS_ENCOUNTERS = "avg_all_dangerous_encounters"
 
 
 class RewardModelType(Enum):
@@ -1124,10 +1126,25 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
         """Check if PacMan is at the same position as any ghost."""
         return pacman_pos in ghost_positions
 
-    def _collect_step_distances_and_collisions(self, history: History) -> Tuple[List[float], int]:
-        """Collect distances to closest ghost and collision count from episode history."""
+    def _is_in_dangerous_area(self, position: Tuple[int, int]) -> bool:
+        if not self.dangerous_areas:
+            return False
+        pos_row, pos_col = position
+        radius_sq = self.dangerous_area_radius * self.dangerous_area_radius
+        for danger_row, danger_col in self.dangerous_areas:
+            dr = pos_row - danger_row
+            dc = pos_col - danger_col
+            if dr * dr + dc * dc <= radius_sq:
+                return True
+        return False
+
+    def _collect_step_distances_and_collisions(
+        self, history: History
+    ) -> Tuple[List[float], int, int]:
+        """Collect distances, collision count, and danger-area step count from episode."""
         episode_distances = []
         episode_collisions = 0
+        episode_danger_steps = 0
 
         for step_data in history.history:
             state = step_data.state
@@ -1143,16 +1160,21 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
             if self._is_collision(pacman_pos, ghost_positions):
                 episode_collisions += 1
 
-        return episode_distances, episode_collisions
+            if self._is_in_dangerous_area(pacman_pos):
+                episode_danger_steps += 1
+
+        return episode_distances, episode_collisions, episode_danger_steps
 
     def _process_episode_metrics(self, history: History) -> Dict[str, Any]:
         """Process metrics for a single episode."""
-        metrics_data = {
+        metrics_data: Dict[str, Any] = {
             "episode_length": len(history.history),
             "won": 0,
             "pellets_collected": 0,
             "avg_distance": None,
             "collisions": 0,
+            "dangerous_area_steps": 0,
+            "all_dangerous_encounters": 0,
         }
 
         if not history.history:
@@ -1167,13 +1189,17 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
         metrics_data["won"] = self._check_episode_win_status(final_state)
         metrics_data["pellets_collected"] = self._count_pellets_collected(final_state)
 
-        # Collect distances and collisions from episode steps
-        episode_distances, episode_collisions = self._collect_step_distances_and_collisions(history)
+        # Collect distances, collisions, and danger-area steps from episode steps
+        episode_distances, episode_collisions, episode_danger_steps = (
+            self._collect_step_distances_and_collisions(history)
+        )
 
         if episode_distances:
             metrics_data["avg_distance"] = float(np.mean(episode_distances))
 
         metrics_data["collisions"] = episode_collisions
+        metrics_data["dangerous_area_steps"] = episode_danger_steps
+        metrics_data["all_dangerous_encounters"] = episode_collisions + episode_danger_steps
         return metrics_data
 
     def _create_metric_value(self, name: str, values: List[float]) -> Optional[MetricValue]:
@@ -1270,8 +1296,13 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
         Returns:
             List containing metric names including standard metrics (win_rate,
             avg_pellets_collected, avg_episode_length, avg_pacman_closest_ghost_distance,
-            avg_collision_encounters) and dynamically generated per-ghost distance metrics
-            for multi-ghost scenarios (avg_pacman_ghost_0_distance, avg_pacman_ghost_1_distance, etc.)
+            avg_collision_encounters, avg_dangerous_area_steps,
+            avg_all_dangerous_encounters) and dynamically generated per-ghost
+            distance metrics for multi-ghost scenarios
+            (avg_pacman_ghost_0_distance, avg_pacman_ghost_1_distance, etc.).
+            ``avg_all_dangerous_encounters`` is the per-step sum of
+            ghost-collision and dangerous-area-step events; a step that is both
+            counts twice.
         """
         # Start with standard metrics
         metric_names = [metric.value for metric in PacManPOMDPMetrics]
@@ -1294,6 +1325,8 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
         episode_lengths = []
         pacman_ghost_distances = []
         collision_encounters = []
+        dangerous_area_steps = []
+        all_dangerous_encounters = []
 
         for history in histories:
             episode_data = self._process_episode_metrics(history)
@@ -1301,6 +1334,8 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
             wins.append(episode_data["won"])
             pellets_collected.append(episode_data["pellets_collected"])
             collision_encounters.append(episode_data["collisions"])
+            dangerous_area_steps.append(episode_data["dangerous_area_steps"])
+            all_dangerous_encounters.append(episode_data["all_dangerous_encounters"])
 
             if episode_data["avg_distance"] is not None:
                 pacman_ghost_distances.append(episode_data["avg_distance"])
@@ -1313,6 +1348,11 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
             (PacManPOMDPMetrics.AVG_EPISODE_LENGTH.value, episode_lengths),
             (PacManPOMDPMetrics.AVG_PACMAN_CLOSEST_GHOST_DISTANCE.value, pacman_ghost_distances),
             (PacManPOMDPMetrics.AVG_COLLISION_ENCOUNTERS.value, collision_encounters),
+            (PacManPOMDPMetrics.AVG_DANGEROUS_AREA_STEPS.value, dangerous_area_steps),
+            (
+                PacManPOMDPMetrics.AVG_ALL_DANGEROUS_ENCOUNTERS.value,
+                all_dangerous_encounters,
+            ),
         ]
 
         for name, values in metric_definitions:

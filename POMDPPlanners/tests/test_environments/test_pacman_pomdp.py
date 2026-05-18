@@ -1539,6 +1539,166 @@ class TestPacManPOMDPMetrics:
         verify_return_shift_linearity(histories, self.pomdp, shift=1.5)
 
 
+class TestPacManPOMDPDangerMetrics:
+    """Test cases for PacMan dangerous-area step and aggregate metrics."""
+
+    def setup_method(self):
+        """Set up a PacMan env with a single danger zone at (3, 3) radius 1."""
+        self.pomdp = PacManPOMDP(
+            maze_size=(7, 7),
+            walls=set(),
+            initial_pellets=[(0, 6)],
+            initial_pacman_pos=(0, 0),
+            num_ghosts=1,
+            initial_ghost_positions=[(6, 6)],
+            dangerous_areas={(3, 3)},
+            dangerous_area_radius=1.0,
+            dangerous_area_penalty=5.0,
+        )
+
+    def _make_state(
+        self, pac_pos: Tuple[int, int], ghost_pos: Tuple[int, int] = (6, 6)
+    ) -> np.ndarray:
+        return self.pomdp.make_state(
+            pacman_pos=pac_pos,
+            ghost_positions=(ghost_pos,),
+            pellets=((0, 6),),
+        )
+
+    def _make_history(self, states: list) -> History:
+        dummy_belief = WeightedParticleBelief(
+            particles=[None], log_weights=np.array([0.1]), resampling=False
+        )
+
+        def _step(state: np.ndarray, next_state: np.ndarray) -> StepData:
+            return StepData(
+                state=state,
+                action=None,
+                next_state=next_state,
+                observation=None,
+                reward=0,
+                belief=dummy_belief,
+            )
+
+        steps = [_step(states[i], states[i + 1]) for i in range(len(states) - 1)]
+        if not steps:
+            steps = [_step(states[0], states[0])]
+        return History(
+            history=steps,
+            discount_factor=0.95,
+            average_state_sampling_time=0.0,
+            average_action_time=0.0,
+            average_observation_time=0.0,
+            average_belief_update_time=0.0,
+            average_reward_time=0.0,
+            actual_num_steps=len(steps),
+            reach_terminal_state=False,
+            policy_run_data=[],
+        )
+
+    def test_compute_metrics_dangerous_area_steps_count(self):
+        """Counts each step whose state has PacMan inside any danger zone.
+
+        Purpose: Validates that ``avg_dangerous_area_steps`` totals one per
+            step whose recorded ``state`` places PacMan inside a configured
+            hazard zone, matching the LaserTag counting convention.
+
+        Given: Two episodes — episode A with 2 in-zone states and 1 outside,
+            episode B with 1 in-zone state and 1 outside.
+        When: ``compute_metrics`` is called.
+        Then: ``avg_dangerous_area_steps`` equals the per-episode mean
+            ``(2 + 1) / 2 = 1.5`` with finite confidence bounds.
+
+        Test type: unit
+        """
+        ep_a = self._make_history(
+            [
+                self._make_state((3, 3)),  # in zone
+                self._make_state((3, 4)),  # in zone (distance 1)
+                self._make_state((0, 0)),  # outside
+            ]
+        )
+        ep_b = self._make_history(
+            [
+                self._make_state((2, 3)),  # in zone
+                self._make_state((0, 1)),  # outside
+            ]
+        )
+
+        metrics = self.pomdp.compute_metrics([ep_a, ep_b])
+        danger_metric = next((m for m in metrics if m.name == "avg_dangerous_area_steps"), None)
+
+        assert danger_metric is not None
+        assert abs(danger_metric.value - 1.5) < 1e-9
+        assert danger_metric.lower_confidence_bound is not None
+        assert danger_metric.upper_confidence_bound is not None
+
+    def test_compute_metrics_all_dangerous_encounters_sums_collisions_and_zone_steps(self):
+        """Aggregate equals ghost-collision count plus danger-zone-step count.
+
+        Purpose: Validates that ``avg_all_dangerous_encounters`` is the sum
+            of ``avg_collision_encounters`` and ``avg_dangerous_area_steps``,
+            counting a step that is both a ghost collision and inside a
+            danger zone as two encounters (the LaserTag convention).
+
+        Given: Episode A with 2 danger-zone steps and 0 ghost collisions;
+            episode B with 1 step that is simultaneously in the zone and a
+            ghost collision plus 1 unrelated outside step.
+        When: ``compute_metrics`` is called.
+        Then: ``avg_collision_encounters`` is 0.5, ``avg_dangerous_area_steps``
+            is 1.5, and ``avg_all_dangerous_encounters`` is 2.0.
+
+        Test type: unit
+        """
+        ep_a = self._make_history(
+            [
+                self._make_state((3, 3), ghost_pos=(6, 6)),
+                self._make_state((3, 4), ghost_pos=(6, 6)),
+                self._make_state((0, 0), ghost_pos=(6, 6)),
+            ]
+        )
+        ep_b = self._make_history(
+            [
+                # Collision AND in-zone simultaneously
+                self._make_state((3, 3), ghost_pos=(3, 3)),
+                self._make_state((0, 1), ghost_pos=(6, 6)),
+            ]
+        )
+
+        metrics = self.pomdp.compute_metrics([ep_a, ep_b])
+        by_name = {m.name: m for m in metrics}
+
+        collisions = by_name.get("avg_collision_encounters")
+        danger_steps = by_name.get("avg_dangerous_area_steps")
+        aggregate = by_name.get("avg_all_dangerous_encounters")
+
+        assert collisions is not None
+        assert danger_steps is not None
+        assert aggregate is not None
+        assert abs(collisions.value - 0.5) < 1e-9
+        assert abs(danger_steps.value - 1.5) < 1e-9
+        assert abs(aggregate.value - (collisions.value + danger_steps.value)) < 1e-9
+        assert abs(aggregate.value - 2.0) < 1e-9
+
+    def test_get_metric_names_includes_danger_step_and_aggregate(self):
+        """``get_metric_names`` advertises both new metric keys.
+
+        Purpose: Validates that the public metric-name listing reports the
+            danger-step counter and the all-dangerous-encounters aggregate
+            so downstream tooling can discover them.
+
+        Given: A PacMan env with a danger zone configured.
+        When: ``get_metric_names`` is called.
+        Then: Both ``avg_dangerous_area_steps`` and
+            ``avg_all_dangerous_encounters`` appear in the returned list.
+
+        Test type: unit
+        """
+        names = self.pomdp.get_metric_names()
+        assert "avg_dangerous_area_steps" in names
+        assert "avg_all_dangerous_encounters" in names
+
+
 class TestCreateSimpleMazePacman:
     """Test cases for create_simple_maze_pacman function."""
 
