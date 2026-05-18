@@ -173,11 +173,10 @@ class RockSampleRewardModel(BaseRockSampleRewardModel):
         rewards = np.full(n, self.step_penalty, dtype=np.float64)
         map_cols = self.map_size[1]
 
+        exits_mask: Optional[np.ndarray] = None
         if action == 2:
-            exits = states[:, 1].astype(int) == (map_cols - 1)
-            terminal = (states[:, 0] < 0) & (states[:, 1] < 0)
-            rewards[exits | terminal] += self.exit_reward
-            return rewards
+            exits_mask = states[:, 1].astype(int) == (map_cols - 1)
+            rewards[exits_mask] += self.exit_reward
 
         if action == 0:
             robot_rows = states[:, 0].astype(int)
@@ -203,7 +202,9 @@ class RockSampleRewardModel(BaseRockSampleRewardModel):
         else:
             next_robot_rows, next_robot_cols = self._closed_form_next_robot_pos(states, action)
 
-        self._apply_dangerous_area_contribution_batch(rewards, next_robot_rows, next_robot_cols)
+        self._apply_dangerous_area_contribution_batch(
+            rewards, next_robot_rows, next_robot_cols, skip_mask=exits_mask
+        )
 
         return rewards
 
@@ -226,15 +227,20 @@ class RockSampleRewardModel(BaseRockSampleRewardModel):
         rewards: np.ndarray,
         next_robot_rows: np.ndarray,
         next_robot_cols: np.ndarray,
+        skip_mask: Optional[np.ndarray] = None,
     ) -> None:
         """Vectorised constant-probability dangerous-area contribution.
 
         RNG stays in Python so seeded behaviour matches the per-row scalar
         loop bit-for-bit: deterministic case draws zero uniforms;
         stochastic case draws exactly ``in_zone.sum()`` uniforms, in
-        ascending row index order.
+        ascending row index order. ``skip_mask`` rows (e.g. East exits)
+        are excluded from both the membership check and the RNG draws so
+        the scalar early-return contract is preserved.
         """
         in_zone = self._compute_in_zone_mask(next_robot_rows, next_robot_cols)
+        if skip_mask is not None:
+            in_zone &= ~skip_mask
         if self.dangerous_area_hit_probability >= 1.0:
             rewards[in_zone] += self.dangerous_area_penalty
         else:
@@ -264,13 +270,19 @@ class RockSampleRewardModel(BaseRockSampleRewardModel):
         # Closed-form post-transition robot position for the dangerous-area
         # check. RockSample movement actions translate by ``(dr, dc)`` and
         # clip to map bounds; sample / sense actions leave position
-        # unchanged. Terminal-sentinel rows (state[:, 0] < 0) keep their
-        # negative coordinates so they never match a dangerous-area cell,
+        # unchanged. East (action=2) on a non-rightmost row moves +1 col;
+        # rightmost-column rows exit and are handled by the exit-mask in
+        # ``compute_reward_batch`` so this method returns the clipped
+        # position (rightmost-column rows stay put after clipping).
+        # Terminal-sentinel rows (state[:, 0] < 0) keep their negative
+        # coordinates so they never match a dangerous-area cell,
         # mirroring the batch-kernel semantics for that path.
         robot_rows = states[:, 0].astype(int)
         robot_cols = states[:, 1].astype(int)
         if action == 1:
             dr, dc = -1, 0
+        elif action == 2:
+            dr, dc = 0, 1
         elif action == 3:
             dr, dc = 1, 0
         elif action == 4:
@@ -312,8 +324,11 @@ class RockSampleHighVarianceRewardModel(RockSampleRewardModel):
         rewards: np.ndarray,
         next_robot_rows: np.ndarray,
         next_robot_cols: np.ndarray,
+        skip_mask: Optional[np.ndarray] = None,
     ) -> None:
         in_zone = self._compute_in_zone_mask(next_robot_rows, next_robot_cols)
+        if skip_mask is not None:
+            in_zone &= ~skip_mask
         in_zone_indices = np.flatnonzero(in_zone)
         coins = np.random.random(in_zone_indices.size)
         signs = np.where(coins < 0.5, 1.0, -1.0)
@@ -387,6 +402,7 @@ class RockSampleDecayingHitProbabilityRewardModel(RockSampleRewardModel):
         rewards: np.ndarray,
         next_robot_rows: np.ndarray,
         next_robot_cols: np.ndarray,
+        skip_mask: Optional[np.ndarray] = None,
     ) -> None:
         # Single allocation + cast-on-assign beats column_stack(astype, astype),
         # which materialises two extra intermediate float64 arrays before
@@ -395,10 +411,13 @@ class RockSampleDecayingHitProbabilityRewardModel(RockSampleRewardModel):
         points[:, 0] = next_robot_rows
         points[:, 1] = next_robot_cols
         uniforms = np.random.random(points.shape[0])
-        rewards += decaying_prob_penalty_batch_kernel(
+        contributions = decaying_prob_penalty_batch_kernel(
             points,
             self._dangerous_areas_xy,
             self.dangerous_area_penalty,
             self.penalty_decay,
             uniforms,
         )
+        if skip_mask is not None:
+            contributions = np.where(skip_mask, 0.0, contributions)
+        rewards += contributions
