@@ -7,12 +7,14 @@ mock updater that requires no environment dependencies.
 import numpy as np
 import pytest
 
+from POMDPPlanners.core.belief.particle_beliefs import WeightedParticleBelief
 from POMDPPlanners.core.belief.vectorized_particle_belief_updater import (
     VectorizedParticleBeliefUpdater,
 )
 from POMDPPlanners.core.belief.vectorized_weighted_particle_belief import (
     VectorizedWeightedParticleBelief,
 )
+from POMDPPlanners.core.distributions import DiscreteDistribution
 from POMDPPlanners.tests.test_utils.metric_invariants_utils import (
     verify_belief_invariants,
 )
@@ -454,3 +456,95 @@ class TestConfigId:
             updater=uniform_belief.updater,
         )
         assert uniform_belief.config_id != other.config_id
+
+
+# ---------------------------------------------------------------------------
+# Unique-support distribution tests
+# ---------------------------------------------------------------------------
+
+
+def _pair_set(values, probs):
+    return {(tuple(np.asarray(v).tolist()), round(float(p), 12)) for v, p in zip(values, probs)}
+
+
+class TestToUniqueSupportDistribution:
+    def test_to_unique_support_distribution_collapses_duplicates(self):
+        """Test that duplicate particles are collapsed and weights are aggregated.
+
+        Purpose: Validates the full contract of to_unique_support_distribution:
+            empty-belief handling, duplicate collapsing, defensive L1
+            normalization, and equivalence with WeightedParticleBelief.
+
+        Given: Four sub-cases — (1) an empty belief, (2) a belief with duplicate
+            particles, (3) a belief with unnormalized weights, and (4) the same
+            particle/weight data wrapped in a WeightedParticleBelief.
+        When: to_unique_support_distribution() is called on each.
+        Then: (1) returns an empty DiscreteDistribution, (2) collapses
+            duplicates and sums their weights, (3) probabilities sum to exactly
+            1.0, and (4) produces the same unique-support distribution (as a
+            set of (particle, probability) pairs) as WeightedParticleBelief.
+
+        Test type: unit
+        """
+        # Sub-case 1: empty belief
+        empty_belief = VectorizedWeightedParticleBelief(
+            particles=np.zeros((0, 2)),
+            log_weights=np.zeros(0),
+            updater=_MockUpdater(),
+        )
+        empty_dist = empty_belief.to_unique_support_distribution()
+        assert isinstance(empty_dist, DiscreteDistribution)
+        assert len(empty_dist.values) == 0
+        assert empty_dist.probs.shape == (0,)
+
+        # Sub-case 2: duplicates collapse and their weights sum.
+        # Particles 0 and 2 are identical; particles 1 and 3 are identical.
+        particles = np.array(
+            [
+                [1.0, 2.0],
+                [3.0, 4.0],
+                [1.0, 2.0],
+                [3.0, 4.0],
+                [5.0, 6.0],
+            ]
+        )
+        # Uniform weights -> two duplicate-groups of 2 collapse to 0.4 each,
+        # singleton stays at 0.2.
+        log_weights = np.full(5, -np.log(5))
+        belief = VectorizedWeightedParticleBelief(
+            particles=particles,
+            log_weights=log_weights,
+            updater=_MockUpdater(),
+        )
+        dist = belief.to_unique_support_distribution()
+        assert isinstance(dist, DiscreteDistribution)
+        assert len(dist.values) == 3
+        for value in dist.values:
+            assert isinstance(value, np.ndarray)
+            assert value.shape == (2,)
+        expected = {
+            ((1.0, 2.0), 0.4),
+            ((3.0, 4.0), 0.4),
+            ((5.0, 6.0), 0.2),
+        }
+        assert _pair_set(dist.values, dist.probs) == expected
+
+        # Sub-case 3: unnormalized weights -> probs still sum to exactly 1.0.
+        unnormalized_log_weights = np.array(
+            [np.log(2.0), np.log(3.0), np.log(2.0), np.log(3.0), np.log(5.0)]
+        )
+        belief_unnorm = VectorizedWeightedParticleBelief(
+            particles=particles,
+            log_weights=unnormalized_log_weights,
+            updater=_MockUpdater(),
+        )
+        dist_unnorm = belief_unnorm.to_unique_support_distribution()
+        assert float(dist_unnorm.probs.sum()) == pytest.approx(1.0, abs=1e-12)
+
+        # Sub-case 4: equivalence with WeightedParticleBelief on the same data.
+        ref_belief = WeightedParticleBelief(
+            particles=[row.copy() for row in particles],
+            log_weights=log_weights.copy(),
+        )
+        ref_dist = ref_belief.to_unique_support_distribution()
+        assert _pair_set(dist.values, dist.probs) == _pair_set(ref_dist.values, ref_dist.probs)
