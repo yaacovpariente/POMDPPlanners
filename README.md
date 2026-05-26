@@ -58,119 +58,120 @@ print(f"Recommended action: {action}")
 
 ## 🏗️ Architecture Overview
 
-### Core Components
+POMDPPlanners is organized around three core abstractions and a shared
+experiment-management layer.
 
-- **`POMDPPlanners.core`**: Fundamental abstractions and interfaces
-  - `environment.py`: Base `Environment`, `DiscreteActionsEnvironment`, `SpaceType`, `ObservationModel`, `StateTransitionModel`
-  - `policy.py`: Base `Policy` and `TrainablePolicy` classes with config management and logging
-  - `belief/`: Belief state representations including:
-    - `WeightedParticleBelief`, `UnweightedParticleBelief` — particle filter beliefs
-    - `GaussianBelief`, `GaussianMixtureBelief` — parametric beliefs
-    - `VectorizedWeightedParticleBelief` — vectorized particle belief for performance
-    - Gaussian belief updaters and vectorized particle belief updaters
-  - `cost.py`: Cost function abstractions for constrained planning
-  - `distributions.py`: Probability distribution implementations
-  - `tree.py`: Tree-based data structures for planning algorithms
-  - `config_types.py`: Centralized configuration type definitions
+### Core Abstractions
 
-- **`POMDPPlanners.environments`**: POMDP environment implementations
-- **`POMDPPlanners.planners`**: Planning algorithm implementations
-- **`POMDPPlanners.simulations`**: Experiment management and execution framework
-- **`POMDPPlanners.utils`**: Helper functions and visualization tools
+- **`Environment`** — POMDP dynamics: state transition and observation models,
+  reward function, terminal condition, and initial distributions. A `SpaceInfo`
+  dataclass declares whether the action/observation spaces are discrete,
+  continuous, or mixed, enabling runtime compatibility checking with beliefs and
+  planners. Performance-critical environments expose a C++ inner loop via a
+  pure-Python facade.
+- **`Belief`** — distribution over states with a Bayesian update step. Built-in
+  representations: `WeightedParticleBelief`, `UnweightedParticleBelief`,
+  `VectorizedWeightedParticleBelief` (vectorized particle filter),
+  `GaussianBelief`, and `GaussianMixtureBelief`.
+- **`Policy`** — exposes `action(belief)` and returns the chosen action together
+  with a `PolicyRunData` record of per-step diagnostics (e.g. expanded nodes,
+  visit counts for MCTS planners), enabling post-hoc analysis of planner
+  behavior.
 
-### Supported Algorithms
+### Experiment Management
 
-#### MCTS-Based Planners
-- **POMCP**: Partially Observable Monte Carlo Planning
-- **POMCPOW**: POMCP with Online Widening (progressive widening for observations)
-- **POMCP-DPW**: POMCP with Double Progressive Widening
-- **PFT-DPW**: Progressive Widening with Particle Filter Trees
-- **Sparse PFT**: Sparse sampling with Particle Filter Trees
+Two workflows share a common task manager:
 
-#### Neural MCTS Planners
-- **BetaZero**: Neural-guided MCTS for POMDPs — adapts AlphaZero to belief-space planning with a dual-head neural network (value + policy)
-- **ConstrainedZero**: Safety-constrained extension of BetaZero for chance-constrained POMDPs — adds a failure-probability head and adaptive threshold calibration via conformal inference
+- **Direct evaluation** — `LocalSimulationsAPI.run_multiple_environments_and_policies(...)`
+  runs parallel episodes and returns aggregated statistics (mean return, CVaR,
+  VaR, confidence intervals).
+- **Optimize-and-evaluate** — `LocalSimulationsAPI.run_optimize_and_evaluate(...)`
+  drives an Optuna search over each planner's hyperparameter space and forwards
+  the best configuration to evaluation.
 
-#### Other Planners
-- **Sparse Sampling**: Classical sparse sampling algorithm
-- **Open Loop Planners**: Non-feedback planning approaches (discrete action sequences)
+Each simulation is keyed by a SHA-256 hash of its full specification
+(environment parameters, policy, belief, seed), so cache hits return instantly
+and interrupted experiments resume automatically. Per-episode returns, safety
+metrics, hyperparameters, and `PolicyRunData` diagnostics are written as MLflow
+runs.
 
-### Available Environments
+### Execution Backends
 
-- **Tiger POMDP**: Classic two-door problem
-- **Light-Dark POMDP**: Navigation with position-dependent observation noise (discrete and continuous variants)
-- **Rock Sample POMDP**: Grid-world rover navigation with multiple rock samples; rover must sense and collect good rocks
-- **Laser Tag POMDP**: Tag-based pursuit environment (discrete and continuous geometry variants)
-- **PacMan POMDP**: Partially observable Pac-Man navigation with ghost uncertainty
-- **CartPole POMDP**: Partially observable cart-pole balancing
-- **Mountain Car POMDP**: Partially observable mountain car
-- **Push POMDP**: Object manipulation environment
-- **Safety Ant Velocity**: Safety-constrained locomotion task
+The task manager is backed by a pluggable execution layer; switching backends
+only requires changing the API class:
 
-### Simulations Framework
+| Backend | API class | Use case |
+|---|---|---|
+| **Local (Joblib)** | `LocalSimulationsAPI` | Multi-core single machine; the default |
+| **Dask** | `DaskSimulationsAPI` | Distributed multi-machine clusters |
+| **PBS** | `PBSSimulationsAPI` | HPC batch queues via `dask-jobqueue` |
 
-- **`POMDPPlanners.simulations.simulator`**: Main simulation runner
-- **`POMDPPlanners.simulations.episodes`**: Episode execution logic
-- **`POMDPPlanners.simulations.workflows`**: High-level evaluation and optimization workflows
-  - `evaluation.py`, `optimization.py`, `integrated.py`
-  - `planner_evaluation_workflow.py`, `hyperparameter_tuning_evaluation_workflows.py`
-- **`POMDPPlanners.simulations.simulation_apis`**: Pluggable backends for experiment execution (see Distributed Computing section)
-- **`POMDPPlanners.simulations.simulations_deployment`**: Task managers and caching for distributed runs
+### Available Planners and Environments
 
-### Utilities
+**Online planners.** POMCP, POMCP-DPW, POMCPOW, PFT-DPW, Sparse PFT,
+DiscreteActionSequences (open-loop baseline), Sparse Sampling, BetaZero
+(neural-guided MCTS), and the risk-averse family ConstrainedZero, ICVaR
+POMCPOW, and ICVaR PFT-DPW for safety-constrained planning.
 
-- **`POMDPPlanners.utils.visualization`**: Visualization submodule with
-  - `metrics_plots.py`, `returns_plots.py`, `tree_plots.py`, `policy_simulation_plots.py`
-- **`POMDPPlanners.utils.config_loader`**: Configuration file management
-- **`POMDPPlanners.utils.logger`**: Centralized logging setup
-- **`POMDPPlanners.utils.statistics_utils`**: Statistical analysis functions
-- **`POMDPPlanners.utils.tree_statistics`**: Tree statistics computation
+**Environments.** Tiger, LightDark (discrete + continuous), RockSample,
+LaserTag (discrete + continuous), PacMan, CartPole, MountainCar, Push, and
+SafetyAnt. Most environments expose configurable dangerous areas and report
+dedicated safety metrics (violation rates, total counts) alongside standard
+return statistics.
 
 ## 📊 Running Experiments
 
-### Simple Experiment
+The recommended entry point for end-to-end experiments is `LocalSimulationsAPI`,
+which runs parallel episodes, applies persistent caching, and returns aggregated
+statistics (mean return, CVaR, VaR, confidence intervals).
 
 ```python
-from POMDPPlanners.simulations.simulator import Simulator
-from POMDPPlanners.utils.config_loader import load_config
+from POMDPPlanners.environments import ContinuousLightDarkPOMDPDiscreteActions
+from POMDPPlanners.planners.mcts_planners.pomcpow import POMCPOW
+from POMDPPlanners.planners.mcts_planners.pft_dpw import PFT_DPW
+from POMDPPlanners.utils.action_samplers import DiscreteActionSampler
+from POMDPPlanners.utils.belief_factory import create_environment_belief
+from POMDPPlanners.simulations.simulation_apis.local_simulations_api import LocalSimulationsAPI
+from POMDPPlanners.core.simulation import EnvironmentRunParams
 
-# Load experiment configuration
-config = load_config("experiments/configs/tiger_pomcp_experiment.yaml")
+env = ContinuousLightDarkPOMDPDiscreteActions(discount_factor=0.95)
+sampler = DiscreteActionSampler(env.get_actions())
 
-# Run simulation
-simulator = Simulator(config)
-results = simulator.run()
+pomcpow = POMCPOW(environment=env, discount_factor=0.95, depth=10,
+                  exploration_constant=10.0, k_o=2.0, k_a=2.0,
+                  alpha_o=0.5, alpha_a=0.5, n_simulations=500,
+                  action_sampler=sampler, name="POMCPOW")
+pft_dpw = PFT_DPW(environment=env, discount_factor=0.95, depth=10,
+                  exploration_constant=10.0, n_simulations=500,
+                  action_sampler=sampler, name="PFT_DPW")
+belief = create_environment_belief(env, n_particles=200)
 
-print(f"Average reward: {results['average_reward']}")
-```
-
-### Hyperparameter Tuning
-
-```python
-from POMDPPlanners.simulations.hyper_parameter_tuning_simulations import HyperParameterTuningSimulations
-
-# Define hyperparameter space
-hyperparams = {
-    "num_simulations": [500, 1000, 2000],
-    "exploration_constant": [1.0, 2.0, 5.0],
-    "discount_factor": [0.9, 0.95, 0.99]
-}
-
-# Run tuning experiment
-tuner = HyperParameterTuningSimulations(
-    base_config="experiments/configs/base_config.yaml",
-    hyperparameters=hyperparams
+api = LocalSimulationsAPI()
+_, stats = api.run_multiple_environments_and_policies(
+    environment_run_params=[EnvironmentRunParams(
+        environment=env, belief=belief,
+        policies=[pomcpow, pft_dpw], num_episodes=100, num_steps=30)],
+    alpha=0.1, experiment_name="LightDark_Evaluation",
 )
-best_params = tuner.optimize()
 ```
 
-### Example Notebooks
+For hyperparameter search, `LocalSimulationsAPI.run_optimize_and_evaluate(...)`
+accepts `HyperParameterRunParams` with Optuna search ranges and forwards the
+best configuration to evaluation automatically.
 
-Interactive Jupyter notebooks with detailed usage examples are available in `docs/examples/`:
+### Tutorial Notebooks
 
-- `docs/examples/basic_usage.ipynb` — Environment setup, belief initialization, and basic planning
-- `docs/examples/hyperparameter_tuning.ipynb` — End-to-end hyperparameter search
-- `docs/examples/planners_comparison.ipynb` — Side-by-side comparison of planning algorithms
+Self-contained Jupyter notebooks with executable end-to-end examples live in
+[`docs/examples/`](docs/examples/):
+
+| Notebook | What it covers |
+|---|---|
+| [`basic_usage.ipynb`](docs/examples/basic_usage.ipynb) | Environment setup, belief initialization, single-planner evaluation |
+| [`planners_comparison.ipynb`](docs/examples/planners_comparison.ipynb) | Side-by-side comparison of POMCP / POMCPOW / PFT-DPW on a shared environment |
+| [`belief_representations.ipynb`](docs/examples/belief_representations.ipynb) | Particle, Gaussian, and Gaussian-mixture beliefs |
+| [`hyperparameter_tuning.ipynb`](docs/examples/hyperparameter_tuning.ipynb) | End-to-end Optuna search via `run_optimize_and_evaluate` |
+| [`advanced_optimization.ipynb`](docs/examples/advanced_optimization.ipynb) | Multi-config tuning, custom search spaces |
+| [`custom_environment.ipynb`](docs/examples/custom_environment.ipynb) | Implementing a new `Environment` subclass |
 
 ## 🌐 Distributed Computing
 
