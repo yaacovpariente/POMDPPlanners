@@ -158,6 +158,19 @@ For hyperparameter search, `LocalSimulationsAPI.run_optimize_and_evaluate(...)`
 accepts `HyperParameterRunParams` with Optuna search ranges and forwards the
 best configuration to evaluation automatically.
 
+### Progress Tracking and Slack Notifications
+
+Long-running experiments emit lifecycle events (`run_started`,
+`episode_completed` heartbeat, `run_finished`, `run_failed`) to a local
+SQLite progress DB and, optionally, to Slack. Export `SLACK_WEBHOOK_URL`
+before constructing the API and notifications are picked up automatically;
+for per-instance control (e.g. routing two parallel simulations to
+different channels), pass a `NotificationConfig` directly. An external
+watcher CLI catches hard process death (SIGKILL / OOM / reboot) by
+monitoring heartbeat age. See
+[`NotificationConfig`](POMDPPlanners/simulations/simulations_deployment/run_progress/config.py)
+for the full env-var list and watcher invocation.
+
 ### Tutorial Notebooks
 
 Self-contained Jupyter notebooks with executable end-to-end examples live in

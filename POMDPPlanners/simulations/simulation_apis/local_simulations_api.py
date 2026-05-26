@@ -112,7 +112,12 @@ class LocalSimulationsAPI(SimulationsAPIInterface):
                 :class:`POMDPSimulator` / :class:`HyperParameterOptimizer`
                 constructed by this API. When ``None``, defaults to
                 :meth:`NotificationConfig.from_env`, preserving the
-                zero-config env-var workflow.
+                zero-config env-var workflow (export ``SLACK_WEBHOOK_URL``
+                to enable). See :class:`NotificationConfig` for the full
+                list of env vars (``POMDPPLANNERS_DISABLE_NOTIFY``,
+                ``HYPERPARAM_TRIAL_NOTIFICATION_INTERVAL``,
+                ``POMDP_PROGRESS_DB``) and the watcher CLI for stall
+                detection.
         """
         self.logger = get_logger(
             name="local_simulations_api", output_dir=cache_dir_path, debug=debug

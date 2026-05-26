@@ -124,8 +124,12 @@ class PBSSimulationsAPI(SimulationsAPIInterface):
             dashboard_prefix: URL prefix for dashboard (useful with reverse proxies)
             cache_dir_path: Optional path for storing simulation results and logs
             debug: Whether to enable debug-level logging output
-            notification_config: Optional :class:`NotificationConfig`. When
-                ``None``, defaults to :meth:`NotificationConfig.from_env`.
+            notification_config: Optional :class:`NotificationConfig`
+                controlling Slack + progress-DB notifications. When ``None``,
+                defaults to :meth:`NotificationConfig.from_env`, preserving
+                the zero-config env-var workflow (export ``SLACK_WEBHOOK_URL``
+                to enable). See :class:`NotificationConfig` for the full
+                list of env vars and the watcher CLI for stall detection.
         """
         # Store PBS-specific configuration
         self.queue = queue
