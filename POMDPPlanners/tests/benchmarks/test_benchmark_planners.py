@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Layer 2: Planner-only benchmarks.
 
 Measures planner logic using TigerPOMDP (the cheapest environment) so that

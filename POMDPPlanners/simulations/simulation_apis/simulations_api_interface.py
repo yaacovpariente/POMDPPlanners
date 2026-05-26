@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Abstract interface for POMDP simulation APIs.
 
 This module defines the abstract base class interface that all simulation API

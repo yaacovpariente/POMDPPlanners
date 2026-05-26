@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Continuous LaserTag POMDP Environment Implementation.
 
 This module implements a continuous-space variant of the LaserTag

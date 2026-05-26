@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for the Continuous LaserTag vectorized belief updater.
 
 Tests cover batch transition, batch observation log-likelihood,

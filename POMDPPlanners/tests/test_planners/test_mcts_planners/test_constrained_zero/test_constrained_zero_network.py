@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for the ConstrainedZero 3-head neural network.
 
 This module tests the ConstrainedZeroNetwork, which extends BetaZeroNetwork

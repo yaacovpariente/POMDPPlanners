@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 import random
 from bisect import bisect
 from collections.abc import Hashable

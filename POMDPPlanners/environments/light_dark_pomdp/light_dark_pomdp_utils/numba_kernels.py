@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Light-Dark-specific Numba-JIT kernels.
 
 Holds kernels whose signatures or logic hardcode light-dark concepts

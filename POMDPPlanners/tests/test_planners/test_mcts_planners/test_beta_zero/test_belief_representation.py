@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for ParticleMeanStdRepresentation belief-to-feature conversion.
 
 This module verifies that the ParticleMeanStdRepresentation class correctly

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """RockSample POMDP Environment Module.
 
 This module provides the RockSample POMDP environment implementation and related

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Integrated optimization and evaluation workflows.
 
 This module provides both class-based and function-based APIs for running

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 # pylint: disable=too-many-lines
 """LaserTag POMDP Environment Implementation.
 

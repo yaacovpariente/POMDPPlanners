@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Utilities for testing state transition probability methods.
 
 This module provides general utility functions for validating that probability

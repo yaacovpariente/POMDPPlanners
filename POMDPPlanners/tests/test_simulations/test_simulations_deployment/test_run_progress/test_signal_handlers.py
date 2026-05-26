@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 # pylint: disable=protected-access  # Tests need to inspect internal state
 """Tests for :func:`install_signal_handlers`.
 

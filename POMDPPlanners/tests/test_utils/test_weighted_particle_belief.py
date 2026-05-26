@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for weighted particle belief implementations.
 
 This module tests the weighted particle belief implementations, focusing on:

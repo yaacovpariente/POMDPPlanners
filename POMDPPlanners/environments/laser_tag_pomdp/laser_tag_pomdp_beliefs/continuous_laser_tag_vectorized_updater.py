@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Vectorized particle belief updater for the Continuous LaserTag POMDP.
 
 This module implements a concrete

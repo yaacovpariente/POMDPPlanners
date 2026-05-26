@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Shared abstract layer for CPOMDP-DPW MCTS variants.
 
 Mirrors Listing 1 from Jamgochian, Corso, & Kochenderfer (ICAPS 2023),

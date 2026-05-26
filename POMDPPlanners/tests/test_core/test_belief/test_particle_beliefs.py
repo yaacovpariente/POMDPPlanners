@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for particle belief implementations.
 
 This module tests the particle belief implementations, focusing on:

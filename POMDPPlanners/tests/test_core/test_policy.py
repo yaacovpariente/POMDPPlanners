@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for policy implementations.
 
 This module tests the policy implementations, focusing on:

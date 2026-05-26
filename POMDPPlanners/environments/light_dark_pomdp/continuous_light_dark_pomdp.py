@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Continuous Light-Dark POMDP Environment Implementation.
 
 This module implements the continuous Light-Dark domain, a classic POMDP benchmark

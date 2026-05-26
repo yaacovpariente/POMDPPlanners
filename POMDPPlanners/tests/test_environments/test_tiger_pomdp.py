@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 import random
 from unittest.mock import Mock
 

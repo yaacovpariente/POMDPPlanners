@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """C-PFT-DPW (Constrained Particle Filter Tree with Double Progressive Widening).
 
 Online MCTS for cost-constrained POMDPs that uses particle-filter belief

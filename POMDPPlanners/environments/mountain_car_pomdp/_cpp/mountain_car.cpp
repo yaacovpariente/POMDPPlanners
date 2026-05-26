@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 // MountainCar POMDP native sampling hot path, built on the shared
 // pomdp_native core (templated on the compile-time state dimension).
 // MountainCar instantiates TransitionModelCpp<2> / ObservationModelCpp<2>

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Default ``ExperimentVisualizer`` rendering per-policy returns histograms.
 
 Produces, per environment:

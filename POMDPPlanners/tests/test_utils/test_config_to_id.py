@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 import numpy as np
 
 from POMDPPlanners.core.belief import WeightedParticleBelief

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for hyperparameter tuning and evaluation utilities.
 
 This module tests the hyperparameter tuning and evaluation utilities, focusing on:

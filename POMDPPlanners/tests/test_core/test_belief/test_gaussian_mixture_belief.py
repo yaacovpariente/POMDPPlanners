@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for GaussianMixtureBelief implementation.
 
 This module tests the GaussianMixtureBelief class, covering:

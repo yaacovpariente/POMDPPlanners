@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Module for cost and reward calculation utilities.
 
 This module provides utility functions for calculating expected costs and

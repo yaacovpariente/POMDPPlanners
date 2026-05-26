@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Reward models for the Push POMDP family.
 
 Mirrors the abstract-base / concrete-subclass layout used by

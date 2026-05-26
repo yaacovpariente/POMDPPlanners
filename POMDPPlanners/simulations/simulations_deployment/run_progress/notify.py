@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Notifier interface, implementations, and signal-handler installer.
 
 The :class:`Notifier` Protocol defines four events that the simulator emits

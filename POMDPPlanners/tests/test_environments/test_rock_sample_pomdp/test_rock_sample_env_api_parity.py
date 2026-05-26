@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Env-API contract / feature-driven tests for the RockSample POMDP source.
 
 These tests target the public ``Environment`` API surface described in

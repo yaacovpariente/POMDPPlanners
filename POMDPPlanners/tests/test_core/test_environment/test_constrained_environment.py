@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for the ``ConstrainedEnvironment`` ABC.
 
 Validates that the abstract contract is enforced (cannot instantiate without

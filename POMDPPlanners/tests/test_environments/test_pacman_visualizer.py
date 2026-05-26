@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for ``PacManVisualizer`` belief-overlay rendering."""
 
 # Tests intentionally exercise the protected ``_draw_ghost_belief`` method

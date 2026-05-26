@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Belief factory for the Discrete Light-Dark POMDP.
 
 Functions:

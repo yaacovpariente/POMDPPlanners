@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Module for POMDP policy abstractions and execution tracking.
 
 This module provides the foundational interface for POMDP policies, including

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for ExperimentVisualizer abstract base class."""
 
 import pytest

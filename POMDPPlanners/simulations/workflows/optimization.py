@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Hyperparameter optimization workflows."""
 
 from pathlib import Path

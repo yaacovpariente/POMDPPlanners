@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tree visualization utilities.
 
 This module provides functions for visualizing POMDP belief trees with interactive

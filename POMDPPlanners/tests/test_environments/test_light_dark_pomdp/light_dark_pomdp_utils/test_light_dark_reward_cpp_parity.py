@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """C++/Python parity tests for the Continuous Light-Dark reward variants.
 
 These tests target a future ``_native.compute_reward_batch`` kernel that

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for POMDP planner serialization.
 
 This module tests that all POMDP planners can be properly serialized

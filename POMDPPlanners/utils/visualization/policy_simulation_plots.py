@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Policy simulation and returns plotting utilities.
 
 This module provides functions for simulating agent paths and visualizing

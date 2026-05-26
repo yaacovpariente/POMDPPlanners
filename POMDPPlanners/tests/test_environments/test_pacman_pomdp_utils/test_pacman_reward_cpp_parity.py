@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """C++↔Python reward parity tests for the PacMan POMDP.
 
 Stage 1 (red step) of the upcoming native reward-kernel work. These

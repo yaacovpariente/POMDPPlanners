@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Dual-head neural network for BetaZero policy and value prediction.
 
 This module provides the PyTorch neural network used by BetaZero. The network

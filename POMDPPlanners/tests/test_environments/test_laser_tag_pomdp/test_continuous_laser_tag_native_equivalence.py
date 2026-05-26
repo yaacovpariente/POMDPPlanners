@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Numerical equivalence tests for the native Continuous LaserTag extension.
 
 Verifies that the C++ ``_native`` sampling / probability code matches the

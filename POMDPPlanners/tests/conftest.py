@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Shared pytest fixtures for all test modules.
 
 This conftest.py provides common fixtures that are automatically available

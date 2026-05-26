@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Reusable test utilities for verifying metric name consistency.
 
 This module provides generic test functions to verify that the metric names

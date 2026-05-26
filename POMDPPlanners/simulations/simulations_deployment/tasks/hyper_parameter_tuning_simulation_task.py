@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 # pylint: disable=too-many-lines
 import logging
 import random

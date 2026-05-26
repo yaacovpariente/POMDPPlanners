@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Policy factory module for creating POMDP policies."""
 
 from typing import Any, Dict, Type

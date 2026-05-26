@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Performance benchmark: LightDark vectorized vs non-vectorized belief.
 
 Benchmarks all 6 observation-model-aware vectorized updaters (3 continuous,

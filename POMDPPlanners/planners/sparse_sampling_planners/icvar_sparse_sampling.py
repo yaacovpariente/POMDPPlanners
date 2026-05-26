@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """ICVaR Sparse Sampling POMDP Planning Algorithm Implementation.
 
 This module implements a risk-sensitive variant of the sparse sampling algorithm

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Performance benchmark: light_dark env-level ``reward`` / ``reward_batch``.
 
 Times the public Environment-API reward methods

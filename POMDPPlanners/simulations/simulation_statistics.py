@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 from enum import Enum
 from typing import Dict, List, Optional, Tuple, Type, Union
 

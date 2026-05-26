@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Policy evaluation workflows."""
 
 from pathlib import Path

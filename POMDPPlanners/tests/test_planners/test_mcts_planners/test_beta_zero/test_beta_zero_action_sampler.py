@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for BetaZeroActionSampler network-guided action sampling.
 
 This module tests the BetaZeroActionSampler class including fallback behaviour,

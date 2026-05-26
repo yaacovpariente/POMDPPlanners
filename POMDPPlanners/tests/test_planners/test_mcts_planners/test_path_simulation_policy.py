@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for PathSimulationPolicy implementations.
 
 This module tests the PathSimulationPolicy abstract base class, focusing on:

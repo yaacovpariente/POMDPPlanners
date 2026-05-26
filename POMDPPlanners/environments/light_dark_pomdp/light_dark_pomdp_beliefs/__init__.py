@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_beliefs.continuous_light_dark_vectorized_updater import (
     ContinuousLightDarkDistanceBasedVectorizedUpdater,
     ContinuousLightDarkNoObsInDarkVectorizedUpdater,

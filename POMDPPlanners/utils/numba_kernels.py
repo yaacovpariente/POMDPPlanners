@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Shared Numba-JIT kernels for POMDP environment hot paths.
 
 Holds pure geometric / numerical kernels reused across POMDP environments

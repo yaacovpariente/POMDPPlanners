@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for VectorizedWeightedParticleBelief and VectorizedParticleBeliefUpdater.
 
 This module tests the vectorized weighted particle belief using a lightweight

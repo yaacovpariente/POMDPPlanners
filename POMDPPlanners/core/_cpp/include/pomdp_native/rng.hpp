@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 // POMDPPlanners shared native RNG state.
 //
 // Header-only. Each pybind11 extension that #includes this header gets its

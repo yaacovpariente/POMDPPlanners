@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for hyper_parameter_tuning_simulations module.
 
 This module tests the HyperParameterOptimizer class and its functionality for

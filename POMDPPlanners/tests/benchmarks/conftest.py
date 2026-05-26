@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Benchmark fixtures for performance testing.
 
 Provides pre-built environments, planners, beliefs, and initial states

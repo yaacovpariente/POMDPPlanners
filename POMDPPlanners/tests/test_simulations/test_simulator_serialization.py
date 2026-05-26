@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for POMDP simulator serialization.
 
 This module tests that POMDP simulators can be properly serialized

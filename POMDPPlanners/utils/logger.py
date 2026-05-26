@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 import atexit
 import logging
 import queue

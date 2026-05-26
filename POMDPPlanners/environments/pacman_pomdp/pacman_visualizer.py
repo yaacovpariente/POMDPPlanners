@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Visualization module for PacMan POMDP environment.
 
 This module provides sprite-based visualization capabilities for PacMan POMDP

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Continuous Push POMDP Environment Implementation.
 
 This module implements a continuous-action variant of the Push POMDP where

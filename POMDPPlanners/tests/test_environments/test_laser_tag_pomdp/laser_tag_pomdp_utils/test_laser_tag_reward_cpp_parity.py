@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """C++/Python reward-parity tests for the discrete LaserTag reward variants.
 
 Verifies that the native ``_native.lasertag_discrete_reward_batch`` C++

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """BetaZero planner: neural MCTS for POMDPs.
 
 This module implements the BetaZero algorithm, which adapts AlphaZero to POMDPs by

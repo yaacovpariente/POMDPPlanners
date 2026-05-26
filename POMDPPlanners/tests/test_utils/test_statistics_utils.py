@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 import random
 from typing import List, Any
 

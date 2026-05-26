@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for the Continuous Light-Dark belief factory.
 
 This module tests :func:`create_continuous_light_dark_belief` from

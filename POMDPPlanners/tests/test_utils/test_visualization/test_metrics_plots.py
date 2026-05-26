@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 import tempfile
 import time
 from contextlib import contextmanager

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 // CartPole POMDP native sampling hot path, built on the shared
 // pomdp_native core (templated on the compile-time state dimension).
 // CartPole instantiates TransitionModelCpp<4> / ObservationModelCpp<4>

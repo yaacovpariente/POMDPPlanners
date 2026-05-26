@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for :mod:`POMDPPlanners.simulations.simulations_deployment.run_progress.config`."""
 
 from pathlib import Path

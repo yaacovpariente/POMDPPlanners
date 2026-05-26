@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for the ConstrainedZero planner module.
 
 This module tests the ConstrainedZero planner, which extends BetaZero with

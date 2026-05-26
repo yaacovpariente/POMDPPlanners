@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for Light Dark POMDP reward models.
 
 This module tests the reward models from light_dark_reward_models.py, focusing on:

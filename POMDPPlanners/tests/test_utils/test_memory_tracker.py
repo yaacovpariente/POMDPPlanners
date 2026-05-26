@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for memory tracker utility.
 
 This module tests the memory tracking functionality, including:

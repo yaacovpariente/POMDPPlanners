@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Parity tests for the native discrete Push transition kernel.
 
 Verifies that the C++ ``PushDiscreteTransitionCpp`` deterministic

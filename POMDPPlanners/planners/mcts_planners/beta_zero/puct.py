@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """PUCT action selection and progressive widening for BetaZero.
 
 Implements the Predictor Upper Confidence Trees (PUCT) selection rule used

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for simulation configuration classes."""
 
 import pytest

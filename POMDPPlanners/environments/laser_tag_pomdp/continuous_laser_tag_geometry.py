@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Geometry utilities for the Continuous LaserTag POMDP.
 
 Provides ray-AABB intersection, ray-circle intersection, wall collision

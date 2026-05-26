@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for environment base classes.
 
 This module tests the environment base classes, focusing on:

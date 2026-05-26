@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Numerical parity tests for the discrete LaserTag native reward kernel.
 
 Verifies that the ``_native.lasertag_discrete_reward_batch`` C++ free

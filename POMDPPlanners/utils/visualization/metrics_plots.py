@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Metrics comparison plotting utilities.
 
 This module provides functions for comparing and visualizing metrics across different

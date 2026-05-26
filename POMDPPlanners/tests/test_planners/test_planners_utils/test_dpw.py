@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for DPW (Double Progressive Widening) planner utilities.
 
 This module tests the DPW planner utilities, focusing on:

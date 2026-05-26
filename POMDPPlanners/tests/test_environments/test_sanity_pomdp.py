@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for Sanity POMDP environment.
 
 This module tests the Sanity POMDP environment, focusing on:

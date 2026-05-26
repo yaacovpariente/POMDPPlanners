@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Simulation workflows for POMDP planning experiments.
 
 This package provides high-level workflow classes for hyperparameter optimization,

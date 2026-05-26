@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tiger POMDP Environment Implementation.
 
 This module implements the classic Tiger problem, a benchmark POMDP environment

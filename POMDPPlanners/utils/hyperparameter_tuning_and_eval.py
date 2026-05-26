@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 # pylint: disable=too-many-lines
 """Utility functions for hyperparameter tuning and evaluation of POMDP planners.
 

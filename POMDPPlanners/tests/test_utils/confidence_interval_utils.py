@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Utility functions for confidence interval testing in environment tests."""
 
 from typing import List, Union

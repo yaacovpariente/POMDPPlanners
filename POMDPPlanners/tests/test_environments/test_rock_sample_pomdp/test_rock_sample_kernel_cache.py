@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Cached-kernel parity tests for the RockSample POMDP.
 
 These tests cover the per-action C++ kernel cache that the env now keeps

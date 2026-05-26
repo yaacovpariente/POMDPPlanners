@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests to verify package installation and basic functionality."""
 
 import importlib

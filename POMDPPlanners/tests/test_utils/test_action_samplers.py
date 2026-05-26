@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for action samplers utility functions.
 
 This module tests the action sampler implementations used for continuous action

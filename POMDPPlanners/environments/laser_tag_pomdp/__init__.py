@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """LaserTag POMDP Environment Package.
 
 This package implements the LaserTag pursuit-evasion POMDP environment

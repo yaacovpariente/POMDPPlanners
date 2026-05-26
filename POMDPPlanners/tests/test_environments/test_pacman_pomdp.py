@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for PacMan POMDP environment.
 
 This module tests the PacMan POMDP environment, focusing on:

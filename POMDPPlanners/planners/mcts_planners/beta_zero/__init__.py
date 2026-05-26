@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """BetaZero: Neural MCTS for POMDPs.
 
 This package implements the BetaZero algorithm (Moss et al., 2024), which adapts

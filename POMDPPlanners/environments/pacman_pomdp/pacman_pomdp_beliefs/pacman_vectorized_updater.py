@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Vectorized particle belief updater for the PacMan POMDP.
 
 Batched state transitions and observation log-likelihoods dispatch to the

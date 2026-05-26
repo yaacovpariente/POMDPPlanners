@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Unit tests for generic dangerous-area Numba kernels.
 
 Each test pairs a kernel against a pure-NumPy reference implementation

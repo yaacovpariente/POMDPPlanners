@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Concrete POMDP simulator implementation."""
 
 import hashlib

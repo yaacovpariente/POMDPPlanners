@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for the Continuous Push POMDP environment.
 
 This module tests the state transition behavior, observation behavior,

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for CovarianceParameterizedMultivariateNormal class.
 
 This module provides comprehensive tests for the multivariate normal distribution

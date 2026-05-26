@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for the Safety Ant Velocity belief factory.
 
 This module tests :func:`create_safety_ant_velocity_belief` from

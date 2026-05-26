@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Reward models for the PacMan POMDP.
 
 Mirrors the abstract-base / concrete-subclass layout used by

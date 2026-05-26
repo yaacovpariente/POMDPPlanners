@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Sanity Check POMDP Environment Implementation.
 
 This module implements a simple test environment used for debugging and sanity

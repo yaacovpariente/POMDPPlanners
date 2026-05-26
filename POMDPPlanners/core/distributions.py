@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Module for probability distribution implementations.
 
 This module provides abstract and concrete implementations of probability

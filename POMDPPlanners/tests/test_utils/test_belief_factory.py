@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for the top-level belief factory.
 
 This module tests :func:`create_environment_belief` and :class:`BeliefType`

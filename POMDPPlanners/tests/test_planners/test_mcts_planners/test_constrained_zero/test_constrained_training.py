@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for the ConstrainedZero training utilities.
 
 This module tests the loss function and training loop for the 3-head

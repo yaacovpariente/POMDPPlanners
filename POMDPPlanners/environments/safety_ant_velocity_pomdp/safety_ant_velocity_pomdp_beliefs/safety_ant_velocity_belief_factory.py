@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Belief factory for the Safety Ant Velocity POMDP.
 
 Functions:

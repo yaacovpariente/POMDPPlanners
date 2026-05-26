@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Generic Numba kernels for dangerous-area reward contributions.
 
 Each kernel maps a 2-D point (and a batch of points) to the *dangerous-

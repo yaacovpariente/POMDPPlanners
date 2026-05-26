@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 # pylint: disable=protected-access  # Tests need to inspect internal state
 """Tests for :mod:`POMDPPlanners.simulations.simulations_deployment.run_progress.notify`."""
 

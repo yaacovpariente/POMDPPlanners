@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Abstract base class for POMDP simulation frameworks."""
 
 import cProfile

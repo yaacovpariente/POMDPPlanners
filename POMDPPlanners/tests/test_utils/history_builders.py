@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Helper functions for building test History objects.
 
 This module provides utility functions to reduce code duplication when

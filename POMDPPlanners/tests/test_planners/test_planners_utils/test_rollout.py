@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for rollout planner utilities.
 
 This module tests the rollout planner utilities, focusing on:

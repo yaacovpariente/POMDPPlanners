@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Belief factory for RockSample POMDP.
 
 This module provides a factory function for creating belief objects for the

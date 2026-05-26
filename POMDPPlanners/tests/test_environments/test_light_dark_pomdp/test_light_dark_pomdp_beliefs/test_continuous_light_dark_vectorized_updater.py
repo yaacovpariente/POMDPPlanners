@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for ContinuousLightDarkVectorizedUpdater and observation model variants.
 
 This module tests the vectorized batch transition and observation

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 // Continuous Light-Dark POMDP native sampling hot path, built on the
 // shared pomdp_native core.
 //

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 import copy
 from logging import Logger
 from time import time

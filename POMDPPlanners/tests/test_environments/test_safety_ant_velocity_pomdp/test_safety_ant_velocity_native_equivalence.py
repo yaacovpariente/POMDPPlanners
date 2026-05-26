@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Numerical equivalence tests for the native Safety Ant Velocity extension.
 
 Verifies that the C++ ``_native`` sampling / log-likelihood code matches the

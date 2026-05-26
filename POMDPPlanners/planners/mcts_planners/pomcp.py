@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """POMCP (Partially Observable Monte Carlo Planning) Algorithm Implementation.
 
 This module implements POMCP, a Monte Carlo Tree Search algorithm for POMDP planning.

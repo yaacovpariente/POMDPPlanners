@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Geometry utilities for the Continuous Push POMDP.
 
 Provides circle-AABB overlap tests, point-in-AABB tests, collision

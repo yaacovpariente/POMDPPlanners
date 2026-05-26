@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Visualization module for RockSample POMDP Environment.
 
 This module provides visualization capabilities for RockSample POMDP episodes,

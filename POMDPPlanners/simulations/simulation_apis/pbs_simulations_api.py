@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 

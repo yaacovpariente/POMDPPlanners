@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for cost and reward calculation utilities.
 
 This module tests the cost and reward calculation utilities, focusing on:

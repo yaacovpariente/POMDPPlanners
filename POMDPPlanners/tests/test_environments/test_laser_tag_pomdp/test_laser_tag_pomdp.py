@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for LaserTag POMDP environment.
 
 This module tests the LaserTag POMDP environment, focusing on:

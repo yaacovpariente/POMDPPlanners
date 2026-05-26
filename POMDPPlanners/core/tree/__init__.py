@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """MCTS tree data structures.
 
 Two implementations live here:

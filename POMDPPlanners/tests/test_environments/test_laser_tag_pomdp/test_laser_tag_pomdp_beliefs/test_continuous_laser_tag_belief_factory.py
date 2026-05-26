@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for the Continuous LaserTag belief factory.
 
 Tests cover creation of vectorized and particle beliefs for both

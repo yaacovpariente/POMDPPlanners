@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for environment visualization consistency and correctness.
 
 This module tests that visualizers produce deterministic, reproducible outputs
