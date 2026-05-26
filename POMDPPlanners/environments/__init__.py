@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """POMDP Environment Implementations.
 
 This package contains concrete implementations of various POMDP environments

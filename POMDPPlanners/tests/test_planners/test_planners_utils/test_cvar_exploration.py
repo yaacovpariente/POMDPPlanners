@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Tests for cvar_exploration LCB action selection."""
 
 import math

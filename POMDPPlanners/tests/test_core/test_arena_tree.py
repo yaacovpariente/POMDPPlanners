@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Tests for the column-store Tree in ``core.tree.arena``.
 
 The arena tree has no node objects: a node is an integer ID into the

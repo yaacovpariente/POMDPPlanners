@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 import hashlib
 import json
 from enum import Enum

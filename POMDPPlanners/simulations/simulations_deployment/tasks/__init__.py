@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Tasks for POMDP simulation deployment.
 
 This module contains task classes for distributed execution of POMDP simulations,

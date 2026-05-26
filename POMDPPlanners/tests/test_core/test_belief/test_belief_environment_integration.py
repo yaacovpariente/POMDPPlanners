@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Smoke-tests for belief classes against POMDP environments.
 
 This module verifies that the concrete belief classes work correctly with

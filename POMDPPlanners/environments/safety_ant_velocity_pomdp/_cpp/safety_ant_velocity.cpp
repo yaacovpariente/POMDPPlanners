@@ -1,3 +1,6 @@
+// Copyright 2025 Yaacov Pariente
+// SPDX-License-Identifier: MIT
+
 // Safety Ant Velocity POMDP native sampling hot path.
 //
 // The transition model does NOT fit the shared

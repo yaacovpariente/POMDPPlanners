@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """CartPole POMDP Environment Module.
 
 This module provides the CartPole POMDP environment implementation and related

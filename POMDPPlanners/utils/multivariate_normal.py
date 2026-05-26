@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Module for efficient multivariate normal distribution with pre-computed Cholesky decomposition.
 
 This module provides a multivariate normal distribution implementation optimized for scenarios

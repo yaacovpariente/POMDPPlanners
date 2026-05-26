@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Belief-to-feature-vector representations for BetaZero.
 
 This module provides abstractions for converting POMDP belief states into

@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Precomputed grid navigation tables for vectorized PacMan operations.
 
 This module provides utility functions that precompute lookup tables for

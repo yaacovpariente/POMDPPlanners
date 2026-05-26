@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 from POMDPPlanners.environments.safety_ant_velocity_pomdp.safety_ant_velocity_pomdp_beliefs.safety_ant_velocity_vectorized_updater import (
     SafetyAntVelocityVectorizedUpdater,
 )

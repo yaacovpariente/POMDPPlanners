@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Module for POMDP environment abstractions.
 
 This module provides the foundational classes and interfaces for defining

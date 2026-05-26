@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Tests for Continuous Light Dark POMDP environment.
 
 This module tests the Continuous Light Dark POMDP environment, focusing on:

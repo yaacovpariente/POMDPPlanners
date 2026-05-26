@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """PacMan-specific Numba-JIT kernels.
 
 Single-pass batched reward kernel that mirrors the numpy implementation in

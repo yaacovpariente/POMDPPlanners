@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """MountainCar sampling hot-path benchmarks.
 
 Captures the per-call cost of ``env.sample_next_state`` /

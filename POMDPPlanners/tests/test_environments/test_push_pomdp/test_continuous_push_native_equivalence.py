@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Numerical equivalence tests for the native Continuous Push sampling extension.
 
 Verifies that the C++ ``_native`` sampling / probability code matches the

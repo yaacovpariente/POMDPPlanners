@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Belief factory for the PacMan POMDP.
 
 This module provides a factory function that creates ready-to-use belief

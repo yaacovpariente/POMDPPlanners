@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Tests for CartPole POMDP environment.
 
 This module tests the CartPole POMDP environment, focusing on:

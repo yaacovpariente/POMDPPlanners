@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Tests for the BetaZero PUCT action selection module.
 
 This module tests the PUCT selection rule and progressive widening with PUCT

@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Tests for tree data structures.
 
 This module tests the tree data structures, focusing on:

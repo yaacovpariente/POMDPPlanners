@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Three-head neural network for ConstrainedZero.
 
 This module extends the BetaZero dual-head network with an additional failure

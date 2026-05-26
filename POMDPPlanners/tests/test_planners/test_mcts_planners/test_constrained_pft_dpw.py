@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 # pylint: disable=protected-access  # Tests reach into private state to verify backups
 import random
 from typing import Any

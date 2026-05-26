@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """CLI watcher that posts Slack alerts for stalled experiment runs.
 
 Intended to be invoked from cron (typically once per minute):

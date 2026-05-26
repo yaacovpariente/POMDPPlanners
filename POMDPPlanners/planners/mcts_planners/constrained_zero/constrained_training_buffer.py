@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Iteration-slot replay buffer for ConstrainedZero training examples.
 
 This module extends the BetaZero training buffer with an additional failure

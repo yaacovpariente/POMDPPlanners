@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Visualization utilities for POMDPPlanners.
 
 This module provides plotting and visualization functions for analyzing

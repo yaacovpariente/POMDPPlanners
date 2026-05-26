@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Tests for RockSample vectorized particle belief updater."""
 
 import numpy as np

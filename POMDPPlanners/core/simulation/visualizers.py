@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Abstractions for rendering aggregated experiment visualizations.
 
 Implementations are dispatched to worker processes via the simulator's task

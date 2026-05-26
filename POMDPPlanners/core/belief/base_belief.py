@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Abstract base class for POMDP belief state representations.
 
 This module provides the foundational Belief abstract base class that defines

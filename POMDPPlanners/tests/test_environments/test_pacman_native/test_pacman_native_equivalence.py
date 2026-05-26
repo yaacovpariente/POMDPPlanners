@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Native↔Python equivalence tests for the PacMan POMDP C++ port.
 
 These tests target the ``PacManTransitionCpp`` C++ kernel directly via the

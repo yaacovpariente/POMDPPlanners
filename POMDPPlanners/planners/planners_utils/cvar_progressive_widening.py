@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 from typing import Optional
 
 from POMDPPlanners.core.environment import Environment

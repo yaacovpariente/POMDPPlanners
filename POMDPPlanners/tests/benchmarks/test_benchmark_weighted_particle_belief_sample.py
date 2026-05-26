@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Benchmarks for ``WeightedParticleBelief.sample``.
 
 Compares the **lazy-CDF** implementation (``bisect_left`` on a cached

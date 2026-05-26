@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Network-guided action sampler for BetaZero progressive widening.
 
 This module provides an ``ActionSampler`` subclass that draws new candidate

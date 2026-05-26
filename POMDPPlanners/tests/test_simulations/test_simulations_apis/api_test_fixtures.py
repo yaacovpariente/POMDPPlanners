@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Shared fixtures and test data generators for simulation API tests.
 
 This module provides reusable pytest fixtures for testing all simulation API

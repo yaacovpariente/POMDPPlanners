@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Centralized serialization utilities for POMDPPlanners.
 
 This module provides reusable serialization functions for converting Python

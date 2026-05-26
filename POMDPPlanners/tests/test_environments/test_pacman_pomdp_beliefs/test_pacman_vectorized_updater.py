@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Tests for PacMan vectorized particle belief updater."""
 
 # pylint: disable=protected-access

@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Test fixtures and factory functions for interface compliance testing.
 
 This module provides factory functions that create instances of various

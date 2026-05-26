@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Tests for experiment_configs module.
 
 This module contains comprehensive tests for the experiment_configs implementation,

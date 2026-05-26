@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Tests for the SPUCT action selection module (arena backend).
 
 This module tests the safety-constrained PUCT selection and progressive

@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Tests for the LaserTag POMDP reward-model variants.
 
 Covers the high-variance and decaying-hit-probability variants added

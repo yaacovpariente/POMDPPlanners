@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Vectorized particle belief updater for the Continuous Push POMDP.
 
 This module implements a concrete

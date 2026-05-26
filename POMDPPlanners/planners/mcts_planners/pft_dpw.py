@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """PFT-DPW (Particle Filter Tree with Double Progressive Widening) Algorithm.
 
 This module implements PFT-DPW, a Monte Carlo Tree Search algorithm for continuous

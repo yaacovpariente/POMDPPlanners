@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Tests for the Discrete Light-Dark belief factory.
 
 This module tests that create_discrete_light_dark_belief correctly dispatches

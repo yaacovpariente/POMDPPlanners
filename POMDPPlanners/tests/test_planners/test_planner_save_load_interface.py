@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Interface tests for POMDP planner save/load functionality.
 
 This module tests that all POMDP planners can be properly saved to JSON

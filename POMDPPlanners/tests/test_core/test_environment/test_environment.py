@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Tests for environment base classes.
 
 This module tests the environment base classes, focusing on:

@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Mixin classes with shared test methods for all simulation API implementations.
 
 This module contains concrete test methods organized into logical mixin classes

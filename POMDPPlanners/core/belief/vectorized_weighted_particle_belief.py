@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Vectorized weighted particle belief state representation.
 
 This module provides a weighted particle filter that stores particles as a

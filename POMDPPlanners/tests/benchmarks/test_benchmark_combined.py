@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Layer 3: Combined planner+environment benchmarks.
 
 Measures realistic end-to-end planning performance. Compare with Layer 1

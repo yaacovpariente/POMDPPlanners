@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Tests for the BetaZero planner module.
 
 This module tests the BetaZero planner, which extends

@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Trainer callbacks for policy training loops.
 
 This module provides a callback interface and concrete implementations for

@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Notification configuration dataclass for the run_progress module.
 
 `NotificationConfig` bundles every parameter the run-progress

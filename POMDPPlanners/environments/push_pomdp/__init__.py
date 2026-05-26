@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Push POMDP Environment Module.
 
 This module provides the Push POMDP environment implementation and related

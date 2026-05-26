@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Column-store implementation of the MCTS tree.
 
 A single :class:`Tree` instance holds one Python ``list`` per node attribute.

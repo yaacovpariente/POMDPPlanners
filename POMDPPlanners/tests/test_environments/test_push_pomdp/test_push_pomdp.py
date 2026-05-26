@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Tests for Push POMDP environment.
 
 This module tests the Push POMDP environment, focusing on:

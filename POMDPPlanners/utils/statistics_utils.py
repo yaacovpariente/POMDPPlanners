@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 # pylint: disable=fixme
 from functools import lru_cache
 from typing import Optional, Tuple

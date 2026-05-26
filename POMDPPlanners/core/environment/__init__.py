@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Public surface of the ``core.environment`` package.
 
 Re-exports the same names that used to live in ``core/environment.py`` so

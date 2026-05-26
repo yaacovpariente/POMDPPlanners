@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 import numpy as np
 
 from POMDPPlanners.core.simulation.hyperparameter_tuning import (

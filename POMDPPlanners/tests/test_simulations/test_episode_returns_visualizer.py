@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Tests for EpisodeReturnsVisualizer."""
 
 # pylint: disable=protected-access  # Tests need to access protected members

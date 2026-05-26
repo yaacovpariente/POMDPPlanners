@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Safety-constrained PUCT (SPUCT) action selection for ConstrainedZero.
 
 Implements the SPUCT selection rule that masks unsafe actions based on their

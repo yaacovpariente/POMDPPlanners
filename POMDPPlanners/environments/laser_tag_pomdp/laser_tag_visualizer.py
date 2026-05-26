@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """LaserTag POMDP Visualization Module.
 
 This module provides visualization functionality for LaserTag POMDP environments,

@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Shared test utilities for comparing vectorized vs per-particle belief updates.
 
 This module provides reusable assertion functions that verify vectorized

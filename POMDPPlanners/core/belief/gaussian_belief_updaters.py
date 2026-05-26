@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Gaussian belief updater abstract base class and concrete implementations.
 
 This module provides the ``GaussianBeliefUpdater`` ABC and three concrete

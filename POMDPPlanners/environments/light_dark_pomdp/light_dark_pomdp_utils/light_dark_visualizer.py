@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 from pathlib import Path
 from typing import Any, List, Tuple, cast
 

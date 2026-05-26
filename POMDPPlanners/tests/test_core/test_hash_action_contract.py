@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Contract and integration tests for ``Environment.hash_action``.
 
 Validates the per-env hash/equality contract for actions across every

@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 import numpy as np
 
 from POMDPPlanners.utils.numba_kernels import sparse_sampling_lcb_min_idx_kernel

@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Safety Ant Velocity POMDP Environment Package.
 
 This package implements a safety-critical velocity control task where an agent

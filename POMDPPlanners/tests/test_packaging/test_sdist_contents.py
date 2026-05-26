@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Static sdist content checks.
 
 These run without compiling anything (~1s). They guard against the class of

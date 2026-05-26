@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Cross-environment conformance tests for the Environment API.
 
 Covers two contracts that planners and beliefs rely on but that, prior

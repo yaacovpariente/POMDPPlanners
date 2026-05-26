@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """PolicyTrainer: orchestrates the collect-then-train loop for trainable policies.
 
 This module provides a single concrete trainer that works with any policy

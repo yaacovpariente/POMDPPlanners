@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Tests for training callback implementations.
 
 This module tests the TrainerCallback hierarchy: EarlyStopping,

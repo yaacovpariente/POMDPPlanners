@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Tests for the RockSample ZERO_MEAN_HAZARD_SHOCK and DISTANCE_DECAYED_HAZARD_PENALTY
 reward-model variants.
 

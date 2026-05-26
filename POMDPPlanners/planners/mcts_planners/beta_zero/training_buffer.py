@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Iteration-slot replay buffer for BetaZero training examples.
 
 This module provides a buffer that stores training tuples (φ(b), π_qw, g_t)

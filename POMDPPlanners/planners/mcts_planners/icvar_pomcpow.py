@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """ICVaR POMCPOW (Iterated CVaR POMCPOW) Algorithm.
 
 This module implements a risk-sensitive variant of POMCPOW that uses the Iterated Conditional

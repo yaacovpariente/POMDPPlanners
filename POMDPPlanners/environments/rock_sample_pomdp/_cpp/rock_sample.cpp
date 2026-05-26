@@ -1,3 +1,6 @@
+// Copyright 2025 Yaacov Pariente
+// SPDX-License-Identifier: MIT
+
 // RockSample POMDP native sampling hot path.
 //
 // The RockSample transition is deterministic (no RNG) and the observation is

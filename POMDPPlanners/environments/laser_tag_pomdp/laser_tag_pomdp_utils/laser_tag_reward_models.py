@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Reward models for the discrete LaserTag POMDP.
 
 Mirrors the abstract-base / concrete-subclass layout used by

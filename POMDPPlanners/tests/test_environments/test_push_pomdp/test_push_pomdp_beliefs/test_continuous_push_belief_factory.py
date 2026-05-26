@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Tests for the Continuous Push belief factory.
 
 This module tests :func:`create_continuous_push_belief` from

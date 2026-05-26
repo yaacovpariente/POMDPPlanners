@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 # pylint: disable=protected-access  # Tests need to inspect internal helpers
 """Tests for :mod:`POMDPPlanners.simulations.simulations_deployment.run_progress.watcher`."""
 

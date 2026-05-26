@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Test cases for Jupyter notebook examples in docs/examples/.
 
 This module provides test cases to validate that all notebook examples

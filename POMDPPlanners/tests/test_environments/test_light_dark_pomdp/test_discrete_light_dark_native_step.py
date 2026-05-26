@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Native single-step parity tests for DiscreteLightDarkPOMDP.
 
 Verifies that the C++ ``discrete_sample_next_state_step`` and

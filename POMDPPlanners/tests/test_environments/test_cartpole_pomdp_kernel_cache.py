@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Cached-kernel parity tests for the CartPole POMDP.
 
 These tests cover the per-action C++ kernel cache that the env now keeps

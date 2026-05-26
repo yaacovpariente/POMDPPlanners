@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Benchmark fixtures for performance testing.
 
 Provides pre-built environments, planners, beliefs, and initial states

@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import List, Optional

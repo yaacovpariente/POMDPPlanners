@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Interface compliance tests for Distribution implementations.
 
 This module validates that all distribution classes correctly implement

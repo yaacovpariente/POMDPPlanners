@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Hyperparameter optimization module for POMDP policies.
 
 This module provides tools for optimizing hyperparameters of POMDP policies using

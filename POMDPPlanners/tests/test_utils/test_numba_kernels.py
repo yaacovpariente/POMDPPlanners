@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Numerical-equivalence tests for the shared Numba kernels in ``POMDPPlanners.utils``.
 
 Each test pairs a kernel against a pure-NumPy reference implementation and

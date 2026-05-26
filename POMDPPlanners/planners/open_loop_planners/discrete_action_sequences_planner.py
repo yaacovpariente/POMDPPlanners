@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 from itertools import product
 from pathlib import Path
 from typing import Any, List, Optional, Tuple

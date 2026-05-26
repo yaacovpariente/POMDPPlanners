@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """POMDP simulator package.
 
 Re-exports the public simulator API. Importers can continue to use::

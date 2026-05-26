@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Tests for simulation API implementations.
 
 This package contains tests for all simulation API implementations

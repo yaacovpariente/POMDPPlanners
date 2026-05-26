@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Module for RockSample POMDP environment.
 
 This module provides the RockSample POMDP environment implementation based on the

@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Tests for BetaZero training utilities.
 
 This module tests the ``compute_beta_zero_loss`` and ``train_network``

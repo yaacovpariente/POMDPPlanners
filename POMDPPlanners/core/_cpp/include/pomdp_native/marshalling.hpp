@@ -1,3 +1,6 @@
+// Copyright 2025 Yaacov Pariente
+// SPDX-License-Identifier: MIT
+
 // Python <-> C++ numeric marshalling helpers shared across native extensions.
 //
 // Generalizes the duck-typed (tuple / list / ndarray) conversion helpers

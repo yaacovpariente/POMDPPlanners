@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Visualization module for Push POMDP Environment.
 
 This module provides visualization capabilities for Push POMDP episodes,

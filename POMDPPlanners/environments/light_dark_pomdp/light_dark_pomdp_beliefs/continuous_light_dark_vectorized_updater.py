@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Vectorized particle belief updaters for the Continuous Light-Dark POMDP.
 
 This module implements concrete

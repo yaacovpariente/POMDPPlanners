@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Tests for MountainCar POMDP environment.
 
 This module tests the MountainCar POMDP environment, focusing on:

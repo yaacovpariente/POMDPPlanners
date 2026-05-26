@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """C++/Python reward-parity tests for the Push POMDP reward variants.
 
 Verifies that the future native reward kernels

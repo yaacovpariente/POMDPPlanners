@@ -1,3 +1,6 @@
+// Copyright 2025 Yaacov Pariente
+// SPDX-License-Identifier: MIT
+
 // Continuous LaserTag POMDP native sampling hot path.
 //
 // The continuous LaserTag transition and observation models do not fit the

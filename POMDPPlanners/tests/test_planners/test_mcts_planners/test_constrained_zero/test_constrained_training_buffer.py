@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Tests for the ConstrainedTrainingBuffer module.
 
 This module tests the ConstrainedTrainingBuffer and ConstrainedTrainingExample,

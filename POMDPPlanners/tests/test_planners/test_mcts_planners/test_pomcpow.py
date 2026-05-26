@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Tests for POMCPOW planner.
 
 This module tests the POMCPOW planner, focusing on:

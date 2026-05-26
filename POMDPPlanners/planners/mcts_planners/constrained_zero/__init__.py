@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """ConstrainedZero: Neural MCTS for Chance-Constrained POMDPs.
 
 This package implements the ConstrainedZero algorithm (Moss et al., IJCAI 2024),

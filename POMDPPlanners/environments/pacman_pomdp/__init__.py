@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """PacMan POMDP package with sprite-based visualization."""
 
 from POMDPPlanners.environments.pacman_pomdp.pacman_pomdp import (

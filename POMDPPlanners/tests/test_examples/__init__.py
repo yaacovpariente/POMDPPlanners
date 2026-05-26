@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Test examples package.
 
 This package contains tests for various examples and usage patterns

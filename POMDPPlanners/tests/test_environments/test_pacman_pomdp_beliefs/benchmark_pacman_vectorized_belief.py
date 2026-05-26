@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Performance benchmark: PacMan vectorized vs non-vectorized belief.
 
 Run manually to measure speedup:

@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Gaussian belief state representation for POMDP environments.
 
 This module provides a multivariate Gaussian belief state that delegates

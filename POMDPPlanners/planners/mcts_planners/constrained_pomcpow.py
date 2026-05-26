@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """CPOMCPOW (Constrained POMCPOW) Algorithm.
 
 Online MCTS for cost-constrained POMDPs in continuous state, action, and

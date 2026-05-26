@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Gaussian Mixture belief state representation for POMDP environments.
 
 This module provides a Gaussian Mixture Model (GMM) belief state that

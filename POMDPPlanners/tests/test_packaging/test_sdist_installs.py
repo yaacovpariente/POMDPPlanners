@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """End-to-end sdist install check.
 
 Slow: this builds the sdist, creates a fresh venv, installs the tarball

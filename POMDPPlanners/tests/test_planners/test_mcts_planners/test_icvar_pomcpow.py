@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 # pylint: disable=protected-access,too-many-lines,broad-exception-caught,unused-argument,import-outside-toplevel
 from logging import getLogger
 import inspect

@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Native (C++) equivalence tests for the RockSample POMDP.
 
 Mirrors the structure of

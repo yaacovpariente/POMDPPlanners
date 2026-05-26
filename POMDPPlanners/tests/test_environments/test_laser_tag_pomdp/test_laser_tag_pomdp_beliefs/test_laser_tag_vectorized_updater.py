@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Tests for LaserTagVectorizedUpdater.
 
 This module tests the vectorized batch transition and observation

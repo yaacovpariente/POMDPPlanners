@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Training utilities for POMDP policies.
 
 This package provides a trainer and callbacks for offline policy-iteration

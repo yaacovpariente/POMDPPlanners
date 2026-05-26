@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Module-level helper functions for belief state operations.
 
 This module provides utility functions for common belief operations such as

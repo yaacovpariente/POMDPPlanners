@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Shared test utilities for MCTS planners.
 
 This module provides common test functions that can be reused across different MCTS planner tests

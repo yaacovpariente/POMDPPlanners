@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Training utilities for ConstrainedZero network.
 
 This module provides the loss function and training loop for the 3-head

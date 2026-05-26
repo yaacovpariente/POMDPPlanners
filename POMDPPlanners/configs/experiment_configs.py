@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 # pylint: disable=duplicate-code,cyclic-import
 from typing import List, Tuple, Optional, Sequence, Type
 from POMDPPlanners.core.simulation.simulation_configs import PlannerGenerator, EnvironmentRunParams

@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Per-action C++ kernel cache parity tests for ``PacManPOMDP``.
 
 These tests pin down the new per-action ``_trans_kernel_cache`` /

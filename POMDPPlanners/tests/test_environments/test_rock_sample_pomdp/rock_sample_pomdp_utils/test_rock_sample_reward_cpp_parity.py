@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """C++ <-> Python reward parity tests for the RockSample POMDP.
 
 These tests assert that a (yet-to-be-added) standalone C++ reward kernel

@@ -1,3 +1,6 @@
+// Copyright 2025 Yaacov Pariente
+// SPDX-License-Identifier: MIT
+
 // PacMan POMDP native extension.
 //
 // Mirrors the structural pattern used by the continuous LaserTag port: state

@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Mountain Car POMDP Environment Implementation.
 
 This module implements the classic Mountain Car problem as a POMDP, where an

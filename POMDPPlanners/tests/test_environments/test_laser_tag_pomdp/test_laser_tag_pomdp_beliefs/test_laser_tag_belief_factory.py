@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Tests for the LaserTag belief factory.
 
 This module tests :func:`create_laser_tag_belief` from

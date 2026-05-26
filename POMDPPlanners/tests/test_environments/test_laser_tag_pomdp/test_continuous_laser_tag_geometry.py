@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Tests for the continuous LaserTag geometry utilities module.
 
 Tests cover ray-AABB intersection, ray-circle intersection,

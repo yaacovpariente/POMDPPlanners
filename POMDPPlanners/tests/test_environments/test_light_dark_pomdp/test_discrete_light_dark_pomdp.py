@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Tests for Discrete Light Dark POMDP environment.
 
 This module tests the Discrete Light Dark POMDP environment, focusing on:

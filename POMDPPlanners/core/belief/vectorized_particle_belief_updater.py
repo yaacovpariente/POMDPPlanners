@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Abstract base class for vectorized particle belief updaters.
 
 This module provides the ``VectorizedParticleBeliefUpdater`` ABC that defines

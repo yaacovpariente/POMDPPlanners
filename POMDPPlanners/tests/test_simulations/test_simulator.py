@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Tests for simulator functionality.
 
 This module tests the simulator functionality, focusing on:

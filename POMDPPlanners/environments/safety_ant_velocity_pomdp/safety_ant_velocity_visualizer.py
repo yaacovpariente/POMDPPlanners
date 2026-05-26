@@ -1,3 +1,6 @@
+# Copyright 2025 Yaacov Pariente
+# SPDX-License-Identifier: MIT
+
 """Visualization utilities for Safety Ant Velocity POMDP Environment.
 
 This module provides visualization capabilities for the Safety Ant Velocity POMDP,
