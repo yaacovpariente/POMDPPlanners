@@ -150,7 +150,8 @@ _, stats = api.run_multiple_environments_and_policies(
     environment_run_params=[EnvironmentRunParams(
         environment=env, belief=belief,
         policies=[pomcpow, pft_dpw], num_episodes=100, num_steps=30)],
-    alpha=0.1, experiment_name="LightDark_Evaluation",
+    alpha=0.1, confidence_interval_level=0.95,
+    experiment_name="LightDark_Evaluation",
 )
 ```
 
