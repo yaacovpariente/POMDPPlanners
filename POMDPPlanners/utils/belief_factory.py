@@ -1,4 +1,3 @@
-# Copyright 2025 Yaacov Pariente
 # SPDX-License-Identifier: MIT
 
 """Top-level factory for creating environment-specific belief states.

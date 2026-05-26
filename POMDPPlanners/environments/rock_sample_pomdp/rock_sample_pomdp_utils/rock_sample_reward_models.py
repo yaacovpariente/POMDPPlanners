@@ -1,4 +1,3 @@
-# Copyright 2025 Yaacov Pariente
 # SPDX-License-Identifier: MIT
 
 """Reward models for the RockSample POMDP.

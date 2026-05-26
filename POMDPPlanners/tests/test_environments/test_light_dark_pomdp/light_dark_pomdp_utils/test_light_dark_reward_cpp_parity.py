@@ -1,4 +1,3 @@
-# Copyright 2025 Yaacov Pariente
 # SPDX-License-Identifier: MIT
 
 """C++/Python parity tests for the Continuous Light-Dark reward variants.

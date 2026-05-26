@@ -1,4 +1,3 @@
-// Copyright 2025 Yaacov Pariente
 // SPDX-License-Identifier: MIT
 
 // MountainCar POMDP native sampling hot path, built on the shared

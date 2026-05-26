@@ -1,4 +1,3 @@
-# Copyright 2025 Yaacov Pariente
 # SPDX-License-Identifier: MIT
 
 """Performance benchmark: light_dark env-level ``reward`` / ``reward_batch``.

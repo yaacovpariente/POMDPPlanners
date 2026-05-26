@@ -1,4 +1,3 @@
-# Copyright 2025 Yaacov Pariente
 # SPDX-License-Identifier: MIT
 
 """Native↔Python equivalence tests for the PacMan POMDP C++ port.

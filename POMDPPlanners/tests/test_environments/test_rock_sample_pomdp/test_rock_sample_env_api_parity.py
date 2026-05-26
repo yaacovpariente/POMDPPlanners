@@ -1,4 +1,3 @@
-# Copyright 2025 Yaacov Pariente
 # SPDX-License-Identifier: MIT
 
 """Env-API contract / feature-driven tests for the RockSample POMDP source.

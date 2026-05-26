@@ -1,4 +1,3 @@
-# Copyright 2025 Yaacov Pariente
 # SPDX-License-Identifier: MIT
 
 """POMCPOW (Partially Observable Monte Carlo Planning with Optimistic Weights) Algorithm.

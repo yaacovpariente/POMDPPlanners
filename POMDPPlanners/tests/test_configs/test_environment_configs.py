@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# Copyright 2025 Yaacov Pariente
 # SPDX-License-Identifier: MIT
 
 """Test script to verify all environment configurations work correctly.

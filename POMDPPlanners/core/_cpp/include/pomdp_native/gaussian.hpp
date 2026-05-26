@@ -1,4 +1,3 @@
-// Copyright 2025 Yaacov Pariente
 // SPDX-License-Identifier: MIT
 
 // N-dimensional Gaussian with Cholesky-factored covariance, templated on

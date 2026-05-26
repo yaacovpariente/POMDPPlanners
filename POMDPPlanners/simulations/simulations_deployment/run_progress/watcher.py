@@ -1,4 +1,3 @@
-# Copyright 2025 Yaacov Pariente
 # SPDX-License-Identifier: MIT
 
 """CLI watcher that posts Slack alerts for stalled experiment runs.

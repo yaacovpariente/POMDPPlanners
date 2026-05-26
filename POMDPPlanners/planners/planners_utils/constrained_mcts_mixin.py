@@ -1,4 +1,3 @@
-# Copyright 2025 Yaacov Pariente
 # SPDX-License-Identifier: MIT
 
 """Shared abstract layer for CPOMDP-DPW MCTS variants.

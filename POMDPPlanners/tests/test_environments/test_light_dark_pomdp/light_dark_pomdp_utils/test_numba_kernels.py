@@ -1,4 +1,3 @@
-# Copyright 2025 Yaacov Pariente
 # SPDX-License-Identifier: MIT
 
 """Numerical-equivalence tests for the light-dark-specific Numba kernels.

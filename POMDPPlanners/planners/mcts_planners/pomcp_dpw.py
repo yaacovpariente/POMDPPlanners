@@ -1,4 +1,3 @@
-# Copyright 2025 Yaacov Pariente
 # SPDX-License-Identifier: MIT
 
 """POMCP_DPW (Partially Observable Monte Carlo Planning with Double Progressive Widening) Algorithm.

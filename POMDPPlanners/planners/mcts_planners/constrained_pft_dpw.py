@@ -1,4 +1,3 @@
-# Copyright 2025 Yaacov Pariente
 # SPDX-License-Identifier: MIT
 
 """C-PFT-DPW (Constrained Particle Filter Tree with Double Progressive Widening).

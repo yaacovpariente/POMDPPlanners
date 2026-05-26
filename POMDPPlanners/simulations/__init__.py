@@ -1,4 +1,3 @@
-# Copyright 2025 Yaacov Pariente
 # SPDX-License-Identifier: MIT
 
 from POMDPPlanners.simulations.simulation_apis.simulations_api_interface import (

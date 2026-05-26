@@ -1,4 +1,3 @@
-# Copyright 2025 Yaacov Pariente
 # SPDX-License-Identifier: MIT
 
 from POMDPPlanners.environments.push_pomdp.push_pomdp_beliefs.push_vectorized_updater import (

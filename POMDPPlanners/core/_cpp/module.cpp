@@ -1,4 +1,3 @@
-// Copyright 2025 Yaacov Pariente
 // SPDX-License-Identifier: MIT
 
 // Python-facing surface of the shared native core.
