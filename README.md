@@ -40,21 +40,20 @@ pip install -e ".[dev]"
 ```python
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
-from POMDPPlanners.core.belief import WeightedParticleBelief
+from POMDPPlanners.utils.belief_factory import create_environment_belief
 
-# Create environment and planner
-env = TigerPOMDP()
-planner = POMCP(env, num_simulations=1000)
+env = TigerPOMDP(discount_factor=0.95)
+planner = POMCP(environment=env, discount_factor=0.95, depth=20,
+                exploration_constant=10.0, n_simulations=1000,
+                name="POMCP")
+belief = create_environment_belief(env, n_particles=200)
 
-# Initialize belief and run planning
-initial_belief = WeightedParticleBelief.create_uniform_belief(
-    env.get_states(), num_particles=1000
-)
-
-# Get action from planner
-action = planner.get_action(initial_belief)
-print(f"Recommended action: {action}")
+actions, _ = planner.action(belief)
+print(f"Recommended action: {actions[0]}")
 ```
+
+See [Running Experiments](#-running-experiments) below for a parallel
+multi-policy evaluation example.
 
 ## 🏗️ Architecture Overview
 
@@ -172,29 +171,6 @@ Self-contained Jupyter notebooks with executable end-to-end examples live in
 | [`hyperparameter_tuning.ipynb`](docs/examples/hyperparameter_tuning.ipynb) | End-to-end Optuna search via `run_optimize_and_evaluate` |
 | [`advanced_optimization.ipynb`](docs/examples/advanced_optimization.ipynb) | Multi-config tuning, custom search spaces |
 | [`custom_environment.ipynb`](docs/examples/custom_environment.ipynb) | Implementing a new `Environment` subclass |
-
-## 🌐 Distributed Computing
-
-POMDPPlanners supports multiple execution backends for scaling experiments:
-
-| Backend | Description | Use Case |
-|---------|-------------|----------|
-| **Local** | Sequential single-process | Development and debugging |
-| **Dask** | Distributed multi-machine cluster | Large-scale parallelism |
-| **PBS** | HPC cluster via `dask-jobqueue` | Supercomputer / PBS job scheduler |
-
-Select the backend via the simulation API in `POMDPPlanners.simulations.simulation_apis`:
-
-```python
-# Local sequential execution
-from POMDPPlanners.simulations.simulation_apis.local_simulations_api import LocalSimulationsAPI
-
-# Dask distributed execution
-from POMDPPlanners.simulations.simulation_apis.dask_simulations_api import DaskSimulationsAPI
-
-# PBS (HPC) cluster execution
-from POMDPPlanners.simulations.simulation_apis.pbs_simulations_api import PBSSimulationsAPI
-```
 
 ## 🧪 Testing
 
