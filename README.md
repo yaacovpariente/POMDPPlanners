@@ -55,69 +55,6 @@ print(f"Recommended action: {actions[0]}")
 See [Running Experiments](#-running-experiments) below for a parallel
 multi-policy evaluation example.
 
-## 🏗️ Architecture Overview
-
-POMDPPlanners is organized around three core abstractions and a shared
-experiment-management layer.
-
-### Core Abstractions
-
-- **`Environment`** — POMDP dynamics: state transition and observation models,
-  reward function, terminal condition, and initial distributions. A `SpaceInfo`
-  dataclass declares whether the action/observation spaces are discrete,
-  continuous, or mixed, enabling runtime compatibility checking with beliefs and
-  planners. Performance-critical environments expose a C++ inner loop via a
-  pure-Python facade.
-- **`Belief`** — distribution over states with a Bayesian update step. Built-in
-  representations: `WeightedParticleBelief`, `UnweightedParticleBelief`,
-  `VectorizedWeightedParticleBelief` (vectorized particle filter),
-  `GaussianBelief`, and `GaussianMixtureBelief`.
-- **`Policy`** — exposes `action(belief)` and returns the chosen action together
-  with a `PolicyRunData` record of per-step diagnostics (e.g. expanded nodes,
-  visit counts for MCTS planners), enabling post-hoc analysis of planner
-  behavior.
-
-### Experiment Management
-
-Two workflows share a common task manager:
-
-- **Direct evaluation** — `LocalSimulationsAPI.run_multiple_environments_and_policies(...)`
-  runs parallel episodes and returns aggregated statistics (mean return, CVaR,
-  VaR, confidence intervals).
-- **Optimize-and-evaluate** — `LocalSimulationsAPI.run_optimize_and_evaluate(...)`
-  drives an Optuna search over each planner's hyperparameter space and forwards
-  the best configuration to evaluation.
-
-Each simulation is keyed by a SHA-256 hash of its full specification
-(environment parameters, policy, belief, seed), so cache hits return instantly
-and interrupted experiments resume automatically. Per-episode returns, safety
-metrics, hyperparameters, and `PolicyRunData` diagnostics are written as MLflow
-runs.
-
-### Execution Backends
-
-The task manager is backed by a pluggable execution layer; switching backends
-only requires changing the API class:
-
-| Backend | API class | Use case |
-|---|---|---|
-| **Local (Joblib)** | `LocalSimulationsAPI` | Multi-core single machine; the default |
-| **Dask** | `DaskSimulationsAPI` | Distributed multi-machine clusters |
-| **PBS** | `PBSSimulationsAPI` | HPC batch queues via `dask-jobqueue` |
-
-### Available Planners and Environments
-
-**Online planners.** POMCP, POMCP-DPW, POMCPOW, PFT-DPW, Sparse PFT,
-DiscreteActionSequences (open-loop baseline), Sparse Sampling, BetaZero
-(neural-guided MCTS), and the risk-averse family ConstrainedZero, ICVaR
-POMCPOW, and ICVaR PFT-DPW for safety-constrained planning.
-
-**Environments.** Tiger, LightDark (discrete + continuous), RockSample,
-LaserTag (discrete + continuous), PacMan, CartPole, MountainCar, Push, and
-SafetyAnt. Most environments expose configurable dangerous areas and report
-dedicated safety metrics (violation rates, total counts) alongside standard
-return statistics.
-
 ## 📊 Running Experiments
 
 The recommended entry point for end-to-end experiments is `LocalSimulationsAPI`,
