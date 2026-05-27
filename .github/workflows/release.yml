@@ -60,9 +60,14 @@ jobs:
         python -m pip install --upgrade pip
         pip install build twine
 
-    - name: Build package
+    - name: Build sdist
+      # Build sdist only. Building a wheel here would produce a
+      # ``linux_x86_64``-tagged artifact which PyPI / TestPyPI reject
+      # (only ``manylinux*`` wheels are accepted). Portable wheels need
+      # a cibuildwheel-driven matrix that is out of scope for this
+      # workflow; users install from sdist and build locally.
       run: |
-        python -m build
+        python -m build --sdist
 
     - name: Check package
       run: |
