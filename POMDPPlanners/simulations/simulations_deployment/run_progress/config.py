@@ -56,15 +56,48 @@ class NotificationConfig:
             ``POMDPPLANNERS_DISABLE_NOTIFY=1`` env var.
 
     Example:
-        Explicit construction (e.g. routing two simulations in one process
-        to different Slack channels)::
+        Enabling Slack notifications has two equivalent paths.
 
+        **Zero-config (env var).** Export ``SLACK_WEBHOOK_URL`` and any
+        ``SimulationsAPI`` constructed without an explicit
+        ``notification_config`` will pick it up automatically via
+        :meth:`from_env`::
+
+            # In the shell:
+            #   export SLACK_WEBHOOK_URL="https://hooks.slack.com/services/..."
+            from POMDPPlanners.simulations.simulation_apis.local_simulations_api \\
+                import LocalSimulationsAPI
+            api = LocalSimulationsAPI()  # notifications enabled
+
+        Other env vars read by :meth:`from_env`:
+        ``POMDPPLANNERS_DISABLE_NOTIFY=1`` (silence a single invocation
+        even if a webhook is set), ``HYPERPARAM_TRIAL_NOTIFICATION_INTERVAL``
+        (Optuna milestone cadence; default 50, set ``0`` to disable),
+        ``POMDP_PROGRESS_DB`` (override the SQLite progress DB path).
+        Pytest runs are auto-silenced via ``PYTEST_CURRENT_TEST``.
+
+        **Programmatic (per-instance control).** Construct explicitly to
+        route multiple simulations in the same process to different
+        Slack channels, or to override env-driven defaults::
+
+            from POMDPPlanners.simulations.simulations_deployment.run_progress \\
+                import NotificationConfig
             cfg_a = NotificationConfig(webhook_url="https://hooks.slack.com/A")
             cfg_b = NotificationConfig(webhook_url="https://hooks.slack.com/B")
+            api_a = LocalSimulationsAPI(notification_config=cfg_a)
+            api_b = LocalSimulationsAPI(notification_config=cfg_b)
 
-        Environment-driven construction (used by ``LocalSimulationsAPI``)::
+        **Stall detection (external watcher).** The in-process notifier
+        cannot report a death the process itself does not witness
+        (SIGKILL / OOM / host reboot). Run this once a minute from cron
+        to catch those::
 
-            cfg = NotificationConfig.from_env()
+            * * * * * /path/to/.venv/bin/python -m \\
+                POMDPPlanners.simulations.simulations_deployment.run_progress.watcher \\
+                --threshold-seconds 3600
+
+        ``--threshold-seconds`` is the heartbeat age above which a still-
+        running entry is reported as stalled.
     """
 
     webhook_url: Optional[str] = None
