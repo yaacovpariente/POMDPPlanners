@@ -5,7 +5,7 @@
 This module extends the BetaZero training buffer with an additional failure
 target, used for training the 3-head ConstrainedZero network.
 
-Reference:
+References:
     Moss, R. J., Jamgochian, A., Fischer, J., Corso, A., & Kochenderfer, M. J. (2024).
     ConstrainedZero: Chance-Constrained POMDP Planning Using Learned Probabilistic Failure
     Surrogates and Adaptive Safety Constraints. Proceedings of the Thirty-Third International

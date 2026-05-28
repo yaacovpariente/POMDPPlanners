@@ -5,7 +5,7 @@
 Implements the SPUCT selection rule that masks unsafe actions based on their
 estimated failure probability relative to an adaptive threshold Delta'.
 
-Reference:
+References:
     Moss, R. J., Jamgochian, A., Fischer, J., Corso, A., & Kochenderfer, M. J. (2024).
     ConstrainedZero: Chance-Constrained POMDP Planning Using Learned Probabilistic Failure
     Surrogates and Adaptive Safety Constraints. Proceedings of the Thirty-Third International
