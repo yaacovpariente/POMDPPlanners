@@ -124,11 +124,6 @@ class BetaZero(ArenaDoubleProgressiveWideningMCTSPolicy, TrainablePolicy):
         >>> actions, run_data = planner.action(belief)
         >>> actions[0] in env.get_actions()
         True
-
-    References:
-        Moss, R. J., Corso, A., Caers, J., & Kochenderfer, M. J. (2024).
-        BetaZero: Belief-State Planning for Long-Horizon POMDPs using Learned
-        Approximations. Reinforcement Learning Conference (RLC).
     """
 
     def __init__(
