@@ -36,6 +36,10 @@ from POMDPPlanners.environments.push_pomdp.push_pomdp import PushPOMDP
 from POMDPPlanners.environments.push_pomdp.push_pomdp_utils.push_reward_models import (
     RewardModelType,
 )
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
+    continuous_push_pinned_kwargs,
+    push_pinned_kwargs,
+)
 
 
 _BATCH_SIZE = 2000
@@ -70,16 +74,18 @@ def _build_discrete_env(variant: RewardModelType) -> PushPOMDP:
     """Build a discrete :class:`PushPOMDP` with the requested reward variant."""
     return PushPOMDP(
         discount_factor=0.95,
-        grid_size=10,
-        dangerous_areas=_DANGEROUS_AREAS_DISCRETE,
-        dangerous_area_radius=_DANGEROUS_AREA_RADIUS,
-        dangerous_area_penalty=_DANGEROUS_AREA_PENALTY,
-        dangerous_area_hit_probability=1.0,
-        reward_model_type=variant,
-        penalty_decay=(
-            _PENALTY_DECAY_BY_VARIANT[variant]
-            if variant == RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY
-            else 1.0
+        **push_pinned_kwargs(
+            grid_size=10,
+            dangerous_areas=_DANGEROUS_AREAS_DISCRETE,
+            dangerous_area_radius=_DANGEROUS_AREA_RADIUS,
+            dangerous_area_penalty=_DANGEROUS_AREA_PENALTY,
+            dangerous_area_hit_probability=1.0,
+            reward_model_type=variant,
+            penalty_decay=(
+                _PENALTY_DECAY_BY_VARIANT[variant]
+                if variant == RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY
+                else 1.0
+            ),
         ),
     )
 
@@ -88,16 +94,18 @@ def _build_continuous_env(variant: RewardModelType) -> ContinuousPushPOMDP:
     """Build a continuous :class:`ContinuousPushPOMDP` with the requested variant."""
     return ContinuousPushPOMDP(
         discount_factor=0.95,
-        grid_size=10,
-        dangerous_areas=_DANGEROUS_AREAS_CONTINUOUS,
-        dangerous_area_radius=_DANGEROUS_AREA_RADIUS,
-        dangerous_area_penalty=_DANGEROUS_AREA_PENALTY,
-        dangerous_area_hit_probability=1.0,
-        reward_model_type=variant,
-        penalty_decay=(
-            _PENALTY_DECAY_BY_VARIANT[variant]
-            if variant == RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY
-            else 1.0
+        **continuous_push_pinned_kwargs(
+            grid_size=10,
+            dangerous_areas=_DANGEROUS_AREAS_CONTINUOUS,
+            dangerous_area_radius=_DANGEROUS_AREA_RADIUS,
+            dangerous_area_penalty=_DANGEROUS_AREA_PENALTY,
+            dangerous_area_hit_probability=1.0,
+            reward_model_type=variant,
+            penalty_decay=(
+                _PENALTY_DECAY_BY_VARIANT[variant]
+                if variant == RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY
+                else 1.0
+            ),
         ),
     )
 

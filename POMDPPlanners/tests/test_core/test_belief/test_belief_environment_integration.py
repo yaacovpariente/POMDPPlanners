@@ -45,6 +45,16 @@ from POMDPPlanners.environments import (
 )
 from POMDPPlanners.environments.pacman_pomdp import create_simple_maze_pacman
 from POMDPPlanners.environments.rock_sample_pomdp import create_random_rock_sample
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
+    cartpole_pinned_kwargs,
+    continuous_light_dark_discrete_actions_pinned_kwargs,
+    discrete_light_dark_pinned_kwargs,
+    laser_tag_pinned_kwargs,
+    mountain_car_pinned_kwargs,
+    push_pinned_kwargs,
+    safety_ant_velocity_pinned_kwargs,
+    tiger_pinned_kwargs,
+)
 from POMDPPlanners.tests.test_utils.metric_invariants_utils import (
     verify_belief_invariants,
 )
@@ -54,7 +64,7 @@ NUM_STATE_UPDATE_PARTICLES = 3
 
 
 def _make_tiger():
-    return TigerPOMDP(discount_factor=0.95)
+    return TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs())
 
 
 def _make_sanity():
@@ -62,27 +72,32 @@ def _make_sanity():
 
 
 def _make_cartpole():
-    return CartPolePOMDP(discount_factor=0.95, noise_cov=np.eye(4) * 0.1)
+    return CartPolePOMDP(
+        discount_factor=0.95, noise_cov=np.eye(4) * 0.1, **cartpole_pinned_kwargs()
+    )
 
 
 def _make_mountain_car():
-    return MountainCarPOMDP(discount_factor=0.95)
+    return MountainCarPOMDP(discount_factor=0.95, **mountain_car_pinned_kwargs())
 
 
 def _make_continuous_light_dark():
-    return ContinuousLightDarkPOMDPDiscreteActions(discount_factor=0.95)
+    return ContinuousLightDarkPOMDPDiscreteActions(
+        discount_factor=0.95,
+        **continuous_light_dark_discrete_actions_pinned_kwargs(),
+    )
 
 
 def _make_discrete_light_dark():
-    return DiscreteLightDarkPOMDP(discount_factor=0.95)
+    return DiscreteLightDarkPOMDP(discount_factor=0.95, **discrete_light_dark_pinned_kwargs())
 
 
 def _make_push():
-    return PushPOMDP(discount_factor=0.95)
+    return PushPOMDP(discount_factor=0.95, **push_pinned_kwargs())
 
 
 def _make_laser_tag():
-    return LaserTagPOMDP(discount_factor=0.95)
+    return LaserTagPOMDP(discount_factor=0.95, **laser_tag_pinned_kwargs())
 
 
 def _make_pacman():
@@ -94,7 +109,7 @@ def _make_rock_sample():
 
 
 def _make_safe_ant_velocity():
-    return SafeAntVelocityPOMDP(discount_factor=0.95)
+    return SafeAntVelocityPOMDP(discount_factor=0.95, **safety_ant_velocity_pinned_kwargs())
 
 
 ENV_FACTORIES = [
@@ -288,8 +303,10 @@ def _make_continuous_light_dark_with_cov():
     R = 0.1 * np.eye(2)
     env = ContinuousLightDarkPOMDPDiscreteActions(
         discount_factor=0.95,
-        state_transition_cov_matrix=Q,
-        observation_cov_matrix=R,
+        **continuous_light_dark_discrete_actions_pinned_kwargs(
+            state_transition_cov_matrix=Q,
+            observation_cov_matrix=R,
+        ),
     )
     return env, Q, R
 

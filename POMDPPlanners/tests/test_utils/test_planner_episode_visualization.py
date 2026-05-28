@@ -18,6 +18,10 @@ from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp imp
 )
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
+    cartpole_pinned_kwargs,
+    continuous_light_dark_pinned_kwargs,
+)
 from POMDPPlanners.utils.planner_episode_visualization import visualize_planner_episode
 
 np.random.seed(42)
@@ -532,8 +536,17 @@ class TestVisualizePlannerEpisode:
         noise_cov = np.eye(4) * 0.01  # 4x4 identity matrix with small noise
         environments = [
             TigerPOMDP(discount_factor=0.95, name="TigerPOMDP"),
-            ContinuousLightDarkPOMDP(discount_factor=0.95, name="LightDarkPOMDP"),
-            CartPolePOMDP(discount_factor=0.95, noise_cov=noise_cov, name="CartPolePOMDP"),
+            ContinuousLightDarkPOMDP(
+                discount_factor=0.95,
+                name="LightDarkPOMDP",
+                **continuous_light_dark_pinned_kwargs(),
+            ),
+            CartPolePOMDP(
+                discount_factor=0.95,
+                noise_cov=noise_cov,
+                name="CartPolePOMDP",
+                **cartpole_pinned_kwargs(),
+            ),
         ]
 
         # Mock cache_visualization for all environments to avoid file I/O

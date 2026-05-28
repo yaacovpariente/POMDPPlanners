@@ -13,6 +13,11 @@ from POMDPPlanners.core.belief.particle_beliefs import WeightedParticleBelief
 from POMDPPlanners.core.belief.vectorized_weighted_particle_belief import (
     VectorizedWeightedParticleBelief,
 )
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
+    cartpole_pinned_kwargs,
+    continuous_light_dark_pinned_kwargs,
+    mountain_car_pinned_kwargs,
+)
 from POMDPPlanners.tests.test_utils.metric_invariants_utils import (
     verify_belief_invariants,
 )
@@ -35,14 +40,18 @@ def tiger_env():
 def cartpole_env():
     from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
 
-    return CartPolePOMDP(discount_factor=0.99, noise_cov=np.diag([0.1, 0.1, 0.1, 0.1]))
+    return CartPolePOMDP(
+        discount_factor=0.99,
+        noise_cov=np.diag([0.1, 0.1, 0.1, 0.1]),
+        **cartpole_pinned_kwargs(),
+    )
 
 
 @pytest.fixture
 def mountain_car_env():
     from POMDPPlanners.environments.mountain_car_pomdp import MountainCarPOMDP
 
-    return MountainCarPOMDP(discount_factor=0.99)
+    return MountainCarPOMDP(discount_factor=0.99, **mountain_car_pinned_kwargs())
 
 
 @pytest.fixture
@@ -51,7 +60,7 @@ def light_dark_env():
         ContinuousLightDarkPOMDP,
     )
 
-    return ContinuousLightDarkPOMDP(discount_factor=0.95)
+    return ContinuousLightDarkPOMDP(discount_factor=0.95, **continuous_light_dark_pinned_kwargs())
 
 
 # ---------------------------------------------------------------------------

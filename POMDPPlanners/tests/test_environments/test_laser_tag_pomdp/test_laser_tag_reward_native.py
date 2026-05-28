@@ -30,6 +30,9 @@ from POMDPPlanners.environments.laser_tag_pomdp import _native
 from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_utils.laser_tag_reward_models import (
     LaserTagRewardModel,
 )
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
+    laser_tag_pinned_kwargs as _lt_pinned_kwargs,
+)
 
 
 def _reference_reward_batch_python(
@@ -97,7 +100,7 @@ def _build_state_batch() -> np.ndarray:
 @pytest.fixture(name="default_env")
 def _default_env_fixture() -> LaserTagPOMDP:
     """Default LaserTag env (uses the built-in dangerous_areas + walls)."""
-    return LaserTagPOMDP(discount_factor=0.95)
+    return LaserTagPOMDP(discount_factor=0.95, **_lt_pinned_kwargs())
 
 
 @pytest.fixture(name="explicit_env")
@@ -105,7 +108,7 @@ def _explicit_env_fixture() -> LaserTagPOMDP:
     """LaserTag env with an explicit dangerous_areas set ({(2,3),(5,5)})."""
     return LaserTagPOMDP(
         discount_factor=0.95,
-        dangerous_areas={(2, 3), (5, 5)},
+        **_lt_pinned_kwargs(dangerous_areas={(2, 3), (5, 5)}),
     )
 
 

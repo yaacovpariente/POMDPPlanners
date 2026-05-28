@@ -28,6 +28,11 @@ from POMDPPlanners.planners.planners_utils.dpw import (
     ucb1_exploration,
 )
 from POMDPPlanners.planners.planners_utils.rollout import random_rollout_action_sampler
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
+    continuous_light_dark_discrete_actions_pinned_kwargs,
+    continuous_light_dark_pinned_kwargs,
+    sanity_pinned_kwargs,
+)
 from POMDPPlanners.utils.action_samplers import UnitCircleActionSampler
 
 np.random.seed(42)
@@ -699,7 +704,7 @@ def test_belief_node_data_structure(planner, belief):
 @pytest.mark.slow
 def test_sanity_pomdp_action_selection():
     """Test POMCP_DPW with SanityPOMDP to verify correct action selection."""
-    environment = SanityPOMDP()
+    environment = SanityPOMDP(discount_factor=0.95, **sanity_pinned_kwargs())
     action_sampler = MockActionSampler([0, 1])
 
     planner = POMCP_DPW(
@@ -974,18 +979,20 @@ def test_numpy_array_observation_comparison():
     environment = ContinuousLightDarkPOMDPDiscreteActions(
         discount_factor=0.95,
         name="TestObservationComparison",
-        state_transition_cov_matrix=np.eye(2) * 0.1,
-        observation_cov_matrix=np.eye(2) * 0.5,
-        beacons=[(0, 0)],  # List of tuples as expected
-        goal_state=np.array([1, 1]),
-        start_state=np.array([0, 0]),
-        obstacles=[(0.5, 0.5)],  # Add one obstacle to avoid broadcasting issues
-        goal_reward=1.0,
-        fuel_cost=0.1,
-        grid_size=2,
-        goal_state_radius=0.5,
-        beacon_radius=1.0,
-        reward_model_type=RewardModelType.CONSTANT_HAZARD_PENALTY,
+        **continuous_light_dark_discrete_actions_pinned_kwargs(
+            state_transition_cov_matrix=np.eye(2) * 0.1,
+            observation_cov_matrix=np.eye(2) * 0.5,
+            beacons=[(0, 0)],  # List of tuples as expected
+            goal_state=np.array([1, 1]),
+            start_state=np.array([0, 0]),
+            obstacles=[(0.5, 0.5)],  # Add one obstacle to avoid broadcasting issues
+            goal_reward=1.0,
+            fuel_cost=0.1,
+            grid_size=2,
+            goal_state_radius=0.5,
+            beacon_radius=1.0,
+            reward_model_type=RewardModelType.CONSTANT_HAZARD_PENALTY,
+        ),
     )
 
     # Test that the environment's is_equal_observation method works correctly
@@ -1098,9 +1105,11 @@ def test_pomcp_dpw_config_id_different_action_sampler_values():
     # Create continuous environment for testing
     continuous_environment = ContinuousLightDarkPOMDP(
         discount_factor=0.99,
-        goal_state=np.array([5, 0]),
-        start_state=np.array([0, 0]),
         name="TestContinuous",
+        **continuous_light_dark_pinned_kwargs(
+            goal_state=np.array([5, 0]),
+            start_state=np.array([0, 0]),
+        ),
     )
 
     # Create action samplers with different max_action_magnitude

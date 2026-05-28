@@ -20,6 +20,7 @@ from POMDPPlanners.environments.rock_sample_pomdp import (
     RockSampleState,
     create_rock_sample_state,
 )
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import rock_sample_pinned_kwargs
 
 
 class TestVisualization:
@@ -36,7 +37,7 @@ class TestVisualization:
 
         Test type: unit
         """
-        pomdp = RockSamplePOMDP()
+        pomdp = RockSamplePOMDP(discount_factor=0.95, **rock_sample_pinned_kwargs())
         state = create_rock_sample_state((0, 0), (True, False))
 
         with pytest.raises(TypeError, match="cache_path must be a Path object"):
@@ -56,7 +57,7 @@ class TestVisualization:
 
         Test type: unit
         """
-        pomdp = RockSamplePOMDP()
+        pomdp = RockSamplePOMDP(discount_factor=0.95, **rock_sample_pinned_kwargs())
         empty_history = History(
             history=[],
             discount_factor=0.95,
@@ -88,7 +89,7 @@ class TestVisualization:
 
         Test type: unit
         """
-        pomdp = RockSamplePOMDP()
+        pomdp = RockSamplePOMDP(discount_factor=0.95, **rock_sample_pinned_kwargs())
 
         # Create history with steps
         state1 = create_rock_sample_state((0, 0), (True, False))

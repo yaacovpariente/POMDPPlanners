@@ -33,6 +33,9 @@ from POMDPPlanners.planners.mcts_planners.beta_zero import BetaZero
 from POMDPPlanners.planners.mcts_planners.beta_zero.beta_zero_action_sampler import (
     BetaZeroActionSampler,
 )
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
+    discrete_light_dark_pinned_kwargs,
+)
 from POMDPPlanners.utils.action_samplers import DiscreteActionSampler
 
 # Set seeds for reproducible tests
@@ -45,7 +48,9 @@ class TestPlannerSerialization:
     def setup_method(self):
         """Set up test environments for each test."""
         self.tiger_env = TigerPOMDP(discount_factor=0.95)
-        self.light_dark_env = DiscreteLightDarkPOMDP(discount_factor=0.95)
+        self.light_dark_env = DiscreteLightDarkPOMDP(
+            discount_factor=0.95, **discrete_light_dark_pinned_kwargs()
+        )
 
     def _test_planner_serialization(self, planner_class: type, init_params: Dict[str, Any]) -> None:
         """Helper method to test planner serialization.

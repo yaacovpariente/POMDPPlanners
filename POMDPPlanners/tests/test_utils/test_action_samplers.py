@@ -23,6 +23,9 @@ from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp imp
     ContinuousLightDarkPOMDP,
 )
 from POMDPPlanners.planners.mcts_planners.pft_dpw import PFT_DPW
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
+    continuous_light_dark_pinned_kwargs,
+)
 from POMDPPlanners.utils.action_samplers import (
     DiscreteActionSampler,
     UnitCircleActionSampler,
@@ -353,9 +356,11 @@ class TestUnitCircleActionSampler:
         # Create environment
         env = ContinuousLightDarkPOMDP(
             discount_factor=0.99,
-            goal_state=np.array([5, 0]),
-            start_state=np.array([0, 0]),
             name="TestContinuousLightDark",
+            **continuous_light_dark_pinned_kwargs(
+                goal_state=np.array([5, 0]),
+                start_state=np.array([0, 0]),
+            ),
         )
 
         # Create action sampler
@@ -588,8 +593,10 @@ class TestUsageExamples:
         # Create 2D navigation environment (reduced size for testing)
         nav_env = ContinuousLightDarkPOMDP(
             discount_factor=0.99,
-            goal_state=np.array([10, 0]),
-            start_state=np.array([0, 0]),
+            **continuous_light_dark_pinned_kwargs(
+                goal_state=np.array([10, 0]),
+                start_state=np.array([0, 0]),
+            ),
         )
 
         # Create unit circle action sampler

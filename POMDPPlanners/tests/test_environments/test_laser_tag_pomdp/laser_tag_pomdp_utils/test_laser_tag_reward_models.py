@@ -22,6 +22,9 @@ from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_utils.laser_tag_
     LaserTagZeroMeanHazardShockRewardModel,
     LaserTagRewardModel,
 )
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
+    laser_tag_pinned_kwargs as _lt_pinned_kwargs,
+)
 
 
 # Default ``LaserTagPOMDP`` walls / danger areas / radii — referenced by the
@@ -320,7 +323,10 @@ class TestLaserTagPOMDPRewardModelTypeWiring:
 
         Test type: unit
         """
-        env = LaserTagPOMDP(discount_factor=0.95, reward_model_type=rmt, penalty_decay=2.0)
+        env = LaserTagPOMDP(
+            discount_factor=0.95,
+            **_lt_pinned_kwargs(reward_model_type=rmt, penalty_decay=2.0),
+        )
         assert isinstance(env.reward_model, expected_cls)
 
     def test_env_default_reward_model_is_standard(self):
@@ -337,7 +343,7 @@ class TestLaserTagPOMDPRewardModelTypeWiring:
 
         Test type: unit
         """
-        env = LaserTagPOMDP(discount_factor=0.95)
+        env = LaserTagPOMDP(discount_factor=0.95, **_lt_pinned_kwargs())
         assert (
             type(env.reward_model) is LaserTagRewardModel
         )  # pylint: disable=unidiomatic-typecheck

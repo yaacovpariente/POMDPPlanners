@@ -23,6 +23,7 @@ from POMDPPlanners.environments.cartpole_pomdp import (
     CartPolePOMDP,
     _native,
 )
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import cartpole_pinned_kwargs
 
 # Set seeds for reproducible tests
 np.random.seed(42)
@@ -33,7 +34,7 @@ random.seed(42)
 def base_cartpole_environment() -> CartPolePOMDP:
     """Fixture providing a base CartPolePOMDP environment for comparison."""
     noise_cov = np.eye(4) * 0.1
-    return CartPolePOMDP(discount_factor=0.95, noise_cov=noise_cov)
+    return CartPolePOMDP(discount_factor=0.95, noise_cov=noise_cov, **cartpole_pinned_kwargs())
 
 
 class TestCartPolePOMDPEquality:
@@ -51,7 +52,9 @@ class TestCartPolePOMDPEquality:
         Test type: unit
         """
         other_env = CartPolePOMDP(
-            discount_factor=0.95, noise_cov=base_cartpole_environment.noise_cov
+            discount_factor=0.95,
+            noise_cov=base_cartpole_environment.noise_cov,
+            **cartpole_pinned_kwargs(),
         )
         assert base_cartpole_environment == other_env
         assert other_env == base_cartpole_environment  # Test symmetry
@@ -68,7 +71,9 @@ class TestCartPolePOMDPEquality:
         Test type: unit
         """
         other_env = CartPolePOMDP(
-            discount_factor=0.8, noise_cov=base_cartpole_environment.noise_cov
+            discount_factor=0.8,
+            noise_cov=base_cartpole_environment.noise_cov,
+            **cartpole_pinned_kwargs(),
         )
         assert base_cartpole_environment != other_env
         assert other_env != base_cartpole_environment  # Test symmetry
@@ -85,8 +90,7 @@ class TestCartPolePOMDPEquality:
         Test type: unit
         """
         other_env = CartPolePOMDP(
-            discount_factor=0.95,
-            noise_cov=np.eye(4) * 0.2,  # Different noise covariance
+            discount_factor=0.95, noise_cov=np.eye(4) * 0.2, **cartpole_pinned_kwargs()
         )
         assert base_cartpole_environment != other_env
         assert other_env != base_cartpole_environment  # Test symmetry
@@ -103,13 +107,17 @@ class TestCartPolePOMDPEquality:
         Test type: unit
         """
         other_env = CartPolePOMDP(
-            discount_factor=0.95, noise_cov=base_cartpole_environment.noise_cov
+            discount_factor=0.95,
+            noise_cov=base_cartpole_environment.noise_cov,
+            **cartpole_pinned_kwargs(),
         )
         other_env.gravity = 10.0  # Different gravity
         assert base_cartpole_environment != other_env
 
         other_env = CartPolePOMDP(
-            discount_factor=0.95, noise_cov=base_cartpole_environment.noise_cov
+            discount_factor=0.95,
+            noise_cov=base_cartpole_environment.noise_cov,
+            **cartpole_pinned_kwargs(),
         )
         other_env.masscart = 2.0  # Different cart mass
         assert base_cartpole_environment != other_env
@@ -141,13 +149,17 @@ class TestCartPolePOMDPEquality:
         Test type: unit
         """
         other_env = CartPolePOMDP(
-            discount_factor=0.95, noise_cov=base_cartpole_environment.noise_cov
+            discount_factor=0.95,
+            noise_cov=base_cartpole_environment.noise_cov,
+            **cartpole_pinned_kwargs(),
         )
         delattr(other_env, "gravity")
         assert base_cartpole_environment != other_env
 
         other_env = CartPolePOMDP(
-            discount_factor=0.95, noise_cov=base_cartpole_environment.noise_cov
+            discount_factor=0.95,
+            noise_cov=base_cartpole_environment.noise_cov,
+            **cartpole_pinned_kwargs(),
         )
         delattr(other_env, "masscart")
         assert base_cartpole_environment != other_env
@@ -183,7 +195,9 @@ class TestCartPolePOMDPConfigId:
         Test type: configuration
         """
         other_env = CartPolePOMDP(
-            discount_factor=0.95, noise_cov=base_cartpole_environment.noise_cov
+            discount_factor=0.95,
+            noise_cov=base_cartpole_environment.noise_cov,
+            **cartpole_pinned_kwargs(),
         )
         assert base_cartpole_environment.config_id == other_env.config_id
 
@@ -199,7 +213,9 @@ class TestCartPolePOMDPConfigId:
         Test type: configuration
         """
         other_env = CartPolePOMDP(
-            discount_factor=0.8, noise_cov=base_cartpole_environment.noise_cov
+            discount_factor=0.8,
+            noise_cov=base_cartpole_environment.noise_cov,
+            **cartpole_pinned_kwargs(),
         )
         assert base_cartpole_environment.config_id != other_env.config_id
 
@@ -215,8 +231,7 @@ class TestCartPolePOMDPConfigId:
         Test type: configuration
         """
         other_env = CartPolePOMDP(
-            discount_factor=0.95,
-            noise_cov=np.eye(4) * 0.2,  # Different noise covariance
+            discount_factor=0.95, noise_cov=np.eye(4) * 0.2, **cartpole_pinned_kwargs()
         )
         assert base_cartpole_environment.config_id != other_env.config_id
 
@@ -234,13 +249,17 @@ class TestCartPolePOMDPConfigId:
         Test type: configuration
         """
         other_env = CartPolePOMDP(
-            discount_factor=0.95, noise_cov=base_cartpole_environment.noise_cov
+            discount_factor=0.95,
+            noise_cov=base_cartpole_environment.noise_cov,
+            **cartpole_pinned_kwargs(),
         )
         other_env.gravity = 10.0  # Different gravity
         assert base_cartpole_environment.config_id != other_env.config_id
 
         other_env = CartPolePOMDP(
-            discount_factor=0.95, noise_cov=base_cartpole_environment.noise_cov
+            discount_factor=0.95,
+            noise_cov=base_cartpole_environment.noise_cov,
+            **cartpole_pinned_kwargs(),
         )
         other_env.masscart = 2.0  # Different cart mass
         assert base_cartpole_environment.config_id != other_env.config_id
@@ -379,7 +398,7 @@ def test_state_transition_default_covariance():
 
     Test type: unit
     """
-    env = CartPolePOMDP(discount_factor=0.95, noise_cov=np.eye(4) * 0.1)
+    env = CartPolePOMDP(discount_factor=0.95, noise_cov=np.eye(4) * 0.1, **cartpole_pinned_kwargs())
     np.testing.assert_array_equal(
         env.state_transition_cov, CartPolePOMDP.DEFAULT_STATE_TRANSITION_COV
     )
@@ -401,7 +420,7 @@ def test_state_transition_custom_covariance():
     env = CartPolePOMDP(
         discount_factor=0.95,
         noise_cov=np.eye(4) * 0.1,
-        state_transition_cov=custom_cov,
+        **cartpole_pinned_kwargs(state_transition_cov=custom_cov),
     )
     np.testing.assert_array_equal(env.state_transition_cov, custom_cov)
 
@@ -457,7 +476,7 @@ def test_cartpole_pomdp_initialization():
     # Test POMDP initialization
     noise_cov = np.eye(4) * 0.1
 
-    env = CartPolePOMDP(discount_factor=0.95, noise_cov=noise_cov)
+    env = CartPolePOMDP(discount_factor=0.95, noise_cov=noise_cov, **cartpole_pinned_kwargs())
 
     # Verify parameters
     assert np.array_equal(env.noise_cov, noise_cov)
@@ -479,7 +498,7 @@ def test_cartpole_pomdp_reward():
     Test type: unit
     """
     # Test reward function
-    env = CartPolePOMDP(discount_factor=0.95, noise_cov=np.eye(4) * 0.1)
+    env = CartPolePOMDP(discount_factor=0.95, noise_cov=np.eye(4) * 0.1, **cartpole_pinned_kwargs())
 
     # Test non-terminal state
     state = np.array([0.0, 0.0, 0.0, 0.0])
@@ -505,7 +524,7 @@ def test_cartpole_pomdp_terminal():
     Test type: unit
     """
     # Test terminal state detection
-    env = CartPolePOMDP(discount_factor=0.95, noise_cov=np.eye(4) * 0.1)
+    env = CartPolePOMDP(discount_factor=0.95, noise_cov=np.eye(4) * 0.1, **cartpole_pinned_kwargs())
 
     # Test non-terminal state
     state = np.array([0.0, 0.0, 0.0, 0.0])
@@ -535,7 +554,7 @@ def test_cartpole_pomdp_models():
 
     Test type: unit
     """
-    env = CartPolePOMDP(discount_factor=0.95, noise_cov=np.eye(4) * 0.1)
+    env = CartPolePOMDP(discount_factor=0.95, noise_cov=np.eye(4) * 0.1, **cartpole_pinned_kwargs())
     state = np.array([0.0, 0.0, 0.0, 0.0])
     action = 0
 
@@ -573,7 +592,7 @@ def test_cartpole_observation_model_probability_shape_single_observation():
     true_state = np.array([0.1, 0.05, 0.02, -0.1])
     action = 1
     noise_cov = np.diag([0.1, 0.1, 0.1, 0.1])
-    env = CartPolePOMDP(discount_factor=0.95, noise_cov=noise_cov)
+    env = CartPolePOMDP(discount_factor=0.95, noise_cov=noise_cov, **cartpole_pinned_kwargs())
 
     # Create single observation
     observation = np.array([0.12, 0.06, 0.025, -0.09])
@@ -611,7 +630,7 @@ def test_cartpole_observation_model_probability_shape_multiple_observations():
     true_state = np.array([0.1, 0.05, 0.02, -0.1])
     action = 1
     noise_cov = np.diag([0.1, 0.1, 0.1, 0.1])
-    env = CartPolePOMDP(discount_factor=0.95, noise_cov=noise_cov)
+    env = CartPolePOMDP(discount_factor=0.95, noise_cov=noise_cov, **cartpole_pinned_kwargs())
 
     # Create multiple observations
     observations = [
@@ -658,7 +677,7 @@ def test_cartpole_observation_model_probability_empty_list():
     true_state = np.array([0.1, 0.05, 0.02, -0.1])
     action = 1
     noise_cov = np.diag([0.1, 0.1, 0.1, 0.1])
-    env = CartPolePOMDP(discount_factor=0.95, noise_cov=noise_cov)
+    env = CartPolePOMDP(discount_factor=0.95, noise_cov=noise_cov, **cartpole_pinned_kwargs())
 
     # ACT: Get probability for empty list via env-level API
     probs = np.exp(
@@ -688,7 +707,7 @@ def test_cartpole_observation_model_probability_values_reasonable():
     true_state = np.array([0.1, 0.05, 0.02, -0.1])
     action = 1
     noise_cov = np.diag([0.1, 0.1, 0.1, 0.1])
-    env = CartPolePOMDP(discount_factor=0.95, noise_cov=noise_cov)
+    env = CartPolePOMDP(discount_factor=0.95, noise_cov=noise_cov, **cartpole_pinned_kwargs())
 
     # Create observations: one close to true state, one far
     close_obs = true_state + np.array([0.01, 0.01, 0.01, 0.01])  # Small deviation
@@ -721,7 +740,7 @@ def test_get_metric_names():
     Test type: unit
     """
     noise_cov = np.eye(4) * 0.1
-    env = CartPolePOMDP(discount_factor=0.95, noise_cov=noise_cov)
+    env = CartPolePOMDP(discount_factor=0.95, noise_cov=noise_cov, **cartpole_pinned_kwargs())
     metric_names = env.get_metric_names()
     assert "goal_reaching_rate" in metric_names
     assert len(metric_names) == 1
@@ -742,7 +761,7 @@ def test_compute_metrics_goal_reaching():
     from POMDPPlanners.core.simulation import History, StepData
 
     noise_cov = np.eye(4) * 0.1
-    env = CartPolePOMDP(discount_factor=0.95, noise_cov=noise_cov)
+    env = CartPolePOMDP(discount_factor=0.95, noise_cov=noise_cov, **cartpole_pinned_kwargs())
 
     # Create a simple belief for testing
     def create_test_belief(state):
@@ -869,9 +888,7 @@ def test_compute_metrics_values_within_confidence_intervals():
     from POMDPPlanners.core.belief import (  # pylint: disable=import-outside-toplevel
         WeightedParticleBelief,
     )
-    from POMDPPlanners.core.policy import (  # pylint: disable=import-outside-toplevel
-        PolicyRunData,
-    )
+    from POMDPPlanners.core.policy import PolicyRunData  # pylint: disable=import-outside-toplevel
     from POMDPPlanners.core.simulation import (  # pylint: disable=import-outside-toplevel
         History,
         StepData,
@@ -886,7 +903,7 @@ def test_compute_metrics_values_within_confidence_intervals():
     )
 
     noise_cov = np.eye(4) * 0.1
-    env = CartPolePOMDP(discount_factor=0.95, noise_cov=noise_cov)
+    env = CartPolePOMDP(discount_factor=0.95, noise_cov=noise_cov, **cartpole_pinned_kwargs())
 
     def _make_belief(state: np.ndarray) -> WeightedParticleBelief:
         return WeightedParticleBelief(
@@ -1004,7 +1021,9 @@ def test_reward_batch_matches_scalar_reward():
 
     Test type: unit
     """
-    env = CartPolePOMDP(discount_factor=0.95, noise_cov=np.diag([0.1, 0.1, 0.1, 0.1]))
+    env = CartPolePOMDP(
+        discount_factor=0.95, noise_cov=np.diag([0.1, 0.1, 0.1, 0.1]), **cartpole_pinned_kwargs()
+    )
     np.random.seed(42)
     states = np.random.randn(100, 4)
     action = 1
@@ -1047,7 +1066,9 @@ def test_simulate_random_rollout_native_matches_base_class_python() -> None:
         python_random_rollout,
     )  # pylint: disable=import-outside-toplevel
 
-    env = CartPolePOMDP(discount_factor=0.99, noise_cov=np.diag([0.1, 0.1, 0.1, 0.1]))
+    env = CartPolePOMDP(
+        discount_factor=0.99, noise_cov=np.diag([0.1, 0.1, 0.1, 0.1]), **cartpole_pinned_kwargs()
+    )
     state = np.array([0.0, 0.0, 0.0, 0.0], dtype=np.float64)
     max_depth = 10
     gamma = 0.95
@@ -1123,7 +1144,9 @@ def test_scalar_obs_log_prob_un_floored_matches_batch_after_fix() -> None:
 
     Test type: unit
     """
-    env = CartPolePOMDP(discount_factor=0.95, noise_cov=np.eye(4) * 0.01)
+    env = CartPolePOMDP(
+        discount_factor=0.95, noise_cov=np.eye(4) * 0.01, **cartpole_pinned_kwargs()
+    )
     next_state = np.zeros(4)
     action = 0
     observation = np.array([1.87, 1.87, 1.87, 1.87])
@@ -1162,7 +1185,7 @@ def test_initial_observation_dist_applies_obs_noise() -> None:
     """
     np.random.seed(0)
     noise_cov = np.eye(4) * 0.04
-    env = CartPolePOMDP(discount_factor=0.95, noise_cov=noise_cov)
+    env = CartPolePOMDP(discount_factor=0.95, noise_cov=noise_cov, **cartpole_pinned_kwargs())
 
     samples = np.asarray(env.initial_observation_dist().sample(n_samples=5000))
 
@@ -1191,7 +1214,7 @@ def test_is_equal_observation_tolerates_float_roundoff() -> None:
 
     Test type: unit
     """
-    env = CartPolePOMDP(discount_factor=0.95, noise_cov=np.eye(4) * 0.1)
+    env = CartPolePOMDP(discount_factor=0.95, noise_cov=np.eye(4) * 0.1, **cartpole_pinned_kwargs())
     a = np.array([0.1, -0.2, 0.03, -0.04])
     a_copy = a.copy()
     a_eps = a + 1e-12

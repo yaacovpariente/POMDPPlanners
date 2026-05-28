@@ -56,73 +56,99 @@ from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp import RockS
 from POMDPPlanners.environments.safety_ant_velocity_pomdp import SafeAntVelocityPOMDP
 from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
+    cartpole_pinned_kwargs,
+    continuous_laser_tag_discrete_actions_pinned_kwargs,
+    continuous_laser_tag_pinned_kwargs,
+    continuous_light_dark_discrete_actions_pinned_kwargs,
+    continuous_light_dark_pinned_kwargs,
+    continuous_push_discrete_actions_pinned_kwargs,
+    continuous_push_pinned_kwargs,
+    discrete_light_dark_pinned_kwargs,
+    laser_tag_pinned_kwargs,
+    mountain_car_pinned_kwargs,
+    pacman_pinned_kwargs,
+    push_pinned_kwargs,
+    rock_sample_pinned_kwargs,
+    safety_ant_velocity_pinned_kwargs,
+    sanity_pinned_kwargs,
+    tiger_pinned_kwargs,
+)
 
 
 EnvBuilder = Callable[[], Environment]
 
 
 def _build_tiger() -> TigerPOMDP:
-    return TigerPOMDP(discount_factor=0.95)
+    return TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs())
 
 
 def _build_sanity() -> SanityPOMDP:
-    return SanityPOMDP(discount_factor=0.95)
+    return SanityPOMDP(discount_factor=0.95, **sanity_pinned_kwargs())
 
 
 def _build_cartpole() -> CartPolePOMDP:
-    return CartPolePOMDP(discount_factor=0.95, noise_cov=np.eye(4) * 0.1)
+    return CartPolePOMDP(
+        discount_factor=0.95, noise_cov=np.eye(4) * 0.1, **cartpole_pinned_kwargs()
+    )
 
 
 def _build_mountain_car() -> MountainCarPOMDP:
-    return MountainCarPOMDP(discount_factor=0.95)
+    return MountainCarPOMDP(discount_factor=0.95, **mountain_car_pinned_kwargs())
 
 
 def _build_push() -> PushPOMDP:
-    return PushPOMDP(discount_factor=0.95)
+    return PushPOMDP(discount_factor=0.95, **push_pinned_kwargs())
 
 
 def _build_continuous_push() -> ContinuousPushPOMDP:
-    return ContinuousPushPOMDP(discount_factor=0.95)
+    return ContinuousPushPOMDP(discount_factor=0.95, **continuous_push_pinned_kwargs())
 
 
 def _build_continuous_push_discrete() -> ContinuousPushPOMDPDiscreteActions:
-    return ContinuousPushPOMDPDiscreteActions(discount_factor=0.95)
+    return ContinuousPushPOMDPDiscreteActions(
+        discount_factor=0.95, **continuous_push_discrete_actions_pinned_kwargs()
+    )
 
 
 def _build_rock_sample() -> RockSamplePOMDP:
-    return RockSamplePOMDP(discount_factor=0.95)
+    return RockSamplePOMDP(discount_factor=0.95, **rock_sample_pinned_kwargs())
 
 
 def _build_discrete_light_dark() -> DiscreteLightDarkPOMDP:
-    return DiscreteLightDarkPOMDP(discount_factor=0.95)
+    return DiscreteLightDarkPOMDP(discount_factor=0.95, **discrete_light_dark_pinned_kwargs())
 
 
 def _build_continuous_light_dark() -> ContinuousLightDarkPOMDP:
-    return ContinuousLightDarkPOMDP(discount_factor=0.95)
+    return ContinuousLightDarkPOMDP(discount_factor=0.95, **continuous_light_dark_pinned_kwargs())
 
 
 def _build_continuous_light_dark_discrete() -> ContinuousLightDarkPOMDPDiscreteActions:
-    return ContinuousLightDarkPOMDPDiscreteActions(discount_factor=0.95)
+    return ContinuousLightDarkPOMDPDiscreteActions(
+        discount_factor=0.95, **continuous_light_dark_discrete_actions_pinned_kwargs()
+    )
 
 
 def _build_pacman() -> PacManPOMDP:
-    return PacManPOMDP(discount_factor=0.95)
+    return PacManPOMDP(discount_factor=0.95, **pacman_pinned_kwargs())
 
 
 def _build_laser_tag() -> LaserTagPOMDP:
-    return LaserTagPOMDP(discount_factor=0.95)
+    return LaserTagPOMDP(discount_factor=0.95, **laser_tag_pinned_kwargs())
 
 
 def _build_continuous_laser_tag() -> ContinuousLaserTagPOMDP:
-    return ContinuousLaserTagPOMDP(discount_factor=0.95)
+    return ContinuousLaserTagPOMDP(discount_factor=0.95, **continuous_laser_tag_pinned_kwargs())
 
 
 def _build_continuous_laser_tag_discrete() -> ContinuousLaserTagPOMDPDiscreteActions:
-    return ContinuousLaserTagPOMDPDiscreteActions(discount_factor=0.95)
+    return ContinuousLaserTagPOMDPDiscreteActions(
+        discount_factor=0.95, **continuous_laser_tag_discrete_actions_pinned_kwargs()
+    )
 
 
 def _build_safety_ant() -> SafeAntVelocityPOMDP:
-    return SafeAntVelocityPOMDP(discount_factor=0.95)
+    return SafeAntVelocityPOMDP(discount_factor=0.95, **safety_ant_velocity_pinned_kwargs())
 
 
 # Registry of (env_id, builder). New envs added here are automatically

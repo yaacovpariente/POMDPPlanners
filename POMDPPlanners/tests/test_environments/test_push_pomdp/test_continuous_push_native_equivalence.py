@@ -25,6 +25,7 @@ import pytest
 from POMDPPlanners.environments.push_pomdp import _native
 from POMDPPlanners.environments.push_pomdp.continuous_push_pomdp import ContinuousPushPOMDP
 from POMDPPlanners.tests.test_environments import _native_parity
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import continuous_push_pinned_kwargs
 from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
 
 
@@ -61,8 +62,10 @@ def _make_observation_kernel(env: ContinuousPushPOMDP, next_state, action):
 def _env_fixture():
     return ContinuousPushPOMDP(
         discount_factor=0.99,
-        state_transition_cov_matrix=np.eye(2) * 0.01,
-        robot_radius=0.3,
+        **continuous_push_pinned_kwargs(
+            state_transition_cov_matrix=np.eye(2) * 0.01,
+            robot_radius=0.3,
+        ),
     )
 
 
@@ -473,7 +476,9 @@ def test_transition_push_mechanics_match_python_reference():
     # Use essentially zero noise so we can compare the push output directly.
     tiny_env = ContinuousPushPOMDP(
         discount_factor=0.99,
-        state_transition_cov_matrix=np.eye(2) * 1e-14,
+        **continuous_push_pinned_kwargs(
+            state_transition_cov_matrix=np.eye(2) * 1e-14,
+        ),
     )
     state = np.array([2.5, 3.1, 3.0, 3.0, 8.0, 8.0])  # dist ~0.51 < 1.0 threshold
     action = np.array([1.0, 0.0])

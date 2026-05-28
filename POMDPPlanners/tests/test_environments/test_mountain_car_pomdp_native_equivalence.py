@@ -23,12 +23,13 @@ import pytest
 
 from POMDPPlanners.environments.mountain_car_pomdp import MountainCarPOMDP, _native
 from POMDPPlanners.tests.test_environments import _native_parity
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import mountain_car_pinned_kwargs
 from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
 
 
 @pytest.fixture(name="env")
 def _env_fixture():
-    return MountainCarPOMDP(discount_factor=0.99)
+    return MountainCarPOMDP(discount_factor=0.99, **mountain_car_pinned_kwargs())
 
 
 def _build_transition(env: MountainCarPOMDP, state, action: int):

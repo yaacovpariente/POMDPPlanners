@@ -26,6 +26,12 @@ from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp imp
 from POMDPPlanners.environments.push_pomdp.push_pomdp import PushPOMDP
 from POMDPPlanners.planners.mcts_planners.pomcpow import POMCPOW
 from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
+    continuous_laser_tag_discrete_actions_pinned_kwargs,
+    continuous_light_dark_discrete_actions_pinned_kwargs,
+    laser_tag_pinned_kwargs,
+    push_pinned_kwargs,
+)
 
 
 np.random.seed(42)
@@ -46,19 +52,25 @@ class _DiscreteActionSampler(ActionSampler):
 
 
 def _make_continuous_light_dark():
-    return ContinuousLightDarkPOMDPDiscreteActions(discount_factor=0.95)
+    return ContinuousLightDarkPOMDPDiscreteActions(
+        discount_factor=0.95,
+        **continuous_light_dark_discrete_actions_pinned_kwargs(),
+    )
 
 
 def _make_continuous_laser_tag():
-    return ContinuousLaserTagPOMDPDiscreteActions(discount_factor=0.95)
+    return ContinuousLaserTagPOMDPDiscreteActions(
+        discount_factor=0.95,
+        **continuous_laser_tag_discrete_actions_pinned_kwargs(),
+    )
 
 
 def _make_laser_tag():
-    return LaserTagPOMDP(discount_factor=0.95)
+    return LaserTagPOMDP(discount_factor=0.95, **laser_tag_pinned_kwargs())
 
 
 def _make_push():
-    return PushPOMDP(discount_factor=0.95)
+    return PushPOMDP(discount_factor=0.95, **push_pinned_kwargs())
 
 
 # ---------------------------------------------------------------------------

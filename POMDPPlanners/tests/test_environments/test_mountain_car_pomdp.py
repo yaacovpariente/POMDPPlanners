@@ -17,6 +17,7 @@ import pytest
 import scipy.stats
 
 from POMDPPlanners.environments.mountain_car_pomdp import MountainCarPOMDP
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import mountain_car_pinned_kwargs
 
 # Set seeds for reproducible tests
 np.random.seed(42)
@@ -34,7 +35,7 @@ def test_mountain_car_initialization():
 
     Test type: unit
     """
-    pomdp = MountainCarPOMDP(discount_factor=0.95)
+    pomdp = MountainCarPOMDP(discount_factor=0.95, **mountain_car_pinned_kwargs())
     assert pomdp.min_position == -1.2
     assert pomdp.max_position == 0.6
     assert pomdp.max_speed == 0.07
@@ -158,7 +159,7 @@ def test_state_transition_default_covariance():
 
     Test type: unit
     """
-    env = MountainCarPOMDP(discount_factor=0.95)
+    env = MountainCarPOMDP(discount_factor=0.95, **mountain_car_pinned_kwargs())
     np.testing.assert_array_equal(
         env.state_transition_cov, MountainCarPOMDP.DEFAULT_STATE_TRANSITION_COV
     )
@@ -178,8 +179,7 @@ def test_state_transition_custom_covariance():
     """
     custom_cov = np.diag([1e-4, 1e-5])
     env = MountainCarPOMDP(
-        discount_factor=0.95,
-        state_transition_cov=custom_cov,
+        discount_factor=0.95, **mountain_car_pinned_kwargs(state_transition_cov=custom_cov)
     )
     np.testing.assert_array_equal(env.state_transition_cov, custom_cov)
 
@@ -582,7 +582,7 @@ def test_mountain_car_reward():
 
     Test type: unit
     """
-    pomdp = MountainCarPOMDP(discount_factor=0.95)
+    pomdp = MountainCarPOMDP(discount_factor=0.95, **mountain_car_pinned_kwargs())
 
     # Test reward when not at goal
     state = (0.0, 0.0)
@@ -611,7 +611,7 @@ def test_mountain_car_terminal():
 
     Test type: unit
     """
-    pomdp = MountainCarPOMDP(discount_factor=0.95)
+    pomdp = MountainCarPOMDP(discount_factor=0.95, **mountain_car_pinned_kwargs())
 
     # Test non-terminal state
     state = (0.0, 0.0)
@@ -637,7 +637,7 @@ def test_mountain_car_actions():
 
     Test type: unit
     """
-    pomdp = MountainCarPOMDP(discount_factor=0.95)
+    pomdp = MountainCarPOMDP(discount_factor=0.95, **mountain_car_pinned_kwargs())
     actions = pomdp.get_actions()
 
     assert len(actions) == 3
@@ -657,7 +657,7 @@ def test_reward_range():
 
     Test type: unit
     """
-    pomdp = MountainCarPOMDP(discount_factor=0.95)
+    pomdp = MountainCarPOMDP(discount_factor=0.95, **mountain_car_pinned_kwargs())
     assert pomdp.reward_range == (-1.0, 0.0)
 
     # Verify the actual rewards match the range
@@ -689,7 +689,7 @@ def test_mountain_car_state_bounds():
 
     Test type: unit
     """
-    pomdp = MountainCarPOMDP(discount_factor=0.95)
+    pomdp = MountainCarPOMDP(discount_factor=0.95, **mountain_car_pinned_kwargs())
 
     # Test position bounds
     state = (pomdp.min_position - 0.1, 0.0)
@@ -722,7 +722,7 @@ def base_mountain_car_environment() -> MountainCarPOMDP:
 
     Test type: fixture
     """
-    return MountainCarPOMDP(discount_factor=0.95)
+    return MountainCarPOMDP(discount_factor=0.95, **mountain_car_pinned_kwargs())
 
 
 class TestMountainCarPOMDPEquality:
@@ -748,7 +748,7 @@ class TestMountainCarPOMDPEquality:
 
         Test type: unit
         """
-        other_env = MountainCarPOMDP(discount_factor=0.95)
+        other_env = MountainCarPOMDP(discount_factor=0.95, **mountain_car_pinned_kwargs())
         assert base_mountain_car_environment == other_env
         assert other_env == base_mountain_car_environment  # Test symmetry
 
@@ -763,7 +763,7 @@ class TestMountainCarPOMDPEquality:
 
         Test type: unit
         """
-        other_env = MountainCarPOMDP(discount_factor=0.8)
+        other_env = MountainCarPOMDP(discount_factor=0.8, **mountain_car_pinned_kwargs())
         assert base_mountain_car_environment != other_env
         assert other_env != base_mountain_car_environment  # Test symmetry
 
@@ -778,19 +778,19 @@ class TestMountainCarPOMDPEquality:
 
         Test type: unit
         """
-        other_env = MountainCarPOMDP(discount_factor=0.95)
+        other_env = MountainCarPOMDP(discount_factor=0.95, **mountain_car_pinned_kwargs())
         other_env.min_position = -1.0  # Different from -1.2
         assert base_mountain_car_environment != other_env
 
-        other_env = MountainCarPOMDP(discount_factor=0.95)
+        other_env = MountainCarPOMDP(discount_factor=0.95, **mountain_car_pinned_kwargs())
         other_env.max_position = 0.7  # Different from 0.6
         assert base_mountain_car_environment != other_env
 
-        other_env = MountainCarPOMDP(discount_factor=0.95)
+        other_env = MountainCarPOMDP(discount_factor=0.95, **mountain_car_pinned_kwargs())
         other_env.max_speed = 0.08  # Different from 0.07
         assert base_mountain_car_environment != other_env
 
-        other_env = MountainCarPOMDP(discount_factor=0.95)
+        other_env = MountainCarPOMDP(discount_factor=0.95, **mountain_car_pinned_kwargs())
         other_env.goal_position = 0.6  # Different from 0.5
         assert base_mountain_car_environment != other_env
 
@@ -805,16 +805,16 @@ class TestMountainCarPOMDPEquality:
 
         Test type: unit
         """
-        other_env = MountainCarPOMDP(discount_factor=0.95)
+        other_env = MountainCarPOMDP(discount_factor=0.95, **mountain_car_pinned_kwargs())
         other_env.position_noise = 0.2  # Different from 0.1
         assert base_mountain_car_environment != other_env
 
-        other_env = MountainCarPOMDP(discount_factor=0.95)
+        other_env = MountainCarPOMDP(discount_factor=0.95, **mountain_car_pinned_kwargs())
         other_env.velocity_noise = 0.02  # Different from 0.01
         assert base_mountain_car_environment != other_env
 
         # Test covariance matrix changes
-        other_env = MountainCarPOMDP(discount_factor=0.95)
+        other_env = MountainCarPOMDP(discount_factor=0.95, **mountain_car_pinned_kwargs())
         other_env.cov_matrix = np.array([[0.2**2, 0], [0, 0.02**2]])  # Different from original
         assert base_mountain_car_environment != other_env
 
@@ -829,7 +829,7 @@ class TestMountainCarPOMDPEquality:
 
         Test type: unit
         """
-        other_env = MountainCarPOMDP(discount_factor=0.95)
+        other_env = MountainCarPOMDP(discount_factor=0.95, **mountain_car_pinned_kwargs())
         other_env.actions = [-1, 0, 1, 2]  # Different from [-1, 0, 1]
         assert base_mountain_car_environment != other_env
 
@@ -859,11 +859,11 @@ class TestMountainCarPOMDPEquality:
 
         Test type: unit
         """
-        other_env = MountainCarPOMDP(discount_factor=0.95)
+        other_env = MountainCarPOMDP(discount_factor=0.95, **mountain_car_pinned_kwargs())
         delattr(other_env, "min_position")
         assert base_mountain_car_environment != other_env
 
-        other_env = MountainCarPOMDP(discount_factor=0.95)
+        other_env = MountainCarPOMDP(discount_factor=0.95, **mountain_car_pinned_kwargs())
         delattr(other_env, "cov_matrix")
         assert base_mountain_car_environment != other_env
 
@@ -906,7 +906,7 @@ class TestMountainCarPOMDPConfigId:
 
         Test type: configuration
         """
-        other_env = MountainCarPOMDP(discount_factor=0.95)
+        other_env = MountainCarPOMDP(discount_factor=0.95, **mountain_car_pinned_kwargs())
         assert base_mountain_car_environment.config_id == other_env.config_id
 
     def test_config_id_different_discount_factor(
@@ -922,7 +922,7 @@ class TestMountainCarPOMDPConfigId:
 
         Test type: configuration
         """
-        other_env = MountainCarPOMDP(discount_factor=0.8)
+        other_env = MountainCarPOMDP(discount_factor=0.8, **mountain_car_pinned_kwargs())
         assert base_mountain_car_environment.config_id != other_env.config_id
 
     def test_config_id_different_parameters(self, base_mountain_car_environment: MountainCarPOMDP):
@@ -937,12 +937,12 @@ class TestMountainCarPOMDPConfigId:
         Test type: configuration
         """
         # Test different position noise
-        other_env = MountainCarPOMDP(discount_factor=0.95)
+        other_env = MountainCarPOMDP(discount_factor=0.95, **mountain_car_pinned_kwargs())
         other_env.position_noise = 0.2  # Different from 0.1
         assert base_mountain_car_environment.config_id != other_env.config_id
 
         # Test different velocity noise
-        other_env = MountainCarPOMDP(discount_factor=0.95)
+        other_env = MountainCarPOMDP(discount_factor=0.95, **mountain_car_pinned_kwargs())
         other_env.velocity_noise = 0.02  # Different from 0.01
         assert base_mountain_car_environment.config_id != other_env.config_id
 
@@ -956,11 +956,11 @@ class TestMountainCarPOMDPConfigId:
     
     Test type: configuration
     """
-        other_env = MountainCarPOMDP(discount_factor=0.95)
+        other_env = MountainCarPOMDP(discount_factor=0.95, **mountain_car_pinned_kwargs())
         other_env.power = 0.002  # Different from 0.001
         assert base_mountain_car_environment.config_id != other_env.config_id
 
-        other_env = MountainCarPOMDP(discount_factor=0.95)
+        other_env = MountainCarPOMDP(discount_factor=0.95, **mountain_car_pinned_kwargs())
         other_env.gravity = 0.003  # Different from 0.0025
         assert base_mountain_car_environment.config_id != other_env.config_id
 
@@ -1007,7 +1007,7 @@ def test_get_metric_names():
 
     Test type: unit
     """
-    pomdp = MountainCarPOMDP(discount_factor=0.95)
+    pomdp = MountainCarPOMDP(discount_factor=0.95, **mountain_car_pinned_kwargs())
     metric_names = pomdp.get_metric_names()
     assert "goal_reaching_rate" in metric_names
     assert len(metric_names) == 1
@@ -1027,7 +1027,7 @@ def test_compute_metrics_goal_reaching():
     from POMDPPlanners.core.policy import PolicyRunData
     from POMDPPlanners.core.simulation import History, StepData
 
-    pomdp = MountainCarPOMDP(discount_factor=0.95)
+    pomdp = MountainCarPOMDP(discount_factor=0.95, **mountain_car_pinned_kwargs())
 
     # Create a simple belief for testing
     def create_test_belief(state):
@@ -1163,9 +1163,7 @@ def test_compute_metrics_values_within_confidence_intervals():
     from POMDPPlanners.core.belief import (  # pylint: disable=import-outside-toplevel
         WeightedParticleBelief,
     )
-    from POMDPPlanners.core.policy import (  # pylint: disable=import-outside-toplevel
-        PolicyRunData,
-    )
+    from POMDPPlanners.core.policy import PolicyRunData  # pylint: disable=import-outside-toplevel
     from POMDPPlanners.core.simulation import (  # pylint: disable=import-outside-toplevel
         History,
         StepData,
@@ -1179,7 +1177,7 @@ def test_compute_metrics_values_within_confidence_intervals():
         verify_return_shift_linearity,
     )
 
-    env = MountainCarPOMDP(discount_factor=0.95)
+    env = MountainCarPOMDP(discount_factor=0.95, **mountain_car_pinned_kwargs())
 
     def _make_belief(state: np.ndarray) -> WeightedParticleBelief:
         return WeightedParticleBelief(
@@ -1294,7 +1292,7 @@ def test_reward_batch_matches_scalar_reward():
 
     Test type: unit
     """
-    env = MountainCarPOMDP(discount_factor=0.95)
+    env = MountainCarPOMDP(discount_factor=0.95, **mountain_car_pinned_kwargs())
     np.random.seed(42)
     # Create states with positions spanning below and above goal_position
     states = np.column_stack(
@@ -1343,7 +1341,7 @@ def test_simulate_random_rollout_native_matches_base_class_python() -> None:
         python_random_rollout,
     )  # pylint: disable=import-outside-toplevel
 
-    env = MountainCarPOMDP(discount_factor=0.99)
+    env = MountainCarPOMDP(discount_factor=0.99, **mountain_car_pinned_kwargs())
     state = np.array([-0.5, 0.0], dtype=np.float64)
     max_depth = 10
     gamma = 0.95
@@ -1420,7 +1418,7 @@ def test_scalar_obs_log_prob_un_floored_matches_batch_after_fix() -> None:
 
     Test type: unit
     """
-    env = MountainCarPOMDP(discount_factor=0.95)
+    env = MountainCarPOMDP(discount_factor=0.95, **mountain_car_pinned_kwargs())
     next_state = np.array([0.0, 0.0])
     action = 0
     observation = np.array([3.78, 0.0])

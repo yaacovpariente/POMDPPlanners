@@ -19,21 +19,11 @@ import numpy as np
 import pytest
 from scipy.stats import multivariate_normal
 
-from POMDPPlanners.configs.environment_configs import (
-    RiskAverseEnvironmentConfigsAPI,
-)
+from POMDPPlanners.configs.environment_configs import RiskAverseEnvironmentConfigsAPI
 from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.distributions import DiscreteDistribution
 from POMDPPlanners.core.policy import PolicyRunData
 from POMDPPlanners.core.simulation import History, StepData
-from POMDPPlanners.tests.test_utils.confidence_interval_utils import (
-    verify_metrics_within_confidence_intervals,
-)
-from POMDPPlanners.tests.test_utils.metric_invariants_utils import (
-    verify_history_returns_bounded,
-    verify_metric_sanity,
-    verify_return_shift_linearity,
-)
 from POMDPPlanners.environments.light_dark_pomdp import _native
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
     ContinuousLightDarkPOMDP,
@@ -42,10 +32,21 @@ from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp imp
     RewardModelType,
 )
 from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_reward_models import (
-    ContinuousLightDarkDistanceDecayedHazardPenaltyRewardModel,
     ContinuousLDZeroMeanHazardShockRewardModel,
+    ContinuousLightDarkDistanceDecayedHazardPenaltyRewardModel,
 )
-
+from POMDPPlanners.tests.test_utils.confidence_interval_utils import (
+    verify_metrics_within_confidence_intervals,
+)
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
+    continuous_light_dark_discrete_actions_pinned_kwargs,
+    continuous_light_dark_pinned_kwargs,
+)
+from POMDPPlanners.tests.test_utils.metric_invariants_utils import (
+    verify_history_returns_bounded,
+    verify_metric_sanity,
+    verify_return_shift_linearity,
+)
 
 # Set seeds for reproducible tests
 np.random.seed(42)
@@ -57,16 +58,18 @@ def base_light_dark_environment() -> ContinuousLightDarkPOMDPDiscreteActions:
     """Fixture providing a base ContinuousLightDarkPOMDP environment for comparison."""
     return ContinuousLightDarkPOMDPDiscreteActions(
         discount_factor=0.95,
-        state_transition_cov_matrix=np.eye(2),
-        observation_cov_matrix=np.eye(2),
-        obstacle_hit_probability=0.2,
-        obstacle_reward=-10.0,
-        goal_reward=10.0,
-        fuel_cost=2.0,
-        grid_size=11,
-        goal_state_radius=1.5,
-        beacon_radius=1.0,
-        obstacle_radius=1.5,
+        **continuous_light_dark_discrete_actions_pinned_kwargs(
+            state_transition_cov_matrix=np.eye(2),
+            observation_cov_matrix=np.eye(2),
+            obstacle_hit_probability=0.2,
+            obstacle_reward=-10.0,
+            goal_reward=10.0,
+            fuel_cost=2.0,
+            grid_size=11,
+            goal_state_radius=1.5,
+            beacon_radius=1.0,
+            obstacle_radius=1.5,
+        ),
     )
 
 
@@ -74,16 +77,18 @@ def base_light_dark_environment() -> ContinuousLightDarkPOMDPDiscreteActions:
 def base_continuous_light_dark_pomdp() -> ContinuousLightDarkPOMDP:
     return ContinuousLightDarkPOMDP(
         discount_factor=0.95,
-        state_transition_cov_matrix=np.eye(2),
-        observation_cov_matrix=np.eye(2),
-        obstacle_hit_probability=0.2,
-        obstacle_reward=-10.0,
-        goal_reward=10.0,
-        fuel_cost=2.0,
-        grid_size=11,
-        goal_state_radius=1.5,
-        beacon_radius=1.0,
-        obstacle_radius=1.5,
+        **continuous_light_dark_pinned_kwargs(
+            state_transition_cov_matrix=np.eye(2),
+            observation_cov_matrix=np.eye(2),
+            obstacle_hit_probability=0.2,
+            obstacle_reward=-10.0,
+            goal_reward=10.0,
+            fuel_cost=2.0,
+            grid_size=11,
+            goal_state_radius=1.5,
+            beacon_radius=1.0,
+            obstacle_radius=1.5,
+        ),
     )
 
 
@@ -91,16 +96,18 @@ def base_continuous_light_dark_pomdp() -> ContinuousLightDarkPOMDP:
 def pomdp():
     return ContinuousLightDarkPOMDP(
         discount_factor=0.95,
-        state_transition_cov_matrix=np.eye(2),
-        observation_cov_matrix=np.eye(2),
-        obstacle_hit_probability=0.2,
-        obstacle_reward=-10.0,
-        goal_reward=10.0,
-        fuel_cost=2.0,
-        grid_size=11,
-        goal_state_radius=1.5,
-        beacon_radius=1.0,
-        obstacle_radius=1.5,
+        **continuous_light_dark_pinned_kwargs(
+            state_transition_cov_matrix=np.eye(2),
+            observation_cov_matrix=np.eye(2),
+            obstacle_hit_probability=0.2,
+            obstacle_reward=-10.0,
+            goal_reward=10.0,
+            fuel_cost=2.0,
+            grid_size=11,
+            goal_state_radius=1.5,
+            beacon_radius=1.0,
+            obstacle_radius=1.5,
+        ),
     )
 
 
@@ -113,16 +120,18 @@ class TestContinuousLightDarkPOMDPEquality:
         """Test that ContinuousLightDarkPOMDPs with same discount factor are equal."""
         other_env = ContinuousLightDarkPOMDPDiscreteActions(
             discount_factor=0.95,
-            state_transition_cov_matrix=np.eye(2),
-            observation_cov_matrix=np.eye(2),
-            obstacle_hit_probability=0.2,
-            obstacle_reward=-10.0,
-            goal_reward=10.0,
-            fuel_cost=2.0,
-            grid_size=11,
-            goal_state_radius=1.5,
-            beacon_radius=1.0,
-            obstacle_radius=1.5,
+            **continuous_light_dark_discrete_actions_pinned_kwargs(
+                state_transition_cov_matrix=np.eye(2),
+                observation_cov_matrix=np.eye(2),
+                obstacle_hit_probability=0.2,
+                obstacle_reward=-10.0,
+                goal_reward=10.0,
+                fuel_cost=2.0,
+                grid_size=11,
+                goal_state_radius=1.5,
+                beacon_radius=1.0,
+                obstacle_radius=1.5,
+            ),
         )
         assert base_light_dark_environment == other_env
         assert other_env == base_light_dark_environment  # Test symmetry
@@ -133,16 +142,18 @@ class TestContinuousLightDarkPOMDPEquality:
         """Test that ContinuousLightDarkPOMDPs with different discount factors are not equal."""
         other_env = ContinuousLightDarkPOMDPDiscreteActions(
             discount_factor=0.8,
-            state_transition_cov_matrix=np.eye(2),
-            observation_cov_matrix=np.eye(2),
-            obstacle_hit_probability=0.2,
-            obstacle_reward=-10.0,
-            goal_reward=10.0,
-            fuel_cost=2.0,
-            grid_size=11,
-            goal_state_radius=1.5,
-            beacon_radius=1.0,
-            obstacle_radius=1.5,
+            **continuous_light_dark_discrete_actions_pinned_kwargs(
+                state_transition_cov_matrix=np.eye(2),
+                observation_cov_matrix=np.eye(2),
+                obstacle_hit_probability=0.2,
+                obstacle_reward=-10.0,
+                goal_reward=10.0,
+                fuel_cost=2.0,
+                grid_size=11,
+                goal_state_radius=1.5,
+                beacon_radius=1.0,
+                obstacle_radius=1.5,
+            ),
         )
         assert base_light_dark_environment != other_env
         assert other_env != base_light_dark_environment  # Test symmetry
@@ -153,31 +164,35 @@ class TestContinuousLightDarkPOMDPEquality:
         """Test that ContinuousLightDarkPOMDPs with different covariance matrices are not equal."""
         other_env = ContinuousLightDarkPOMDPDiscreteActions(
             discount_factor=0.95,
-            state_transition_cov_matrix=2 * np.eye(2),  # Different state transition covariance
-            observation_cov_matrix=np.eye(2),
-            obstacle_hit_probability=0.2,
-            obstacle_reward=-10.0,
-            goal_reward=10.0,
-            fuel_cost=2.0,
-            grid_size=11,
-            goal_state_radius=1.5,
-            beacon_radius=1.0,
-            obstacle_radius=1.5,
+            **continuous_light_dark_discrete_actions_pinned_kwargs(
+                state_transition_cov_matrix=2 * np.eye(2),
+                observation_cov_matrix=np.eye(2),
+                obstacle_hit_probability=0.2,
+                obstacle_reward=-10.0,
+                goal_reward=10.0,
+                fuel_cost=2.0,
+                grid_size=11,
+                goal_state_radius=1.5,
+                beacon_radius=1.0,
+                obstacle_radius=1.5,
+            ),
         )
         assert base_light_dark_environment != other_env
 
         other_env = ContinuousLightDarkPOMDPDiscreteActions(
             discount_factor=0.95,
-            state_transition_cov_matrix=np.eye(2),
-            observation_cov_matrix=2 * np.eye(2),  # Different observation covariance
-            obstacle_hit_probability=0.2,
-            obstacle_reward=-10.0,
-            goal_reward=10.0,
-            fuel_cost=2.0,
-            grid_size=11,
-            goal_state_radius=1.5,
-            beacon_radius=1.0,
-            obstacle_radius=1.5,
+            **continuous_light_dark_discrete_actions_pinned_kwargs(
+                state_transition_cov_matrix=np.eye(2),
+                observation_cov_matrix=2 * np.eye(2),
+                obstacle_hit_probability=0.2,
+                obstacle_reward=-10.0,
+                goal_reward=10.0,
+                fuel_cost=2.0,
+                grid_size=11,
+                goal_state_radius=1.5,
+                beacon_radius=1.0,
+                obstacle_radius=1.5,
+            ),
         )
         assert base_light_dark_environment != other_env
 
@@ -187,46 +202,52 @@ class TestContinuousLightDarkPOMDPEquality:
         """Test that ContinuousLightDarkPOMDPs with different radii are not equal."""
         other_env = ContinuousLightDarkPOMDPDiscreteActions(
             discount_factor=0.95,
-            state_transition_cov_matrix=np.eye(2),
-            observation_cov_matrix=np.eye(2),
-            obstacle_hit_probability=0.2,
-            obstacle_reward=-10.0,
-            goal_reward=10.0,
-            fuel_cost=2.0,
-            grid_size=11,
-            goal_state_radius=2.0,  # Different goal radius
-            beacon_radius=1.0,
-            obstacle_radius=1.5,
+            **continuous_light_dark_discrete_actions_pinned_kwargs(
+                state_transition_cov_matrix=np.eye(2),
+                observation_cov_matrix=np.eye(2),
+                obstacle_hit_probability=0.2,
+                obstacle_reward=-10.0,
+                goal_reward=10.0,
+                fuel_cost=2.0,
+                grid_size=11,
+                goal_state_radius=2.0,
+                beacon_radius=1.0,
+                obstacle_radius=1.5,
+            ),
         )
         assert base_light_dark_environment != other_env
 
         other_env = ContinuousLightDarkPOMDPDiscreteActions(
             discount_factor=0.95,
-            state_transition_cov_matrix=np.eye(2),
-            observation_cov_matrix=np.eye(2),
-            obstacle_hit_probability=0.2,
-            obstacle_reward=-10.0,
-            goal_reward=10.0,
-            fuel_cost=2.0,
-            grid_size=11,
-            goal_state_radius=1.5,
-            beacon_radius=2.0,  # Different beacon radius
-            obstacle_radius=1.5,
+            **continuous_light_dark_discrete_actions_pinned_kwargs(
+                state_transition_cov_matrix=np.eye(2),
+                observation_cov_matrix=np.eye(2),
+                obstacle_hit_probability=0.2,
+                obstacle_reward=-10.0,
+                goal_reward=10.0,
+                fuel_cost=2.0,
+                grid_size=11,
+                goal_state_radius=1.5,
+                beacon_radius=2.0,
+                obstacle_radius=1.5,
+            ),
         )
         assert base_light_dark_environment != other_env
 
         other_env = ContinuousLightDarkPOMDPDiscreteActions(
             discount_factor=0.95,
-            state_transition_cov_matrix=np.eye(2),
-            observation_cov_matrix=np.eye(2),
-            obstacle_hit_probability=0.2,
-            obstacle_reward=-10.0,
-            goal_reward=10.0,
-            fuel_cost=2.0,
-            grid_size=11,
-            goal_state_radius=1.5,
-            beacon_radius=1.0,
-            obstacle_radius=2.0,  # Different obstacle radius
+            **continuous_light_dark_discrete_actions_pinned_kwargs(
+                state_transition_cov_matrix=np.eye(2),
+                observation_cov_matrix=np.eye(2),
+                obstacle_hit_probability=0.2,
+                obstacle_reward=-10.0,
+                goal_reward=10.0,
+                fuel_cost=2.0,
+                grid_size=11,
+                goal_state_radius=1.5,
+                beacon_radius=1.0,
+                obstacle_radius=2.0,
+            ),
         )
         assert base_light_dark_environment != other_env
 
@@ -235,16 +256,18 @@ def test_initialization():
     """Test initialization with default parameters"""
     env = ContinuousLightDarkPOMDPDiscreteActions(
         discount_factor=0.95,
-        state_transition_cov_matrix=np.eye(2),
-        observation_cov_matrix=np.eye(2),
-        obstacle_hit_probability=0.2,
-        obstacle_reward=-10.0,
-        goal_reward=10.0,
-        fuel_cost=2.0,
-        grid_size=11,
-        goal_state_radius=1.5,
-        beacon_radius=1.0,
-        obstacle_radius=1.5,
+        **continuous_light_dark_discrete_actions_pinned_kwargs(
+            state_transition_cov_matrix=np.eye(2),
+            observation_cov_matrix=np.eye(2),
+            obstacle_hit_probability=0.2,
+            obstacle_reward=-10.0,
+            goal_reward=10.0,
+            fuel_cost=2.0,
+            grid_size=11,
+            goal_state_radius=1.5,
+            beacon_radius=1.0,
+            obstacle_radius=1.5,
+        ),
     )
 
     # Check default parameters
@@ -276,16 +299,18 @@ def test_beacons_and_obstacles_array_structure():
     """Test that beacons and obstacles are numpy arrays with correct shapes after initialization."""
     env = ContinuousLightDarkPOMDPDiscreteActions(
         discount_factor=0.95,
-        state_transition_cov_matrix=np.eye(2),
-        observation_cov_matrix=np.eye(2),
-        obstacle_hit_probability=0.2,
-        obstacle_reward=-10.0,
-        goal_reward=10.0,
-        fuel_cost=2.0,
-        grid_size=11,
-        goal_state_radius=1.5,
-        beacon_radius=1.0,
-        obstacle_radius=1.5,
+        **continuous_light_dark_discrete_actions_pinned_kwargs(
+            state_transition_cov_matrix=np.eye(2),
+            observation_cov_matrix=np.eye(2),
+            obstacle_hit_probability=0.2,
+            obstacle_reward=-10.0,
+            goal_reward=10.0,
+            fuel_cost=2.0,
+            grid_size=11,
+            goal_state_radius=1.5,
+            beacon_radius=1.0,
+            obstacle_radius=1.5,
+        ),
     )
 
     # Test beacons structure
@@ -344,9 +369,9 @@ def test_reward_function():
     """Test reward function"""
     env = ContinuousLightDarkPOMDPDiscreteActions(
         discount_factor=0.95,
-        obstacle_hit_probability=1.0,
-        goal_state_radius=1.5,
-        obstacle_radius=1.5,
+        **continuous_light_dark_discrete_actions_pinned_kwargs(
+            obstacle_hit_probability=1.0, goal_state_radius=1.5, obstacle_radius=1.5
+        ),
     )
 
     # Test goal state reward (state within goal radius)
@@ -368,7 +393,10 @@ def test_reward_function():
 def test_is_terminal():
     """Test terminal state detection"""
     env = ContinuousLightDarkPOMDPDiscreteActions(
-        discount_factor=0.95, goal_state_radius=1.5, obstacle_radius=1.5
+        discount_factor=0.95,
+        **continuous_light_dark_discrete_actions_pinned_kwargs(
+            goal_state_radius=1.5, obstacle_radius=1.5
+        ),
     )
 
     # Test goal state (within radius)
@@ -400,10 +428,9 @@ def test_reward_range():
     """
     env = ContinuousLightDarkPOMDPDiscreteActions(
         discount_factor=0.95,
-        obstacle_reward=-15.0,
-        goal_reward=25.0,
-        fuel_cost=2.0,
-        grid_size=11,
+        **continuous_light_dark_discrete_actions_pinned_kwargs(
+            obstacle_reward=-15.0, goal_reward=25.0, fuel_cost=2.0, grid_size=11
+        ),
     )
 
     # Expected calculation for CONSTANT_HAZARD_PENALTY reward model:
@@ -420,10 +447,9 @@ def test_reward_range():
     # Test with another environment instance with different parameters
     env2 = ContinuousLightDarkPOMDPDiscreteActions(
         discount_factor=0.99,
-        obstacle_reward=-50.0,
-        goal_reward=100.0,
-        fuel_cost=3.0,
-        grid_size=15,
+        **continuous_light_dark_discrete_actions_pinned_kwargs(
+            obstacle_reward=-50.0, goal_reward=100.0, fuel_cost=3.0, grid_size=15
+        ),
     )
 
     # Calculate expected range for different parameters
@@ -438,7 +464,10 @@ def test_reward_range():
 def test_compute_metrics():
     """Test computation of metrics for different simulation histories"""
     env = ContinuousLightDarkPOMDPDiscreteActions(
-        discount_factor=0.95, goal_state_radius=1.5, obstacle_radius=1.5
+        discount_factor=0.95,
+        **continuous_light_dark_discrete_actions_pinned_kwargs(
+            goal_state_radius=1.5, obstacle_radius=1.5
+        ),
     )
 
     # Create test histories
@@ -549,7 +578,10 @@ def test_compute_metrics_values_within_confidence_intervals():
     Test type: integration
     """
     env = ContinuousLightDarkPOMDPDiscreteActions(
-        discount_factor=0.95, goal_state_radius=1.5, obstacle_radius=1.5
+        discount_factor=0.95,
+        **continuous_light_dark_discrete_actions_pinned_kwargs(
+            goal_state_radius=1.5, obstacle_radius=1.5
+        ),
     )
 
     def _make_belief(state: np.ndarray) -> WeightedParticleBelief:
@@ -812,18 +844,20 @@ def test_decaying_hit_probability_reward_model():
     """Test that the environment uses the decaying hit probability reward model when specified."""
     env = ContinuousLightDarkPOMDPDiscreteActions(
         discount_factor=0.95,
-        state_transition_cov_matrix=np.eye(2),
-        observation_cov_matrix=np.eye(2),
-        obstacle_hit_probability=0.2,
-        obstacle_reward=-10.0,
-        goal_reward=10.0,
-        fuel_cost=2.0,
-        grid_size=11,
-        goal_state_radius=1.5,
-        beacon_radius=1.0,
-        obstacle_radius=1.5,
-        reward_model_type=RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY,
-        penalty_decay=0.5,
+        **continuous_light_dark_discrete_actions_pinned_kwargs(
+            state_transition_cov_matrix=np.eye(2),
+            observation_cov_matrix=np.eye(2),
+            obstacle_hit_probability=0.2,
+            obstacle_reward=-10.0,
+            goal_reward=10.0,
+            fuel_cost=2.0,
+            grid_size=11,
+            goal_state_radius=1.5,
+            beacon_radius=1.0,
+            obstacle_radius=1.5,
+            reward_model_type=RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY,
+            penalty_decay=0.5,
+        ),
     )
     assert isinstance(env.reward_model, ContinuousLightDarkDistanceDecayedHazardPenaltyRewardModel)
 
@@ -832,17 +866,19 @@ def test_high_variance_states_reward_model():
     """Test that the environment uses the high-variance states reward model when specified."""
     env = ContinuousLightDarkPOMDPDiscreteActions(
         discount_factor=0.95,
-        state_transition_cov_matrix=np.eye(2),
-        observation_cov_matrix=np.eye(2),
-        obstacle_hit_probability=0.2,
-        obstacle_reward=-10.0,
-        goal_reward=10.0,
-        fuel_cost=2.0,
-        grid_size=11,
-        goal_state_radius=1.5,
-        beacon_radius=1.0,
-        obstacle_radius=1.5,
-        reward_model_type=RewardModelType.ZERO_MEAN_HAZARD_SHOCK,
+        **continuous_light_dark_discrete_actions_pinned_kwargs(
+            state_transition_cov_matrix=np.eye(2),
+            observation_cov_matrix=np.eye(2),
+            obstacle_hit_probability=0.2,
+            obstacle_reward=-10.0,
+            goal_reward=10.0,
+            fuel_cost=2.0,
+            grid_size=11,
+            goal_state_radius=1.5,
+            beacon_radius=1.0,
+            obstacle_radius=1.5,
+            reward_model_type=RewardModelType.ZERO_MEAN_HAZARD_SHOCK,
+        ),
     )
 
     # Test that the correct reward model is initialized
@@ -883,17 +919,19 @@ def test_single_obstacle_reward_behavior():
 
     env = ContinuousLightDarkPOMDPDiscreteActions(
         discount_factor=0.95,
-        state_transition_cov_matrix=np.eye(2),
-        observation_cov_matrix=np.eye(2),
-        obstacle_hit_probability=1.0,  # Always hit obstacle when in range
-        obstacle_reward=-15.0,  # High negative reward for obstacle hits
-        goal_reward=10.0,
-        fuel_cost=2.0,
-        grid_size=11,
-        goal_state_radius=1.5,
-        beacon_radius=1.0,
-        obstacle_radius=1.0,  # Radius of 1.0
-        obstacles=single_obstacle,
+        **continuous_light_dark_discrete_actions_pinned_kwargs(
+            state_transition_cov_matrix=np.eye(2),
+            observation_cov_matrix=np.eye(2),
+            obstacle_hit_probability=1.0,
+            obstacle_reward=-15.0,
+            goal_reward=10.0,
+            fuel_cost=2.0,
+            grid_size=11,
+            goal_state_radius=1.5,
+            beacon_radius=1.0,
+            obstacle_radius=1.0,
+            obstacles=single_obstacle,
+        ),
     )
 
     # Test state exactly at obstacle center (5, 5)
@@ -1416,9 +1454,11 @@ def test_beacon_proximity_observation_covariance_changes():
     """
     env = ContinuousLightDarkPOMDP(
         discount_factor=0.95,
-        observation_cov_matrix=np.eye(2) * 4.0,
-        beacons=[(0.0, 0.0), (5.0, 5.0), (10.0, 10.0)],
-        beacon_radius=1.0,
+        **continuous_light_dark_pinned_kwargs(
+            observation_cov_matrix=np.eye(2) * 4.0,
+            beacons=[(0.0, 0.0), (5.0, 5.0), (10.0, 10.0)],
+            beacon_radius=1.0,
+        ),
     )
     action = np.array([0.0, 0.0])
 
@@ -1456,9 +1496,11 @@ def test_beacon_proximity_with_multiple_beacons():
     """
     env = ContinuousLightDarkPOMDP(
         discount_factor=0.95,
-        observation_cov_matrix=np.eye(2) * 2.0,
-        beacons=[(0.0, 0.0), (5.0, 5.0), (10.0, 10.0)],
-        beacon_radius=1.5,
+        **continuous_light_dark_pinned_kwargs(
+            observation_cov_matrix=np.eye(2) * 2.0,
+            beacons=[(0.0, 0.0), (5.0, 5.0), (10.0, 10.0)],
+            beacon_radius=1.5,
+        ),
     )
 
     near_first_beacon = np.array([1.0, 1.0])  # Distance sqrt(2) ≈ 1.41 < 1.5 from (0,0)
@@ -1493,9 +1535,11 @@ def test_observation_model_probability_function():
     observation_cov_matrix = np.eye(2) * 0.25
     env = ContinuousLightDarkPOMDP(
         discount_factor=0.95,
-        observation_cov_matrix=observation_cov_matrix,
-        beacons=[(0.0, 0.0), (10.0, 10.0)],
-        beacon_radius=1.0,
+        **continuous_light_dark_pinned_kwargs(
+            observation_cov_matrix=observation_cov_matrix,
+            beacons=[(0.0, 0.0), (10.0, 10.0)],
+            beacon_radius=1.0,
+        ),
     )
 
     # Single value at the mean.
@@ -1551,9 +1595,9 @@ def test_observation_model_probability_with_beacon_proximity():
     """
     env = ContinuousLightDarkPOMDP(
         discount_factor=0.95,
-        observation_cov_matrix=np.eye(2),
-        beacons=[(0.0, 0.0), (5.0, 5.0)],
-        beacon_radius=1.0,
+        **continuous_light_dark_pinned_kwargs(
+            observation_cov_matrix=np.eye(2), beacons=[(0.0, 0.0), (5.0, 5.0)], beacon_radius=1.0
+        ),
     )
     action = np.array([0.0, 0.0])
     near_state = np.array([0.5, 0.5])
@@ -1582,9 +1626,11 @@ def test_observation_model_probability_edge_cases():
     action = np.array([0.0, 0.0])
     env = ContinuousLightDarkPOMDP(
         discount_factor=0.95,
-        observation_cov_matrix=np.eye(2) * 0.1,
-        beacons=[(2.0, 2.0), (8.0, 8.0)],
-        beacon_radius=1.0,
+        **continuous_light_dark_pinned_kwargs(
+            observation_cov_matrix=np.eye(2) * 0.1,
+            beacons=[(2.0, 2.0), (8.0, 8.0)],
+            beacon_radius=1.0,
+        ),
     )
 
     # Single observation at the mean.
@@ -1607,9 +1653,11 @@ def test_observation_model_probability_edge_cases():
     # Very small covariance — density at the mean is much higher than off.
     small_env = ContinuousLightDarkPOMDP(
         discount_factor=0.95,
-        observation_cov_matrix=np.eye(2) * 1e-6,
-        beacons=[(2.0, 2.0), (8.0, 8.0)],
-        beacon_radius=1.0,
+        **continuous_light_dark_pinned_kwargs(
+            observation_cov_matrix=np.eye(2) * 1e-6,
+            beacons=[(2.0, 2.0), (8.0, 8.0)],
+            beacon_radius=1.0,
+        ),
     )
     exact_log = small_env.observation_log_probability(next_state, action, [next_state])[0]
     offset_log = small_env.observation_log_probability(
@@ -1632,16 +1680,18 @@ def test_start_state_not_in_obstacle_radius():
     # Test default environment configuration
     env = ContinuousLightDarkPOMDPDiscreteActions(
         discount_factor=0.95,
-        state_transition_cov_matrix=np.eye(2),
-        observation_cov_matrix=np.eye(2),
-        obstacle_hit_probability=0.2,
-        obstacle_reward=-10.0,
-        goal_reward=10.0,
-        fuel_cost=2.0,
-        grid_size=11,
-        goal_state_radius=1.5,
-        beacon_radius=1.0,
-        obstacle_radius=1.5,
+        **continuous_light_dark_discrete_actions_pinned_kwargs(
+            state_transition_cov_matrix=np.eye(2),
+            observation_cov_matrix=np.eye(2),
+            obstacle_hit_probability=0.2,
+            obstacle_reward=-10.0,
+            goal_reward=10.0,
+            fuel_cost=2.0,
+            grid_size=11,
+            goal_state_radius=1.5,
+            beacon_radius=1.0,
+            obstacle_radius=1.5,
+        ),
     )
 
     # Check that start state is not terminal (not in obstacle radius)
@@ -1740,20 +1790,22 @@ def test_environment_configuration_obstacle_placement():
     for config in test_configs:
         env = ContinuousLightDarkPOMDPDiscreteActions(
             discount_factor=0.95,
-            state_transition_cov_matrix=np.eye(2),
-            observation_cov_matrix=np.eye(2),
-            obstacle_hit_probability=0.2,
-            obstacle_reward=-10.0,
-            goal_reward=10.0,
-            fuel_cost=2.0,
-            grid_size=config["grid_size"],
-            goal_state_radius=1.5,
-            beacon_radius=1.0,
-            obstacle_radius=1.5,
-            start_state=config["start_state"],
-            goal_state=config["goal_state"],
-            beacons=config["beacons"],
-            obstacles=config["obstacles"],
+            **continuous_light_dark_discrete_actions_pinned_kwargs(
+                state_transition_cov_matrix=np.eye(2),
+                observation_cov_matrix=np.eye(2),
+                obstacle_hit_probability=0.2,
+                obstacle_reward=-10.0,
+                goal_reward=10.0,
+                fuel_cost=2.0,
+                grid_size=config["grid_size"],
+                goal_state_radius=1.5,
+                beacon_radius=1.0,
+                obstacle_radius=1.5,
+                start_state=config["start_state"],
+                goal_state=config["goal_state"],
+                beacons=config["beacons"],
+                obstacles=config["obstacles"],
+            ),
         )
 
         # Basic sanity checks
@@ -1794,7 +1846,7 @@ def test_continuous_light_dark_sample_next_state_shapes_and_distribution():
     """
     env = ContinuousLightDarkPOMDP(
         discount_factor=0.95,
-        state_transition_cov_matrix=np.eye(2) * 0.1,
+        **continuous_light_dark_pinned_kwargs(state_transition_cov_matrix=np.eye(2) * 0.1),
     )
     state = np.array([2.0, 3.0])
     action = np.array([1.0, -0.5])
@@ -1835,7 +1887,9 @@ def test_normal_noise_observation_model():
     """
     env = ContinuousLightDarkPOMDPDiscreteActions(
         discount_factor=0.95,
-        observation_model_type=ObservationModelType.NORMAL_NOISE,
+        **continuous_light_dark_discrete_actions_pinned_kwargs(
+            observation_model_type=ObservationModelType.NORMAL_NOISE
+        ),
     )
     assert env.observation_model_type == ObservationModelType.NORMAL_NOISE
 
@@ -1864,7 +1918,9 @@ def test_normal_noise_no_obs_in_dark_observation_model():
     """
     env = ContinuousLightDarkPOMDPDiscreteActions(
         discount_factor=0.95,
-        observation_model_type=ObservationModelType.NORMAL_NOISE_NO_OBS_IN_DARK,
+        **continuous_light_dark_discrete_actions_pinned_kwargs(
+            observation_model_type=ObservationModelType.NORMAL_NOISE_NO_OBS_IN_DARK
+        ),
     )
     assert env.observation_model_type == ObservationModelType.NORMAL_NOISE_NO_OBS_IN_DARK
     action = "up"
@@ -1893,7 +1949,9 @@ def test_default_observation_model_type():
 
     Test type: unit
     """
-    env = ContinuousLightDarkPOMDPDiscreteActions(discount_factor=0.95)
+    env = ContinuousLightDarkPOMDPDiscreteActions(
+        discount_factor=0.95, **continuous_light_dark_discrete_actions_pinned_kwargs()
+    )
     assert env.observation_model_type == ObservationModelType.NORMAL_NOISE
 
     obs = env.sample_observation(np.array([5.0, 5.0]), "up", n_samples=1)
@@ -1905,18 +1963,24 @@ def test_observation_model_type_equality():
     """Test that environments with different observation model types are not equal."""
     env1 = ContinuousLightDarkPOMDPDiscreteActions(
         discount_factor=0.95,
-        observation_model_type=ObservationModelType.NORMAL_NOISE,
+        **continuous_light_dark_discrete_actions_pinned_kwargs(
+            observation_model_type=ObservationModelType.NORMAL_NOISE
+        ),
     )
     env2 = ContinuousLightDarkPOMDPDiscreteActions(
         discount_factor=0.95,
-        observation_model_type=ObservationModelType.NORMAL_NOISE_NO_OBS_IN_DARK,
+        **continuous_light_dark_discrete_actions_pinned_kwargs(
+            observation_model_type=ObservationModelType.NORMAL_NOISE_NO_OBS_IN_DARK
+        ),
     )
     assert env1 != env2, "Environments with different observation model types should not be equal"
 
     # Test distance-based vs others
     env3 = ContinuousLightDarkPOMDPDiscreteActions(
         discount_factor=0.95,
-        observation_model_type=ObservationModelType.DISTANCE_BASED,
+        **continuous_light_dark_discrete_actions_pinned_kwargs(
+            observation_model_type=ObservationModelType.DISTANCE_BASED
+        ),
     )
     assert env1 != env3, "Distance-based should not equal normal noise"
     assert env2 != env3, "Distance-based should not equal no obs in dark"
@@ -1937,7 +2001,9 @@ def test_continuous_light_dark_pomdp_observation_model_type():
     """
     env = ContinuousLightDarkPOMDP(
         discount_factor=0.95,
-        observation_model_type=ObservationModelType.NORMAL_NOISE_NO_OBS_IN_DARK,
+        **continuous_light_dark_pinned_kwargs(
+            observation_model_type=ObservationModelType.NORMAL_NOISE_NO_OBS_IN_DARK
+        ),
     )
     assert env.observation_model_type == ObservationModelType.NORMAL_NOISE_NO_OBS_IN_DARK
 
@@ -1967,7 +2033,9 @@ def test_distance_based_observation_model():
     """
     env = ContinuousLightDarkPOMDPDiscreteActions(
         discount_factor=0.95,
-        observation_model_type=ObservationModelType.DISTANCE_BASED,
+        **continuous_light_dark_discrete_actions_pinned_kwargs(
+            observation_model_type=ObservationModelType.DISTANCE_BASED
+        ),
     )
     assert env.observation_model_type == ObservationModelType.DISTANCE_BASED
     action = "up"
@@ -2010,10 +2078,12 @@ def test_distance_based_observation_model_binary_selection():
     """
     env = ContinuousLightDarkPOMDPDiscreteActions(
         discount_factor=0.95,
-        observation_cov_matrix=np.eye(2) * 2.0,
-        beacon_radius=2.0,
-        beacons=[(0.0, 0.0)],
-        observation_model_type=ObservationModelType.DISTANCE_BASED,
+        **continuous_light_dark_discrete_actions_pinned_kwargs(
+            observation_cov_matrix=np.eye(2) * 2.0,
+            beacon_radius=2.0,
+            beacons=[(0.0, 0.0)],
+            observation_model_type=ObservationModelType.DISTANCE_BASED,
+        ),
     )
     action = "up"
 
@@ -2049,8 +2119,9 @@ def test_distance_based_observation_model_probability():
     """
     env = ContinuousLightDarkPOMDPDiscreteActions(
         discount_factor=0.95,
-        beacon_radius=1.0,
-        observation_model_type=ObservationModelType.DISTANCE_BASED,
+        **continuous_light_dark_discrete_actions_pinned_kwargs(
+            beacon_radius=1.0, observation_model_type=ObservationModelType.DISTANCE_BASED
+        ),
     )
     action = "up"
 
@@ -2138,7 +2209,7 @@ def test_continuous_sample_next_state_n_samples_shapes(n_samples):
 
     Test type: unit
     """
-    env = ContinuousLightDarkPOMDP(discount_factor=0.95)
+    env = ContinuousLightDarkPOMDP(discount_factor=0.95, **continuous_light_dark_pinned_kwargs())
     state = np.array([3.0, 4.0])
     action = np.array([1.0, 0.5])
 
@@ -2166,7 +2237,7 @@ def test_continuous_sample_observation_n_samples_shapes(n_samples):
 
     Test type: unit
     """
-    env = ContinuousLightDarkPOMDP(discount_factor=0.95)
+    env = ContinuousLightDarkPOMDP(discount_factor=0.95, **continuous_light_dark_pinned_kwargs())
     next_state = np.array([5.0, 5.0])  # near beacon
     action = np.array([0.0, 0.0])
 
@@ -2200,7 +2271,7 @@ def test_continuous_sample_observation_n_samples_for_non_normal_noise():
     ):
         env = ContinuousLightDarkPOMDP(
             discount_factor=0.95,
-            observation_model_type=obs_type,
+            **continuous_light_dark_pinned_kwargs(observation_model_type=obs_type),
         )
         next_state = np.array([5.0, 5.0])
         action = np.array([0.0, 0.0])
@@ -2227,9 +2298,11 @@ def test_native_simulate_rollout_matches_python_rollout_seeded():
     """
     env = ContinuousLightDarkPOMDPDiscreteActions(
         discount_factor=0.95,
-        obstacle_hit_probability=0.0,  # Deterministic rewards — no stochastic obstacle draw
-        state_transition_cov_matrix=np.eye(2) * 0.01,
-        observation_cov_matrix=np.eye(2),
+        **continuous_light_dark_discrete_actions_pinned_kwargs(
+            obstacle_hit_probability=0.0,
+            state_transition_cov_matrix=np.eye(2) * 0.01,
+            observation_cov_matrix=np.eye(2),
+        ),
     )
     initial_state = np.array([1.0, 2.0])
     max_depth = 8
@@ -2297,7 +2370,9 @@ def test_native_simulate_rollout_terminal_short_circuit():
 
     Test type: unit
     """
-    env = ContinuousLightDarkPOMDPDiscreteActions(discount_factor=0.95)
+    env = ContinuousLightDarkPOMDPDiscreteActions(
+        discount_factor=0.95, **continuous_light_dark_discrete_actions_pinned_kwargs()
+    )
 
     # Place initial state exactly at goal — is_terminal must return True
     terminal_state = env.goal_state.astype(np.float64).copy()
@@ -2347,7 +2422,7 @@ def test_continuous_light_dark_reward_batch_matches_scalar():
     """
     env = ContinuousLightDarkPOMDPDiscreteActions(
         discount_factor=0.95,
-        obstacle_hit_probability=0.0,  # Deterministic rewards
+        **continuous_light_dark_discrete_actions_pinned_kwargs(obstacle_hit_probability=0.0),
     )
 
     np.random.seed(7)
@@ -2425,7 +2500,7 @@ def test_continuous_reward_at_goal_returns_goal_reward_minus_costs():
 
     Test type: unit
     """
-    env = ContinuousLightDarkPOMDP(discount_factor=0.95)
+    env = ContinuousLightDarkPOMDP(discount_factor=0.95, **continuous_light_dark_pinned_kwargs())
     state = np.array([8.5, 5.0])
     action = np.array([1.0, 0.0])
     expected = -env.fuel_cost - 0.5 + env.goal_reward
@@ -2450,7 +2525,7 @@ def test_continuous_reward_outside_grid_returns_obstacle_reward_penalty():
 
     Test type: unit
     """
-    env = ContinuousLightDarkPOMDP(discount_factor=0.95)
+    env = ContinuousLightDarkPOMDP(discount_factor=0.95, **continuous_light_dark_pinned_kwargs())
     state = np.array([5.0, 12.5])
     action = np.array([0.0, 0.0])
     dist_to_goal = float(np.linalg.norm(state - env.goal_state))
@@ -2480,7 +2555,7 @@ def test_continuous_reward_in_obstacle_zone_drifts_by_p_hit_times_obstacle_rewar
     Test type: unit
     """
     np.random.seed(2024)
-    env = ContinuousLightDarkPOMDP(discount_factor=0.95)
+    env = ContinuousLightDarkPOMDP(discount_factor=0.95, **continuous_light_dark_pinned_kwargs())
     in_obs = np.array([5.0, 5.0])
     free = np.array([8.0, 4.0])
     action = np.array([0.0, 0.0])
@@ -2532,8 +2607,9 @@ def test_continuous_reward_in_obstacle_depends_on_reward_model_type(
     np.random.seed(31)
     env = ContinuousLightDarkPOMDP(
         discount_factor=0.95,
-        reward_model_type=reward_model_type,
-        penalty_decay=1.0,
+        **continuous_light_dark_pinned_kwargs(
+            reward_model_type=reward_model_type, penalty_decay=1.0
+        ),
     )
     state = np.array([5.0, 5.0])
     action = np.array([0.0, 0.0])
@@ -2582,8 +2658,9 @@ def test_continuous_decaying_hit_probability_reward_decays_with_obstacle_distanc
     np.random.seed(55)
     env = ContinuousLightDarkPOMDP(
         discount_factor=0.95,
-        reward_model_type=RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY,
-        penalty_decay=1.0,
+        **continuous_light_dark_pinned_kwargs(
+            reward_model_type=RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY, penalty_decay=1.0
+        ),
     )
     obstacle = np.array([5.0, 5.0])
     action = np.array([0.0, 0.0])
@@ -2634,7 +2711,7 @@ def test_continuous_sample_next_state_density_matches_transition_log_probability
     np.random.seed(42)
     env = ContinuousLightDarkPOMDP(
         discount_factor=0.95,
-        state_transition_cov_matrix=np.eye(2) * 0.05,
+        **continuous_light_dark_pinned_kwargs(state_transition_cov_matrix=np.eye(2) * 0.05),
     )
     state = np.array([2.0, 5.0])
     action = np.array([1.0, 0.0])
@@ -2668,8 +2745,10 @@ def test_continuous_sample_observation_density_matches_log_prob_normal_noise():
     """
     env = ContinuousLightDarkPOMDP(
         discount_factor=0.95,
-        observation_cov_matrix=np.eye(2) * 0.05,
-        observation_model_type=ObservationModelType.NORMAL_NOISE,
+        **continuous_light_dark_pinned_kwargs(
+            observation_cov_matrix=np.eye(2) * 0.05,
+            observation_model_type=ObservationModelType.NORMAL_NOISE,
+        ),
     )
     action = np.array([0.0, 0.0])
     n_samples = 20_000
@@ -2710,8 +2789,10 @@ def test_continuous_sample_observation_consistency_no_obs_in_dark():
     """
     env = ContinuousLightDarkPOMDP(
         discount_factor=0.95,
-        observation_cov_matrix=np.eye(2) * 0.05,
-        observation_model_type=ObservationModelType.NORMAL_NOISE_NO_OBS_IN_DARK,
+        **continuous_light_dark_pinned_kwargs(
+            observation_cov_matrix=np.eye(2) * 0.05,
+            observation_model_type=ObservationModelType.NORMAL_NOISE_NO_OBS_IN_DARK,
+        ),
     )
     action = np.array([0.0, 0.0])
     n_samples = 20_000
@@ -2762,8 +2843,10 @@ def test_continuous_sample_observation_consistency_distance_based():
     """
     env = ContinuousLightDarkPOMDP(
         discount_factor=0.95,
-        observation_cov_matrix=np.eye(2) * 0.05,
-        observation_model_type=ObservationModelType.DISTANCE_BASED,
+        **continuous_light_dark_pinned_kwargs(
+            observation_cov_matrix=np.eye(2) * 0.05,
+            observation_model_type=ObservationModelType.DISTANCE_BASED,
+        ),
     )
     action = np.array([0.0, 0.0])
     n_samples = 20_000
@@ -2807,7 +2890,7 @@ def test_continuous_is_terminal_inside_goal_radius_boundary_is_true():
 
     Test type: unit
     """
-    env = ContinuousLightDarkPOMDP(discount_factor=0.95)
+    env = ContinuousLightDarkPOMDP(discount_factor=0.95, **continuous_light_dark_pinned_kwargs())
     state = env.goal_state.astype(np.float64) + np.array([env.goal_state_radius - 1e-9, 0.0])
     assert env.is_terminal(state) is True
 
@@ -2824,7 +2907,7 @@ def test_continuous_is_terminal_outside_goal_radius_boundary_is_false():
 
     Test type: unit
     """
-    env = ContinuousLightDarkPOMDP(discount_factor=0.95)
+    env = ContinuousLightDarkPOMDP(discount_factor=0.95, **continuous_light_dark_pinned_kwargs())
     state = env.goal_state.astype(np.float64) + np.array([env.goal_state_radius + 1e-6, 0.0])
     assert env.is_terminal(state) is False
 
@@ -2845,8 +2928,12 @@ def test_continuous_is_obstacle_hit_terminal_flag_controls_obstacle_termination(
     Test type: unit
     """
     state = np.array([5.0, 5.0])
-    env_term = ContinuousLightDarkPOMDP(discount_factor=0.95, is_obstacle_hit_terminal=True)
-    env_continue = ContinuousLightDarkPOMDP(discount_factor=0.95, is_obstacle_hit_terminal=False)
+    env_term = ContinuousLightDarkPOMDP(
+        discount_factor=0.95, **continuous_light_dark_pinned_kwargs(is_obstacle_hit_terminal=True)
+    )
+    env_continue = ContinuousLightDarkPOMDP(
+        discount_factor=0.95, **continuous_light_dark_pinned_kwargs(is_obstacle_hit_terminal=False)
+    )
     assert env_term.is_terminal(state) is True
     assert env_continue.is_terminal(state) is False
 
@@ -2882,9 +2969,11 @@ def test_continuous_sample_outputs_finite_and_in_grid(
     np.random.seed(101)
     env = ContinuousLightDarkPOMDP(
         discount_factor=0.95,
-        state_transition_cov_matrix=np.eye(2) * 0.05,
-        observation_cov_matrix=np.eye(2) * 0.05,
-        observation_model_type=observation_model_type,
+        **continuous_light_dark_pinned_kwargs(
+            state_transition_cov_matrix=np.eye(2) * 0.05,
+            observation_cov_matrix=np.eye(2) * 0.05,
+            observation_model_type=observation_model_type,
+        ),
     )
     state = np.array([5.5, 5.5])
     action = np.array([0.0, 0.0])
@@ -2931,7 +3020,7 @@ def test_continuous_sample_next_state_batch_matches_looped_sample():
     """
     env = ContinuousLightDarkPOMDP(
         discount_factor=0.95,
-        state_transition_cov_matrix=np.eye(2) * 0.05,
+        **continuous_light_dark_pinned_kwargs(state_transition_cov_matrix=np.eye(2) * 0.05),
     )
     rng = np.random.RandomState(7)
     states = rng.uniform(0.0, env.grid_size, size=(32, 2))
@@ -2975,8 +3064,10 @@ def test_continuous_observation_log_probability_per_state_matches_scalar_normal_
     """
     env = ContinuousLightDarkPOMDP(
         discount_factor=0.95,
-        observation_cov_matrix=np.eye(2) * 0.05,
-        observation_model_type=ObservationModelType.NORMAL_NOISE,
+        **continuous_light_dark_pinned_kwargs(
+            observation_cov_matrix=np.eye(2) * 0.05,
+            observation_model_type=ObservationModelType.NORMAL_NOISE,
+        ),
     )
     rng = np.random.RandomState(13)
     next_states = rng.uniform(4.0, 6.0, size=(64, 2))
@@ -3030,8 +3121,10 @@ def test_scalar_obs_log_prob_un_floored_matches_batch_after_fix():
     """
     env = ContinuousLightDarkPOMDP(
         discount_factor=0.95,
-        observation_cov_matrix=np.eye(2) * 0.05,
-        observation_model_type=ObservationModelType.NORMAL_NOISE,
+        **continuous_light_dark_pinned_kwargs(
+            observation_cov_matrix=np.eye(2) * 0.05,
+            observation_model_type=ObservationModelType.NORMAL_NOISE,
+        ),
     )
     next_state = np.array([5.0, 5.0])
     action = np.array([0.0, 0.0])
@@ -3076,8 +3169,10 @@ def test_scalar_and_batch_obs_log_prob_share_symmetric_floor_in_deep_underflow()
     """
     env = ContinuousLightDarkPOMDP(
         discount_factor=0.95,
-        observation_cov_matrix=np.eye(2) * 0.01,
-        observation_model_type=ObservationModelType.NORMAL_NOISE,
+        **continuous_light_dark_pinned_kwargs(
+            observation_cov_matrix=np.eye(2) * 0.01,
+            observation_model_type=ObservationModelType.NORMAL_NOISE,
+        ),
     )
     next_state = np.array([5.0, 5.0])
     action = np.array([0.0, 0.0])
@@ -3129,8 +3224,9 @@ def test_observation_sampler_unbiased_near_grid_edge(obs_type: ObservationModelT
 
     env = ContinuousLightDarkPOMDPDiscreteActions(
         discount_factor=0.95,
-        observation_cov_matrix=np.eye(2),
-        observation_model_type=obs_type,
+        **continuous_light_dark_discrete_actions_pinned_kwargs(
+            observation_cov_matrix=np.eye(2), observation_model_type=obs_type
+        ),
     )
     observations = env.sample_observation(next_state, "up", n_samples=n_samples)
     observations_arr = np.asarray(observations, dtype=float)
@@ -3159,20 +3255,22 @@ class TestContinuousLightDarkRewardNextStateConsistency:
     ):
         return ContinuousLightDarkPOMDP(
             discount_factor=0.95,
-            state_transition_cov_matrix=np.eye(2) * 1e-12,
-            observation_cov_matrix=np.eye(2),
-            obstacles=obstacles,
-            obstacle_hit_probability=hit_probability,
-            obstacle_reward=-25.0,
-            goal_reward=10.0,
-            fuel_cost=1.0,
-            grid_size=20,
-            goal_state=np.array([18, 5]),
-            goal_state_radius=1.0,
-            beacon_radius=1.0,
-            obstacle_radius=1.0,
-            reward_model_type=reward_model_type,
-            is_obstacle_hit_terminal=False,
+            **continuous_light_dark_pinned_kwargs(
+                state_transition_cov_matrix=np.eye(2) * 1e-12,
+                observation_cov_matrix=np.eye(2),
+                obstacles=obstacles,
+                obstacle_hit_probability=hit_probability,
+                obstacle_reward=-25.0,
+                goal_reward=10.0,
+                fuel_cost=1.0,
+                grid_size=20,
+                goal_state=np.array([18, 5]),
+                goal_state_radius=1.0,
+                beacon_radius=1.0,
+                obstacle_radius=1.0,
+                reward_model_type=reward_model_type,
+                is_obstacle_hit_terminal=False,
+            ),
         )
 
     def test_reward_obstacle_penalty_uses_realised_next_state(self):
@@ -3270,17 +3368,19 @@ class TestContinuousLightDarkRewardNextStateConsistency:
         # rewards rather than a single value.
         env = ContinuousLightDarkPOMDP(
             discount_factor=0.95,
-            state_transition_cov_matrix=np.eye(2) * 4.0,
-            observation_cov_matrix=np.eye(2),
-            obstacles=[(5.0, 5.0)],
-            obstacle_hit_probability=1.0,
-            obstacle_reward=-50.0,
-            goal_reward=10.0,
-            fuel_cost=2.0,
-            grid_size=11,
-            goal_state_radius=1.5,
-            obstacle_radius=0.5,
-            is_obstacle_hit_terminal=False,
+            **continuous_light_dark_pinned_kwargs(
+                state_transition_cov_matrix=np.eye(2) * 4.0,
+                observation_cov_matrix=np.eye(2),
+                obstacles=[(5.0, 5.0)],
+                obstacle_hit_probability=1.0,
+                obstacle_reward=-50.0,
+                goal_reward=10.0,
+                fuel_cost=2.0,
+                grid_size=11,
+                goal_state_radius=1.5,
+                obstacle_radius=0.5,
+                is_obstacle_hit_terminal=False,
+            ),
         )
         state = np.array([4.0, 5.0])
         action = np.array([1.0, 0.0])  # state+action == (5,5) — the obstacle
@@ -3376,20 +3476,22 @@ class TestContinuousLightDarkRewardNextStateConsistency:
         """
         env = ContinuousLightDarkPOMDP(
             discount_factor=0.95,
-            state_transition_cov_matrix=np.eye(2) * 1e-12,
-            observation_cov_matrix=np.eye(2),
-            obstacles=[(8.0, 5.0)],
-            obstacle_reward=-25.0,
-            goal_reward=10.0,
-            fuel_cost=1.0,
-            grid_size=20,
-            goal_state=np.array([18, 5]),
-            goal_state_radius=1.0,
-            beacon_radius=1.0,
-            obstacle_radius=1.0,
-            reward_model_type=RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY,
-            penalty_decay=0.1,
-            is_obstacle_hit_terminal=False,
+            **continuous_light_dark_pinned_kwargs(
+                state_transition_cov_matrix=np.eye(2) * 1e-12,
+                observation_cov_matrix=np.eye(2),
+                obstacles=[(8.0, 5.0)],
+                obstacle_reward=-25.0,
+                goal_reward=10.0,
+                fuel_cost=1.0,
+                grid_size=20,
+                goal_state=np.array([18, 5]),
+                goal_state_radius=1.0,
+                beacon_radius=1.0,
+                obstacle_radius=1.0,
+                reward_model_type=RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY,
+                penalty_decay=0.1,
+                is_obstacle_hit_terminal=False,
+            ),
         )
         states = np.array([[4.0, 5.0], [4.0, 5.0], [4.0, 5.0], [4.0, 5.0]])
         action = np.array([1.0, 0.0])
@@ -3425,18 +3527,20 @@ class TestContinuousLightDarkRewardNextStateConsistency:
         """
         env = ContinuousLightDarkPOMDPDiscreteActions(
             discount_factor=0.95,
-            state_transition_cov_matrix=np.eye(2) * 1e-12,
-            observation_cov_matrix=np.eye(2),
-            obstacles=[(8.0, 5.0)],
-            obstacle_hit_probability=1.0,
-            obstacle_reward=-25.0,
-            goal_reward=10.0,
-            fuel_cost=1.0,
-            grid_size=20,
-            goal_state=np.array([18, 5]),
-            goal_state_radius=1.0,
-            obstacle_radius=1.0,
-            is_obstacle_hit_terminal=False,
+            **continuous_light_dark_discrete_actions_pinned_kwargs(
+                state_transition_cov_matrix=np.eye(2) * 1e-12,
+                observation_cov_matrix=np.eye(2),
+                obstacles=[(8.0, 5.0)],
+                obstacle_hit_probability=1.0,
+                obstacle_reward=-25.0,
+                goal_reward=10.0,
+                fuel_cost=1.0,
+                grid_size=20,
+                goal_state=np.array([18, 5]),
+                goal_state_radius=1.0,
+                obstacle_radius=1.0,
+                is_obstacle_hit_terminal=False,
+            ),
         )
         state = np.array([4.0, 5.0])
         clean = np.array([5.0, 5.0])

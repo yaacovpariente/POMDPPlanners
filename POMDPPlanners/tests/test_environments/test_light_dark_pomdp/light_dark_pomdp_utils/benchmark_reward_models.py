@@ -30,6 +30,7 @@ from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp imp
     ContinuousLightDarkPOMDP,
     RewardModelType,
 )
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import continuous_light_dark_pinned_kwargs
 
 # Fixed workload: 4 obstacles on a 10x10 grid, goal at (8, 8).
 GOAL_STATE = np.array([8.0, 8.0])
@@ -61,7 +62,6 @@ def _time_fn(fn: Callable[[], Any], n_runs: int) -> Tuple[float, float]:
 
 def _build_envs() -> List[Tuple[str, ContinuousLightDarkPOMDP]]:
     common = {
-        "discount_factor": 0.95,
         "goal_state": GOAL_STATE,
         "obstacles": OBSTACLES_LIST,
         "goal_state_radius": GOAL_RADIUS,
@@ -77,19 +77,31 @@ def _build_envs() -> List[Tuple[str, ContinuousLightDarkPOMDP]]:
         (
             "ConstantHazardPenalty",
             ContinuousLightDarkPOMDP(
-                reward_model_type=RewardModelType.CONSTANT_HAZARD_PENALTY, **common
+                discount_factor=0.95,
+                **continuous_light_dark_pinned_kwargs(
+                    **common,
+                    reward_model_type=RewardModelType.CONSTANT_HAZARD_PENALTY,
+                ),
             ),
         ),
         (
             "ZeroMeanHazardShock",
             ContinuousLightDarkPOMDP(
-                reward_model_type=RewardModelType.ZERO_MEAN_HAZARD_SHOCK, **common
+                discount_factor=0.95,
+                **continuous_light_dark_pinned_kwargs(
+                    **common,
+                    reward_model_type=RewardModelType.ZERO_MEAN_HAZARD_SHOCK,
+                ),
             ),
         ),
         (
             "DistanceDecayedHazardPenalty",
             ContinuousLightDarkPOMDP(
-                reward_model_type=RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY, **common
+                discount_factor=0.95,
+                **continuous_light_dark_pinned_kwargs(
+                    **common,
+                    reward_model_type=RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY,
+                ),
             ),
         ),
     ]

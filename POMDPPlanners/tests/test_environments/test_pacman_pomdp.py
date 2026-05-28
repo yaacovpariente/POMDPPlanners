@@ -27,6 +27,7 @@ from POMDPPlanners.tests.test_utils.metric_invariants_utils import (
     verify_metric_sanity,
     verify_return_shift_linearity,
 )
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import pacman_pinned_kwargs
 from POMDPPlanners.environments.pacman_pomdp import (
     PacManPOMDP,
     create_simple_maze_pacman,
@@ -42,7 +43,11 @@ class TestMakeState:
 
     def setup_method(self):
         """Construct a shared env with two ghosts and four pellets."""
+        # num_ghosts overridden to 2; the env auto-generates per-ghost
+        # ``ghost_strategies``, so do not inject the single-ghost pinned
+        # defaults here.
         self.pomdp = PacManPOMDP(
+            discount_factor=0.95,
             maze_size=(7, 7),
             walls=set(),
             initial_pellets=[(0, 0), (5, 5), (1, 2), (3, 4)],
@@ -169,12 +174,15 @@ class TestPacManStateTransition:
     def setup_method(self):
         """Set up test environment and states for each test."""
         self.pomdp = PacManPOMDP(
-            maze_size=(5, 5),
-            walls={(2, 2)},
-            initial_pellets=[(1, 1), (3, 3)],
-            initial_pacman_pos=(0, 0),
-            num_ghosts=1,
-            initial_ghost_positions=[(4, 4)],
+            discount_factor=0.95,
+            **pacman_pinned_kwargs(
+                maze_size=(5, 5),
+                walls={(2, 2)},
+                initial_pellets=[(1, 1), (3, 3)],
+                initial_pacman_pos=(0, 0),
+                num_ghosts=1,
+                initial_ghost_positions=[(4, 4)],
+            ),
         )
 
         self.state = self.pomdp.make_state(
@@ -412,14 +420,17 @@ class TestPacManObservation:
     def setup_method(self):
         """Set up test environment for each test."""
         self.pomdp = PacManPOMDP(
-            maze_size=(5, 5),
-            walls={(1, 2), (2, 1), (3, 4)},  # Custom walls that don't conflict
-            initial_pellets=[(1, 1), (1, 3), (3, 1), (3, 3)],  # Valid for 5x5 maze
-            observation_noise_factor=0.5,
-            max_observation_noise=2.0,
-            initial_pacman_pos=(0, 0),
-            num_ghosts=1,
-            initial_ghost_positions=[(4, 4)],
+            discount_factor=0.95,
+            **pacman_pinned_kwargs(
+                maze_size=(5, 5),
+                walls={(1, 2), (2, 1), (3, 4)},  # Custom walls that don't conflict
+                initial_pellets=[(1, 1), (1, 3), (3, 1), (3, 3)],  # Valid for 5x5 maze
+                observation_noise_factor=0.5,
+                max_observation_noise=2.0,
+                initial_pacman_pos=(0, 0),
+                num_ghosts=1,
+                initial_ghost_positions=[(4, 4)],
+            ),
         )
 
     def _sample_observations(self, next_state: np.ndarray, action: int, n: int):
@@ -566,12 +577,15 @@ class TestPacManPOMDP:
     def setup_method(self):
         """Set up test environment for each test."""
         self.pomdp = PacManPOMDP(
-            maze_size=(5, 5),
-            walls={(2, 2), (3, 1)},
-            initial_pellets=[(1, 1), (3, 3)],
-            initial_pacman_pos=(0, 0),
-            num_ghosts=1,
-            initial_ghost_positions=[(4, 4)],
+            discount_factor=0.95,
+            **pacman_pinned_kwargs(
+                maze_size=(5, 5),
+                walls={(2, 2), (3, 1)},
+                initial_pellets=[(1, 1), (3, 3)],
+                initial_pacman_pos=(0, 0),
+                num_ghosts=1,
+                initial_ghost_positions=[(4, 4)],
+            ),
         )
 
     def test_pomdp_initialization(self):
@@ -585,7 +599,7 @@ class TestPacManPOMDP:
 
         Test type: unit
         """
-        pomdp = PacManPOMDP()
+        pomdp = PacManPOMDP(discount_factor=0.95, **pacman_pinned_kwargs())
 
         assert pomdp.maze_size == (7, 7)
         assert pomdp.initial_pacman_pos == (0, 0)
@@ -649,12 +663,15 @@ class TestPacManPOMDP:
         """
         with pytest.raises(ValueError, match="Pellet position .* is inside a wall"):
             PacManPOMDP(
-                maze_size=(5, 5),
-                walls={(2, 2)},
-                initial_pellets=[(2, 2), (3, 3)],  # Pellet inside wall
-                initial_pacman_pos=(0, 0),
-                num_ghosts=1,
-                initial_ghost_positions=[(4, 4)],
+                discount_factor=0.95,
+                **pacman_pinned_kwargs(
+                    maze_size=(5, 5),
+                    walls={(2, 2)},
+                    initial_pellets=[(2, 2), (3, 3)],  # Pellet inside wall
+                    initial_pacman_pos=(0, 0),
+                    num_ghosts=1,
+                    initial_ghost_positions=[(4, 4)],
+                ),
             )
 
     def test_pomdp_parameter_validation_initial_pos_in_wall(self):
@@ -670,22 +687,28 @@ class TestPacManPOMDP:
         """
         with pytest.raises(ValueError, match="Initial PacMan position .* is inside a wall"):
             PacManPOMDP(
-                maze_size=(5, 5),
-                walls={(0, 0)},
-                initial_pellets=[(1, 1)],
-                initial_pacman_pos=(0, 0),  # In wall
-                num_ghosts=1,
-                initial_ghost_positions=[(4, 4)],
+                discount_factor=0.95,
+                **pacman_pinned_kwargs(
+                    maze_size=(5, 5),
+                    walls={(0, 0)},
+                    initial_pellets=[(1, 1)],
+                    initial_pacman_pos=(0, 0),  # In wall
+                    num_ghosts=1,
+                    initial_ghost_positions=[(4, 4)],
+                ),
             )
 
         with pytest.raises(ValueError, match="Initial ghost 0 position .* is inside a wall"):
             PacManPOMDP(
-                maze_size=(5, 5),
-                walls={(4, 4)},
-                initial_pellets=[(1, 1)],
-                initial_pacman_pos=(0, 0),
-                num_ghosts=1,
-                initial_ghost_positions=[(4, 4)],  # In wall
+                discount_factor=0.95,
+                **pacman_pinned_kwargs(
+                    maze_size=(5, 5),
+                    walls={(4, 4)},
+                    initial_pellets=[(1, 1)],
+                    initial_pacman_pos=(0, 0),
+                    num_ghosts=1,
+                    initial_ghost_positions=[(4, 4)],  # In wall
+                ),
             )
 
     def test_get_actions(self):
@@ -901,7 +924,10 @@ class TestPacManPOMDP:
         assert self.pomdp.reward_range == (expected_min, expected_max)
 
         # Test with custom parameters
+        # Legacy single-ghost ``initial_ghost_pos`` is under test here; do not
+        # let the pinned ``initial_ghost_positions`` default override it.
         custom_pomdp = PacManPOMDP(
+            discount_factor=0.95,
             maze_size=(5, 5),
             walls={(1, 2), (2, 1), (3, 4)},  # Custom walls that don't conflict
             initial_pellets=[(1, 1), (1, 3), (3, 1), (3, 3)],  # Valid for 5x5 maze
@@ -969,11 +995,14 @@ class TestPacManPOMDPMetrics:
     def setup_method(self):
         """Set up test environment for metrics tests."""
         self.pomdp = PacManPOMDP(
-            maze_size=(5, 5),
-            walls={(1, 2), (3, 1)},  # Custom walls that don't conflict with pellets
-            initial_pellets=[(1, 1), (3, 3)],  # Valid pellets not in walls
-            initial_pacman_pos=(0, 0),
-            initial_ghost_positions=[(4, 4)],  # Multi-ghost format
+            discount_factor=0.95,
+            **pacman_pinned_kwargs(
+                maze_size=(5, 5),
+                walls={(1, 2), (3, 1)},  # Custom walls that don't conflict with pellets
+                initial_pellets=[(1, 1), (3, 3)],  # Valid pellets not in walls
+                initial_pacman_pos=(0, 0),
+                initial_ghost_positions=[(4, 4)],  # Multi-ghost format
+            ),
         )
 
     def test_compute_metrics_empty_histories(self):
@@ -1547,15 +1576,18 @@ class TestPacManPOMDPDangerMetrics:
     def setup_method(self):
         """Set up a PacMan env with a single danger zone at (3, 3) radius 1."""
         self.pomdp = PacManPOMDP(
-            maze_size=(7, 7),
-            walls=set(),
-            initial_pellets=[(0, 6)],
-            initial_pacman_pos=(0, 0),
-            num_ghosts=1,
-            initial_ghost_positions=[(6, 6)],
-            dangerous_areas={(3, 3)},
-            dangerous_area_radius=1.0,
-            dangerous_area_penalty=5.0,
+            discount_factor=0.95,
+            **pacman_pinned_kwargs(
+                maze_size=(7, 7),
+                walls=set(),
+                initial_pellets=[(0, 6)],
+                initial_pacman_pos=(0, 0),
+                num_ghosts=1,
+                initial_ghost_positions=[(6, 6)],
+                dangerous_areas={(3, 3)},
+                dangerous_area_radius=1.0,
+                dangerous_area_penalty=5.0,
+            ),
         )
 
     def _make_state(
@@ -1793,7 +1825,10 @@ def test_pacman_pomdp_usage_example():
     # Execute the exact usage example from docstring
     walls = {(1, 1), (1, 2), (3, 3)}
     pellets = [(0, 2), (2, 0), (4, 4)]
-    pomdp = PacManPOMDP(maze_size=(7, 7), walls=walls, initial_pellets=pellets)
+    pomdp = PacManPOMDP(
+        discount_factor=0.95,
+        **pacman_pinned_kwargs(maze_size=(7, 7), walls=walls, initial_pellets=pellets),
+    )
 
     # Sample initial state
     initial_state = pomdp.initial_state_dist().sample()[0]
@@ -1812,7 +1847,10 @@ class TestMultiGhostFeatures:
 
     def setup_method(self):
         """Set up a default 3-ghost / 4-pellet env for state-construction tests."""
+        # num_ghosts overridden to 3; keep explicit kwargs so the env
+        # auto-generates per-ghost ``ghost_strategies`` for 3 ghosts.
         self.pomdp = PacManPOMDP(
+            discount_factor=0.95,
             maze_size=(7, 7),
             walls=set(),
             initial_pellets=[(0, 0), (5, 5), (0, 1), (1, 1)],
@@ -1833,6 +1871,7 @@ class TestMultiGhostFeatures:
         Test type: unit
         """
         pomdp = PacManPOMDP(
+            discount_factor=0.95,
             maze_size=(7, 7),
             walls={(2, 2), (3, 3)},
             initial_pellets=[(0, 1), (1, 0)],
@@ -1886,6 +1925,7 @@ class TestMultiGhostFeatures:
         Test type: unit
         """
         pomdp = PacManPOMDP(
+            discount_factor=0.95,
             maze_size=(5, 5),
             walls={(2, 2)},
             initial_pellets=[(0, 1)],
@@ -1922,6 +1962,7 @@ class TestMultiGhostFeatures:
         """
         # Test independent coordination
         pomdp_independent = PacManPOMDP(
+            discount_factor=0.95,
             maze_size=(5, 5),
             walls=set(),  # No walls to avoid conflicts
             initial_pellets=[(0, 1), (2, 2)],  # Explicit pellets within bounds
@@ -1933,6 +1974,7 @@ class TestMultiGhostFeatures:
 
         # Test coordinated strategy
         pomdp_coordinated = PacManPOMDP(
+            discount_factor=0.95,
             maze_size=(5, 5),
             walls=set(),  # No walls to avoid conflicts
             initial_pellets=[(0, 1), (2, 2)],  # Explicit pellets within bounds
@@ -1944,6 +1986,7 @@ class TestMultiGhostFeatures:
 
         # Test mixed strategy
         pomdp_mixed = PacManPOMDP(
+            discount_factor=0.95,
             maze_size=(5, 5),
             walls=set(),  # No walls to avoid conflicts
             initial_pellets=[(0, 1), (2, 2)],  # Explicit pellets within bounds
@@ -1965,6 +2008,7 @@ class TestMultiGhostFeatures:
         Test type: unit
         """
         pomdp = PacManPOMDP(
+            discount_factor=0.95,
             maze_size=(6, 6),
             walls=set(),  # No walls to avoid conflicts
             initial_pellets=[(0, 1), (1, 0), (2, 2)],  # Explicit pellets within bounds
@@ -1990,6 +2034,7 @@ class TestMultiGhostFeatures:
         Test type: unit
         """
         pomdp = PacManPOMDP(
+            discount_factor=0.95,
             maze_size=(5, 5),
             walls=set(),
             initial_pellets=[(0, 0), (3, 3)],
@@ -2034,6 +2079,7 @@ class TestMultiGhostFeatures:
         Test type: integration
         """
         pomdp = PacManPOMDP(
+            discount_factor=0.95,
             maze_size=(5, 5),
             walls=set(),  # No walls for simpler testing
             initial_pellets=[(1, 1)],
@@ -2067,6 +2113,7 @@ class TestMultiGhostFeatures:
         Test type: unit
         """
         pomdp = PacManPOMDP(
+            discount_factor=0.95,
             maze_size=(5, 5),
             walls=set(),  # No walls to avoid conflicts
             initial_pellets=[(0, 1), (1, 0)],  # Explicit pellets within bounds
@@ -2116,11 +2163,14 @@ class TestMultiGhostFeatures:
         """
         # Build a single-ghost env for this assertion block
         single_ghost_pomdp = PacManPOMDP(
-            maze_size=(5, 5),
-            walls=set(),
-            initial_pellets=[(0, 0), (0, 1), (2, 2)],
-            initial_ghost_positions=[(3, 4)],
-            num_ghosts=1,
+            discount_factor=0.95,
+            **pacman_pinned_kwargs(
+                maze_size=(5, 5),
+                walls=set(),
+                initial_pellets=[(0, 0), (0, 1), (2, 2)],
+                initial_ghost_positions=[(3, 4)],
+                num_ghosts=1,
+            ),
         )
         state = single_ghost_pomdp.make_state(
             pacman_pos=(1, 2),
@@ -2135,18 +2185,24 @@ class TestMultiGhostFeatures:
 
         # Test PacManPOMDP backward compatibility
         pomdp = PacManPOMDP(
-            maze_size=(5, 5),
-            walls=set(),  # No walls to avoid conflicts
-            initial_pellets=[(0, 1), (2, 2)],  # Explicit pellets within bounds
-            initial_ghost_positions=[(4, 4)],  # Single ghost
+            discount_factor=0.95,
+            **pacman_pinned_kwargs(
+                maze_size=(5, 5),
+                walls=set(),  # No walls to avoid conflicts
+                initial_pellets=[(0, 1), (2, 2)],  # Explicit pellets within bounds
+                initial_ghost_positions=[(4, 4)],  # Single ghost
+            ),
         )
 
         # Should work with single ghost
         assert pomdp.num_ghosts == 1
         assert pomdp.initial_ghost_positions == [(4, 4)]
 
-        # Legacy initialization should still work
+        # Legacy initialization should still work. The legacy single-ghost
+        # ``initial_ghost_pos`` param is under test, so the pinned
+        # ``initial_ghost_positions`` default must not be injected here.
         pomdp_legacy = PacManPOMDP(
+            discount_factor=0.95,
             maze_size=(5, 5),
             walls=set(),  # No walls to avoid conflicts
             initial_pellets=[(0, 1), (2, 2)],  # Explicit pellets within bounds
@@ -2168,13 +2224,15 @@ class TestArrayStateLayout:
     @pytest.fixture()
     def env(self):
         return PacManPOMDP(
-            maze_size=(5, 5),
-            walls={(2, 2)},
-            initial_pellets=[(1, 1), (3, 3)],
-            initial_pacman_pos=(0, 0),
-            num_ghosts=1,
-            initial_ghost_positions=[(4, 4)],
             discount_factor=0.95,
+            **pacman_pinned_kwargs(
+                maze_size=(5, 5),
+                walls={(2, 2)},
+                initial_pellets=[(1, 1), (3, 3)],
+                initial_pacman_pos=(0, 0),
+                num_ghosts=1,
+                initial_ghost_positions=[(4, 4)],
+            ),
         )
 
     def test_make_state_shape(self, env):
@@ -2293,13 +2351,15 @@ class TestRewardBatch:
     @pytest.fixture()
     def env(self):
         return PacManPOMDP(
-            maze_size=(5, 5),
-            walls={(2, 2)},
-            initial_pellets=[(1, 1), (3, 3)],
-            initial_pacman_pos=(0, 0),
-            num_ghosts=1,
-            initial_ghost_positions=[(4, 4)],
             discount_factor=0.95,
+            **pacman_pinned_kwargs(
+                maze_size=(5, 5),
+                walls={(2, 2)},
+                initial_pellets=[(1, 1), (3, 3)],
+                initial_pacman_pos=(0, 0),
+                num_ghosts=1,
+                initial_ghost_positions=[(4, 4)],
+            ),
         )
 
     def test_shape(self, env):
@@ -2389,17 +2449,19 @@ class TestNativeSimulateRollout:
 
     def _make_env(self) -> PacManPOMDP:
         return PacManPOMDP(
-            maze_size=(7, 7),
-            walls={(2, 2), (2, 3), (3, 2), (4, 4), (3, 5)},
-            initial_pellets=[(1, 1), (1, 5), (5, 1), (5, 5)],
-            initial_pacman_pos=(0, 0),
-            num_ghosts=1,
-            initial_ghost_positions=[(6, 6)],
-            pellet_reward=10.0,
-            ghost_collision_penalty=-100.0,
-            step_penalty=-1.0,
-            win_reward=100.0,
             discount_factor=0.95,
+            **pacman_pinned_kwargs(
+                maze_size=(7, 7),
+                walls={(2, 2), (2, 3), (3, 2), (4, 4), (3, 5)},
+                initial_pellets=[(1, 1), (1, 5), (5, 1), (5, 5)],
+                initial_pacman_pos=(0, 0),
+                num_ghosts=1,
+                initial_ghost_positions=[(6, 6)],
+                pellet_reward=10.0,
+                ghost_collision_penalty=-100.0,
+                step_penalty=-1.0,
+                win_reward=100.0,
+            ),
         )
 
     def test_pacman_native_simulate_rollout_matches_python(self):
@@ -2601,15 +2663,18 @@ class TestPacManDangerousAreas:
         # by moving east, and (3, 4) sits exactly at distance 1.0 from the
         # center to exercise the squared-distance boundary check.
         self.pomdp = PacManPOMDP(
-            maze_size=(7, 7),
-            walls=set(),
-            initial_pellets=[(0, 6)],
-            initial_pacman_pos=(0, 0),
-            num_ghosts=1,
-            initial_ghost_positions=[(6, 6)],
-            dangerous_areas={(3, 3)},
-            dangerous_area_radius=1.0,
-            dangerous_area_penalty=5.0,
+            discount_factor=0.95,
+            **pacman_pinned_kwargs(
+                maze_size=(7, 7),
+                walls=set(),
+                initial_pellets=[(0, 6)],
+                initial_pacman_pos=(0, 0),
+                num_ghosts=1,
+                initial_ghost_positions=[(6, 6)],
+                dangerous_areas={(3, 3)},
+                dangerous_area_radius=1.0,
+                dangerous_area_penalty=5.0,
+            ),
         )
 
     def _state_with_pac(self, pos: Tuple[int, int], score: float = 0.0) -> np.ndarray:
@@ -2637,12 +2702,15 @@ class TestPacManDangerousAreas:
         Test type: unit
         """
         plain = PacManPOMDP(
-            maze_size=(7, 7),
-            walls=set(),
-            initial_pellets=[(0, 6)],
-            initial_pacman_pos=(0, 0),
-            num_ghosts=1,
-            initial_ghost_positions=[(6, 6)],
+            discount_factor=0.95,
+            **pacman_pinned_kwargs(
+                maze_size=(7, 7),
+                walls=set(),
+                initial_pellets=[(0, 6)],
+                initial_pacman_pos=(0, 0),
+                num_ghosts=1,
+                initial_ghost_positions=[(6, 6)],
+            ),
         )
         state = plain.make_state(pacman_pos=(3, 2), ghost_positions=((6, 6),), pellets=((0, 6),))
         next_state = plain.make_state(
@@ -2771,13 +2839,16 @@ class TestPacManDangerousAreas:
         """
         with pytest.raises(ValueError, match=r"Dangerous area .* is outside maze bounds"):
             PacManPOMDP(
-                maze_size=(5, 5),
-                walls=set(),
-                initial_pellets=[(1, 1)],
-                initial_pacman_pos=(0, 0),
-                num_ghosts=1,
-                initial_ghost_positions=[(4, 4)],
-                dangerous_areas={(5, 0)},
+                discount_factor=0.95,
+                **pacman_pinned_kwargs(
+                    maze_size=(5, 5),
+                    walls=set(),
+                    initial_pellets=[(1, 1)],
+                    initial_pacman_pos=(0, 0),
+                    num_ghosts=1,
+                    initial_ghost_positions=[(4, 4)],
+                    dangerous_areas={(5, 0)},
+                ),
             )
 
     def test_dangerous_area_negative_radius_or_penalty_raises(self):
@@ -2804,9 +2875,15 @@ class TestPacManDangerousAreas:
             "dangerous_areas": {(2, 2)},
         }
         with pytest.raises(ValueError, match=r"dangerous_area_radius must be non-negative"):
-            PacManPOMDP(dangerous_area_radius=-0.1, **common)  # type: ignore[arg-type]
+            PacManPOMDP(
+                discount_factor=0.95,
+                **pacman_pinned_kwargs(dangerous_area_radius=-0.1, **common),  # type: ignore[arg-type]
+            )
         with pytest.raises(ValueError, match=r"dangerous_area_penalty must be non-negative"):
-            PacManPOMDP(dangerous_area_penalty=-1.0, **common)  # type: ignore[arg-type]
+            PacManPOMDP(
+                discount_factor=0.95,
+                **pacman_pinned_kwargs(dangerous_area_penalty=-1.0, **common),  # type: ignore[arg-type]
+            )
 
     def test_dangerous_areas_do_not_block_movement_or_terminate(self):
         """Walking through a zone is allowed and non-terminal.
