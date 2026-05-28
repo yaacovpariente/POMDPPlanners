@@ -5,12 +5,12 @@
 Implements the SPUCT selection rule that masks unsafe actions based on their
 estimated failure probability relative to an adaptive threshold Delta'.
 
-Reference:
+References:
     Moss, R. J., Jamgochian, A., Fischer, J., Corso, A., & Kochenderfer, M. J. (2024).
     ConstrainedZero: Chance-Constrained POMDP Planning Using Learned Probabilistic Failure
     Surrogates and Adaptive Safety Constraints. Proceedings of the Thirty-Third International
-    Joint Conference on Artificial Intelligence (IJCAI), 6752-6760.
-    https://www.ijcai.org/proceedings/2024/746
+    Joint Conference on Artificial Intelligence (IJCAI), 6752-6760. arXiv:2405.00644.
+    https://arxiv.org/abs/2405.00644
 
 Functions:
     spuct_selection: Select among existing children using safety-masked PUCT.
