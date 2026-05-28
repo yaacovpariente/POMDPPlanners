@@ -162,7 +162,7 @@ class ContinuousLaserTagPOMDP(Environment):
         measurement_noise: float = 1.0,
         robot_transition_cov_matrix: np.ndarray = np.eye(2) * 0.1,
         opponent_transition_cov_matrix: np.ndarray = np.eye(2) * 0.05,
-        pursuit_speed: float = 0.6,
+        evasion_speed: float = 0.6,
         dangerous_areas: Optional[List[Tuple[float, float]]] = None,
         dangerous_area_radius: float = 1.0,
         dangerous_area_penalty: float = 5.0,
@@ -188,7 +188,7 @@ class ContinuousLaserTagPOMDP(Environment):
             measurement_noise: Std of Gaussian laser noise.
             robot_transition_cov_matrix: 2x2 covariance for robot noise.
             opponent_transition_cov_matrix: 2x2 covariance for opponent noise.
-            pursuit_speed: Mean opponent step magnitude toward robot.
+            evasion_speed: Mean opponent step magnitude away from robot.
             dangerous_areas: Dangerous area centers as ``(x, y)`` tuples.
             dangerous_area_radius: Radius of dangerous areas.
             dangerous_area_penalty: Penalty for being in a dangerous area.
@@ -234,7 +234,7 @@ class ContinuousLaserTagPOMDP(Environment):
         self.tag_penalty = tag_penalty
         self.step_cost = step_cost
         self.measurement_noise = measurement_noise
-        self.pursuit_speed = pursuit_speed
+        self.evasion_speed = evasion_speed
         self.dangerous_areas: List[Tuple[float, float]] = (
             list(dangerous_areas) if dangerous_areas is not None else list(_DEFAULT_DANGEROUS_AREAS)
         )
@@ -272,7 +272,7 @@ class ContinuousLaserTagPOMDP(Environment):
         self._rollout_static_params: Dict[str, Any] = {
             "robot_covariance": self._robot_transition_dist.covariance,
             "opponent_covariance": self._opponent_transition_dist.covariance,
-            "pursuit_speed": self.pursuit_speed,
+            "evasion_speed": self.evasion_speed,
             "walls": self._walls,
             "grid_size": self._grid_size,
             "robot_radius": self.robot_radius,
@@ -309,7 +309,7 @@ class ContinuousLaserTagPOMDP(Environment):
                 action=action_arr,
                 robot_covariance=self._robot_transition_dist.covariance,
                 opponent_covariance=self._opponent_transition_dist.covariance,
-                pursuit_speed=self.pursuit_speed,
+                evasion_speed=self.evasion_speed,
                 walls=self._walls,
                 grid_size=self._grid_size,
                 robot_radius=self.robot_radius,
@@ -990,7 +990,7 @@ class ContinuousLaserTagPOMDPDiscreteActions(ContinuousLaserTagPOMDP, DiscreteAc
         measurement_noise: float = 1.0,
         robot_transition_cov_matrix: np.ndarray = np.eye(2) * 0.1,
         opponent_transition_cov_matrix: np.ndarray = np.eye(2) * 0.05,
-        pursuit_speed: float = 0.6,
+        evasion_speed: float = 0.6,
         dangerous_areas: Optional[List[Tuple[float, float]]] = None,
         dangerous_area_radius: float = 1.0,
         dangerous_area_penalty: float = 5.0,
@@ -1014,7 +1014,7 @@ class ContinuousLaserTagPOMDPDiscreteActions(ContinuousLaserTagPOMDP, DiscreteAc
             measurement_noise=measurement_noise,
             robot_transition_cov_matrix=robot_transition_cov_matrix,
             opponent_transition_cov_matrix=opponent_transition_cov_matrix,
-            pursuit_speed=pursuit_speed,
+            evasion_speed=evasion_speed,
             dangerous_areas=dangerous_areas,
             dangerous_area_radius=dangerous_area_radius,
             dangerous_area_penalty=dangerous_area_penalty,

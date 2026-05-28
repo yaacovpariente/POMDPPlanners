@@ -191,6 +191,61 @@ class TestSampleNextState:
         mean_x = np.mean([s[0] for s in samples])
         assert abs(mean_x - 6.0) < 1.0
 
+    def test_opponent_moves_away_from_robot(self, env):
+        """Test the continuous opponent evades by moving away from the robot.
+
+        Purpose: Validates the opponent's mean step increases distance to the robot
+            (evasion), rather than decreasing it (pursuit)
+
+        Given: Robot at (5, 3) and opponent offset to +x/+y at (8, 5)
+        When: The robot holds position (no-op action) and many next states are sampled
+        Then: The mean opponent position moves further out in both x and y
+
+        Test type: unit
+        """
+        np.random.seed(42)
+        state = np.array([5.0, 3.0, 8.0, 5.0, 0.0])
+        action = np.array([0.0, 0.0, 0.0])  # robot holds position, no tag
+        samples = env.sample_next_state(state, action, n_samples=500)
+
+        mean_opp_x = float(np.mean([s[2] for s in samples]))
+        mean_opp_y = float(np.mean([s[3] for s in samples]))
+
+        assert mean_opp_x > 8.1, f"Expected opponent to flee in +x (>8.1), got {mean_opp_x}"
+        assert mean_opp_y > 5.1, f"Expected opponent to flee in +y (>5.1), got {mean_opp_y}"
+
+    def test_opponent_reacts_to_premove_robot(self):
+        """Test the continuous opponent evades relative to the robot's PRE-move position.
+
+        Purpose: Validates the opponent's evasion direction on a movement action is
+            computed from the robot's current (pre-move) position, consistent with the
+            tag-action path
+
+        Given: A near-deterministic-robot env, robot just left of the opponent on x
+            (robot x=5.0, opponent x=5.4, same y), and a +x action that carries the robot
+            across to the opponent's right
+        When: many next states are sampled
+        Then: the opponent's mean next x increases (it flees +x, away from the robot's
+            pre-move position) rather than decreasing as a post-move robot would cause
+
+        Test type: unit
+        """
+        np.random.seed(0)
+        env = ContinuousLaserTagPOMDP(
+            discount_factor=0.95,
+            walls=[],
+            dangerous_areas=[],
+            robot_transition_cov_matrix=np.eye(2) * 1e-9,
+        )
+        state = np.array([5.0, 3.0, 5.4, 3.0, 0.0])
+        action = np.array([1.0, 0.0, 0.0])  # robot moves +x, crossing to the opponent's right
+        samples = env.sample_next_state(state, action, n_samples=400)
+
+        mean_opp_x = float(np.mean([s[2] for s in samples]))
+        assert (
+            mean_opp_x > 5.6
+        ), f"Expected opponent to flee +x from pre-move robot (>5.6), got {mean_opp_x}"
+
 
 class TestSampleObservation:
     """Tests for env.sample_observation behaviour."""
@@ -248,6 +303,30 @@ class TestSampleObservation:
         samples = env.sample_observation(state, action, n_samples=20)
         for obs in samples:
             assert np.all(obs >= 0)
+
+    def test_beam_toward_opponent_reads_true_distance(self):
+        """Test the laser beam pointing at the opponent reads the true distance.
+
+        Purpose: Validates the opponent is sensed on its laser ray as
+            (center distance - opponent_radius) under negligible noise
+
+        Given: Robot at (5, 3) and opponent 3 units East at (8, 3), an open arena
+            (no walls), and near-zero measurement noise
+        When: An observation is sampled
+        Then: The East beam reads ~= 3 - opponent_radius (the opponent's near edge)
+
+        Test type: unit
+        """
+        np.random.seed(0)
+        env = ContinuousLaserTagPOMDP(
+            discount_factor=0.95, walls=[], dangerous_areas=[], measurement_noise=1e-6
+        )
+        state = np.array([5.0, 3.0, 8.0, 3.0, 0.0])
+        obs = np.asarray(env.sample_observation(state, np.array([0.0, 0.0, 0.0]), n_samples=1))
+        # Laser directions order: N, NE, E, SE, S, SW, W, NW -> East is index 2.
+        east_beam = float(obs[2])
+        expected = 3.0 - env.opponent_radius
+        assert abs(east_beam - expected) < 0.01, f"East beam {east_beam} != expected {expected}"
 
 
 class TestReward:

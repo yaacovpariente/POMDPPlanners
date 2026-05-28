@@ -509,7 +509,7 @@ class TestEquivalenceWithPerParticleLoop:
         """
         np.random.seed(42)
         n_samples = 2000
-        # Robot at (1, 1), opponent at (3, 3) → opponent should move toward robot
+        # Robot at (1, 1), opponent at (3, 3) → opponent evades away from robot
         particle = np.array([[1.0, 1.0, 3.0, 3.0, 0.0]])
         particles = np.tile(particle, (n_samples, 1))
 
@@ -520,9 +520,9 @@ class TestEquivalenceWithPerParticleLoop:
         unique, counts = np.unique(opp_positions, axis=0, return_counts=True)
         freq = dict(zip([tuple(u) for u in unique], counts / n_samples))
 
-        # Expected: h_target=(3,2) prob=0.4, v_target=(2,3) prob=0.4, stay=(3,3) prob=0.2
-        assert abs(freq.get((3.0, 2.0), 0) - 0.4) < 0.05
-        assert abs(freq.get((2.0, 3.0), 0) - 0.4) < 0.05
+        # Expected: h_target=(3,4) prob=0.4, v_target=(4,3) prob=0.4, stay=(3,3) prob=0.2
+        assert abs(freq.get((3.0, 4.0), 0) - 0.4) < 0.05
+        assert abs(freq.get((4.0, 3.0), 0) - 0.4) < 0.05
         assert abs(freq.get((3.0, 3.0), 0) - 0.2) < 0.05
 
     def test_observation_log_likelihood_matches_per_particle_loop(

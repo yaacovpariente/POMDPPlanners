@@ -277,12 +277,12 @@ struct EnvParams {
     double robot_radius;
     double opponent_radius;
     double tag_radius;
-    double pursuit_speed;
+    double evasion_speed;
 };
 
 EnvParams make_env_params(const py::array_t<double> &walls_arr,
                           const py::array_t<double> &grid_size, double robot_radius,
-                          double opponent_radius, double tag_radius, double pursuit_speed) {
+                          double opponent_radius, double tag_radius, double evasion_speed) {
     if (grid_size.ndim() != 1 || grid_size.shape(0) != 2) {
         throw std::invalid_argument("grid_size must have shape (2,)");
     }
@@ -294,7 +294,7 @@ EnvParams make_env_params(const py::array_t<double> &walls_arr,
     p.robot_radius = robot_radius;
     p.opponent_radius = opponent_radius;
     p.tag_radius = tag_radius;
-    p.pursuit_speed = pursuit_speed;
+    p.evasion_speed = evasion_speed;
     return p;
 }
 
@@ -313,13 +313,13 @@ void sample_move(double mean_x, double mean_y, double radius,
     clamp_to_grid(out_x, out_y, radius, env.grid_w, env.grid_h);
 }
 
-// Compute the pursuit target for the opponent: move ``pursuit_speed`` toward
+// Compute the evasion target for the opponent: move ``evasion_speed`` away from
 // the robot, sampling a random unit vector when the two are coincident.
-void opponent_pursuit_mean(double robot_x, double robot_y, double opp_x, double opp_y,
-                           double pursuit_speed, pomdp_native::RNGState &rng, double &mean_x,
+void opponent_evasion_mean(double robot_x, double robot_y, double opp_x, double opp_y,
+                           double evasion_speed, pomdp_native::RNGState &rng, double &mean_x,
                            double &mean_y) {
-    const double diff_x = robot_x - opp_x;
-    const double diff_y = robot_y - opp_y;
+    const double diff_x = opp_x - robot_x;
+    const double diff_y = opp_y - robot_y;
     const double dist = std::hypot(diff_x, diff_y);
     double dir_x;
     double dir_y;
@@ -334,8 +334,8 @@ void opponent_pursuit_mean(double robot_x, double robot_y, double opp_x, double 
         dir_x = diff_x / dist;
         dir_y = diff_y / dist;
     }
-    mean_x = opp_x + pursuit_speed * dir_x;
-    mean_y = opp_y + pursuit_speed * dir_y;
+    mean_x = opp_x + evasion_speed * dir_x;
+    mean_y = opp_y + evasion_speed * dir_y;
 }
 
 // Parse the 3-element action vector (dx, dy, tag_flag) from a Python object.
@@ -376,7 +376,7 @@ class ContinuousLaserTagTransitionCpp {
   public:
     ContinuousLaserTagTransitionCpp(const py::object &state_obj, const py::object &action_obj,
                                     const py::array_t<double> &robot_cov,
-                                    const py::array_t<double> &opponent_cov, double pursuit_speed,
+                                    const py::array_t<double> &opponent_cov, double evasion_speed,
                                     const py::array_t<double> &walls_arr,
                                     const py::array_t<double> &grid_size, double robot_radius,
                                     double opponent_radius, double tag_radius)
@@ -385,7 +385,7 @@ class ContinuousLaserTagTransitionCpp {
           robot_noise_(pomdp_native::GaussianND<2>::from_covariance(robot_cov)),
           opp_noise_(pomdp_native::GaussianND<2>::from_covariance(opponent_cov)),
           env_(make_env_params(walls_arr, grid_size, robot_radius, opponent_radius, tag_radius,
-                               pursuit_speed)) {}
+                               evasion_speed)) {}
 
     py::list sample(int n_samples) const {
         if (n_samples < 0) {
@@ -481,10 +481,10 @@ class ContinuousLaserTagTransitionCpp {
                 out[4] = 1.0;
                 return;
             }
-            // Robot does not move on a tag; opponent still pursues.
+            // Robot does not move on a tag; opponent still evades.
             double mean_opp_x;
             double mean_opp_y;
-            opponent_pursuit_mean(robot_x, robot_y, opp_x, opp_y, env_.pursuit_speed, rng,
+            opponent_evasion_mean(robot_x, robot_y, opp_x, opp_y, env_.evasion_speed, rng,
                                   mean_opp_x, mean_opp_y);
             double new_opp_x;
             double new_opp_y;
@@ -498,7 +498,7 @@ class ContinuousLaserTagTransitionCpp {
             return;
         }
 
-        // Non-tag action: apply robot Gaussian move then opponent pursuit.
+        // Non-tag action: apply robot Gaussian move then opponent evasion.
         double new_robot_x;
         double new_robot_y;
         sample_move(robot_x + action_[0], robot_y + action_[1], env_.robot_radius, robot_noise_,
@@ -506,7 +506,9 @@ class ContinuousLaserTagTransitionCpp {
 
         double mean_opp_x;
         double mean_opp_y;
-        opponent_pursuit_mean(new_robot_x, new_robot_y, opp_x, opp_y, env_.pursuit_speed, rng,
+        // Opponent reacts to the robot's PRE-move position, consistent with the
+        // tag-action path and the discrete env.
+        opponent_evasion_mean(robot_x, robot_y, opp_x, opp_y, env_.evasion_speed, rng,
                               mean_opp_x, mean_opp_y);
         double new_opp_x;
         double new_opp_y;
@@ -1180,10 +1182,10 @@ static bool cont_step_state(double *state, const double *action, const EnvParams
             state[4] = 1.0;
             return true;
         }
-        // Robot stays; opponent pursues.
+        // Robot stays; opponent evades.
         double mean_opp_x;
         double mean_opp_y;
-        opponent_pursuit_mean(robot_x, robot_y, opp_x, opp_y, env.pursuit_speed, rng, mean_opp_x,
+        opponent_evasion_mean(robot_x, robot_y, opp_x, opp_y, env.evasion_speed, rng, mean_opp_x,
                               mean_opp_y);
         double new_opp_x;
         double new_opp_y;
@@ -1194,7 +1196,7 @@ static bool cont_step_state(double *state, const double *action, const EnvParams
         return false;
     }
 
-    // Non-tag: robot moves, then opponent pursues.
+    // Non-tag: robot moves, then opponent evades.
     double new_robot_x;
     double new_robot_y;
     sample_move(robot_x + action[0], robot_y + action[1], env.robot_radius, robot_noise, env, rng,
@@ -1202,7 +1204,9 @@ static bool cont_step_state(double *state, const double *action, const EnvParams
 
     double mean_opp_x;
     double mean_opp_y;
-    opponent_pursuit_mean(new_robot_x, new_robot_y, opp_x, opp_y, env.pursuit_speed, rng,
+    // Opponent reacts to the robot's PRE-move position, consistent with the
+    // tag-action path and the discrete env.
+    opponent_evasion_mean(robot_x, robot_y, opp_x, opp_y, env.evasion_speed, rng,
                           mean_opp_x, mean_opp_y);
     double new_opp_x;
     double new_opp_y;
@@ -1227,7 +1231,7 @@ static bool cont_step_state(double *state, const double *action, const EnvParams
 //   discount_factor    - per-step gamma
 //   robot_covariance   - (2, 2) float64 covariance for robot Gaussian noise
 //   opponent_covariance- (2, 2) float64 covariance for opponent Gaussian noise
-//   pursuit_speed      - opponent mean step magnitude
+//   evasion_speed      - opponent mean step magnitude
 //   walls              - (M, 4) float64 AABB walls (cx, cy, hx, hy)
 //   grid_size          - (2,) float64 [width, height]
 //   robot_radius       - robot body radius
@@ -1247,7 +1251,7 @@ double cont_simulate_rollout(
     int start_depth, int max_depth, double discount_factor,
     const py::array_t<double, py::array::c_style | py::array::forcecast> &robot_covariance,
     const py::array_t<double, py::array::c_style | py::array::forcecast> &opponent_covariance,
-    double pursuit_speed,
+    double evasion_speed,
     const py::array_t<double, py::array::c_style | py::array::forcecast> &walls,
     const py::array_t<double, py::array::c_style | py::array::forcecast> &grid_size,
     double robot_radius, double opponent_radius, double tag_radius, double tag_reward,
@@ -1273,7 +1277,7 @@ double cont_simulate_rollout(
     // Build env params.
     py::array_t<double> grid_size_arr = grid_size;
     EnvParams env = make_env_params(walls, grid_size_arr, robot_radius, opponent_radius, tag_radius,
-                                    pursuit_speed);
+                                    evasion_speed);
 
     // Build Gaussian noise models.
     pomdp_native::GaussianND<2> robot_noise = pomdp_native::GaussianND<2>::from_covariance(robot_covariance);
@@ -1564,8 +1568,8 @@ std::pair<int, int> disc_sample_opponent_move(
         add_cand(opp_r, opp_c + 1, 0.2);
         add_cand(opp_r, opp_c - 1, 0.2);
     } else {
-        const int toward_c = (robot_c > opp_c) ? opp_c + 1 : opp_c - 1;
-        add_cand(opp_r, toward_c, 0.4);
+        const int away_c = (robot_c > opp_c) ? opp_c - 1 : opp_c + 1;
+        add_cand(opp_r, away_c, 0.4);
     }
 
     // y-moves (row direction, fixed col = opp_c)
@@ -1573,8 +1577,8 @@ std::pair<int, int> disc_sample_opponent_move(
         add_cand(opp_r + 1, opp_c, 0.2);
         add_cand(opp_r - 1, opp_c, 0.2);
     } else {
-        const int toward_r = (robot_r > opp_r) ? opp_r + 1 : opp_r - 1;
-        add_cand(toward_r, opp_c, 0.4);
+        const int away_r = (robot_r > opp_r) ? opp_r - 1 : opp_r + 1;
+        add_cand(away_r, opp_c, 0.4);
     }
 
     // Compute actual_total including the base stay probability 0.2.
@@ -1705,9 +1709,10 @@ double simulate_rollout_discrete(
             break;
         }
 
-        // Sample opponent move.
+        // Sample opponent move. The opponent reacts to the robot's PRE-move
+        // position (robot_r, robot_c), matching LaserTag.jl's transition.
         auto [new_opp_r, new_opp_c] = disc_sample_opponent_move(
-            opp_r, opp_c, new_robot_r, new_robot_c, env, rng);
+            opp_r, opp_c, robot_r, robot_c, env, rng);
 
         state[0] = static_cast<double>(new_robot_r);
         state[1] = static_cast<double>(new_robot_c);
@@ -1775,25 +1780,25 @@ void belief_sample_opponent_move(int robot_r, int robot_c, int opp_r, int opp_c,
     double right_prob = 0.0;
     if (same_col && right_valid) {
         right_prob = 0.2;
-    } else if (robot_c > opp_c && right_valid) {
+    } else if (robot_c < opp_c && right_valid) {
         right_prob = 0.4;
     }
     double left_prob = 0.0;
     if (same_col && left_valid) {
         left_prob = 0.2;
-    } else if (robot_c < opp_c && left_valid) {
+    } else if (robot_c > opp_c && left_valid) {
         left_prob = 0.4;
     }
     double up_prob = 0.0;
     if (same_row && up_valid) {
         up_prob = 0.2;
-    } else if (robot_r < opp_r && up_valid) {
+    } else if (robot_r > opp_r && up_valid) {
         up_prob = 0.4;
     }
     double down_prob = 0.0;
     if (same_row && down_valid) {
         down_prob = 0.2;
-    } else if (robot_r > opp_r && down_valid) {
+    } else if (robot_r < opp_r && down_valid) {
         down_prob = 0.4;
     }
 
@@ -1883,7 +1888,9 @@ void belief_apply_action(int action_idx, std::size_t n,
         const double u = uniform(rng.engine());
         int new_opp_r;
         int new_opp_c;
-        belief_sample_opponent_move(new_robot_r, new_robot_c, opp_r, opp_c,
+        // Opponent reacts to the robot's PRE-move position (robot_r, robot_c),
+        // matching LaserTag.jl's transition.
+        belief_sample_opponent_move(robot_r, robot_c, opp_r, opp_c,
                                      rows, cols, valid_cell, u,
                                      &new_opp_r, &new_opp_c);
 
@@ -2211,10 +2218,10 @@ void disc_laser_measurements(int robot_r, int robot_c, int opp_r, int opp_c,
 }
 
 // Build the opponent-move probability table (positions and probabilities)
-// after the robot has already moved. Mirrors
+// relative to the robot's CURRENT (pre-move) position. Mirrors
 // LaserTagPOMDP._opponent_move_probabilities_inline. Returns the count.
-std::size_t disc_opponent_move_table(int opp_r, int opp_c, int robot_r_after,
-                                     int robot_c_after, const DiscreteEnvParams &env,
+std::size_t disc_opponent_move_table(int opp_r, int opp_c, int robot_r,
+                                     int robot_c, const DiscreteEnvParams &env,
                                      int *out_rows, int *out_cols, double *out_probs) {
     std::size_t n = 0;
 
@@ -2228,21 +2235,21 @@ std::size_t disc_opponent_move_table(int opp_r, int opp_c, int robot_r_after,
     };
 
     // x-moves (column direction, fixed row = opp_r)
-    if (robot_c_after == opp_c) {
+    if (robot_c == opp_c) {
         try_add(opp_r, opp_c + 1, 0.2);
         try_add(opp_r, opp_c - 1, 0.2);
     } else {
-        const int toward_c = (robot_c_after > opp_c) ? opp_c + 1 : opp_c - 1;
-        try_add(opp_r, toward_c, 0.4);
+        const int away_c = (robot_c > opp_c) ? opp_c - 1 : opp_c + 1;
+        try_add(opp_r, away_c, 0.4);
     }
 
     // y-moves (row direction, fixed col = opp_c)
-    if (robot_r_after == opp_r) {
+    if (robot_r == opp_r) {
         try_add(opp_r + 1, opp_c, 0.2);
         try_add(opp_r - 1, opp_c, 0.2);
     } else {
-        const int toward_r = (robot_r_after > opp_r) ? opp_r + 1 : opp_r - 1;
-        try_add(toward_r, opp_c, 0.4);
+        const int away_r = (robot_r > opp_r) ? opp_r - 1 : opp_r + 1;
+        try_add(away_r, opp_c, 0.4);
     }
 
     // Stay action probability: 0.2 + slack from invalid moves.
@@ -2332,8 +2339,10 @@ py::array_t<double> lasertag_sample_next_state_step(
     int opp_rows_buf[5];   // NOLINT(modernize-avoid-c-arrays)
     int opp_cols_buf[5];   // NOLINT(modernize-avoid-c-arrays)
     double opp_probs[5];   // NOLINT(modernize-avoid-c-arrays)
+    // Opponent reacts to the robot's PRE-move position (robot_r, robot_c),
+    // matching LaserTag.jl's transition.
     const std::size_t n_opp = disc_opponent_move_table(
-        opp_r, opp_c, robot_next_r, robot_next_c, env, opp_rows_buf, opp_cols_buf, opp_probs);
+        opp_r, opp_c, robot_r, robot_c, env, opp_rows_buf, opp_cols_buf, opp_probs);
     const std::size_t pick = cumulative_sample(opp_probs, n_opp, opp_uniform);
 
     ov(0) = static_cast<double>(robot_next_r);
@@ -2520,7 +2529,7 @@ PYBIND11_MODULE(_native, m) {
                       const py::array_t<double> &, double, const py::array_t<double> &,
                       const py::array_t<double> &, double, double, double>(),
              py::arg("state"), py::arg("action"), py::arg("robot_covariance"),
-             py::arg("opponent_covariance"), py::arg("pursuit_speed"), py::arg("walls"),
+             py::arg("opponent_covariance"), py::arg("evasion_speed"), py::arg("walls"),
              py::arg("grid_size"), py::arg("robot_radius"), py::arg("opponent_radius"),
              py::arg("tag_radius"))
         .def("sample", &ContinuousLaserTagTransitionCpp::sample, py::arg("n_samples") = 1)
@@ -2552,7 +2561,7 @@ PYBIND11_MODULE(_native, m) {
         "cont_simulate_rollout", &cont_simulate_rollout,
         py::arg("initial_state"), py::arg("actions_buffer"), py::arg("start_depth"),
         py::arg("max_depth"), py::arg("discount_factor"), py::arg("robot_covariance"),
-        py::arg("opponent_covariance"), py::arg("pursuit_speed"), py::arg("walls"),
+        py::arg("opponent_covariance"), py::arg("evasion_speed"), py::arg("walls"),
         py::arg("grid_size"), py::arg("robot_radius"), py::arg("opponent_radius"),
         py::arg("tag_radius"), py::arg("tag_reward"), py::arg("tag_penalty"),
         py::arg("step_cost"), py::arg("dangerous_areas"), py::arg("dangerous_area_radius"),
