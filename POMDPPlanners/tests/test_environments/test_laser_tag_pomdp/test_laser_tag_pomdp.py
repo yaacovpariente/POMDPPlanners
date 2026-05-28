@@ -22,7 +22,7 @@ from POMDPPlanners.core.distributions import DiscreteDistribution
 from POMDPPlanners.core.environment import SpaceType
 from POMDPPlanners.core.policy import Policy, PolicyRunData, PolicySpaceInfo
 from POMDPPlanners.core.simulation import History, StepData
-from POMDPPlanners.environments.laser_tag_pomdp import LaserTagPOMDP
+from POMDPPlanners.environments.laser_tag_pomdp import LaserTagPOMDP, OpponentPolicy
 from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
 from POMDPPlanners.simulations.episodes import run_episode
 from POMDPPlanners.tests.test_utils.confidence_interval_utils import (
@@ -131,6 +131,7 @@ def _make_env(
     walls=None,
     transition_error_prob=0.0,
     measurement_noise=1.0,
+    opponent_policy=OpponentPolicy.EVADE,
 ):
     """Build a LaserTagPOMDP with empty dangerous areas for transition/observation tests."""
     return LaserTagPOMDP(
@@ -140,6 +141,7 @@ def _make_env(
         dangerous_areas=set(),
         measurement_noise=measurement_noise,
         transition_error_prob=transition_error_prob,
+        opponent_policy=opponent_policy,
     )
 
 
@@ -153,6 +155,23 @@ def _observation_probabilities(env, next_state, action, observations):
     """Convenience: env.observation_log_probability -> probability list."""
     log_probs = env.observation_log_probability(next_state, action, observations)
     return np.exp(log_probs)
+
+
+def test_opponent_policy_changes_config_id():
+    """Distinct opponent policies produce distinct environment config IDs.
+
+    Purpose: Validates the opponent_policy enum is captured by config_id so cached
+        results for EVADE and PURSUE configs never collide
+
+    Given: Two LaserTagPOMDPs identical except for opponent_policy
+    When: config_id is computed for each
+    Then: The two IDs differ
+
+    Test type: unit
+    """
+    evade = _make_env(opponent_policy=OpponentPolicy.EVADE)
+    pursue = _make_env(opponent_policy=OpponentPolicy.PURSUE)
+    assert evade.config_id != pursue.config_id
 
 
 class TestLaserTagStateTransition:
@@ -281,6 +300,67 @@ class TestLaserTagStateTransition:
             0.35 <= probs[0] <= 0.45
         ), f"Expected ~0.4 for opponent fleeing South (pre-move robot below), got {probs[0]}"
         assert probs[1] == 0.0, f"Expected 0.0 for the toward (North) cell, got {probs[1]}"
+
+    def test_opponent_pursues_toward_robot(self):
+        """Test opponent pursues by moving toward the robot under OpponentPolicy.PURSUE.
+
+        Purpose: Validates the PURSUE policy restores the pre-evader-fix chaser: the 0.4
+            directional mass lands on the cell that decreases distance to the robot
+
+        Given: A PURSUE env, robot above the opponent (robot row 2, opponent row 5, same column)
+        When: Many state transitions are sampled after the robot moves South
+        Then: Opponent prefers the toward cell (4, 5) and rarely takes the away cell (6, 5)
+
+        Test type: unit
+        """
+        env = _make_env(floor_shape=(7, 11), opponent_policy=OpponentPolicy.PURSUE)
+        state = np.array([2.0, 5.0, 5.0, 5.0, 0.0])
+
+        # Robot moves South (action 1) -> robot_next at (3, 5), still above opponent.
+        # PURSUE references the post-move robot (3, 5), so the opponent chases North.
+        samples = env.sample_next_state(state, 1, n_samples=1000)
+
+        opponent_positions = [(int(s[2]), int(s[3])) for s in samples]
+        pos_counts = Counter(opponent_positions)
+        total_samples = len(samples)
+
+        toward_prob = pos_counts.get((4, 5), 0) / total_samples
+        away_prob = pos_counts.get((6, 5), 0) / total_samples
+
+        assert toward_prob > 0.3, f"Expected >0.3 probability toward robot, got {toward_prob}"
+        assert away_prob < 0.1, f"Expected <0.1 probability away from robot, got {away_prob}"
+
+    def test_opponent_pursue_reacts_to_postmove_robot(self):
+        """Test the PURSUE opponent reacts to the robot's POST-move position.
+
+        Purpose: Validates the PURSUE move distribution is conditioned on the robot's
+            post-move cell (restoring the pre-evader-fix reference), the mirror image of
+            the EVADE pre-move semantics
+
+        Given: A PURSUE env, robot at (4, 5) one row above the opponent at (5, 5); the robot
+            moves South, landing on the opponent's cell at (5, 5)
+        When: transition_log_probability is evaluated for the opponent moving South (6, 5)
+            versus North (4, 5)
+        Then: Because the post-move robot (5, 5) is row-aligned with the opponent, the row
+            axis splits 0.2/0.2 between North and South — distinct from the EVADE pre-move
+            case (robot row 4 < 5) which would give 0.4 South / 0.0 North
+
+        Test type: unit
+        """
+        env = _make_env(floor_shape=(7, 11), opponent_policy=OpponentPolicy.PURSUE)
+        state = np.array([4.0, 5.0, 5.0, 5.0, 0.0])
+
+        next_state_south = np.array([5.0, 5.0, 6.0, 5.0, 0.0])  # opponent South
+        next_state_north = np.array([5.0, 5.0, 4.0, 5.0, 0.0])  # opponent North
+
+        probs = _transition_probabilities(env, state, 1, [next_state_south, next_state_north])
+
+        assert (
+            0.15 <= probs[0] <= 0.25
+        ), f"Expected ~0.2 South from the post-move row-aligned split, got {probs[0]}"
+        assert (
+            0.15 <= probs[1] <= 0.25
+        ), f"Expected ~0.2 North from the post-move row-aligned split, got {probs[1]}"
 
     def test_successful_tagging(self):
         """Test successful tagging creates terminal state.
@@ -2182,18 +2262,19 @@ def _python_rollout(
 class TestNativeDiscreteRollout:
     """Tests for the native C++ discrete LaserTag rollout kernel."""
 
-    def test_lasertag_native_simulate_rollout_matches_python(self) -> None:
+    @pytest.mark.parametrize("opponent_policy", [OpponentPolicy.EVADE, OpponentPolicy.PURSUE])
+    def test_lasertag_native_simulate_rollout_matches_python(self, opponent_policy) -> None:
         """Native C++ rollout produces the same return distribution as the Python loop.
 
         Purpose: Validates that simulate_rollout_discrete in the C++ extension implements
             the same stochastic transition / reward / terminal logic as the Python
-            ``Environment.simulate_random_rollout`` base-class loop, so that replacing
-            the Python loop with the C++ kernel does not change the algorithm's value
-            estimates in expectation.
+            ``Environment.simulate_random_rollout`` base-class loop under BOTH opponent
+            policies, so that the C++ and Python opponent-move kernels stay in lockstep
+            (the real hazard is C++-PURSUE diverging from Python-PURSUE).
 
         Given: A LaserTagPOMDP with default walls and dangerous areas, a fixed
             initial state, max_depth=15, discount=0.95, and 500 independent
-            rollout trials.
+            rollout trials, run once per opponent policy (EVADE, PURSUE).
         When: 500 trials are run with both the pure Python path (NumPy RNG) and
             the native C++ path (mt19937_64 RNG), each seeded independently before
             the batch.
@@ -2202,7 +2283,7 @@ class TestNativeDiscreteRollout:
 
         Test type: integration
         """
-        env = LaserTagPOMDP(discount_factor=0.95)
+        env = LaserTagPOMDP(discount_factor=0.95, opponent_policy=opponent_policy)
         state = np.array([0.0, 0.0, 6.0, 5.0, 0.0])
         max_depth = 15
         discount = 0.95
@@ -2241,6 +2322,53 @@ class TestNativeDiscreteRollout:
             f"by {diff:.3f} (scale={scale:.3f}). C++ and Python rollout kernels "
             "implement different distributions."
         )
+
+    @pytest.mark.parametrize("opponent_policy", [OpponentPolicy.EVADE, OpponentPolicy.PURSUE])
+    @pytest.mark.parametrize(
+        "walls",
+        [set(), {(5, 6), (5, 4)}],
+        ids=["open", "wall_adjacent_slack"],
+    )
+    def test_native_single_step_opponent_distribution_matches_python(
+        self, opponent_policy, walls
+    ) -> None:
+        """Native single-step kernel matches the Python opponent distribution per policy.
+
+        Purpose: Validates that the native ``sample_next_state_step`` opponent-move table
+            (disc_opponent_move_table) reproduces the Python ``_python_sample_next_state``
+            distribution under BOTH opponent policies, including the wall-blocked
+            invalid-move -> stay slack path — guarding against a missed direction flip or
+            pre/post reference choice in the C++ single-step kernel.
+
+        Given: A LaserTagPOMDP (open grid or walls blocking both opponent x-moves), robot
+            above the opponent, robot moving South, evaluated for EVADE and PURSUE.
+        When: 4000 single samples are drawn via the native path (n_samples == 1) and 4000
+            via the Python batch path (n_samples > 1).
+        Then: The per-cell opponent next-position probabilities agree within 0.05.
+
+        Test type: integration
+        """
+        env = _make_env(floor_shape=(7, 11), walls=walls, opponent_policy=opponent_policy)
+        state = np.array([2.0, 5.0, 5.0, 5.0, 0.0])
+        action = 1  # robot moves South -> robot_next (3, 5), still above the opponent
+        n = 4000
+
+        np.random.seed(0)
+        native_counts = Counter(
+            (int(s[2]), int(s[3]))
+            for s in (env.sample_next_state(state, action, n_samples=1) for _ in range(n))
+        )
+        np.random.seed(0)
+        python_samples = env.sample_next_state(state, action, n_samples=n)
+        python_counts = Counter((int(s[2]), int(s[3])) for s in python_samples)
+
+        for cell in set(native_counts) | set(python_counts):
+            p_native = native_counts.get(cell, 0) / n
+            p_python = python_counts.get(cell, 0) / n
+            assert abs(p_native - p_python) < 0.05, (
+                f"policy={opponent_policy} cell={cell}: native {p_native:.3f} vs "
+                f"python {p_python:.3f} — C++ and Python single-step kernels diverge"
+            )
 
     def test_lasertag_native_rollout_returns_finite_float(self) -> None:
         """Native rollout returns a finite float from a valid initial state.

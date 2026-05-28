@@ -32,6 +32,9 @@ from POMDPPlanners.core.belief.vectorized_particle_belief_updater import (
     VectorizedParticleBeliefUpdater,
 )
 from POMDPPlanners.environments.laser_tag_pomdp import _native
+from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_utils import (
+    OpponentPolicy,
+)
 from POMDPPlanners.utils.config_to_id import config_to_id
 
 if TYPE_CHECKING:
@@ -120,6 +123,7 @@ class LaserTagVectorizedUpdater(VectorizedParticleBeliefUpdater):
         wall_dist_table: np.ndarray,
         measurement_noise: float,
         transition_error_prob: float,
+        opponent_policy: OpponentPolicy = OpponentPolicy.EVADE,
     ):
         """Initialize the vectorized updater.
 
@@ -129,12 +133,14 @@ class LaserTagVectorizedUpdater(VectorizedParticleBeliefUpdater):
             wall_dist_table: Integer array of shape (rows, cols, 8).
             measurement_noise: Standard deviation of laser noise.
             transition_error_prob: Probability of executing a random action.
+            opponent_policy: Opponent transition behaviour (EVADE or PURSUE).
         """
         self.floor_shape = floor_shape
         self.valid_cell = valid_cell
         self.wall_dist_table = wall_dist_table
         self.measurement_noise = measurement_noise
         self.transition_error_prob = transition_error_prob
+        self.opponent_policy = opponent_policy
 
         # Precompute observation constants
         self._variance = measurement_noise**2
@@ -170,6 +176,7 @@ class LaserTagVectorizedUpdater(VectorizedParticleBeliefUpdater):
             wall_dist_table=wall_dist_table,
             measurement_noise=env.measurement_noise,
             transition_error_prob=env.transition_error_prob,
+            opponent_policy=env.opponent_policy,
         )
 
     # ------------------------------------------------------------------
@@ -187,6 +194,7 @@ class LaserTagVectorizedUpdater(VectorizedParticleBeliefUpdater):
             valid_cell_flat=self._valid_cell_flat,
             rows=self._rows,
             cols=self._cols,
+            opponent_policy_code=self.opponent_policy.native_code,
         )
 
     def batch_observation_log_likelihood(
@@ -216,5 +224,6 @@ class LaserTagVectorizedUpdater(VectorizedParticleBeliefUpdater):
             "valid_cell": self.valid_cell.tolist(),
             "measurement_noise": self.measurement_noise,
             "transition_error_prob": self.transition_error_prob,
+            "opponent_policy": self.opponent_policy.value,
         }
         return config_to_id(config_dict)

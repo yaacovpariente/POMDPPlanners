@@ -84,6 +84,7 @@ class ContinuousLaserTagTransitionCpp:
         robot_radius: float,
         opponent_radius: float,
         tag_radius: float,
+        opponent_policy_code: int = ...,
     ) -> None: ...
     def sample(self, n_samples: int = 1) -> List[NDArray[np.float64]]: ...
     def probability(
@@ -150,6 +151,7 @@ def simulate_rollout_discrete(
     transition_error_prob: float,
     reward_variant_code: int = ...,
     penalty_decay: float = ...,
+    opponent_policy_code: int = ...,
 ) -> float:
     """Run a full random-action rollout for the discrete LaserTagPOMDP in one C++ frame.
 
@@ -158,7 +160,9 @@ def simulate_rollout_discrete(
     results. ``reward_variant_code`` selects the reward variant:
     ``0`` = CONSTANT_HAZARD_PENALTY, ``1`` = ZERO_MEAN_HAZARD_SHOCK,
     ``2`` = DISTANCE_DECAYED_HAZARD_PENALTY. ``penalty_decay`` is consulted only by
-    the ``DISTANCE_DECAYED_HAZARD_PENALTY`` variant. Returns the discounted sum of
+    the ``DISTANCE_DECAYED_HAZARD_PENALTY`` variant. ``opponent_policy_code`` selects
+    the opponent behaviour (``0`` = EVADE, away + pre-move robot reference;
+    ``1`` = PURSUE, toward + post-move robot reference). Returns the discounted sum of
     immediate rewards along the sampled trajectory.
     """
     ...
@@ -172,11 +176,14 @@ def belief_batch_transition_discrete(
     valid_cell_flat: NDArray[np.unsignedinteger],
     rows: int,
     cols: int,
+    opponent_policy_code: int = ...,
 ) -> NDArray[np.float64]:
     """Native port of LaserTagVectorizedUpdater.batch_transition.
 
     Returns the (N, 5) float64 array of next particles. Uses the module-level
     mt19937_64 RNG; seed via set_seed() before calling for reproducibility.
+    ``opponent_policy_code`` selects the opponent behaviour (``0`` = EVADE,
+    away + pre-move robot reference; ``1`` = PURSUE, toward + post-move reference).
     """
     ...
 
@@ -207,6 +214,7 @@ def sample_next_state_step(
     rows: int,
     cols: int,
     walls_flat: NDArray[np.integer],
+    opponent_policy_code: int = ...,
 ) -> NDArray[np.float64]:
     """Single-step transition for the discrete LaserTagPOMDP.
 
@@ -214,6 +222,8 @@ def sample_next_state_step(
     transition error in numpy) and pre-draws ``opp_uniform`` via
     ``np.random.random()`` so byte-identical numpy RNG state is preserved
     across the original Python path and this native fast path.
+    ``opponent_policy_code`` selects the opponent behaviour (``0`` = EVADE,
+    away + pre-move robot reference; ``1`` = PURSUE, toward + post-move reference).
     """
     ...
 
@@ -267,10 +277,13 @@ def cont_simulate_rollout(
     dangerous_areas: NDArray[np.floating],
     dangerous_area_radius: float,
     dangerous_area_penalty: float,
+    opponent_policy_code: int = ...,
 ) -> float:
     """Run a full random rollout for ContinuousLaserTagPOMDP in one C++ frame.
 
     ``actions_buffer`` must be shape (N, 3) float64 with N >= max_depth - start_depth.
+    ``opponent_policy_code`` selects the opponent behaviour (``0`` = EVADE,
+    away + pre-move robot reference; ``1`` = PURSUE, toward + post-move reference).
     Returns the discounted sum of immediate rewards along the sampled trajectory.
     """
     ...

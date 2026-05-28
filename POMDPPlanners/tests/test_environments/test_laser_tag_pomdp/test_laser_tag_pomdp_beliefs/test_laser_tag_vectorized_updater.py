@@ -13,10 +13,12 @@ per-particle loop (one bulk ``np.random.random(K)`` vs sequential
 exact match while opponent positions are tested statistically.
 """
 
+from collections import Counter
+
 import numpy as np
 import pytest
 
-from POMDPPlanners.environments.laser_tag_pomdp import LaserTagPOMDP
+from POMDPPlanners.environments.laser_tag_pomdp import LaserTagPOMDP, OpponentPolicy
 from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_beliefs import (
     LaserTagVectorizedUpdater,
 )
@@ -270,6 +272,56 @@ class TestBatchTransition:
             seen_positions.add(opp)
         # Should see at least 2 different opponent positions
         assert len(seen_positions) >= 2
+
+    @pytest.mark.parametrize("opponent_policy", [OpponentPolicy.EVADE, OpponentPolicy.PURSUE])
+    @pytest.mark.parametrize(
+        "walls",
+        [set(), {(5, 6), (5, 4)}],
+        ids=["open", "wall_adjacent_slack"],
+    )
+    def test_batch_transition_opponent_distribution_matches_env(self, opponent_policy, walls):
+        """Native belief batch transition matches the env opponent distribution per policy.
+
+        Purpose: Validates that the C++ belief kernel (belief_sample_opponent_move via
+            belief_batch_transition_discrete) reproduces the env's Python opponent-move
+            distribution under BOTH policies, including the wall-blocked stay-slack path —
+            guarding against a missed direction flip / pre-move reference in the belief path.
+
+        Given: A LaserTagPOMDP (open grid or walls blocking both opponent x-moves), robot
+            above the opponent, action South, evaluated for EVADE and PURSUE.
+        When: 4000 particles are pushed through updater.batch_transition and 4000 samples
+            through the env's Python sample_next_state.
+        Then: The per-cell opponent next-position probabilities agree within 0.05.
+
+        Test type: integration
+        """
+        env = LaserTagPOMDP(
+            discount_factor=0.95,
+            floor_shape=(7, 11),
+            walls=walls,
+            dangerous_areas=set(),
+            opponent_policy=opponent_policy,
+        )
+        updater = LaserTagVectorizedUpdater.from_environment(env)
+        state = np.array([2.0, 5.0, 5.0, 5.0, 0.0])
+        action = 1  # robot moves South -> robot_next (3, 5), still above the opponent
+        n = 4000
+
+        np.random.seed(0)
+        out = updater.batch_transition(np.tile(state, (n, 1)), action=np.array(action))
+        belief_counts = Counter((int(r[2]), int(r[3])) for r in out)
+
+        np.random.seed(0)
+        env_samples = env.sample_next_state(state, action, n_samples=n)
+        env_counts = Counter((int(s[2]), int(s[3])) for s in env_samples)
+
+        for cell in set(belief_counts) | set(env_counts):
+            p_belief = belief_counts.get(cell, 0) / n
+            p_env = env_counts.get(cell, 0) / n
+            assert abs(p_belief - p_env) < 0.05, (
+                f"policy={opponent_policy} cell={cell}: belief {p_belief:.3f} vs "
+                f"env {p_env:.3f} — C++ belief and Python env kernels diverge"
+            )
 
 
 # ---------------------------------------------------------------------------

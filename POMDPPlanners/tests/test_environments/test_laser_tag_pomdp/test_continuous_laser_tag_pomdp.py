@@ -16,7 +16,7 @@ import pytest
 from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.policy import PolicyRunData
 from POMDPPlanners.core.simulation import History, StepData
-from POMDPPlanners.environments.laser_tag_pomdp import _native
+from POMDPPlanners.environments.laser_tag_pomdp import _native, OpponentPolicy
 from POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_pomdp import (
     ContinuousLaserTagPOMDP,
     ContinuousLaserTagPOMDPDiscreteActions,
@@ -63,6 +63,24 @@ def env_default():
 def env_discrete_default():
     """Discrete-action environment with default configuration."""
     return ContinuousLaserTagPOMDPDiscreteActions(discount_factor=0.95)
+
+
+def test_continuous_opponent_policy_changes_config_id():
+    """Distinct opponent policies produce distinct continuous env config IDs.
+
+    Purpose: Validates the opponent_policy enum is captured by config_id so cached
+        results for EVADE and PURSUE continuous configs never collide
+
+    Given: Two ContinuousLaserTagPOMDPs identical except for opponent_policy
+    When: config_id is computed for each
+    Then: The two IDs differ
+
+    Test type: unit
+    """
+    common = {"discount_factor": 0.95, "walls": [], "dangerous_areas": []}
+    evade = ContinuousLaserTagPOMDP(**common, opponent_policy=OpponentPolicy.EVADE)
+    pursue = ContinuousLaserTagPOMDP(**common, opponent_policy=OpponentPolicy.PURSUE)
+    assert evade.config_id != pursue.config_id
 
 
 class TestContinuousLaserTagPOMDPInit:
@@ -245,6 +263,67 @@ class TestSampleNextState:
         assert (
             mean_opp_x > 5.6
         ), f"Expected opponent to flee +x from pre-move robot (>5.6), got {mean_opp_x}"
+
+    def test_opponent_pursues_toward_robot(self):
+        """Test the continuous opponent pursues by moving toward the robot under PURSUE.
+
+        Purpose: Validates the PURSUE policy restores the chaser: the opponent's mean step
+            decreases distance to the robot, the mirror image of the EVADE evasion
+
+        Given: A PURSUE env, robot at (5, 3) and opponent offset to +x/+y at (8, 5)
+        When: The robot holds position (no-op action) and many next states are sampled
+        Then: The mean opponent position moves inward toward the robot in both x and y
+
+        Test type: unit
+        """
+        np.random.seed(42)
+        env = ContinuousLaserTagPOMDP(
+            discount_factor=0.95,
+            walls=[],
+            dangerous_areas=[],
+            opponent_policy=OpponentPolicy.PURSUE,
+        )
+        state = np.array([5.0, 3.0, 8.0, 5.0, 0.0])
+        action = np.array([0.0, 0.0, 0.0])  # robot holds position, no tag
+        samples = env.sample_next_state(state, action, n_samples=500)
+
+        mean_opp_x = float(np.mean([s[2] for s in samples]))
+        mean_opp_y = float(np.mean([s[3] for s in samples]))
+
+        assert mean_opp_x < 7.9, f"Expected opponent to chase in -x (<7.9), got {mean_opp_x}"
+        assert mean_opp_y < 4.9, f"Expected opponent to chase in -y (<4.9), got {mean_opp_y}"
+
+    def test_opponent_pursue_reacts_to_postmove_robot(self):
+        """Test the continuous PURSUE opponent reacts to the robot's POST-move position.
+
+        Purpose: Validates the opponent's pursuit direction on a movement action is computed
+            from the robot's post-move position (restoring the pre-evader-fix reference)
+
+        Given: A near-deterministic-robot PURSUE env, robot just left of the opponent on x
+            (robot x=5.0, opponent x=5.4, same y), and a +x action that carries the robot
+            across to the opponent's right (post-move x ~ 6.0)
+        When: many next states are sampled
+        Then: the opponent's mean next x increases (it chases +x toward the post-move robot
+            on its right); had it used the pre-move robot (5.0, on its left) it would chase -x
+
+        Test type: unit
+        """
+        np.random.seed(0)
+        env = ContinuousLaserTagPOMDP(
+            discount_factor=0.95,
+            walls=[],
+            dangerous_areas=[],
+            robot_transition_cov_matrix=np.eye(2) * 1e-9,
+            opponent_policy=OpponentPolicy.PURSUE,
+        )
+        state = np.array([5.0, 3.0, 5.4, 3.0, 0.0])
+        action = np.array([1.0, 0.0, 0.0])  # robot moves +x, crossing to the opponent's right
+        samples = env.sample_next_state(state, action, n_samples=400)
+
+        mean_opp_x = float(np.mean([s[2] for s in samples]))
+        assert (
+            mean_opp_x > 5.6
+        ), f"Expected opponent to chase +x toward post-move robot (>5.6), got {mean_opp_x}"
 
 
 class TestSampleObservation:

@@ -20,6 +20,12 @@ Observation:
     ``np.ndarray`` shape ``(8,)`` – noisy 8-direction laser range
     measurements.  Terminal observation is ``np.full(8, -1.0)``.
 
+Opponent behaviour is selectable via ``opponent_policy`` (see
+:class:`~POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_utils.OpponentPolicy`):
+``EVADE`` (default) flees the robot's pre-move position at ``evasion_speed``;
+``PURSUE`` chases the robot's post-move position. ``evasion_speed`` is a
+direction-neutral step magnitude under both policies.
+
 Classes:
     ContinuousLaserTagPOMDP: Continuous-action environment.
     ContinuousLaserTagPOMDPDiscreteActions: Discrete-action variant.
@@ -45,6 +51,9 @@ from POMDPPlanners.core.environment import (
 )
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
 from POMDPPlanners.environments.laser_tag_pomdp import _native
+from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_utils import (
+    OpponentPolicy,
+)
 from POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_visualizer import (
     ContinuousLaserTagVisualizer,
 )
@@ -171,6 +180,7 @@ class ContinuousLaserTagPOMDP(Environment):
         debug: bool = False,
         use_queue_logger: bool = False,
         initial_state: Optional[np.ndarray] = None,
+        opponent_policy: OpponentPolicy = OpponentPolicy.EVADE,
     ):
         """Initialize the Continuous LaserTag POMDP.
 
@@ -203,6 +213,12 @@ class ContinuousLaserTagPOMDP(Environment):
             debug: Enable debug logging.
             use_queue_logger: Use queue-based logger.
             initial_state: Fixed initial state (if provided).
+            opponent_policy: Selects the opponent transition behaviour.
+                ``EVADE`` (default) flees the robot at ``evasion_speed`` away from
+                its pre-move position; ``PURSUE`` chases toward its post-move
+                position. ``evasion_speed`` is a direction-neutral step magnitude
+                under both policies. See
+                :class:`~POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_utils.OpponentPolicy`.
         """
         if not 0.0 <= discount_factor <= 1.0:
             raise ValueError("discount_factor must be between 0 and 1 (inclusive)")
@@ -235,6 +251,7 @@ class ContinuousLaserTagPOMDP(Environment):
         self.step_cost = step_cost
         self.measurement_noise = measurement_noise
         self.evasion_speed = evasion_speed
+        self.opponent_policy = opponent_policy
         self.dangerous_areas: List[Tuple[float, float]] = (
             list(dangerous_areas) if dangerous_areas is not None else list(_DEFAULT_DANGEROUS_AREAS)
         )
@@ -284,6 +301,7 @@ class ContinuousLaserTagPOMDP(Environment):
             "dangerous_areas": self._dangerous_areas_arr,
             "dangerous_area_radius": self.dangerous_area_radius,
             "dangerous_area_penalty": self.dangerous_area_penalty,
+            "opponent_policy_code": self.opponent_policy.native_code,
         }
 
     # ------------------------------------------------------------------
@@ -315,6 +333,7 @@ class ContinuousLaserTagPOMDP(Environment):
                 robot_radius=self.robot_radius,
                 opponent_radius=self.opponent_radius,
                 tag_radius=self.tag_radius,
+                opponent_policy_code=self.opponent_policy.native_code,
             )
             self._trans_kernel_cache[key] = kernel
         if isinstance(action, np.ndarray):
@@ -999,6 +1018,7 @@ class ContinuousLaserTagPOMDPDiscreteActions(ContinuousLaserTagPOMDP, DiscreteAc
         debug: bool = False,
         use_queue_logger: bool = False,
         initial_state: Optional[np.ndarray] = None,
+        opponent_policy: OpponentPolicy = OpponentPolicy.EVADE,
     ):
         super().__init__(
             discount_factor=discount_factor,
@@ -1023,6 +1043,7 @@ class ContinuousLaserTagPOMDPDiscreteActions(ContinuousLaserTagPOMDP, DiscreteAc
             debug=debug,
             use_queue_logger=use_queue_logger,
             initial_state=initial_state,
+            opponent_policy=opponent_policy,
         )
 
         # Override space info to discrete actions
