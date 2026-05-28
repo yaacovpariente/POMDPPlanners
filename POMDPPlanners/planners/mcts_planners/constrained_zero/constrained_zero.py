@@ -7,7 +7,7 @@ CC-POMDPs. It adds a 3-head network with a failure probability head, safety-cons
 PUCT (SPUCT), adaptive failure threshold calibration via conformal inference, and
 constrained policy targets for training.
 
-Reference:
+References:
     Moss, R. J., Jamgochian, A., Fischer, J., Corso, A., & Kochenderfer, M. J. (2024).
     ConstrainedZero: Chance-Constrained POMDP Planning Using Learned Probabilistic Failure
     Surrogates and Adaptive Safety Constraints. Proceedings of the Thirty-Third International

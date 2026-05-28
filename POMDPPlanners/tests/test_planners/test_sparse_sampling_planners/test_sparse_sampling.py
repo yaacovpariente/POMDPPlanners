@@ -15,6 +15,7 @@ from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.planners.sparse_sampling_planners.sparse_sampling import (
     SparseSamplingDiscreteActionsPlanner,
 )
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import sanity_pinned_kwargs
 
 np.random.seed(42)
 random.seed(42)
@@ -374,7 +375,7 @@ def test_sanity_pomdp_action_selection():
     Test type: unit
     """
     # Create environment and planner with higher branching factor and depth for better accuracy
-    environment = SanityPOMDP()
+    environment = SanityPOMDP(discount_factor=0.95, **sanity_pinned_kwargs())
     planner = SparseSamplingDiscreteActionsPlanner(
         environment=environment,
         branching_factor=4,  # Higher branching factor for better exploration

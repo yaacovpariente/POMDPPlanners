@@ -12,6 +12,9 @@ from POMDPPlanners.core.tree.arena import ACTION, BELIEF, Tree
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
     ContinuousLightDarkPOMDP,
 )
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
+    continuous_light_dark_pinned_kwargs,
+)
 from POMDPPlanners.utils.action_samplers import UnitCircleActionSampler
 from POMDPPlanners.simulations.episodes import run_episode
 from POMDPPlanners.planners.mcts_planners.icvar_pft_dpw import ICVaR_PFT_DPW
@@ -19,7 +22,7 @@ from POMDPPlanners.planners.mcts_planners.icvar_pft_dpw import ICVaR_PFT_DPW
 
 @pytest.fixture
 def env():
-    return ContinuousLightDarkPOMDP(discount_factor=0.95)
+    return ContinuousLightDarkPOMDP(discount_factor=0.95, **continuous_light_dark_pinned_kwargs())
 
 
 @pytest.fixture

@@ -17,18 +17,21 @@ import numpy as np
 import pytest
 
 from POMDPPlanners.environments.push_pomdp.push_pomdp import PushPOMDP
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import push_pinned_kwargs
 
 
 @pytest.fixture(name="env")
 def _env_fixture() -> PushPOMDP:
     return PushPOMDP(
         discount_factor=0.95,
-        grid_size=10,
-        push_threshold=1.0,
-        friction_coefficient=0.3,
-        observation_noise=0.1,
-        obstacles=[(5.0, 5.0), (3.0, 7.0)],
-        obstacle_radius=0.5,
+        **push_pinned_kwargs(
+            grid_size=10,
+            push_threshold=1.0,
+            friction_coefficient=0.3,
+            observation_noise=0.1,
+            obstacles=[(5.0, 5.0), (3.0, 7.0)],
+            obstacle_radius=0.5,
+        ),
     )
 
 
@@ -125,12 +128,14 @@ def test_native_transition_log_probability_matches_python_reference() -> None:
     """
     env = PushPOMDP(
         discount_factor=0.95,
-        grid_size=10,
-        push_threshold=1.0,
-        friction_coefficient=0.3,
-        observation_noise=0.1,
-        obstacles=[],
-        transition_error_prob=0.2,
+        **push_pinned_kwargs(
+            grid_size=10,
+            push_threshold=1.0,
+            friction_coefficient=0.3,
+            observation_noise=0.1,
+            obstacles=[],
+            transition_error_prob=0.2,
+        ),
     )
     state = np.array([4.0, 4.0, 6.0, 6.0, 9.0, 9.0])
     intended_action = "right"

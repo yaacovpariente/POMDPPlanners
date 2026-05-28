@@ -17,13 +17,14 @@ import pytest
 
 from POMDPPlanners.environments.cartpole_pomdp import _native
 from POMDPPlanners.environments.cartpole_pomdp.cartpole_pomdp import CartPolePOMDP
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import cartpole_pinned_kwargs
 
 _NOISE_COV = np.diag([0.1, 0.1, 0.1, 0.1])
 _STATE_DIM = 4
 
 
 def _make_env() -> CartPolePOMDP:
-    return CartPolePOMDP(discount_factor=0.95, noise_cov=_NOISE_COV)
+    return CartPolePOMDP(discount_factor=0.95, noise_cov=_NOISE_COV, **cartpole_pinned_kwargs())
 
 
 def _all_actions() -> List[int]:

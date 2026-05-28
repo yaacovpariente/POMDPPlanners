@@ -7,7 +7,7 @@ planning in belief space. It combines online MCTS with PUCT and neural network p
 for both action selection and leaf value estimation. Offline policy-iteration training
 is orchestrated via :class:`~POMDPPlanners.training.PolicyTrainer`.
 
-Reference:
+References:
     Moss, R. J., Corso, A., Caers, J., & Kochenderfer, M. J. (2024). BetaZero:
     Belief-State Planning for Long-Horizon POMDPs using Learned Approximations.
     Reinforcement Learning Conference (RLC).

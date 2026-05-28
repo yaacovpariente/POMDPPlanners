@@ -25,6 +25,7 @@ from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp_utils.rock_s
     RockSampleZeroMeanHazardShockRewardModel,
     RockSampleRewardModel,
 )
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import rock_sample_pinned_kwargs
 
 
 # ---------------------------------------------------------------------------
@@ -44,7 +45,9 @@ def test_env_builds_standard_reward_model_by_default():
 
     Test type: unit
     """
-    env = RockSamplePOMDP(dangerous_areas=[(2, 2)])
+    env = RockSamplePOMDP(
+        discount_factor=0.95, **rock_sample_pinned_kwargs(dangerous_areas=[(2, 2)])
+    )
     assert type(env.reward_model) is RockSampleRewardModel  # pylint: disable=unidiomatic-typecheck
 
 
@@ -62,9 +65,12 @@ def test_env_builds_high_variance_reward_model_on_request():
     Test type: unit
     """
     env = RockSamplePOMDP(
-        dangerous_areas=[(2, 2)],
-        dangerous_area_penalty=-5.0,
-        reward_model_type=RewardModelType.ZERO_MEAN_HAZARD_SHOCK,
+        discount_factor=0.95,
+        **rock_sample_pinned_kwargs(
+            dangerous_areas=[(2, 2)],
+            dangerous_area_penalty=-5.0,
+            reward_model_type=RewardModelType.ZERO_MEAN_HAZARD_SHOCK,
+        ),
     )
     assert isinstance(env.reward_model, RockSampleZeroMeanHazardShockRewardModel)
     # HIGH_VARIANCE flips the penalty sign with probability 0.5, so the
@@ -90,9 +96,12 @@ def test_env_builds_decaying_reward_model_on_request():
     Test type: unit
     """
     env = RockSamplePOMDP(
-        dangerous_areas=[(2, 2)],
-        reward_model_type=RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY,
-        penalty_decay=2.5,
+        discount_factor=0.95,
+        **rock_sample_pinned_kwargs(
+            dangerous_areas=[(2, 2)],
+            reward_model_type=RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY,
+            penalty_decay=2.5,
+        ),
     )
     assert isinstance(env.reward_model, RockSampleDistanceDecayedHazardPenaltyRewardModel)
     assert env.reward_model.penalty_decay == 2.5
@@ -149,11 +158,14 @@ def test_decaying_model_rejects_non_positive_penalty_decay():
 
 def _make_high_variance_env() -> RockSamplePOMDP:
     return RockSamplePOMDP(
-        map_size=(7, 7),
-        rock_positions=[(0, 0), (2, 2), (3, 3), (5, 5)],
-        dangerous_areas=[(2, 2), (4, 4)],
-        dangerous_area_penalty=-5.0,
-        reward_model_type=RewardModelType.ZERO_MEAN_HAZARD_SHOCK,
+        discount_factor=0.95,
+        **rock_sample_pinned_kwargs(
+            map_size=(7, 7),
+            rock_positions=[(0, 0), (2, 2), (3, 3), (5, 5)],
+            dangerous_areas=[(2, 2), (4, 4)],
+            dangerous_area_penalty=-5.0,
+            reward_model_type=RewardModelType.ZERO_MEAN_HAZARD_SHOCK,
+        ),
     )
 
 
@@ -260,12 +272,15 @@ def test_high_variance_batch_seeded_parity_with_scalar_loop():
 
 def _make_decaying_env(penalty_decay: float = 1.0) -> RockSamplePOMDP:
     return RockSamplePOMDP(
-        map_size=(7, 7),
-        rock_positions=[(0, 0), (2, 2), (3, 3), (5, 5)],
-        dangerous_areas=[(3, 3)],
-        dangerous_area_penalty=-5.0,
-        reward_model_type=RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY,
-        penalty_decay=penalty_decay,
+        discount_factor=0.95,
+        **rock_sample_pinned_kwargs(
+            map_size=(7, 7),
+            rock_positions=[(0, 0), (2, 2), (3, 3), (5, 5)],
+            dangerous_areas=[(3, 3)],
+            dangerous_area_penalty=-5.0,
+            reward_model_type=RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY,
+            penalty_decay=penalty_decay,
+        ),
     )
 
 

@@ -14,18 +14,21 @@ from POMDPPlanners.environments.pacman_pomdp.pacman_pomdp_beliefs.pacman_belief_
     create_pacman_belief,
 )
 from POMDPPlanners.utils.belief_factory import BeliefType, create_environment_belief
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import pacman_pinned_kwargs
 
 
 @pytest.fixture()
 def env():
     return PacManPOMDP(
-        maze_size=(5, 5),
-        walls={(2, 2)},
-        initial_pellets=[(1, 1), (3, 3)],
-        initial_pacman_pos=(0, 0),
-        num_ghosts=1,
-        initial_ghost_positions=[(4, 4)],
         discount_factor=0.95,
+        **pacman_pinned_kwargs(
+            maze_size=(5, 5),
+            walls={(2, 2)},
+            initial_pellets=[(1, 1), (3, 3)],
+            initial_pacman_pos=(0, 0),
+            num_ghosts=1,
+            initial_ghost_positions=[(4, 4)],
+        ),
     )
 
 

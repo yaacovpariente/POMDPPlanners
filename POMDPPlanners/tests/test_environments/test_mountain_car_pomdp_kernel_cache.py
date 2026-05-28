@@ -17,17 +17,15 @@ import numpy as np
 import pytest
 
 from POMDPPlanners.environments.mountain_car_pomdp import _native
-from POMDPPlanners.environments.mountain_car_pomdp.mountain_car_pomdp import (
-    MountainCarPOMDP,
-)
-
+from POMDPPlanners.environments.mountain_car_pomdp.mountain_car_pomdp import MountainCarPOMDP
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import mountain_car_pinned_kwargs
 
 _DISCOUNT_FACTOR: float = 0.99
 _ACTIONS: List[int] = [-1, 0, 1]
 
 
 def _make_env() -> MountainCarPOMDP:
-    return MountainCarPOMDP(discount_factor=_DISCOUNT_FACTOR)
+    return MountainCarPOMDP(discount_factor=_DISCOUNT_FACTOR, **mountain_car_pinned_kwargs())
 
 
 def _fresh_trans_kernel(env: MountainCarPOMDP, action: int) -> "_native.MountainCarTransitionCpp":

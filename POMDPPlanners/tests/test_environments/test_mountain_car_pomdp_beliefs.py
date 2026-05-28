@@ -27,6 +27,7 @@ from POMDPPlanners.tests.test_core.test_belief.vectorized_updater_test_utils imp
     assert_batch_obs_log_likelihood_matches_loop,
     assert_batch_transition_matches_loop,
 )
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import mountain_car_pinned_kwargs
 
 
 def _make_aligned_beliefs(updater, n_particles=60):
@@ -62,7 +63,7 @@ def _make_aligned_beliefs(updater, n_particles=60):
 
 @pytest.fixture
 def env():
-    return MountainCarPOMDP(discount_factor=0.99)
+    return MountainCarPOMDP(discount_factor=0.99, **mountain_car_pinned_kwargs())
 
 
 @pytest.fixture

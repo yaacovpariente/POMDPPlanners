@@ -14,7 +14,7 @@ Key features:
 - Handles continuous and discrete action spaces
 - Adaptive observation node expansion
 
-Reference:
+References:
     Sunberg, Z. N., & Kochenderfer, M. J. (2018). Online Algorithms for POMDPs with
     Continuous State, Action, and Observation Spaces. Proceedings of the International
     Conference on Automated Planning and Scheduling, 28(1), 259-263.

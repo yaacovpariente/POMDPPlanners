@@ -25,6 +25,13 @@ from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
 from POMDPPlanners.planners.mcts_planners.pomcp_dpw import POMCP_DPW
 from POMDPPlanners.planners.mcts_planners.pomcpow import POMCPOW
 from POMDPPlanners.planners.mcts_planners.sparse_pft import SparsePFT
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
+    continuous_light_dark_discrete_actions_pinned_kwargs,
+    discrete_light_dark_pinned_kwargs,
+    laser_tag_pinned_kwargs,
+    mountain_car_pinned_kwargs,
+    rock_sample_pinned_kwargs,
+)
 from POMDPPlanners.utils.action_samplers import DiscreteActionSampler
 
 DISCOUNT_FACTOR = 0.95
@@ -48,31 +55,36 @@ def tiger_env():
 @pytest.fixture
 def discrete_ld_env():
     """DiscreteLightDarkPOMDP environment for benchmarking."""
-    return DiscreteLightDarkPOMDP(discount_factor=DISCOUNT_FACTOR)
+    return DiscreteLightDarkPOMDP(
+        discount_factor=DISCOUNT_FACTOR, **discrete_light_dark_pinned_kwargs()
+    )
 
 
 @pytest.fixture
 def continuous_ld_env():
     """ContinuousLightDarkPOMDPDiscreteActions environment for benchmarking."""
-    return ContinuousLightDarkPOMDPDiscreteActions(discount_factor=DISCOUNT_FACTOR)
+    return ContinuousLightDarkPOMDPDiscreteActions(
+        discount_factor=DISCOUNT_FACTOR,
+        **continuous_light_dark_discrete_actions_pinned_kwargs(),
+    )
 
 
 @pytest.fixture
 def rock_sample_env():
     """RockSamplePOMDP environment for benchmarking."""
-    return RockSamplePOMDP(discount_factor=DISCOUNT_FACTOR)
+    return RockSamplePOMDP(discount_factor=DISCOUNT_FACTOR, **rock_sample_pinned_kwargs())
 
 
 @pytest.fixture
 def laser_tag_env():
     """LaserTagPOMDP environment for benchmarking."""
-    return LaserTagPOMDP(discount_factor=DISCOUNT_FACTOR)
+    return LaserTagPOMDP(discount_factor=DISCOUNT_FACTOR, **laser_tag_pinned_kwargs())
 
 
 @pytest.fixture
 def mountain_car_env():
     """MountainCarPOMDP environment for benchmarking."""
-    return MountainCarPOMDP(discount_factor=DISCOUNT_FACTOR)
+    return MountainCarPOMDP(discount_factor=DISCOUNT_FACTOR, **mountain_car_pinned_kwargs())
 
 
 # ---------------------------------------------------------------------------

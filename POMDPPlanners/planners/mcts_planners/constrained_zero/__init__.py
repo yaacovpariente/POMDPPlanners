@@ -6,7 +6,7 @@ This package implements the ConstrainedZero algorithm (Moss et al., IJCAI 2024),
 which extends BetaZero to solve CC-POMDPs by adding a failure probability head,
 safety-constrained PUCT, and adaptive failure threshold calibration.
 
-Reference:
+References:
     Moss, R. J., Jamgochian, A., Fischer, J., Corso, A., & Kochenderfer, M. J. (2024).
     ConstrainedZero: Chance-Constrained POMDP Planning Using Learned Probabilistic Failure
     Surrogates and Adaptive Safety Constraints. Proceedings of the Thirty-Third International

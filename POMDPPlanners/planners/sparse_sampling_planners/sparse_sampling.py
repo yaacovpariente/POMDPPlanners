@@ -12,10 +12,10 @@ The sparse sampling approach works by:
 3. Computing value estimates using dynamic programming
 4. Selecting the action with the best estimated value
 
-Reference:
+References:
     Kearns, M., Mansour, Y., & Ng, A. Y. (2002). A Sparse Sampling Algorithm for
-    Near-Optimal Planning in Large Markov Decision Processes. Machine Learning, 49, 193-208.
-    https://link.springer.com/article/10.1023/A:1017932429737
+    Near-Optimal Planning in Large Markov Decision Processes. Machine Learning, 49(2),
+    193-208. https://link.springer.com/article/10.1023/A:1017932429737
 
 Classes:
     BaseSparseSamplingDiscreteActionsPlanner: Abstract base class for sparse sampling algorithms

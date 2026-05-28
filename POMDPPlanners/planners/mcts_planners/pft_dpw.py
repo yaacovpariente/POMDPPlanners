@@ -19,7 +19,7 @@ The algorithm progressively expands the tree by:
 3. Balancing exploration of new actions with exploitation of promising ones
 4. Performing random rollouts from leaf nodes for value estimation
 
-Reference:
+References:
     Sunberg, Z. N., & Kochenderfer, M. J. (2018). Online Algorithms for POMDPs with
     Continuous State, Action, and Observation Spaces. Proceedings of the International
     Conference on Automated Planning and Scheduling, 28(1), 259-263.

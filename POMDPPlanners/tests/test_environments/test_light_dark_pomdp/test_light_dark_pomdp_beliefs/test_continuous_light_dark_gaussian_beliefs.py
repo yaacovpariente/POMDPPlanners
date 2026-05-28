@@ -22,7 +22,7 @@ from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_beliefs import
     GaussianBeliefUpdaterType,
     create_continuous_light_dark_gaussian_belief,
 )
-
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import continuous_light_dark_pinned_kwargs
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -31,7 +31,7 @@ from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_beliefs import
 
 @pytest.fixture
 def env():
-    return ContinuousLightDarkPOMDP(discount_factor=0.95)
+    return ContinuousLightDarkPOMDP(discount_factor=0.95, **continuous_light_dark_pinned_kwargs())
 
 
 @pytest.fixture

@@ -15,12 +15,15 @@ from POMDPPlanners.core.belief.vectorized_weighted_particle_belief import (
 )
 from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
 from POMDPPlanners.environments.cartpole_pomdp.cartpole_pomdp_beliefs import create_cartpole_belief
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import cartpole_pinned_kwargs
 from POMDPPlanners.utils.belief_factory import BeliefType
 
 
 @pytest.fixture
 def env():
-    return CartPolePOMDP(discount_factor=0.99, noise_cov=np.diag([0.1, 0.1, 0.1, 0.1]))
+    return CartPolePOMDP(
+        discount_factor=0.99, noise_cov=np.diag([0.1, 0.1, 0.1, 0.1]), **cartpole_pinned_kwargs()
+    )
 
 
 class TestCreateCartpoleBelief:

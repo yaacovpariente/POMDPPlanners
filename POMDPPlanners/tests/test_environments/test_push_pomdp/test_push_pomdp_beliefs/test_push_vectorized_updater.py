@@ -27,6 +27,7 @@ from POMDPPlanners.tests.test_core.test_belief.vectorized_updater_test_utils imp
     assert_batch_obs_log_likelihood_matches_loop,
     assert_batch_transition_matches_loop,
 )
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import push_pinned_kwargs
 
 
 def _make_aligned_beliefs(updater, n_particles=100):
@@ -62,12 +63,14 @@ ACTION_STRINGS = ["up", "down", "right", "left"]
 def env():
     return PushPOMDP(
         discount_factor=0.99,
-        grid_size=10,
-        push_threshold=1.0,
-        friction_coefficient=0.3,
-        observation_noise=0.1,
-        obstacles=[(3.0, 3.0), (7.0, 7.0)],
-        obstacle_radius=0.5,
+        **push_pinned_kwargs(
+            grid_size=10,
+            push_threshold=1.0,
+            friction_coefficient=0.3,
+            observation_noise=0.1,
+            obstacles=[(3.0, 3.0), (7.0, 7.0)],
+            obstacle_radius=0.5,
+        ),
     )
 
 
@@ -75,10 +78,12 @@ def env():
 def env_no_obstacles():
     return PushPOMDP(
         discount_factor=0.99,
-        grid_size=10,
-        push_threshold=1.0,
-        friction_coefficient=0.3,
-        observation_noise=0.1,
+        **push_pinned_kwargs(
+            grid_size=10,
+            push_threshold=1.0,
+            friction_coefficient=0.3,
+            observation_noise=0.1,
+        ),
     )
 
 

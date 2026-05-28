@@ -6,6 +6,7 @@ from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import cartpole_pinned_kwargs
 from POMDPPlanners.utils.config_to_id import config_to_id, NumpyEncoder
 
 
@@ -501,8 +502,10 @@ class TestConfigToIdIntegration:
         noise_cov = np.diag([0.1, 0.1, 0.1, 0.1])
 
         # Create multiple identical environments
-        env1 = CartPolePOMDP(discount_factor=0.99, noise_cov=noise_cov)
-        env2 = CartPolePOMDP(discount_factor=0.99, noise_cov=noise_cov.copy())
+        env1 = CartPolePOMDP(discount_factor=0.99, noise_cov=noise_cov, **cartpole_pinned_kwargs())
+        env2 = CartPolePOMDP(
+            discount_factor=0.99, noise_cov=noise_cov.copy(), **cartpole_pinned_kwargs()
+        )
 
         # Extract configuration dictionaries
         config1 = {
@@ -547,7 +550,7 @@ class TestConfigToIdIntegration:
 
         # Configuration 1: Base configuration
         noise_cov1 = np.diag([0.1, 0.1, 0.1, 0.1])
-        env1 = CartPolePOMDP(discount_factor=0.99, noise_cov=noise_cov1)
+        env1 = CartPolePOMDP(discount_factor=0.99, noise_cov=noise_cov1, **cartpole_pinned_kwargs())
         configs.append(
             {
                 "discount_factor": env1.discount_factor,
@@ -558,7 +561,7 @@ class TestConfigToIdIntegration:
 
         # Configuration 2: Different discount factor
         noise_cov2 = np.diag([0.1, 0.1, 0.1, 0.1])
-        env2 = CartPolePOMDP(discount_factor=0.95, noise_cov=noise_cov2)
+        env2 = CartPolePOMDP(discount_factor=0.95, noise_cov=noise_cov2, **cartpole_pinned_kwargs())
         configs.append(
             {
                 "discount_factor": env2.discount_factor,
@@ -569,7 +572,7 @@ class TestConfigToIdIntegration:
 
         # Configuration 3: Different noise covariance
         noise_cov3 = np.diag([0.2, 0.2, 0.2, 0.2])
-        env3 = CartPolePOMDP(discount_factor=0.99, noise_cov=noise_cov3)
+        env3 = CartPolePOMDP(discount_factor=0.99, noise_cov=noise_cov3, **cartpole_pinned_kwargs())
         configs.append(
             {
                 "discount_factor": env3.discount_factor,
@@ -804,7 +807,7 @@ class TestConfigToIdIntegration:
         """
         # Create POMDP components with config_id attributes
         noise_cov = np.diag([0.1, 0.1, 0.1, 0.1])
-        env = CartPolePOMDP(discount_factor=0.99, noise_cov=noise_cov)
+        env = CartPolePOMDP(discount_factor=0.99, noise_cov=noise_cov, **cartpole_pinned_kwargs())
 
         particles = [np.array([0.0, 0.0, 0.1, 0.0]), np.array([0.1, 0.0, 0.0, 0.0])]
         log_weights = np.log(np.array([0.5, 0.5]))
@@ -840,7 +843,7 @@ class TestConfigToIdIntegration:
         Test type: integration
         """
         noise_cov = np.diag([0.1, 0.1, 0.1, 0.1])
-        env = CartPolePOMDP(discount_factor=0.99, noise_cov=noise_cov)
+        env = CartPolePOMDP(discount_factor=0.99, noise_cov=noise_cov, **cartpole_pinned_kwargs())
 
         # Configuration 1: Keys in one order
         config1 = {

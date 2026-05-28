@@ -60,6 +60,10 @@ from POMDPPlanners.environments.laser_tag_pomdp import (
     ContinuousLaserTagPOMDPDiscreteActions,
 )
 from POMDPPlanners.environments.pacman_pomdp import PacManPOMDP
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
+    continuous_laser_tag_discrete_actions_pinned_kwargs,
+    continuous_laser_tag_pinned_kwargs,
+)
 
 # Set random seeds for reproducible tests
 np.random.seed(42)
@@ -1428,9 +1432,13 @@ class TestAverageReturnParameterToOptimizeMapper:
         Test type: unit
         """
         envs = [
-            ContinuousLaserTagPOMDP(discount_factor=0.95, walls=[], dangerous_areas=[]),
+            ContinuousLaserTagPOMDP(
+                discount_factor=0.95,
+                **continuous_laser_tag_pinned_kwargs(walls=[], dangerous_areas=[]),
+            ),
             ContinuousLaserTagPOMDPDiscreteActions(
-                discount_factor=0.95, walls=[], dangerous_areas=[]
+                discount_factor=0.95,
+                **continuous_laser_tag_discrete_actions_pinned_kwargs(walls=[], dangerous_areas=[]),
             ),
         ]
         for env in envs:
@@ -1530,9 +1538,13 @@ class TestRiskAverseParameterToOptimizeMapper:
         Test type: unit
         """
         envs = [
-            ContinuousLaserTagPOMDP(discount_factor=0.95, walls=[], dangerous_areas=[]),
+            ContinuousLaserTagPOMDP(
+                discount_factor=0.95,
+                **continuous_laser_tag_pinned_kwargs(walls=[], dangerous_areas=[]),
+            ),
             ContinuousLaserTagPOMDPDiscreteActions(
-                discount_factor=0.95, walls=[], dangerous_areas=[]
+                discount_factor=0.95,
+                **continuous_laser_tag_discrete_actions_pinned_kwargs(walls=[], dangerous_areas=[]),
             ),
         ]
         for env in envs:

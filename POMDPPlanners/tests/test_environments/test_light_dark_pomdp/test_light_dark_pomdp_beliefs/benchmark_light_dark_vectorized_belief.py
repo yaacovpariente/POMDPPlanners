@@ -22,10 +22,14 @@ from POMDPPlanners.core.belief.vectorized_weighted_particle_belief import (
 )
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
     ContinuousLightDarkPOMDP,
+)
+from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
     ObservationModelType as ContinuousObsType,
 )
 from POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp import (
     DiscreteLightDarkPOMDP,
+)
+from POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp import (
     ObservationModelType as DiscreteObsType,
 )
 from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_beliefs import (
@@ -35,6 +39,10 @@ from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_beliefs import
     DiscreteLightDarkDistanceBasedVectorizedUpdater,
     DiscreteLightDarkNoObsInDarkVectorizedUpdater,
     DiscreteLightDarkVectorizedUpdater,
+)
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
+    continuous_light_dark_pinned_kwargs,
+    discrete_light_dark_pinned_kwargs,
 )
 
 PARTICLE_COUNTS = [200]
@@ -171,7 +179,9 @@ def _run_continuous_benchmark(
     print(f"Continuous LightDark — {name}")
     print(f"{'=' * 70}")
 
-    env = ContinuousLightDarkPOMDP(discount_factor=0.95, observation_model_type=obs_type)
+    env = ContinuousLightDarkPOMDP(
+        discount_factor=0.95, **continuous_light_dark_pinned_kwargs(observation_model_type=obs_type)
+    )
     updater = updater_cls.from_environment(env)
 
     _benchmark_continuous_transition(env, updater)
@@ -272,7 +282,9 @@ def _run_discrete_benchmark(
     print(f"Discrete LightDark — {name}")
     print(f"{'=' * 70}")
 
-    env = DiscreteLightDarkPOMDP(discount_factor=0.95, observation_model_type=obs_type)
+    env = DiscreteLightDarkPOMDP(
+        discount_factor=0.95, **discrete_light_dark_pinned_kwargs(observation_model_type=obs_type)
+    )
     updater = updater_cls.from_environment(env)
 
     _benchmark_discrete_transition(env, updater)

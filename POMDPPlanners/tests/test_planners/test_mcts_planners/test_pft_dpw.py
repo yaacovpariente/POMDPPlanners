@@ -25,6 +25,10 @@ from POMDPPlanners.planners.planners_utils.dpw import (
     ActionSampler,
     action_progressive_widening,
 )
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
+    continuous_light_dark_pinned_kwargs,
+    discrete_light_dark_pinned_kwargs,
+)
 from POMDPPlanners.utils.action_samplers import (
     DiscreteActionSampler,
     UnitCircleActionSampler,
@@ -36,7 +40,7 @@ random.seed(42)
 
 @pytest.fixture
 def environment():
-    return ContinuousLightDarkPOMDP(discount_factor=0.95)
+    return ContinuousLightDarkPOMDP(discount_factor=0.95, **continuous_light_dark_pinned_kwargs())
 
 
 @pytest.fixture
@@ -1017,8 +1021,10 @@ def test_sample_existing_belief_node_recovers_per_action_immediate_reward():
     random.seed(42)
     env = DiscreteLightDarkPOMDP(
         discount_factor=0.95,
-        obstacle_reward=-100.0,
-        obstacle_hit_probability=1.0,
+        **discrete_light_dark_pinned_kwargs(
+            obstacle_reward=-100.0,
+            obstacle_hit_probability=1.0,
+        ),
     )
 
     n_particles = 20

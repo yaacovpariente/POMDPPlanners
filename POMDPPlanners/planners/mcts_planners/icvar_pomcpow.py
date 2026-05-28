@@ -7,10 +7,9 @@ Value at Risk (ICVaR) for value backups instead of the expected value. This make
 focus on the worst-alpha fraction of outcomes, enabling risk-averse planning in POMDPs with
 continuous state, action, and observation spaces.
 
-Reference:
+References:
     Pariente, Y., & Indelman, V. (2026). Online Risk-Averse Planning in POMDPs Using
-    Iterated CVaR Value Function. arXiv preprint arXiv:2601.20554.
-    https://arxiv.org/abs/2601.20554
+    Iterated CVaR Value Function. arXiv:2601.20554. https://arxiv.org/abs/2601.20554
 
 Implementation note:
     Operates on the column-store arena

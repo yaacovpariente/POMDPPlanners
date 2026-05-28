@@ -21,17 +21,18 @@ from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.distributions import DiscreteDistribution
 from POMDPPlanners.core.policy import PolicyRunData
 from POMDPPlanners.core.simulation import History, StepData
+from POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp import (
+    DiscreteLightDarkPOMDP,
+    ObservationModelType,
+)
 from POMDPPlanners.tests.test_utils.confidence_interval_utils import (
     verify_metrics_within_confidence_intervals,
 )
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import discrete_light_dark_pinned_kwargs
 from POMDPPlanners.tests.test_utils.metric_invariants_utils import (
     verify_history_returns_bounded,
     verify_metric_sanity,
     verify_return_shift_linearity,
-)
-from POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp import (
-    DiscreteLightDarkPOMDP,
-    ObservationModelType,
 )
 
 # Set seeds for reproducible tests
@@ -44,14 +45,16 @@ def base_light_dark_environment() -> DiscreteLightDarkPOMDP:
     """Fixture providing a base DiscreteLightDarkPOMDP environment for comparison."""
     return DiscreteLightDarkPOMDP(
         discount_factor=0.95,
-        transition_error_prob=0.05,
-        observation_error_prob=0.05,
-        obstacle_hit_probability=0.2,
-        obstacle_reward=-10.0,
-        goal_reward=10.0,
-        fuel_cost=2.0,
-        grid_size=11,
-        is_stochastic_reward=True,
+        **discrete_light_dark_pinned_kwargs(
+            transition_error_prob=0.05,
+            observation_error_prob=0.05,
+            obstacle_hit_probability=0.2,
+            obstacle_reward=-10.0,
+            goal_reward=10.0,
+            fuel_cost=2.0,
+            grid_size=11,
+            is_stochastic_reward=True,
+        ),
     )
 
 
@@ -71,14 +74,16 @@ class TestDiscreteLightDarkPOMDPEquality:
         """
         other_env = DiscreteLightDarkPOMDP(
             discount_factor=0.95,
-            transition_error_prob=0.05,
-            observation_error_prob=0.05,
-            obstacle_hit_probability=0.2,
-            obstacle_reward=-10.0,
-            goal_reward=10.0,
-            fuel_cost=2.0,
-            grid_size=11,
-            is_stochastic_reward=True,
+            **discrete_light_dark_pinned_kwargs(
+                transition_error_prob=0.05,
+                observation_error_prob=0.05,
+                obstacle_hit_probability=0.2,
+                obstacle_reward=-10.0,
+                goal_reward=10.0,
+                fuel_cost=2.0,
+                grid_size=11,
+                is_stochastic_reward=True,
+            ),
         )
         assert base_light_dark_environment == other_env
         assert other_env == base_light_dark_environment  # Test symmetry
@@ -96,14 +101,16 @@ class TestDiscreteLightDarkPOMDPEquality:
         """
         other_env = DiscreteLightDarkPOMDP(
             discount_factor=0.8,
-            transition_error_prob=0.05,
-            observation_error_prob=0.05,
-            obstacle_hit_probability=0.2,
-            obstacle_reward=-10.0,
-            goal_reward=10.0,
-            fuel_cost=2.0,
-            grid_size=11,
-            is_stochastic_reward=True,
+            **discrete_light_dark_pinned_kwargs(
+                transition_error_prob=0.05,
+                observation_error_prob=0.05,
+                obstacle_hit_probability=0.2,
+                obstacle_reward=-10.0,
+                goal_reward=10.0,
+                fuel_cost=2.0,
+                grid_size=11,
+                is_stochastic_reward=True,
+            ),
         )
         assert base_light_dark_environment != other_env
         assert other_env != base_light_dark_environment  # Test symmetry
@@ -121,14 +128,16 @@ class TestDiscreteLightDarkPOMDPEquality:
         """
         other_env = DiscreteLightDarkPOMDP(
             discount_factor=0.95,
-            transition_error_prob=0.1,  # Different transition error
-            observation_error_prob=0.05,
-            obstacle_hit_probability=0.2,
-            obstacle_reward=-10.0,
-            goal_reward=10.0,
-            fuel_cost=2.0,
-            grid_size=11,
-            is_stochastic_reward=True,
+            **discrete_light_dark_pinned_kwargs(
+                transition_error_prob=0.1,
+                observation_error_prob=0.05,
+                obstacle_hit_probability=0.2,
+                obstacle_reward=-10.0,
+                goal_reward=10.0,
+                fuel_cost=2.0,
+                grid_size=11,
+                is_stochastic_reward=True,
+            ),
         )
         assert base_light_dark_environment != other_env
 
@@ -145,14 +154,16 @@ class TestDiscreteLightDarkPOMDPEquality:
         """
         other_env = DiscreteLightDarkPOMDP(
             discount_factor=0.95,
-            transition_error_prob=0.05,
-            observation_error_prob=0.1,  # Different observation error
-            obstacle_hit_probability=0.2,
-            obstacle_reward=-10.0,
-            goal_reward=10.0,
-            fuel_cost=2.0,
-            grid_size=11,
-            is_stochastic_reward=True,
+            **discrete_light_dark_pinned_kwargs(
+                transition_error_prob=0.05,
+                observation_error_prob=0.1,
+                obstacle_hit_probability=0.2,
+                obstacle_reward=-10.0,
+                goal_reward=10.0,
+                fuel_cost=2.0,
+                grid_size=11,
+                is_stochastic_reward=True,
+            ),
         )
         assert base_light_dark_environment != other_env
 
@@ -169,25 +180,27 @@ class TestDiscreteLightDarkPOMDPEquality:
         """
         other_env = DiscreteLightDarkPOMDP(
             discount_factor=0.95,
-            transition_error_prob=0.05,
-            observation_error_prob=0.05,
-            obstacle_hit_probability=0.2,
-            obstacle_reward=-10.0,
-            goal_reward=10.0,
-            fuel_cost=2.0,
-            grid_size=11,
-            is_stochastic_reward=True,
-            beacons=[
-                (1, 1),
-                (1, 6),
-                (1, 11),
-                (6, 1),
-                (6, 6),
-                (6, 11),
-                (11, 1),
-                (11, 6),
-                (11, 11),
-            ],  # Different beacons
+            **discrete_light_dark_pinned_kwargs(
+                transition_error_prob=0.05,
+                observation_error_prob=0.05,
+                obstacle_hit_probability=0.2,
+                obstacle_reward=-10.0,
+                goal_reward=10.0,
+                fuel_cost=2.0,
+                grid_size=11,
+                is_stochastic_reward=True,
+                beacons=[
+                    (1, 1),
+                    (1, 6),
+                    (1, 11),
+                    (6, 1),
+                    (6, 6),
+                    (6, 11),
+                    (11, 1),
+                    (11, 6),
+                    (11, 11),
+                ],
+            ),
         )
         assert base_light_dark_environment != other_env
 
@@ -204,15 +217,17 @@ class TestDiscreteLightDarkPOMDPEquality:
         """
         other_env = DiscreteLightDarkPOMDP(
             discount_factor=0.95,
-            transition_error_prob=0.05,
-            observation_error_prob=0.05,
-            obstacle_hit_probability=0.2,
-            obstacle_reward=-10.0,
-            goal_reward=10.0,
-            fuel_cost=2.0,
-            grid_size=11,
-            is_stochastic_reward=True,
-            obstacles=[(4, 8), (6, 6)],  # Different obstacles
+            **discrete_light_dark_pinned_kwargs(
+                transition_error_prob=0.05,
+                observation_error_prob=0.05,
+                obstacle_hit_probability=0.2,
+                obstacle_reward=-10.0,
+                goal_reward=10.0,
+                fuel_cost=2.0,
+                grid_size=11,
+                is_stochastic_reward=True,
+                obstacles=[(4, 8), (6, 6)],
+            ),
         )
         assert base_light_dark_environment != other_env
 
@@ -229,15 +244,17 @@ class TestDiscreteLightDarkPOMDPEquality:
         """
         other_env = DiscreteLightDarkPOMDP(
             discount_factor=0.95,
-            transition_error_prob=0.05,
-            observation_error_prob=0.05,
-            obstacle_hit_probability=0.2,
-            obstacle_reward=-10.0,
-            goal_reward=10.0,
-            fuel_cost=2.0,
-            grid_size=11,
-            is_stochastic_reward=True,
-            goal_state=np.array([9, 4]),  # Different goal state
+            **discrete_light_dark_pinned_kwargs(
+                transition_error_prob=0.05,
+                observation_error_prob=0.05,
+                obstacle_hit_probability=0.2,
+                obstacle_reward=-10.0,
+                goal_reward=10.0,
+                fuel_cost=2.0,
+                grid_size=11,
+                is_stochastic_reward=True,
+                goal_state=np.array([9, 4]),
+            ),
         )
         assert base_light_dark_environment != other_env
 
@@ -254,15 +271,17 @@ class TestDiscreteLightDarkPOMDPEquality:
         """
         other_env = DiscreteLightDarkPOMDP(
             discount_factor=0.95,
-            transition_error_prob=0.05,
-            observation_error_prob=0.05,
-            obstacle_hit_probability=0.2,
-            obstacle_reward=-10.0,
-            goal_reward=10.0,
-            fuel_cost=2.0,
-            grid_size=11,
-            is_stochastic_reward=True,
-            start_state=np.array([1, 4]),  # Different start state
+            **discrete_light_dark_pinned_kwargs(
+                transition_error_prob=0.05,
+                observation_error_prob=0.05,
+                obstacle_hit_probability=0.2,
+                obstacle_reward=-10.0,
+                goal_reward=10.0,
+                fuel_cost=2.0,
+                grid_size=11,
+                is_stochastic_reward=True,
+                start_state=np.array([1, 4]),
+            ),
         )
         assert base_light_dark_environment != other_env
 
@@ -279,14 +298,16 @@ class TestDiscreteLightDarkPOMDPEquality:
         """
         other_env = DiscreteLightDarkPOMDP(
             discount_factor=0.95,
-            transition_error_prob=0.05,
-            observation_error_prob=0.05,
-            obstacle_hit_probability=0.2,
-            obstacle_reward=-20.0,  # Different obstacle reward
-            goal_reward=20.0,  # Different goal reward
-            fuel_cost=3.0,  # Different fuel cost
-            grid_size=11,
-            is_stochastic_reward=True,
+            **discrete_light_dark_pinned_kwargs(
+                transition_error_prob=0.05,
+                observation_error_prob=0.05,
+                obstacle_hit_probability=0.2,
+                obstacle_reward=-20.0,
+                goal_reward=20.0,
+                fuel_cost=3.0,
+                grid_size=11,
+                is_stochastic_reward=True,
+            ),
         )
         assert base_light_dark_environment != other_env
 
@@ -303,14 +324,16 @@ class TestDiscreteLightDarkPOMDPEquality:
         """
         other_env = DiscreteLightDarkPOMDP(
             discount_factor=0.95,
-            transition_error_prob=0.05,
-            observation_error_prob=0.05,
-            obstacle_hit_probability=0.2,
-            obstacle_reward=-10.0,
-            goal_reward=10.0,
-            fuel_cost=2.0,
-            grid_size=15,  # Different grid size
-            is_stochastic_reward=True,
+            **discrete_light_dark_pinned_kwargs(
+                transition_error_prob=0.05,
+                observation_error_prob=0.05,
+                obstacle_hit_probability=0.2,
+                obstacle_reward=-10.0,
+                goal_reward=10.0,
+                fuel_cost=2.0,
+                grid_size=15,
+                is_stochastic_reward=True,
+            ),
         )
         assert base_light_dark_environment != other_env
 
@@ -327,15 +350,17 @@ class TestDiscreteLightDarkPOMDPEquality:
         """
         other_env = DiscreteLightDarkPOMDP(
             discount_factor=0.95,
-            transition_error_prob=0.05,
-            observation_error_prob=0.05,
-            obstacle_hit_probability=0.2,
-            obstacle_reward=-10.0,
-            goal_reward=10.0,
-            fuel_cost=2.0,
-            grid_size=11,
-            is_stochastic_reward=True,
-            beacon_radius=2.0,  # Different beacon radius
+            **discrete_light_dark_pinned_kwargs(
+                transition_error_prob=0.05,
+                observation_error_prob=0.05,
+                obstacle_hit_probability=0.2,
+                obstacle_reward=-10.0,
+                goal_reward=10.0,
+                fuel_cost=2.0,
+                grid_size=11,
+                is_stochastic_reward=True,
+                beacon_radius=2.0,
+            ),
         )
         assert base_light_dark_environment != other_env
 
@@ -352,14 +377,16 @@ class TestDiscreteLightDarkPOMDPEquality:
         """
         other_env = DiscreteLightDarkPOMDP(
             discount_factor=0.95,
-            transition_error_prob=0.05,
-            observation_error_prob=0.05,
-            obstacle_hit_probability=0.2,
-            obstacle_reward=-10.0,
-            goal_reward=10.0,
-            fuel_cost=2.0,
-            grid_size=11,
-            is_stochastic_reward=False,  # Different stochastic reward setting
+            **discrete_light_dark_pinned_kwargs(
+                transition_error_prob=0.05,
+                observation_error_prob=0.05,
+                obstacle_hit_probability=0.2,
+                obstacle_reward=-10.0,
+                goal_reward=10.0,
+                fuel_cost=2.0,
+                grid_size=11,
+                is_stochastic_reward=False,
+            ),
         )
         assert base_light_dark_environment != other_env
 
@@ -393,28 +420,32 @@ class TestDiscreteLightDarkPOMDPEquality:
         """
         other_env = DiscreteLightDarkPOMDP(
             discount_factor=0.95,
-            transition_error_prob=0.05,
-            observation_error_prob=0.05,
-            obstacle_hit_probability=0.2,
-            obstacle_reward=-10.0,
-            goal_reward=10.0,
-            fuel_cost=2.0,
-            grid_size=11,
-            is_stochastic_reward=True,
+            **discrete_light_dark_pinned_kwargs(
+                transition_error_prob=0.05,
+                observation_error_prob=0.05,
+                obstacle_hit_probability=0.2,
+                obstacle_reward=-10.0,
+                goal_reward=10.0,
+                fuel_cost=2.0,
+                grid_size=11,
+                is_stochastic_reward=True,
+            ),
         )
         delattr(other_env, "beacons")
         assert base_light_dark_environment != other_env
 
         other_env = DiscreteLightDarkPOMDP(
             discount_factor=0.95,
-            transition_error_prob=0.05,
-            observation_error_prob=0.05,
-            obstacle_hit_probability=0.2,
-            obstacle_reward=-10.0,
-            goal_reward=10.0,
-            fuel_cost=2.0,
-            grid_size=11,
-            is_stochastic_reward=True,
+            **discrete_light_dark_pinned_kwargs(
+                transition_error_prob=0.05,
+                observation_error_prob=0.05,
+                obstacle_hit_probability=0.2,
+                obstacle_reward=-10.0,
+                goal_reward=10.0,
+                fuel_cost=2.0,
+                grid_size=11,
+                is_stochastic_reward=True,
+            ),
         )
         delattr(other_env, "obstacles")
         assert base_light_dark_environment != other_env
@@ -452,14 +483,16 @@ class TestDiscreteLightDarkPOMDPConfigId:
         """
         other_env = DiscreteLightDarkPOMDP(
             discount_factor=0.95,
-            transition_error_prob=0.05,
-            observation_error_prob=0.05,
-            obstacle_hit_probability=0.2,
-            obstacle_reward=-10.0,
-            goal_reward=10.0,
-            fuel_cost=2.0,
-            grid_size=11,
-            is_stochastic_reward=True,
+            **discrete_light_dark_pinned_kwargs(
+                transition_error_prob=0.05,
+                observation_error_prob=0.05,
+                obstacle_hit_probability=0.2,
+                obstacle_reward=-10.0,
+                goal_reward=10.0,
+                fuel_cost=2.0,
+                grid_size=11,
+                is_stochastic_reward=True,
+            ),
         )
         assert base_light_dark_environment.config_id == other_env.config_id
 
@@ -478,14 +511,16 @@ class TestDiscreteLightDarkPOMDPConfigId:
         """
         other_env = DiscreteLightDarkPOMDP(
             discount_factor=0.8,
-            transition_error_prob=0.05,
-            observation_error_prob=0.05,
-            obstacle_hit_probability=0.2,
-            obstacle_reward=-10.0,
-            goal_reward=10.0,
-            fuel_cost=2.0,
-            grid_size=11,
-            is_stochastic_reward=True,
+            **discrete_light_dark_pinned_kwargs(
+                transition_error_prob=0.05,
+                observation_error_prob=0.05,
+                obstacle_hit_probability=0.2,
+                obstacle_reward=-10.0,
+                goal_reward=10.0,
+                fuel_cost=2.0,
+                grid_size=11,
+                is_stochastic_reward=True,
+            ),
         )
         assert base_light_dark_environment.config_id != other_env.config_id
 
@@ -505,53 +540,59 @@ class TestDiscreteLightDarkPOMDPConfigId:
         # Test different transition error
         other_env = DiscreteLightDarkPOMDP(
             discount_factor=0.95,
-            transition_error_prob=0.1,  # Different
-            observation_error_prob=0.05,
-            obstacle_hit_probability=0.2,
-            obstacle_reward=-10.0,
-            goal_reward=10.0,
-            fuel_cost=2.0,
-            grid_size=11,
-            is_stochastic_reward=True,
+            **discrete_light_dark_pinned_kwargs(
+                transition_error_prob=0.1,
+                observation_error_prob=0.05,
+                obstacle_hit_probability=0.2,
+                obstacle_reward=-10.0,
+                goal_reward=10.0,
+                fuel_cost=2.0,
+                grid_size=11,
+                is_stochastic_reward=True,
+            ),
         )
         assert base_light_dark_environment.config_id != other_env.config_id
 
         # Test different observation error
         other_env = DiscreteLightDarkPOMDP(
             discount_factor=0.95,
-            transition_error_prob=0.05,
-            observation_error_prob=0.1,  # Different
-            obstacle_hit_probability=0.2,
-            obstacle_reward=-10.0,
-            goal_reward=10.0,
-            fuel_cost=2.0,
-            grid_size=11,
-            is_stochastic_reward=True,
+            **discrete_light_dark_pinned_kwargs(
+                transition_error_prob=0.05,
+                observation_error_prob=0.1,
+                obstacle_hit_probability=0.2,
+                obstacle_reward=-10.0,
+                goal_reward=10.0,
+                fuel_cost=2.0,
+                grid_size=11,
+                is_stochastic_reward=True,
+            ),
         )
         assert base_light_dark_environment.config_id != other_env.config_id
 
         # Test different beacons
         other_env = DiscreteLightDarkPOMDP(
             discount_factor=0.95,
-            transition_error_prob=0.05,
-            observation_error_prob=0.05,
-            obstacle_hit_probability=0.2,
-            obstacle_reward=-10.0,
-            goal_reward=10.0,
-            fuel_cost=2.0,
-            grid_size=11,
-            is_stochastic_reward=True,
-            beacons=[
-                (1, 1),
-                (1, 6),
-                (1, 11),
-                (6, 1),
-                (6, 6),
-                (6, 11),
-                (11, 1),
-                (11, 6),
-                (11, 11),
-            ],  # Different
+            **discrete_light_dark_pinned_kwargs(
+                transition_error_prob=0.05,
+                observation_error_prob=0.05,
+                obstacle_hit_probability=0.2,
+                obstacle_reward=-10.0,
+                goal_reward=10.0,
+                fuel_cost=2.0,
+                grid_size=11,
+                is_stochastic_reward=True,
+                beacons=[
+                    (1, 1),
+                    (1, 6),
+                    (1, 11),
+                    (6, 1),
+                    (6, 6),
+                    (6, 11),
+                    (11, 1),
+                    (11, 6),
+                    (11, 11),
+                ],
+            ),
         )
         assert base_light_dark_environment.config_id != other_env.config_id
 
@@ -614,15 +655,17 @@ class TestDiscreteLightDarkPOMDPConfigId:
 
         other_env = DiscreteLightDarkPOMDP(
             discount_factor=0.95,
-            transition_error_prob=0.05,
-            observation_error_prob=0.05,
-            obstacle_hit_probability=0.2,
-            obstacle_reward=-10.0,
-            goal_reward=10.0,
-            fuel_cost=2.0,
-            grid_size=11,
-            is_stochastic_reward=True,
-            beacons=beacons_reordered,
+            **discrete_light_dark_pinned_kwargs(
+                transition_error_prob=0.05,
+                observation_error_prob=0.05,
+                obstacle_hit_probability=0.2,
+                obstacle_reward=-10.0,
+                goal_reward=10.0,
+                fuel_cost=2.0,
+                grid_size=11,
+                is_stochastic_reward=True,
+                beacons=beacons_reordered,
+            ),
         )
         assert base_light_dark_environment.config_id == other_env.config_id
 
@@ -633,31 +676,35 @@ class TestDiscreteLightDarkPOMDPConfigId:
 
         other_env = DiscreteLightDarkPOMDP(
             discount_factor=0.95,
-            transition_error_prob=0.05,
-            observation_error_prob=0.05,
-            obstacle_hit_probability=0.2,
-            obstacle_reward=-10.0,
-            goal_reward=10.0,
-            fuel_cost=2.0,
-            grid_size=11,
-            is_stochastic_reward=True,
-            obstacles=obstacles_reordered,
+            **discrete_light_dark_pinned_kwargs(
+                transition_error_prob=0.05,
+                observation_error_prob=0.05,
+                obstacle_hit_probability=0.2,
+                obstacle_reward=-10.0,
+                goal_reward=10.0,
+                fuel_cost=2.0,
+                grid_size=11,
+                is_stochastic_reward=True,
+                obstacles=obstacles_reordered,
+            ),
         )
         assert base_light_dark_environment.config_id == other_env.config_id
 
         # Test both beacons and obstacles reordered together
         other_env = DiscreteLightDarkPOMDP(
             discount_factor=0.95,
-            transition_error_prob=0.05,
-            observation_error_prob=0.05,
-            obstacle_hit_probability=0.2,
-            obstacle_reward=-10.0,
-            goal_reward=10.0,
-            fuel_cost=2.0,
-            grid_size=11,
-            is_stochastic_reward=True,
-            beacons=beacons_reordered,
-            obstacles=obstacles_reordered,
+            **discrete_light_dark_pinned_kwargs(
+                transition_error_prob=0.05,
+                observation_error_prob=0.05,
+                obstacle_hit_probability=0.2,
+                obstacle_reward=-10.0,
+                goal_reward=10.0,
+                fuel_cost=2.0,
+                grid_size=11,
+                is_stochastic_reward=True,
+                beacons=beacons_reordered,
+                obstacles=obstacles_reordered,
+            ),
         )
         assert base_light_dark_environment.config_id == other_env.config_id
 
@@ -675,14 +722,16 @@ def test_initialization():
     """
     env = DiscreteLightDarkPOMDP(
         discount_factor=0.95,
-        transition_error_prob=0.05,
-        observation_error_prob=0.05,
-        obstacle_hit_probability=0.2,
-        obstacle_reward=-10.0,
-        goal_reward=10.0,
-        fuel_cost=2.0,
-        grid_size=11,
-        is_stochastic_reward=True,
+        **discrete_light_dark_pinned_kwargs(
+            transition_error_prob=0.05,
+            observation_error_prob=0.05,
+            obstacle_hit_probability=0.2,
+            obstacle_reward=-10.0,
+            goal_reward=10.0,
+            fuel_cost=2.0,
+            grid_size=11,
+            is_stochastic_reward=True,
+        ),
     )
 
     # Check default parameters
@@ -725,14 +774,16 @@ def test_beacons_and_obstacles_array_structure():
     """
     env = DiscreteLightDarkPOMDP(
         discount_factor=0.95,
-        transition_error_prob=0.05,
-        observation_error_prob=0.05,
-        obstacle_hit_probability=0.2,
-        obstacle_reward=-10.0,
-        goal_reward=10.0,
-        fuel_cost=2.0,
-        grid_size=11,
-        is_stochastic_reward=True,
+        **discrete_light_dark_pinned_kwargs(
+            transition_error_prob=0.05,
+            observation_error_prob=0.05,
+            obstacle_hit_probability=0.2,
+            obstacle_reward=-10.0,
+            goal_reward=10.0,
+            fuel_cost=2.0,
+            grid_size=11,
+            is_stochastic_reward=True,
+        ),
     )
 
     # Test beacons structure
@@ -801,16 +852,18 @@ def test_custom_beacons_and_obstacles_array_structure():
 
     env = DiscreteLightDarkPOMDP(
         discount_factor=0.95,
-        transition_error_prob=0.05,
-        observation_error_prob=0.05,
-        obstacle_hit_probability=0.2,
-        obstacle_reward=-10.0,
-        goal_reward=10.0,
-        fuel_cost=2.0,
-        grid_size=11,
-        is_stochastic_reward=True,
-        beacons=custom_beacons,
-        obstacles=custom_obstacles,
+        **discrete_light_dark_pinned_kwargs(
+            transition_error_prob=0.05,
+            observation_error_prob=0.05,
+            obstacle_hit_probability=0.2,
+            obstacle_reward=-10.0,
+            goal_reward=10.0,
+            fuel_cost=2.0,
+            grid_size=11,
+            is_stochastic_reward=True,
+            beacons=custom_beacons,
+            obstacles=custom_obstacles,
+        ),
     )
 
     # Test custom beacons structure
@@ -876,16 +929,18 @@ def test_empty_beacons_and_obstacles():
     """
     env = DiscreteLightDarkPOMDP(
         discount_factor=0.95,
-        transition_error_prob=0.05,
-        observation_error_prob=0.05,
-        obstacle_hit_probability=0.2,
-        obstacle_reward=-10.0,
-        goal_reward=10.0,
-        fuel_cost=2.0,
-        grid_size=11,
-        is_stochastic_reward=True,
-        beacons=[],  # Empty beacons
-        obstacles=[],  # Empty obstacles
+        **discrete_light_dark_pinned_kwargs(
+            transition_error_prob=0.05,
+            observation_error_prob=0.05,
+            obstacle_hit_probability=0.2,
+            obstacle_reward=-10.0,
+            goal_reward=10.0,
+            fuel_cost=2.0,
+            grid_size=11,
+            is_stochastic_reward=True,
+            beacons=[],
+            obstacles=[],
+        ),
     )
 
     # Test empty beacons structure
@@ -920,7 +975,9 @@ def test_state_transition_model():
 
     Test type: unit
     """
-    env = DiscreteLightDarkPOMDP(discount_factor=0.95, transition_error_prob=0.1)
+    env = DiscreteLightDarkPOMDP(
+        discount_factor=0.95, **discrete_light_dark_pinned_kwargs(transition_error_prob=0.1)
+    )
     state = np.array([5, 5])
 
     candidates = [
@@ -949,7 +1006,9 @@ def test_reward_function():
 
     Test type: unit
     """
-    env = DiscreteLightDarkPOMDP(discount_factor=0.95, obstacle_hit_probability=1.0)
+    env = DiscreteLightDarkPOMDP(
+        discount_factor=0.95, **discrete_light_dark_pinned_kwargs(obstacle_hit_probability=1.0)
+    )
 
     # Test goal state reward
     state = np.array([9, 5])
@@ -981,7 +1040,7 @@ def test_is_terminal():
 
     Test type: unit
     """
-    env = DiscreteLightDarkPOMDP(discount_factor=0.95)
+    env = DiscreteLightDarkPOMDP(discount_factor=0.95, **discrete_light_dark_pinned_kwargs())
 
     # Test goal state
     assert env.is_terminal(env.goal_state)
@@ -1008,7 +1067,7 @@ def test_initial_distributions():
 
     Test type: unit
     """
-    env = DiscreteLightDarkPOMDP(discount_factor=0.95)
+    env = DiscreteLightDarkPOMDP(discount_factor=0.95, **discrete_light_dark_pinned_kwargs())
 
     # Test initial state distribution
     state_dist = env.initial_state_dist()
@@ -1034,7 +1093,7 @@ def test_get_actions():
 
     Test type: unit
     """
-    env = DiscreteLightDarkPOMDP(discount_factor=0.95)
+    env = DiscreteLightDarkPOMDP(discount_factor=0.95, **discrete_light_dark_pinned_kwargs())
     actions = env.get_actions()
     assert set(actions) == {"up", "down", "right", "left"}
 
@@ -1050,7 +1109,7 @@ def test_visualize_path(tmp_path):
 
     Test type: unit
     """
-    env = DiscreteLightDarkPOMDP(discount_factor=0.95)
+    env = DiscreteLightDarkPOMDP(discount_factor=0.95, **discrete_light_dark_pinned_kwargs())
     path = [np.array([0, 5]), np.array([1, 5]), np.array([2, 5]), np.array([3, 5])]
 
     # Create a simple belief path for testing
@@ -1085,7 +1144,7 @@ def test_compute_metrics():
 
     Test type: unit
     """
-    env = DiscreteLightDarkPOMDP(discount_factor=0.95)
+    env = DiscreteLightDarkPOMDP(discount_factor=0.95, **discrete_light_dark_pinned_kwargs())
 
     # Create test histories
     # Create a simple belief for testing
@@ -1282,7 +1341,7 @@ def test_compute_metrics_values_within_confidence_intervals():
 
     Test type: integration
     """
-    env = DiscreteLightDarkPOMDP(discount_factor=0.95)
+    env = DiscreteLightDarkPOMDP(discount_factor=0.95, **discrete_light_dark_pinned_kwargs())
 
     def _make_belief(state: np.ndarray) -> WeightedParticleBelief:
         return WeightedParticleBelief(
@@ -1399,7 +1458,7 @@ def test_normal_observation_model():
     """
     env = DiscreteLightDarkPOMDP(
         discount_factor=0.95,
-        observation_model_type=ObservationModelType.NORMAL,
+        **discrete_light_dark_pinned_kwargs(observation_model_type=ObservationModelType.NORMAL),
     )
     assert env.observation_model_type == ObservationModelType.NORMAL
 
@@ -1425,7 +1484,9 @@ def test_no_obs_in_dark_observation_model():
     """
     env = DiscreteLightDarkPOMDP(
         discount_factor=0.95,
-        observation_model_type=ObservationModelType.NO_OBS_IN_DARK,
+        **discrete_light_dark_pinned_kwargs(
+            observation_model_type=ObservationModelType.NO_OBS_IN_DARK
+        ),
     )
     assert env.observation_model_type == ObservationModelType.NO_OBS_IN_DARK
     action = "up"
@@ -1453,7 +1514,7 @@ def test_default_observation_model_type():
 
     Test type: unit
     """
-    env = DiscreteLightDarkPOMDP(discount_factor=0.95)
+    env = DiscreteLightDarkPOMDP(discount_factor=0.95, **discrete_light_dark_pinned_kwargs())
     assert env.observation_model_type == ObservationModelType.NORMAL
 
     obs = env.sample_observation(np.array([5, 5]), "up")
@@ -1465,24 +1526,30 @@ def test_observation_model_type_equality():
     """Test that environments with different observation model types are not equal."""
     env1 = DiscreteLightDarkPOMDP(
         discount_factor=0.95,
-        transition_error_prob=0.05,
-        observation_error_prob=0.05,
-        observation_model_type=ObservationModelType.NORMAL,
+        **discrete_light_dark_pinned_kwargs(
+            transition_error_prob=0.05,
+            observation_error_prob=0.05,
+            observation_model_type=ObservationModelType.NORMAL,
+        ),
     )
     env2 = DiscreteLightDarkPOMDP(
         discount_factor=0.95,
-        transition_error_prob=0.05,
-        observation_error_prob=0.05,
-        observation_model_type=ObservationModelType.NO_OBS_IN_DARK,
+        **discrete_light_dark_pinned_kwargs(
+            transition_error_prob=0.05,
+            observation_error_prob=0.05,
+            observation_model_type=ObservationModelType.NO_OBS_IN_DARK,
+        ),
     )
     assert env1 != env2, "Environments with different observation model types should not be equal"
 
     # Test distance-based vs others
     env3 = DiscreteLightDarkPOMDP(
         discount_factor=0.95,
-        transition_error_prob=0.05,
-        observation_error_prob=0.05,
-        observation_model_type=ObservationModelType.DISTANCE_BASED,
+        **discrete_light_dark_pinned_kwargs(
+            transition_error_prob=0.05,
+            observation_error_prob=0.05,
+            observation_model_type=ObservationModelType.DISTANCE_BASED,
+        ),
     )
     assert env1 != env3, "Distance-based should not equal normal"
     assert env2 != env3, "Distance-based should not equal no obs in dark"
@@ -1492,15 +1559,19 @@ def test_observation_model_type_config_id():
     """Test that config_id changes with different observation model types."""
     env1 = DiscreteLightDarkPOMDP(
         discount_factor=0.95,
-        transition_error_prob=0.05,
-        observation_error_prob=0.05,
-        observation_model_type=ObservationModelType.NORMAL,
+        **discrete_light_dark_pinned_kwargs(
+            transition_error_prob=0.05,
+            observation_error_prob=0.05,
+            observation_model_type=ObservationModelType.NORMAL,
+        ),
     )
     env2 = DiscreteLightDarkPOMDP(
         discount_factor=0.95,
-        transition_error_prob=0.05,
-        observation_error_prob=0.05,
-        observation_model_type=ObservationModelType.NO_OBS_IN_DARK,
+        **discrete_light_dark_pinned_kwargs(
+            transition_error_prob=0.05,
+            observation_error_prob=0.05,
+            observation_model_type=ObservationModelType.NO_OBS_IN_DARK,
+        ),
     )
     assert (
         env1.config_id != env2.config_id
@@ -1509,9 +1580,11 @@ def test_observation_model_type_config_id():
     # Test distance-based produces different config_id
     env3 = DiscreteLightDarkPOMDP(
         discount_factor=0.95,
-        transition_error_prob=0.05,
-        observation_error_prob=0.05,
-        observation_model_type=ObservationModelType.DISTANCE_BASED,
+        **discrete_light_dark_pinned_kwargs(
+            transition_error_prob=0.05,
+            observation_error_prob=0.05,
+            observation_model_type=ObservationModelType.DISTANCE_BASED,
+        ),
     )
     assert (
         env1.config_id != env3.config_id
@@ -1541,8 +1614,9 @@ def test_distance_based_observation_model():
     """
     env = DiscreteLightDarkPOMDP(
         discount_factor=0.95,
-        observation_error_prob=0.05,
-        observation_model_type=ObservationModelType.DISTANCE_BASED,
+        **discrete_light_dark_pinned_kwargs(
+            observation_error_prob=0.05, observation_model_type=ObservationModelType.DISTANCE_BASED
+        ),
     )
     assert env.observation_model_type == ObservationModelType.DISTANCE_BASED
     action = "up"
@@ -1594,9 +1668,11 @@ def test_distance_based_observation_model_continuous_scaling():
     """
     env = DiscreteLightDarkPOMDP(
         discount_factor=0.95,
-        observation_error_prob=0.1,
-        beacon_radius=2.0,
-        observation_model_type=ObservationModelType.DISTANCE_BASED,
+        **discrete_light_dark_pinned_kwargs(
+            observation_error_prob=0.1,
+            beacon_radius=2.0,
+            observation_model_type=ObservationModelType.DISTANCE_BASED,
+        ),
     )
     base_error_prob = 0.1
     action = "up"
@@ -1635,8 +1711,9 @@ def test_distance_based_observation_model_probability():
     """
     env = DiscreteLightDarkPOMDP(
         discount_factor=0.95,
-        beacon_radius=1.0,
-        observation_model_type=ObservationModelType.DISTANCE_BASED,
+        **discrete_light_dark_pinned_kwargs(
+            beacon_radius=1.0, observation_model_type=ObservationModelType.DISTANCE_BASED
+        ),
     )
     action = "up"
 
@@ -1705,7 +1782,7 @@ def test_discrete_sample_next_state_n_samples_shapes(n_samples):
 
     Test type: unit
     """
-    env = DiscreteLightDarkPOMDP(discount_factor=0.95)
+    env = DiscreteLightDarkPOMDP(discount_factor=0.95, **discrete_light_dark_pinned_kwargs())
     state = np.array([2, 3])
     action = "up"
 
@@ -1734,9 +1811,11 @@ def test_discrete_sample_observation_n_samples_shapes_normal(n_samples):
     """
     env = DiscreteLightDarkPOMDP(
         discount_factor=0.95,
-        beacons=[(0, 0), (5, 5)],
-        beacon_radius=1.5,
-        observation_model_type=ObservationModelType.NORMAL,
+        **discrete_light_dark_pinned_kwargs(
+            beacons=[(0, 0), (5, 5)],
+            beacon_radius=1.5,
+            observation_model_type=ObservationModelType.NORMAL,
+        ),
     )
     next_state = np.array([5, 5])
     action = "up"
@@ -1770,9 +1849,9 @@ def test_discrete_sample_observation_n_samples_for_non_normal():
     ):
         env = DiscreteLightDarkPOMDP(
             discount_factor=0.95,
-            beacons=[(0, 0), (5, 5)],
-            beacon_radius=1.5,
-            observation_model_type=obs_type,
+            **discrete_light_dark_pinned_kwargs(
+                beacons=[(0, 0), (5, 5)], beacon_radius=1.5, observation_model_type=obs_type
+            ),
         )
         next_state = np.array([5, 5])
         action = "up"
@@ -1960,7 +2039,7 @@ def test_discrete_sample_observation_frequencies_match_log_probability_normal():
     Test type: unit
     """
     np.random.seed(101)
-    env = DiscreteLightDarkPOMDP(discount_factor=0.95)
+    env = DiscreteLightDarkPOMDP(discount_factor=0.95, **discrete_light_dark_pinned_kwargs())
     action = "up"
     n_samples = 5_000
     tol = 3.0 / np.sqrt(n_samples)
@@ -2002,7 +2081,9 @@ def test_discrete_sample_observation_frequencies_match_log_probability_no_obs_in
     np.random.seed(202)
     env = DiscreteLightDarkPOMDP(
         discount_factor=0.95,
-        observation_model_type=ObservationModelType.NO_OBS_IN_DARK,
+        **discrete_light_dark_pinned_kwargs(
+            observation_model_type=ObservationModelType.NO_OBS_IN_DARK
+        ),
     )
     action = "up"
     n_samples = 5_000
@@ -2051,7 +2132,9 @@ def test_discrete_sample_observation_frequencies_match_log_probability_distance_
     np.random.seed(303)
     env = DiscreteLightDarkPOMDP(
         discount_factor=0.95,
-        observation_model_type=ObservationModelType.DISTANCE_BASED,
+        **discrete_light_dark_pinned_kwargs(
+            observation_model_type=ObservationModelType.DISTANCE_BASED
+        ),
     )
     action = "up"
     n_samples = 5_000
@@ -2103,7 +2186,7 @@ def test_discrete_sample_outputs_lie_in_grid_or_are_none_sentinel(
     np.random.seed(404)
     env = DiscreteLightDarkPOMDP(
         discount_factor=0.95,
-        observation_model_type=observation_model_type,
+        **discrete_light_dark_pinned_kwargs(observation_model_type=observation_model_type),
     )
     state = np.array([5.0, 5.0])
     action = "up"
@@ -2155,10 +2238,12 @@ class TestDiscreteLightDarkRewardNextStateConsistency:
         """
         env = DiscreteLightDarkPOMDP(
             discount_factor=0.95,
-            transition_error_prob=0.0,
-            obstacle_hit_probability=1.0,
-            obstacles=[(5, 5)],
-            goal_state=np.array([10, 5]),
+            **discrete_light_dark_pinned_kwargs(
+                transition_error_prob=0.0,
+                obstacle_hit_probability=1.0,
+                obstacles=[(5, 5)],
+                goal_state=np.array([10, 5]),
+            ),
         )
         state = np.array([4, 4])
         action = "up"  # intended next = [4, 5] (clear)
@@ -2192,10 +2277,12 @@ class TestDiscreteLightDarkRewardNextStateConsistency:
         """
         env = DiscreteLightDarkPOMDP(
             discount_factor=0.95,
-            transition_error_prob=0.0,
-            obstacle_hit_probability=1.0,
-            obstacles=[(5, 5)],
-            goal_state=np.array([10, 5]),
+            **discrete_light_dark_pinned_kwargs(
+                transition_error_prob=0.0,
+                obstacle_hit_probability=1.0,
+                obstacles=[(5, 5)],
+                goal_state=np.array([10, 5]),
+            ),
         )
         state = np.array([4, 5])
         action = "right"  # intended next = [5, 5] (obstacle)
@@ -2225,11 +2312,13 @@ class TestDiscreteLightDarkRewardNextStateConsistency:
         """
         env = DiscreteLightDarkPOMDP(
             discount_factor=0.95,
-            transition_error_prob=0.5,
-            obstacle_hit_probability=1.0,
-            obstacles=[(5, 5), (3, 7)],
-            goal_state=np.array([10, 5]),
-            observation_model_type=ObservationModelType.DISTANCE_BASED,
+            **discrete_light_dark_pinned_kwargs(
+                transition_error_prob=0.5,
+                obstacle_hit_probability=1.0,
+                obstacles=[(5, 5), (3, 7)],
+                goal_state=np.array([10, 5]),
+                observation_model_type=ObservationModelType.DISTANCE_BASED,
+            ),
         )
 
         np.random.seed(7)
@@ -2272,10 +2361,12 @@ class TestDiscreteLightDarkRewardNextStateConsistency:
         """
         env = DiscreteLightDarkPOMDP(
             discount_factor=0.95,
-            transition_error_prob=0.0,
-            obstacle_hit_probability=1.0,
-            obstacles=[(5, 5)],
-            goal_state=np.array([10, 5]),
+            **discrete_light_dark_pinned_kwargs(
+                transition_error_prob=0.0,
+                obstacle_hit_probability=1.0,
+                obstacles=[(5, 5)],
+                goal_state=np.array([10, 5]),
+            ),
         )
         states = np.array([[4, 4], [4, 5]], dtype=float)
         next_states = np.array([[5, 5], [4, 6]], dtype=float)
@@ -2316,10 +2407,12 @@ class TestDiscreteLightDarkRewardNextStateConsistency:
         """
         env = DiscreteLightDarkPOMDP(
             discount_factor=0.95,
-            transition_error_prob=0.0,
-            obstacle_hit_probability=0.5,
-            obstacles=[(5, 5)],
-            goal_state=np.array([10, 5]),
+            **discrete_light_dark_pinned_kwargs(
+                transition_error_prob=0.0,
+                obstacle_hit_probability=0.5,
+                obstacles=[(5, 5)],
+                goal_state=np.array([10, 5]),
+            ),
         )
         state = np.array([4, 5])
         action = "right"

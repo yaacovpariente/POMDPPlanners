@@ -16,6 +16,9 @@ from POMDPPlanners.core.belief import (
 from POMDPPlanners.core.cost import belief_expectation_cost
 from POMDPPlanners.core.tree.arena import ACTION, BELIEF, Tree
 from POMDPPlanners.environments import TigerPOMDP, DiscreteLightDarkPOMDP
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
+    discrete_light_dark_pinned_kwargs,
+)
 from POMDPPlanners.utils.action_samplers import DiscreteActionSampler
 from POMDPPlanners.simulations.episodes import run_episode
 from POMDPPlanners.planners.mcts_planners.icvar_pomcpow import ICVaR_POMCPOW
@@ -89,7 +92,9 @@ def environment(discount_factor):
 
 @pytest.fixture
 def light_dark_env(discount_factor):
-    return DiscreteLightDarkPOMDP(discount_factor=discount_factor)
+    return DiscreteLightDarkPOMDP(
+        discount_factor=discount_factor, **discrete_light_dark_pinned_kwargs()
+    )
 
 
 @pytest.fixture

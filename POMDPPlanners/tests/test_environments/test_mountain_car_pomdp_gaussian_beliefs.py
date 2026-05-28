@@ -19,6 +19,7 @@ from POMDPPlanners.environments.mountain_car_pomdp.mountain_car_pomdp_gaussian_b
     GaussianBeliefUpdaterType,
     create_mountain_car_gaussian_belief,
 )
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import mountain_car_pinned_kwargs
 
 
 def _deterministic_next_state(env: MountainCarPOMDP, state: np.ndarray, action: int) -> np.ndarray:
@@ -49,7 +50,7 @@ def _deterministic_next_state(env: MountainCarPOMDP, state: np.ndarray, action: 
 
 @pytest.fixture
 def env():
-    return MountainCarPOMDP(discount_factor=0.99)
+    return MountainCarPOMDP(discount_factor=0.99, **mountain_car_pinned_kwargs())
 
 
 @pytest.fixture

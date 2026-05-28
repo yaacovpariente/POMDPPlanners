@@ -22,6 +22,11 @@ from POMDPPlanners.core.belief import (
 from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
 from POMDPPlanners.environments.laser_tag_pomdp import LaserTagPOMDP
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
+    cartpole_pinned_kwargs,
+    laser_tag_pinned_kwargs,
+    tiger_pinned_kwargs,
+)
 
 # Set seeds for reproducible tests
 np.random.seed(42)
@@ -32,7 +37,7 @@ random.seed(42)
 def test_is_terminal_belief_all_terminal_particles():
     """Test is_terminal_belief returns True when all particles are terminal."""
     # ARRANGE: Create LaserTag environment
-    env = LaserTagPOMDP(discount_factor=0.95)
+    env = LaserTagPOMDP(discount_factor=0.95, **laser_tag_pinned_kwargs())
 
     # Create terminal states
     terminal_state1 = np.array([0.0, 0.0, 1.0, 1.0, 1.0])
@@ -54,7 +59,7 @@ def test_is_terminal_belief_all_terminal_particles():
 def test_is_terminal_belief_no_terminal_particles():
     """Test is_terminal_belief returns False when no particles are terminal."""
     # ARRANGE: Create LaserTag environment
-    env = LaserTagPOMDP(discount_factor=0.95)
+    env = LaserTagPOMDP(discount_factor=0.95, **laser_tag_pinned_kwargs())
 
     # Create non-terminal states
     non_terminal_state1 = np.array([0.0, 0.0, 1.0, 1.0, 0.0])
@@ -76,7 +81,7 @@ def test_is_terminal_belief_no_terminal_particles():
 def test_is_terminal_belief_mixed_particles():
     """Test is_terminal_belief returns False when some particles are terminal."""
     # ARRANGE: Create LaserTag environment
-    env = LaserTagPOMDP(discount_factor=0.95)
+    env = LaserTagPOMDP(discount_factor=0.95, **laser_tag_pinned_kwargs())
 
     # Create mixed states (some terminal, some not)
     terminal_state = np.array([0.0, 0.0, 1.0, 1.0, 1.0])
@@ -98,7 +103,7 @@ def test_is_terminal_belief_mixed_particles():
 def test_is_terminal_belief_single_terminal_particle():
     """Test is_terminal_belief with single terminal particle."""
     # ARRANGE: Create LaserTag environment
-    env = LaserTagPOMDP(discount_factor=0.95)
+    env = LaserTagPOMDP(discount_factor=0.95, **laser_tag_pinned_kwargs())
 
     # Create single terminal state
     terminal_state = np.array([0.0, 0.0, 1.0, 1.0, 1.0])
@@ -118,7 +123,7 @@ def test_is_terminal_belief_single_terminal_particle():
 def test_is_terminal_belief_single_non_terminal_particle():
     """Test is_terminal_belief with single non-terminal particle."""
     # ARRANGE: Create LaserTag environment
-    env = LaserTagPOMDP(discount_factor=0.95)
+    env = LaserTagPOMDP(discount_factor=0.95, **laser_tag_pinned_kwargs())
 
     # Create single non-terminal state
     non_terminal_state = np.array([0.0, 0.0, 1.0, 1.0, 0.0])
@@ -138,7 +143,7 @@ def test_is_terminal_belief_single_non_terminal_particle():
 def test_is_terminal_belief_empty_belief():
     """Test is_terminal_belief with empty belief."""
     # ARRANGE: Create LaserTag environment
-    env = LaserTagPOMDP(discount_factor=0.95)
+    env = LaserTagPOMDP(discount_factor=0.95, **laser_tag_pinned_kwargs())
 
     # Create empty belief using WeightedParticleBeliefStateUpdate (which allows empty)
     belief = WeightedParticleBeliefStateUpdate(particles=[], weights=[])
@@ -153,7 +158,7 @@ def test_is_terminal_belief_empty_belief():
 def test_is_terminal_belief_with_weighted_particle_belief_state_update():
     """Test is_terminal_belief with WeightedParticleBeliefStateUpdate."""
     # ARRANGE: Create LaserTag environment
-    env = LaserTagPOMDP(discount_factor=0.95)
+    env = LaserTagPOMDP(discount_factor=0.95, **laser_tag_pinned_kwargs())
 
     # Create terminal and non-terminal states
     terminal_state = np.array([0.0, 0.0, 1.0, 1.0, 1.0])
@@ -174,7 +179,7 @@ def test_is_terminal_belief_with_weighted_particle_belief_state_update():
 def test_is_terminal_belief_with_unweighted_particle_belief_state_update():
     """Test is_terminal_belief with UnweightedParticleBeliefStateUpdate."""
     # ARRANGE: Create LaserTag environment
-    env = LaserTagPOMDP(discount_factor=0.95)
+    env = LaserTagPOMDP(discount_factor=0.95, **laser_tag_pinned_kwargs())
 
     # Create all terminal states
     terminal_state1 = np.array([0.0, 0.0, 1.0, 1.0, 1.0])
@@ -194,8 +199,8 @@ def test_is_terminal_belief_with_unweighted_particle_belief_state_update():
 def test_is_terminal_belief_with_different_environments():
     """Test is_terminal_belief with different environment types."""
     # ARRANGE: Create different environments
-    laser_tag_env = LaserTagPOMDP(discount_factor=0.95)
-    tiger_env = TigerPOMDP(discount_factor=0.95)
+    laser_tag_env = LaserTagPOMDP(discount_factor=0.95, **laser_tag_pinned_kwargs())
+    tiger_env = TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs())
 
     # Create LaserTag terminal state
     laser_tag_terminal = np.array([0.0, 0.0, 1.0, 1.0, 1.0])
@@ -219,7 +224,7 @@ def test_is_terminal_belief_with_different_environments():
 def test_is_terminal_belief_large_particle_set():
     """Test is_terminal_belief with large number of particles."""
     # ARRANGE: Create LaserTag environment
-    env = LaserTagPOMDP(discount_factor=0.95)
+    env = LaserTagPOMDP(discount_factor=0.95, **laser_tag_pinned_kwargs())
 
     # Create large set of terminal particles
     particles = []
@@ -242,7 +247,7 @@ def test_is_terminal_belief_large_particle_set():
 def test_is_terminal_belief_large_mixed_particle_set():
     """Test is_terminal_belief with large mixed particle set."""
     # ARRANGE: Create LaserTag environment
-    env = LaserTagPOMDP(discount_factor=0.95)
+    env = LaserTagPOMDP(discount_factor=0.95, **laser_tag_pinned_kwargs())
 
     # Create large set of mixed particles (alternating terminal/non-terminal)
     particles = []
@@ -272,7 +277,7 @@ def test_is_terminal_belief_large_mixed_particle_set():
 def test_is_terminal_belief_edge_case_all_false():
     """Test is_terminal_belief edge case with all False terminal flags."""
     # ARRANGE: Create LaserTag environment
-    env = LaserTagPOMDP(discount_factor=0.95)
+    env = LaserTagPOMDP(discount_factor=0.95, **laser_tag_pinned_kwargs())
 
     # Create states with explicit False terminal flags
     state1 = np.array([0.0, 0.0, 1.0, 1.0, 0.0])
@@ -293,7 +298,7 @@ def test_is_terminal_belief_edge_case_all_false():
 def test_is_terminal_belief_edge_case_all_true():
     """Test is_terminal_belief edge case with all True terminal flags."""
     # ARRANGE: Create LaserTag environment
-    env = LaserTagPOMDP(discount_factor=0.95)
+    env = LaserTagPOMDP(discount_factor=0.95, **laser_tag_pinned_kwargs())
 
     # Create states with explicit True terminal flags
     state1 = np.array([0.0, 0.0, 1.0, 1.0, 1.0])
@@ -314,7 +319,7 @@ def test_is_terminal_belief_edge_case_all_true():
 def test_is_terminal_belief_comprehensive_scenarios():
     """Test is_terminal_belief with comprehensive scenarios."""
     # ARRANGE: Create LaserTag environment
-    env = LaserTagPOMDP(discount_factor=0.95)
+    env = LaserTagPOMDP(discount_factor=0.95, **laser_tag_pinned_kwargs())
 
     # Scenario 1: All terminal
     all_terminal_particles = [
@@ -378,7 +383,7 @@ def test_weighted_particle_belief_update_normalized_weights_sum_to_one_cartpole(
     """
     # ARRANGE: Create CartPole POMDP environment
     noise_cov = np.diag([0.1, 0.1, 0.1, 0.1])
-    env = CartPolePOMDP(discount_factor=0.99, noise_cov=noise_cov)
+    env = CartPolePOMDP(discount_factor=0.99, noise_cov=noise_cov, **cartpole_pinned_kwargs())
 
     # Create initial states for CartPole (4D continuous states)
     particles = [

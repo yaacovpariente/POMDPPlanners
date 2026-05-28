@@ -19,6 +19,7 @@ from POMDPPlanners.environments.cartpole_pomdp.cartpole_pomdp_gaussian_beliefs i
     GaussianBeliefUpdaterType,
     create_cartpole_gaussian_belief,
 )
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import cartpole_pinned_kwargs
 
 
 def _deterministic_next_state(env: CartPolePOMDP, state: np.ndarray, action: int) -> np.ndarray:
@@ -53,7 +54,7 @@ def _deterministic_next_state(env: CartPolePOMDP, state: np.ndarray, action: int
 @pytest.fixture
 def env():
     noise_cov = np.diag([0.1, 0.1, 0.1, 0.1])
-    return CartPolePOMDP(discount_factor=0.99, noise_cov=noise_cov)
+    return CartPolePOMDP(discount_factor=0.99, noise_cov=noise_cov, **cartpole_pinned_kwargs())
 
 
 @pytest.fixture

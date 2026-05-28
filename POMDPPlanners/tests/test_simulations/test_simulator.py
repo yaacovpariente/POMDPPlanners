@@ -37,6 +37,9 @@ from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp imp
     ContinuousLightDarkPOMDPDiscreteActions,
 )
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
+    continuous_light_dark_discrete_actions_pinned_kwargs,
+)
 from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
 from POMDPPlanners.planners.mcts_planners.pft_dpw import PFT_DPW
 from POMDPPlanners.utils.action_samplers import DiscreteActionSampler
@@ -1546,12 +1549,14 @@ def test_simulator_caches_visualizations_with_continuous_light_dark_pomdp(
     # Setup continuous light-dark environment with discrete actions
     environment = ContinuousLightDarkPOMDPDiscreteActions(
         discount_factor=0.95,
-        goal_state=np.array([3, 3]),
-        start_state=np.array([1, 1]),
-        beacons=[(1, 2), (1, 2)],  # Beacons as list of tuples
-        obstacles=[(2, 1)],  # Single obstacle as list of tuples
-        grid_size=4,
         name="IntegrationTestEnv",
+        **continuous_light_dark_discrete_actions_pinned_kwargs(
+            goal_state=np.array([3, 3]),
+            start_state=np.array([1, 1]),
+            beacons=[(1, 2), (1, 2)],  # Beacons as list of tuples
+            obstacles=[(2, 1)],  # Single obstacle as list of tuples
+            grid_size=4,
+        ),
     )
 
     # Create test policy directory to simulate the structure the simulator creates
@@ -1715,12 +1720,14 @@ def test_simulator_skips_visualization_caching_when_disabled(temp_cache_dir):
     # Setup continuous light-dark environment
     environment = ContinuousLightDarkPOMDPDiscreteActions(
         discount_factor=0.95,
-        goal_state=np.array([5, 5]),
-        start_state=np.array([1, 1]),
-        beacons=[(2, 4), (2, 4)],  # Beacons as list of tuples
-        obstacles=[(3, 3)],  # Single obstacle as list of tuples
-        grid_size=6,
         name="TestLightDarkNoViz",
+        **continuous_light_dark_discrete_actions_pinned_kwargs(
+            goal_state=np.array([5, 5]),
+            start_state=np.array([1, 1]),
+            beacons=[(2, 4), (2, 4)],  # Beacons as list of tuples
+            obstacles=[(3, 3)],  # Single obstacle as list of tuples
+            grid_size=6,
+        ),
     )
 
     action_sampler = DiscreteActionSampler(environment.get_actions())
@@ -1813,12 +1820,14 @@ def test_simulator_cache_episode_visualizations_method_integration(temp_cache_di
 
     environment = ContinuousLightDarkPOMDPDiscreteActions(
         discount_factor=0.95,
-        goal_state=np.array([3, 3]),
-        start_state=np.array([0, 0]),
-        beacons=[(1, 2), (1, 2)],  # Beacons as list of tuples
-        obstacles=[(2, 1)],  # Single obstacle as list of tuples
-        grid_size=4,
         name="DirectMethodTest",
+        **continuous_light_dark_discrete_actions_pinned_kwargs(
+            goal_state=np.array([3, 3]),
+            start_state=np.array([0, 0]),
+            beacons=[(1, 2), (1, 2)],  # Beacons as list of tuples
+            obstacles=[(2, 1)],  # Single obstacle as list of tuples
+            grid_size=4,
+        ),
     )
 
     # Create test policy directory
@@ -1959,12 +1968,14 @@ def test_simulator_visualization_error_handling_with_continuous_light_dark(
 
     environment = ContinuousLightDarkPOMDPDiscreteActions(
         discount_factor=0.95,
-        goal_state=np.array([3, 3]),
-        start_state=np.array([0, 0]),
-        beacons=[(1, 2), (1, 2)],  # Beacons as list of tuples
-        obstacles=[(2, 1)],  # Single obstacle as list of tuples
-        grid_size=4,
         name="ErrorTestEnv",
+        **continuous_light_dark_discrete_actions_pinned_kwargs(
+            goal_state=np.array([3, 3]),
+            start_state=np.array([0, 0]),
+            beacons=[(1, 2), (1, 2)],  # Beacons as list of tuples
+            obstacles=[(2, 1)],  # Single obstacle as list of tuples
+            grid_size=4,
+        ),
     )
 
     # Create test policy directory
@@ -2054,12 +2065,14 @@ def test_create_and_log_environment_visualizations_creates_cache_directory(
 
     environment = ContinuousLightDarkPOMDPDiscreteActions(
         discount_factor=0.95,
-        goal_state=np.array([3, 3]),
-        start_state=np.array([0, 0]),
-        beacons=[(1, 2), (1, 2)],
-        obstacles=[(2, 1)],
-        grid_size=4,
         name="CacheTestEnv",
+        **continuous_light_dark_discrete_actions_pinned_kwargs(
+            goal_state=np.array([3, 3]),
+            start_state=np.array([0, 0]),
+            beacons=[(1, 2), (1, 2)],
+            obstacles=[(2, 1)],
+            grid_size=4,
+        ),
     )
 
     action_sampler = DiscreteActionSampler(environment.get_actions())
@@ -2172,22 +2185,26 @@ def test_create_and_log_environment_visualizations_parallel_execution(temp_cache
     # Create two environments
     env1 = ContinuousLightDarkPOMDPDiscreteActions(
         discount_factor=0.95,
-        goal_state=np.array([3, 3]),
-        start_state=np.array([0, 0]),
-        beacons=[(1, 2), (1, 2)],
-        obstacles=[(2, 1)],
-        grid_size=4,
         name="ParallelEnv1",
+        **continuous_light_dark_discrete_actions_pinned_kwargs(
+            goal_state=np.array([3, 3]),
+            start_state=np.array([0, 0]),
+            beacons=[(1, 2), (1, 2)],
+            obstacles=[(2, 1)],
+            grid_size=4,
+        ),
     )
 
     env2 = ContinuousLightDarkPOMDPDiscreteActions(
         discount_factor=0.95,
-        goal_state=np.array([5, 5]),
-        start_state=np.array([1, 1]),
-        beacons=[(2, 4), (2, 4)],
-        obstacles=[(3, 3)],
-        grid_size=6,
         name="ParallelEnv2",
+        **continuous_light_dark_discrete_actions_pinned_kwargs(
+            goal_state=np.array([5, 5]),
+            start_state=np.array([1, 1]),
+            beacons=[(2, 4), (2, 4)],
+            obstacles=[(3, 3)],
+            grid_size=6,
+        ),
     )
 
     # Create policies for each environment
@@ -2323,12 +2340,14 @@ def test_create_and_log_environment_visualizations_mlflow_integration(temp_cache
 
     environment = ContinuousLightDarkPOMDPDiscreteActions(
         discount_factor=0.95,
-        goal_state=np.array([3, 3]),
-        start_state=np.array([0, 0]),
-        beacons=[(1, 2), (1, 2)],
-        obstacles=[(2, 1)],
-        grid_size=4,
         name="MLflowTestEnv",
+        **continuous_light_dark_discrete_actions_pinned_kwargs(
+            goal_state=np.array([3, 3]),
+            start_state=np.array([0, 0]),
+            beacons=[(1, 2), (1, 2)],
+            obstacles=[(2, 1)],
+            grid_size=4,
+        ),
     )
 
     action_sampler = DiscreteActionSampler(environment.get_actions())
@@ -2439,12 +2458,14 @@ def test_create_and_log_environment_visualizations_cache_cleanup(temp_cache_dir)
 
     environment = ContinuousLightDarkPOMDPDiscreteActions(
         discount_factor=0.95,
-        goal_state=np.array([3, 3]),
-        start_state=np.array([0, 0]),
-        beacons=[(1, 2), (1, 2)],
-        obstacles=[(2, 1)],
-        grid_size=4,
         name="CleanupTestEnv",
+        **continuous_light_dark_discrete_actions_pinned_kwargs(
+            goal_state=np.array([3, 3]),
+            start_state=np.array([0, 0]),
+            beacons=[(1, 2), (1, 2)],
+            obstacles=[(2, 1)],
+            grid_size=4,
+        ),
     )
 
     action_sampler = DiscreteActionSampler(environment.get_actions())
@@ -2540,12 +2561,14 @@ def test_create_and_log_environment_visualizations_disabled_caching(temp_cache_d
 
     environment = ContinuousLightDarkPOMDPDiscreteActions(
         discount_factor=0.95,
-        goal_state=np.array([3, 3]),
-        start_state=np.array([0, 0]),
-        beacons=[(1, 2), (1, 2)],
-        obstacles=[(2, 1)],
-        grid_size=4,
         name="DisabledCachingEnv",
+        **continuous_light_dark_discrete_actions_pinned_kwargs(
+            goal_state=np.array([3, 3]),
+            start_state=np.array([0, 0]),
+            beacons=[(1, 2), (1, 2)],
+            obstacles=[(2, 1)],
+            grid_size=4,
+        ),
     )
 
     action_sampler = DiscreteActionSampler(environment.get_actions())
@@ -3493,7 +3516,9 @@ def test_get_output_metric_names_multiple_environments(tmp_path):
     """
     tiger_env = TigerPOMDP(discount_factor=0.95)
     light_dark_env = ContinuousLightDarkPOMDPDiscreteActions(
-        discount_factor=0.95, name="LightDarkPOMDP"
+        discount_factor=0.95,
+        name="LightDarkPOMDP",
+        **continuous_light_dark_discrete_actions_pinned_kwargs(),
     )
 
     simulator = POMDPSimulator(
