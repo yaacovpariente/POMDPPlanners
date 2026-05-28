@@ -84,6 +84,7 @@ class ContinuousLaserTagTransitionCpp:
         robot_radius: float,
         opponent_radius: float,
         tag_radius: float,
+        opponent_policy_code: int = ...,
     ) -> None: ...
     def sample(self, n_samples: int = 1) -> List[NDArray[np.float64]]: ...
     def probability(
@@ -150,6 +151,7 @@ def simulate_rollout_discrete(
     transition_error_prob: float,
     reward_variant_code: int = ...,
     penalty_decay: float = ...,
+    opponent_policy_code: int = ...,
 ) -> float:
     """Run a full random-action rollout for the discrete LaserTagPOMDP in one C++ frame.
 
@@ -172,6 +174,7 @@ def belief_batch_transition_discrete(
     valid_cell_flat: NDArray[np.unsignedinteger],
     rows: int,
     cols: int,
+    opponent_policy_code: int = ...,
 ) -> NDArray[np.float64]:
     """Native port of LaserTagVectorizedUpdater.batch_transition.
 
@@ -207,6 +210,7 @@ def sample_next_state_step(
     rows: int,
     cols: int,
     walls_flat: NDArray[np.integer],
+    opponent_policy_code: int = ...,
 ) -> NDArray[np.float64]:
     """Single-step transition for the discrete LaserTagPOMDP.
 
@@ -267,6 +271,7 @@ def cont_simulate_rollout(
     dangerous_areas: NDArray[np.floating],
     dangerous_area_radius: float,
     dangerous_area_penalty: float,
+    opponent_policy_code: int = ...,
 ) -> float:
     """Run a full random rollout for ContinuousLaserTagPOMDP in one C++ frame.
 

@@ -15,9 +15,13 @@ from POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_pomdp impor
     ContinuousLaserTagPOMDP,
     ContinuousLaserTagPOMDPDiscreteActions,
 )
+from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_utils import (
+    OpponentPolicy,
+)
 
 __all__ = [
     "LaserTagPOMDP",
     "ContinuousLaserTagPOMDP",
     "ContinuousLaserTagPOMDPDiscreteActions",
+    "OpponentPolicy",
 ]

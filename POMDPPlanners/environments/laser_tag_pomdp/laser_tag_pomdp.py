@@ -40,6 +40,9 @@ from POMDPPlanners.utils.statistics_utils import confidence_interval
 from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_visualizer import (  # pylint: disable=import-outside-toplevel
     LaserTagVisualizer,
 )
+from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_utils import (
+    OpponentPolicy,
+)
 from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_utils.laser_tag_reward_models import (
     BaseLaserTagRewardModel,
     LaserTagDistanceDecayedHazardPenaltyRewardModel,
@@ -175,6 +178,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         transition_error_prob: float = 0.0,
         reward_model_type: RewardModelType = RewardModelType.CONSTANT_HAZARD_PENALTY,
         penalty_decay: float = 1.0,
+        opponent_policy: OpponentPolicy = OpponentPolicy.EVADE,
     ):
         """Initialize the LaserTag POMDP environment.
 
@@ -214,6 +218,14 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
             penalty_decay: Decay length used by the
                 ``DISTANCE_DECAYED_HAZARD_PENALTY`` reward model. Ignored by the other
                 variants. Must be strictly positive. Defaults to ``1.0``.
+            opponent_policy: Selects the opponent transition behaviour.
+                ``EVADE`` (default) makes the opponent flee the robot, placing its
+                directional mass on the distance-increasing cell and reacting to the
+                robot's pre-move position (matches JuliaPOMDP/LaserTag.jl). ``PURSUE``
+                makes the opponent chase the robot, placing its mass on the
+                distance-decreasing cell and reacting to the robot's post-move
+                position (restores the pre-evader-fix behaviour). See
+                :class:`~POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_utils.OpponentPolicy`.
 
         Raises:
             ValueError: If discount_factor is not in valid range [0, 1], if
@@ -255,6 +267,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         self.dangerous_area_penalty = dangerous_area_penalty
         self.initial_state = initial_state
         self.transition_error_prob = transition_error_prob
+        self.opponent_policy = opponent_policy
 
         # Action definitions
         self.actions = [0, 1, 2, 3, 4]  # North, South, East, West, Tag
@@ -413,6 +426,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
             rows=rows,
             cols=cols,
             walls_flat=walls_flat,
+            opponent_policy_code=self.opponent_policy.native_code,
         )
 
     def _resolve_actual_action(self, action: int) -> int:
@@ -464,7 +478,9 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         # Regular transition: build opponent move distribution then draw indices
         # in a single np.random.choice call (matches the wrapper's RNG draw order
         # for any n_samples).
-        opp_moves = self._opponent_move_probabilities_inline(state, robot_current)
+        opp_moves = self._opponent_move_probabilities_inline(
+            state, self._opponent_robot_reference(robot_current, robot_next)
+        )
         positions, probabilities = zip(*opp_moves)
         opp_indices = np.random.choice(len(positions), size=n_samples, p=probabilities)
         if n_samples == 1:
@@ -494,6 +510,13 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
             )
         return samples
 
+    def _opponent_robot_reference(
+        self, robot_current: Tuple[int, int], robot_next: Tuple[int, int]
+    ) -> Tuple[int, int]:
+        # EVADE conditions the opponent move on the robot's pre-move cell; PURSUE on
+        # its post-move cell. Tag actions don't move the robot, so the two coincide.
+        return robot_current if self.opponent_policy is OpponentPolicy.EVADE else robot_next
+
     def _opponent_move_probabilities_inline(
         self, state: np.ndarray, robot_pos: Tuple[int, int]
     ) -> List[Tuple[Tuple[int, int], float]]:
@@ -517,6 +540,14 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
     def _directional_moves_inline(
         self, opponent_coord: int, robot_coord: int, fixed_coord: int, is_horizontal: bool
     ) -> List[Tuple[Tuple[int, int], float]]:
+        # Under EVADE the 0.4 directional mass goes on the away cell; under PURSUE it
+        # goes on the toward cell. The aligned (robot == opponent) case is policy-
+        # invariant and keeps its symmetric 0.2/0.2 split.
+        if self.opponent_policy is OpponentPolicy.EVADE:
+            directional_toward_prob, directional_away_prob = 0.0, 0.4
+        else:
+            directional_toward_prob, directional_away_prob = 0.4, 0.0
+
         if robot_coord > opponent_coord:
             toward_pos = (
                 (fixed_coord, opponent_coord + 1)
@@ -528,7 +559,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
                 if is_horizontal
                 else (opponent_coord - 1, fixed_coord)
             )
-            toward_prob, away_prob = 0.0, 0.4
+            toward_prob, away_prob = directional_toward_prob, directional_away_prob
         elif robot_coord < opponent_coord:
             toward_pos = (
                 (fixed_coord, opponent_coord - 1)
@@ -540,7 +571,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
                 if is_horizontal
                 else (opponent_coord + 1, fixed_coord)
             )
-            toward_prob, away_prob = 0.0, 0.4
+            toward_prob, away_prob = directional_toward_prob, directional_away_prob
         else:
             toward_pos = (
                 (fixed_coord, opponent_coord + 1)
@@ -673,7 +704,9 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
 
         # Regular transition: opponent moves stochastically, terminal flag stays 0.
         if next_robot == robot_next and not next_terminal:
-            opp_moves = self._opponent_move_probabilities_inline(state, robot_current)
+            opp_moves = self._opponent_move_probabilities_inline(
+                state, self._opponent_robot_reference(robot_current, robot_next)
+            )
             for opp_pos, prob in opp_moves:
                 if next_opponent == opp_pos:
                     return prob
@@ -998,6 +1031,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
                     transition_error_prob=transition_error_prob,
                     reward_variant_code=self._native_reward_variant_code(),
                     penalty_decay=float(self.penalty_decay),
+                    opponent_policy_code=self.opponent_policy.native_code,
                 )
             )
 
