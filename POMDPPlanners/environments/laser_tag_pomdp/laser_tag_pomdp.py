@@ -519,9 +519,42 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
     def _opponent_robot_reference(
         self, robot_current: Tuple[int, int], robot_next: Tuple[int, int]
     ) -> Tuple[int, int]:
-        # EVADE conditions the opponent move on the robot's pre-move cell; PURSUE on
-        # its post-move cell. Tag actions don't move the robot, so the two coincide.
-        return robot_current if self.opponent_policy is OpponentPolicy.EVADE else robot_next
+        # PURSUE conditions the opponent move on the robot's post-move cell; EVADE and
+        # EVADE_WHEN_SPOTTED on its pre-move cell. Tag actions don't move the robot, so
+        # the two coincide.
+        return robot_next if self.opponent_policy is OpponentPolicy.PURSUE else robot_current
+
+    def _is_opponent_spotted(self, robot_pos: Tuple[int, int], opp_pos: Tuple[int, int]) -> bool:
+        # True iff the opponent cell lies on one of the robot's 8 laser rays,
+        # unoccluded by a wall or the grid boundary. Mirrors the ray walk in
+        # _laser_distance_inline (and the C++ disc/belief spotted predicates) but
+        # returns whether the opponent — rather than a wall — is the first hit.
+        rows, cols = self.floor_shape
+        for dr, dc in _LASER_DIRECTIONS:
+            row, col = robot_pos
+            while True:
+                row += dr
+                col += dc
+                if row < 0 or row >= rows or col < 0 or col >= cols:
+                    break
+                if (row, col) == opp_pos:
+                    return True
+                if (row, col) in self.walls:
+                    break
+        return False
+
+    def _random_move_probabilities_inline(
+        self, current_opp: Tuple[int, int]
+    ) -> List[Tuple[Tuple[int, int], float]]:
+        # Uniform 0.2 on each valid cardinal neighbour; invalid neighbours are
+        # dropped and their mass falls through to "stay" via the shared slack tail.
+        moves: List[Tuple[Tuple[int, int], float]] = []
+        for action in (0, 1, 2, 3):  # North, South, East, West
+            dr, dc = self._action_directions[action]
+            cand = (current_opp[0] + dr, current_opp[1] + dc)
+            if self._is_valid_position_inline(cand):
+                moves.append((cand, 0.2))
+        return moves
 
     def _opponent_move_probabilities_inline(
         self, state: np.ndarray, robot_pos: Tuple[int, int]
@@ -532,10 +565,17 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         robot_row, robot_col = robot_pos
         opp_row, opp_col = current_opp
 
-        x_moves = self._directional_moves_inline(opp_col, robot_col, opp_row, True)
-        y_moves = self._directional_moves_inline(opp_row, robot_row, opp_col, False)
+        if (
+            self.opponent_policy is OpponentPolicy.EVADE_WHEN_SPOTTED
+            and not self._is_opponent_spotted(robot_pos, current_opp)
+        ):
+            directional_moves = self._random_move_probabilities_inline(current_opp)
+        else:
+            x_moves = self._directional_moves_inline(opp_col, robot_col, opp_row, True)
+            y_moves = self._directional_moves_inline(opp_row, robot_row, opp_col, False)
+            directional_moves = x_moves + y_moves
 
-        move_probs = x_moves + y_moves + [(current_opp, 0.2)]
+        move_probs = directional_moves + [(current_opp, 0.2)]
         actual_total = sum(prob for _, prob in move_probs if prob > 0)
         if actual_total < 1.0:
             stay_index = len(move_probs) - 1
@@ -546,13 +586,14 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
     def _directional_moves_inline(
         self, opponent_coord: int, robot_coord: int, fixed_coord: int, is_horizontal: bool
     ) -> List[Tuple[Tuple[int, int], float]]:
-        # Under EVADE the 0.4 directional mass goes on the away cell; under PURSUE it
-        # goes on the toward cell. The aligned (robot == opponent) case is policy-
-        # invariant and keeps its symmetric 0.2/0.2 split.
-        if self.opponent_policy is OpponentPolicy.EVADE:
-            directional_toward_prob, directional_away_prob = 0.0, 0.4
-        else:
+        # Only PURSUE puts the 0.4 directional mass on the toward cell; every other
+        # policy (EVADE, and EVADE_WHEN_SPOTTED on the spotted branch) flees to the
+        # away cell. The aligned (robot == opponent) case is policy-invariant and
+        # keeps its symmetric 0.2/0.2 split.
+        if self.opponent_policy is OpponentPolicy.PURSUE:
             directional_toward_prob, directional_away_prob = 0.4, 0.0
+        else:
+            directional_toward_prob, directional_away_prob = 0.0, 0.4
 
         if robot_coord > opponent_coord:
             toward_pos = (

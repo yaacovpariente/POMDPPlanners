@@ -69,18 +69,19 @@ def test_continuous_opponent_policy_changes_config_id():
     """Distinct opponent policies produce distinct continuous env config IDs.
 
     Purpose: Validates the opponent_policy enum is captured by config_id so cached
-        results for EVADE and PURSUE continuous configs never collide
+        results for distinct continuous policies never collide
 
-    Given: Two ContinuousLaserTagPOMDPs identical except for opponent_policy
+    Given: ContinuousLaserTagPOMDPs identical except for opponent_policy
     When: config_id is computed for each
-    Then: The two IDs differ
+    Then: The three policy IDs are all distinct
 
     Test type: unit
     """
     common = {"discount_factor": 0.95, "walls": [], "dangerous_areas": []}
     evade = ContinuousLaserTagPOMDP(**common, opponent_policy=OpponentPolicy.EVADE)
     pursue = ContinuousLaserTagPOMDP(**common, opponent_policy=OpponentPolicy.PURSUE)
-    assert evade.config_id != pursue.config_id
+    spotted = ContinuousLaserTagPOMDP(**common, opponent_policy=OpponentPolicy.EVADE_WHEN_SPOTTED)
+    assert len({evade.config_id, pursue.config_id, spotted.config_id}) == 3
 
 
 class TestContinuousLaserTagPOMDPInit:
@@ -324,6 +325,70 @@ class TestSampleNextState:
         assert (
             mean_opp_x > 5.6
         ), f"Expected opponent to chase +x toward post-move robot (>5.6), got {mean_opp_x}"
+
+    def test_evade_when_spotted_flees_when_visible(self):
+        """Continuous EVADE_WHEN_SPOTTED flees when the robot has line of sight.
+
+        Purpose: Validates that an opponent lying on one of the robot's laser rays flees
+            away (EVADE behaviour) under the spotted branch
+
+        Given: An EVADE_WHEN_SPOTTED env (no walls), robot at (5, 3) with the opponent due
+            +x at (8, 3) — on the robot's East ray, so visible
+        When: the robot holds position and many next states are sampled
+        Then: the opponent's mean x increases (it flees +x, away from the robot)
+
+        Test type: unit
+        """
+        np.random.seed(42)
+        env = ContinuousLaserTagPOMDP(
+            discount_factor=0.95,
+            walls=[],
+            dangerous_areas=[],
+            opponent_policy=OpponentPolicy.EVADE_WHEN_SPOTTED,
+        )
+        state = np.array([5.0, 3.0, 8.0, 3.0, 0.0])
+        action = np.array([0.0, 0.0, 0.0])  # robot holds position, no tag
+        samples = env.sample_next_state(state, action, n_samples=500)
+
+        mean_opp_x = float(np.mean([s[2] for s in samples]))
+        assert (
+            mean_opp_x > 8.1
+        ), f"Expected opponent to flee +x while spotted (>8.1), got {mean_opp_x}"
+
+    def test_evade_when_spotted_stays_when_not_visible(self):
+        """Continuous EVADE_WHEN_SPOTTED holds position when not visible.
+
+        Purpose: Validates that the continuous opponent stays in place (rather than taking a
+            directional step) when the robot has no line of sight — only the small Gaussian
+            transition noise jitters it
+
+        Given: An EVADE_WHEN_SPOTTED env (no walls), robot at (5, 3) and opponent at (8, 5)
+            — not aligned with any of the robot's 8 laser directions (so not visible)
+        When: the robot holds position and many next states are sampled
+        Then: the opponent stays near its start, and the per-step spread is just the Gaussian
+            opponent noise — well below a full evasion_speed (0.6) step
+
+        Test type: unit
+        """
+        np.random.seed(42)
+        env = ContinuousLaserTagPOMDP(
+            discount_factor=0.95,
+            walls=[],
+            dangerous_areas=[],
+            opponent_policy=OpponentPolicy.EVADE_WHEN_SPOTTED,
+        )
+        state = np.array([5.0, 3.0, 8.0, 5.0, 0.0])
+        action = np.array([0.0, 0.0, 0.0])  # robot holds position, no tag
+        samples = env.sample_next_state(state, action, n_samples=600)
+
+        opp_x = np.array([s[2] for s in samples])
+        opp_y = np.array([s[3] for s in samples])
+        # The opponent holds its position (mean ~ start) ...
+        assert abs(float(np.mean(opp_x)) - 8.0) < 0.1, "Expected opponent to hold x"
+        assert abs(float(np.mean(opp_y)) - 5.0) < 0.1, "Expected opponent to hold y"
+        # ... with only the Gaussian opponent noise (std ~ sqrt(0.05) ~ 0.22), not a 0.6 step.
+        assert float(np.std(opp_x)) < 0.35, "Expected only noise-level spread in x (staying)"
+        assert float(np.std(opp_y)) < 0.35, "Expected only noise-level spread in y (staying)"
 
 
 class TestSampleObservation:

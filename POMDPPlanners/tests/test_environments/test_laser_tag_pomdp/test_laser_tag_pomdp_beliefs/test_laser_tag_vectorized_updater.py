@@ -273,22 +273,28 @@ class TestBatchTransition:
         # Should see at least 2 different opponent positions
         assert len(seen_positions) >= 2
 
-    @pytest.mark.parametrize("opponent_policy", [OpponentPolicy.EVADE, OpponentPolicy.PURSUE])
+    @pytest.mark.parametrize(
+        "opponent_policy",
+        [OpponentPolicy.EVADE, OpponentPolicy.PURSUE, OpponentPolicy.EVADE_WHEN_SPOTTED],
+    )
     @pytest.mark.parametrize(
         "walls",
-        [set(), {(5, 6), (5, 4)}],
-        ids=["open", "wall_adjacent_slack"],
+        [set(), {(5, 6), (5, 4)}, {(3, 5)}],
+        ids=["open", "wall_adjacent_slack", "occluded_ray"],
     )
     def test_batch_transition_opponent_distribution_matches_env(self, opponent_policy, walls):
         """Native belief batch transition matches the env opponent distribution per policy.
 
         Purpose: Validates that the C++ belief kernel (belief_sample_opponent_move via
             belief_batch_transition_discrete) reproduces the env's Python opponent-move
-            distribution under BOTH policies, including the wall-blocked stay-slack path —
-            guarding against a missed direction flip / pre-move reference in the belief path.
+            distribution under ALL policies, including the wall-blocked stay-slack path and
+            the occluded-ray case (which makes EVADE_WHEN_SPOTTED fall back to random) —
+            guarding against a missed direction flip, pre-move reference, or spotted-predicate
+            divergence in the belief path.
 
-        Given: A LaserTagPOMDP (open grid or walls blocking both opponent x-moves), robot
-            above the opponent, action South, evaluated for EVADE and PURSUE.
+        Given: A LaserTagPOMDP (open grid, walls blocking both opponent x-moves, or a wall on
+            the robot-opponent ray), robot above the opponent, action South, evaluated for
+            EVADE, PURSUE, and EVADE_WHEN_SPOTTED.
         When: 4000 particles are pushed through updater.batch_transition and 4000 samples
             through the env's Python sample_next_state.
         Then: The per-cell opponent next-position probabilities agree within 0.05.

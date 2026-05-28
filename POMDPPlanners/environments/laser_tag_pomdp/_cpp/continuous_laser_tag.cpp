@@ -221,6 +221,29 @@ void compute_laser_measurements(double robot_x, double robot_y, double opp_x, do
     }
 }
 
+// True iff the robot has line of sight to the opponent: some laser ray reaches
+// the opponent disc before any wall or the grid boundary. Mirrors the per-ray
+// comparison in compute_laser_measurements; used by the EVADE_WHEN_SPOTTED policy.
+bool opponent_visible(double robot_x, double robot_y, double opp_x, double opp_y,
+                      double opponent_radius, const std::vector<Wall> &walls, double grid_w,
+                      double grid_h) {
+    for (std::size_t d = 0; d < kObsDim; ++d) {
+        const double dx = kLaserDirections[d][0];
+        const double dy = kLaserDirections[d][1];
+        double occluder = ray_walls_distance(robot_x, robot_y, dx, dy, walls);
+        const double boundary = ray_grid_boundary_distance(robot_x, robot_y, dx, dy, grid_w, grid_h);
+        if (boundary < occluder) {
+            occluder = boundary;
+        }
+        const double opp_d =
+            ray_circle_distance(robot_x, robot_y, dx, dy, opp_x, opp_y, opponent_radius);
+        if (opp_d < occluder) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // Resolve collision between a circular entity at (x, y) with radius r and a
 // single wall AABB. Mirrors _resolve_single_wall in the Python geometry
 // module (circle-AABB minimum-translation-vector push-out).
@@ -274,6 +297,7 @@ void clamp_to_grid(double &x, double &y, double radius, double grid_w, double gr
 // post-move position). Mirrors OpponentPolicy.native_code in Python.
 constexpr int kPolicyEvade = 0;
 constexpr int kPolicyPursue = 1;
+constexpr int kPolicyEvadeWhenSpotted = 2;
 
 // Shared environment geometry / physics parameters used by both the
 // transition and observation models.
@@ -323,15 +347,22 @@ void sample_move(double mean_x, double mean_y, double radius,
     clamp_to_grid(out_x, out_y, radius, env.grid_w, env.grid_h);
 }
 
-// Compute the opponent's target mean: move ``move_speed`` away from (EVADE) or
-// toward (PURSUE) the robot, sampling a random unit vector when the two are
-// coincident. The caller chooses which robot position (pre- or post-move) to
-// pass per the policy's reference-position semantics.
+// Compute the opponent's target mean: move ``move_speed`` away from (EVADE-like)
+// or toward (PURSUE) the robot. When ``stay_in_place`` is set (EVADE_WHEN_SPOTTED
+// with no line of sight), the opponent holds its current position — only the
+// caller's Gaussian opponent noise then jitters it. A random unit vector is used
+// when the robot and opponent are coincident. The caller chooses which robot
+// position (pre- or post-move) to pass per the policy's reference-position semantics.
 void opponent_move_mean(double robot_x, double robot_y, double opp_x, double opp_y,
-                        double move_speed, int opponent_policy_code,
+                        double move_speed, int opponent_policy_code, bool stay_in_place,
                         pomdp_native::RNGState &rng, double &mean_x, double &mean_y) {
-    // EVADE flees (diff = opp - robot); PURSUE chases (diff = robot - opp).
-    const double sign = (opponent_policy_code == kPolicyEvade) ? 1.0 : -1.0;
+    if (stay_in_place) {
+        mean_x = opp_x;
+        mean_y = opp_y;
+        return;
+    }
+    // Only PURSUE chases (diff = robot - opp); every other policy flees (diff = opp - robot).
+    const double sign = (opponent_policy_code == kPolicyPursue) ? -1.0 : 1.0;
     const double diff_x = sign * (opp_x - robot_x);
     const double diff_y = sign * (opp_y - robot_y);
     const double dist = std::hypot(diff_x, diff_y);
@@ -500,8 +531,13 @@ class ContinuousLaserTagTransitionCpp {
             // (pre- and post-move robot coincide here).
             double mean_opp_x;
             double mean_opp_y;
+            const bool tag_stay_in_place =
+                env_.opponent_policy_code == kPolicyEvadeWhenSpotted &&
+                !opponent_visible(robot_x, robot_y, opp_x, opp_y, env_.opponent_radius, env_.walls,
+                                  env_.grid_w, env_.grid_h);
             opponent_move_mean(robot_x, robot_y, opp_x, opp_y, env_.evasion_speed,
-                               env_.opponent_policy_code, rng, mean_opp_x, mean_opp_y);
+                               env_.opponent_policy_code, tag_stay_in_place, rng, mean_opp_x,
+                               mean_opp_y);
             double new_opp_x;
             double new_opp_y;
             sample_move(mean_opp_x, mean_opp_y, env_.opponent_radius, opp_noise_, env_, rng,
@@ -522,13 +558,18 @@ class ContinuousLaserTagTransitionCpp {
 
         double mean_opp_x;
         double mean_opp_y;
-        // EVADE reacts to the robot's PRE-move position; PURSUE to its POST-move position.
+        // PURSUE reacts to the robot's POST-move position; EVADE / EVADE_WHEN_SPOTTED
+        // to its PRE-move position.
         const double ref_robot_x =
-            (env_.opponent_policy_code == kPolicyEvade) ? robot_x : new_robot_x;
+            (env_.opponent_policy_code == kPolicyPursue) ? new_robot_x : robot_x;
         const double ref_robot_y =
-            (env_.opponent_policy_code == kPolicyEvade) ? robot_y : new_robot_y;
+            (env_.opponent_policy_code == kPolicyPursue) ? new_robot_y : robot_y;
+        const bool stay_in_place =
+            env_.opponent_policy_code == kPolicyEvadeWhenSpotted &&
+            !opponent_visible(ref_robot_x, ref_robot_y, opp_x, opp_y, env_.opponent_radius,
+                              env_.walls, env_.grid_w, env_.grid_h);
         opponent_move_mean(ref_robot_x, ref_robot_y, opp_x, opp_y, env_.evasion_speed,
-                           env_.opponent_policy_code, rng, mean_opp_x, mean_opp_y);
+                           env_.opponent_policy_code, stay_in_place, rng, mean_opp_x, mean_opp_y);
         double new_opp_x;
         double new_opp_y;
         sample_move(mean_opp_x, mean_opp_y, env_.opponent_radius, opp_noise_, env_, rng, new_opp_x,
@@ -1204,8 +1245,13 @@ static bool cont_step_state(double *state, const double *action, const EnvParams
         // Robot stays; opponent moves per the policy (pre/post robot coincide).
         double mean_opp_x;
         double mean_opp_y;
+        const bool tag_stay_in_place =
+            env.opponent_policy_code == kPolicyEvadeWhenSpotted &&
+            !opponent_visible(robot_x, robot_y, opp_x, opp_y, env.opponent_radius, env.walls,
+                              env.grid_w, env.grid_h);
         opponent_move_mean(robot_x, robot_y, opp_x, opp_y, env.evasion_speed,
-                           env.opponent_policy_code, rng, mean_opp_x, mean_opp_y);
+                           env.opponent_policy_code, tag_stay_in_place, rng, mean_opp_x,
+                           mean_opp_y);
         double new_opp_x;
         double new_opp_y;
         sample_move(mean_opp_x, mean_opp_y, env.opponent_radius, opp_noise, env, rng, new_opp_x,
@@ -1223,11 +1269,16 @@ static bool cont_step_state(double *state, const double *action, const EnvParams
 
     double mean_opp_x;
     double mean_opp_y;
-    // EVADE reacts to the robot's PRE-move position; PURSUE to its POST-move position.
-    const double ref_robot_x = (env.opponent_policy_code == kPolicyEvade) ? robot_x : new_robot_x;
-    const double ref_robot_y = (env.opponent_policy_code == kPolicyEvade) ? robot_y : new_robot_y;
+    // PURSUE reacts to the robot's POST-move position; EVADE / EVADE_WHEN_SPOTTED to its
+    // PRE-move position.
+    const double ref_robot_x = (env.opponent_policy_code == kPolicyPursue) ? new_robot_x : robot_x;
+    const double ref_robot_y = (env.opponent_policy_code == kPolicyPursue) ? new_robot_y : robot_y;
+    const bool stay_in_place =
+        env.opponent_policy_code == kPolicyEvadeWhenSpotted &&
+        !opponent_visible(ref_robot_x, ref_robot_y, opp_x, opp_y, env.opponent_radius, env.walls,
+                          env.grid_w, env.grid_h);
     opponent_move_mean(ref_robot_x, ref_robot_y, opp_x, opp_y, env.evasion_speed,
-                       env.opponent_policy_code, rng, mean_opp_x, mean_opp_y);
+                       env.opponent_policy_code, stay_in_place, rng, mean_opp_x, mean_opp_y);
     double new_opp_x;
     double new_opp_y;
     sample_move(mean_opp_x, mean_opp_y, env.opponent_radius, opp_noise, env, rng, new_opp_x,
@@ -1570,6 +1621,35 @@ double disc_reward(const double *state, int action, const DiscreteEnvParams &env
     return base;
 }
 
+// 8 laser directions (N, NE, E, SE, S, SW, W, NW). Mirrors
+// LaserTagPOMDP._LASER_DIRECTIONS / kBeliefLaserDirections.
+static constexpr std::array<std::array<int, 2>, 8> kDiscLaserDirs = {{
+    {{-1, 0}}, {{-1, 1}}, {{0, 1}}, {{1, 1}}, {{1, 0}}, {{1, -1}}, {{0, -1}}, {{-1, -1}}}};
+
+// True iff the opponent lies on one of the robot's 8 unoccluded laser rays.
+// Mirrors LaserTagPOMDP._is_opponent_spotted: walks each ray from the robot and
+// returns true if the opponent cell is reached before a wall or the boundary.
+bool disc_opponent_spotted(int robot_r, int robot_c, int opp_r, int opp_c,
+                           const DiscreteEnvParams &env) {
+    for (std::size_t d = 0; d < 8; ++d) {
+        const int dr = kDiscLaserDirs[d][0];
+        const int dc = kDiscLaserDirs[d][1];
+        int r = robot_r;
+        int c = robot_c;
+        while (true) {
+            r += dr;
+            c += dc;
+            if (r == opp_r && c == opp_c) {
+                return true;
+            }
+            if (!disc_is_valid(r, c, env)) {  // wall or out of bounds
+                break;
+            }
+        }
+    }
+    return false;
+}
+
 std::pair<int, int> disc_sample_opponent_move(
     int opp_r, int opp_c, int robot_r, int robot_c,
     const DiscreteEnvParams &env, pomdp_native::RNGState &rng) {
@@ -1588,29 +1668,39 @@ std::pair<int, int> disc_sample_opponent_move(
         }
     };
 
-    // EVADE places the 0.4 directional mass on the distance-increasing (away)
-    // cell; PURSUE places it on the distance-decreasing (toward) cell. The
-    // aligned (robot == opponent) branch is policy-invariant.
-    const bool evade = (env.opponent_policy_code == kPolicyEvade);
-
-    // x-moves (column direction, fixed row = opp_r)
-    if (robot_c == opp_c) {
+    if (env.opponent_policy_code == kPolicyEvadeWhenSpotted &&
+        !disc_opponent_spotted(robot_r, robot_c, opp_r, opp_c, env)) {
+        // EVADE_WHEN_SPOTTED with no line of sight: uniform 0.2 on each valid
+        // cardinal neighbour; remainder (incl. blocked moves) falls through to stay.
+        add_cand(opp_r - 1, opp_c, 0.2);
+        add_cand(opp_r + 1, opp_c, 0.2);
         add_cand(opp_r, opp_c + 1, 0.2);
         add_cand(opp_r, opp_c - 1, 0.2);
     } else {
-        const int dir_c = (robot_c > opp_c) ? (evade ? opp_c - 1 : opp_c + 1)
-                                            : (evade ? opp_c + 1 : opp_c - 1);
-        add_cand(opp_r, dir_c, 0.4);
-    }
+        // Only PURSUE places the 0.4 directional mass on the distance-decreasing
+        // (toward) cell; every other policy flees to the away cell. The aligned
+        // (robot == opponent) branch is policy-invariant.
+        const bool evade = (env.opponent_policy_code != kPolicyPursue);
 
-    // y-moves (row direction, fixed col = opp_c)
-    if (robot_r == opp_r) {
-        add_cand(opp_r + 1, opp_c, 0.2);
-        add_cand(opp_r - 1, opp_c, 0.2);
-    } else {
-        const int dir_r = (robot_r > opp_r) ? (evade ? opp_r - 1 : opp_r + 1)
-                                            : (evade ? opp_r + 1 : opp_r - 1);
-        add_cand(dir_r, opp_c, 0.4);
+        // x-moves (column direction, fixed row = opp_r)
+        if (robot_c == opp_c) {
+            add_cand(opp_r, opp_c + 1, 0.2);
+            add_cand(opp_r, opp_c - 1, 0.2);
+        } else {
+            const int dir_c = (robot_c > opp_c) ? (evade ? opp_c - 1 : opp_c + 1)
+                                                : (evade ? opp_c + 1 : opp_c - 1);
+            add_cand(opp_r, dir_c, 0.4);
+        }
+
+        // y-moves (row direction, fixed col = opp_c)
+        if (robot_r == opp_r) {
+            add_cand(opp_r + 1, opp_c, 0.2);
+            add_cand(opp_r - 1, opp_c, 0.2);
+        } else {
+            const int dir_r = (robot_r > opp_r) ? (evade ? opp_r - 1 : opp_r + 1)
+                                                : (evade ? opp_r + 1 : opp_r - 1);
+            add_cand(dir_r, opp_c, 0.4);
+        }
     }
 
     // Compute actual_total including the base stay probability 0.2.
@@ -1742,12 +1832,12 @@ double simulate_rollout_discrete(
             break;
         }
 
-        // Sample opponent move. EVADE reacts to the robot's PRE-move position;
-        // PURSUE to its POST-move position.
+        // Sample opponent move. PURSUE reacts to the robot's POST-move position;
+        // EVADE / EVADE_WHEN_SPOTTED to its PRE-move position.
         const int ref_robot_r =
-            (env.opponent_policy_code == kPolicyEvade) ? robot_r : new_robot_r;
+            (env.opponent_policy_code == kPolicyPursue) ? new_robot_r : robot_r;
         const int ref_robot_c =
-            (env.opponent_policy_code == kPolicyEvade) ? robot_c : new_robot_c;
+            (env.opponent_policy_code == kPolicyPursue) ? new_robot_c : robot_c;
         auto [new_opp_r, new_opp_c] = disc_sample_opponent_move(
             opp_r, opp_c, ref_robot_r, ref_robot_c, env, rng);
 
@@ -1798,6 +1888,30 @@ inline bool belief_is_valid(int r, int c, int rows, int cols, const std::uint8_t
     return valid_cell[r * cols + c] != 0;
 }
 
+// True iff the opponent lies on one of the robot's 8 unoccluded laser rays
+// (over the belief ``valid_cell`` grid). Mirrors LaserTagPOMDP._is_opponent_spotted
+// / disc_opponent_spotted for the belief path.
+bool belief_opponent_spotted(int robot_r, int robot_c, int opp_r, int opp_c, int rows, int cols,
+                             const std::uint8_t *valid_cell) {
+    for (std::size_t d = 0; d < 8; ++d) {
+        const int dr = kBeliefLaserDirections[d][0];
+        const int dc = kBeliefLaserDirections[d][1];
+        int r = robot_r;
+        int c = robot_c;
+        while (true) {
+            r += dr;
+            c += dc;
+            if (r == opp_r && c == opp_c) {
+                return true;
+            }
+            if (!belief_is_valid(r, c, rows, cols, valid_cell)) {  // wall or out of bounds
+                break;
+            }
+        }
+    }
+    return false;
+}
+
 // Compute the opponent's next position by sampling from the 5-way
 // categorical distribution defined in
 // LaserTagVectorizedUpdater._batch_opponent_move, using a single uniform
@@ -1813,33 +1927,45 @@ void belief_sample_opponent_move(int robot_r, int robot_c, int opp_r, int opp_c,
 
     const bool same_col = (robot_c == opp_c);
     const bool same_row = (robot_r == opp_r);
-    // EVADE puts the 0.4 mass on the cell that increases distance to the robot;
-    // PURSUE on the cell that decreases it. The comparisons below flip per policy.
-    const bool evade = (opponent_policy_code == kPolicyEvade);
+    // Only PURSUE puts the 0.4 mass on the cell that decreases distance to the
+    // robot; every other policy flees to the cell that increases it.
+    const bool evade = (opponent_policy_code != kPolicyPursue);
+    // EVADE_WHEN_SPOTTED with no line of sight moves uniformly at random.
+    const bool move_randomly =
+        opponent_policy_code == kPolicyEvadeWhenSpotted &&
+        !belief_opponent_spotted(robot_r, robot_c, opp_r, opp_c, rows, cols, valid_cell);
 
     double right_prob = 0.0;
-    if (same_col && right_valid) {
-        right_prob = 0.2;
-    } else if ((evade ? (robot_c < opp_c) : (robot_c > opp_c)) && right_valid) {
-        right_prob = 0.4;
-    }
     double left_prob = 0.0;
-    if (same_col && left_valid) {
-        left_prob = 0.2;
-    } else if ((evade ? (robot_c > opp_c) : (robot_c < opp_c)) && left_valid) {
-        left_prob = 0.4;
-    }
     double up_prob = 0.0;
-    if (same_row && up_valid) {
-        up_prob = 0.2;
-    } else if ((evade ? (robot_r > opp_r) : (robot_r < opp_r)) && up_valid) {
-        up_prob = 0.4;
-    }
     double down_prob = 0.0;
-    if (same_row && down_valid) {
-        down_prob = 0.2;
-    } else if ((evade ? (robot_r < opp_r) : (robot_r > opp_r)) && down_valid) {
-        down_prob = 0.4;
+    if (move_randomly) {
+        // Uniform 0.2 on each valid neighbour; the remainder routes to "stay".
+        right_prob = right_valid ? 0.2 : 0.0;
+        left_prob = left_valid ? 0.2 : 0.0;
+        up_prob = up_valid ? 0.2 : 0.0;
+        down_prob = down_valid ? 0.2 : 0.0;
+    } else {
+        if (same_col && right_valid) {
+            right_prob = 0.2;
+        } else if ((evade ? (robot_c < opp_c) : (robot_c > opp_c)) && right_valid) {
+            right_prob = 0.4;
+        }
+        if (same_col && left_valid) {
+            left_prob = 0.2;
+        } else if ((evade ? (robot_c > opp_c) : (robot_c < opp_c)) && left_valid) {
+            left_prob = 0.4;
+        }
+        if (same_row && up_valid) {
+            up_prob = 0.2;
+        } else if ((evade ? (robot_r > opp_r) : (robot_r < opp_r)) && up_valid) {
+            up_prob = 0.4;
+        }
+        if (same_row && down_valid) {
+            down_prob = 0.2;
+        } else if ((evade ? (robot_r < opp_r) : (robot_r > opp_r)) && down_valid) {
+            down_prob = 0.4;
+        }
     }
 
     const double cum1 = right_prob;
@@ -1928,12 +2054,12 @@ void belief_apply_action(int action_idx, std::size_t n,
         const double u = uniform(rng.engine());
         int new_opp_r;
         int new_opp_c;
-        // EVADE reacts to the robot's PRE-move position; PURSUE to its POST-move
-        // position.
+        // PURSUE reacts to the robot's POST-move position; EVADE / EVADE_WHEN_SPOTTED
+        // to its PRE-move position.
         const int ref_robot_r =
-            (opponent_policy_code == kPolicyEvade) ? robot_r : new_robot_r;
+            (opponent_policy_code == kPolicyPursue) ? new_robot_r : robot_r;
         const int ref_robot_c =
-            (opponent_policy_code == kPolicyEvade) ? robot_c : new_robot_c;
+            (opponent_policy_code == kPolicyPursue) ? new_robot_c : robot_c;
         belief_sample_opponent_move(ref_robot_r, ref_robot_c, opp_r, opp_c,
                                      rows, cols, valid_cell, opponent_policy_code, u,
                                      &new_opp_r, &new_opp_c);
@@ -2230,12 +2356,6 @@ inline std::size_t cumulative_sample(const double *probs, std::size_t n, double 
     return n - 1;
 }
 
-// 8-direction laser distance scan from (robot_r, robot_c). Mirrors
-// LaserTagPOMDP._laser_distance_inline / _LASER_DIRECTIONS.
-// Output: out[0..7] in order N, NE, E, SE, S, SW, W, NW.
-static constexpr std::array<std::array<int, 2>, 8> kDiscLaserDirs = {{
-    {{-1, 0}}, {{-1, 1}}, {{0, 1}}, {{1, 1}}, {{1, 0}}, {{1, -1}}, {{0, -1}}, {{-1, -1}}}};
-
 void disc_laser_measurements(int robot_r, int robot_c, int opp_r, int opp_c,
                              const DiscreteEnvParams &env, double *out) {
     for (std::size_t d = 0; d < 8; ++d) {
@@ -2279,29 +2399,39 @@ std::size_t disc_opponent_move_table(int opp_r, int opp_c, int robot_r,
         }
     };
 
-    // EVADE places the 0.4 directional mass on the distance-increasing (away)
-    // cell; PURSUE on the distance-decreasing (toward) cell. The aligned branch
-    // is policy-invariant.
-    const bool evade = (env.opponent_policy_code == kPolicyEvade);
-
-    // x-moves (column direction, fixed row = opp_r)
-    if (robot_c == opp_c) {
+    if (env.opponent_policy_code == kPolicyEvadeWhenSpotted &&
+        !disc_opponent_spotted(robot_r, robot_c, opp_r, opp_c, env)) {
+        // EVADE_WHEN_SPOTTED with no line of sight: uniform 0.2 on each valid
+        // cardinal neighbour; remainder (incl. blocked moves) falls through to stay.
+        try_add(opp_r - 1, opp_c, 0.2);
+        try_add(opp_r + 1, opp_c, 0.2);
         try_add(opp_r, opp_c + 1, 0.2);
         try_add(opp_r, opp_c - 1, 0.2);
     } else {
-        const int dir_c = (robot_c > opp_c) ? (evade ? opp_c - 1 : opp_c + 1)
-                                            : (evade ? opp_c + 1 : opp_c - 1);
-        try_add(opp_r, dir_c, 0.4);
-    }
+        // Only PURSUE places the 0.4 directional mass on the distance-decreasing
+        // (toward) cell; every other policy flees to the away cell. The aligned
+        // branch is policy-invariant.
+        const bool evade = (env.opponent_policy_code != kPolicyPursue);
 
-    // y-moves (row direction, fixed col = opp_c)
-    if (robot_r == opp_r) {
-        try_add(opp_r + 1, opp_c, 0.2);
-        try_add(opp_r - 1, opp_c, 0.2);
-    } else {
-        const int dir_r = (robot_r > opp_r) ? (evade ? opp_r - 1 : opp_r + 1)
-                                            : (evade ? opp_r + 1 : opp_r - 1);
-        try_add(dir_r, opp_c, 0.4);
+        // x-moves (column direction, fixed row = opp_r)
+        if (robot_c == opp_c) {
+            try_add(opp_r, opp_c + 1, 0.2);
+            try_add(opp_r, opp_c - 1, 0.2);
+        } else {
+            const int dir_c = (robot_c > opp_c) ? (evade ? opp_c - 1 : opp_c + 1)
+                                                : (evade ? opp_c + 1 : opp_c - 1);
+            try_add(opp_r, dir_c, 0.4);
+        }
+
+        // y-moves (row direction, fixed col = opp_c)
+        if (robot_r == opp_r) {
+            try_add(opp_r + 1, opp_c, 0.2);
+            try_add(opp_r - 1, opp_c, 0.2);
+        } else {
+            const int dir_r = (robot_r > opp_r) ? (evade ? opp_r - 1 : opp_r + 1)
+                                                : (evade ? opp_r + 1 : opp_r - 1);
+            try_add(dir_r, opp_c, 0.4);
+        }
     }
 
     // Stay action probability: 0.2 + slack from invalid moves.
@@ -2393,11 +2523,12 @@ py::array_t<double> lasertag_sample_next_state_step(
     int opp_rows_buf[5];   // NOLINT(modernize-avoid-c-arrays)
     int opp_cols_buf[5];   // NOLINT(modernize-avoid-c-arrays)
     double opp_probs[5];   // NOLINT(modernize-avoid-c-arrays)
-    // EVADE reacts to the robot's PRE-move position; PURSUE to its POST-move position.
+    // PURSUE reacts to the robot's POST-move position; EVADE / EVADE_WHEN_SPOTTED to its
+    // PRE-move position.
     const int ref_robot_r =
-        (opponent_policy_code == kPolicyEvade) ? robot_r : robot_next_r;
+        (opponent_policy_code == kPolicyPursue) ? robot_next_r : robot_r;
     const int ref_robot_c =
-        (opponent_policy_code == kPolicyEvade) ? robot_c : robot_next_c;
+        (opponent_policy_code == kPolicyPursue) ? robot_next_c : robot_c;
     const std::size_t n_opp = disc_opponent_move_table(
         opp_r, opp_c, ref_robot_r, ref_robot_c, env, opp_rows_buf, opp_cols_buf, opp_probs);
     const std::size_t pick = cumulative_sample(opp_probs, n_opp, opp_uniform);
@@ -2626,7 +2757,8 @@ PYBIND11_MODULE(_native, m) {
         "Run a full random rollout for ContinuousLaserTagPOMDP in one C++ frame.\n\n"
         "``actions_buffer`` must be shape (N, 3) float64 with N >= max_depth - start_depth.\n"
         "``opponent_policy_code`` selects the opponent behaviour: 0 = EVADE (away from\n"
-        "the robot's pre-move position), 1 = PURSUE (toward its post-move position).\n"
+        "the robot's pre-move position), 1 = PURSUE (toward its post-move position),\n"
+        "2 = EVADE_WHEN_SPOTTED (evade while the robot has line of sight, else hold position).\n"
         "Returns the discounted sum of immediate rewards along the sampled trajectory.");
 
     // ── Discrete LaserTag native rollout binding ──────────────────────────────
@@ -2651,7 +2783,8 @@ PYBIND11_MODULE(_native, m) {
         "  2 = DISTANCE_DECAYED_HAZARD_PENALTY (wall always -penalty; danger -penalty\n"
         "      with probability exp(-min_dist / penalty_decay), no radius cutoff).\n"
         "``opponent_policy_code`` selects the opponent behaviour: 0 = EVADE (away from\n"
-        "the robot's pre-move position), 1 = PURSUE (toward its post-move position).\n"
+        "the robot's pre-move position), 1 = PURSUE (toward its post-move position),\n"
+        "2 = EVADE_WHEN_SPOTTED (evade while the robot has line of sight, else random).\n"
         "Returns the discounted sum of immediate rewards along the sampled trajectory.");
 
     // ── Discrete LaserTag belief-update kernels ─────────────────────────────
@@ -2664,7 +2797,8 @@ PYBIND11_MODULE(_native, m) {
         "Returns the (N, 5) float64 array of next particles.  Uses\n"
         "pomdp_native::default_rng(); seed via set_seed() for reproducibility.\n"
         "``opponent_policy_code`` selects the opponent behaviour: 0 = EVADE (away from\n"
-        "the robot's pre-move position), 1 = PURSUE (toward its post-move position).");
+        "the robot's pre-move position), 1 = PURSUE (toward its post-move position), "
+        "2 = EVADE_WHEN_SPOTTED (evade while the robot has line of sight, else random).");
 
     m.def(
         "belief_batch_obs_log_likelihood_discrete",
@@ -2688,7 +2822,8 @@ PYBIND11_MODULE(_native, m) {
         "used to pick the opponent move; must be drawn with np.random.random()\n"
         "for byte-identical reproducibility against the original Python path.\n"
         "``opponent_policy_code`` selects the opponent behaviour: 0 = EVADE (away from\n"
-        "the robot's pre-move position), 1 = PURSUE (toward its post-move position).\n"
+        "the robot's pre-move position), 1 = PURSUE (toward its post-move position),\n"
+        "2 = EVADE_WHEN_SPOTTED (evade while the robot has line of sight, else random).\n"
         "Returns a (5,) float64 ndarray.");
 
     m.def(
