@@ -17,12 +17,15 @@ from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp import LaserTagP
 from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_beliefs import (
     create_laser_tag_belief,
 )
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
+    laser_tag_pinned_kwargs as _lt_pinned_kwargs,
+)
 from POMDPPlanners.utils.belief_factory import BeliefType
 
 
 @pytest.fixture
 def env():
-    return LaserTagPOMDP(discount_factor=0.95)
+    return LaserTagPOMDP(discount_factor=0.95, **_lt_pinned_kwargs())
 
 
 class TestCreateLaserTagBelief:

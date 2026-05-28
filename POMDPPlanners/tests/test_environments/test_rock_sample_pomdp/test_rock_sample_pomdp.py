@@ -31,6 +31,7 @@ from POMDPPlanners.environments.rock_sample_pomdp import (
 from POMDPPlanners.tests.test_utils.confidence_interval_utils import (
     verify_metrics_within_confidence_intervals,
 )
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import rock_sample_pinned_kwargs
 from POMDPPlanners.tests.test_utils.history_builders import build_test_history
 from POMDPPlanners.tests.test_utils.metric_invariants_utils import (
     verify_history_returns_bounded,
@@ -144,7 +145,7 @@ class TestRockSamplePOMDP:
 
         Test type: unit
         """
-        pomdp = RockSamplePOMDP()
+        pomdp = RockSamplePOMDP(discount_factor=0.95, **rock_sample_pinned_kwargs())
 
         assert pomdp.map_size == (5, 5)
         assert pomdp.rock_positions == [(0, 0), (2, 2), (3, 3)]
@@ -170,13 +171,15 @@ class TestRockSamplePOMDP:
         """
         custom_rocks = [(1, 1), (2, 3), (4, 4)]
         pomdp = RockSamplePOMDP(
-            map_size=(7, 8),
-            rock_positions=custom_rocks,
-            init_pos=(1, 0),
-            sensor_efficiency=15.0,
-            bad_rock_penalty=-20.0,
-            good_rock_reward=15.0,
             discount_factor=0.9,
+            **rock_sample_pinned_kwargs(
+                map_size=(7, 8),
+                rock_positions=custom_rocks,
+                init_pos=(1, 0),
+                sensor_efficiency=15.0,
+                bad_rock_penalty=-20.0,
+                good_rock_reward=15.0,
+            ),
         )
 
         assert pomdp.map_size == (7, 8)
@@ -199,10 +202,10 @@ class TestRockSamplePOMDP:
         Test type: unit
         """
         with pytest.raises(ValueError, match="Map size must be positive"):
-            RockSamplePOMDP(map_size=(0, 5))
+            RockSamplePOMDP(discount_factor=0.95, **rock_sample_pinned_kwargs(map_size=(0, 5)))
 
         with pytest.raises(ValueError, match="Map size must be positive"):
-            RockSamplePOMDP(map_size=(5, -1))
+            RockSamplePOMDP(discount_factor=0.95, **rock_sample_pinned_kwargs(map_size=(5, -1)))
 
     def test_pomdp_validation_empty_rocks(self):
         """Test parameter validation for empty rock positions.
@@ -216,7 +219,9 @@ class TestRockSamplePOMDP:
         Test type: unit
         """
         # Empty rocks should be allowed - creates environment with no rocks
-        pomdp = RockSamplePOMDP(rock_positions=[])
+        pomdp = RockSamplePOMDP(
+            discount_factor=0.95, **rock_sample_pinned_kwargs(rock_positions=[])
+        )
         assert pomdp.rock_positions == []  # Should remain empty as requested
         assert len(pomdp.get_actions()) == 5  # Only basic actions, no check actions
 
@@ -235,10 +240,16 @@ class TestRockSamplePOMDP:
         Test type: unit
         """
         with pytest.raises(ValueError, match="Rock position .* is outside map bounds"):
-            RockSamplePOMDP(map_size=(3, 3), rock_positions=[(0, 0), (3, 3)])
+            RockSamplePOMDP(
+                discount_factor=0.95,
+                **rock_sample_pinned_kwargs(map_size=(3, 3), rock_positions=[(0, 0), (3, 3)]),
+            )
 
         with pytest.raises(ValueError, match="Rock position .* is outside map bounds"):
-            RockSamplePOMDP(map_size=(5, 5), rock_positions=[(2, 2), (-1, 3)])
+            RockSamplePOMDP(
+                discount_factor=0.95,
+                **rock_sample_pinned_kwargs(map_size=(5, 5), rock_positions=[(2, 2), (-1, 3)]),
+            )
 
     def test_pomdp_validation_init_pos_out_of_bounds(self):
         """Test parameter validation for initial position outside bounds.
@@ -252,10 +263,16 @@ class TestRockSamplePOMDP:
         Test type: unit
         """
         with pytest.raises(ValueError, match="Initial position .* is outside map bounds"):
-            RockSamplePOMDP(map_size=(3, 3), rock_positions=[], init_pos=(3, 2))
+            RockSamplePOMDP(
+                discount_factor=0.95,
+                **rock_sample_pinned_kwargs(map_size=(3, 3), rock_positions=[], init_pos=(3, 2)),
+            )
 
         with pytest.raises(ValueError, match="Initial position .* is outside map bounds"):
-            RockSamplePOMDP(map_size=(5, 5), rock_positions=[], init_pos=(2, -1))
+            RockSamplePOMDP(
+                discount_factor=0.95,
+                **rock_sample_pinned_kwargs(map_size=(5, 5), rock_positions=[], init_pos=(2, -1)),
+            )
 
     def test_get_actions(self):
         """Test action enumeration.
@@ -268,7 +285,10 @@ class TestRockSamplePOMDP:
 
         Test type: unit
         """
-        pomdp = RockSamplePOMDP(rock_positions=[(0, 0), (2, 2), (3, 3)])
+        pomdp = RockSamplePOMDP(
+            discount_factor=0.95,
+            **rock_sample_pinned_kwargs(rock_positions=[(0, 0), (2, 2), (3, 3)]),
+        )
         actions = pomdp.get_actions()
 
         expected_actions = [0, 1, 2, 3, 4, 5, 6, 7]  # 5 basic + 3 check
@@ -289,7 +309,12 @@ class TestRockSamplePOMDP:
 
         Test type: unit
         """
-        pomdp = RockSamplePOMDP(map_size=(3, 3), rock_positions=[(0, 0), (1, 1)], init_pos=(0, 0))
+        pomdp = RockSamplePOMDP(
+            discount_factor=0.95,
+            **rock_sample_pinned_kwargs(
+                map_size=(3, 3), rock_positions=[(0, 0), (1, 1)], init_pos=(0, 0)
+            ),
+        )
         dist = pomdp.initial_state_dist()
 
         assert len(dist.values) == 4  # 2^2 possible rock configurations
@@ -310,7 +335,7 @@ class TestRockSamplePOMDP:
 
         Test type: unit
         """
-        pomdp = RockSamplePOMDP()
+        pomdp = RockSamplePOMDP(discount_factor=0.95, **rock_sample_pinned_kwargs())
         dist = pomdp.initial_observation_dist()
 
         assert len(dist.values) == 1
@@ -328,7 +353,7 @@ class TestRockSamplePOMDP:
 
         Test type: unit
         """
-        pomdp = RockSamplePOMDP()
+        pomdp = RockSamplePOMDP(discount_factor=0.95, **rock_sample_pinned_kwargs())
 
         assert pomdp.is_equal_observation("good", "good")
         assert pomdp.is_equal_observation("bad", "bad")
@@ -347,7 +372,7 @@ class TestRockSamplePOMDP:
 
         Test type: unit
         """
-        pomdp = RockSamplePOMDP()
+        pomdp = RockSamplePOMDP(discount_factor=0.95, **rock_sample_pinned_kwargs())
 
         normal_state = create_rock_sample_state((2, 3), (True, False, True))
         terminal_state = create_rock_sample_state((-1, -1), (True, False, True))
@@ -370,7 +395,7 @@ class TestStateTransitionModel:
 
         Test type: unit
         """
-        pomdp = RockSamplePOMDP()
+        pomdp = RockSamplePOMDP(discount_factor=0.95, **rock_sample_pinned_kwargs())
         state = create_rock_sample_state((2, 1), (True, False, True))
 
         next_state = pomdp.sample_next_state(state=state, action=1)  # North
@@ -388,7 +413,7 @@ class TestStateTransitionModel:
 
         Test type: unit
         """
-        pomdp = RockSamplePOMDP()
+        pomdp = RockSamplePOMDP(discount_factor=0.95, **rock_sample_pinned_kwargs())
         state = create_rock_sample_state((0, 1), (True, False, True))
 
         next_state = pomdp.sample_next_state(state=state, action=1)  # North
@@ -405,7 +430,7 @@ class TestStateTransitionModel:
 
         Test type: unit
         """
-        pomdp = RockSamplePOMDP()
+        pomdp = RockSamplePOMDP(discount_factor=0.95, **rock_sample_pinned_kwargs())
         state = create_rock_sample_state((1, 2), (True, False, True))
 
         next_state = pomdp.sample_next_state(state=state, action=2)  # East
@@ -423,7 +448,9 @@ class TestStateTransitionModel:
 
         Test type: unit
         """
-        pomdp = RockSamplePOMDP()  # Default 5x5 map
+        pomdp = RockSamplePOMDP(
+            discount_factor=0.95, **rock_sample_pinned_kwargs()
+        )  # Default 5x5 map
         state = create_rock_sample_state((1, 4), (True, False, True))  # Right boundary
 
         next_state = pomdp.sample_next_state(state=state, action=2)  # East
@@ -440,7 +467,7 @@ class TestStateTransitionModel:
 
         Test type: unit
         """
-        pomdp = RockSamplePOMDP()
+        pomdp = RockSamplePOMDP(discount_factor=0.95, **rock_sample_pinned_kwargs())
         state = create_rock_sample_state((1, 2), (True, False, True))
 
         next_state = pomdp.sample_next_state(state=state, action=3)  # South
@@ -458,7 +485,9 @@ class TestStateTransitionModel:
 
         Test type: unit
         """
-        pomdp = RockSamplePOMDP()  # Default 5x5 map
+        pomdp = RockSamplePOMDP(
+            discount_factor=0.95, **rock_sample_pinned_kwargs()
+        )  # Default 5x5 map
         state = create_rock_sample_state((4, 1), (True, False, True))  # Bottom boundary
 
         next_state = pomdp.sample_next_state(state=state, action=3)  # South
@@ -475,7 +504,7 @@ class TestStateTransitionModel:
 
         Test type: unit
         """
-        pomdp = RockSamplePOMDP()
+        pomdp = RockSamplePOMDP(discount_factor=0.95, **rock_sample_pinned_kwargs())
         state = create_rock_sample_state((2, 3), (True, False, True))
 
         next_state = pomdp.sample_next_state(state=state, action=4)  # West
@@ -493,7 +522,7 @@ class TestStateTransitionModel:
 
         Test type: unit
         """
-        pomdp = RockSamplePOMDP()
+        pomdp = RockSamplePOMDP(discount_factor=0.95, **rock_sample_pinned_kwargs())
         state = create_rock_sample_state((2, 0), (True, False, True))
 
         next_state = pomdp.sample_next_state(state=state, action=4)  # West
@@ -510,7 +539,10 @@ class TestStateTransitionModel:
 
         Test type: unit
         """
-        pomdp = RockSamplePOMDP(rock_positions=[(0, 0), (2, 2), (3, 3)])
+        pomdp = RockSamplePOMDP(
+            discount_factor=0.95,
+            **rock_sample_pinned_kwargs(rock_positions=[(0, 0), (2, 2), (3, 3)]),
+        )
         state = create_rock_sample_state((0, 0), (True, False, True))  # At rock 0
 
         next_state = pomdp.sample_next_state(state=state, action=0)  # Sample
@@ -528,7 +560,10 @@ class TestStateTransitionModel:
 
         Test type: unit
         """
-        pomdp = RockSamplePOMDP(rock_positions=[(0, 0), (2, 2), (3, 3)])
+        pomdp = RockSamplePOMDP(
+            discount_factor=0.95,
+            **rock_sample_pinned_kwargs(rock_positions=[(0, 0), (2, 2), (3, 3)]),
+        )
         state = create_rock_sample_state((1, 1), (True, False, True))  # Not at any rock
 
         next_state = pomdp.sample_next_state(state=state, action=0)  # Sample
@@ -546,7 +581,7 @@ class TestStateTransitionModel:
 
         Test type: unit
         """
-        pomdp = RockSamplePOMDP()
+        pomdp = RockSamplePOMDP(discount_factor=0.95, **rock_sample_pinned_kwargs())
         state = create_rock_sample_state((2, 1), (True, False, True))
 
         next_state = pomdp.sample_next_state(state=state, action=5)  # Check rock 0
@@ -568,7 +603,7 @@ class TestObservationModel:
 
         Test type: unit
         """
-        pomdp = RockSamplePOMDP()
+        pomdp = RockSamplePOMDP(discount_factor=0.95, **rock_sample_pinned_kwargs())
         state = create_rock_sample_state((1, 1), (True, False))
 
         for action in [1, 2, 3, 4]:  # North, East, South, West
@@ -586,7 +621,7 @@ class TestObservationModel:
 
         Test type: unit
         """
-        pomdp = RockSamplePOMDP()
+        pomdp = RockSamplePOMDP(discount_factor=0.95, **rock_sample_pinned_kwargs())
         state = create_rock_sample_state((1, 1), (True, False))
 
         observation = pomdp.sample_observation(next_state=state, action=0)  # Sample
@@ -604,7 +639,10 @@ class TestObservationModel:
         Test type: unit
         """
         pomdp = RockSamplePOMDP(
-            rock_positions=[(1, 1), (3, 3)], sensor_efficiency=50.0  # High efficiency
+            discount_factor=0.95,
+            **rock_sample_pinned_kwargs(
+                rock_positions=[(1, 1), (3, 3)], sensor_efficiency=50.0  # High efficiency
+            ),
         )
         state = create_rock_sample_state((1, 1), (True, False))  # At rock 0 position
 
@@ -627,8 +665,11 @@ class TestObservationModel:
         Test type: unit
         """
         pomdp = RockSamplePOMDP(
-            rock_positions=[(0, 0), (1, 2)],  # Closer rocks
-            sensor_efficiency=2.0,  # Moderate efficiency for reasonable uncertainty
+            discount_factor=0.95,
+            **rock_sample_pinned_kwargs(
+                rock_positions=[(0, 0), (1, 2)],  # Closer rocks
+                sensor_efficiency=2.0,  # Moderate efficiency for reasonable uncertainty
+            ),
         )
         state = create_rock_sample_state((0, 0), (True, False))  # At rock 0, check rock 1 at (1,2)
 
@@ -652,7 +693,10 @@ class TestObservationModel:
 
         Test type: unit
         """
-        pomdp = RockSamplePOMDP(rock_positions=[(0, 0), (2, 2)])  # Only 2 rocks
+        pomdp = RockSamplePOMDP(
+            discount_factor=0.95,
+            **rock_sample_pinned_kwargs(rock_positions=[(0, 0), (2, 2)]),
+        )  # Only 2 rocks
         state = create_rock_sample_state((1, 1), (True, False))
 
         observation = pomdp.sample_observation(next_state=state, action=7)  # Check rock 2 (invalid)
@@ -669,7 +713,10 @@ class TestObservationModel:
 
         Test type: unit
         """
-        pomdp = RockSamplePOMDP(rock_positions=[(2, 2)], sensor_efficiency=10.0)
+        pomdp = RockSamplePOMDP(
+            discount_factor=0.95,
+            **rock_sample_pinned_kwargs(rock_positions=[(2, 2)], sensor_efficiency=10.0),
+        )
         state = create_rock_sample_state((1, 1), (True,))  # Good rock at distance sqrt(2)
 
         log_probs = pomdp.observation_log_probability(state, 5, ["good", "bad", "none"])
@@ -697,7 +744,9 @@ class TestRewardFunction:
 
         Test type: unit
         """
-        pomdp = RockSamplePOMDP(step_penalty=-1.0)
+        pomdp = RockSamplePOMDP(
+            discount_factor=0.95, **rock_sample_pinned_kwargs(step_penalty=-1.0)
+        )
         state = create_rock_sample_state((2, 2), (True, False))
 
         for action in [1, 2, 3, 4]:  # Movement actions
@@ -715,7 +764,10 @@ class TestRewardFunction:
 
         Test type: unit
         """
-        pomdp = RockSamplePOMDP(step_penalty=-1.0, exit_reward=10.0)
+        pomdp = RockSamplePOMDP(
+            discount_factor=0.95,
+            **rock_sample_pinned_kwargs(step_penalty=-1.0, exit_reward=10.0),
+        )
         state = create_rock_sample_state((2, 4), (True, False))  # At right edge of 5x5 map
 
         reward = pomdp.reward(state, 2)  # East action
@@ -733,7 +785,10 @@ class TestRewardFunction:
         Test type: unit
         """
         pomdp = RockSamplePOMDP(
-            rock_positions=[(1, 1), (3, 3)], step_penalty=-0.5, good_rock_reward=15.0
+            discount_factor=0.95,
+            **rock_sample_pinned_kwargs(
+                rock_positions=[(1, 1), (3, 3)], step_penalty=-0.5, good_rock_reward=15.0
+            ),
         )
         state = create_rock_sample_state((1, 1), (True, False))  # At good rock
 
@@ -752,7 +807,10 @@ class TestRewardFunction:
         Test type: unit
         """
         pomdp = RockSamplePOMDP(
-            rock_positions=[(1, 1), (3, 3)], step_penalty=-0.5, bad_rock_penalty=-20.0
+            discount_factor=0.95,
+            **rock_sample_pinned_kwargs(
+                rock_positions=[(1, 1), (3, 3)], step_penalty=-0.5, bad_rock_penalty=-20.0
+            ),
         )
         state = create_rock_sample_state((1, 1), (False, True))  # At bad rock
 
@@ -770,7 +828,10 @@ class TestRewardFunction:
 
         Test type: unit
         """
-        pomdp = RockSamplePOMDP(rock_positions=[(0, 0), (3, 3)], step_penalty=-1.5)
+        pomdp = RockSamplePOMDP(
+            discount_factor=0.95,
+            **rock_sample_pinned_kwargs(rock_positions=[(0, 0), (3, 3)], step_penalty=-1.5),
+        )
         state = create_rock_sample_state((1, 1), (True, False))  # Not at any rock
 
         reward = pomdp.reward(state, 0)  # Sample action
@@ -787,7 +848,10 @@ class TestRewardFunction:
 
         Test type: unit
         """
-        pomdp = RockSamplePOMDP(step_penalty=-1.0, sensor_use_penalty=-2.0)
+        pomdp = RockSamplePOMDP(
+            discount_factor=0.95,
+            **rock_sample_pinned_kwargs(step_penalty=-1.0, sensor_use_penalty=-2.0),
+        )
         state = create_rock_sample_state((2, 2), (True, False))
 
         reward = pomdp.reward(state, 5)  # Check rock 0
@@ -805,11 +869,14 @@ class TestRewardFunction:
         Test type: unit
         """
         pomdp = RockSamplePOMDP(
-            step_penalty=-1.0,
-            bad_rock_penalty=-5.0,
-            good_rock_reward=8.0,
-            exit_reward=12.0,
-            sensor_use_penalty=-0.5,
+            discount_factor=0.95,
+            **rock_sample_pinned_kwargs(
+                step_penalty=-1.0,
+                bad_rock_penalty=-5.0,
+                good_rock_reward=8.0,
+                exit_reward=12.0,
+                sensor_use_penalty=-0.5,
+            ),
         )
 
         # Expected calculations from RockSamplePOMDP constructor:
@@ -822,10 +889,13 @@ class TestRewardFunction:
 
         # Verify with different parameters
         pomdp2 = RockSamplePOMDP(
-            step_penalty=-0.5,
-            bad_rock_penalty=-10.0,
-            exit_reward=20.0,
-            sensor_use_penalty=-1.0,
+            discount_factor=0.95,
+            **rock_sample_pinned_kwargs(
+                step_penalty=-0.5,
+                bad_rock_penalty=-10.0,
+                exit_reward=20.0,
+                sensor_use_penalty=-1.0,
+            ),
         )
 
         expected_min2 = -0.5 + (-10.0) + (-1.0)  # -11.5
@@ -848,7 +918,7 @@ class TestDangerousArea:
 
         Test type: unit
         """
-        pomdp = RockSamplePOMDP()
+        pomdp = RockSamplePOMDP(discount_factor=0.95, **rock_sample_pinned_kwargs())
         assert pomdp._is_in_dangerous_area((0, 0)) is False
         assert pomdp._is_in_dangerous_area((2, 2)) is False
         assert pomdp._is_in_dangerous_area((4, 4)) is False
@@ -864,7 +934,10 @@ class TestDangerousArea:
 
         Test type: unit
         """
-        pomdp = RockSamplePOMDP(dangerous_areas=[(2, 2)], dangerous_area_radius=1.5)
+        pomdp = RockSamplePOMDP(
+            discount_factor=0.95,
+            **rock_sample_pinned_kwargs(dangerous_areas=[(2, 2)], dangerous_area_radius=1.5),
+        )
         # Position at center
         assert pomdp._is_in_dangerous_area((2, 2)) is True
         # Position adjacent (distance = 1.0)
@@ -887,7 +960,10 @@ class TestDangerousArea:
 
         Test type: unit
         """
-        pomdp = RockSamplePOMDP(dangerous_areas=[(2, 2)], dangerous_area_radius=1.0)
+        pomdp = RockSamplePOMDP(
+            discount_factor=0.95,
+            **rock_sample_pinned_kwargs(dangerous_areas=[(2, 2)], dangerous_area_radius=1.0),
+        )
         # Position at center (distance = 0.0)
         assert pomdp._is_in_dangerous_area((2, 2)) is True
         # Position adjacent (distance = 1.0, exactly at boundary)
@@ -912,7 +988,12 @@ class TestDangerousArea:
         """
         import math
 
-        pomdp = RockSamplePOMDP(dangerous_areas=[(2, 2)], dangerous_area_radius=math.sqrt(2))
+        pomdp = RockSamplePOMDP(
+            discount_factor=0.95,
+            **rock_sample_pinned_kwargs(
+                dangerous_areas=[(2, 2)], dangerous_area_radius=math.sqrt(2)
+            ),
+        )
         # Position diagonal (distance = sqrt(2), exactly at boundary)
         assert pomdp._is_in_dangerous_area((3, 3)) is True
         assert pomdp._is_in_dangerous_area((1, 1)) is True
@@ -930,7 +1011,12 @@ class TestDangerousArea:
 
         Test type: unit
         """
-        pomdp = RockSamplePOMDP(dangerous_areas=[(1, 1), (3, 3)], dangerous_area_radius=1.5)
+        pomdp = RockSamplePOMDP(
+            discount_factor=0.95,
+            **rock_sample_pinned_kwargs(
+                dangerous_areas=[(1, 1), (3, 3)], dangerous_area_radius=1.5
+            ),
+        )
         # Position within first area
         assert pomdp._is_in_dangerous_area((1, 1)) is True
         assert pomdp._is_in_dangerous_area((2, 1)) is True
@@ -957,9 +1043,12 @@ class TestDangerousArea:
         Test type: unit
         """
         pomdp = RockSamplePOMDP(
-            map_size=(5, 5),
-            dangerous_areas=[(2, 2)],
-            dangerous_area_radius=10.0,  # Large enough to cover entire map
+            discount_factor=0.95,
+            **rock_sample_pinned_kwargs(
+                map_size=(5, 5),
+                dangerous_areas=[(2, 2)],
+                dangerous_area_radius=10.0,  # Large enough to cover entire map
+            ),
         )
         # All positions should be within radius
         assert pomdp._is_in_dangerous_area((0, 0)) is True
@@ -977,7 +1066,10 @@ class TestDangerousArea:
 
         Test type: unit
         """
-        pomdp = RockSamplePOMDP(dangerous_areas=[(2, 2)], dangerous_area_radius=0.1)
+        pomdp = RockSamplePOMDP(
+            discount_factor=0.95,
+            **rock_sample_pinned_kwargs(dangerous_areas=[(2, 2)], dangerous_area_radius=0.1),
+        )
         # Only exact center should be within radius
         assert pomdp._is_in_dangerous_area((2, 2)) is True
         # Adjacent positions should be outside
@@ -1000,14 +1092,17 @@ class TestStochasticDangerousAreaPenalty:
     @staticmethod
     def _stochastic_env(hit_probability: float, penalty: float = -5.0) -> RockSamplePOMDP:
         return RockSamplePOMDP(
-            map_size=(5, 5),
-            rock_positions=[(4, 4)],
-            init_pos=(1, 0),
-            dangerous_areas=[(2, 0)],
-            dangerous_area_radius=1.0,
-            dangerous_area_penalty=penalty,
-            dangerous_area_hit_probability=hit_probability,
-            step_penalty=0.0,
+            discount_factor=0.95,
+            **rock_sample_pinned_kwargs(
+                map_size=(5, 5),
+                rock_positions=[(4, 4)],
+                init_pos=(1, 0),
+                dangerous_areas=[(2, 0)],
+                dangerous_area_radius=1.0,
+                dangerous_area_penalty=penalty,
+                dangerous_area_hit_probability=hit_probability,
+                step_penalty=0.0,
+            ),
         )
 
     def test_default_hit_probability_is_one(self):
@@ -1022,7 +1117,7 @@ class TestStochasticDangerousAreaPenalty:
 
         Test type: unit
         """
-        env = RockSamplePOMDP()
+        env = RockSamplePOMDP(discount_factor=0.95, **rock_sample_pinned_kwargs())
         assert env.dangerous_area_hit_probability == 1.0
 
     def test_hit_probability_zero_never_applies_penalty(self):
@@ -1141,7 +1236,10 @@ class TestStochasticDangerousAreaPenalty:
         Test type: unit
         """
         with pytest.raises(ValueError, match="dangerous_area_hit_probability"):
-            RockSamplePOMDP(dangerous_area_hit_probability=bad_value)
+            RockSamplePOMDP(
+                discount_factor=0.95,
+                **rock_sample_pinned_kwargs(dangerous_area_hit_probability=bad_value),
+            )
 
 
 class TestMetricsComputation:
@@ -1158,7 +1256,7 @@ class TestMetricsComputation:
 
         Test type: unit
         """
-        pomdp = RockSamplePOMDP()
+        pomdp = RockSamplePOMDP(discount_factor=0.95, **rock_sample_pinned_kwargs())
         metrics = pomdp.compute_metrics([])
         assert metrics == []
 
@@ -1173,7 +1271,7 @@ class TestMetricsComputation:
 
         Test type: unit
         """
-        pomdp = RockSamplePOMDP()
+        pomdp = RockSamplePOMDP(discount_factor=0.95, **rock_sample_pinned_kwargs())
 
         # Create mock histories
         histories = []
@@ -1225,7 +1323,7 @@ class TestMetricsComputation:
 
         Test type: unit
         """
-        pomdp = RockSamplePOMDP()
+        pomdp = RockSamplePOMDP(discount_factor=0.95, **rock_sample_pinned_kwargs())
 
         histories = []
 
@@ -1282,7 +1380,7 @@ class TestMetricsComputation:
 
         Test type: integration
         """
-        pomdp = RockSamplePOMDP()
+        pomdp = RockSamplePOMDP(discount_factor=0.95, **rock_sample_pinned_kwargs())
 
         # History 0: sample once and exit successfully.
         sample_state = create_rock_sample_state((0, 0), (True, True))
@@ -1440,7 +1538,12 @@ class TestIntegration:
 
         Test type: integration
         """
-        pomdp = RockSamplePOMDP(map_size=(3, 3), rock_positions=[(0, 0), (2, 2)], init_pos=(0, 0))
+        pomdp = RockSamplePOMDP(
+            discount_factor=0.95,
+            **rock_sample_pinned_kwargs(
+                map_size=(3, 3), rock_positions=[(0, 0), (2, 2)], init_pos=(0, 0)
+            ),
+        )
 
         # Start with initial state
         initial_dist = pomdp.initial_state_dist()
@@ -1484,7 +1587,10 @@ class TestIntegration:
         """
         # High efficiency sensor for deterministic behavior
         pomdp = RockSamplePOMDP(
-            rock_positions=[(1, 1)], sensor_efficiency=100.0  # Very high efficiency
+            discount_factor=0.95,
+            **rock_sample_pinned_kwargs(
+                rock_positions=[(1, 1)], sensor_efficiency=100.0  # Very high efficiency
+            ),
         )
 
         # Robot at rock position - should get very accurate readings
@@ -1508,7 +1614,10 @@ class TestIntegration:
 
         Test type: integration
         """
-        pomdp = RockSamplePOMDP(rock_positions=[(0, 0), (1, 1)], init_pos=(0, 0))
+        pomdp = RockSamplePOMDP(
+            discount_factor=0.95,
+            **rock_sample_pinned_kwargs(rock_positions=[(0, 0), (1, 1)], init_pos=(0, 0)),
+        )
 
         initial_dist = pomdp.initial_state_dist()
 
@@ -1544,7 +1653,7 @@ class TestSampleNextStepEquivalence:
         """
         from POMDPPlanners.core.environment import Environment
 
-        env = RockSamplePOMDP(discount_factor=0.95)
+        env = RockSamplePOMDP(discount_factor=0.95, **rock_sample_pinned_kwargs())
         state = env.initial_state_dist().sample()[0]
 
         for action in [0, 1, 2, 3, 4, 5]:
@@ -1583,11 +1692,15 @@ _RS_STATE_DIM = 2 + _RS_NUM_ROCKS
 
 
 def _make_rs_env(**kwargs) -> RockSamplePOMDP:
+    discount_factor = kwargs.pop("discount_factor", 0.95)
     return RockSamplePOMDP(
-        map_size=_RS_MAP_SIZE,
-        rock_positions=list(_RS_ROCK_POSITIONS),
-        init_pos=(0, 0),
-        **kwargs,
+        discount_factor=discount_factor,
+        **rock_sample_pinned_kwargs(
+            map_size=_RS_MAP_SIZE,
+            rock_positions=list(_RS_ROCK_POSITIONS),
+            init_pos=(0, 0),
+            **kwargs,
+        ),
     )
 
 
@@ -1853,8 +1966,10 @@ def test_scalar_obs_log_prob_un_floored_matches_batch_after_fix() -> None:
     """
     env = RockSamplePOMDP(
         discount_factor=0.95,
-        rock_positions=[(1, 1)],
-        sensor_efficiency=10.0,
+        **rock_sample_pinned_kwargs(
+            rock_positions=[(1, 1)],
+            sensor_efficiency=10.0,
+        ),
     )
     state = create_rock_sample_state((1, 1), (True,))
 
@@ -1884,14 +1999,17 @@ class TestRockSampleRewardBatchNextStateConsistency:
     @staticmethod
     def _danger_env(hit_probability: float = 1.0) -> RockSamplePOMDP:
         return RockSamplePOMDP(
-            map_size=(5, 5),
-            rock_positions=[(4, 4)],
-            init_pos=(0, 0),
-            dangerous_areas=[(2, 0)],
-            dangerous_area_radius=1.0,
-            dangerous_area_penalty=-5.0,
-            dangerous_area_hit_probability=hit_probability,
-            step_penalty=0.0,
+            discount_factor=0.95,
+            **rock_sample_pinned_kwargs(
+                map_size=(5, 5),
+                rock_positions=[(4, 4)],
+                init_pos=(0, 0),
+                dangerous_areas=[(2, 0)],
+                dangerous_area_radius=1.0,
+                dangerous_area_penalty=-5.0,
+                dangerous_area_hit_probability=hit_probability,
+                step_penalty=0.0,
+            ),
         )
 
     def test_reward_batch_uses_passed_next_states_per_row(self):

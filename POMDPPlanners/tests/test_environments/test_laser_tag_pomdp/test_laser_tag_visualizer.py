@@ -18,6 +18,9 @@ from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.policy import PolicyRunData
 from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.environments.laser_tag_pomdp import LaserTagPOMDP
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
+    laser_tag_pinned_kwargs as _lt_pinned_kwargs,
+)
 
 # Set seeds for reproducible tests
 np.random.seed(42)
@@ -47,7 +50,7 @@ class TestLaserTagVisualization:
 
         Test type: integration
         """
-        env = LaserTagPOMDP(discount_factor=0.95)
+        env = LaserTagPOMDP(discount_factor=0.95, **_lt_pinned_kwargs())
 
         # Create simple test history
 
@@ -117,7 +120,7 @@ class TestLaserTagVisualization:
 
         Test type: unit
         """
-        env = LaserTagPOMDP(discount_factor=0.95)
+        env = LaserTagPOMDP(discount_factor=0.95, **_lt_pinned_kwargs())
 
         # Create dummy history for testing
         dummy_history = History(

@@ -22,9 +22,7 @@ from POMDPPlanners.core.belief.particle_beliefs import WeightedParticleBelief
 from POMDPPlanners.core.belief.vectorized_weighted_particle_belief import (
     VectorizedWeightedParticleBelief,
 )
-from POMDPPlanners.environments.light_dark_pomdp import (
-    _native,  # pylint: disable=no-name-in-module
-)
+from POMDPPlanners.environments.light_dark_pomdp import _native  # pylint: disable=no-name-in-module
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
     ContinuousLightDarkPOMDP,
     ContinuousLightDarkPOMDPDiscreteActions,
@@ -44,7 +42,10 @@ from POMDPPlanners.tests.test_core.test_belief.vectorized_updater_test_utils imp
     assert_batch_obs_log_likelihood_matches_loop,
     assert_batch_transition_matches_loop,
 )
-
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
+    continuous_light_dark_discrete_actions_pinned_kwargs,
+    continuous_light_dark_pinned_kwargs,
+)
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -53,7 +54,7 @@ from POMDPPlanners.tests.test_core.test_belief.vectorized_updater_test_utils imp
 
 @pytest.fixture
 def env():
-    return ContinuousLightDarkPOMDP(discount_factor=0.95)
+    return ContinuousLightDarkPOMDP(discount_factor=0.95, **continuous_light_dark_pinned_kwargs())
 
 
 @pytest.fixture
@@ -440,7 +441,9 @@ class TestEquivalenceWithPerParticleLoop:
 
 @pytest.fixture
 def discrete_env():
-    return ContinuousLightDarkPOMDPDiscreteActions(discount_factor=0.95)
+    return ContinuousLightDarkPOMDPDiscreteActions(
+        discount_factor=0.95, **continuous_light_dark_discrete_actions_pinned_kwargs()
+    )
 
 
 @pytest.fixture
@@ -596,7 +599,9 @@ class TestDiscreteActionConfigId:
 def no_obs_env():
     return ContinuousLightDarkPOMDP(
         discount_factor=0.95,
-        observation_model_type=ObservationModelType.NORMAL_NOISE_NO_OBS_IN_DARK,
+        **continuous_light_dark_pinned_kwargs(
+            observation_model_type=ObservationModelType.NORMAL_NOISE_NO_OBS_IN_DARK
+        ),
     )
 
 
@@ -783,7 +788,9 @@ class TestNoObsInDarkConfigId:
 def dist_env():
     return ContinuousLightDarkPOMDP(
         discount_factor=0.95,
-        observation_model_type=ObservationModelType.DISTANCE_BASED,
+        **continuous_light_dark_pinned_kwargs(
+            observation_model_type=ObservationModelType.DISTANCE_BASED
+        ),
     )
 
 

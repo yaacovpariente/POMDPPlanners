@@ -22,6 +22,7 @@ from POMDPPlanners.environments.push_pomdp import PushPOMDP, _native as push_nat
 from POMDPPlanners.tests.test_utils.confidence_interval_utils import (
     verify_metrics_within_confidence_intervals,
 )
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import push_pinned_kwargs
 from POMDPPlanners.tests.test_utils.metric_invariants_utils import (
     verify_history_returns_bounded,
     verify_metric_sanity,
@@ -41,13 +42,15 @@ class TestPushPOMDP:
         # Create Push POMDP environment with obstacles
         self.env = PushPOMDP(
             discount_factor=0.95,
-            grid_size=10,
-            push_threshold=1.0,
-            friction_coefficient=0.3,
-            observation_noise=0.1,
-            obstacles=[(3.0, 3.0), (7.0, 7.0)],  # Two obstacles
-            obstacle_radius=0.5,
-            obstacle_penalty=-10.0,
+            **push_pinned_kwargs(
+                grid_size=10,
+                push_threshold=1.0,
+                friction_coefficient=0.3,
+                observation_noise=0.1,
+                obstacles=[(3.0, 3.0), (7.0, 7.0)],  # Two obstacles
+                obstacle_radius=0.5,
+                obstacle_penalty=-10.0,
+            ),
         )
 
         # Test positions
@@ -416,9 +419,11 @@ class TestPushPOMDP:
         action = "right"
         env = PushPOMDP(
             discount_factor=0.95,
-            grid_size=10,
-            push_threshold=2.0,
-            friction_coefficient=0.3,
+            **push_pinned_kwargs(
+                grid_size=10,
+                push_threshold=2.0,
+                friction_coefficient=0.3,
+            ),
         )
 
         next_state = env.sample_next_state(state, action)
@@ -446,9 +451,11 @@ class TestPushPOMDP:
         action = "right"
         env = PushPOMDP(
             discount_factor=0.95,
-            grid_size=10,
-            push_threshold=1.0,
-            friction_coefficient=0.3,
+            **push_pinned_kwargs(
+                grid_size=10,
+                push_threshold=1.0,
+                friction_coefficient=0.3,
+            ),
         )
 
         next_state = env.sample_next_state(state, action)
@@ -462,7 +469,10 @@ class TestPushPOMDP:
     def test_observation_model_functionality(self):
         """Test observation model functionality with noise."""
         # Build an env whose observation parameters drive the env-API call.
-        env = PushPOMDP(discount_factor=0.95, grid_size=10, observation_noise=0.1)
+        env = PushPOMDP(
+            discount_factor=0.95,
+            **push_pinned_kwargs(grid_size=10, observation_noise=0.1),
+        )
         state = np.array([5.0, 5.0, 4.0, 5.0, 9.0, 9.0])
 
         observation = env.sample_observation(state, "right")
@@ -499,7 +509,7 @@ class TestPushPOMDP:
     def test_reward_range(self):
         """Test that reward range is correctly calculated."""
         # Test with default grid size (10)
-        env = PushPOMDP(discount_factor=0.95, grid_size=10)
+        env = PushPOMDP(discount_factor=0.95, **push_pinned_kwargs(grid_size=10))
 
         # Expected calculation from PushPOMDP constructor:
         # Maximum distance is diagonal from corner to corner: sqrt(2) * (grid_size - 1)
@@ -511,7 +521,7 @@ class TestPushPOMDP:
         assert env.reward_range == (expected_min, expected_max)
 
         # Test with different grid size
-        env2 = PushPOMDP(discount_factor=0.95, grid_size=25)
+        env2 = PushPOMDP(discount_factor=0.95, **push_pinned_kwargs(grid_size=25))
 
         max_distance2 = np.sqrt(2) * (25 - 1)  # sqrt(2) * 24 ≈ 33.94
         expected_min2 = -max_distance2
@@ -558,10 +568,12 @@ class TestPushPOMDP:
         """
         env = PushPOMDP(
             discount_factor=0.95,
-            grid_size=10,
-            obstacles=[(3.0, 3.0)],
-            obstacle_radius=0.5,
-            obstacle_penalty=-10.0,
+            **push_pinned_kwargs(
+                grid_size=10,
+                obstacles=[(3.0, 3.0)],
+                obstacle_radius=0.5,
+                obstacle_penalty=-10.0,
+            ),
         )
         state = np.array([3.0, 3.5, 0.0, 0.0, 9.0, 9.0])
         action = "down"
@@ -612,17 +624,21 @@ class TestPushPOMDP:
         # Create two identical environments
         env1 = PushPOMDP(
             discount_factor=0.95,
-            grid_size=10,
-            push_threshold=1.0,
-            friction_coefficient=0.3,
-            observation_noise=0.1,
+            **push_pinned_kwargs(
+                grid_size=10,
+                push_threshold=1.0,
+                friction_coefficient=0.3,
+                observation_noise=0.1,
+            ),
         )
         env2 = PushPOMDP(
             discount_factor=0.95,
-            grid_size=10,
-            push_threshold=1.0,
-            friction_coefficient=0.3,
-            observation_noise=0.1,
+            **push_pinned_kwargs(
+                grid_size=10,
+                push_threshold=1.0,
+                friction_coefficient=0.3,
+                observation_noise=0.1,
+            ),
         )
 
         # Test equality
@@ -631,10 +647,12 @@ class TestPushPOMDP:
         # Test inequality with different parameters
         env3 = PushPOMDP(
             discount_factor=0.9,  # Different discount factor
-            grid_size=10,
-            push_threshold=1.0,
-            friction_coefficient=0.3,
-            observation_noise=0.1,
+            **push_pinned_kwargs(
+                grid_size=10,
+                push_threshold=1.0,
+                friction_coefficient=0.3,
+                observation_noise=0.1,
+            ),
         )
         assert env1 != env3
 
@@ -643,17 +661,21 @@ class TestPushPOMDP:
         # Create two environments with same parameters
         env1 = PushPOMDP(
             discount_factor=0.95,
-            grid_size=10,
-            push_threshold=1.0,
-            friction_coefficient=0.3,
-            observation_noise=0.1,
+            **push_pinned_kwargs(
+                grid_size=10,
+                push_threshold=1.0,
+                friction_coefficient=0.3,
+                observation_noise=0.1,
+            ),
         )
         env2 = PushPOMDP(
             discount_factor=0.95,
-            grid_size=10,
-            push_threshold=1.0,
-            friction_coefficient=0.3,
-            observation_noise=0.1,
+            **push_pinned_kwargs(
+                grid_size=10,
+                push_threshold=1.0,
+                friction_coefficient=0.3,
+                observation_noise=0.1,
+            ),
         )
 
         # Test same config_id for identical environments
@@ -662,10 +684,12 @@ class TestPushPOMDP:
         # Test different config_id for different environments
         env3 = PushPOMDP(
             discount_factor=0.9,  # Different discount factor
-            grid_size=10,
-            push_threshold=1.0,
-            friction_coefficient=0.3,
-            observation_noise=0.1,
+            **push_pinned_kwargs(
+                grid_size=10,
+                push_threshold=1.0,
+                friction_coefficient=0.3,
+                observation_noise=0.1,
+            ),
         )
         assert env1.config_id != env3.config_id
 
@@ -684,7 +708,10 @@ class TestPushPOMDP:
 
         Test type: unit
         """
-        env = PushPOMDP(discount_factor=0.95, grid_size=10, observation_noise=0.1)
+        env = PushPOMDP(
+            discount_factor=0.95,
+            **push_pinned_kwargs(grid_size=10, observation_noise=0.1),
+        )
         next_state = np.array([5.0, 5.0, 4.0, 5.0, 9.0, 9.0])
 
         # Sample many observations to check consistency.
@@ -781,11 +808,13 @@ class TestPushPOMDP:
         action = "right"
         env = PushPOMDP(
             discount_factor=0.95,
-            grid_size=10,
-            push_threshold=1.0,
-            friction_coefficient=0.3,
-            obstacles=[],
-            obstacle_radius=0.5,
+            **push_pinned_kwargs(
+                grid_size=10,
+                push_threshold=1.0,
+                friction_coefficient=0.3,
+                obstacles=[],
+                obstacle_radius=0.5,
+            ),
         )
 
         # Get the actual next state via the env API.
@@ -827,11 +856,13 @@ class TestPushPOMDP:
         action = "right"  # Will collide with obstacle
         env = PushPOMDP(
             discount_factor=0.95,
-            grid_size=10,
-            push_threshold=1.0,
-            friction_coefficient=0.3,
-            obstacles=obstacles,
-            obstacle_radius=0.5,
+            **push_pinned_kwargs(
+                grid_size=10,
+                push_threshold=1.0,
+                friction_coefficient=0.3,
+                obstacles=obstacles,
+                obstacle_radius=0.5,
+            ),
         )
 
         # Get the actual next state (robot should stay in place due to collision).
@@ -870,11 +901,13 @@ class TestPushPOMDP:
         friction = 0.5
         env = PushPOMDP(
             discount_factor=0.95,
-            grid_size=10,
-            push_threshold=1.0,  # Robot is within push threshold
-            friction_coefficient=friction,
-            obstacles=[],
-            obstacle_radius=0.5,
+            **push_pinned_kwargs(
+                grid_size=10,
+                push_threshold=1.0,  # Robot is within push threshold
+                friction_coefficient=friction,
+                obstacles=[],
+                obstacle_radius=0.5,
+            ),
         )
 
         # Get the actual next state with push dynamics.
@@ -916,11 +949,13 @@ class TestPushPOMDP:
         action = "left"  # Try to move beyond boundary
         env = PushPOMDP(
             discount_factor=0.95,
-            grid_size=10,
-            push_threshold=1.0,
-            friction_coefficient=0.3,
-            obstacles=[],
-            obstacle_radius=0.5,
+            **push_pinned_kwargs(
+                grid_size=10,
+                push_threshold=1.0,
+                friction_coefficient=0.3,
+                obstacles=[],
+                obstacle_radius=0.5,
+            ),
         )
 
         # Get actual next state (should be clipped at boundary).
@@ -957,11 +992,13 @@ class TestPushPOMDP:
         action = "up"
         env = PushPOMDP(
             discount_factor=0.95,
-            grid_size=10,
-            push_threshold=1.0,
-            friction_coefficient=0.3,
-            obstacles=[],
-            obstacle_radius=0.5,
+            **push_pinned_kwargs(
+                grid_size=10,
+                push_threshold=1.0,
+                friction_coefficient=0.3,
+                obstacles=[],
+                obstacle_radius=0.5,
+            ),
         )
 
         # Get actual next state.
@@ -1003,7 +1040,7 @@ class TestPushPOMDP:
         Test type: unit
         """
         fixed_state = np.array([2.0, 3.0, 5.0, 5.0, 9.0, 9.0])
-        env = PushPOMDP(discount_factor=0.95, initial_state=fixed_state)
+        env = PushPOMDP(discount_factor=0.95, **push_pinned_kwargs(initial_state=fixed_state))
 
         # Sample multiple times
         samples = [env.initial_state_dist().sample()[0] for _ in range(5)]
@@ -1025,7 +1062,7 @@ class TestPushPOMDP:
         Test type: unit
         """
         fixed_state = np.array([1.0, 2.0, 4.0, 4.0, 9.0, 9.0])
-        env = PushPOMDP(discount_factor=0.95, initial_state=fixed_state)
+        env = PushPOMDP(discount_factor=0.95, **push_pinned_kwargs(initial_state=fixed_state))
 
         samples = env.initial_state_dist().sample(n_samples=10)
 
@@ -1045,7 +1082,7 @@ class TestPushPOMDP:
         Test type: unit
         """
         fixed_state = np.array([2.0, 3.0, 5.0, 5.0, 9.0, 9.0])
-        env = PushPOMDP(discount_factor=0.95, initial_state=fixed_state)
+        env = PushPOMDP(discount_factor=0.95, **push_pinned_kwargs(initial_state=fixed_state))
 
         sample1 = env.initial_state_dist().sample()[0]
         sample1[0] = 999.0  # Modify the sample
@@ -1067,7 +1104,7 @@ class TestPushPOMDP:
         Test type: unit
         """
         fixed_state = np.array([3.0, 4.0, 6.0, 6.0, 9.0, 9.0])
-        env = PushPOMDP(discount_factor=0.95, initial_state=fixed_state)
+        env = PushPOMDP(discount_factor=0.95, **push_pinned_kwargs(initial_state=fixed_state))
 
         observation = env.initial_observation_dist().sample()[0]
 
@@ -1086,7 +1123,7 @@ class TestPushPOMDP:
 
         Test type: unit
         """
-        env = PushPOMDP(discount_factor=0.95)
+        env = PushPOMDP(discount_factor=0.95, **push_pinned_kwargs())
 
         samples = [env.initial_state_dist().sample()[0] for _ in range(10)]
 
@@ -1109,8 +1146,10 @@ class TestPushPOMDP:
         obstacles = [(3.0, 3.0), (7.0, 7.0)]
         env = PushPOMDP(
             discount_factor=0.95,
-            obstacles=obstacles,
-            obstacle_radius=0.5,
+            **push_pinned_kwargs(
+                obstacles=obstacles,
+                obstacle_radius=0.5,
+            ),
         )
 
         for _ in range(20):
@@ -1137,7 +1176,7 @@ class TestPushPOMDP:
 
         Test type: unit
         """
-        env = PushPOMDP(discount_factor=0.95, grid_size=10)
+        env = PushPOMDP(discount_factor=0.95, **push_pinned_kwargs(grid_size=10))
 
         for _ in range(20):
             state = env.initial_state_dist().sample()[0]
@@ -1165,12 +1204,14 @@ class TestPushPOMDP:
         initial_state = np.array([5.0, 5.0, 5.0, 5.0, 9.0, 9.0])
         env = PushPOMDP(
             discount_factor=0.95,
-            grid_size=10,
-            push_threshold=2.0,  # Large enough so robot stays within threshold after moving
-            friction_coefficient=0.3,
-            obstacles=[],
-            obstacle_radius=0.5,
-            transition_error_prob=0.0,  # Explicitly set to 0 for deterministic behavior
+            **push_pinned_kwargs(
+                grid_size=10,
+                push_threshold=2.0,  # Large enough so robot stays within threshold after moving
+                friction_coefficient=0.3,
+                obstacles=[],
+                obstacle_radius=0.5,
+                transition_error_prob=0.0,  # Explicitly set to 0 for deterministic behavior
+            ),
         )
 
         # Hardcoded expected states for each action.
@@ -1228,12 +1269,14 @@ class TestPushPOMDPStateTransition:
         initial_state = np.array([1.0, 1.0, 8.0, 8.0, 9.0, 9.0])
         env = PushPOMDP(
             discount_factor=0.95,
-            grid_size=10,
-            push_threshold=1.0,
-            friction_coefficient=0.3,
-            obstacles=[],
-            obstacle_radius=0.5,
-            transition_error_prob=0.0,  # Explicitly set to 0 for deterministic behavior
+            **push_pinned_kwargs(
+                grid_size=10,
+                push_threshold=1.0,
+                friction_coefficient=0.3,
+                obstacles=[],
+                obstacle_radius=0.5,
+                transition_error_prob=0.0,  # Explicitly set to 0 for deterministic behavior
+            ),
         )
 
         # Hardcoded expected states for each action.
@@ -1293,12 +1336,14 @@ class TestStochasticObstacleHitProbability:
     def _stochastic_env(hit_probability: float) -> PushPOMDP:
         return PushPOMDP(
             discount_factor=0.95,
-            grid_size=10,
-            obstacles=[(3.0, 3.0)],
-            obstacle_radius=0.5,
-            obstacle_penalty=TestStochasticObstacleHitProbability.OBSTACLE_PENALTY,
-            obstacle_hit_probability=hit_probability,
-            transition_error_prob=0.0,
+            **push_pinned_kwargs(
+                grid_size=10,
+                obstacles=[(3.0, 3.0)],
+                obstacle_radius=0.5,
+                obstacle_penalty=TestStochasticObstacleHitProbability.OBSTACLE_PENALTY,
+                obstacle_hit_probability=hit_probability,
+                transition_error_prob=0.0,
+            ),
         )
 
     @staticmethod
@@ -1320,7 +1365,7 @@ class TestStochasticObstacleHitProbability:
 
         Test type: unit
         """
-        env = PushPOMDP(discount_factor=0.95)
+        env = PushPOMDP(discount_factor=0.95, **push_pinned_kwargs())
         assert env.obstacle_hit_probability == 1.0
 
     def test_hit_probability_zero_never_applies_penalty(self):
@@ -1448,7 +1493,10 @@ class TestStochasticObstacleHitProbability:
         Test type: unit
         """
         with pytest.raises(ValueError, match="obstacle_hit_probability"):
-            PushPOMDP(discount_factor=0.95, obstacle_hit_probability=bad_value)
+            PushPOMDP(
+                discount_factor=0.95,
+                **push_pinned_kwargs(obstacle_hit_probability=bad_value),
+            )
 
 
 class TestPushDangerousAreas:
@@ -1468,12 +1516,14 @@ class TestPushDangerousAreas:
     def _danger_env(hit_probability: float = 1.0) -> PushPOMDP:
         return PushPOMDP(
             discount_factor=0.95,
-            grid_size=10,
-            dangerous_areas=[(3.0, 3.0)],
-            dangerous_area_radius=0.5,
-            dangerous_area_penalty=TestPushDangerousAreas.DANGER_PENALTY,
-            dangerous_area_hit_probability=hit_probability,
-            transition_error_prob=0.0,
+            **push_pinned_kwargs(
+                grid_size=10,
+                dangerous_areas=[(3.0, 3.0)],
+                dangerous_area_radius=0.5,
+                dangerous_area_penalty=TestPushDangerousAreas.DANGER_PENALTY,
+                dangerous_area_hit_probability=hit_probability,
+                transition_error_prob=0.0,
+            ),
         )
 
     @staticmethod
@@ -1503,7 +1553,7 @@ class TestPushDangerousAreas:
         env = self._danger_env()
         state = self._enter_state()
         # Reference reward without dangerous area for comparison.
-        env_safe = PushPOMDP(discount_factor=0.95, grid_size=10)
+        env_safe = PushPOMDP(discount_factor=0.95, **push_pinned_kwargs(grid_size=10))
         np.random.seed(0)
         baseline = env_safe.reward(state, self.DANGER_ACTION)
         np.random.seed(0)
@@ -1525,7 +1575,7 @@ class TestPushDangerousAreas:
         Test type: unit
         """
         env_danger = self._danger_env()
-        env_safe = PushPOMDP(discount_factor=0.95, grid_size=10)
+        env_safe = PushPOMDP(discount_factor=0.95, **push_pinned_kwargs(grid_size=10))
         state = self._safe_state()
         np.random.seed(0)
         baseline = env_safe.reward(state, self.DANGER_ACTION)
@@ -1546,7 +1596,7 @@ class TestPushDangerousAreas:
 
         Test type: unit
         """
-        env = PushPOMDP(discount_factor=0.95)
+        env = PushPOMDP(discount_factor=0.95, **push_pinned_kwargs())
         assert not env.dangerous_areas
         assert env._dangerous_areas_arr.shape == (0, 2)
         assert env.dangerous_area_hit_probability == 1.0
@@ -1566,7 +1616,7 @@ class TestPushDangerousAreas:
         Test type: unit
         """
         env = self._danger_env()
-        env_safe = PushPOMDP(discount_factor=0.95, grid_size=10)
+        env_safe = PushPOMDP(discount_factor=0.95, **push_pinned_kwargs(grid_size=10))
         states = np.stack([self._enter_state(), self._safe_state()])
         np.random.seed(0)
         baselines = env_safe.reward_batch(states, self.DANGER_ACTION)
@@ -1588,7 +1638,7 @@ class TestPushDangerousAreas:
         Test type: unit
         """
         env = self._danger_env(hit_probability=0.0)
-        env_safe = PushPOMDP(discount_factor=0.95, grid_size=10)
+        env_safe = PushPOMDP(discount_factor=0.95, **push_pinned_kwargs(grid_size=10))
         state = self._enter_state()
         baseline = env_safe.reward(state, self.DANGER_ACTION)
         for _ in range(200):
@@ -1606,7 +1656,7 @@ class TestPushDangerousAreas:
         Test type: unit
         """
         env = self._danger_env(hit_probability=1.0)
-        env_safe = PushPOMDP(discount_factor=0.95, grid_size=10)
+        env_safe = PushPOMDP(discount_factor=0.95, **push_pinned_kwargs(grid_size=10))
         state = self._enter_state()
         baseline = env_safe.reward(state, self.DANGER_ACTION)
         expected = baseline + self.DANGER_PENALTY
@@ -1625,7 +1675,7 @@ class TestPushDangerousAreas:
         Test type: unit
         """
         env = self._danger_env(hit_probability=0.3)
-        env_safe = PushPOMDP(discount_factor=0.95, grid_size=10)
+        env_safe = PushPOMDP(discount_factor=0.95, **push_pinned_kwargs(grid_size=10))
         state = self._enter_state()
         baseline = env_safe.reward(state, self.DANGER_ACTION)
         np.random.seed(123)
@@ -1713,7 +1763,10 @@ class TestPushDangerousAreas:
         Test type: unit
         """
         with pytest.raises(ValueError, match="dangerous_area_hit_probability"):
-            PushPOMDP(discount_factor=0.95, dangerous_area_hit_probability=bad_value)
+            PushPOMDP(
+                discount_factor=0.95,
+                **push_pinned_kwargs(dangerous_area_hit_probability=bad_value),
+            )
 
     def test_native_rollout_used_when_hit_probability_lt_one(self, monkeypatch):
         """Stochastic dangerous-area hit probability is handled by the native rollout.
@@ -1772,12 +1825,14 @@ class TestPushDangerousAreas:
 
         Test type: unit
         """
-        env_no = PushPOMDP(discount_factor=0.95, grid_size=10)
+        env_no = PushPOMDP(discount_factor=0.95, **push_pinned_kwargs(grid_size=10))
         env_yes = PushPOMDP(
             discount_factor=0.95,
-            grid_size=10,
-            dangerous_areas=[(2.0, 2.0)],
-            dangerous_area_penalty=-3.5,
+            **push_pinned_kwargs(
+                grid_size=10,
+                dangerous_areas=[(2.0, 2.0)],
+                dangerous_area_penalty=-3.5,
+            ),
         )
         assert env_yes.reward_range[0] == pytest.approx(env_no.reward_range[0] - 3.5)
 
@@ -1800,7 +1855,7 @@ class TestSampleNextStepEquivalence:
         """
         from POMDPPlanners.core.environment import Environment
 
-        env = PushPOMDP(discount_factor=0.95)
+        env = PushPOMDP(discount_factor=0.95, **push_pinned_kwargs())
         state = env.initial_state_dist().sample()[0]
 
         for action in env.get_actions():
@@ -1867,10 +1922,12 @@ class TestRewardBatchMatchesScalarLoop:
 
         env = PushPOMDP(
             discount_factor=0.95,
-            grid_size=10,
-            obstacles=[(3.0, 3.0), (7.0, 7.0)],
-            obstacle_radius=0.5,
-            obstacle_penalty=-10.0,
+            **push_pinned_kwargs(
+                grid_size=10,
+                obstacles=[(3.0, 3.0), (7.0, 7.0)],
+                obstacle_radius=0.5,
+                obstacle_penalty=-10.0,
+            ),
         )
 
         np.random.seed(0)
@@ -1921,7 +1978,7 @@ class TestRewardBatchMatchesScalarLoop:
 
         Test type: unit
         """
-        env = PushPOMDP(discount_factor=0.95)
+        env = PushPOMDP(discount_factor=0.95, **push_pinned_kwargs())
         np.random.seed(7)
         particles = env.initial_state_dist().sample(n_samples=16)
         particles_arr = np.array(particles)
@@ -1957,11 +2014,13 @@ class TestRewardBatchMatchesScalarLoop:
         """
         env = PushPOMDP(
             discount_factor=0.95,
-            obstacles=[(3.0, 3.0)],
-            obstacle_radius=0.5,
-            obstacle_penalty=-10.0,
-            transition_error_prob=0.0,
-            friction_coefficient=0.0,
+            **push_pinned_kwargs(
+                obstacles=[(3.0, 3.0)],
+                obstacle_radius=0.5,
+                obstacle_penalty=-10.0,
+                transition_error_prob=0.0,
+                friction_coefficient=0.0,
+            ),
         )
 
         # Realised next-state robot lies inside the obstacle (boundary geometry).
@@ -2014,14 +2073,16 @@ class TestPushNativeSimulateRollout:
 
         env = PushPOMDP(
             discount_factor=0.95,
-            grid_size=10,
-            push_threshold=1.0,
-            friction_coefficient=0.3,
-            observation_noise=0.1,
-            obstacles=[(3.0, 3.0), (7.0, 7.0)],
-            obstacle_radius=0.5,
-            obstacle_penalty=-10.0,
-            transition_error_prob=0.0,
+            **push_pinned_kwargs(
+                grid_size=10,
+                push_threshold=1.0,
+                friction_coefficient=0.3,
+                observation_noise=0.1,
+                obstacles=[(3.0, 3.0), (7.0, 7.0)],
+                obstacle_radius=0.5,
+                obstacle_penalty=-10.0,
+                transition_error_prob=0.0,
+            ),
         )
 
         initial_state = np.array([2.0, 3.0, 2.5, 3.1, 9.0, 9.0], dtype=np.float64)
@@ -2092,14 +2153,16 @@ class TestPushNativeSimulateRollout:
 
         env = PushPOMDP(
             discount_factor=0.99,
-            grid_size=10,
-            push_threshold=1.5,
-            friction_coefficient=0.2,
-            observation_noise=0.1,
-            obstacles=None,
-            obstacle_radius=0.5,
-            obstacle_penalty=-5.0,
-            transition_error_prob=0.0,
+            **push_pinned_kwargs(
+                grid_size=10,
+                push_threshold=1.5,
+                friction_coefficient=0.2,
+                observation_noise=0.1,
+                obstacles=None,
+                obstacle_radius=0.5,
+                obstacle_penalty=-5.0,
+                transition_error_prob=0.0,
+            ),
         )
 
         initial_state = np.array([0.0, 0.0, 5.0, 5.0, 9.0, 9.0], dtype=np.float64)
@@ -2161,11 +2224,13 @@ class TestPushNativeSimulateRollout:
         """
         env = PushPOMDP(
             discount_factor=0.95,
-            grid_size=10,
-            push_threshold=1.0,
-            friction_coefficient=0.3,
-            observation_noise=0.1,
-            transition_error_prob=0.0,
+            **push_pinned_kwargs(
+                grid_size=10,
+                push_threshold=1.0,
+                friction_coefficient=0.3,
+                observation_noise=0.1,
+                transition_error_prob=0.0,
+            ),
         )
 
         # Object is at the target: (9-9)^2 + (9-9)^2 = 0 < 0.25, terminal.
@@ -2209,22 +2274,26 @@ class TestPushNativeSimulateRollout:
         _ACTIONS = ["up", "down", "right", "left"]
         env_safe = PushPOMDP(
             discount_factor=0.99,
-            grid_size=10,
-            push_threshold=1.0,
-            friction_coefficient=0.3,
-            observation_noise=0.1,
-            transition_error_prob=0.0,
+            **push_pinned_kwargs(
+                grid_size=10,
+                push_threshold=1.0,
+                friction_coefficient=0.3,
+                observation_noise=0.1,
+                transition_error_prob=0.0,
+            ),
         )
         env_danger = PushPOMDP(
             discount_factor=0.99,
-            grid_size=10,
-            push_threshold=1.0,
-            friction_coefficient=0.3,
-            observation_noise=0.1,
-            transition_error_prob=0.0,
-            dangerous_areas=[(3.0, 3.0)],
-            dangerous_area_radius=0.5,
-            dangerous_area_penalty=-5.0,
+            **push_pinned_kwargs(
+                grid_size=10,
+                push_threshold=1.0,
+                friction_coefficient=0.3,
+                observation_noise=0.1,
+                transition_error_prob=0.0,
+                dangerous_areas=[(3.0, 3.0)],
+                dangerous_area_radius=0.5,
+                dangerous_area_penalty=-5.0,
+            ),
         )
         # Robot at (2, 3) → action "right" → intended (3, 3) is in the zone.
         initial_state = np.array([2.0, 3.0, 8.0, 8.0, 9.0, 9.0], dtype=np.float64)
@@ -2293,17 +2362,19 @@ class TestPushNativeSimulateRollout:
         _ACTIONS = ["up", "down", "right", "left"]
         env = PushPOMDP(
             discount_factor=0.99,
-            grid_size=10,
-            push_threshold=1.0,
-            friction_coefficient=0.3,
-            observation_noise=0.1,
-            obstacles=[(7.0, 7.0)],
-            obstacle_radius=0.5,
-            obstacle_penalty=-10.0,
-            dangerous_areas=[(3.0, 3.0)],
-            dangerous_area_radius=0.5,
-            dangerous_area_penalty=-5.0,
-            transition_error_prob=0.0,
+            **push_pinned_kwargs(
+                grid_size=10,
+                push_threshold=1.0,
+                friction_coefficient=0.3,
+                observation_noise=0.1,
+                obstacles=[(7.0, 7.0)],
+                obstacle_radius=0.5,
+                obstacle_penalty=-10.0,
+                dangerous_areas=[(3.0, 3.0)],
+                dangerous_area_radius=0.5,
+                dangerous_area_penalty=-5.0,
+                transition_error_prob=0.0,
+            ),
         )
         initial_state = np.array([2.0, 3.0, 2.5, 3.1, 9.0, 9.0], dtype=np.float64)
         max_depth = 20
@@ -2357,13 +2428,15 @@ def test_compute_metrics_values_within_confidence_intervals():
     """
     env = PushPOMDP(
         discount_factor=0.95,
-        grid_size=10,
-        push_threshold=1.0,
-        friction_coefficient=0.3,
-        observation_noise=0.1,
-        obstacles=[(3.0, 3.0), (7.0, 7.0)],
-        obstacle_radius=0.5,
-        obstacle_penalty=-10.0,
+        **push_pinned_kwargs(
+            grid_size=10,
+            push_threshold=1.0,
+            friction_coefficient=0.3,
+            observation_noise=0.1,
+            obstacles=[(3.0, 3.0), (7.0, 7.0)],
+            obstacle_radius=0.5,
+            obstacle_penalty=-10.0,
+        ),
     )
 
     target = np.array([9.0, 9.0])
@@ -2483,13 +2556,15 @@ class TestPushPOMDPRewardNextStateConsistency:
     def _env_with_obstacle() -> PushPOMDP:
         return PushPOMDP(
             discount_factor=0.95,
-            grid_size=10,
-            obstacles=[(3.0, 3.0)],
-            obstacle_radius=0.5,
-            obstacle_penalty=TestPushPOMDPRewardNextStateConsistency.OBSTACLE_PENALTY,
-            obstacle_hit_probability=1.0,
-            transition_error_prob=0.0,
-            friction_coefficient=0.0,
+            **push_pinned_kwargs(
+                grid_size=10,
+                obstacles=[(3.0, 3.0)],
+                obstacle_radius=0.5,
+                obstacle_penalty=TestPushPOMDPRewardNextStateConsistency.OBSTACLE_PENALTY,
+                obstacle_hit_probability=1.0,
+                transition_error_prob=0.0,
+                friction_coefficient=0.0,
+            ),
         )
 
     def test_reward_obstacle_penalty_uses_realised_next_state(self):
@@ -2586,13 +2661,15 @@ class TestPushPOMDPRewardNextStateConsistency:
         """
         env = PushPOMDP(
             discount_factor=0.95,
-            grid_size=10,
-            obstacles=[(3.0, 3.0)],
-            obstacle_radius=0.5,
-            obstacle_penalty=self.OBSTACLE_PENALTY,
-            obstacle_hit_probability=1.0,
-            transition_error_prob=0.4,
-            friction_coefficient=0.0,
+            **push_pinned_kwargs(
+                grid_size=10,
+                obstacles=[(3.0, 3.0)],
+                obstacle_radius=0.5,
+                obstacle_penalty=self.OBSTACLE_PENALTY,
+                obstacle_hit_probability=1.0,
+                transition_error_prob=0.4,
+                friction_coefficient=0.0,
+            ),
         )
         state = np.array([2.0, 3.0, 8.0, 8.0, 9.0, 9.0])
 

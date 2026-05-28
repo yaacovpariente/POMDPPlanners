@@ -42,6 +42,7 @@ from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp_beliefs.rock
 from POMDPPlanners.tests.test_core.test_belief.vectorized_updater_test_utils import (
     assert_batch_transition_matches_loop,
 )
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import rock_sample_pinned_kwargs
 
 # Shared small-env fixture values used across tests. Rock 0 lives at the
 # robot's starting position so the "distance-zero sensor" case is trivial.
@@ -55,10 +56,13 @@ _STATE_DIM: int = 2 + _NUM_ROCKS
 
 def _make_env() -> RockSamplePOMDP:
     return RockSamplePOMDP(
-        map_size=_MAP_SIZE,
-        rock_positions=list(_ROCK_POSITIONS),
-        init_pos=_INIT_POS,
-        sensor_efficiency=_SENSOR_EFFICIENCY,
+        discount_factor=0.95,
+        **rock_sample_pinned_kwargs(
+            map_size=_MAP_SIZE,
+            rock_positions=list(_ROCK_POSITIONS),
+            init_pos=_INIT_POS,
+            sensor_efficiency=_SENSOR_EFFICIENCY,
+        ),
     )
 
 

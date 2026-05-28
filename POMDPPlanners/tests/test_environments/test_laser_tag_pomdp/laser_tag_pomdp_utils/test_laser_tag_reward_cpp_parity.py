@@ -30,6 +30,9 @@ from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp import (
 from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_utils.laser_tag_reward_models import (
     LaserTagRewardModel,
 )
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
+    laser_tag_pinned_kwargs as _lt_pinned_kwargs,
+)
 
 
 _BATCH_SIZE = 2000
@@ -53,10 +56,12 @@ def _build_env(rmt: RewardModelType) -> LaserTagPOMDP:
     """Build a discrete LaserTag env with non-empty danger zones and the chosen variant."""
     return LaserTagPOMDP(
         discount_factor=0.95,
-        dangerous_areas=_DANGEROUS_AREAS,
-        dangerous_area_penalty=_DANGEROUS_AREA_PENALTY,
-        reward_model_type=rmt,
-        penalty_decay=_PENALTY_DECAY,
+        **_lt_pinned_kwargs(
+            dangerous_areas=_DANGEROUS_AREAS,
+            dangerous_area_penalty=_DANGEROUS_AREA_PENALTY,
+            reward_model_type=rmt,
+            penalty_decay=_PENALTY_DECAY,
+        ),
     )
 
 

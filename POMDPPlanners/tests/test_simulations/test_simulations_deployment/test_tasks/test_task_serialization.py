@@ -27,6 +27,9 @@ from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     HyperParameterOptimizationDirection,
 )
 from POMDPPlanners.environments import TigerPOMDP, ContinuousLightDarkPOMDPDiscreteActions
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
+    continuous_light_dark_discrete_actions_pinned_kwargs,
+)
 from POMDPPlanners.planners import POMCP, SparsePFT, POMCPOW
 from POMDPPlanners.simulations.simulations_deployment.tasks import (
     EpisodeSimulationTask,
@@ -636,7 +639,10 @@ class TestComplexHyperparameterTuningTaskSerialization:
     def setup_method(self):
         """Set up complex test environment for each test."""
         # Use the complex environment from the failure report
-        self.env = ContinuousLightDarkPOMDPDiscreteActions(discount_factor=0.95)
+        self.env = ContinuousLightDarkPOMDPDiscreteActions(
+            discount_factor=0.95,
+            **continuous_light_dark_discrete_actions_pinned_kwargs(),
+        )
 
         # Create action sampler for POMCPOW
         self.action_sampler = DiscreteActionSampler(self.env.get_actions())

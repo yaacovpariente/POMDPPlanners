@@ -27,6 +27,10 @@ from POMDPPlanners.tests.test_core.test_belief.belief_equivalence_utils import (
 from POMDPPlanners.tests.test_core.test_belief.vectorized_updater_test_utils import (
     assert_batch_obs_log_likelihood_matches_loop,
 )
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
+    continuous_laser_tag_discrete_actions_pinned_kwargs,
+    continuous_laser_tag_pinned_kwargs,
+)
 
 
 def _make_aligned_beliefs(updater, n_particles=20):
@@ -60,12 +64,17 @@ def _make_aligned_beliefs(updater, n_particles=20):
 
 @pytest.fixture
 def env():
-    return ContinuousLaserTagPOMDP(discount_factor=0.95, walls=[])
+    return ContinuousLaserTagPOMDP(
+        discount_factor=0.95, **continuous_laser_tag_pinned_kwargs(walls=[])
+    )
 
 
 @pytest.fixture
 def env_discrete():
-    return ContinuousLaserTagPOMDPDiscreteActions(discount_factor=0.95, walls=[])
+    return ContinuousLaserTagPOMDPDiscreteActions(
+        discount_factor=0.95,
+        **continuous_laser_tag_discrete_actions_pinned_kwargs(walls=[]),
+    )
 
 
 @pytest.fixture

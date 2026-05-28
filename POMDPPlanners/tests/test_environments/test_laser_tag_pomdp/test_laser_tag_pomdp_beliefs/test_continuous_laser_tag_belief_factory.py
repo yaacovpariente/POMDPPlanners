@@ -16,19 +16,28 @@ from POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_pomdp impor
 from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_beliefs.continuous_laser_tag_belief_factory import (
     create_continuous_laser_tag_belief,
 )
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
+    continuous_laser_tag_discrete_actions_pinned_kwargs,
+    continuous_laser_tag_pinned_kwargs,
+)
 from POMDPPlanners.utils.belief_factory import BeliefType, create_environment_belief
 
 
 @pytest.fixture
 def env():
     np.random.seed(42)
-    return ContinuousLaserTagPOMDP(discount_factor=0.95, walls=[])
+    return ContinuousLaserTagPOMDP(
+        discount_factor=0.95, **continuous_laser_tag_pinned_kwargs(walls=[])
+    )
 
 
 @pytest.fixture
 def env_discrete():
     np.random.seed(42)
-    return ContinuousLaserTagPOMDPDiscreteActions(discount_factor=0.95, walls=[])
+    return ContinuousLaserTagPOMDPDiscreteActions(
+        discount_factor=0.95,
+        **continuous_laser_tag_discrete_actions_pinned_kwargs(walls=[]),
+    )
 
 
 class TestCreateContinuousLaserTagBelief:

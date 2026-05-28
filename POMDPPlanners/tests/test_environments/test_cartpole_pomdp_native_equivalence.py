@@ -16,13 +16,14 @@ import pytest
 
 from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP, _native
 from POMDPPlanners.tests.test_environments import _native_parity
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import cartpole_pinned_kwargs
 from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
 
 
 @pytest.fixture(name="env")
 def _env_fixture():
     noise_cov = np.diag([0.1, 0.1, 0.1, 0.1])
-    return CartPolePOMDP(discount_factor=0.99, noise_cov=noise_cov)
+    return CartPolePOMDP(discount_factor=0.99, noise_cov=noise_cov, **cartpole_pinned_kwargs())
 
 
 def _build_transition(env: CartPolePOMDP, state: np.ndarray, action: int):

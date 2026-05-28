@@ -16,6 +16,10 @@ from POMDPPlanners.environments.push_pomdp.continuous_push_pomdp import (
 from POMDPPlanners.environments.push_pomdp.push_pomdp_beliefs.continuous_push_belief_factory import (
     create_continuous_push_belief,
 )
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
+    continuous_push_discrete_actions_pinned_kwargs,
+    continuous_push_pinned_kwargs,
+)
 from POMDPPlanners.utils.belief_factory import BeliefType, create_environment_belief
 
 
@@ -27,8 +31,10 @@ class TestContinuousPushBeliefFactory:
         np.random.seed(42)
         self.env = ContinuousPushPOMDP(
             discount_factor=0.99,
-            state_transition_cov_matrix=np.eye(2) * 0.01,
-            robot_radius=0.3,
+            **continuous_push_pinned_kwargs(
+                state_transition_cov_matrix=np.eye(2) * 0.01,
+                robot_radius=0.3,
+            ),
         )
 
     def test_create_vectorized_belief(self):
@@ -106,8 +112,10 @@ class TestContinuousPushBeliefFactory:
         """
         env_d = ContinuousPushPOMDPDiscreteActions(
             discount_factor=0.99,
-            state_transition_cov_matrix=np.eye(2) * 0.01,
-            robot_radius=0.3,
+            **continuous_push_discrete_actions_pinned_kwargs(
+                state_transition_cov_matrix=np.eye(2) * 0.01,
+                robot_radius=0.3,
+            ),
         )
         belief = create_environment_belief(env_d, n_particles=50)
         assert belief is not None

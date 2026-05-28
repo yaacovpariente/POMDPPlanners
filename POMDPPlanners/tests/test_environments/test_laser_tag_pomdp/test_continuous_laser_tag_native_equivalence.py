@@ -22,6 +22,9 @@ from POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_pomdp impor
     ContinuousLaserTagPOMDP,
 )
 from POMDPPlanners.tests.test_environments import _native_parity
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
+    continuous_laser_tag_pinned_kwargs as _cont_lt_pinned_kwargs,
+)
 from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
 
 
@@ -29,7 +32,7 @@ from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMulti
 def _env_fixture():
     # Use an empty-walls environment so the geometry is purely grid-bounded;
     # per-test fixtures below cover the populated-walls case separately.
-    return ContinuousLaserTagPOMDP(discount_factor=0.95, walls=[])
+    return ContinuousLaserTagPOMDP(discount_factor=0.95, **_cont_lt_pinned_kwargs(walls=[]))
 
 
 def _build_transition_kernel(

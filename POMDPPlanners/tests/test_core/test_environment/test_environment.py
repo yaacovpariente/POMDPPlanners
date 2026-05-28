@@ -23,6 +23,7 @@ from POMDPPlanners.core.environment import (
     SpaceType,
 )
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import tiger_pinned_kwargs
 from POMDPPlanners.utils.logger import reset_logger_state
 
 # Set seeds for reproducible tests
@@ -281,7 +282,7 @@ def test_attribute_presence(base_environment: MockEnvironment, attr_name: str, a
 @pytest.fixture
 def base_tiger_environment() -> TigerPOMDP:
     """Fixture providing a base TigerPOMDP environment for comparison."""
-    return TigerPOMDP(discount_factor=0.95)
+    return TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs())
 
 
 @pytest.fixture(autouse=True)
@@ -377,11 +378,11 @@ class TestEnvironmentConfigId:
         Test type: configuration
         """
         # Same configuration should have same ID
-        other_env = TigerPOMDP(discount_factor=0.95)
+        other_env = TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs())
         assert base_tiger_environment.config_id == other_env.config_id
 
         # Different configuration should have different ID
-        different_env = TigerPOMDP(discount_factor=0.8)
+        different_env = TigerPOMDP(discount_factor=0.8, **tiger_pinned_kwargs())
         assert base_tiger_environment.config_id != different_env.config_id
 
     def test_config_id_format(self, base_environment: MockEnvironment):

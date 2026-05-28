@@ -19,12 +19,15 @@ from POMDPPlanners.environments.safety_ant_velocity_pomdp.safety_ant_velocity_po
 from POMDPPlanners.environments.safety_ant_velocity_pomdp.safety_ant_velocity_pomdp_beliefs import (
     create_safety_ant_velocity_belief,
 )
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
+    safety_ant_velocity_pinned_kwargs,
+)
 from POMDPPlanners.utils.belief_factory import BeliefType
 
 
 @pytest.fixture
 def env():
-    return SafeAntVelocityPOMDP(discount_factor=0.95)
+    return SafeAntVelocityPOMDP(discount_factor=0.95, **safety_ant_velocity_pinned_kwargs())
 
 
 class TestCreateSafetyAntVelocityBelief:

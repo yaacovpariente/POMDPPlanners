@@ -33,6 +33,10 @@ from POMDPPlanners.tests.test_core.test_belief.vectorized_updater_test_utils imp
     assert_batch_obs_log_likelihood_matches_loop,
     assert_batch_transition_matches_loop,
 )
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
+    continuous_push_discrete_actions_pinned_kwargs,
+    continuous_push_pinned_kwargs,
+)
 
 
 def _make_aligned_beliefs(updater, n_particles=60):
@@ -65,8 +69,10 @@ class TestContinuousPushVectorizedUpdater:
         np.random.seed(42)
         self.env = ContinuousPushPOMDP(
             discount_factor=0.99,
-            state_transition_cov_matrix=np.eye(2) * 0.01,
-            robot_radius=0.3,
+            **continuous_push_pinned_kwargs(
+                state_transition_cov_matrix=np.eye(2) * 0.01,
+                robot_radius=0.3,
+            ),
         )
         self.updater = ContinuousPushVectorizedUpdater.from_environment(self.env)
 
@@ -113,8 +119,10 @@ class TestContinuousPushVectorizedUpdater:
         """
         env_d = ContinuousPushPOMDPDiscreteActions(
             discount_factor=0.99,
-            state_transition_cov_matrix=np.eye(2) * 0.01,
-            robot_radius=0.3,
+            **continuous_push_discrete_actions_pinned_kwargs(
+                state_transition_cov_matrix=np.eye(2) * 0.01,
+                robot_radius=0.3,
+            ),
         )
         updater = ContinuousPushVectorizedUpdater.from_environment(env_d)
         particles = np.tile(env_d.initial_state_dist().sample()[0], (50, 1))
@@ -170,8 +178,10 @@ class TestContinuousPushVectorizedUpdater:
         """
         env2 = ContinuousPushPOMDP(
             discount_factor=0.99,
-            state_transition_cov_matrix=np.eye(2) * 0.01,
-            robot_radius=0.3,
+            **continuous_push_pinned_kwargs(
+                state_transition_cov_matrix=np.eye(2) * 0.01,
+                robot_radius=0.3,
+            ),
         )
         updater2 = ContinuousPushVectorizedUpdater.from_environment(env2)
         assert self.updater.config_id == updater2.config_id
@@ -257,8 +267,10 @@ class TestContinuousPushVectorizedUpdater:
         """
         env_d = ContinuousPushPOMDPDiscreteActions(
             discount_factor=0.99,
-            state_transition_cov_matrix=np.eye(2) * 0.01,
-            robot_radius=0.3,
+            **continuous_push_discrete_actions_pinned_kwargs(
+                state_transition_cov_matrix=np.eye(2) * 0.01,
+                robot_radius=0.3,
+            ),
         )
         updater = ContinuousPushVectorizedUpdater.from_environment(env_d)
         assert updater._action_to_vector is not None
@@ -272,8 +284,10 @@ class TestBeliefEquivalenceWithBaseline:
         """Set up shared test fixtures."""
         self.env = ContinuousPushPOMDP(
             discount_factor=0.99,
-            state_transition_cov_matrix=np.eye(2) * 0.01,
-            robot_radius=0.3,
+            **continuous_push_pinned_kwargs(
+                state_transition_cov_matrix=np.eye(2) * 0.01,
+                robot_radius=0.3,
+            ),
         )
         self.updater = ContinuousPushVectorizedUpdater.from_environment(self.env)
 

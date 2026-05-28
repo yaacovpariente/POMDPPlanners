@@ -23,10 +23,14 @@ from POMDPPlanners.core.environment import SpaceType
 from POMDPPlanners.core.policy import Policy, PolicyRunData, PolicySpaceInfo
 from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.environments.laser_tag_pomdp import LaserTagPOMDP, OpponentPolicy
+from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp import RewardModelType
 from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
 from POMDPPlanners.simulations.episodes import run_episode
 from POMDPPlanners.tests.test_utils.confidence_interval_utils import (
     verify_metrics_within_confidence_intervals,
+)
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
+    laser_tag_pinned_kwargs as _lt_pinned_kwargs,
 )
 from POMDPPlanners.tests.test_utils.metric_invariants_utils import (
     verify_history_returns_bounded,
@@ -136,12 +140,14 @@ def _make_env(
     """Build a LaserTagPOMDP with empty dangerous areas for transition/observation tests."""
     return LaserTagPOMDP(
         discount_factor=0.95,
-        floor_shape=floor_shape,
-        walls=walls if walls is not None else set(),
-        dangerous_areas=set(),
-        measurement_noise=measurement_noise,
-        transition_error_prob=transition_error_prob,
-        opponent_policy=opponent_policy,
+        **_lt_pinned_kwargs(
+            floor_shape=floor_shape,
+            walls=walls if walls is not None else set(),
+            dangerous_areas=set(),
+            measurement_noise=measurement_noise,
+            transition_error_prob=transition_error_prob,
+            opponent_policy=opponent_policy,
+        ),
     )
 
 
@@ -960,16 +966,16 @@ class TestLaserTagPOMDPTransitionError:
         """
         # Test negative value
         with pytest.raises(ValueError, match="transition_error_prob must be between 0 and 1"):
-            LaserTagPOMDP(discount_factor=0.95, transition_error_prob=-0.1)
+            LaserTagPOMDP(discount_factor=0.95, **_lt_pinned_kwargs(transition_error_prob=-0.1))
 
         # Test value > 1.0
         with pytest.raises(ValueError, match="transition_error_prob must be between 0 and 1"):
-            LaserTagPOMDP(discount_factor=0.95, transition_error_prob=1.1)
+            LaserTagPOMDP(discount_factor=0.95, **_lt_pinned_kwargs(transition_error_prob=1.1))
 
         # Test valid values should not raise
-        LaserTagPOMDP(discount_factor=0.95, transition_error_prob=0.0)
-        LaserTagPOMDP(discount_factor=0.95, transition_error_prob=0.5)
-        LaserTagPOMDP(discount_factor=0.95, transition_error_prob=1.0)
+        LaserTagPOMDP(discount_factor=0.95, **_lt_pinned_kwargs(transition_error_prob=0.0))
+        LaserTagPOMDP(discount_factor=0.95, **_lt_pinned_kwargs(transition_error_prob=0.5))
+        LaserTagPOMDP(discount_factor=0.95, **_lt_pinned_kwargs(transition_error_prob=1.0))
 
     def test_transition_error_probability_stored_on_environment(self):
         """Test that transition_error_prob is stored on the environment.
@@ -982,7 +988,7 @@ class TestLaserTagPOMDPTransitionError:
 
         Test type: unit
         """
-        env = LaserTagPOMDP(discount_factor=0.95, transition_error_prob=0.3)
+        env = LaserTagPOMDP(discount_factor=0.95, **_lt_pinned_kwargs(transition_error_prob=0.3))
         assert env.transition_error_prob == 0.3
 
     def test_transition_error_probability_default_zero(self):
@@ -997,7 +1003,7 @@ class TestLaserTagPOMDPTransitionError:
 
         Test type: unit
         """
-        env = LaserTagPOMDP(discount_factor=0.95, dangerous_areas=set())
+        env = LaserTagPOMDP(discount_factor=0.95, **_lt_pinned_kwargs(dangerous_areas=set()))
         assert env.transition_error_prob == 0.0, "Default transition_error_prob should be 0.0"
 
         np.random.seed(42)
@@ -1021,7 +1027,7 @@ class TestLaserTagPOMDPTransitionError:
         Test type: integration
         """
         np.random.seed(42)  # For reproducibility
-        env = LaserTagPOMDP(discount_factor=0.95, transition_error_prob=0.7)
+        env = LaserTagPOMDP(discount_factor=0.95, **_lt_pinned_kwargs(transition_error_prob=0.7))
         state = np.array([3.0, 5.0, 1.0, 1.0, 0.0])
 
         # Sample many transitions with North action (0) via the env-level API.
@@ -1326,7 +1332,7 @@ class TestLaserTagPOMDP:
 
         Test type: unit
         """
-        env = LaserTagPOMDP(discount_factor=0.95)
+        env = LaserTagPOMDP(discount_factor=0.95, **_lt_pinned_kwargs())
 
         assert env.discount_factor == 0.95
         assert env.floor_shape == (11, 7)
@@ -1360,7 +1366,7 @@ class TestLaserTagPOMDP:
         Test type: unit
         """
         walls = {(3, 3), (4, 4)}
-        env = LaserTagPOMDP(discount_factor=0.95, walls=walls)
+        env = LaserTagPOMDP(discount_factor=0.95, **_lt_pinned_kwargs(walls=walls))
 
         assert env.walls == walls
 
@@ -1376,7 +1382,7 @@ class TestLaserTagPOMDP:
         Test type: unit
         """
         # Create environment with no dangerous areas to get deterministic rewards
-        env = LaserTagPOMDP(discount_factor=0.95, dangerous_areas=set())
+        env = LaserTagPOMDP(discount_factor=0.95, **_lt_pinned_kwargs(dangerous_areas=set()))
 
         # Test successful tag - using position (1, 1) which is not in default dangerous areas
         same_pos_state = np.array([1.0, 1.0, 1.0, 1.0, 0.0])
@@ -1408,7 +1414,7 @@ class TestLaserTagPOMDP:
 
         Test type: unit
         """
-        env = LaserTagPOMDP(discount_factor=0.95)
+        env = LaserTagPOMDP(discount_factor=0.95, **_lt_pinned_kwargs())
 
         non_terminal = np.array([3.0, 5.0, 2.0, 4.0, 0.0])
         terminal = np.array([3.0, 5.0, 3.0, 5.0, 1.0])
@@ -1427,7 +1433,10 @@ class TestLaserTagPOMDP:
 
         Test type: unit
         """
-        env = LaserTagPOMDP(discount_factor=0.95, tag_reward=15.0, tag_penalty=20.0, step_cost=2.0)
+        env = LaserTagPOMDP(
+            discount_factor=0.95,
+            **_lt_pinned_kwargs(tag_reward=15.0, tag_penalty=20.0, step_cost=2.0),
+        )
 
         # Expected calculation from LaserTagPOMDP constructor:
         # reward_range=(-tag_penalty, tag_reward) = (-20.0, 15.0)
@@ -1438,7 +1447,8 @@ class TestLaserTagPOMDP:
 
         # Test with different parameters
         env2 = LaserTagPOMDP(
-            discount_factor=0.95, tag_reward=50.0, tag_penalty=100.0, step_cost=1.0
+            discount_factor=0.95,
+            **_lt_pinned_kwargs(tag_reward=50.0, tag_penalty=100.0, step_cost=1.0),
         )
 
         expected_min2 = -100.0  # Failed tag penalty
@@ -1457,7 +1467,7 @@ class TestLaserTagPOMDP:
 
         Test type: unit
         """
-        env = LaserTagPOMDP(discount_factor=0.95)
+        env = LaserTagPOMDP(discount_factor=0.95, **_lt_pinned_kwargs())
         initial_dist = env.initial_state_dist()
 
         # Sample several initial states
@@ -1483,7 +1493,7 @@ class TestLaserTagPOMDP:
         Test type: unit
         """
         # Test 1: When initial_state is None (default), should return uniform distribution
-        env_default = LaserTagPOMDP(discount_factor=0.95)
+        env_default = LaserTagPOMDP(discount_factor=0.95, **_lt_pinned_kwargs())
         assert env_default.initial_state is None
 
         initial_dist_default = env_default.initial_state_dist()
@@ -1499,7 +1509,9 @@ class TestLaserTagPOMDP:
 
         # Test 2: When initial_state is set, should return that state with probability 1.0
         start_state = np.array([2.0, 3.0, 5.0, 6.0, 0.0])
-        env_custom = LaserTagPOMDP(discount_factor=0.95, initial_state=start_state)
+        env_custom = LaserTagPOMDP(
+            discount_factor=0.95, **_lt_pinned_kwargs(initial_state=start_state)
+        )
         assert env_custom.initial_state is not None
         assert np.array_equal(env_custom.initial_state, start_state)
 
@@ -1546,7 +1558,7 @@ class TestLaserTagPOMDP:
 
         Test type: unit
         """
-        env = LaserTagPOMDP(discount_factor=0.95)
+        env = LaserTagPOMDP(discount_factor=0.95, **_lt_pinned_kwargs())
 
         obs1 = (2.0, 4.0, 1.5, 3.2, 2.8, 1.1, 0.9, 2.5)
         obs2 = (2.0, 4.0, 1.5, 3.2, 2.8, 1.1, 0.9, 2.5)
@@ -1567,7 +1579,7 @@ class TestLaserTagPOMDP:
         Test type: unit
         """
         walls = {(3, 3)}
-        env = LaserTagPOMDP(discount_factor=0.95, walls=walls)
+        env = LaserTagPOMDP(discount_factor=0.95, **_lt_pinned_kwargs(walls=walls))
 
         # Create mock history with wall collision
         # Create a simple belief for testing
@@ -1682,7 +1694,8 @@ class TestLaserTagPOMDP:
         """
         walls = {(3, 3)}
         env = LaserTagPOMDP(
-            discount_factor=0.95, walls=walls, dangerous_area_penalty=5.0, step_cost=1.0
+            discount_factor=0.95,
+            **_lt_pinned_kwargs(walls=walls, dangerous_area_penalty=5.0, step_cost=1.0),
         )
 
         # Robot at (3, 2); attempted East move into wall at (3, 3).
@@ -1724,7 +1737,8 @@ class TestLaserTagPOMDP:
         """
         walls = {(3, 3)}
         env = LaserTagPOMDP(
-            discount_factor=0.95, walls=walls, dangerous_area_penalty=5.0, step_cost=1.0
+            discount_factor=0.95,
+            **_lt_pinned_kwargs(walls=walls, dangerous_area_penalty=5.0, step_cost=1.0),
         )
 
         # Will-collide: robot at (3, 2) attempting East move into wall
@@ -1766,11 +1780,13 @@ class TestLaserTagPOMDP:
         # Create LaserTag environment with known configuration
         env = LaserTagPOMDP(
             discount_factor=0.95,
-            tag_reward=10.0,
-            tag_penalty=10.0,
-            step_cost=1.0,
-            measurement_noise=0.1,
-            dangerous_areas={(3, 3), (4, 4)},  # Add some dangerous areas
+            **_lt_pinned_kwargs(
+                tag_reward=10.0,
+                tag_penalty=10.0,
+                step_cost=1.0,
+                measurement_noise=0.1,
+                dangerous_areas={(3, 3), (4, 4)},  # Add some dangerous areas
+            ),
         )
 
         # Generate realistic episode histories by running environment simulation
@@ -1914,7 +1930,7 @@ class TestLaserTagPOMDP:
 
         Test type: unit
         """
-        env = LaserTagPOMDP(discount_factor=0.95)
+        env = LaserTagPOMDP(discount_factor=0.95, **_lt_pinned_kwargs())
 
         # Create test belief
         dummy_particles = [np.array([3.0, 5.0, 2.0, 4.0, 0.0])]
@@ -2037,9 +2053,11 @@ def test_metrics_confidence_intervals():
     # Create a LaserTagPOMDP environment with smaller grid for faster testing
     env = LaserTagPOMDP(
         discount_factor=0.95,
-        floor_shape=(7, 7),  # Smaller grid for faster episodes
-        walls={(2, 2), (3, 4), (5, 1)},  # Some walls for variety
-        dangerous_areas={(1, 3), (4, 4)},  # Some dangerous areas
+        **_lt_pinned_kwargs(
+            floor_shape=(7, 7),  # Smaller grid for faster episodes
+            walls={(2, 2), (3, 4), (5, 1)},  # Some walls for variety
+            dangerous_areas={(1, 3), (4, 4)},  # Some dangerous areas
+        ),
     )
 
     # Create random policy and initial belief
@@ -2105,7 +2123,7 @@ class TestLaserTagRewardBatch:
     """
 
     def _make_env(self) -> LaserTagPOMDP:
-        return LaserTagPOMDP(discount_factor=0.95)
+        return LaserTagPOMDP(discount_factor=0.95, **_lt_pinned_kwargs())
 
     def _sample_states(self, env: LaserTagPOMDP, n: int, seed: int = 0) -> np.ndarray:
         np.random.seed(seed)
@@ -2239,11 +2257,13 @@ class TestLaserTagRewardNextStateConsistency:
         """
         env = LaserTagPOMDP(
             discount_factor=0.95,
-            walls=set(),
-            dangerous_areas={(5, 5)},
-            dangerous_area_radius=0.0,
-            dangerous_area_penalty=5.0,
-            step_cost=1.0,
+            **_lt_pinned_kwargs(
+                walls=set(),
+                dangerous_areas={(5, 5)},
+                dangerous_area_radius=0.0,
+                dangerous_area_penalty=5.0,
+                step_cost=1.0,
+            ),
         )
         state = np.array([4.0, 5.0, 0.0, 0.0, 0.0])  # robot at (4, 5)
         # Realised next_state: robot landed at (5, 5) (the danger cell).
@@ -2280,11 +2300,13 @@ class TestLaserTagRewardNextStateConsistency:
         """
         env = LaserTagPOMDP(
             discount_factor=0.95,
-            walls={(3, 3)},
-            dangerous_areas={(3, 3)},
-            dangerous_area_radius=0.0,
-            dangerous_area_penalty=5.0,
-            step_cost=1.0,
+            **_lt_pinned_kwargs(
+                walls={(3, 3)},
+                dangerous_areas={(3, 3)},
+                dangerous_area_radius=0.0,
+                dangerous_area_penalty=5.0,
+                step_cost=1.0,
+            ),
         )
         state = np.array([3.0, 2.0, 0.0, 0.0, 0.0])
         # Realised next_state: robot stayed at (3, 2) (wall blocked the East move).
@@ -2322,12 +2344,14 @@ class TestLaserTagRewardNextStateConsistency:
         """
         env = LaserTagPOMDP(
             discount_factor=0.95,
-            walls={(3, 3), (4, 5)},
-            dangerous_areas={(2, 5), (5, 3)},
-            dangerous_area_radius=1.0,
-            dangerous_area_penalty=5.0,
-            step_cost=1.0,
-            transition_error_prob=0.5,
+            **_lt_pinned_kwargs(
+                walls={(3, 3), (4, 5)},
+                dangerous_areas={(2, 5), (5, 3)},
+                dangerous_area_radius=1.0,
+                dangerous_area_penalty=5.0,
+                step_cost=1.0,
+                transition_error_prob=0.5,
+            ),
         )
         np.random.seed(0)
         state = np.array([3.0, 4.0, 1.0, 1.0, 0.0])
@@ -2365,11 +2389,13 @@ class TestLaserTagRewardNextStateConsistency:
         """
         env = LaserTagPOMDP(
             discount_factor=0.95,
-            walls={(3, 3)},
-            dangerous_areas={(5, 5)},
-            dangerous_area_radius=0.0,
-            dangerous_area_penalty=5.0,
-            step_cost=1.0,
+            **_lt_pinned_kwargs(
+                walls={(3, 3)},
+                dangerous_areas={(5, 5)},
+                dangerous_area_radius=0.0,
+                dangerous_area_penalty=5.0,
+                step_cost=1.0,
+            ),
         )
         states = np.array(
             [
@@ -2456,7 +2482,9 @@ class TestNativeDiscreteRollout:
 
         Test type: integration
         """
-        env = LaserTagPOMDP(discount_factor=0.95, opponent_policy=opponent_policy)
+        env = LaserTagPOMDP(
+            discount_factor=0.95, **_lt_pinned_kwargs(opponent_policy=opponent_policy)
+        )
         state = np.array([0.0, 0.0, 6.0, 5.0, 0.0])
         max_depth = 15
         discount = 0.95
@@ -2561,7 +2589,7 @@ class TestNativeDiscreteRollout:
 
         Test type: unit
         """
-        env = LaserTagPOMDP(discount_factor=0.95)
+        env = LaserTagPOMDP(discount_factor=0.95, **_lt_pinned_kwargs())
         state = np.array([0.0, 0.0, 6.0, 5.0, 0.0])
         from POMDPPlanners.environments.laser_tag_pomdp import (
             _native,
@@ -2589,7 +2617,7 @@ class TestNativeDiscreteRollout:
 
         Test type: unit
         """
-        env = LaserTagPOMDP(discount_factor=0.95)
+        env = LaserTagPOMDP(discount_factor=0.95, **_lt_pinned_kwargs())
         terminal_state = np.array([3.0, 2.0, 3.0, 2.0, 1.0])
         from POMDPPlanners.environments.laser_tag_pomdp import (
             _native,
@@ -2619,10 +2647,12 @@ class TestNativeDiscreteRollout:
         """
         env = LaserTagPOMDP(
             discount_factor=0.95,
-            tag_reward=10.0,
-            tag_penalty=10.0,
-            step_cost=1.0,
-            dangerous_area_penalty=5.0,
+            **_lt_pinned_kwargs(
+                tag_reward=10.0,
+                tag_penalty=10.0,
+                step_cost=1.0,
+                dangerous_area_penalty=5.0,
+            ),
         )
         state = np.array([0.0, 0.0, 6.0, 5.0, 0.0])
         max_depth = 5
@@ -2671,7 +2701,7 @@ class TestNativeDiscreteRolloutRewardVariantGating:
 
         env = LaserTagPOMDP(
             discount_factor=0.95,
-            reward_model_type=RewardModelType.CONSTANT_HAZARD_PENALTY,
+            **_lt_pinned_kwargs(reward_model_type=RewardModelType.CONSTANT_HAZARD_PENALTY),
         )
         state = np.array([0.0, 0.0, 6.0, 5.0, 0.0])
 
@@ -2715,7 +2745,7 @@ class TestNativeDiscreteRolloutRewardVariantGating:
 
         env = LaserTagPOMDP(
             discount_factor=0.95,
-            reward_model_type=RewardModelType.ZERO_MEAN_HAZARD_SHOCK,
+            **_lt_pinned_kwargs(reward_model_type=RewardModelType.ZERO_MEAN_HAZARD_SHOCK),
         )
         state = np.array([0.0, 0.0, 6.0, 5.0, 0.0])
 
@@ -2759,8 +2789,10 @@ class TestNativeDiscreteRolloutRewardVariantGating:
 
         env = LaserTagPOMDP(
             discount_factor=0.95,
-            reward_model_type=RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY,
-            penalty_decay=1.5,
+            **_lt_pinned_kwargs(
+                reward_model_type=RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY,
+                penalty_decay=1.5,
+            ),
         )
         state = np.array([0.0, 0.0, 6.0, 5.0, 0.0])
 

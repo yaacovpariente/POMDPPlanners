@@ -28,6 +28,9 @@ from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_beliefs import (
 from POMDPPlanners.tests.test_core.test_belief.vectorized_updater_test_utils import (
     assert_batch_obs_log_likelihood_matches_loop,
 )
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
+    laser_tag_pinned_kwargs as _lt_pinned_kwargs,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -39,9 +42,11 @@ from POMDPPlanners.tests.test_core.test_belief.vectorized_updater_test_utils imp
 def env():
     return LaserTagPOMDP(
         discount_factor=0.95,
-        floor_shape=(11, 7),
-        walls={(1, 2), (3, 0), (3, 4), (5, 0), (6, 4), (9, 1), (9, 4), (10, 6)},
-        measurement_noise=1.0,
+        **_lt_pinned_kwargs(
+            floor_shape=(11, 7),
+            walls={(1, 2), (3, 0), (3, 4), (5, 0), (6, 4), (9, 1), (9, 4), (10, 6)},
+            measurement_noise=1.0,
+        ),
     )
 
 
@@ -49,9 +54,11 @@ def env():
 def env_no_walls():
     return LaserTagPOMDP(
         discount_factor=0.95,
-        floor_shape=(5, 5),
-        walls=set(),
-        measurement_noise=1.0,
+        **_lt_pinned_kwargs(
+            floor_shape=(5, 5),
+            walls=set(),
+            measurement_noise=1.0,
+        ),
     )
 
 
@@ -306,10 +313,12 @@ class TestBatchTransition:
         """
         env = LaserTagPOMDP(
             discount_factor=0.95,
-            floor_shape=(7, 11),
-            walls=walls,
-            dangerous_areas=set(),
-            opponent_policy=opponent_policy,
+            **_lt_pinned_kwargs(
+                floor_shape=(7, 11),
+                walls=walls,
+                dangerous_areas=set(),
+                opponent_policy=opponent_policy,
+            ),
         )
         updater = LaserTagVectorizedUpdater.from_environment(env)
         state = np.array([2.0, 5.0, 5.0, 5.0, 0.0])
@@ -499,9 +508,11 @@ class TestConfigId:
 
         env2 = LaserTagPOMDP(
             discount_factor=0.95,
-            floor_shape=env.floor_shape,
-            walls=env.walls,
-            measurement_noise=env.measurement_noise * 2,
+            **_lt_pinned_kwargs(
+                floor_shape=env.floor_shape,
+                walls=env.walls,
+                measurement_noise=env.measurement_noise * 2,
+            ),
         )
         u2 = LaserTagVectorizedUpdater.from_environment(env2)
         assert u1.config_id != u2.config_id
@@ -682,10 +693,12 @@ def _make_open_env() -> LaserTagPOMDP:
     """Build a wall-free 7x15 LaserTag env with unit measurement noise."""
     return LaserTagPOMDP(
         discount_factor=0.95,
-        floor_shape=(7, 15),
-        walls=set(),
-        dangerous_areas=set(),
-        measurement_noise=1.0,
+        **_lt_pinned_kwargs(
+            floor_shape=(7, 15),
+            walls=set(),
+            dangerous_areas=set(),
+            measurement_noise=1.0,
+        ),
     )
 
 

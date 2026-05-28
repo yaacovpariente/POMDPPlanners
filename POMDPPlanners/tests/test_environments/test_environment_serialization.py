@@ -30,6 +30,14 @@ from POMDPPlanners.environments import (
     SanityPOMDP,
     TigerPOMDP,
 )
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
+    continuous_light_dark_pinned_kwargs,
+    discrete_light_dark_pinned_kwargs,
+    pacman_pinned_kwargs,
+    rock_sample_pinned_kwargs,
+    sanity_pinned_kwargs,
+    tiger_pinned_kwargs,
+)
 
 # Set seeds for reproducible tests
 np.random.seed(42)
@@ -263,7 +271,7 @@ class TestEnvironmentStateSerialization:
 
         Test type: unit
         """
-        env = TigerPOMDP(discount_factor=0.95)
+        env = TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs())
         state = env.initial_state_dist().sample()[0]
 
         pickled_state = pickle.dumps(state)
@@ -282,7 +290,7 @@ class TestEnvironmentStateSerialization:
 
         Test type: unit
         """
-        env = PacManPOMDP(discount_factor=0.95)
+        env = PacManPOMDP(discount_factor=0.95, **pacman_pinned_kwargs())
         state = env.initial_state_dist().sample()[0]
 
         pickled_state = pickle.dumps(state)
@@ -302,7 +310,7 @@ class TestEnvironmentStateSerialization:
 
         Test type: unit
         """
-        env = DiscreteLightDarkPOMDP(discount_factor=0.95)
+        env = DiscreteLightDarkPOMDP(discount_factor=0.95, **discrete_light_dark_pinned_kwargs())
         state = env.initial_state_dist().sample()[0]
 
         pickled_state = pickle.dumps(state)
@@ -322,7 +330,7 @@ class TestEnvironmentStateSerialization:
 
         Test type: unit
         """
-        env = RockSamplePOMDP(discount_factor=0.95, map_size=(5, 5))
+        env = RockSamplePOMDP(discount_factor=0.95, **rock_sample_pinned_kwargs(map_size=(5, 5)))
         state = env.initial_state_dist().sample()[0]
 
         pickled_state = pickle.dumps(state)
@@ -401,10 +409,10 @@ class TestEnvironmentSerializationRoundTrip:
         Test type: integration
         """
         environments = [
-            TigerPOMDP(discount_factor=0.95),
-            SanityPOMDP(discount_factor=0.95),
-            PacManPOMDP(discount_factor=0.95),
-            DiscreteLightDarkPOMDP(discount_factor=0.95),
+            TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs()),
+            SanityPOMDP(discount_factor=0.95, **sanity_pinned_kwargs()),
+            PacManPOMDP(discount_factor=0.95, **pacman_pinned_kwargs()),
+            DiscreteLightDarkPOMDP(discount_factor=0.95, **discrete_light_dark_pinned_kwargs()),
         ]
 
         for env in environments:
@@ -445,7 +453,9 @@ class TestEnvironmentSerializationRoundTrip:
         Test type: unit
         """
         # Test continuous environments that use numpy arrays
-        env = ContinuousLightDarkPOMDP(discount_factor=0.95)
+        env = ContinuousLightDarkPOMDP(
+            discount_factor=0.95, **continuous_light_dark_pinned_kwargs()
+        )
 
         # Sample state
         state = env.initial_state_dist().sample()[0]

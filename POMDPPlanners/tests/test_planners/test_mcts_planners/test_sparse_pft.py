@@ -12,6 +12,7 @@ from POMDPPlanners.core.tree.arena import ACTION, BELIEF, Tree
 from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.planners.mcts_planners.sparse_pft import SparsePFT
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import sanity_pinned_kwargs
 
 np.random.seed(42)
 random.seed(42)
@@ -384,7 +385,7 @@ def test_sanity_pomdp_action_selection():
     Test type: unit
     """
     # Create environment and planner with appropriate parameters
-    environment = SanityPOMDP()
+    environment = SanityPOMDP(discount_factor=0.95, **sanity_pinned_kwargs())
     planner = SparsePFT(
         environment=environment,
         discount_factor=0.95,
@@ -428,7 +429,7 @@ def test_sanity_pomdp_belief_children():
 
     Test type: unit
     """
-    environment = SanityPOMDP()
+    environment = SanityPOMDP(discount_factor=0.95, **sanity_pinned_kwargs())
     planner = SparsePFT(
         environment=environment,
         discount_factor=0.95,

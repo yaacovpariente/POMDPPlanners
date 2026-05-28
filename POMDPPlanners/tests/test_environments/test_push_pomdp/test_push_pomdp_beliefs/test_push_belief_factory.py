@@ -17,12 +17,13 @@ from POMDPPlanners.environments.push_pomdp.push_pomdp import PushPOMDP
 from POMDPPlanners.environments.push_pomdp.push_pomdp_beliefs import (
     create_push_belief,
 )
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import push_pinned_kwargs
 from POMDPPlanners.utils.belief_factory import BeliefType
 
 
 @pytest.fixture
 def env():
-    return PushPOMDP(discount_factor=0.95)
+    return PushPOMDP(discount_factor=0.95, **push_pinned_kwargs())
 
 
 class TestCreatePushBelief:

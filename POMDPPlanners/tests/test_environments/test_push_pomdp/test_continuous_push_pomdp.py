@@ -29,6 +29,10 @@ from POMDPPlanners.environments.push_pomdp.continuous_push_pomdp import (
 from POMDPPlanners.tests.test_utils.confidence_interval_utils import (
     verify_metrics_within_confidence_intervals,
 )
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
+    continuous_push_discrete_actions_pinned_kwargs,
+    continuous_push_pinned_kwargs,
+)
 from POMDPPlanners.tests.test_utils.metric_invariants_utils import (
     verify_history_returns_bounded,
     verify_metric_sanity,
@@ -46,7 +50,6 @@ def _make_env(**overrides) -> ContinuousPushPOMDP:
     ``env.sample_next_state``.
     """
     defaults: dict = dict(  # pylint: disable=use-dict-literal
-        discount_factor=0.99,
         grid_size=10,
         push_threshold=1.0,
         friction_coefficient=0.3,
@@ -56,7 +59,11 @@ def _make_env(**overrides) -> ContinuousPushPOMDP:
         state_transition_cov_matrix=np.eye(2) * 0.01,
     )
     defaults.update(overrides)
-    return ContinuousPushPOMDP(**defaults)
+    discount_factor = defaults.pop("discount_factor", 0.99)
+    return ContinuousPushPOMDP(
+        discount_factor=discount_factor,
+        **continuous_push_pinned_kwargs(**defaults),
+    )
 
 
 # ------------------------------------------------------------------
@@ -315,10 +322,12 @@ class TestContinuousPushPOMDP:
         np.random.seed(42)
         self.env = ContinuousPushPOMDP(  # pylint: disable=attribute-defined-outside-init
             discount_factor=0.99,
-            grid_size=10,
-            obstacles=[(5.0, 5.0, 0.5)],
-            robot_radius=0.3,
-            state_transition_cov_matrix=np.eye(2) * 0.01,
+            **continuous_push_pinned_kwargs(
+                grid_size=10,
+                obstacles=[(5.0, 5.0, 0.5)],
+                robot_radius=0.3,
+                state_transition_cov_matrix=np.eye(2) * 0.01,
+            ),
         )
 
     def test_space_info_continuous(self):
@@ -460,10 +469,12 @@ class TestContinuousPushPOMDP:
         """
         env2 = ContinuousPushPOMDP(
             discount_factor=0.99,
-            grid_size=10,
-            obstacles=[(5.0, 5.0, 0.5)],
-            robot_radius=0.3,
-            state_transition_cov_matrix=np.eye(2) * 0.01,
+            **continuous_push_pinned_kwargs(
+                grid_size=10,
+                obstacles=[(5.0, 5.0, 0.5)],
+                robot_radius=0.3,
+                state_transition_cov_matrix=np.eye(2) * 0.01,
+            ),
         )
         assert self.env.config_id == env2.config_id
 
@@ -479,7 +490,9 @@ class TestContinuousPushPOMDP:
         Test type: unit
         """
         fixed = np.array([1.0, 1.0, 5.0, 5.0, 9.0, 9.0])
-        env = ContinuousPushPOMDP(discount_factor=0.99, initial_state=fixed)
+        env = ContinuousPushPOMDP(
+            discount_factor=0.99, **continuous_push_pinned_kwargs(initial_state=fixed)
+        )
         state = env.initial_state_dist().sample()[0]
         np.testing.assert_array_equal(state, fixed)
 
@@ -494,7 +507,7 @@ class TestContinuousPushPOMDP:
 
         Test type: unit
         """
-        env = ContinuousPushPOMDP(discount_factor=0.99)
+        env = ContinuousPushPOMDP(discount_factor=0.99, **continuous_push_pinned_kwargs())
         state = env.initial_state_dist().sample()[0]
         result = env.sample_next_step(state, np.array([1.0, 0.0]))
         assert result[0].shape == (6,)
@@ -695,12 +708,14 @@ class TestContinuousPushStochasticObstacleHitProbability:
     def _stochastic_env(hit_probability: float) -> ContinuousPushPOMDP:
         return ContinuousPushPOMDP(
             discount_factor=0.99,
-            grid_size=10,
-            obstacles=[(5.0, 5.0, 0.5)],
-            obstacle_penalty=TestContinuousPushStochasticObstacleHitProbability.OBSTACLE_PENALTY,
-            obstacle_hit_probability=hit_probability,
-            robot_radius=0.3,
-            state_transition_cov_matrix=np.eye(2) * 1e-8,
+            **continuous_push_pinned_kwargs(
+                grid_size=10,
+                obstacles=[(5.0, 5.0, 0.5)],
+                obstacle_penalty=TestContinuousPushStochasticObstacleHitProbability.OBSTACLE_PENALTY,
+                obstacle_hit_probability=hit_probability,
+                robot_radius=0.3,
+                state_transition_cov_matrix=np.eye(2) * 1e-8,
+            ),
         )
 
     @staticmethod
@@ -721,7 +736,7 @@ class TestContinuousPushStochasticObstacleHitProbability:
 
         Test type: unit
         """
-        env = ContinuousPushPOMDP(discount_factor=0.99)
+        env = ContinuousPushPOMDP(discount_factor=0.99, **continuous_push_pinned_kwargs())
         assert env.obstacle_hit_probability == 1.0
 
     def test_hit_probability_zero_never_applies_penalty(self):
@@ -861,7 +876,10 @@ class TestContinuousPushStochasticObstacleHitProbability:
         Test type: unit
         """
         with pytest.raises(ValueError, match="obstacle_hit_probability"):
-            ContinuousPushPOMDP(discount_factor=0.99, obstacle_hit_probability=bad_value)
+            ContinuousPushPOMDP(
+                discount_factor=0.99,
+                **continuous_push_pinned_kwargs(obstacle_hit_probability=bad_value),
+            )
 
 
 # ------------------------------------------------------------------
@@ -887,13 +905,15 @@ class TestContinuousPushDangerousAreas:
     def _danger_env(hit_probability: float = 1.0) -> ContinuousPushPOMDP:
         return ContinuousPushPOMDP(
             discount_factor=0.99,
-            grid_size=10,
-            dangerous_areas=[(5.0, 5.0)],
-            dangerous_area_radius=0.5,
-            dangerous_area_penalty=TestContinuousPushDangerousAreas.DANGER_PENALTY,
-            dangerous_area_hit_probability=hit_probability,
-            robot_radius=0.3,
-            state_transition_cov_matrix=np.eye(2) * 1e-8,
+            **continuous_push_pinned_kwargs(
+                grid_size=10,
+                dangerous_areas=[(5.0, 5.0)],
+                dangerous_area_radius=0.5,
+                dangerous_area_penalty=TestContinuousPushDangerousAreas.DANGER_PENALTY,
+                dangerous_area_hit_probability=hit_probability,
+                robot_radius=0.3,
+                state_transition_cov_matrix=np.eye(2) * 1e-8,
+            ),
         )
 
     @staticmethod
@@ -925,9 +945,11 @@ class TestContinuousPushDangerousAreas:
         env = self._danger_env()
         env_safe = ContinuousPushPOMDP(
             discount_factor=0.99,
-            grid_size=10,
-            robot_radius=0.3,
-            state_transition_cov_matrix=np.eye(2) * 1e-8,
+            **continuous_push_pinned_kwargs(
+                grid_size=10,
+                robot_radius=0.3,
+                state_transition_cov_matrix=np.eye(2) * 1e-8,
+            ),
         )
         state = self._enter_state()
         np.random.seed(0)
@@ -948,7 +970,7 @@ class TestContinuousPushDangerousAreas:
 
         Test type: unit
         """
-        env = ContinuousPushPOMDP(discount_factor=0.99)
+        env = ContinuousPushPOMDP(discount_factor=0.99, **continuous_push_pinned_kwargs())
         assert not env.dangerous_areas
         assert env._dangerous_areas_arr.shape == (0, 2)
         assert env.dangerous_area_hit_probability == 1.0
@@ -970,9 +992,11 @@ class TestContinuousPushDangerousAreas:
         env = self._danger_env()
         env_safe = ContinuousPushPOMDP(
             discount_factor=0.99,
-            grid_size=10,
-            robot_radius=0.3,
-            state_transition_cov_matrix=np.eye(2) * 1e-8,
+            **continuous_push_pinned_kwargs(
+                grid_size=10,
+                robot_radius=0.3,
+                state_transition_cov_matrix=np.eye(2) * 1e-8,
+            ),
         )
         states = np.stack([self._enter_state(), self._safe_state()])
         np.random.seed(0)
@@ -1000,18 +1024,22 @@ class TestContinuousPushDangerousAreas:
         """
         env = ContinuousPushPOMDP(
             discount_factor=0.99,
-            grid_size=10,
-            dangerous_areas=[(5.0, 5.0), (5.1, 5.0)],
-            dangerous_area_radius=0.5,
-            dangerous_area_penalty=self.DANGER_PENALTY,
-            robot_radius=0.3,
-            state_transition_cov_matrix=np.eye(2) * 1e-8,
+            **continuous_push_pinned_kwargs(
+                grid_size=10,
+                dangerous_areas=[(5.0, 5.0), (5.1, 5.0)],
+                dangerous_area_radius=0.5,
+                dangerous_area_penalty=self.DANGER_PENALTY,
+                robot_radius=0.3,
+                state_transition_cov_matrix=np.eye(2) * 1e-8,
+            ),
         )
         env_safe = ContinuousPushPOMDP(
             discount_factor=0.99,
-            grid_size=10,
-            robot_radius=0.3,
-            state_transition_cov_matrix=np.eye(2) * 1e-8,
+            **continuous_push_pinned_kwargs(
+                grid_size=10,
+                robot_radius=0.3,
+                state_transition_cov_matrix=np.eye(2) * 1e-8,
+            ),
         )
         state = self._enter_state()
         np.random.seed(0)
@@ -1102,13 +1130,15 @@ class TestContinuousPushDangerousAreas:
         """
         env = ContinuousPushPOMDPDiscreteActions(
             discount_factor=0.99,
-            grid_size=10,
-            dangerous_areas=[(5.0, 5.0)],
-            dangerous_area_radius=0.5,
-            dangerous_area_penalty=self.DANGER_PENALTY,
-            dangerous_area_hit_probability=0.5,
-            robot_radius=0.3,
-            state_transition_cov_matrix=np.eye(2) * 1e-8,
+            **continuous_push_discrete_actions_pinned_kwargs(
+                grid_size=10,
+                dangerous_areas=[(5.0, 5.0)],
+                dangerous_area_radius=0.5,
+                dangerous_area_penalty=self.DANGER_PENALTY,
+                dangerous_area_hit_probability=0.5,
+                robot_radius=0.3,
+                state_transition_cov_matrix=np.eye(2) * 1e-8,
+            ),
         )
 
         call_kwargs: List[Dict[str, Any]] = []
@@ -1145,13 +1175,15 @@ class TestContinuousPushDangerousHitProbability:
     def _danger_env(hit_probability: float) -> ContinuousPushPOMDP:
         return ContinuousPushPOMDP(
             discount_factor=0.99,
-            grid_size=10,
-            dangerous_areas=[(5.0, 5.0)],
-            dangerous_area_radius=0.5,
-            dangerous_area_penalty=TestContinuousPushDangerousHitProbability.DANGER_PENALTY,
-            dangerous_area_hit_probability=hit_probability,
-            robot_radius=0.3,
-            state_transition_cov_matrix=np.eye(2) * 1e-8,
+            **continuous_push_pinned_kwargs(
+                grid_size=10,
+                dangerous_areas=[(5.0, 5.0)],
+                dangerous_area_radius=0.5,
+                dangerous_area_penalty=TestContinuousPushDangerousHitProbability.DANGER_PENALTY,
+                dangerous_area_hit_probability=hit_probability,
+                robot_radius=0.3,
+                state_transition_cov_matrix=np.eye(2) * 1e-8,
+            ),
         )
 
     @staticmethod
@@ -1170,7 +1202,7 @@ class TestContinuousPushDangerousHitProbability:
 
         Test type: unit
         """
-        env = ContinuousPushPOMDP(discount_factor=0.99)
+        env = ContinuousPushPOMDP(discount_factor=0.99, **continuous_push_pinned_kwargs())
         assert env.dangerous_area_hit_probability == 1.0
 
     def test_hit_probability_zero_never_applies_penalty(self):
@@ -1252,7 +1284,10 @@ class TestContinuousPushDangerousHitProbability:
         Test type: unit
         """
         with pytest.raises(ValueError, match="dangerous_area_hit_probability"):
-            ContinuousPushPOMDP(discount_factor=0.99, dangerous_area_hit_probability=bad_value)
+            ContinuousPushPOMDP(
+                discount_factor=0.99,
+                **continuous_push_pinned_kwargs(dangerous_area_hit_probability=bad_value),
+            )
 
     def test_reward_batch_honours_hit_probability_zero(self):
         """Batch reward with hit_probability=0 applies no dangerous-area penalty.
@@ -1297,10 +1332,12 @@ class TestContinuousPushPOMDPDiscreteActionsDangerousAreas:
         """
         env = ContinuousPushPOMDPDiscreteActions(
             discount_factor=0.99,
-            dangerous_areas=[(3.0, 3.0)],
-            dangerous_area_radius=0.4,
-            dangerous_area_penalty=self.DANGER_PENALTY,
-            dangerous_area_hit_probability=0.7,
+            **continuous_push_discrete_actions_pinned_kwargs(
+                dangerous_areas=[(3.0, 3.0)],
+                dangerous_area_radius=0.4,
+                dangerous_area_penalty=self.DANGER_PENALTY,
+                dangerous_area_hit_probability=0.7,
+            ),
         )
         assert env.dangerous_areas == [(3.0, 3.0)]
         assert env.dangerous_area_radius == 0.4
@@ -1325,18 +1362,22 @@ class TestContinuousPushPOMDPDiscreteActionsDangerousAreas:
         """
         env = ContinuousPushPOMDPDiscreteActions(
             discount_factor=0.99,
-            grid_size=10,
-            dangerous_areas=[(5.0, 5.0)],
-            dangerous_area_radius=0.5,
-            dangerous_area_penalty=self.DANGER_PENALTY,
-            robot_radius=0.3,
-            state_transition_cov_matrix=np.eye(2) * 1e-8,
+            **continuous_push_discrete_actions_pinned_kwargs(
+                grid_size=10,
+                dangerous_areas=[(5.0, 5.0)],
+                dangerous_area_radius=0.5,
+                dangerous_area_penalty=self.DANGER_PENALTY,
+                robot_radius=0.3,
+                state_transition_cov_matrix=np.eye(2) * 1e-8,
+            ),
         )
         env_safe = ContinuousPushPOMDPDiscreteActions(
             discount_factor=0.99,
-            grid_size=10,
-            robot_radius=0.3,
-            state_transition_cov_matrix=np.eye(2) * 1e-8,
+            **continuous_push_discrete_actions_pinned_kwargs(
+                grid_size=10,
+                robot_radius=0.3,
+                state_transition_cov_matrix=np.eye(2) * 1e-8,
+            ),
         )
         state = np.array([4.0, 5.0, 1.0, 1.0, 9.0, 9.0])
         np.random.seed(0)
@@ -1360,9 +1401,11 @@ class TestContinuousPushPOMDPDiscreteActions:
         # pylint: disable=attribute-defined-outside-init
         self.env = ContinuousPushPOMDPDiscreteActions(
             discount_factor=0.99,
-            grid_size=10,
-            robot_radius=0.3,
-            state_transition_cov_matrix=np.eye(2) * 0.01,
+            **continuous_push_discrete_actions_pinned_kwargs(
+                grid_size=10,
+                robot_radius=0.3,
+                state_transition_cov_matrix=np.eye(2) * 0.01,
+            ),
         )
 
     def test_actions_list(self):
@@ -1424,8 +1467,10 @@ class TestContinuousPushPOMDPDiscreteActions:
         low_cov = np.eye(2) * 1e-8
         env = ContinuousPushPOMDPDiscreteActions(
             discount_factor=0.99,
-            state_transition_cov_matrix=low_cov,
-            robot_radius=0.3,
+            **continuous_push_discrete_actions_pinned_kwargs(
+                state_transition_cov_matrix=low_cov,
+                robot_radius=0.3,
+            ),
         )
         state = np.array([5.0, 5.0, 1.0, 1.0, 9.0, 9.0])
 
@@ -1459,12 +1504,14 @@ class TestContinuousPushDiscreteActionsHitProbability:
     def _stochastic_env(hit_probability: float) -> ContinuousPushPOMDPDiscreteActions:
         return ContinuousPushPOMDPDiscreteActions(
             discount_factor=0.99,
-            grid_size=10,
-            obstacles=[(5.0, 5.0, 0.5)],
-            obstacle_penalty=TestContinuousPushDiscreteActionsHitProbability.OBSTACLE_PENALTY,
-            obstacle_hit_probability=hit_probability,
-            robot_radius=0.3,
-            state_transition_cov_matrix=np.eye(2) * 1e-8,
+            **continuous_push_discrete_actions_pinned_kwargs(
+                grid_size=10,
+                obstacles=[(5.0, 5.0, 0.5)],
+                obstacle_penalty=TestContinuousPushDiscreteActionsHitProbability.OBSTACLE_PENALTY,
+                obstacle_hit_probability=hit_probability,
+                robot_radius=0.3,
+                state_transition_cov_matrix=np.eye(2) * 1e-8,
+            ),
         )
 
     def test_default_hit_probability_is_one(self):
@@ -1478,7 +1525,9 @@ class TestContinuousPushDiscreteActionsHitProbability:
 
         Test type: unit
         """
-        env = ContinuousPushPOMDPDiscreteActions(discount_factor=0.99)
+        env = ContinuousPushPOMDPDiscreteActions(
+            discount_factor=0.99, **continuous_push_discrete_actions_pinned_kwargs()
+        )
         assert env.obstacle_hit_probability == 1.0
 
     @pytest.mark.parametrize("p", [0.0, 0.3, 0.7, 1.0])
@@ -1534,7 +1583,10 @@ class TestContinuousPushDiscreteActionsHitProbability:
         """
         with pytest.raises(ValueError, match="obstacle_hit_probability"):
             ContinuousPushPOMDPDiscreteActions(
-                discount_factor=0.99, obstacle_hit_probability=bad_value
+                discount_factor=0.99,
+                **continuous_push_discrete_actions_pinned_kwargs(
+                    obstacle_hit_probability=bad_value
+                ),
             )
 
 
@@ -1566,7 +1618,9 @@ class TestDiscreteActionsResolvesAction:
         """
         env = ContinuousPushPOMDPDiscreteActions(
             discount_factor=0.99,
-            state_transition_cov_matrix=np.eye(2) * 0.01,
+            **continuous_push_discrete_actions_pinned_kwargs(
+                state_transition_cov_matrix=np.eye(2) * 0.01,
+            ),
         )
         state = np.array([5.0, 5.0, 5.5, 5.0, 9.0, 9.0])
         for str_action in env.get_actions():
@@ -1591,7 +1645,9 @@ class TestDiscreteActionsResolvesAction:
 
         Test type: unit
         """
-        env = ContinuousPushPOMDPDiscreteActions(discount_factor=0.99)
+        env = ContinuousPushPOMDPDiscreteActions(
+            discount_factor=0.99, **continuous_push_discrete_actions_pinned_kwargs()
+        )
         next_state = np.array([5.0, 5.0, 5.5, 5.0, 9.0, 9.0])
         for str_action in env.get_actions():
             vec = env.action_to_vector[str_action]
@@ -1615,7 +1671,9 @@ class TestDiscreteActionsResolvesAction:
 
         Test type: unit
         """
-        env = ContinuousPushPOMDPDiscreteActions(discount_factor=0.99)
+        env = ContinuousPushPOMDPDiscreteActions(
+            discount_factor=0.99, **continuous_push_discrete_actions_pinned_kwargs()
+        )
         for action_name, vec in env.action_to_vector.items():
             assert isinstance(vec, np.ndarray), action_name
             assert vec.dtype == np.float64, action_name
@@ -1642,8 +1700,10 @@ class TestDiscreteActionsResolvesAction:
         """
         env = ContinuousPushPOMDPDiscreteActions(
             discount_factor=0.99,
-            state_transition_cov_matrix=np.eye(2) * 0.01,
-            observation_noise=0.3,
+            **continuous_push_discrete_actions_pinned_kwargs(
+                state_transition_cov_matrix=np.eye(2) * 0.01,
+                observation_noise=0.3,
+            ),
         )
         state = np.array([5.0, 5.0, 5.5, 5.0, 9.0, 9.0])
         next_states = [
@@ -1692,8 +1752,10 @@ class TestSampleNSamplesContract:
         """
         env = ContinuousPushPOMDP(
             discount_factor=0.99,
-            state_transition_cov_matrix=np.eye(2) * 0.01,
-            robot_radius=0.3,
+            **continuous_push_pinned_kwargs(
+                state_transition_cov_matrix=np.eye(2) * 0.01,
+                robot_radius=0.3,
+            ),
         )
         state = np.array([2.5, 3.1, 3.0, 3.0, 8.0, 8.0])
         action = np.array([1.0, 0.0])
@@ -1725,8 +1787,10 @@ class TestSampleNSamplesContract:
         """
         env = ContinuousPushPOMDP(
             discount_factor=0.99,
-            observation_noise=0.3,
-            robot_radius=0.3,
+            **continuous_push_pinned_kwargs(
+                observation_noise=0.3,
+                robot_radius=0.3,
+            ),
         )
         next_state = np.array([5.0, 5.0, 4.5, 5.5, 8.0, 8.0])
         action = np.array([0.5, 0.5])
@@ -1764,15 +1828,17 @@ class TestNativeRolloutEquivalence:
     def _make_env(self) -> ContinuousPushPOMDPDiscreteActions:
         return ContinuousPushPOMDPDiscreteActions(
             discount_factor=0.95,
-            grid_size=10,
-            push_threshold=1.0,
-            friction_coefficient=0.3,
-            max_push=2.0,
-            observation_noise=0.1,
-            obstacles=[(5.0, 5.0, 0.5)],
-            obstacle_penalty=-10.0,
-            robot_radius=0.3,
-            state_transition_cov_matrix=np.eye(2) * 0.05,
+            **continuous_push_discrete_actions_pinned_kwargs(
+                grid_size=10,
+                push_threshold=1.0,
+                friction_coefficient=0.3,
+                max_push=2.0,
+                observation_noise=0.1,
+                obstacles=[(5.0, 5.0, 0.5)],
+                obstacle_penalty=-10.0,
+                robot_radius=0.3,
+                state_transition_cov_matrix=np.eye(2) * 0.05,
+            ),
         )
 
     def test_native_rollout_is_float(self):
@@ -1998,8 +2064,10 @@ class TestNativeRolloutEquivalence:
 
         env = ContinuousPushPOMDP(
             discount_factor=0.95,
-            grid_size=10,
-            state_transition_cov_matrix=np.eye(2) * 0.05,
+            **continuous_push_pinned_kwargs(
+                grid_size=10,
+                state_transition_cov_matrix=np.eye(2) * 0.05,
+            ),
         )
         state = np.array([2.0, 2.0, 5.0, 5.0, 9.0, 9.0])
         sampler = UnitCircleActionSampler(max_action_magnitude=1.0)
@@ -2033,22 +2101,26 @@ class TestNativeRolloutEquivalence:
         """
         env_safe = ContinuousPushPOMDPDiscreteActions(
             discount_factor=0.99,
-            grid_size=10,
-            push_threshold=1.0,
-            friction_coefficient=0.3,
-            robot_radius=0.3,
-            state_transition_cov_matrix=np.eye(2) * 1e-8,
+            **continuous_push_discrete_actions_pinned_kwargs(
+                grid_size=10,
+                push_threshold=1.0,
+                friction_coefficient=0.3,
+                robot_radius=0.3,
+                state_transition_cov_matrix=np.eye(2) * 1e-8,
+            ),
         )
         env_danger = ContinuousPushPOMDPDiscreteActions(
             discount_factor=0.99,
-            grid_size=10,
-            push_threshold=1.0,
-            friction_coefficient=0.3,
-            robot_radius=0.3,
-            state_transition_cov_matrix=np.eye(2) * 1e-8,
-            dangerous_areas=[(5.0, 5.0)],
-            dangerous_area_radius=0.5,
-            dangerous_area_penalty=-7.0,
+            **continuous_push_discrete_actions_pinned_kwargs(
+                grid_size=10,
+                push_threshold=1.0,
+                friction_coefficient=0.3,
+                robot_radius=0.3,
+                state_transition_cov_matrix=np.eye(2) * 1e-8,
+                dangerous_areas=[(5.0, 5.0)],
+                dangerous_area_radius=0.5,
+                dangerous_area_penalty=-7.0,
+            ),
         )
         state = np.array([4.0, 5.0, 1.0, 1.0, 9.0, 9.0])
         sampler = _FixedActionSampler(["right"])
@@ -2082,15 +2154,19 @@ class TestNativeRolloutEquivalence:
         """
         env_a = ContinuousPushPOMDPDiscreteActions(
             discount_factor=0.99,
-            grid_size=10,
-            robot_radius=0.3,
-            state_transition_cov_matrix=np.eye(2) * 0.01,
+            **continuous_push_discrete_actions_pinned_kwargs(
+                grid_size=10,
+                robot_radius=0.3,
+                state_transition_cov_matrix=np.eye(2) * 0.01,
+            ),
         )
         env_b = ContinuousPushPOMDPDiscreteActions(
             discount_factor=0.99,
-            grid_size=10,
-            robot_radius=0.3,
-            state_transition_cov_matrix=np.eye(2) * 0.01,
+            **continuous_push_discrete_actions_pinned_kwargs(
+                grid_size=10,
+                robot_radius=0.3,
+                state_transition_cov_matrix=np.eye(2) * 0.01,
+            ),
         )
         state = np.array([2.0, 2.0, 6.0, 6.0, 9.0, 9.0])
         sampler = _FixedActionSampler(["right"] * 8)
@@ -2131,23 +2207,29 @@ class TestContinuousPushRewardNextStateConsistency:
     def _obstacle_env() -> ContinuousPushPOMDP:
         return ContinuousPushPOMDP(
             discount_factor=0.99,
-            grid_size=10,
-            obstacles=[(5.0, 5.0, 0.5)],
-            obstacle_penalty=(TestContinuousPushRewardNextStateConsistency.OBSTACLE_PENALTY),
-            robot_radius=0.3,
-            state_transition_cov_matrix=np.eye(2) * 0.01,
+            **continuous_push_pinned_kwargs(
+                grid_size=10,
+                obstacles=[(5.0, 5.0, 0.5)],
+                obstacle_penalty=(TestContinuousPushRewardNextStateConsistency.OBSTACLE_PENALTY),
+                robot_radius=0.3,
+                state_transition_cov_matrix=np.eye(2) * 0.01,
+            ),
         )
 
     @staticmethod
     def _danger_env() -> ContinuousPushPOMDP:
         return ContinuousPushPOMDP(
             discount_factor=0.99,
-            grid_size=10,
-            dangerous_areas=[(5.0, 5.0)],
-            dangerous_area_radius=0.5,
-            dangerous_area_penalty=(TestContinuousPushRewardNextStateConsistency.DANGER_PENALTY),
-            robot_radius=0.3,
-            state_transition_cov_matrix=np.eye(2) * 0.01,
+            **continuous_push_pinned_kwargs(
+                grid_size=10,
+                dangerous_areas=[(5.0, 5.0)],
+                dangerous_area_radius=0.5,
+                dangerous_area_penalty=(
+                    TestContinuousPushRewardNextStateConsistency.DANGER_PENALTY
+                ),
+                robot_radius=0.3,
+                state_transition_cov_matrix=np.eye(2) * 0.01,
+            ),
         )
 
     def test_reward_obstacle_penalty_uses_realised_next_state(self):
@@ -2283,11 +2365,13 @@ class TestContinuousPushRewardNextStateConsistency:
         """
         env = ContinuousPushPOMDP(
             discount_factor=0.99,
-            grid_size=10,
-            obstacles=[(5.0, 5.0, 0.5)],
-            obstacle_penalty=self.OBSTACLE_PENALTY,
-            robot_radius=0.3,
-            state_transition_cov_matrix=np.eye(2) * 0.5,
+            **continuous_push_pinned_kwargs(
+                grid_size=10,
+                obstacles=[(5.0, 5.0, 0.5)],
+                obstacle_penalty=self.OBSTACLE_PENALTY,
+                robot_radius=0.3,
+                state_transition_cov_matrix=np.eye(2) * 0.5,
+            ),
         )
         state = np.array([4.6, 5.0, 1.0, 1.0, 9.0, 9.0])
         action = np.array([0.4, 0.0])

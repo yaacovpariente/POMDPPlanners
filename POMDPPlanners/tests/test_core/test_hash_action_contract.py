@@ -42,6 +42,22 @@ from POMDPPlanners.environments.safety_ant_velocity_pomdp.safety_ant_velocity_po
 )
 from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
+    cartpole_pinned_kwargs,
+    continuous_laser_tag_discrete_actions_pinned_kwargs,
+    continuous_laser_tag_pinned_kwargs,
+    continuous_light_dark_discrete_actions_pinned_kwargs,
+    continuous_light_dark_pinned_kwargs,
+    continuous_push_pinned_kwargs,
+    discrete_light_dark_pinned_kwargs,
+    laser_tag_pinned_kwargs,
+    mountain_car_pinned_kwargs,
+    pacman_pinned_kwargs,
+    push_pinned_kwargs,
+    rock_sample_pinned_kwargs,
+    safety_ant_velocity_pinned_kwargs,
+    tiger_pinned_kwargs,
+)
 from POMDPPlanners.planners.mcts_planners.pft_dpw import PFT_DPW
 from POMDPPlanners.planners.mcts_planners.pomcpow import POMCPOW
 from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
@@ -60,75 +76,97 @@ random.seed(42)
 
 
 def _continuous_light_dark_factory():
-    env = ContinuousLightDarkPOMDP(discount_factor=0.95)
+    env = ContinuousLightDarkPOMDP(discount_factor=0.95, **continuous_light_dark_pinned_kwargs())
     actions = [np.array([1.0, 0.0]), np.array([0.0, 1.0])]
     return env, actions
 
 
 def _continuous_light_dark_discrete_factory():
-    env = ContinuousLightDarkPOMDPDiscreteActions(discount_factor=0.95)
+    env = ContinuousLightDarkPOMDPDiscreteActions(
+        discount_factor=0.95,
+        **continuous_light_dark_discrete_actions_pinned_kwargs(),
+    )
     return env, env.get_actions()
 
 
 def _discrete_light_dark_factory():
-    env = DiscreteLightDarkPOMDP(discount_factor=0.95)
+    env = DiscreteLightDarkPOMDP(discount_factor=0.95, **discrete_light_dark_pinned_kwargs())
     return env, env.get_actions()
 
 
 def _continuous_laser_tag_factory():
-    env = ContinuousLaserTagPOMDP(discount_factor=0.95)
+    env = ContinuousLaserTagPOMDP(discount_factor=0.95, **continuous_laser_tag_pinned_kwargs())
     actions = [np.array([1.0, 0.0, 0.0]), np.array([0.0, 1.0, 0.0])]
     return env, actions
 
 
 def _continuous_laser_tag_discrete_factory():
-    env = ContinuousLaserTagPOMDPDiscreteActions(discount_factor=0.95)
+    env = ContinuousLaserTagPOMDPDiscreteActions(
+        discount_factor=0.95,
+        **continuous_laser_tag_discrete_actions_pinned_kwargs(),
+    )
     return env, env.get_actions()
 
 
 def _laser_tag_factory():
-    env = LaserTagPOMDP(discount_factor=0.95)
+    env = LaserTagPOMDP(discount_factor=0.95, **laser_tag_pinned_kwargs())
     return env, env.get_actions()
 
 
 def _continuous_push_factory():
-    env = ContinuousPushPOMDP(discount_factor=0.95)
+    env = ContinuousPushPOMDP(discount_factor=0.95, **continuous_push_pinned_kwargs())
     actions = [np.array([1.0, 0.0]), np.array([0.0, 1.0])]
     return env, actions
 
 
 def _push_factory():
-    env = PushPOMDP(discount_factor=0.95)
+    env = PushPOMDP(discount_factor=0.95, **push_pinned_kwargs())
     return env, env.get_actions()
 
 
 def _cartpole_factory():
-    env = CartPolePOMDP(discount_factor=0.99, noise_cov=np.diag([0.1, 0.1, 0.1, 0.1]))
+    env = CartPolePOMDP(
+        discount_factor=0.99,
+        noise_cov=np.diag([0.1, 0.1, 0.1, 0.1]),
+        **cartpole_pinned_kwargs(),
+    )
     return env, env.get_actions()
 
 
 def _mountain_car_factory():
-    env = MountainCarPOMDP(discount_factor=0.99)
+    env = MountainCarPOMDP(discount_factor=0.99, **mountain_car_pinned_kwargs())
     return env, env.get_actions()
 
 
 def _pacman_factory():
-    env = PacManPOMDP(maze_size=(5, 5), walls=set(), initial_pellets=[(2, 2)])
+    env = PacManPOMDP(
+        discount_factor=0.95,
+        **pacman_pinned_kwargs(
+            maze_size=(5, 5),
+            walls=set(),
+            initial_pellets=[(2, 2)],
+            initial_ghost_positions=None,
+            ghost_strategies=None,
+        ),
+    )
     return env, env.get_actions()
 
 
 def _rock_sample_factory():
-    env = RockSamplePOMDP(map_size=(5, 5), rock_positions=[(0, 0), (2, 2)])
+    env = RockSamplePOMDP(
+        discount_factor=0.95,
+        **rock_sample_pinned_kwargs(map_size=(5, 5), rock_positions=[(0, 0), (2, 2)]),
+    )
     return env, env.get_actions()
 
 
 def _safety_ant_factory():
-    env = SafeAntVelocityPOMDP(discount_factor=0.95)
+    env = SafeAntVelocityPOMDP(discount_factor=0.95, **safety_ant_velocity_pinned_kwargs())
     return env, env.get_actions()
 
 
 def _tiger_factory():
-    env = TigerPOMDP(discount_factor=0.95)
+    env = TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs())
     return env, env.get_actions()
 
 
@@ -302,7 +340,7 @@ class _FixedNDArrayActionSampler(ActionSampler):
 
 
 def _run_pomcpow_continuous_light_dark():
-    env = ContinuousLightDarkPOMDP(discount_factor=0.95)
+    env = ContinuousLightDarkPOMDP(discount_factor=0.95, **continuous_light_dark_pinned_kwargs())
     sampler = _FixedNDArrayActionSampler(
         [np.array([1.0, 0.0]), np.array([0.0, 1.0]), np.array([-1.0, 0.0])]
     )
@@ -325,7 +363,7 @@ def _run_pomcpow_continuous_light_dark():
 
 
 def _run_pft_dpw_continuous_light_dark():
-    env = ContinuousLightDarkPOMDP(discount_factor=0.95)
+    env = ContinuousLightDarkPOMDP(discount_factor=0.95, **continuous_light_dark_pinned_kwargs())
     sampler = _FixedNDArrayActionSampler(
         [np.array([1.0, 0.0]), np.array([0.0, 1.0]), np.array([-1.0, 0.0])]
     )
@@ -454,7 +492,7 @@ def test_action_child_lookup_distinguishes_distinct_ndarray_actions():
 
     Test type: integration
     """
-    env = ContinuousLightDarkPOMDP(discount_factor=0.95)
+    env = ContinuousLightDarkPOMDP(discount_factor=0.95, **continuous_light_dark_pinned_kwargs())
     belief = get_initial_belief(pomdp=env, n_particles=4, resampling=True)
     tree = Tree()
     root_id = tree.add_belief_node(belief=belief)

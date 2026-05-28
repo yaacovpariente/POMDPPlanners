@@ -16,16 +16,19 @@ from POMDPPlanners.tests.test_core.test_belief.vectorized_updater_test_utils imp
     assert_batch_obs_log_likelihood_matches_loop,
     assert_batch_transition_matches_loop,
 )
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import rock_sample_pinned_kwargs
 
 
 @pytest.fixture()
 def simple_env():
     return RockSamplePOMDP(
-        map_size=(5, 5),
-        rock_positions=[(1, 1), (3, 3)],
-        init_pos=(2, 2),
-        sensor_efficiency=10.0,
         discount_factor=0.95,
+        **rock_sample_pinned_kwargs(
+            map_size=(5, 5),
+            rock_positions=[(1, 1), (3, 3)],
+            init_pos=(2, 2),
+            sensor_efficiency=10.0,
+        ),
     )
 
 

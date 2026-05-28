@@ -22,6 +22,10 @@ from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
 from POMDPPlanners.planners.mcts_planners.pomcp_dpw import POMCP_DPW
 from POMDPPlanners.planners.mcts_planners.pomcpow import POMCPOW
 from POMDPPlanners.planners.mcts_planners.sparse_pft import SparsePFT
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
+    discrete_light_dark_pinned_kwargs,
+    rock_sample_pinned_kwargs,
+)
 from POMDPPlanners.utils.action_samplers import DiscreteActionSampler
 
 DISCOUNT = 0.95
@@ -78,7 +82,7 @@ def test_bench_pomcp_rocksample(benchmark):
 
     Test type: performance
     """
-    env = RockSamplePOMDP(discount_factor=DISCOUNT)
+    env = RockSamplePOMDP(discount_factor=DISCOUNT, **rock_sample_pinned_kwargs())
     planner = POMCP(
         environment=env,
         discount_factor=DISCOUNT,
@@ -102,7 +106,7 @@ def test_bench_pomcp_discrete_ld(benchmark):
 
     Test type: performance
     """
-    env = DiscreteLightDarkPOMDP(discount_factor=DISCOUNT)
+    env = DiscreteLightDarkPOMDP(discount_factor=DISCOUNT, **discrete_light_dark_pinned_kwargs())
     planner = POMCP(
         environment=env,
         discount_factor=DISCOUNT,
@@ -157,7 +161,7 @@ def test_bench_sparse_pft_discrete_ld(benchmark):
 
     Test type: performance
     """
-    env = DiscreteLightDarkPOMDP(discount_factor=DISCOUNT)
+    env = DiscreteLightDarkPOMDP(discount_factor=DISCOUNT, **discrete_light_dark_pinned_kwargs())
     planner = SparsePFT(
         environment=env,
         discount_factor=DISCOUNT,
@@ -188,7 +192,7 @@ def test_bench_pft_dpw_discrete_ld(benchmark):
 
     Test type: performance
     """
-    env = DiscreteLightDarkPOMDP(discount_factor=DISCOUNT)
+    env = DiscreteLightDarkPOMDP(discount_factor=DISCOUNT, **discrete_light_dark_pinned_kwargs())
     actions = env.get_actions()
     planner = PFT_DPW(
         environment=env,
@@ -218,7 +222,7 @@ def test_bench_pomcpow_discrete_ld(benchmark):
 
     Test type: performance
     """
-    env = DiscreteLightDarkPOMDP(discount_factor=DISCOUNT)
+    env = DiscreteLightDarkPOMDP(discount_factor=DISCOUNT, **discrete_light_dark_pinned_kwargs())
     actions = env.get_actions()
     planner = POMCPOW(
         environment=env,
@@ -248,7 +252,7 @@ def test_bench_pomcp_dpw_discrete_ld(benchmark):
 
     Test type: performance
     """
-    env = DiscreteLightDarkPOMDP(discount_factor=DISCOUNT)
+    env = DiscreteLightDarkPOMDP(discount_factor=DISCOUNT, **discrete_light_dark_pinned_kwargs())
     actions = env.get_actions()
     planner = POMCP_DPW(
         environment=env,

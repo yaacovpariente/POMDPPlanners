@@ -20,6 +20,9 @@ from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp imp
     ContinuousLightDarkPOMDP,
 )
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
+    continuous_light_dark_pinned_kwargs,
+)
 from POMDPPlanners.utils.action_samplers import DiscreteActionSampler, UnitCircleActionSampler
 from POMDPPlanners.planners.mcts_planners.pft_dpw import PFT_DPW
 from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
@@ -539,7 +542,9 @@ class TestPlannersHyperparamConfigs:
 
         Test type: unit
         """
-        env = ContinuousLightDarkPOMDP(discount_factor=0.95)
+        env = ContinuousLightDarkPOMDP(
+            discount_factor=0.95, **continuous_light_dark_pinned_kwargs()
+        )
         planners = self.config_api.get_compatible_planners(env)
 
         # Should return 3 planners for continuous/continuous environment
@@ -606,7 +611,9 @@ class TestPlannersHyperparamConfigs:
 
         Test type: unit
         """
-        env = ContinuousLightDarkPOMDP(discount_factor=0.95)
+        env = ContinuousLightDarkPOMDP(
+            discount_factor=0.95, **continuous_light_dark_pinned_kwargs()
+        )
         action_sampler = self.config_api._get_action_sampler_for_environment(env)
 
         assert isinstance(action_sampler, UnitCircleActionSampler)

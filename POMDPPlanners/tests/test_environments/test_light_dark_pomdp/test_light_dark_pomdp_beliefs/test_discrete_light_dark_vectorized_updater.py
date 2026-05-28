@@ -23,7 +23,7 @@ from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_beliefs import
     DiscreteLightDarkNoObsInDarkVectorizedUpdater,
     DiscreteLightDarkVectorizedUpdater,
 )
-
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import discrete_light_dark_pinned_kwargs
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -32,7 +32,7 @@ from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_beliefs import
 
 @pytest.fixture
 def env():
-    return DiscreteLightDarkPOMDP(discount_factor=0.95)
+    return DiscreteLightDarkPOMDP(discount_factor=0.95, **discrete_light_dark_pinned_kwargs())
 
 
 @pytest.fixture
@@ -249,7 +249,9 @@ class TestConfigId:
 def no_obs_env():
     return DiscreteLightDarkPOMDP(
         discount_factor=0.95,
-        observation_model_type=ObservationModelType.NO_OBS_IN_DARK,
+        **discrete_light_dark_pinned_kwargs(
+            observation_model_type=ObservationModelType.NO_OBS_IN_DARK
+        ),
     )
 
 
@@ -403,7 +405,9 @@ class TestNoObsInDarkConfigId:
 def dist_env():
     return DiscreteLightDarkPOMDP(
         discount_factor=0.95,
-        observation_model_type=ObservationModelType.DISTANCE_BASED,
+        **discrete_light_dark_pinned_kwargs(
+            observation_model_type=ObservationModelType.DISTANCE_BASED
+        ),
     )
 
 

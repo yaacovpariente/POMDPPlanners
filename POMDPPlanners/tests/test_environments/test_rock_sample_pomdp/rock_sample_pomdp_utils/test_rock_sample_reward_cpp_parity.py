@@ -40,6 +40,7 @@ from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp import (
     RewardModelType,
     RockSamplePOMDP,
 )
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import rock_sample_pinned_kwargs
 
 
 _MAP_SIZE: Tuple[int, int] = (7, 7)
@@ -61,20 +62,23 @@ _NUM_ROCKS: int = len(_ROCK_POSITIONS)
 
 def _make_env(reward_model_type: RewardModelType, penalty_decay: float) -> RockSamplePOMDP:
     return RockSamplePOMDP(
-        map_size=_MAP_SIZE,
-        rock_positions=list(_ROCK_POSITIONS),
-        init_pos=_INIT_POS,
-        bad_rock_penalty=_BAD_ROCK_PENALTY,
-        good_rock_reward=_GOOD_ROCK_REWARD,
-        step_penalty=_STEP_PENALTY,
-        sensor_use_penalty=_SENSOR_USE_PENALTY,
-        exit_reward=_EXIT_REWARD,
-        dangerous_areas=list(_DANGEROUS_AREAS),
-        dangerous_area_radius=_DANGEROUS_AREA_RADIUS,
-        dangerous_area_penalty=_DANGEROUS_AREA_PENALTY,
-        dangerous_area_hit_probability=_DANGEROUS_AREA_HIT_PROBABILITY,
-        reward_model_type=reward_model_type,
-        penalty_decay=penalty_decay,
+        discount_factor=0.95,
+        **rock_sample_pinned_kwargs(
+            map_size=_MAP_SIZE,
+            rock_positions=list(_ROCK_POSITIONS),
+            init_pos=_INIT_POS,
+            bad_rock_penalty=_BAD_ROCK_PENALTY,
+            good_rock_reward=_GOOD_ROCK_REWARD,
+            step_penalty=_STEP_PENALTY,
+            sensor_use_penalty=_SENSOR_USE_PENALTY,
+            exit_reward=_EXIT_REWARD,
+            dangerous_areas=list(_DANGEROUS_AREAS),
+            dangerous_area_radius=_DANGEROUS_AREA_RADIUS,
+            dangerous_area_penalty=_DANGEROUS_AREA_PENALTY,
+            dangerous_area_hit_probability=_DANGEROUS_AREA_HIT_PROBABILITY,
+            reward_model_type=reward_model_type,
+            penalty_decay=penalty_decay,
+        ),
     )
 
 

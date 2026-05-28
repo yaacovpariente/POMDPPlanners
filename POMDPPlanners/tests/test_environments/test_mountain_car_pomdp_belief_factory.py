@@ -17,12 +17,13 @@ from POMDPPlanners.environments.mountain_car_pomdp import MountainCarPOMDP
 from POMDPPlanners.environments.mountain_car_pomdp.mountain_car_pomdp_beliefs import (
     create_mountain_car_belief,
 )
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import mountain_car_pinned_kwargs
 from POMDPPlanners.utils.belief_factory import BeliefType
 
 
 @pytest.fixture
 def env():
-    return MountainCarPOMDP(discount_factor=0.99)
+    return MountainCarPOMDP(discount_factor=0.99, **mountain_car_pinned_kwargs())
 
 
 class TestCreateMountainCarBelief:

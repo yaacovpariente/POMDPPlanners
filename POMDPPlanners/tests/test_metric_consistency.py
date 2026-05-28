@@ -29,6 +29,7 @@ from POMDPPlanners.tests.test_metric_consistency_utils import (
     verify_environment_metric_consistency,
     verify_policy_metric_consistency,
 )
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import push_pinned_kwargs
 from POMDPPlanners.tests.test_utils.history_builders import build_test_history
 
 np.random.seed(42)
@@ -87,10 +88,12 @@ class TestEnvironmentMetricConsistency:
         """
         env = PushPOMDP(
             discount_factor=0.95,
-            grid_size=10,
-            push_threshold=1.0,
-            friction_coefficient=0.1,
-            observation_noise=0.1,
+            **push_pinned_kwargs(
+                grid_size=10,
+                push_threshold=1.0,
+                friction_coefficient=0.1,
+                observation_noise=0.1,
+            ),
         )
 
         # Create sample histories with collision data
