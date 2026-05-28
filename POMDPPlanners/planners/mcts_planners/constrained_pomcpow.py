@@ -15,8 +15,9 @@ track and the optional minimal-cost propagation trick.
 
 References:
     Jamgochian, A., Corso, A., & Kochenderfer, M. J. (2023). Online Planning
-    for Constrained POMDPs with Continuous Spaces through Dual Ascent. AAAI.
-    arXiv:2212.12154.
+    for Constrained POMDPs with Continuous Spaces through Dual Ascent. Proceedings
+    of the International Conference on Automated Planning and Scheduling, 33(1),
+    198-202. https://doi.org/10.1609/icaps.v33i1.27195
     Lee, J., Kim, G.-H., Poupart, P., & Kim, K.-E. (2018). Monte-Carlo Tree
     Search for Constrained POMDPs. NeurIPS.
 
