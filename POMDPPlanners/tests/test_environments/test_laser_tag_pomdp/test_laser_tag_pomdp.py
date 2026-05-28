@@ -224,36 +224,63 @@ class TestLaserTagStateTransition:
         for next_state in next_states:
             assert (int(next_state[0]), int(next_state[1])) == (3, 2)  # Should stay in place
 
-    def test_opponent_movement_toward_robot(self):
-        """Test opponent tends to move toward robot position.
+    def test_opponent_moves_away_from_robot(self):
+        """Test opponent evades by moving away from the robot.
 
-        Purpose: Validates opponent movement probabilities favor moves toward robot
+        Purpose: Validates the opponent flees (canonical LaserTag.jl evader), placing
+            the 0.4 directional mass on the cell that increases distance to the robot
 
-        Given: Opponent in position where it can move toward robot
-        When: Many state transitions are sampled
-        Then: Opponent moves toward robot more frequently than random
+        Given: Robot above the opponent (robot row 2, opponent row 5, same column)
+        When: Many state transitions are sampled after the robot moves South
+        Then: Opponent prefers the away cell (6, 5) and rarely takes the toward cell (4, 5)
 
         Test type: unit
         """
         env = _make_env(floor_shape=(7, 11))
         state = np.array([2.0, 5.0, 5.0, 5.0, 0.0])
 
-        # Robot moves South (action 1)
+        # Robot moves South (action 1) -> robot_next at (3, 5), still above opponent.
         samples = env.sample_next_state(state, 1, n_samples=1000)
 
-        # Count opponent positions
         opponent_positions = [(int(s[2]), int(s[3])) for s in samples]
         pos_counts = Counter(opponent_positions)
-
-        # Opponent should prefer moving toward robot (should prefer North: (4,5))
-        toward_robot_count = pos_counts.get((4, 5), 0)
         total_samples = len(samples)
-        toward_robot_prob = toward_robot_count / total_samples
 
-        # Should be around 0.4 based on implementation
+        away_prob = pos_counts.get((6, 5), 0) / total_samples
+        toward_prob = pos_counts.get((4, 5), 0) / total_samples
+
+        assert away_prob > 0.3, f"Expected >0.3 probability away from robot, got {away_prob}"
+        assert toward_prob < 0.1, f"Expected <0.1 probability toward robot, got {toward_prob}"
+
+    def test_opponent_reacts_to_premove_robot(self):
+        """Test the opponent evades relative to the robot's PRE-move position.
+
+        Purpose: Validates the opponent move distribution is conditioned on the robot's
+            current (pre-move) cell, matching JuliaPOMDP/LaserTag.jl, not the post-move cell
+
+        Given: Robot at (4, 5) one row above the opponent at (5, 5); the robot moves South,
+            which lands it on the opponent's row at (5, 5)
+        When: transition_log_probability is evaluated for the opponent fleeing South (6, 5)
+            versus the toward cell North (4, 5)
+        Then: The opponent flees South with ~0.4 (robot is still below it pre-move) and the
+            toward cell gets 0.0 — not the 0.2/0.2 split a post-move (row-aligned) robot gives
+
+        Test type: unit
+        """
+        env = _make_env(floor_shape=(7, 11))
+        state = np.array([4.0, 5.0, 5.0, 5.0, 0.0])
+
+        # Robot moves South (action 1) -> robot lands at (5, 5). Pre-move robot row 4 < 5,
+        # so the opponent flees South to (6, 5); the toward cell North (4, 5) gets 0.
+        next_state_south = np.array([5.0, 5.0, 6.0, 5.0, 0.0])  # opponent flees South (away)
+        next_state_north = np.array([5.0, 5.0, 4.0, 5.0, 0.0])  # opponent toward (North)
+
+        probs = _transition_probabilities(env, state, 1, [next_state_south, next_state_north])
+
         assert (
-            toward_robot_prob > 0.3
-        ), f"Expected >0.3 probability toward robot, got {toward_robot_prob}"
+            0.35 <= probs[0] <= 0.45
+        ), f"Expected ~0.4 for opponent fleeing South (pre-move robot below), got {probs[0]}"
+        assert probs[1] == 0.0, f"Expected 0.0 for the toward (North) cell, got {probs[1]}"
 
     def test_successful_tagging(self):
         """Test successful tagging creates terminal state.
@@ -334,11 +361,11 @@ class TestLaserTagStateTransition:
         state = np.array([3.0, 5.0, 5.0, 5.0, 0.0])
 
         # Robot moves South (action 1), so next robot position is (4, 5)
-        # Opponent at (5, 5) should prefer moving toward robot at (4, 5)
-        # Expected moves: North to (4, 5) with prob 0.4, stay at (5, 5) with prob 0.2
-        next_state_north = np.array([4.0, 5.0, 4.0, 5.0, 0.0])  # Opponent moves North
+        # Opponent at (5, 5) evades by moving away from robot at (4, 5)
+        # Expected moves: South to (6, 5) with prob 0.4, stay at (5, 5) with prob 0.2
+        next_state_north = np.array([4.0, 5.0, 4.0, 5.0, 0.0])  # Opponent moves North (toward)
         next_state_stay = np.array([4.0, 5.0, 5.0, 5.0, 0.0])  # Opponent stays
-        next_state_south = np.array([4.0, 5.0, 6.0, 5.0, 0.0])  # Opponent moves South
+        next_state_south = np.array([4.0, 5.0, 6.0, 5.0, 0.0])  # Opponent moves South (away)
         next_state_wrong_robot = np.array([3.0, 5.0, 4.0, 5.0, 0.0])  # Wrong robot position
 
         test_states = [next_state_north, next_state_stay, next_state_south, next_state_wrong_robot]
@@ -346,16 +373,16 @@ class TestLaserTagStateTransition:
 
         assert all(p >= 0 for p in probs), "All probabilities should be non-negative"
         assert (
-            probs[0] > 0
-        ), f"Expected positive probability for opponent moving North, got {probs[0]}"
+            probs[0] == 0.0
+        ), f"Expected 0.0 probability for opponent moving North (toward), got {probs[0]}"
         assert probs[1] > 0, f"Expected positive probability for opponent staying, got {probs[1]}"
         assert (
-            probs[2] == 0.0
-        ), f"Expected 0.0 probability for opponent moving South (away), got {probs[2]}"
+            probs[2] > 0
+        ), f"Expected positive probability for opponent moving South (away), got {probs[2]}"
         assert probs[3] == 0.0, f"Expected 0.0 for wrong robot position, got {probs[3]}"
         assert (
-            0.35 <= probs[0] <= 0.45
-        ), f"Expected ~0.4 probability for North movement, got {probs[0]}"
+            0.35 <= probs[2] <= 0.45
+        ), f"Expected ~0.4 probability for South (away) movement, got {probs[2]}"
 
     def test_probability_normalization_with_walls(self):
         """Test probability normalization when opponent movement is blocked by walls.
@@ -371,9 +398,11 @@ class TestLaserTagStateTransition:
         env = _make_env(floor_shape=(7, 11), walls={(3, 4), (4, 3)})
         state = np.array([3.0, 5.0, 3.0, 3.0, 0.0])
 
-        # Robot moves North (action 0), so next robot position is (2, 5)
-        # East move (3, 4) is blocked, South move (4, 3) is blocked
-        # North move (2, 3) and West move (3, 2) are valid
+        # Robot moves North (action 0) -> robot lands at (2, 5), but the opponent
+        # reacts to the robot's PRE-move cell (3, 5). Column: robot col 5 > opp col 3
+        # -> flee West to (3, 2) [valid, 0.4]. Row: robot is aligned with the opponent
+        # (both row 3) -> 0.2/0.2 split between North (2, 3) and South (4, 3); South is
+        # blocked by the wall, so its mass falls through to stay. East (3, 4) is toward -> 0.
         next_state_stay = np.array([2.0, 5.0, 3.0, 3.0, 0.0])
         next_state_north = np.array([2.0, 5.0, 2.0, 3.0, 0.0])
         next_state_east_blocked = np.array([2.0, 5.0, 3.0, 4.0, 0.0])
@@ -385,7 +414,7 @@ class TestLaserTagStateTransition:
             probs[0] > 0.2
         ), f"Expected stay probability > 0.2 due to blocked moves, got {probs[0]}"
         assert probs[1] >= 0, f"Expected non-negative probability for North, got {probs[1]}"
-        assert probs[2] == 0.0, f"Expected 0.0 for blocked East move, got {probs[2]}"
+        assert probs[2] == 0.0, f"Expected 0.0 for toward/blocked East move, got {probs[2]}"
 
         # Total probability should sum to 1.0
         all_possible_positions = [(3, 3), (2, 3), (3, 2)]

@@ -14,7 +14,7 @@ The LaserTag problem features:
 - 8-directional laser range measurements with Gaussian noise
 - Positive reward for successful tagging, negative reward for failed tag attempts
 - Step cost for each movement action
-- Opponent moves with 0.4 prob toward robot in x-dir, 0.4 prob toward robot in y-dir, 0.2 prob stay
+- Opponent moves with 0.4 prob away from robot in x-dir, 0.4 prob away from robot in y-dir, 0.2 prob stay
 - When aligned on an axis, the 0.4 budget is split equally (0.2/0.2) between both directions
 
 Classes:
@@ -464,7 +464,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         # Regular transition: build opponent move distribution then draw indices
         # in a single np.random.choice call (matches the wrapper's RNG draw order
         # for any n_samples).
-        opp_moves = self._opponent_move_probabilities_inline(state, robot_next)
+        opp_moves = self._opponent_move_probabilities_inline(state, robot_current)
         positions, probabilities = zip(*opp_moves)
         opp_indices = np.random.choice(len(positions), size=n_samples, p=probabilities)
         if n_samples == 1:
@@ -528,7 +528,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
                 if is_horizontal
                 else (opponent_coord - 1, fixed_coord)
             )
-            toward_prob, away_prob = 0.4, 0.0
+            toward_prob, away_prob = 0.0, 0.4
         elif robot_coord < opponent_coord:
             toward_pos = (
                 (fixed_coord, opponent_coord - 1)
@@ -540,7 +540,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
                 if is_horizontal
                 else (opponent_coord + 1, fixed_coord)
             )
-            toward_prob, away_prob = 0.4, 0.0
+            toward_prob, away_prob = 0.0, 0.4
         else:
             toward_pos = (
                 (fixed_coord, opponent_coord + 1)
@@ -673,7 +673,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
 
         # Regular transition: opponent moves stochastically, terminal flag stays 0.
         if next_robot == robot_next and not next_terminal:
-            opp_moves = self._opponent_move_probabilities_inline(state, robot_next)
+            opp_moves = self._opponent_move_probabilities_inline(state, robot_current)
             for opp_pos, prob in opp_moves:
                 if next_opponent == opp_pos:
                     return prob
