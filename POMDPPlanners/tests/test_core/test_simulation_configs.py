@@ -6,6 +6,7 @@ import pytest
 
 from POMDPPlanners.core.simulation.simulation_configs import EnvironmentRunParams
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import tiger_pinned_kwargs
 from POMDPPlanners.core.belief import get_initial_belief
 from POMDPPlanners.planners.open_loop_planners.discrete_action_sequences_planner import (
     DiscreteActionSequencesPlanner,
@@ -26,7 +27,7 @@ class TestEnvironmentRunParamsConfigId:
 
         Test type: unit
         """
-        env = TigerPOMDP(discount_factor=0.95)
+        env = TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs())
         belief = get_initial_belief(env, n_particles=100)
         policy = DiscreteActionSequencesPlanner(
             environment=env, discount_factor=0.95, name="test_planner", depth=5, n_return_samples=10
@@ -53,8 +54,8 @@ class TestEnvironmentRunParamsConfigId:
 
         Test type: unit
         """
-        env1 = TigerPOMDP(discount_factor=0.95)
-        env2 = TigerPOMDP(discount_factor=0.90)
+        env1 = TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs())
+        env2 = TigerPOMDP(discount_factor=0.90, **tiger_pinned_kwargs())
 
         belief1 = get_initial_belief(env1, n_particles=100)
         belief2 = get_initial_belief(env2, n_particles=100)
@@ -95,7 +96,7 @@ class TestEnvironmentRunParamsConfigId:
 
         Test type: unit
         """
-        env = TigerPOMDP(discount_factor=0.95)
+        env = TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs())
 
         belief1 = get_initial_belief(env, n_particles=100)
         belief2 = get_initial_belief(env, n_particles=200)
@@ -125,7 +126,7 @@ class TestEnvironmentRunParamsConfigId:
 
         Test type: unit
         """
-        env = TigerPOMDP(discount_factor=0.95)
+        env = TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs())
         belief = get_initial_belief(env, n_particles=100)
 
         policy1 = DiscreteActionSequencesPlanner(
@@ -164,7 +165,7 @@ class TestEnvironmentRunParamsConfigId:
 
         Test type: unit
         """
-        env = TigerPOMDP(discount_factor=0.95)
+        env = TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs())
         belief = get_initial_belief(env, n_particles=100)
         policy = DiscreteActionSequencesPlanner(
             environment=env, discount_factor=0.95, name="test_planner", depth=5, n_return_samples=10
@@ -191,7 +192,7 @@ class TestEnvironmentRunParamsConfigId:
 
         Test type: unit
         """
-        env = TigerPOMDP(discount_factor=0.95)
+        env = TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs())
         belief = get_initial_belief(env, n_particles=100)
         policy = DiscreteActionSequencesPlanner(
             environment=env, discount_factor=0.95, name="test_planner", depth=5, n_return_samples=10
@@ -218,7 +219,7 @@ class TestEnvironmentRunParamsConfigId:
 
         Test type: unit
         """
-        env = TigerPOMDP(discount_factor=0.95)
+        env = TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs())
         belief = get_initial_belief(env, n_particles=100)
 
         policy1 = DiscreteActionSequencesPlanner(
@@ -269,7 +270,7 @@ class TestEnvironmentRunParamsHashAndEquality:
 
         Test type: unit
         """
-        env = TigerPOMDP(discount_factor=0.95)
+        env = TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs())
         belief = get_initial_belief(env, n_particles=100)
         policy = DiscreteActionSequencesPlanner(
             environment=env, discount_factor=0.95, name="test_planner", depth=5, n_return_samples=10
@@ -296,7 +297,7 @@ class TestEnvironmentRunParamsHashAndEquality:
 
         Test type: unit
         """
-        env = TigerPOMDP(discount_factor=0.95)
+        env = TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs())
         belief = get_initial_belief(env, n_particles=100)
         policy = DiscreteActionSequencesPlanner(
             environment=env, discount_factor=0.95, name="test_planner", depth=5, n_return_samples=10
@@ -323,7 +324,7 @@ class TestEnvironmentRunParamsHashAndEquality:
 
         Test type: unit
         """
-        env = TigerPOMDP(discount_factor=0.95)
+        env = TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs())
         belief = get_initial_belief(env, n_particles=100)
         policy = DiscreteActionSequencesPlanner(
             environment=env, discount_factor=0.95, name="test_planner", depth=5, n_return_samples=10
@@ -350,7 +351,7 @@ class TestEnvironmentRunParamsHashAndEquality:
 
         Test type: unit
         """
-        env = TigerPOMDP(discount_factor=0.95)
+        env = TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs())
         belief = get_initial_belief(env, n_particles=100)
         policy = DiscreteActionSequencesPlanner(
             environment=env, discount_factor=0.95, name="test_planner", depth=5, n_return_samples=10
@@ -375,7 +376,7 @@ class TestEnvironmentRunParamsHashAndEquality:
 
         Test type: unit
         """
-        env = TigerPOMDP(discount_factor=0.95)
+        env = TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs())
         belief = get_initial_belief(env, n_particles=100)
         policy = DiscreteActionSequencesPlanner(
             environment=env, discount_factor=0.95, name="test_planner", depth=5, n_return_samples=10
@@ -407,7 +408,7 @@ class TestEnvironmentRunParamsHashAndEquality:
 
         Test type: unit
         """
-        env = TigerPOMDP(discount_factor=0.95)
+        env = TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs())
         belief = get_initial_belief(env, n_particles=100)
         policy = DiscreteActionSequencesPlanner(
             environment=env, discount_factor=0.95, name="test_planner", depth=5, n_return_samples=10
@@ -442,7 +443,7 @@ class TestEnvironmentRunParamsInputValidation:
 
         Test type: unit
         """
-        env = TigerPOMDP(discount_factor=0.95)
+        env = TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs())
         belief = get_initial_belief(env, n_particles=100)
         policy = DiscreteActionSequencesPlanner(
             environment=env, discount_factor=0.95, name="test_planner", depth=5, n_return_samples=10
@@ -477,7 +478,7 @@ class TestEnvironmentRunParamsInputValidation:
 
         Test type: unit
         """
-        env = TigerPOMDP(discount_factor=0.95)
+        env = TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs())
         belief = get_initial_belief(env, n_particles=100)
         policy = DiscreteActionSequencesPlanner(
             environment=env, discount_factor=0.95, name="test_planner", depth=5, n_return_samples=10
@@ -512,7 +513,7 @@ class TestEnvironmentRunParamsInputValidation:
 
         Test type: unit
         """
-        env = TigerPOMDP(discount_factor=0.95)
+        env = TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs())
         belief = get_initial_belief(env, n_particles=100)
         policy = DiscreteActionSequencesPlanner(
             environment=env, discount_factor=0.95, name="test_planner", depth=5, n_return_samples=10
@@ -539,7 +540,7 @@ class TestEnvironmentRunParamsInputValidation:
 
         Test type: unit
         """
-        env = TigerPOMDP(discount_factor=0.95)
+        env = TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs())
         belief = get_initial_belief(env, n_particles=100)
         policy = DiscreteActionSequencesPlanner(
             environment=env, discount_factor=0.95, name="test_planner", depth=5, n_return_samples=10
@@ -566,7 +567,7 @@ class TestEnvironmentRunParamsInputValidation:
 
         Test type: unit
         """
-        env = TigerPOMDP(discount_factor=0.95)
+        env = TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs())
         belief = get_initial_belief(env, n_particles=100)
         policy = DiscreteActionSequencesPlanner(
             environment=env, discount_factor=0.95, name="test_planner", depth=5, n_return_samples=10
@@ -601,7 +602,7 @@ class TestEnvironmentRunParamsInputValidation:
 
         Test type: unit
         """
-        env = TigerPOMDP(discount_factor=0.95)
+        env = TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs())
         belief = get_initial_belief(env, n_particles=100)
         policy = DiscreteActionSequencesPlanner(
             environment=env, discount_factor=0.95, name="test_planner", depth=5, n_return_samples=10
@@ -636,7 +637,7 @@ class TestEnvironmentRunParamsInputValidation:
 
         Test type: unit
         """
-        env = TigerPOMDP(discount_factor=0.95)
+        env = TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs())
         belief = get_initial_belief(env, n_particles=100)
 
         with pytest.raises(ValueError, match="policies list cannot be empty"):
@@ -655,7 +656,7 @@ class TestEnvironmentRunParamsInputValidation:
 
         Test type: unit
         """
-        env = TigerPOMDP(discount_factor=0.95)
+        env = TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs())
         belief = get_initial_belief(env, n_particles=100)
         policy = DiscreteActionSequencesPlanner(
             environment=env, discount_factor=0.95, name="test_planner", depth=5, n_return_samples=10
@@ -690,7 +691,7 @@ class TestEnvironmentRunParamsInputValidation:
 
         Test type: unit
         """
-        env = TigerPOMDP(discount_factor=0.95)
+        env = TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs())
         belief = get_initial_belief(env, n_particles=100)
         policy = DiscreteActionSequencesPlanner(
             environment=env, discount_factor=0.95, name="test_planner", depth=5, n_return_samples=10

@@ -23,6 +23,7 @@ from POMDPPlanners.core.tree.arena import ACTION, BELIEF, Tree
 from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import sanity_pinned_kwargs
 
 # Set seeds for reproducible tests
 np.random.seed(42)
@@ -384,7 +385,7 @@ def test_sanity_pomdp_action_selection():
     Test type: unit
     """
     # Create environment and planner
-    environment = SanityPOMDP()
+    environment = SanityPOMDP(discount_factor=0.95, **sanity_pinned_kwargs())
     planner = POMCP(
         environment=environment,
         discount_factor=0.95,

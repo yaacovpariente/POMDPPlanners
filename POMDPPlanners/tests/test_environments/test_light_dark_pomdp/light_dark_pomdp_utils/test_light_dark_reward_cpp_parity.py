@@ -20,14 +20,12 @@ from typing import Tuple
 import numpy as np
 import pytest
 
-from POMDPPlanners.environments.light_dark_pomdp import (
-    _native,  # pylint: disable=no-name-in-module
-)
+from POMDPPlanners.environments.light_dark_pomdp import _native  # pylint: disable=no-name-in-module
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
     ContinuousLightDarkPOMDP,
     RewardModelType,
 )
-
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import continuous_light_dark_pinned_kwargs
 
 _REWARD_VARIANT_CODES = {
     RewardModelType.CONSTANT_HAZARD_PENALTY: 0,
@@ -48,9 +46,11 @@ def _build_env(variant: RewardModelType) -> ContinuousLightDarkPOMDP:
     # consumed by the DECAYING variant but is harmless elsewhere.
     return ContinuousLightDarkPOMDP(
         discount_factor=0.95,
-        obstacles=[(3.0, 3.0), (6.0, 6.0), (8.0, 2.0)],
-        reward_model_type=variant,
-        penalty_decay=_PENALTY_DECAY_BY_VARIANT[variant],
+        **continuous_light_dark_pinned_kwargs(
+            obstacles=[(3.0, 3.0), (6.0, 6.0), (8.0, 2.0)],
+            reward_model_type=variant,
+            penalty_decay=_PENALTY_DECAY_BY_VARIANT[variant],
+        ),
     )
 
 

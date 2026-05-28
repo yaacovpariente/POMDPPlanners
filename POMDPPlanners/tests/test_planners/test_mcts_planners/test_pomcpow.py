@@ -36,6 +36,10 @@ from POMDPPlanners.planners.planners_utils.dpw import (
     ucb1_exploration,
 )
 from POMDPPlanners.planners.planners_utils.rollout import random_rollout_action_sampler
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
+    continuous_light_dark_pinned_kwargs,
+    sanity_pinned_kwargs,
+)
 from POMDPPlanners.utils.action_samplers import UnitCircleActionSampler
 
 # Set seeds for reproducible tests
@@ -660,7 +664,7 @@ def test_sanity_pomdp_action_selection():
 
     Test type: integration
     """
-    environment = SanityPOMDP()
+    environment = SanityPOMDP(discount_factor=0.95, **sanity_pinned_kwargs())
     action_sampler = MockActionSampler([0, 1])
 
     planner = POMCPOW(
@@ -930,9 +934,11 @@ def test_pomcpow_config_id_different_action_sampler_values():
     # Create continuous environment for testing
     continuous_environment = ContinuousLightDarkPOMDP(
         discount_factor=0.99,
-        goal_state=np.array([5, 0]),
-        start_state=np.array([0, 0]),
         name="TestContinuous",
+        **continuous_light_dark_pinned_kwargs(
+            goal_state=np.array([5, 0]),
+            start_state=np.array([0, 0]),
+        ),
     )
 
     # Create action samplers with different max_action_magnitude
@@ -1098,9 +1104,11 @@ def test_pomcpow_config_id_action_sampler_attribute_changes():
     # Create continuous environment for testing
     continuous_environment = ContinuousLightDarkPOMDP(
         discount_factor=0.99,
-        goal_state=np.array([5, 0]),
-        start_state=np.array([0, 0]),
         name="TestContinuous",
+        **continuous_light_dark_pinned_kwargs(
+            goal_state=np.array([5, 0]),
+            start_state=np.array([0, 0]),
+        ),
     )
 
     # Create initial action sampler and POMCPOW

@@ -28,11 +28,16 @@ import numpy as np
 
 from POMDPPlanners.environments.pacman_pomdp import _native  # pylint: disable=no-name-in-module
 from POMDPPlanners.environments.pacman_pomdp.pacman_pomdp import PacManPOMDP
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import pacman_pinned_kwargs
 
 
 def _build_env() -> PacManPOMDP:
     """Small reusable env matching the benchmark fixture from PR #87."""
+    # num_ghosts overridden to 2; the env auto-generates per-ghost
+    # ``ghost_strategies``, so the single-ghost pinned defaults are not
+    # injected here (they would mismatch the two-ghost configuration).
     return PacManPOMDP(
+        discount_factor=0.95,
         maze_size=(7, 7),
         num_ghosts=2,
         initial_pellets=[(1, 1), (1, 5), (5, 1), (5, 5)],
@@ -40,7 +45,6 @@ def _build_env() -> PacManPOMDP:
         initial_ghost_positions=[(0, 0), (6, 6)],
         ghost_aggressiveness=2.0,
         ghost_coordination="independent",
-        discount_factor=0.95,
     )
 
 
@@ -223,15 +227,18 @@ class TestAggressiveDistribution:
         Test type: integration
         """
         env = PacManPOMDP(
-            maze_size=(5, 5),
-            walls=set(),
-            initial_pellets=[(2, 2)],
-            initial_pacman_pos=(0, 0),
-            num_ghosts=1,
-            initial_ghost_positions=[(3, 3)],
-            ghost_aggressiveness=2.0,
-            ghost_coordination="independent",
-            ghost_strategies=["aggressive"],
+            discount_factor=0.95,
+            **pacman_pinned_kwargs(
+                maze_size=(5, 5),
+                walls=set(),
+                initial_pellets=[(2, 2)],
+                initial_pacman_pos=(0, 0),
+                num_ghosts=1,
+                initial_ghost_positions=[(3, 3)],
+                ghost_aggressiveness=2.0,
+                ghost_coordination="independent",
+                ghost_strategies=["aggressive"],
+            ),
         )
         state = env.make_state(
             pacman_pos=(0, 0),

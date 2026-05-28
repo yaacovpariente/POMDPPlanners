@@ -78,6 +78,16 @@ from POMDPPlanners.environments.safety_ant_velocity_pomdp.safety_ant_velocity_po
 from POMDPPlanners.environments.safety_ant_velocity_pomdp.safety_ant_velocity_visualizer import (
     SafeAntVelocityVisualizer,
 )
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
+    continuous_laser_tag_pinned_kwargs,
+    continuous_light_dark_pinned_kwargs,
+    continuous_push_pinned_kwargs,
+    laser_tag_pinned_kwargs,
+    pacman_pinned_kwargs,
+    push_pinned_kwargs,
+    rock_sample_pinned_kwargs,
+    safety_ant_velocity_pinned_kwargs,
+)
 
 
 # Golden files directory
@@ -189,11 +199,13 @@ def create_deterministic_rock_sample_episode(seed: int = 42) -> List[StepData]:
     """
     np.random.seed(seed)
     env = RockSamplePOMDP(
-        map_size=(5, 5),
-        rock_positions=[(1, 1), (2, 3), (4, 2)],
-        dangerous_areas=[(2, 2)],
-        dangerous_area_radius=1.0,
         discount_factor=0.95,
+        **rock_sample_pinned_kwargs(
+            map_size=(5, 5),
+            rock_positions=[(1, 1), (2, 3), (4, 2)],
+            dangerous_areas=[(2, 2)],
+            dangerous_area_radius=1.0,
+        ),
     )
 
     state = env.initial_state_dist().sample()[0]
@@ -251,9 +263,13 @@ def create_deterministic_pacman_episode(seed: int = 42) -> List[StepData]:
     # the episode deterministic end-to-end.
     _pacman_native.set_seed(seed)
     env = PacManPOMDP(
-        maze_size=(7, 7),
-        num_ghosts=2,
         discount_factor=0.95,
+        **pacman_pinned_kwargs(
+            maze_size=(7, 7),
+            num_ghosts=2,
+            initial_ghost_positions=None,
+            ghost_strategies=None,
+        ),
     )
 
     state = env.initial_state_dist().sample()[0]
@@ -312,6 +328,7 @@ def create_deterministic_light_dark_episode(seed: int = 42) -> List[StepData]:
     _ld_native.set_seed(seed)
     env = ContinuousLightDarkPOMDP(
         discount_factor=0.95,
+        **continuous_light_dark_pinned_kwargs(),
     )
 
     state = env.initial_state_dist().sample()[0]
@@ -372,8 +389,10 @@ def create_deterministic_push_episode(seed: int = 42) -> List[StepData]:
     np.random.seed(seed)
     env = PushPOMDP(
         discount_factor=0.95,
-        grid_size=8,
-        transition_error_prob=0.0,  # Explicitly set for deterministic behavior
+        **push_pinned_kwargs(
+            grid_size=8,
+            transition_error_prob=0.0,  # Explicitly set for deterministic behavior
+        ),
     )
 
     state = env.initial_state_dist().sample()[0]
@@ -426,7 +445,9 @@ def create_deterministic_laser_tag_episode(seed: int = 42) -> List[StepData]:
     np.random.seed(seed)
     env = LaserTagPOMDP(
         discount_factor=0.95,
-        transition_error_prob=0.0,  # Explicitly set for deterministic behavior
+        **laser_tag_pinned_kwargs(
+            transition_error_prob=0.0,  # Explicitly set for deterministic behavior
+        ),
     )
 
     state = env.initial_state_dist().sample()[0]
@@ -485,6 +506,7 @@ def create_deterministic_safety_ant_velocity_episode(seed: int = 42) -> List[Ste
     _sa_native.set_seed(seed)
     env = SafeAntVelocityPOMDP(
         discount_factor=0.95,
+        **safety_ant_velocity_pinned_kwargs(),
     )
 
     state = env.initial_state_dist().sample()[0]
@@ -540,8 +562,10 @@ def create_deterministic_continuous_laser_tag_episode(seed: int = 42) -> List[St
     _laser_tag_native.set_seed(seed)
     env = ContinuousLaserTagPOMDP(
         discount_factor=0.95,
-        robot_transition_cov_matrix=np.eye(2) * 0.01,
-        opponent_transition_cov_matrix=np.eye(2) * 0.01,
+        **continuous_laser_tag_pinned_kwargs(
+            robot_transition_cov_matrix=np.eye(2) * 0.01,
+            opponent_transition_cov_matrix=np.eye(2) * 0.01,
+        ),
     )
 
     state = env.initial_state_dist().sample()[0]
@@ -607,9 +631,11 @@ def create_deterministic_continuous_push_episode(seed: int = 42) -> List[StepDat
     _push_native.set_seed(seed)
     env = ContinuousPushPOMDP(
         discount_factor=0.99,
-        grid_size=10,
-        obstacles=[(3.0, 3.0, 0.5), (6.0, 6.0, 0.5)],
-        state_transition_cov_matrix=np.eye(2) * 0.01,
+        **continuous_push_pinned_kwargs(
+            grid_size=10,
+            obstacles=[(3.0, 3.0, 0.5), (6.0, 6.0, 0.5)],
+            state_transition_cov_matrix=np.eye(2) * 0.01,
+        ),
     )
 
     state = env.initial_state_dist().sample()[0]
@@ -700,11 +726,13 @@ class TestVisualizationConsistency:
 
         # Create environment and visualizer
         env = RockSamplePOMDP(
-            map_size=(5, 5),
-            rock_positions=[(1, 1), (2, 3), (4, 2)],
-            dangerous_areas=[(2, 2)],
-            dangerous_area_radius=1.0,
             discount_factor=0.95,
+            **rock_sample_pinned_kwargs(
+                map_size=(5, 5),
+                rock_positions=[(1, 1), (2, 3), (4, 2)],
+                dangerous_areas=[(2, 2)],
+                dangerous_area_radius=1.0,
+            ),
         )
         visualizer = RockSampleVisualizer(env)
 
@@ -735,9 +763,13 @@ class TestVisualizationConsistency:
 
         # Create environment and visualizer
         env = PacManPOMDP(
-            maze_size=(7, 7),
-            num_ghosts=2,
             discount_factor=0.95,
+            **pacman_pinned_kwargs(
+                maze_size=(7, 7),
+                num_ghosts=2,
+                initial_ghost_positions=None,
+                ghost_strategies=None,
+            ),
         )
         visualizer = PacManVisualizer(env)
 
@@ -769,6 +801,7 @@ class TestVisualizationConsistency:
         # Create environment and visualizer
         env = ContinuousLightDarkPOMDP(
             discount_factor=0.95,
+            **continuous_light_dark_pinned_kwargs(),
         )
         visualizer = LightDarkPOMDPVisualizer(env)
 
@@ -800,8 +833,10 @@ class TestVisualizationConsistency:
         # Create environment and visualizer
         env = PushPOMDP(
             discount_factor=0.95,
-            grid_size=8,
-            transition_error_prob=0.0,  # Explicitly set for deterministic behavior
+            **push_pinned_kwargs(
+                grid_size=8,
+                transition_error_prob=0.0,  # Explicitly set for deterministic behavior
+            ),
         )
         visualizer = PushPOMDPVisualizer(env)
 
@@ -833,7 +868,9 @@ class TestVisualizationConsistency:
         # Create environment and visualizer
         env = LaserTagPOMDP(
             discount_factor=0.95,
-            transition_error_prob=0.0,  # Explicitly set for deterministic behavior
+            **laser_tag_pinned_kwargs(
+                transition_error_prob=0.0,  # Explicitly set for deterministic behavior
+            ),
         )
         visualizer = LaserTagVisualizer(
             floor_shape=env.floor_shape,
@@ -870,8 +907,10 @@ class TestVisualizationConsistency:
         # Create environment and visualizer
         env = ContinuousLaserTagPOMDP(
             discount_factor=0.95,
-            robot_transition_cov_matrix=np.eye(2) * 0.01,
-            opponent_transition_cov_matrix=np.eye(2) * 0.01,
+            **continuous_laser_tag_pinned_kwargs(
+                robot_transition_cov_matrix=np.eye(2) * 0.01,
+                opponent_transition_cov_matrix=np.eye(2) * 0.01,
+            ),
         )
         visualizer = ContinuousLaserTagVisualizer(
             grid_size=env.grid_size,
@@ -910,9 +949,11 @@ class TestVisualizationConsistency:
         # Create environment and visualizer
         env = ContinuousPushPOMDP(
             discount_factor=0.99,
-            grid_size=10,
-            obstacles=[(3.0, 3.0, 0.5), (6.0, 6.0, 0.5)],
-            state_transition_cov_matrix=np.eye(2) * 0.01,
+            **continuous_push_pinned_kwargs(
+                grid_size=10,
+                obstacles=[(3.0, 3.0, 0.5), (6.0, 6.0, 0.5)],
+                state_transition_cov_matrix=np.eye(2) * 0.01,
+            ),
         )
         visualizer = ContinuousPushPOMDPVisualizer(env)
 
@@ -944,6 +985,7 @@ class TestVisualizationConsistency:
         # Create environment and visualizer
         env = SafeAntVelocityPOMDP(
             discount_factor=0.95,
+            **safety_ant_velocity_pinned_kwargs(),
         )
         visualizer = SafeAntVelocityVisualizer(env)
 
@@ -978,11 +1020,13 @@ class TestVisualizationDeterminism:
 
         # Create environment and visualizer
         env = RockSamplePOMDP(
-            map_size=(5, 5),
-            rock_positions=[(1, 1), (2, 3), (4, 2)],
-            dangerous_areas=[(2, 2)],
-            dangerous_area_radius=1.0,
             discount_factor=0.95,
+            **rock_sample_pinned_kwargs(
+                map_size=(5, 5),
+                rock_positions=[(1, 1), (2, 3), (4, 2)],
+                dangerous_areas=[(2, 2)],
+                dangerous_area_radius=1.0,
+            ),
         )
         visualizer = RockSampleVisualizer(env)
 

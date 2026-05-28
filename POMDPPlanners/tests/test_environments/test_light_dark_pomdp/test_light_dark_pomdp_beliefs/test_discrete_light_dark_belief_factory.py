@@ -23,12 +23,13 @@ from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_beliefs import
     DiscreteLightDarkVectorizedUpdater,
     create_discrete_light_dark_belief,
 )
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import discrete_light_dark_pinned_kwargs
 from POMDPPlanners.utils.belief_factory import BeliefType
 
 
 @pytest.fixture
 def env():
-    return DiscreteLightDarkPOMDP(discount_factor=0.95)
+    return DiscreteLightDarkPOMDP(discount_factor=0.95, **discrete_light_dark_pinned_kwargs())
 
 
 class TestCreateDiscreteLightDarkBelief:
@@ -108,7 +109,7 @@ class TestObservationModelTypeDispatch:
         np.random.seed(42)
         env = DiscreteLightDarkPOMDP(
             discount_factor=0.95,
-            observation_model_type=ObservationModelType.NORMAL,
+            **discrete_light_dark_pinned_kwargs(observation_model_type=ObservationModelType.NORMAL),
         )
         belief = create_discrete_light_dark_belief(env)
         assert isinstance(belief, VectorizedWeightedParticleBelief)
@@ -129,7 +130,9 @@ class TestObservationModelTypeDispatch:
         np.random.seed(42)
         env = DiscreteLightDarkPOMDP(
             discount_factor=0.95,
-            observation_model_type=ObservationModelType.NO_OBS_IN_DARK,
+            **discrete_light_dark_pinned_kwargs(
+                observation_model_type=ObservationModelType.NO_OBS_IN_DARK
+            ),
         )
         belief = create_discrete_light_dark_belief(env)
         assert isinstance(belief, VectorizedWeightedParticleBelief)
@@ -149,7 +152,9 @@ class TestObservationModelTypeDispatch:
         np.random.seed(42)
         env = DiscreteLightDarkPOMDP(
             discount_factor=0.95,
-            observation_model_type=ObservationModelType.DISTANCE_BASED,
+            **discrete_light_dark_pinned_kwargs(
+                observation_model_type=ObservationModelType.DISTANCE_BASED
+            ),
         )
         belief = create_discrete_light_dark_belief(env)
         assert isinstance(belief, VectorizedWeightedParticleBelief)

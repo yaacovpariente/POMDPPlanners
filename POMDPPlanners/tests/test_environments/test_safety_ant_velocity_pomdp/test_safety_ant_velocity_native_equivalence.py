@@ -23,12 +23,15 @@ from POMDPPlanners.environments.safety_ant_velocity_pomdp.safety_ant_velocity_po
     DEFAULT_FORCE_SCALES,
 )
 from POMDPPlanners.tests.test_environments import _native_parity
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
+    safety_ant_velocity_pinned_kwargs,
+)
 from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
 
 
 @pytest.fixture(name="env")
 def _env_fixture():
-    return SafeAntVelocityPOMDP(discount_factor=0.99)
+    return SafeAntVelocityPOMDP(discount_factor=0.99, **safety_ant_velocity_pinned_kwargs())
 
 
 def _build_native_transition(env: SafeAntVelocityPOMDP, state: np.ndarray, action: int):

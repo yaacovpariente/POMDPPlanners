@@ -14,6 +14,9 @@ from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp imp
     ContinuousLightDarkPOMDP,
 )
 from POMDPPlanners.planners.mcts_planners.constrained_pft_dpw import CPFT_DPW
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
+    continuous_light_dark_pinned_kwargs,
+)
 from POMDPPlanners.utils.action_samplers import UnitCircleActionSampler
 
 
@@ -116,7 +119,9 @@ def test_rejects_unconstrained_environment(action_sampler):
 
     Test type: unit
     """
-    plain_env = ContinuousLightDarkPOMDP(discount_factor=0.95)
+    plain_env = ContinuousLightDarkPOMDP(
+        discount_factor=0.95, **continuous_light_dark_pinned_kwargs()
+    )
     with pytest.raises(TypeError, match="ConstrainedEnvironment"):
         CPFT_DPW(
             environment=plain_env,

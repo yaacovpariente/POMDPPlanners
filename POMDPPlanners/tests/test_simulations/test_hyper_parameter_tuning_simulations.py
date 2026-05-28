@@ -84,6 +84,22 @@ from POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_pomdp impor
     ContinuousLaserTagPOMDP,
     ContinuousLaserTagPOMDPDiscreteActions,
 )
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
+    cartpole_pinned_kwargs,
+    continuous_laser_tag_discrete_actions_pinned_kwargs,
+    continuous_laser_tag_pinned_kwargs,
+    continuous_light_dark_discrete_actions_pinned_kwargs,
+    continuous_light_dark_pinned_kwargs,
+    continuous_push_discrete_actions_pinned_kwargs,
+    continuous_push_pinned_kwargs,
+    discrete_light_dark_pinned_kwargs,
+    laser_tag_pinned_kwargs,
+    mountain_car_pinned_kwargs,
+    pacman_pinned_kwargs,
+    push_pinned_kwargs,
+    rock_sample_pinned_kwargs,
+    safety_ant_velocity_pinned_kwargs,
+)
 import warnings
 
 np.random.seed(42)
@@ -2072,7 +2088,9 @@ class TestSingleEnvironmentOptimizationSmoke:
 
         Test type: integration
         """
-        env = ContinuousLightDarkPOMDP(discount_factor=0.95)
+        env = ContinuousLightDarkPOMDP(
+            discount_factor=0.95, **continuous_light_dark_pinned_kwargs()
+        )
         belief = get_initial_belief(env, n_particles=10)
         action_sampler = UnitCircleActionSampler()
 
@@ -2122,7 +2140,7 @@ class TestSingleEnvironmentOptimizationSmoke:
 
         Test type: integration
         """
-        env = ContinuousPushPOMDP(discount_factor=0.95)
+        env = ContinuousPushPOMDP(discount_factor=0.95, **continuous_push_pinned_kwargs())
         belief = get_initial_belief(env, n_particles=10)
         action_sampler = UnitCircleActionSampler()
 
@@ -2172,7 +2190,7 @@ class TestSingleEnvironmentOptimizationSmoke:
 
         Test type: integration
         """
-        env = ContinuousLaserTagPOMDP(discount_factor=0.95)
+        env = ContinuousLaserTagPOMDP(discount_factor=0.95, **continuous_laser_tag_pinned_kwargs())
         belief = get_initial_belief(env, n_particles=10)
         action_sampler = LaserTagContinuousActionSampler()
 
@@ -2222,7 +2240,11 @@ class TestSingleEnvironmentOptimizationSmoke:
 
         Test type: integration
         """
-        env = CartPolePOMDP(discount_factor=0.95, noise_cov=np.eye(4) * 0.1)
+        env = CartPolePOMDP(
+            discount_factor=0.95,
+            noise_cov=np.eye(4) * 0.1,
+            **cartpole_pinned_kwargs(),
+        )
         belief = get_initial_belief(env, n_particles=10)
         action_sampler = DiscreteActionSampler(env.get_actions())
 
@@ -2272,7 +2294,7 @@ class TestSingleEnvironmentOptimizationSmoke:
 
         Test type: integration
         """
-        env = MountainCarPOMDP(discount_factor=0.95)
+        env = MountainCarPOMDP(discount_factor=0.95, **mountain_car_pinned_kwargs())
         belief = get_initial_belief(env, n_particles=10)
         action_sampler = DiscreteActionSampler(env.get_actions())
 
@@ -2372,7 +2394,7 @@ class TestSingleEnvironmentOptimizationSmoke:
 
         Test type: integration
         """
-        env = PushPOMDP(discount_factor=0.95)
+        env = PushPOMDP(discount_factor=0.95, **push_pinned_kwargs())
         belief = get_initial_belief(env, n_particles=10)
         action_sampler = DiscreteActionSampler(env.get_actions())
 
@@ -2422,7 +2444,7 @@ class TestSingleEnvironmentOptimizationSmoke:
 
         Test type: integration
         """
-        env = LaserTagPOMDP(discount_factor=0.95)
+        env = LaserTagPOMDP(discount_factor=0.95, **laser_tag_pinned_kwargs())
         belief = get_initial_belief(env, n_particles=10)
         action_sampler = DiscreteActionSampler(env.get_actions())
 
@@ -2472,7 +2494,7 @@ class TestSingleEnvironmentOptimizationSmoke:
 
         Test type: integration
         """
-        env = RockSamplePOMDP(discount_factor=0.95)
+        env = RockSamplePOMDP(discount_factor=0.95, **rock_sample_pinned_kwargs())
         belief = get_initial_belief(env, n_particles=10)
         action_sampler = DiscreteActionSampler(env.get_actions())
 
@@ -2522,7 +2544,7 @@ class TestSingleEnvironmentOptimizationSmoke:
 
         Test type: integration
         """
-        env = PacManPOMDP(discount_factor=0.95)
+        env = PacManPOMDP(discount_factor=0.95, **pacman_pinned_kwargs())
         belief = get_initial_belief(env, n_particles=10)
         action_sampler = DiscreteActionSampler(env.get_actions())
 
@@ -2572,7 +2594,7 @@ class TestSingleEnvironmentOptimizationSmoke:
 
         Test type: integration
         """
-        env = SafeAntVelocityPOMDP(discount_factor=0.95)
+        env = SafeAntVelocityPOMDP(discount_factor=0.95, **safety_ant_velocity_pinned_kwargs())
         belief = get_initial_belief(env, n_particles=10)
         action_sampler = DiscreteActionSampler(env.get_actions())
 
@@ -2622,7 +2644,7 @@ class TestSingleEnvironmentOptimizationSmoke:
 
         Test type: integration
         """
-        env = DiscreteLightDarkPOMDP(discount_factor=0.95)
+        env = DiscreteLightDarkPOMDP(discount_factor=0.95, **discrete_light_dark_pinned_kwargs())
         belief = get_initial_belief(env, n_particles=10)
         action_sampler = DiscreteActionSampler(env.get_actions())
 
@@ -2674,7 +2696,10 @@ class TestSingleEnvironmentOptimizationSmoke:
 
         Test type: integration
         """
-        env = ContinuousLightDarkPOMDPDiscreteActions(discount_factor=0.95)
+        env = ContinuousLightDarkPOMDPDiscreteActions(
+            discount_factor=0.95,
+            **continuous_light_dark_discrete_actions_pinned_kwargs(),
+        )
         belief = get_initial_belief(env, n_particles=10)
         action_sampler = DiscreteActionSampler(env.get_actions())
 
@@ -2726,7 +2751,10 @@ class TestSingleEnvironmentOptimizationSmoke:
 
         Test type: integration
         """
-        env = ContinuousPushPOMDPDiscreteActions(discount_factor=0.95)
+        env = ContinuousPushPOMDPDiscreteActions(
+            discount_factor=0.95,
+            **continuous_push_discrete_actions_pinned_kwargs(),
+        )
         belief = get_initial_belief(env, n_particles=10)
         action_sampler = DiscreteActionSampler(env.get_actions())
 
@@ -2778,7 +2806,10 @@ class TestSingleEnvironmentOptimizationSmoke:
 
         Test type: integration
         """
-        env = ContinuousLaserTagPOMDPDiscreteActions(discount_factor=0.95)
+        env = ContinuousLaserTagPOMDPDiscreteActions(
+            discount_factor=0.95,
+            **continuous_laser_tag_discrete_actions_pinned_kwargs(),
+        )
         belief = get_initial_belief(env, n_particles=10)
         action_sampler = DiscreteActionSampler(env.get_actions())
 

@@ -30,6 +30,9 @@ from POMDPPlanners.tests.test_core.test_belief.vectorized_updater_test_utils imp
     assert_batch_obs_log_likelihood_matches_loop,
     assert_batch_transition_matches_loop,
 )
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
+    safety_ant_velocity_pinned_kwargs,
+)
 from POMDPPlanners.utils.multivariate_normal import (
     CovarianceParameterizedMultivariateNormal,
 )
@@ -68,7 +71,7 @@ def _make_aligned_beliefs(updater, n_particles=60):
 
 @pytest.fixture
 def env():
-    return SafeAntVelocityPOMDP(discount_factor=0.99)
+    return SafeAntVelocityPOMDP(discount_factor=0.99, **safety_ant_velocity_pinned_kwargs())
 
 
 @pytest.fixture

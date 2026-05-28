@@ -31,6 +31,10 @@ from POMDPPlanners.core.cost import (
     belief_expectation_reward_particle_belief,
 )
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
+    cartpole_pinned_kwargs,
+    tiger_pinned_kwargs,
+)
 
 # Set seeds for reproducible tests
 np.random.seed(42)
@@ -93,7 +97,7 @@ def tiger_env():
 
     Test type: unit
     """
-    return TigerPOMDP(discount_factor=0.95)
+    return TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs())
 
 
 def test_belief_expectation_cost_particle_belief_uniform_weights(
@@ -155,7 +159,7 @@ def test_belief_expectation_cost_particle_belief_varying_rewards():
     log_weights = np.log(np.array([0.7, 0.3]))
     belief = WeightedParticleBelief(particles=particles, log_weights=log_weights)
 
-    env = TigerPOMDP(discount_factor=0.95)
+    env = TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs())
     action = "open_left"
     cost = belief_expectation_cost_particle_belief(belief=belief, action=action, env=env)
 
@@ -181,7 +185,7 @@ def test_belief_expectation_cost_entropy_penalty():
     log_weights = np.log(np.ones(2) / 2)
     belief = WeightedParticleBelief(particles=particles, log_weights=log_weights)
 
-    env = TigerPOMDP(discount_factor=0.95)
+    env = TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs())
     action = "listen"
     entropy_weight = 0.1
 
@@ -296,7 +300,7 @@ def test_belief_expectation_cost_belief_information_gain():
     log_weights_next = np.log(np.array([0.9, 0.1]))
     belief_next = WeightedParticleBelief(particles=particles_next, log_weights=log_weights_next)
 
-    env = TigerPOMDP(discount_factor=0.95)
+    env = TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs())
     action = "listen"
     entropy_weight = 0.1
 
@@ -474,7 +478,7 @@ def test_belief_expectation_cost_belief_information_gain_with_weighted_particle_
     log_weights_next = np.log(np.array([0.9, 0.1]))
     belief_next = WeightedParticleBelief(particles=particles_next, log_weights=log_weights_next)
 
-    env = TigerPOMDP(discount_factor=0.95)
+    env = TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs())
     action = "listen"
     entropy_weight = 0.1
 
@@ -562,7 +566,7 @@ def test_belief_expectation_cost_single_particle():
     log_weights = np.array([1e-10])
     belief = WeightedParticleBelief(particles=particles, log_weights=log_weights)
 
-    env = TigerPOMDP(discount_factor=0.95)
+    env = TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs())
 
     action = "open_right"  # Opening right door when tiger is left gives +10 reward
     cost = belief_expectation_cost_particle_belief(belief=belief, action=action, env=env)
@@ -597,7 +601,7 @@ def test_belief_expectation_cost_entropy_penalty_maximum_uncertainty():
         particles=particles_concentrated, log_weights=log_weights_concentrated
     )
 
-    env = TigerPOMDP(discount_factor=0.95)
+    env = TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs())
     action = "listen"
     entropy_weight = 0.5
 
@@ -646,7 +650,7 @@ def test_belief_expectation_cost_weights_normalization():
     log_weights = np.log(np.array([0.5, 0.5]))  # Will be normalized to [0.5, 0.5]
     belief = WeightedParticleBelief(particles=particles, log_weights=log_weights)
 
-    env = TigerPOMDP(discount_factor=0.95)
+    env = TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs())
     action = "open_left"  # This gives different rewards: -100 for tiger_left, 10 for tiger_right
 
     cost = belief_expectation_cost_particle_belief(belief=belief, action=action, env=env)
@@ -680,7 +684,9 @@ class TestVectorizedBeliefCost:
         )
         from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
 
-        env = CartPolePOMDP(discount_factor=0.95, noise_cov=np.diag([0.1] * 4))
+        env = CartPolePOMDP(
+            discount_factor=0.95, noise_cov=np.diag([0.1] * 4), **cartpole_pinned_kwargs()
+        )
         np.random.seed(42)
         particles_arr = np.random.randn(50, 4)
         weights = np.random.dirichlet(np.ones(50))
@@ -715,7 +721,7 @@ class TestVectorizedBeliefCost:
 
         Test type: unit
         """
-        env = TigerPOMDP(discount_factor=0.95)
+        env = TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs())
         particles = ["tiger_left", "tiger_right"]
         weights = np.array([0.7, 0.3])
         log_weights = np.log(weights)

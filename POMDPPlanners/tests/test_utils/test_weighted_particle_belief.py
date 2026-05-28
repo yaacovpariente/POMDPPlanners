@@ -17,6 +17,9 @@ import pytest
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
     ContinuousLightDarkPOMDPDiscreteActions,
 )
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
+    continuous_light_dark_discrete_actions_pinned_kwargs,
+)
 from POMDPPlanners.tests.test_utils.metric_invariants_utils import (
     verify_belief_invariants,
 )
@@ -91,7 +94,9 @@ def test_reinvigoration():
     )
 
     # Create ContinuousLightDarkPOMDP environment
-    env = ContinuousLightDarkPOMDPDiscreteActions(discount_factor=0.95)
+    env = ContinuousLightDarkPOMDPDiscreteActions(
+        discount_factor=0.95, **continuous_light_dark_discrete_actions_pinned_kwargs()
+    )
 
     # Test reinvigoration
     action = "up"
@@ -228,7 +233,9 @@ def test_full_coverage_reinvigoration():
     )
 
     # Create ContinuousLightDarkPOMDP environment
-    env = ContinuousLightDarkPOMDPDiscreteActions(discount_factor=0.95)
+    env = ContinuousLightDarkPOMDPDiscreteActions(
+        discount_factor=0.95, **continuous_light_dark_discrete_actions_pinned_kwargs()
+    )
 
     # Test reinvigoration
     action = "up"
@@ -306,7 +313,9 @@ def test_full_coverage_resampling():
     assert initial_ess < belief.ess_threshold
 
     # Create ContinuousLightDarkPOMDP environment
-    env = ContinuousLightDarkPOMDPDiscreteActions(discount_factor=0.95)
+    env = ContinuousLightDarkPOMDPDiscreteActions(
+        discount_factor=0.95, **continuous_light_dark_discrete_actions_pinned_kwargs()
+    )
 
     # Test reinvigoration
     action = "up"
@@ -390,7 +399,9 @@ def test_continuous_full_coverage_reinvigoration():
     )
 
     # Create ContinuousLightDarkPOMDP environment
-    env = ContinuousLightDarkPOMDPDiscreteActions(discount_factor=0.95)
+    env = ContinuousLightDarkPOMDPDiscreteActions(
+        discount_factor=0.95, **continuous_light_dark_discrete_actions_pinned_kwargs()
+    )
 
     # Test reinvigoration
     action = "up"
@@ -478,7 +489,9 @@ def test_continuous_full_coverage_resampling():
     assert initial_ess < belief.ess_threshold
 
     # Create ContinuousLightDarkPOMDP environment
-    env = ContinuousLightDarkPOMDPDiscreteActions(discount_factor=0.95)
+    env = ContinuousLightDarkPOMDPDiscreteActions(
+        discount_factor=0.95, **continuous_light_dark_discrete_actions_pinned_kwargs()
+    )
 
     # Test reinvigoration
     action = "up"
@@ -526,7 +539,9 @@ def test_continuous_full_coverage_gmm_sampling():
     )
 
     # Create ContinuousLightDarkPOMDP environment
-    env = ContinuousLightDarkPOMDPDiscreteActions(discount_factor=0.95)
+    env = ContinuousLightDarkPOMDPDiscreteActions(
+        discount_factor=0.95, **continuous_light_dark_discrete_actions_pinned_kwargs()
+    )
 
     # Test reinvigoration
     action = "up"
@@ -575,7 +590,9 @@ def test_continuous_full_coverage_particle_type_preservation_after_update():
     )
 
     # Create environment
-    env = ContinuousLightDarkPOMDPDiscreteActions(discount_factor=0.95)
+    env = ContinuousLightDarkPOMDPDiscreteActions(
+        discount_factor=0.95, **continuous_light_dark_discrete_actions_pinned_kwargs()
+    )
 
     # Verify original particle types and shapes
     for particle in belief.particles:

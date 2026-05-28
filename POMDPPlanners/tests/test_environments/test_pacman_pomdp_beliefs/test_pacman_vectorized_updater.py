@@ -27,6 +27,7 @@ from POMDPPlanners.tests.test_core.test_belief.vectorized_updater_test_utils imp
     assert_batch_obs_log_likelihood_matches_loop,
     assert_batch_transition_matches_loop,
 )
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import pacman_pinned_kwargs
 
 
 def _make_aligned_beliefs(env, updater, n_particles=50):
@@ -63,15 +64,17 @@ def _make_particle_to_array(env):  # pylint: disable=unused-argument
 @pytest.fixture()
 def simple_env():
     return PacManPOMDP(
-        maze_size=(5, 5),
-        walls={(2, 2)},
-        initial_pellets=[(1, 1), (3, 3)],
-        initial_pacman_pos=(0, 0),
-        num_ghosts=1,
-        initial_ghost_positions=[(4, 4)],
-        ghost_aggressiveness=2.0,
-        ghost_coordination="independent",
         discount_factor=0.95,
+        **pacman_pinned_kwargs(
+            maze_size=(5, 5),
+            walls={(2, 2)},
+            initial_pellets=[(1, 1), (3, 3)],
+            initial_pacman_pos=(0, 0),
+            num_ghosts=1,
+            initial_ghost_positions=[(4, 4)],
+            ghost_aggressiveness=2.0,
+            ghost_coordination="independent",
+        ),
     )
 
 

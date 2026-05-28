@@ -24,16 +24,20 @@ from POMDPPlanners.environments.pacman_pomdp.pacman_pomdp_beliefs.pacman_vectori
     PacManVectorizedUpdater,
 )
 from POMDPPlanners.environments.pacman_pomdp.pacman_visualizer import PacManVisualizer
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import pacman_pinned_kwargs
 
 
 def _make_env() -> PacManPOMDP:
     return PacManPOMDP(
-        maze_size=(5, 5),
-        walls=set(),
-        initial_pacman_pos=(0, 0),
-        num_ghosts=1,
-        initial_ghost_positions=[(4, 4)],
-        initial_pellets=[(2, 2)],
+        discount_factor=0.95,
+        **pacman_pinned_kwargs(
+            maze_size=(5, 5),
+            walls=set(),
+            initial_pacman_pos=(0, 0),
+            num_ghosts=1,
+            initial_ghost_positions=[(4, 4)],
+            initial_pellets=[(2, 2)],
+        ),
     )
 
 
@@ -255,15 +259,18 @@ def test_draw_dangerous_areas_renders_red_overlay_on_configured_cell() -> None:
     Test type: unit
     """
     env = PacManPOMDP(
-        maze_size=(5, 5),
-        walls=set(),
-        initial_pacman_pos=(0, 0),
-        num_ghosts=1,
-        initial_ghost_positions=[(4, 4)],
-        initial_pellets=[(2, 2)],
-        dangerous_areas={(2, 2)},
-        dangerous_area_radius=1.0,
-        dangerous_area_penalty=5.0,
+        discount_factor=0.95,
+        **pacman_pinned_kwargs(
+            maze_size=(5, 5),
+            walls=set(),
+            initial_pacman_pos=(0, 0),
+            num_ghosts=1,
+            initial_ghost_positions=[(4, 4)],
+            initial_pellets=[(2, 2)],
+            dangerous_areas={(2, 2)},
+            dangerous_area_radius=1.0,
+            dangerous_area_penalty=5.0,
+        ),
     )
     visualizer = PacManVisualizer(env, tile_size=16)
     canvas = _blank_canvas(env, visualizer.tile_size)

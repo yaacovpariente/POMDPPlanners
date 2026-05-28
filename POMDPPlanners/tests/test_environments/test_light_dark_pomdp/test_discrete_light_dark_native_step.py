@@ -23,21 +23,22 @@ from typing import Any, List, Tuple
 import numpy as np
 import pytest
 
-from POMDPPlanners.environments.light_dark_pomdp import (
-    _native,  # pylint: disable=no-name-in-module
-)
+from POMDPPlanners.environments.light_dark_pomdp import _native  # pylint: disable=no-name-in-module
 from POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp import (
     DiscreteLightDarkPOMDP,
     ObservationModelType,
 )
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import discrete_light_dark_pinned_kwargs
 
 
 def _make_env() -> DiscreteLightDarkPOMDP:
     return DiscreteLightDarkPOMDP(
         discount_factor=0.95,
-        beacons=[(0, 0), (5, 5)],
-        beacon_radius=1.5,
-        observation_model_type=ObservationModelType.NORMAL,
+        **discrete_light_dark_pinned_kwargs(
+            beacons=[(0, 0), (5, 5)],
+            beacon_radius=1.5,
+            observation_model_type=ObservationModelType.NORMAL,
+        ),
     )
 
 
@@ -150,9 +151,11 @@ def test_native_sample_next_state_empirical_distribution_matches_cumprobs() -> N
     """
     env = DiscreteLightDarkPOMDP(
         discount_factor=0.95,
-        transition_error_prob=0.1,
-        beacons=[(0, 0)],
-        observation_model_type=ObservationModelType.NORMAL,
+        **discrete_light_dark_pinned_kwargs(
+            transition_error_prob=0.1,
+            beacons=[(0, 0)],
+            observation_model_type=ObservationModelType.NORMAL,
+        ),
     )
     state = np.array([3, 4])
     success_offset = env.action_to_vector["up"]
@@ -192,10 +195,12 @@ def test_native_sample_observation_empirical_distribution_matches_cumprobs() -> 
     """
     env = DiscreteLightDarkPOMDP(
         discount_factor=0.95,
-        observation_error_prob=0.2,
-        beacons=[(5, 5)],
-        beacon_radius=1.5,
-        observation_model_type=ObservationModelType.NORMAL,
+        **discrete_light_dark_pinned_kwargs(
+            observation_error_prob=0.2,
+            beacons=[(5, 5)],
+            beacon_radius=1.5,
+            observation_model_type=ObservationModelType.NORMAL,
+        ),
     )
     next_state = np.array([5, 5])
     no_noise_outcome = (5.0, 5.0)

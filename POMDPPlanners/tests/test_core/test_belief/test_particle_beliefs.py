@@ -28,6 +28,11 @@ from POMDPPlanners.core.tree import ActionNode, BeliefNode
 from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
 from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
+    cartpole_pinned_kwargs,
+    continuous_light_dark_discrete_actions_pinned_kwargs,
+    tiger_pinned_kwargs,
+)
 from POMDPPlanners.tests.test_utils.metric_invariants_utils import (
     verify_belief_invariants,
 )
@@ -666,7 +671,7 @@ def test_get_unique_support_preserves_original_types():
 def test_belief_update_basic():
     """Test basic belief update functionality."""
     # Create a simple environment and belief
-    env = SanityPOMDP()
+    env = SanityPOMDP(discount_factor=0.95)
     particles = [0, 1, 0, 1]  # Mix of states
     log_weights = np.array([0.1, 0.1, 0.1, 0.1])  # Non-zero weights
     belief = WeightedParticleBelief(particles=particles, log_weights=log_weights, resampling=False)
@@ -691,7 +696,7 @@ def test_belief_update_basic():
 
 def test_belief_update_with_resampling():
     """Test belief update with resampling enabled."""
-    env = SanityPOMDP()
+    env = SanityPOMDP(discount_factor=0.95)
     particles = [0, 1, 0, 1]
     log_weights = np.array([0.1, 0.1, 0.1, 0.1])  # Non-zero weights
     belief = WeightedParticleBelief(
@@ -718,7 +723,7 @@ def test_belief_update_with_resampling():
 def test_belief_update_state_transitions():
     """Test that belief update correctly handles state transitions."""
 
-    env = SanityPOMDP()
+    env = SanityPOMDP(discount_factor=0.95)
     particles = [0, 0, 0]  # All particles start in state 0
     log_weights = np.array([0.1, 0.1, 0.1])  # Non-zero weights
     belief = WeightedParticleBelief(particles=particles, log_weights=log_weights, resampling=False)
@@ -735,7 +740,7 @@ def test_belief_update_state_transitions():
 def test_belief_update_observation_probabilities():
     """Test that belief update correctly computes observation probabilities."""
 
-    env = SanityPOMDP()
+    env = SanityPOMDP(discount_factor=0.95)
     particles = [0, 1, 0, 1]
     log_weights = np.array([0.1, 0.1, 0.1, 0.1])  # Non-zero weights
     belief = WeightedParticleBelief(particles=particles, log_weights=log_weights, resampling=False)
@@ -751,7 +756,7 @@ def test_belief_update_observation_probabilities():
 
 def test_belief_update_with_tiger_pomdp():
     """Test belief update with TigerPOMDP environment."""
-    env = TigerPOMDP(discount_factor=0.95)
+    env = TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs())
     particles = ["tiger_left", "tiger_right", "tiger_left"]
     log_weights = np.array([0.1, 0.1, 0.1])  # Non-zero weights
     belief = WeightedParticleBelief(particles=particles, log_weights=log_weights, resampling=False)
@@ -772,7 +777,7 @@ def test_belief_update_with_tiger_pomdp():
 def test_belief_update_preserves_particle_count():
     """Test that belief update preserves the number of particles."""
 
-    env = SanityPOMDP()
+    env = SanityPOMDP(discount_factor=0.95)
     n_particles = 10
     particles = [0] * n_particles
     log_weights = np.ones(n_particles) * 0.1  # Non-zero weights
@@ -789,7 +794,7 @@ def test_belief_update_preserves_particle_count():
 def test_belief_update_weight_normalization():
     """Test that belief update properly handles weight normalization."""
 
-    env = SanityPOMDP()
+    env = SanityPOMDP(discount_factor=0.95)
     particles = [0, 1, 0, 1]
     log_weights = np.array([1.0, 2.0, 3.0, 4.0])  # Unequal weights
     belief = WeightedParticleBelief(particles=particles, log_weights=log_weights, resampling=False)
@@ -808,7 +813,7 @@ def test_belief_update_weight_normalization():
 def test_belief_update_with_extreme_weights():
     """Test belief update with extreme weight values."""
 
-    env = SanityPOMDP()
+    env = SanityPOMDP(discount_factor=0.95)
     particles = [0, 1, 0, 1]
     log_weights = np.array([-1000.0, -1000.0, -1000.0, -1000.0])  # Very small weights
     belief = WeightedParticleBelief(particles=particles, log_weights=log_weights, resampling=False)
@@ -851,7 +856,10 @@ def test_update_weights_skips_asarray_round_trip_on_native_path():
         ContinuousLightDarkPOMDPDiscreteActions,
     )
 
-    env = ContinuousLightDarkPOMDPDiscreteActions(discount_factor=0.95)
+    env = ContinuousLightDarkPOMDPDiscreteActions(
+        discount_factor=0.95,
+        **continuous_light_dark_discrete_actions_pinned_kwargs(),
+    )
 
     np.random.seed(123)
     init_particles = env.initial_state_dist().sample(n_samples=8)
@@ -908,7 +916,7 @@ def test_update_weights_preserves_list_path_for_non_native_envs():
     Test type: unit
     """
     # pylint: disable=protected-access
-    env = TigerPOMDP(discount_factor=0.95)
+    env = TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs())
     particles = ["tiger_left", "tiger_right", "tiger_left"]
     log_weights = np.array([0.1, 0.1, 0.1])
     belief = WeightedParticleBelief(particles=particles, log_weights=log_weights, resampling=False)
@@ -926,7 +934,7 @@ def test_update_weights_preserves_list_path_for_non_native_envs():
 def test_belief_update_consistency():
     """Test that belief update produces consistent results."""
 
-    env = SanityPOMDP()
+    env = SanityPOMDP(discount_factor=0.95)
     particles = [0, 1, 0, 1]
     log_weights = np.array([0.1, 0.1, 0.1, 0.1])  # Non-zero weights
     belief = WeightedParticleBelief(particles=particles, log_weights=log_weights, resampling=False)
@@ -946,7 +954,7 @@ def test_belief_update_consistency():
 def test_belief_update_with_different_actions():
     """Test that belief update behaves differently for different actions."""
 
-    env = SanityPOMDP()
+    env = SanityPOMDP(discount_factor=0.95)
     particles = [0, 1, 0, 1]
     log_weights = np.array([0.1, 0.1, 0.1, 0.1])  # Non-zero weights
     belief = WeightedParticleBelief(particles=particles, log_weights=log_weights, resampling=False)
@@ -1026,7 +1034,7 @@ def test_weighted_particle_belief_state_update_initialization_weight_sum():
 def test_weighted_particle_belief_state_update_inplace_update():
     """Test inplace_update method adds state and weight correctly."""
 
-    env = SanityPOMDP()
+    env = SanityPOMDP(discount_factor=0.95)
     belief = WeightedParticleBeliefStateUpdate(particles=[0], weights=[0.5])
     initial_sum = belief.weights_sum
 
@@ -1050,7 +1058,7 @@ def test_weighted_particle_belief_state_update_inplace_update():
 def test_weighted_particle_belief_state_update_inplace_update_observation_probability():
     """Test that inplace_update correctly computes observation probability."""
 
-    env = SanityPOMDP()
+    env = SanityPOMDP(discount_factor=0.95)
     belief = WeightedParticleBeliefStateUpdate()
 
     state = 0
@@ -1070,7 +1078,7 @@ def test_weighted_particle_belief_state_update_inplace_update_observation_probab
 def test_weighted_particle_belief_state_update_multiple_inplace_updates():
     """Test multiple inplace_updates accumulate correctly."""
 
-    env = SanityPOMDP()
+    env = SanityPOMDP(discount_factor=0.95)
     belief = WeightedParticleBeliefStateUpdate(particles=[], weights=[])
 
     states = [0, 1, 0]
@@ -1089,7 +1097,7 @@ def test_weighted_particle_belief_state_update_multiple_inplace_updates():
 def test_weighted_particle_belief_state_update_update_returns_new_instance():
     """Test that update method returns a new instance."""
 
-    env = SanityPOMDP()
+    env = SanityPOMDP(discount_factor=0.95)
     original_belief = WeightedParticleBeliefStateUpdate(particles=[0], weights=[0.5])
 
     action = 0
@@ -1116,7 +1124,7 @@ def test_weighted_particle_belief_state_update_update_returns_new_instance():
 def test_weighted_particle_belief_state_update_update_preserves_original_data():
     """Test that update method preserves original particles and weights."""
 
-    env = SanityPOMDP()
+    env = SanityPOMDP(discount_factor=0.95)
     original_particles = [0, 1]
     original_weights = [0.3, 0.7]
     original_belief = WeightedParticleBeliefStateUpdate(
@@ -1144,7 +1152,7 @@ def test_weighted_particle_belief_state_update_update_preserves_original_data():
 def test_weighted_particle_belief_state_update_inplace_vs_update_comparison():
     """Test that inplace_update modifies the belief in-place while update returns a new belief."""
 
-    env = SanityPOMDP()
+    env = SanityPOMDP(discount_factor=0.95)
 
     # Test 1: inplace_update modifies the original belief
     belief1 = WeightedParticleBeliefStateUpdate(particles=[0], weights=[0.5])
@@ -1327,7 +1335,7 @@ def test_weighted_particle_belief_state_update_sample_normalization():
 
 def test_weighted_particle_belief_state_update_with_tiger_pomdp():
     """Test WeightedParticleBeliefStateUpdate integration with TigerPOMDP."""
-    env = TigerPOMDP(discount_factor=0.95)
+    env = TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs())
 
     # Start with empty belief
     belief = WeightedParticleBeliefStateUpdate([], [])
@@ -1354,7 +1362,7 @@ def test_weighted_particle_belief_state_update_with_tiger_pomdp():
 
 def test_weighted_particle_belief_state_update_with_tiger_pomdp_different_observations():
     """Test WeightedParticleBeliefStateUpdate with different observations in TigerPOMDP."""
-    env = TigerPOMDP(discount_factor=0.95)
+    env = TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs())
 
     # Create two beliefs with different observations
     belief1 = WeightedParticleBeliefStateUpdate([], [])
@@ -1627,7 +1635,7 @@ def test_weighted_particle_belief_state_update_hashable():
 def test_weighted_particle_belief_state_update_edge_cases():
     """Test edge cases for WeightedParticleBeliefStateUpdate."""
 
-    env = SanityPOMDP()
+    env = SanityPOMDP(discount_factor=0.95)
 
     # Test with very small weights
     belief = WeightedParticleBeliefStateUpdate(particles=[0], weights=[1e-10])
@@ -1655,7 +1663,7 @@ def test_weighted_particle_belief_state_update_comprehensive_usage_example():
     """Test the comprehensive WeightedParticleBeliefStateUpdate usage example from the class docstring."""
 
     # Create environment and empty belief (from docstring)
-    env = TigerPOMDP(discount_factor=0.95)
+    env = TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs())
     belief = WeightedParticleBeliefStateUpdate(particles=[], weights=[])
 
     # Add states incrementally with observations (from docstring)
@@ -1692,7 +1700,7 @@ def test_weighted_particle_belief_state_update_update_method_example():
     """Test the update method usage example from WeightedParticleBeliefStateUpdate docstring."""
 
     # Create a mock environment for testing
-    environment = TigerPOMDP(discount_factor=0.95)
+    environment = TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs())
 
     # Original belief with 2 particles (from docstring)
     belief = WeightedParticleBeliefStateUpdate(
@@ -1721,7 +1729,7 @@ def test_weighted_particle_belief_state_update_update_method_example():
 def test_weighted_particle_belief_state_update_inplace_update_example():
     """Test the inplace_update method usage example from WeightedParticleBeliefStateUpdate docstring."""
 
-    env = TigerPOMDP(discount_factor=0.95)
+    env = TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs())
     belief = WeightedParticleBeliefStateUpdate([], [])
 
     # Add particles one by one (from docstring)
@@ -1801,7 +1809,7 @@ def test_unweighted_particle_belief_state_update_initialization_weight_sum():
 def test_unweighted_particle_belief_state_update_inplace_update():
     """Test inplace_update method adds state correctly."""
 
-    env = SanityPOMDP()
+    env = SanityPOMDP(discount_factor=0.95)
     belief = UnweightedParticleBeliefStateUpdate(particles=[0])
     initial_sum = belief.weights_sum
 
@@ -1824,7 +1832,7 @@ def test_unweighted_particle_belief_state_update_inplace_update():
 def test_unweighted_particle_belief_state_update_inplace_update_ignores_observation():
     """Test that inplace_update doesn't use observation probability (unweighted)."""
 
-    env = SanityPOMDP()
+    env = SanityPOMDP(discount_factor=0.95)
     belief = UnweightedParticleBeliefStateUpdate()
 
     state = 0
@@ -1842,7 +1850,7 @@ def test_unweighted_particle_belief_state_update_inplace_update_ignores_observat
 def test_unweighted_particle_belief_state_update_multiple_inplace_updates():
     """Test multiple inplace_updates accumulate correctly."""
 
-    env = SanityPOMDP()
+    env = SanityPOMDP(discount_factor=0.95)
     belief = UnweightedParticleBeliefStateUpdate(particles=[])
 
     states = [0, 1, 0, 2]
@@ -1860,7 +1868,7 @@ def test_unweighted_particle_belief_state_update_multiple_inplace_updates():
 def test_unweighted_particle_belief_state_update_update_returns_new_instance():
     """Test that update method returns a new instance."""
 
-    env = SanityPOMDP()
+    env = SanityPOMDP(discount_factor=0.95)
     original_belief = UnweightedParticleBeliefStateUpdate(particles=[0])
 
     action = 0
@@ -1887,7 +1895,7 @@ def test_unweighted_particle_belief_state_update_update_returns_new_instance():
 def test_unweighted_particle_belief_state_update_update_preserves_original_data():
     """Test that update method preserves original particles."""
 
-    env = SanityPOMDP()
+    env = SanityPOMDP(discount_factor=0.95)
     original_particles = [0, 1]
     original_belief = UnweightedParticleBeliefStateUpdate(particles=original_particles)
 
@@ -1911,7 +1919,7 @@ def test_unweighted_particle_belief_state_update_update_preserves_original_data(
 def test_unweighted_particle_belief_state_update_inplace_vs_update_comparison():
     """Test that inplace_update modifies the belief in-place while update returns a new belief."""
 
-    env = SanityPOMDP()
+    env = SanityPOMDP(discount_factor=0.95)
 
     # Test 1: inplace_update modifies the original belief
     belief1 = UnweightedParticleBeliefStateUpdate(particles=[0])
@@ -2027,7 +2035,7 @@ def test_unweighted_particle_belief_state_update_sample_empty_belief_raises_erro
 
 def test_unweighted_particle_belief_state_update_with_tiger_pomdp():
     """Test UnweightedParticleBeliefStateUpdate integration with TigerPOMDP."""
-    env = TigerPOMDP(discount_factor=0.95)
+    env = TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs())
 
     # Start with empty belief
     belief = UnweightedParticleBeliefStateUpdate([])
@@ -2268,7 +2276,7 @@ def test_unweighted_particle_belief_state_update_hashable():
 def test_unweighted_particle_belief_state_update_edge_cases():
     """Test edge cases for UnweightedParticleBeliefStateUpdate."""
 
-    env = SanityPOMDP()
+    env = SanityPOMDP(discount_factor=0.95)
 
     # Test with None state
     belief = UnweightedParticleBeliefStateUpdate(particles=[0])
@@ -2287,7 +2295,7 @@ def test_unweighted_particle_belief_state_update_comprehensive_usage_example():
     """Test comprehensive usage example similar to the weighted version."""
 
     # Create environment and empty belief
-    env = TigerPOMDP(discount_factor=0.95)
+    env = TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs())
     belief = UnweightedParticleBeliefStateUpdate(particles=[])
 
     # Add states incrementally (observations are ignored in unweighted version)
@@ -2320,7 +2328,7 @@ def test_unweighted_particle_belief_state_update_comprehensive_usage_example():
 def test_unweighted_particle_belief_state_update_differences_from_weighted():
     """Test that UnweightedParticleBeliefStateUpdate behaves differently from WeightedParticleBeliefStateUpdate."""
 
-    env = TigerPOMDP(discount_factor=0.95)
+    env = TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs())
 
     # Create both types of beliefs
     unweighted_belief = UnweightedParticleBeliefStateUpdate([])
@@ -2395,7 +2403,7 @@ def test_weighted_particle_belief_basic_incremental_construction_usage_example()
     """Test the basic incremental belief construction usage example from WeightedParticleBeliefStateUpdate docstring."""
 
     # Create environment and empty belief (from docstring)
-    env = TigerPOMDP(discount_factor=0.95)
+    env = TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs())
     belief = WeightedParticleBeliefStateUpdate(particles=[], weights=[])
 
     # Add states incrementally with observations (from docstring)
@@ -2424,7 +2432,7 @@ def test_weighted_particle_belief_immutable_updates_usage_example():
 
     # Create continuous state environment (from docstring)
     noise_cov = np.diag([0.1, 0.1, 0.1, 0.1])
-    env = CartPolePOMDP(discount_factor=0.99, noise_cov=noise_cov)
+    env = CartPolePOMDP(discount_factor=0.99, noise_cov=noise_cov, **cartpole_pinned_kwargs())
 
     # Start with single particle (from docstring)
     initial_state = np.array([0.0, 0.0, 0.1, 0.0])  # [x, x_dot, theta, theta_dot]
@@ -2498,7 +2506,7 @@ def test_weighted_particle_belief_update_strategies_comparison_usage_example():
 def test_weighted_particle_belief_mcts_integration_usage_example():
     """Test the Monte Carlo Tree Search integration usage example from WeightedParticleBeliefStateUpdate docstring."""
 
-    env = TigerPOMDP(discount_factor=0.95)
+    env = TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs())
 
     # Root belief node with initial particles (from docstring)
     root_belief = WeightedParticleBeliefStateUpdate(
@@ -2542,7 +2550,7 @@ def test_weighted_particle_belief_mcts_integration_usage_example():
 def test_weighted_particle_belief_weighted_sampling_usage_example():
     """Test the weighted sampling and state estimation usage example from WeightedParticleBeliefStateUpdate docstring."""
 
-    env = TigerPOMDP(discount_factor=0.95)
+    env = TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs())
     belief = WeightedParticleBeliefStateUpdate([], [])
 
     # Add strongly biased evidence for tiger_left (from docstring)
@@ -2603,7 +2611,7 @@ def test_weighted_particle_belief_custom_particle_types_usage_example():
 
     # Works with any particle type - numpy arrays, custom objects, etc. (from docstring)
     noise_cov = np.diag([0.1, 0.1, 0.1, 0.1])
-    env = CartPolePOMDP(discount_factor=0.99, noise_cov=noise_cov)
+    env = CartPolePOMDP(discount_factor=0.99, noise_cov=noise_cov, **cartpole_pinned_kwargs())
 
     # Numpy array particles (from docstring)
     particles = [
@@ -2643,7 +2651,7 @@ def test_unweighted_particle_belief_state_update_basic_uniform_belief_constructi
     """Test the basic uniform belief construction usage example from UnweightedParticleBeliefStateUpdate docstring."""
 
     # Create environment and empty uniform belief
-    env = TigerPOMDP(discount_factor=0.95)
+    env = TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs())
     belief = UnweightedParticleBeliefStateUpdate(particles=[])
 
     # Add states uniformly (all have equal probability)
@@ -2729,7 +2737,7 @@ def test_unweighted_particle_belief_state_update_comparing_weighted_vs_unweighte
 def test_unweighted_particle_belief_state_update_discrete_observation_filtering_usage_example():
     """Test the discrete observation filtering usage example from UnweightedParticleBeliefStateUpdate docstring."""
 
-    env = TigerPOMDP(discount_factor=0.95)
+    env = TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs())
     belief = UnweightedParticleBeliefStateUpdate([])
 
     # Simulate multiple observations (discrete: hear_left or hear_right)
@@ -2767,7 +2775,7 @@ def test_unweighted_particle_belief_state_update_immutable_belief_trees_usage_ex
 
     # Create continuous state environment
     noise_cov = np.diag([0.1, 0.1, 0.1, 0.1])
-    env = CartPolePOMDP(discount_factor=0.99, noise_cov=noise_cov)
+    env = CartPolePOMDP(discount_factor=0.99, noise_cov=noise_cov, **cartpole_pinned_kwargs())
 
     # Start with uniform belief over multiple initial states
     initial_states = [
@@ -2851,7 +2859,7 @@ def test_unweighted_particle_belief_state_update_configuration_caching_usage_exa
 def test_unweighted_particle_belief_state_update_large_scale_accumulation_usage_example():
     """Test the large-scale particle accumulation usage example from UnweightedParticleBeliefStateUpdate docstring."""
 
-    env = TigerPOMDP(discount_factor=0.95)
+    env = TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs())
     belief = UnweightedParticleBeliefStateUpdate([])
 
     # Time large-scale particle addition (reduced scale for testing)

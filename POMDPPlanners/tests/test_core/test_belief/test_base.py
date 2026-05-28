@@ -19,6 +19,7 @@ from POMDPPlanners.core.belief import (
 )
 from POMDPPlanners.core.config_types import BeliefConfig
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import tiger_pinned_kwargs
 from POMDPPlanners.utils.weighted_particle_beliefs import (
     WeightedParticleBeliefContinuousLightDarkFullCoverage,
     WeightedParticleBeliefDiscreteLightDark,
@@ -283,7 +284,7 @@ def test_create_belief_from_config_basic():
         class_name="WeightedParticleBelief",
         params={"n_particles": 5, "resampling": True, "ess_factor": 0.5},
     )
-    env = TigerPOMDP(discount_factor=0.95)
+    env = TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs())
     belief = create_belief(env, config)
     assert isinstance(belief, WeightedParticleBelief)
     assert len(belief.particles) == 5
@@ -300,7 +301,7 @@ def test_create_belief_particles_and_weights():
         class_name="WeightedParticleBelief",
         params={"n_particles": 3, "resampling": False, "ess_factor": 0.1},
     )
-    env = TigerPOMDP(discount_factor=0.95)
+    env = TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs())
     belief = create_belief(env, config)
     assert len(belief.particles) == 3
     assert all(p in env.states for p in belief.particles)
@@ -321,7 +322,7 @@ def test_reinvigoration_discrete_light_dark():
             "reinvigoration_fraction": 0.2,
         },
     )
-    env = TigerPOMDP(discount_factor=0.95)
+    env = TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs())
     belief = create_belief(env, config)
     assert isinstance(belief, WeightedParticleBeliefDiscreteLightDark)
     # Call reinvigorate with dummy action and observation
@@ -336,7 +337,7 @@ def test_reinvigoration_discrete_light_dark_full_coverage():
         class_name="WeightedParticleBeliefDiscreteLightDarkFullCoverage",
         params={"n_particles": 5, "ess_factor": 0.5, "reinvigoration_fraction": 0.05},
     )
-    env = TigerPOMDP(discount_factor=0.95)
+    env = TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs())
     belief = create_belief(env, config)
     assert isinstance(belief, WeightedParticleBeliefDiscreteLightDarkFullCoverage)
     # Call reinvigorate with dummy action and observation
@@ -356,7 +357,7 @@ def test_reinvigoration_continuous_light_dark_full_coverage():
             "reinvigoration_cov_matrix": np.eye(2),
         },
     )
-    env = TigerPOMDP(discount_factor=0.95)
+    env = TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs())
     belief = create_belief(env, config)
     assert isinstance(belief, WeightedParticleBeliefContinuousLightDarkFullCoverage)
     # Call reinvigorate with dummy action and observation
@@ -376,7 +377,7 @@ def test_reinvigoration_sanity_pomdp():
             "reinvigoration_fraction": 0.2,
         },
     )
-    env = TigerPOMDP(discount_factor=0.95)
+    env = TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs())
     belief = create_belief(env, config)
     assert isinstance(belief, WeightedParticleBeliefSanityPOMDP)
     # Call reinvigorate with dummy action and observation

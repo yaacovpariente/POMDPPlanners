@@ -23,6 +23,10 @@ from POMDPPlanners.planners.planners_utils.rollout import (
     python_random_rollout,
     random_rollout_action_sampler,
 )
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
+    cartpole_pinned_kwargs,
+    sanity_pinned_kwargs,
+)
 
 # Set seeds for reproducible tests
 np.random.seed(42)
@@ -60,14 +64,14 @@ def tiger_environment():
 @pytest.fixture
 def sanity_environment():
     """Sanity POMDP environment fixture."""
-    return SanityPOMDP(discount_factor=0.9)
+    return SanityPOMDP(discount_factor=0.9, **sanity_pinned_kwargs())
 
 
 @pytest.fixture
 def cartpole_environment():
     """CartPole POMDP environment fixture."""
     noise_cov = np.diag([0.1, 0.1, 0.1, 0.1])
-    return CartPolePOMDP(discount_factor=0.99, noise_cov=noise_cov)
+    return CartPolePOMDP(discount_factor=0.99, noise_cov=noise_cov, **cartpole_pinned_kwargs())
 
 
 @pytest.fixture
@@ -365,7 +369,7 @@ def test_rollout_variance_reduction():
 
     Test type: unit
     """
-    sanity = SanityPOMDP(discount_factor=0.95)
+    sanity = SanityPOMDP(discount_factor=0.95, **sanity_pinned_kwargs())
     sampler = MockActionSampler([0, 1])
     state = 0
 
@@ -415,7 +419,7 @@ def test_rollout_recursion_depth():
 
     Test type: unit
     """
-    sanity = SanityPOMDP(discount_factor=0.99)
+    sanity = SanityPOMDP(discount_factor=0.99, **sanity_pinned_kwargs())
     sampler = MockActionSampler([0, 1])
 
     # Test with very deep max_depth
@@ -503,7 +507,7 @@ def test_cartpole_rollout_usage_example():
 
     # Create CartPole environment (from docstring)
     noise_cov = np.diag([0.1, 0.1, 0.1, 0.1])
-    cartpole = CartPolePOMDP(discount_factor=0.99, noise_cov=noise_cov)
+    cartpole = CartPolePOMDP(discount_factor=0.99, noise_cov=noise_cov, **cartpole_pinned_kwargs())
     action_sampler = CartPoleActionSampler()
 
     # Sample initial state and perform rollout (from docstring)
@@ -541,7 +545,7 @@ def test_multiple_rollouts_usage_example():
         def sample(self, belief_node=None):
             return np.random.choice([0, 1])
 
-    sanity = SanityPOMDP(discount_factor=0.95)
+    sanity = SanityPOMDP(discount_factor=0.95, **sanity_pinned_kwargs())
     action_sampler = SanityActionSampler()
 
     # Perform multiple rollouts to reduce variance (from docstring)
@@ -589,7 +593,7 @@ def test_rollout_depth_comparison_usage_example():
         def sample(self, belief_node=None):
             return np.random.choice([0, 1])
 
-    sanity = SanityPOMDP(discount_factor=0.95)
+    sanity = SanityPOMDP(discount_factor=0.95, **sanity_pinned_kwargs())
     action_sampler = SanityActionSampler()
     state = 0
 
@@ -703,7 +707,7 @@ def test_rollout_parameter_validation():
 
     Test type: unit
     """
-    sanity = SanityPOMDP(discount_factor=0.5)
+    sanity = SanityPOMDP(discount_factor=0.5, **sanity_pinned_kwargs())
     sampler = MockActionSampler([0, 1])
 
     # Test with discount_factor of 0 (no future value)

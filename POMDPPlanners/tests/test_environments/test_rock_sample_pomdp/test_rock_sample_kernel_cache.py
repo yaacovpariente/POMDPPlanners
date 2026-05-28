@@ -21,6 +21,7 @@ from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp import (
     RockSamplePOMDP,
     create_rock_sample_state,
 )
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import rock_sample_pinned_kwargs
 
 _ROCK_POSITIONS: List[Tuple[int, int]] = [(0, 0), (2, 2), (3, 3)]
 _MAP_SIZE: Tuple[int, int] = (5, 5)
@@ -32,11 +33,14 @@ _STATE_DIM: int = 2 + _NUM_ROCKS
 
 def _make_env(dangerous_areas=None) -> RockSamplePOMDP:
     return RockSamplePOMDP(
-        map_size=_MAP_SIZE,
-        rock_positions=list(_ROCK_POSITIONS),
-        init_pos=_INIT_POS,
-        sensor_efficiency=_SENSOR_EFFICIENCY,
-        dangerous_areas=dangerous_areas,
+        discount_factor=0.95,
+        **rock_sample_pinned_kwargs(
+            map_size=_MAP_SIZE,
+            rock_positions=list(_ROCK_POSITIONS),
+            init_pos=_INIT_POS,
+            sensor_efficiency=_SENSOR_EFFICIENCY,
+            dangerous_areas=dangerous_areas,
+        ),
     )
 
 

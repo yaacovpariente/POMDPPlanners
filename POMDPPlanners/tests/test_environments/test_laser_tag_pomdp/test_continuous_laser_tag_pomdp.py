@@ -26,6 +26,9 @@ from POMDPPlanners.planners.planners_utils.rollout import python_random_rollout
 from POMDPPlanners.tests.test_utils.confidence_interval_utils import (
     verify_metrics_within_confidence_intervals,
 )
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
+    continuous_laser_tag_pinned_kwargs as _cont_lt_pinned_kwargs,
+)
 from POMDPPlanners.tests.test_utils.metric_invariants_utils import (
     verify_history_returns_bounded,
     verify_metric_sanity,
@@ -38,8 +41,7 @@ def env():
     """Continuous-action environment with no walls for simpler testing."""
     return ContinuousLaserTagPOMDP(
         discount_factor=0.95,
-        walls=[],
-        dangerous_areas=[],
+        **_cont_lt_pinned_kwargs(walls=[], dangerous_areas=[]),
     )
 
 
@@ -48,21 +50,20 @@ def env_discrete():
     """Discrete-action environment with no walls for simpler testing."""
     return ContinuousLaserTagPOMDPDiscreteActions(
         discount_factor=0.95,
-        walls=[],
-        dangerous_areas=[],
+        **_cont_lt_pinned_kwargs(walls=[], dangerous_areas=[]),
     )
 
 
 @pytest.fixture
 def env_default():
     """Environment with default configuration (includes walls)."""
-    return ContinuousLaserTagPOMDP(discount_factor=0.95)
+    return ContinuousLaserTagPOMDP(discount_factor=0.95, **_cont_lt_pinned_kwargs())
 
 
 @pytest.fixture
 def env_discrete_default():
     """Discrete-action environment with default configuration."""
-    return ContinuousLaserTagPOMDPDiscreteActions(discount_factor=0.95)
+    return ContinuousLaserTagPOMDPDiscreteActions(discount_factor=0.95, **_cont_lt_pinned_kwargs())
 
 
 def test_continuous_opponent_policy_changes_config_id():
@@ -77,10 +78,24 @@ def test_continuous_opponent_policy_changes_config_id():
 
     Test type: unit
     """
-    common = {"discount_factor": 0.95, "walls": [], "dangerous_areas": []}
-    evade = ContinuousLaserTagPOMDP(**common, opponent_policy=OpponentPolicy.EVADE)
-    pursue = ContinuousLaserTagPOMDP(**common, opponent_policy=OpponentPolicy.PURSUE)
-    spotted = ContinuousLaserTagPOMDP(**common, opponent_policy=OpponentPolicy.EVADE_WHEN_SPOTTED)
+    evade = ContinuousLaserTagPOMDP(
+        discount_factor=0.95,
+        **_cont_lt_pinned_kwargs(
+            walls=[], dangerous_areas=[], opponent_policy=OpponentPolicy.EVADE
+        ),
+    )
+    pursue = ContinuousLaserTagPOMDP(
+        discount_factor=0.95,
+        **_cont_lt_pinned_kwargs(
+            walls=[], dangerous_areas=[], opponent_policy=OpponentPolicy.PURSUE
+        ),
+    )
+    spotted = ContinuousLaserTagPOMDP(
+        discount_factor=0.95,
+        **_cont_lt_pinned_kwargs(
+            walls=[], dangerous_areas=[], opponent_policy=OpponentPolicy.EVADE_WHEN_SPOTTED
+        ),
+    )
     assert len({evade.config_id, pursue.config_id, spotted.config_id}) == 3
 
 
@@ -116,7 +131,7 @@ class TestContinuousLaserTagPOMDPInit:
         Test type: unit
         """
         with pytest.raises(ValueError, match="discount_factor"):
-            ContinuousLaserTagPOMDP(discount_factor=1.5)
+            ContinuousLaserTagPOMDP(discount_factor=1.5, **_cont_lt_pinned_kwargs())
 
     def test_default_walls(self, env_default):
         """Test that default walls are loaded.
@@ -252,9 +267,11 @@ class TestSampleNextState:
         np.random.seed(0)
         env = ContinuousLaserTagPOMDP(
             discount_factor=0.95,
-            walls=[],
-            dangerous_areas=[],
-            robot_transition_cov_matrix=np.eye(2) * 1e-9,
+            **_cont_lt_pinned_kwargs(
+                walls=[],
+                dangerous_areas=[],
+                robot_transition_cov_matrix=np.eye(2) * 1e-9,
+            ),
         )
         state = np.array([5.0, 3.0, 5.4, 3.0, 0.0])
         action = np.array([1.0, 0.0, 0.0])  # robot moves +x, crossing to the opponent's right
@@ -280,9 +297,11 @@ class TestSampleNextState:
         np.random.seed(42)
         env = ContinuousLaserTagPOMDP(
             discount_factor=0.95,
-            walls=[],
-            dangerous_areas=[],
-            opponent_policy=OpponentPolicy.PURSUE,
+            **_cont_lt_pinned_kwargs(
+                walls=[],
+                dangerous_areas=[],
+                opponent_policy=OpponentPolicy.PURSUE,
+            ),
         )
         state = np.array([5.0, 3.0, 8.0, 5.0, 0.0])
         action = np.array([0.0, 0.0, 0.0])  # robot holds position, no tag
@@ -312,10 +331,12 @@ class TestSampleNextState:
         np.random.seed(0)
         env = ContinuousLaserTagPOMDP(
             discount_factor=0.95,
-            walls=[],
-            dangerous_areas=[],
-            robot_transition_cov_matrix=np.eye(2) * 1e-9,
-            opponent_policy=OpponentPolicy.PURSUE,
+            **_cont_lt_pinned_kwargs(
+                walls=[],
+                dangerous_areas=[],
+                robot_transition_cov_matrix=np.eye(2) * 1e-9,
+                opponent_policy=OpponentPolicy.PURSUE,
+            ),
         )
         state = np.array([5.0, 3.0, 5.4, 3.0, 0.0])
         action = np.array([1.0, 0.0, 0.0])  # robot moves +x, crossing to the opponent's right
@@ -342,9 +363,11 @@ class TestSampleNextState:
         np.random.seed(42)
         env = ContinuousLaserTagPOMDP(
             discount_factor=0.95,
-            walls=[],
-            dangerous_areas=[],
-            opponent_policy=OpponentPolicy.EVADE_WHEN_SPOTTED,
+            **_cont_lt_pinned_kwargs(
+                walls=[],
+                dangerous_areas=[],
+                opponent_policy=OpponentPolicy.EVADE_WHEN_SPOTTED,
+            ),
         )
         state = np.array([5.0, 3.0, 8.0, 3.0, 0.0])
         action = np.array([0.0, 0.0, 0.0])  # robot holds position, no tag
@@ -373,9 +396,11 @@ class TestSampleNextState:
         np.random.seed(42)
         env = ContinuousLaserTagPOMDP(
             discount_factor=0.95,
-            walls=[],
-            dangerous_areas=[],
-            opponent_policy=OpponentPolicy.EVADE_WHEN_SPOTTED,
+            **_cont_lt_pinned_kwargs(
+                walls=[],
+                dangerous_areas=[],
+                opponent_policy=OpponentPolicy.EVADE_WHEN_SPOTTED,
+            ),
         )
         state = np.array([5.0, 3.0, 8.0, 5.0, 0.0])
         action = np.array([0.0, 0.0, 0.0])  # robot holds position, no tag
@@ -463,7 +488,8 @@ class TestSampleObservation:
         """
         np.random.seed(0)
         env = ContinuousLaserTagPOMDP(
-            discount_factor=0.95, walls=[], dangerous_areas=[], measurement_noise=1e-6
+            discount_factor=0.95,
+            **_cont_lt_pinned_kwargs(walls=[], dangerous_areas=[], measurement_noise=1e-6),
         )
         state = np.array([5.0, 3.0, 8.0, 3.0, 0.0])
         obs = np.asarray(env.sample_observation(state, np.array([0.0, 0.0, 0.0]), n_samples=1))
@@ -552,10 +578,12 @@ class TestReward:
         """
         env = ContinuousLaserTagPOMDP(
             discount_factor=0.95,
-            walls=[],
-            dangerous_areas=[(5.0, 3.0)],
-            dangerous_area_radius=1.0,
-            dangerous_area_penalty=5.0,
+            **_cont_lt_pinned_kwargs(
+                walls=[],
+                dangerous_areas=[(5.0, 3.0)],
+                dangerous_area_radius=1.0,
+                dangerous_area_penalty=5.0,
+            ),
         )
         state = np.array([5.0, 3.0, 8.0, 5.0, 0.0])
         action = np.array([1.0, 0.0, 0.0])
@@ -570,11 +598,13 @@ class TestStochasticDangerousAreaPenalty:
     def _stochastic_env(hit_probability: float, penalty: float = 5.0) -> ContinuousLaserTagPOMDP:
         return ContinuousLaserTagPOMDP(
             discount_factor=0.95,
-            walls=[],
-            dangerous_areas=[(5.0, 3.0)],
-            dangerous_area_radius=1.0,
-            dangerous_area_penalty=penalty,
-            dangerous_area_hit_probability=hit_probability,
+            **_cont_lt_pinned_kwargs(
+                walls=[],
+                dangerous_areas=[(5.0, 3.0)],
+                dangerous_area_radius=1.0,
+                dangerous_area_penalty=penalty,
+                dangerous_area_hit_probability=hit_probability,
+            ),
         )
 
     def test_default_hit_probability_is_one(self, env_default):
@@ -716,7 +746,7 @@ class TestStochasticDangerousAreaPenalty:
         with pytest.raises(ValueError, match="dangerous_area_hit_probability"):
             ContinuousLaserTagPOMDP(
                 discount_factor=0.95,
-                dangerous_area_hit_probability=bad_value,
+                **_cont_lt_pinned_kwargs(dangerous_area_hit_probability=bad_value),
             )
 
     def test_discrete_actions_wrapper_forwards_hit_probability(self):
@@ -736,11 +766,13 @@ class TestStochasticDangerousAreaPenalty:
         """
         env = ContinuousLaserTagPOMDPDiscreteActions(
             discount_factor=0.95,
-            walls=[],
-            dangerous_areas=[(5.0, 3.0)],
-            dangerous_area_radius=1.0,
-            dangerous_area_penalty=5.0,
-            dangerous_area_hit_probability=0.0,
+            **_cont_lt_pinned_kwargs(
+                walls=[],
+                dangerous_areas=[(5.0, 3.0)],
+                dangerous_area_radius=1.0,
+                dangerous_area_penalty=5.0,
+                dangerous_area_hit_probability=0.0,
+            ),
         )
         assert env.dangerous_area_hit_probability == 0.0
         state = np.array([5.0, 3.0, 8.0, 5.0, 0.0])
@@ -763,11 +795,13 @@ class TestContinuousLaserTagRewardNextStateConsistency:
     def _danger_env(hit_probability: float = 1.0) -> ContinuousLaserTagPOMDP:
         return ContinuousLaserTagPOMDP(
             discount_factor=0.95,
-            walls=[],
-            dangerous_areas=[(5.0, 3.0)],
-            dangerous_area_radius=1.0,
-            dangerous_area_penalty=5.0,
-            dangerous_area_hit_probability=hit_probability,
+            **_cont_lt_pinned_kwargs(
+                walls=[],
+                dangerous_areas=[(5.0, 3.0)],
+                dangerous_area_radius=1.0,
+                dangerous_area_penalty=5.0,
+                dangerous_area_hit_probability=hit_probability,
+            ),
         )
 
     def test_reward_penalty_uses_realised_next_state(self):
@@ -960,8 +994,7 @@ class TestInitialStateDist:
         fixed = np.array([2.0, 3.0, 8.0, 5.0, 0.0])
         env = ContinuousLaserTagPOMDP(
             discount_factor=0.95,
-            walls=[],
-            initial_state=fixed,
+            **_cont_lt_pinned_kwargs(walls=[], initial_state=fixed),
         )
         dist = env.initial_state_dist()
         samples = dist.sample(n_samples=5)
@@ -1347,10 +1380,12 @@ class TestMetrics:
         np.random.seed(42)
         env = ContinuousLaserTagPOMDP(
             discount_factor=0.95,
-            walls=[],
-            dangerous_areas=[(5.0, 3.0)],
-            dangerous_area_radius=1.0,
-            dangerous_area_penalty=5.0,
+            **_cont_lt_pinned_kwargs(
+                walls=[],
+                dangerous_areas=[(5.0, 3.0)],
+                dangerous_area_radius=1.0,
+                dangerous_area_penalty=5.0,
+            ),
         )
         dummy_belief = WeightedParticleBelief(
             particles=[np.array([5.0, 3.0, 8.0, 5.0, 0.0])],
@@ -1574,7 +1609,9 @@ class TestObservationLogProbabilityTerminal:
 
         Test type: unit
         """
-        env = ContinuousLaserTagPOMDP(discount_factor=0.95, walls=[], dangerous_areas=[])
+        env = ContinuousLaserTagPOMDP(
+            discount_factor=0.95, **_cont_lt_pinned_kwargs(walls=[], dangerous_areas=[])
+        )
         terminal_state = np.array([3.0, 3.0, 8.0, 5.0, 1.0])
         action = np.array([0.0, 0.0, 1.0])
         terminal_obs = np.full(8, -1.0)
@@ -1607,7 +1644,9 @@ class TestObservationLogProbabilityScalarBatchTerminalParity:
     """
 
     def _build_env(self) -> ContinuousLaserTagPOMDP:
-        return ContinuousLaserTagPOMDP(discount_factor=0.95, walls=[], dangerous_areas=[])
+        return ContinuousLaserTagPOMDP(
+            discount_factor=0.95, **_cont_lt_pinned_kwargs(walls=[], dangerous_areas=[])
+        )
 
     def test_scalar_matches_batch_nonterminal_state_terminal_obs(self) -> None:
         """Non-terminal next_state with terminal-sentinel obs returns -inf on both paths.
@@ -1728,8 +1767,7 @@ class TestContinuousLaserTagNativeRollout:
         """
         env = ContinuousLaserTagPOMDP(
             discount_factor=0.95,
-            walls=[],
-            dangerous_areas=[],
+            **_cont_lt_pinned_kwargs(walls=[], dangerous_areas=[]),
         )
         state = np.array([3.0, 3.0, 8.0, 5.0, 0.0])
         max_depth = 10
@@ -1797,7 +1835,9 @@ class TestContinuousLaserTagNativeRollout:
             def sample(self, belief_node=None):  # pylint: disable=unused-argument
                 return np.array([1.0, 0.0, 0.0])
 
-        env = ContinuousLaserTagPOMDP(discount_factor=0.95, walls=[], dangerous_areas=[])
+        env = ContinuousLaserTagPOMDP(
+            discount_factor=0.95, **_cont_lt_pinned_kwargs(walls=[], dangerous_areas=[])
+        )
         terminal_state = np.array([5.0, 3.0, 5.0, 3.0, 1.0])
         result = env.simulate_random_rollout(
             state=terminal_state,
@@ -1824,7 +1864,9 @@ class TestContinuousLaserTagNativeRollout:
             def sample(self, belief_node=None):  # pylint: disable=unused-argument
                 return np.array([1.0, 0.0, 0.0])
 
-        env = ContinuousLaserTagPOMDP(discount_factor=0.95, walls=[], dangerous_areas=[])
+        env = ContinuousLaserTagPOMDP(
+            discount_factor=0.95, **_cont_lt_pinned_kwargs(walls=[], dangerous_areas=[])
+        )
         state = np.array([3.0, 3.0, 8.0, 5.0, 0.0])
         result = env.simulate_random_rollout(
             state=state,
@@ -1851,8 +1893,7 @@ class TestContinuousLaserTagNativeRollout:
         """
         env = ContinuousLaserTagPOMDPDiscreteActions(
             discount_factor=0.95,
-            walls=[],
-            dangerous_areas=[],
+            **_cont_lt_pinned_kwargs(walls=[], dangerous_areas=[]),
         )
         state = np.array([3.0, 3.0, 8.0, 5.0, 0.0])
         max_depth = 8
@@ -1926,7 +1967,9 @@ class TestObservationLogProbabilityLowDensityB1:
 
         Test type: unit
         """
-        env = ContinuousLaserTagPOMDP(discount_factor=0.95, walls=[], dangerous_areas=[])
+        env = ContinuousLaserTagPOMDP(
+            discount_factor=0.95, **_cont_lt_pinned_kwargs(walls=[], dangerous_areas=[])
+        )
         action = np.array([1.0, 0.0, 0.0])
         next_state = np.array([3.0, 3.0, 8.0, 5.0, 0.0])
 
@@ -1975,7 +2018,9 @@ class TestObservationLogProbabilityLowDensityB1:
 
         Test type: unit
         """
-        env = ContinuousLaserTagPOMDP(discount_factor=0.95, walls=[], dangerous_areas=[])
+        env = ContinuousLaserTagPOMDP(
+            discount_factor=0.95, **_cont_lt_pinned_kwargs(walls=[], dangerous_areas=[])
+        )
         action = np.array([1.0, 0.0, 0.0])
         next_state = np.array([3.0, 3.0, 8.0, 5.0, 0.0])
 

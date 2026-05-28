@@ -23,6 +23,9 @@ from POMDPPlanners.core.belief import get_initial_belief
 from POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp import (
     DiscreteLightDarkPOMDP,
 )
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
+    discrete_light_dark_pinned_kwargs,
+)
 
 
 def _build_environment_and_belief_instances():
@@ -44,7 +47,9 @@ def _build_environment_and_belief_instances():
         env, belief = config_method(n_particles=n_particles)
         envs[key] = env
         beliefs[key] = belief
-    discrete_ld = DiscreteLightDarkPOMDP(discount_factor=0.95)
+    discrete_ld = DiscreteLightDarkPOMDP(
+        discount_factor=0.95, **discrete_light_dark_pinned_kwargs()
+    )
     beliefs["discrete_light_dark"] = get_initial_belief(
         pomdp=discrete_ld, n_particles=n_particles, resampling=True
     )

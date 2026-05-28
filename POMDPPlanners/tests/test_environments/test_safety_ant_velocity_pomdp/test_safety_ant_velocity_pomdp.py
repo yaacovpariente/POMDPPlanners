@@ -23,6 +23,9 @@ from POMDPPlanners.environments.safety_ant_velocity_pomdp import SafeAntVelocity
 from POMDPPlanners.tests.test_utils.confidence_interval_utils import (
     verify_metrics_within_confidence_intervals,
 )
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
+    safety_ant_velocity_pinned_kwargs,
+)
 from POMDPPlanners.tests.test_utils.metric_invariants_utils import (
     verify_history_returns_bounded,
     verify_metric_sanity,
@@ -34,7 +37,7 @@ from POMDPPlanners.tests.test_utils.metric_invariants_utils import (
 
 @pytest.fixture
 def pomdp():
-    return SafeAntVelocityPOMDP(discount_factor=0.95)
+    return SafeAntVelocityPOMDP(discount_factor=0.95, **safety_ant_velocity_pinned_kwargs())
 
 
 def test_safe_velocity_pomdp_initialization():
@@ -51,15 +54,17 @@ def test_safe_velocity_pomdp_initialization():
     # Test basic initialization
     env = SafeAntVelocityPOMDP(
         discount_factor=0.95,
-        safe_velocity_threshold=2.0,
-        max_force=1.0,
-        dt=0.1,
-        mass=1.0,
-        damping=0.1,
-        position_noise=0.1,
-        velocity_noise=0.2,
-        safety_violation_penalty=-100.0,
-        movement_reward_scale=1.0,
+        **safety_ant_velocity_pinned_kwargs(
+            safe_velocity_threshold=2.0,
+            max_force=1.0,
+            dt=0.1,
+            mass=1.0,
+            damping=0.1,
+            position_noise=0.1,
+            velocity_noise=0.2,
+            safety_violation_penalty=-100.0,
+            movement_reward_scale=1.0,
+        ),
     )
 
     assert env.discount_factor == 0.95
@@ -168,9 +173,11 @@ def test_reward_function():
     """
     env = SafeAntVelocityPOMDP(
         discount_factor=0.95,
-        safe_velocity_threshold=2.0,
-        safety_violation_penalty=-100.0,
-        movement_reward_scale=1.0,
+        **safety_ant_velocity_pinned_kwargs(
+            safe_velocity_threshold=2.0,
+            safety_violation_penalty=-100.0,
+            movement_reward_scale=1.0,
+        ),
     )
 
     # Test reward for safe velocity
@@ -197,7 +204,9 @@ def test_terminal_state():
     """
     env = SafeAntVelocityPOMDP(
         discount_factor=0.95,
-        safe_velocity_threshold=2.0,
+        **safety_ant_velocity_pinned_kwargs(
+            safe_velocity_threshold=2.0,
+        ),
     )
 
     # Test non-terminal state (safe velocity)
@@ -222,9 +231,11 @@ def test_reward_range():
     """
     env = SafeAntVelocityPOMDP(
         discount_factor=0.95,
-        safe_velocity_threshold=2.0,
-        safety_violation_penalty=-50.0,
-        movement_reward_scale=1.5,
+        **safety_ant_velocity_pinned_kwargs(
+            safe_velocity_threshold=2.0,
+            safety_violation_penalty=-50.0,
+            movement_reward_scale=1.5,
+        ),
     )
 
     # Expected calculations from SafeAntVelocityPOMDP constructor:
@@ -238,9 +249,11 @@ def test_reward_range():
     # Test with different parameters
     env2 = SafeAntVelocityPOMDP(
         discount_factor=0.95,
-        safe_velocity_threshold=3.0,
-        safety_violation_penalty=-100.0,
-        movement_reward_scale=2.0,
+        **safety_ant_velocity_pinned_kwargs(
+            safe_velocity_threshold=3.0,
+            safety_violation_penalty=-100.0,
+            movement_reward_scale=2.0,
+        ),
     )
 
     expected_min2 = 0.0 + (-100.0)  # -100.0
@@ -260,7 +273,7 @@ def test_initial_state_distribution():
 
     Test type: unit
     """
-    env = SafeAntVelocityPOMDP(discount_factor=0.95)
+    env = SafeAntVelocityPOMDP(discount_factor=0.95, **safety_ant_velocity_pinned_kwargs())
     initial_dist = env.initial_state_dist()
 
     # Test multiple samples
@@ -289,7 +302,7 @@ def test_get_actions():
 
     Test type: unit
     """
-    env = SafeAntVelocityPOMDP(discount_factor=0.95)
+    env = SafeAntVelocityPOMDP(discount_factor=0.95, **safety_ant_velocity_pinned_kwargs())
     actions = env.get_actions()
 
     assert len(actions) == 4
@@ -308,7 +321,7 @@ def test_is_equal_observation():
 
     Test type: unit
     """
-    env = SafeAntVelocityPOMDP(discount_factor=0.95)
+    env = SafeAntVelocityPOMDP(discount_factor=0.95, **safety_ant_velocity_pinned_kwargs())
 
     # Test equal observations
     obs1 = np.array([0.0, 0.0, 1.0, 1.0])
@@ -331,7 +344,7 @@ def test_sample_next_step():
 
     Test type: unit
     """
-    env = SafeAntVelocityPOMDP(discount_factor=0.95)
+    env = SafeAntVelocityPOMDP(discount_factor=0.95, **safety_ant_velocity_pinned_kwargs())
     state = np.array([0.0, 0.0, 1.0, 1.0])
     action = 2  # Medium force
 
@@ -369,7 +382,9 @@ def test_compute_metrics():
     """
     env = SafeAntVelocityPOMDP(
         discount_factor=0.95,
-        safe_velocity_threshold=2.0,
+        **safety_ant_velocity_pinned_kwargs(
+            safe_velocity_threshold=2.0,
+        ),
     )
 
     # Create test histories with different velocity scenarios
@@ -523,7 +538,9 @@ def test_compute_metrics_values_within_confidence_intervals():
     """
     env = SafeAntVelocityPOMDP(
         discount_factor=0.95,
-        safe_velocity_threshold=2.0,
+        **safety_ant_velocity_pinned_kwargs(
+            safe_velocity_threshold=2.0,
+        ),
     )
 
     # History 0: all-safe.
@@ -620,27 +637,31 @@ def test_environment_equality():
     # Create two identical environments
     env1 = SafeAntVelocityPOMDP(
         discount_factor=0.95,
-        safe_velocity_threshold=2.0,
-        max_force=1.0,
-        dt=0.1,
-        mass=1.0,
-        damping=0.1,
-        position_noise=0.1,
-        velocity_noise=0.2,
-        safety_violation_penalty=-100.0,
-        movement_reward_scale=1.0,
+        **safety_ant_velocity_pinned_kwargs(
+            safe_velocity_threshold=2.0,
+            max_force=1.0,
+            dt=0.1,
+            mass=1.0,
+            damping=0.1,
+            position_noise=0.1,
+            velocity_noise=0.2,
+            safety_violation_penalty=-100.0,
+            movement_reward_scale=1.0,
+        ),
     )
     env2 = SafeAntVelocityPOMDP(
         discount_factor=0.95,
-        safe_velocity_threshold=2.0,
-        max_force=1.0,
-        dt=0.1,
-        mass=1.0,
-        damping=0.1,
-        position_noise=0.1,
-        velocity_noise=0.2,
-        safety_violation_penalty=-100.0,
-        movement_reward_scale=1.0,
+        **safety_ant_velocity_pinned_kwargs(
+            safe_velocity_threshold=2.0,
+            max_force=1.0,
+            dt=0.1,
+            mass=1.0,
+            damping=0.1,
+            position_noise=0.1,
+            velocity_noise=0.2,
+            safety_violation_penalty=-100.0,
+            movement_reward_scale=1.0,
+        ),
     )
 
     # Test equality
@@ -649,15 +670,17 @@ def test_environment_equality():
     # Test inequality with different parameters
     env3 = SafeAntVelocityPOMDP(
         discount_factor=0.9,  # Different discount factor
-        safe_velocity_threshold=2.0,
-        max_force=1.0,
-        dt=0.1,
-        mass=1.0,
-        damping=0.1,
-        position_noise=0.1,
-        velocity_noise=0.2,
-        safety_violation_penalty=-100.0,
-        movement_reward_scale=1.0,
+        **safety_ant_velocity_pinned_kwargs(
+            safe_velocity_threshold=2.0,
+            max_force=1.0,
+            dt=0.1,
+            mass=1.0,
+            damping=0.1,
+            position_noise=0.1,
+            velocity_noise=0.2,
+            safety_violation_penalty=-100.0,
+            movement_reward_scale=1.0,
+        ),
     )
     assert env1 != env3
 
@@ -676,27 +699,31 @@ def test_config_id():
     # Create two environments with same parameters
     env1 = SafeAntVelocityPOMDP(
         discount_factor=0.95,
-        safe_velocity_threshold=2.0,
-        max_force=1.0,
-        dt=0.1,
-        mass=1.0,
-        damping=0.1,
-        position_noise=0.1,
-        velocity_noise=0.2,
-        safety_violation_penalty=-100.0,
-        movement_reward_scale=1.0,
+        **safety_ant_velocity_pinned_kwargs(
+            safe_velocity_threshold=2.0,
+            max_force=1.0,
+            dt=0.1,
+            mass=1.0,
+            damping=0.1,
+            position_noise=0.1,
+            velocity_noise=0.2,
+            safety_violation_penalty=-100.0,
+            movement_reward_scale=1.0,
+        ),
     )
     env2 = SafeAntVelocityPOMDP(
         discount_factor=0.95,
-        safe_velocity_threshold=2.0,
-        max_force=1.0,
-        dt=0.1,
-        mass=1.0,
-        damping=0.1,
-        position_noise=0.1,
-        velocity_noise=0.2,
-        safety_violation_penalty=-100.0,
-        movement_reward_scale=1.0,
+        **safety_ant_velocity_pinned_kwargs(
+            safe_velocity_threshold=2.0,
+            max_force=1.0,
+            dt=0.1,
+            mass=1.0,
+            damping=0.1,
+            position_noise=0.1,
+            velocity_noise=0.2,
+            safety_violation_penalty=-100.0,
+            movement_reward_scale=1.0,
+        ),
     )
 
     # Test same config_id for identical environments
@@ -705,15 +732,17 @@ def test_config_id():
     # Test different config_id for different environments
     env3 = SafeAntVelocityPOMDP(
         discount_factor=0.9,  # Different discount factor
-        safe_velocity_threshold=2.0,
-        max_force=1.0,
-        dt=0.1,
-        mass=1.0,
-        damping=0.1,
-        position_noise=0.1,
-        velocity_noise=0.2,
-        safety_violation_penalty=-100.0,
-        movement_reward_scale=1.0,
+        **safety_ant_velocity_pinned_kwargs(
+            safe_velocity_threshold=2.0,
+            max_force=1.0,
+            dt=0.1,
+            mass=1.0,
+            damping=0.1,
+            position_noise=0.1,
+            velocity_noise=0.2,
+            safety_violation_penalty=-100.0,
+            movement_reward_scale=1.0,
+        ),
     )
     assert env1.config_id != env3.config_id
 
@@ -792,8 +821,10 @@ def test_observation_log_probability_invalid_observation_raises():
     """
     env = SafeAntVelocityPOMDP(
         discount_factor=0.95,
-        position_noise=0.1,
-        velocity_noise=0.2,
+        **safety_ant_velocity_pinned_kwargs(
+            position_noise=0.1,
+            velocity_noise=0.2,
+        ),
     )
     next_state = np.array([0.5, -0.2, 1.0, 0.5])
     empty_observation = np.array([])
@@ -820,8 +851,10 @@ def test_observation_log_probability_various_invalid_shapes():
     """
     env = SafeAntVelocityPOMDP(
         discount_factor=0.95,
-        position_noise=0.1,
-        velocity_noise=0.2,
+        **safety_ant_velocity_pinned_kwargs(
+            position_noise=0.1,
+            velocity_noise=0.2,
+        ),
     )
     next_state = np.array([0.5, -0.2, 1.0, 0.5])
 
@@ -854,8 +887,10 @@ def test_env_sample_observation_never_empty():
     """
     env = SafeAntVelocityPOMDP(
         discount_factor=0.95,
-        position_noise=0.1,
-        velocity_noise=0.2,
+        **safety_ant_velocity_pinned_kwargs(
+            position_noise=0.1,
+            velocity_noise=0.2,
+        ),
     )
     next_state = np.array([0.5, -0.2, 1.0, 0.5])
     action = 1
@@ -884,9 +919,11 @@ def test_sample_next_step_observation_never_empty():
     """
     env = SafeAntVelocityPOMDP(
         discount_factor=0.95,
-        safe_velocity_threshold=2.0,
-        position_noise=0.1,
-        velocity_noise=0.2,
+        **safety_ant_velocity_pinned_kwargs(
+            safe_velocity_threshold=2.0,
+            position_noise=0.1,
+            velocity_noise=0.2,
+        ),
     )
 
     # Test with various initial states
@@ -938,8 +975,10 @@ def test_env_observation_log_probability_list_interface():
     """
     env = SafeAntVelocityPOMDP(
         discount_factor=0.95,
-        position_noise=0.1,
-        velocity_noise=0.2,
+        **safety_ant_velocity_pinned_kwargs(
+            position_noise=0.1,
+            velocity_noise=0.2,
+        ),
     )
     next_state = np.array([0.5, -0.2, 1.0, 0.5])
     action = 1
@@ -977,9 +1016,11 @@ def test_reward_batch_matches_scalar_reward():
     """
     env = SafeAntVelocityPOMDP(
         discount_factor=0.95,
-        safe_velocity_threshold=2.0,
-        safety_violation_penalty=-100.0,
-        movement_reward_scale=1.0,
+        **safety_ant_velocity_pinned_kwargs(
+            safe_velocity_threshold=2.0,
+            safety_violation_penalty=-100.0,
+            movement_reward_scale=1.0,
+        ),
     )
     np.random.seed(42)
     # 4-dim states: [pos_x, pos_y, vel_x, vel_y]
@@ -1071,7 +1112,7 @@ def test_native_simulate_rollout_safe_ant_matches_python_reference():
     )  # pylint: disable=import-outside-toplevel
 
     np.random.seed(0)
-    env_local = SafeAntVelocityPOMDP(discount_factor=0.99)
+    env_local = SafeAntVelocityPOMDP(discount_factor=0.99, **safety_ant_velocity_pinned_kwargs())
     initial_state = np.array([0.2, -0.1, 0.5, 0.3], dtype=np.float64)
     max_depth = 8
     start_depth = 0
@@ -1128,7 +1169,7 @@ def test_simulate_random_rollout_safe_ant_returns_finite_float():
 
     np.random.seed(0)
     sa_native.set_seed(0)
-    env_local = SafeAntVelocityPOMDP(discount_factor=0.99)
+    env_local = SafeAntVelocityPOMDP(discount_factor=0.99, **safety_ant_velocity_pinned_kwargs())
     state = env_local.initial_state_dist().sample()[0]
     sampler = _FixedActionSamplerSafeAnt(action=1)
 
@@ -1154,7 +1195,7 @@ def test_simulate_random_rollout_safe_ant_returns_zero_at_max_depth():
 
     Test type: unit
     """
-    env_local = SafeAntVelocityPOMDP(discount_factor=0.99)
+    env_local = SafeAntVelocityPOMDP(discount_factor=0.99, **safety_ant_velocity_pinned_kwargs())
     state = env_local.initial_state_dist().sample()[0]
     sampler = _FixedActionSamplerSafeAnt(action=0)
 
@@ -1181,7 +1222,7 @@ def test_simulate_random_rollout_safe_ant_terminal_returns_zero():
 
     Test type: unit
     """
-    env_local = SafeAntVelocityPOMDP(discount_factor=0.99)
+    env_local = SafeAntVelocityPOMDP(discount_factor=0.99, **safety_ant_velocity_pinned_kwargs())
     critical_speed = env_local.safe_velocity_threshold * 2.0
     terminal_state = np.array([0.0, 0.0, critical_speed, 0.0], dtype=np.float64)
     sampler = _FixedActionSamplerSafeAnt(action=0)

@@ -36,6 +36,7 @@ from POMDPPlanners.environments.rock_sample_pomdp import (
     RockSamplePOMDP,
     create_rock_sample_state,
 )
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import rock_sample_pinned_kwargs
 
 
 # ---------------------------------------------------------------------------
@@ -52,10 +53,13 @@ def _make_env(
 ) -> RockSamplePOMDP:
     rocks = rock_positions if rock_positions is not None else [(1, 1), (3, 3)]
     return RockSamplePOMDP(
-        map_size=map_size,
-        rock_positions=rocks,
-        init_pos=init_pos,
-        sensor_efficiency=sensor_efficiency,
+        discount_factor=0.95,
+        **rock_sample_pinned_kwargs(
+            map_size=map_size,
+            rock_positions=rocks,
+            init_pos=init_pos,
+            sensor_efficiency=sensor_efficiency,
+        ),
     )
 
 
@@ -317,13 +321,16 @@ def test_reward_dangerous_area_penalty_added_when_next_state_in_zone() -> None:
     Test type: unit
     """
     env = RockSamplePOMDP(
-        map_size=(5, 5),
-        rock_positions=[(0, 0)],
-        init_pos=(0, 0),
-        dangerous_areas=[(2, 1)],
-        dangerous_area_radius=1.0,
-        dangerous_area_penalty=-5.0,
-        step_penalty=0.0,
+        discount_factor=0.95,
+        **rock_sample_pinned_kwargs(
+            map_size=(5, 5),
+            rock_positions=[(0, 0)],
+            init_pos=(0, 0),
+            dangerous_areas=[(2, 1)],
+            dangerous_area_radius=1.0,
+            dangerous_area_penalty=-5.0,
+            step_penalty=0.0,
+        ),
     )
     state = create_rock_sample_state((2, 0), (True,))
     reward = env.reward(state, 2)  # east -> next at (2,1)
@@ -344,10 +351,13 @@ def test_reward_check_action_includes_sensor_penalty_no_movement_penalty() -> No
     Test type: unit
     """
     env = RockSamplePOMDP(
-        rock_positions=[(0, 0)],
-        init_pos=(0, 0),
-        step_penalty=-0.25,
-        sensor_use_penalty=-0.5,
+        discount_factor=0.95,
+        **rock_sample_pinned_kwargs(
+            rock_positions=[(0, 0)],
+            init_pos=(0, 0),
+            step_penalty=-0.25,
+            sensor_use_penalty=-0.5,
+        ),
     )
     state = create_rock_sample_state((2, 2), (True,))
     reward = env.reward(state, 5)  # check_rock_0
@@ -369,7 +379,9 @@ def test_default_dangerous_area_penalty_is_non_positive() -> None:
 
     Test type: unit
     """
-    env = RockSamplePOMDP(rock_positions=[(0, 0)])
+    env = RockSamplePOMDP(
+        discount_factor=0.95, **rock_sample_pinned_kwargs(rock_positions=[(0, 0)])
+    )
     assert env.dangerous_area_penalty <= 0.0, (
         "Default dangerous_area_penalty must be non-positive given the "
         "additive reward convention; a positive default rewards danger entry."
@@ -392,13 +404,16 @@ def test_negative_dangerous_area_penalty_decreases_reward() -> None:
     Test type: unit
     """
     env = RockSamplePOMDP(
-        map_size=(5, 5),
-        rock_positions=[(0, 0)],
-        init_pos=(0, 0),
-        dangerous_areas=[(2, 1)],
-        dangerous_area_radius=1.0,
-        dangerous_area_penalty=-7.0,
-        step_penalty=0.0,
+        discount_factor=0.95,
+        **rock_sample_pinned_kwargs(
+            map_size=(5, 5),
+            rock_positions=[(0, 0)],
+            init_pos=(0, 0),
+            dangerous_areas=[(2, 1)],
+            dangerous_area_radius=1.0,
+            dangerous_area_penalty=-7.0,
+            step_penalty=0.0,
+        ),
     )
     state = create_rock_sample_state((2, 0), (True,))
     reward = env.reward(state, 2)
@@ -421,10 +436,13 @@ def test_positive_dangerous_area_penalty_emits_warning() -> None:
     """
     with pytest.warns(UserWarning, match="positive"):
         RockSamplePOMDP(
-            map_size=(5, 5),
-            rock_positions=[(0, 0)],
-            dangerous_areas=[(2, 2)],
-            dangerous_area_penalty=5.0,
+            discount_factor=0.95,
+            **rock_sample_pinned_kwargs(
+                map_size=(5, 5),
+                rock_positions=[(0, 0)],
+                dangerous_areas=[(2, 2)],
+                dangerous_area_penalty=5.0,
+            ),
         )
 
 
@@ -446,14 +464,17 @@ def test_reward_exit_action_does_not_add_dangerous_area_penalty() -> None:
     Test type: unit
     """
     env = RockSamplePOMDP(
-        map_size=(5, 5),
-        rock_positions=[(0, 0)],
-        init_pos=(0, 0),
-        dangerous_areas=[(0, 0)],
-        dangerous_area_radius=0.5,
-        dangerous_area_penalty=-99.0,
-        step_penalty=-1.0,
-        exit_reward=10.0,
+        discount_factor=0.95,
+        **rock_sample_pinned_kwargs(
+            map_size=(5, 5),
+            rock_positions=[(0, 0)],
+            init_pos=(0, 0),
+            dangerous_areas=[(0, 0)],
+            dangerous_area_radius=0.5,
+            dangerous_area_penalty=-99.0,
+            step_penalty=-1.0,
+            exit_reward=10.0,
+        ),
     )
     state = create_rock_sample_state((2, 4), (True,))
     reward = env.reward(state, 2)  # east -> exit
@@ -533,11 +554,14 @@ def test_reward_batch_exit_branch_matches_scalar_and_cpp_contract() -> None:
     Test type: integration
     """
     env = RockSamplePOMDP(
-        map_size=(5, 5),
-        rock_positions=[(0, 0)],
-        init_pos=(0, 0),
-        step_penalty=-1.0,
-        exit_reward=10.0,
+        discount_factor=0.95,
+        **rock_sample_pinned_kwargs(
+            map_size=(5, 5),
+            rock_positions=[(0, 0)],
+            init_pos=(0, 0),
+            step_penalty=-1.0,
+            exit_reward=10.0,
+        ),
     )
     particles = np.array(
         [
@@ -577,14 +601,17 @@ def test_reward_batch_east_non_exit_includes_dangerous_area_penalty() -> None:
     Test type: integration
     """
     env = RockSamplePOMDP(
-        map_size=(5, 5),
-        rock_positions=[(0, 0)],
-        init_pos=(0, 0),
-        dangerous_areas=[(2, 1)],
-        dangerous_area_radius=1.0,
-        dangerous_area_penalty=-100.0,
-        step_penalty=-1.0,
-        exit_reward=10.0,
+        discount_factor=0.95,
+        **rock_sample_pinned_kwargs(
+            map_size=(5, 5),
+            rock_positions=[(0, 0)],
+            init_pos=(0, 0),
+            dangerous_areas=[(2, 1)],
+            dangerous_area_radius=1.0,
+            dangerous_area_penalty=-100.0,
+            step_penalty=-1.0,
+            exit_reward=10.0,
+        ),
     )
     state = create_rock_sample_state((2, 0), (True,))
     scalar_reward = env.reward(state, 2)
@@ -614,14 +641,17 @@ def test_reward_batch_east_on_terminal_sentinel_equals_step_penalty() -> None:
     Test type: integration
     """
     env = RockSamplePOMDP(
-        map_size=(5, 5),
-        rock_positions=[(0, 0)],
-        init_pos=(0, 0),
-        dangerous_areas=[(2, 2)],
-        dangerous_area_radius=1.0,
-        dangerous_area_penalty=-50.0,
-        step_penalty=-1.0,
-        exit_reward=10.0,
+        discount_factor=0.95,
+        **rock_sample_pinned_kwargs(
+            map_size=(5, 5),
+            rock_positions=[(0, 0)],
+            init_pos=(0, 0),
+            dangerous_areas=[(2, 2)],
+            dangerous_area_radius=1.0,
+            dangerous_area_penalty=-50.0,
+            step_penalty=-1.0,
+            exit_reward=10.0,
+        ),
     )
     terminal = create_rock_sample_state((-1, -1), (True,))
     scalar_reward = env.reward(terminal, 2)
