@@ -18,6 +18,9 @@ from collections import Counter
 import numpy as np
 import pytest
 
+from POMDPPlanners.core.belief.vectorized_weighted_particle_belief import (
+    VectorizedWeightedParticleBelief,
+)
 from POMDPPlanners.environments.laser_tag_pomdp import LaserTagPOMDP, OpponentPolicy
 from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_beliefs import (
     LaserTagVectorizedUpdater,
@@ -656,3 +659,133 @@ class TestEquivalenceWithPerParticleLoop:
         assert result[1] == 0.0  # terminal
         assert result[2] == -np.inf  # non-terminal
         assert result[3] == 0.0  # terminal
+
+
+# ---------------------------------------------------------------------------
+# Belief filtering: ESS-gated resampling drops off-sight particles
+# ---------------------------------------------------------------------------
+
+# Open 7x15 grid scenario shared by the resampling tests.
+_ROBOT = (3, 5)
+_TRUE_OPP = (3, 8)  # 3 cells East of the robot, on the East laser ray (in sight)
+_FAR_OFF_RAY = (0, 12)  # far from the robot and off all 8 laser rays (never spotted)
+_NEAR_THRESHOLD = 2.0  # opponent within this many cells of _TRUE_OPP counts as "relevant"
+
+# Noiseless laser reading for robot (3, 5), opponent (3, 8) on an open 7x15 grid:
+# the opponent blocks the East beam (reading distance-1 = 2); West runs 5 cells to
+# the edge; every other beam runs 3 cells to the edge. The no-opponent reading would
+# show East = 9, so this observation is informative about the opponent's location.
+_IN_SIGHT_OBS = np.array([3.0, 3.0, 2.0, 3.0, 3.0, 3.0, 5.0, 3.0])
+
+
+def _make_open_env() -> LaserTagPOMDP:
+    """Build a wall-free 7x15 LaserTag env with unit measurement noise."""
+    return LaserTagPOMDP(
+        discount_factor=0.95,
+        floor_shape=(7, 15),
+        walls=set(),
+        dangerous_areas=set(),
+        measurement_noise=1.0,
+    )
+
+
+def _mixed_belief(
+    n_relevant: int, n_irrelevant: int, ess_factor: float
+) -> VectorizedWeightedParticleBelief:
+    """Build a uniform-weight belief mixing near-true and far off-ray particles."""
+    relevant = np.tile(np.array([*_ROBOT, *_TRUE_OPP, 0.0], dtype=float), (n_relevant, 1))
+    irrelevant = np.tile(np.array([*_ROBOT, *_FAR_OFF_RAY, 0.0], dtype=float), (n_irrelevant, 1))
+    particles = np.vstack([relevant, irrelevant])
+    log_weights = np.full(len(particles), -np.log(len(particles)))
+    updater = LaserTagVectorizedUpdater.from_environment(_make_open_env())
+    return VectorizedWeightedParticleBelief(
+        particles, log_weights, updater, resampling=True, ess_factor=ess_factor
+    )
+
+
+def _opp_distance_from_true(belief: VectorizedWeightedParticleBelief) -> np.ndarray:
+    """Euclidean distance of each particle's opponent cell from _TRUE_OPP."""
+    opp = belief.particles[:, 2:4]
+    return np.sqrt(((opp - np.array(_TRUE_OPP, dtype=float)) ** 2).sum(axis=1))
+
+
+class TestLaserTagBeliefResamplingFiltering:
+    """Test ESS-gated resampling filters off-sight particles in the LaserTag belief.
+
+    Purpose: Validates that the dedicated LaserTag belief, driven by
+        LaserTagVectorizedUpdater, removes particles whose opponent is far and out of
+        the laser's line of sight once an in-sight observation collapses their weights
+
+    Given: A VectorizedWeightedParticleBelief mixing a minority of near-true particles
+        with a majority of far off-ray particles
+    When: The belief is updated with an in-sight laser observation
+    Then: Resampling fires (or is gated off) according to the ESS threshold
+
+    Test type: integration
+    """
+
+    def test_resampling_filters_off_sight_particles(self):
+        """Test an in-sight observation filters out far off-ray particles via resampling.
+
+        Purpose: Validates that the ESS-gated resample step removes irrelevant particles
+            (opponent far and off the laser line of sight) when the observation strongly
+            favours the minority near the true opponent location
+
+        Given: A 200-particle belief (40 near the true opponent at (3, 8), 160 far
+            off-ray at (0, 12)) with resampling enabled and ess_factor=0.5, so the
+            threshold is 100 effective particles
+        When: The belief is updated with the in-sight observation (East beam blocked at
+            reading 2); the post-reweight ESS (~20) falls below the threshold
+        Then: Resampling fires (weights reset to uniform) and every surviving particle
+            places the opponent within 2 cells of the true location — all 160 far
+            off-ray particles are filtered out
+
+        Test type: integration
+        """
+        np.random.seed(0)
+        belief = _mixed_belief(n_relevant=40, n_irrelevant=160, ess_factor=0.5)
+
+        assert belief.n_particles == 200
+        assert int((_opp_distance_from_true(belief) > _NEAR_THRESHOLD).sum()) == 160
+
+        updated = belief.update(action=4, observation=_IN_SIGHT_OBS)
+
+        assert updated.n_particles == 200
+        assert np.allclose(
+            updated.log_weights, updated.log_weights[0]
+        ), "Resampling should have fired and reset weights to uniform"
+        assert (
+            int((_opp_distance_from_true(updated) > _NEAR_THRESHOLD).sum()) == 0
+        ), "All far off-sight particles should have been filtered out"
+
+    def test_resampling_gated_off_keeps_irrelevant_particles(self):
+        """Test irrelevant particles survive when ESS stays above the resample threshold.
+
+        Purpose: Locks in that the filtering is ESS-gated, not automatic: with the same
+            degenerate weights but a threshold below the ESS, the resample step does not
+            fire and the far off-sight particles remain in the belief
+
+        Given: The identical 200-particle mix (40 near-true, 160 far off-ray) and the
+            same in-sight observation, but ess_factor=0.05 so the threshold is only 10
+            effective particles — below the post-reweight ESS (~20)
+        When: The belief is updated
+        Then: Resampling does not fire (weights stay non-uniform), all 160 far off-ray
+            particles survive, yet they carry essentially zero normalized weight — the
+            reweight captured the information, only the gated resample step removes them
+
+        Test type: integration
+        """
+        np.random.seed(0)
+        belief = _mixed_belief(n_relevant=40, n_irrelevant=160, ess_factor=0.05)
+
+        updated = belief.update(action=4, observation=_IN_SIGHT_OBS)
+
+        assert not np.allclose(
+            updated.log_weights, updated.log_weights[0]
+        ), "Resampling should not have fired, so weights should remain non-uniform"
+
+        far_mask = _opp_distance_from_true(updated) > _NEAR_THRESHOLD
+        assert int(far_mask.sum()) == 160, "Far off-sight particles should not be filtered out"
+        assert (
+            updated.normalized_weights[far_mask].sum() < 1e-6
+        ), "Surviving far particles should carry essentially zero weight"

@@ -1215,6 +1215,93 @@ class TestLaserTagObservation:
 
         assert all(p > 0 for p in probs), f"All probabilities should be positive, got {probs}"
 
+    def test_observation_discriminates_opponent_on_laser_ray(self):
+        """Test the observation model detects an opponent that sits on a laser ray.
+
+        Purpose: Validates that when the opponent lies on one of the robot's 8 laser
+            rays, the in-sight laser reading is far more likely under the in-sight
+            state than under a state where the opponent has left that ray
+
+        Given: A wall-free 7x11 grid, robot fixed at (3, 3); the in-sight state places
+            the opponent 3 cells East at (3, 6) (blocking the East beam at reading
+            distance-1 = 2), and the out-of-sight state moves the opponent off every
+            ray to (4, 6) so the East beam runs to the grid edge (reading 7)
+        When: env.observation_log_probability scores the noiseless in-sight laser
+            reading (3, 3, 2, 3, 3, 3, 3, 3) against both states
+        Then: the in-sight likelihood equals the analytic Gaussian maximum and is more
+            than 1000x larger than the out-of-sight likelihood (East beam differs by 5
+            cells with sigma=1)
+
+        Test type: unit
+        """
+        env = _make_env(floor_shape=(7, 11), walls=set(), measurement_noise=1.0)
+
+        state_in_sight = np.array([3.0, 3.0, 3.0, 6.0, 0.0])
+        state_out_of_sight = np.array([3.0, 3.0, 4.0, 6.0, 0.0])
+
+        # Noiseless true laser ranges for the in-sight state: the opponent blocks the
+        # East beam (reading distance-1 = 2); every other beam runs to the grid edge,
+        # 3 cells from the centre cell (3, 3).
+        in_sight_measurement = (3.0, 3.0, 2.0, 3.0, 3.0, 3.0, 3.0, 3.0)
+
+        p_in = _observation_probabilities(env, state_in_sight, 0, [in_sight_measurement])[0]
+        p_out = _observation_probabilities(env, state_out_of_sight, 0, [in_sight_measurement])[0]
+
+        # All 8 diffs are zero under the in-sight state, so the likelihood is the
+        # product of 8 Gaussian peaks. This also confirms the hardcoded reading is
+        # exactly the true range vector.
+        expected_max = (1.0 / np.sqrt(2 * np.pi)) ** 8
+        assert np.isclose(
+            p_in, expected_max
+        ), f"In-sight reading should be the max-likelihood observation, got {p_in}"
+        assert p_in > p_out, f"Expected in-sight > out-of-sight, got {p_in} vs {p_out}"
+        assert (
+            p_out < p_in * 1e-3
+        ), f"Out-of-sight likelihood should be far smaller, got {p_out} vs {p_in}"
+
+    def test_observation_blind_to_off_ray_opponent_position(self):
+        """Test the observation model carries no information for off-ray opponents.
+
+        Purpose: Demonstrates the LaserTag blindspot: when the opponent is off all 8
+            laser rays, the observation likelihood is identical regardless of where the
+            opponent actually is, so the laser cannot localise it
+
+        Given: A wall-free 7x11 grid, robot fixed at (3, 3), and two states whose
+            opponents sit at different off-ray cells (4, 6) and (1, 2) at different
+            Euclidean distances from the robot
+        When: env.observation_log_probability scores the same observations (the free
+            ranges (3, 3, 7, 3, 3, 3, 3, 3) and an arbitrary noisy vector) against both
+            states
+        Then: the two states yield identical log-likelihoods for every observation, and
+            the free-range vector is the max-likelihood observation for both, proving
+            the opponent's position leaves no imprint on the observation
+
+        Test type: unit
+        """
+        env = _make_env(floor_shape=(7, 11), walls=set(), measurement_noise=1.0)
+
+        state_opp_a = np.array([3.0, 3.0, 4.0, 6.0, 0.0])  # opponent at (4, 6)
+        state_opp_b = np.array([3.0, 3.0, 1.0, 2.0, 0.0])  # opponent at (1, 2)
+
+        # With no opponent on any ray, every beam runs to the grid edge, so both states
+        # share the same true ranges: 7 cells East, 3 cells in every other direction.
+        free_ranges = (3.0, 3.0, 7.0, 3.0, 3.0, 3.0, 3.0, 3.0)
+        noisy_obs = (2.4, 3.1, 6.5, 2.9, 3.3, 2.7, 3.0, 3.2)
+
+        for obs in (free_ranges, noisy_obs):
+            log_a = env.observation_log_probability(state_opp_a, 0, [obs])
+            log_b = env.observation_log_probability(state_opp_b, 0, [obs])
+            assert np.allclose(log_a, log_b), (
+                "Observation likelihood must be identical for the two off-ray opponent "
+                f"positions, but got {log_a} vs {log_b}"
+            )
+
+        expected_max = (1.0 / np.sqrt(2 * np.pi)) ** 8
+        p_free = _observation_probabilities(env, state_opp_a, 0, [free_ranges])[0]
+        assert np.isclose(
+            p_free, expected_max
+        ), f"Free ranges should be the max-likelihood observation, got {p_free}"
+
 
 class TestLaserTagPOMDP:
     """Test main LaserTag POMDP environment functionality.
