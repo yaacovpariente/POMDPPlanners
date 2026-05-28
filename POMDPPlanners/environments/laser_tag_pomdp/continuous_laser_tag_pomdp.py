@@ -23,8 +23,10 @@ Observation:
 Opponent behaviour is selectable via ``opponent_policy`` (see
 :class:`~POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_utils.OpponentPolicy`):
 ``EVADE`` (default) flees the robot's pre-move position at ``evasion_speed``;
-``PURSUE`` chases the robot's post-move position. ``evasion_speed`` is a
-direction-neutral step magnitude under both policies.
+``PURSUE`` chases the robot's post-move position. ``EVADE_WHEN_SPOTTED`` flees
+only while the robot has line of sight to it and otherwise **holds its position**
+(in this continuous env; the discrete grid env moves randomly instead).
+``evasion_speed`` is a direction-neutral step magnitude under all policies.
 
 Classes:
     ContinuousLaserTagPOMDP: Continuous-action environment.

@@ -161,17 +161,18 @@ def test_opponent_policy_changes_config_id():
     """Distinct opponent policies produce distinct environment config IDs.
 
     Purpose: Validates the opponent_policy enum is captured by config_id so cached
-        results for EVADE and PURSUE configs never collide
+        results for distinct policies never collide
 
-    Given: Two LaserTagPOMDPs identical except for opponent_policy
+    Given: LaserTagPOMDPs identical except for opponent_policy
     When: config_id is computed for each
-    Then: The two IDs differ
+    Then: The three policy IDs are all distinct
 
     Test type: unit
     """
     evade = _make_env(opponent_policy=OpponentPolicy.EVADE)
     pursue = _make_env(opponent_policy=OpponentPolicy.PURSUE)
-    assert evade.config_id != pursue.config_id
+    spotted = _make_env(opponent_policy=OpponentPolicy.EVADE_WHEN_SPOTTED)
+    assert len({evade.config_id, pursue.config_id, spotted.config_id}) == 3
 
 
 class TestLaserTagStateTransition:
@@ -361,6 +362,88 @@ class TestLaserTagStateTransition:
         assert (
             0.15 <= probs[1] <= 0.25
         ), f"Expected ~0.2 North from the post-move row-aligned split, got {probs[1]}"
+
+    def test_evade_when_spotted_flees_when_visible(self):
+        """EVADE_WHEN_SPOTTED behaves like EVADE when the robot has line of sight.
+
+        Purpose: Validates that an opponent on a clear laser ray from the robot flees
+            exactly as the EVADE policy would
+
+        Given: An EVADE_WHEN_SPOTTED env, robot at (2, 5) directly above the opponent at
+            (5, 5) on the same column (the opponent is on the robot's unoccluded South ray)
+        When: many transitions are sampled after the robot moves South
+        Then: the opponent flees to the away cell (6, 5) with >0.3 probability and rarely
+            takes the toward cell (4, 5), identical to EVADE
+
+        Test type: unit
+        """
+        env = _make_env(floor_shape=(7, 11), opponent_policy=OpponentPolicy.EVADE_WHEN_SPOTTED)
+        state = np.array([2.0, 5.0, 5.0, 5.0, 0.0])
+
+        samples = env.sample_next_state(state, 1, n_samples=1000)
+        pos_counts = Counter((int(s[2]), int(s[3])) for s in samples)
+        total = len(samples)
+
+        away_prob = pos_counts.get((6, 5), 0) / total
+        toward_prob = pos_counts.get((4, 5), 0) / total
+        assert away_prob > 0.3, f"Expected >0.3 away (flee while spotted), got {away_prob}"
+        assert toward_prob < 0.1, f"Expected <0.1 toward while spotted, got {toward_prob}"
+
+    def test_evade_when_spotted_random_when_not_visible(self):
+        """EVADE_WHEN_SPOTTED moves uniformly at random when not on any laser ray.
+
+        Purpose: Validates the random fallback distribution (0.2 per move + 0.2 stay) when
+            the opponent is off all of the robot's rays
+
+        Given: An EVADE_WHEN_SPOTTED env, robot at (3, 5) and opponent at (5, 6) — not
+            collinear with any of the robot's 8 laser directions (so unspotted)
+        When: many transitions are sampled
+        Then: each of the four neighbour cells and the stay cell each get ~0.2 probability
+
+        Test type: unit
+        """
+        env = _make_env(floor_shape=(7, 11), opponent_policy=OpponentPolicy.EVADE_WHEN_SPOTTED)
+        state = np.array([3.0, 5.0, 5.0, 6.0, 0.0])
+
+        samples = env.sample_next_state(state, 0, n_samples=4000)
+        pos_counts = Counter((int(s[2]), int(s[3])) for s in samples)
+        total = len(samples)
+
+        for cell in [(4, 6), (6, 6), (5, 7), (5, 5), (5, 6)]:  # N, S, E, W, stay
+            prob = pos_counts.get(cell, 0) / total
+            assert 0.15 <= prob <= 0.25, f"Expected ~0.2 for random cell {cell}, got {prob}"
+
+    def test_evade_when_spotted_occluded_is_random(self):
+        """A wall between robot and opponent breaks line of sight -> random moves.
+
+        Purpose: Validates that "spotted" uses true line of sight: an opponent on a ray but
+            occluded by a wall is treated as unspotted (random), not fleeing
+
+        Given: An EVADE_WHEN_SPOTTED env, robot at (1, 5) above the opponent at (5, 5) on the
+            same column, with a wall at (3, 5) between them occluding the South ray
+        When: many transitions are sampled
+        Then: the opponent moves randomly (toward cell (4, 5) gets ~0.2, not 0 as a spotted
+            evader would give)
+
+        Test type: unit
+        """
+        env = _make_env(
+            floor_shape=(7, 11),
+            walls={(3, 5)},
+            opponent_policy=OpponentPolicy.EVADE_WHEN_SPOTTED,
+        )
+        state = np.array([1.0, 5.0, 5.0, 5.0, 0.0])
+
+        samples = env.sample_next_state(state, 2, n_samples=4000)
+        pos_counts = Counter((int(s[2]), int(s[3])) for s in samples)
+        total = len(samples)
+
+        toward_prob = pos_counts.get((4, 5), 0) / total
+        away_prob = pos_counts.get((6, 5), 0) / total
+        assert (
+            0.15 <= toward_prob <= 0.25
+        ), f"Expected ~0.2 toward cell (occluded -> random), got {toward_prob}"
+        assert 0.15 <= away_prob <= 0.25, f"Expected ~0.2 away cell (random), got {away_prob}"
 
     def test_successful_tagging(self):
         """Test successful tagging creates terminal state.
@@ -2262,7 +2345,10 @@ def _python_rollout(
 class TestNativeDiscreteRollout:
     """Tests for the native C++ discrete LaserTag rollout kernel."""
 
-    @pytest.mark.parametrize("opponent_policy", [OpponentPolicy.EVADE, OpponentPolicy.PURSUE])
+    @pytest.mark.parametrize(
+        "opponent_policy",
+        [OpponentPolicy.EVADE, OpponentPolicy.PURSUE, OpponentPolicy.EVADE_WHEN_SPOTTED],
+    )
     def test_lasertag_native_simulate_rollout_matches_python(self, opponent_policy) -> None:
         """Native C++ rollout produces the same return distribution as the Python loop.
 
@@ -2323,11 +2409,14 @@ class TestNativeDiscreteRollout:
             "implement different distributions."
         )
 
-    @pytest.mark.parametrize("opponent_policy", [OpponentPolicy.EVADE, OpponentPolicy.PURSUE])
+    @pytest.mark.parametrize(
+        "opponent_policy",
+        [OpponentPolicy.EVADE, OpponentPolicy.PURSUE, OpponentPolicy.EVADE_WHEN_SPOTTED],
+    )
     @pytest.mark.parametrize(
         "walls",
-        [set(), {(5, 6), (5, 4)}],
-        ids=["open", "wall_adjacent_slack"],
+        [set(), {(5, 6), (5, 4)}, {(3, 5)}],
+        ids=["open", "wall_adjacent_slack", "occluded_ray"],
     )
     def test_native_single_step_opponent_distribution_matches_python(
         self, opponent_policy, walls
@@ -2336,12 +2425,15 @@ class TestNativeDiscreteRollout:
 
         Purpose: Validates that the native ``sample_next_state_step`` opponent-move table
             (disc_opponent_move_table) reproduces the Python ``_python_sample_next_state``
-            distribution under BOTH opponent policies, including the wall-blocked
-            invalid-move -> stay slack path — guarding against a missed direction flip or
-            pre/post reference choice in the C++ single-step kernel.
+            distribution under ALL opponent policies, including the wall-blocked
+            invalid-move -> stay slack path and the occluded-ray case (which makes
+            EVADE_WHEN_SPOTTED fall back to random) — guarding against a missed direction
+            flip, pre/post reference choice, or spotted-predicate divergence in the C++
+            single-step kernel.
 
-        Given: A LaserTagPOMDP (open grid or walls blocking both opponent x-moves), robot
-            above the opponent, robot moving South, evaluated for EVADE and PURSUE.
+        Given: A LaserTagPOMDP (open grid, walls blocking both opponent x-moves, or a wall
+            on the robot-opponent ray), robot above the opponent, robot moving South,
+            evaluated for EVADE, PURSUE, and EVADE_WHEN_SPOTTED.
         When: 4000 single samples are drawn via the native path (n_samples == 1) and 4000
             via the Python batch path (n_samples > 1).
         Then: The per-cell opponent next-position probabilities agree within 0.05.
