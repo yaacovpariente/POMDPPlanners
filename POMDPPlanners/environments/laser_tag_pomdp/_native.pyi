@@ -160,7 +160,9 @@ def simulate_rollout_discrete(
     results. ``reward_variant_code`` selects the reward variant:
     ``0`` = CONSTANT_HAZARD_PENALTY, ``1`` = ZERO_MEAN_HAZARD_SHOCK,
     ``2`` = DISTANCE_DECAYED_HAZARD_PENALTY. ``penalty_decay`` is consulted only by
-    the ``DISTANCE_DECAYED_HAZARD_PENALTY`` variant. Returns the discounted sum of
+    the ``DISTANCE_DECAYED_HAZARD_PENALTY`` variant. ``opponent_policy_code`` selects
+    the opponent behaviour (``0`` = EVADE, away + pre-move robot reference;
+    ``1`` = PURSUE, toward + post-move robot reference). Returns the discounted sum of
     immediate rewards along the sampled trajectory.
     """
     ...
@@ -180,6 +182,8 @@ def belief_batch_transition_discrete(
 
     Returns the (N, 5) float64 array of next particles. Uses the module-level
     mt19937_64 RNG; seed via set_seed() before calling for reproducibility.
+    ``opponent_policy_code`` selects the opponent behaviour (``0`` = EVADE,
+    away + pre-move robot reference; ``1`` = PURSUE, toward + post-move reference).
     """
     ...
 
@@ -218,6 +222,8 @@ def sample_next_state_step(
     transition error in numpy) and pre-draws ``opp_uniform`` via
     ``np.random.random()`` so byte-identical numpy RNG state is preserved
     across the original Python path and this native fast path.
+    ``opponent_policy_code`` selects the opponent behaviour (``0`` = EVADE,
+    away + pre-move robot reference; ``1`` = PURSUE, toward + post-move reference).
     """
     ...
 
@@ -276,6 +282,8 @@ def cont_simulate_rollout(
     """Run a full random rollout for ContinuousLaserTagPOMDP in one C++ frame.
 
     ``actions_buffer`` must be shape (N, 3) float64 with N >= max_depth - start_depth.
+    ``opponent_policy_code`` selects the opponent behaviour (``0`` = EVADE,
+    away + pre-move robot reference; ``1`` = PURSUE, toward + post-move reference).
     Returns the discounted sum of immediate rewards along the sampled trajectory.
     """
     ...

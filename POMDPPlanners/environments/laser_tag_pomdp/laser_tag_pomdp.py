@@ -14,12 +14,18 @@ The LaserTag problem features:
 - 8-directional laser range measurements with Gaussian noise
 - Positive reward for successful tagging, negative reward for failed tag attempts
 - Step cost for each movement action
-- Opponent moves with 0.4 prob away from robot in x-dir, 0.4 prob away from robot in y-dir, 0.2 prob stay
-- When aligned on an axis, the 0.4 budget is split equally (0.2/0.2) between both directions
+- Opponent moves with 0.4 prob in x-dir, 0.4 prob in y-dir, 0.2 prob stay; the
+  direction of the 0.4 mass is set by ``opponent_policy`` (see
+  :class:`~POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_utils.OpponentPolicy`):
+  ``EVADE`` (default) moves away from the robot's pre-move position, ``PURSUE``
+  moves toward the robot's post-move position
+- When aligned on an axis, the 0.4 budget is split equally (0.2/0.2) between both
+  directions, regardless of policy
 
 Classes:
     LaserTagState: State representation with robot and opponent positions
     LaserTagPOMDP: Main environment class implementing the LaserTag problem
+    OpponentPolicy: Selectable opponent transition behaviour (evade vs pursue)
 """
 
 from enum import Enum

@@ -2625,6 +2625,8 @@ PYBIND11_MODULE(_native, m) {
         py::arg("dangerous_area_penalty"), py::arg("opponent_policy_code") = 0,
         "Run a full random rollout for ContinuousLaserTagPOMDP in one C++ frame.\n\n"
         "``actions_buffer`` must be shape (N, 3) float64 with N >= max_depth - start_depth.\n"
+        "``opponent_policy_code`` selects the opponent behaviour: 0 = EVADE (away from\n"
+        "the robot's pre-move position), 1 = PURSUE (toward its post-move position).\n"
         "Returns the discounted sum of immediate rewards along the sampled trajectory.");
 
     // ── Discrete LaserTag native rollout binding ──────────────────────────────
@@ -2648,6 +2650,8 @@ PYBIND11_MODULE(_native, m) {
         "  1 = ZERO_MEAN_HAZARD_SHOCK (wall always -penalty; danger +/-penalty 50/50);\n"
         "  2 = DISTANCE_DECAYED_HAZARD_PENALTY (wall always -penalty; danger -penalty\n"
         "      with probability exp(-min_dist / penalty_decay), no radius cutoff).\n"
+        "``opponent_policy_code`` selects the opponent behaviour: 0 = EVADE (away from\n"
+        "the robot's pre-move position), 1 = PURSUE (toward its post-move position).\n"
         "Returns the discounted sum of immediate rewards along the sampled trajectory.");
 
     // ── Discrete LaserTag belief-update kernels ─────────────────────────────
@@ -2658,7 +2662,9 @@ PYBIND11_MODULE(_native, m) {
         py::arg("opponent_policy_code") = 0,
         "Native port of LaserTagVectorizedUpdater.batch_transition.\n\n"
         "Returns the (N, 5) float64 array of next particles.  Uses\n"
-        "pomdp_native::default_rng(); seed via set_seed() for reproducibility.");
+        "pomdp_native::default_rng(); seed via set_seed() for reproducibility.\n"
+        "``opponent_policy_code`` selects the opponent behaviour: 0 = EVADE (away from\n"
+        "the robot's pre-move position), 1 = PURSUE (toward its post-move position).");
 
     m.def(
         "belief_batch_obs_log_likelihood_discrete",
@@ -2681,6 +2687,8 @@ PYBIND11_MODULE(_native, m) {
         "optional transition error). ``opp_uniform`` is a uniform [0,1) draw\n"
         "used to pick the opponent move; must be drawn with np.random.random()\n"
         "for byte-identical reproducibility against the original Python path.\n"
+        "``opponent_policy_code`` selects the opponent behaviour: 0 = EVADE (away from\n"
+        "the robot's pre-move position), 1 = PURSUE (toward its post-move position).\n"
         "Returns a (5,) float64 ndarray.");
 
     m.def(

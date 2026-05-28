@@ -20,6 +20,12 @@ Observation:
     ``np.ndarray`` shape ``(8,)`` – noisy 8-direction laser range
     measurements.  Terminal observation is ``np.full(8, -1.0)``.
 
+Opponent behaviour is selectable via ``opponent_policy`` (see
+:class:`~POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_utils.OpponentPolicy`):
+``EVADE`` (default) flees the robot's pre-move position at ``evasion_speed``;
+``PURSUE`` chases the robot's post-move position. ``evasion_speed`` is a
+direction-neutral step magnitude under both policies.
+
 Classes:
     ContinuousLaserTagPOMDP: Continuous-action environment.
     ContinuousLaserTagPOMDPDiscreteActions: Discrete-action variant.
