@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for confidence interval testing utilities."""
 
 import pytest

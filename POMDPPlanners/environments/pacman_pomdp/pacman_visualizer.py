@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Visualization module for PacMan POMDP environment.
 
 This module provides sprite-based visualization capabilities for PacMan POMDP
@@ -13,7 +15,7 @@ from typing import TYPE_CHECKING, Any, List, Optional, Tuple
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
-from POMDPPlanners.core.belief import Belief, WeightedParticleBelief
+from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.core.simulation import StepData
 
 if TYPE_CHECKING:
@@ -132,6 +134,29 @@ class PacManVisualizer:
                 else:
                     draw.rectangle([x, y, x + tile_size, y + tile_size], fill=(0, 0, 0, 255))
 
+    def _draw_dangerous_areas(self, canvas: Image.Image, tile_size: int) -> None:
+        """Overlay dangerous areas as translucent red circles.
+
+        Painted into a separate RGBA overlay so the configured alpha blends
+        with the maze background without clobbering pellets, ghosts, or
+        PacMan, which are composited on top in :meth:`_render_frame`.
+        """
+        areas = getattr(self.env, "dangerous_areas", None)
+        if not areas:
+            return
+        radius = float(getattr(self.env, "dangerous_area_radius", 1.0))
+        overlay = Image.new("RGBA", canvas.size, (0, 0, 0, 0))  # type: ignore[arg-type]
+        draw_overlay = ImageDraw.Draw(overlay)
+        px_radius = max(1, int(round(radius * tile_size)))
+        for danger_row, danger_col in areas:
+            cx = int(danger_col * tile_size + tile_size / 2)
+            cy = int(danger_row * tile_size + tile_size / 2)
+            draw_overlay.ellipse(
+                [cx - px_radius, cy - px_radius, cx + px_radius, cy + px_radius],
+                fill=(255, 0, 0, 90),
+            )
+        canvas.alpha_composite(overlay)
+
     def _draw_pellets(self, state: np.ndarray, draw: ImageDraw.ImageDraw, tile_size: int) -> None:
         """Draw pellets on the maze."""
         rows, cols = self.env.maze_size
@@ -155,10 +180,10 @@ class PacManVisualizer:
         Each cell's red intensity is proportional to the marginal probability
         (sum of normalized particle weights) that any ghost occupies that cell.
         """
-        if belief is None or not isinstance(belief, WeightedParticleBelief):
+        if belief is None:
             return
-        particles = belief.particles
-        weights = belief.normalized_weights
+        particles = getattr(belief, "particles", None)
+        weights = getattr(belief, "normalized_weights", None)
         if particles is None or weights is None or len(particles) == 0:
             return
 
@@ -297,11 +322,30 @@ class PacManVisualizer:
             font=self.font_regular,
         )
 
+        # Second swatch + caption — only rendered when dangerous areas are
+        # configured so the legend stays compact for vanilla PacMan runs.
+        has_danger = bool(getattr(self.env, "dangerous_areas", None))
+        if has_danger:
+            danger_x = legend_x + 130
+            draw.rectangle(
+                [danger_x, legend_y + 2, danger_x + 14, legend_y + 14],
+                fill=(255, 0, 0, 110),
+            )
+            draw.text(
+                (danger_x + 20, legend_y),
+                "= danger zone",
+                fill=(255, 255, 255),
+                font=self.font_regular,
+            )
+
         if self.env.get_terminal(state):
             banner = "YOU WIN!" if len(pellets) == 0 else "GAME OVER"
             color = (0, 255, 0) if len(pellets) == 0 else (255, 80, 80)
+            # Push the banner right of the danger-zone caption when present,
+            # otherwise keep the historical x-offset.
+            banner_x = legend_x + (260 if has_danger else 130)
             draw.text(
-                (legend_x + 130, legend_y),
+                (banner_x, legend_y),
                 banner,
                 fill=color,
                 font=self.font_bold,
@@ -324,6 +368,9 @@ class PacManVisualizer:
         draw = ImageDraw.Draw(canvas)
 
         self._draw_maze_background(draw, tile_size)
+        # Dangerous areas sit just above the maze background so the belief
+        # heatmap, pellets, ghosts, and PacMan all remain readable on top.
+        self._draw_dangerous_areas(canvas, tile_size)
         # Belief overlay sits beneath pellets/ghosts/pacman so it doesn't
         # obscure them; pellets remain visible on top of the heatmap.
         self._draw_ghost_belief(belief, canvas, tile_size)

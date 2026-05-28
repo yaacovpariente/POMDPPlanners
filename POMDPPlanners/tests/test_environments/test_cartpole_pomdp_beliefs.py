@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for CartPoleVectorizedUpdater.
 
 This module tests the vectorized batch transition and observation

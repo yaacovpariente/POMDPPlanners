@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 # pylint: disable=protected-access  # Tests need to access protected members
 import shutil
 import tempfile

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for LaserTagVectorizedUpdater.
 
 This module tests the vectorized batch transition and observation
@@ -11,10 +13,12 @@ per-particle loop (one bulk ``np.random.random(K)`` vs sequential
 exact match while opponent positions are tested statistically.
 """
 
+from collections import Counter
+
 import numpy as np
 import pytest
 
-from POMDPPlanners.environments.laser_tag_pomdp import LaserTagPOMDP
+from POMDPPlanners.environments.laser_tag_pomdp import LaserTagPOMDP, OpponentPolicy
 from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_beliefs import (
     LaserTagVectorizedUpdater,
 )
@@ -269,6 +273,62 @@ class TestBatchTransition:
         # Should see at least 2 different opponent positions
         assert len(seen_positions) >= 2
 
+    @pytest.mark.parametrize(
+        "opponent_policy",
+        [OpponentPolicy.EVADE, OpponentPolicy.PURSUE, OpponentPolicy.EVADE_WHEN_SPOTTED],
+    )
+    @pytest.mark.parametrize(
+        "walls",
+        [set(), {(5, 6), (5, 4)}, {(3, 5)}],
+        ids=["open", "wall_adjacent_slack", "occluded_ray"],
+    )
+    def test_batch_transition_opponent_distribution_matches_env(self, opponent_policy, walls):
+        """Native belief batch transition matches the env opponent distribution per policy.
+
+        Purpose: Validates that the C++ belief kernel (belief_sample_opponent_move via
+            belief_batch_transition_discrete) reproduces the env's Python opponent-move
+            distribution under ALL policies, including the wall-blocked stay-slack path and
+            the occluded-ray case (which makes EVADE_WHEN_SPOTTED fall back to random) —
+            guarding against a missed direction flip, pre-move reference, or spotted-predicate
+            divergence in the belief path.
+
+        Given: A LaserTagPOMDP (open grid, walls blocking both opponent x-moves, or a wall on
+            the robot-opponent ray), robot above the opponent, action South, evaluated for
+            EVADE, PURSUE, and EVADE_WHEN_SPOTTED.
+        When: 4000 particles are pushed through updater.batch_transition and 4000 samples
+            through the env's Python sample_next_state.
+        Then: The per-cell opponent next-position probabilities agree within 0.05.
+
+        Test type: integration
+        """
+        env = LaserTagPOMDP(
+            discount_factor=0.95,
+            floor_shape=(7, 11),
+            walls=walls,
+            dangerous_areas=set(),
+            opponent_policy=opponent_policy,
+        )
+        updater = LaserTagVectorizedUpdater.from_environment(env)
+        state = np.array([2.0, 5.0, 5.0, 5.0, 0.0])
+        action = 1  # robot moves South -> robot_next (3, 5), still above the opponent
+        n = 4000
+
+        np.random.seed(0)
+        out = updater.batch_transition(np.tile(state, (n, 1)), action=np.array(action))
+        belief_counts = Counter((int(r[2]), int(r[3])) for r in out)
+
+        np.random.seed(0)
+        env_samples = env.sample_next_state(state, action, n_samples=n)
+        env_counts = Counter((int(s[2]), int(s[3])) for s in env_samples)
+
+        for cell in set(belief_counts) | set(env_counts):
+            p_belief = belief_counts.get(cell, 0) / n
+            p_env = env_counts.get(cell, 0) / n
+            assert abs(p_belief - p_env) < 0.05, (
+                f"policy={opponent_policy} cell={cell}: belief {p_belief:.3f} vs "
+                f"env {p_env:.3f} — C++ belief and Python env kernels diverge"
+            )
+
 
 # ---------------------------------------------------------------------------
 # batch_observation_log_likelihood tests
@@ -507,7 +567,7 @@ class TestEquivalenceWithPerParticleLoop:
         """
         np.random.seed(42)
         n_samples = 2000
-        # Robot at (1, 1), opponent at (3, 3) → opponent should move toward robot
+        # Robot at (1, 1), opponent at (3, 3) → opponent evades away from robot
         particle = np.array([[1.0, 1.0, 3.0, 3.0, 0.0]])
         particles = np.tile(particle, (n_samples, 1))
 
@@ -518,9 +578,9 @@ class TestEquivalenceWithPerParticleLoop:
         unique, counts = np.unique(opp_positions, axis=0, return_counts=True)
         freq = dict(zip([tuple(u) for u in unique], counts / n_samples))
 
-        # Expected: h_target=(3,2) prob=0.4, v_target=(2,3) prob=0.4, stay=(3,3) prob=0.2
-        assert abs(freq.get((3.0, 2.0), 0) - 0.4) < 0.05
-        assert abs(freq.get((2.0, 3.0), 0) - 0.4) < 0.05
+        # Expected: h_target=(3,4) prob=0.4, v_target=(4,3) prob=0.4, stay=(3,3) prob=0.2
+        assert abs(freq.get((3.0, 4.0), 0) - 0.4) < 0.05
+        assert abs(freq.get((4.0, 3.0), 0) - 0.4) < 0.05
         assert abs(freq.get((3.0, 3.0), 0) - 0.2) < 0.05
 
     def test_observation_log_likelihood_matches_per_particle_loop(

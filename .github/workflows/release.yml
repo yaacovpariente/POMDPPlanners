@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
+        python-version: ["3.10", "3.11", "3.12"]
 
     steps:
     - uses: actions/checkout@v4
@@ -60,9 +60,14 @@ jobs:
         python -m pip install --upgrade pip
         pip install build twine
 
-    - name: Build package
+    - name: Build sdist
+      # Build sdist only. Building a wheel here would produce a
+      # ``linux_x86_64``-tagged artifact which PyPI / TestPyPI reject
+      # (only ``manylinux*`` wheels are accepted). Portable wheels need
+      # a cibuildwheel-driven matrix that is out of scope for this
+      # workflow; users install from sdist and build locally.
       run: |
-        python -m build
+        python -m build --sdist
 
     - name: Check package
       run: |

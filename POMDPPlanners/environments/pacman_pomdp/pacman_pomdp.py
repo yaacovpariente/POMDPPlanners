@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 # pylint: disable=too-many-lines
 """Module for PacMan POMDP environment.
 
@@ -33,6 +35,12 @@ from POMDPPlanners.core.environment import (
 )
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
 from POMDPPlanners.environments.pacman_pomdp import _native  # pylint: disable=no-name-in-module
+from POMDPPlanners.environments.pacman_pomdp.pacman_pomdp_utils.pacman_reward_models import (
+    BasePacManRewardModel,
+    PacManDistanceDecayedHazardPenaltyRewardModel,
+    PacManZeroMeanHazardShockRewardModel,
+    PacManRewardModel,
+)
 from POMDPPlanners.utils.statistics_utils import confidence_interval
 
 _GHOST_COORDINATION_CODES = {"independent": 0, "coordinated": 1, "mixed": 2}
@@ -47,6 +55,25 @@ class PacManPOMDPMetrics(Enum):
     AVG_EPISODE_LENGTH = "avg_episode_length"
     AVG_PACMAN_CLOSEST_GHOST_DISTANCE = "avg_pacman_closest_ghost_distance"
     AVG_COLLISION_ENCOUNTERS = "avg_collision_encounters"
+    AVG_DANGEROUS_AREA_STEPS = "avg_dangerous_area_steps"
+    AVG_ALL_DANGEROUS_ENCOUNTERS = "avg_all_dangerous_encounters"
+
+
+class RewardModelType(Enum):
+    """Reward-model variants selectable on :class:`PacManPOMDP`."""
+
+    CONSTANT_HAZARD_PENALTY = "constant_hazard_penalty"
+    ZERO_MEAN_HAZARD_SHOCK = "zero_mean_hazard_shock"
+    DISTANCE_DECAYED_HAZARD_PENALTY = "distance_decayed_hazard_penalty"
+
+
+# Numeric variant codes consumed by the C++ ``reward_batch`` / ``simulate_rollout``
+# kernels. Kept in lock-step with the C++ ``dangerous_area_contribution`` switch.
+_REWARD_VARIANT_CODES: Dict[RewardModelType, int] = {
+    RewardModelType.CONSTANT_HAZARD_PENALTY: 0,
+    RewardModelType.ZERO_MEAN_HAZARD_SHOCK: 1,
+    RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY: 2,
+}
 
 
 class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-methods
@@ -67,6 +94,9 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
         ghost_aggressiveness: Temperature parameter for ghost movement policy
         observation_noise_factor: Multiplier for observation noise based on distance
         max_observation_noise: Maximum noise standard deviation
+        dangerous_areas: List of (row, col) centers of circular hazard zones
+        dangerous_area_radius: Radius (in grid cells) defining each hazard zone
+        dangerous_area_penalty: Penalty subtracted when PacMan ends a step inside a zone
 
     Example:
         >>> import numpy as np
@@ -86,6 +116,24 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
         >>> # Check terminal condition
         >>> env.is_terminal(initial_state)
         False
+
+    Example:
+        Construct an env with a circular hazard zone — PacMan is penalised by
+        ``dangerous_area_penalty`` whenever its realised next position lies
+        inside the zone, but the zone does not block movement or terminate.
+
+        >>> import numpy as np
+        >>> np.random.seed(0)
+        >>> env = PacManPOMDP(
+        ...     maze_size=(7, 7),
+        ...     dangerous_areas={(3, 3)},
+        ...     dangerous_area_radius=1.0,
+        ...     dangerous_area_penalty=5.0,
+        ... )
+        >>> state = env.initial_state_dist().sample()[0]
+        >>> _ = env.sample_next_step(state, env.get_actions()[0])
+        >>> env.dangerous_area_penalty
+        5.0
     """
 
     def __init__(  # pylint: disable=too-many-statements
@@ -106,10 +154,15 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
         ghost_strategies: Optional[List[str]] = None,
         observation_noise_factor: float = 0.3,
         max_observation_noise: float = 1.5,
+        dangerous_areas: Optional[Set[Tuple[int, int]]] = None,
+        dangerous_area_radius: float = 1.0,
+        dangerous_area_penalty: float = 5.0,
         discount_factor: float = 0.95,
         name: str = "PacManPOMDP",
         output_dir: Optional[Path] = None,
         debug: bool = False,
+        reward_model_type: RewardModelType = RewardModelType.CONSTANT_HAZARD_PENALTY,
+        penalty_decay: float = 1.0,
     ):
         """Initialize PacMan POMDP.
 
@@ -130,13 +183,37 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
             ghost_strategies: Individual ghost strategies (list of "aggressive", "patrol", "ambush"). Defaults to None.
             observation_noise_factor: Observation noise factor. Defaults to 0.3.
             max_observation_noise: Maximum observation noise. Defaults to 1.5.
+            dangerous_areas: Set of (row, col) centers of circular hazard zones. ``None``
+                or an empty set disables the feature. Defaults to ``None`` (opt-in).
+            dangerous_area_radius: Radius (in grid cells) defining each hazard zone via
+                Euclidean distance. Defaults to 1.0.
+            dangerous_area_penalty: Non-negative penalty subtracted from the reward when
+                PacMan's realised next position lies inside any hazard zone. Defaults to 5.0.
             discount_factor: Discount factor. Defaults to 0.95.
             name: Environment name. Defaults to "PacManPOMDP".
             output_dir: Output directory for logging. Defaults to None.
             debug: Enable debug logging. Defaults to False.
+            reward_model_type: Selects the reward variant. ``CONSTANT_HAZARD_PENALTY`` (default)
+                deterministically subtracts ``dangerous_area_penalty`` whenever
+                PacMan's realised next position lies inside a hazard zone.
+                ``ZERO_MEAN_HAZARD_SHOCK`` emits ``±dangerous_area_penalty``
+                (50/50) on a zone hit (expected 0, high variance).
+                ``DISTANCE_DECAYED_HAZARD_PENALTY`` applies ``-dangerous_area_penalty``
+                with probability ``exp(-min_dist / penalty_decay)`` against
+                the nearest zone centre (no radius cutoff). Mirrors the
+                light-dark / laser-tag / rock-sample reward-model variants.
+            penalty_decay: Decay length used by the
+                ``DISTANCE_DECAYED_HAZARD_PENALTY`` reward model. Ignored by the other
+                variants. Must be strictly positive. Defaults to ``1.0``.
         """
-        # Calculate reward range based on parameters
+        # Calculate reward range based on parameters. The dangerous-area
+        # penalty only contributes to ``min_reward`` when at least one zone
+        # is configured, so disabling the feature preserves the historical
+        # reward range exactly.
+        _has_dangerous_areas = bool(dangerous_areas)
         min_reward = step_penalty + ghost_collision_penalty
+        if _has_dangerous_areas:
+            min_reward -= float(dangerous_area_penalty)
         max_reward = step_penalty + pellet_reward + win_reward
 
         space_info = SpaceInfo(
@@ -167,6 +244,19 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
         self.ghost_strategies = ghost_strategies or ["aggressive"] * num_ghosts
         self.observation_noise_factor = observation_noise_factor
         self.max_observation_noise = max_observation_noise
+        self.dangerous_areas: List[Tuple[int, int]] = (
+            list(dangerous_areas) if dangerous_areas else []
+        )
+        self.dangerous_area_radius = float(dangerous_area_radius)
+        self.dangerous_area_penalty = float(dangerous_area_penalty)
+        # Pre-built (D, 2) float64 array reused by the vectorised batch-reward
+        # path. Kept C-contiguous so future native callers can consume it
+        # without an extra copy.
+        self._dangerous_areas_arr: np.ndarray = (
+            np.ascontiguousarray(np.asarray(self.dangerous_areas, dtype=np.float64))
+            if self.dangerous_areas
+            else np.empty((0, 2), dtype=np.float64)
+        )
 
         # Handle ghost positions (backward compatibility)
         if initial_ghost_positions is not None:
@@ -246,6 +336,47 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
             if self._num_initial_pellets > 0
             else np.empty((0, 2), dtype=np.int32)
         )
+
+        self.reward_model_type = reward_model_type
+        self.penalty_decay = float(penalty_decay)
+        self.reward_model: BasePacManRewardModel = self._build_reward_model(
+            reward_model_type, self.penalty_decay
+        )
+
+    def _build_reward_model(
+        self,
+        reward_model_type: RewardModelType,
+        penalty_decay: float,
+    ) -> BasePacManRewardModel:
+        common_kwargs = {
+            "num_ghosts": self.num_ghosts,
+            "pellet_positions_arr": self._pellet_positions_arr,
+            "dangerous_areas": self.dangerous_areas,
+            "dangerous_areas_arr": self._dangerous_areas_arr,
+            "dangerous_area_radius": self.dangerous_area_radius,
+            "dangerous_area_penalty": self.dangerous_area_penalty,
+            "step_penalty": self.step_penalty,
+            "ghost_collision_penalty": self.ghost_collision_penalty,
+            "pellet_reward": self.pellet_reward,
+            "win_reward": self.win_reward,
+            "idx_pac_row": self._idx_pac_row,
+            "idx_pac_col": self._idx_pac_col,
+            "idx_ghosts_start": self._idx_ghosts_start,
+            "idx_pellets_start": self._idx_pellets_start,
+            "idx_pellets_end": self._idx_pellets_end,
+            "idx_score": self._idx_score,
+            "idx_terminal": self._idx_terminal,
+            "neighbor_table_getter": self._get_neighbor_table,
+        }
+        if reward_model_type == RewardModelType.CONSTANT_HAZARD_PENALTY:
+            return PacManRewardModel(**common_kwargs)
+        if reward_model_type == RewardModelType.ZERO_MEAN_HAZARD_SHOCK:
+            return PacManZeroMeanHazardShockRewardModel(**common_kwargs)
+        if reward_model_type == RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY:
+            return PacManDistanceDecayedHazardPenaltyRewardModel(
+                **common_kwargs, penalty_decay=penalty_decay
+            )
+        raise ValueError(f"Unknown reward model type: {reward_model_type}")
 
     @property
     def initial_ghost_pos(self) -> Tuple[int, int]:
@@ -495,6 +626,24 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
             if strategy not in valid_strategies:
                 raise ValueError(f"ghost_strategies[{i}] must be one of {valid_strategies}")
 
+        # Validate dangerous-area configuration. Overlap with walls, pellets,
+        # or agent positions is intentionally permitted (matches laser_tag).
+        if self.dangerous_area_radius < 0:
+            raise ValueError(
+                f"dangerous_area_radius must be non-negative, got {self.dangerous_area_radius}"
+            )
+        if self.dangerous_area_penalty < 0:
+            raise ValueError(
+                f"dangerous_area_penalty must be non-negative, got {self.dangerous_area_penalty}"
+            )
+        for i, danger_pos in enumerate(self.dangerous_areas):
+            if not (
+                0 <= danger_pos[0] < self.maze_size[0] and 0 <= danger_pos[1] < self.maze_size[1]
+            ):
+                raise ValueError(
+                    f"Dangerous area {i} position {danger_pos} is outside maze bounds {self.maze_size}"
+                )
+
     def get_actions(self) -> List[int]:
         """Get all available actions."""
         return list(range(len(self.action_names)))
@@ -690,6 +839,11 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
             discount_factor=float(discount_factor),
             depth=0,
             max_depth=remaining_depth,
+            dangerous_areas=self._dangerous_areas_arr,
+            dangerous_area_radius=float(self.dangerous_area_radius),
+            dangerous_area_penalty=float(self.dangerous_area_penalty),
+            reward_variant_code=_REWARD_VARIANT_CODES[self.reward_model_type],
+            penalty_decay=float(self.penalty_decay),
         )
 
     def reward(self, state: np.ndarray, action: int, next_state: Any = None) -> float:
@@ -706,30 +860,11 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
             return 0.0
 
         if next_state is None:
-            next_state = self.sample_next_state(state, action)
+            next_state_arr = self.sample_next_state(state, action)
         else:
-            next_state = self._require_state_array(next_state)
+            next_state_arr = self._require_state_array(next_state)
 
-        total_reward = self.step_penalty
-
-        next_pac_row = int(next_state[self._idx_pac_row])
-        next_pac_col = int(next_state[self._idx_pac_col])
-        for g in range(self.num_ghosts):
-            g_row = int(next_state[self._idx_ghosts_start + 2 * g])
-            g_col = int(next_state[self._idx_ghosts_start + 2 * g + 1])
-            if next_pac_row == g_row and next_pac_col == g_col:
-                total_reward += self.ghost_collision_penalty
-                break
-
-        if next_state[self._idx_score] > state[self._idx_score]:
-            total_reward += self.pellet_reward
-
-        if next_state[self._idx_terminal] > 0.5:
-            pellet_mask = next_state[self._idx_pellets_start : self._idx_pellets_end]
-            if not np.any(pellet_mask > 0.5):
-                total_reward += self.win_reward
-
-        return total_reward
+        return self.reward_model.compute_reward(state, action, next_state=next_state_arr)
 
     def reward_batch(  # type: ignore[override]
         self,
@@ -757,11 +892,54 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
         if states_arr.dtype.kind == "f":
             if states_arr.ndim == 1:
                 states_arr = states_arr.reshape(1, -1)
-            return self._compute_reward_batch(states_arr, action, next_states_arr)
+            if next_states_arr is not None:
+                return self._reward_batch_cpp(states_arr, action, next_states_arr)
+            return self.reward_model.compute_reward_batch(
+                states_arr, action, next_states=next_states_arr
+            )
         if next_states_arr is None:
             return np.array([self.reward(states[i], action) for i in range(len(states))])
         return np.array(
             [self.reward(states[i], action, next_states_arr[i]) for i in range(len(states))]
+        )
+
+    def _reward_batch_cpp(
+        self,
+        states_arr: np.ndarray,
+        action: int,
+        next_states_arr: np.ndarray,
+    ) -> np.ndarray:
+        # Route the fast (states, next_states) batch path through the C++
+        # ``reward_batch`` kernel. The kernel covers all three reward-model
+        # variants via ``reward_variant_code`` and matches the Python kernels
+        # in sample mean. ``penalty_decay`` is consulted only by the decaying
+        # variant.
+        states_c = np.ascontiguousarray(states_arr, dtype=np.float64)
+        next_states_c = np.ascontiguousarray(next_states_arr, dtype=np.float64)
+        return np.asarray(
+            _native.reward_batch(
+                states=states_c,
+                action=int(action),
+                next_states=next_states_c,
+                reward_variant_code=_REWARD_VARIANT_CODES[self.reward_model_type],
+                penalty_decay=float(self.penalty_decay),
+                dangerous_areas=self._dangerous_areas_arr,
+                dangerous_area_radius=float(self.dangerous_area_radius),
+                dangerous_area_penalty=float(self.dangerous_area_penalty),
+                num_ghosts=int(self.num_ghosts),
+                step_penalty=float(self.step_penalty),
+                ghost_collision_penalty=float(self.ghost_collision_penalty),
+                pellet_reward=float(self.pellet_reward),
+                win_reward=float(self.win_reward),
+                idx_pac_row=int(self._idx_pac_row),
+                idx_pac_col=int(self._idx_pac_col),
+                idx_ghosts_start=int(self._idx_ghosts_start),
+                idx_pellets_start=int(self._idx_pellets_start),
+                idx_pellets_end=int(self._idx_pellets_end),
+                idx_score=int(self._idx_score),
+                idx_terminal=int(self._idx_terminal),
+            ),
+            dtype=np.float64,
         )
 
     def _coerce_next_states_arr(
@@ -774,78 +952,6 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
         if arr.ndim == 1:
             arr = arr.reshape(1, -1)
         return arr
-
-    def _compute_reward_batch(
-        self,
-        states_arr: np.ndarray,
-        action: int,
-        next_states_arr: Optional[np.ndarray] = None,
-    ) -> np.ndarray:
-        # Single-pass vectorised reward kernel. Without ``next_states_arr``
-        # the ghost-collision penalty is excluded because it depends on
-        # the stochastic ghost transition; when supplied (caller already
-        # realised the batch transition) the penalty is included against
-        # those realised draws. Patrol-direction state is left alone here
-        # — it is mutated only inside the C++ transition kernel.
-        terminal = states_arr[:, self._idx_terminal] > 0.5
-        rewards = np.where(terminal, 0.0, self.step_penalty)
-
-        # Vectorised neighbor-table lookup: (rows, cols, action) -> next pos.
-        pac_rows = states_arr[:, self._idx_pac_row].astype(np.int32)
-        pac_cols = states_arr[:, self._idx_pac_col].astype(np.int32)
-        new_positions = self._get_neighbor_table()[pac_rows, pac_cols, action]
-        new_pac_rows = new_positions[:, 0]
-        new_pac_cols = new_positions[:, 1]
-
-        rewards = self._add_collision_penalty_batch(
-            rewards, terminal, new_pac_rows, new_pac_cols, next_states_arr
-        )
-
-        if self._pellet_positions_arr.shape[0] == 0:
-            # Degenerate config (env constructed with no pellets): there is
-            # nothing to collect and therefore nothing to "win". Returning
-            # rewards alone (step penalty for non-terminal, zero for
-            # terminal, plus optional collision) avoids the prior bug that
-            # paid out ``win_reward`` on every non-terminal step against
-            # an empty pellet set.
-            return rewards
-
-        pellet_mask = states_arr[:, self._idx_pellets_start : self._idx_pellets_end]
-        pellet_pos = self._pellet_positions_arr  # (P, 2) int32, static.
-
-        # Broadcast (N, 1) vs (1, P): which pellet (if any) sits on the
-        # target cell, gated on it currently being active.
-        pos_match = (new_pac_rows[:, None] == pellet_pos[None, :, 0]) & (
-            new_pac_cols[:, None] == pellet_pos[None, :, 1]
-        )
-        active_match = pos_match & (pellet_mask > 0.5)
-        collected = active_match.any(axis=1)
-
-        remaining_after = pellet_mask.sum(axis=1) - collected.astype(np.float64)
-        all_collected = collected & (remaining_after < 0.5)
-
-        rewards += np.where(~terminal & collected, self.pellet_reward, 0.0)
-        rewards += np.where(~terminal & all_collected, self.win_reward, 0.0)
-        return rewards
-
-    def _add_collision_penalty_batch(
-        self,
-        rewards: np.ndarray,
-        terminal: np.ndarray,
-        new_pac_rows: np.ndarray,
-        new_pac_cols: np.ndarray,
-        next_states_arr: Optional[np.ndarray],
-    ) -> np.ndarray:
-        if next_states_arr is None or self.num_ghosts <= 0:
-            return rewards
-        # Use realised post-transition ghost positions; mark a collision
-        # for any ghost that ends on pacman's new cell.
-        collision = np.zeros(rewards.shape, dtype=bool)
-        for g in range(self.num_ghosts):
-            g_rows = next_states_arr[:, self._idx_ghosts_start + 2 * g].astype(np.int32)
-            g_cols = next_states_arr[:, self._idx_ghosts_start + 2 * g + 1].astype(np.int32)
-            collision |= (g_rows == new_pac_rows) & (g_cols == new_pac_cols)
-        return rewards + np.where(~terminal & collision, self.ghost_collision_penalty, 0.0)
 
     def _get_neighbor_table(self) -> np.ndarray:
         if self._cached_neighbor_table is None:
@@ -1022,10 +1128,25 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
         """Check if PacMan is at the same position as any ghost."""
         return pacman_pos in ghost_positions
 
-    def _collect_step_distances_and_collisions(self, history: History) -> Tuple[List[float], int]:
-        """Collect distances to closest ghost and collision count from episode history."""
+    def _is_in_dangerous_area(self, position: Tuple[int, int]) -> bool:
+        if not self.dangerous_areas:
+            return False
+        pos_row, pos_col = position
+        radius_sq = self.dangerous_area_radius * self.dangerous_area_radius
+        for danger_row, danger_col in self.dangerous_areas:
+            dr = pos_row - danger_row
+            dc = pos_col - danger_col
+            if dr * dr + dc * dc <= radius_sq:
+                return True
+        return False
+
+    def _collect_step_distances_and_collisions(
+        self, history: History
+    ) -> Tuple[List[float], int, int]:
+        """Collect distances, collision count, and danger-area step count from episode."""
         episode_distances = []
         episode_collisions = 0
+        episode_danger_steps = 0
 
         for step_data in history.history:
             state = step_data.state
@@ -1041,16 +1162,21 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
             if self._is_collision(pacman_pos, ghost_positions):
                 episode_collisions += 1
 
-        return episode_distances, episode_collisions
+            if self._is_in_dangerous_area(pacman_pos):
+                episode_danger_steps += 1
+
+        return episode_distances, episode_collisions, episode_danger_steps
 
     def _process_episode_metrics(self, history: History) -> Dict[str, Any]:
         """Process metrics for a single episode."""
-        metrics_data = {
+        metrics_data: Dict[str, Any] = {
             "episode_length": len(history.history),
             "won": 0,
             "pellets_collected": 0,
             "avg_distance": None,
             "collisions": 0,
+            "dangerous_area_steps": 0,
+            "all_dangerous_encounters": 0,
         }
 
         if not history.history:
@@ -1065,13 +1191,17 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
         metrics_data["won"] = self._check_episode_win_status(final_state)
         metrics_data["pellets_collected"] = self._count_pellets_collected(final_state)
 
-        # Collect distances and collisions from episode steps
-        episode_distances, episode_collisions = self._collect_step_distances_and_collisions(history)
+        # Collect distances, collisions, and danger-area steps from episode steps
+        episode_distances, episode_collisions, episode_danger_steps = (
+            self._collect_step_distances_and_collisions(history)
+        )
 
         if episode_distances:
             metrics_data["avg_distance"] = float(np.mean(episode_distances))
 
         metrics_data["collisions"] = episode_collisions
+        metrics_data["dangerous_area_steps"] = episode_danger_steps
+        metrics_data["all_dangerous_encounters"] = episode_collisions + episode_danger_steps
         return metrics_data
 
     def _create_metric_value(self, name: str, values: List[float]) -> Optional[MetricValue]:
@@ -1168,8 +1298,13 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
         Returns:
             List containing metric names including standard metrics (win_rate,
             avg_pellets_collected, avg_episode_length, avg_pacman_closest_ghost_distance,
-            avg_collision_encounters) and dynamically generated per-ghost distance metrics
-            for multi-ghost scenarios (avg_pacman_ghost_0_distance, avg_pacman_ghost_1_distance, etc.)
+            avg_collision_encounters, avg_dangerous_area_steps,
+            avg_all_dangerous_encounters) and dynamically generated per-ghost
+            distance metrics for multi-ghost scenarios
+            (avg_pacman_ghost_0_distance, avg_pacman_ghost_1_distance, etc.).
+            ``avg_all_dangerous_encounters`` is the per-step sum of
+            ghost-collision and dangerous-area-step events; a step that is both
+            counts twice.
         """
         # Start with standard metrics
         metric_names = [metric.value for metric in PacManPOMDPMetrics]
@@ -1192,6 +1327,8 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
         episode_lengths = []
         pacman_ghost_distances = []
         collision_encounters = []
+        dangerous_area_steps = []
+        all_dangerous_encounters = []
 
         for history in histories:
             episode_data = self._process_episode_metrics(history)
@@ -1199,6 +1336,8 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
             wins.append(episode_data["won"])
             pellets_collected.append(episode_data["pellets_collected"])
             collision_encounters.append(episode_data["collisions"])
+            dangerous_area_steps.append(episode_data["dangerous_area_steps"])
+            all_dangerous_encounters.append(episode_data["all_dangerous_encounters"])
 
             if episode_data["avg_distance"] is not None:
                 pacman_ghost_distances.append(episode_data["avg_distance"])
@@ -1211,6 +1350,11 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
             (PacManPOMDPMetrics.AVG_EPISODE_LENGTH.value, episode_lengths),
             (PacManPOMDPMetrics.AVG_PACMAN_CLOSEST_GHOST_DISTANCE.value, pacman_ghost_distances),
             (PacManPOMDPMetrics.AVG_COLLISION_ENCOUNTERS.value, collision_encounters),
+            (PacManPOMDPMetrics.AVG_DANGEROUS_AREA_STEPS.value, dangerous_area_steps),
+            (
+                PacManPOMDPMetrics.AVG_ALL_DANGEROUS_ENCOUNTERS.value,
+                all_dangerous_encounters,
+            ),
         ]
 
         for name, values in metric_definitions:

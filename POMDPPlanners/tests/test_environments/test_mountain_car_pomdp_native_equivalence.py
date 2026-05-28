@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Numerical equivalence tests for the native MountainCar sampling extension.
 
 Verifies that the C++ ``_native`` sampling / probability code matches the

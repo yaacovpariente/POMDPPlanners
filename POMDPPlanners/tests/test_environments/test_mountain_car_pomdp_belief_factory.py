@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for the Mountain Car belief factory.
 
 This module tests :func:`create_mountain_car_belief` from

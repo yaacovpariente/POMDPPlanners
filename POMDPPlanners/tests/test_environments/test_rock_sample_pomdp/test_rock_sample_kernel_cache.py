@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Cached-kernel parity tests for the RockSample POMDP.
 
 These tests cover the per-action C++ kernel cache that the env now keeps
@@ -245,17 +247,21 @@ def _reward_batch_via_native_transition(
     """Reference implementation: re-creates the pre-refactor reward path
     that calls ``sample_next_state_batch`` to get post-step robot positions
     for the dangerous-area check.
+
+    Mirrors the scalar ``compute_reward`` / C++ ``reward_batch`` contract:
+    only true exits (``robot_col == map_cols - 1`` under action=2) get the
+    exit bonus — terminal-sentinel rows do not. Non-exiting East rows
+    continue into the dangerous-area branch.
     """
     n = states.shape[0]
     next_states = env.sample_next_state_batch(states, action)
     rewards = np.full(n, env.step_penalty, dtype=np.float64)
     map_cols = env.map_size[1]
 
+    exits_mask: np.ndarray | None = None
     if action == 2:
-        exits = states[:, 1].astype(int) == (map_cols - 1)
-        terminal = (states[:, 0] < 0) & (states[:, 1] < 0)
-        rewards[exits | terminal] += env.exit_reward
-        return rewards
+        exits_mask = states[:, 1].astype(int) == (map_cols - 1)
+        rewards[exits_mask] += env.exit_reward
 
     if action == 0:
         robot_rows = states[:, 0].astype(int)
@@ -276,6 +282,8 @@ def _reward_batch_via_native_transition(
         next_robot_rows = next_states[:, 0].astype(int)
         next_robot_cols = next_states[:, 1].astype(int)
         for j in range(n):
+            if exits_mask is not None and exits_mask[j]:
+                continue
             if env._is_in_dangerous_area((next_robot_rows[j], next_robot_cols[j])):
                 rewards[j] += env.dangerous_area_penalty
 

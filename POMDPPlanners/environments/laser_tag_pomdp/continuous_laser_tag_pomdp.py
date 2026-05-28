@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Continuous LaserTag POMDP Environment Implementation.
 
 This module implements a continuous-space variant of the LaserTag
@@ -17,6 +19,14 @@ State representation:
 Observation:
     ``np.ndarray`` shape ``(8,)`` – noisy 8-direction laser range
     measurements.  Terminal observation is ``np.full(8, -1.0)``.
+
+Opponent behaviour is selectable via ``opponent_policy`` (see
+:class:`~POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_utils.OpponentPolicy`):
+``EVADE`` (default) flees the robot's pre-move position at ``evasion_speed``;
+``PURSUE`` chases the robot's post-move position. ``EVADE_WHEN_SPOTTED`` flees
+only while the robot has line of sight to it and otherwise **holds its position**
+(in this continuous env; the discrete grid env moves randomly instead).
+``evasion_speed`` is a direction-neutral step magnitude under all policies.
 
 Classes:
     ContinuousLaserTagPOMDP: Continuous-action environment.
@@ -43,6 +53,9 @@ from POMDPPlanners.core.environment import (
 )
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
 from POMDPPlanners.environments.laser_tag_pomdp import _native
+from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_utils import (
+    OpponentPolicy,
+)
 from POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_visualizer import (
     ContinuousLaserTagVisualizer,
 )
@@ -160,7 +173,7 @@ class ContinuousLaserTagPOMDP(Environment):
         measurement_noise: float = 1.0,
         robot_transition_cov_matrix: np.ndarray = np.eye(2) * 0.1,
         opponent_transition_cov_matrix: np.ndarray = np.eye(2) * 0.05,
-        pursuit_speed: float = 0.6,
+        evasion_speed: float = 0.6,
         dangerous_areas: Optional[List[Tuple[float, float]]] = None,
         dangerous_area_radius: float = 1.0,
         dangerous_area_penalty: float = 5.0,
@@ -169,6 +182,7 @@ class ContinuousLaserTagPOMDP(Environment):
         debug: bool = False,
         use_queue_logger: bool = False,
         initial_state: Optional[np.ndarray] = None,
+        opponent_policy: OpponentPolicy = OpponentPolicy.EVADE,
     ):
         """Initialize the Continuous LaserTag POMDP.
 
@@ -186,7 +200,7 @@ class ContinuousLaserTagPOMDP(Environment):
             measurement_noise: Std of Gaussian laser noise.
             robot_transition_cov_matrix: 2x2 covariance for robot noise.
             opponent_transition_cov_matrix: 2x2 covariance for opponent noise.
-            pursuit_speed: Mean opponent step magnitude toward robot.
+            evasion_speed: Mean opponent step magnitude away from robot.
             dangerous_areas: Dangerous area centers as ``(x, y)`` tuples.
             dangerous_area_radius: Radius of dangerous areas.
             dangerous_area_penalty: Penalty for being in a dangerous area.
@@ -201,6 +215,12 @@ class ContinuousLaserTagPOMDP(Environment):
             debug: Enable debug logging.
             use_queue_logger: Use queue-based logger.
             initial_state: Fixed initial state (if provided).
+            opponent_policy: Selects the opponent transition behaviour.
+                ``EVADE`` (default) flees the robot at ``evasion_speed`` away from
+                its pre-move position; ``PURSUE`` chases toward its post-move
+                position. ``evasion_speed`` is a direction-neutral step magnitude
+                under both policies. See
+                :class:`~POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_utils.OpponentPolicy`.
         """
         if not 0.0 <= discount_factor <= 1.0:
             raise ValueError("discount_factor must be between 0 and 1 (inclusive)")
@@ -232,7 +252,8 @@ class ContinuousLaserTagPOMDP(Environment):
         self.tag_penalty = tag_penalty
         self.step_cost = step_cost
         self.measurement_noise = measurement_noise
-        self.pursuit_speed = pursuit_speed
+        self.evasion_speed = evasion_speed
+        self.opponent_policy = opponent_policy
         self.dangerous_areas: List[Tuple[float, float]] = (
             list(dangerous_areas) if dangerous_areas is not None else list(_DEFAULT_DANGEROUS_AREAS)
         )
@@ -270,7 +291,7 @@ class ContinuousLaserTagPOMDP(Environment):
         self._rollout_static_params: Dict[str, Any] = {
             "robot_covariance": self._robot_transition_dist.covariance,
             "opponent_covariance": self._opponent_transition_dist.covariance,
-            "pursuit_speed": self.pursuit_speed,
+            "evasion_speed": self.evasion_speed,
             "walls": self._walls,
             "grid_size": self._grid_size,
             "robot_radius": self.robot_radius,
@@ -282,6 +303,7 @@ class ContinuousLaserTagPOMDP(Environment):
             "dangerous_areas": self._dangerous_areas_arr,
             "dangerous_area_radius": self.dangerous_area_radius,
             "dangerous_area_penalty": self.dangerous_area_penalty,
+            "opponent_policy_code": self.opponent_policy.native_code,
         }
 
     # ------------------------------------------------------------------
@@ -307,12 +329,13 @@ class ContinuousLaserTagPOMDP(Environment):
                 action=action_arr,
                 robot_covariance=self._robot_transition_dist.covariance,
                 opponent_covariance=self._opponent_transition_dist.covariance,
-                pursuit_speed=self.pursuit_speed,
+                evasion_speed=self.evasion_speed,
                 walls=self._walls,
                 grid_size=self._grid_size,
                 robot_radius=self.robot_radius,
                 opponent_radius=self.opponent_radius,
                 tag_radius=self.tag_radius,
+                opponent_policy_code=self.opponent_policy.native_code,
             )
             self._trans_kernel_cache[key] = kernel
         if isinstance(action, np.ndarray):
@@ -988,7 +1011,7 @@ class ContinuousLaserTagPOMDPDiscreteActions(ContinuousLaserTagPOMDP, DiscreteAc
         measurement_noise: float = 1.0,
         robot_transition_cov_matrix: np.ndarray = np.eye(2) * 0.1,
         opponent_transition_cov_matrix: np.ndarray = np.eye(2) * 0.05,
-        pursuit_speed: float = 0.6,
+        evasion_speed: float = 0.6,
         dangerous_areas: Optional[List[Tuple[float, float]]] = None,
         dangerous_area_radius: float = 1.0,
         dangerous_area_penalty: float = 5.0,
@@ -997,6 +1020,7 @@ class ContinuousLaserTagPOMDPDiscreteActions(ContinuousLaserTagPOMDP, DiscreteAc
         debug: bool = False,
         use_queue_logger: bool = False,
         initial_state: Optional[np.ndarray] = None,
+        opponent_policy: OpponentPolicy = OpponentPolicy.EVADE,
     ):
         super().__init__(
             discount_factor=discount_factor,
@@ -1012,7 +1036,7 @@ class ContinuousLaserTagPOMDPDiscreteActions(ContinuousLaserTagPOMDP, DiscreteAc
             measurement_noise=measurement_noise,
             robot_transition_cov_matrix=robot_transition_cov_matrix,
             opponent_transition_cov_matrix=opponent_transition_cov_matrix,
-            pursuit_speed=pursuit_speed,
+            evasion_speed=evasion_speed,
             dangerous_areas=dangerous_areas,
             dangerous_area_radius=dangerous_area_radius,
             dangerous_area_penalty=dangerous_area_penalty,
@@ -1021,6 +1045,7 @@ class ContinuousLaserTagPOMDPDiscreteActions(ContinuousLaserTagPOMDP, DiscreteAc
             debug=debug,
             use_queue_logger=use_queue_logger,
             initial_state=initial_state,
+            opponent_policy=opponent_policy,
         )
 
         # Override space info to discrete actions

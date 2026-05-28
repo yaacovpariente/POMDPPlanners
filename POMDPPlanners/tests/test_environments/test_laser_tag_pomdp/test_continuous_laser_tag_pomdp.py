@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for the Continuous LaserTag POMDP environment.
 
 Tests cover both ContinuousLaserTagPOMDP and
@@ -14,7 +16,7 @@ import pytest
 from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.policy import PolicyRunData
 from POMDPPlanners.core.simulation import History, StepData
-from POMDPPlanners.environments.laser_tag_pomdp import _native
+from POMDPPlanners.environments.laser_tag_pomdp import _native, OpponentPolicy
 from POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_pomdp import (
     ContinuousLaserTagPOMDP,
     ContinuousLaserTagPOMDPDiscreteActions,
@@ -61,6 +63,25 @@ def env_default():
 def env_discrete_default():
     """Discrete-action environment with default configuration."""
     return ContinuousLaserTagPOMDPDiscreteActions(discount_factor=0.95)
+
+
+def test_continuous_opponent_policy_changes_config_id():
+    """Distinct opponent policies produce distinct continuous env config IDs.
+
+    Purpose: Validates the opponent_policy enum is captured by config_id so cached
+        results for distinct continuous policies never collide
+
+    Given: ContinuousLaserTagPOMDPs identical except for opponent_policy
+    When: config_id is computed for each
+    Then: The three policy IDs are all distinct
+
+    Test type: unit
+    """
+    common = {"discount_factor": 0.95, "walls": [], "dangerous_areas": []}
+    evade = ContinuousLaserTagPOMDP(**common, opponent_policy=OpponentPolicy.EVADE)
+    pursue = ContinuousLaserTagPOMDP(**common, opponent_policy=OpponentPolicy.PURSUE)
+    spotted = ContinuousLaserTagPOMDP(**common, opponent_policy=OpponentPolicy.EVADE_WHEN_SPOTTED)
+    assert len({evade.config_id, pursue.config_id, spotted.config_id}) == 3
 
 
 class TestContinuousLaserTagPOMDPInit:
@@ -189,6 +210,186 @@ class TestSampleNextState:
         mean_x = np.mean([s[0] for s in samples])
         assert abs(mean_x - 6.0) < 1.0
 
+    def test_opponent_moves_away_from_robot(self, env):
+        """Test the continuous opponent evades by moving away from the robot.
+
+        Purpose: Validates the opponent's mean step increases distance to the robot
+            (evasion), rather than decreasing it (pursuit)
+
+        Given: Robot at (5, 3) and opponent offset to +x/+y at (8, 5)
+        When: The robot holds position (no-op action) and many next states are sampled
+        Then: The mean opponent position moves further out in both x and y
+
+        Test type: unit
+        """
+        np.random.seed(42)
+        state = np.array([5.0, 3.0, 8.0, 5.0, 0.0])
+        action = np.array([0.0, 0.0, 0.0])  # robot holds position, no tag
+        samples = env.sample_next_state(state, action, n_samples=500)
+
+        mean_opp_x = float(np.mean([s[2] for s in samples]))
+        mean_opp_y = float(np.mean([s[3] for s in samples]))
+
+        assert mean_opp_x > 8.1, f"Expected opponent to flee in +x (>8.1), got {mean_opp_x}"
+        assert mean_opp_y > 5.1, f"Expected opponent to flee in +y (>5.1), got {mean_opp_y}"
+
+    def test_opponent_reacts_to_premove_robot(self):
+        """Test the continuous opponent evades relative to the robot's PRE-move position.
+
+        Purpose: Validates the opponent's evasion direction on a movement action is
+            computed from the robot's current (pre-move) position, consistent with the
+            tag-action path
+
+        Given: A near-deterministic-robot env, robot just left of the opponent on x
+            (robot x=5.0, opponent x=5.4, same y), and a +x action that carries the robot
+            across to the opponent's right
+        When: many next states are sampled
+        Then: the opponent's mean next x increases (it flees +x, away from the robot's
+            pre-move position) rather than decreasing as a post-move robot would cause
+
+        Test type: unit
+        """
+        np.random.seed(0)
+        env = ContinuousLaserTagPOMDP(
+            discount_factor=0.95,
+            walls=[],
+            dangerous_areas=[],
+            robot_transition_cov_matrix=np.eye(2) * 1e-9,
+        )
+        state = np.array([5.0, 3.0, 5.4, 3.0, 0.0])
+        action = np.array([1.0, 0.0, 0.0])  # robot moves +x, crossing to the opponent's right
+        samples = env.sample_next_state(state, action, n_samples=400)
+
+        mean_opp_x = float(np.mean([s[2] for s in samples]))
+        assert (
+            mean_opp_x > 5.6
+        ), f"Expected opponent to flee +x from pre-move robot (>5.6), got {mean_opp_x}"
+
+    def test_opponent_pursues_toward_robot(self):
+        """Test the continuous opponent pursues by moving toward the robot under PURSUE.
+
+        Purpose: Validates the PURSUE policy restores the chaser: the opponent's mean step
+            decreases distance to the robot, the mirror image of the EVADE evasion
+
+        Given: A PURSUE env, robot at (5, 3) and opponent offset to +x/+y at (8, 5)
+        When: The robot holds position (no-op action) and many next states are sampled
+        Then: The mean opponent position moves inward toward the robot in both x and y
+
+        Test type: unit
+        """
+        np.random.seed(42)
+        env = ContinuousLaserTagPOMDP(
+            discount_factor=0.95,
+            walls=[],
+            dangerous_areas=[],
+            opponent_policy=OpponentPolicy.PURSUE,
+        )
+        state = np.array([5.0, 3.0, 8.0, 5.0, 0.0])
+        action = np.array([0.0, 0.0, 0.0])  # robot holds position, no tag
+        samples = env.sample_next_state(state, action, n_samples=500)
+
+        mean_opp_x = float(np.mean([s[2] for s in samples]))
+        mean_opp_y = float(np.mean([s[3] for s in samples]))
+
+        assert mean_opp_x < 7.9, f"Expected opponent to chase in -x (<7.9), got {mean_opp_x}"
+        assert mean_opp_y < 4.9, f"Expected opponent to chase in -y (<4.9), got {mean_opp_y}"
+
+    def test_opponent_pursue_reacts_to_postmove_robot(self):
+        """Test the continuous PURSUE opponent reacts to the robot's POST-move position.
+
+        Purpose: Validates the opponent's pursuit direction on a movement action is computed
+            from the robot's post-move position (restoring the pre-evader-fix reference)
+
+        Given: A near-deterministic-robot PURSUE env, robot just left of the opponent on x
+            (robot x=5.0, opponent x=5.4, same y), and a +x action that carries the robot
+            across to the opponent's right (post-move x ~ 6.0)
+        When: many next states are sampled
+        Then: the opponent's mean next x increases (it chases +x toward the post-move robot
+            on its right); had it used the pre-move robot (5.0, on its left) it would chase -x
+
+        Test type: unit
+        """
+        np.random.seed(0)
+        env = ContinuousLaserTagPOMDP(
+            discount_factor=0.95,
+            walls=[],
+            dangerous_areas=[],
+            robot_transition_cov_matrix=np.eye(2) * 1e-9,
+            opponent_policy=OpponentPolicy.PURSUE,
+        )
+        state = np.array([5.0, 3.0, 5.4, 3.0, 0.0])
+        action = np.array([1.0, 0.0, 0.0])  # robot moves +x, crossing to the opponent's right
+        samples = env.sample_next_state(state, action, n_samples=400)
+
+        mean_opp_x = float(np.mean([s[2] for s in samples]))
+        assert (
+            mean_opp_x > 5.6
+        ), f"Expected opponent to chase +x toward post-move robot (>5.6), got {mean_opp_x}"
+
+    def test_evade_when_spotted_flees_when_visible(self):
+        """Continuous EVADE_WHEN_SPOTTED flees when the robot has line of sight.
+
+        Purpose: Validates that an opponent lying on one of the robot's laser rays flees
+            away (EVADE behaviour) under the spotted branch
+
+        Given: An EVADE_WHEN_SPOTTED env (no walls), robot at (5, 3) with the opponent due
+            +x at (8, 3) — on the robot's East ray, so visible
+        When: the robot holds position and many next states are sampled
+        Then: the opponent's mean x increases (it flees +x, away from the robot)
+
+        Test type: unit
+        """
+        np.random.seed(42)
+        env = ContinuousLaserTagPOMDP(
+            discount_factor=0.95,
+            walls=[],
+            dangerous_areas=[],
+            opponent_policy=OpponentPolicy.EVADE_WHEN_SPOTTED,
+        )
+        state = np.array([5.0, 3.0, 8.0, 3.0, 0.0])
+        action = np.array([0.0, 0.0, 0.0])  # robot holds position, no tag
+        samples = env.sample_next_state(state, action, n_samples=500)
+
+        mean_opp_x = float(np.mean([s[2] for s in samples]))
+        assert (
+            mean_opp_x > 8.1
+        ), f"Expected opponent to flee +x while spotted (>8.1), got {mean_opp_x}"
+
+    def test_evade_when_spotted_stays_when_not_visible(self):
+        """Continuous EVADE_WHEN_SPOTTED holds position when not visible.
+
+        Purpose: Validates that the continuous opponent stays in place (rather than taking a
+            directional step) when the robot has no line of sight — only the small Gaussian
+            transition noise jitters it
+
+        Given: An EVADE_WHEN_SPOTTED env (no walls), robot at (5, 3) and opponent at (8, 5)
+            — not aligned with any of the robot's 8 laser directions (so not visible)
+        When: the robot holds position and many next states are sampled
+        Then: the opponent stays near its start, and the per-step spread is just the Gaussian
+            opponent noise — well below a full evasion_speed (0.6) step
+
+        Test type: unit
+        """
+        np.random.seed(42)
+        env = ContinuousLaserTagPOMDP(
+            discount_factor=0.95,
+            walls=[],
+            dangerous_areas=[],
+            opponent_policy=OpponentPolicy.EVADE_WHEN_SPOTTED,
+        )
+        state = np.array([5.0, 3.0, 8.0, 5.0, 0.0])
+        action = np.array([0.0, 0.0, 0.0])  # robot holds position, no tag
+        samples = env.sample_next_state(state, action, n_samples=600)
+
+        opp_x = np.array([s[2] for s in samples])
+        opp_y = np.array([s[3] for s in samples])
+        # The opponent holds its position (mean ~ start) ...
+        assert abs(float(np.mean(opp_x)) - 8.0) < 0.1, "Expected opponent to hold x"
+        assert abs(float(np.mean(opp_y)) - 5.0) < 0.1, "Expected opponent to hold y"
+        # ... with only the Gaussian opponent noise (std ~ sqrt(0.05) ~ 0.22), not a 0.6 step.
+        assert float(np.std(opp_x)) < 0.35, "Expected only noise-level spread in x (staying)"
+        assert float(np.std(opp_y)) < 0.35, "Expected only noise-level spread in y (staying)"
+
 
 class TestSampleObservation:
     """Tests for env.sample_observation behaviour."""
@@ -246,6 +447,30 @@ class TestSampleObservation:
         samples = env.sample_observation(state, action, n_samples=20)
         for obs in samples:
             assert np.all(obs >= 0)
+
+    def test_beam_toward_opponent_reads_true_distance(self):
+        """Test the laser beam pointing at the opponent reads the true distance.
+
+        Purpose: Validates the opponent is sensed on its laser ray as
+            (center distance - opponent_radius) under negligible noise
+
+        Given: Robot at (5, 3) and opponent 3 units East at (8, 3), an open arena
+            (no walls), and near-zero measurement noise
+        When: An observation is sampled
+        Then: The East beam reads ~= 3 - opponent_radius (the opponent's near edge)
+
+        Test type: unit
+        """
+        np.random.seed(0)
+        env = ContinuousLaserTagPOMDP(
+            discount_factor=0.95, walls=[], dangerous_areas=[], measurement_noise=1e-6
+        )
+        state = np.array([5.0, 3.0, 8.0, 3.0, 0.0])
+        obs = np.asarray(env.sample_observation(state, np.array([0.0, 0.0, 0.0]), n_samples=1))
+        # Laser directions order: N, NE, E, SE, S, SW, W, NW -> East is index 2.
+        east_beam = float(obs[2])
+        expected = 3.0 - env.opponent_radius
+        assert abs(east_beam - expected) < 0.01, f"East beam {east_beam} != expected {expected}"
 
 
 class TestReward:

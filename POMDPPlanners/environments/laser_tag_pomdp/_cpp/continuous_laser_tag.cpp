@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 // Continuous LaserTag POMDP native sampling hot path.
 //
 // The continuous LaserTag transition and observation models do not fit the
@@ -219,6 +221,29 @@ void compute_laser_measurements(double robot_x, double robot_y, double opp_x, do
     }
 }
 
+// True iff the robot has line of sight to the opponent: some laser ray reaches
+// the opponent disc before any wall or the grid boundary. Mirrors the per-ray
+// comparison in compute_laser_measurements; used by the EVADE_WHEN_SPOTTED policy.
+bool opponent_visible(double robot_x, double robot_y, double opp_x, double opp_y,
+                      double opponent_radius, const std::vector<Wall> &walls, double grid_w,
+                      double grid_h) {
+    for (std::size_t d = 0; d < kObsDim; ++d) {
+        const double dx = kLaserDirections[d][0];
+        const double dy = kLaserDirections[d][1];
+        double occluder = ray_walls_distance(robot_x, robot_y, dx, dy, walls);
+        const double boundary = ray_grid_boundary_distance(robot_x, robot_y, dx, dy, grid_w, grid_h);
+        if (boundary < occluder) {
+            occluder = boundary;
+        }
+        const double opp_d =
+            ray_circle_distance(robot_x, robot_y, dx, dy, opp_x, opp_y, opponent_radius);
+        if (opp_d < occluder) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // Resolve collision between a circular entity at (x, y) with radius r and a
 // single wall AABB. Mirrors _resolve_single_wall in the Python geometry
 // module (circle-AABB minimum-translation-vector push-out).
@@ -266,6 +291,14 @@ void clamp_to_grid(double &x, double &y, double radius, double grid_w, double gr
     y = std::clamp(y, radius, grid_h - radius);
 }
 
+// Opponent transition policy. EVADE flees the robot (directional mass on the
+// distance-increasing move, reacting to the robot's pre-move position); PURSUE
+// chases (mass on the distance-decreasing move, reacting to the robot's
+// post-move position). Mirrors OpponentPolicy.native_code in Python.
+constexpr int kPolicyEvade = 0;
+constexpr int kPolicyPursue = 1;
+constexpr int kPolicyEvadeWhenSpotted = 2;
+
 // Shared environment geometry / physics parameters used by both the
 // transition and observation models.
 struct EnvParams {
@@ -275,12 +308,14 @@ struct EnvParams {
     double robot_radius;
     double opponent_radius;
     double tag_radius;
-    double pursuit_speed;
+    double evasion_speed;
+    int opponent_policy_code = kPolicyEvade;
 };
 
 EnvParams make_env_params(const py::array_t<double> &walls_arr,
                           const py::array_t<double> &grid_size, double robot_radius,
-                          double opponent_radius, double tag_radius, double pursuit_speed) {
+                          double opponent_radius, double tag_radius, double evasion_speed,
+                          int opponent_policy_code = kPolicyEvade) {
     if (grid_size.ndim() != 1 || grid_size.shape(0) != 2) {
         throw std::invalid_argument("grid_size must have shape (2,)");
     }
@@ -292,7 +327,8 @@ EnvParams make_env_params(const py::array_t<double> &walls_arr,
     p.robot_radius = robot_radius;
     p.opponent_radius = opponent_radius;
     p.tag_radius = tag_radius;
-    p.pursuit_speed = pursuit_speed;
+    p.evasion_speed = evasion_speed;
+    p.opponent_policy_code = opponent_policy_code;
     return p;
 }
 
@@ -311,13 +347,24 @@ void sample_move(double mean_x, double mean_y, double radius,
     clamp_to_grid(out_x, out_y, radius, env.grid_w, env.grid_h);
 }
 
-// Compute the pursuit target for the opponent: move ``pursuit_speed`` toward
-// the robot, sampling a random unit vector when the two are coincident.
-void opponent_pursuit_mean(double robot_x, double robot_y, double opp_x, double opp_y,
-                           double pursuit_speed, pomdp_native::RNGState &rng, double &mean_x,
-                           double &mean_y) {
-    const double diff_x = robot_x - opp_x;
-    const double diff_y = robot_y - opp_y;
+// Compute the opponent's target mean: move ``move_speed`` away from (EVADE-like)
+// or toward (PURSUE) the robot. When ``stay_in_place`` is set (EVADE_WHEN_SPOTTED
+// with no line of sight), the opponent holds its current position — only the
+// caller's Gaussian opponent noise then jitters it. A random unit vector is used
+// when the robot and opponent are coincident. The caller chooses which robot
+// position (pre- or post-move) to pass per the policy's reference-position semantics.
+void opponent_move_mean(double robot_x, double robot_y, double opp_x, double opp_y,
+                        double move_speed, int opponent_policy_code, bool stay_in_place,
+                        pomdp_native::RNGState &rng, double &mean_x, double &mean_y) {
+    if (stay_in_place) {
+        mean_x = opp_x;
+        mean_y = opp_y;
+        return;
+    }
+    // Only PURSUE chases (diff = robot - opp); every other policy flees (diff = opp - robot).
+    const double sign = (opponent_policy_code == kPolicyPursue) ? -1.0 : 1.0;
+    const double diff_x = sign * (opp_x - robot_x);
+    const double diff_y = sign * (opp_y - robot_y);
     const double dist = std::hypot(diff_x, diff_y);
     double dir_x;
     double dir_y;
@@ -332,8 +379,8 @@ void opponent_pursuit_mean(double robot_x, double robot_y, double opp_x, double 
         dir_x = diff_x / dist;
         dir_y = diff_y / dist;
     }
-    mean_x = opp_x + pursuit_speed * dir_x;
-    mean_y = opp_y + pursuit_speed * dir_y;
+    mean_x = opp_x + move_speed * dir_x;
+    mean_y = opp_y + move_speed * dir_y;
 }
 
 // Parse the 3-element action vector (dx, dy, tag_flag) from a Python object.
@@ -374,16 +421,17 @@ class ContinuousLaserTagTransitionCpp {
   public:
     ContinuousLaserTagTransitionCpp(const py::object &state_obj, const py::object &action_obj,
                                     const py::array_t<double> &robot_cov,
-                                    const py::array_t<double> &opponent_cov, double pursuit_speed,
+                                    const py::array_t<double> &opponent_cov, double evasion_speed,
                                     const py::array_t<double> &walls_arr,
                                     const py::array_t<double> &grid_size, double robot_radius,
-                                    double opponent_radius, double tag_radius)
+                                    double opponent_radius, double tag_radius,
+                                    int opponent_policy_code = kPolicyEvade)
         : state_(parse_state(state_obj)),
           action_(parse_action(action_obj)),
           robot_noise_(pomdp_native::GaussianND<2>::from_covariance(robot_cov)),
           opp_noise_(pomdp_native::GaussianND<2>::from_covariance(opponent_cov)),
           env_(make_env_params(walls_arr, grid_size, robot_radius, opponent_radius, tag_radius,
-                               pursuit_speed)) {}
+                               evasion_speed, opponent_policy_code)) {}
 
     py::list sample(int n_samples) const {
         if (n_samples < 0) {
@@ -479,11 +527,17 @@ class ContinuousLaserTagTransitionCpp {
                 out[4] = 1.0;
                 return;
             }
-            // Robot does not move on a tag; opponent still pursues.
+            // Robot does not move on a tag; opponent still moves per the policy
+            // (pre- and post-move robot coincide here).
             double mean_opp_x;
             double mean_opp_y;
-            opponent_pursuit_mean(robot_x, robot_y, opp_x, opp_y, env_.pursuit_speed, rng,
-                                  mean_opp_x, mean_opp_y);
+            const bool tag_stay_in_place =
+                env_.opponent_policy_code == kPolicyEvadeWhenSpotted &&
+                !opponent_visible(robot_x, robot_y, opp_x, opp_y, env_.opponent_radius, env_.walls,
+                                  env_.grid_w, env_.grid_h);
+            opponent_move_mean(robot_x, robot_y, opp_x, opp_y, env_.evasion_speed,
+                               env_.opponent_policy_code, tag_stay_in_place, rng, mean_opp_x,
+                               mean_opp_y);
             double new_opp_x;
             double new_opp_y;
             sample_move(mean_opp_x, mean_opp_y, env_.opponent_radius, opp_noise_, env_, rng,
@@ -496,7 +550,7 @@ class ContinuousLaserTagTransitionCpp {
             return;
         }
 
-        // Non-tag action: apply robot Gaussian move then opponent pursuit.
+        // Non-tag action: apply robot Gaussian move then the opponent move.
         double new_robot_x;
         double new_robot_y;
         sample_move(robot_x + action_[0], robot_y + action_[1], env_.robot_radius, robot_noise_,
@@ -504,8 +558,18 @@ class ContinuousLaserTagTransitionCpp {
 
         double mean_opp_x;
         double mean_opp_y;
-        opponent_pursuit_mean(new_robot_x, new_robot_y, opp_x, opp_y, env_.pursuit_speed, rng,
-                              mean_opp_x, mean_opp_y);
+        // PURSUE reacts to the robot's POST-move position; EVADE / EVADE_WHEN_SPOTTED
+        // to its PRE-move position.
+        const double ref_robot_x =
+            (env_.opponent_policy_code == kPolicyPursue) ? new_robot_x : robot_x;
+        const double ref_robot_y =
+            (env_.opponent_policy_code == kPolicyPursue) ? new_robot_y : robot_y;
+        const bool stay_in_place =
+            env_.opponent_policy_code == kPolicyEvadeWhenSpotted &&
+            !opponent_visible(ref_robot_x, ref_robot_y, opp_x, opp_y, env_.opponent_radius,
+                              env_.walls, env_.grid_w, env_.grid_h);
+        opponent_move_mean(ref_robot_x, ref_robot_y, opp_x, opp_y, env_.evasion_speed,
+                           env_.opponent_policy_code, stay_in_place, rng, mean_opp_x, mean_opp_y);
         double new_opp_x;
         double new_opp_y;
         sample_move(mean_opp_x, mean_opp_y, env_.opponent_radius, opp_noise_, env_, rng, new_opp_x,
@@ -852,22 +916,148 @@ py::array_t<double> reward_batch(
     return out;
 }
 
+// Reward-variant codes shared by the discrete reward batch kernel and the
+// random-rollout kernel. Match
+// POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp.RewardModelType.
+//
+// CONSTANT_HAZARD_PENALTY                 : deterministic single ``-penalty`` on wall OR
+//                            danger membership (matches
+//                            LaserTagRewardModel._compute_area_penalty_scalar
+//                            and the legacy kernel).
+// ZERO_MEAN_HAZARD_SHOCK     : wall always emits ``-penalty``; danger emits
+//                            ``±penalty`` 50/50 via the shared C++ RNG.
+// DISTANCE_DECAYED_HAZARD_PENALTY : wall always emits ``-penalty``; danger emits
+//                            ``-penalty`` with probability
+//                            ``exp(-min_dist / penalty_decay)`` against the
+//                            nearest centre (no radius cutoff).
+constexpr int kVariantConstantHazardPenalty = 0;
+constexpr int kVariantZeroMeanHazardShock = 1;
+constexpr int kVariantDistanceDecayedHazardPenalty = 2;
+
+// Build the packed wall hash set from the (2 * n_walls,) int64 buffer.
+std::unordered_set<int64_t> build_wall_cells(
+    const py::array_t<int64_t, py::array::c_style | py::array::forcecast> &walls_flat,
+    int n_walls, int cols) {
+    auto walls_view = walls_flat.unchecked<1>();
+    std::unordered_set<int64_t> wall_cells;
+    wall_cells.reserve(static_cast<std::size_t>(n_walls) * 2 + 1);
+    for (int i = 0; i < n_walls; ++i) {
+        const int64_t wr = walls_view(static_cast<py::ssize_t>(2 * i));
+        const int64_t wc = walls_view(static_cast<py::ssize_t>(2 * i + 1));
+        wall_cells.insert(wr * static_cast<int64_t>(cols) + wc);
+    }
+    return wall_cells;
+}
+
+// Pack dangerous-area centres from the (D, 2) float64 buffer (or empty).
+std::vector<std::pair<double, double>> build_areas(
+    const py::array_t<double, py::array::c_style | py::array::forcecast> &dangerous_areas,
+    int n_dangerous) {
+    std::vector<std::pair<double, double>> areas;
+    if (n_dangerous <= 0) {
+        return areas;
+    }
+    if (dangerous_areas.ndim() != 2 || dangerous_areas.shape(0) != n_dangerous ||
+        dangerous_areas.shape(1) != 2) {
+        throw std::invalid_argument("dangerous_areas must have shape (n_dangerous, 2)");
+    }
+    areas.reserve(static_cast<std::size_t>(n_dangerous));
+    auto da_view = dangerous_areas.unchecked<2>();
+    for (int i = 0; i < n_dangerous; ++i) {
+        areas.emplace_back(da_view(static_cast<py::ssize_t>(i), 0),
+                           da_view(static_cast<py::ssize_t>(i), 1));
+    }
+    return areas;
+}
+
+// Return true iff (int_r, int_c) is an in-bounds wall cell.
+inline bool wall_hit(int64_t int_r, int64_t int_c, int rows, int cols,
+                     const std::unordered_set<int64_t> &wall_cells) {
+    if (int_r < 0 || int_r >= static_cast<int64_t>(rows) || int_c < 0 ||
+        int_c >= static_cast<int64_t>(cols)) {
+        return false;
+    }
+    const int64_t key = int_r * static_cast<int64_t>(cols) + int_c;
+    return wall_cells.find(key) != wall_cells.end();
+}
+
+// Return true iff (pr, pc) lies within ``r_sq`` (squared radius) of any area.
+inline bool danger_hit_within(double pr, double pc, double r_sq,
+                              const std::vector<std::pair<double, double>> &areas) {
+    for (const auto &area : areas) {
+        const double ddr = pr - area.first;
+        const double ddc = pc - area.second;
+        if (ddr * ddr + ddc * ddc <= r_sq) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Compute the variant's danger-area contribution (already excludes the wall
+// contribution; wall handling is shared upstream). ``uniform`` is used by
+// stochastic variants only — pass any value for CONSTANT_HAZARD_PENALTY.
+inline double variant_danger_contribution(
+    int variant_code, double pr, double pc, double r_sq, double penalty_decay,
+    double dangerous_area_penalty,
+    const std::vector<std::pair<double, double>> &areas, double uniform) {
+    if (areas.empty()) {
+        return 0.0;
+    }
+    if (variant_code == kVariantZeroMeanHazardShock) {
+        if (!danger_hit_within(pr, pc, r_sq, areas)) {
+            return 0.0;
+        }
+        return (uniform < 0.5) ? -dangerous_area_penalty : dangerous_area_penalty;
+    }
+    if (variant_code == kVariantDistanceDecayedHazardPenalty) {
+        double min_sq = std::numeric_limits<double>::infinity();
+        for (const auto &area : areas) {
+            const double ddr = pr - area.first;
+            const double ddc = pc - area.second;
+            const double dsq = ddr * ddr + ddc * ddc;
+            if (dsq < min_sq) {
+                min_sq = dsq;
+            }
+        }
+        const double min_dist = std::sqrt(min_sq);
+        const double hit_prob = std::exp(-min_dist / penalty_decay);
+        if (uniform < hit_prob) {
+            return -dangerous_area_penalty;
+        }
+        return 0.0;
+    }
+    // CONSTANT_HAZARD_PENALTY: handled by the caller via the combined OR-mask path; this
+    // helper should not be invoked for CONSTANT_HAZARD_PENALTY.
+    return 0.0;
+}
+
 // Vectorised reward kernel for the discrete LaserTagPOMDP.
 //
-// Mirrors LaserTagPOMDP._compute_reward_batch in pure C++:
+// Mirrors LaserTagPOMDP.reward_model.compute_reward_batch across the three
+// :class:`RewardModelType` variants:
 //   - terminal-flag rows yield 0.0;
 //   - on the tag action (action == 4): live rows get +tag_reward when the
 //     robot grid cell equals the opponent grid cell, else -tag_penalty;
 //   - on a movement action (0..3): live rows pay -step_cost;
-//   - the intended-position penalty (-dangerous_area_penalty) is applied
-//     when the intended cell hits a wall (in-bounds + walls hit) or lies
-//     within ``dangerous_area_radius`` (Euclidean) of any dangerous-area
-//     centre. For action == 4 the intended cell is the current robot cell;
-//     for actions 0..3 it is the robot cell shifted by ``action_directions``.
+//   - the danger / wall contribution is scored against the *realised*
+//     post-action position read from ``next_states[:, :2]`` when
+//     ``next_states`` is provided (preferred path); when it is empty/null
+//     the intended cell is used (legacy ``compute_reward_batch_python``
+//     fallback). CONSTANT_HAZARD_PENALTY applies a single -penalty on (wall OR danger);
+//     ZERO_MEAN_HAZARD_SHOCK and DISTANCE_DECAYED_HAZARD_PENALTY apply the wall
+//     penalty deterministically and resolve the danger contribution via
+//     ``pomdp_native::default_rng``.
 //
 // dangerous_areas: shape (D, 2) float64 (or (0, 2) / 1-D length-0 for empty).
 // walls_flat: 1-D int64 array of (row, col) pairs flattened (length = 2 * n_walls).
 // action_directions: shape (4, 2) int64 with row r = (dr, dc) for action r.
+// next_states: shape (N, 5) float64 or empty (0, 0) / (0, 5) for "intended
+//   position" fallback. When non-empty its row count must equal ``states``'.
+// reward_variant_code: see kVariant* constants above.
+// penalty_decay: decay length for the DISTANCE_DECAYED_HAZARD_PENALTY variant
+//   (must be strictly positive when ``reward_variant_code == kVariantDistanceDecayedHazardPenalty``);
+//   ignored otherwise.
 py::array_t<double> lasertag_discrete_reward_batch(
     const py::array_t<double, py::array::c_style | py::array::forcecast> &states,
     int action,
@@ -881,7 +1071,10 @@ py::array_t<double> lasertag_discrete_reward_batch(
     double tag_reward,
     double tag_penalty,
     double step_cost,
-    const py::array_t<int64_t, py::array::c_style | py::array::forcecast> &action_directions) {
+    const py::array_t<int64_t, py::array::c_style | py::array::forcecast> &action_directions,
+    const py::array_t<double, py::array::c_style | py::array::forcecast> &next_states,
+    int reward_variant_code,
+    double penalty_decay) {
     if (states.ndim() != 2 || states.shape(1) != static_cast<py::ssize_t>(kStateDim)) {
         throw std::invalid_argument("states must have shape (N, 5)");
     }
@@ -894,30 +1087,31 @@ py::array_t<double> lasertag_discrete_reward_batch(
         throw std::invalid_argument("action_directions must have shape (4, 2)");
     }
 
-    // Pack walls into a hash set of row * cols + col for O(1) wall hits.
-    auto walls_view = walls_flat.unchecked<1>();
-    std::unordered_set<int64_t> wall_cells;
-    wall_cells.reserve(static_cast<std::size_t>(n_walls) * 2 + 1);
-    for (int i = 0; i < n_walls; ++i) {
-        const int64_t wr = walls_view(static_cast<py::ssize_t>(2 * i));
-        const int64_t wc = walls_view(static_cast<py::ssize_t>(2 * i + 1));
-        wall_cells.insert(wr * static_cast<int64_t>(cols) + wc);
+    const auto n = static_cast<std::size_t>(states.shape(0));
+    // next_states is optional: empty (0, 0) / (0, 5) / 1-D length-0 means
+    // "fall back to intended position". When non-empty its row count must
+    // equal ``states``'s row count.
+    const bool has_next_states =
+        (next_states.ndim() == 2 && next_states.shape(0) == states.shape(0) &&
+         next_states.shape(1) == static_cast<py::ssize_t>(kStateDim));
+    if (!has_next_states) {
+        const bool is_empty =
+            (next_states.ndim() == 1 && next_states.shape(0) == 0) ||
+            (next_states.ndim() == 2 && next_states.shape(0) == 0);
+        if (!is_empty) {
+            throw std::invalid_argument(
+                "next_states must have shape (N, 5) matching states, or be empty");
+        }
+    }
+    if (reward_variant_code == kVariantDistanceDecayedHazardPenalty && !(penalty_decay > 0.0)) {
+        throw std::invalid_argument(
+            "penalty_decay must be strictly positive for the DISTANCE_DECAYED_HAZARD_PENALTY variant");
     }
 
-    // Pack dangerous-area centres.
-    std::vector<std::pair<double, double>> areas;
-    if (n_dangerous > 0) {
-        if (dangerous_areas.ndim() != 2 || dangerous_areas.shape(0) != n_dangerous ||
-            dangerous_areas.shape(1) != 2) {
-            throw std::invalid_argument("dangerous_areas must have shape (n_dangerous, 2)");
-        }
-        areas.reserve(static_cast<std::size_t>(n_dangerous));
-        auto da_view = dangerous_areas.unchecked<2>();
-        for (int i = 0; i < n_dangerous; ++i) {
-            areas.emplace_back(da_view(static_cast<py::ssize_t>(i), 0),
-                               da_view(static_cast<py::ssize_t>(i), 1));
-        }
-    }
+    const std::unordered_set<int64_t> wall_cells =
+        build_wall_cells(walls_flat, n_walls, cols);
+    const std::vector<std::pair<double, double>> areas =
+        build_areas(dangerous_areas, n_dangerous);
     const double r_sq = dangerous_area_radius * dangerous_area_radius;
 
     // Resolve the action's grid delta. For action 4 (tag) the intended cell is
@@ -932,10 +1126,16 @@ py::array_t<double> lasertag_discrete_reward_batch(
     }
     const bool is_tag = (action == 4);
 
-    const auto n = static_cast<std::size_t>(states.shape(0));
     auto state_view = states.unchecked<2>();
     auto out = py::array_t<double>(static_cast<py::ssize_t>(n));
     auto buf = out.mutable_unchecked<1>();
+
+    pomdp_native::RNGState &rng = pomdp_native::default_rng();
+    std::uniform_real_distribution<double> uniform_dist(0.0, 1.0);
+    const bool needs_uniform =
+        (reward_variant_code == kVariantZeroMeanHazardShock ||
+         reward_variant_code == kVariantDistanceDecayedHazardPenalty) &&
+        !areas.empty();
 
     for (std::size_t i = 0; i < n; ++i) {
         const py::ssize_t row = static_cast<py::ssize_t>(i);
@@ -956,31 +1156,50 @@ py::array_t<double> lasertag_discrete_reward_batch(
             r = -step_cost;
         }
 
-        const int64_t int_r = robot_r + dr;
-        const int64_t int_c = robot_c + dc;
+        // Resolve the position used to evaluate the wall / danger penalty.
+        // Prefer the realised next_state position when provided; fall back to
+        // the intended cell otherwise (legacy compute_reward_batch_python
+        // behaviour).
+        int64_t eval_r;
+        int64_t eval_c;
+        if (has_next_states) {
+            auto ns_view = next_states.unchecked<2>();
+            eval_r = static_cast<int64_t>(ns_view(row, 0));
+            eval_c = static_cast<int64_t>(ns_view(row, 1));
+        } else {
+            eval_r = robot_r + dr;
+            eval_c = robot_c + dc;
+        }
 
-        bool penalty = false;
-        if (int_r >= 0 && int_r < static_cast<int64_t>(rows) &&
-            int_c >= 0 && int_c < static_cast<int64_t>(cols)) {
-            const int64_t key = int_r * static_cast<int64_t>(cols) + int_c;
-            if (wall_cells.find(key) != wall_cells.end()) {
-                penalty = true;
+        const bool is_wall = wall_hit(eval_r, eval_c, rows, cols, wall_cells);
+
+        if (reward_variant_code == kVariantConstantHazardPenalty) {
+            // Single -penalty on (wall OR danger).
+            bool penalty = is_wall;
+            if (!penalty && !areas.empty()) {
+                penalty = danger_hit_within(static_cast<double>(eval_r),
+                                            static_cast<double>(eval_c), r_sq, areas);
             }
-        }
-        if (!penalty && !areas.empty()) {
-            const double pr = static_cast<double>(int_r);
-            const double pc = static_cast<double>(int_c);
-            for (const auto &area : areas) {
-                const double ddr = pr - area.first;
-                const double ddc = pc - area.second;
-                if (ddr * ddr + ddc * ddc <= r_sq) {
-                    penalty = true;
-                    break;
-                }
+            if (penalty) {
+                r -= dangerous_area_penalty;
             }
-        }
-        if (penalty) {
-            r -= dangerous_area_penalty;
+        } else {
+            // ZERO_MEAN_HAZARD_SHOCK / DECAYING: wall and danger contributions
+            // are independent. Wall hit always subtracts ``penalty`` exactly
+            // like the CONSTANT_HAZARD_PENALTY variant.
+            if (is_wall) {
+                r -= dangerous_area_penalty;
+            }
+            if (needs_uniform) {
+                // One uniform per row (preserving the Python batch path's
+                // one-draw-per-row contract); the variant helper decides
+                // whether to consume it.
+                const double u = uniform_dist(rng.engine());
+                r += variant_danger_contribution(
+                    reward_variant_code, static_cast<double>(eval_r),
+                    static_cast<double>(eval_c), r_sq, penalty_decay,
+                    dangerous_area_penalty, areas, u);
+            }
         }
         buf(row) = r;
     }
@@ -1023,11 +1242,16 @@ static bool cont_step_state(double *state, const double *action, const EnvParams
             state[4] = 1.0;
             return true;
         }
-        // Robot stays; opponent pursues.
+        // Robot stays; opponent moves per the policy (pre/post robot coincide).
         double mean_opp_x;
         double mean_opp_y;
-        opponent_pursuit_mean(robot_x, robot_y, opp_x, opp_y, env.pursuit_speed, rng, mean_opp_x,
-                              mean_opp_y);
+        const bool tag_stay_in_place =
+            env.opponent_policy_code == kPolicyEvadeWhenSpotted &&
+            !opponent_visible(robot_x, robot_y, opp_x, opp_y, env.opponent_radius, env.walls,
+                              env.grid_w, env.grid_h);
+        opponent_move_mean(robot_x, robot_y, opp_x, opp_y, env.evasion_speed,
+                           env.opponent_policy_code, tag_stay_in_place, rng, mean_opp_x,
+                           mean_opp_y);
         double new_opp_x;
         double new_opp_y;
         sample_move(mean_opp_x, mean_opp_y, env.opponent_radius, opp_noise, env, rng, new_opp_x,
@@ -1037,7 +1261,7 @@ static bool cont_step_state(double *state, const double *action, const EnvParams
         return false;
     }
 
-    // Non-tag: robot moves, then opponent pursues.
+    // Non-tag: robot moves, then the opponent moves per the policy.
     double new_robot_x;
     double new_robot_y;
     sample_move(robot_x + action[0], robot_y + action[1], env.robot_radius, robot_noise, env, rng,
@@ -1045,8 +1269,16 @@ static bool cont_step_state(double *state, const double *action, const EnvParams
 
     double mean_opp_x;
     double mean_opp_y;
-    opponent_pursuit_mean(new_robot_x, new_robot_y, opp_x, opp_y, env.pursuit_speed, rng,
-                          mean_opp_x, mean_opp_y);
+    // PURSUE reacts to the robot's POST-move position; EVADE / EVADE_WHEN_SPOTTED to its
+    // PRE-move position.
+    const double ref_robot_x = (env.opponent_policy_code == kPolicyPursue) ? new_robot_x : robot_x;
+    const double ref_robot_y = (env.opponent_policy_code == kPolicyPursue) ? new_robot_y : robot_y;
+    const bool stay_in_place =
+        env.opponent_policy_code == kPolicyEvadeWhenSpotted &&
+        !opponent_visible(ref_robot_x, ref_robot_y, opp_x, opp_y, env.opponent_radius, env.walls,
+                          env.grid_w, env.grid_h);
+    opponent_move_mean(ref_robot_x, ref_robot_y, opp_x, opp_y, env.evasion_speed,
+                       env.opponent_policy_code, stay_in_place, rng, mean_opp_x, mean_opp_y);
     double new_opp_x;
     double new_opp_y;
     sample_move(mean_opp_x, mean_opp_y, env.opponent_radius, opp_noise, env, rng, new_opp_x,
@@ -1070,7 +1302,7 @@ static bool cont_step_state(double *state, const double *action, const EnvParams
 //   discount_factor    - per-step gamma
 //   robot_covariance   - (2, 2) float64 covariance for robot Gaussian noise
 //   opponent_covariance- (2, 2) float64 covariance for opponent Gaussian noise
-//   pursuit_speed      - opponent mean step magnitude
+//   evasion_speed      - opponent mean step magnitude
 //   walls              - (M, 4) float64 AABB walls (cx, cy, hx, hy)
 //   grid_size          - (2,) float64 [width, height]
 //   robot_radius       - robot body radius
@@ -1090,13 +1322,14 @@ double cont_simulate_rollout(
     int start_depth, int max_depth, double discount_factor,
     const py::array_t<double, py::array::c_style | py::array::forcecast> &robot_covariance,
     const py::array_t<double, py::array::c_style | py::array::forcecast> &opponent_covariance,
-    double pursuit_speed,
+    double evasion_speed,
     const py::array_t<double, py::array::c_style | py::array::forcecast> &walls,
     const py::array_t<double, py::array::c_style | py::array::forcecast> &grid_size,
     double robot_radius, double opponent_radius, double tag_radius, double tag_reward,
     double tag_penalty, double step_cost,
     const py::array_t<double, py::array::c_style | py::array::forcecast> &dangerous_areas,
-    double dangerous_area_radius, double dangerous_area_penalty) {
+    double dangerous_area_radius, double dangerous_area_penalty,
+    int opponent_policy_code = kPolicyEvade) {
     // Validate shapes.
     if (initial_state.ndim() != 1 || initial_state.shape(0) != static_cast<py::ssize_t>(kStateDim)) {
         throw std::invalid_argument("initial_state must have shape (5,)");
@@ -1116,7 +1349,7 @@ double cont_simulate_rollout(
     // Build env params.
     py::array_t<double> grid_size_arr = grid_size;
     EnvParams env = make_env_params(walls, grid_size_arr, robot_radius, opponent_radius, tag_radius,
-                                    pursuit_speed);
+                                    evasion_speed, opponent_policy_code);
 
     // Build Gaussian noise models.
     pomdp_native::GaussianND<2> robot_noise = pomdp_native::GaussianND<2>::from_covariance(robot_covariance);
@@ -1215,6 +1448,11 @@ struct DiscreteEnvParams {
     double tag_penalty;
     double step_cost;
     double transition_error_prob;
+    // Reward-variant fields (default to CONSTANT_HAZARD_PENALTY, penalty_decay=1.0).
+    int reward_variant_code = kVariantConstantHazardPenalty;
+    double penalty_decay = 1.0;
+    // Opponent transition policy (default EVADE).
+    int opponent_policy_code = kPolicyEvade;
 };
 
 DiscreteEnvParams make_discrete_env_params(
@@ -1223,12 +1461,18 @@ DiscreteEnvParams make_discrete_env_params(
     const py::array_t<double, py::array::c_style | py::array::forcecast> &dangerous_areas_arr,
     double dangerous_area_radius, double dangerous_area_penalty,
     double tag_reward, double tag_penalty, double step_cost,
-    double transition_error_prob) {
+    double transition_error_prob,
+    int reward_variant_code = kVariantConstantHazardPenalty,
+    double penalty_decay = 1.0,
+    int opponent_policy_code = kPolicyEvade) {
 
     DiscreteEnvParams p;
     p.rows = rows;
     p.cols = cols;
     p.wall_grid.assign(static_cast<std::size_t>(rows * cols), false);
+    p.reward_variant_code = reward_variant_code;
+    p.penalty_decay = penalty_decay;
+    p.opponent_policy_code = opponent_policy_code;
 
     // walls_flat: 1-D int64 array of length 2*M: [r0, c0, r1, c1, ...]
     if (walls_flat.ndim() != 1) {
@@ -1289,7 +1533,28 @@ inline bool disc_is_dangerous(int r, int c, const DiscreteEnvParams &env) {
     return false;
 }
 
-double disc_reward(const double *state, int action, const DiscreteEnvParams &env) {
+// Returns the minimum Euclidean distance from (pr, pc) to any dangerous-area
+// centre, or +infinity if no centres are configured.
+inline double disc_min_danger_distance(double pr, double pc, const DiscreteEnvParams &env) {
+    double min_sq = std::numeric_limits<double>::infinity();
+    for (const auto &area : env.dangerous_areas) {
+        const double ddr = pr - area.first;
+        const double ddc = pc - area.second;
+        const double dsq = ddr * ddr + ddc * ddc;
+        if (dsq < min_sq) {
+            min_sq = dsq;
+        }
+    }
+    return std::sqrt(min_sq);
+}
+
+// Variant-aware discrete reward. Wall hit is always evaluated against the
+// realised position (the intended-cell + transition handles wall-blocked
+// movement in the rollout caller). The danger contribution depends on
+// ``env.reward_variant_code``; stochastic variants consume one uniform from
+// the supplied RNG.
+double disc_reward(const double *state, int action, const DiscreteEnvParams &env,
+                   pomdp_native::RNGState &rng) {
     if (state[4] != 0.0) {
         return 0.0;
     }
@@ -1318,10 +1583,71 @@ double disc_reward(const double *state, int action, const DiscreteEnvParams &env
     const bool is_wall =
         intended_in_bounds &&
         env.wall_grid[static_cast<std::size_t>(int_r * env.cols + int_c)];
-    if (is_wall || disc_is_dangerous(int_r, int_c, env)) {
+    const bool is_danger = disc_is_dangerous(int_r, int_c, env);
+
+    if (env.reward_variant_code == kVariantConstantHazardPenalty) {
+        if (is_wall || is_danger) {
+            base -= env.dangerous_area_penalty;
+        }
+        return base;
+    }
+
+    // HV / Decaying: wall always emits ``-penalty``; danger uses the variant
+    // helper with one RNG draw per evaluation (only when areas exist).
+    if (is_wall) {
         base -= env.dangerous_area_penalty;
     }
+    if (env.dangerous_areas.empty()) {
+        return base;
+    }
+    std::uniform_real_distribution<double> uniform_dist(0.0, 1.0);
+    const double u = uniform_dist(rng.engine());
+    if (env.reward_variant_code == kVariantZeroMeanHazardShock) {
+        if (!is_danger) {
+            return base;
+        }
+        return base + ((u < 0.5) ? -env.dangerous_area_penalty
+                                 : env.dangerous_area_penalty);
+    }
+    if (env.reward_variant_code == kVariantDistanceDecayedHazardPenalty) {
+        const double min_dist = disc_min_danger_distance(
+            static_cast<double>(int_r), static_cast<double>(int_c), env);
+        const double hit_prob = std::exp(-min_dist / env.penalty_decay);
+        if (u < hit_prob) {
+            base -= env.dangerous_area_penalty;
+        }
+        return base;
+    }
     return base;
+}
+
+// 8 laser directions (N, NE, E, SE, S, SW, W, NW). Mirrors
+// LaserTagPOMDP._LASER_DIRECTIONS / kBeliefLaserDirections.
+static constexpr std::array<std::array<int, 2>, 8> kDiscLaserDirs = {{
+    {{-1, 0}}, {{-1, 1}}, {{0, 1}}, {{1, 1}}, {{1, 0}}, {{1, -1}}, {{0, -1}}, {{-1, -1}}}};
+
+// True iff the opponent lies on one of the robot's 8 unoccluded laser rays.
+// Mirrors LaserTagPOMDP._is_opponent_spotted: walks each ray from the robot and
+// returns true if the opponent cell is reached before a wall or the boundary.
+bool disc_opponent_spotted(int robot_r, int robot_c, int opp_r, int opp_c,
+                           const DiscreteEnvParams &env) {
+    for (std::size_t d = 0; d < 8; ++d) {
+        const int dr = kDiscLaserDirs[d][0];
+        const int dc = kDiscLaserDirs[d][1];
+        int r = robot_r;
+        int c = robot_c;
+        while (true) {
+            r += dr;
+            c += dc;
+            if (r == opp_r && c == opp_c) {
+                return true;
+            }
+            if (!disc_is_valid(r, c, env)) {  // wall or out of bounds
+                break;
+            }
+        }
+    }
+    return false;
 }
 
 std::pair<int, int> disc_sample_opponent_move(
@@ -1342,22 +1668,39 @@ std::pair<int, int> disc_sample_opponent_move(
         }
     };
 
-    // x-moves (column direction, fixed row = opp_r)
-    if (robot_c == opp_c) {
+    if (env.opponent_policy_code == kPolicyEvadeWhenSpotted &&
+        !disc_opponent_spotted(robot_r, robot_c, opp_r, opp_c, env)) {
+        // EVADE_WHEN_SPOTTED with no line of sight: uniform 0.2 on each valid
+        // cardinal neighbour; remainder (incl. blocked moves) falls through to stay.
+        add_cand(opp_r - 1, opp_c, 0.2);
+        add_cand(opp_r + 1, opp_c, 0.2);
         add_cand(opp_r, opp_c + 1, 0.2);
         add_cand(opp_r, opp_c - 1, 0.2);
     } else {
-        const int toward_c = (robot_c > opp_c) ? opp_c + 1 : opp_c - 1;
-        add_cand(opp_r, toward_c, 0.4);
-    }
+        // Only PURSUE places the 0.4 directional mass on the distance-decreasing
+        // (toward) cell; every other policy flees to the away cell. The aligned
+        // (robot == opponent) branch is policy-invariant.
+        const bool evade = (env.opponent_policy_code != kPolicyPursue);
 
-    // y-moves (row direction, fixed col = opp_c)
-    if (robot_r == opp_r) {
-        add_cand(opp_r + 1, opp_c, 0.2);
-        add_cand(opp_r - 1, opp_c, 0.2);
-    } else {
-        const int toward_r = (robot_r > opp_r) ? opp_r + 1 : opp_r - 1;
-        add_cand(toward_r, opp_c, 0.4);
+        // x-moves (column direction, fixed row = opp_r)
+        if (robot_c == opp_c) {
+            add_cand(opp_r, opp_c + 1, 0.2);
+            add_cand(opp_r, opp_c - 1, 0.2);
+        } else {
+            const int dir_c = (robot_c > opp_c) ? (evade ? opp_c - 1 : opp_c + 1)
+                                                : (evade ? opp_c + 1 : opp_c - 1);
+            add_cand(opp_r, dir_c, 0.4);
+        }
+
+        // y-moves (row direction, fixed col = opp_c)
+        if (robot_r == opp_r) {
+            add_cand(opp_r + 1, opp_c, 0.2);
+            add_cand(opp_r - 1, opp_c, 0.2);
+        } else {
+            const int dir_r = (robot_r > opp_r) ? (evade ? opp_r - 1 : opp_r + 1)
+                                                : (evade ? opp_r + 1 : opp_r - 1);
+            add_cand(dir_r, opp_c, 0.4);
+        }
     }
 
     // Compute actual_total including the base stay probability 0.2.
@@ -1408,16 +1751,24 @@ double simulate_rollout_discrete(
     const py::array_t<double, py::array::c_style | py::array::forcecast> &dangerous_areas,
     double dangerous_area_radius, double dangerous_area_penalty,
     double tag_reward, double tag_penalty, double step_cost,
-    double transition_error_prob) {
+    double transition_error_prob,
+    int reward_variant_code,
+    double penalty_decay,
+    int opponent_policy_code = kPolicyEvade) {
 
     if (initial_state.ndim() != 1 || initial_state.shape(0) != 5) {
         throw std::invalid_argument("initial_state must have shape (5,)");
+    }
+    if (reward_variant_code == kVariantDistanceDecayedHazardPenalty && !(penalty_decay > 0.0)) {
+        throw std::invalid_argument(
+            "penalty_decay must be strictly positive for the DISTANCE_DECAYED_HAZARD_PENALTY variant");
     }
 
     const DiscreteEnvParams env = make_discrete_env_params(
         rows, cols, walls_flat, dangerous_areas,
         dangerous_area_radius, dangerous_area_penalty,
-        tag_reward, tag_penalty, step_cost, transition_error_prob);
+        tag_reward, tag_penalty, step_cost, transition_error_prob,
+        reward_variant_code, penalty_decay, opponent_policy_code);
 
     pomdp_native::RNGState &rng = pomdp_native::default_rng();
     std::uniform_int_distribution<int> action_dist(0, 4);
@@ -1434,7 +1785,7 @@ double simulate_rollout_discrete(
         const int action = action_dist(rng.engine());
 
         // Reward computed on current state before transition.
-        total += gamma_power * disc_reward(state, action, env);
+        total += gamma_power * disc_reward(state, action, env, rng);
         gamma_power *= discount;
 
         // Actual action (with possible error on movement actions).
@@ -1481,9 +1832,14 @@ double simulate_rollout_discrete(
             break;
         }
 
-        // Sample opponent move.
+        // Sample opponent move. PURSUE reacts to the robot's POST-move position;
+        // EVADE / EVADE_WHEN_SPOTTED to its PRE-move position.
+        const int ref_robot_r =
+            (env.opponent_policy_code == kPolicyPursue) ? new_robot_r : robot_r;
+        const int ref_robot_c =
+            (env.opponent_policy_code == kPolicyPursue) ? new_robot_c : robot_c;
         auto [new_opp_r, new_opp_c] = disc_sample_opponent_move(
-            opp_r, opp_c, new_robot_r, new_robot_c, env, rng);
+            opp_r, opp_c, ref_robot_r, ref_robot_c, env, rng);
 
         state[0] = static_cast<double>(new_robot_r);
         state[1] = static_cast<double>(new_robot_c);
@@ -1532,6 +1888,30 @@ inline bool belief_is_valid(int r, int c, int rows, int cols, const std::uint8_t
     return valid_cell[r * cols + c] != 0;
 }
 
+// True iff the opponent lies on one of the robot's 8 unoccluded laser rays
+// (over the belief ``valid_cell`` grid). Mirrors LaserTagPOMDP._is_opponent_spotted
+// / disc_opponent_spotted for the belief path.
+bool belief_opponent_spotted(int robot_r, int robot_c, int opp_r, int opp_c, int rows, int cols,
+                             const std::uint8_t *valid_cell) {
+    for (std::size_t d = 0; d < 8; ++d) {
+        const int dr = kBeliefLaserDirections[d][0];
+        const int dc = kBeliefLaserDirections[d][1];
+        int r = robot_r;
+        int c = robot_c;
+        while (true) {
+            r += dr;
+            c += dc;
+            if (r == opp_r && c == opp_c) {
+                return true;
+            }
+            if (!belief_is_valid(r, c, rows, cols, valid_cell)) {  // wall or out of bounds
+                break;
+            }
+        }
+    }
+    return false;
+}
+
 // Compute the opponent's next position by sampling from the 5-way
 // categorical distribution defined in
 // LaserTagVectorizedUpdater._batch_opponent_move, using a single uniform
@@ -1539,7 +1919,7 @@ inline bool belief_is_valid(int r, int c, int rows, int cols, const std::uint8_t
 // match the Python cumulative thresholds (cum1, cum2, cum3, cum4, 1.0).
 void belief_sample_opponent_move(int robot_r, int robot_c, int opp_r, int opp_c,
                                   int rows, int cols, const std::uint8_t *valid_cell,
-                                  double u, int *out_r, int *out_c) {
+                                  int opponent_policy_code, double u, int *out_r, int *out_c) {
     const bool right_valid = belief_is_valid(opp_r, opp_c + 1, rows, cols, valid_cell);
     const bool left_valid = belief_is_valid(opp_r, opp_c - 1, rows, cols, valid_cell);
     const bool up_valid = belief_is_valid(opp_r - 1, opp_c, rows, cols, valid_cell);
@@ -1547,30 +1927,45 @@ void belief_sample_opponent_move(int robot_r, int robot_c, int opp_r, int opp_c,
 
     const bool same_col = (robot_c == opp_c);
     const bool same_row = (robot_r == opp_r);
+    // Only PURSUE puts the 0.4 mass on the cell that decreases distance to the
+    // robot; every other policy flees to the cell that increases it.
+    const bool evade = (opponent_policy_code != kPolicyPursue);
+    // EVADE_WHEN_SPOTTED with no line of sight moves uniformly at random.
+    const bool move_randomly =
+        opponent_policy_code == kPolicyEvadeWhenSpotted &&
+        !belief_opponent_spotted(robot_r, robot_c, opp_r, opp_c, rows, cols, valid_cell);
 
     double right_prob = 0.0;
-    if (same_col && right_valid) {
-        right_prob = 0.2;
-    } else if (robot_c > opp_c && right_valid) {
-        right_prob = 0.4;
-    }
     double left_prob = 0.0;
-    if (same_col && left_valid) {
-        left_prob = 0.2;
-    } else if (robot_c < opp_c && left_valid) {
-        left_prob = 0.4;
-    }
     double up_prob = 0.0;
-    if (same_row && up_valid) {
-        up_prob = 0.2;
-    } else if (robot_r < opp_r && up_valid) {
-        up_prob = 0.4;
-    }
     double down_prob = 0.0;
-    if (same_row && down_valid) {
-        down_prob = 0.2;
-    } else if (robot_r > opp_r && down_valid) {
-        down_prob = 0.4;
+    if (move_randomly) {
+        // Uniform 0.2 on each valid neighbour; the remainder routes to "stay".
+        right_prob = right_valid ? 0.2 : 0.0;
+        left_prob = left_valid ? 0.2 : 0.0;
+        up_prob = up_valid ? 0.2 : 0.0;
+        down_prob = down_valid ? 0.2 : 0.0;
+    } else {
+        if (same_col && right_valid) {
+            right_prob = 0.2;
+        } else if ((evade ? (robot_c < opp_c) : (robot_c > opp_c)) && right_valid) {
+            right_prob = 0.4;
+        }
+        if (same_col && left_valid) {
+            left_prob = 0.2;
+        } else if ((evade ? (robot_c > opp_c) : (robot_c < opp_c)) && left_valid) {
+            left_prob = 0.4;
+        }
+        if (same_row && up_valid) {
+            up_prob = 0.2;
+        } else if ((evade ? (robot_r > opp_r) : (robot_r < opp_r)) && up_valid) {
+            up_prob = 0.4;
+        }
+        if (same_row && down_valid) {
+            down_prob = 0.2;
+        } else if ((evade ? (robot_r < opp_r) : (robot_r > opp_r)) && down_valid) {
+            down_prob = 0.4;
+        }
     }
 
     const double cum1 = right_prob;
@@ -1604,7 +1999,7 @@ void belief_sample_opponent_move(int robot_r, int robot_c, int opp_r, int opp_c,
 void belief_apply_action(int action_idx, std::size_t n,
                           const double *particles, double *out,
                           int rows, int cols, const std::uint8_t *valid_cell,
-                          pomdp_native::RNGState &rng) {
+                          int opponent_policy_code, pomdp_native::RNGState &rng) {
     std::uniform_real_distribution<double> uniform(0.0, 1.0);
     const int dr = kBeliefActionDirections[static_cast<std::size_t>(action_idx)][0];
     const int dc = kBeliefActionDirections[static_cast<std::size_t>(action_idx)][1];
@@ -1659,8 +2054,14 @@ void belief_apply_action(int action_idx, std::size_t n,
         const double u = uniform(rng.engine());
         int new_opp_r;
         int new_opp_c;
-        belief_sample_opponent_move(new_robot_r, new_robot_c, opp_r, opp_c,
-                                     rows, cols, valid_cell, u,
+        // PURSUE reacts to the robot's POST-move position; EVADE / EVADE_WHEN_SPOTTED
+        // to its PRE-move position.
+        const int ref_robot_r =
+            (opponent_policy_code == kPolicyPursue) ? new_robot_r : robot_r;
+        const int ref_robot_c =
+            (opponent_policy_code == kPolicyPursue) ? new_robot_c : robot_c;
+        belief_sample_opponent_move(ref_robot_r, ref_robot_c, opp_r, opp_c,
+                                     rows, cols, valid_cell, opponent_policy_code, u,
                                      &new_opp_r, &new_opp_c);
 
         out[off + 0] = static_cast<double>(new_robot_r);
@@ -1688,7 +2089,7 @@ py::array_t<double> belief_batch_transition_discrete(
     const py::array_t<double, py::array::c_style | py::array::forcecast> &particles,
     int action_idx, double transition_error_prob,
     const py::array_t<std::uint8_t, py::array::c_style | py::array::forcecast> &valid_cell_flat,
-    int rows, int cols) {
+    int rows, int cols, int opponent_policy_code = kPolicyEvade) {
     if (particles.ndim() != 2 || particles.shape(1) != 5) {
         throw std::invalid_argument("particles must have shape (N, 5)");
     }
@@ -1721,7 +2122,8 @@ py::array_t<double> belief_batch_transition_discrete(
 
     // Fast path: tag action or zero error probability → single dispatch.
     if (action_idx == 4 || transition_error_prob <= 0.0) {
-        belief_apply_action(action_idx, n, in_data, out_data, rows, cols, vc_data, rng);
+        belief_apply_action(action_idx, n, in_data, out_data, rows, cols, vc_data,
+                            opponent_policy_code, rng);
         // Suppress unused-variable warnings from unused views.
         (void)in_view;
         (void)out_view;
@@ -1736,7 +2138,7 @@ py::array_t<double> belief_batch_transition_discrete(
     for (int a = 0; a < 4; ++a) {
         candidates[static_cast<std::size_t>(a)].assign(n * 5, 0.0);
         belief_apply_action(a, n, in_data, candidates[static_cast<std::size_t>(a)].data(),
-                            rows, cols, vc_data, rng);
+                            rows, cols, vc_data, opponent_policy_code, rng);
     }
 
     // For each particle, decide which action was actually executed.
@@ -1954,12 +2356,6 @@ inline std::size_t cumulative_sample(const double *probs, std::size_t n, double 
     return n - 1;
 }
 
-// 8-direction laser distance scan from (robot_r, robot_c). Mirrors
-// LaserTagPOMDP._laser_distance_inline / _LASER_DIRECTIONS.
-// Output: out[0..7] in order N, NE, E, SE, S, SW, W, NW.
-static constexpr std::array<std::array<int, 2>, 8> kDiscLaserDirs = {{
-    {{-1, 0}}, {{-1, 1}}, {{0, 1}}, {{1, 1}}, {{1, 0}}, {{1, -1}}, {{0, -1}}, {{-1, -1}}}};
-
 void disc_laser_measurements(int robot_r, int robot_c, int opp_r, int opp_c,
                              const DiscreteEnvParams &env, double *out) {
     for (std::size_t d = 0; d < 8; ++d) {
@@ -1987,10 +2383,10 @@ void disc_laser_measurements(int robot_r, int robot_c, int opp_r, int opp_c,
 }
 
 // Build the opponent-move probability table (positions and probabilities)
-// after the robot has already moved. Mirrors
+// relative to the robot's CURRENT (pre-move) position. Mirrors
 // LaserTagPOMDP._opponent_move_probabilities_inline. Returns the count.
-std::size_t disc_opponent_move_table(int opp_r, int opp_c, int robot_r_after,
-                                     int robot_c_after, const DiscreteEnvParams &env,
+std::size_t disc_opponent_move_table(int opp_r, int opp_c, int robot_r,
+                                     int robot_c, const DiscreteEnvParams &env,
                                      int *out_rows, int *out_cols, double *out_probs) {
     std::size_t n = 0;
 
@@ -2003,22 +2399,39 @@ std::size_t disc_opponent_move_table(int opp_r, int opp_c, int robot_r_after,
         }
     };
 
-    // x-moves (column direction, fixed row = opp_r)
-    if (robot_c_after == opp_c) {
+    if (env.opponent_policy_code == kPolicyEvadeWhenSpotted &&
+        !disc_opponent_spotted(robot_r, robot_c, opp_r, opp_c, env)) {
+        // EVADE_WHEN_SPOTTED with no line of sight: uniform 0.2 on each valid
+        // cardinal neighbour; remainder (incl. blocked moves) falls through to stay.
+        try_add(opp_r - 1, opp_c, 0.2);
+        try_add(opp_r + 1, opp_c, 0.2);
         try_add(opp_r, opp_c + 1, 0.2);
         try_add(opp_r, opp_c - 1, 0.2);
     } else {
-        const int toward_c = (robot_c_after > opp_c) ? opp_c + 1 : opp_c - 1;
-        try_add(opp_r, toward_c, 0.4);
-    }
+        // Only PURSUE places the 0.4 directional mass on the distance-decreasing
+        // (toward) cell; every other policy flees to the away cell. The aligned
+        // branch is policy-invariant.
+        const bool evade = (env.opponent_policy_code != kPolicyPursue);
 
-    // y-moves (row direction, fixed col = opp_c)
-    if (robot_r_after == opp_r) {
-        try_add(opp_r + 1, opp_c, 0.2);
-        try_add(opp_r - 1, opp_c, 0.2);
-    } else {
-        const int toward_r = (robot_r_after > opp_r) ? opp_r + 1 : opp_r - 1;
-        try_add(toward_r, opp_c, 0.4);
+        // x-moves (column direction, fixed row = opp_r)
+        if (robot_c == opp_c) {
+            try_add(opp_r, opp_c + 1, 0.2);
+            try_add(opp_r, opp_c - 1, 0.2);
+        } else {
+            const int dir_c = (robot_c > opp_c) ? (evade ? opp_c - 1 : opp_c + 1)
+                                                : (evade ? opp_c + 1 : opp_c - 1);
+            try_add(opp_r, dir_c, 0.4);
+        }
+
+        // y-moves (row direction, fixed col = opp_c)
+        if (robot_r == opp_r) {
+            try_add(opp_r + 1, opp_c, 0.2);
+            try_add(opp_r - 1, opp_c, 0.2);
+        } else {
+            const int dir_r = (robot_r > opp_r) ? (evade ? opp_r - 1 : opp_r + 1)
+                                                : (evade ? opp_r + 1 : opp_r - 1);
+            try_add(dir_r, opp_c, 0.4);
+        }
     }
 
     // Stay action probability: 0.2 + slack from invalid moves.
@@ -2043,7 +2456,8 @@ std::size_t disc_opponent_move_table(int opp_r, int opp_c, int robot_r_after,
 py::array_t<double> lasertag_sample_next_state_step(
     const py::array_t<double, py::array::c_style | py::array::forcecast> &state_arr,
     int actual_action, double opp_uniform, int rows, int cols,
-    const py::array_t<std::int64_t, py::array::c_style | py::array::forcecast> &walls_flat) {
+    const py::array_t<std::int64_t, py::array::c_style | py::array::forcecast> &walls_flat,
+    int opponent_policy_code = kPolicyEvade) {
     if (state_arr.ndim() != 1 || state_arr.shape(0) != 5) {
         throw std::invalid_argument("state must have shape (5,)");
     }
@@ -2056,6 +2470,7 @@ py::array_t<double> lasertag_sample_next_state_step(
     DiscreteEnvParams env;
     env.rows = rows;
     env.cols = cols;
+    env.opponent_policy_code = opponent_policy_code;
     env.wall_grid.assign(static_cast<std::size_t>(rows * cols), false);
     if (walls_flat.ndim() != 1) {
         throw std::invalid_argument("walls_flat must be 1-D");
@@ -2108,8 +2523,14 @@ py::array_t<double> lasertag_sample_next_state_step(
     int opp_rows_buf[5];   // NOLINT(modernize-avoid-c-arrays)
     int opp_cols_buf[5];   // NOLINT(modernize-avoid-c-arrays)
     double opp_probs[5];   // NOLINT(modernize-avoid-c-arrays)
+    // PURSUE reacts to the robot's POST-move position; EVADE / EVADE_WHEN_SPOTTED to its
+    // PRE-move position.
+    const int ref_robot_r =
+        (opponent_policy_code == kPolicyPursue) ? robot_next_r : robot_r;
+    const int ref_robot_c =
+        (opponent_policy_code == kPolicyPursue) ? robot_next_c : robot_c;
     const std::size_t n_opp = disc_opponent_move_table(
-        opp_r, opp_c, robot_next_r, robot_next_c, env, opp_rows_buf, opp_cols_buf, opp_probs);
+        opp_r, opp_c, ref_robot_r, ref_robot_c, env, opp_rows_buf, opp_cols_buf, opp_probs);
     const std::size_t pick = cumulative_sample(opp_probs, n_opp, opp_uniform);
 
     ov(0) = static_cast<double>(robot_next_r);
@@ -2273,22 +2694,32 @@ PYBIND11_MODULE(_native, m) {
           py::arg("dangerous_area_radius"), py::arg("dangerous_area_penalty"),
           py::arg("tag_reward"), py::arg("tag_penalty"), py::arg("step_cost"),
           py::arg("action_directions"),
+          py::arg("next_states") = py::array_t<double>(std::vector<py::ssize_t>{0, 0}),
+          py::arg("reward_variant_code") = 0,
+          py::arg("penalty_decay") = 1.0,
           "Vectorised reward computation for the discrete LaserTagPOMDP. "
-          "Returns shape (N,) float64. Mirrors LaserTagPOMDP._compute_reward_batch "
-          "semantics: terminal rows yield 0, action 4 yields +tag_reward / "
-          "-tag_penalty, actions 0..3 pay -step_cost, and the intended cell "
-          "(robot + action_directions[action] for actions 0..3, robot for tag) "
-          "incurs -dangerous_area_penalty when it hits a wall (in-bounds) or "
-          "lies within dangerous_area_radius of any dangerous-area centre.");
+          "Returns shape (N,) float64. Mirrors "
+          "LaserTagRewardModel.compute_reward_batch across the three "
+          "RewardModelType variants: CONSTANT_HAZARD_PENALTY (0) applies a single "
+          "-dangerous_area_penalty on (wall OR danger) at the realised cell, "
+          "ZERO_MEAN_HAZARD_SHOCK (1) emits +/-dangerous_area_penalty on danger "
+          "(50/50) with deterministic wall penalty, and "
+          "DISTANCE_DECAYED_HAZARD_PENALTY (2) emits -dangerous_area_penalty on "
+          "danger with probability exp(-min_dist / penalty_decay) with "
+          "deterministic wall penalty. When ``next_states`` is shape (N, 5), "
+          "the penalty is scored against next_states[:, :2]; when it is empty "
+          "(default) the legacy intended-position fallback is used. "
+          "Stochastic variants consume randomness from "
+          "pomdp_native::default_rng().");
 
     py::class_<ContinuousLaserTagTransitionCpp>(m, "ContinuousLaserTagTransitionCpp")
         .def(py::init<const py::object &, const py::object &, const py::array_t<double> &,
                       const py::array_t<double> &, double, const py::array_t<double> &,
-                      const py::array_t<double> &, double, double, double>(),
+                      const py::array_t<double> &, double, double, double, int>(),
              py::arg("state"), py::arg("action"), py::arg("robot_covariance"),
-             py::arg("opponent_covariance"), py::arg("pursuit_speed"), py::arg("walls"),
+             py::arg("opponent_covariance"), py::arg("evasion_speed"), py::arg("walls"),
              py::arg("grid_size"), py::arg("robot_radius"), py::arg("opponent_radius"),
-             py::arg("tag_radius"))
+             py::arg("tag_radius"), py::arg("opponent_policy_code") = 0)
         .def("sample", &ContinuousLaserTagTransitionCpp::sample, py::arg("n_samples") = 1)
         .def("probability", &ContinuousLaserTagTransitionCpp::probability, py::arg("values"))
         .def("batch_sample", &ContinuousLaserTagTransitionCpp::batch_sample, py::arg("particles"))
@@ -2318,13 +2749,16 @@ PYBIND11_MODULE(_native, m) {
         "cont_simulate_rollout", &cont_simulate_rollout,
         py::arg("initial_state"), py::arg("actions_buffer"), py::arg("start_depth"),
         py::arg("max_depth"), py::arg("discount_factor"), py::arg("robot_covariance"),
-        py::arg("opponent_covariance"), py::arg("pursuit_speed"), py::arg("walls"),
+        py::arg("opponent_covariance"), py::arg("evasion_speed"), py::arg("walls"),
         py::arg("grid_size"), py::arg("robot_radius"), py::arg("opponent_radius"),
         py::arg("tag_radius"), py::arg("tag_reward"), py::arg("tag_penalty"),
         py::arg("step_cost"), py::arg("dangerous_areas"), py::arg("dangerous_area_radius"),
-        py::arg("dangerous_area_penalty"),
+        py::arg("dangerous_area_penalty"), py::arg("opponent_policy_code") = 0,
         "Run a full random rollout for ContinuousLaserTagPOMDP in one C++ frame.\n\n"
         "``actions_buffer`` must be shape (N, 3) float64 with N >= max_depth - start_depth.\n"
+        "``opponent_policy_code`` selects the opponent behaviour: 0 = EVADE (away from\n"
+        "the robot's pre-move position), 1 = PURSUE (toward its post-move position),\n"
+        "2 = EVADE_WHEN_SPOTTED (evade while the robot has line of sight, else hold position).\n"
         "Returns the discounted sum of immediate rewards along the sampled trajectory.");
 
     // ── Discrete LaserTag native rollout binding ──────────────────────────────
@@ -2337,9 +2771,20 @@ PYBIND11_MODULE(_native, m) {
         py::arg("dangerous_area_radius"), py::arg("dangerous_area_penalty"),
         py::arg("tag_reward"), py::arg("tag_penalty"), py::arg("step_cost"),
         py::arg("transition_error_prob"),
+        py::arg("reward_variant_code") = 0,
+        py::arg("penalty_decay") = 1.0,
+        py::arg("opponent_policy_code") = 0,
         "Run a full random-action rollout for the discrete LaserTagPOMDP in one C++ frame.\n\n"
         "Actions are drawn uniformly from {0,1,2,3,4} using pomdp_native::default_rng().\n"
         "Seed via set_seed() before calling to obtain reproducible trajectories.\n"
+        "``reward_variant_code`` selects the LaserTag reward-model variant:\n"
+        "  0 = CONSTANT_HAZARD_PENALTY (deterministic wall/danger -penalty on OR);\n"
+        "  1 = ZERO_MEAN_HAZARD_SHOCK (wall always -penalty; danger +/-penalty 50/50);\n"
+        "  2 = DISTANCE_DECAYED_HAZARD_PENALTY (wall always -penalty; danger -penalty\n"
+        "      with probability exp(-min_dist / penalty_decay), no radius cutoff).\n"
+        "``opponent_policy_code`` selects the opponent behaviour: 0 = EVADE (away from\n"
+        "the robot's pre-move position), 1 = PURSUE (toward its post-move position),\n"
+        "2 = EVADE_WHEN_SPOTTED (evade while the robot has line of sight, else random).\n"
         "Returns the discounted sum of immediate rewards along the sampled trajectory.");
 
     // ── Discrete LaserTag belief-update kernels ─────────────────────────────
@@ -2347,9 +2792,13 @@ PYBIND11_MODULE(_native, m) {
         "belief_batch_transition_discrete", &belief_batch_transition_discrete,
         py::arg("particles"), py::arg("action_idx"), py::arg("transition_error_prob"),
         py::arg("valid_cell_flat"), py::arg("rows"), py::arg("cols"),
+        py::arg("opponent_policy_code") = 0,
         "Native port of LaserTagVectorizedUpdater.batch_transition.\n\n"
         "Returns the (N, 5) float64 array of next particles.  Uses\n"
-        "pomdp_native::default_rng(); seed via set_seed() for reproducibility.");
+        "pomdp_native::default_rng(); seed via set_seed() for reproducibility.\n"
+        "``opponent_policy_code`` selects the opponent behaviour: 0 = EVADE (away from\n"
+        "the robot's pre-move position), 1 = PURSUE (toward its post-move position), "
+        "2 = EVADE_WHEN_SPOTTED (evade while the robot has line of sight, else random).");
 
     m.def(
         "belief_batch_obs_log_likelihood_discrete",
@@ -2366,11 +2815,15 @@ PYBIND11_MODULE(_native, m) {
         "sample_next_state_step", &lasertag_sample_next_state_step,
         py::arg("state"), py::arg("actual_action"), py::arg("opp_uniform"),
         py::arg("rows"), py::arg("cols"), py::arg("walls_flat"),
+        py::arg("opponent_policy_code") = 0,
         "Single-step transition for the discrete LaserTagPOMDP.\n\n"
         "Caller must resolve the actual_action via numpy (handling the\n"
         "optional transition error). ``opp_uniform`` is a uniform [0,1) draw\n"
         "used to pick the opponent move; must be drawn with np.random.random()\n"
         "for byte-identical reproducibility against the original Python path.\n"
+        "``opponent_policy_code`` selects the opponent behaviour: 0 = EVADE (away from\n"
+        "the robot's pre-move position), 1 = PURSUE (toward its post-move position),\n"
+        "2 = EVADE_WHEN_SPOTTED (evade while the robot has line of sight, else random).\n"
         "Returns a (5,) float64 ndarray.");
 
     m.def(

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """POMCP_DPW (Partially Observable Monte Carlo Planning with Double Progressive Widening) Algorithm.
 
 This module implements POMCP_DPW, an advanced Monte Carlo Tree Search algorithm for POMDP

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for the Continuous Push POMDP environment.
 
 This module tests the state transition behavior, observation behavior,
@@ -10,6 +12,8 @@ historical wrapper classes ``ContinuousPushStateTransitionModel`` and
 """
 
 # pylint: disable=protected-access
+
+from typing import Any, Dict, List
 
 import numpy as np
 import pytest
@@ -1078,17 +1082,21 @@ class TestContinuousPushDangerousAreas:
         assert metrics["total_dangerous_area_steps"].value == pytest.approx(2.0)
         assert metrics["dangerous_area_rate"].value == pytest.approx(2.0 / 3.0)
 
-    def test_native_rollout_bypassed_when_hit_probability_lt_one(self, monkeypatch):
-        """Native rollout is bypassed when dangerous_area_hit_probability < 1.
+    def test_native_rollout_used_when_hit_probability_lt_one(self, monkeypatch):
+        """Native rollout handles dangerous_area_hit_probability < 1 internally.
 
-        Purpose: Validates that ``simulate_random_rollout`` falls back to
-            the Python rollout so per-step Bernoulli draws survive.
+        Purpose: Validates that ``simulate_random_rollout`` routes through
+            the native C++ kernel even when
+            ``dangerous_area_hit_probability < 1.0`` because the kernel
+            now applies the Bernoulli draw internally. Regression check
+            for the removal of the Python fallback gate.
 
         Given: A ContinuousPushPOMDPDiscreteActions with
             ``dangerous_area_hit_probability=0.5``.
-        When: ``simulate_random_rollout`` is invoked after monkeypatching
-            ``_native.cont_simulate_rollout`` to raise.
-        Then: No exception is raised because the native path was bypassed.
+        When: ``simulate_random_rollout`` is invoked after wrapping
+            ``_native.cont_simulate_rollout`` to record calls.
+        Then: The native kernel is invoked exactly once with
+            ``dangerous_area_hit_probability=0.5`` threaded through.
 
         Test type: unit
         """
@@ -1103,10 +1111,14 @@ class TestContinuousPushDangerousAreas:
             state_transition_cov_matrix=np.eye(2) * 1e-8,
         )
 
-        def _explode(**_kwargs):
-            raise AssertionError("native cont_simulate_rollout must not be called")
+        call_kwargs: List[Dict[str, Any]] = []
+        original = _native.cont_simulate_rollout
 
-        monkeypatch.setattr(_native, "cont_simulate_rollout", _explode)
+        def _record(**kwargs):
+            call_kwargs.append(kwargs)
+            return original(**kwargs)
+
+        monkeypatch.setattr(_native, "cont_simulate_rollout", _record)
 
         class _Sampler:
             def sample(self):
@@ -1118,6 +1130,9 @@ class TestContinuousPushDangerousAreas:
             max_depth=5,
             discount_factor=0.99,
         )
+
+        assert len(call_kwargs) == 1
+        assert call_kwargs[0]["dangerous_area_hit_probability"] == pytest.approx(0.5)
 
 
 class TestContinuousPushDangerousHitProbability:

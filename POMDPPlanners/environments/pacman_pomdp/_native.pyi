@@ -38,12 +38,42 @@ def simulate_rollout(
     discount_factor: float,
     depth: int,
     max_depth: int,
+    dangerous_areas: NDArray[np.float64],
+    dangerous_area_radius: float,
+    dangerous_area_penalty: float,
+    reward_variant_code: int,
+    penalty_decay: float,
 ) -> float:
     """Run a random rollout from state using pre-drawn action_indices.
 
     Returns the discounted cumulative reward accumulated until terminal or
     max_depth is reached. action_indices must have length >= (max_depth - depth).
+    Reward per step includes the variant-aware dangerous-area contribution.
     """
+
+def reward_batch(
+    states: NDArray[np.float64],
+    action: int,
+    next_states: NDArray[np.float64],
+    reward_variant_code: int,
+    penalty_decay: float,
+    dangerous_areas: NDArray[np.float64],
+    dangerous_area_radius: float,
+    dangerous_area_penalty: float,
+    num_ghosts: int,
+    step_penalty: float,
+    ghost_collision_penalty: float,
+    pellet_reward: float,
+    win_reward: float,
+    idx_pac_row: int,
+    idx_pac_col: int,
+    idx_ghosts_start: int,
+    idx_pellets_start: int,
+    idx_pellets_end: int,
+    idx_score: int,
+    idx_terminal: int,
+) -> NDArray[np.float64]:
+    """Variant-aware standalone batch reward kernel. Returns (N,) float64."""
 
 class PacManTransitionCpp:
     """Native transition kernel for PacMan POMDP (pybind11-backed)."""

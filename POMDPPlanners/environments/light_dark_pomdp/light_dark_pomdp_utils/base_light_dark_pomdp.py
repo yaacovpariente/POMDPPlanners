@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 from abc import ABC, abstractmethod
 from enum import Enum
 from pathlib import Path

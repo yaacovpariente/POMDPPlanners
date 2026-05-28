@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 # pylint: disable=too-many-lines
 """LaserTag POMDP Environment Implementation.
 
@@ -12,12 +14,18 @@ The LaserTag problem features:
 - 8-directional laser range measurements with Gaussian noise
 - Positive reward for successful tagging, negative reward for failed tag attempts
 - Step cost for each movement action
-- Opponent moves with 0.4 prob toward robot in x-dir, 0.4 prob toward robot in y-dir, 0.2 prob stay
-- When aligned on an axis, the 0.4 budget is split equally (0.2/0.2) between both directions
+- Opponent moves with 0.4 prob in x-dir, 0.4 prob in y-dir, 0.2 prob stay; the
+  direction of the 0.4 mass is set by ``opponent_policy`` (see
+  :class:`~POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_utils.OpponentPolicy`):
+  ``EVADE`` (default) moves away from the robot's pre-move position, ``PURSUE``
+  moves toward the robot's post-move position
+- When aligned on an axis, the 0.4 budget is split equally (0.2/0.2) between both
+  directions, regardless of policy
 
 Classes:
     LaserTagState: State representation with robot and opponent positions
     LaserTagPOMDP: Main environment class implementing the LaserTag problem
+    OpponentPolicy: Selectable opponent transition behaviour (evade vs pursue)
 """
 
 from enum import Enum
@@ -37,6 +45,15 @@ from POMDPPlanners.core.simulation import History, MetricValue, StepData
 from POMDPPlanners.utils.statistics_utils import confidence_interval
 from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_visualizer import (  # pylint: disable=import-outside-toplevel
     LaserTagVisualizer,
+)
+from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_utils import (
+    OpponentPolicy,
+)
+from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_utils.laser_tag_reward_models import (
+    BaseLaserTagRewardModel,
+    LaserTagDistanceDecayedHazardPenaltyRewardModel,
+    LaserTagZeroMeanHazardShockRewardModel,
+    LaserTagRewardModel,
 )
 
 
@@ -63,6 +80,14 @@ class LaserTagPOMDPMetrics(Enum):
     AVERAGE_OBSTACLE_COLLISIONS = "average_obstacle_collisions"
     AVERAGE_DANGEROUS_AREA_STEPS = "average_dangerous_area_steps"
     AVERAGE_ALL_DANGEROUS_ENCOUNTERS = "average_all_dangerous_encounters"
+
+
+class RewardModelType(Enum):
+    """Reward-model variants selectable on :class:`LaserTagPOMDP`."""
+
+    CONSTANT_HAZARD_PENALTY = "constant_hazard_penalty"
+    ZERO_MEAN_HAZARD_SHOCK = "zero_mean_hazard_shock"
+    DISTANCE_DECAYED_HAZARD_PENALTY = "distance_decayed_hazard_penalty"
 
 
 # State representation for LaserTag POMDP as numpy array
@@ -157,6 +182,9 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         use_queue_logger: bool = False,
         initial_state: Optional[np.ndarray] = None,
         transition_error_prob: float = 0.0,
+        reward_model_type: RewardModelType = RewardModelType.CONSTANT_HAZARD_PENALTY,
+        penalty_decay: float = 1.0,
+        opponent_policy: OpponentPolicy = OpponentPolicy.EVADE,
     ):
         """Initialize the LaserTag POMDP environment.
 
@@ -183,10 +211,32 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
                 With probability (1-p), the intended action is executed. With probability p, a random
                 action is selected uniformly from {0,1,2,3} excluding the intended action.
                 Defaults to 0.0 (deterministic transitions).
+            reward_model_type: Selects the reward variant. ``CONSTANT_HAZARD_PENALTY`` (default)
+                deterministically subtracts ``dangerous_area_penalty`` on a wall
+                or dangerous-area hit. ``ZERO_MEAN_HAZARD_SHOCK`` keeps the wall
+                penalty deterministic but emits ``±dangerous_area_penalty``
+                (50/50) on a dangerous-area hit (expected 0, high variance).
+                ``DISTANCE_DECAYED_HAZARD_PENALTY`` keeps the wall penalty
+                deterministic and applies ``-dangerous_area_penalty`` with
+                probability ``exp(-min_dist / penalty_decay)`` against the
+                nearest dangerous-area centre (no radius cutoff). Mirrors the
+                light-dark reward-model variants.
+            penalty_decay: Decay length used by the
+                ``DISTANCE_DECAYED_HAZARD_PENALTY`` reward model. Ignored by the other
+                variants. Must be strictly positive. Defaults to ``1.0``.
+            opponent_policy: Selects the opponent transition behaviour.
+                ``EVADE`` (default) makes the opponent flee the robot, placing its
+                directional mass on the distance-increasing cell and reacting to the
+                robot's pre-move position (matches JuliaPOMDP/LaserTag.jl). ``PURSUE``
+                makes the opponent chase the robot, placing its mass on the
+                distance-decreasing cell and reacting to the robot's post-move
+                position (restores the pre-evader-fix behaviour). See
+                :class:`~POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_utils.OpponentPolicy`.
 
         Raises:
-            ValueError: If discount_factor is not in valid range [0, 1] or if transition_error_prob
-                is not in valid range [0, 1]
+            ValueError: If discount_factor is not in valid range [0, 1], if
+                transition_error_prob is not in valid range [0, 1], or if
+                reward_model_type is unknown.
         """
         if not 0.0 <= discount_factor <= 1.0:
             raise ValueError("discount_factor must be between 0 and 1 (inclusive)")
@@ -223,6 +273,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         self.dangerous_area_penalty = dangerous_area_penalty
         self.initial_state = initial_state
         self.transition_error_prob = transition_error_prob
+        self.opponent_policy = opponent_policy
 
         # Action definitions
         self.actions = [0, 1, 2, 3, 4]  # North, South, East, West, Tag
@@ -234,32 +285,11 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
             3: (0, -1),  # West (left)
             4: (0, 0),  # Tag (no movement)
         }
-        # Pre-built C-contiguous int64 (4, 2) array of (dr, dc) for actions 0..3,
-        # consumed by the native ``lasertag_discrete_reward_batch`` kernel so the
-        # hot path doesn't repack a Python dict on every call.
-        self._action_directions_arr: np.ndarray = np.ascontiguousarray(
-            np.array(
-                [self._action_directions[a] for a in (0, 1, 2, 3)],
-                dtype=np.int64,
-            )
+        self.reward_model_type = reward_model_type
+        self.penalty_decay = penalty_decay
+        self.reward_model: BaseLaserTagRewardModel = self._build_reward_model(
+            reward_model_type, penalty_decay
         )
-        # Pre-built (D, 2) C-contiguous float64 array of dangerous-area centres
-        # (or empty (0, 2) when none are configured) so the native kernel can
-        # consume it directly without per-call reallocation.
-        if self.dangerous_areas:
-            self._dangerous_areas_arr: np.ndarray = np.ascontiguousarray(
-                np.asarray(self.dangerous_areas, dtype=np.float64).reshape(-1, 2)
-            )
-        else:
-            self._dangerous_areas_arr = np.empty((0, 2), dtype=np.float64)
-        # Flattened int64 walls buffer (length 2 * n_walls) for the native
-        # kernel; pairs are (row, col). Sorted for deterministic ordering.
-        walls_list = sorted(self.walls)
-        self._reward_walls_flat: np.ndarray = np.array(
-            [coord for pair in walls_list for coord in pair],
-            dtype=np.int64,
-        )
-        self._reward_n_walls: int = len(walls_list)
         # Precomputed error-action lookup for the action-error coin in
         # _resolve_actual_action / _python_sample_next_state. Avoids a
         # per-call list comprehension + np.random.choice over a Python
@@ -267,6 +297,48 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         self._error_actions_for: Dict[int, List[int]] = {
             a: [b for b in (0, 1, 2, 3) if b != a] for a in (0, 1, 2, 3)
         }
+
+    def _build_reward_model(
+        self, reward_model_type: RewardModelType, penalty_decay: float
+    ) -> BaseLaserTagRewardModel:
+        if reward_model_type == RewardModelType.CONSTANT_HAZARD_PENALTY:
+            return LaserTagRewardModel(
+                floor_shape=self.floor_shape,
+                walls=self.walls,
+                dangerous_areas=self.dangerous_areas,
+                dangerous_area_radius=self.dangerous_area_radius,
+                dangerous_area_penalty=self.dangerous_area_penalty,
+                tag_reward=self.tag_reward,
+                tag_penalty=self.tag_penalty,
+                step_cost=self.step_cost,
+                action_directions=self._action_directions,
+            )
+        if reward_model_type == RewardModelType.ZERO_MEAN_HAZARD_SHOCK:
+            return LaserTagZeroMeanHazardShockRewardModel(
+                floor_shape=self.floor_shape,
+                walls=self.walls,
+                dangerous_areas=self.dangerous_areas,
+                dangerous_area_radius=self.dangerous_area_radius,
+                dangerous_area_penalty=self.dangerous_area_penalty,
+                tag_reward=self.tag_reward,
+                tag_penalty=self.tag_penalty,
+                step_cost=self.step_cost,
+                action_directions=self._action_directions,
+            )
+        if reward_model_type == RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY:
+            return LaserTagDistanceDecayedHazardPenaltyRewardModel(
+                floor_shape=self.floor_shape,
+                walls=self.walls,
+                dangerous_areas=self.dangerous_areas,
+                dangerous_area_radius=self.dangerous_area_radius,
+                dangerous_area_penalty=self.dangerous_area_penalty,
+                tag_reward=self.tag_reward,
+                tag_penalty=self.tag_penalty,
+                step_cost=self.step_cost,
+                action_directions=self._action_directions,
+                penalty_decay=penalty_decay,
+            )
+        raise ValueError(f"Unknown reward model type: {reward_model_type}")
 
     def __getstate__(self) -> Dict[str, Any]:
         # The native step / rollout / reward_batch caches and the vectorized
@@ -278,7 +350,6 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         state = self.__dict__.copy()
         state.pop("_cached_native_step_params", None)
         state.pop("_cached_native_rollout_params", None)
-        state.pop("_cached_native_reward_batch", None)
         state.pop("_cached_vectorized_updater", None)
         return state
 
@@ -361,6 +432,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
             rows=rows,
             cols=cols,
             walls_flat=walls_flat,
+            opponent_policy_code=self.opponent_policy.native_code,
         )
 
     def _resolve_actual_action(self, action: int) -> int:
@@ -412,7 +484,9 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         # Regular transition: build opponent move distribution then draw indices
         # in a single np.random.choice call (matches the wrapper's RNG draw order
         # for any n_samples).
-        opp_moves = self._opponent_move_probabilities_inline(state, robot_next)
+        opp_moves = self._opponent_move_probabilities_inline(
+            state, self._opponent_robot_reference(robot_current, robot_next)
+        )
         positions, probabilities = zip(*opp_moves)
         opp_indices = np.random.choice(len(positions), size=n_samples, p=probabilities)
         if n_samples == 1:
@@ -442,6 +516,46 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
             )
         return samples
 
+    def _opponent_robot_reference(
+        self, robot_current: Tuple[int, int], robot_next: Tuple[int, int]
+    ) -> Tuple[int, int]:
+        # PURSUE conditions the opponent move on the robot's post-move cell; EVADE and
+        # EVADE_WHEN_SPOTTED on its pre-move cell. Tag actions don't move the robot, so
+        # the two coincide.
+        return robot_next if self.opponent_policy is OpponentPolicy.PURSUE else robot_current
+
+    def _is_opponent_spotted(self, robot_pos: Tuple[int, int], opp_pos: Tuple[int, int]) -> bool:
+        # True iff the opponent cell lies on one of the robot's 8 laser rays,
+        # unoccluded by a wall or the grid boundary. Mirrors the ray walk in
+        # _laser_distance_inline (and the C++ disc/belief spotted predicates) but
+        # returns whether the opponent — rather than a wall — is the first hit.
+        rows, cols = self.floor_shape
+        for dr, dc in _LASER_DIRECTIONS:
+            row, col = robot_pos
+            while True:
+                row += dr
+                col += dc
+                if row < 0 or row >= rows or col < 0 or col >= cols:
+                    break
+                if (row, col) == opp_pos:
+                    return True
+                if (row, col) in self.walls:
+                    break
+        return False
+
+    def _random_move_probabilities_inline(
+        self, current_opp: Tuple[int, int]
+    ) -> List[Tuple[Tuple[int, int], float]]:
+        # Uniform 0.2 on each valid cardinal neighbour; invalid neighbours are
+        # dropped and their mass falls through to "stay" via the shared slack tail.
+        moves: List[Tuple[Tuple[int, int], float]] = []
+        for action in (0, 1, 2, 3):  # North, South, East, West
+            dr, dc = self._action_directions[action]
+            cand = (current_opp[0] + dr, current_opp[1] + dc)
+            if self._is_valid_position_inline(cand):
+                moves.append((cand, 0.2))
+        return moves
+
     def _opponent_move_probabilities_inline(
         self, state: np.ndarray, robot_pos: Tuple[int, int]
     ) -> List[Tuple[Tuple[int, int], float]]:
@@ -451,10 +565,17 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         robot_row, robot_col = robot_pos
         opp_row, opp_col = current_opp
 
-        x_moves = self._directional_moves_inline(opp_col, robot_col, opp_row, True)
-        y_moves = self._directional_moves_inline(opp_row, robot_row, opp_col, False)
+        if (
+            self.opponent_policy is OpponentPolicy.EVADE_WHEN_SPOTTED
+            and not self._is_opponent_spotted(robot_pos, current_opp)
+        ):
+            directional_moves = self._random_move_probabilities_inline(current_opp)
+        else:
+            x_moves = self._directional_moves_inline(opp_col, robot_col, opp_row, True)
+            y_moves = self._directional_moves_inline(opp_row, robot_row, opp_col, False)
+            directional_moves = x_moves + y_moves
 
-        move_probs = x_moves + y_moves + [(current_opp, 0.2)]
+        move_probs = directional_moves + [(current_opp, 0.2)]
         actual_total = sum(prob for _, prob in move_probs if prob > 0)
         if actual_total < 1.0:
             stay_index = len(move_probs) - 1
@@ -465,6 +586,15 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
     def _directional_moves_inline(
         self, opponent_coord: int, robot_coord: int, fixed_coord: int, is_horizontal: bool
     ) -> List[Tuple[Tuple[int, int], float]]:
+        # Only PURSUE puts the 0.4 directional mass on the toward cell; every other
+        # policy (EVADE, and EVADE_WHEN_SPOTTED on the spotted branch) flees to the
+        # away cell. The aligned (robot == opponent) case is policy-invariant and
+        # keeps its symmetric 0.2/0.2 split.
+        if self.opponent_policy is OpponentPolicy.PURSUE:
+            directional_toward_prob, directional_away_prob = 0.4, 0.0
+        else:
+            directional_toward_prob, directional_away_prob = 0.0, 0.4
+
         if robot_coord > opponent_coord:
             toward_pos = (
                 (fixed_coord, opponent_coord + 1)
@@ -476,7 +606,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
                 if is_horizontal
                 else (opponent_coord - 1, fixed_coord)
             )
-            toward_prob, away_prob = 0.4, 0.0
+            toward_prob, away_prob = directional_toward_prob, directional_away_prob
         elif robot_coord < opponent_coord:
             toward_pos = (
                 (fixed_coord, opponent_coord - 1)
@@ -488,7 +618,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
                 if is_horizontal
                 else (opponent_coord + 1, fixed_coord)
             )
-            toward_prob, away_prob = 0.4, 0.0
+            toward_prob, away_prob = directional_toward_prob, directional_away_prob
         else:
             toward_pos = (
                 (fixed_coord, opponent_coord + 1)
@@ -621,7 +751,9 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
 
         # Regular transition: opponent moves stochastically, terminal flag stays 0.
         if next_robot == robot_next and not next_terminal:
-            opp_moves = self._opponent_move_probabilities_inline(state, robot_next)
+            opp_moves = self._opponent_move_probabilities_inline(
+                state, self._opponent_robot_reference(robot_current, robot_next)
+            )
             for opp_pos, prob in opp_moves:
                 if next_opponent == opp_pos:
                     return prob
@@ -735,26 +867,16 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         return distance - 1.0
 
     def _is_in_dangerous_area(self, position: Tuple[int, int]) -> bool:
-        """Check if a position is within any dangerous area.
-
-        Args:
-            position: Position to check as (row, col) tuple
-
-        Returns:
-            True if position is within radius of any dangerous area center
-        """
+        """Check if a position is within any dangerous area (metrics helper)."""
         if not self.dangerous_areas:
             return False
-
         pos_row, pos_col = position
-        # Square-distance comparison avoids np.sqrt per area (~400 ns each).
         radius_sq = self.dangerous_area_radius * self.dangerous_area_radius
         for danger_row, danger_col in self.dangerous_areas:
             dr = pos_row - danger_row
             dc = pos_col - danger_col
             if dr * dr + dc * dc <= radius_sq:
                 return True
-
         return False
 
     def reward(self, state: np.ndarray, action: int, next_state: Any = None) -> float:
@@ -778,24 +900,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         else:
             next_state_arr = np.asarray(next_state, dtype=np.float64)
 
-        robot_pos = (int(state[0]), int(state[1]))
-        opponent_pos = (int(state[2]), int(state[3]))
-
-        if action == 4:  # Tag action
-            base_reward = self.tag_reward if robot_pos == opponent_pos else -self.tag_penalty
-        else:
-            base_reward = -self.step_cost  # Movement cost
-
-        # Penalty is applied against the realised next-state robot position.
-        # For walls this is effectively dead code (the transition kernel never
-        # leaves the robot inside a wall), but it is retained so the scalar
-        # path mirrors the batch path and so any future relaxation of that
-        # invariant remains correctly scored.
-        realised_pos = (int(next_state_arr[0]), int(next_state_arr[1]))
-        if realised_pos in self.walls or self._is_in_dangerous_area(realised_pos):
-            base_reward -= self.dangerous_area_penalty
-
-        return base_reward
+        return self.reward_model.compute_reward(state, action, next_state=next_state_arr)
 
     def is_terminal(self, state: np.ndarray) -> bool:
         """Check if a state is terminal."""
@@ -869,6 +974,20 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         # Discrete int actions (0..4); already hashable.
         return action
 
+    def _native_reward_variant_code(self) -> int:
+        """Map ``self.reward_model_type`` to the native kernel's variant code.
+
+        Matches the integer code emitted by the C++ kernel (``0`` = CONSTANT_HAZARD_PENALTY,
+        ``1`` = ZERO_MEAN_HAZARD_SHOCK, ``2`` = DISTANCE_DECAYED_HAZARD_PENALTY).
+        """
+        if self.reward_model_type == RewardModelType.CONSTANT_HAZARD_PENALTY:
+            return 0
+        if self.reward_model_type == RewardModelType.ZERO_MEAN_HAZARD_SHOCK:
+            return 1
+        if self.reward_model_type == RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY:
+            return 2
+        raise ValueError(f"Unknown reward model type: {self.reward_model_type}")
+
     def _get_native_rollout_params(
         self,
     ) -> Optional[Any]:
@@ -922,6 +1041,9 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         # are therefore only equivalent in distribution, not bit-by-bit.
         # If the action_sampler is not a uniform sampler over all 5 actions, fall
         # back to the Python loop so planner-specific rollout policies still work.
+        # The native kernel handles all three reward-model variants via the
+        # ``reward_variant_code`` argument; stochastic variants consume
+        # additional draws from the same module-level mt19937_64 RNG.
         params = self._get_native_rollout_params()
         if params is not None:
             state_arr = np.ascontiguousarray(np.asarray(state, dtype=np.float64))
@@ -954,6 +1076,9 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
                     tag_penalty=tag_penalty,
                     step_cost=step_cost,
                     transition_error_prob=transition_error_prob,
+                    reward_variant_code=self._native_reward_variant_code(),
+                    penalty_decay=float(self.penalty_decay),
+                    opponent_policy_code=self.opponent_policy.native_code,
                 )
             )
 
@@ -1011,17 +1136,6 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
             next_states_arr, np.asarray(action), np.asarray(observation, dtype=float)
         )
 
-    def _get_wall_grid(self) -> np.ndarray:
-        cached = getattr(self, "_wall_grid", None)
-        if cached is not None:
-            return cached
-        grid = np.zeros(self.floor_shape, dtype=bool)
-        for row, col in self.walls:
-            grid[row, col] = True
-        # pylint: disable=attribute-defined-outside-init
-        self._wall_grid = grid
-        return grid
-
     def reward_batch(
         self,
         states: Any,
@@ -1034,185 +1148,19 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         evaluated against the realised positions in ``next_states[:, :2]``
         (matching the contract honoured by
         :meth:`Environment.sample_next_step`). When it is ``None`` the
-        method resamples via :meth:`sample_next_state_batch` and scores the
-        penalty against that draw, so reward and trajectory remain
-        consistent end-to-end.
-
-        The native ``lasertag_discrete_reward_batch`` kernel computes the
-        legacy intended-position penalty and is therefore only used as a
-        fast path when the caller does not thread a realised ``next_states``
-        and the env has no walls / dangerous areas (in which case the
-        intended- and realised-position branches collapse to the same pure
-        ``-step_cost`` / tag reward). All other cases fall through to the
-        Python path so the next-state semantics are honoured.
+        method resamples via :meth:`sample_next_state_batch` whenever
+        penalty terms exist, then delegates to the reward model so reward
+        and trajectory remain consistent end-to-end.
         """
         states_arr = np.asarray(states, dtype=np.float64)
         if states_arr.ndim == 1:
             states_arr = states_arr.reshape(1, -1)
         states_arr = np.ascontiguousarray(states_arr)
 
-        next_states_arr = self._normalise_next_states(states_arr, action, next_states)
+        if next_states is None and (self.walls or self.dangerous_areas):
+            next_states = self.sample_next_state_batch(states_arr, action)
 
-        if self._can_use_native_reward_batch(next_states_arr):
-            native_fn = self._get_native_reward_batch()
-            if native_fn is not None:
-                return np.asarray(
-                    native_fn(
-                        states=states_arr,
-                        action=int(action),
-                        rows=int(self.floor_shape[0]),
-                        cols=int(self.floor_shape[1]),
-                        walls_flat=self._reward_walls_flat,
-                        n_walls=self._reward_n_walls,
-                        dangerous_areas=self._dangerous_areas_arr,
-                        n_dangerous=int(self._dangerous_areas_arr.shape[0]),
-                        dangerous_area_radius=float(self.dangerous_area_radius),
-                        dangerous_area_penalty=float(self.dangerous_area_penalty),
-                        tag_reward=float(self.tag_reward),
-                        tag_penalty=float(self.tag_penalty),
-                        step_cost=float(self.step_cost),
-                        action_directions=self._action_directions_arr,
-                    )
-                )
-        return self._compute_reward_batch_python(states_arr, action, next_states_arr)
-
-    def _normalise_next_states(
-        self,
-        states_arr: np.ndarray,
-        action: int,
-        next_states: Any,
-    ) -> Optional[np.ndarray]:
-        if next_states is None:
-            # Only resample when penalties depend on the realised position;
-            # otherwise leave None so the native fast path can short-circuit.
-            if self.walls or self.dangerous_areas:
-                return np.ascontiguousarray(self.sample_next_state_batch(states_arr, action))
-            return None
-        ns_arr = np.asarray(next_states, dtype=np.float64)
-        if ns_arr.ndim == 1:
-            ns_arr = ns_arr.reshape(1, -1)
-        return np.ascontiguousarray(ns_arr)
-
-    def _can_use_native_reward_batch(self, next_states_arr: Optional[np.ndarray]) -> bool:
-        # The native kernel computes the intended-position penalty and does
-        # not accept a realised next_states buffer. It is therefore only
-        # safe when no penalty terms exist (intended == realised in that
-        # degenerate case).
-        if next_states_arr is not None:
-            return False
-        return not self.walls and not self.dangerous_areas
-
-    def _get_native_reward_batch(self) -> Optional[Any]:
-        cached = getattr(self, "_cached_native_reward_batch", None)
-        if cached is not None:
-            return cached if cached is not False else None
-        try:
-            from POMDPPlanners.environments.laser_tag_pomdp import (  # pylint: disable=import-outside-toplevel
-                _native,
-            )
-        except ImportError:
-            # pylint: disable=attribute-defined-outside-init
-            self._cached_native_reward_batch = False
-            return None
-        fn = getattr(_native, "lasertag_discrete_reward_batch", None)
-        # pylint: disable=attribute-defined-outside-init
-        self._cached_native_reward_batch = fn if fn is not None else False
-        return fn
-
-    def _compute_reward_batch_python(
-        self,
-        states: np.ndarray,
-        action: int,
-        next_states: Optional[np.ndarray] = None,
-    ) -> np.ndarray:
-        n = states.shape[0]
-        terminal_mask = states[:, 4].astype(bool)
-
-        robot_r = states[:, 0].astype(np.int64)
-        robot_c = states[:, 1].astype(np.int64)
-        opp_r = states[:, 2].astype(np.int64)
-        opp_c = states[:, 3].astype(np.int64)
-
-        rewards = self._compute_base_rewards(action, robot_r, robot_c, opp_r, opp_c, n)
-
-        # Realised post-action robot positions for the penalty check. When
-        # ``next_states`` is None, fall back to the legacy intended-position
-        # branch so callers that explicitly invoke the python helper without
-        # threading a draw still observe deterministic behaviour identical
-        # to the pre-fix implementation.
-        if next_states is None:
-            int_r, int_c = self._compute_intended_positions(action, robot_r, robot_c)
-        else:
-            int_r = next_states[:, 0].astype(np.int64)
-            int_c = next_states[:, 1].astype(np.int64)
-
-        self._apply_area_penalty_batch_at(rewards, int_r, int_c)
-
-        rewards[terminal_mask] = 0.0
-        return rewards
-
-    def _compute_base_rewards(
-        self,
-        action: int,
-        robot_r: np.ndarray,
-        robot_c: np.ndarray,
-        opp_r: np.ndarray,
-        opp_c: np.ndarray,
-        n: int,
-    ) -> np.ndarray:
-        if action == 4:
-            at_same_pos = (robot_r == opp_r) & (robot_c == opp_c)
-            rewards = np.where(at_same_pos, float(self.tag_reward), float(-self.tag_penalty))
-        else:
-            rewards = np.full(n, float(-self.step_cost), dtype=np.float64)
-        return rewards
-
-    def _compute_intended_positions(
-        self, action: int, robot_r: np.ndarray, robot_c: np.ndarray
-    ) -> Tuple[np.ndarray, np.ndarray]:
-        if action in (0, 1, 2, 3):
-            dr, dc = self._action_directions[action]
-            return robot_r + dr, robot_c + dc
-        return robot_r.copy(), robot_c.copy()
-
-    def _apply_area_penalty_batch(
-        self, rewards: np.ndarray, action: int, robot_r: np.ndarray, robot_c: np.ndarray
-    ) -> None:
-        int_r, int_c = self._compute_intended_positions(action, robot_r, robot_c)
-        self._apply_area_penalty_batch_at(rewards, int_r, int_c)
-
-    def _apply_area_penalty_batch_at(
-        self,
-        rewards: np.ndarray,
-        positions_r: np.ndarray,
-        positions_c: np.ndarray,
-    ) -> None:
-        wall_mask = self._compute_wall_hit_mask(positions_r, positions_c)
-        danger_mask = self._compute_danger_mask(positions_r, positions_c)
-
-        penalty_mask = wall_mask | danger_mask
-        rewards[penalty_mask] -= self.dangerous_area_penalty
-
-    def _compute_wall_hit_mask(self, int_r: np.ndarray, int_c: np.ndarray) -> np.ndarray:
-        rows, cols = self.floor_shape
-        wall_grid = self._get_wall_grid()
-
-        # Out-of-bounds positions are NOT in self.walls, so they return False here.
-        # We clip to grid bounds for safe indexing, then zero-out OOB entries via the mask.
-        clipped_r = np.clip(int_r, 0, rows - 1)
-        clipped_c = np.clip(int_c, 0, cols - 1)
-        in_bounds = (int_r >= 0) & (int_r < rows) & (int_c >= 0) & (int_c < cols)
-        return in_bounds & wall_grid[clipped_r, clipped_c]
-
-    def _compute_danger_mask(self, int_r: np.ndarray, int_c: np.ndarray) -> np.ndarray:
-        if not self.dangerous_areas:
-            return np.zeros(len(int_r), dtype=bool)
-        centers = np.array(self.dangerous_areas, dtype=np.float64)  # shape (D, 2)
-        # Euclidean distance from each intended position to each danger center: (N, D)
-        dr = int_r[:, np.newaxis] - centers[:, 0]
-        dc = int_c[:, np.newaxis] - centers[:, 1]
-        dist = np.sqrt(dr**2 + dc**2)
-        return np.asarray((dist <= self.dangerous_area_radius).any(axis=1), dtype=bool)
+        return self.reward_model.compute_reward_batch(states_arr, action, next_states=next_states)
 
     def _count_episode_metrics(
         self, history: History, action_dirs: Dict[int, Tuple[int, int]]

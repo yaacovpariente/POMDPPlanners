@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """POMCPOW (Partially Observable Monte Carlo Planning with Optimistic Weights) Algorithm.
 
 This module implements POMCPOW, an advanced Monte Carlo Tree Search algorithm for POMDP

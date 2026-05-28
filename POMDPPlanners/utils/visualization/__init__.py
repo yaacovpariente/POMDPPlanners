@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Visualization utilities for POMDPPlanners.
 
 This module provides plotting and visualization functions for analyzing

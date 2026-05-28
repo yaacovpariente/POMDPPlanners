@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 from typing import List, Tuple
 
 import numpy as np
@@ -202,7 +204,7 @@ class EnvironmentConfigsAPI:
         GOAL_STATE_RADIUS = 1.5  # Radius around goal to consider as reached
         BEACON_RADIUS = 1.0  # Radius around beacons for observations
         OBSTACLE_RADIUS = 1.5  # Radius around obstacles for collision
-        REWARD_MODEL_TYPE = RewardModelType.STANDARD  # Standard reward model
+        REWARD_MODEL_TYPE = RewardModelType.CONSTANT_HAZARD_PENALTY  # Standard reward model
         PENALTY_DECAY = 1.0  # No decay in penalty
 
         pomdp = ContinuousLightDarkPOMDPDiscreteActions(
@@ -249,7 +251,7 @@ class EnvironmentConfigsAPI:
         GOAL_STATE_RADIUS = 1.5  # Radius around goal to consider as reached
         BEACON_RADIUS = 1.0  # Radius around beacons for observations
         OBSTACLE_RADIUS = 1.5  # Radius around obstacles for collision
-        REWARD_MODEL_TYPE = RewardModelType.STANDARD  # Standard reward model
+        REWARD_MODEL_TYPE = RewardModelType.CONSTANT_HAZARD_PENALTY  # Standard reward model
         PENALTY_DECAY = 1.0  # No decay in penalty
 
         pomdp = ContinuousLightDarkPOMDP(
@@ -372,7 +374,7 @@ class RiskAverseEnvironmentConfigsAPI:
         GOAL_STATE_RADIUS = 1.5  # Radius around goal to consider as reached
         BEACON_RADIUS = 1.0  # Radius around beacons for observations
         OBSTACLE_RADIUS = 1.2  # Radius around obstacles for collision
-        REWARD_MODEL_TYPE = RewardModelType.DANGEROUS_STATES  # Standard reward model
+        REWARD_MODEL_TYPE = RewardModelType.ZERO_MEAN_HAZARD_SHOCK  # Standard reward model
         PENALTY_DECAY = 1.0  # No decay in penalty
 
         pomdp = ContinuousLightDarkPOMDPDiscreteActions(
@@ -423,7 +425,7 @@ class RiskAverseEnvironmentConfigsAPI:
         GOAL_STATE_RADIUS = 1.5  # Radius around goal to consider as reached
         BEACON_RADIUS = 1.0  # Radius around beacons for observations
         OBSTACLE_RADIUS = 1.2  # Radius around obstacles for collision
-        REWARD_MODEL_TYPE = RewardModelType.DANGEROUS_STATES  # Standard reward model
+        REWARD_MODEL_TYPE = RewardModelType.ZERO_MEAN_HAZARD_SHOCK  # Standard reward model
         PENALTY_DECAY = 1.0  # No decay in penalty
 
         pomdp = ContinuousLightDarkPOMDP(

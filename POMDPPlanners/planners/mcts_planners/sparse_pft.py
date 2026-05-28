@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Sparse-PFT (Sparse Particle Filter Tree) Algorithm for POMDP Planning.
 
 Implementation note:

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for the Push belief factory.
 
 This module tests :func:`create_push_belief` from

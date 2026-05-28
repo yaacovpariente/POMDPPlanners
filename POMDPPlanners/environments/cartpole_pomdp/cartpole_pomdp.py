@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """CartPole POMDP Environment Implementation.
 
 This module implements a CartPole balancing task as a POMDP, where an agent

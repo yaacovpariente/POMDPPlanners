@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Shared plotting utilities for visualization modules."""
 
 import logging

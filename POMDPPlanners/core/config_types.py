@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Configuration data structures for POMDP components.
 
 This module defines standardized configuration data structures used throughout

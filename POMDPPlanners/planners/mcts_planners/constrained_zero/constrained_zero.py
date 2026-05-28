@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """ConstrainedZero planner: neural MCTS for Chance-Constrained POMDPs.
 
 This module implements the ConstrainedZero algorithm, which extends BetaZero to solve

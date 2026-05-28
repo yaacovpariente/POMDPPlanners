@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Factory for pre-configured Gaussian beliefs for the Continuous Light-Dark POMDP.
 
 This module provides a single factory function that creates a

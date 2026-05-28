@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for LaserTag POMDP visualization functionality.
 
 This module tests the LaserTag POMDP visualization features, focusing on:

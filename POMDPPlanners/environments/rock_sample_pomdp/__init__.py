@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """RockSample POMDP Environment Module.
 
 This module provides the RockSample POMDP environment implementation and related
@@ -10,6 +12,7 @@ Classes:
 """
 
 from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp import (
+    RewardModelType,
     RockSamplePOMDP,
     RockSampleState,
     create_random_rock_sample,
@@ -27,6 +30,7 @@ from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_visualizer import 
 )
 
 __all__ = [
+    "RewardModelType",
     "RockSamplePOMDP",
     "RockSampleState",
     "RockSampleVisualizer",

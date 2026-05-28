@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Numerical equivalence tests for the native Continuous LaserTag extension.
 
 Verifies that the C++ ``_native`` sampling / probability code matches the
@@ -41,7 +43,7 @@ def _build_transition_kernel(
         action=np.asarray(action, dtype=np.float64),
         robot_covariance=env.robot_transition_cov_matrix,
         opponent_covariance=env.opponent_transition_cov_matrix,
-        pursuit_speed=env.pursuit_speed,
+        evasion_speed=env.evasion_speed,
         walls=np.asarray(env.walls, dtype=np.float64).reshape(-1, 4),
         grid_size=np.asarray(env.grid_size, dtype=np.float64),
         robot_radius=env.robot_radius,

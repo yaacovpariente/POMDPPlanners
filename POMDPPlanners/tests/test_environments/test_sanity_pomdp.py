@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for Sanity POMDP environment.
 
 This module tests the Sanity POMDP environment, focusing on:
@@ -361,7 +363,7 @@ class TestSanityStateTransition:
         log_probs = sanity_pomdp.transition_log_probability(state=0, action=0, next_states=values)
         probs = np.exp(log_probs)
         expected = np.array([1.0, 0.0, 1.0, 0.0])
-        np.testing.assert_allclose(probs, expected, atol=1e-200)
+        np.testing.assert_array_equal(probs, expected)
 
     def test_probability_action_1(self, sanity_pomdp):
         """Test probability calculation for action 1.
@@ -378,7 +380,7 @@ class TestSanityStateTransition:
         log_probs = sanity_pomdp.transition_log_probability(state=0, action=1, next_states=values)
         probs = np.exp(log_probs)
         expected = np.array([0.0, 1.0, 0.0, 1.0])
-        np.testing.assert_allclose(probs, expected, atol=1e-200)
+        np.testing.assert_array_equal(probs, expected)
 
 
 class TestSanityObservation:
@@ -456,7 +458,7 @@ class TestSanityObservation:
         )
         probs = np.exp(log_probs)
         expected = np.array([1.0, 0.0, 1.0, 0.0])
-        np.testing.assert_allclose(probs, expected, atol=1e-200)
+        np.testing.assert_array_equal(probs, expected)
 
     def test_probability_state_1(self, sanity_pomdp):
         """Test probability calculation for state 1.
@@ -475,7 +477,49 @@ class TestSanityObservation:
         )
         probs = np.exp(log_probs)
         expected = np.array([0.0, 1.0, 0.0, 1.0])
-        np.testing.assert_allclose(probs, expected, atol=1e-200)
+        np.testing.assert_array_equal(probs, expected)
+
+    def test_impossible_transition_log_prob_is_neg_inf(self, sanity_pomdp):
+        """Regression: impossible state transitions must return log-prob -inf, not finite tiny value.
+
+        Purpose: Validates that impossible transitions are flagged as -inf log-prob so particle-filter
+        importance weights are exactly zero (no ghost mass)
+
+        Given: SanityPOMDP with deterministic transitions (action 0 -> state 0, action 1 -> state 1)
+        When: transition_log_probability is queried with the impossible next_state for each action
+        Then: All impossible entries equal -np.inf (not log(epsilon))
+
+        Test type: unit
+        """
+        log_probs_a0 = sanity_pomdp.transition_log_probability(
+            state=0, action=0, next_states=[1, 1, 1]
+        )
+        log_probs_a1 = sanity_pomdp.transition_log_probability(
+            state=0, action=1, next_states=[0, 0, 0]
+        )
+        assert np.all(np.isneginf(log_probs_a0))
+        assert np.all(np.isneginf(log_probs_a1))
+
+    def test_impossible_observation_log_prob_is_neg_inf(self, sanity_pomdp):
+        """Regression: impossible observations must return log-prob -inf, not finite tiny value.
+
+        Purpose: Validates that observations of impossible outcomes are flagged as -inf log-prob so
+        belief updates assign exactly zero weight (no ghost mass)
+
+        Given: SanityPOMDP with deterministic observations (next_state == observation)
+        When: observation_log_probability is queried with the impossible observation for each state
+        Then: All impossible entries equal -np.inf (not log(epsilon))
+
+        Test type: unit
+        """
+        log_probs_s0 = sanity_pomdp.observation_log_probability(
+            next_state=0, action=0, observations=[1, 1, 1]
+        )
+        log_probs_s1 = sanity_pomdp.observation_log_probability(
+            next_state=1, action=0, observations=[0, 0, 0]
+        )
+        assert np.all(np.isneginf(log_probs_s0))
+        assert np.all(np.isneginf(log_probs_s1))
 
 
 class TestSanityInitialStateDist:

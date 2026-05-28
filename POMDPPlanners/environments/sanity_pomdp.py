@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Sanity Check POMDP Environment Implementation.
 
 This module implements a simple test environment used for debugging and sanity
@@ -235,8 +237,7 @@ class SanityPOMDP(DiscreteActionsEnvironment):
     ) -> np.ndarray:
         next_states_arr = np.asarray(next_states)
         expected = 0 if action == 0 else 1
-        probs = np.where(next_states_arr == expected, 1.0, 0.0)
-        return np.log(probs + 1e-300)
+        return np.where(next_states_arr == expected, 0.0, -np.inf)
 
     def observation_log_probability(
         self,
@@ -245,8 +246,7 @@ class SanityPOMDP(DiscreteActionsEnvironment):
         observations: Union[Sequence[int], np.ndarray],
     ) -> np.ndarray:
         observations_arr = np.asarray(observations)
-        probs = np.where(observations_arr == next_state, 1.0, 0.0)
-        return np.log(probs + 1e-300)
+        return np.where(observations_arr == next_state, 0.0, -np.inf)
 
     def reward(self, state: int, action: int, next_state: Any = None) -> float:
         # Transition is deterministic: action 0 -> next_state 0 (reward 1.0),

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 import random
 from bisect import bisect
 from collections.abc import Hashable
@@ -25,7 +27,7 @@ class DiscreteLightDarkPOMDPMetrics(Enum):
     OBSTACLE_HIT_RATE = "obstacle_hit_rate"
     AVG_OBSTACLE_HIT_COUNTER = "avg_obstacle_hit_counter"
     OUT_OF_GRID_RATE = "out_of_grid_rate"
-    AVG_DANGEROUS_STATES_COUNTER = "avg_dangerous_states_counter"
+    AVG_ZERO_MEAN_HAZARD_SHOCK_COUNTER = "avg_high_variance_states_counter"
 
 
 class ObservationModelType(Enum):
@@ -828,7 +830,7 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
 
         Returns:
             List containing metric names: goal_reaching_rate, obstacle_hit_rate,
-            avg_obstacle_hit_counter, out_of_grid_rate, and avg_dangerous_states_counter
+            avg_obstacle_hit_counter, out_of_grid_rate, and avg_high_variance_states_counter
         """
         return [metric.value for metric in DiscreteLightDarkPOMDPMetrics]
 
@@ -837,7 +839,7 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
         obstacle_hits = []
         obstacle_hit_counter = []
         out_of_grid = []
-        dangerous_states_counter = []
+        high_variance_states_counter = []
         for history in histories:
             goal_reached_in_history = False
             obstacle_hit_in_history = False
@@ -865,8 +867,8 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
             obstacle_hits.append(1 if obstacle_hit_in_history else 0)
             obstacle_hit_counter.append(obstacle_hit_counter_in_history)
             out_of_grid.append(1 if out_of_grid_in_history else 0)
-            # Sum obstacle hits and out-of-grid occurrences as dangerous states
-            dangerous_states_counter.append(
+            # Sum obstacle hits and out-of-grid occurrences as high-variance states
+            high_variance_states_counter.append(
                 obstacle_hit_counter_in_history + out_of_grid_counter_in_history
             )
 
@@ -874,13 +876,13 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
         avg_obstacle_hits = float(np.mean(obstacle_hits))
         avg_obstacle_hit_counter = float(np.mean(obstacle_hit_counter))
         avg_out_of_grid = float(np.mean(out_of_grid))
-        avg_dangerous_states_counter = float(np.mean(dangerous_states_counter))
+        avg_high_variance_states_counter = float(np.mean(high_variance_states_counter))
         goal_reached_ci = confidence_interval(data=goal_reached, confidence=0.95)
         obstacle_hits_ci = confidence_interval(data=obstacle_hits, confidence=0.95)
         obstacle_hit_counter_ci = confidence_interval(data=obstacle_hit_counter, confidence=0.95)
         out_of_grid_ci = confidence_interval(data=out_of_grid, confidence=0.95)
-        dangerous_states_counter_ci = confidence_interval(
-            data=dangerous_states_counter, confidence=0.95
+        high_variance_states_counter_ci = confidence_interval(
+            data=high_variance_states_counter, confidence=0.95
         )
 
         return [
@@ -909,10 +911,10 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
                 upper_confidence_bound=out_of_grid_ci[1],
             ),
             MetricValue(
-                name=DiscreteLightDarkPOMDPMetrics.AVG_DANGEROUS_STATES_COUNTER.value,
-                value=avg_dangerous_states_counter,
-                lower_confidence_bound=dangerous_states_counter_ci[0],
-                upper_confidence_bound=dangerous_states_counter_ci[1],
+                name=DiscreteLightDarkPOMDPMetrics.AVG_ZERO_MEAN_HAZARD_SHOCK_COUNTER.value,
+                value=avg_high_variance_states_counter,
+                lower_confidence_bound=high_variance_states_counter_ci[0],
+                upper_confidence_bound=high_variance_states_counter_ci[1],
             ),
         ]
 

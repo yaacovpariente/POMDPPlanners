@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 from unittest.mock import MagicMock, Mock, patch
 
 import pandas as pd

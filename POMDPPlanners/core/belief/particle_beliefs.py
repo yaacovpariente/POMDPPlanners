@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Particle-based belief state representations for POMDP environments.
 
 This module provides particle filter implementations for approximate belief

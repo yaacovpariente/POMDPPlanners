@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for Push POMDP environment.
 
 This module tests the Push POMDP environment, focusing on:
@@ -9,6 +11,7 @@ This module tests the Push POMDP environment, focusing on:
 # pylint: disable=protected-access  # Tests need to access protected members
 
 import random
+from typing import Any, Dict, List
 
 import numpy as np
 import pytest
@@ -1712,26 +1715,34 @@ class TestPushDangerousAreas:
         with pytest.raises(ValueError, match="dangerous_area_hit_probability"):
             PushPOMDP(discount_factor=0.95, dangerous_area_hit_probability=bad_value)
 
-    def test_native_rollout_bypassed_when_hit_probability_lt_one(self, monkeypatch):
-        """Stochastic dangerous-area hit probability bypasses native rollout.
+    def test_native_rollout_used_when_hit_probability_lt_one(self, monkeypatch):
+        """Stochastic dangerous-area hit probability is handled by the native rollout.
 
-        Purpose: Validates that ``simulate_random_rollout`` falls back to
-            the Python rollout when ``dangerous_area_hit_probability < 1.0``,
-            so per-step Bernoulli draws are honoured.
+        Purpose: Validates that ``simulate_random_rollout`` routes through
+            the native C++ kernel even when
+            ``dangerous_area_hit_probability < 1.0`` because the kernel
+            now applies the Bernoulli draw internally (via
+            ``dangerous_contribution``). Regression check for the
+            removal of the Python fallback gate.
 
         Given: A PushPOMDP with ``dangerous_area_hit_probability=0.5``.
-        When: ``simulate_random_rollout`` is invoked after monkeypatching
-            ``_native.simulate_rollout_discrete`` to raise.
-        Then: No exception is raised because the native path was bypassed.
+        When: ``simulate_random_rollout`` is invoked after wrapping
+            ``_native.simulate_rollout_discrete`` to record calls.
+        Then: The native kernel is invoked exactly once with
+            ``dangerous_area_hit_probability=0.5`` threaded through.
 
         Test type: unit
         """
         env = self._danger_env(hit_probability=0.5)
 
-        def _explode(**_kwargs):
-            raise AssertionError("native simulate_rollout_discrete must not be called")
+        call_kwargs: List[Dict[str, Any]] = []
+        original = push_native.simulate_rollout_discrete
 
-        monkeypatch.setattr(push_native, "simulate_rollout_discrete", _explode)
+        def _record(**kwargs):
+            call_kwargs.append(kwargs)
+            return original(**kwargs)
+
+        monkeypatch.setattr(push_native, "simulate_rollout_discrete", _record)
 
         class _Sampler:
             def sample(self):
@@ -1743,6 +1754,9 @@ class TestPushDangerousAreas:
             max_depth=5,
             discount_factor=0.95,
         )
+
+        assert len(call_kwargs) == 1
+        assert call_kwargs[0]["dangerous_area_hit_probability"] == pytest.approx(0.5)
 
     def test_reward_range_includes_dangerous_area_penalty(self):
         """Reward range lower bound shifts when a dangerous area is configured.
@@ -1976,21 +1990,6 @@ class TestRewardBatchMatchesScalarLoop:
 class TestPushNativeSimulateRollout:
     """Tests for the native C++ simulate_rollout_discrete entry point."""
 
-    @pytest.mark.xfail(
-        reason=(
-            "C++ kernel still scores obstacle/danger penalties against the "
-            "intended position (state + action_vector) — the legacy "
-            "pre-realised-next-state semantics. The Python reward path was "
-            "fixed to use the realised next_state; the C++ kernel needs a "
-            "matching rebuild before this parity test passes again. "
-            "TODO(c++): port the realised-next-state penalty check to "
-            "_cpp/continuous_push.cpp:simulate_rollout_discrete and rebuild "
-            "_native.so. Until then ``simulate_random_rollout`` routes around "
-            "the C++ kernel when obstacles/danger are configured, so the "
-            "user-facing API remains correct."
-        ),
-        strict=True,
-    )
     def test_push_native_simulate_rollout_matches_python(self):
         """Native C++ rollout must produce the same discounted return as the Python reference.
 

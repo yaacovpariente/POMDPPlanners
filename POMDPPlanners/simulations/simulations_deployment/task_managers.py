@@ -1,9 +1,12 @@
+# SPDX-License-Identifier: MIT
+
 import gc
+import logging
 import os
 import time
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import psutil
 from dask.cache import Cache
@@ -20,6 +23,8 @@ from POMDPPlanners.core.simulation import (
     TaskManager,
     TaskManagerExternalDB,
 )
+
+_dask_logger = logging.getLogger(__name__)
 
 
 class TaskManagerType(Enum):
@@ -55,7 +60,36 @@ class DaskTaskManager(TaskManager):
         self.client: Optional[Client] = None
         self.cache = None
         self.cache_registered = False  # Track if cache was registered
+        self._on_progress: Optional[Callable[[], None]] = None
         self._initialize_client()
+
+    def set_progress_callback(self, callback: Optional[Callable[[], None]]) -> None:
+        """Register a callback invoked once per completed task.
+
+        The callback runs in a Dask client thread (parent process) as each
+        :class:`dask.distributed.Future` resolves. It is safe to touch
+        parent-only resources (e.g. SQLite connections); ``ProgressDB``
+        already opens a fresh connection per call and uses WAL +
+        ``busy_timeout=5000`` so concurrent client-thread callbacks
+        serialise cleanly. Exceptions raised by the callback are caught
+        and logged at DEBUG level so a flaky callback cannot break the
+        run.
+
+        Args:
+            callback: A zero-argument callable, or ``None`` to clear an
+                existing callback.
+        """
+        self._on_progress = callback
+
+    def _on_done_callback(self, future: Future) -> None:
+        del future  # callback only needs the side-effect, not the result
+        callback = self._on_progress
+        if callback is None:
+            return
+        try:
+            callback()
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            _dask_logger.debug("Dask progress callback raised: %s", exc)
 
     def _initialize_client(self):
         """Initialize Dask client and cache with persistence."""
@@ -95,6 +129,8 @@ class DaskTaskManager(TaskManager):
             future = self.client.submit(
                 task.run, key=task.get_config_id()  # Use task's public config ID as key
             )
+            if self._on_progress is not None:
+                future.add_done_callback(self._on_done_callback)
             futures.append(future)
 
         return futures
@@ -238,6 +274,41 @@ class JoblibTaskManager(TaskManagerExternalDB):
         # Create a cached version of the task runner
         self._cached_run = self.memory.cache(self._run_single_task)
 
+        self._on_progress: Optional[Callable[[], None]] = None
+
+    def set_progress_callback(self, callback: Optional[Callable[[], None]]) -> None:
+        """Register a callback invoked once per completed task.
+
+        The callback runs in the parent process inside the joblib generator
+        loop, so it is safe to touch parent-only resources (e.g. SQLite
+        connections). Exceptions raised by the callback are caught and
+        logged at DEBUG level so a flaky callback cannot break the run.
+
+        The callback is intentionally excluded from this object's pickled
+        state (via :meth:`__getstate__`) so that joblib's :class:`Memory`
+        cache, which hashes function arguments (including ``self``), can
+        still serialize the task manager even when the callback closes
+        over non-picklable parent objects such as a live notifier or
+        simulator.
+
+        Args:
+            callback: A zero-argument callable, or ``None`` to clear an
+                existing callback.
+        """
+        self._on_progress = callback
+
+    def __getstate__(self) -> Dict[str, Any]:
+        # Drop the progress callback from the pickled state so joblib's
+        # Memory cache hashing does not have to serialize whatever the
+        # caller closed over (typically the live simulator + notifier).
+        state = self.__dict__.copy()
+        state["_on_progress"] = None
+        return state
+
+    def __setstate__(self, state: Dict[str, Any]) -> None:
+        for key, value in state.items():
+            setattr(self, key, value)
+
     def _run_single_task(self, task: SimulationTask) -> Any:
         """Run a single task and return its result.
 
@@ -306,18 +377,35 @@ class JoblibTaskManager(TaskManagerExternalDB):
         return tqdm_logger_callback
 
     def _execute_tasks_parallel(
-        self, tasks: List[SimulationTask], start_time: float
-    ) -> list:  # pylint: disable=unused-argument
-        """Execute tasks in parallel using joblib with progress tracking."""
+        self,
+        tasks: List[SimulationTask],
+        start_time: float,  # pylint: disable=unused-argument
+    ) -> list:
+        """Execute tasks in parallel using joblib with progress tracking.
 
-        # Use tqdm with conditional disabling based on no_logs
-        with tqdm(tasks, desc="Running tasks", disable=self.no_logs) as pbar:
-            results = list(
-                Parallel(n_jobs=self.n_jobs, verbose=self.verbose)(
-                    delayed(self._cached_run)(task) for task in pbar
-                )
-            )
+        Uses ``return_as="generator"`` so results are yielded as they
+        complete in the parent process. After each completion, the
+        registered :meth:`set_progress_callback` callable (if any) is
+        invoked — this is the hook the simulator uses to write per-episode
+        heartbeats.
+        """
+        parallel = Parallel(n_jobs=self.n_jobs, verbose=self.verbose, return_as="generator")
+        results: list = []
+        with tqdm(total=len(tasks), desc="Running tasks", disable=self.no_logs) as pbar:
+            for result in parallel(delayed(self._cached_run)(task) for task in tasks):
+                results.append(result)
+                pbar.update(1)
+                self._fire_progress_callback()
         return results
+
+    def _fire_progress_callback(self) -> None:
+        callback = self._on_progress
+        if callback is None:
+            return
+        try:
+            callback()
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            self.logger.debug("Progress callback raised: %s", exc)
 
     def _log_completion_statistics(self, results: list, start_time: float) -> None:
         """Log completion statistics and cache information."""

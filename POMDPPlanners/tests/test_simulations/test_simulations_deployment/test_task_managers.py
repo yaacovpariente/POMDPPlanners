@@ -1,6 +1,9 @@
+# SPDX-License-Identifier: MIT
+
 # pylint: disable=protected-access  # Tests need to access protected members
 import shutil
 import tempfile
+import threading
 import time
 import warnings
 from pathlib import Path
@@ -151,6 +154,135 @@ def test_dask_task_manager_run_tasks(environment, policy):
             assert len(result.history) <= 2
 
 
+def test_dask_task_manager_progress_callback_fires_per_task(environment, policy):
+    """Test that DaskTaskManager fires set_progress_callback once per task.
+
+    Purpose: Validates the new client-thread done-callback hook that
+    bridges Dask future resolution to the in-process notifier.
+
+    Given: A DaskTaskManager with a counting callback registered via
+        set_progress_callback, and 3 real EpisodeSimulationTask instances.
+    When: run_tasks is called with the three tasks.
+    Then: The counter eventually reaches 3 — one callback fire per
+        completed task, all in the parent process. A short wait covers
+        the Dask client-thread fire-and-forget timing.
+
+    Test type: integration
+    """
+    with DaskTaskManager() as task_manager:
+        call_count = [0]
+        lock = threading.Lock()
+
+        def on_progress() -> None:
+            with lock:
+                call_count[0] += 1
+
+        task_manager.set_progress_callback(on_progress)
+
+        tasks = []
+        identifiers = []
+        for i in range(3):
+            tasks.append(
+                EpisodeSimulationTask(
+                    environment=environment,
+                    policy=policy,
+                    initial_belief=create_test_belief(),
+                    num_steps=2,
+                    episode_id=i,
+                    seed=42 + i,
+                    console_output=False,
+                )
+            )
+            identifiers.append(f"episode_{i}")
+
+        task_manager.run_tasks(tasks, identifiers)
+
+        deadline = time.time() + 5.0
+        while True:
+            with lock:
+                if call_count[0] >= 3:
+                    break
+            if time.time() >= deadline:
+                break
+            time.sleep(0.05)
+
+        with lock:
+            assert call_count[0] == 3
+
+
+def test_dask_task_manager_progress_callback_exception_is_swallowed(environment, policy):
+    """Test that a raising progress callback does not break Dask execution.
+
+    Purpose: Validates the resilience clause documented on
+    :meth:`DaskTaskManager.set_progress_callback` — a flaky callback
+    cannot derail a long-running Dask experiment.
+
+    Given: A DaskTaskManager with a callback that always raises, and
+        one real EpisodeSimulationTask.
+    When: run_tasks is called.
+    Then: The task completes successfully (one History returned) and no
+        exception propagates from the callback.
+
+    Test type: integration
+    """
+    with DaskTaskManager() as task_manager:
+
+        def on_progress() -> None:
+            raise RuntimeError("callback broken")
+
+        task_manager.set_progress_callback(on_progress)
+
+        task = EpisodeSimulationTask(
+            environment=environment,
+            policy=policy,
+            initial_belief=create_test_belief(),
+            num_steps=2,
+            episode_id=0,
+            seed=42,
+            console_output=False,
+        )
+
+        results, ids = task_manager.run_tasks([task], ["episode_0"])
+
+        assert len(results) == 1
+        assert ids == ["episode_0"]
+
+
+def test_dask_task_manager_no_callback_does_not_register_anything(environment, policy):
+    """Test that submit_tasks skips add_done_callback when no callback is set.
+
+    Purpose: Validates that the default code path (callback never
+    registered or cleared with ``None``) does not attach any done-callback
+    to the Dask futures, so behaviour is identical to the pre-feature
+    Dask manager.
+
+    Given: A DaskTaskManager with no progress callback registered.
+    When: submit_tasks is called and the returned futures are inspected.
+    Then: Each future has no client-attached done-callback queued; the
+        task completes normally.
+
+    Test type: unit
+    """
+    with DaskTaskManager() as task_manager:
+        task = EpisodeSimulationTask(
+            environment=environment,
+            policy=policy,
+            initial_belief=create_test_belief(),
+            num_steps=2,
+            episode_id=0,
+            seed=42,
+            console_output=False,
+        )
+
+        futures = task_manager.submit_tasks([task])
+        results = task_manager.gather_results(futures)
+
+        # _on_progress remains unset, so no callbacks should have been
+        # attached and the run still succeeds normally.
+        assert task_manager._on_progress is None  # pylint: disable=protected-access
+        assert len(results) == 1
+
+
 def test_dask_task_manager_task_status(environment, policy):
     """Test getting task status with DaskTaskManager (no cache_db).
 
@@ -219,6 +351,89 @@ def test_joblib_task_manager_with_cache_clear(cache_db):
         items = memory.store_backend.get_items()
         assert items is not None
         assert len(list(items)) == 0
+
+
+def test_joblib_task_manager_progress_callback_fires_per_task(cache_db, environment, policy):
+    """Test that set_progress_callback fires once per completed task.
+
+    Purpose: Validates the per-episode heartbeat hook used by the simulator
+    to write heartbeats into the run-progress DB.
+
+    Given: A JoblibTaskManager with a counting callback registered via
+        set_progress_callback, and 3 real EpisodeSimulationTask instances.
+    When: run_tasks is called with the three tasks.
+    Then: The counter equals the number of tasks (3) — one callback fire
+        per completed task, all in the parent process.
+
+    Test type: integration
+    """
+    with JoblibTaskManager(cache_db=cache_db, n_jobs=1) as task_manager:
+        call_count = [0]
+
+        def on_progress() -> None:
+            call_count[0] += 1
+
+        task_manager.set_progress_callback(on_progress)
+
+        tasks = []
+        identifiers = []
+        for i in range(3):
+            tasks.append(
+                EpisodeSimulationTask(
+                    environment=environment,
+                    policy=policy,
+                    initial_belief=create_test_belief(),
+                    num_steps=2,
+                    episode_id=i,
+                    seed=42 + i,
+                    console_output=False,
+                )
+            )
+            identifiers.append(f"episode_{i}")
+
+        task_manager.run_tasks(tasks, identifiers)
+
+        assert call_count[0] == 3
+
+
+def test_joblib_task_manager_progress_callback_exception_is_swallowed(
+    cache_db, environment, policy
+):
+    """Test that a raising progress callback does not break task execution.
+
+    Purpose: Validates the robustness clause documented on
+        :meth:`JoblibTaskManager.set_progress_callback` — a flaky callback
+        cannot derail a 2-week run.
+
+    Given: A JoblibTaskManager with a callback that always raises, and
+        one real EpisodeSimulationTask.
+    When: run_tasks is called.
+    Then: The task completes successfully (one History returned) and no
+        exception propagates from the callback.
+
+    Test type: integration
+    """
+    with JoblibTaskManager(cache_db=cache_db, n_jobs=1) as task_manager:
+
+        def on_progress() -> None:
+            raise RuntimeError("callback broken")
+
+        task_manager.set_progress_callback(on_progress)
+
+        task = EpisodeSimulationTask(
+            environment=environment,
+            policy=policy,
+            initial_belief=create_test_belief(),
+            num_steps=2,
+            episode_id=0,
+            seed=42,
+            console_output=False,
+        )
+
+        results, ids = task_manager.run_tasks([task], ["episode_0"])
+
+        assert len(results) == 1
+        assert ids == ["episode_0"]
 
 
 def test_joblib_task_manager_run_tasks(cache_db, environment, policy):

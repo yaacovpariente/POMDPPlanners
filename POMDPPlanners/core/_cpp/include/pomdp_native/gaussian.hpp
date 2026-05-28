@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 // N-dimensional Gaussian with Cholesky-factored covariance, templated on
 // the compile-time dimension.
 //

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Continuous LaserTag POMDP Visualization Module.
 
 This module provides visualization for the continuous-space LaserTag

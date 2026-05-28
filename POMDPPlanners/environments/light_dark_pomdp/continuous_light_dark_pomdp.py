@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Continuous Light-Dark POMDP Environment Implementation.
 
 This module implements the continuous Light-Dark domain, a classic POMDP benchmark
@@ -51,8 +53,8 @@ from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.numba_ke
 from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
 from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_reward_models import (
     BaseLightDarkRewardModel,
-    ContinuousLDDangerousStatesRewardModel,
-    ContinuousLightDarkDecayingHitProbabilityRewardModel,
+    ContinuousLDZeroMeanHazardShockRewardModel,
+    ContinuousLightDarkDistanceDecayedHazardPenaltyRewardModel,
     ContinuousLightDarkRewardModel,
 )
 from POMDPPlanners.utils.numba_kernels import (
@@ -71,13 +73,23 @@ class ContinuousLightDarkPOMDPMetrics(Enum):
     OBSTACLE_HIT_RATE = "obstacle_hit_rate"
     AVG_OBSTACLE_HIT_COUNTER = "avg_obstacle_hit_counter"
     OUT_OF_GRID_RATE = "out_of_grid_rate"
-    AVG_DANGEROUS_STATES_COUNTER = "avg_dangerous_states_counter"
+    AVG_HIGH_VARIANCE_STATES_COUNTER = "avg_high_variance_states_counter"
 
 
 class RewardModelType(Enum):
-    STANDARD = "standard"
-    DECAYING_HIT_PROBABILITY = "decaying_hit_probability"
-    DANGEROUS_STATES = "dangerous_states"
+    CONSTANT_HAZARD_PENALTY = "constant_hazard_penalty"
+    DISTANCE_DECAYED_HAZARD_PENALTY = "distance_decayed_hazard_penalty"
+    ZERO_MEAN_HAZARD_SHOCK = "zero_mean_hazard_shock"
+
+
+# Integer dispatch codes consumed by the native ``_native.compute_reward_batch``
+# kernel. Must stay in sync with the C++ ``reward_variant_code`` switch in
+# ``_cpp/continuous_light_dark.cpp``.
+_REWARD_VARIANT_CODE_BY_TYPE: Dict[RewardModelType, int] = {
+    RewardModelType.CONSTANT_HAZARD_PENALTY: 0,
+    RewardModelType.ZERO_MEAN_HAZARD_SHOCK: 1,
+    RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY: 2,
+}
 
 
 class ObservationModelType(Enum):
@@ -97,7 +109,7 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
     - Continuous 2D state and action spaces
     - Light beacons reduce observation noise when nearby
     - Multiple observation models available (normal noise, normal noise with no observation in dark)
-    - Multiple reward models available (standard, decaying hit probability, dangerous states)
+    - Multiple reward models available (standard, decaying hit probability, high-variance states)
     - Optional obstacles with configurable hit penalties
     - Terminal conditions for goal reaching, obstacle hits, and boundary violations
 
@@ -153,7 +165,7 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         goal_state_radius: float = 1.5,
         beacon_radius: float = 1.0,
         obstacle_radius: float = 1.5,
-        reward_model_type: RewardModelType = RewardModelType.STANDARD,
+        reward_model_type: RewardModelType = RewardModelType.CONSTANT_HAZARD_PENALTY,
         observation_model_type: ObservationModelType = ObservationModelType.NORMAL_NOISE,
         penalty_decay: float = 1.0,
         is_obstacle_hit_terminal: bool = True,
@@ -165,18 +177,18 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         # Maximum distance to goal is diagonal of grid: sqrt(2) * grid_size
         max_distance_to_goal = np.sqrt(2) * grid_size
 
-        if reward_model_type == RewardModelType.STANDARD:
+        if reward_model_type == RewardModelType.CONSTANT_HAZARD_PENALTY:
             # Min: -fuel_cost - max_distance + obstacle_reward (always negative)
             # Max: -fuel_cost - 0 + goal_reward (at goal)
             min_reward = -fuel_cost - max_distance_to_goal + obstacle_reward
             max_reward = -fuel_cost + goal_reward
-        elif reward_model_type == RewardModelType.DECAYING_HIT_PROBABILITY:
+        elif reward_model_type == RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY:
             # Similar to standard but with distance-based penalties
             # Min: -fuel_cost - max_distance + obstacle_reward (max penalty)
             # Max: -fuel_cost - 0 + goal_reward (at goal, no penalty)
             min_reward = -fuel_cost - max_distance_to_goal + obstacle_reward
             max_reward = -fuel_cost + goal_reward
-        elif reward_model_type == RewardModelType.DANGEROUS_STATES:
+        elif reward_model_type == RewardModelType.ZERO_MEAN_HAZARD_SHOCK:
             # Min: -fuel_cost - max_distance + obstacle_reward (negative)
             # Max: -fuel_cost - 0 + goal_reward OR -fuel_cost - distance - obstacle_reward (if obstacle_reward is negative)
             min_reward = -fuel_cost - max_distance_to_goal + obstacle_reward
@@ -256,9 +268,17 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         self._cls_obs_log_norm_far = self._build_log_norm_2d(observation_cov_matrix)
         self._cls_obs_log_norm_near = self._build_log_norm_2d(observation_cov_matrix * 0.5)
         self._cls_beacon_radius_sq = float(beacon_radius) * float(beacon_radius)
+        # Native dispatch code + pre-flattened obstacle/goal buffers for the
+        # ``_native.compute_reward_batch`` and ``_native.simulate_rollout``
+        # kernels (interleaved ``[x0, y0, x1, y1, ...]`` layout).
+        self._reward_variant_code: int = _REWARD_VARIANT_CODE_BY_TYPE[reward_model_type]
+        self._obstacles_flat: np.ndarray = np.ascontiguousarray(
+            self.obstacles.T.ravel(), dtype=np.float64
+        )
+        self._goal_state_f64: np.ndarray = np.ascontiguousarray(self.goal_state, dtype=np.float64)
         # Initialize reward model based on type
         self.reward_model: BaseLightDarkRewardModel
-        if reward_model_type == RewardModelType.STANDARD:
+        if reward_model_type == RewardModelType.CONSTANT_HAZARD_PENALTY:
             self.reward_model = ContinuousLightDarkRewardModel(
                 goal_state=self.goal_state,
                 obstacles=self.obstacles,
@@ -270,8 +290,8 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
                 goal_reward=self.goal_reward,
                 fuel_cost=self.fuel_cost,
             )
-        elif reward_model_type == RewardModelType.DECAYING_HIT_PROBABILITY:
-            self.reward_model = ContinuousLightDarkDecayingHitProbabilityRewardModel(
+        elif reward_model_type == RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY:
+            self.reward_model = ContinuousLightDarkDistanceDecayedHazardPenaltyRewardModel(
                 goal_state=self.goal_state,
                 obstacles=self.obstacles,
                 goal_state_radius=self.goal_state_radius,
@@ -283,8 +303,8 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
                 fuel_cost=self.fuel_cost,
                 penalty_decay=self.penalty_decay,
             )
-        elif reward_model_type == RewardModelType.DANGEROUS_STATES:
-            self.reward_model = ContinuousLDDangerousStatesRewardModel(
+        elif reward_model_type == RewardModelType.ZERO_MEAN_HAZARD_SHOCK:
+            self.reward_model = ContinuousLDZeroMeanHazardShockRewardModel(
                 goal_state=self.goal_state,
                 obstacles=self.obstacles,
                 goal_state_radius=self.goal_state_radius,
@@ -648,6 +668,11 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         action: np.ndarray,
         next_states: Optional[Union[np.ndarray, Sequence[Any]]] = None,
     ) -> np.ndarray:
+        # Python-backed dispatch preserves the pre-refactor scalar↔batch RNG
+        # parity (both branches consume ``np.random`` draws in the same order).
+        # The variant-aware native ``_native.compute_reward_batch`` is exposed
+        # separately for callers that opt into sample-mean parity (e.g.
+        # belief-tree expansion paths and the C++/Python parity tests).
         next_states_arr = None if next_states is None else np.asarray(next_states)
         return self.reward_model.compute_reward_batch(
             np.asarray(states), action, next_states=next_states_arr
@@ -670,7 +695,7 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
 
         Returns:
             List containing metric names: goal_reaching_rate, obstacle_hit_rate,
-            avg_obstacle_hit_counter, out_of_grid_rate, and avg_dangerous_states_counter
+            avg_obstacle_hit_counter, out_of_grid_rate, and avg_high_variance_states_counter
         """
         return [metric.value for metric in ContinuousLightDarkPOMDPMetrics]
 
@@ -679,7 +704,7 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         obstacle_hits = []
         obstacle_hit_counter = []
         out_of_grid = []
-        dangerous_states_counter = []
+        high_variance_states_counter = []
         for history in histories:
             goal_reached_in_history = False
             obstacle_hit_in_history = False
@@ -708,8 +733,8 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
             obstacle_hits.append(1 if obstacle_hit_in_history else 0)
             obstacle_hit_counter.append(obstacle_hit_counter_in_history)
             out_of_grid.append(1 if out_of_grid_in_history else 0)
-            # Sum obstacle hits and out-of-grid occurrences as dangerous states
-            dangerous_states_counter.append(
+            # Sum obstacle hits and out-of-grid occurrences as high-variance states
+            high_variance_states_counter.append(
                 obstacle_hit_counter_in_history + out_of_grid_counter_in_history
             )
 
@@ -717,13 +742,13 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         avg_obstacle_hits = float(np.mean(obstacle_hits))
         avg_obstacle_hit_counter = float(np.mean(obstacle_hit_counter))
         avg_out_of_grid = float(np.mean(out_of_grid))
-        avg_dangerous_states_counter = float(np.mean(dangerous_states_counter))
+        avg_high_variance_states_counter = float(np.mean(high_variance_states_counter))
         goal_reached_ci = confidence_interval(data=goal_reached, confidence=0.95)
         obstacle_hits_ci = confidence_interval(data=obstacle_hits, confidence=0.95)
         obstacle_hit_counter_ci = confidence_interval(data=obstacle_hit_counter, confidence=0.95)
         out_of_grid_ci = confidence_interval(data=out_of_grid, confidence=0.95)
-        dangerous_states_counter_ci = confidence_interval(
-            data=dangerous_states_counter, confidence=0.95
+        high_variance_states_counter_ci = confidence_interval(
+            data=high_variance_states_counter, confidence=0.95
         )
 
         return [
@@ -752,10 +777,10 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
                 upper_confidence_bound=out_of_grid_ci[1],
             ),
             MetricValue(
-                name=ContinuousLightDarkPOMDPMetrics.AVG_DANGEROUS_STATES_COUNTER.value,
-                value=avg_dangerous_states_counter,
-                lower_confidence_bound=dangerous_states_counter_ci[0],
-                upper_confidence_bound=dangerous_states_counter_ci[1],
+                name=ContinuousLightDarkPOMDPMetrics.AVG_HIGH_VARIANCE_STATES_COUNTER.value,
+                value=avg_high_variance_states_counter,
+                lower_confidence_bound=high_variance_states_counter_ci[0],
+                upper_confidence_bound=high_variance_states_counter_ci[1],
             ),
         ]
 
@@ -861,7 +886,7 @@ class ContinuousLightDarkPOMDPDiscreteActions(ContinuousLightDarkPOMDP, Discrete
         goal_state: np.ndarray = np.array([10, 5]),
         start_state: np.ndarray = np.array([0, 5]),
         obstacles: List[Tuple[float, float]] = [(3, 7), (5, 5)],
-        reward_model_type: RewardModelType = RewardModelType.STANDARD,
+        reward_model_type: RewardModelType = RewardModelType.CONSTANT_HAZARD_PENALTY,
         observation_model_type: ObservationModelType = ObservationModelType.NORMAL_NOISE,
         penalty_decay: float = 1.0,
         is_obstacle_hit_terminal: bool = True,
@@ -904,17 +929,11 @@ class ContinuousLightDarkPOMDPDiscreteActions(ContinuousLightDarkPOMDP, Discrete
             "left": np.ascontiguousarray([-1.0, 0.0], dtype=np.float64),
         }
 
-        # Pre-built arrays for native simulate_rollout.
-        # _actions_array: shape (n_actions, 2) — action vectors stacked row-wise.
-        # _obstacles_flat: shape (2*n_obstacles,) — interleaved [x0,y0,x1,y1,...].
+        # Pre-stacked action vectors for native ``simulate_rollout``; the
+        # ``_obstacles_flat`` / ``_goal_state_f64`` buffers live on the parent.
         self._actions_array: np.ndarray = np.ascontiguousarray(
             np.stack(list(self.action_to_vector.values()), axis=0), dtype=np.float64
         )
-        # self.obstacles is stored as (2, N); flatten to [x0,y0,x1,y1,...].
-        self._obstacles_flat: np.ndarray = np.ascontiguousarray(
-            self.obstacles.T.ravel(), dtype=np.float64
-        )
-        self._goal_state_f64: np.ndarray = np.ascontiguousarray(self.goal_state, dtype=np.float64)
 
     def get_actions(self) -> List[Any]:
         return self.actions
@@ -971,11 +990,14 @@ class ContinuousLightDarkPOMDPDiscreteActions(ContinuousLightDarkPOMDP, Discrete
         discount_factor: float,
         depth: int = 0,
     ) -> float:
-        """Random rollout via native C++ for the STANDARD reward model.
+        """Random rollout via native C++.
 
-        Falls back to the base-class Python loop for non-STANDARD reward
-        models (DECAYING_HIT_PROBABILITY, DANGEROUS_STATES) which have
-        different stochastic semantics not yet ported to C++.
+        The variant-aware ``_native.simulate_rollout`` kernel covers all three
+        reward models in expectation (the rollout RNG draws come from the
+        module-level C++ RNG and match the Python reward models sample-mean,
+        not bit-exact), so no variant gate is required here. The Python
+        fallback is retained only for the realised-position correctness case
+        below.
 
         Args:
             state: Current 2-D position ``[x, y]``.
@@ -995,15 +1017,9 @@ class ContinuousLightDarkPOMDPDiscreteActions(ContinuousLightDarkPOMDP, Discrete
         # noisy next_state. Whenever transition noise is non-trivial AND
         # obstacles are configured, route through Python so the rollout
         # reward agrees with ``reward()`` on the realised next_state.
-        # Until the C++ kernel is rebuilt this is the only correctness-
-        # preserving path for stochastic-transition configurations.
         cov_diag_max = float(np.max(np.abs(self.state_transition_cov_matrix)))
         bypass_native_for_realised_pos = cov_diag_max > 0.0 and self._obstacles_flat.shape[0] > 0
-        if (
-            not isinstance(self.reward_model, ContinuousLightDarkRewardModel)
-            or isinstance(self.reward_model, (ContinuousLDDangerousStatesRewardModel,))
-            or bypass_native_for_realised_pos
-        ):
+        if bypass_native_for_realised_pos:
             return python_random_rollout(
                 state=state,
                 depth=depth,
@@ -1037,6 +1053,8 @@ class ContinuousLightDarkPOMDPDiscreteActions(ContinuousLightDarkPOMDP, Discrete
             obstacle_reward=float(self.obstacle_reward),
             obstacle_hit_probability=float(self.obstacle_hit_probability),
             is_obstacle_hit_terminal=bool(self.is_obstacle_hit_terminal),
+            reward_variant_code=self._reward_variant_code,
+            penalty_decay=float(self.penalty_decay),
             covariance=self._trans_cov_view,
         )
 

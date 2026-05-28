@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """POMDP Environment Implementations.
 
 This package contains concrete implementations of various POMDP environments

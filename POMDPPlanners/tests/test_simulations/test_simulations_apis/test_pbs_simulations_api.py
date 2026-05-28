@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 from typing import List, cast
 from unittest.mock import MagicMock, Mock, patch
 

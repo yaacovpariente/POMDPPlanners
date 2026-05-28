@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 # pylint: disable=protected-access,too-many-lines  # Tests need to access protected members
 import pickle
 from pathlib import Path

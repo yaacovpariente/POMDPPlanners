@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Test examples package.
 
 This package contains tests for various examples and usage patterns

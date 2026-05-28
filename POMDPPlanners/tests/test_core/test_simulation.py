@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for simulation functionality.
 
 This module tests the simulation functionality, focusing on:

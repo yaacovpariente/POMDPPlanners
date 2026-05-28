@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for BetaZeroNetwork dual-head neural network.
 
 This module tests the BetaZeroNetwork class including construction, forward pass,

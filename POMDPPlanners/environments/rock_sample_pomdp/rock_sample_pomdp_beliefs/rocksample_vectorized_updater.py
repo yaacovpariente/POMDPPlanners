@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Vectorized particle belief updater for RockSample POMDP.
 
 This module provides the batched transition and observation log-likelihood

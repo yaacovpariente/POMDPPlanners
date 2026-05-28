@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for simulations caching module.
 
 This module tests the caching functionality for simulation results, focusing on:

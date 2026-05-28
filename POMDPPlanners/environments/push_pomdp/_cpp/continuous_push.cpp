@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 // ContinuousPush POMDP native sampling hot path, built on the shared
 // pomdp_native core.
 //
@@ -21,6 +23,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <limits>
 #include <utility>
 #include <vector>
 
@@ -562,6 +565,119 @@ static inline bool discrete_collides(double px, double py,
     return false;
 }
 
+// Reward-variant codes shared between the standalone batch kernels and the
+// inline rollout reward paths. Mirrors the Python ``RewardModelType`` enum.
+constexpr int kRewardVariantConstantHazardPenalty = 0;
+constexpr int kRewardVariantHighVar = 1;
+constexpr int kRewardVariantDistanceDecayedHazardPenalty = 2;
+
+// Squared Euclidean distance from (px, py) to the nearest dangerous-area
+// centre. Used by the Decaying variant to evaluate the exponential
+// hit-probability without materialising sqrt twice.
+static inline double dangerous_min_dist_sq(double px, double py_,
+                                           const std::vector<double> &areas) noexcept {
+    const std::size_t k = areas.size() / 2;
+    double best = std::numeric_limits<double>::infinity();
+    for (std::size_t i = 0; i < k; ++i) {
+        const double dx = px - areas[i * 2 + 0];
+        const double dy = py_ - areas[i * 2 + 1];
+        const double d_sq = dx * dx + dy * dy;
+        if (d_sq < best) {
+            best = d_sq;
+        }
+    }
+    return best;
+}
+
+// Per-row dangerous-area reward contribution. Branches on ``variant_code``:
+// CONSTANT_HAZARD_PENALTY (with optional Bernoulli), ZERO_MEAN_HAZARD_SHOCK (``±penalty``
+// 50/50 when in zone) and DISTANCE_DECAYED_HAZARD_PENALTY (penalty fires with
+// ``exp(-min_dist / penalty_decay)`` over every row, no radius cutoff).
+static inline double dangerous_contribution(int variant_code, bool in_zone,
+                                            double penalty, double hit_prob,
+                                            double min_dist_sq, double penalty_decay,
+                                            pomdp_native::RNGState &rng) {
+    std::uniform_real_distribution<double> uni(0.0, 1.0);
+    if (variant_code == kRewardVariantConstantHazardPenalty) {
+        if (!in_zone) {
+            return 0.0;
+        }
+        if (hit_prob >= 1.0 || uni(rng.engine()) < hit_prob) {
+            return penalty;
+        }
+        return 0.0;
+    }
+    if (variant_code == kRewardVariantHighVar) {
+        if (!in_zone) {
+            return 0.0;
+        }
+        return uni(rng.engine()) < 0.5 ? penalty : -penalty;
+    }
+    // Decaying: every row, prob exp(-sqrt(min_dist_sq) / penalty_decay).
+    const double u = uni(rng.engine());
+    if (u <= 0.0) {
+        return penalty;
+    }
+    const double log_u = std::log(u);
+    if (penalty_decay * penalty_decay * log_u * log_u > min_dist_sq) {
+        return penalty;
+    }
+    return 0.0;
+}
+
+// Reward configuration for the discrete rollout kernel. Mirrors the
+// parameters consumed by ``push_reward_batch`` so the inline rollout reward
+// stays bit-for-bit aligned with the standalone batch kernel (sample-mean
+// parity across all three :class:`RewardModelType` variants).
+struct DiscreteStepRewardConfig {
+    double obstacle_penalty;
+    double obstacle_hit_probability;
+    double dangerous_area_radius_sq;
+    double dangerous_area_penalty;
+    double dangerous_area_hit_probability;
+    int reward_variant_code;
+    double penalty_decay;
+};
+
+// Per-step reward using the REALISED post-action robot position. Mirrors
+// ``DiscretePushRewardModel.compute_reward`` (and its high-variance /
+// decaying subclasses) so the rollout kernel matches the standalone
+// ``push_reward_batch`` for every variant.
+static double discrete_step_reward(double nrx, double nry, double nox, double noy,
+                                   double tx, double ty,
+                                   const std::vector<double> &obstacles,
+                                   double obstacle_radius_sq,
+                                   const std::vector<double> &dangerous_areas,
+                                   const DiscreteStepRewardConfig &cfg,
+                                   pomdp_native::RNGState &rng) {
+    const double rdx = nox - tx;
+    const double rdy = noy - ty;
+    const double dist_to_target = std::sqrt(rdx * rdx + rdy * rdy);
+    double reward = -dist_to_target;
+    if (dist_to_target < 0.5) {
+        reward += 100.0;
+    }
+    std::uniform_real_distribution<double> uni(0.0, 1.0);
+    if (!obstacles.empty() && discrete_collides(nrx, nry, obstacles, obstacle_radius_sq)) {
+        if (cfg.obstacle_hit_probability >= 1.0 ||
+            uni(rng.engine()) < cfg.obstacle_hit_probability) {
+            reward += cfg.obstacle_penalty;
+        }
+    }
+    if (!dangerous_areas.empty()) {
+        const bool in_zone = point_in_dangerous_areas(nrx, nry, dangerous_areas,
+                                                     cfg.dangerous_area_radius_sq);
+        const double min_sq = (cfg.reward_variant_code == kRewardVariantDistanceDecayedHazardPenalty)
+                                  ? dangerous_min_dist_sq(nrx, nry, dangerous_areas)
+                                  : 0.0;
+        reward += dangerous_contribution(cfg.reward_variant_code, in_zone,
+                                         cfg.dangerous_area_penalty,
+                                         cfg.dangerous_area_hit_probability,
+                                         min_sq, cfg.penalty_decay, rng);
+    }
+    return reward;
+}
+
 // Apply one discrete Push step, writing the next state into the 6-element
 // output array.  Returns the immediate reward.
 //
@@ -571,10 +687,8 @@ static double discrete_step(const double *state, int action_idx, double *next_st
                              double grid_max, double push_threshold_sq,
                              double push_scale, double obstacle_radius_sq,
                              const std::vector<double> &obstacles,
-                             double obstacle_penalty,
                              const std::vector<double> &dangerous_areas,
-                             double dangerous_area_radius_sq,
-                             double dangerous_area_penalty,
+                             const DiscreteStepRewardConfig &reward_cfg,
                              pomdp_native::RNGState &rng,
                              double transition_error_prob) {
     // Resolve action error ---------------------------------------------------
@@ -646,37 +760,12 @@ static double discrete_step(const double *state, int action_idx, double *next_st
     next_state[4] = tx;
     next_state[5] = ty;
 
-    // Reward ------------------------------------------------------------------
-    const double rdx = nox - tx;
-    const double rdy = noy - ty;
-    const double dist_to_target = std::sqrt(rdx * rdx + rdy * rdy);
-    double reward = -dist_to_target;
-    if (dist_to_target < 0.5) {
-        reward += 100.0;
-    }
-
-    // Obstacle penalty: applied if the INTENDED robot position (state[:2]+dxy)
-    // collides with an obstacle — mirrors _reward_from_next_state which calls
-    // _is_colliding_with_obstacle(state[:2], action).
-    const int rdx_int = kDiscreteDXY[static_cast<std::size_t>(action_idx)][0];
-    const int rdy_int = kDiscreteDXY[static_cast<std::size_t>(action_idx)][1];
-    const double intended_rx = rx + static_cast<double>(rdx_int);
-    const double intended_ry = ry + static_cast<double>(rdy_int);
-    if (!obstacles.empty()) {
-        if (discrete_collides(intended_rx, intended_ry, obstacles, obstacle_radius_sq)) {
-            reward += obstacle_penalty;
-        }
-    }
-    // Dangerous-area penalty: applied at most once per step when the intended
-    // robot position lies inside any dangerous area. Penalty is additive (negative)
-    // and parallels the obstacle penalty above.
-    if (!dangerous_areas.empty()) {
-        if (point_in_dangerous_areas(intended_rx, intended_ry, dangerous_areas,
-                                     dangerous_area_radius_sq)) {
-            reward += dangerous_area_penalty;
-        }
-    }
-    return reward;
+    // Reward (uses realised post-action robot position; matches the Python
+    // ``DiscretePushRewardModel`` family and the variant-aware
+    // ``push_reward_batch`` standalone kernel).
+    return discrete_step_reward(nrx, nry, nox, noy, tx, ty, obstacles,
+                                obstacle_radius_sq, dangerous_areas, reward_cfg,
+                                rng);
 }
 
 // Is-terminal: (obj_x - tgt_x)^2 + (obj_y - tgt_y)^2 < 0.25.
@@ -883,7 +972,9 @@ double simulate_rollout_discrete(
     double obstacle_radius, double obstacle_penalty,
     py::array_t<double, py::array::c_style | py::array::forcecast> dangerous_areas_arr,
     double dangerous_area_radius, double dangerous_area_penalty,
-    double transition_error_prob) {
+    double transition_error_prob, double obstacle_hit_probability,
+    double dangerous_area_hit_probability, int reward_variant_code,
+    double penalty_decay) {
     if (state_arr.ndim() != 1 || state_arr.shape(0) != 6) {
         throw std::invalid_argument("state must be a 1-D array of length 6");
     }
@@ -922,6 +1013,16 @@ double simulate_rollout_discrete(
     double gamma_power = 1.0;
     int action_cursor = 0;
 
+    const DiscreteStepRewardConfig reward_cfg{
+        obstacle_penalty,
+        obstacle_hit_probability,
+        dangerous_area_radius_sq,
+        dangerous_area_penalty,
+        dangerous_area_hit_probability,
+        reward_variant_code,
+        penalty_decay,
+    };
+
     while (depth < max_depth && !discrete_is_terminal(cur)) {
         if (action_cursor >= n_actions) {
             break;  // Ran out of pre-drawn actions; stop cleanly.
@@ -932,10 +1033,7 @@ double simulate_rollout_discrete(
         const double r = discrete_step(cur, action_idx, nxt, grid_max,
                                        push_threshold_sq, push_scale,
                                        obstacle_radius_sq, obstacles,
-                                       obstacle_penalty,
-                                       dangerous_areas,
-                                       dangerous_area_radius_sq,
-                                       dangerous_area_penalty,
+                                       dangerous_areas, reward_cfg,
                                        rng, transition_error_prob);
         total += gamma_power * r;
         gamma_power *= discount;
@@ -1094,6 +1192,58 @@ static void cont_sample_next_state_row(
     out_row[5] = state_row[5];
 }
 
+// Per-step reward for the continuous rollout using the REALISED post-action
+// robot position (next_state[:2]). Mirrors ``ContinuousPushRewardModel``
+// (and its high-variance / decaying subclasses) so the rollout output stays
+// in sample-mean parity with ``cont_push_reward_batch`` across every
+// :class:`RewardModelType` variant.
+static double cont_step_reward(const double *next_state,
+                               const std::vector<double> &obs_flat,
+                               std::size_t n_obs, double robot_radius,
+                               const std::vector<double> &dangerous_flat,
+                               const DiscreteStepRewardConfig &cfg,
+                               pomdp_native::RNGState &rng) {
+    const double rd = next_state[2] - next_state[4];
+    const double rd2 = next_state[3] - next_state[5];
+    const double dist_to_target = std::sqrt(rd * rd + rd2 * rd2);
+    double reward = -dist_to_target;
+    if (dist_to_target < 0.5) {
+        reward += 100.0;
+    }
+    std::uniform_real_distribution<double> uni(0.0, 1.0);
+    const double robot_after[2] = {  // NOLINT(modernize-avoid-c-arrays)
+        next_state[0], next_state[1]};
+    if (n_obs > 0) {
+        bool collide = false;
+        for (std::size_t i = 0; i < n_obs; ++i) {
+            if (cont_circle_aabb_overlap(robot_after, robot_radius, &obs_flat[i * 4])) {
+                collide = true;
+                break;
+            }
+        }
+        if (collide) {
+            if (cfg.obstacle_hit_probability >= 1.0 ||
+                uni(rng.engine()) < cfg.obstacle_hit_probability) {
+                reward += cfg.obstacle_penalty;
+            }
+        }
+    }
+    if (!dangerous_flat.empty()) {
+        const bool in_zone = point_in_dangerous_areas(robot_after[0], robot_after[1],
+                                                     dangerous_flat,
+                                                     cfg.dangerous_area_radius_sq);
+        const double min_sq = (cfg.reward_variant_code == kRewardVariantDistanceDecayedHazardPenalty)
+                                  ? dangerous_min_dist_sq(robot_after[0], robot_after[1],
+                                                          dangerous_flat)
+                                  : 0.0;
+        reward += dangerous_contribution(cfg.reward_variant_code, in_zone,
+                                         cfg.dangerous_area_penalty,
+                                         cfg.dangerous_area_hit_probability,
+                                         min_sq, cfg.penalty_decay, rng);
+    }
+    return reward;
+}
+
 double cont_simulate_rollout(
     const py::array_t<double, py::array::c_style | py::array::forcecast> &initial_state,
     const py::array_t<double, py::array::c_style | py::array::forcecast> &action_array,
@@ -1104,7 +1254,9 @@ double cont_simulate_rollout(
     const py::array_t<double, py::array::c_style | py::array::forcecast> &obstacles,
     const py::array_t<double, py::array::c_style | py::array::forcecast> &dangerous_areas,
     double dangerous_area_radius, double dangerous_area_penalty,
-    const py::array_t<double> &covariance) {
+    const py::array_t<double> &covariance,
+    double obstacle_hit_probability, double dangerous_area_hit_probability,
+    int reward_variant_code, double penalty_decay) {
 
     if (initial_state.ndim() != 1 ||
         static_cast<std::size_t>(initial_state.shape(0)) != kPushStateDim) {
@@ -1156,6 +1308,16 @@ double cont_simulate_rollout(
     double gamma_power = 1.0;
     int depth = start_depth;
 
+    const DiscreteStepRewardConfig reward_cfg{
+        obstacle_penalty,
+        obstacle_hit_probability,
+        dangerous_area_radius_sq,
+        dangerous_area_penalty,
+        dangerous_area_hit_probability,
+        reward_variant_code,
+        penalty_decay,
+    };
+
     while (depth < max_depth) {
         if (cont_is_terminal(state)) {
             break;
@@ -1176,35 +1338,9 @@ double cont_simulate_rollout(
                                    friction_coefficient, max_push, robot_radius,
                                    obs_flat, n_obs, noise, next_state, rng);
 
-        const double rd = next_state[2] - next_state[4];
-        const double rd2 = next_state[3] - next_state[5];
-        const double dist_to_target = std::sqrt(rd * rd + rd2 * rd2);
-        double reward = -dist_to_target;
-        if (dist_to_target < 0.5) {
-            reward += 100.0;
-        }
-
-        double robot_after[kNoiseDim] = {  // NOLINT(modernize-avoid-c-arrays)
-            state[0] + action[0], state[1] + action[1]};
-        if (n_obs > 0 && obstacle_penalty != 0.0) {
-            for (std::size_t i = 0; i < n_obs; ++i) {
-                if (cont_circle_aabb_overlap(robot_after, robot_radius, &obs_flat[i * 4])) {
-                    reward += obstacle_penalty;
-                    break;
-                }
-            }
-        }
-        // Dangerous-area penalty: applied at most once when the post-action
-        // robot position lies inside any dangerous area. Mirrors the Python
-        // ``_reward_batch_array`` block that calls
-        // ``_batch_robot_in_dangerous_areas``.
-        if (!dangerous_flat.empty() && dangerous_area_penalty != 0.0) {
-            if (point_in_dangerous_areas(robot_after[0], robot_after[1],
-                                         dangerous_flat,
-                                         dangerous_area_radius_sq)) {
-                reward += dangerous_area_penalty;
-            }
-        }
+        const double reward = cont_step_reward(next_state, obs_flat, n_obs,
+                                               robot_radius, dangerous_flat,
+                                               reward_cfg, rng);
 
         total += gamma_power * reward;
         gamma_power *= discount_factor;
@@ -1457,6 +1593,176 @@ py::array_t<double> push_observation_log_probability_step(
     return out;
 }
 
+// ── Standalone reward-batch kernels (variant-aware) ─────────────────────────
+//
+// ``push_reward_batch`` / ``cont_push_reward_batch`` mirror the Python
+// reward-model batch path bit-by-bit (sample-mean parity, not bit-exact):
+//   * base term: ``-distance(next_obj, target)`` + ``+100`` goal bonus.
+//   * obstacle penalty: deterministic point-in-circle (discrete) /
+//     circle-vs-AABB overlap (continuous) on the REALISED post-action robot
+//     position ``next_state[:2]`` with optional Bernoulli ``hit_probability``.
+//   * dangerous-area penalty: variant-driven.
+//        - reward_variant_code 0 (CONSTANT_HAZARD_PENALTY): per-row penalty when in zone,
+//          optional Bernoulli ``dangerous_area_hit_probability``.
+//        - reward_variant_code 1 (ZERO_MEAN_HAZARD_SHOCK): ``±penalty`` 50/50
+//          when in zone; expectation is 0.
+//        - reward_variant_code 2 (DISTANCE_DECAYED_HAZARD_PENALTY): penalty fires
+//          with probability ``exp(-min_dist / penalty_decay)`` over every
+//          row (no radius cutoff).
+// All RNG draws come from ``pomdp_native::default_rng()``. The variant
+// codes, ``dangerous_min_dist_sq`` and ``dangerous_contribution`` are
+// defined earlier (near ``discrete_step_reward``) so they can be shared
+// between the inline rollout reward and the standalone batch kernels.
+
+py::array_t<double> push_reward_batch(
+    const py::array_t<double, py::array::c_style | py::array::forcecast> &states,
+    int action_idx,
+    const py::array_t<double, py::array::c_style | py::array::forcecast> &next_states,
+    const py::array_t<double, py::array::c_style | py::array::forcecast> &obstacles,
+    double obstacle_radius, double obstacle_penalty, double obstacle_hit_probability,
+    const py::array_t<double, py::array::c_style | py::array::forcecast> &dangerous_areas,
+    double dangerous_area_radius, double dangerous_area_penalty,
+    double dangerous_area_hit_probability, int reward_variant_code,
+    double penalty_decay) {
+    (void)action_idx;  // reward depends on realised next_state, not the action
+    if (next_states.ndim() != 2 || next_states.shape(1) != 6) {
+        throw std::invalid_argument("next_states must have shape (N, 6)");
+    }
+    if (states.ndim() != 2 || states.shape(1) != 6) {
+        throw std::invalid_argument("states must have shape (N, 6)");
+    }
+    const auto n = static_cast<std::size_t>(next_states.shape(0));
+    auto out = py::array_t<double>(static_cast<py::ssize_t>(n));
+    if (n == 0) {
+        return out;
+    }
+    std::vector<double> obs_flat;
+    if (!(obstacles.ndim() == 1 && obstacles.shape(0) == 0)) {
+        obs_flat = load_discrete_obstacles(obstacles);
+    }
+    std::vector<double> areas_flat = load_dangerous_areas(dangerous_areas);
+    const double obs_r_sq = obstacle_radius * obstacle_radius;
+    const double area_r_sq = dangerous_area_radius * dangerous_area_radius;
+    const double *next_data = next_states.data();
+    double *out_data = out.mutable_data();
+    pomdp_native::RNGState &rng = pomdp_native::default_rng();
+    std::uniform_real_distribution<double> uni(0.0, 1.0);
+    const bool has_areas = !areas_flat.empty();
+    const bool has_obs = !obs_flat.empty();
+    for (std::size_t i = 0; i < n; ++i) {
+        const double rx = next_data[i * 6 + 0];
+        const double ry = next_data[i * 6 + 1];
+        const double ox = next_data[i * 6 + 2];
+        const double oy = next_data[i * 6 + 3];
+        const double tx = next_data[i * 6 + 4];
+        const double ty = next_data[i * 6 + 5];
+        const double dxg = ox - tx;
+        const double dyg = oy - ty;
+        const double dist = std::sqrt(dxg * dxg + dyg * dyg);
+        double reward = -dist;
+        if (dist < 0.5) {
+            reward += 100.0;
+        }
+        if (has_obs && discrete_collides(rx, ry, obs_flat, obs_r_sq)) {
+            if (obstacle_hit_probability >= 1.0 ||
+                uni(rng.engine()) < obstacle_hit_probability) {
+                reward += obstacle_penalty;
+            }
+        }
+        if (has_areas) {
+            const bool in_zone =
+                point_in_dangerous_areas(rx, ry, areas_flat, area_r_sq);
+            const double min_sq = (reward_variant_code == kRewardVariantDistanceDecayedHazardPenalty)
+                                      ? dangerous_min_dist_sq(rx, ry, areas_flat)
+                                      : 0.0;
+            reward += dangerous_contribution(reward_variant_code, in_zone,
+                                             dangerous_area_penalty,
+                                             dangerous_area_hit_probability,
+                                             min_sq, penalty_decay, rng);
+        }
+        out_data[i] = reward;
+    }
+    return out;
+}
+
+py::array_t<double> cont_push_reward_batch(
+    const py::array_t<double, py::array::c_style | py::array::forcecast> &states,
+    const py::array_t<double, py::array::c_style | py::array::forcecast> &action,
+    const py::array_t<double, py::array::c_style | py::array::forcecast> &next_states,
+    const py::array_t<double, py::array::c_style | py::array::forcecast> &obstacles,
+    double robot_radius, double obstacle_penalty, double obstacle_hit_probability,
+    const py::array_t<double, py::array::c_style | py::array::forcecast> &dangerous_areas,
+    double dangerous_area_radius, double dangerous_area_penalty,
+    double dangerous_area_hit_probability, int reward_variant_code,
+    double penalty_decay) {
+    (void)states;
+    (void)action;
+    if (next_states.ndim() != 2 || next_states.shape(1) != 6) {
+        throw std::invalid_argument("next_states must have shape (N, 6)");
+    }
+    const auto n = static_cast<std::size_t>(next_states.shape(0));
+    auto out = py::array_t<double>(static_cast<py::ssize_t>(n));
+    if (n == 0) {
+        return out;
+    }
+    std::vector<double> obs_flat;
+    if (!(obstacles.ndim() == 1 && obstacles.shape(0) == 0)) {
+        obs_flat = load_obstacles(obstacles);
+    }
+    std::vector<double> areas_flat = load_dangerous_areas(dangerous_areas);
+    const double area_r_sq = dangerous_area_radius * dangerous_area_radius;
+    const auto n_obs = obs_flat.size() / 4;
+    const double *next_data = next_states.data();
+    double *out_data = out.mutable_data();
+    pomdp_native::RNGState &rng = pomdp_native::default_rng();
+    std::uniform_real_distribution<double> uni(0.0, 1.0);
+    const bool has_areas = !areas_flat.empty();
+    for (std::size_t i = 0; i < n; ++i) {
+        const double rx = next_data[i * 6 + 0];
+        const double ry = next_data[i * 6 + 1];
+        const double ox = next_data[i * 6 + 2];
+        const double oy = next_data[i * 6 + 3];
+        const double tx = next_data[i * 6 + 4];
+        const double ty = next_data[i * 6 + 5];
+        const double dxg = ox - tx;
+        const double dyg = oy - ty;
+        const double dist = std::sqrt(dxg * dxg + dyg * dyg);
+        double reward = -dist;
+        if (dist < 0.5) {
+            reward += 100.0;
+        }
+        if (n_obs > 0) {
+            const double pos[2] = {rx, ry};  // NOLINT(modernize-avoid-c-arrays)
+            bool collide = false;
+            for (std::size_t j = 0; j < n_obs; ++j) {
+                if (cont_circle_aabb_overlap(pos, robot_radius, &obs_flat[j * 4])) {
+                    collide = true;
+                    break;
+                }
+            }
+            if (collide) {
+                if (obstacle_hit_probability >= 1.0 ||
+                    uni(rng.engine()) < obstacle_hit_probability) {
+                    reward += obstacle_penalty;
+                }
+            }
+        }
+        if (has_areas) {
+            const bool in_zone =
+                point_in_dangerous_areas(rx, ry, areas_flat, area_r_sq);
+            const double min_sq = (reward_variant_code == kRewardVariantDistanceDecayedHazardPenalty)
+                                      ? dangerous_min_dist_sq(rx, ry, areas_flat)
+                                      : 0.0;
+            reward += dangerous_contribution(reward_variant_code, in_zone,
+                                             dangerous_area_penalty,
+                                             dangerous_area_hit_probability,
+                                             min_sq, penalty_decay, rng);
+        }
+        out_data[i] = reward;
+    }
+    return out;
+}
+
 }  // anonymous namespace
 
 PYBIND11_MODULE(_native, m) {
@@ -1473,14 +1779,22 @@ PYBIND11_MODULE(_native, m) {
           py::arg("obstacles"), py::arg("dangerous_areas"),
           py::arg("dangerous_area_radius"), py::arg("dangerous_area_penalty"),
           py::arg("covariance"),
+          py::arg("obstacle_hit_probability") = 1.0,
+          py::arg("dangerous_area_hit_probability") = 1.0,
+          py::arg("reward_variant_code") = 0,
+          py::arg("penalty_decay") = 1.0,
           "Native random rollout for ContinuousPushPOMDP. "
           "Returns discounted return from initial_state. "
           "action_indices must be a pre-drawn int32 array of shape (steps_left,). "
           "obstacles must have shape (M, 4) with rows (cx, cy, hx, hy). "
           "dangerous_areas must have shape (K, 2) (or (0, 2) when empty); each "
           "row is the (x, y) centre of a circular dangerous area of radius "
-          "``dangerous_area_radius``. Robots inside any zone after the action "
-          "incur ``dangerous_area_penalty`` (at most once per step).");
+          "``dangerous_area_radius``. Per-step reward consults the REALISED "
+          "post-action robot position (next_state[:2]) for obstacle / danger "
+          "tests, with Bernoulli ``*_hit_probability`` gating. "
+          "``reward_variant_code`` selects the dangerous-area contract "
+          "(0=CONSTANT_HAZARD_PENALTY, 1=ZERO_MEAN_HAZARD_SHOCK, 2=DISTANCE_DECAYED_HAZARD_PENALTY); "
+          "``penalty_decay`` is the decay length used by variant 2.");
 
     m.def("simulate_rollout_discrete", &simulate_rollout_discrete,
           py::arg("state"), py::arg("action_indices"), py::arg("max_depth"),
@@ -1491,9 +1805,17 @@ PYBIND11_MODULE(_native, m) {
           py::arg("dangerous_areas"), py::arg("dangerous_area_radius"),
           py::arg("dangerous_area_penalty"),
           py::arg("transition_error_prob"),
+          py::arg("obstacle_hit_probability") = 1.0,
+          py::arg("dangerous_area_hit_probability") = 1.0,
+          py::arg("reward_variant_code") = 0,
+          py::arg("penalty_decay") = 1.0,
           "Run a full discrete Push rollout in C++. Returns discounted reward sum. "
-          "dangerous_areas must have shape (K, 2) (or empty). Penalty applied "
-          "once per step when the intended robot position lies in any zone.");
+          "dangerous_areas must have shape (K, 2) (or empty). Per-step reward "
+          "consults the REALISED post-action robot position (next_state[:2]) "
+          "for obstacle / danger tests, with Bernoulli ``*_hit_probability`` "
+          "gating. ``reward_variant_code`` selects the dangerous-area contract "
+          "(0=CONSTANT_HAZARD_PENALTY, 1=ZERO_MEAN_HAZARD_SHOCK, 2=DISTANCE_DECAYED_HAZARD_PENALTY); "
+          "``penalty_decay`` is the decay length used by variant 2.");
 
     m.def("belief_batch_transition_discrete", &belief_batch_transition_discrete,
           py::arg("particles"), py::arg("action_idx"), py::arg("transition_error_prob"),
@@ -1514,6 +1836,35 @@ PYBIND11_MODULE(_native, m) {
           "particle[2:4], σ²·I_2) over all (N, 6) particles. "
           "Bit-for-bit equivalent to PushVectorizedUpdater."
           "batch_observation_log_likelihood (no RNG involved).");
+
+    m.def("push_reward_batch", &push_reward_batch,
+          py::arg("states"), py::arg("action_idx"), py::arg("next_states"),
+          py::arg("obstacles"), py::arg("obstacle_radius"),
+          py::arg("obstacle_penalty"), py::arg("obstacle_hit_probability"),
+          py::arg("dangerous_areas"), py::arg("dangerous_area_radius"),
+          py::arg("dangerous_area_penalty"),
+          py::arg("dangerous_area_hit_probability"),
+          py::arg("reward_variant_code"), py::arg("penalty_decay"),
+          "Standalone variant-aware reward batch for PushPOMDP (discrete).\n\n"
+          "Implements all three RewardModelType variants:\n"
+          "  0 = CONSTANT_HAZARD_PENALTY: deterministic per-zone penalty (optional Bernoulli).\n"
+          "  1 = ZERO_MEAN_HAZARD_SHOCK: ±penalty 50/50 when in zone.\n"
+          "  2 = DISTANCE_DECAYED_HAZARD_PENALTY: penalty fires with probability\n"
+          "      exp(-min_dist / penalty_decay) for every row (no radius cutoff).\n"
+          "Obstacle penalty fires on next_state[:2] (realised position).");
+
+    m.def("cont_push_reward_batch", &cont_push_reward_batch,
+          py::arg("states"), py::arg("action"), py::arg("next_states"),
+          py::arg("obstacles"), py::arg("robot_radius"),
+          py::arg("obstacle_penalty"), py::arg("obstacle_hit_probability"),
+          py::arg("dangerous_areas"), py::arg("dangerous_area_radius"),
+          py::arg("dangerous_area_penalty"),
+          py::arg("dangerous_area_hit_probability"),
+          py::arg("reward_variant_code"), py::arg("penalty_decay"),
+          "Standalone variant-aware reward batch for ContinuousPushPOMDP.\n\n"
+          "Same three variants as push_reward_batch. Obstacle test is a\n"
+          "circle-vs-AABB overlap on next_state[:2] with robot_radius;\n"
+          "obstacles rows are (cx, cy, hx, hy).");
 
     py::class_<PushDiscreteTransitionCpp>(m, "PushDiscreteTransitionCpp")
         .def(py::init<py::array_t<double, py::array::c_style | py::array::forcecast>,

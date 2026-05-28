@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """ICVaR PFT-DPW (Iterated CVaR Particle Filter Tree with Double Progressive Widening) Algorithm.
 
 This module implements a risk-sensitive variant of PFT-DPW that uses the Iterated Conditional

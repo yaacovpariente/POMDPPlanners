@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for planner evaluation workflow classes.
 
 This module tests the planner evaluation workflow functionality, focusing on:

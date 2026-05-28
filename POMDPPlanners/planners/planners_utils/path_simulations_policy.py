@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 import time
 from abc import abstractmethod
 from pathlib import Path

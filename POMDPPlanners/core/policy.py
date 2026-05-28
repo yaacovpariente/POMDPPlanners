@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Module for POMDP policy abstractions and execution tracking.
 
 This module provides the foundational interface for POMDP policies, including
@@ -12,6 +14,7 @@ Classes:
 """
 
 import importlib
+import importlib.metadata
 import inspect
 import json
 import logging
@@ -24,7 +27,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, NamedTuple, Optional, Tuple, Union
 
 import numpy as np
-import pkg_resources
 
 from POMDPPlanners.utils.config_to_id import config_to_id, NumpyEncoder
 from POMDPPlanners.utils.logger import get_logger
@@ -250,9 +252,8 @@ def _get_package_version() -> str:
         Package version string or "unknown"
     """
     try:
-        return pkg_resources.get_distribution("POMDPPlanners").version
-    except Exception:  # pylint: disable=broad-exception-caught
-        # Catch all exceptions to ensure function always returns a version string
+        return importlib.metadata.version("POMDPPlanners")
+    except importlib.metadata.PackageNotFoundError:
         return "unknown"
 
 

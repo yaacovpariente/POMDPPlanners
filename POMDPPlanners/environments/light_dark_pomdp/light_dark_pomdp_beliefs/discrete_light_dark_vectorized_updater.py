@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Vectorized particle belief updaters for the Discrete Light-Dark POMDP.
 
 This module implements concrete

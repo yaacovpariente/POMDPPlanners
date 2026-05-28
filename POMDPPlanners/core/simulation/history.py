@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 from dataclasses import dataclass, fields
 from typing import TYPE_CHECKING, Any, List, NamedTuple, Union
 

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for RockSample POMDP visualization functionality.
 
 This module tests the RockSample POMDP visualization features, focusing on:

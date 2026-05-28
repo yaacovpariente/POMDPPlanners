@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Memory tracking utilities for POMDP simulations.
 
 This module provides memory tracking capabilities for monitoring memory usage

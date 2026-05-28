@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Concrete POMDP simulator implementation."""
 
 import hashlib
@@ -16,6 +18,9 @@ from POMDPPlanners.core.simulation import (
 from POMDPPlanners.simulations.simulation_statistics import (
     compute_statistics_environment_policy_pair,
     get_metric_names_from_environment_policy_pair,
+)
+from POMDPPlanners.simulations.simulations_deployment.run_progress import (
+    NotificationConfig,
 )
 from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import (
     TaskManagerConfig,
@@ -118,6 +123,7 @@ class POMDPSimulator(BaseSimulator):
         console_output: bool = True,
         no_logs: bool = False,
         visualizer: Optional[ExperimentVisualizer] = None,
+        notification_config: Optional[NotificationConfig] = None,
     ):
         """Initialize the POMDP simulator.
 
@@ -136,6 +142,10 @@ class POMDPSimulator(BaseSimulator):
             no_logs: Whether to disable all logging (default: False)
             visualizer: Strategy for rendering aggregated experiment artifacts.
                 Defaults to :class:`EpisodeReturnsVisualizer`.
+            notification_config: Optional :class:`NotificationConfig` controlling
+                Slack + progress-DB notifications. Forwarded to
+                :class:`BaseSimulator`. When ``None``, the parent defaults to
+                :meth:`NotificationConfig.disabled`.
         """
         super().__init__(
             task_manager_config=task_manager_config,
@@ -148,6 +158,7 @@ class POMDPSimulator(BaseSimulator):
             console_output=console_output,
             no_logs=no_logs,
             visualizer=visualizer,
+            notification_config=notification_config,
         )
         self.task_console_output = task_console_output
 

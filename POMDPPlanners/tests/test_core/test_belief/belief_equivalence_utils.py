@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Shared belief-level equivalence checks for particle beliefs.
 
 This module provides environment-agnostic assertion helpers that compare a

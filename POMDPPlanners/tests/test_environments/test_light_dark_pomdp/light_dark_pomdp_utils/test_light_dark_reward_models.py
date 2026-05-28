@@ -1,9 +1,11 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for Light Dark POMDP reward models.
 
 This module tests the reward models from light_dark_reward_models.py, focusing on:
 - Base reward model functionality
 - Continuous light dark reward model with obstacles
-- Dangerous states reward model with high variance
+- High-variance states reward model
 - Decaying hit probability reward model
 """
 
@@ -16,8 +18,8 @@ import pytest
 
 from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_reward_models import (
     BaseLightDarkRewardModel,
-    ContinuousLDDangerousStatesRewardModel,
-    ContinuousLightDarkDecayingHitProbabilityRewardModel,
+    ContinuousLDZeroMeanHazardShockRewardModel,
+    ContinuousLightDarkDistanceDecayedHazardPenaltyRewardModel,
     ContinuousLightDarkRewardModel,
 )
 
@@ -411,8 +413,8 @@ class TestContinuousLightDarkRewardModel:
             assert reward < -model_boundary.fuel_cost - np.linalg.norm(next_state - self.goal_state)
 
 
-class TestContinuousLDDangerousStatesRewardModel:
-    """Test cases for dangerous states reward model."""
+class TestContinuousLDZeroMeanHazardShockRewardModel:
+    """Test cases for high-variance states reward model."""
 
     def setup_method(self):
         """Set up test environment before each test method."""
@@ -426,7 +428,7 @@ class TestContinuousLDDangerousStatesRewardModel:
         self.goal_reward = 100.0
         self.fuel_cost = 1.0
 
-        self.model = ContinuousLDDangerousStatesRewardModel(
+        self.model = ContinuousLDZeroMeanHazardShockRewardModel(
             goal_state=self.goal_state,
             obstacles=self.obstacles,
             goal_state_radius=self.goal_state_radius,
@@ -488,7 +490,7 @@ class TestContinuousLDDangerousStatesRewardModel:
         assert 0.4 < bonus_ratio < 0.6, f"Bonus ratio {bonus_ratio} not close to 0.5"
 
     def test_inheritance_from_base(self):
-        """Test that dangerous states model inherits correctly from base."""
+        """Test that high-variance states model inherits correctly from base."""
         # Should have all the same methods as base class
         assert hasattr(self.model, "compute_reward")
         assert hasattr(self.model, "_compute_reward")
@@ -501,7 +503,7 @@ class TestContinuousLDDangerousStatesRewardModel:
         assert base_method != derived_method
 
 
-class TestContinuousLightDarkDecayingHitProbabilityRewardModel:
+class TestContinuousLightDarkDistanceDecayedHazardPenaltyRewardModel:
     """Test cases for decaying hit probability reward model."""
 
     def setup_method(self):
@@ -517,7 +519,7 @@ class TestContinuousLightDarkDecayingHitProbabilityRewardModel:
         self.fuel_cost = 1.0
         self.penalty_decay = 2.0
 
-        self.model = ContinuousLightDarkDecayingHitProbabilityRewardModel(
+        self.model = ContinuousLightDarkDistanceDecayedHazardPenaltyRewardModel(
             goal_state=self.goal_state,
             obstacles=self.obstacles,
             goal_state_radius=self.goal_state_radius,
@@ -529,6 +531,37 @@ class TestContinuousLightDarkDecayingHitProbabilityRewardModel:
             fuel_cost=self.fuel_cost,
             penalty_decay=self.penalty_decay,
         )
+
+    def test_invalid_penalty_decay_rejected(self):
+        """Regression: penalty_decay <= 0 must be rejected at construction.
+
+        Purpose: Validates that the decaying-hit-probability reward model rejects
+        non-positive ``penalty_decay`` at construction, matching the validation already
+        enforced by the pacman and rock_sample decaying-reward variants. Without this
+        guard a misconfigured planner would crash mid-rollout with a divide-by-zero
+        inside ``np.exp(-d / penalty_decay)``.
+
+        Given: The standard decaying-reward constructor kwargs
+        When: ``ContinuousLightDarkDistanceDecayedHazardPenaltyRewardModel`` is instantiated
+            with ``penalty_decay`` equal to 0.0 or a negative value
+        Then: ``ValueError`` is raised at construction; no instance is produced
+
+        Test type: unit
+        """
+        for bad_decay in (0.0, -1.0):
+            with pytest.raises(ValueError):
+                ContinuousLightDarkDistanceDecayedHazardPenaltyRewardModel(
+                    goal_state=self.goal_state,
+                    obstacles=self.obstacles,
+                    goal_state_radius=self.goal_state_radius,
+                    obstacle_radius=self.obstacle_radius,
+                    grid_size=self.grid_size,
+                    obstacle_hit_probability=self.obstacle_hit_probability,
+                    obstacle_reward=self.obstacle_reward,
+                    goal_reward=self.goal_reward,
+                    fuel_cost=self.fuel_cost,
+                    penalty_decay=bad_decay,
+                )
 
     def test_decaying_obstacle_probability(self):
         """Test that obstacle hit probability decreases with distance."""
@@ -602,7 +635,7 @@ class TestContinuousLightDarkDecayingHitProbabilityRewardModel:
     def test_penalty_decay_parameter_effect(self):
         """Test that penalty_decay parameter affects probability decay rate."""
         # Create model with different decay rates
-        fast_decay_model = ContinuousLightDarkDecayingHitProbabilityRewardModel(
+        fast_decay_model = ContinuousLightDarkDistanceDecayedHazardPenaltyRewardModel(
             goal_state=self.goal_state,
             obstacles=self.obstacles,
             goal_state_radius=self.goal_state_radius,
@@ -615,7 +648,7 @@ class TestContinuousLightDarkDecayingHitProbabilityRewardModel:
             penalty_decay=1.0,  # Fast decay
         )
 
-        slow_decay_model = ContinuousLightDarkDecayingHitProbabilityRewardModel(
+        slow_decay_model = ContinuousLightDarkDistanceDecayedHazardPenaltyRewardModel(
             goal_state=self.goal_state,
             obstacles=self.obstacles,
             goal_state_radius=self.goal_state_radius,
@@ -754,7 +787,7 @@ class TestRewardModelBatch:
             fuel_cost=self.fuel_cost,
         )
 
-        self.dangerous_model = ContinuousLDDangerousStatesRewardModel(
+        self.high_variance_model = ContinuousLDZeroMeanHazardShockRewardModel(
             goal_state=self.goal_state,
             obstacles=self.obstacles,
             goal_state_radius=self.goal_state_radius,
@@ -766,7 +799,7 @@ class TestRewardModelBatch:
             fuel_cost=self.fuel_cost,
         )
 
-        self.decaying_model = ContinuousLightDarkDecayingHitProbabilityRewardModel(
+        self.decaying_model = ContinuousLightDarkDistanceDecayedHazardPenaltyRewardModel(
             goal_state=self.goal_state,
             obstacles=self.obstacles,
             goal_state_radius=self.goal_state_radius,
@@ -801,12 +834,12 @@ class TestRewardModelBatch:
         expected = np.array([self.model.compute_reward(states[i], action) for i in range(100)])
         np.testing.assert_allclose(batch_rewards, expected)
 
-    def test_dangerous_model_batch_matches_scalar(self):
-        """Test ContinuousLDDangerousStatesRewardModel batch matches scalar with same seed.
+    def test_high_variance_model_batch_matches_scalar(self):
+        """Test ContinuousLDZeroMeanHazardShockRewardModel batch matches scalar with same seed.
 
         Purpose: Validates vectorized compute_reward_batch matches per-element compute_reward
 
-        Given: A ContinuousLDDangerousStatesRewardModel and 100 random states
+        Given: A ContinuousLDZeroMeanHazardShockRewardModel and 100 random states
         When: compute_reward_batch and scalar calls are made with same seed
         Then: Both produce identical reward arrays
 
@@ -816,21 +849,21 @@ class TestRewardModelBatch:
         action = np.array([0.5, 0.5])
 
         np.random.seed(99)
-        batch_rewards = self.dangerous_model.compute_reward_batch(states, action)
+        batch_rewards = self.high_variance_model.compute_reward_batch(states, action)
         assert batch_rewards.shape == (100,)
 
         np.random.seed(99)
         expected = np.array(
-            [self.dangerous_model.compute_reward(states[i], action) for i in range(100)]
+            [self.high_variance_model.compute_reward(states[i], action) for i in range(100)]
         )
         np.testing.assert_allclose(batch_rewards, expected)
 
     def test_decaying_model_batch_matches_scalar(self):
-        """Test ContinuousLightDarkDecayingHitProbabilityRewardModel batch matches scalar with same seed.
+        """Test ContinuousLightDarkDistanceDecayedHazardPenaltyRewardModel batch matches scalar with same seed.
 
         Purpose: Validates vectorized compute_reward_batch matches per-element compute_reward
 
-        Given: A ContinuousLightDarkDecayingHitProbabilityRewardModel and 100 random states
+        Given: A ContinuousLightDarkDistanceDecayedHazardPenaltyRewardModel and 100 random states
         When: compute_reward_batch and scalar calls are made with same seed
         Then: Both produce identical reward arrays
 

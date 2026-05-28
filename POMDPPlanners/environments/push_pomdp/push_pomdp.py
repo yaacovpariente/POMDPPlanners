@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 # pylint: disable=too-many-lines
 """Push POMDP Environment Implementation.
 
@@ -39,6 +41,13 @@ from POMDPPlanners.core.environment import (
 )
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
 from POMDPPlanners.environments.push_pomdp import _native
+from POMDPPlanners.environments.push_pomdp.push_pomdp_utils.push_reward_models import (
+    BasePushRewardModel,
+    DiscretePushDistanceDecayedHazardPenaltyRewardModel,
+    DiscretePushZeroMeanHazardShockRewardModel,
+    DiscretePushRewardModel,
+    RewardModelType,
+)
 from POMDPPlanners.environments.push_pomdp.push_pomdp_visualizer import PushPOMDPVisualizer
 from POMDPPlanners.utils.statistics_utils import confidence_interval
 
@@ -150,10 +159,10 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
         deterministic given a state-action pair, so any external caching
         that assumes deterministic rewards must be aware of this.
         ``transition_log_probability`` is unaffected; the obstacle still
-        deterministically blocks movement. When
-        ``obstacle_hit_probability < 1.0`` the native C++ rollout (which
-        deducts the penalty deterministically) is bypassed in favour of
-        the pure-Python rollout so per-step Bernoulli draws survive.
+        deterministically blocks movement. The native C++ rollout applies
+        the Bernoulli ``obstacle_hit_probability`` draw internally, so
+        ``simulate_random_rollout`` always routes through the native
+        kernel.
 
     Dangerous areas:
         ``dangerous_areas`` is a separate, additive concept from
@@ -167,8 +176,9 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
         ``dangerous_area_penalty`` is applied per step even when
         multiple zones overlap. Like obstacles, the penalty supports a
         Bernoulli ``dangerous_area_hit_probability`` (default 1.0) for
-        risk-sensitive planning; ``< 1.0`` bypasses the deterministic
-        native rollout in favour of the Python path.
+        risk-sensitive planning. The native C++ rollout applies the
+        Bernoulli draw internally, so all rollouts route through the
+        native kernel regardless of the configured probability.
 
     Example:
         >>> import numpy as np
@@ -215,6 +225,8 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
         dangerous_area_radius: float = 0.5,
         dangerous_area_penalty: float = -10.0,
         dangerous_area_hit_probability: float = 1.0,
+        reward_model_type: RewardModelType = RewardModelType.CONSTANT_HAZARD_PENALTY,
+        penalty_decay: float = 1.0,
         initial_state: Optional[np.ndarray] = None,
         transition_error_prob: float = 0.0,
         name: str = "PushPOMDP",
@@ -226,6 +238,11 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
             raise ValueError("obstacle_hit_probability must be between 0 and 1 (inclusive)")
         if not 0.0 <= dangerous_area_hit_probability <= 1.0:
             raise ValueError("dangerous_area_hit_probability must be between 0 and 1 (inclusive)")
+        if (
+            reward_model_type == RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY
+            and penalty_decay <= 0.0
+        ):
+            raise ValueError("penalty_decay must be strictly positive")
 
         self.grid_size = grid_size
         self.push_threshold = push_threshold
@@ -241,6 +258,8 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
         self.dangerous_area_radius = float(dangerous_area_radius)
         self.dangerous_area_penalty = float(dangerous_area_penalty)
         self.dangerous_area_hit_probability = float(dangerous_area_hit_probability)
+        self.reward_model_type = reward_model_type
+        self.penalty_decay = float(penalty_decay)
         self._initial_state = initial_state
         self.transition_error_prob = transition_error_prob
 
@@ -328,6 +347,39 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
         # objects.
         self._trans_kernel_cache: Dict[str, Any] = {}
 
+        self.reward_model: BasePushRewardModel = self._build_reward_model()
+        # Cache the bound methods so the hot path skips ``self.reward_model``
+        # attribute lookup on each call (~50–100 ns saved per call). Bound
+        # methods pickle correctly via ``(class, name, instance)``, so
+        # __setstate__ doesn't need to rebuild them.
+        self._compute_reward = self.reward_model.compute_reward
+        self._compute_reward_batch = self.reward_model.compute_reward_batch
+
+    def _build_reward_model(self) -> BasePushRewardModel:
+        # ``Dict[str, Any]`` opt-out is required so pyright doesn't narrow
+        # the value type to the lub of obstacles + scalars and reject the
+        # ``**`` unpack as incompatible with each reward-model __init__.
+        common_kwargs: Dict[str, Any] = {
+            "obstacles": self.obstacles,
+            "obstacle_radius": self.obstacle_radius,
+            "obstacle_penalty": self.obstacle_penalty,
+            "obstacle_hit_probability": self.obstacle_hit_probability,
+            "dangerous_areas": self.dangerous_areas,
+            "dangerous_areas_arr": self._dangerous_areas_arr,
+            "dangerous_area_radius": self.dangerous_area_radius,
+            "dangerous_area_penalty": self.dangerous_area_penalty,
+            "dangerous_area_hit_probability": self.dangerous_area_hit_probability,
+        }
+        if self.reward_model_type == RewardModelType.CONSTANT_HAZARD_PENALTY:
+            return DiscretePushRewardModel(**common_kwargs)
+        if self.reward_model_type == RewardModelType.ZERO_MEAN_HAZARD_SHOCK:
+            return DiscretePushZeroMeanHazardShockRewardModel(**common_kwargs)
+        if self.reward_model_type == RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY:
+            return DiscretePushDistanceDecayedHazardPenaltyRewardModel(
+                penalty_decay=self.penalty_decay, **common_kwargs
+            )
+        raise ValueError(f"Unknown reward model type: {self.reward_model_type}")
+
     def _is_colliding_with_obstacle(
         self, position: np.ndarray, action: Optional[str] = None
     ) -> bool:
@@ -363,7 +415,7 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
     def sample_next_step(self, state: Any, action: Any) -> Tuple[Any, Any, float]:
         next_state = self.sample_next_state(state=state, action=action)
         next_observation = self.sample_observation(next_state=next_state, action=action)
-        r = self._reward_from_next_state(state, action, next_state)
+        r = self._compute_reward(state, action, next_state)
         return next_state, next_observation, r
 
     # ── Env-API sampling implementations ────────────────────────────
@@ -608,45 +660,7 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
         # sample a fresh next state to evaluate the action result.
         if next_state is None:
             next_state = self.sample_next_state(state, action)
-        return self._reward_from_next_state(state, action, next_state)
-
-    def _reward_from_next_state(
-        self, state: np.ndarray, action: str, next_state: np.ndarray
-    ) -> float:
-        # State components: [robot_x, robot_y, object_x, object_y, target_x, target_y]
-        del state, action  # penalties consult the realised post-transition robot pos
-        dx = next_state[2] - next_state[4]
-        dy = next_state[3] - next_state[5]
-        distance_to_target = math.sqrt(dx * dx + dy * dy)
-
-        # Base reward is negative distance to encourage moving closer to target
-        reward = -distance_to_target
-
-        # Additional reward for reaching target
-        if distance_to_target < 0.5:
-            reward += 100.0
-
-        # Score obstacle/danger penalties against the realised robot
-        # position so reward and trajectory agree on the same draw —
-        # mirrors the ContinuousPushPOMDP fix. Action-blocking +
-        # transition_error_prob can move the robot somewhere other than
-        # ``state[:2] + dxdy``, so checking the intended position
-        # double-counts bounce-offs and miscredits orthogonal-error draws.
-        if self._is_colliding_with_obstacle(next_state[:2]):
-            if (
-                self.obstacle_hit_probability >= 1.0
-                or np.random.random() < self.obstacle_hit_probability
-            ):
-                reward += self.obstacle_penalty
-
-        if self._is_in_dangerous_area(next_state[:2]):
-            if (
-                self.dangerous_area_hit_probability >= 1.0
-                or np.random.random() < self.dangerous_area_hit_probability
-            ):
-                reward += self.dangerous_area_penalty
-
-        return float(reward)
+        return self._compute_reward(state, action, next_state)
 
     def is_terminal(self, state: np.ndarray) -> bool:
         # Episode ends when object is close to target
@@ -723,35 +737,16 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
         if remaining <= 0 or self.is_terminal(state=state):
             return 0.0
 
-        # Bypass the native kernel whenever obstacle or dangerous-area
-        # penalties may fire: the C++ rollout still scores them against
-        # ``state + action_vector`` (intended position), while the Python
-        # ``reward`` path now consults the realised ``next_state``. The C++
-        # kernel needs a recompile to align — until then we route through
-        # Python whenever penalties are configured.
-        # The same fall-back is required for stochastic hit probabilities
-        # so per-step Bernoulli draws against the configured probabilities
-        # survive (the C++ kernel applies them deterministically).
-        has_obstacle_penalty = len(self.obstacles) > 0
-        has_dangerous_area_penalty = self._dangerous_areas_arr.shape[0] > 0
-        if (
-            self.obstacle_hit_probability < 1.0
-            or self.dangerous_area_hit_probability < 1.0
-            or has_obstacle_penalty
-            or has_dangerous_area_penalty
-        ):
-            actions = [self.actions[i] for i in np.random.randint(0, 4, size=remaining)]
-            return self._python_simulate_random_rollout(
-                state=state,
-                actions=actions,
-                max_depth=max_depth,
-                discount_factor=discount_factor,
-                depth=depth,
-            )
-
+        # Native kernel is variant-aware and scores obstacle / dangerous-area
+        # penalties against the REALISED post-action robot position
+        # (``next_state[:2]``), matching ``DiscretePushRewardModel``. Pass the
+        # variant code + penalty decay so the C++ rollout dispatches
+        # CONSTANT_HAZARD_PENALTY / ZERO_MEAN_HAZARD_SHOCK / DISTANCE_DECAYED_HAZARD_PENALTY exactly
+        # like the standalone ``push_reward_batch`` kernel.
         action_indices = np.random.randint(0, 4, size=remaining, dtype=np.int64)
         obs_arr = self._get_native_rollout_obstacles()
         state_arr = np.asarray(state, dtype=np.float64)
+        variant_code, penalty_decay = self._reward_variant_native_params()
 
         return float(
             _native.simulate_rollout_discrete(
@@ -770,6 +765,10 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
                 dangerous_area_radius=float(self.dangerous_area_radius),
                 dangerous_area_penalty=float(self.dangerous_area_penalty),
                 transition_error_prob=float(self.transition_error_prob),
+                obstacle_hit_probability=float(self.obstacle_hit_probability),
+                dangerous_area_hit_probability=float(self.dangerous_area_hit_probability),
+                reward_variant_code=variant_code,
+                penalty_decay=penalty_decay,
             )
         )
 
@@ -785,7 +784,7 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
         # accepts a pre-drawn action list (to allow exact comparison with the
         # C++ path when transition_error_prob=0 and the actions are held fixed).
         sample_one = self._sample_one_next_state
-        reward_from_next = self._reward_from_next_state
+        reward_from_next = self._compute_reward
         is_terminal = self.is_terminal
 
         total = 0.0
@@ -843,8 +842,10 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
         When ``next_states`` is supplied (e.g. by a caller that has
         already sampled the realised batch transition), it is used
         directly; otherwise N next states are drawn here via the cached
-        ``PushVectorizedUpdater``. Per-particle rewards are then computed
-        with pure NumPy operations — no Python loop over particles.
+        ``PushVectorizedUpdater``. Per-particle rewards are computed in
+        the C++ ``push_reward_batch`` kernel (variant-aware: CONSTANT_HAZARD_PENALTY,
+        ZERO_MEAN_HAZARD_SHOCK, DISTANCE_DECAYED_HAZARD_PENALTY) so the batch
+        cost is a single round-trip into native code.
         """
         states_array = np.ascontiguousarray(np.asarray(states, dtype=float))
         if states_array.ndim == 1:
@@ -855,56 +856,45 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
             next_states_arr = np.ascontiguousarray(np.asarray(next_states, dtype=float))
             if next_states_arr.ndim == 1:
                 next_states_arr = next_states_arr.reshape(1, -1)
-        return self._reward_batch_from_next_states(states_array, action, next_states_arr)
+        return self._native_reward_batch(states_array, action, next_states_arr)
 
-    def _reward_batch_from_next_states(
-        self, states: np.ndarray, action: str, next_states: np.ndarray
+    def _native_reward_batch(
+        self,
+        states_array: np.ndarray,
+        action: str,
+        next_states_arr: np.ndarray,
     ) -> np.ndarray:
-        # ``states``/``action`` are kept on the signature for symmetry with
-        # ``Environment.reward_batch``; the obstacle and dangerous-area
-        # penalties consume the realised post-transition robot position
-        # from ``next_states`` to stay in lockstep with the scalar
-        # ``_reward_from_next_state`` path (and the ContinuousPushPOMDP
-        # reference fix).
-        del states, action
-        dx = next_states[:, 2] - next_states[:, 4]
-        dy = next_states[:, 3] - next_states[:, 5]
-        dist = np.sqrt(dx * dx + dy * dy)
-        rewards = -dist
-        rewards = np.where(dist < 0.5, rewards + 100.0, rewards)
-        rewards += self._obstacle_penalty_batch(next_states)
-        rewards += self._dangerous_area_penalty_batch(next_states)
-        return rewards.astype(np.float64)
+        obstacles_arr = self._get_native_rollout_obstacles()
+        if obstacles_arr.ndim == 1 and obstacles_arr.shape[0] == 0:
+            obstacles_native = np.empty((0, 2), dtype=np.float64)
+        else:
+            obstacles_native = np.ascontiguousarray(obstacles_arr, dtype=np.float64)
+        variant_code, penalty_decay = self._reward_variant_native_params()
+        return np.asarray(
+            _native.push_reward_batch(
+                states=states_array,
+                action_idx=int(self.actions.index(action)),
+                next_states=next_states_arr,
+                obstacles=obstacles_native,
+                obstacle_radius=float(self.obstacle_radius),
+                obstacle_penalty=float(self.obstacle_penalty),
+                obstacle_hit_probability=float(self.obstacle_hit_probability),
+                dangerous_areas=self._dangerous_areas_arr,
+                dangerous_area_radius=float(self.dangerous_area_radius),
+                dangerous_area_penalty=float(self.dangerous_area_penalty),
+                dangerous_area_hit_probability=float(self.dangerous_area_hit_probability),
+                reward_variant_code=variant_code,
+                penalty_decay=penalty_decay,
+            ),
+            dtype=np.float64,
+        )
 
-    def _obstacle_penalty_batch(self, next_states: np.ndarray) -> np.ndarray:
-        # Score the obstacle penalty against the realised next robot
-        # position (``next_states[:, :2]``); mirrors the scalar path's
-        # post-fix ``_is_colliding_with_obstacle(next_state[:2])`` call.
-        if not self.obstacles:
-            return np.zeros(len(next_states), dtype=np.float64)
-        positions = next_states[:, :2]
-        obs_arr = np.asarray(self.obstacles, dtype=float)  # (M, 2)
-        diff = positions[:, None, :] - obs_arr[None, :, :]  # (N, M, 2)
-        dist_sq = np.sum(diff * diff, axis=2)  # (N, M)
-        colliding = np.any(dist_sq <= self.obstacle_radius * self.obstacle_radius, axis=1)
-        if self.obstacle_hit_probability < 1.0:
-            # Per-row Bernoulli mask: refund the penalty for rows that collide
-            # but lose the per-call coin flip.
-            applied = np.random.random(len(next_states)) < self.obstacle_hit_probability
-            colliding = colliding & applied
-        return np.where(colliding, self.obstacle_penalty, 0.0).astype(np.float64)
-
-    def _dangerous_area_penalty_batch(self, next_states: np.ndarray) -> np.ndarray:
-        if not self.dangerous_areas:
-            return np.zeros(len(next_states), dtype=np.float64)
-        positions = next_states[:, :2]
-        diff = positions[:, None, :] - self._dangerous_areas_arr[None, :, :]
-        dist_sq = np.sum(diff * diff, axis=2)
-        in_zone = np.any(dist_sq <= self.dangerous_area_radius * self.dangerous_area_radius, axis=1)
-        if self.dangerous_area_hit_probability < 1.0:
-            applied = np.random.random(len(next_states)) < self.dangerous_area_hit_probability
-            in_zone = in_zone & applied
-        return np.where(in_zone, self.dangerous_area_penalty, 0.0).astype(np.float64)
+    def _reward_variant_native_params(self) -> Tuple[int, float]:
+        if self.reward_model_type == RewardModelType.ZERO_MEAN_HAZARD_SHOCK:
+            return 1, 0.0
+        if self.reward_model_type == RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY:
+            return 2, float(getattr(self.reward_model, "penalty_decay", 1.0))
+        return 0, 0.0
 
     def observation_log_probability_per_state(
         self, next_states: Any, action: str, observation: Any

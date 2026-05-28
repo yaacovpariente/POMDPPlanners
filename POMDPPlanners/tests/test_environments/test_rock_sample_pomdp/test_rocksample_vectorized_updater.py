@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for RockSample vectorized particle belief updater."""
 
 import numpy as np

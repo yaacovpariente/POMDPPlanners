@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for EnvironmentVisualizationTask."""
 
 # pylint: disable=protected-access  # Tests need to access protected members

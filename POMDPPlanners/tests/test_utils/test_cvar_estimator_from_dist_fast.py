@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Parity tests for ``cvar_estimator_from_dist_fast``.
 
 The fast variant is the hot-path version used by MCTS backups in

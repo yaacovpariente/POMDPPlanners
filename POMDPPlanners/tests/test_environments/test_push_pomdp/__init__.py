@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for Push POMDP environments.
 
 This package contains test modules for the Push POMDP environments:

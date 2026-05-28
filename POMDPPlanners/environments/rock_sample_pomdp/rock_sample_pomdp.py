@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Module for RockSample POMDP environment.
 
 This module provides the RockSample POMDP environment implementation based on the
@@ -29,6 +31,12 @@ from POMDPPlanners.core.environment import (
 )
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
 from POMDPPlanners.environments.rock_sample_pomdp import _native
+from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp_utils.rock_sample_reward_models import (
+    BaseRockSampleRewardModel,
+    RockSampleDistanceDecayedHazardPenaltyRewardModel,
+    RockSampleZeroMeanHazardShockRewardModel,
+    RockSampleRewardModel,
+)
 from POMDPPlanners.utils.statistics_utils import confidence_interval
 
 
@@ -38,6 +46,21 @@ class RockSamplePOMDPMetrics(Enum):
     AVG_ROCKS_SAMPLED = "avg_rocks_sampled"
     EXIT_SUCCESS_RATE = "exit_success_rate"
     AVERAGE_DANGEROUS_AREA_STEPS = "average_dangerous_area_steps"
+
+
+class RewardModelType(Enum):
+    """Reward-model variants for :class:`RockSamplePOMDP`.
+
+    Variants differ only in how the dangerous-area penalty is applied —
+    base scoring (exit / sample / sense / step) is identical across all
+    three. See
+    :mod:`POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp_utils.rock_sample_reward_models`
+    for the per-variant semantics.
+    """
+
+    CONSTANT_HAZARD_PENALTY = "constant_hazard_penalty"
+    DISTANCE_DECAYED_HAZARD_PENALTY = "distance_decayed_hazard_penalty"
+    ZERO_MEAN_HAZARD_SHOCK = "zero_mean_hazard_shock"
 
 
 # Type alias for RockSampleState
@@ -174,6 +197,8 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
         dangerous_area_radius: float = 1.0,
         dangerous_area_penalty: float = -5.0,
         dangerous_area_hit_probability: float = 1.0,
+        reward_model_type: RewardModelType = RewardModelType.CONSTANT_HAZARD_PENALTY,
+        penalty_decay: float = 1.0,
         discount_factor: float = 0.95,
         name: str = "RockSample",
         output_dir: Optional[Path] = None,
@@ -207,7 +232,23 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
                 reward stochastic (per-call Bernoulli draw), useful for
                 risk-sensitive planning benchmarks. Note that this makes
                 ``reward(state, action)`` non-deterministic given a
-                state-action pair.
+                state-action pair. Ignored by ``ZERO_MEAN_HAZARD_SHOCK``
+                and ``DISTANCE_DECAYED_HAZARD_PENALTY`` reward models.
+            reward_model_type: Which dangerous-area penalty model to use.
+                Defaults to ``RewardModelType.CONSTANT_HAZARD_PENALTY`` (legacy
+                constant-probability behaviour). ``ZERO_MEAN_HAZARD_SHOCK``
+                applies ``±dangerous_area_penalty`` 50/50 in-zone (zero
+                expected contribution, high variance — useful for
+                risk-sensitive planner benchmarks).
+                ``DISTANCE_DECAYED_HAZARD_PENALTY`` applies the penalty with
+                probability ``exp(-min_dist / penalty_decay)`` based on
+                distance to the closest dangerous-area centre (no radius
+                cutoff). See
+                :class:`~POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp.RewardModelType`.
+            penalty_decay: Distance-decay constant for the
+                ``DISTANCE_DECAYED_HAZARD_PENALTY`` reward model. Must be
+                positive. Ignored by other reward models. Defaults to
+                ``1.0``.
             discount_factor: Discount factor. Defaults to 0.95.
             name: Environment name. Defaults to "RockSample".
             output_dir: Output directory for logging. Defaults to None.
@@ -225,10 +266,21 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
                 stacklevel=2,
             )
 
-        # Calculate reward range based on parameters
-        danger_term = dangerous_area_penalty if dangerous_areas else 0.0
-        min_reward = step_penalty + bad_rock_penalty + sensor_use_penalty + min(0.0, danger_term)
-        max_reward = step_penalty + exit_reward + max(0.0, danger_term)
+        # Calculate reward range based on parameters. ZERO_MEAN_HAZARD_SHOCK
+        # can flip the sign of the dangerous-area contribution, so its
+        # effective danger term spans ``[-|penalty|, +|penalty|]``.
+        if dangerous_areas:
+            if reward_model_type == RewardModelType.ZERO_MEAN_HAZARD_SHOCK:
+                danger_term_min = -abs(dangerous_area_penalty)
+                danger_term_max = abs(dangerous_area_penalty)
+            else:
+                danger_term_min = min(0.0, dangerous_area_penalty)
+                danger_term_max = max(0.0, dangerous_area_penalty)
+        else:
+            danger_term_min = 0.0
+            danger_term_max = 0.0
+        min_reward = step_penalty + bad_rock_penalty + sensor_use_penalty + danger_term_min
+        max_reward = step_penalty + exit_reward + danger_term_max
 
         space_info = SpaceInfo(
             action_space=SpaceType.DISCRETE, observation_space=SpaceType.DISCRETE
@@ -261,6 +313,10 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
         self.dangerous_area_radius = dangerous_area_radius
         self.dangerous_area_penalty = dangerous_area_penalty
         self.dangerous_area_hit_probability = float(dangerous_area_hit_probability)
+        self.reward_model_type = reward_model_type
+        self.penalty_decay = float(penalty_decay)
+
+        self.reward_model: BaseRockSampleRewardModel = self._build_reward_model()
 
         # Validate parameters
         self._validate_parameters()
@@ -275,6 +331,21 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
         self._rock_positions_flat: np.ndarray = np.asarray(
             [coord for rp in self.rock_positions for coord in rp], dtype=np.int32
         )
+
+        # Cached (K, 2) float64 dangerous-area centres for the native
+        # reward / rollout kernels. Empty (0, 2) array when no danger
+        # zones are configured.
+        if self.dangerous_areas:
+            self._dangerous_areas_arr: np.ndarray = np.ascontiguousarray(
+                np.asarray(self.dangerous_areas, dtype=np.float64)
+            )
+        else:
+            self._dangerous_areas_arr = np.empty((0, 2), dtype=np.float64)
+        self._reward_variant_code: int = {
+            RewardModelType.CONSTANT_HAZARD_PENALTY: 0,
+            RewardModelType.ZERO_MEAN_HAZARD_SHOCK: 1,
+            RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY: 2,
+        }[self.reward_model_type]
 
         # Define actions: 0=sample, 1=north, 2=east, 3=south, 4=west, 5+=check_rock_i
         self.action_names = ["sample", "north", "east", "south", "west"]
@@ -298,6 +369,30 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
         self._trans_kernel_cache: Dict[int, Any] = {}
         self._obs_kernel_cache: Dict[int, Any] = {}
 
+    def _build_reward_model(self) -> BaseRockSampleRewardModel:
+        common_kwargs = {
+            "map_size": self.map_size,
+            "rock_positions": self.rock_positions,
+            "step_penalty": self.step_penalty,
+            "bad_rock_penalty": self.bad_rock_penalty,
+            "good_rock_reward": self.good_rock_reward,
+            "sensor_use_penalty": self.sensor_use_penalty,
+            "exit_reward": self.exit_reward,
+            "dangerous_areas": self.dangerous_areas,
+            "dangerous_area_radius": self.dangerous_area_radius,
+            "dangerous_area_penalty": self.dangerous_area_penalty,
+            "dangerous_area_hit_probability": self.dangerous_area_hit_probability,
+        }
+        if self.reward_model_type == RewardModelType.CONSTANT_HAZARD_PENALTY:
+            return RockSampleRewardModel(**common_kwargs)
+        if self.reward_model_type == RewardModelType.ZERO_MEAN_HAZARD_SHOCK:
+            return RockSampleZeroMeanHazardShockRewardModel(**common_kwargs)
+        if self.reward_model_type == RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY:
+            return RockSampleDistanceDecayedHazardPenaltyRewardModel(
+                **common_kwargs, penalty_decay=self.penalty_decay
+            )
+        raise ValueError(f"Unknown reward model type: {self.reward_model_type}")
+
     def _validate_parameters(self):
         """Validate environment parameters."""
         if self.map_size[0] <= 0 or self.map_size[1] <= 0:
@@ -313,25 +408,14 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
             )
 
     def _is_in_dangerous_area(self, position: Tuple[int, int]) -> bool:
-        """Check if a position is within any dangerous area.
-
-        Args:
-            position: Position to check as (row, col) tuple
-
-        Returns:
-            True if position is within radius of any dangerous area center
-        """
+        """Check if a position is within any dangerous area (metrics helper)."""
         if not self.dangerous_areas:
             return False
-
         pos_row, pos_col = position
-
         for danger_row, danger_col in self.dangerous_areas:
-            # Calculate Euclidean distance
             distance = math.sqrt((pos_row - danger_row) ** 2 + (pos_col - danger_col) ** 2)
             if distance <= self.dangerous_area_radius:
                 return True
-
         return False
 
     def get_actions(self) -> List[int]:
@@ -358,34 +442,7 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
     def _reward_from_next_state(
         self, state: RockSampleState, action: int, next_state: RockSampleState
     ) -> float:
-        total_reward = self.step_penalty
-
-        robot_row, robot_col = get_robot_pos(state)
-        if action == 2 and robot_col == self.map_size[1] - 1:
-            total_reward += self.exit_reward
-            return total_reward
-
-        if action == 0:
-            rocks = get_rocks(state)
-            for i, rock_pos in enumerate(self.rock_positions):
-                if (robot_row, robot_col) == rock_pos:
-                    if rocks[i]:
-                        total_reward += self.good_rock_reward
-                    else:
-                        total_reward += self.bad_rock_penalty
-                    break
-
-        if action >= 5:
-            total_reward += self.sensor_use_penalty
-
-        if self._is_in_dangerous_area(get_robot_pos(next_state)):
-            if (
-                self.dangerous_area_hit_probability >= 1.0
-                or np.random.random() < self.dangerous_area_hit_probability
-            ):
-                total_reward += self.dangerous_area_penalty
-
-        return total_reward
+        return self.reward_model.compute_reward(state, action, next_state=next_state)
 
     def reward_batch(
         self,
@@ -422,85 +479,32 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
         action: int,
         next_states: Optional[np.ndarray] = None,
     ) -> np.ndarray:
-        n = states.shape[0]
-        rewards = np.full(n, self.step_penalty, dtype=np.float64)
-        map_cols = self.map_size[1]
-
-        if action == 2:
-            # East exit: robot at last column exits
-            exits = states[:, 1].astype(int) == (map_cols - 1)
-            # Terminal-sentinel rows are already exited; treat as exit
-            terminal = (states[:, 0] < 0) & (states[:, 1] < 0)
-            rewards[exits | terminal] += self.exit_reward
-            return rewards
-
-        if action == 0:
-            # Sample action: reward depends on rock quality at robot position
-            robot_rows = states[:, 0].astype(int)
-            robot_cols = states[:, 1].astype(int)
-            for i, (rr, rc) in enumerate(self.rock_positions):
-                at_rock = (robot_rows == rr) & (robot_cols == rc)
-                if not np.any(at_rock):
-                    continue
-                rock_slot = 2 + i
-                rock_good = states[:, rock_slot] > 0.5
-                rewards[at_rock & rock_good] += self.good_rock_reward
-                rewards[at_rock & ~rock_good] += self.bad_rock_penalty
-
-        if action >= 5:
-            rewards += self.sensor_use_penalty
-
-        # Default config has no dangerous areas; skip the next-position
-        # computation entirely. Otherwise, prefer caller-supplied
-        # realised next positions and only reconstruct via closed-form
-        # math when ``next_states`` is None. RockSample transitions are
-        # deterministic, so the closed-form fallback agrees with a
-        # fresh draw from :meth:`sample_next_state`.
-        if not self.dangerous_areas:
-            return rewards
-
-        if next_states is not None:
-            next_robot_rows = next_states[:, 0].astype(int)
-            next_robot_cols = next_states[:, 1].astype(int)
-        else:
-            next_robot_rows, next_robot_cols = self._closed_form_next_robot_pos(states, action)
-        deterministic = self.dangerous_area_hit_probability >= 1.0
-        for j in range(n):
-            if not self._is_in_dangerous_area((next_robot_rows[j], next_robot_cols[j])):
-                continue
-            if deterministic or np.random.random() < self.dangerous_area_hit_probability:
-                rewards[j] += self.dangerous_area_penalty
-
-        return rewards
-
-    def _closed_form_next_robot_pos(
-        self, states: np.ndarray, action: int
-    ) -> Tuple[np.ndarray, np.ndarray]:
-        # Closed-form post-transition robot position for the dangerous-area
-        # check. RockSample movement actions translate by ``(dr, dc)`` and
-        # clip to map bounds; sample / sense actions leave position
-        # unchanged. Terminal-sentinel rows (state[:, 0] < 0) keep their
-        # negative coordinates so they never match a dangerous-area cell,
-        # mirroring the batch-kernel semantics for that path.
-        robot_rows = states[:, 0].astype(int)
-        robot_cols = states[:, 1].astype(int)
-        if action == 1:
-            dr, dc = -1, 0
-        elif action == 3:
-            dr, dc = 1, 0
-        elif action == 4:
-            dr, dc = 0, -1
-        else:
-            dr, dc = 0, 0
-        new_rows = robot_rows + dr
-        new_cols = robot_cols + dc
-        terminal = (states[:, 0] < 0) & (states[:, 1] < 0)
-        new_rows = np.clip(new_rows, 0, self.map_size[0] - 1)
-        new_cols = np.clip(new_cols, 0, self.map_size[1] - 1)
-        # Restore terminal-sentinel rows so they stay "in their own row".
-        new_rows[terminal] = robot_rows[terminal]
-        new_cols[terminal] = robot_cols[terminal]
-        return new_rows, new_cols
+        # Fallback to the Python reward model when caller did not pre-sample
+        # next states (closed-form reconstruction lives there).
+        if next_states is None:
+            return self.reward_model.compute_reward_batch(states, action, next_states=None)
+        return np.asarray(
+            _native.reward_batch(
+                states=np.ascontiguousarray(states, dtype=np.float64),
+                action=int(action),
+                next_states=np.ascontiguousarray(next_states, dtype=np.float64),
+                map_rows=int(self.map_size[0]),
+                map_cols=int(self.map_size[1]),
+                rock_positions=self._rock_positions_int32,
+                step_penalty=float(self.step_penalty),
+                bad_rock_penalty=float(self.bad_rock_penalty),
+                good_rock_reward=float(self.good_rock_reward),
+                sensor_use_penalty=float(self.sensor_use_penalty),
+                exit_reward=float(self.exit_reward),
+                dangerous_areas=self._dangerous_areas_arr,
+                dangerous_area_radius=float(self.dangerous_area_radius),
+                dangerous_area_penalty=float(self.dangerous_area_penalty),
+                dangerous_area_hit_probability=float(self.dangerous_area_hit_probability),
+                reward_variant_code=int(self._reward_variant_code),
+                penalty_decay=float(self.penalty_decay),
+            ),
+            dtype=np.float64,
+        )
 
     # ── Native-backed env-API implementations ────────────────────────
     # Each method fetches a cached per-action C++ kernel, mutates its
@@ -619,20 +623,22 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
     def simulate_random_rollout(
         self,
         state: Any,
-        action_sampler: Any,
+        action_sampler: Any,  # pylint: disable=unused-argument
         max_depth: int,
         discount_factor: float,
         depth: int = 0,
     ) -> float:
         """Random rollout via native C++ deterministic transition and reward kernel.
 
-        Falls back to the base-class Python loop when dangerous areas are
-        configured (their stochastic-penalty semantics are not ported to C++).
+        The C++ kernel applies the variant-aware dangerous-area reward term
+        directly, so no Python fallback is required when danger zones are
+        configured.
 
         Args:
             state: Current RockSample state array.
             action_sampler: Object with a ``sample()`` method returning an
-                integer action; used only on the Python fallback path.
+                integer action. Currently unused — actions are drawn
+                uniformly by the native kernel.
             max_depth: Maximum rollout depth.
             discount_factor: Per-step discount factor.
             depth: Depth already consumed by the search tree. Defaults to 0.
@@ -640,21 +646,6 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
         Returns:
             Discounted sum of immediate rewards along the sampled trajectory.
         """
-        if self.dangerous_areas:
-            # pylint: disable-next=import-outside-toplevel
-            from POMDPPlanners.planners.planners_utils.rollout import (
-                python_random_rollout,
-            )
-
-            return python_random_rollout(
-                state=state,
-                depth=depth,
-                action_sampler=action_sampler,
-                environment=self,
-                discount_factor=discount_factor,
-                max_depth=max_depth,
-            )
-
         steps_left = max_depth - depth
         if steps_left <= 0:
             return 0.0
@@ -678,6 +669,12 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
             good_rock_reward=float(self.good_rock_reward),
             bad_rock_penalty=float(self.bad_rock_penalty),
             sensor_use_penalty=float(self.sensor_use_penalty),
+            dangerous_areas=self._dangerous_areas_arr,
+            dangerous_area_radius=float(self.dangerous_area_radius),
+            dangerous_area_penalty=float(self.dangerous_area_penalty),
+            dangerous_area_hit_probability=float(self.dangerous_area_hit_probability),
+            reward_variant_code=int(self._reward_variant_code),
+            penalty_decay=float(self.penalty_decay),
         )
 
     def sample_next_step(

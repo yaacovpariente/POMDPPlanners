@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for the CartPole belief factory.
 
 This module tests :func:`create_cartpole_belief` from

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Continuous Push POMDP Environment Implementation.
 
 This module implements a continuous-action variant of the Push POMDP where
@@ -39,6 +41,13 @@ from POMDPPlanners.planners.planners_utils.rollout import python_random_rollout
 from POMDPPlanners.environments.push_pomdp.continuous_push_geometry import (
     circle_aabb_overlap,
     point_inside_aabb,
+)
+from POMDPPlanners.environments.push_pomdp.push_pomdp_utils.push_reward_models import (
+    BasePushRewardModel,
+    ContinuousPushDistanceDecayedHazardPenaltyRewardModel,
+    ContinuousPushZeroMeanHazardShockRewardModel,
+    ContinuousPushRewardModel,
+    RewardModelType,
 )
 from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
 from POMDPPlanners.utils.statistics_utils import confidence_interval
@@ -127,10 +136,10 @@ class ContinuousPushPOMDP(Environment):
         env. Note that this makes ``reward(state, action)`` non-
         deterministic given a state-action pair, so any external caching
         that assumes deterministic rewards must be aware of this.
-        ``transition_log_probability`` is unaffected. When
-        ``obstacle_hit_probability < 1.0`` the native C++ rollout (which
-        deducts the penalty deterministically) is bypassed in favour of
-        the Python rollout so per-step Bernoulli draws survive.
+        ``transition_log_probability`` is unaffected. The native C++
+        rollout applies the Bernoulli ``obstacle_hit_probability`` draw
+        internally, so ``simulate_random_rollout`` always routes through
+        the native kernel.
 
     Dangerous areas:
         ``dangerous_areas`` is a separate, additive concept from
@@ -144,8 +153,9 @@ class ContinuousPushPOMDP(Environment):
         ``dangerous_area_penalty`` is applied per step even when
         multiple zones overlap. Like obstacles, the penalty supports a
         Bernoulli ``dangerous_area_hit_probability`` (default 1.0) for
-        risk-sensitive planning; ``< 1.0`` bypasses the deterministic
-        native rollout in favour of the Python rollout.
+        risk-sensitive planning. The native C++ rollout applies the
+        Bernoulli draw internally, so all rollouts route through the
+        native kernel regardless of the configured probability.
 
     Example:
         >>> import numpy as np
@@ -177,6 +187,8 @@ class ContinuousPushPOMDP(Environment):
         dangerous_area_radius: float = 0.5,
         dangerous_area_penalty: float = -10.0,
         dangerous_area_hit_probability: float = 1.0,
+        reward_model_type: RewardModelType = RewardModelType.CONSTANT_HAZARD_PENALTY,
+        penalty_decay: float = 1.0,
         robot_radius: float = 0.3,
         state_transition_cov_matrix: np.ndarray = np.eye(2) * 0.1,
         initial_state: Optional[np.ndarray] = None,
@@ -189,6 +201,11 @@ class ContinuousPushPOMDP(Environment):
             raise ValueError("obstacle_hit_probability must be between 0 and 1 (inclusive)")
         if not 0.0 <= dangerous_area_hit_probability <= 1.0:
             raise ValueError("dangerous_area_hit_probability must be between 0 and 1 (inclusive)")
+        if (
+            reward_model_type == RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY
+            and penalty_decay <= 0.0
+        ):
+            raise ValueError("penalty_decay must be strictly positive")
 
         self.grid_size = grid_size
         self.push_threshold = push_threshold
@@ -212,6 +229,8 @@ class ContinuousPushPOMDP(Environment):
         self.dangerous_area_radius = float(dangerous_area_radius)
         self.dangerous_area_penalty = float(dangerous_area_penalty)
         self.dangerous_area_hit_probability = float(dangerous_area_hit_probability)
+        self.reward_model_type = reward_model_type
+        self.penalty_decay = float(penalty_decay)
         if self.dangerous_areas:
             self._dangerous_areas_arr: np.ndarray = np.ascontiguousarray(
                 np.asarray(self.dangerous_areas, dtype=np.float64).reshape(-1, 2)
@@ -266,6 +285,39 @@ class ContinuousPushPOMDP(Environment):
             debug=debug,
             use_queue_logger=use_queue_logger,
         )
+
+        self.reward_model: BasePushRewardModel = self._build_reward_model()
+        # Cache the bound method so the hot path skips ``self.reward_model``
+        # attribute lookup on each call (~50–100 ns saved per call). Only
+        # the batch path is used here; ``reward()`` re-enters
+        # ``reward_batch`` via the (1, 6) reshape wrapper, so caching the
+        # batch ref covers both entry points.
+        self._compute_reward_batch = self.reward_model.compute_reward_batch
+
+    def _build_reward_model(self) -> BasePushRewardModel:
+        # ``Dict[str, Any]`` opt-out is required so pyright doesn't narrow
+        # the value type to ``ndarray | float`` (the lub of obstacles +
+        # scalars) and then reject the ``**`` unpack as incompatible with
+        # each reward-model __init__'s typed parameters.
+        common_kwargs: Dict[str, Any] = {
+            "obstacles": self.obstacles,
+            "robot_radius": self.robot_radius,
+            "obstacle_penalty": self.obstacle_penalty,
+            "obstacle_hit_probability": self.obstacle_hit_probability,
+            "dangerous_areas_arr": self._dangerous_areas_arr,
+            "dangerous_area_radius": self.dangerous_area_radius,
+            "dangerous_area_penalty": self.dangerous_area_penalty,
+            "dangerous_area_hit_probability": self.dangerous_area_hit_probability,
+        }
+        if self.reward_model_type == RewardModelType.CONSTANT_HAZARD_PENALTY:
+            return ContinuousPushRewardModel(**common_kwargs)
+        if self.reward_model_type == RewardModelType.ZERO_MEAN_HAZARD_SHOCK:
+            return ContinuousPushZeroMeanHazardShockRewardModel(**common_kwargs)
+        if self.reward_model_type == RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY:
+            return ContinuousPushDistanceDecayedHazardPenaltyRewardModel(
+                penalty_decay=self.penalty_decay, **common_kwargs
+            )
+        raise ValueError(f"Unknown reward model type: {self.reward_model_type}")
 
     def _build_obstacle_array(
         self, obstacle_tuples: List[Tuple[float, float, float]]
@@ -419,12 +471,14 @@ class ContinuousPushPOMDP(Environment):
         state_arr = np.ascontiguousarray(np.asarray(state, dtype=np.float64)).reshape(1, -1)
         action_arr = np.ascontiguousarray(np.asarray(action, dtype=np.float64)).ravel()
         if next_state is None:
-            next_states_arr = None
+            next_states_arr = np.asarray(
+                self._get_trans_kernel(action_arr).batch_sample(state_arr), dtype=np.float64
+            )
         else:
             next_states_arr = np.ascontiguousarray(
                 np.asarray(next_state, dtype=np.float64)
             ).reshape(1, -1)
-        rewards = self._reward_batch_array(state_arr, action_arr, next_states_arr)
+        rewards = self._compute_reward_batch(state_arr, action_arr, next_states_arr)
         return float(rewards[0])
 
     def reward_batch(
@@ -438,108 +492,51 @@ class ContinuousPushPOMDP(Environment):
             states_arr = states_arr.reshape(1, -1)
         action_arr = np.ascontiguousarray(np.asarray(action, dtype=np.float64)).ravel()
         if next_states is None:
-            next_states_arr = None
+            # batch_sample reads per-row state from the input — no set_state
+            # required. C++ kernel returns shape (N, 6) float64. Sampling
+            # lives here (and not in the reward model) so the model stays a
+            # pure reward function with no kernel dependency.
+            next_states_arr = np.asarray(
+                self._get_trans_kernel(action_arr).batch_sample(states_arr), dtype=np.float64
+            )
         else:
             next_states_arr = np.ascontiguousarray(np.asarray(next_states, dtype=np.float64))
             if next_states_arr.ndim == 1:
                 next_states_arr = next_states_arr.reshape(1, -1)
-        return self._reward_batch_array(states_arr, action_arr, next_states_arr)
+        return self._native_reward_batch(states_arr, action_arr, next_states_arr)
 
-    def _reward_batch_array(
+    def _native_reward_batch(
         self,
-        states: np.ndarray,
-        action: np.ndarray,
-        next_states: Optional[np.ndarray] = None,
+        states_arr: np.ndarray,
+        action_arr: np.ndarray,
+        next_states_arr: np.ndarray,
     ) -> np.ndarray:
-        """Vectorised reward computation reusing the cached transition kernel.
+        variant_code, penalty_decay = self._reward_variant_native_params()
+        return np.asarray(
+            _native.cont_push_reward_batch(
+                states=states_arr,
+                action=action_arr,
+                next_states=next_states_arr,
+                obstacles=np.ascontiguousarray(self.obstacles, dtype=np.float64),
+                robot_radius=float(self.robot_radius),
+                obstacle_penalty=float(self.obstacle_penalty),
+                obstacle_hit_probability=float(self.obstacle_hit_probability),
+                dangerous_areas=self._dangerous_areas_arr,
+                dangerous_area_radius=float(self.dangerous_area_radius),
+                dangerous_area_penalty=float(self.dangerous_area_penalty),
+                dangerous_area_hit_probability=float(self.dangerous_area_hit_probability),
+                reward_variant_code=variant_code,
+                penalty_decay=penalty_decay,
+            ),
+            dtype=np.float64,
+        )
 
-        ``states`` must be ``(N, 6)`` C-contiguous float64 and ``action``
-        must be a 1-D float64 array; callers (``reward`` / ``reward_batch``)
-        normalise the inputs.
-
-        When ``next_states`` is ``None`` this draws fresh next states via
-        the cached kernel (same RNG stream as ``sample_next_state_batch``);
-        otherwise it consumes the threaded draw from
-        :meth:`Environment.sample_next_step` so reward and trajectory agree
-        on the same Cholesky sample. Per row it computes:
-        - distance penalty to target (from ``next_states[:, 2:4]``),
-        - +100 goal bonus when within 0.5 of the target,
-        - obstacle penalty when the *realised* robot position
-          ``next_states[:, :2]`` overlaps an obstacle AABB,
-        - dangerous-area penalty when the realised robot position lies in
-          any zone.
-        """
-        if next_states is None:
-            kernel = self._get_trans_kernel(action)
-            # batch_sample reads per-row state from the input — no set_state
-            # required. C++ kernel returns shape (N, 6) float64.
-            next_states = np.asarray(kernel.batch_sample(states), dtype=np.float64)
-
-        # Distance-to-target penalty + goal bonus, computed in one pass on
-        # the (N, 2) object/target slices.
-        delta = next_states[:, 2:4] - next_states[:, 4:6]
-        dist_to_target = np.sqrt(np.einsum("ij,ij->i", delta, delta))
-        rewards = -dist_to_target
-        rewards[dist_to_target < 0.5] += 100.0
-
-        # Obstacle penalty: realised post-action robot position vs. AABBs.
-        if self.obstacles.shape[0] > 0:
-            robot_after = next_states[:, :2]
-            collide = self._batch_circle_obstacle_overlap(robot_after, self.robot_radius)
-            if self.obstacle_hit_probability < 1.0:
-                # Per-row Bernoulli mask: refund the penalty for rows that
-                # collide but lose the per-call coin flip.
-                applied = np.random.random(collide.shape[0]) < self.obstacle_hit_probability
-                collide = collide & applied
-            if np.any(collide):
-                rewards[collide] += self.obstacle_penalty
-
-        # Dangerous-area penalty: realised post-action robot position vs.
-        # circular zones. At most one penalty per row even when zones overlap.
-        if self._dangerous_areas_arr.shape[0] > 0:
-            robot_after = next_states[:, :2]
-            in_zone = self._batch_robot_in_dangerous_areas(robot_after)
-            if self.dangerous_area_hit_probability < 1.0:
-                applied = np.random.random(in_zone.shape[0]) < self.dangerous_area_hit_probability
-                in_zone = in_zone & applied
-            if np.any(in_zone):
-                rewards[in_zone] += self.dangerous_area_penalty
-
-        return rewards
-
-    def _batch_robot_in_dangerous_areas(self, positions: np.ndarray) -> np.ndarray:
-        """Vectorised point-in-circle test against ``self._dangerous_areas_arr``.
-
-        ``positions`` is shape ``(N, 2)``. Returns an ``(N,)`` boolean mask
-        flagging rows that fall inside any dangerous-area circle.
-        """
-        diff = positions[:, None, :] - self._dangerous_areas_arr[None, :, :]
-        dist_sq = np.einsum("ijk,ijk->ij", diff, diff)
-        return np.any(dist_sq <= self.dangerous_area_radius * self.dangerous_area_radius, axis=1)
-
-    def _batch_circle_obstacle_overlap(self, positions: np.ndarray, radius: float) -> np.ndarray:
-        """Vectorised circle-vs-AABB overlap test against ``self.obstacles``.
-
-        ``positions`` is shape ``(N, 2)``. Returns an ``(N,)`` boolean mask
-        flagging rows that overlap any obstacle. Mirrors the per-wall logic
-        of :func:`continuous_push_geometry.circle_aabb_overlap` but
-        broadcast across all walls in one shot.
-        """
-        walls = self.obstacles
-        # Broadcast positions (N, 1, 2) against walls (M, 4): closest point
-        # on each AABB to each position, then squared distance < r**2.
-        cx = walls[:, 0]
-        cy = walls[:, 1]
-        hx = walls[:, 2]
-        hy = walls[:, 3]
-        px = positions[:, 0:1]
-        py = positions[:, 1:2]
-        closest_x = np.clip(px, cx - hx, cx + hx)
-        closest_y = np.clip(py, cy - hy, cy + hy)
-        dx = px - closest_x
-        dy = py - closest_y
-        dist_sq = dx * dx + dy * dy
-        return np.any(dist_sq < radius * radius, axis=1)
+    def _reward_variant_native_params(self) -> Tuple[int, float]:
+        if self.reward_model_type == RewardModelType.ZERO_MEAN_HAZARD_SHOCK:
+            return 1, 0.0
+        if self.reward_model_type == RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY:
+            return 2, float(getattr(self.reward_model, "penalty_decay", 1.0))
+        return 0, 0.0
 
     def __getstate__(self):
         # Per-action C++ kernel cache holds pybind11 objects that aren't
@@ -611,14 +608,10 @@ class ContinuousPushPOMDP(Environment):
             return 0.0
 
         actions_array = self._get_rollout_actions_array()
-        if (
-            actions_array is None
-            or self.obstacle_hit_probability < 1.0
-            or self.dangerous_area_hit_probability < 1.0
-        ):
-            # Native kernel applies the obstacle and dangerous-area penalties
-            # deterministically; fall back to the Python rollout so per-step
-            # Bernoulli draws against the configured hit probabilities survive.
+        if actions_array is None:
+            # Pure continuous-action env without a finite action set: no
+            # ``action_to_vector`` mapping is available, so we cannot
+            # pre-draw a fixed action index array for the native kernel.
             return python_random_rollout(
                 state=state,
                 depth=depth,
@@ -631,6 +624,7 @@ class ContinuousPushPOMDP(Environment):
         n_actions = len(actions_array)
         action_indices = np.random.randint(0, n_actions, size=steps_left, dtype=np.int32)
         state_arr = np.ascontiguousarray(np.asarray(state, dtype=np.float64).ravel())
+        variant_code, penalty_decay = self._reward_variant_native_params()
 
         return float(
             _native.cont_simulate_rollout(
@@ -651,6 +645,10 @@ class ContinuousPushPOMDP(Environment):
                 dangerous_area_radius=float(self.dangerous_area_radius),
                 dangerous_area_penalty=float(self.dangerous_area_penalty),
                 covariance=self._trans_cov_view,
+                obstacle_hit_probability=float(self.obstacle_hit_probability),
+                dangerous_area_hit_probability=float(self.dangerous_area_hit_probability),
+                reward_variant_code=variant_code,
+                penalty_decay=penalty_decay,
             )
         )
 
@@ -897,6 +895,8 @@ class ContinuousPushPOMDPDiscreteActions(ContinuousPushPOMDP, DiscreteActionsEnv
         dangerous_area_radius: float = 0.5,
         dangerous_area_penalty: float = -10.0,
         dangerous_area_hit_probability: float = 1.0,
+        reward_model_type: RewardModelType = RewardModelType.CONSTANT_HAZARD_PENALTY,
+        penalty_decay: float = 1.0,
         robot_radius: float = 0.3,
         state_transition_cov_matrix: np.ndarray = np.eye(2) * 0.1,
         initial_state: Optional[np.ndarray] = None,
@@ -919,6 +919,8 @@ class ContinuousPushPOMDPDiscreteActions(ContinuousPushPOMDP, DiscreteActionsEnv
             dangerous_area_radius=dangerous_area_radius,
             dangerous_area_penalty=dangerous_area_penalty,
             dangerous_area_hit_probability=dangerous_area_hit_probability,
+            reward_model_type=reward_model_type,
+            penalty_decay=penalty_decay,
             robot_radius=robot_radius,
             state_transition_cov_matrix=state_transition_cov_matrix,
             initial_state=initial_state,

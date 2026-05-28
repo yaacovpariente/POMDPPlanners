@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Env-API contract / feature-driven tests for the RockSample POMDP source.
 
 These tests target the public ``Environment`` API surface described in
@@ -511,20 +513,22 @@ def test_sample_next_state_terminal_is_absorbing() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_reward_batch_exit_branch_treats_terminal_as_exited() -> None:
-    """reward_batch east-action: terminal rows receive exit_reward.
+def test_reward_batch_exit_branch_matches_scalar_and_cpp_contract() -> None:
+    """reward_batch east-action: only right-edge rows receive exit_reward.
 
-    Purpose: Validates the documented behaviour in
-        ``RockSamplePOMDP._reward_batch_vectorized`` that terminal rows are
-        merged with rows whose col == map_cols - 1 and both receive
-        exit_reward. This ensures the batch path is consistent across the
-        live-edge and terminal-sentinel populations.
+    Purpose: Validates that the Python batch path matches the scalar
+        ``compute_reward`` contract (and the C++ ``reward_batch`` kernel)
+        for the east action: only rows whose ``col == map_cols - 1`` get
+        the exit bonus. Terminal-sentinel rows (``(-1, -1, ...)``) are
+        NOT treated as exited — they receive ``step_penalty`` only.
 
-    Given: A batch of 4 particles: [right-edge live, terminal, interior live,
-        right-edge live with different rocks].
-    When: ``reward_batch(particles, action=2)`` is invoked.
-    Then: Both right-edge rows and the terminal row receive
-        step_penalty + exit_reward; the interior row receives only step_penalty.
+    Given: A batch of 4 particles: [right-edge live, terminal sentinel,
+        interior live, another right-edge live].
+    When: ``reward_batch(particles, action=2)`` is invoked (no
+        ``next_states`` supplied, so the Python reward model runs).
+    Then: Right-edge rows receive ``step_penalty + exit_reward``;
+        the terminal-sentinel row and the interior row receive
+        ``step_penalty`` only — matching the scalar / C++ behaviour.
 
     Test type: integration
     """
@@ -546,9 +550,85 @@ def test_reward_batch_exit_branch_treats_terminal_as_exited() -> None:
     )
     rewards = env.reward_batch(particles, 2)
     assert rewards[0] == pytest.approx(-1.0 + 10.0)
-    assert rewards[1] == pytest.approx(-1.0 + 10.0)
+    assert rewards[1] == pytest.approx(-1.0)
     assert rewards[2] == pytest.approx(-1.0)
     assert rewards[3] == pytest.approx(-1.0 + 10.0)
+
+
+def test_reward_batch_east_non_exit_includes_dangerous_area_penalty() -> None:
+    """East action from a non-rightmost column applies dangerous-area penalty.
+
+    Purpose: Regression for a Python-batch bug where the East branch
+        returned unconditionally after handling exits, dropping the
+        dangerous-area term for rows that move East into a danger cell
+        without exiting. Scalar ``compute_reward`` and the C++
+        ``reward_batch`` kernel both include the danger penalty here, so
+        the Python batch must agree.
+
+    Given: A 5x5 env with a deterministic dangerous area at (2, 1)
+        radius 1.0, penalty -100.0, step_penalty -1.0. A single
+        particle at (2, 0) moves East (action=2) into (2, 1), which is
+        the danger centre. The current column is 0, far from the
+        rightmost column, so this is a non-exiting East move.
+    When: ``reward(state, 2)`` (scalar) and ``reward_batch(states, 2)``
+        (Python batch, no ``next_states`` supplied) are evaluated.
+    Then: Both return ``step_penalty + dangerous_area_penalty`` = -101.0.
+
+    Test type: integration
+    """
+    env = RockSamplePOMDP(
+        map_size=(5, 5),
+        rock_positions=[(0, 0)],
+        init_pos=(0, 0),
+        dangerous_areas=[(2, 1)],
+        dangerous_area_radius=1.0,
+        dangerous_area_penalty=-100.0,
+        step_penalty=-1.0,
+        exit_reward=10.0,
+    )
+    state = create_rock_sample_state((2, 0), (True,))
+    scalar_reward = env.reward(state, 2)
+    batch_rewards = env.reward_batch(state.reshape(1, -1), 2)
+    assert scalar_reward == pytest.approx(-101.0)
+    assert batch_rewards[0] == pytest.approx(-101.0)
+    assert batch_rewards[0] == pytest.approx(scalar_reward)
+
+
+def test_reward_batch_east_on_terminal_sentinel_equals_step_penalty() -> None:
+    """East action on a terminal-sentinel row returns step_penalty only.
+
+    Purpose: Regression for a Python-batch bug where terminal-sentinel
+        rows (``(-1, -1, ...)``) were granted ``exit_reward`` under the
+        East action. Scalar ``compute_reward`` only awards the exit
+        bonus when ``robot_col == map_cols - 1``; the C++ batch kernel
+        does the same. A sentinel's col is -1, so neither path emits
+        the bonus.
+
+    Given: A 5x5 env (with a dangerous area positioned so the sentinel
+        is safely outside its radius) and a single terminal-sentinel
+        particle.
+    When: ``reward(state, 2)`` (scalar) and ``reward_batch(states, 2)``
+        (Python batch, no ``next_states``) are evaluated.
+    Then: Both return ``step_penalty`` (no exit bonus, no danger term).
+
+    Test type: integration
+    """
+    env = RockSamplePOMDP(
+        map_size=(5, 5),
+        rock_positions=[(0, 0)],
+        init_pos=(0, 0),
+        dangerous_areas=[(2, 2)],
+        dangerous_area_radius=1.0,
+        dangerous_area_penalty=-50.0,
+        step_penalty=-1.0,
+        exit_reward=10.0,
+    )
+    terminal = create_rock_sample_state((-1, -1), (True,))
+    scalar_reward = env.reward(terminal, 2)
+    batch_rewards = env.reward_batch(terminal.reshape(1, -1), 2)
+    assert scalar_reward == pytest.approx(-1.0)
+    assert batch_rewards[0] == pytest.approx(-1.0)
+    assert batch_rewards[0] == pytest.approx(scalar_reward)
 
 
 if __name__ == "__main__":

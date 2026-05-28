@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for RockSample belief factory."""
 
 import numpy as np

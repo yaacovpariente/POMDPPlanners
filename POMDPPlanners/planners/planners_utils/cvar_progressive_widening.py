@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 from typing import Optional
 
 from POMDPPlanners.core.environment import Environment

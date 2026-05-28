@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests to verify package installation and basic functionality."""
 
 import importlib
@@ -18,14 +20,14 @@ def test_package_installed():
 
     Purpose: Validates that POMDPPlanners package is properly installed and accessible with correct version
 
-    Given: POMDPPlanners package should be installed in the Python environment with version 0.3.1
+    Given: POMDPPlanners package should be installed in the Python environment with version 0.4.0
     When: Package is imported and version is checked
-    Then: Import succeeds without error and version matches expected 0.3.1
+    Then: Import succeeds without error and version matches expected 0.4.0
 
     Test type: unit
     """
     try:
-        assert POMDPPlanners.__version__ == "0.3.1"
+        assert POMDPPlanners.__version__ == "0.4.0"
     except ImportError as e:
         raise AssertionError(f"Failed to import POMDPPlanners: {e}")
 

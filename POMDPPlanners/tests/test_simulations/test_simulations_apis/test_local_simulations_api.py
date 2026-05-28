@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for LocalSimulationsAPI using mixin pattern.
 
 This module tests the LocalSimulationsAPI implementation, inheriting common

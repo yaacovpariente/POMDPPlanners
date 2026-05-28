@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for POMDP simulation task serialization.
 
 This module tests that all simulation task classes can be properly serialized

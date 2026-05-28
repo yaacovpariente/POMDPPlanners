@@ -35,13 +35,51 @@ def simulate_rollout_discrete(
     good_rock_reward: float,
     bad_rock_penalty: float,
     sensor_use_penalty: float,
+    dangerous_areas: NDArray[np.float64],
+    dangerous_area_radius: float,
+    dangerous_area_penalty: float,
+    dangerous_area_hit_probability: float,
+    reward_variant_code: int,
+    penalty_decay: float,
 ) -> float:
-    """Native random rollout for RockSamplePOMDP (no dangerous-area term).
+    """Native random rollout for RockSamplePOMDP with variant-aware reward.
 
-    Walks the deterministic transition model and computes rewards in C++.
-    Returns the discounted sum of rewards. ``action_indices`` must be a
-    pre-drawn integer array of length ``max_depth - start_depth``.
-    ``rock_positions_flat`` is a 1-D int32 array ``[row0, col0, row1, col1, …]``.
+    Walks the deterministic transition model and computes rewards in C++,
+    including the variant-aware dangerous-area term. Returns the discounted
+    sum of rewards. ``action_indices`` must be a pre-drawn integer array of
+    length ``max_depth - start_depth``. ``rock_positions_flat`` is a 1-D
+    int32 array ``[row0, col0, row1, col1, …]``. ``dangerous_areas`` is a
+    ``(K, 2)`` float64 array (may be empty). ``reward_variant_code``:
+    ``0=CONSTANT_HAZARD_PENALTY``, ``1=ZERO_MEAN_HAZARD_SHOCK``, ``2=DISTANCE_DECAYED_HAZARD_PENALTY``.
+    """
+    ...
+
+def reward_batch(
+    states: NDArray[np.float64],
+    action: int,
+    next_states: NDArray[np.float64],
+    map_rows: int,
+    map_cols: int,
+    rock_positions: NDArray[np.int32],
+    step_penalty: float,
+    bad_rock_penalty: float,
+    good_rock_reward: float,
+    sensor_use_penalty: float,
+    exit_reward: float,
+    dangerous_areas: NDArray[np.float64],
+    dangerous_area_radius: float,
+    dangerous_area_penalty: float,
+    dangerous_area_hit_probability: float,
+    reward_variant_code: int,
+    penalty_decay: float,
+) -> NDArray[np.float64]:
+    """Variant-aware standalone batch reward kernel for RockSamplePOMDP.
+
+    Returns a ``(N,)`` float64 array of rewards. The dangerous-area term
+    is selected by ``reward_variant_code``: ``0=CONSTANT_HAZARD_PENALTY`` (constant-
+    probability hit), ``1=ZERO_MEAN_HAZARD_SHOCK`` (50/50 ±penalty in zone),
+    ``2=DISTANCE_DECAYED_HAZARD_PENALTY`` (hit with probability
+    ``exp(-min_dist / penalty_decay)``).
     """
     ...
 

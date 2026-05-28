@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 
@@ -21,6 +23,9 @@ from POMDPPlanners.simulations.workflows.hyperparameter_tuning_evaluation_workfl
 )
 from POMDPPlanners.simulations.hyper_parameter_tuning_simulations import (
     HyperParameterOptimizer,
+)
+from POMDPPlanners.simulations.simulations_deployment.run_progress import (
+    NotificationConfig,
 )
 from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import (
     JoblibConfig,
@@ -91,15 +96,36 @@ class LocalSimulationsAPI(SimulationsAPIInterface):
         2
     """
 
-    def __init__(self, cache_dir_path: Optional[Path] = None, debug: bool = False):
+    def __init__(
+        self,
+        cache_dir_path: Optional[Path] = None,
+        debug: bool = False,
+        notification_config: Optional[NotificationConfig] = None,
+    ):
         """Initialize the LocalSimulationsAPI.
 
         Args:
             cache_dir_path: Optional path for storing simulation results and logs
             debug: Whether to enable debug-level logging output
+            notification_config: Optional :class:`NotificationConfig` controlling
+                Slack + progress-DB notifications threaded into every
+                :class:`POMDPSimulator` / :class:`HyperParameterOptimizer`
+                constructed by this API. When ``None``, defaults to
+                :meth:`NotificationConfig.from_env`, preserving the
+                zero-config env-var workflow (export ``SLACK_WEBHOOK_URL``
+                to enable). See :class:`NotificationConfig` for the full
+                list of env vars (``POMDPPLANNERS_DISABLE_NOTIFY``,
+                ``HYPERPARAM_TRIAL_NOTIFICATION_INTERVAL``,
+                ``POMDP_PROGRESS_DB``) and the watcher CLI for stall
+                detection.
         """
         self.logger = get_logger(
             name="local_simulations_api", output_dir=cache_dir_path, debug=debug
+        )
+        self.notification_config: NotificationConfig = (
+            notification_config
+            if notification_config is not None
+            else NotificationConfig.from_env()
         )
         self.logger.info("Initialized LocalSimulationsAPI")
 
@@ -219,6 +245,7 @@ class LocalSimulationsAPI(SimulationsAPIInterface):
             debug=debug,
             enable_profiling=enable_profiling,
             profiling_output_limit=profiling_output_limit,
+            notification_config=self.notification_config,
         ) as simulator:
             self.logger.info("Running simulation comparison")
             results = simulator.compare_multiple_environments_policies(
@@ -365,6 +392,7 @@ class LocalSimulationsAPI(SimulationsAPIInterface):
             debug=True,
             enable_profiling=enable_profiling,
             profiling_output_limit=profiling_output_limit,
+            notification_config=self.notification_config,
         ) as simulator_debug:
             simulator_debug.compare_multiple_environments_policies(
                 environment_run_params=environment_run_params_debug,
@@ -388,6 +416,7 @@ class LocalSimulationsAPI(SimulationsAPIInterface):
             debug=False,
             enable_profiling=enable_profiling,
             profiling_output_limit=profiling_output_limit,
+            notification_config=self.notification_config,
         ) as simulator:
             results = simulator.compare_multiple_environments_policies(
                 environment_run_params=environment_run_params,
@@ -612,6 +641,7 @@ class LocalSimulationsAPI(SimulationsAPIInterface):
             alpha=alpha,
             parallelization_level=parallelization_level,
             use_queue_logger=use_queue_logger,
+            notification_config=self.notification_config,
         )
 
         try:

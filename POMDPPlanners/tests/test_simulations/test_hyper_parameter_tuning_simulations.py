@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for hyper_parameter_tuning_simulations module.
 
 This module tests the HyperParameterOptimizer class and its functionality for
@@ -2889,3 +2891,165 @@ class TestHyperParameterOptimizerParallelizationLevel:
 
         for task in tasks:
             assert task.parallelization_level == ParallelizationLevel.OPTUNA_TRIALS
+
+
+class TestHyperParameterOptimizerNotifications:
+    """Tests for the Slack/DB notification surface added to the optimizer."""
+
+    def test_optimizer_emits_run_started_and_run_finished_on_success(
+        self, temp_cache_dir, sample_configs
+    ):
+        """Verify run_started and run_finished fire when optimize() succeeds.
+
+        Purpose: Validates the parent-side notifier integration in the
+        happy-path of :meth:`HyperParameterOptimizer.optimize`.
+
+        Given: An optimizer with sample_configs (two configs, 2 trials each).
+        When: optimize() is called and completes without raising; the
+            internal notifier is swapped for a Mock just before the call.
+        Then: notifier.run_started is called exactly once with metadata
+            containing num_configs=2 and total_trials=4; notifier.run_finished
+            is called exactly once; notifier.run_failed is never called.
+
+        Test type: integration
+        """
+        optimizer = HyperParameterOptimizer(cache_dir_path=temp_cache_dir)
+        mock_notifier = Mock()
+        optimizer._notifier = mock_notifier
+
+        optimizer.optimize(sample_configs)
+
+        mock_notifier.run_started.assert_called_once()
+        started_args, started_kwargs = mock_notifier.run_started.call_args
+        assert started_args[0] == optimizer._run_id
+        assert started_kwargs["metadata"]["num_configs"] == len(sample_configs)
+        assert started_kwargs["metadata"]["total_trials"] == sum(c.n_trials for c in sample_configs)
+        mock_notifier.run_finished.assert_called_once_with(optimizer._run_id)
+        mock_notifier.run_failed.assert_not_called()
+
+    def test_optimizer_emits_run_failed_on_exception(self, temp_cache_dir, sample_configs):
+        """Verify run_failed fires when optimize() raises.
+
+        Purpose: Validates the crash-path notifier integration so a 2-week
+        tuning run that dies mid-flight surfaces in Slack.
+
+        Given: An optimizer with sample_configs and the internal task
+            execution monkeypatched to raise.
+        When: optimize() is called.
+        Then: The exception propagates; notifier.run_failed is called
+            exactly once with an error string containing the exception
+            type and message; notifier.run_finished is never called.
+
+        Test type: integration
+        """
+        optimizer = HyperParameterOptimizer(cache_dir_path=temp_cache_dir)
+        mock_notifier = Mock()
+        optimizer._notifier = mock_notifier
+
+        def _explode(_configs):
+            raise RuntimeError("synthetic failure")
+
+        optimizer._execute_optimization_tasks = _explode  # type: ignore[assignment]
+
+        with pytest.raises(RuntimeError, match="synthetic failure"):
+            optimizer.optimize(sample_configs)
+
+        mock_notifier.run_failed.assert_called_once()
+        failed_args, _ = mock_notifier.run_failed.call_args
+        assert failed_args[0] == optimizer._run_id
+        assert "RuntimeError" in failed_args[1]
+        assert "synthetic failure" in failed_args[1]
+        mock_notifier.run_finished.assert_not_called()
+
+    def test_optimizer_is_picklable(self, temp_cache_dir):
+        """Verify the optimizer survives pickle.dumps despite the signal closure.
+
+        Purpose: Locks in the regression we caught for BaseSimulator. The
+        signal-handler uninstall is a closure; without __getstate__ it
+        would crash pickle.
+
+        Given: An optimizer with default settings.
+        When: pickle.dumps(optimizer) is called.
+        Then: No AttributeError / PicklingError is raised, and the
+            unpickled optimizer has a callable _uninstall_signals attribute.
+
+        Test type: unit
+        """
+        import pickle  # pylint: disable=import-outside-toplevel
+
+        optimizer = HyperParameterOptimizer(cache_dir_path=temp_cache_dir)
+        payload = pickle.dumps(optimizer)
+        revived = pickle.loads(payload)
+        assert callable(revived._uninstall_signals)
+        # The no-op uninstall on the revived instance must not raise.
+        revived._uninstall_signals()
+
+    def test_trial_milestone_fires_every_n_trials(self, temp_cache_dir):
+        """Verify post_trial_milestone is called once per interval.
+
+        Purpose: Validates that the in-task Optuna callback emits at
+        exactly the configured cadence with no double-firing.
+
+        Given: A HyperParameterTuningSimulationTask configured with
+            trial_interval=2, total_trials_globally=4, a fake webhook URL,
+            and a parent_run_id; an Optuna study run with 4 trials.
+        When: The task's progress callback is registered with the study
+            and the study completes.
+        Then: post_trial_milestone is called exactly 2 times (at the
+            completions of trial.number=1 and trial.number=3 — global
+            counts 2 and 4).
+
+        Test type: integration
+        """
+        import optuna  # pylint: disable=import-outside-toplevel
+
+        from POMDPPlanners.simulations.simulations_deployment.run_progress import (  # pylint: disable=import-outside-toplevel
+            ProgressDB,
+        )
+
+        # Minimal real Task instance so the bound `_build_progress_callback`
+        # has the wiring it needs without standing up a full simulator.
+        env = TigerPOMDP(discount_factor=0.95)
+        belief = get_initial_belief(env, n_particles=4)
+        task = HyperParameterTuningSimulationTask(
+            environment=env,
+            belief=belief,
+            policy_cls=SparseSamplingDiscreteActionsPlanner,
+            hyper_parameters=[NumericalHyperParameter(1, 2, "branching_factor")],
+            constant_parameters={"depth": 1},
+            num_episodes=1,
+            num_steps=1,
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
+            n_trials=4,
+            cache_dir=temp_cache_dir,
+            parent_run_id="rid-test",
+            webhook_url="https://hooks.slack.com/test",
+            trial_interval=2,
+            trial_offset=0,
+            total_trials_globally=4,
+            progress_db_path=temp_cache_dir / "progress.db",
+        )
+
+        # Pre-create the run row so heartbeats during the callback have a
+        # row to update (otherwise the UPDATE is a silent no-op, which is
+        # also fine but creates noise in tests).
+        ProgressDB(path=temp_cache_dir / "progress.db").start_run("rid-test", "exp-test", {})
+
+        callback = task._build_progress_callback()
+        study = optuna.create_study(direction="maximize")
+
+        with patch(
+            "POMDPPlanners.simulations.simulations_deployment.tasks."
+            "hyper_parameter_tuning_simulation_task.post_trial_milestone"
+        ) as mock_milestone:
+            study.optimize(
+                lambda trial: trial.suggest_float("x", 0.0, 1.0), n_trials=4, callbacks=[callback]
+            )
+
+        assert mock_milestone.call_count == 2
+        first_call_kwargs = mock_milestone.call_args_list[0].kwargs
+        assert first_call_kwargs["completed_trials"] == 2
+        assert first_call_kwargs["run_id"] == "rid-test"
+        assert first_call_kwargs["total_trials"] == 4

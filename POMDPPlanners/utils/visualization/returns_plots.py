@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Returns distribution plotting utilities.
 
 This module provides functions for visualizing discounted returns distributions

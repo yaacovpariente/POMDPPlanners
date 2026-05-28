@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Safety Ant Velocity POMDP Environment Implementation.
 
 This module implements a safety-critical velocity control task where an agent

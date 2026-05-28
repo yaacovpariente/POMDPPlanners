@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Mountain Car POMDP Environment Module.
 
 This module provides the Mountain Car POMDP environment implementation and

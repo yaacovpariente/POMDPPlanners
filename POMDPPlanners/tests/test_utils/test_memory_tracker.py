@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for memory tracker utility.
 
 This module tests the memory tracking functionality, including:
@@ -31,8 +33,10 @@ from POMDPPlanners.utils.memory_tracker import (
 class TestMemoryTracker:
     """Test cases for MemoryTracker class."""
 
-    def test_initialization_default(self):
+    def test_initialization_default(self, monkeypatch):
         """Test default initialization."""
+        for var in ("ENABLE_MEMORY_PROFILING", "DEBUG", "CI"):
+            monkeypatch.delenv(var, raising=False)
         tracker = MemoryTracker()
         assert tracker.enable_tracking is False  # Should be False by default
         assert tracker.tracking_mode == "lightweight"

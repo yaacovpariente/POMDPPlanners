@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for centralized serialization utilities.
 
 This module tests the serialization functionality in POMDPPlanners.core.serialization,

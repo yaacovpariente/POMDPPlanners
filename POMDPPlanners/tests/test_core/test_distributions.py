@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for distribution implementations.
 
 This module tests the distribution implementations, focusing on:

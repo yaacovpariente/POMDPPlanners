@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for task manager configuration classes.
 
 This module contains comprehensive tests for the task manager configuration

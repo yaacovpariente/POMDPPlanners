@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Workflow classes for optimization and evaluation.
 
 This module provides class-based workflows for running hyperparameter optimization

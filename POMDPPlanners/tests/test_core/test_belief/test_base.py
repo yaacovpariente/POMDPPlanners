@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for Belief abstract base class.
 
 This module tests the Belief ABC, focusing on:

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Comprehensive tests for metric name consistency across environments and policies.
 
 This module demonstrates how to use the reusable test utilities from

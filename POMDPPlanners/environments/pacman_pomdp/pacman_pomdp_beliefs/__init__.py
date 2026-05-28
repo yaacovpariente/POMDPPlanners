@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """PacMan POMDP belief support with vectorized particle filter.
 
 This package provides vectorized belief updater, grid utilities,

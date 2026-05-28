@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Numerical-equivalence tests for the light-dark-specific Numba kernels.
 
 Each test pairs a kernel against a pure-NumPy reference implementation

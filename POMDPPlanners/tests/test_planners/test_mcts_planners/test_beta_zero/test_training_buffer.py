@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for the BetaZero training buffer module.
 
 This module tests the TrainingBuffer iteration-slot replay buffer and the

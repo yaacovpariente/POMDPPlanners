@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for the ConstrainedTrainingBuffer module.
 
 This module tests the ConstrainedTrainingBuffer and ConstrainedTrainingExample,

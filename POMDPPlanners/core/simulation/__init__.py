@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 # Import all classes to maintain backward compatibility
 from POMDPPlanners.core.simulation.history import (
     History,

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 import hashlib
 import json
 from enum import Enum

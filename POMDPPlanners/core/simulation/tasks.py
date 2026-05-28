@@ -1,7 +1,9 @@
+# SPDX-License-Identifier: MIT
+
 import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, List, Optional, Tuple
+from typing import Any, Callable, List, Optional, Tuple
 
 from POMDPPlanners.utils.logger import get_logger
 
@@ -157,6 +159,21 @@ class TaskManager(ABC):
 
         Returns:
             Tuple[List[Any], list]: Results and successful task identifiers
+        """
+
+    def set_progress_callback(self, callback: Optional[Callable[[], None]]) -> None:
+        """Register a callback fired once per completed task.
+
+        Subclasses that support per-task progress reporting (e.g.
+        :class:`JoblibTaskManager`) override this to store the callback and
+        invoke it from inside their parallel execution loop. The default
+        implementation is a no-op so callers may invoke it unconditionally.
+
+        Args:
+            callback: A zero-argument callable invoked in the parent process
+                after each task completes, or ``None`` to clear a previously
+                set callback. Exceptions raised by the callable are caught
+                and ignored by implementing task managers.
         """
 
     def __enter__(self):

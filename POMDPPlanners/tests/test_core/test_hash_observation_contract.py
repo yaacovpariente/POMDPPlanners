@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Contract and integration tests for ``Environment.hash_observation``.
 
 Validates the contract pair with ``is_equal_observation`` for the three envs

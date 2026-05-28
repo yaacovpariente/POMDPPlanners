@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for belief utility functions.
 
 This module tests the belief utility functions, focusing on:

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for the CartPole Gaussian belief factory.
 
 This module tests the factory function and enum that produce pre-configured

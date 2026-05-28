@@ -1,7 +1,9 @@
+# SPDX-License-Identifier: MIT
+
 """Light-Dark-specific Numba-JIT kernels.
 
 Holds kernels whose signatures or logic hardcode light-dark concepts
-(goal+obstacles+out-of-grid shape, standard / dangerous-states / decaying-
+(goal+obstacles+out-of-grid shape, standard / high-variance-states / decaying-
 hit-probability reward formulas). Generic geometric / numerical primitives
 used here also by other envs live in
 ``POMDPPlanners.utils.numba_kernels`` instead.
@@ -14,7 +16,7 @@ Public kernels
 --------------
 - :func:`is_terminal_kernel` — replaces ``ContinuousLightDarkPOMDP.is_terminal``.
 - :func:`compute_reward_base_kernel` — deterministic part of the Standard /
-  DangerousStates reward model plus an ``is_obstacle_hit_region`` flag so the
+  ZeroMeanHazardShock reward model plus an ``is_obstacle_hit_region`` flag so the
   Python caller can decide whether to draw a uniform.
 - :func:`compute_reward_base_batch_kernel` — batched version of
   :func:`compute_reward_base_kernel`. Returns ``(rewards, obstacle_mask)`` so
@@ -28,6 +30,10 @@ from typing import Tuple
 
 import numpy as np
 from numba import njit
+
+from POMDPPlanners.environments.environment_utils.dangerous_areas_kernels import (
+    decaying_prob_penalty_kernel,  # called from compute_reward_decaying_hit_prob_kernel
+)
 
 # pylint: disable=no-value-for-parameter,not-an-iterable
 
@@ -77,7 +83,7 @@ def compute_reward_base_kernel(
     out-of-grid penalty. The caller (Python) must add the stochastic
     obstacle-hit contribution when ``is_obstacle_hit_region`` is ``True``,
     using its own ``np.random.rand()`` draw so seeded tests stay bit-identical.
-    Used by Standard and DangerousStates reward models.
+    Used by Standard and ZeroMeanHazardShock reward models.
 
     ``next_state`` is the realised post-transition position. The Python
     caller threads either the draw from
@@ -212,15 +218,11 @@ def compute_reward_decaying_hit_prob_kernel(
     elif is_out_of_grid:
         reward += obstacle_reward
 
-    n_obs = obstacles.shape[1]
-    min_obs_sq = np.inf
-    for i in range(n_obs):
-        ox = next_x - obstacles[0, i]
-        oy = next_y - obstacles[1, i]
-        d_sq = ox * ox + oy * oy
-        min_obs_sq = min(min_obs_sq, d_sq)
-    min_obs_dist = min_obs_sq**0.5
-    hit_prob = np.exp(-min_obs_dist / penalty_decay)
-    if uniform < hit_prob:
-        reward += obstacle_reward
+    # Delegate the decaying-hit-probability contribution to the generic
+    # kernel (njit-to-njit, free at call time). Keeps this kernel's outer
+    # signature unchanged for back-compat with the Python caller while
+    # routing the danger logic through the shared environment_utils path.
+    reward += decaying_prob_penalty_kernel(
+        next_state, obstacles, obstacle_reward, penalty_decay, uniform
+    )
     return reward

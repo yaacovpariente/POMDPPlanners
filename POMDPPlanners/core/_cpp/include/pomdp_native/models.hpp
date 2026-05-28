@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 // Header-only C++ base classes for native transition / observation models,
 // templated on the compile-time state dimension.
 //

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for the Continuous LaserTag visualizer module.
 
 Tests cover input validation, history data extraction, and basic

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Integration tests for PacMan vectorized belief."""
 
 # pylint: disable=protected-access

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Vectorized weighted particle belief state representation.
 
 This module provides a weighted particle filter that stores particles as a
@@ -17,6 +19,7 @@ from POMDPPlanners.core.belief.base_belief import Belief
 from POMDPPlanners.core.belief.vectorized_particle_belief_updater import (
     VectorizedParticleBeliefUpdater,
 )
+from POMDPPlanners.core.distributions import DiscreteDistribution
 from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.utils.config_to_id import config_to_id
 
@@ -155,6 +158,43 @@ class VectorizedWeightedParticleBelief(Belief):
             resampling=self.resampling,
             ess_factor=self.ess_factor,
         )
+
+    def to_unique_support_distribution(self) -> DiscreteDistribution:
+        """Convert the belief to a DiscreteDistribution with unique particles.
+
+        Returns:
+            DiscreteDistribution: A distribution where each particle appears only once,
+            with its probability being the sum of all its occurrences in the original
+            belief. Probabilities are L1-normalized to sum to 1.0. If the belief has
+            no particles, an empty DiscreteDistribution is returned.
+        """
+        if self.particles.shape[0] == 0:
+            return self._empty_discrete_distribution()
+
+        unique_particles, inverse_indices = np.unique(self.particles, axis=0, return_inverse=True)
+        inverse_indices = np.asarray(inverse_indices).ravel()
+        combined_weights = np.zeros(unique_particles.shape[0], dtype=float)
+        np.add.at(combined_weights, inverse_indices, self.normalized_weights)
+
+        total = combined_weights.sum()
+        if total > 0.0:
+            probabilities = combined_weights / total
+        else:
+            probabilities = np.full(unique_particles.shape[0], 1.0 / unique_particles.shape[0])
+
+        values = [unique_particles[i] for i in range(unique_particles.shape[0])]
+        return DiscreteDistribution(values=values, probs=probabilities)
+
+    @staticmethod
+    def _empty_discrete_distribution() -> DiscreteDistribution:
+        # DiscreteDistribution.__init__ rejects probs that do not sum to 1.0, so we
+        # build the empty case directly. Sampling/probability methods are not
+        # meaningful on an empty belief; consumers gate on len(values).
+        empty = DiscreteDistribution.__new__(DiscreteDistribution)
+        empty.values = []
+        empty.probs = np.array([], dtype=float)
+        empty._cumprobs = np.array([], dtype=float)  # pylint: disable=protected-access
+        return empty
 
     @property
     def n_particles(self) -> int:

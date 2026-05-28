@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Vectorized particle belief updater for the Continuous LaserTag POMDP.
 
 This module implements a concrete
@@ -29,6 +31,9 @@ from POMDPPlanners.core.belief.vectorized_particle_belief_updater import (
 )
 from POMDPPlanners.core.environment import SpaceType
 from POMDPPlanners.environments.laser_tag_pomdp import _native
+from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_utils import (
+    OpponentPolicy,
+)
 from POMDPPlanners.utils.config_to_id import config_to_id
 
 if TYPE_CHECKING:
@@ -53,7 +58,7 @@ class ContinuousLaserTagVectorizedUpdater(VectorizedParticleBeliefUpdater):
         robot_radius: Robot body radius.
         opponent_radius: Opponent body radius.
         tag_radius: Maximum tag distance.
-        pursuit_speed: Mean opponent pursuit step magnitude.
+        evasion_speed: Mean opponent evasion step magnitude.
         measurement_noise: Laser measurement noise std.
         robot_covariance: Shape ``(2, 2)`` robot transition noise covariance.
         opponent_covariance: Shape ``(2, 2)`` opponent transition noise
@@ -86,11 +91,12 @@ class ContinuousLaserTagVectorizedUpdater(VectorizedParticleBeliefUpdater):
         robot_radius: float,
         opponent_radius: float,
         tag_radius: float,
-        pursuit_speed: float,
+        evasion_speed: float,
         measurement_noise: float,
         robot_covariance: np.ndarray,
         opponent_covariance: np.ndarray,
         action_to_vector: Optional[Dict[str, np.ndarray]] = None,
+        opponent_policy: OpponentPolicy = OpponentPolicy.EVADE,
     ):
         """Initialize the vectorized updater.
 
@@ -100,24 +106,26 @@ class ContinuousLaserTagVectorizedUpdater(VectorizedParticleBeliefUpdater):
             robot_radius: Robot body radius.
             opponent_radius: Opponent body radius.
             tag_radius: Maximum tag distance.
-            pursuit_speed: Mean opponent pursuit step magnitude.
+            evasion_speed: Mean opponent step magnitude (direction set by policy).
             measurement_noise: Laser measurement noise std.
             robot_covariance: Robot transition noise covariance ``(2, 2)``.
             opponent_covariance: Opponent transition noise covariance
                 ``(2, 2)``.
             action_to_vector: Optional mapping from string actions to
                 3-D vectors (for discrete action variant).
+            opponent_policy: Opponent transition behaviour (EVADE or PURSUE).
         """
         self.walls = np.asarray(walls, dtype=float).reshape(-1, 4)
         self.grid_size = np.asarray(grid_size, dtype=float)
         self.robot_radius = robot_radius
         self.opponent_radius = opponent_radius
         self.tag_radius = tag_radius
-        self.pursuit_speed = pursuit_speed
+        self.evasion_speed = evasion_speed
         self.measurement_noise = measurement_noise
         self.robot_covariance = np.asarray(robot_covariance, dtype=float)
         self.opponent_covariance = np.asarray(opponent_covariance, dtype=float)
         self._action_to_vector = action_to_vector
+        self.opponent_policy = opponent_policy
 
     @classmethod
     def from_environment(
@@ -135,11 +143,12 @@ class ContinuousLaserTagVectorizedUpdater(VectorizedParticleBeliefUpdater):
             robot_radius=env.robot_radius,
             opponent_radius=env.opponent_radius,
             tag_radius=env.tag_radius,
-            pursuit_speed=env.pursuit_speed,
+            evasion_speed=env.evasion_speed,
             measurement_noise=env.measurement_noise,
             robot_covariance=env.robot_transition_cov_matrix,
             opponent_covariance=env.opponent_transition_cov_matrix,
             action_to_vector=action_map,
+            opponent_policy=env.opponent_policy,
         )
 
     # ------------------------------------------------------------------
@@ -159,12 +168,13 @@ class ContinuousLaserTagVectorizedUpdater(VectorizedParticleBeliefUpdater):
             action=action_vec,
             robot_covariance=self.robot_covariance,
             opponent_covariance=self.opponent_covariance,
-            pursuit_speed=self.pursuit_speed,
+            evasion_speed=self.evasion_speed,
             walls=self.walls,
             grid_size=self.grid_size,
             robot_radius=self.robot_radius,
             opponent_radius=self.opponent_radius,
             tag_radius=self.tag_radius,
+            opponent_policy_code=self.opponent_policy.native_code,
         )
         return transition.batch_sample(particles_arr)
 
@@ -197,10 +207,11 @@ class ContinuousLaserTagVectorizedUpdater(VectorizedParticleBeliefUpdater):
             "robot_radius": self.robot_radius,
             "opponent_radius": self.opponent_radius,
             "tag_radius": self.tag_radius,
-            "pursuit_speed": self.pursuit_speed,
+            "evasion_speed": self.evasion_speed,
             "measurement_noise": self.measurement_noise,
             "robot_covariance": self.robot_covariance.tolist(),
             "opponent_covariance": self.opponent_covariance.tolist(),
+            "opponent_policy": self.opponent_policy.value,
         }
         if self._action_to_vector is not None:
             config_dict["action_to_vector"] = {

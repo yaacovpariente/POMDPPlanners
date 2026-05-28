@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for Gaussian belief updater classes.
 
 This module tests the concrete updater implementations:

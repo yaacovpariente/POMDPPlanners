@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for the PolicyTrainer class.
 
 This module tests the PolicyTrainer collect-then-train loop, including

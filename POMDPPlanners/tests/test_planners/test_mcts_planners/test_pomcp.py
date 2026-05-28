@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 """Tests for POMCP planner.
 
 This module tests the POMCP planner, focusing on:
