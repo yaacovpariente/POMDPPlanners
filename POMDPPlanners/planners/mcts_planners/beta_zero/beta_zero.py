@@ -10,7 +10,7 @@ is orchestrated via :class:`~POMDPPlanners.training.PolicyTrainer`.
 References:
     Moss, R. J., Corso, A., Caers, J., & Kochenderfer, M. J. (2024). BetaZero:
     Belief-State Planning for Long-Horizon POMDPs using Learned Approximations.
-    arXiv:2306.00249. https://arxiv.org/abs/2306.00249
+    Reinforcement Learning Conference (RLC).
 
 Implementation note:
     Operates on the column-store arena
@@ -128,7 +128,7 @@ class BetaZero(ArenaDoubleProgressiveWideningMCTSPolicy, TrainablePolicy):
     References:
         Moss, R. J., Corso, A., Caers, J., & Kochenderfer, M. J. (2024).
         BetaZero: Belief-State Planning for Long-Horizon POMDPs using Learned
-        Approximations. arXiv:2306.00249. https://arxiv.org/abs/2306.00249
+        Approximations. Reinforcement Learning Conference (RLC).
     """
 
     def __init__(
