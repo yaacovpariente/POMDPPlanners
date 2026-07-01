@@ -209,6 +209,7 @@ ignore-imports = false
 ignored-modules = [
     "numpy",
     "cvxopt",
+    "carla",
     "POMDPPlanners.core._native",
     "POMDPPlanners.environments.mountain_car_pomdp._native",
     "POMDPPlanners.environments.cartpole_pomdp._native",
