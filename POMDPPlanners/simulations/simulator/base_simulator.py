@@ -4,6 +4,7 @@
 
 import cProfile
 import io
+import os
 import pstats
 import shutil
 import tempfile
@@ -231,6 +232,11 @@ class BaseSimulator(ABC):
 
         trash_path = mlruns_path / ".trash"
         trash_path.mkdir(parents=True, exist_ok=True)
+
+        # MLflow >= 3.6 gates the local filesystem tracking backend behind an
+        # explicit opt-in. This project deliberately uses local file storage,
+        # so enable it unless the caller has already chosen otherwise.
+        os.environ.setdefault("MLFLOW_ALLOW_FILE_STORE", "true")
 
         tracking_uri = f"file://{mlruns_path.absolute()}"
         mlflow.set_tracking_uri(tracking_uri)
