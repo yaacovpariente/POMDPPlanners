@@ -10,12 +10,16 @@ frames. They mirror the CarlaPOMDP visualizer test patterns (parameter validatio
 + successful encode).
 """
 
+import shutil
 from pathlib import Path
 
 import numpy as np
 import pytest
 
 from POMDPPlanners.environments.isaac_lab_pomdp import IsaacLabPOMDPVisualizer
+
+_FFMPEG_MISSING = shutil.which("ffmpeg") is None
+_SKIP_REASON = "ffmpeg not available on PATH"
 
 
 def _frame(value: int, channels: int = 3) -> np.ndarray:
@@ -92,6 +96,7 @@ def test_frames_to_video_rejects_malformed_frame() -> None:
         visualizer.frames_to_video([np.zeros((4, 6), dtype=np.uint8)], Path("out.mp4"))
 
 
+@pytest.mark.skipif(_FFMPEG_MISSING, reason=_SKIP_REASON)
 def test_frames_to_video_success(tmp_path: Path) -> None:
     """A valid RGB frame sequence encodes a non-empty .mp4 video.
 
@@ -113,6 +118,7 @@ def test_frames_to_video_success(tmp_path: Path) -> None:
     assert video_path.stat().st_size > 0
 
 
+@pytest.mark.skipif(_FFMPEG_MISSING, reason=_SKIP_REASON)
 def test_frames_to_video_drops_alpha_channel(tmp_path: Path) -> None:
     """An RGBA frame sequence is accepted (alpha dropped) and encodes a video.
 
