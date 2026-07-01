@@ -282,7 +282,9 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
         # Discrete int actions (force levels); already hashable.
         return action
 
-    def cache_visualization(self, history: List[StepData], cache_path: Path) -> None:
+    def cache_visualization(
+        self, history: List[StepData], output_dir: Path, episode_index: int
+    ) -> None:
         """Cache animated visualization of the safety ant velocity episode.
 
         Creates an animated GIF showing the ant's movement trajectory with velocity vectors,
@@ -290,12 +292,13 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
 
         Args:
             history: Episode history containing states, actions, and rewards
-            cache_path: Path where to save the visualization (must end with .gif)
+            output_dir: Directory into which the ``.gif`` visualization is written
+            episode_index: Zero-based episode index, used to name the file
 
         Raises:
-            ValueError: If history is empty or cache_path doesn't end with .gif
-            TypeError: If cache_path is not a Path object
+            ValueError: If history is empty
         """
+        cache_path = output_dir / f"agent_path_{episode_index}.gif"
         visualizer = SafeAntVelocityVisualizer(self)
         visualizer.create_animation(history, cache_path)
 

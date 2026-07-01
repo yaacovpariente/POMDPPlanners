@@ -643,15 +643,20 @@ class Environment(ABC):  # pylint: disable=too-many-public-methods
 
         return next_state, next_observation, reward
 
-    def cache_visualization(self, history: "List[StepData]", cache_path: Path) -> None:
+    def cache_visualization(
+        self, history: "List[StepData]", output_dir: Path, episode_index: int
+    ) -> None:
         """Cache visualization data for an episode history.
 
         This method can be overridden by subclasses to provide environment-specific
-        visualization caching capabilities.
+        visualization caching capabilities. The environment owns the output file
+        name and extension: callers provide only the destination directory and the
+        episode index, and each environment writes whatever artifact(s) it chooses.
 
         Args:
             history: List of step data from an episode
-            cache_path: Path where visualization data should be cached
+            output_dir: Directory into which the visualization file(s) are written
+            episode_index: Zero-based index of the episode, used to name the file
         """
 
     def get_metric_names(self) -> List[str]:

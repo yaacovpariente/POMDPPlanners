@@ -1384,17 +1384,21 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
         visualizer = PacManVisualizer(self)
         visualizer.visualize_path(path, actions, cache_path)
 
-    def cache_visualization(self, history: List[StepData], cache_path: Path) -> None:
+    def cache_visualization(
+        self, history: List[StepData], output_dir: Path, episode_index: int
+    ) -> None:
         """Cache visualization of episode history.
 
         Args:
             history: List of StepData objects representing the episode
-            cache_path: Path where the GIF should be saved
+            output_dir: Directory into which the ``.gif`` visualization is written
+            episode_index: Zero-based episode index, used to name the file
         """
         from POMDPPlanners.environments.pacman_pomdp.pacman_visualizer import (
             PacManVisualizer,
         )  # pylint: disable=import-outside-toplevel
 
+        cache_path = output_dir / f"agent_path_{episode_index}.gif"
         visualizer = PacManVisualizer(self)
         visualizer.cache_visualization(history, cache_path)
 

@@ -153,12 +153,11 @@ class EpisodeReturnsVisualizer(ExperimentVisualizer):
         viz_dir.mkdir(exist_ok=True)
 
         for episode_idx, history in enumerate(policy_histories):
-            file_name = f"agent_path_{episode_idx}.gif"
-            cache_path = viz_dir / file_name
             try:
                 environment.cache_visualization(
                     history=history.history,
-                    cache_path=cache_path,
+                    output_dir=viz_dir,
+                    episode_index=episode_idx,
                 )
             except Exception as exc:  # pylint: disable=broad-exception-caught
                 logger.warning("Visualization failed for episode %s: %s", episode_idx, str(exc))
