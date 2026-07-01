@@ -158,20 +158,17 @@ class TestVisualizePlannerEpisode:
             # Verify environment visualization was called twice
             assert tiger_environment.cache_visualization.call_count == 2
 
-            # Verify cache paths are correct
-            expected_cache_paths = [
-                temp_cache_dir / "TestPlanner_0.gif",
-                temp_cache_dir / "TestPlanner_1.gif",
-            ]
+            # The environment owns the output file name; the planner name scopes
+            # the output directory and the episode id becomes the episode index.
+            expected_output_dir = temp_cache_dir / "TestPlanner"
 
             for i, call_args in enumerate(tiger_environment.cache_visualization.call_args_list):
-                history_arg = call_args[1]["history"]
-                cache_path_arg = call_args[1]["cache_path"]
-
+                kwargs = call_args[1]
                 assert (
-                    history_arg == sample_episode_history.history
+                    kwargs["history"] == sample_episode_history.history
                 )  # Pass the history list, not the History object
-                assert cache_path_arg == expected_cache_paths[i]
+                assert kwargs["output_dir"] == expected_output_dir
+                assert kwargs["episode_index"] == i
 
     def test_visualize_planner_episode_single_episode(
         self,
@@ -219,7 +216,8 @@ class TestVisualizePlannerEpisode:
 
             tiger_environment.cache_visualization.assert_called_once_with(
                 history=sample_episode_history.history,  # Pass the history list, not the History object
-                cache_path=temp_cache_dir / "TestPlanner_0.gif",
+                output_dir=temp_cache_dir / "TestPlanner",
+                episode_index=0,
             )
 
     def test_visualize_planner_episode_zero_episodes(
@@ -267,7 +265,8 @@ class TestVisualizePlannerEpisode:
 
         Given: Planner with specific name, belief, and multiple episodes
         When: visualize_planner_episode generates cache paths
-        Then: Cache paths follow expected format: {planner_name}_{episode_id}.
+        Then: The planner name scopes the output directory and the episode id
+            is passed as the episode index.
 
         Test type: unit
         """
@@ -291,19 +290,18 @@ class TestVisualizePlannerEpisode:
                 num_steps=5,
             )
 
-            # Extract cache paths from calls
-            cache_paths = []
+            # Extract output directories and episode indices from calls
+            output_dirs = []
+            episode_indices = []
             for call_args in tiger_environment.cache_visualization.call_args_list:
-                cache_paths.append(call_args[1]["cache_path"])
+                output_dirs.append(call_args[1]["output_dir"])
+                episode_indices.append(call_args[1]["episode_index"])
 
-            # Verify cache path formatting
-            expected_paths = [
-                temp_cache_dir / "POMCP_TestPlanner_123_0.gif",
-                temp_cache_dir / "POMCP_TestPlanner_123_1.gif",
-                temp_cache_dir / "POMCP_TestPlanner_123_2.gif",
-            ]
-
-            assert cache_paths == expected_paths
+            # Each planner writes into its own subdirectory; the environment owns
+            # the per-episode file name.
+            expected_dir = temp_cache_dir / "POMCP_TestPlanner_123"
+            assert output_dirs == [expected_dir, expected_dir, expected_dir]
+            assert episode_indices == [0, 1, 2]
 
     def test_visualize_planner_episode_real_policy_integration(self, temp_cache_dir):
         """Test integration with real POMCP policy and TigerPOMDP.
@@ -348,19 +346,16 @@ class TestVisualizePlannerEpisode:
         # Verify visualization was called
         assert env.cache_visualization.call_count == 2
 
-        # Verify cache paths
-        expected_paths = [
-            temp_cache_dir / "RealPOMCP_0.gif",
-            temp_cache_dir / "RealPOMCP_1.gif",
-        ]
+        # Verify per-planner output directory and episode indices
+        expected_dir = temp_cache_dir / "RealPOMCP"
 
         for i, call_args in enumerate(env.cache_visualization.call_args_list):
-            cache_path_arg = call_args[1]["cache_path"]
-            assert cache_path_arg == expected_paths[i]
+            kwargs = call_args[1]
+            assert kwargs["output_dir"] == expected_dir
+            assert kwargs["episode_index"] == i
 
             # Verify history is a valid list of StepData
-            history_arg = call_args[1]["history"]
-            assert isinstance(history_arg, list)  # Should be a list of StepData
+            assert isinstance(kwargs["history"], list)  # Should be a list of StepData
 
     def test_visualize_planner_episode_exception_handling(
         self, test_planner, tiger_environment, test_belief, temp_cache_dir
@@ -604,11 +599,11 @@ class TestVisualizePlannerEpisode:
                     num_steps=5,
                 )
 
-                # Verify cache path is constructed correctly
-                expected_cache_path = temp_path / "TestPlanner_0.gif"
+                # Verify the output directory and episode index are passed correctly
                 tiger_environment.cache_visualization.assert_called_with(
                     history=sample_episode_history.history,  # Pass the history list, not the History object
-                    cache_path=expected_cache_path,
+                    output_dir=temp_path / "TestPlanner",
+                    episode_index=0,
                 )
 
     def test_visualize_planner_episode_docstring_example(self, temp_cache_dir):
@@ -652,12 +647,11 @@ class TestVisualizePlannerEpisode:
         # Verify expected behavior
         assert env.cache_visualization.call_count == 3
 
-        # Verify cache paths follow expected pattern
+        # Verify per-planner output directory and episode indices
         for i in range(3):
-            call_args = env.cache_visualization.call_args_list[i]
-            cache_path = call_args[1]["cache_path"]
-            expected_path = temp_cache_dir / f"POMCP_{i}.gif"
-            assert cache_path == expected_path
+            kwargs = env.cache_visualization.call_args_list[i][1]
+            assert kwargs["output_dir"] == temp_cache_dir / "POMCP"
+            assert kwargs["episode_index"] == i
 
     def test_visualize_planner_episode_parallel_basic(
         self,

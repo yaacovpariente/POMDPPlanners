@@ -676,7 +676,9 @@ class ContinuousPushPOMDP(Environment):
         # np.array_equal semantics for arrays of identical shape and dtype.
         return np.ascontiguousarray(action, dtype=np.float64).tobytes()
 
-    def cache_visualization(self, history: List[StepData], cache_path: Path) -> None:
+    def cache_visualization(
+        self, history: List[StepData], output_dir: Path, episode_index: int
+    ) -> None:
         """Cache animated visualization of the continuous push episode.
 
         Creates an animated GIF showing the robot pushing the object toward
@@ -685,13 +687,13 @@ class ContinuousPushPOMDP(Environment):
 
         Args:
             history: Episode history containing states, actions, and rewards.
-            cache_path: Path where to save the visualization (must end with .gif).
+            output_dir: Directory into which the ``.gif`` visualization is written.
+            episode_index: Zero-based episode index, used to name the file.
 
         Raises:
-            ValueError: If history is empty or cache_path doesn't end with .gif.
-            TypeError: If cache_path is not a Path object.
+            ValueError: If history is empty.
         """
-
+        cache_path = output_dir / f"agent_path_{episode_index}.gif"
         visualizer = ContinuousPushPOMDPVisualizer(self)
         visualizer.create_visualization(history, cache_path)
 

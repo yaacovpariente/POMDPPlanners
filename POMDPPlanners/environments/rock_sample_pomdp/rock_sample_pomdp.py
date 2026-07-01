@@ -813,17 +813,21 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
 
         return metrics
 
-    def cache_visualization(self, history: List[StepData], cache_path: Path) -> None:
+    def cache_visualization(
+        self, history: List[StepData], output_dir: Path, episode_index: int
+    ) -> None:
         """Cache visualization of episode history.
 
         Args:
             history: Episode history containing states, actions, and rewards
-            cache_path: Path where to save the visualization (must end with .gif)
+            output_dir: Directory into which the ``.gif`` visualization is written
+            episode_index: Zero-based episode index, used to name the file
         """
         from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_visualizer import (  # pylint: disable=import-outside-toplevel
             RockSampleVisualizer,
         )
 
+        cache_path = output_dir / f"agent_path_{episode_index}.gif"
         visualizer = RockSampleVisualizer(self)
         visualizer.create_visualization(history, cache_path)
 
