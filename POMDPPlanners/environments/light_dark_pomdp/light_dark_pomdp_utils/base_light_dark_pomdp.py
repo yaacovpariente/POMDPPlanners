@@ -322,18 +322,21 @@ class BaseLightDarkPOMDP(Environment, ABC):
         visualizer = LightDarkPOMDPVisualizer(self)
         visualizer.visualize_path(path, agent_belief_path, actions, cache_path)
 
-    def cache_visualization(self, history: List[StepData], cache_path: Path) -> None:
+    def cache_visualization(
+        self, history: List[StepData], output_dir: Path, episode_index: int
+    ) -> None:
         """Cache visualization of agent's path and belief.
 
         Args:
             history: List of step data from an episode.
-            cache_path: Path where to save the visualization.
+            output_dir: Directory into which the ``.gif`` visualization is written.
+            episode_index: Zero-based episode index, used to name the file.
 
         Raises:
-            TypeError: If history is not a List or contains non-StepData objects,
-                or if cache_path is not a Path object.
+            TypeError: If history is not a List or contains non-StepData objects.
             ValueError: If history is empty or contains invalid data.
         """
+        cache_path = output_dir / f"agent_path_{episode_index}.gif"
         visualizer = LightDarkPOMDPVisualizer(self)
         visualizer.cache_visualization(history, cache_path)
 

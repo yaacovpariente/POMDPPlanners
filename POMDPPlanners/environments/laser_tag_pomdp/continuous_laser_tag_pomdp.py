@@ -820,7 +820,10 @@ class ContinuousLaserTagPOMDP(Environment):
     # Visualization
     # ------------------------------------------------------------------
 
-    def cache_visualization(self, history: List[StepData], cache_path: Path) -> None:
+    def cache_visualization(
+        self, history: List[StepData], output_dir: Path, episode_index: int
+    ) -> None:
+        cache_path = output_dir / f"agent_path_{episode_index}.gif"
         visualizer = ContinuousLaserTagVisualizer(
             grid_size=self._grid_size,
             walls=self._walls,

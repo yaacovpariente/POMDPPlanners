@@ -1433,7 +1433,9 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
             all_dangerous_encounters_ci,
         )
 
-    def cache_visualization(self, history: List[StepData], cache_path: Path) -> None:
+    def cache_visualization(
+        self, history: List[StepData], output_dir: Path, episode_index: int
+    ) -> None:
         """Cache visualization of the LaserTag episode as an animated GIF.
 
         Creates an animated visualization showing:
@@ -1448,12 +1450,13 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
 
         Args:
             history: The history of states, actions, and observations from an episode
-            cache_path: Path where to save the visualization GIF
+            output_dir: Directory into which the ``.gif`` visualization is written
+            episode_index: Zero-based episode index, used to name the file
 
         Raises:
             ValueError: If history is empty or contains invalid data
-            TypeError: If cache_path is not a Path object or doesn't end with .gif
         """
+        cache_path = output_dir / f"agent_path_{episode_index}.gif"
         # Lazy import to avoid circular dependency
         visualizer = LaserTagVisualizer(
             floor_shape=self.floor_shape,

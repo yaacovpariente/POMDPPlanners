@@ -29,10 +29,15 @@ def _run_single_episode(
         num_steps=num_steps,
         logger=logger,
     )
-    cache_path = cache_dir / f"{planner.name}_{episode_id}.gif"
-
-    # Visualize the episode
-    environment.cache_visualization(history=episode_result.history, cache_path=cache_path)
+    # The environment owns the output file name/extension; keep each planner's
+    # visualizations separated by writing them into a per-planner subdirectory.
+    planner_output_dir = cache_dir / planner.name
+    planner_output_dir.mkdir(parents=True, exist_ok=True)
+    environment.cache_visualization(
+        history=episode_result.history,
+        output_dir=planner_output_dir,
+        episode_index=episode_id,
+    )
 
 
 def visualize_planner_episode(

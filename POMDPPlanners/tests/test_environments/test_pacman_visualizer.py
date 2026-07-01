@@ -221,8 +221,8 @@ def test_cache_visualization_vectorized_belief_renders_red_overlay() -> None:
     ]
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        gif_path = Path(tmpdir) / "viz.gif"
-        env.cache_visualization(history, gif_path)
+        env.cache_visualization(history, Path(tmpdir), 0)
+        gif_path = Path(tmpdir) / "agent_path_0.gif"
         assert gif_path.exists()
 
         frame = Image.open(gif_path).convert("RGBA")
