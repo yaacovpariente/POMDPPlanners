@@ -12,7 +12,7 @@ CARLA-specific assertion that the observation differs from the state.
 # pylint: disable=protected-access  # Tests inspect the live-session internals
 
 import pickle
-from typing import List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from pathlib import Path
 
 import numpy as np
@@ -22,7 +22,7 @@ from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.core.belief.belief_utils import get_initial_belief
 from POMDPPlanners.core.environment import Environment, SpaceType
 from POMDPPlanners.core.policy import Policy, PolicyRunData, PolicySpaceInfo
-from POMDPPlanners.environments.carla_pomdp import CarlaPOMDP
+from POMDPPlanners.environments.carla_pomdp import CarlaPOMDP, carla_video
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.simulations.episodes import EpisodeRunner
 
@@ -478,3 +478,151 @@ def test_two_env_discount_mismatch_raises(fake_session: FakeCarlaSession) -> Non
         EpisodeRunner(
             environment=world, policy=policy, initial_belief=belief, num_steps=2, logger=None
         )
+
+
+class _FakeCameraSession(FakeCarlaSession):
+    """A FakeCarlaSession that also buffers RGB camera frames like the real session.
+
+    Extends the scripted session with a ``frames`` buffer so the camera-video save
+    path can be exercised without a CARLA server or a live camera sensor attached.
+    """
+
+    def __init__(self, frame_count: int = 0) -> None:
+        super().__init__()
+        self.frames: List[np.ndarray] = [
+            np.zeros((4, 4, 3), dtype=np.uint8) for _ in range(frame_count)
+        ]
+
+
+def test_hash_observation_matches_for_equal_and_differs_for_distinct(world: CarlaPOMDP) -> None:
+    """hash_observation is stable for equal arrays and distinct for different ones.
+
+    Purpose: Validates observation hashing used to key belief/tree observation nodes.
+
+    Given: Two equal 3-D observation arrays and a third differing one
+    When: hash_observation is computed for each
+    Then: Equal arrays hash equally and the differing array hashes differently
+
+    Test type: unit
+    """
+    observation = np.array([48.0, 2.0, 0.0])
+    same = np.array([48.0, 2.0, 0.0])
+    different = np.array([48.0, 2.0, 1.0])
+
+    assert world.hash_observation(observation) == world.hash_observation(same)
+    assert world.hash_observation(observation) != world.hash_observation(different)
+
+
+def test_hash_action_hashes_arrays_and_passes_scalars_through(world: CarlaPOMDP) -> None:
+    """hash_action returns bytes for ndarray actions and passes scalars unchanged.
+
+    Purpose: Validates action hashing for both preset-index and array actions.
+
+    Given: A scalar preset-index action and an ndarray action
+    When: hash_action is computed for each
+    Then: The scalar is returned unchanged and the array maps to its byte view
+
+    Test type: unit
+    """
+    array_action = np.array([0.5, 0.0, 0.0])
+
+    assert world.hash_action(1) == 1
+    assert world.hash_action(array_action) == array_action.tobytes()
+
+
+def test_save_camera_video_raises_when_recording_disabled() -> None:
+    """save_camera_video refuses to run when camera recording was not enabled.
+
+    Purpose: Validates the record_camera precondition guard.
+
+    Given: A CarlaPOMDP constructed with record_camera=False
+    When: save_camera_video is called
+    Then: RuntimeError is raised explaining recording is disabled
+
+    Test type: unit
+    """
+    env = CarlaPOMDP(discount_factor=0.95, record_camera=False)
+
+    with pytest.raises(RuntimeError, match="Camera recording is disabled"):
+        env.save_camera_video(Path("unused.mp4"))
+
+
+def test_save_camera_video_raises_when_no_frames_captured() -> None:
+    """save_camera_video refuses to run when no frames were buffered.
+
+    Purpose: Validates the non-empty-frames precondition guard.
+
+    Given: A record_camera=True world whose session buffered zero frames
+    When: save_camera_video is called
+    Then: RuntimeError is raised explaining no frames were captured
+
+    Test type: unit
+    """
+    env = CarlaPOMDP(discount_factor=0.95, record_camera=True)
+    env._session = _FakeCameraSession(frame_count=0)
+
+    with pytest.raises(RuntimeError, match="No camera frames"):
+        env.save_camera_video(Path("unused.mp4"))
+
+
+def test_save_camera_video_forwards_session_frames_and_fps(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """save_camera_video streams the buffered session frames to the encoder.
+
+    Purpose: Validates the happy-path delegation to write_frames_to_mp4.
+
+    Given: A record_camera=True world whose session buffered three frames
+    When: save_camera_video is called with an explicit fps and output path
+    Then: The encoder receives the session frames, the path, and the fps verbatim
+
+    Test type: unit
+    """
+    written: Dict[str, Any] = {}
+
+    def _fake_write(frames: List[np.ndarray], cache_path: Path, fps: int = 20) -> None:
+        written["frames"] = frames
+        written["path"] = cache_path
+        written["fps"] = fps
+
+    monkeypatch.setattr(carla_video, "write_frames_to_mp4", _fake_write)
+
+    env = CarlaPOMDP(discount_factor=0.95, record_camera=True)
+    session = _FakeCameraSession(frame_count=3)
+    env._session = session
+    output = tmp_path / "clip.mp4"
+
+    env.save_camera_video(output, fps=30)
+
+    assert written["frames"] is session.frames
+    assert written["path"] == output
+    assert written["fps"] == 30
+
+
+def test_cache_visualization_writes_agent_path_named_mp4(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """cache_visualization names the camera clip agent_path_<episode>.mp4.
+
+    Purpose: Validates the environment-owned visualization file-naming contract.
+
+    Given: A record_camera=True world with buffered frames and an output directory
+    When: cache_visualization is called for episode index 7
+    Then: The encoder is asked to write <output_dir>/agent_path_7.mp4
+
+    Test type: unit
+    """
+    written: Dict[str, Any] = {}
+
+    def _fake_write(frames: List[np.ndarray], cache_path: Path, fps: int = 20) -> None:
+        del frames, fps
+        written["path"] = cache_path
+
+    monkeypatch.setattr(carla_video, "write_frames_to_mp4", _fake_write)
+
+    env = CarlaPOMDP(discount_factor=0.95, record_camera=True)
+    env._session = _FakeCameraSession(frame_count=2)
+
+    env.cache_visualization(history=[], output_dir=tmp_path, episode_index=7)
+
+    assert written["path"] == tmp_path / "agent_path_7.mp4"
