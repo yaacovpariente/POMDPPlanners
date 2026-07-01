@@ -121,6 +121,7 @@ Note:
     - Results include optimized policies with their chosen hyperparameters
 """
 
+import os
 import uuid
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Tuple
@@ -309,6 +310,10 @@ class HyperParameterOptimizer:
 
         # Create the mlruns directory and set up MLflow
         self.mlruns_path.mkdir(parents=True, exist_ok=True)
+        # MLflow >= 3.6 gates the local filesystem tracking backend behind an
+        # explicit opt-in. This project deliberately uses local file storage,
+        # so enable it unless the caller has already chosen otherwise.
+        os.environ.setdefault("MLFLOW_ALLOW_FILE_STORE", "true")
         self.mlflow_tracking_uri: str = f"file://{self.mlruns_path.absolute()}"
         mlflow.set_tracking_uri(self.mlflow_tracking_uri)
         mlflow.set_experiment(experiment_name)
