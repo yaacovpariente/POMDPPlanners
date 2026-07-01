@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: MIT
 
 import copy
+import math
 from logging import Logger
 from time import time
 from typing import Any, List, Optional, Tuple
@@ -61,14 +62,23 @@ class EpisodeRunner:
     ):
         _validate_episode_inputs(environment, policy, initial_belief, num_steps)
 
+        # ``environment`` is the ground-truth world used to sample the executed
+        # trajectory (reward, next state, observation, terminal). The belief
+        # filter instead runs on the planner's own generative model
+        # (``policy.environment``); the two are the same object in the classic
+        # single-environment setup and differ when the world is a forward-only
+        # simulator (e.g. a Gymnasium/Isaac env) that cannot serve as a model.
         self.environment = environment
+        model_environment: Environment = getattr(policy, "environment", environment)
+        self.model_environment = model_environment
+        self._assert_consistent_discount()
         self.policy = policy
         self.num_steps = num_steps
         self.logger = logger or get_logger(f"episode.{environment.name}.{policy.name}")
 
         # Episode state
         self.belief = copy.deepcopy(initial_belief)
-        self.state = initial_belief.sample()
+        self.state = self._sample_initial_state(initial_belief)
         self.history = []
         self.policy_run_data = []
         self.current_step = 0
@@ -80,6 +90,31 @@ class EpisodeRunner:
         self.average_state_sampling_time = 0.0
         self.average_observation_time = 0.0
         self.average_belief_update_time = 0.0
+
+    def _assert_consistent_discount(self) -> None:
+        """Ensure the world and model share a discount factor when they differ."""
+        if self.model_environment is self.environment:
+            return
+        if not math.isclose(
+            self.environment.discount_factor, self.model_environment.discount_factor
+        ):
+            raise ValueError(
+                "World environment discount_factor "
+                f"({self.environment.discount_factor}) must match the planner "
+                f"model discount_factor ({self.model_environment.discount_factor})."
+            )
+
+    def _sample_initial_state(self, initial_belief: Belief) -> Any:
+        """Draw the ground-truth initial state.
+
+        When the world differs from the planner's model the true start must come
+        from the world itself (a forward-only simulator resets to its own state
+        and cannot accept an injected belief sample). In the single-environment
+        setup the belief sample is used, preserving classic behavior.
+        """
+        if self.model_environment is not self.environment:
+            return self.environment.initial_state_dist().sample()[0]
+        return initial_belief.sample()
 
     def run(self) -> History:
         """Execute the episode and return history with metrics."""
@@ -183,7 +218,7 @@ class EpisodeRunner:
         self.belief = self.belief.update(
             action=action,
             observation=observation,
-            pomdp=self.environment,
+            pomdp=self.model_environment,
             state=next_state,
         )
         elapsed = time() - start_time
