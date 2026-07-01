@@ -626,3 +626,47 @@ def test_cache_visualization_writes_agent_path_named_mp4(
     env.cache_visualization(history=[], output_dir=tmp_path, episode_index=7)
 
     assert written["path"] == tmp_path / "agent_path_7.mp4"
+
+
+def test_is_equal_observation_true_for_identical_false_for_distinct(world: CarlaPOMDP) -> None:
+    """is_equal_observation compares GNSS observation vectors element-wise.
+
+    Purpose: Validates the observation-equality predicate directly.
+
+    Given: Two identical GNSS observations and a third differing one
+    When: is_equal_observation compares the identical pair and the differing pair
+    Then: The identical pair compares equal and the differing pair compares unequal
+
+    Test type: unit
+    """
+    observation = np.array([48.0, 2.0, 0.0])
+    same = np.array([48.0, 2.0, 0.0])
+    different = np.array([48.0, 2.0, 1.0])
+
+    assert world.is_equal_observation(observation, same) is True
+    assert world.is_equal_observation(observation, different) is False
+
+
+def test_reward_subtracts_collision_penalty_on_terminal_step(world: CarlaPOMDP) -> None:
+    """The reward is ego speed on live steps and speed minus the penalty on collision.
+
+    Purpose: Validates the collision-penalty branch of the reward model.
+
+    Given: A world whose fake session terminates on the third tick at speed 3
+    When: The world is driven forward three steps, reading each reward
+    Then: Non-terminal rewards equal the speed and the terminal reward has the
+        default collision penalty subtracted (3.0 - 100.0 == -97.0)
+
+    Test type: unit
+    """
+    assert world.collision_penalty == 100.0
+    state = world._live_state
+    rewards = []
+    for _ in range(3):
+        next_state, _, reward = world.sample_next_step(state, 0)
+        rewards.append(reward)
+        state = next_state
+
+    assert rewards[0] == 1.0
+    assert rewards[1] == 2.0
+    assert rewards[2] == 3.0 - 100.0
