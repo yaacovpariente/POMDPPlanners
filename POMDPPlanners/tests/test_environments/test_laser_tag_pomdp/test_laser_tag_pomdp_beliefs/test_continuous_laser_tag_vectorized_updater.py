@@ -13,7 +13,7 @@ from POMDPPlanners.core.belief.particle_beliefs import WeightedParticleBelief
 from POMDPPlanners.core.belief.vectorized_weighted_particle_belief import (
     VectorizedWeightedParticleBelief,
 )
-from POMDPPlanners.environments.laser_tag_pomdp import _native
+from POMDPPlanners.environments.laser_tag_pomdp import OpponentPolicy, _native
 from POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_pomdp import (
     ContinuousLaserTagPOMDP,
     ContinuousLaserTagPOMDPDiscreteActions,
@@ -476,3 +476,173 @@ class TestBeliefEquivalenceWithBaseline:
             seed=1000,
             seed_fn=_native.set_seed,
         )
+
+
+class TestOpponentPolicyPropagation:
+    """Tests that the belief updater honours the environment's opponent_policy.
+
+    These tests pin a particular ``opponent_policy`` on the environment, build the
+    updater via ``from_environment``, and check both that (a) the updater's
+    ``batch_transition`` reproduces the environment state-transition model
+    bit-for-bit per policy, and (b) the propagated particle cloud moves in the
+    policy-correct direction (anchored to ground-truth geometry so a shared
+    EVADE-hardcoding bug in both paths could not pass).
+    """
+
+    @pytest.mark.parametrize(
+        "opponent_policy",
+        [
+            OpponentPolicy.EVADE,
+            OpponentPolicy.PURSUE,
+            OpponentPolicy.EVADE_WHEN_SPOTTED,
+        ],
+    )
+    def test_batch_transition_matches_env_stm_per_policy(self, opponent_policy):
+        """Belief batch_transition matches the env STM bit-for-bit under each policy.
+
+        Purpose: Validates that the opponent_policy carried by the
+            ContinuousLaserTagPOMDP state-transition model is propagated into the
+            belief updater, so particle propagation uses the same opponent
+            dynamics (EVADE / PURSUE / EVADE_WHEN_SPOTTED) as the environment.
+
+        Given: A ContinuousLaserTagPOMDP pinned to one opponent_policy, an updater
+            built from it via from_environment, and a set of non-terminal
+            continuous-space particles.
+        When: batch_transition is run once on the whole particle set under a shared
+            native seed, then the same seed is restored and per-particle
+            env.sample_next_state calls are issued in row order.
+        Then: The two next-state arrays agree within floating-point tolerance for
+            every policy.
+
+        Test type: integration
+        """
+        env = ContinuousLaserTagPOMDP(
+            discount_factor=0.95,
+            **continuous_laser_tag_pinned_kwargs(walls=[], opponent_policy=opponent_policy),
+        )
+        updater = ContinuousLaserTagVectorizedUpdater.from_environment(env)
+
+        np.random.seed(123)
+        n = 30
+        particles = np.column_stack(
+            [
+                np.random.rand(n) * 10,
+                np.random.rand(n) * 6,
+                np.random.rand(n) * 10,
+                np.random.rand(n) * 6,
+                np.zeros(n),
+            ]
+        )
+        action = np.array([1.0, 0.5, 0.0])
+
+        _native.set_seed(2024)
+        vec_result = updater.batch_transition(particles, action)
+
+        _native.set_seed(2024)
+        scalar_rows = [env.sample_next_state(particles[i], action) for i in range(n)]
+        scalar_result = np.stack(scalar_rows, axis=0)
+
+        np.testing.assert_allclose(
+            vec_result,
+            scalar_result,
+            atol=1e-12,
+            err_msg=f"batch_transition diverged from env STM for policy={opponent_policy}",
+        )
+
+    def test_batch_transition_evades_away_from_robot(self):
+        """Belief batch_transition propagates particles AWAY from the robot under EVADE.
+
+        Purpose: Anchors the EVADE belief propagation to ground-truth geometry,
+            proving the updater applies the fleeing direction (not merely that it
+            agrees with the env on a shared bug).
+
+        Given: An EVADE updater, the robot at (5, 3) and the opponent offset to
+            +x/+y at (8, 5), and a no-op (no-tag) action.
+        When: batch_transition propagates many copies of this particle.
+        Then: The mean opponent position increases in both x and y (fleeing).
+
+        Test type: integration
+        """
+        env = ContinuousLaserTagPOMDP(
+            discount_factor=0.95,
+            **continuous_laser_tag_pinned_kwargs(walls=[], opponent_policy=OpponentPolicy.EVADE),
+        )
+        updater = ContinuousLaserTagVectorizedUpdater.from_environment(env)
+
+        _native.set_seed(7)
+        n = 500
+        particles = np.tile(np.array([5.0, 3.0, 8.0, 5.0, 0.0]), (n, 1))
+        out = updater.batch_transition(particles, np.array([0.0, 0.0, 0.0]))
+
+        assert float(np.mean(out[:, 2])) > 8.1, "Expected EVADE to flee +x"
+        assert float(np.mean(out[:, 3])) > 5.1, "Expected EVADE to flee +y"
+
+    def test_batch_transition_pursues_toward_robot(self):
+        """Belief batch_transition propagates particles TOWARD the robot under PURSUE.
+
+        Purpose: Anchors the PURSUE belief propagation to ground-truth geometry,
+            the mirror image of the EVADE check, proving the updater honours the
+            chasing direction.
+
+        Given: A PURSUE updater, the robot at (5, 3) and the opponent offset to
+            +x/+y at (8, 5), and a no-op (no-tag) action.
+        When: batch_transition propagates many copies of this particle.
+        Then: The mean opponent position decreases in both x and y (chasing).
+
+        Test type: integration
+        """
+        env = ContinuousLaserTagPOMDP(
+            discount_factor=0.95,
+            **continuous_laser_tag_pinned_kwargs(walls=[], opponent_policy=OpponentPolicy.PURSUE),
+        )
+        updater = ContinuousLaserTagVectorizedUpdater.from_environment(env)
+
+        _native.set_seed(7)
+        n = 500
+        particles = np.tile(np.array([5.0, 3.0, 8.0, 5.0, 0.0]), (n, 1))
+        out = updater.batch_transition(particles, np.array([0.0, 0.0, 0.0]))
+
+        assert float(np.mean(out[:, 2])) < 7.9, "Expected PURSUE to chase -x"
+        assert float(np.mean(out[:, 3])) < 4.9, "Expected PURSUE to chase -y"
+
+    def test_batch_transition_evade_when_spotted_branches_on_visibility(self):
+        """Belief batch_transition flees when spotted and holds when unseen under EWS.
+
+        Purpose: Validates that the EVADE_WHEN_SPOTTED line-of-sight branch is
+            propagated into the belief updater: the opponent flees when it lies on
+            a robot laser ray and only jitters (holds position) otherwise.
+
+        Given: An EVADE_WHEN_SPOTTED updater (no walls), the robot at (5, 3), and
+            two particle clouds — opponent due +x at (8, 3) (on the East ray, so
+            visible) and opponent at (8, 5) (off every ray, not visible) — under a
+            no-op action.
+        When: batch_transition propagates each cloud.
+        Then: The spotted cloud's mean x increases (fleeing), while the unseen
+            cloud holds near its start with only noise-level spread (well below a
+            full evasion step).
+
+        Test type: integration
+        """
+        env = ContinuousLaserTagPOMDP(
+            discount_factor=0.95,
+            **continuous_laser_tag_pinned_kwargs(
+                walls=[], opponent_policy=OpponentPolicy.EVADE_WHEN_SPOTTED
+            ),
+        )
+        updater = ContinuousLaserTagVectorizedUpdater.from_environment(env)
+        n = 600
+        no_op = np.array([0.0, 0.0, 0.0])
+
+        _native.set_seed(11)
+        spotted = updater.batch_transition(
+            np.tile(np.array([5.0, 3.0, 8.0, 3.0, 0.0]), (n, 1)), no_op
+        )
+        assert float(np.mean(spotted[:, 2])) > 8.1, "Expected EWS to flee +x while spotted"
+
+        _native.set_seed(11)
+        unseen = updater.batch_transition(
+            np.tile(np.array([5.0, 3.0, 8.0, 5.0, 0.0]), (n, 1)), no_op
+        )
+        assert abs(float(np.mean(unseen[:, 2])) - 8.0) < 0.1, "Expected EWS to hold x when unseen"
+        assert abs(float(np.mean(unseen[:, 3])) - 5.0) < 0.1, "Expected EWS to hold y when unseen"
+        assert float(np.std(unseen[:, 2])) < 0.35, "Expected only noise-level spread when unseen"
