@@ -16,11 +16,16 @@ from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
     ContinuousLightDarkPOMDP,
 )
+from POMDPPlanners.environments.rock_sample_pomdp import (
+    RockSamplePOMDP,
+    create_rock_sample_state,
+)
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
 from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
     cartpole_pinned_kwargs,
     continuous_light_dark_pinned_kwargs,
+    rock_sample_pinned_kwargs,
 )
 from POMDPPlanners.utils.planner_episode_visualization import visualize_planner_episode
 
@@ -158,20 +163,17 @@ class TestVisualizePlannerEpisode:
             # Verify environment visualization was called twice
             assert tiger_environment.cache_visualization.call_count == 2
 
-            # Verify cache paths are correct
-            expected_cache_paths = [
-                temp_cache_dir / "TestPlanner_0.gif",
-                temp_cache_dir / "TestPlanner_1.gif",
-            ]
+            # The environment owns the output file name; the planner name scopes
+            # the output directory and the episode id becomes the episode index.
+            expected_output_dir = temp_cache_dir / "TestPlanner"
 
             for i, call_args in enumerate(tiger_environment.cache_visualization.call_args_list):
-                history_arg = call_args[1]["history"]
-                cache_path_arg = call_args[1]["cache_path"]
-
+                kwargs = call_args[1]
                 assert (
-                    history_arg == sample_episode_history.history
+                    kwargs["history"] == sample_episode_history.history
                 )  # Pass the history list, not the History object
-                assert cache_path_arg == expected_cache_paths[i]
+                assert kwargs["output_dir"] == expected_output_dir
+                assert kwargs["episode_index"] == i
 
     def test_visualize_planner_episode_single_episode(
         self,
@@ -219,7 +221,8 @@ class TestVisualizePlannerEpisode:
 
             tiger_environment.cache_visualization.assert_called_once_with(
                 history=sample_episode_history.history,  # Pass the history list, not the History object
-                cache_path=temp_cache_dir / "TestPlanner_0.gif",
+                output_dir=temp_cache_dir / "TestPlanner",
+                episode_index=0,
             )
 
     def test_visualize_planner_episode_zero_episodes(
@@ -267,7 +270,8 @@ class TestVisualizePlannerEpisode:
 
         Given: Planner with specific name, belief, and multiple episodes
         When: visualize_planner_episode generates cache paths
-        Then: Cache paths follow expected format: {planner_name}_{episode_id}.
+        Then: The planner name scopes the output directory and the episode id
+            is passed as the episode index.
 
         Test type: unit
         """
@@ -291,19 +295,18 @@ class TestVisualizePlannerEpisode:
                 num_steps=5,
             )
 
-            # Extract cache paths from calls
-            cache_paths = []
+            # Extract output directories and episode indices from calls
+            output_dirs = []
+            episode_indices = []
             for call_args in tiger_environment.cache_visualization.call_args_list:
-                cache_paths.append(call_args[1]["cache_path"])
+                output_dirs.append(call_args[1]["output_dir"])
+                episode_indices.append(call_args[1]["episode_index"])
 
-            # Verify cache path formatting
-            expected_paths = [
-                temp_cache_dir / "POMCP_TestPlanner_123_0.gif",
-                temp_cache_dir / "POMCP_TestPlanner_123_1.gif",
-                temp_cache_dir / "POMCP_TestPlanner_123_2.gif",
-            ]
-
-            assert cache_paths == expected_paths
+            # Each planner writes into its own subdirectory; the environment owns
+            # the per-episode file name.
+            expected_dir = temp_cache_dir / "POMCP_TestPlanner_123"
+            assert output_dirs == [expected_dir, expected_dir, expected_dir]
+            assert episode_indices == [0, 1, 2]
 
     def test_visualize_planner_episode_real_policy_integration(self, temp_cache_dir):
         """Test integration with real POMCP policy and TigerPOMDP.
@@ -348,19 +351,16 @@ class TestVisualizePlannerEpisode:
         # Verify visualization was called
         assert env.cache_visualization.call_count == 2
 
-        # Verify cache paths
-        expected_paths = [
-            temp_cache_dir / "RealPOMCP_0.gif",
-            temp_cache_dir / "RealPOMCP_1.gif",
-        ]
+        # Verify per-planner output directory and episode indices
+        expected_dir = temp_cache_dir / "RealPOMCP"
 
         for i, call_args in enumerate(env.cache_visualization.call_args_list):
-            cache_path_arg = call_args[1]["cache_path"]
-            assert cache_path_arg == expected_paths[i]
+            kwargs = call_args[1]
+            assert kwargs["output_dir"] == expected_dir
+            assert kwargs["episode_index"] == i
 
             # Verify history is a valid list of StepData
-            history_arg = call_args[1]["history"]
-            assert isinstance(history_arg, list)  # Should be a list of StepData
+            assert isinstance(kwargs["history"], list)  # Should be a list of StepData
 
     def test_visualize_planner_episode_exception_handling(
         self, test_planner, tiger_environment, test_belief, temp_cache_dir
@@ -604,11 +604,11 @@ class TestVisualizePlannerEpisode:
                     num_steps=5,
                 )
 
-                # Verify cache path is constructed correctly
-                expected_cache_path = temp_path / "TestPlanner_0.gif"
+                # Verify the output directory and episode index are passed correctly
                 tiger_environment.cache_visualization.assert_called_with(
                     history=sample_episode_history.history,  # Pass the history list, not the History object
-                    cache_path=expected_cache_path,
+                    output_dir=temp_path / "TestPlanner",
+                    episode_index=0,
                 )
 
     def test_visualize_planner_episode_docstring_example(self, temp_cache_dir):
@@ -652,12 +652,11 @@ class TestVisualizePlannerEpisode:
         # Verify expected behavior
         assert env.cache_visualization.call_count == 3
 
-        # Verify cache paths follow expected pattern
+        # Verify per-planner output directory and episode indices
         for i in range(3):
-            call_args = env.cache_visualization.call_args_list[i]
-            cache_path = call_args[1]["cache_path"]
-            expected_path = temp_cache_dir / f"POMCP_{i}.gif"
-            assert cache_path == expected_path
+            kwargs = env.cache_visualization.call_args_list[i][1]
+            assert kwargs["output_dir"] == temp_cache_dir / "POMCP"
+            assert kwargs["episode_index"] == i
 
     def test_visualize_planner_episode_parallel_basic(
         self,
@@ -1008,3 +1007,86 @@ class TestVisualizePlannerEpisode:
             # Verify parallel execution was triggered
             mock_parallel.assert_called_once_with(n_jobs=2)
             mock_parallel.return_value.assert_called_once()
+
+    def test_visualize_planner_episode_writes_per_planner_subdir_hierarchy(self, temp_cache_dir):
+        """Test the on-disk output hierarchy with a real rendering environment.
+
+        Purpose: Validates that the environment now owns the file name and each
+            planner's visualizations land in their own subdirectory, i.e.
+            ``cache_dir/<planner_name>/agent_path_{episode}.gif``.
+
+        Given: A real RockSamplePOMDP (which renders a GIF), a POMCP planner, and
+            a mocked run_episode returning a fixed two-step history.
+        When: visualize_planner_episode is called with n_episodes=2.
+        Then: ``cache_dir/HierarchyPOMCP/agent_path_{0,1}.gif`` exist as non-empty
+            files, and nothing is written flat under ``cache_dir``.
+
+        Test type: integration
+        """
+        environment = RockSamplePOMDP(discount_factor=0.95, **rock_sample_pinned_kwargs())
+        planner = POMCP(
+            environment=environment,
+            discount_factor=0.95,
+            name="HierarchyPOMCP",
+            exploration_constant=1.0,
+            n_simulations=5,  # Minimal for testing
+            depth=3,
+        )
+
+        state1 = create_rock_sample_state((0, 0), (True, False))
+        state2 = create_rock_sample_state((0, 1), (True, False))
+        history = History(
+            history=[
+                StepData(
+                    state=state1,
+                    action=2,
+                    next_state=state2,
+                    observation="none",
+                    reward=-1.0,
+                    belief=Mock(spec=Belief),
+                ),
+                StepData(
+                    state=state2,
+                    action=None,
+                    next_state=state2,
+                    observation="none",
+                    reward=0.0,
+                    belief=Mock(spec=Belief),
+                ),
+            ],
+            discount_factor=0.95,
+            average_state_sampling_time=0.0,
+            average_action_time=0.0,
+            average_observation_time=0.0,
+            average_belief_update_time=0.0,
+            average_reward_time=0.0,
+            actual_num_steps=2,
+            reach_terminal_state=False,
+            policy_run_data=[],
+        )
+
+        with patch(
+            "POMDPPlanners.utils.planner_episode_visualization.run_episode",
+            return_value=history,
+        ):
+            visualize_planner_episode(
+                planner=planner,
+                environment=environment,
+                belief=Mock(spec=Belief),
+                n_episodes=2,
+                cache_dir=temp_cache_dir,
+                num_steps=5,
+            )
+
+        # The planner name scopes its own subdirectory.
+        planner_dir = temp_cache_dir / "HierarchyPOMCP"
+        assert planner_dir.is_dir(), f"Per-planner directory not created: {planner_dir}"
+
+        # The environment owns the file name: agent_path_{episode}.gif inside it.
+        for episode_index in range(2):
+            gif_path = planner_dir / f"agent_path_{episode_index}.gif"
+            assert gif_path.is_file(), f"Missing visualization file: {gif_path}"
+            assert gif_path.stat().st_size > 0, f"Empty visualization file: {gif_path}"
+
+        # Nothing is written flat under cache_dir; the per-planner subdir is used.
+        assert not list(temp_cache_dir.glob("agent_path_*.gif"))

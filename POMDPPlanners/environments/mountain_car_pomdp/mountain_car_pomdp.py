@@ -367,8 +367,10 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
     def get_actions(self) -> List[Any]:
         return self.actions
 
-    def cache_visualization(self, history: List[StepData], cache_path: Path) -> None:
-        # Create a figure and axis
+    def cache_visualization(
+        self, history: List[StepData], output_dir: Path, episode_index: int
+    ) -> None:
+        # No per-episode visualization for this environment.
         pass
 
     def is_equal_observation(
