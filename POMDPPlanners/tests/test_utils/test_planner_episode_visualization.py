@@ -16,11 +16,16 @@ from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
     ContinuousLightDarkPOMDP,
 )
+from POMDPPlanners.environments.rock_sample_pomdp import (
+    RockSamplePOMDP,
+    create_rock_sample_state,
+)
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
 from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
     cartpole_pinned_kwargs,
     continuous_light_dark_pinned_kwargs,
+    rock_sample_pinned_kwargs,
 )
 from POMDPPlanners.utils.planner_episode_visualization import visualize_planner_episode
 
@@ -1002,3 +1007,86 @@ class TestVisualizePlannerEpisode:
             # Verify parallel execution was triggered
             mock_parallel.assert_called_once_with(n_jobs=2)
             mock_parallel.return_value.assert_called_once()
+
+    def test_visualize_planner_episode_writes_per_planner_subdir_hierarchy(self, temp_cache_dir):
+        """Test the on-disk output hierarchy with a real rendering environment.
+
+        Purpose: Validates that the environment now owns the file name and each
+            planner's visualizations land in their own subdirectory, i.e.
+            ``cache_dir/<planner_name>/agent_path_{episode}.gif``.
+
+        Given: A real RockSamplePOMDP (which renders a GIF), a POMCP planner, and
+            a mocked run_episode returning a fixed two-step history.
+        When: visualize_planner_episode is called with n_episodes=2.
+        Then: ``cache_dir/HierarchyPOMCP/agent_path_{0,1}.gif`` exist as non-empty
+            files, and nothing is written flat under ``cache_dir``.
+
+        Test type: integration
+        """
+        environment = RockSamplePOMDP(discount_factor=0.95, **rock_sample_pinned_kwargs())
+        planner = POMCP(
+            environment=environment,
+            discount_factor=0.95,
+            name="HierarchyPOMCP",
+            exploration_constant=1.0,
+            n_simulations=5,  # Minimal for testing
+            depth=3,
+        )
+
+        state1 = create_rock_sample_state((0, 0), (True, False))
+        state2 = create_rock_sample_state((0, 1), (True, False))
+        history = History(
+            history=[
+                StepData(
+                    state=state1,
+                    action=2,
+                    next_state=state2,
+                    observation="none",
+                    reward=-1.0,
+                    belief=Mock(spec=Belief),
+                ),
+                StepData(
+                    state=state2,
+                    action=None,
+                    next_state=state2,
+                    observation="none",
+                    reward=0.0,
+                    belief=Mock(spec=Belief),
+                ),
+            ],
+            discount_factor=0.95,
+            average_state_sampling_time=0.0,
+            average_action_time=0.0,
+            average_observation_time=0.0,
+            average_belief_update_time=0.0,
+            average_reward_time=0.0,
+            actual_num_steps=2,
+            reach_terminal_state=False,
+            policy_run_data=[],
+        )
+
+        with patch(
+            "POMDPPlanners.utils.planner_episode_visualization.run_episode",
+            return_value=history,
+        ):
+            visualize_planner_episode(
+                planner=planner,
+                environment=environment,
+                belief=Mock(spec=Belief),
+                n_episodes=2,
+                cache_dir=temp_cache_dir,
+                num_steps=5,
+            )
+
+        # The planner name scopes its own subdirectory.
+        planner_dir = temp_cache_dir / "HierarchyPOMCP"
+        assert planner_dir.is_dir(), f"Per-planner directory not created: {planner_dir}"
+
+        # The environment owns the file name: agent_path_{episode}.gif inside it.
+        for episode_index in range(2):
+            gif_path = planner_dir / f"agent_path_{episode_index}.gif"
+            assert gif_path.is_file(), f"Missing visualization file: {gif_path}"
+            assert gif_path.stat().st_size > 0, f"Empty visualization file: {gif_path}"
+
+        # Nothing is written flat under cache_dir; the per-planner subdir is used.
+        assert not list(temp_cache_dir.glob("agent_path_*.gif"))
