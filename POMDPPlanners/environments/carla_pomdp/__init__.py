@@ -1,16 +1,25 @@
 # SPDX-License-Identifier: MIT
 
-"""CARLA POMDP world environment module.
+"""CARLA POMDP environment module.
 
 This module provides a forward-only adapter exposing the CARLA autonomous-driving
-simulator as a ground-truth world for the POMDPPlanners episode loop.
+simulator as a ground-truth world for the POMDPPlanners episode loop, plus the
+planner-side generative-model interface paired with it and a concrete reference model.
 
 Classes:
     CarlaPOMDP: Forward-only adapter exposing a CARLA session as a world Environment.
+    CarlaModelPOMDP: Abstract generative-model interface over the CARLA schema.
+    FactoredCarlaModelPOMDP: Concrete CARLA model with a factored observation model.
 """
 
 from POMDPPlanners.environments.carla_pomdp.carla_pomdp import CarlaPOMDP
+from POMDPPlanners.environments.carla_pomdp.carla_model_pomdp import CarlaModelPOMDP
+from POMDPPlanners.environments.carla_pomdp.carla_factored_model_pomdp import (
+    FactoredCarlaModelPOMDP,
+)
 
 __all__ = [
     "CarlaPOMDP",
+    "CarlaModelPOMDP",
+    "FactoredCarlaModelPOMDP",
 ]
