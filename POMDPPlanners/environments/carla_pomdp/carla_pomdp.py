@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: MIT
 
+# pylint: disable=too-many-lines  # Multi-agent traffic + perception grew the module.
+
 """CARLA POMDP world environment.
 
 This module adapts the `CARLA <https://carla.org/>`_ autonomous-driving
@@ -20,11 +22,58 @@ called.
 
 Unlike :class:`~POMDPPlanners.environments.gym_pomdp.gym_pomdp.GymPOMDP` (which is
 fully observed: observation equals state), CARLA is genuinely partially observed.
-The **state** is the ego vehicle's ground-truth kinematics ``[x, y, yaw, vx, vy]``
-read straight from the simulator, while the **observation** is a native CARLA
-sensor payload (GNSS ``[lat, lon, alt]`` by default). Any measurement noise is
-CARLA's own, configured through the sensor blueprint attributes in
-``sensor_config`` — the wrapper adds none.
+
+The world is populated each reset with surrounding autopilot traffic and walking
+pedestrians (via CARLA's Traffic Manager), so it poses a genuine multi-agent
+perception problem rather than an empty course.
+
+The **state** is the ego vehicle's ground-truth kinematics and lane pose,
+``[x, y, yaw, vx, vy, lat, heading_err]``, **followed by fixed slots for the
+``max_tracked_agents`` nearest other vehicles** (ground truth). Each agent slot is
+``[present, rel_x, rel_y, rel_yaw, rel_speed]`` expressed in the ego frame
+(``rel_x`` forward, ``rel_y`` left, ``rel_yaw`` in **radians**, ``rel_speed`` in
+m/s); ``present`` is ``1`` for a filled slot and ``0`` for padding. The ego part
+is read straight from the simulator, where:
+
+- ``x``, ``y``: ego position in the CARLA map (world) frame, in metres, read from
+  the actor transform's location.
+- ``yaw``: ego heading about the world Z axis, in **degrees** (CARLA convention),
+  read from the actor transform's rotation.
+- ``vx``, ``vy``: ego linear-velocity components in the world frame, in metres per
+  second, read from the actor's velocity vector.
+- ``lat``: signed lateral offset from the centre of the nearest driving lane, in
+  metres (positive to the lane's left), from the CARLA map's lane geometry.
+- ``heading_err``: ego heading minus the lane direction, wrapped to
+  ``[-pi, pi]``, in **radians**.
+
+(The vertical axis ``z`` and roll/pitch are intentionally omitted; the ego is
+modelled on the ground plane.)
+
+The lane-relative terms (``lat``, ``heading_err``) drive a gym-carla-style
+driving-quality reward: it rewards longitudinal progress along the lane while
+penalising overspeed, drifting out of lane, and harsh / high-speed steering, plus
+a per-step time cost and a terminal collision penalty. See
+:data:`REWARD_SPEED_WEIGHT` and the sibling weights for the fixed coefficients.
+
+The **observation** is a multi-modal dict of native CARLA sensor payloads:
+
+- ``"gnss"``: ``[lat, lon, alt]`` (always present) — latitude and longitude in
+  **degrees** and altitude in metres, from a ``sensor.other.gnss`` reading.
+- ``"agents"`` (always present): the ``max_tracked_agents`` agent slots of the
+  state flattened, but with any agent that is **out of ``perception_range`` or
+  geometrically occluded** by another vehicle zeroed to an empty (``present == 0``)
+  slot. Slot indices align with the state, so a nearby agent the ego cannot see is
+  exactly a slot that is filled in the state yet empty here — the hidden variable
+  the belief must reason about.
+- ``"camera"`` (present iff ``include_camera``): a front-facing RGB image,
+  ``(H, W, 3)`` ``uint8``, from a ``sensor.camera.rgb``.
+- ``"lidar"`` (present iff ``include_lidar``): a point cloud, ``(N, 4)`` ``float32``
+  with rows ``[x, y, z, intensity]`` in the LiDAR **sensor** frame (metres;
+  ``intensity`` normalised to ``[0, 1]``), from a ``sensor.lidar.ray_cast``. ``N``
+  varies per tick.
+
+Any measurement noise is CARLA's own, configured through the sensor blueprint
+attributes — the wrapper adds none.
 
 Classes:
     CarlaPOMDP: Forward-only adapter exposing a CARLA session as a world Environment.
@@ -33,7 +82,7 @@ Classes:
 from collections.abc import Hashable
 from pathlib import Path
 from queue import Queue
-from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple
 
 import numpy as np
 
@@ -54,11 +103,160 @@ DEFAULT_ACTION_PRESETS: Tuple[Tuple[float, float, float], ...] = (
 _ROLE_NEXT_STATE = "next_state"
 _ROLE_REWARD = "reward"
 
+# Fixed gym-carla-style reward term weights. The collision weight is the tunable
+# ``collision_penalty`` constructor argument; these shape the driving-quality
+# terms and are held fixed so the reward is a single well-defined objective.
+REWARD_SPEED_WEIGHT = 1.0  # reward per m/s of along-lane (longitudinal) progress
+REWARD_FAST_PENALTY = 10.0  # penalty when longitudinal speed exceeds desired_speed
+REWARD_OUT_PENALTY = 1.0  # penalty when |lat| exceeds out_lane_thresh
+REWARD_STEER_WEIGHT = 5.0  # penalty on squared steering (harsh-steer smoothness)
+REWARD_LAT_WEIGHT = 0.2  # penalty on |steer| * longitudinal_speed**2 (fast turns)
+REWARD_STEP_COST = 0.1  # constant per-step time cost
+
+
+def _wrap_to_pi(angle: float) -> float:
+    """Wrap an angle in radians to the ``[-pi, pi]`` interval."""
+    return (angle + np.pi) % (2.0 * np.pi) - np.pi
+
+
+def driving_quality_reward(
+    next_state: np.ndarray,
+    steer: float,
+    terminated: bool,
+    desired_speed: float,
+    out_lane_thresh: float,
+    collision_penalty: float,
+) -> float:
+    """Score a transition with a gym-carla-style driving-quality reward.
+
+    Rewards along-lane progress and penalises overspeed, drifting out of lane, harsh /
+    high-speed steering, each elapsed step, and a terminal collision. Shared by the
+    :class:`CarlaPOMDP` world and the planner-side factored model so the two score a
+    transition identically by construction.
+
+    Args:
+        next_state: Resulting ego state ``[x, y, yaw(deg), vx, vy, lat, heading_err]``.
+        steer: Steering command applied on the transition (from the action preset).
+        terminated: Whether the transition ended in a terminal collision.
+        desired_speed: Target longitudinal speed (m/s); exceeding it is penalised.
+        out_lane_thresh: Lateral offset (m) beyond which the ego is treated as out of lane.
+        collision_penalty: Penalty scale applied on a terminal collision.
+
+    Returns:
+        The scalar reward for the transition.
+    """
+    ego_yaw = float(np.radians(next_state[2]))
+    vel_x, vel_y = float(next_state[3]), float(next_state[4])
+    lateral, heading_err = float(next_state[5]), float(next_state[6])
+    lane_yaw = ego_yaw - heading_err
+    lspeed_lon = vel_x * np.cos(lane_yaw) + vel_y * np.sin(lane_yaw)
+
+    r_fast = -1.0 if lspeed_lon > desired_speed else 0.0
+    r_out = -1.0 if abs(lateral) > out_lane_thresh else 0.0
+    r_collision = -1.0 if terminated else 0.0
+    r_steer = -(steer**2)
+    r_lat = -abs(steer) * lspeed_lon**2
+
+    return float(
+        collision_penalty * r_collision
+        + REWARD_SPEED_WEIGHT * lspeed_lon
+        + REWARD_FAST_PENALTY * r_fast
+        + REWARD_OUT_PENALTY * r_out
+        + REWARD_STEER_WEIGHT * r_steer
+        + REWARD_LAT_WEIGHT * r_lat
+        - REWARD_STEP_COST
+    )
+
+
+# Surrounding-traffic / perception defaults.
+DEFAULT_NUM_VEHICLES = 30  # other autopilot vehicles spawned into the world
+DEFAULT_NUM_WALKERS = 10  # pedestrians spawned into the world
+DEFAULT_MAX_TRACKED_AGENTS = 5  # nearest other vehicles carried in state/observation
+DEFAULT_PERCEPTION_RANGE = 50.0  # metres beyond which another agent is undetectable
+DEFAULT_OCCLUSION_RADIUS = 1.5  # metres; a vehicle nearer than this to the ego->target
+# sight line is treated as blocking (geometric occlusion among vehicles)
+DEFAULT_TRAFFIC_MANAGER_PORT = 8000  # CARLA Traffic Manager RPC port
+
+# State/observation layout for other agents. Each tracked agent occupies a fixed
+# slot ``[present, rel_x, rel_y, rel_yaw, rel_speed]`` expressed in the ego frame
+# (``rel_x`` forward, ``rel_y`` left, ``rel_yaw`` in radians, ``rel_speed`` in m/s).
+EGO_STATE_WIDTH = 7  # [x, y, yaw, vx, vy, lat, heading_err]
+AGENT_SLOT_WIDTH = 5  # [present, rel_x, rel_y, rel_yaw, rel_speed]
+
+
+def _relative_agent_row(
+    ego_x: float,
+    ego_y: float,
+    ego_yaw_rad: float,
+    other_x: float,
+    other_y: float,
+    other_yaw_rad: float,
+    other_speed: float,
+) -> np.ndarray:
+    """Express another agent's pose/speed in the ego frame as a present slot row.
+
+    Returns ``[1.0, rel_x, rel_y, rel_yaw, rel_speed]`` with ``rel_x`` pointing
+    along the ego heading, ``rel_y`` to its left, and ``rel_yaw`` wrapped to
+    ``[-pi, pi]``.
+    """
+    delta_x = other_x - ego_x
+    delta_y = other_y - ego_y
+    cos_yaw = np.cos(ego_yaw_rad)
+    sin_yaw = np.sin(ego_yaw_rad)
+    rel_x = float(cos_yaw * delta_x + sin_yaw * delta_y)
+    rel_y = float(-sin_yaw * delta_x + cos_yaw * delta_y)
+    rel_yaw = float(_wrap_to_pi(other_yaw_rad - ego_yaw_rad))
+    return np.array([1.0, rel_x, rel_y, rel_yaw, float(other_speed)])
+
+
+def _segment_occludes(
+    ego_x: float,
+    ego_y: float,
+    target_x: float,
+    target_y: float,
+    blocker_x: float,
+    blocker_y: float,
+    radius: float,
+) -> bool:
+    """Whether a blocker vehicle lies on the ego->target sight line within ``radius``.
+
+    Projects the blocker onto the ego->target segment; it occludes when the
+    projection falls strictly between the endpoints and its perpendicular distance
+    to the line is below ``radius``.
+    """
+    seg_x = target_x - ego_x
+    seg_y = target_y - ego_y
+    seg_len_sq = seg_x * seg_x + seg_y * seg_y
+    if seg_len_sq == 0.0:
+        return False
+    param = ((blocker_x - ego_x) * seg_x + (blocker_y - ego_y) * seg_y) / seg_len_sq
+    if param <= 0.0 or param >= 1.0:
+        return False
+    perp_x = ego_x + param * seg_x - blocker_x
+    perp_y = ego_y + param * seg_y - blocker_y
+    return float(np.hypot(perp_x, perp_y)) < radius
+
+
 # Default chase RGB camera resolution / field of view (blueprint attributes).
 DEFAULT_CAMERA_CONFIG: Dict[str, str] = {
     "image_size_x": "640",
     "image_size_y": "480",
     "fov": "90",
+}
+
+# Default front-facing observation RGB camera blueprint attributes.
+DEFAULT_OBSERVATION_CAMERA_CONFIG: Dict[str, str] = {
+    "image_size_x": "128",
+    "image_size_y": "128",
+    "fov": "90",
+}
+
+# Default roof-mounted LiDAR blueprint attributes.
+DEFAULT_LIDAR_CONFIG: Dict[str, str] = {
+    "channels": "32",
+    "range": "50.0",
+    "points_per_second": "100000",
+    "rotation_frequency": "20.0",
 }
 
 
@@ -82,18 +280,47 @@ class _CarlaSession:
         timeout: float,
         record_camera: bool = False,
         camera_config: Optional[Dict[str, Any]] = None,
+        include_camera: bool = True,
+        include_lidar: bool = True,
+        observation_camera_config: Optional[Dict[str, Any]] = None,
+        lidar_config: Optional[Dict[str, Any]] = None,
+        num_vehicles: int = DEFAULT_NUM_VEHICLES,
+        num_walkers: int = DEFAULT_NUM_WALKERS,
+        max_tracked_agents: int = DEFAULT_MAX_TRACKED_AGENTS,
+        perception_range: float = DEFAULT_PERCEPTION_RANGE,
+        occlusion_radius: float = DEFAULT_OCCLUSION_RADIUS,
+        traffic_manager_port: int = DEFAULT_TRAFFIC_MANAGER_PORT,
+        randomize_spawn: bool = True,
+        observation_extractor: Optional[Callable[[Dict[str, np.ndarray]], Any]] = None,
     ) -> None:
         import carla  # pylint: disable=import-outside-toplevel,import-error
 
         self._carla = carla
+        self._observation_extractor = observation_extractor
         self._sensor_config = sensor_config
         self._vehicle_filter = vehicle_filter
+        self._num_vehicles = num_vehicles
+        self._num_walkers = num_walkers
+        self._max_tracked_agents = max_tracked_agents
+        self._perception_range = perception_range
+        self._occlusion_radius = occlusion_radius
+        self._traffic_manager_port = traffic_manager_port
+        self._randomize_spawn = randomize_spawn
         self._record_camera = record_camera
         self._camera_config = camera_config if camera_config is not None else {}
+        self._include_camera = include_camera
+        self._include_lidar = include_lidar
+        self._obs_camera_config = (
+            observation_camera_config if observation_camera_config is not None else {}
+        )
+        self._lidar_config = lidar_config if lidar_config is not None else {}
+        self._camera_width = int(self._obs_camera_config.get("image_size_x", 128))
+        self._camera_height = int(self._obs_camera_config.get("image_size_y", 128))
         client = carla.Client(host, port)
         client.set_timeout(timeout)
         self._client = client
         self._world = client.load_world(town)
+        self._map = self._world.get_map()
         self._apply_synchronous_settings(fixed_delta_seconds)
 
         self._vehicle: Optional[Any] = None
@@ -102,29 +329,50 @@ class _CarlaSession:
         self._camera_sensor: Optional[Any] = None
         self._camera_queue: Optional["Queue[Any]"] = None
         self._frames: List[np.ndarray] = []
+        self._obs_camera_sensor: Optional[Any] = None
+        self._lidar_sensor: Optional[Any] = None
         self._latest_gnss: Optional[np.ndarray] = None
+        self._latest_camera: Optional[np.ndarray] = None
+        self._latest_lidar: Optional[np.ndarray] = None
         self._collided: bool = False
+        self._traffic_vehicles: List[Any] = []
+        self._walkers: List[Any] = []
+        self._walker_controllers: List[Any] = []
+        self._rng = np.random.default_rng()
 
     @property
     def frames(self) -> List[np.ndarray]:
         """RGB chase-camera frames captured so far, one ``(H, W, 3)`` array per tick."""
         return self._frames
 
-    def reset(self, seed: Optional[int] = None) -> Tuple[np.ndarray, np.ndarray]:
-        """Respawn the ego vehicle and sensors, tick once, and read the start."""
+    def reset(self, seed: Optional[int] = None) -> Tuple[np.ndarray, Dict[str, np.ndarray]]:
+        """Respawn the ego, surrounding traffic, and sensors, tick once, read start."""
         if seed is not None:
-            self._world.get_settings()  # touch settings so a seed hook can attach
+            self._rng = np.random.default_rng(seed)
         self._teardown_actors()
         self._frames = []
+        self._randomize_weather()
         self._spawn_actors()
+        self._spawn_traffic()
         self._collided = False
         self._world.tick()
         self._capture_frame()
         return self._read_state(), self._read_observation()
 
+    def _randomize_weather(self) -> None:
+        presets = [
+            attr
+            for attr in dir(self._carla.WeatherParameters)
+            if not attr.startswith("_") and attr != "values"
+        ]
+        if not presets:
+            return
+        choice = presets[int(self._rng.integers(len(presets)))]
+        self._world.set_weather(getattr(self._carla.WeatherParameters, choice))
+
     def step(
         self, throttle: float, steer: float, brake: float
-    ) -> Tuple[np.ndarray, np.ndarray, bool]:
+    ) -> Tuple[np.ndarray, Dict[str, np.ndarray], bool]:
         """Apply a control, advance one fixed tick, and read the outcome."""
         control = self._carla.VehicleControl(throttle=throttle, steer=steer, brake=brake)
         self._vehicle.apply_control(control)
@@ -141,12 +389,62 @@ class _CarlaSession:
     def _spawn_actors(self) -> None:
         blueprint_library = self._world.get_blueprint_library()
         vehicle_bp = blueprint_library.filter(self._vehicle_filter)[0]
-        spawn_point = self._world.get_map().get_spawn_points()[0]
-        self._vehicle = self._world.spawn_actor(vehicle_bp, spawn_point)
+        spawn_points = self._map.get_spawn_points()
+        index = int(self._rng.integers(len(spawn_points))) if self._randomize_spawn else 0
+        self._vehicle = self._world.spawn_actor(vehicle_bp, spawn_points[index])
         self._gnss_sensor = self._attach_gnss(blueprint_library)
         self._collision_sensor = self._attach_collision(blueprint_library)
         if self._record_camera:
             self._camera_sensor = self._attach_camera(blueprint_library)
+        if self._include_camera:
+            self._obs_camera_sensor = self._attach_observation_camera(blueprint_library)
+        if self._include_lidar:
+            self._lidar_sensor = self._attach_lidar(blueprint_library)
+
+    def _spawn_traffic(self) -> None:
+        """Populate the world with autopilot vehicles and walking pedestrians."""
+        self._spawn_traffic_vehicles()
+        self._spawn_walkers()
+
+    def _spawn_traffic_vehicles(self) -> None:
+        blueprint_library = self._world.get_blueprint_library()
+        vehicle_bps = blueprint_library.filter("vehicle.*")
+        traffic_manager = self._client.get_trafficmanager(self._traffic_manager_port)
+        traffic_manager.set_synchronous_mode(True)
+        spawn_points = self._map.get_spawn_points()
+        ego_location = self._vehicle.get_location()
+        candidates = [
+            point for point in spawn_points if point.location.distance(ego_location) > 1.0
+        ]
+        order = self._rng.permutation(len(candidates))
+        for point_index in order[: self._num_vehicles]:
+            blueprint = vehicle_bps[int(self._rng.integers(len(vehicle_bps)))]
+            vehicle: Any = self._world.try_spawn_actor(blueprint, candidates[int(point_index)])
+            if vehicle is None:
+                continue
+            vehicle.set_autopilot(True, traffic_manager.get_port())
+            self._traffic_vehicles.append(vehicle)
+
+    def _spawn_walkers(self) -> None:
+        blueprint_library = self._world.get_blueprint_library()
+        walker_bps = blueprint_library.filter("walker.pedestrian.*")
+        controller_bp = blueprint_library.find("controller.ai.walker")
+        for _ in range(self._num_walkers):
+            location = self._world.get_random_location_from_navigation()
+            if location is None:
+                continue
+            blueprint = walker_bps[int(self._rng.integers(len(walker_bps)))]
+            transform = self._carla.Transform(location)
+            walker: Any = self._world.try_spawn_actor(blueprint, transform)
+            if walker is None:
+                continue
+            controller: Any = self._world.spawn_actor(
+                controller_bp, self._carla.Transform(), attach_to=walker
+            )
+            controller.start()
+            controller.go_to_location(self._world.get_random_location_from_navigation())
+            self._walkers.append(walker)
+            self._walker_controllers.append(controller)
 
     def _attach_gnss(self, blueprint_library: Any) -> Any:
         gnss_bp = blueprint_library.find("sensor.other.gnss")
@@ -180,6 +478,26 @@ class _CarlaSession:
         sensor.listen(self._camera_queue.put)
         return sensor
 
+    def _attach_observation_camera(self, blueprint_library: Any) -> Any:
+        camera_bp = blueprint_library.find("sensor.camera.rgb")
+        for attribute, value in self._obs_camera_config.items():
+            camera_bp.set_attribute(attribute, str(value))
+        # Front-facing view: ahead of and above the ego, no rotation.
+        transform = self._carla.Transform(self._carla.Location(x=1.5, z=2.4))
+        sensor: Any = self._world.spawn_actor(camera_bp, transform, attach_to=self._vehicle)
+        sensor.listen(self._on_camera)
+        return sensor
+
+    def _attach_lidar(self, blueprint_library: Any) -> Any:
+        lidar_bp = blueprint_library.find("sensor.lidar.ray_cast")
+        for attribute, value in self._lidar_config.items():
+            lidar_bp.set_attribute(attribute, str(value))
+        # Roof-mounted, centered on the ego.
+        transform = self._carla.Transform(self._carla.Location(z=2.4))
+        sensor: Any = self._world.spawn_actor(lidar_bp, transform, attach_to=self._vehicle)
+        sensor.listen(self._on_lidar)
+        return sensor
+
     def _capture_frame(self) -> None:
         """Pull the RGB frame CARLA rendered for the tick just executed."""
         if not self._record_camera or self._camera_queue is None:
@@ -195,6 +513,15 @@ class _CarlaSession:
             [measurement.latitude, measurement.longitude, measurement.altitude]
         )
 
+    def _on_camera(self, image: Any) -> None:
+        buffer = np.frombuffer(image.raw_data, dtype=np.uint8)
+        bgra = np.reshape(buffer, (image.height, image.width, 4))
+        # CARLA stores BGRA; take B,G,R reversed to RGB and drop alpha.
+        self._latest_camera = np.ascontiguousarray(bgra[:, :, 2::-1])
+
+    def _on_lidar(self, data: Any) -> None:
+        self._latest_lidar = np.frombuffer(data.raw_data, dtype=np.float32).reshape(-1, 4)
+
     def _on_collision(self, event: Any) -> None:
         del event
         self._collided = True
@@ -202,36 +529,157 @@ class _CarlaSession:
     def _read_state(self) -> np.ndarray:
         transform = self._vehicle.get_transform()
         velocity = self._vehicle.get_velocity()
-        return np.array(
+        lateral, heading_err = self._lane_geometry(transform.location, transform.rotation.yaw)
+        ego = np.array(
             [
                 transform.location.x,
                 transform.location.y,
                 transform.rotation.yaw,
                 velocity.x,
                 velocity.y,
+                lateral,
+                heading_err,
             ]
         )
+        agent_rows = self._agent_rows(detected_only=False)
+        return np.concatenate([ego, agent_rows.reshape(-1)])
 
-    def _read_observation(self) -> np.ndarray:
+    def _nearest_agents(self) -> List[Any]:
+        """The ``max_tracked_agents`` other vehicles nearest the ego, by true distance."""
+        ego_location = self._vehicle.get_location()
+        others = [
+            actor
+            for actor in self._world.get_actors().filter("vehicle.*")
+            if actor.id != self._vehicle.id
+        ]
+        others.sort(key=lambda actor: actor.get_location().distance(ego_location))
+        return others[: self._max_tracked_agents]
+
+    def _agent_rows(self, detected_only: bool) -> np.ndarray:
+        """Fixed ``(K, AGENT_SLOT_WIDTH)`` matrix of nearest-agent slots in ego frame.
+
+        When ``detected_only`` is set, agents that are out of range or occluded are
+        left as empty (``present == 0``) slots, so the same slot index that carries
+        an agent in the ground-truth state is hidden in the observation.
+        """
+        rows = np.zeros((self._max_tracked_agents, AGENT_SLOT_WIDTH))
+        ego_transform = self._vehicle.get_transform()
+        ego_location = ego_transform.location
+        ego_x, ego_y = ego_location.x, ego_location.y
+        ego_yaw = np.radians(ego_transform.rotation.yaw)
+        nearest = self._nearest_agents()
+        for slot, actor in enumerate(nearest):
+            if detected_only and not self._is_detected(ego_location, actor, nearest):
+                continue
+            other_transform = actor.get_transform()
+            other_velocity = actor.get_velocity()
+            rows[slot] = _relative_agent_row(
+                ego_x,
+                ego_y,
+                ego_yaw,
+                other_transform.location.x,
+                other_transform.location.y,
+                np.radians(other_transform.rotation.yaw),
+                float(np.hypot(other_velocity.x, other_velocity.y)),
+            )
+        return rows
+
+    def _is_detected(self, ego_location: Any, actor: Any, nearest: List[Any]) -> bool:
+        """Whether ``actor`` is within perception range and not occluded by a vehicle."""
+        target = actor.get_location()
+        if target.distance(ego_location) > self._perception_range:
+            return False
+        for blocker in nearest:
+            if blocker.id == actor.id:
+                continue
+            blocker_location = blocker.get_location()
+            if _segment_occludes(
+                ego_location.x,
+                ego_location.y,
+                target.x,
+                target.y,
+                blocker_location.x,
+                blocker_location.y,
+                self._occlusion_radius,
+            ):
+                return False
+        return True
+
+    def _lane_geometry(self, location: Any, yaw_deg: float) -> Tuple[float, float]:
+        """Signed lateral offset (m) and heading error (rad) w.r.t. the driving lane.
+
+        Projects the ego onto the centre of the nearest driving lane via the CARLA
+        map, then returns how far it sits to the side of that lane centre and how
+        far its heading deviates from the lane direction (wrapped to ``[-pi, pi]``).
+        """
+        waypoint = self._map.get_waypoint(
+            location, project_to_road=True, lane_type=self._carla.LaneType.Driving
+        )
+        lane_transform = waypoint.transform
+        lane_yaw = np.radians(lane_transform.rotation.yaw)
+        delta_x = location.x - lane_transform.location.x
+        delta_y = location.y - lane_transform.location.y
+        lateral = float(-np.sin(lane_yaw) * delta_x + np.cos(lane_yaw) * delta_y)
+        heading_err = float(_wrap_to_pi(np.radians(yaw_deg) - lane_yaw))
+        return lateral, heading_err
+
+    def _read_observation(self) -> Dict[str, np.ndarray]:
+        observation: Dict[str, np.ndarray] = {
+            "gnss": self._read_gnss(),
+            "agents": self._agent_rows(detected_only=True).reshape(-1),
+        }
+        if self._include_camera:
+            observation["camera"] = self._read_camera()
+        if self._include_lidar:
+            observation["lidar"] = self._read_lidar()
+        if self._observation_extractor is not None:
+            return self._observation_extractor(observation)
+        return observation
+
+    def _read_gnss(self) -> np.ndarray:
         if self._latest_gnss is None:
             return np.zeros(3)
         return self._latest_gnss
 
+    def _read_camera(self) -> np.ndarray:
+        if self._latest_camera is None:
+            return np.zeros((self._camera_height, self._camera_width, 3), dtype=np.uint8)
+        return self._latest_camera
+
+    def _read_lidar(self) -> np.ndarray:
+        if self._latest_lidar is None:
+            return np.zeros((0, 4), dtype=np.float32)
+        return self._latest_lidar
+
     def _teardown_actors(self) -> None:
+        for controller in self._walker_controllers:
+            controller.stop()
         for actor in (
+            *self._walker_controllers,
+            *self._walkers,
+            *self._traffic_vehicles,
             self._camera_sensor,
+            self._obs_camera_sensor,
+            self._lidar_sensor,
             self._collision_sensor,
             self._gnss_sensor,
             self._vehicle,
         ):
             if actor is not None:
                 actor.destroy()
+        self._traffic_vehicles = []
+        self._walkers = []
+        self._walker_controllers = []
         self._vehicle = None
         self._gnss_sensor = None
         self._collision_sensor = None
         self._camera_sensor = None
         self._camera_queue = None
+        self._obs_camera_sensor = None
+        self._lidar_sensor = None
         self._latest_gnss = None
+        self._latest_camera = None
+        self._latest_lidar = None
 
 
 class CarlaPOMDP(Environment):
@@ -243,7 +691,9 @@ class CarlaPOMDP(Environment):
     POMDPPlanners episode loop requests those three quantities through separate
     method calls while CARLA produces them atomically. The state is the ego
     vehicle's ground-truth kinematics; the observation is a native CARLA sensor
-    payload (GNSS by default), so the world is genuinely partially observed.
+    payload (GNSS by default), so the world is genuinely partially observed. See
+    the module docstring for the exact state and observation variables, units,
+    and frames.
 
     Note:
         This is a *world* environment, not a generative model. It cannot sample a
@@ -270,7 +720,8 @@ class CarlaPOMDP(Environment):
             env = CarlaPOMDP(discount_factor=0.95, town="Town03")
             state = env.initial_state_dist().sample()[0]
             next_state, observation, reward = env.sample_next_step(state, 0)
-            # state is [x, y, yaw, vx, vy]; observation is a GNSS reading.
+            # state is [ego(7), nearest-agent slots...]; observation is a
+            # gnss/agents/camera/lidar dict hiding out-of-range / occluded agents.
     """
 
     def __init__(
@@ -283,8 +734,22 @@ class CarlaPOMDP(Environment):
         action_presets: Optional[Sequence[Tuple[float, float, float]]] = None,
         record_camera: bool = False,
         camera_config: Optional[Dict[str, Any]] = None,
+        include_camera: bool = True,
+        include_lidar: bool = True,
+        observation_camera_config: Optional[Dict[str, Any]] = None,
+        lidar_config: Optional[Dict[str, Any]] = None,
         fixed_delta_seconds: float = 0.05,
         collision_penalty: float = 100.0,
+        desired_speed: float = 8.0,
+        out_lane_thresh: float = 2.0,
+        num_vehicles: int = DEFAULT_NUM_VEHICLES,
+        num_walkers: int = DEFAULT_NUM_WALKERS,
+        max_tracked_agents: int = DEFAULT_MAX_TRACKED_AGENTS,
+        perception_range: float = DEFAULT_PERCEPTION_RANGE,
+        occlusion_radius: float = DEFAULT_OCCLUSION_RADIUS,
+        traffic_manager_port: int = DEFAULT_TRAFFIC_MANAGER_PORT,
+        randomize_spawn: bool = True,
+        observation_extractor: Optional[Callable[[Dict[str, np.ndarray]], Any]] = None,
         vehicle_filter: str = "vehicle.tesla.model3",
         timeout: float = 10.0,
         seed: Optional[int] = None,
@@ -310,9 +775,45 @@ class CarlaPOMDP(Environment):
                 render cost, so it defaults to False.
             camera_config: RGB camera blueprint attributes (e.g. ``image_size_x``)
                 overriding :data:`DEFAULT_CAMERA_CONFIG`. Defaults to none.
+            include_camera: If True, attach a front-facing RGB observation camera
+                and include its frame under the ``"camera"`` observation key.
+                Defaults to True.
+            include_lidar: If True, attach a roof-mounted LiDAR and include its
+                point cloud under the ``"lidar"`` observation key. Defaults to True.
+            observation_camera_config: Front camera blueprint attributes overriding
+                :data:`DEFAULT_OBSERVATION_CAMERA_CONFIG`. Defaults to none.
+            lidar_config: LiDAR blueprint attributes overriding
+                :data:`DEFAULT_LIDAR_CONFIG`. Defaults to none.
             fixed_delta_seconds: Synchronous-mode tick length. Defaults to 0.05.
             collision_penalty: Reward penalty applied on a terminal collision.
                 Defaults to 100.0.
+            desired_speed: Target longitudinal speed in m/s; exceeding it incurs the
+                overspeed penalty. Defaults to 8.0.
+            out_lane_thresh: Lateral offset in metres beyond which the ego is treated
+                as out of lane and penalised. Defaults to 2.0.
+            num_vehicles: Number of autopilot traffic vehicles spawned into the
+                world each reset. Defaults to :data:`DEFAULT_NUM_VEHICLES`.
+            num_walkers: Number of walking pedestrians spawned into the world each
+                reset. Defaults to :data:`DEFAULT_NUM_WALKERS`.
+            max_tracked_agents: Number of nearest other vehicles carried as fixed
+                slots in the state and observation. Defaults to
+                :data:`DEFAULT_MAX_TRACKED_AGENTS`.
+            perception_range: Metres beyond which another agent is undetectable and
+                hidden from the observation. Defaults to
+                :data:`DEFAULT_PERCEPTION_RANGE`.
+            occlusion_radius: Metres from the ego->target sight line within which a
+                vehicle blocks (occludes) the target. Defaults to
+                :data:`DEFAULT_OCCLUSION_RADIUS`.
+            traffic_manager_port: CARLA Traffic Manager RPC port used to drive the
+                traffic vehicles. Defaults to :data:`DEFAULT_TRAFFIC_MANAGER_PORT`.
+            randomize_spawn: If True, sample a random ego spawn point (and weather)
+                each reset instead of a fixed one. Defaults to True.
+            observation_extractor: Optional callable applied to the full
+                ``{gnss, agents, camera, lidar}`` observation dict each step,
+                returning the observation actually emitted (e.g. a subset of the
+                keys or a flattened vector). Must be a picklable (module-level)
+                callable, since the environment is pickled for distributed runs.
+                Defaults to None, which emits the full dict unchanged.
             vehicle_filter: Blueprint filter for the ego vehicle. Defaults to
                 ``"vehicle.tesla.model3"``.
             timeout: CARLA client timeout in seconds. Defaults to 10.0.
@@ -335,8 +836,26 @@ class CarlaPOMDP(Environment):
         self.camera_config: Dict[str, Any] = dict(DEFAULT_CAMERA_CONFIG)
         if camera_config:
             self.camera_config.update(camera_config)
+        self.include_camera = include_camera
+        self.include_lidar = include_lidar
+        self.observation_camera_config: Dict[str, Any] = dict(DEFAULT_OBSERVATION_CAMERA_CONFIG)
+        if observation_camera_config:
+            self.observation_camera_config.update(observation_camera_config)
+        self.lidar_config: Dict[str, Any] = dict(DEFAULT_LIDAR_CONFIG)
+        if lidar_config:
+            self.lidar_config.update(lidar_config)
         self.fixed_delta_seconds = fixed_delta_seconds
         self.collision_penalty = collision_penalty
+        self.desired_speed = desired_speed
+        self.out_lane_thresh = out_lane_thresh
+        self.num_vehicles = num_vehicles
+        self.num_walkers = num_walkers
+        self.max_tracked_agents = max_tracked_agents
+        self.perception_range = perception_range
+        self.occlusion_radius = occlusion_radius
+        self.traffic_manager_port = traffic_manager_port
+        self.randomize_spawn = randomize_spawn
+        self.observation_extractor = observation_extractor
         self.vehicle_filter = vehicle_filter
         self.timeout = timeout
         self.seed = seed
@@ -344,7 +863,7 @@ class CarlaPOMDP(Environment):
         # Live-session state: rebuilt lazily and never serialized.
         self._session: Optional[Any] = None
         self._live_state: Optional[np.ndarray] = None
-        self._latest_obs: Optional[np.ndarray] = None
+        self._latest_obs: Optional[Dict[str, np.ndarray]] = None
         self._terminated: bool = False
         self._seeded: bool = False
         self._pending: Optional[Dict[str, Any]] = None
@@ -403,6 +922,18 @@ class CarlaPOMDP(Environment):
                 timeout=self.timeout,
                 record_camera=self.record_camera,
                 camera_config=self.camera_config,
+                include_camera=self.include_camera,
+                include_lidar=self.include_lidar,
+                observation_camera_config=self.observation_camera_config,
+                lidar_config=self.lidar_config,
+                num_vehicles=self.num_vehicles,
+                num_walkers=self.num_walkers,
+                max_tracked_agents=self.max_tracked_agents,
+                perception_range=self.perception_range,
+                occlusion_radius=self.occlusion_radius,
+                traffic_manager_port=self.traffic_manager_port,
+                randomize_spawn=self.randomize_spawn,
+                observation_extractor=self.observation_extractor,
             )
         return self._session
 
@@ -415,7 +946,7 @@ class CarlaPOMDP(Environment):
             state, observation = session.reset()
         state = np.asarray(state)
         self._live_state = state
-        self._latest_obs = np.asarray(observation)
+        self._latest_obs = observation
         self._terminated = False
         self._pending = None
         self._served_roles = set()
@@ -427,10 +958,21 @@ class CarlaPOMDP(Environment):
     def _states_equal(self, state_a: Any, state_b: Any) -> bool:
         return np.array_equal(np.asarray(state_a), np.asarray(state_b))
 
-    def _compute_reward(self, next_state: np.ndarray, terminated: bool) -> float:
-        speed = float(np.hypot(next_state[3], next_state[4]))
-        penalty = self.collision_penalty if terminated else 0.0
-        return speed - penalty
+    def _compute_reward(self, next_state: np.ndarray, action: Any, terminated: bool) -> float:
+        """Score a transition with a gym-carla-style driving-quality reward.
+
+        Rewards along-lane progress and penalises overspeed, drifting out of lane,
+        harsh / high-speed steering, each elapsed step, and a terminal collision.
+        """
+        _, steer, _ = self._to_control(action)
+        return driving_quality_reward(
+            next_state,
+            steer,
+            terminated,
+            self.desired_speed,
+            self.out_lane_thresh,
+            self.collision_penalty,
+        )
 
     def _ensure_stepped(self, state: Any, action: Any, role: str) -> Dict[str, Any]:
         """Advance the world one tick for ``(state, action)`` (once) and cache it.
@@ -465,14 +1007,13 @@ class CarlaPOMDP(Environment):
         throttle, steer, brake = self._to_control(action)
         next_state, observation, terminated = session.step(throttle, steer, brake)
         next_state = np.asarray(next_state)
-        observation = np.asarray(observation)
         done = bool(terminated)
         pending = {
             "state": np.asarray(state).copy(),
             "action": action,
             "next_state": next_state,
             "observation": observation,
-            "reward": self._compute_reward(next_state, done),
+            "reward": self._compute_reward(next_state, action, done),
             "terminated": done,
         }
         self._pending = pending
@@ -488,7 +1029,7 @@ class CarlaPOMDP(Environment):
             raise ValueError("CarlaPOMDP is forward-only and only supports n_samples=1")
         return self._ensure_stepped(state, action, _ROLE_NEXT_STATE)["next_state"]
 
-    def sample_observation(self, next_state: Any, action: Any, n_samples: int = 1) -> np.ndarray:
+    def sample_observation(self, next_state: Any, action: Any, n_samples: int = 1) -> Any:
         del action
         if n_samples != 1:
             raise ValueError("CarlaPOMDP is forward-only and only supports n_samples=1")
@@ -529,20 +1070,33 @@ class CarlaPOMDP(Environment):
         parent = self
 
         class InitialObservation(Distribution):
-            def sample(self, n_samples: int = 1) -> List[np.ndarray]:
+            def sample(self, n_samples: int = 1) -> List[Any]:
                 # pylint: disable=protected-access
                 observation = parent._latest_obs
                 if observation is None:
                     parent._reset()
                     observation = parent._latest_obs
-                return [np.asarray(observation) for _ in range(n_samples)]
+                assert observation is not None
+                return [dict(observation) for _ in range(n_samples)]
 
         return InitialObservation()
 
     def is_equal_observation(self, observation1: Any, observation2: Any) -> bool:
+        is_dict1 = isinstance(observation1, dict)
+        is_dict2 = isinstance(observation2, dict)
+        if is_dict1 and is_dict2:
+            if observation1.keys() != observation2.keys():
+                return False
+            return all(np.array_equal(observation1[key], observation2[key]) for key in observation1)
+        if is_dict1 or is_dict2:
+            return False
         return np.array_equal(np.asarray(observation1), np.asarray(observation2))
 
     def hash_observation(self, observation: Any) -> Hashable:
+        if isinstance(observation, dict):
+            return tuple(
+                (key, np.asarray(observation[key]).tobytes()) for key in sorted(observation)
+            )
         array = np.asarray(observation)
         return array.tobytes()
 
