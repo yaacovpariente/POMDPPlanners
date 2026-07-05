@@ -3,15 +3,16 @@
 """Unit tests for the CarlaPOMDP forward-only world wrapper.
 
 These tests drive CarlaPOMDP against a controllable fake CARLA session (scripted
-reset/step returning a 5-D ground-truth state and a 3-D GNSS observation) injected
+reset/step returning a 7-D ground-truth state and a 3-D GNSS observation) injected
 by monkeypatching ``CarlaPOMDP._get_session``, so they run without a CARLA server
 or the ``carla`` package installed. They mirror the GymPOMDP suite and add the
 CARLA-specific assertion that the observation differs from the state.
 """
 
-# pylint: disable=protected-access  # Tests inspect the live-session internals
+# pylint: disable=protected-access,too-many-lines  # Tests inspect live-session internals
 
 import pickle
+from types import SimpleNamespace
 from typing import Any, Dict, List, Optional, Tuple
 from pathlib import Path
 
@@ -22,18 +23,34 @@ from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.core.belief.belief_utils import get_initial_belief
 from POMDPPlanners.core.environment import Environment, SpaceType
 from POMDPPlanners.core.policy import Policy, PolicyRunData, PolicySpaceInfo
-from POMDPPlanners.environments.carla_pomdp import CarlaPOMDP, carla_video
+from POMDPPlanners.environments.carla_pomdp import CarlaPOMDP, carla_pomdp, carla_video
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.simulations.episodes import EpisodeRunner
 
 
-class FakeCarlaSession:
-    """Scripted CARLA-like session: 5-D ground-truth state, 3-D GNSS observation.
+def _make_observation(latitude: float) -> Dict[str, np.ndarray]:
+    """Build a multi-modal gnss/camera/lidar observation dict for the fakes."""
+    return {
+        "gnss": np.array([latitude, 2.0, 0.0]),
+        "camera": np.zeros((128, 128, 3), dtype=np.uint8),
+        "lidar": np.zeros((10, 4), dtype=np.float32),
+    }
 
-    The state is ``[x, y, yaw, vx, vy]`` with ``vx`` advancing each tick so the
-    ego speed equals the step index; the observation is a distinct 3-D GNSS
-    ``[lat, lon, alt]`` vector. The episode terminates once three ticks have been
-    taken, so terminal behavior is deterministic.
+
+def _gnss_only_extractor(observation: Dict[str, np.ndarray]) -> Dict[str, np.ndarray]:
+    """Observation extractor that keeps only the ``gnss`` modality."""
+    return {"gnss": observation["gnss"]}
+
+
+class FakeCarlaSession:
+    """Scripted CARLA-like session: 7-D ground-truth state, multi-modal observation.
+
+    The state is ``[x, y, yaw, vx, vy, lat, heading_err]`` with ``vx`` advancing
+    each tick so the ego speed equals the step index and the ego kept perfectly on
+    the lane centre (``lat == 0`` and ``heading_err == 0``); the observation is a
+    distinct dict with a 3-D GNSS ``[lat, lon, alt]`` vector plus camera and lidar
+    arrays. The episode terminates once three ticks have been taken, so terminal
+    behavior is deterministic.
     """
 
     def __init__(self) -> None:
@@ -42,24 +59,22 @@ class FakeCarlaSession:
         self.last_control: Optional[Tuple[float, float, float]] = None
         self._t = 0
 
-    def reset(self, seed: Optional[int] = None) -> Tuple[np.ndarray, np.ndarray]:
+    def reset(self, seed: Optional[int] = None) -> Tuple[np.ndarray, Dict[str, np.ndarray]]:
         del seed
         self.reset_calls += 1
         self._t = 0
-        state = np.array([0.0, 0.0, 0.0, 0.0, 0.0])
-        observation = np.array([48.0, 2.0, 0.0])
-        return state, observation
+        state = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        return state, _make_observation(48.0)
 
     def step(
         self, throttle: float, steer: float, brake: float
-    ) -> Tuple[np.ndarray, np.ndarray, bool]:
+    ) -> Tuple[np.ndarray, Dict[str, np.ndarray], bool]:
         self.step_calls += 1
         self.last_control = (throttle, steer, brake)
         self._t += 1
-        state = np.array([float(self._t), 0.0, 0.0, float(self._t), 0.0])
-        observation = np.array([48.0 + self._t, 2.0, 0.0])
+        state = np.array([float(self._t), 0.0, 0.0, float(self._t), 0.0, 0.0, 0.0])
         terminated = self._t >= 3
-        return state, observation, terminated
+        return state, _make_observation(48.0 + self._t), terminated
 
 
 class FixedActionPolicy(Policy):
@@ -143,9 +158,9 @@ def test_step_called_once_across_reward_next_state_observation(
     observation = world.sample_observation(next_state, 0)
 
     assert fake_session.step_calls - before == 1
-    assert reward == 1.0
-    assert np.array_equal(next_state, np.array([1.0, 0.0, 0.0, 1.0, 0.0]))
-    assert np.array_equal(observation, np.array([49.0, 2.0, 0.0]))
+    assert reward == pytest.approx(0.9)
+    assert np.array_equal(next_state, np.array([1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0]))
+    assert np.array_equal(observation["gnss"], np.array([49.0, 2.0, 0.0]))
 
 
 def test_call_order_independence_next_state_before_reward(
@@ -168,8 +183,8 @@ def test_call_order_independence_next_state_before_reward(
     reward = world.reward(state, 0)
 
     assert fake_session.step_calls - before == 1
-    assert np.array_equal(next_state, np.array([1.0, 0.0, 0.0, 1.0, 0.0]))
-    assert reward == 1.0
+    assert np.array_equal(next_state, np.array([1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0]))
+    assert reward == pytest.approx(0.9)
 
 
 def test_observation_differs_from_ground_truth_state(world: CarlaPOMDP) -> None:
@@ -179,7 +194,7 @@ def test_observation_differs_from_ground_truth_state(world: CarlaPOMDP) -> None:
 
     Given: A CarlaPOMDP world at its live state
     When: A step is sampled and both next state and observation are read
-    Then: The observation is the 3-D GNSS vector, not the 5-D ground-truth state
+    Then: The observation is the multi-modal sensor dict, not the 5-D state
 
     Test type: unit
     """
@@ -187,8 +202,8 @@ def test_observation_differs_from_ground_truth_state(world: CarlaPOMDP) -> None:
     next_state = world.sample_next_state(state, 0)
     observation = world.sample_observation(next_state, 0)
 
-    assert next_state.shape == (5,)
-    assert observation.shape == (3,)
+    assert next_state.shape == (7,)
+    assert observation["gnss"].shape == (3,)
     assert not world.is_equal_observation(observation, next_state)
 
 
@@ -230,7 +245,7 @@ def test_initial_state_dist_sample_triggers_reset(fake_session: FakeCarlaSession
 
     assert fake_session.reset_calls - before == 1
     assert len(samples) == 1
-    assert np.array_equal(samples[0], np.zeros(5))
+    assert np.array_equal(samples[0], np.zeros(7))
 
 
 def test_initial_observation_dist_returns_sensor_reading(world: CarlaPOMDP) -> None:
@@ -246,7 +261,7 @@ def test_initial_observation_dist_returns_sensor_reading(world: CarlaPOMDP) -> N
     """
     samples = world.initial_observation_dist().sample()
     assert len(samples) == 1
-    assert np.array_equal(samples[0], np.array([48.0, 2.0, 0.0]))
+    assert np.array_equal(samples[0]["gnss"], np.array([48.0, 2.0, 0.0]))
 
 
 def test_action_preset_index_maps_to_vehicle_control(world: CarlaPOMDP) -> None:
@@ -305,7 +320,7 @@ def test_forward_only_guard_raises_on_mismatched_state(world: CarlaPOMDP) -> Non
 
     Test type: unit
     """
-    arbitrary_state = np.array([99.0, 99.0, 0.0, 0.0, 0.0])
+    arbitrary_state = np.array([99.0, 99.0, 0.0, 0.0, 0.0, 0.0, 0.0])
     with pytest.raises(RuntimeError, match="forward-only"):
         world.sample_next_state(arbitrary_state, 0)
 
@@ -322,7 +337,7 @@ def test_sample_observation_rejects_mismatched_next_state(world: CarlaPOMDP) -> 
     Test type: unit
     """
     with pytest.raises(RuntimeError, match="forward-only|live"):
-        world.sample_observation(np.array([7.0, 7.0, 0.0, 0.0, 0.0]), 0)
+        world.sample_observation(np.array([7.0, 7.0, 0.0, 0.0, 0.0, 0.0, 0.0]), 0)
 
 
 def test_sample_next_state_rejects_multiple_samples(world: CarlaPOMDP) -> None:
@@ -396,7 +411,7 @@ def test_two_env_initial_state_drawn_from_world(fake_session: FakeCarlaSession) 
         environment=world, policy=policy, initial_belief=belief, num_steps=2, logger=None
     )
 
-    assert np.array_equal(runner.state, np.zeros(5))
+    assert np.array_equal(runner.state, np.zeros(7))
     assert fake_session.reset_calls >= 1
 
 
@@ -413,21 +428,21 @@ class StationaryThenMovingSession:
         self.step_calls = 0
         self._t = 0
 
-    def reset(self, seed: Optional[int] = None) -> Tuple[np.ndarray, np.ndarray]:
+    def reset(self, seed: Optional[int] = None) -> Tuple[np.ndarray, Dict[str, np.ndarray]]:
         del seed
         self.reset_calls += 1
         self._t = 0
-        return np.array([0.0, 0.0, 0.0, 0.0, 0.0]), np.array([48.0, 2.0, 0.0])
+        return np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]), _make_observation(48.0)
 
     def step(
         self, throttle: float, steer: float, brake: float
-    ) -> Tuple[np.ndarray, np.ndarray, bool]:
+    ) -> Tuple[np.ndarray, Dict[str, np.ndarray], bool]:
         del throttle, steer, brake
         self.step_calls += 1
         self._t += 1
         position = 0.0 if self._t <= 2 else float(self._t - 2)
-        state = np.array([position, 0.0, 0.0, 0.0, 0.0])
-        return state, np.array([48.0, 2.0, 0.0]), False
+        state = np.array([position, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        return state, _make_observation(48.0), False
 
 
 def test_stationary_ego_does_not_freeze_the_world(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -648,14 +663,17 @@ def test_is_equal_observation_true_for_identical_false_for_distinct(world: Carla
 
 
 def test_reward_subtracts_collision_penalty_on_terminal_step(world: CarlaPOMDP) -> None:
-    """The reward is ego speed on live steps and speed minus the penalty on collision.
+    """The reward rewards along-lane progress and subtracts the collision penalty.
 
-    Purpose: Validates the collision-penalty branch of the reward model.
+    Purpose: Validates the driving-quality reward and its collision branch.
 
-    Given: A world whose fake session terminates on the third tick at speed 3
+    Given: A world whose fake session keeps the ego on the lane centre (lat and
+        heading_err both zero), cruising straight (steer 0) at a speed equal to the
+        step index, terminating on the third tick at speed 3
     When: The world is driven forward three steps, reading each reward
-    Then: Non-terminal rewards equal the speed and the terminal reward has the
-        default collision penalty subtracted (3.0 - 100.0 == -97.0)
+    Then: Each non-terminal reward is the along-lane speed minus the per-step cost
+        (speed - 0.1), and the terminal reward additionally subtracts the default
+        collision penalty (3.0 - 0.1 - 100.0 == -97.1)
 
     Test type: unit
     """
@@ -667,6 +685,412 @@ def test_reward_subtracts_collision_penalty_on_terminal_step(world: CarlaPOMDP) 
         rewards.append(reward)
         state = next_state
 
-    assert rewards[0] == 1.0
-    assert rewards[1] == 2.0
-    assert rewards[2] == 3.0 - 100.0
+    assert rewards[0] == pytest.approx(1.0 - 0.1)
+    assert rewards[1] == pytest.approx(2.0 - 0.1)
+    assert rewards[2] == pytest.approx(3.0 - 0.1 - 100.0)
+
+
+def test_reward_penalizes_leaving_the_lane(world: CarlaPOMDP) -> None:
+    """A lateral offset beyond the threshold subtracts the out-of-lane penalty.
+
+    Purpose: Validates the out-of-lane term of the driving-quality reward.
+
+    Given: A transition cruising straight at 1 m/s but 3 m off the lane centre,
+        beyond the default 2 m out_lane_thresh
+    When: The reward for that transition is computed (non-terminal, no steering)
+    Then: The reward is the along-lane progress minus the out-of-lane penalty and
+        the per-step cost (1.0 - 1.0 - 0.1 == -0.1)
+
+    Test type: unit
+    """
+    next_state = np.array([0.0, 0.0, 0.0, 1.0, 0.0, 3.0, 0.0])
+
+    reward = world._compute_reward(next_state, 0, terminated=False)
+
+    assert reward == pytest.approx(1.0 - 1.0 - 0.1)
+
+
+def test_reward_penalizes_exceeding_desired_speed(world: CarlaPOMDP) -> None:
+    """Longitudinal speed above desired_speed subtracts the overspeed penalty.
+
+    Purpose: Validates the overspeed term of the driving-quality reward.
+
+    Given: A transition cruising straight along the lane at 10 m/s, above the
+        default 8 m/s desired_speed
+    When: The reward for that transition is computed (non-terminal, no steering)
+    Then: The reward is the along-lane progress minus the overspeed penalty and the
+        per-step cost (10.0 - 10.0 - 0.1 == -0.1)
+
+    Test type: unit
+    """
+    next_state = np.array([0.0, 0.0, 0.0, 10.0, 0.0, 0.0, 0.0])
+
+    reward = world._compute_reward(next_state, 0, terminated=False)
+
+    assert reward == pytest.approx(10.0 - 10.0 - 0.1)
+
+
+def test_reward_penalizes_steering(world: CarlaPOMDP) -> None:
+    """A steering action subtracts the squared-steer and lateral-accel penalties.
+
+    Purpose: Validates the steering smoothness terms of the driving-quality reward.
+
+    Given: A transition at 1 m/s along the lane taken with the steer-left preset
+        (index 1, steer -0.5)
+    When: The reward for that transition is computed (non-terminal)
+    Then: The reward is progress minus 5*steer**2, minus 0.2*|steer|*speed**2, minus
+        the per-step cost (1.0 - 5*0.25 - 0.2*0.5 - 0.1 == -0.45)
+
+    Test type: unit
+    """
+    next_state = np.array([0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0])
+
+    reward = world._compute_reward(next_state, 1, terminated=False)
+
+    assert reward == pytest.approx(1.0 - 5 * 0.25 - 0.2 * 0.5 - 0.1)
+
+
+def test_lane_geometry_returns_signed_offset_and_wrapped_heading_error() -> None:
+    """_lane_geometry projects the ego onto the lane and wraps the heading error.
+
+    Purpose: Validates the lane-relative geometry feeding lat/heading_err in state.
+
+    Given: A session whose CARLA map reports a lane centred at the origin pointing
+        along +x, with the ego 1.5 m to the lane's left
+    When: _lane_geometry is queried for headings of 10 deg and 190 deg
+    Then: The lateral offset is +1.5 m and the heading error equals the ego heading
+        minus the lane direction, wrapped to [-pi, pi]
+
+    Test type: unit
+    """
+    lane_transform = SimpleNamespace(
+        location=SimpleNamespace(x=0.0, y=0.0), rotation=SimpleNamespace(yaw=0.0)
+    )
+    waypoint = SimpleNamespace(transform=lane_transform)
+    session: Any = object.__new__(carla_pomdp._CarlaSession)
+    session._carla = SimpleNamespace(LaneType=SimpleNamespace(Driving="Driving"))
+    session._map = SimpleNamespace(
+        get_waypoint=lambda location, project_to_road, lane_type: waypoint
+    )
+    ego_location = SimpleNamespace(x=0.0, y=1.5)
+
+    lateral, heading_err = session._lane_geometry(ego_location, 10.0)
+    _, wrapped_heading_err = session._lane_geometry(ego_location, 190.0)
+
+    assert lateral == pytest.approx(1.5)
+    assert heading_err == pytest.approx(np.radians(10.0))
+    assert wrapped_heading_err == pytest.approx(np.radians(190.0) - 2 * np.pi)
+
+
+def test_relative_agent_row_expresses_pose_in_ego_frame() -> None:
+    """_relative_agent_row rotates another agent's pose into the ego frame.
+
+    Purpose: Validates the ego-frame transform feeding the agent state/obs slots.
+
+    Given: An ego at the origin heading 90 degrees (north, +y) and another agent
+        10 m north of it heading 90 degrees at 4 m/s
+    When: _relative_agent_row builds the slot row
+    Then: The agent maps to 10 m straight ahead (rel_x), 0 m lateral (rel_y), zero
+        relative heading, its speed, and a set present flag
+
+    Test type: unit
+    """
+    row = carla_pomdp._relative_agent_row(
+        ego_x=0.0,
+        ego_y=0.0,
+        ego_yaw_rad=np.radians(90.0),
+        other_x=0.0,
+        other_y=10.0,
+        other_yaw_rad=np.radians(90.0),
+        other_speed=4.0,
+    )
+
+    assert row[0] == pytest.approx(1.0)
+    assert row[1] == pytest.approx(10.0)
+    assert row[2] == pytest.approx(0.0, abs=1e-9)
+    assert row[3] == pytest.approx(0.0)
+    assert row[4] == pytest.approx(4.0)
+
+
+def test_segment_occludes_only_for_blockers_on_the_sight_line() -> None:
+    """_segment_occludes flags blockers between ego and target near the sight line.
+
+    Purpose: Validates the geometric occlusion test for perception hiding.
+
+    Given: An ego at the origin and a target 30 m ahead along +x
+    When: A blocker sits on the sight line between them, off to the side, and behind
+        the ego
+    Then: Only the on-line, in-between blocker occludes the target
+
+    Test type: unit
+    """
+    on_line = carla_pomdp._segment_occludes(0.0, 0.0, 30.0, 0.0, 15.0, 0.5, 1.5)
+    off_to_side = carla_pomdp._segment_occludes(0.0, 0.0, 30.0, 0.0, 15.0, 5.0, 1.5)
+    behind_ego = carla_pomdp._segment_occludes(0.0, 0.0, 30.0, 0.0, -5.0, 0.0, 1.5)
+
+    assert on_line is True
+    assert off_to_side is False
+    assert behind_ego is False
+
+
+def test_agent_rows_state_keeps_all_nearest_observation_hides_unseen() -> None:
+    """State carries every nearest agent; the observation hides unseen ones.
+
+    Purpose: Validates the core partial-observability gap over other agents.
+
+    Given: An ego with three tracked neighbours — one clearly visible ahead, one
+        directly behind the visible one (occluded), and one beyond perception range
+    When: _agent_rows is built for the state (all) and the observation (detected)
+    Then: The state marks all three present, while the observation keeps only the
+        visible agent and zeroes the occluded and out-of-range slots
+
+    Test type: unit
+    """
+    ego = _fake_actor(0, 0.0, 0.0)
+    visible = _fake_actor(1, 10.0, 0.0)  # 10 m ahead, in range, unobstructed
+    occluded = _fake_actor(2, 30.0, 0.0)  # behind `visible` on the same sight line
+    far = _fake_actor(3, 60.0, 0.0)  # beyond the 50 m perception range
+    session: Any = object.__new__(carla_pomdp._CarlaSession)
+    session._vehicle = ego
+    session._world = _fake_world([ego, visible, occluded, far])
+    session._max_tracked_agents = 3
+    session._perception_range = 50.0
+    session._occlusion_radius = 1.5
+
+    state_rows = session._agent_rows(detected_only=False)
+    observed_rows = session._agent_rows(detected_only=True)
+
+    assert state_rows.shape == (3, carla_pomdp.AGENT_SLOT_WIDTH)
+    assert list(state_rows[:, 0]) == [1.0, 1.0, 1.0]
+    assert state_rows[0][1] == pytest.approx(10.0)  # nearest is the visible agent
+    assert observed_rows[0][0] == 1.0  # visible agent survives
+    assert np.array_equal(observed_rows[1], np.zeros(carla_pomdp.AGENT_SLOT_WIDTH))
+    assert np.array_equal(observed_rows[2], np.zeros(carla_pomdp.AGENT_SLOT_WIDTH))
+
+
+def test_observation_includes_camera_and_lidar(world: CarlaPOMDP) -> None:
+    """A stepped observation is a multi-modal gnss/camera/lidar dict.
+
+    Purpose: Validates the multi-modal observation payload of the CARLA world.
+
+    Given: A CarlaPOMDP world whose fake session returns a dict observation
+    When: A step is sampled and the observation is read
+    Then: The observation is a dict with gnss/camera/lidar; camera is (H, W, 3)
+        uint8 and lidar is (N, 4) float32
+
+    Test type: unit
+    """
+    state = world._live_state
+    next_state = world.sample_next_state(state, 0)
+    observation = world.sample_observation(next_state, 0)
+
+    assert isinstance(observation, dict)
+    assert set(observation) == {"gnss", "camera", "lidar"}
+    assert np.array_equal(observation["gnss"], np.array([49.0, 2.0, 0.0]))
+    assert observation["camera"].shape == (128, 128, 3)
+    assert observation["camera"].dtype == np.uint8
+    assert observation["lidar"].shape[1] == 4
+    assert observation["lidar"].dtype == np.float32
+
+
+def _fake_actor(actor_id: int, x: float, y: float, yaw: float = 0.0, speed: float = 0.0) -> Any:
+    """A SimpleNamespace CARLA actor with transform/location/velocity accessors."""
+    location = SimpleNamespace(
+        x=x, y=y, distance=lambda other, _x=x, _y=y: float(np.hypot(other.x - _x, other.y - _y))
+    )
+    transform = SimpleNamespace(location=location, rotation=SimpleNamespace(yaw=yaw))
+    velocity = SimpleNamespace(x=speed, y=0.0)
+    return SimpleNamespace(
+        id=actor_id,
+        get_location=lambda _loc=location: _loc,
+        get_transform=lambda _tf=transform: _tf,
+        get_velocity=lambda _vel=velocity: _vel,
+    )
+
+
+def _fake_world(actors: List[Any]) -> Any:
+    """A SimpleNamespace CARLA world whose get_actors().filter() returns ``actors``."""
+    return SimpleNamespace(get_actors=lambda: SimpleNamespace(filter=lambda pattern: actors))
+
+
+def _bare_session(
+    include_camera: bool,
+    include_lidar: bool,
+    observation_extractor: Optional[Any] = None,
+) -> Any:
+    """Build a _CarlaSession bypassing __init__ so _read_observation runs sans carla."""
+    session = object.__new__(carla_pomdp._CarlaSession)
+    session._observation_extractor = observation_extractor
+    session._include_camera = include_camera
+    session._include_lidar = include_lidar
+    session._latest_gnss = None
+    session._latest_camera = None
+    session._latest_lidar = None
+    session._camera_height = 128
+    session._camera_width = 128
+    ego = _fake_actor(0, 0.0, 0.0)
+    session._vehicle = ego
+    session._world = _fake_world([ego])
+    session._max_tracked_agents = 5
+    session._perception_range = 50.0
+    session._occlusion_radius = 1.5
+    return session
+
+
+def test_read_observation_omits_disabled_sensor_keys() -> None:
+    """Disabled sensors drop their observation keys; gnss always stays.
+
+    Purpose: Validates include_camera/include_lidar gate their observation keys.
+
+    Given: Sessions configured with camera-only and lidar-only sensor sets
+    When: _read_observation builds the observation dict
+    Then: Only the enabled sensor key appears alongside the always-present gnss and
+        agents keys
+
+    Test type: unit
+    """
+    camera_only = _bare_session(include_camera=True, include_lidar=False)
+    lidar_only = _bare_session(include_camera=False, include_lidar=True)
+
+    assert set(camera_only._read_observation()) == {"gnss", "agents", "camera"}
+    assert set(lidar_only._read_observation()) == {"gnss", "agents", "lidar"}
+
+
+def test_read_observation_falls_back_to_zeros_before_sensor_data() -> None:
+    """Before a sensor callback fires, observation values fall back to zeros.
+
+    Purpose: Validates the zero-filled fallbacks for gnss/camera/lidar.
+
+    Given: A session with both sensors enabled, no other vehicles, and no callback
+        data yet
+    When: _read_observation is called
+    Then: gnss is zeros(3), the agents block is an all-empty K*slot vector, camera is
+        (H, W, 3) uint8 zeros, and lidar is (0, 4) float32
+
+    Test type: unit
+    """
+    session = _bare_session(include_camera=True, include_lidar=True)
+
+    observation = session._read_observation()
+
+    assert np.array_equal(observation["gnss"], np.zeros(3))
+    assert np.array_equal(observation["agents"], np.zeros(5 * carla_pomdp.AGENT_SLOT_WIDTH))
+    assert observation["camera"].shape == (128, 128, 3)
+    assert observation["camera"].dtype == np.uint8
+    assert not observation["camera"].any()
+    assert observation["lidar"].shape == (0, 4)
+    assert observation["lidar"].dtype == np.float32
+
+
+def test_read_observation_applies_observation_extractor() -> None:
+    """A supplied observation extractor replaces the emitted observation.
+
+    Purpose: Validates that _read_observation routes the full dict through the
+        injected observation_extractor and returns its result.
+
+    Given: A bare session with both sensors enabled and a gnss-only extractor
+    When: _read_observation builds the full dict and applies the extractor
+    Then: The returned observation contains only the ``gnss`` key produced by the
+        extractor, dropping agents/camera/lidar
+
+    Test type: unit
+    """
+    session = _bare_session(
+        include_camera=True, include_lidar=True, observation_extractor=_gnss_only_extractor
+    )
+
+    observation = session._read_observation()
+
+    assert set(observation) == {"gnss"}
+    assert np.array_equal(observation["gnss"], np.zeros(3))
+
+
+def test_observation_extractor_forwarded_from_env_to_session(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CarlaPOMDP stores the extractor and threads it into the session build.
+
+    Purpose: Validates the observation_extractor constructor argument is retained
+        and forwarded to the underlying _CarlaSession by _get_session.
+
+    Given: A CarlaPOMDP constructed with a gnss-only observation extractor and a
+        recording _CarlaSession stub
+    When: The environment builds its session via _get_session
+    Then: The environment exposes the extractor and _CarlaSession receives the same
+        callable in its keyword arguments
+
+    Test type: unit
+    """
+    captured: Dict[str, Any] = {}
+
+    def _recording_session(**kwargs: Any) -> str:
+        captured.update(kwargs)
+        return "session"
+
+    monkeypatch.setattr(carla_pomdp, "_CarlaSession", _recording_session)
+    env = CarlaPOMDP(discount_factor=0.95, observation_extractor=_gnss_only_extractor)
+
+    assert env.observation_extractor is _gnss_only_extractor
+    assert env._get_session() == "session"
+    assert captured["observation_extractor"] is _gnss_only_extractor
+
+
+def test_include_flags_thread_into_session(fake_session: FakeCarlaSession) -> None:
+    """The CarlaPOMDP include flags configure the underlying session build.
+
+    Purpose: Validates include_camera/include_lidar reach _CarlaSession config.
+
+    Given: A CarlaPOMDP constructed with camera enabled and lidar disabled
+    When: Its public sensor configuration is inspected
+    Then: The include flags and merged config defaults match the constructor args
+
+    Test type: unit
+    """
+    del fake_session
+    env = CarlaPOMDP(discount_factor=0.95, include_camera=True, include_lidar=False)
+
+    assert env.include_camera is True
+    assert env.include_lidar is False
+    assert env.observation_camera_config["image_size_x"] == "128"
+    assert env.lidar_config["channels"] == "32"
+
+
+def test_hash_observation_handles_dict_observations(world: CarlaPOMDP) -> None:
+    """Dict observations hash equal when equal and differ on a changed modality.
+
+    Purpose: Validates dict-aware hash_observation for multi-modal payloads.
+
+    Given: Two equal sensor dicts and a third with a differing camera frame
+    When: hash_observation is computed for each
+    Then: Equal dicts hash equally and the differing dict hashes differently
+
+    Test type: unit
+    """
+    observation = _make_observation(48.0)
+    same = _make_observation(48.0)
+    different = _make_observation(48.0)
+    different["camera"] = np.ones((128, 128, 3), dtype=np.uint8)
+
+    assert world.hash_observation(observation) == world.hash_observation(same)
+    assert world.hash_observation(observation) != world.hash_observation(different)
+
+
+def test_is_equal_observation_handles_dict_observations(world: CarlaPOMDP) -> None:
+    """is_equal_observation compares dict observations modality by modality.
+
+    Purpose: Validates dict-aware equality, including dict/non-dict mismatches.
+
+    Given: Two equal sensor dicts, one with a differing lidar cloud, and an array
+    When: is_equal_observation compares each pairing
+    Then: Equal dicts compare equal; a changed modality and a dict/array mix differ
+
+    Test type: unit
+    """
+    observation = _make_observation(48.0)
+    same = _make_observation(48.0)
+    different = _make_observation(48.0)
+    different["lidar"] = np.ones((10, 4), dtype=np.float32)
+
+    assert world.is_equal_observation(observation, same) is True
+    assert world.is_equal_observation(observation, different) is False
+    assert world.is_equal_observation(observation, np.zeros(3)) is False
