@@ -54,7 +54,7 @@ import numpy as np
 
 from POMDPPlanners.core.belief import Belief, WeightedParticleBelief
 from POMDPPlanners.environments.carla_pomdp.carla_belief import PerceivedAgentsBelief
-from POMDPPlanners.environments.carla_pomdp.carla_perception_pipeline import (
+from POMDPPlanners.environments.carla_pomdp.carla_perception import (
     CarlaPerceptionPipeline,
 )
 from POMDPPlanners.environments.carla_pomdp.carla_pomdp import (
@@ -84,7 +84,7 @@ def build_world(seed: int, host: str, port: int) -> CarlaPOMDP:
     """Construct the forward-only CARLA world with onboard perception and chase-camera recording.
 
     The world's observation model runs a
-    :class:`~POMDPPlanners.environments.carla_pomdp.carla_perception_pipeline.CarlaPerceptionPipeline`,
+    :class:`~POMDPPlanners.environments.carla_pomdp.carla_perception.pipeline.CarlaPerceptionPipeline`,
     so the emitted ``agents`` block is the *perceived* object list — vehicles clustered and
     tracked from the lidar, a fused lidar/camera forward hazard and a camera-inferred red/amber
     light folded in — rather than a ground-truth oracle. The planner's model scores that same

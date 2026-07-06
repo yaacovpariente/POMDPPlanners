@@ -106,7 +106,7 @@ from POMDPPlanners.core.simulation import History, MetricValue, StepData
 from POMDPPlanners.utils.statistics_utils import confidence_interval
 
 if TYPE_CHECKING:  # avoid a runtime import cycle (the pipeline imports this module's schema)
-    from POMDPPlanners.environments.carla_pomdp.carla_perception_pipeline import (
+    from POMDPPlanners.environments.carla_pomdp.carla_perception import (
         CarlaPerceptionPipeline,
     )
 
@@ -965,7 +965,7 @@ class CarlaPOMDP(Environment):
                 callable, since the environment is pickled for distributed runs.
                 Defaults to None, which emits the full dict unchanged.
             perception_pipeline: Optional
-                :class:`~POMDPPlanners.environments.carla_pomdp.carla_perception_pipeline.CarlaPerceptionPipeline`
+                :class:`~POMDPPlanners.environments.carla_pomdp.carla_perception.pipeline.CarlaPerceptionPipeline`
                 run on every emitted observation: it replaces the raw ``agents`` block with the
                 *perceived* object list (vehicles clustered/tracked from the lidar, a fused
                 forward hazard and a camera-inferred traffic light folded in), so the world emits

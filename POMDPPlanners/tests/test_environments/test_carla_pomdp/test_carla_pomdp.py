@@ -25,7 +25,7 @@ from POMDPPlanners.core.environment import Environment, SpaceType
 from POMDPPlanners.core.policy import Policy, PolicyRunData, PolicySpaceInfo
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
 from POMDPPlanners.environments.carla_pomdp import CarlaPOMDP, carla_pomdp, carla_video
-from POMDPPlanners.environments.carla_pomdp.carla_perception_pipeline import (
+from POMDPPlanners.environments.carla_pomdp.carla_perception import (
     CarlaPerceptionPipeline,
 )
 from POMDPPlanners.environments.carla_pomdp.carla_pomdp import (

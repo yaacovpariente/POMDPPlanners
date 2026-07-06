@@ -46,7 +46,7 @@ from typing import Any, Optional
 
 import numpy as np
 
-from POMDPPlanners.environments.carla_pomdp.carla_perception import (
+from POMDPPlanners.environments.carla_pomdp.carla_perception.sensors import (
     DEFAULT_CORRIDOR_HALFWIDTH,
     camera_looming_cue,
     fuse_forward_obstacle,
@@ -55,7 +55,10 @@ from POMDPPlanners.environments.carla_pomdp.carla_perception import (
     traffic_light_from_camera,
     traffic_light_stop_distance,
 )
-from POMDPPlanners.environments.carla_pomdp.carla_tracking import TRACK_WIDTH, update_tracks
+from POMDPPlanners.environments.carla_pomdp.carla_perception.tracking import (
+    TRACK_WIDTH,
+    update_tracks,
+)
 from POMDPPlanners.environments.carla_pomdp.carla_pomdp import (
     AGENT_SLOT_WIDTH,
     DEFAULT_MAX_TRACKED_AGENTS,
@@ -252,7 +255,7 @@ class AlphaBetaTracker(MotionTracker):
     """Default constant-velocity multi-object tracker (alpha-beta) over vehicle detections.
 
     A thin :class:`MotionTracker` wrapper around
-    :func:`~POMDPPlanners.environments.carla_pomdp.carla_tracking.update_tracks`; its coasting of
+    :func:`~POMDPPlanners.environments.carla_pomdp.carla_perception.tracking.update_tracks`; its coasting of
     undetected tracks is what carries a briefly occluded vehicle through a sensor dropout.
 
     Example:
