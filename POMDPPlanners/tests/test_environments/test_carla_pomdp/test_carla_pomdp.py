@@ -19,10 +19,11 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from POMDPPlanners.core.belief import Belief
+from POMDPPlanners.core.belief import Belief, WeightedParticleBelief
 from POMDPPlanners.core.belief.belief_utils import get_initial_belief
 from POMDPPlanners.core.environment import Environment, SpaceType
 from POMDPPlanners.core.policy import Policy, PolicyRunData, PolicySpaceInfo
+from POMDPPlanners.core.simulation import History, MetricValue, StepData
 from POMDPPlanners.environments.carla_pomdp import CarlaPOMDP, carla_pomdp, carla_video
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.simulations.episodes import EpisodeRunner
@@ -905,6 +906,8 @@ def _fake_actor(actor_id: int, x: float, y: float, yaw: float = 0.0, speed: floa
         get_location=lambda _loc=location: _loc,
         get_transform=lambda _tf=transform: _tf,
         get_velocity=lambda _vel=velocity: _vel,
+        get_traffic_light_state=lambda: "Green",
+        get_traffic_light=lambda: None,
     )
 
 
@@ -913,16 +916,26 @@ def _fake_world(actors: List[Any]) -> Any:
     return SimpleNamespace(get_actors=lambda: SimpleNamespace(filter=lambda pattern: actors))
 
 
+def _fake_carla_module() -> Any:
+    """A minimal stand-in for the ``carla`` module exposing ``TrafficLightState``."""
+    return SimpleNamespace(
+        TrafficLightState=SimpleNamespace(Red="Red", Yellow="Yellow", Green="Green")
+    )
+
+
 def _bare_session(
     include_camera: bool,
     include_lidar: bool,
     observation_extractor: Optional[Any] = None,
+    include_traffic_light: bool = True,
 ) -> Any:
     """Build a _CarlaSession bypassing __init__ so _read_observation runs sans carla."""
     session = object.__new__(carla_pomdp._CarlaSession)
+    session._carla = _fake_carla_module()
     session._observation_extractor = observation_extractor
     session._include_camera = include_camera
     session._include_lidar = include_lidar
+    session._include_traffic_light = include_traffic_light
     session._latest_gnss = None
     session._latest_camera = None
     session._latest_lidar = None
@@ -944,16 +957,32 @@ def test_read_observation_omits_disabled_sensor_keys() -> None:
 
     Given: Sessions configured with camera-only and lidar-only sensor sets
     When: _read_observation builds the observation dict
-    Then: Only the enabled sensor key appears alongside the always-present gnss and
-        agents keys
+    Then: Only the enabled sensor key appears alongside the always-present gnss, agents
+        and traffic_light keys
 
     Test type: unit
     """
     camera_only = _bare_session(include_camera=True, include_lidar=False)
     lidar_only = _bare_session(include_camera=False, include_lidar=True)
 
-    assert set(camera_only._read_observation()) == {"gnss", "agents", "camera"}
-    assert set(lidar_only._read_observation()) == {"gnss", "agents", "lidar"}
+    assert set(camera_only._read_observation()) == {"gnss", "agents", "traffic_light", "camera"}
+    assert set(lidar_only._read_observation()) == {"gnss", "agents", "traffic_light", "lidar"}
+
+
+def test_read_observation_omits_traffic_light_when_disabled() -> None:
+    """Disabling include_traffic_light drops the traffic_light observation key.
+
+    Purpose: Validates the traffic-light ground-truth oracle can be withheld entirely.
+
+    Given: A session with camera, lidar and traffic-light all disabled
+    When: _read_observation builds the observation dict
+    Then: Only gnss and agents remain — no traffic_light key
+
+    Test type: unit
+    """
+    session = _bare_session(include_camera=False, include_lidar=False, include_traffic_light=False)
+
+    assert set(session._read_observation()) == {"gnss", "agents"}
 
 
 def test_read_observation_falls_back_to_zeros_before_sensor_data() -> None:
@@ -1094,3 +1123,384 @@ def test_is_equal_observation_handles_dict_observations(world: CarlaPOMDP) -> No
     assert world.is_equal_observation(observation, same) is True
     assert world.is_equal_observation(observation, different) is False
     assert world.is_equal_observation(observation, np.zeros(3)) is False
+
+
+# ── Evaluation metrics (compute_metrics / get_metric_names) ──────────────────
+
+
+def _ego_state(x: float, y: float, vx: float = 0.0, vy: float = 0.0) -> np.ndarray:
+    """Build a minimal ego state with the given world position and velocity."""
+    state = np.zeros(carla_pomdp.EGO_STATE_WIDTH)
+    state[0], state[1] = x, y
+    state[3], state[4] = vx, vy
+    return state
+
+
+def _metrics_history(
+    transitions: List[Tuple[np.ndarray, np.ndarray]], reach_terminal: bool
+) -> History:
+    """Build a History from (state, next_state) ego transitions for metric tests."""
+    belief: Belief = WeightedParticleBelief([np.zeros(1), np.zeros(1)], np.array([0.0, -1.0]))
+    steps = [
+        StepData(
+            state=state,
+            action=(0.5, 0.0, 0.0),
+            next_state=next_state,
+            observation={"gnss": np.zeros(3)},
+            reward=0.0,
+            belief=belief,
+        )
+        for state, next_state in transitions
+    ]
+    return History(
+        history=steps,
+        discount_factor=0.95,
+        average_state_sampling_time=0.0,
+        average_action_time=0.0,
+        average_observation_time=0.0,
+        average_belief_update_time=0.0,
+        average_reward_time=0.0,
+        actual_num_steps=len(steps),
+        reach_terminal_state=reach_terminal,
+        policy_run_data=[],
+    )
+
+
+def _metric_by_name(metrics: List[MetricValue], name: str) -> MetricValue:
+    """Return the single MetricValue with the given name."""
+    return next(metric for metric in metrics if metric.name == name)
+
+
+def _light_state(
+    x: float, vx: float, present: float, code: float, rel_x: float = 2.0
+) -> np.ndarray:
+    """Build a full ego+agents+light state with the given ego motion and light slot."""
+    offset = carla_pomdp.EGO_STATE_WIDTH + carla_pomdp.DEFAULT_MAX_TRACKED_AGENTS * (
+        carla_pomdp.AGENT_SLOT_WIDTH
+    )
+    state = np.zeros(offset + carla_pomdp.LIGHT_SLOT_WIDTH)
+    state[0], state[3] = x, vx
+    state[offset], state[offset + 1], state[offset + 3] = present, rel_x, code
+    return state
+
+
+def test_get_metric_names_lists_the_full_carla_metric_set() -> None:
+    """Metric names advertise driving quality plus the traffic-light metrics.
+
+    Purpose: Validates get_metric_names exposes exactly the CARLA metric set
+
+    Given: A CarlaPOMDP world
+    When: get_metric_names is called
+    Then: It returns the driving-quality and traffic-light metric names
+
+    Test type: unit
+    """
+    env = CarlaPOMDP(discount_factor=0.95)
+
+    assert env.get_metric_names() == [
+        "collision_rate",
+        "average_progress",
+        "average_speed",
+        "red_light_violation_rate",
+        "red_light_violation_count",
+        "traffic_light_malfunction_count",
+        "near_miss_count",
+        "min_vehicle_distance",
+    ]
+
+
+def test_compute_metrics_empty_histories_returns_empty_list() -> None:
+    """No histories yields no metrics.
+
+    Purpose: Validates compute_metrics degrades gracefully on empty input
+
+    Given: A CarlaPOMDP world
+    When: compute_metrics is called with an empty history list
+    Then: An empty list is returned (no division by zero, no CI on empty data)
+
+    Test type: unit
+    """
+    env = CarlaPOMDP(discount_factor=0.95)
+
+    assert not env.compute_metrics([])
+
+
+def test_compute_metrics_emits_the_three_named_metrics() -> None:
+    """A single episode produces all three named metrics.
+
+    Purpose: Validates compute_metrics returns the full CARLA metric set
+
+    Given: A CarlaPOMDP world and one one-step episode
+    When: compute_metrics is called
+    Then: Exactly the three CARLA metric names are emitted
+
+    Test type: unit
+    """
+    env = CarlaPOMDP(discount_factor=0.95)
+    history = _metrics_history([(_ego_state(0.0, 0.0), _ego_state(1.0, 0.0, 1.0))], False)
+
+    metrics = env.compute_metrics([history])
+
+    assert {metric.name for metric in metrics} == set(env.get_metric_names())
+
+
+def test_collision_rate_is_fraction_of_episodes_ending_terminal() -> None:
+    """Collision rate averages the per-episode terminal flag.
+
+    Purpose: Validates collision_rate equals the fraction of terminal episodes
+
+    Given: Four episodes, two of which reached a terminal (collision) state
+    When: compute_metrics is called
+    Then: collision_rate is 0.5
+
+    Test type: unit
+    """
+    env = CarlaPOMDP(discount_factor=0.95)
+    transition = [(_ego_state(0.0, 0.0), _ego_state(1.0, 0.0, 1.0))]
+    histories = [
+        _metrics_history(transition, reach_terminal=True),
+        _metrics_history(transition, reach_terminal=False),
+        _metrics_history(transition, reach_terminal=True),
+        _metrics_history(transition, reach_terminal=False),
+    ]
+
+    metrics = env.compute_metrics(histories)
+
+    assert _metric_by_name(metrics, "collision_rate").value == pytest.approx(0.5)
+
+
+def test_average_progress_sums_euclidean_path_length() -> None:
+    """Progress is the ground distance travelled along the ego path.
+
+    Purpose: Validates average_progress integrates the ego's Euclidean path length
+
+    Given: One episode moving (0,0)->(3,0)->(3,4)
+    When: compute_metrics is called
+    Then: average_progress is 7.0 metres (3 + 4)
+
+    Test type: unit
+    """
+    env = CarlaPOMDP(discount_factor=0.95)
+    history = _metrics_history(
+        [
+            (_ego_state(0.0, 0.0), _ego_state(3.0, 0.0)),
+            (_ego_state(3.0, 0.0), _ego_state(3.0, 4.0)),
+        ],
+        reach_terminal=False,
+    )
+
+    metrics = env.compute_metrics([history])
+
+    assert _metric_by_name(metrics, "average_progress").value == pytest.approx(7.0)
+
+
+def test_average_speed_averages_ego_velocity_magnitude() -> None:
+    """Speed is the mean magnitude of the ego velocity over the trajectory.
+
+    Purpose: Validates average_speed averages sqrt(vx**2 + vy**2) over steps
+
+    Given: One episode whose next-state velocities are (3,4) then (6,8)
+    When: compute_metrics is called
+    Then: average_speed is 7.5 m/s (mean of 5 and 10)
+
+    Test type: unit
+    """
+    env = CarlaPOMDP(discount_factor=0.95)
+    history = _metrics_history(
+        [
+            (_ego_state(0.0, 0.0), _ego_state(1.0, 0.0, 3.0, 4.0)),
+            (_ego_state(1.0, 0.0, 3.0, 4.0), _ego_state(2.0, 0.0, 6.0, 8.0)),
+        ],
+        reach_terminal=False,
+    )
+
+    metrics = env.compute_metrics([history])
+
+    assert _metric_by_name(metrics, "average_speed").value == pytest.approx(7.5)
+
+
+def test_metric_confidence_bounds_bracket_value_across_episodes() -> None:
+    """Confidence bounds bracket the reported mean for varied episodes.
+
+    Purpose: Validates the reported value lies within its confidence interval
+
+    Given: Two episodes with different path lengths (5 and 10 metres)
+    When: compute_metrics is called
+    Then: average_progress is 7.5 and its confidence bounds bracket that value
+
+    Test type: unit
+    """
+    env = CarlaPOMDP(discount_factor=0.95)
+    histories = [
+        _metrics_history([(_ego_state(0.0, 0.0), _ego_state(5.0, 0.0))], reach_terminal=False),
+        _metrics_history([(_ego_state(0.0, 0.0), _ego_state(10.0, 0.0))], reach_terminal=False),
+    ]
+
+    progress = _metric_by_name(env.compute_metrics(histories), "average_progress")
+
+    assert progress.value == pytest.approx(7.5)
+    assert progress.lower_confidence_bound <= progress.value <= progress.upper_confidence_bound
+
+
+def test_red_light_crossing_counts_as_a_violation() -> None:
+    """Crossing a stop line while the light is red is a red-light violation.
+
+    Purpose: Validates the red-light metrics count a moving crossing on red
+
+    Given: One episode where the ego is affiliated to a RED light and moving, then crosses
+        (the light slot's present flag goes 1 -> 0)
+    When: compute_metrics is called
+    Then: red_light_violation_count is 1, its rate is 1.0, and malfunction count is 0
+
+    Test type: unit
+    """
+    env = CarlaPOMDP(discount_factor=0.95)
+    history = _metrics_history(
+        [
+            (
+                _light_state(0.0, 5.0, 1.0, carla_pomdp.TRAFFIC_LIGHT_RED),
+                _light_state(1.0, 5.0, 0.0, 0.0),
+            )
+        ],
+        reach_terminal=False,
+    )
+
+    metrics = env.compute_metrics([history])
+
+    assert _metric_by_name(metrics, "red_light_violation_count").value == pytest.approx(1.0)
+    assert _metric_by_name(metrics, "red_light_violation_rate").value == pytest.approx(1.0)
+    assert _metric_by_name(metrics, "traffic_light_malfunction_count").value == pytest.approx(0.0)
+
+
+def test_green_crossing_is_not_a_violation() -> None:
+    """Crossing on green is a legal functioning-light pass, not a violation.
+
+    Purpose: Validates a green crossing lowers the violation rate to zero
+
+    Given: One episode where the ego crosses while the light is GREEN
+    When: compute_metrics is called
+    Then: red_light_violation_count and rate are both 0
+
+    Test type: unit
+    """
+    env = CarlaPOMDP(discount_factor=0.95)
+    history = _metrics_history(
+        [
+            (
+                _light_state(0.0, 5.0, 1.0, carla_pomdp.TRAFFIC_LIGHT_GREEN),
+                _light_state(1.0, 5.0, 0.0, 0.0),
+            )
+        ],
+        reach_terminal=False,
+    )
+
+    metrics = env.compute_metrics([history])
+
+    assert _metric_by_name(metrics, "red_light_violation_count").value == pytest.approx(0.0)
+    assert _metric_by_name(metrics, "red_light_violation_rate").value == pytest.approx(0.0)
+
+
+def test_malfunctioning_light_crossing_recorded_separately() -> None:
+    """Crossing an off/unknown light is recorded as a malfunction, never a violation.
+
+    Purpose: Validates a non-operating light is scored separately from red-running
+
+    Given: One episode where the ego crosses while the light is OFF
+    When: compute_metrics is called
+    Then: traffic_light_malfunction_count is 1 and red_light_violation_count is 0
+
+    Test type: unit
+    """
+    env = CarlaPOMDP(discount_factor=0.95)
+    history = _metrics_history(
+        [
+            (
+                _light_state(0.0, 5.0, 1.0, carla_pomdp.TRAFFIC_LIGHT_OFF),
+                _light_state(1.0, 5.0, 0.0, 0.0),
+            )
+        ],
+        reach_terminal=False,
+    )
+
+    metrics = env.compute_metrics([history])
+
+    assert _metric_by_name(metrics, "traffic_light_malfunction_count").value == pytest.approx(1.0)
+    assert _metric_by_name(metrics, "red_light_violation_count").value == pytest.approx(0.0)
+
+
+def test_stopping_at_a_red_light_is_not_a_violation() -> None:
+    """Being at a red light while stopped is not counted as a crossing.
+
+    Purpose: Validates the moving-speed gate excludes a car halted at the line
+
+    Given: One episode where the ego is at a RED light but not moving when affiliation drops
+    When: compute_metrics is called
+    Then: no red-light violation is counted
+
+    Test type: unit
+    """
+    env = CarlaPOMDP(discount_factor=0.95)
+    history = _metrics_history(
+        [
+            (
+                _light_state(0.0, 0.0, 1.0, carla_pomdp.TRAFFIC_LIGHT_RED),
+                _light_state(0.0, 0.0, 0.0, 0.0),
+            )
+        ],
+        reach_terminal=False,
+    )
+
+    metrics = env.compute_metrics([history])
+
+    assert _metric_by_name(metrics, "red_light_violation_count").value == pytest.approx(0.0)
+
+
+def _agent_state(rel_x: float, rel_y: float = 0.0) -> np.ndarray:
+    """Full ego+agents+light state carrying one present agent at ``(rel_x, rel_y)``."""
+    offset = carla_pomdp.EGO_STATE_WIDTH + carla_pomdp.DEFAULT_MAX_TRACKED_AGENTS * (
+        carla_pomdp.AGENT_SLOT_WIDTH
+    )
+    state = np.zeros(offset + carla_pomdp.LIGHT_SLOT_WIDTH)
+    agents = carla_pomdp.EGO_STATE_WIDTH
+    state[agents], state[agents + 1], state[agents + 2] = 1.0, rel_x, rel_y
+    return state
+
+
+def test_near_miss_counted_when_a_vehicle_comes_within_threshold() -> None:
+    """A close pass without a collision is counted as a near-miss.
+
+    Purpose: Validates the near-miss metric flags a sub-threshold approach
+
+    Given: One episode where the nearest vehicle is 1 m from the ego (no collision)
+    When: compute_metrics is called
+    Then: near_miss_count is 1 and min_vehicle_distance is 1 m
+
+    Test type: unit
+    """
+    env = CarlaPOMDP(discount_factor=0.95)
+    history = _metrics_history([(_agent_state(1.0), _agent_state(1.0))], reach_terminal=False)
+
+    metrics = env.compute_metrics([history])
+
+    assert _metric_by_name(metrics, "near_miss_count").value == pytest.approx(1.0)
+    assert _metric_by_name(metrics, "min_vehicle_distance").value == pytest.approx(1.0)
+
+
+def test_no_near_miss_when_vehicles_stay_far() -> None:
+    """A comfortable gap to other vehicles yields no near-miss.
+
+    Purpose: Validates the near-miss metric ignores well-separated vehicles
+
+    Given: One episode whose nearest vehicle stays 10 m away
+    When: compute_metrics is called
+    Then: near_miss_count is 0 and min_vehicle_distance is 10 m
+
+    Test type: unit
+    """
+    env = CarlaPOMDP(discount_factor=0.95)
+    history = _metrics_history([(_agent_state(10.0), _agent_state(10.0))], reach_terminal=False)
+
+    metrics = env.compute_metrics([history])
+
+    assert _metric_by_name(metrics, "near_miss_count").value == pytest.approx(0.0)
+    assert _metric_by_name(metrics, "min_vehicle_distance").value == pytest.approx(10.0)
