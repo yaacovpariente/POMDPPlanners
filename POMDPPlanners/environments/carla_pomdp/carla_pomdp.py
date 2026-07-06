@@ -965,7 +965,7 @@ class CarlaPOMDP(Environment):
                 callable, since the environment is pickled for distributed runs.
                 Defaults to None, which emits the full dict unchanged.
             perception_pipeline: Optional
-                :class:`~POMDPPlanners.environments.carla_pomdp.carla_perception.pipeline.CarlaPerceptionPipeline`
+                :class:`~POMDPPlanners.environments.carla_pomdp.carla_perception.carla_pipeline.CarlaPerceptionPipeline`
                 run on every emitted observation: it replaces the raw ``agents`` block with the
                 *perceived* object list (vehicles clustered/tracked from the lidar, a fused
                 forward hazard and a camera-inferred traffic light folded in), so the world emits

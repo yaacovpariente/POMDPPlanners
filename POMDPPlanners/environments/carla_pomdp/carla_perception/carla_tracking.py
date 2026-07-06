@@ -3,7 +3,7 @@
 """Constant-velocity multi-object tracker for lidar vehicle detections.
 
 The temporal (prediction) stage of the perception pipeline: it turns the per-frame
-detections from :func:`~POMDPPlanners.environments.carla_pomdp.carla_perception.sensors.lidar_vehicle_detections`
+detections from :func:`~POMDPPlanners.environments.carla_pomdp.carla_perception.carla_sensors.lidar_vehicle_detections`
 into persistent tracks that carry an estimated ego-frame **velocity**, using an alpha-beta
 filter (a simplified constant-velocity Kalman) with greedy nearest-neighbour association.
 Undetected tracks coast on their velocity and decay in confidence until evicted; unmatched

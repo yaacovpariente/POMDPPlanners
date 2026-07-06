@@ -11,7 +11,7 @@ All tests run on hand-built sensor arrays.
 
 import numpy as np
 
-from POMDPPlanners.environments.carla_pomdp.carla_perception.pipeline import (
+from POMDPPlanners.environments.carla_pomdp.carla_perception.carla_pipeline import (
     AlphaBetaTracker,
     CarlaPerceptionPipeline,
     Detections,

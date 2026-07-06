@@ -3,7 +3,7 @@
 """Plain particle belief that stamps the observed agent block onto its particles.
 
 Perception lives in the world's observation model: a
-:class:`~POMDPPlanners.environments.carla_pomdp.carla_perception.pipeline.CarlaPerceptionPipeline`
+:class:`~POMDPPlanners.environments.carla_pomdp.carla_perception.carla_pipeline.CarlaPerceptionPipeline`
 run inside :class:`~POMDPPlanners.environments.carla_pomdp.carla_pomdp.CarlaPOMDP` turns the raw
 sensors into the *perceived* observation, so the ``agents`` channel the belief receives is
 already the tracked object list. The belief therefore does no perception at all.

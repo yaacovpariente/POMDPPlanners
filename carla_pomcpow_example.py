@@ -84,7 +84,7 @@ def build_world(seed: int, host: str, port: int) -> CarlaPOMDP:
     """Construct the forward-only CARLA world with onboard perception and chase-camera recording.
 
     The world's observation model runs a
-    :class:`~POMDPPlanners.environments.carla_pomdp.carla_perception.pipeline.CarlaPerceptionPipeline`,
+    :class:`~POMDPPlanners.environments.carla_pomdp.carla_perception.carla_pipeline.CarlaPerceptionPipeline`,
     so the emitted ``agents`` block is the *perceived* object list — vehicles clustered and
     tracked from the lidar, a fused lidar/camera forward hazard and a camera-inferred red/amber
     light folded in — rather than a ground-truth oracle. The planner's model scores that same
