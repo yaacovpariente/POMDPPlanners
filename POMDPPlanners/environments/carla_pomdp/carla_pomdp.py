@@ -96,7 +96,7 @@ from collections.abc import Hashable
 from enum import Enum
 from pathlib import Path
 from queue import Queue
-from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Sequence, Set, Tuple
 
 import numpy as np
 
@@ -104,6 +104,11 @@ from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.core.environment import Environment, SpaceInfo, SpaceType
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
 from POMDPPlanners.utils.statistics_utils import confidence_interval
+
+if TYPE_CHECKING:  # avoid a runtime import cycle (the pipeline imports this module's schema)
+    from POMDPPlanners.environments.carla_pomdp.carla_perception_pipeline import (
+        CarlaPerceptionPipeline,
+    )
 
 # Default discrete control presets as ``(throttle, steer, brake)`` triples.
 DEFAULT_ACTION_PRESETS: Tuple[Tuple[float, float, float], ...] = (
@@ -890,6 +895,7 @@ class CarlaPOMDP(Environment):
         traffic_manager_port: int = DEFAULT_TRAFFIC_MANAGER_PORT,
         randomize_spawn: bool = True,
         observation_extractor: Optional[Callable[[Dict[str, np.ndarray]], Any]] = None,
+        perception_pipeline: Optional["CarlaPerceptionPipeline"] = None,
         vehicle_filter: str = "vehicle.tesla.model3",
         timeout: float = 10.0,
         seed: Optional[int] = None,
@@ -958,6 +964,15 @@ class CarlaPOMDP(Environment):
                 keys or a flattened vector). Must be a picklable (module-level)
                 callable, since the environment is pickled for distributed runs.
                 Defaults to None, which emits the full dict unchanged.
+            perception_pipeline: Optional
+                :class:`~POMDPPlanners.environments.carla_pomdp.carla_perception_pipeline.CarlaPerceptionPipeline`
+                run on every emitted observation: it replaces the raw ``agents`` block with the
+                *perceived* object list (vehicles clustered/tracked from the lidar, a fused
+                forward hazard and a camera-inferred traffic light folded in), so the world emits
+                the same perceived observation the planner's model scores. Its tracker state is
+                advanced once per real step and reset each episode. The pipeline's
+                ``max_tracked_agents`` must equal this world's. Defaults to None (the raw
+                ground-truth-detected ``agents`` block is emitted unchanged).
             vehicle_filter: Blueprint filter for the ego vehicle. Defaults to
                 ``"vehicle.tesla.model3"``.
             timeout: CARLA client timeout in seconds. Defaults to 10.0.
@@ -1001,9 +1016,14 @@ class CarlaPOMDP(Environment):
         self.traffic_manager_port = traffic_manager_port
         self.randomize_spawn = randomize_spawn
         self.observation_extractor = observation_extractor
+        self.perception_pipeline = perception_pipeline
         self.vehicle_filter = vehicle_filter
         self.timeout = timeout
         self.seed = seed
+
+        # Live perception state: the pipeline advanced across ticks (reset each episode to the
+        # configured base), kept separate from the picklable base config above.
+        self._perception_pipeline: Optional["CarlaPerceptionPipeline"] = perception_pipeline
 
         # Live-session state: rebuilt lazily and never serialized.
         self._session: Optional[Any] = None
@@ -1042,6 +1062,7 @@ class CarlaPOMDP(Environment):
         state["_seeded"] = False
         state["_pending"] = None
         state["_served_roles"] = set()
+        state["_perception_pipeline"] = self.perception_pipeline  # drop advanced tracker state
         return state
 
     def __setstate__(self, state: Dict[str, Any]) -> None:
@@ -1053,6 +1074,7 @@ class CarlaPOMDP(Environment):
         self._seeded = False
         self._pending = None
         self._served_roles = set()
+        self._perception_pipeline = self.perception_pipeline
 
     # ── Live simulator management ───────────────────────────────────────
     def _get_session(self) -> Any:
@@ -1085,6 +1107,7 @@ class CarlaPOMDP(Environment):
 
     def _reset(self) -> np.ndarray:
         session = self._get_session()
+        self._perception_pipeline = self.perception_pipeline  # fresh tracker state per episode
         if self.seed is not None and not self._seeded:
             state, observation = session.reset(seed=self.seed)
             self._seeded = True
@@ -1092,11 +1115,27 @@ class CarlaPOMDP(Environment):
             state, observation = session.reset()
         state = np.asarray(state)
         self._live_state = state
-        self._latest_obs = observation
+        self._latest_obs = self._perceive(observation)
         self._terminated = False
         self._pending = None
         self._served_roles = set()
         return state
+
+    def _perceive(self, observation: Any) -> Any:
+        """Emit the perceived observation, advancing the perception pipeline one step.
+
+        When no pipeline is configured the raw session observation is returned unchanged.
+        Otherwise the pipeline replaces the ``agents`` block with the perceived, tracked object
+        list (obstacles and traffic lights folded in) and its advanced successor is carried
+        forward, so the world emits the same perceived observation the planner's model scores.
+        """
+        if self._perception_pipeline is None or not isinstance(observation, dict):
+            return observation
+        output = self._perception_pipeline.process(observation)
+        self._perception_pipeline = output.pipeline
+        perceived = dict(observation)
+        perceived["agents"] = output.agent_rows.reshape(-1)
+        return perceived
 
     def _to_control(self, action: Any) -> Tuple[float, float, float]:
         return self.action_presets[int(action)]
@@ -1153,6 +1192,7 @@ class CarlaPOMDP(Environment):
         throttle, steer, brake = self._to_control(action)
         next_state, observation, terminated = session.step(throttle, steer, brake)
         next_state = np.asarray(next_state)
+        observation = self._perceive(observation)
         done = bool(terminated)
         pending = {
             "state": np.asarray(state).copy(),

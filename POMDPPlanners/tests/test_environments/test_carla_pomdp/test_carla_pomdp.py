@@ -25,6 +25,13 @@ from POMDPPlanners.core.environment import Environment, SpaceType
 from POMDPPlanners.core.policy import Policy, PolicyRunData, PolicySpaceInfo
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
 from POMDPPlanners.environments.carla_pomdp import CarlaPOMDP, carla_pomdp, carla_video
+from POMDPPlanners.environments.carla_pomdp.carla_perception_pipeline import (
+    CarlaPerceptionPipeline,
+)
+from POMDPPlanners.environments.carla_pomdp.carla_pomdp import (
+    AGENT_SLOT_WIDTH,
+    DEFAULT_MAX_TRACKED_AGENTS,
+)
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.simulations.episodes import EpisodeRunner
 
@@ -1504,3 +1511,130 @@ def test_no_near_miss_when_vehicles_stay_far() -> None:
 
     assert _metric_by_name(metrics, "near_miss_count").value == pytest.approx(0.0)
     assert _metric_by_name(metrics, "min_vehicle_distance").value == pytest.approx(10.0)
+
+
+def _lidar_vehicle_blob(center_x: float) -> np.ndarray:
+    """A 5x5 grid of vehicle-height lidar returns centred ``center_x`` metres ahead."""
+    grid = np.linspace(-0.4, 0.4, 5)
+    xx, yy = np.meshgrid(grid, grid)
+    points = np.zeros((xx.size, 4), dtype=np.float32)
+    points[:, 0] = center_x + xx.ravel()
+    points[:, 1] = yy.ravel()
+    points[:, 2] = -1.0
+    return points
+
+
+class _LidarVehicleSession:
+    """A fake session whose observation carries a lidar vehicle 8 m ahead (empty agents oracle)."""
+
+    def __init__(self) -> None:
+        self.reset_calls = 0
+        self.step_calls = 0
+        self._t = 0
+
+    def _observation(self) -> Dict[str, np.ndarray]:
+        return {
+            "gnss": np.zeros(3),
+            "agents": np.zeros(DEFAULT_MAX_TRACKED_AGENTS * AGENT_SLOT_WIDTH),
+            "lidar": _lidar_vehicle_blob(8.0),
+            "camera": np.zeros((32, 32, 3), dtype=np.uint8),
+        }
+
+    def reset(self, seed: Optional[int] = None) -> Tuple[np.ndarray, Dict[str, np.ndarray]]:
+        del seed
+        self.reset_calls += 1
+        self._t = 0
+        return np.zeros(7), self._observation()
+
+    def step(
+        self, throttle: float, steer: float, brake: float
+    ) -> Tuple[np.ndarray, Dict[str, np.ndarray], bool]:
+        del throttle, steer, brake
+        self.step_calls += 1
+        self._t += 1
+        state = np.array([float(self._t), 0.0, 0.0, float(self._t), 0.0, 0.0, 0.0])
+        return state, self._observation(), self._t >= 3
+
+
+def test_perception_pipeline_emits_perceived_agents_from_lidar(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A configured perception pipeline replaces the emitted agents with lidar detections.
+
+    Purpose: Validates the world's observation model runs perception so agents are inferred.
+
+    Given: A world with a CarlaPerceptionPipeline and a session whose lidar shows a vehicle 8 m
+        ahead but whose ground-truth agents channel is empty
+    When: a step is taken and the observation is read
+    Then: the emitted agents block marks a present agent near 8 m (perceived from the lidar)
+
+    Test type: integration
+    """
+    session = _LidarVehicleSession()
+    monkeypatch.setattr(CarlaPOMDP, "_get_session", lambda self: session)
+    pipeline = CarlaPerceptionPipeline(
+        max_tracked_agents=DEFAULT_MAX_TRACKED_AGENTS,
+        sensor_fusion=False,
+        stop_for_traffic_lights=False,
+    )
+    world = CarlaPOMDP(discount_factor=0.95, perception_pipeline=pipeline)
+    world.initial_state_dist().sample()  # reset to establish the live state
+    state = world._live_state
+
+    next_state = world.sample_next_state(state, 0)
+    observation = world.sample_observation(next_state, 0)
+
+    rows = np.asarray(observation["agents"]).reshape(DEFAULT_MAX_TRACKED_AGENTS, AGENT_SLOT_WIDTH)
+    assert rows[0, 0] == 1.0
+    assert abs(rows[0, 1] - 8.0) < 1.0
+
+
+def test_no_perception_pipeline_emits_raw_agents_unchanged(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Without a pipeline the world emits the session's raw agents block unchanged.
+
+    Purpose: Validates perception is opt-in; the default world passes the oracle agents through.
+
+    Given: A world with no perception pipeline and a session with an all-empty agents channel
+    When: a step is taken and the observation is read
+    Then: the emitted agents block is the raw (empty) channel, not a perceived one
+
+    Test type: integration
+    """
+    session = _LidarVehicleSession()
+    monkeypatch.setattr(CarlaPOMDP, "_get_session", lambda self: session)
+    world = CarlaPOMDP(discount_factor=0.95)
+    world.initial_state_dist().sample()  # reset to establish the live state
+    state = world._live_state
+
+    next_state = world.sample_next_state(state, 0)
+    observation = world.sample_observation(next_state, 0)
+
+    assert np.all(np.asarray(observation["agents"]) == 0.0)
+
+
+def test_perception_pipeline_base_is_never_mutated(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Advancing perception never mutates the configured base pipeline.
+
+    Purpose: Validates per-episode perception state cannot leak, since each reset re-seeds the
+    live pipeline from an immutable, empty-tracked base.
+
+    Given: A world whose live pipeline has tracked a vehicle over several steps
+    When: the configured base pipeline is inspected
+    Then: it is the same object with empty tracker state (only the live successor advanced)
+
+    Test type: integration
+    """
+    session = _LidarVehicleSession()
+    monkeypatch.setattr(CarlaPOMDP, "_get_session", lambda self: session)
+    pipeline = CarlaPerceptionPipeline(max_tracked_agents=DEFAULT_MAX_TRACKED_AGENTS)
+    world = CarlaPOMDP(discount_factor=0.95, perception_pipeline=pipeline)
+    world.initial_state_dist().sample()  # reset to establish the live state
+    world.sample_next_state(world._live_state, 0)  # advance so the live pipeline accrues a track
+
+    assert world.perception_pipeline is pipeline  # base handle unchanged
+    assert pipeline.tracks.shape[0] == 0  # base never accumulates tracks -> reset re-seeds clean
+    assert world._perception_pipeline is not pipeline  # the live pipeline advanced off the base
