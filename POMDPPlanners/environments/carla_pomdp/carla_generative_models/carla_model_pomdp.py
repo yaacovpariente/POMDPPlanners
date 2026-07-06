@@ -13,7 +13,7 @@ terminal — abstract for a study- or task-specific subclass (e.g. a learned mod
 in.
 
 A runnable reference implementation with a fixed factored observation model lives in
-:mod:`~POMDPPlanners.environments.carla_pomdp.carla_factored_model_pomdp`.
+:mod:`~POMDPPlanners.environments.carla_pomdp.carla_generative_models.carla_factored_model_pomdp`.
 
 The schema (state/observation layout, action presets) is imported from
 :mod:`~POMDPPlanners.environments.carla_pomdp.carla_pomdp` so world and model agree by
@@ -56,7 +56,7 @@ class CarlaModelPOMDP(DiscreteActionsEnvironment):
 
     Note:
         This is an abstract base class and cannot be instantiated directly. See
-        :class:`~POMDPPlanners.environments.carla_pomdp.carla_factored_model_pomdp.FactoredCarlaModelPOMDP`
+        :class:`~POMDPPlanners.environments.carla_pomdp.carla_generative_models.carla_factored_model_pomdp.FactoredCarlaModelPOMDP`
         for a concrete reference implementation.
     """
 

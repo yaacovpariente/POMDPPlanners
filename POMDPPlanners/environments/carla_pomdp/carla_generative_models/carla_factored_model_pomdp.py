@@ -3,7 +3,7 @@
 """Reference concrete CARLA generative model with a fixed factored observation model.
 
 :class:`FactoredCarlaModelPOMDP` implements the
-:class:`~POMDPPlanners.environments.carla_pomdp.carla_model_pomdp.CarlaModelPOMDP`
+:class:`~POMDPPlanners.environments.carla_pomdp.carla_generative_models.carla_model_pomdp.CarlaModelPOMDP`
 interface with a fixed, factored observation model (per-slot agent detection with range +
 occlusion gating and additive Gaussian pose noise, plus a Gaussian GNSS reading) and the
 same gym-carla driving-quality reward the world uses. The transition dynamics are a
@@ -23,7 +23,9 @@ from typing import Any, Optional, Sequence, Tuple
 import numpy as np
 
 from POMDPPlanners.core.distributions import Distribution
-from POMDPPlanners.environments.carla_pomdp.carla_model_pomdp import CarlaModelPOMDP
+from POMDPPlanners.environments.carla_pomdp.carla_generative_models.carla_model_pomdp import (
+    CarlaModelPOMDP,
+)
 from POMDPPlanners.environments.carla_pomdp.carla_pomdp import (
     AGENT_SLOT_WIDTH,
     DEFAULT_MAX_TRACKED_AGENTS,
@@ -80,7 +82,7 @@ class FactoredCarlaModelPOMDP(CarlaModelPOMDP):
         discount_factor: float,
         action_presets: Optional[Sequence[Tuple[float, float, float]]] = None,
         max_tracked_agents: int = DEFAULT_MAX_TRACKED_AGENTS,
-        perception_range: float = DEFAULT_PERCEPTION_RANGE,
+        perception_range: Optional[float] = DEFAULT_PERCEPTION_RANGE,
         occlusion_radius: float = DEFAULT_OCCLUSION_RADIUS,
         pose_std: float = 0.5,
         gnss_std: float = 1e-5,
@@ -97,7 +99,8 @@ class FactoredCarlaModelPOMDP(CarlaModelPOMDP):
             action_presets: Discrete ``(throttle, steer, brake)`` triples. Defaults to
                 the world's default presets.
             max_tracked_agents: Number of fixed agent slots in state/observation.
-            perception_range: Metres beyond which an agent is undetectable.
+            perception_range: Metres beyond which an agent is undetectable, or ``None`` to
+                disable the range gate (agents stay visible at any distance).
             occlusion_radius: Sight-line blocking radius among agents.
             pose_std: Std of Gaussian noise on a detected agent's pose measurement.
             gnss_std: Std of Gaussian noise on the ``gnss`` reading.
@@ -181,7 +184,9 @@ class FactoredCarlaModelPOMDP(CarlaModelPOMDP):
     def _visible(self, rows: np.ndarray, slot: int) -> bool:
         """Whether true agent ``slot`` is in range and not occluded (ego-frame)."""
         rel_x, rel_y = rows[slot, 1], rows[slot, 2]
-        if float(np.hypot(rel_x, rel_y)) > self.perception_range:
+        if self.perception_range is not None and float(np.hypot(rel_x, rel_y)) > (
+            self.perception_range
+        ):
             return False
         for other in range(self.max_tracked_agents):
             if other == slot or rows[other, 0] != 1.0:
