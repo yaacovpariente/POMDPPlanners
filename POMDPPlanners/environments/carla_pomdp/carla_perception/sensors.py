@@ -24,7 +24,7 @@ nearest in-corridor obstacle, or the sensor range when clear) — with pure, tes
   distance, so a red light can be injected as a virtual obstacle just like a stopped car.
 
 These helpers are composed by
-:class:`~POMDPPlanners.environments.carla_pomdp.carla_perception_pipeline.CarlaPerceptionPipeline`,
+:class:`~POMDPPlanners.environments.carla_pomdp.carla_perception.pipeline.CarlaPerceptionPipeline`,
 whose output the belief stamps as agent slots so the planner's terminal-collision and headway
 logic brake for them — i.e. the sensors are used *by the planner*, not by a hidden actuation
 override.

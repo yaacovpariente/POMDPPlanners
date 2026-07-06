@@ -17,7 +17,7 @@ Classes:
 
 from POMDPPlanners.environments.carla_pomdp.carla_pomdp import CarlaPOMDP
 from POMDPPlanners.environments.carla_pomdp.carla_belief import PerceivedAgentsBelief
-from POMDPPlanners.environments.carla_pomdp.carla_perception_pipeline import (
+from POMDPPlanners.environments.carla_pomdp.carla_perception import (
     CarlaPerceptionPipeline,
     LidarCameraPerceptionModel,
     MotionTracker,

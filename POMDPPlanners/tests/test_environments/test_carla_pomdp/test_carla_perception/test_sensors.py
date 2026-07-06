@@ -10,7 +10,7 @@ combining them with lidar taking precedence. All tests run on hand-built arrays.
 
 import numpy as np
 
-from POMDPPlanners.environments.carla_pomdp.carla_perception import (
+from POMDPPlanners.environments.carla_pomdp.carla_perception.sensors import (
     DEFAULT_LIDAR_RANGE,
     camera_looming_cue,
     fuse_forward_obstacle,
