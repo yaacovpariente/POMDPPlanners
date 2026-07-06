@@ -11,7 +11,7 @@ detection arrays; no CARLA server is needed.
 import numpy as np
 import pytest
 
-from POMDPPlanners.environments.carla_pomdp.carla_perception.tracking import update_tracks
+from POMDPPlanners.environments.carla_pomdp.carla_perception.carla_tracking import update_tracks
 
 _EMPTY = np.zeros((0, 5))
 
