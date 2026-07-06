@@ -46,6 +46,14 @@ is read straight from the simulator, where:
 - ``heading_err``: ego heading minus the lane direction, wrapped to
   ``[-pi, pi]``, in **radians**.
 
+The state ends with **one traffic-light slot**,
+``[present, rel_x, rel_y, state_code, time_to_change]`` (ego frame; ``state_code`` is a
+``TRAFFIC_LIGHT_*`` code, ``time_to_change`` in seconds), carrying the light governing the
+ego as ground truth (``present == 0`` when none affects it). It is always in the state — used
+by the red-light-violation metrics — and is independent of whether the *observation* exposes
+the light (``include_traffic_light``); a planner can thus be scored for running reds even when
+it is given no light information.
+
 (The vertical axis ``z`` and roll/pitch are intentionally omitted; the ego is
 modelled on the ground plane.)
 
@@ -71,6 +79,11 @@ The **observation** is a multi-modal dict of native CARLA sensor payloads:
   with rows ``[x, y, z, intensity]`` in the LiDAR **sensor** frame (metres;
   ``intensity`` normalised to ``[0, 1]``), from a ``sensor.lidar.ray_cast``. ``N``
   varies per tick.
+- ``"traffic_light"`` (present iff ``include_traffic_light``): ``[should_stop, distance_m]``
+  — ``should_stop`` is ``1.0`` when the ego is affected by a **red or yellow** light (else
+  ``0.0``) and ``distance_m`` is the forward distance to that light's stop line. This is a
+  privileged **ground-truth** read (no noise), letting a planner treat a red light as a
+  virtual obstacle to stop for; disable it to withhold the signal entirely.
 
 Any measurement noise is CARLA's own, configured through the sensor blueprint
 attributes — the wrapper adds none.
@@ -80,15 +93,22 @@ Classes:
 """
 
 from collections.abc import Hashable
+from enum import Enum
 from pathlib import Path
 from queue import Queue
-from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Sequence, Set, Tuple
 
 import numpy as np
 
 from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.core.environment import Environment, SpaceInfo, SpaceType
-from POMDPPlanners.core.simulation import StepData
+from POMDPPlanners.core.simulation import History, MetricValue, StepData
+from POMDPPlanners.utils.statistics_utils import confidence_interval
+
+if TYPE_CHECKING:  # avoid a runtime import cycle (the pipeline imports this module's schema)
+    from POMDPPlanners.environments.carla_pomdp.carla_perception import (
+        CarlaPerceptionPipeline,
+    )
 
 # Default discrete control presets as ``(throttle, steer, brake)`` triples.
 DEFAULT_ACTION_PRESETS: Tuple[Tuple[float, float, float], ...] = (
@@ -182,6 +202,46 @@ DEFAULT_TRAFFIC_MANAGER_PORT = 8000  # CARLA Traffic Manager RPC port
 # (``rel_x`` forward, ``rel_y`` left, ``rel_yaw`` in radians, ``rel_speed`` in m/s).
 EGO_STATE_WIDTH = 7  # [x, y, yaw, vx, vy, lat, heading_err]
 AGENT_SLOT_WIDTH = 5  # [present, rel_x, rel_y, rel_yaw, rel_speed]
+
+# The ground-truth state ends with a single traffic-light slot
+# ``[present, rel_x, rel_y, state_code, time_to_change]`` (ego frame; ``state_code`` is one
+# of the ``TRAFFIC_LIGHT_*`` codes below, ``time_to_change`` in seconds). It carries the light
+# governing the ego (CARLA affiliates at most one) as ground truth for the evaluation metrics,
+# independent of whether the *observation* exposes the light. ``present == 0`` when no light
+# affects the ego. The full state width is ``EGO_STATE_WIDTH + K*AGENT_SLOT_WIDTH + LIGHT_SLOT_WIDTH``.
+LIGHT_SLOT_WIDTH = 5  # [present, rel_x, rel_y, state_code, time_to_change]
+
+# state_code values carried in the traffic-light state slot.
+TRAFFIC_LIGHT_GREEN = 0.0
+TRAFFIC_LIGHT_RED = 1.0
+TRAFFIC_LIGHT_YELLOW = 2.0
+TRAFFIC_LIGHT_OFF = 3.0  # light present but not operating (dark / flashing)
+TRAFFIC_LIGHT_UNKNOWN = 4.0
+# A stop-line crossing is only counted when the ego was moving at least this fast (m/s), so a
+# car stopped at the line (whose affiliation later drops) is not mistaken for a pass-through.
+_LIGHT_CROSS_MOVING_SPEED = 0.5
+
+# Centre-to-centre ego->vehicle distance (m) at/under which a step counts toward a near-miss.
+# A near-miss event is a contiguous run below this threshold that did NOT end in a collision,
+# catching close calls the physics collision sensor misses (Roach's BEV-overlap idea).
+_NEAR_MISS_DISTANCE = 2.5
+
+# Indices into the ego state block, used by the evaluation metrics.
+_EGO_POSITION_SLICE = slice(0, 2)  # (x, y) world position in metres
+_EGO_VELOCITY_SLICE = slice(3, 5)  # (vx, vy) world velocity in m/s
+
+
+class CarlaPOMDPMetrics(Enum):
+    """Metric names for the CARLA POMDP environment."""
+
+    COLLISION_RATE = "collision_rate"
+    AVERAGE_PROGRESS = "average_progress"
+    AVERAGE_SPEED = "average_speed"
+    RED_LIGHT_VIOLATION_RATE = "red_light_violation_rate"
+    RED_LIGHT_VIOLATION_COUNT = "red_light_violation_count"
+    TRAFFIC_LIGHT_MALFUNCTION_COUNT = "traffic_light_malfunction_count"
+    NEAR_MISS_COUNT = "near_miss_count"
+    MIN_VEHICLE_DISTANCE = "min_vehicle_distance"
 
 
 def _relative_agent_row(
@@ -282,12 +342,13 @@ class _CarlaSession:
         camera_config: Optional[Dict[str, Any]] = None,
         include_camera: bool = True,
         include_lidar: bool = True,
+        include_traffic_light: bool = True,
         observation_camera_config: Optional[Dict[str, Any]] = None,
         lidar_config: Optional[Dict[str, Any]] = None,
         num_vehicles: int = DEFAULT_NUM_VEHICLES,
         num_walkers: int = DEFAULT_NUM_WALKERS,
         max_tracked_agents: int = DEFAULT_MAX_TRACKED_AGENTS,
-        perception_range: float = DEFAULT_PERCEPTION_RANGE,
+        perception_range: Optional[float] = DEFAULT_PERCEPTION_RANGE,
         occlusion_radius: float = DEFAULT_OCCLUSION_RADIUS,
         traffic_manager_port: int = DEFAULT_TRAFFIC_MANAGER_PORT,
         randomize_spawn: bool = True,
@@ -310,6 +371,7 @@ class _CarlaSession:
         self._camera_config = camera_config if camera_config is not None else {}
         self._include_camera = include_camera
         self._include_lidar = include_lidar
+        self._include_traffic_light = include_traffic_light
         self._obs_camera_config = (
             observation_camera_config if observation_camera_config is not None else {}
         )
@@ -363,7 +425,10 @@ class _CarlaSession:
         presets = [
             attr
             for attr in dir(self._carla.WeatherParameters)
-            if not attr.startswith("_") and attr != "values"
+            if not attr.startswith("_")
+            and isinstance(
+                getattr(self._carla.WeatherParameters, attr), self._carla.WeatherParameters
+            )
         ]
         if not presets:
             return
@@ -416,10 +481,13 @@ class _CarlaSession:
         candidates = [
             point for point in spawn_points if point.location.distance(ego_location) > 1.0
         ]
-        order = self._rng.permutation(len(candidates))
-        for point_index in order[: self._num_vehicles]:
+        # Fill the nearest spawn points first so traffic clusters around the ego
+        # (a random permutation scatters it across the whole map, which reads as an
+        # empty road on large towns). Blueprint choice stays rng-driven for variety.
+        candidates.sort(key=lambda point: point.location.distance(ego_location))
+        for point in candidates[: self._num_vehicles]:
             blueprint = vehicle_bps[int(self._rng.integers(len(vehicle_bps)))]
-            vehicle: Any = self._world.try_spawn_actor(blueprint, candidates[int(point_index)])
+            vehicle: Any = self._world.try_spawn_actor(blueprint, point)
             if vehicle is None:
                 continue
             vehicle.set_autopilot(True, traffic_manager.get_port())
@@ -542,7 +610,54 @@ class _CarlaSession:
             ]
         )
         agent_rows = self._agent_rows(detected_only=False)
-        return np.concatenate([ego, agent_rows.reshape(-1)])
+        return np.concatenate([ego, agent_rows.reshape(-1), self._read_state_traffic_light()])
+
+    def _read_state_traffic_light(self) -> np.ndarray:
+        """Ground-truth light slot ``[present, rel_x, rel_y, state_code, time_to_change]``.
+
+        Carries the light governing the ego (``present == 0`` when none affects it). This is
+        the state's ground-truth record used by the evaluation metrics, distinct from the
+        simplified ``traffic_light`` observation the planner may consume.
+        """
+        light = self._vehicle.get_traffic_light()
+        if light is None:
+            return np.zeros(LIGHT_SLOT_WIDTH)
+        rel_x, rel_y = self._stop_line_rel_position(light)
+        code = self._traffic_light_code(light.get_state())
+        return np.array([1.0, rel_x, rel_y, code, self._time_to_change(light)])
+
+    def _traffic_light_code(self, state: Any) -> float:
+        return {
+            self._carla.TrafficLightState.Green: TRAFFIC_LIGHT_GREEN,
+            self._carla.TrafficLightState.Red: TRAFFIC_LIGHT_RED,
+            self._carla.TrafficLightState.Yellow: TRAFFIC_LIGHT_YELLOW,
+            self._carla.TrafficLightState.Off: TRAFFIC_LIGHT_OFF,
+        }.get(state, TRAFFIC_LIGHT_UNKNOWN)
+
+    def _stop_line_rel_position(self, light: Any) -> Tuple[float, float]:
+        ego_transform = self._vehicle.get_transform()
+        ego_x, ego_y = ego_transform.location.x, ego_transform.location.y
+        ego_yaw = np.radians(ego_transform.rotation.yaw)
+        waypoints = light.get_stop_waypoints()
+        if waypoints:
+            nearest = min(
+                waypoints, key=lambda wp: wp.transform.location.distance(ego_transform.location)
+            )
+            target = nearest.transform.location
+        else:
+            target = light.get_location()
+        row = _relative_agent_row(ego_x, ego_y, ego_yaw, target.x, target.y, 0.0, 0.0)
+        return float(row[1]), float(row[2])
+
+    def _time_to_change(self, light: Any) -> float:
+        duration = {
+            self._carla.TrafficLightState.Red: light.get_red_time,
+            self._carla.TrafficLightState.Yellow: light.get_yellow_time,
+            self._carla.TrafficLightState.Green: light.get_green_time,
+        }.get(light.get_state())
+        if duration is None:
+            return 0.0
+        return float(max(0.0, duration() - light.get_elapsed_time()))
 
     def _nearest_agents(self) -> List[Any]:
         """The ``max_tracked_agents`` other vehicles nearest the ego, by true distance."""
@@ -587,7 +702,9 @@ class _CarlaSession:
     def _is_detected(self, ego_location: Any, actor: Any, nearest: List[Any]) -> bool:
         """Whether ``actor`` is within perception range and not occluded by a vehicle."""
         target = actor.get_location()
-        if target.distance(ego_location) > self._perception_range:
+        if self._perception_range is not None and (
+            target.distance(ego_location) > self._perception_range
+        ):
             return False
         for blocker in nearest:
             if blocker.id == actor.id:
@@ -628,6 +745,8 @@ class _CarlaSession:
             "gnss": self._read_gnss(),
             "agents": self._agent_rows(detected_only=True).reshape(-1),
         }
+        if self._include_traffic_light:
+            observation["traffic_light"] = self._read_traffic_light()
         if self._include_camera:
             observation["camera"] = self._read_camera()
         if self._include_lidar:
@@ -635,6 +754,31 @@ class _CarlaSession:
         if self._observation_extractor is not None:
             return self._observation_extractor(observation)
         return observation
+
+    def _read_traffic_light(self) -> np.ndarray:
+        """Stop signal for a red/yellow light ahead: ``[should_stop, distance_m]``.
+
+        ``should_stop`` is 1.0 when the ego is affected by a red or yellow light (else
+        0.0); ``distance_m`` is the forward distance to that light's stop line. This lets
+        a planner treat a red light as a virtual obstacle to brake for.
+        """
+        state = self._vehicle.get_traffic_light_state()
+        stop_states = (self._carla.TrafficLightState.Red, self._carla.TrafficLightState.Yellow)
+        if state not in stop_states:
+            return np.array([0.0, 0.0])
+        return np.array([1.0, self._stop_line_distance(self._vehicle.get_traffic_light())])
+
+    def _stop_line_distance(self, light: Any) -> float:
+        if light is None:
+            return 0.0
+        ego = self._vehicle.get_location()
+        try:
+            waypoints = light.get_stop_waypoints()
+        except (AttributeError, RuntimeError):
+            waypoints = []
+        if waypoints:
+            return float(min(wp.transform.location.distance(ego) for wp in waypoints))
+        return float(light.get_location().distance(ego))
 
     def _read_gnss(self) -> np.ndarray:
         if self._latest_gnss is None:
@@ -736,6 +880,7 @@ class CarlaPOMDP(Environment):
         camera_config: Optional[Dict[str, Any]] = None,
         include_camera: bool = True,
         include_lidar: bool = True,
+        include_traffic_light: bool = True,
         observation_camera_config: Optional[Dict[str, Any]] = None,
         lidar_config: Optional[Dict[str, Any]] = None,
         fixed_delta_seconds: float = 0.05,
@@ -745,11 +890,12 @@ class CarlaPOMDP(Environment):
         num_vehicles: int = DEFAULT_NUM_VEHICLES,
         num_walkers: int = DEFAULT_NUM_WALKERS,
         max_tracked_agents: int = DEFAULT_MAX_TRACKED_AGENTS,
-        perception_range: float = DEFAULT_PERCEPTION_RANGE,
+        perception_range: Optional[float] = DEFAULT_PERCEPTION_RANGE,
         occlusion_radius: float = DEFAULT_OCCLUSION_RADIUS,
         traffic_manager_port: int = DEFAULT_TRAFFIC_MANAGER_PORT,
         randomize_spawn: bool = True,
         observation_extractor: Optional[Callable[[Dict[str, np.ndarray]], Any]] = None,
+        perception_pipeline: Optional["CarlaPerceptionPipeline"] = None,
         vehicle_filter: str = "vehicle.tesla.model3",
         timeout: float = 10.0,
         seed: Optional[int] = None,
@@ -780,6 +926,9 @@ class CarlaPOMDP(Environment):
                 Defaults to True.
             include_lidar: If True, attach a roof-mounted LiDAR and include its
                 point cloud under the ``"lidar"`` observation key. Defaults to True.
+            include_traffic_light: If True, include the ground-truth ``"traffic_light"``
+                ``[should_stop, distance_m]`` signal in the observation. Set False to
+                withhold the privileged light oracle entirely. Defaults to True.
             observation_camera_config: Front camera blueprint attributes overriding
                 :data:`DEFAULT_OBSERVATION_CAMERA_CONFIG`. Defaults to none.
             lidar_config: LiDAR blueprint attributes overriding
@@ -799,8 +948,9 @@ class CarlaPOMDP(Environment):
                 slots in the state and observation. Defaults to
                 :data:`DEFAULT_MAX_TRACKED_AGENTS`.
             perception_range: Metres beyond which another agent is undetectable and
-                hidden from the observation. Defaults to
-                :data:`DEFAULT_PERCEPTION_RANGE`.
+                hidden from the observation, or ``None`` to disable the range gate entirely
+                (every nearest-tracked agent stays visible regardless of distance). Defaults
+                to :data:`DEFAULT_PERCEPTION_RANGE`.
             occlusion_radius: Metres from the ego->target sight line within which a
                 vehicle blocks (occludes) the target. Defaults to
                 :data:`DEFAULT_OCCLUSION_RADIUS`.
@@ -814,6 +964,15 @@ class CarlaPOMDP(Environment):
                 keys or a flattened vector). Must be a picklable (module-level)
                 callable, since the environment is pickled for distributed runs.
                 Defaults to None, which emits the full dict unchanged.
+            perception_pipeline: Optional
+                :class:`~POMDPPlanners.environments.carla_pomdp.carla_perception.carla_pipeline.CarlaPerceptionPipeline`
+                run on every emitted observation: it replaces the raw ``agents`` block with the
+                *perceived* object list (vehicles clustered/tracked from the lidar, a fused
+                forward hazard and a camera-inferred traffic light folded in), so the world emits
+                the same perceived observation the planner's model scores. Its tracker state is
+                advanced once per real step and reset each episode. The pipeline's
+                ``max_tracked_agents`` must equal this world's. Defaults to None (the raw
+                ground-truth-detected ``agents`` block is emitted unchanged).
             vehicle_filter: Blueprint filter for the ego vehicle. Defaults to
                 ``"vehicle.tesla.model3"``.
             timeout: CARLA client timeout in seconds. Defaults to 10.0.
@@ -838,6 +997,7 @@ class CarlaPOMDP(Environment):
             self.camera_config.update(camera_config)
         self.include_camera = include_camera
         self.include_lidar = include_lidar
+        self.include_traffic_light = include_traffic_light
         self.observation_camera_config: Dict[str, Any] = dict(DEFAULT_OBSERVATION_CAMERA_CONFIG)
         if observation_camera_config:
             self.observation_camera_config.update(observation_camera_config)
@@ -856,9 +1016,14 @@ class CarlaPOMDP(Environment):
         self.traffic_manager_port = traffic_manager_port
         self.randomize_spawn = randomize_spawn
         self.observation_extractor = observation_extractor
+        self.perception_pipeline = perception_pipeline
         self.vehicle_filter = vehicle_filter
         self.timeout = timeout
         self.seed = seed
+
+        # Live perception state: the pipeline advanced across ticks (reset each episode to the
+        # configured base), kept separate from the picklable base config above.
+        self._perception_pipeline: Optional["CarlaPerceptionPipeline"] = perception_pipeline
 
         # Live-session state: rebuilt lazily and never serialized.
         self._session: Optional[Any] = None
@@ -897,6 +1062,7 @@ class CarlaPOMDP(Environment):
         state["_seeded"] = False
         state["_pending"] = None
         state["_served_roles"] = set()
+        state["_perception_pipeline"] = self.perception_pipeline  # drop advanced tracker state
         return state
 
     def __setstate__(self, state: Dict[str, Any]) -> None:
@@ -908,6 +1074,7 @@ class CarlaPOMDP(Environment):
         self._seeded = False
         self._pending = None
         self._served_roles = set()
+        self._perception_pipeline = self.perception_pipeline
 
     # ── Live simulator management ───────────────────────────────────────
     def _get_session(self) -> Any:
@@ -924,6 +1091,7 @@ class CarlaPOMDP(Environment):
                 camera_config=self.camera_config,
                 include_camera=self.include_camera,
                 include_lidar=self.include_lidar,
+                include_traffic_light=self.include_traffic_light,
                 observation_camera_config=self.observation_camera_config,
                 lidar_config=self.lidar_config,
                 num_vehicles=self.num_vehicles,
@@ -939,6 +1107,7 @@ class CarlaPOMDP(Environment):
 
     def _reset(self) -> np.ndarray:
         session = self._get_session()
+        self._perception_pipeline = self.perception_pipeline  # fresh tracker state per episode
         if self.seed is not None and not self._seeded:
             state, observation = session.reset(seed=self.seed)
             self._seeded = True
@@ -946,11 +1115,27 @@ class CarlaPOMDP(Environment):
             state, observation = session.reset()
         state = np.asarray(state)
         self._live_state = state
-        self._latest_obs = observation
+        self._latest_obs = self._perceive(observation)
         self._terminated = False
         self._pending = None
         self._served_roles = set()
         return state
+
+    def _perceive(self, observation: Any) -> Any:
+        """Emit the perceived observation, advancing the perception pipeline one step.
+
+        When no pipeline is configured the raw session observation is returned unchanged.
+        Otherwise the pipeline replaces the ``agents`` block with the perceived, tracked object
+        list (obstacles and traffic lights folded in) and its advanced successor is carried
+        forward, so the world emits the same perceived observation the planner's model scores.
+        """
+        if self._perception_pipeline is None or not isinstance(observation, dict):
+            return observation
+        output = self._perception_pipeline.process(observation)
+        self._perception_pipeline = output.pipeline
+        perceived = dict(observation)
+        perceived["agents"] = output.agent_rows.reshape(-1)
+        return perceived
 
     def _to_control(self, action: Any) -> Tuple[float, float, float]:
         return self.action_presets[int(action)]
@@ -1007,6 +1192,7 @@ class CarlaPOMDP(Environment):
         throttle, steer, brake = self._to_control(action)
         next_state, observation, terminated = session.step(throttle, steer, brake)
         next_state = np.asarray(next_state)
+        observation = self._perceive(observation)
         done = bool(terminated)
         pending = {
             "state": np.asarray(state).copy(),
@@ -1055,6 +1241,158 @@ class CarlaPOMDP(Environment):
                 "current state is terminal."
             )
         return self._terminated
+
+    def get_metric_names(self) -> List[str]:
+        """Names of the CARLA-specific evaluation metrics.
+
+        Returns:
+            The metric name strings produced by :meth:`compute_metrics`:
+            ``collision_rate``, ``average_progress``, ``average_speed``,
+            ``red_light_violation_rate``, ``red_light_violation_count``,
+            ``traffic_light_malfunction_count``, ``near_miss_count`` and
+            ``min_vehicle_distance``.
+        """
+        return [metric.value for metric in CarlaPOMDPMetrics]
+
+    def compute_metrics(self, histories: List[History]) -> List[MetricValue]:
+        """Compute CARLA driving-quality metrics from episode histories.
+
+        Args:
+            histories: Episode histories to summarise.
+
+        Returns:
+            A list of :class:`MetricValue` with 95% confidence bounds across
+            episodes:
+
+            - ``collision_rate``: fraction of episodes that ended in a collision
+              (the environment's only terminal condition).
+            - ``average_progress``: mean per-episode ground distance travelled by
+              the ego, in metres.
+            - ``average_speed``: mean ego speed over the driven trajectory, in m/s.
+            - ``red_light_violation_rate``: fraction of *functioning*-light stop-line
+              crossings taken while the light was red (averaged over episodes that crossed
+              at least one working light).
+            - ``red_light_violation_count``: mean number of red-light crossings per episode.
+            - ``traffic_light_malfunction_count``: mean number of crossings per episode where
+              the light was off / unknown — recorded separately and never counted as a
+              violation, since the light was not operating.
+            - ``near_miss_count``: mean number of near-miss events per episode (a run within
+              ``_NEAR_MISS_DISTANCE`` of another vehicle that did not become a collision).
+            - ``min_vehicle_distance``: mean over episodes of the closest the ego came to any
+              vehicle, in metres (a safety-margin metric; episodes that saw no vehicle are
+              excluded).
+        """
+        if not histories:
+            return []
+        collisions = [1.0 if history.reach_terminal_state else 0.0 for history in histories]
+        path_lengths = [self._episode_path_length(h) for h in histories if h.history]
+        mean_speeds = [self._episode_mean_speed(h) for h in histories if h.history]
+        events = [self._episode_traffic_light_events(h) for h in histories if h.history]
+        red_counts = [float(red) for red, _functioning, _malfunction in events]
+        red_rates = [red / functioning for red, functioning, _m in events if functioning > 0]
+        malfunctions = [float(malfunction) for _red, _functioning, malfunction in events]
+        near = [self._episode_near_misses(h) for h in histories if h.history]
+        near_counts = [float(count) for count, _min_distance in near]
+        min_distances = [dist for _count, dist in near if np.isfinite(dist)]
+        return [
+            self._metric_from_samples(CarlaPOMDPMetrics.COLLISION_RATE.value, collisions),
+            self._metric_from_samples(CarlaPOMDPMetrics.AVERAGE_PROGRESS.value, path_lengths),
+            self._metric_from_samples(CarlaPOMDPMetrics.AVERAGE_SPEED.value, mean_speeds),
+            self._metric_from_samples(CarlaPOMDPMetrics.RED_LIGHT_VIOLATION_RATE.value, red_rates),
+            self._metric_from_samples(
+                CarlaPOMDPMetrics.RED_LIGHT_VIOLATION_COUNT.value, red_counts
+            ),
+            self._metric_from_samples(
+                CarlaPOMDPMetrics.TRAFFIC_LIGHT_MALFUNCTION_COUNT.value, malfunctions
+            ),
+            self._metric_from_samples(CarlaPOMDPMetrics.NEAR_MISS_COUNT.value, near_counts),
+            self._metric_from_samples(CarlaPOMDPMetrics.MIN_VEHICLE_DISTANCE.value, min_distances),
+        ]
+
+    def _episode_near_misses(self, history: History) -> Tuple[int, float]:
+        """Return ``(near_miss_events, min_ego_vehicle_distance)`` for one episode.
+
+        A near-miss event is a contiguous run of steps whose closest other vehicle is within
+        ``_NEAR_MISS_DISTANCE`` (centre-to-centre, ego frame). ``min_ego_vehicle_distance`` is
+        the closest the ego came to any vehicle over the episode (``inf`` if it never saw one).
+        States lacking agent slots (non-CARLA fixtures) contribute nothing.
+        """
+        agents_end = EGO_STATE_WIDTH + self.max_tracked_agents * AGENT_SLOT_WIDTH
+        distances: List[float] = []
+        for step in history.history:
+            state = np.asarray(step.state, dtype=float)
+            if len(state) < agents_end:
+                continue
+            rows = state[EGO_STATE_WIDTH:agents_end].reshape(
+                self.max_tracked_agents, AGENT_SLOT_WIDTH
+            )
+            present = rows[rows[:, 0] == 1.0]
+            distances.append(
+                float(np.min(np.hypot(present[:, 1], present[:, 2]))) if len(present) else np.inf
+            )
+        events = was_near = 0
+        for distance in distances:
+            near = distance < _NEAR_MISS_DISTANCE
+            events += 1 if (near and not was_near) else 0
+            was_near = near
+        finite = [distance for distance in distances if np.isfinite(distance)]
+        return events, (min(finite) if finite else float("inf"))
+
+    def _episode_traffic_light_events(self, history: History) -> Tuple[int, int, int]:
+        """Count ``(red_runs, functioning_crossings, malfunction_crossings)`` for one episode.
+
+        A stop-line crossing is an affiliation drop (light ``present`` 1 -> 0) while the ego is
+        moving. It is a *red run* when the light was red at the crossing, a *functioning*
+        crossing when the light was operating (red / yellow / green), and a *malfunction*
+        crossing when the light was off / unknown (recorded separately, never a violation).
+        States lacking a light slot (e.g. non-CARLA test fixtures) yield no events.
+        """
+        offset = EGO_STATE_WIDTH + self.max_tracked_agents * AGENT_SLOT_WIDTH
+        states = [np.asarray(step.state, dtype=float) for step in history.history]
+        states.append(np.asarray(history.history[-1].next_state, dtype=float))
+        red_runs = functioning = malfunction = 0
+        for prev, curr in zip(states, states[1:]):
+            if len(prev) < offset + LIGHT_SLOT_WIDTH:
+                continue
+            next_present = curr[offset] if len(curr) >= offset + LIGHT_SLOT_WIDTH else 0.0
+            moving = float(np.hypot(prev[3], prev[4])) > _LIGHT_CROSS_MOVING_SPEED
+            if not (prev[offset] == 1.0 and next_present == 0.0 and moving):
+                continue
+            code = prev[offset + 3]
+            if code in (TRAFFIC_LIGHT_OFF, TRAFFIC_LIGHT_UNKNOWN):
+                malfunction += 1
+            else:
+                functioning += 1
+                red_runs += 1 if code == TRAFFIC_LIGHT_RED else 0
+        return red_runs, functioning, malfunction
+
+    def _episode_path_length(self, history: History) -> float:
+        total = 0.0
+        for step in history.history:
+            start = np.asarray(step.state)[_EGO_POSITION_SLICE]
+            end = np.asarray(step.next_state)[_EGO_POSITION_SLICE]
+            total += float(np.linalg.norm(end - start))
+        return total
+
+    def _episode_mean_speed(self, history: History) -> float:
+        speeds = [
+            float(np.linalg.norm(np.asarray(step.next_state)[_EGO_VELOCITY_SLICE]))
+            for step in history.history
+        ]
+        return float(np.mean(speeds)) if speeds else 0.0
+
+    def _metric_from_samples(self, name: str, samples: List[float]) -> MetricValue:
+        if not samples:
+            return MetricValue(
+                name=name, value=0.0, lower_confidence_bound=0.0, upper_confidence_bound=0.0
+            )
+        lower, upper = confidence_interval(data=samples, confidence=0.95)
+        return MetricValue(
+            name=name,
+            value=float(np.mean(samples)),
+            lower_confidence_bound=float(lower),
+            upper_confidence_bound=float(upper),
+        )
 
     def initial_state_dist(self) -> Distribution:
         parent = self

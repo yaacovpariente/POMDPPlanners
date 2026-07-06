@@ -10,11 +10,23 @@ Classes:
     CarlaPOMDP: Forward-only adapter exposing a CARLA session as a world Environment.
     CarlaModelPOMDP: Abstract generative-model interface over the CARLA schema.
     FactoredCarlaModelPOMDP: Concrete CARLA model with a factored observation model.
+    DreamerCarlaModelPOMDP: Concrete CARLA model backed by a Dreamer world model.
+    PerceivedAgentsBelief: Particle belief that stamps the perception pipeline's agent block.
+    CarlaPerceptionPipeline: Standalone, swappable perception + prediction stage.
 """
 
 from POMDPPlanners.environments.carla_pomdp.carla_pomdp import CarlaPOMDP
-from POMDPPlanners.environments.carla_pomdp.carla_model_pomdp import CarlaModelPOMDP
-from POMDPPlanners.environments.carla_pomdp.carla_factored_model_pomdp import (
+from POMDPPlanners.environments.carla_pomdp.carla_belief import PerceivedAgentsBelief
+from POMDPPlanners.environments.carla_pomdp.carla_perception import (
+    CarlaPerceptionPipeline,
+    LidarCameraPerceptionModel,
+    MotionTracker,
+    OracleAgentPerceptionModel,
+    PerceptionModel,
+)
+from POMDPPlanners.environments.carla_pomdp.carla_generative_models import (
+    CarlaModelPOMDP,
+    DreamerCarlaModelPOMDP,
     FactoredCarlaModelPOMDP,
 )
 
@@ -22,4 +34,11 @@ __all__ = [
     "CarlaPOMDP",
     "CarlaModelPOMDP",
     "FactoredCarlaModelPOMDP",
+    "DreamerCarlaModelPOMDP",
+    "PerceivedAgentsBelief",
+    "CarlaPerceptionPipeline",
+    "PerceptionModel",
+    "MotionTracker",
+    "LidarCameraPerceptionModel",
+    "OracleAgentPerceptionModel",
 ]
