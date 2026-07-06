@@ -13,8 +13,8 @@ from typing import Any, List
 import numpy as np
 import pytest
 
-from POMDPPlanners.environments.carla_pomdp.carla_model_pomdp import CarlaModelPOMDP
-from POMDPPlanners.environments.carla_pomdp.carla_factored_model_pomdp import (
+from POMDPPlanners.environments.carla_pomdp.carla_generative_models import (
+    CarlaModelPOMDP,
     FactoredCarlaModelPOMDP,
 )
 from POMDPPlanners.environments.carla_pomdp.carla_pomdp import (
@@ -170,6 +170,29 @@ def test_sample_observation_keys_and_hides_unseen():
     obs_rows = observation["agents"].reshape(DEFAULT_MAX_TRACKED_AGENTS, AGENT_SLOT_WIDTH)
     assert obs_rows[0, 0] == 1.0  # near agent detected
     assert obs_rows[1, 0] == 0.0  # far agent hidden
+
+
+def test_perception_range_none_keeps_far_agents_visible():
+    """A None perception range disables the distance gate so far agents stay visible.
+
+    Purpose: Validates the removable range limit exposes distant agents
+
+    Given: The same near + far (100 m) state, but a model with perception_range=None
+    When: sample_observation is called
+    Then: Both the near and the far agent slots are present (no range gate applied)
+
+    Test type: unit
+    """
+    env = FactoredCarlaModelPOMDP(discount_factor=0.95, perception_range=None)
+    near = np.array([1.0, 10.0, 0.0, 0.0, 0.0])
+    far = np.array([1.0, 100.0, 30.0, 0.0, 0.0])  # far off the sight line: gated only by range
+    state = _make_state([near, far])
+
+    obs_rows = env.sample_observation(state, action=0)["agents"].reshape(
+        DEFAULT_MAX_TRACKED_AGENTS, AGENT_SLOT_WIDTH
+    )
+    assert obs_rows[0, 0] == 1.0  # near agent detected
+    assert obs_rows[1, 0] == 1.0  # far agent now also visible
 
 
 def test_observation_log_probability_prefers_matching_observation():

@@ -10,11 +10,15 @@ Classes:
     CarlaPOMDP: Forward-only adapter exposing a CARLA session as a world Environment.
     CarlaModelPOMDP: Abstract generative-model interface over the CARLA schema.
     FactoredCarlaModelPOMDP: Concrete CARLA model with a factored observation model.
+    DreamerCarlaModelPOMDP: Concrete CARLA model backed by a Dreamer world model.
+    CarlaAgentReinvigoration: Particle belief that re-injects observed CARLA traffic.
 """
 
 from POMDPPlanners.environments.carla_pomdp.carla_pomdp import CarlaPOMDP
-from POMDPPlanners.environments.carla_pomdp.carla_model_pomdp import CarlaModelPOMDP
-from POMDPPlanners.environments.carla_pomdp.carla_factored_model_pomdp import (
+from POMDPPlanners.environments.carla_pomdp.carla_belief import CarlaAgentReinvigoration
+from POMDPPlanners.environments.carla_pomdp.carla_generative_models import (
+    CarlaModelPOMDP,
+    DreamerCarlaModelPOMDP,
     FactoredCarlaModelPOMDP,
 )
 
@@ -22,4 +26,6 @@ __all__ = [
     "CarlaPOMDP",
     "CarlaModelPOMDP",
     "FactoredCarlaModelPOMDP",
+    "DreamerCarlaModelPOMDP",
+    "CarlaAgentReinvigoration",
 ]
