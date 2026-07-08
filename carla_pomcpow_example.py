@@ -54,12 +54,8 @@ import numpy as np
 
 from POMDPPlanners.core.belief import Belief, WeightedParticleBelief
 from POMDPPlanners.environments.carla_pomdp.carla_belief import PerceivedAgentsBelief
-from POMDPPlanners.environments.carla_pomdp.carla_perception import (
-    CarlaPerceptionPipeline,
-)
 from POMDPPlanners.environments.carla_pomdp.carla_pomdp import (
     AGENT_SLOT_WIDTH,
-    DEFAULT_MAX_TRACKED_AGENTS,
     EGO_STATE_WIDTH,
     CarlaPOMDP,
 )
@@ -81,22 +77,13 @@ DT = 0.05
 
 
 def build_world(seed: int, host: str, port: int) -> CarlaPOMDP:
-    """Construct the forward-only CARLA world with onboard perception and chase-camera recording.
+    """Construct the forward-only CARLA world with chase-camera recording.
 
-    The world's observation model runs a
-    :class:`~POMDPPlanners.environments.carla_pomdp.carla_perception.carla_pipeline.CarlaPerceptionPipeline`,
-    so the emitted ``agents`` block is the *perceived* object list — vehicles clustered and
-    tracked from the lidar, a fused lidar/camera forward hazard and a camera-inferred red/amber
-    light folded in — rather than a ground-truth oracle. The planner's model scores that same
-    perceived observation.
+    The world emits the raw ``{gnss, agents}`` observation unchanged — the ``agents`` block is
+    the ground-truth channel, not a perceived one. Perception lives solely on the planner's
+    generative model, which degrades this same raw observation through its own observation model;
+    the world and the model therefore share one raw observation by construction.
     """
-    pipeline = CarlaPerceptionPipeline(
-        max_tracked_agents=DEFAULT_MAX_TRACKED_AGENTS,
-        sensor_fusion=True,
-        stop_for_traffic_lights=True,
-        obstacle_detection_range=30.0,
-        dt=DT,
-    )
     return CarlaPOMDP(
         discount_factor=GAMMA,
         record_camera=True,
@@ -105,7 +92,6 @@ def build_world(seed: int, host: str, port: int) -> CarlaPOMDP:
         num_vehicles=80,  # heavy surrounding traffic (default is 30)
         num_walkers=0,  # walker-AI spawn segfaults native CARLA on Town02; vehicles suffice
         randomize_spawn=False,  # deterministic, known-busy ego spawn point
-        perception_pipeline=pipeline,
         seed=seed,
         host=host,
         port=port,

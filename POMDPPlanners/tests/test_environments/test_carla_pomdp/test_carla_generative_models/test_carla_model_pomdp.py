@@ -17,6 +17,9 @@ from POMDPPlanners.environments.carla_pomdp.carla_generative_models import (
     CarlaModelPOMDP,
     FactoredCarlaModelPOMDP,
 )
+from POMDPPlanners.environments.carla_pomdp.carla_perception import (
+    FactoredObservationModel,
+)
 from POMDPPlanners.environments.carla_pomdp.carla_pomdp import (
     AGENT_SLOT_WIDTH,
     DEFAULT_MAX_TRACKED_AGENTS,
@@ -210,7 +213,10 @@ def test_observation_log_probability_prefers_matching_observation():
     """
     env = FactoredCarlaModelPOMDP(discount_factor=0.95)
     state = _make_state([np.array([1.0, 10.0, 1.0, 0.2, 3.0])])
-    clean = env._render_observation(state, noisy=False)  # pylint: disable=protected-access
+    assert isinstance(env.perception, FactoredObservationModel)
+    clean = env.perception.render(
+        env._clean_observation(state), noisy=False  # pylint: disable=protected-access
+    )
 
     mismatched = {
         "gnss": clean["gnss"].copy(),

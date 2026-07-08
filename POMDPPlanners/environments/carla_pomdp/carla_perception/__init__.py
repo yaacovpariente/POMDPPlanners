@@ -15,6 +15,10 @@ user can swap in a different perception model without touching either:
   :class:`PerceptionModel` / :class:`MotionTracker` interfaces and the composed, immutable
   :class:`CarlaPerceptionPipeline` that :class:`~POMDPPlanners.environments.carla_pomdp.carla_pomdp.CarlaPOMDP`
   runs inside its observation model.
+* :mod:`~POMDPPlanners.environments.carla_pomdp.carla_perception.observation_model` — the shared
+  :class:`CarlaObservationModel` interface (clean observation -> perceived observation) that both
+  the world and the generative models plug their perception into, plus the factored reference
+  :class:`FactoredObservationModel`.
 
 The public names below are re-exported here so callers can import them straight from the
 subpackage (e.g. ``from ...carla_perception import CarlaPerceptionPipeline``).
@@ -31,6 +35,10 @@ from POMDPPlanners.environments.carla_pomdp.carla_perception.carla_sensors impor
 from POMDPPlanners.environments.carla_pomdp.carla_perception.carla_tracking import (
     TRACK_WIDTH,
     update_tracks,
+)
+from POMDPPlanners.environments.carla_pomdp.carla_perception.observation_model import (
+    CarlaObservationModel,
+    FactoredObservationModel,
 )
 from POMDPPlanners.environments.carla_pomdp.carla_perception.carla_pipeline import (
     AlphaBetaTracker,
@@ -52,6 +60,8 @@ __all__ = [
     "traffic_light_stop_distance",
     "TRACK_WIDTH",
     "update_tracks",
+    "CarlaObservationModel",
+    "FactoredObservationModel",
     "AlphaBetaTracker",
     "CarlaPerceptionPipeline",
     "Detections",
