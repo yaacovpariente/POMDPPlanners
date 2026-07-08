@@ -46,6 +46,9 @@ from typing import Any, Optional
 
 import numpy as np
 
+from POMDPPlanners.environments.carla_pomdp.carla_perception.observation_model import (
+    CarlaObservationModel,
+)
 from POMDPPlanners.environments.carla_pomdp.carla_perception.carla_sensors import (
     DEFAULT_CORRIDOR_HALFWIDTH,
     camera_looming_cue,
@@ -272,13 +275,20 @@ class AlphaBetaTracker(MotionTracker):
         return update_tracks(tracks, vehicle_positions, dt)
 
 
-class CarlaPerceptionPipeline:
+class CarlaPerceptionPipeline(CarlaObservationModel):
     """Standalone perception + prediction stage: raw observation -> agent slots + obstacle.
 
     Composes a :class:`PerceptionModel` (single-frame) and a :class:`MotionTracker` (temporal),
     owns the tracker state, and produces the ego-frame agent block a belief stamps onto its
     particles plus a fused forward-obstacle distance. Immutable: :meth:`process` returns a
     :class:`PerceptionOutput` carrying a successor pipeline with the advanced tracks.
+
+    As a sensor-driven, temporally-stateful stage it is a *sample-only*
+    :class:`~POMDPPlanners.environments.carla_pomdp.carla_perception.observation_model.CarlaObservationModel`
+    (``supports_density = False``): it perceives an observation but exposes no observation
+    density. The world threads its tracker state forward via :meth:`process`; the
+    :meth:`perceive` interface method returns a single perceived observation without carrying
+    the advanced tracks, for callers that only need one reading.
 
     Attributes:
         max_tracked_agents: Number of agent slots produced in the agent block.
@@ -361,6 +371,23 @@ class CarlaPerceptionPipeline:
             obstacle_distance=obstacle,
             pipeline=self._successor(tracks),
         )
+
+    def perceive(self, clean_observation: Mapping[str, Any]) -> dict:
+        """Perceive one observation, replacing its ``agents`` block with tracked slots.
+
+        Unlike :meth:`process` this discards the advanced tracker state: it yields a single
+        perceived observation for callers that only need one reading. Use :meth:`process`
+        when the successor pipeline (advanced tracks) must be threaded forward.
+
+        Args:
+            clean_observation: The world's raw observation dict.
+
+        Returns:
+            The perceived observation dict with the tracked ``agents`` block.
+        """
+        perceived = dict(clean_observation)
+        perceived["agents"] = self.process(clean_observation).agent_rows.reshape(-1)
+        return perceived
 
     def _pack_agent_rows(self, tracks: np.ndarray) -> np.ndarray:
         rows = np.zeros((self.max_tracked_agents, AGENT_SLOT_WIDTH))
