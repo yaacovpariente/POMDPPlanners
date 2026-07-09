@@ -68,11 +68,9 @@ The **observation** is a multi-modal dict of native CARLA sensor payloads:
 - ``"gnss"``: ``[lat, lon, alt]`` (always present) — latitude and longitude in
   **degrees** and altitude in metres, from a ``sensor.other.gnss`` reading.
 - ``"agents"`` (always present): the ``max_tracked_agents`` agent slots of the
-  state flattened, but with any agent that is **out of ``perception_range`` or
-  geometrically occluded** by another vehicle zeroed to an empty (``present == 0``)
-  slot. Slot indices align with the state, so a nearby agent the ego cannot see is
-  exactly a slot that is filled in the state yet empty here — the hidden variable
-  the belief must reason about.
+  state flattened, reported **raw** at their true ego-frame poses. The world applies
+  no perception, so this is the ground-truth channel; range-gating, occlusion and
+  sensor noise are the planner model's observation model, not the world's.
 - ``"camera"`` (present iff ``include_camera``): a front-facing RGB image,
   ``(H, W, 3)`` ``uint8``, from a ``sensor.camera.rgb``.
 - ``"lidar"`` (present iff ``include_lidar``): a point cloud, ``(N, 4)`` ``float32``
@@ -96,7 +94,7 @@ from collections.abc import Hashable
 from enum import Enum
 from pathlib import Path
 from queue import Queue
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Sequence, Set, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple
 
 import numpy as np
 
@@ -104,11 +102,6 @@ from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.core.environment import Environment, SpaceInfo, SpaceType
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
 from POMDPPlanners.utils.statistics_utils import confidence_interval
-
-if TYPE_CHECKING:  # avoid a runtime import cycle (the pipeline imports this module's schema)
-    from POMDPPlanners.environments.carla_pomdp.carla_perception import (
-        CarlaPerceptionPipeline,
-    )
 
 # Default discrete control presets as ``(throttle, steer, brake)`` triples.
 DEFAULT_ACTION_PRESETS: Tuple[Tuple[float, float, float], ...] = (
@@ -348,8 +341,6 @@ class _CarlaSession:
         num_vehicles: int = DEFAULT_NUM_VEHICLES,
         num_walkers: int = DEFAULT_NUM_WALKERS,
         max_tracked_agents: int = DEFAULT_MAX_TRACKED_AGENTS,
-        perception_range: Optional[float] = DEFAULT_PERCEPTION_RANGE,
-        occlusion_radius: float = DEFAULT_OCCLUSION_RADIUS,
         traffic_manager_port: int = DEFAULT_TRAFFIC_MANAGER_PORT,
         randomize_spawn: bool = True,
         observation_extractor: Optional[Callable[[Dict[str, np.ndarray]], Any]] = None,
@@ -363,8 +354,6 @@ class _CarlaSession:
         self._num_vehicles = num_vehicles
         self._num_walkers = num_walkers
         self._max_tracked_agents = max_tracked_agents
-        self._perception_range = perception_range
-        self._occlusion_radius = occlusion_radius
         self._traffic_manager_port = traffic_manager_port
         self._randomize_spawn = randomize_spawn
         self._record_camera = record_camera
@@ -609,7 +598,7 @@ class _CarlaSession:
                 heading_err,
             ]
         )
-        agent_rows = self._agent_rows(detected_only=False)
+        agent_rows = self._agent_rows()
         return np.concatenate([ego, agent_rows.reshape(-1), self._read_state_traffic_light()])
 
     def _read_state_traffic_light(self) -> np.ndarray:
@@ -670,12 +659,12 @@ class _CarlaSession:
         others.sort(key=lambda actor: actor.get_location().distance(ego_location))
         return others[: self._max_tracked_agents]
 
-    def _agent_rows(self, detected_only: bool) -> np.ndarray:
-        """Fixed ``(K, AGENT_SLOT_WIDTH)`` matrix of nearest-agent slots in ego frame.
+    def _agent_rows(self) -> np.ndarray:
+        """Fixed ``(K, AGENT_SLOT_WIDTH)`` matrix of the nearest-agent slots in ego frame.
 
-        When ``detected_only`` is set, agents that are out of range or occluded are
-        left as empty (``present == 0``) slots, so the same slot index that carries
-        an agent in the ground-truth state is hidden in the observation.
+        Every nearest agent is reported at its true ego-frame pose; the world applies no
+        perception. Range-gating and occlusion are the planner model's observation model,
+        so the world's ``agents`` block is the raw ground-truth channel.
         """
         rows = np.zeros((self._max_tracked_agents, AGENT_SLOT_WIDTH))
         ego_transform = self._vehicle.get_transform()
@@ -684,8 +673,6 @@ class _CarlaSession:
         ego_yaw = np.radians(ego_transform.rotation.yaw)
         nearest = self._nearest_agents()
         for slot, actor in enumerate(nearest):
-            if detected_only and not self._is_detected(ego_location, actor, nearest):
-                continue
             other_transform = actor.get_transform()
             other_velocity = actor.get_velocity()
             rows[slot] = _relative_agent_row(
@@ -698,29 +685,6 @@ class _CarlaSession:
                 float(np.hypot(other_velocity.x, other_velocity.y)),
             )
         return rows
-
-    def _is_detected(self, ego_location: Any, actor: Any, nearest: List[Any]) -> bool:
-        """Whether ``actor`` is within perception range and not occluded by a vehicle."""
-        target = actor.get_location()
-        if self._perception_range is not None and (
-            target.distance(ego_location) > self._perception_range
-        ):
-            return False
-        for blocker in nearest:
-            if blocker.id == actor.id:
-                continue
-            blocker_location = blocker.get_location()
-            if _segment_occludes(
-                ego_location.x,
-                ego_location.y,
-                target.x,
-                target.y,
-                blocker_location.x,
-                blocker_location.y,
-                self._occlusion_radius,
-            ):
-                return False
-        return True
 
     def _lane_geometry(self, location: Any, yaw_deg: float) -> Tuple[float, float]:
         """Signed lateral offset (m) and heading error (rad) w.r.t. the driving lane.
@@ -743,7 +707,7 @@ class _CarlaSession:
     def _read_observation(self) -> Dict[str, np.ndarray]:
         observation: Dict[str, np.ndarray] = {
             "gnss": self._read_gnss(),
-            "agents": self._agent_rows(detected_only=True).reshape(-1),
+            "agents": self._agent_rows().reshape(-1),
         }
         if self._include_traffic_light:
             observation["traffic_light"] = self._read_traffic_light()
@@ -890,12 +854,9 @@ class CarlaPOMDP(Environment):
         num_vehicles: int = DEFAULT_NUM_VEHICLES,
         num_walkers: int = DEFAULT_NUM_WALKERS,
         max_tracked_agents: int = DEFAULT_MAX_TRACKED_AGENTS,
-        perception_range: Optional[float] = DEFAULT_PERCEPTION_RANGE,
-        occlusion_radius: float = DEFAULT_OCCLUSION_RADIUS,
         traffic_manager_port: int = DEFAULT_TRAFFIC_MANAGER_PORT,
         randomize_spawn: bool = True,
         observation_extractor: Optional[Callable[[Dict[str, np.ndarray]], Any]] = None,
-        perception_pipeline: Optional["CarlaPerceptionPipeline"] = None,
         vehicle_filter: str = "vehicle.tesla.model3",
         timeout: float = 10.0,
         seed: Optional[int] = None,
@@ -947,13 +908,6 @@ class CarlaPOMDP(Environment):
             max_tracked_agents: Number of nearest other vehicles carried as fixed
                 slots in the state and observation. Defaults to
                 :data:`DEFAULT_MAX_TRACKED_AGENTS`.
-            perception_range: Metres beyond which another agent is undetectable and
-                hidden from the observation, or ``None`` to disable the range gate entirely
-                (every nearest-tracked agent stays visible regardless of distance). Defaults
-                to :data:`DEFAULT_PERCEPTION_RANGE`.
-            occlusion_radius: Metres from the ego->target sight line within which a
-                vehicle blocks (occludes) the target. Defaults to
-                :data:`DEFAULT_OCCLUSION_RADIUS`.
             traffic_manager_port: CARLA Traffic Manager RPC port used to drive the
                 traffic vehicles. Defaults to :data:`DEFAULT_TRAFFIC_MANAGER_PORT`.
             randomize_spawn: If True, sample a random ego spawn point (and weather)
@@ -964,15 +918,6 @@ class CarlaPOMDP(Environment):
                 keys or a flattened vector). Must be a picklable (module-level)
                 callable, since the environment is pickled for distributed runs.
                 Defaults to None, which emits the full dict unchanged.
-            perception_pipeline: Optional
-                :class:`~POMDPPlanners.environments.carla_pomdp.carla_perception.carla_pipeline.CarlaPerceptionPipeline`
-                run on every emitted observation: it replaces the raw ``agents`` block with the
-                *perceived* object list (vehicles clustered/tracked from the lidar, a fused
-                forward hazard and a camera-inferred traffic light folded in), so the world emits
-                the same perceived observation the planner's model scores. Its tracker state is
-                advanced once per real step and reset each episode. The pipeline's
-                ``max_tracked_agents`` must equal this world's. Defaults to None (the raw
-                ground-truth-detected ``agents`` block is emitted unchanged).
             vehicle_filter: Blueprint filter for the ego vehicle. Defaults to
                 ``"vehicle.tesla.model3"``.
             timeout: CARLA client timeout in seconds. Defaults to 10.0.
@@ -1011,19 +956,12 @@ class CarlaPOMDP(Environment):
         self.num_vehicles = num_vehicles
         self.num_walkers = num_walkers
         self.max_tracked_agents = max_tracked_agents
-        self.perception_range = perception_range
-        self.occlusion_radius = occlusion_radius
         self.traffic_manager_port = traffic_manager_port
         self.randomize_spawn = randomize_spawn
         self.observation_extractor = observation_extractor
-        self.perception_pipeline = perception_pipeline
         self.vehicle_filter = vehicle_filter
         self.timeout = timeout
         self.seed = seed
-
-        # Live perception state: the pipeline advanced across ticks (reset each episode to the
-        # configured base), kept separate from the picklable base config above.
-        self._perception_pipeline: Optional["CarlaPerceptionPipeline"] = perception_pipeline
 
         # Live-session state: rebuilt lazily and never serialized.
         self._session: Optional[Any] = None
@@ -1062,7 +1000,6 @@ class CarlaPOMDP(Environment):
         state["_seeded"] = False
         state["_pending"] = None
         state["_served_roles"] = set()
-        state["_perception_pipeline"] = self.perception_pipeline  # drop advanced tracker state
         return state
 
     def __setstate__(self, state: Dict[str, Any]) -> None:
@@ -1074,7 +1011,6 @@ class CarlaPOMDP(Environment):
         self._seeded = False
         self._pending = None
         self._served_roles = set()
-        self._perception_pipeline = self.perception_pipeline
 
     # ── Live simulator management ───────────────────────────────────────
     def _get_session(self) -> Any:
@@ -1097,8 +1033,6 @@ class CarlaPOMDP(Environment):
                 num_vehicles=self.num_vehicles,
                 num_walkers=self.num_walkers,
                 max_tracked_agents=self.max_tracked_agents,
-                perception_range=self.perception_range,
-                occlusion_radius=self.occlusion_radius,
                 traffic_manager_port=self.traffic_manager_port,
                 randomize_spawn=self.randomize_spawn,
                 observation_extractor=self.observation_extractor,
@@ -1107,7 +1041,6 @@ class CarlaPOMDP(Environment):
 
     def _reset(self) -> np.ndarray:
         session = self._get_session()
-        self._perception_pipeline = self.perception_pipeline  # fresh tracker state per episode
         if self.seed is not None and not self._seeded:
             state, observation = session.reset(seed=self.seed)
             self._seeded = True
@@ -1115,27 +1048,11 @@ class CarlaPOMDP(Environment):
             state, observation = session.reset()
         state = np.asarray(state)
         self._live_state = state
-        self._latest_obs = self._perceive(observation)
+        self._latest_obs = observation
         self._terminated = False
         self._pending = None
         self._served_roles = set()
         return state
-
-    def _perceive(self, observation: Any) -> Any:
-        """Emit the perceived observation, advancing the perception pipeline one step.
-
-        When no pipeline is configured the raw session observation is returned unchanged.
-        Otherwise the pipeline replaces the ``agents`` block with the perceived, tracked object
-        list (obstacles and traffic lights folded in) and its advanced successor is carried
-        forward, so the world emits the same perceived observation the planner's model scores.
-        """
-        if self._perception_pipeline is None or not isinstance(observation, dict):
-            return observation
-        output = self._perception_pipeline.process(observation)
-        self._perception_pipeline = output.pipeline
-        perceived = dict(observation)
-        perceived["agents"] = output.agent_rows.reshape(-1)
-        return perceived
 
     def _to_control(self, action: Any) -> Tuple[float, float, float]:
         return self.action_presets[int(action)]
@@ -1192,7 +1109,6 @@ class CarlaPOMDP(Environment):
         throttle, steer, brake = self._to_control(action)
         next_state, observation, terminated = session.step(throttle, steer, brake)
         next_state = np.asarray(next_state)
-        observation = self._perceive(observation)
         done = bool(terminated)
         pending = {
             "state": np.asarray(state).copy(),
