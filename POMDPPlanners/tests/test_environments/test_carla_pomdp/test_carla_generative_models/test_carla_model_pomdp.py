@@ -18,7 +18,9 @@ from POMDPPlanners.environments.carla_pomdp.carla_generative_models import (
     FactoredCarlaModelPOMDP,
 )
 from POMDPPlanners.environments.carla_pomdp.carla_perception import (
-    FactoredObservationModel,
+    CarlaObservationModel,
+    FactoredAgentObservationModel,
+    GnssObservationModel,
 )
 from POMDPPlanners.environments.carla_pomdp.carla_pomdp import (
     AGENT_SLOT_WIDTH,
@@ -213,10 +215,13 @@ def test_observation_log_probability_prefers_matching_observation():
     """
     env = FactoredCarlaModelPOMDP(discount_factor=0.95)
     state = _make_state([np.array([1.0, 10.0, 1.0, 0.2, 3.0])])
-    assert isinstance(env.perception, FactoredObservationModel)
-    clean = env.perception.render(
-        env._clean_observation(state), noisy=False  # pylint: disable=protected-access
-    )
+    agent_model = env.observation_models["agents"]
+    assert isinstance(agent_model, FactoredAgentObservationModel)
+    clean_state = env._clean_observation(state)  # pylint: disable=protected-access
+    clean = {
+        "gnss": clean_state["gnss"],
+        "agents": agent_model.render(clean_state["agents"], noisy=False),
+    }
 
     mismatched = {
         "gnss": clean["gnss"].copy(),
@@ -383,6 +388,124 @@ def test_learned_dynamics_subclass_plugs_into_sample_next_step():
     assert next_state[0] == state[0] + 1.0
     assert sorted(observation) == ["agents", "gnss"]
     assert reward == 2.0
+
+
+def test_encode_observation_perceives_raw_world_observation():
+    """encode_observation degrades the world's raw observation through the model's perception.
+
+    Purpose: Validates the raw-observation seam gates unseen agents like sample_observation
+
+    Given: A model with a 50 m perception range and a raw world observation holding a near
+        (in-range) agent and a far (out-of-range) agent, both flagged present
+    When: encode_observation is called on that raw observation
+    Then: The returned perceived observation keeps the near agent's slot present, zeroes the
+        far agent's slot (range-gated), and preserves the schema keys
+
+    Test type: unit
+    """
+    np.random.seed(0)
+    env = FactoredCarlaModelPOMDP(discount_factor=0.95, perception_range=50.0)
+    rows = np.zeros((DEFAULT_MAX_TRACKED_AGENTS, AGENT_SLOT_WIDTH))
+    rows[0] = np.array([1.0, 10.0, 0.0, 0.0, 0.0])  # near, in range
+    rows[1] = np.array([1.0, 100.0, 0.0, 0.0, 0.0])  # far, beyond the range gate
+    raw = {"gnss": np.zeros(2), "agents": rows.reshape(-1)}
+
+    perceived = env.encode_observation(raw)
+    assert sorted(perceived) == ["agents", "gnss"]
+    obs_rows = perceived["agents"].reshape(DEFAULT_MAX_TRACKED_AGENTS, AGENT_SLOT_WIDTH)
+    assert obs_rows[0, 0] == 1.0  # near agent kept
+    assert obs_rows[1, 0] == 0.0  # far agent gated out
+
+
+def test_encode_observation_identity_without_perception():
+    """A model without a clean-observation perception encodes the raw observation as identity.
+
+    Purpose: Validates the encode_observation fallback for models without channel models
+
+    Given: A factored model whose observation-model map has been cleared (``None``)
+    When: encode_observation is called with a raw observation
+    Then: The same observation object is returned unchanged (the base identity default)
+
+    Test type: unit
+    """
+    env = FactoredCarlaModelPOMDP(discount_factor=0.95)
+    env.observation_models = None  # emulate a subclass that overrides the observation methods
+    raw = {"gnss": np.zeros(2), "agents": np.zeros(DEFAULT_MAX_TRACKED_AGENTS * AGENT_SLOT_WIDTH)}
+    assert env.encode_observation(raw) is raw
+
+
+def test_observation_selection_resolves_channel_models_via_registry():
+    """The ``observation`` selection resolves per-channel models from the registry.
+
+    Purpose: Validates user-selectable per-channel observation models at env init
+
+    Given: A factored model constructed with an explicit gnss/agents selection
+    When: The env's observation_models map is inspected
+    Then: Each channel holds the registered model type for its selected name
+
+    Test type: integration
+    """
+    env = FactoredCarlaModelPOMDP(
+        discount_factor=0.95,
+        observation={"gnss": "gaussian", "agents": "factored"},
+    )
+    assert isinstance(env.observation_models["gnss"], GnssObservationModel)
+    assert isinstance(env.observation_models["agents"], FactoredAgentObservationModel)
+
+
+def test_observation_log_probability_composes_per_channel_densities():
+    """The env's observation density is the sum of the per-channel densities.
+
+    Purpose: Validates the base composes channel models by summing their log-densities
+
+    Given: A factored model, a state, and a perceived observation sampled from it
+    When: observation_log_probability is computed for that observation
+    Then: It equals the sum of each channel model's log_probability on its channel
+
+    Test type: unit
+    """
+    np.random.seed(0)
+    env = FactoredCarlaModelPOMDP(discount_factor=0.95)
+    state = _make_state([np.array([1.0, 10.0, 1.0, 0.2, 3.0])])
+    clean = env._clean_observation(state)  # pylint: disable=protected-access
+    observation = env.sample_observation(state, action=0)
+
+    total = env.observation_log_probability(state, action=0, observations=observation)[0]
+    per_channel = sum(
+        model.log_probability(clean[channel], observation[channel])
+        for channel, model in env.observation_models.items()
+    )
+    assert total == pytest.approx(per_channel)
+
+
+def test_observation_log_probability_rejects_a_sample_only_channel():
+    """A channel without a density makes the belief-scoring path raise.
+
+    Purpose: Validates the density requirement spans every composed channel
+
+    Given: A factored model whose gnss channel is swapped for a sample-only model
+    When: observation_log_probability is called
+    Then: NotImplementedError is raised naming the sample-only channel
+
+    Test type: unit
+    """
+
+    class _SampleOnlyGnss(CarlaObservationModel):
+        channel = "gnss"
+        supports_density = False
+
+        def perceive(self, clean_channel: Any) -> np.ndarray:
+            return np.asarray(clean_channel, dtype=float)
+
+    env = FactoredCarlaModelPOMDP(discount_factor=0.95)
+    assert env.observation_models is not None
+    models = dict(env.observation_models)
+    models["gnss"] = _SampleOnlyGnss()
+    env.observation_models = models
+    state = _make_state([])
+    observation = env.sample_observation(state, action=0)
+    with pytest.raises(NotImplementedError, match="sample-only"):
+        env.observation_log_probability(state, action=0, observations=observation)
 
 
 def test_factored_model_docstring_example():

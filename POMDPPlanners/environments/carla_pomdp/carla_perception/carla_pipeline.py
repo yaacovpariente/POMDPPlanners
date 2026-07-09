@@ -46,9 +46,6 @@ from typing import Any, Optional
 
 import numpy as np
 
-from POMDPPlanners.environments.carla_pomdp.carla_perception.observation_model import (
-    CarlaObservationModel,
-)
 from POMDPPlanners.environments.carla_pomdp.carla_perception.carla_sensors import (
     DEFAULT_CORRIDOR_HALFWIDTH,
     camera_looming_cue,
@@ -275,7 +272,7 @@ class AlphaBetaTracker(MotionTracker):
         return update_tracks(tracks, vehicle_positions, dt)
 
 
-class CarlaPerceptionPipeline(CarlaObservationModel):
+class CarlaPerceptionPipeline:
     """Standalone perception + prediction stage: raw observation -> agent slots + obstacle.
 
     Composes a :class:`PerceptionModel` (single-frame) and a :class:`MotionTracker` (temporal),
@@ -283,12 +280,13 @@ class CarlaPerceptionPipeline(CarlaObservationModel):
     particles plus a fused forward-obstacle distance. Immutable: :meth:`process` returns a
     :class:`PerceptionOutput` carrying a successor pipeline with the advanced tracks.
 
-    As a sensor-driven, temporally-stateful stage it is a *sample-only*
-    :class:`~POMDPPlanners.environments.carla_pomdp.carla_perception.observation_model.CarlaObservationModel`
-    (``supports_density = False``): it perceives an observation but exposes no observation
-    density. The world threads its tracker state forward via :meth:`process`; the
-    :meth:`perceive` interface method returns a single perceived observation without carrying
-    the advanced tracks, for callers that only need one reading.
+    It is a whole-observation sensor-fusion stage (fusing lidar/camera into the agent block),
+    not a per-channel
+    :class:`~POMDPPlanners.environments.carla_pomdp.carla_perception.observation_model.CarlaObservationModel`:
+    it perceives a whole observation and exposes no observation density. The world threads its
+    tracker state forward via :meth:`process`; the :meth:`perceive` convenience method returns a
+    single perceived observation without carrying the advanced tracks, for callers that only need
+    one reading.
 
     Attributes:
         max_tracked_agents: Number of agent slots produced in the agent block.
