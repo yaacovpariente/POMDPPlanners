@@ -168,10 +168,14 @@ class EpisodeRunner:
         """Execute one action: compute reward, sample transition, update belief."""
         reward = self._compute_reward(action)
         next_state = self._sample_next_state(action)
-        observation = self._sample_observation(next_state=next_state, action=action)
+        raw_observation = self._sample_observation(next_state=next_state, action=action)
+        # The world emits a raw observation; the planner's model encodes it into the
+        # space the belief filter and planner search operate in (identity by default).
+        # History keeps the raw observation; only the belief update sees the encoded one.
+        encoded_observation = self.model_environment.encode_observation(raw_observation)
 
-        self._record_step(action, next_state, observation, reward)
-        self._update_belief(action, observation, next_state)
+        self._record_step(action, next_state, raw_observation, reward)
+        self._update_belief(action, encoded_observation, next_state)
 
         self.state = next_state
 

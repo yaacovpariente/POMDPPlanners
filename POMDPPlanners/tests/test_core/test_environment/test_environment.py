@@ -537,3 +537,43 @@ class TestHashObservationDefault:
         """
         assert base_environment.hash_observation("a") == base_environment.hash_observation("a")
         assert base_environment.hash_observation("a") != base_environment.hash_observation("b")
+
+
+class TestEncodeObservationDefault:
+    """Default ``Environment.encode_observation`` behaviour."""
+
+    def test_returns_observation_unchanged(self, base_environment: MockEnvironment):
+        """Default encode_observation is the identity.
+
+        Purpose: Validates that an environment without an encoder leaves observations untouched
+
+        Given: MockEnvironment instance and an arbitrary observation
+        When: encode_observation is called with that observation
+        Then: The same observation object is returned unchanged
+
+        Test type: unit
+        """
+        observation = np.array([1.0, 2.0, 3.0])
+        assert base_environment.encode_observation(observation) is observation
+        assert base_environment.encode_observation("o1") == "o1"
+        assert base_environment.encode_observation(7) == 7
+
+    def test_override_maps_raw_to_encoded(self):
+        """A subclass override maps a raw observation into an encoded space.
+
+        Purpose: Validates that encode_observation is the single seam a model overrides
+
+        Given: An Environment subclass whose encode_observation doubles the observation
+        When: encode_observation is called with a raw observation
+        Then: The encoded (doubled) observation is returned
+
+        Test type: unit
+        """
+
+        class EncodingEnvironment(MockEnvironment):
+            def encode_observation(self, observation: Any) -> Any:
+                return np.asarray(observation) * 2
+
+        env = EncodingEnvironment(discount_factor=0.9)
+        encoded = env.encode_observation(np.array([1.0, 2.0, 3.0]))
+        assert np.array_equal(encoded, np.array([2.0, 4.0, 6.0]))
