@@ -212,14 +212,14 @@ def seed_belief(model: CarlaModelPOMDP, n_particles: int, initial_observation: d
     world's initial observation and use a plain filter.
 
     For the factored/kinematic model each particle is ego near the origin with jitter, with
-    its agent block seeded from the world's first *perceived* ``agents`` (so the planner sees
-    the traffic in view at step 0). The belief is a
+    its agent block seeded from the world's first raw ``agents`` (so the planner sees the
+    traffic in view at step 0). The belief is a
     :class:`~POMDPPlanners.environments.carla_pomdp.carla_belief.PerceivedAgentsBelief`, which on
-    every update stamps each particle's agent block with the observation's perceived ``agents``
-    block — the perception itself is done by the world's observation model (see
-    :func:`build_world`), not the belief. Without this stamping a plain particle filter could
-    never acquire a vehicle that appears mid-episode; the perceived traffic and signals are used
-    by the planner, not a reactive override.
+    every update stamps each particle's agent block with the observation's ``agents`` block —
+    perception itself is the planner model's, applied by its ``encode_observation`` (see
+    :func:`build_model`), not the world or the belief. Without this stamping a plain particle
+    filter could never acquire a vehicle that appears mid-episode; the perceived traffic and
+    signals are used by the planner, not a reactive override.
     """
     log_weights = np.log(np.ones(n_particles) / n_particles)
     if isinstance(model, DreamerCarlaModelPOMDP):

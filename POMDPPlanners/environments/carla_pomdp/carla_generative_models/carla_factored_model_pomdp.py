@@ -4,13 +4,15 @@
 
 :class:`FactoredCarlaModelPOMDP` implements the
 :class:`~POMDPPlanners.environments.carla_pomdp.carla_generative_models.carla_model_pomdp.CarlaModelPOMDP`
-interface by holding a
-:class:`~POMDPPlanners.environments.carla_pomdp.carla_perception.observation_model.FactoredObservationModel`
-perception (per-slot agent detection with range + occlusion gating and additive Gaussian
-pose noise, plus a Gaussian GNSS reading) — the observation methods themselves are inherited
-from the base and driven by that perception — together with the same gym-carla
-driving-quality reward the world uses. The transition dynamics are a documented identity
-placeholder for a specific study to replace with real (e.g. learned) motion.
+interface by composing per-channel observation models — a
+:class:`~POMDPPlanners.environments.carla_pomdp.carla_perception.observation_models.agent_models.FactoredAgentObservationModel`
+on the ``agents`` channel (per-slot detection with range + occlusion gating and additive Gaussian
+pose noise) and a
+:class:`~POMDPPlanners.environments.carla_pomdp.carla_perception.observation_models.gnss_models.GnssObservationModel`
+on the ``gnss`` channel — the observation methods themselves are inherited from the base and
+driven by that map, together with the same gym-carla driving-quality reward the world uses. The
+transition dynamics are a documented identity placeholder for a specific study to replace with
+real (e.g. learned) motion.
 
 State/observation layout and the shared reward are imported from
 :mod:`~POMDPPlanners.environments.carla_pomdp.carla_pomdp` so world and model agree by
@@ -20,7 +22,7 @@ Classes:
     FactoredCarlaModelPOMDP: Concrete CARLA model with a factored-perception observation model.
 """
 
-from typing import Any, Optional, Sequence, Tuple
+from typing import Any, Dict, Optional, Sequence, Tuple
 
 import numpy as np
 
@@ -28,8 +30,8 @@ from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.environments.carla_pomdp.carla_generative_models.carla_model_pomdp import (
     CarlaModelPOMDP,
 )
-from POMDPPlanners.environments.carla_pomdp.carla_perception.observation_model import (
-    FactoredObservationModel,
+from POMDPPlanners.environments.carla_pomdp.carla_perception.observation_models import (
+    build_observation_model,
 )
 from POMDPPlanners.environments.carla_pomdp.carla_pomdp import (
     DEFAULT_MAX_TRACKED_AGENTS,
@@ -42,18 +44,18 @@ from POMDPPlanners.environments.carla_pomdp.carla_pomdp import (
 class FactoredCarlaModelPOMDP(CarlaModelPOMDP):
     """Concrete CARLA generative model pairing placeholder dynamics with factored perception.
 
-    The observation model is a
-    :class:`~POMDPPlanners.environments.carla_pomdp.carla_perception.observation_model.FactoredObservationModel`
-    (held as ``self.perception``): factored per agent slot (detection gated by perception
-    range and geometric occlusion, additive Gaussian pose noise) plus a Gaussian GNSS
-    reading. The reward is the shared gym-carla driving-quality reward. The transition is a
+    The observation is composed per channel (held as ``self.observation_models``): a
+    :class:`~POMDPPlanners.environments.carla_pomdp.carla_perception.observation_models.agent_models.FactoredAgentObservationModel`
+    on ``agents`` (detection gated by perception range and geometric occlusion, additive Gaussian
+    pose noise) and a
+    :class:`~POMDPPlanners.environments.carla_pomdp.carla_perception.observation_models.gnss_models.GnssObservationModel`
+    on ``gnss``. The reward is the shared gym-carla driving-quality reward. The transition is a
     documented identity placeholder to be replaced with real dynamics per study.
 
     Attributes:
-        perception: The
-            :class:`~POMDPPlanners.environments.carla_pomdp.carla_perception.observation_model.FactoredObservationModel`
-            carrying the observation parameters (``perception_range``, ``occlusion_radius``,
-            ``pose_std``, ``gnss_std``, ``detect_prob``).
+        observation_models: The per-channel ``{channel: CarlaObservationModel}`` map carrying the
+            observation parameters (``perception_range``, ``occlusion_radius``, ``pose_std``,
+            ``gnss_std``, ``detect_prob``).
         desired_speed: Target longitudinal speed (m/s) used by the reward.
         out_lane_thresh: Lateral offset (m) beyond which the reward penalises out-of-lane.
         collision_penalty: Penalty scale applied on a terminal collision in the reward.
@@ -90,6 +92,7 @@ class FactoredCarlaModelPOMDP(CarlaModelPOMDP):
         desired_speed: float = 8.0,
         out_lane_thresh: float = 2.0,
         collision_penalty: float = 100.0,
+        observation: Optional[Dict[str, str]] = None,
         name: Optional[str] = None,
     ) -> None:
         """Initialize the factored CARLA generative model.
@@ -108,24 +111,36 @@ class FactoredCarlaModelPOMDP(CarlaModelPOMDP):
             desired_speed: Target longitudinal speed (m/s) for the reward.
             out_lane_thresh: Lateral offset (m) beyond which the reward penalises.
             collision_penalty: Penalty scale for a terminal collision in the reward.
+            observation: Per-channel model selection ``{channel: registered_name}`` resolved via
+                the observation-model registry. Defaults to
+                ``{"gnss": "gaussian", "agents": "factored"}``.
             name: Environment identifier. Defaults to the class name.
         """
         self.desired_speed = desired_speed
         self.out_lane_thresh = out_lane_thresh
         self.collision_penalty = collision_penalty
-        perception = FactoredObservationModel(
-            max_tracked_agents=max_tracked_agents,
-            perception_range=perception_range,
-            occlusion_radius=occlusion_radius,
-            pose_std=pose_std,
-            gnss_std=gnss_std,
-            detect_prob=detect_prob,
+        selection = (
+            observation if observation is not None else {"gnss": "gaussian", "agents": "factored"}
         )
+        channel_kwargs: Dict[str, Dict[str, Any]] = {
+            "gnss": {"gnss_std": gnss_std},
+            "agents": {
+                "max_tracked_agents": max_tracked_agents,
+                "perception_range": perception_range,
+                "occlusion_radius": occlusion_radius,
+                "pose_std": pose_std,
+                "detect_prob": detect_prob,
+            },
+        }
+        observation_models = {
+            channel: build_observation_model(channel, model_name, **channel_kwargs.get(channel, {}))
+            for channel, model_name in selection.items()
+        }
         super().__init__(
             discount_factor=discount_factor,
             action_presets=action_presets,
             max_tracked_agents=max_tracked_agents,
-            perception=perception,
+            observation_models=observation_models,
             name=name,
         )
 
