@@ -280,6 +280,14 @@ class CarlaPerceptionPipeline:
     particles plus a fused forward-obstacle distance. Immutable: :meth:`process` returns a
     :class:`PerceptionOutput` carrying a successor pipeline with the advanced tracks.
 
+    It is a whole-observation sensor-fusion stage (fusing lidar/camera into the agent block),
+    not a per-channel
+    :class:`~POMDPPlanners.environments.carla_pomdp.carla_perception.observation_model.CarlaObservationModel`:
+    it perceives a whole observation and exposes no observation density. The world threads its
+    tracker state forward via :meth:`process`; the :meth:`perceive` convenience method returns a
+    single perceived observation without carrying the advanced tracks, for callers that only need
+    one reading.
+
     Attributes:
         max_tracked_agents: Number of agent slots produced in the agent block.
         perception: The single-frame :class:`PerceptionModel`.
@@ -361,6 +369,23 @@ class CarlaPerceptionPipeline:
             obstacle_distance=obstacle,
             pipeline=self._successor(tracks),
         )
+
+    def perceive(self, clean_observation: Mapping[str, Any]) -> dict:
+        """Perceive one observation, replacing its ``agents`` block with tracked slots.
+
+        Unlike :meth:`process` this discards the advanced tracker state: it yields a single
+        perceived observation for callers that only need one reading. Use :meth:`process`
+        when the successor pipeline (advanced tracks) must be threaded forward.
+
+        Args:
+            clean_observation: The world's raw observation dict.
+
+        Returns:
+            The perceived observation dict with the tracked ``agents`` block.
+        """
+        perceived = dict(clean_observation)
+        perceived["agents"] = self.process(clean_observation).agent_rows.reshape(-1)
+        return perceived
 
     def _pack_agent_rows(self, tracks: np.ndarray) -> np.ndarray:
         rows = np.zeros((self.max_tracked_agents, AGENT_SLOT_WIDTH))

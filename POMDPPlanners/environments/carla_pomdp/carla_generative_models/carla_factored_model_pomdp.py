@@ -1,24 +1,28 @@
 # SPDX-License-Identifier: MIT
 
-"""Reference concrete CARLA generative model with a fixed factored observation model.
+"""Reference concrete CARLA generative model pairing dynamics with factored perception.
 
 :class:`FactoredCarlaModelPOMDP` implements the
 :class:`~POMDPPlanners.environments.carla_pomdp.carla_generative_models.carla_model_pomdp.CarlaModelPOMDP`
-interface with a fixed, factored observation model (per-slot agent detection with range +
-occlusion gating and additive Gaussian pose noise, plus a Gaussian GNSS reading) and the
-same gym-carla driving-quality reward the world uses. The transition dynamics are a
-documented identity placeholder for a specific study to replace with real (e.g. learned)
-motion.
+interface by composing per-channel observation models — a
+:class:`~POMDPPlanners.environments.carla_pomdp.carla_perception.observation_models.agent_models.FactoredAgentObservationModel`
+on the ``agents`` channel (per-slot detection with range + occlusion gating and additive Gaussian
+pose noise) and a
+:class:`~POMDPPlanners.environments.carla_pomdp.carla_perception.observation_models.gnss_models.GnssObservationModel`
+on the ``gnss`` channel — the observation methods themselves are inherited from the base and
+driven by that map, together with the same gym-carla driving-quality reward the world uses. The
+transition dynamics are a documented identity placeholder for a specific study to replace with
+real (e.g. learned) motion.
 
-State/observation layout, geometry helpers, detection constants, and the shared reward are
-imported from :mod:`~POMDPPlanners.environments.carla_pomdp.carla_pomdp` so world and model
-agree by construction.
+State/observation layout and the shared reward are imported from
+:mod:`~POMDPPlanners.environments.carla_pomdp.carla_pomdp` so world and model agree by
+construction.
 
 Classes:
-    FactoredCarlaModelPOMDP: Concrete CARLA model with a factored observation model.
+    FactoredCarlaModelPOMDP: Concrete CARLA model with a factored-perception observation model.
 """
 
-from typing import Any, Optional, Sequence, Tuple
+from typing import Any, Dict, Optional, Sequence, Tuple
 
 import numpy as np
 
@@ -26,34 +30,32 @@ from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.environments.carla_pomdp.carla_generative_models.carla_model_pomdp import (
     CarlaModelPOMDP,
 )
+from POMDPPlanners.environments.carla_pomdp.carla_perception.observation_models import (
+    build_observation_model,
+)
 from POMDPPlanners.environments.carla_pomdp.carla_pomdp import (
-    AGENT_SLOT_WIDTH,
     DEFAULT_MAX_TRACKED_AGENTS,
     DEFAULT_OCCLUSION_RADIUS,
     DEFAULT_PERCEPTION_RANGE,
-    _segment_occludes,
     driving_quality_reward,
 )
 
-_LOG_EPS = -50.0  # log-prob floor for impossible / near-zero events
-
 
 class FactoredCarlaModelPOMDP(CarlaModelPOMDP):
-    """Concrete CARLA generative model with a fixed factored observation model.
+    """Concrete CARLA generative model pairing placeholder dynamics with factored perception.
 
-    The observation model is factored per agent slot (detection gated by perception range
-    and geometric occlusion, additive Gaussian pose noise) plus a Gaussian GNSS reading;
-    the reward is the shared gym-carla driving-quality reward. The transition is a
+    The observation is composed per channel (held as ``self.observation_models``): a
+    :class:`~POMDPPlanners.environments.carla_pomdp.carla_perception.observation_models.agent_models.FactoredAgentObservationModel`
+    on ``agents`` (detection gated by perception range and geometric occlusion, additive Gaussian
+    pose noise) and a
+    :class:`~POMDPPlanners.environments.carla_pomdp.carla_perception.observation_models.gnss_models.GnssObservationModel`
+    on ``gnss``. The reward is the shared gym-carla driving-quality reward. The transition is a
     documented identity placeholder to be replaced with real dynamics per study.
 
     Attributes:
-        perception_range: Metres beyond which an agent is undetectable.
-        occlusion_radius: Sight-line blocking radius among agents.
-        pose_std: Std of Gaussian noise on a detected agent's ``[rel_x, rel_y, rel_yaw,
-            rel_speed]`` measurement.
-        gnss_std: Std of Gaussian noise on the ``gnss`` reading.
-        detect_prob: Probability of detecting a visible (in-range, un-occluded) agent;
-            ``1 - detect_prob`` is the miss rate.
+        observation_models: The per-channel ``{channel: CarlaObservationModel}`` map carrying the
+            observation parameters (``perception_range``, ``occlusion_radius``, ``pose_std``,
+            ``gnss_std``, ``detect_prob``).
         desired_speed: Target longitudinal speed (m/s) used by the reward.
         out_lane_thresh: Lateral offset (m) beyond which the reward penalises out-of-lane.
         collision_penalty: Penalty scale applied on a terminal collision in the reward.
@@ -90,6 +92,7 @@ class FactoredCarlaModelPOMDP(CarlaModelPOMDP):
         desired_speed: float = 8.0,
         out_lane_thresh: float = 2.0,
         collision_penalty: float = 100.0,
+        observation: Optional[Dict[str, str]] = None,
         name: Optional[str] = None,
     ) -> None:
         """Initialize the factored CARLA generative model.
@@ -108,20 +111,36 @@ class FactoredCarlaModelPOMDP(CarlaModelPOMDP):
             desired_speed: Target longitudinal speed (m/s) for the reward.
             out_lane_thresh: Lateral offset (m) beyond which the reward penalises.
             collision_penalty: Penalty scale for a terminal collision in the reward.
+            observation: Per-channel model selection ``{channel: registered_name}`` resolved via
+                the observation-model registry. Defaults to
+                ``{"gnss": "gaussian", "agents": "factored"}``.
             name: Environment identifier. Defaults to the class name.
         """
-        self.perception_range = perception_range
-        self.occlusion_radius = occlusion_radius
-        self.pose_std = pose_std
-        self.gnss_std = gnss_std
-        self.detect_prob = detect_prob
         self.desired_speed = desired_speed
         self.out_lane_thresh = out_lane_thresh
         self.collision_penalty = collision_penalty
+        selection = (
+            observation if observation is not None else {"gnss": "gaussian", "agents": "factored"}
+        )
+        channel_kwargs: Dict[str, Dict[str, Any]] = {
+            "gnss": {"gnss_std": gnss_std},
+            "agents": {
+                "max_tracked_agents": max_tracked_agents,
+                "perception_range": perception_range,
+                "occlusion_radius": occlusion_radius,
+                "pose_std": pose_std,
+                "detect_prob": detect_prob,
+            },
+        }
+        observation_models = {
+            channel: build_observation_model(channel, model_name, **channel_kwargs.get(channel, {}))
+            for channel, model_name in selection.items()
+        }
         super().__init__(
             discount_factor=discount_factor,
             action_presets=action_presets,
             max_tracked_agents=max_tracked_agents,
+            observation_models=observation_models,
             name=name,
         )
 
@@ -139,20 +158,6 @@ class FactoredCarlaModelPOMDP(CarlaModelPOMDP):
         # Placeholder: implement the density matching sample_next_state's motion model.
         del state, action, next_states
         raise NotImplementedError("FactoredCarlaModelPOMDP transition density not yet implemented.")
-
-    # ── Observation model (fixed, factored) ─────────────────────────────
-    def sample_observation(self, next_state: Any, action: Any, n_samples: int = 1) -> Any:
-        del action
-        obs = self._render_observation(np.asarray(next_state, dtype=float), noisy=True)
-        return [obs for _ in range(n_samples)] if n_samples != 1 else obs
-
-    def observation_log_probability(
-        self, next_state: Any, action: Any, observations: Any
-    ) -> np.ndarray:
-        del action
-        state = np.asarray(next_state, dtype=float)
-        obs_list = observations if isinstance(observations, list) else [observations]
-        return np.array([self._log_prob_single(state, obs) for obs in obs_list])
 
     # ── Reward (shared with the world by construction) ───────────────────
     def reward(self, state: Any, action: Any, next_state: Any = None) -> float:
@@ -179,62 +184,3 @@ class FactoredCarlaModelPOMDP(CarlaModelPOMDP):
 
     def initial_observation_dist(self) -> Distribution:
         raise NotImplementedError("Seed the belief from the world's initial observation.")
-
-    # ── Factored observation helpers ─────────────────────────────────────
-    def _visible(self, rows: np.ndarray, slot: int) -> bool:
-        """Whether true agent ``slot`` is in range and not occluded (ego-frame)."""
-        rel_x, rel_y = rows[slot, 1], rows[slot, 2]
-        if self.perception_range is not None and float(np.hypot(rel_x, rel_y)) > (
-            self.perception_range
-        ):
-            return False
-        for other in range(self.max_tracked_agents):
-            if other == slot or rows[other, 0] != 1.0:
-                continue
-            if _segment_occludes(
-                0.0, 0.0, rel_x, rel_y, rows[other, 1], rows[other, 2], self.occlusion_radius
-            ):
-                return False
-        return True
-
-    def _render_observation(self, state: np.ndarray, noisy: bool) -> dict:
-        rows = self._state_agent_rows(state).copy()
-        for slot in range(self.max_tracked_agents):
-            if rows[slot, 0] != 1.0 or not self._visible(rows, slot):
-                rows[slot] = 0.0
-            elif noisy:
-                rows[slot, 1:] += np.random.normal(0.0, self.pose_std, size=AGENT_SLOT_WIDTH - 1)
-        gnss = state[:2].copy()
-        if noisy:
-            gnss = gnss + np.random.normal(0.0, self.gnss_std, size=2)
-        return {"gnss": gnss, "agents": rows.reshape(-1)}
-
-    def _log_prob_single(self, state: np.ndarray, obs: dict) -> float:
-        rows = self._state_agent_rows(state)
-        obs_rows = np.asarray(obs["agents"], dtype=float).reshape(
-            self.max_tracked_agents, AGENT_SLOT_WIDTH
-        )
-        total = self._gnss_log_prob(state, obs)
-        for slot in range(self.max_tracked_agents):
-            total += self._slot_log_prob(rows, obs_rows, slot)
-        return float(total)
-
-    def _gnss_log_prob(self, state: np.ndarray, obs: dict) -> float:
-        gnss = np.asarray(obs["gnss"], dtype=float)[:2]
-        diff = gnss - state[:2]
-        return float(-0.5 * np.sum((diff / self.gnss_std) ** 2) - 2 * np.log(self.gnss_std))
-
-    def _slot_log_prob(self, rows: np.ndarray, obs_rows: np.ndarray, slot: int) -> float:
-        true_present = rows[slot, 0] == 1.0
-        obs_present = obs_rows[slot, 0] == 1.0
-        if not true_present:
-            return 0.0 if not obs_present else _LOG_EPS  # empty state slot -> empty obs slot
-        if not self._visible(rows, slot):
-            return 0.0 if not obs_present else _LOG_EPS  # invisible -> must be missed
-        if not obs_present:
-            return float(np.log(max(1.0 - self.detect_prob, np.exp(_LOG_EPS))))  # a miss
-        diff = obs_rows[slot, 1:] - rows[slot, 1:]
-        gauss = -0.5 * np.sum((diff / self.pose_std) ** 2) - (AGENT_SLOT_WIDTH - 1) * np.log(
-            self.pose_std
-        )
-        return float(np.log(self.detect_prob) + gauss)

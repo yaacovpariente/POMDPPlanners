@@ -25,9 +25,6 @@ from POMDPPlanners.core.environment import Environment, SpaceType
 from POMDPPlanners.core.policy import Policy, PolicyRunData, PolicySpaceInfo
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
 from POMDPPlanners.environments.carla_pomdp import CarlaPOMDP, carla_pomdp, carla_video
-from POMDPPlanners.environments.carla_pomdp.carla_perception import (
-    CarlaPerceptionPipeline,
-)
 from POMDPPlanners.environments.carla_pomdp.carla_pomdp import (
     AGENT_SLOT_WIDTH,
     DEFAULT_MAX_TRACKED_AGENTS,
@@ -841,39 +838,36 @@ def test_segment_occludes_only_for_blockers_on_the_sight_line() -> None:
     assert behind_ego is False
 
 
-def test_agent_rows_state_keeps_all_nearest_observation_hides_unseen() -> None:
-    """State carries every nearest agent; the observation hides unseen ones.
+def test_agent_rows_reports_every_nearest_agent_raw() -> None:
+    """The world reports every nearest agent at its true pose; it never hides any.
 
-    Purpose: Validates the core partial-observability gap over other agents.
+    Purpose: Validates the world emits the raw ground-truth agents channel — range-gating
+        and occlusion belong to the planner model, not the world.
 
-    Given: An ego with three tracked neighbours — one clearly visible ahead, one
-        directly behind the visible one (occluded), and one beyond perception range
-    When: _agent_rows is built for the state (all) and the observation (detected)
-    Then: The state marks all three present, while the observation keeps only the
-        visible agent and zeroes the occluded and out-of-range slots
+    Given: An ego with three tracked neighbours, including one directly behind another on
+        the same sight line and one far away that a perception model would drop
+    When: _agent_rows builds the agent matrix
+    Then: All three slots are present at their true ego-frame poses, with the nearest first;
+        no slot is zeroed for range or occlusion
 
     Test type: unit
     """
     ego = _fake_actor(0, 0.0, 0.0)
-    visible = _fake_actor(1, 10.0, 0.0)  # 10 m ahead, in range, unobstructed
-    occluded = _fake_actor(2, 30.0, 0.0)  # behind `visible` on the same sight line
-    far = _fake_actor(3, 60.0, 0.0)  # beyond the 50 m perception range
+    near = _fake_actor(1, 10.0, 0.0)  # 10 m ahead
+    behind = _fake_actor(2, 30.0, 0.0)  # behind `near` on the same sight line
+    far = _fake_actor(3, 60.0, 0.0)  # far away
     session: Any = object.__new__(carla_pomdp._CarlaSession)
     session._vehicle = ego
-    session._world = _fake_world([ego, visible, occluded, far])
+    session._world = _fake_world([ego, near, behind, far])
     session._max_tracked_agents = 3
-    session._perception_range = 50.0
-    session._occlusion_radius = 1.5
 
-    state_rows = session._agent_rows(detected_only=False)
-    observed_rows = session._agent_rows(detected_only=True)
+    rows = session._agent_rows()
 
-    assert state_rows.shape == (3, carla_pomdp.AGENT_SLOT_WIDTH)
-    assert list(state_rows[:, 0]) == [1.0, 1.0, 1.0]
-    assert state_rows[0][1] == pytest.approx(10.0)  # nearest is the visible agent
-    assert observed_rows[0][0] == 1.0  # visible agent survives
-    assert np.array_equal(observed_rows[1], np.zeros(carla_pomdp.AGENT_SLOT_WIDTH))
-    assert np.array_equal(observed_rows[2], np.zeros(carla_pomdp.AGENT_SLOT_WIDTH))
+    assert rows.shape == (3, carla_pomdp.AGENT_SLOT_WIDTH)
+    assert list(rows[:, 0]) == [1.0, 1.0, 1.0]  # all present, none hidden
+    assert rows[0][1] == pytest.approx(10.0)  # nearest first
+    assert rows[1][1] == pytest.approx(30.0)
+    assert rows[2][1] == pytest.approx(60.0)
 
 
 def test_observation_includes_camera_and_lidar(world: CarlaPOMDP) -> None:
@@ -952,8 +946,6 @@ def _bare_session(
     session._vehicle = ego
     session._world = _fake_world([ego])
     session._max_tracked_agents = 5
-    session._perception_range = 50.0
-    session._occlusion_radius = 1.5
     return session
 
 
@@ -1556,49 +1548,19 @@ class _LidarVehicleSession:
         return state, self._observation(), self._t >= 3
 
 
-def test_perception_pipeline_emits_perceived_agents_from_lidar(
+def test_world_emits_raw_agents_never_perceived(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A configured perception pipeline replaces the emitted agents with lidar detections.
+    """The world emits the session's raw agents block unchanged; it never perceives.
 
-    Purpose: Validates the world's observation model runs perception so agents are inferred.
+    Purpose: Validates perception lives only on the planner's generative model, so the world
+        passes its raw (ground-truth) agents channel through untouched even when the sensors
+        would support a perceived detection.
 
-    Given: A world with a CarlaPerceptionPipeline and a session whose lidar shows a vehicle 8 m
-        ahead but whose ground-truth agents channel is empty
+    Given: A world and a session whose lidar shows a vehicle 8 m ahead but whose ground-truth
+        agents channel is all-empty
     When: a step is taken and the observation is read
-    Then: the emitted agents block marks a present agent near 8 m (perceived from the lidar)
-
-    Test type: integration
-    """
-    session = _LidarVehicleSession()
-    monkeypatch.setattr(CarlaPOMDP, "_get_session", lambda self: session)
-    pipeline = CarlaPerceptionPipeline(
-        max_tracked_agents=DEFAULT_MAX_TRACKED_AGENTS,
-        sensor_fusion=False,
-        stop_for_traffic_lights=False,
-    )
-    world = CarlaPOMDP(discount_factor=0.95, perception_pipeline=pipeline)
-    world.initial_state_dist().sample()  # reset to establish the live state
-    state = world._live_state
-
-    next_state = world.sample_next_state(state, 0)
-    observation = world.sample_observation(next_state, 0)
-
-    rows = np.asarray(observation["agents"]).reshape(DEFAULT_MAX_TRACKED_AGENTS, AGENT_SLOT_WIDTH)
-    assert rows[0, 0] == 1.0
-    assert abs(rows[0, 1] - 8.0) < 1.0
-
-
-def test_no_perception_pipeline_emits_raw_agents_unchanged(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Without a pipeline the world emits the session's raw agents block unchanged.
-
-    Purpose: Validates perception is opt-in; the default world passes the oracle agents through.
-
-    Given: A world with no perception pipeline and a session with an all-empty agents channel
-    When: a step is taken and the observation is read
-    Then: the emitted agents block is the raw (empty) channel, not a perceived one
+    Then: the emitted agents block is the raw (empty) channel, not a lidar-perceived one
 
     Test type: integration
     """
@@ -1612,29 +1574,3 @@ def test_no_perception_pipeline_emits_raw_agents_unchanged(
     observation = world.sample_observation(next_state, 0)
 
     assert np.all(np.asarray(observation["agents"]) == 0.0)
-
-
-def test_perception_pipeline_base_is_never_mutated(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Advancing perception never mutates the configured base pipeline.
-
-    Purpose: Validates per-episode perception state cannot leak, since each reset re-seeds the
-    live pipeline from an immutable, empty-tracked base.
-
-    Given: A world whose live pipeline has tracked a vehicle over several steps
-    When: the configured base pipeline is inspected
-    Then: it is the same object with empty tracker state (only the live successor advanced)
-
-    Test type: integration
-    """
-    session = _LidarVehicleSession()
-    monkeypatch.setattr(CarlaPOMDP, "_get_session", lambda self: session)
-    pipeline = CarlaPerceptionPipeline(max_tracked_agents=DEFAULT_MAX_TRACKED_AGENTS)
-    world = CarlaPOMDP(discount_factor=0.95, perception_pipeline=pipeline)
-    world.initial_state_dist().sample()  # reset to establish the live state
-    world.sample_next_state(world._live_state, 0)  # advance so the live pipeline accrues a track
-
-    assert world.perception_pipeline is pipeline  # base handle unchanged
-    assert pipeline.tracks.shape[0] == 0  # base never accumulates tracks -> reset re-seeds clean
-    assert world._perception_pipeline is not pipeline  # the live pipeline advanced off the base
