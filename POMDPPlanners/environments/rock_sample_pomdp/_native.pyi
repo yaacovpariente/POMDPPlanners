@@ -41,6 +41,7 @@ def simulate_rollout_discrete(
     dangerous_area_hit_probability: float,
     reward_variant_code: int,
     penalty_decay: float,
+    is_dangerous_area_hit_terminal: bool = ...,
 ) -> float:
     """Native random rollout for RockSamplePOMDP with variant-aware reward.
 
@@ -51,6 +52,9 @@ def simulate_rollout_discrete(
     int32 array ``[row0, col0, row1, col1, …]``. ``dangerous_areas`` is a
     ``(K, 2)`` float64 array (may be empty). ``reward_variant_code``:
     ``0=CONSTANT_HAZARD_PENALTY``, ``1=ZERO_MEAN_HAZARD_SHOCK``, ``2=DISTANCE_DECAYED_HAZARD_PENALTY``.
+    When ``is_dangerous_area_hit_terminal`` is ``True``, a robot position inside
+    any dangerous area terminates the rollout (geometric gate matching
+    :meth:`RockSamplePOMDP.is_terminal`). Defaults to ``False``.
     """
     ...
 

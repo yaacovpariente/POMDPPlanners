@@ -727,6 +727,26 @@ inline double dangerous_area_term(double next_row, double next_col,
     return 0.0;
 }
 
+// Terminal test used by the rollout: the exit sentinel ``(-1, -1)`` OR,
+// when ``is_dangerous_area_hit_terminal`` is enabled, a robot position
+// geometrically inside any dangerous area (squared-distance within
+// ``dangerous_area_radius``). Mirrors ``RockSamplePOMDP.is_terminal``: a
+// pure geometric gate independent of any penalty draw.
+inline bool is_terminal_state(const double *row, bool is_dangerous_area_hit_terminal,
+                              const double *dangers, std::size_t k,
+                              double dangerous_area_radius) {
+    if (is_terminal_row(row)) {
+        return true;
+    }
+    if (is_dangerous_area_hit_terminal && k > 0) {
+        const double radius_sq = dangerous_area_radius * dangerous_area_radius;
+        if (min_dist_to_danger_sq(row[0], row[1], dangers, k) <= radius_sq) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // Standalone reward batch kernel. Returns a (N,) float64 array where each
 // entry is the per-row reward under the configured variant.
 py::array_t<double> reward_batch(
@@ -835,7 +855,8 @@ double simulate_rollout_discrete(
     double dangerous_area_penalty,
     double dangerous_area_hit_probability,
     int reward_variant_code,
-    double penalty_decay) {
+    double penalty_decay,
+    bool is_dangerous_area_hit_terminal) {
     if (initial_state.ndim() != 1 || initial_state.shape(0) < 2) {
         throw std::invalid_argument("initial_state must be a 1-D array with length >= 2");
     }
@@ -890,7 +911,8 @@ double simulate_rollout_discrete(
     int depth = start_depth;
 
     while (depth < max_depth) {
-        if (is_terminal_row(cur.data())) {
+        if (is_terminal_state(cur.data(), is_dangerous_area_hit_terminal, dangers_data,
+                              n_dangers, dangerous_area_radius)) {
             break;
         }
 
@@ -949,12 +971,16 @@ PYBIND11_MODULE(_native, m) {
           py::arg("dangerous_area_penalty"),
           py::arg("dangerous_area_hit_probability"),
           py::arg("reward_variant_code"), py::arg("penalty_decay"),
+          py::arg("is_dangerous_area_hit_terminal") = false,
           "Native random rollout for RockSamplePOMDP with variant-aware "
           "dangerous-area reward term. Returns discounted reward sum. "
           "action_indices must be a pre-drawn int32 array of length (max_depth-start_depth). "
           "rock_positions_flat is a 1-D int32 array [row0, col0, row1, col1, ...]. "
           "dangerous_areas is a (K, 2) float64 array (may be empty). "
-          "reward_variant_code: 0=CONSTANT_HAZARD_PENALTY, 1=ZERO_MEAN_HAZARD_SHOCK, 2=DISTANCE_DECAYED_HAZARD_PENALTY.");
+          "reward_variant_code: 0=CONSTANT_HAZARD_PENALTY, 1=ZERO_MEAN_HAZARD_SHOCK, 2=DISTANCE_DECAYED_HAZARD_PENALTY. "
+          "is_dangerous_area_hit_terminal: when true, a robot position inside a "
+          "dangerous area terminates the rollout (geometric gate matching "
+          "RockSamplePOMDP.is_terminal).");
 
     m.def("reward_batch", &reward_batch,
           py::arg("states"), py::arg("action"), py::arg("next_states"),
