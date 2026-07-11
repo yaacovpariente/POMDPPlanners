@@ -1242,6 +1242,187 @@ class TestStochasticDangerousAreaPenalty:
             )
 
 
+class TestDangerousAreaHitTerminal:
+    """Test the opt-in geometric hazard-terminal gate in ``is_terminal``."""
+
+    def test_default_flag_danger_cell_not_terminal(self):
+        """Robot on a dangerous cell is not terminal under the default flag.
+
+        Purpose: Validates that with ``is_dangerous_area_hit_terminal`` left
+        at its default (``False``), a robot standing inside a dangerous area
+        is not treated as terminal — only the exit sentinel ``(-1, -1)`` is.
+
+        Given: A RockSamplePOMDP with a dangerous area at ``(1, 1)`` and the
+            hazard-terminal flag left at its default.
+        When: ``is_terminal`` is called on a state whose robot is at ``(1, 1)``.
+        Then: ``is_terminal`` returns ``False``; the sentinel state is terminal.
+
+        Test type: unit
+        """
+        pomdp = RockSamplePOMDP(
+            discount_factor=0.95,
+            **rock_sample_pinned_kwargs(dangerous_areas=[(1, 1)], dangerous_area_radius=1.0),
+        )
+
+        in_danger = create_rock_sample_state((1, 1), (True, False, True))
+        sentinel = create_rock_sample_state((-1, -1), (True, False, True))
+
+        assert pomdp.is_terminal(in_danger) is False
+        assert pomdp.is_terminal(sentinel) is True
+
+    def test_flag_on_danger_cell_terminal_and_penalty_applied(self):
+        """Flag on makes an in-zone robot terminal while the penalty still applies.
+
+        Purpose: Validates that with ``is_dangerous_area_hit_terminal=True`` and
+        ``dangerous_area_hit_probability=1.0`` a robot inside a dangerous area
+        is terminal, that the step reward still includes the additive
+        dangerous-area penalty (termination is additive, not a reward change),
+        and that the exit sentinel remains terminal.
+
+        Given: A RockSamplePOMDP with a dangerous area at ``(1, 1)``, radius
+            ``1.0``, penalty ``-5.0``, deterministic hit probability, and the
+            hazard-terminal flag enabled.
+        When: ``is_terminal`` is queried for an in-zone robot and a step is
+            taken (sample action, no movement) from that in-zone position.
+        Then: The in-zone state and the sentinel are terminal, and the step
+            reward equals the additive dangerous-area penalty ``-5.0``.
+
+        Test type: unit
+        """
+        pomdp = RockSamplePOMDP(
+            discount_factor=0.95,
+            **rock_sample_pinned_kwargs(
+                dangerous_areas=[(1, 1)],
+                dangerous_area_radius=1.0,
+                dangerous_area_penalty=-5.0,
+                dangerous_area_hit_probability=1.0,
+                is_dangerous_area_hit_terminal=True,
+            ),
+        )
+
+        in_danger = create_rock_sample_state((1, 1), (True, False, True))
+        sentinel = create_rock_sample_state((-1, -1), (True, False, True))
+
+        assert pomdp.is_terminal(in_danger) is True
+        assert pomdp.is_terminal(sentinel) is True
+
+        # Sample (action 0) at (1, 1) — not a rock cell — leaves the robot in
+        # the zone, so the additive penalty is the only reward contribution.
+        next_state = pomdp.sample_next_state(state=in_danger, action=0)
+        reward = pomdp._reward_from_next_state(  # pylint: disable=protected-access
+            in_danger, 0, next_state
+        )
+        assert reward == pytest.approx(-5.0)
+
+    def test_reward_range_includes_penalty_when_zones_configured(self):
+        """reward_range lower bound includes the dangerous-area penalty.
+
+        Purpose: Validates that when dangerous areas are configured the
+        environment's ``reward_range`` lower bound accounts for the additive
+        dangerous-area penalty, independent of the hazard-terminal flag.
+
+        Given: A RockSamplePOMDP with a dangerous area configured, penalty
+            ``-5.0``, and known step/rock/sensor penalties.
+        When: The ``reward_range`` attribute is read.
+        Then: ``reward_range[0]`` equals the sum of step, bad-rock, sensor, and
+            dangerous-area penalties, so the penalty is included in the range.
+
+        Test type: unit
+        """
+        pomdp = RockSamplePOMDP(
+            discount_factor=0.95,
+            **rock_sample_pinned_kwargs(
+                step_penalty=-1.0,
+                bad_rock_penalty=-5.0,
+                good_rock_reward=8.0,
+                exit_reward=12.0,
+                sensor_use_penalty=-0.5,
+                dangerous_areas=[(1, 1)],
+                dangerous_area_penalty=-5.0,
+                is_dangerous_area_hit_terminal=True,
+            ),
+        )
+
+        # min = step + bad_rock + sensor + danger_term_min = -1 -5 -0.5 -5 = -11.5
+        # max = step + exit_reward + danger_term_max = -1 + 12 + 0 = 11.0
+        assert pomdp.reward_range == (-11.5, 11.0)
+
+    def test_flag_on_native_rollout_terminates_in_zone(self):
+        """Rollouts from an in-zone start terminate consistently with the flag.
+
+        Purpose: Validates that with the hazard-terminal flag enabled, both the
+        native ``simulate_rollout_discrete`` and ``simulate_random_rollout``
+        return ``0.0`` from an in-zone start (the geometric terminal gate fires
+        immediately, matching ``is_terminal``), while with the flag off the same
+        start is not terminal.
+
+        Given: RockSamplePOMDPs with a dangerous area at ``(1, 1)`` — one with
+            the hazard-terminal flag on, one off — and a robot starting in-zone.
+        When: The native rollout and ``simulate_random_rollout`` are run from
+            the in-zone start.
+        Then: With the flag on, ``is_terminal`` is ``True`` and both rollouts
+            return ``0.0``; with the flag off, ``is_terminal`` is ``False``.
+
+        Test type: integration
+        """
+        from POMDPPlanners.environments.rock_sample_pomdp import (  # pylint: disable=import-outside-toplevel
+            _native as rs_native,
+        )
+
+        common = {"dangerous_areas": [(1, 1)], "dangerous_area_radius": 1.0}
+        env_on = RockSamplePOMDP(
+            discount_factor=0.95,
+            **rock_sample_pinned_kwargs(is_dangerous_area_hit_terminal=True, **common),
+        )
+        env_off = RockSamplePOMDP(
+            discount_factor=0.95,
+            **rock_sample_pinned_kwargs(**common),
+        )
+
+        in_danger = create_rock_sample_state((1, 1), (True, False, True))
+        assert env_on.is_terminal(in_danger) is True
+        assert env_off.is_terminal(in_danger) is False
+
+        max_depth = 10
+        n_actions = len(env_on.action_names)
+        np.random.seed(0)
+        action_indices = np.random.randint(0, n_actions, size=max_depth, dtype=np.int32)
+        native_return = rs_native.simulate_rollout_discrete(
+            initial_state=np.ascontiguousarray(in_danger, dtype=np.float64),
+            action_indices=action_indices,
+            rock_positions_flat=env_on._rock_positions_flat,  # pylint: disable=protected-access
+            max_depth=max_depth,
+            start_depth=0,
+            discount_factor=0.95,
+            map_rows=int(env_on.map_size[0]),
+            map_cols=int(env_on.map_size[1]),
+            n_actions=n_actions,
+            step_penalty=float(env_on.step_penalty),
+            exit_reward=float(env_on.exit_reward),
+            good_rock_reward=float(env_on.good_rock_reward),
+            bad_rock_penalty=float(env_on.bad_rock_penalty),
+            sensor_use_penalty=float(env_on.sensor_use_penalty),
+            dangerous_areas=env_on._dangerous_areas_arr,  # pylint: disable=protected-access
+            dangerous_area_radius=float(env_on.dangerous_area_radius),
+            dangerous_area_penalty=float(env_on.dangerous_area_penalty),
+            dangerous_area_hit_probability=float(env_on.dangerous_area_hit_probability),
+            reward_variant_code=int(
+                env_on._reward_variant_code
+            ),  # pylint: disable=protected-access
+            penalty_decay=float(env_on.penalty_decay),
+            is_dangerous_area_hit_terminal=True,
+        )
+        assert native_return == pytest.approx(0.0)
+
+        random_rollout_return = env_on.simulate_random_rollout(
+            state=in_danger,
+            action_sampler=_FixedActionSamplerRS(0),
+            max_depth=max_depth,
+            discount_factor=0.95,
+        )
+        assert random_rollout_return == pytest.approx(0.0)
+
+
 class TestMetricsComputation:
     """Test metrics computation."""
 
