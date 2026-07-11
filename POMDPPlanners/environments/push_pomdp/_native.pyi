@@ -75,6 +75,8 @@ def cont_simulate_rollout(
     dangerous_area_hit_probability: float = 1.0,
     reward_variant_code: int = 0,
     penalty_decay: float = 1.0,
+    is_obstacle_hit_terminal: bool = False,
+    is_dangerous_area_hit_terminal: bool = False,
 ) -> float:
     """Native random rollout for ContinuousPushPOMDP.
 
