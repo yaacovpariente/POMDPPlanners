@@ -1456,6 +1456,103 @@ class TestLaserTagPOMDP:
 
         assert env2.reward_range == (expected_min2, expected_max2)
 
+    def test_default_dangerous_area_not_terminal(self):
+        """Test that a robot inside a dangerous area is non-terminal by default.
+
+        Purpose: Validates that the geometric hazard-terminal gate is opt-in and
+            off by default.
+
+        Given: A default LaserTagPOMDP (is_dangerous_area_hit_terminal defaults to
+            False) and a non-terminal state whose robot cell is the (5, 3)
+            dangerous-area centre.
+        When: is_terminal() is called on that state.
+        Then: Returns False because the flag is disabled.
+
+        Test type: unit
+        """
+        env = LaserTagPOMDP(discount_factor=0.95, **_lt_pinned_kwargs())
+
+        hazard_state = np.array([5.0, 3.0, 8.0, 5.0, 0.0])
+        assert env.is_dangerous_area_hit_terminal is False
+        assert env.is_terminal(hazard_state) is False
+
+    def test_dangerous_area_hit_terminal_flag_on(self):
+        """Test that the hazard-terminal flag makes hazard cells terminal.
+
+        Purpose: Validates that enabling is_dangerous_area_hit_terminal treats a
+            robot cell inside a dangerous area as terminal, while the
+            dangerous-area penalty and explicit tag-terminal flag still apply.
+
+        Given: A LaserTagPOMDP with is_dangerous_area_hit_terminal=True, a
+            non-terminal state whose robot cell is the (5, 3) dangerous-area
+            centre, and a state moving into that cell.
+        When: is_terminal() and reward() are evaluated on those states, and
+            is_terminal() is checked on an explicitly flagged terminal state.
+        Then: is_terminal() returns True for the hazard cell, the reward for
+            moving into it still includes the dangerous-area penalty, the reward
+            range is unchanged, and the explicit terminal-flag state stays
+            terminal.
+
+        Test type: unit
+        """
+        env = LaserTagPOMDP(
+            discount_factor=0.95,
+            **_lt_pinned_kwargs(is_dangerous_area_hit_terminal=True),
+        )
+        hazard_state = np.array([5.0, 3.0, 8.0, 5.0, 0.0])
+        assert env.is_terminal(hazard_state) is True
+
+        # The penalty is unchanged: moving into the hazard still costs the step
+        # cost plus the dangerous-area penalty.
+        approaching_state = np.array([6.0, 3.0, 8.0, 5.0, 0.0])
+        reward = env.reward(approaching_state, 0, next_state=hazard_state)
+        assert reward == pytest.approx(-env.step_cost - env.dangerous_area_penalty)
+
+        # The discrete reward range is intentionally left unchanged.
+        assert env.reward_range == (-env.tag_penalty, env.tag_reward)
+
+        # Regression: explicit tag-terminal detection via state[4] still holds.
+        tag_terminal_state = np.array([3.0, 5.0, 3.0, 5.0, 1.0])
+        assert env.is_terminal(tag_terminal_state) is True
+
+    def test_native_rollout_from_hazard_cell_terminates(self):
+        """Test that a flag-on rollout starting in a hazard cell returns zero.
+
+        Purpose: Validates that the native discrete rollout terminal check
+            mirrors is_terminal when is_dangerous_area_hit_terminal is enabled.
+
+        Given: A LaserTagPOMDP with is_dangerous_area_hit_terminal=True and an
+            initial state whose robot cell is the (5, 3) dangerous-area centre.
+        When: simulate_random_rollout is invoked from that hazard state.
+        Then: is_terminal is True for the start state and the rollout returns 0.0
+            (it terminates immediately, consistent with is_terminal).
+
+        Test type: unit
+        """
+
+        class _UniformDiscreteSampler(ActionSampler):
+            def sample(self, belief_node=None):
+                return int(np.random.choice([0, 1, 2, 3, 4]))
+
+        env = LaserTagPOMDP(
+            discount_factor=0.95,
+            **_lt_pinned_kwargs(is_dangerous_area_hit_terminal=True),
+        )
+        hazard_state = np.array([5.0, 3.0, 8.0, 5.0, 0.0])
+        assert env.is_terminal(hazard_state) is True
+
+        # pylint: disable-next=import-outside-toplevel
+        from POMDPPlanners.environments.laser_tag_pomdp import _native
+
+        _native.set_seed(1)
+        rollout_return = env.simulate_random_rollout(
+            state=hazard_state,
+            action_sampler=_UniformDiscreteSampler(),
+            max_depth=20,
+            discount_factor=0.95,
+        )
+        assert rollout_return == 0.0
+
     def test_initial_state_distribution(self):
         """Test initial state distribution properties.
 

@@ -954,6 +954,87 @@ class TestIsTerminal:
         state = np.array([5.0, 3.0, 8.0, 5.0, 1.0])
         assert env.is_terminal(state) is True
 
+    def test_default_dangerous_area_not_terminal(self, env):
+        """Test that a robot inside a dangerous area is non-terminal by default.
+
+        Purpose: Validates that the geometric hazard-terminal gate is opt-in and
+            off by default.
+
+        Given: A default ContinuousLaserTagPOMDP (is_dangerous_area_hit_terminal
+            defaults to False) and a non-terminal state whose robot position sits
+            inside the (5, 3) dangerous area.
+        When: is_terminal() is called on that state.
+        Then: Returns False because the flag is disabled.
+
+        Test type: unit
+        """
+        state = np.array([5.0, 3.0, 8.0, 5.0, 0.0])
+        assert env.is_dangerous_area_hit_terminal is False
+        assert env.is_terminal(state) is False
+
+    def test_dangerous_area_hit_terminal_flag_on(self):
+        """Test that the hazard-terminal flag makes hazard positions terminal.
+
+        Purpose: Validates that enabling is_dangerous_area_hit_terminal treats a
+            robot geometrically inside a dangerous area as terminal, while the
+            dangerous-area penalty and explicit tag-terminal flag still apply.
+
+        Given: A ContinuousLaserTagPOMDP with is_dangerous_area_hit_terminal=True
+            and dangerous_area_hit_probability=1.0, plus a non-terminal state whose
+            robot sits inside the (5, 3) dangerous area.
+        When: is_terminal() and reward() are evaluated on that state, and
+            is_terminal() is checked on an explicitly flagged terminal state.
+        Then: is_terminal() returns True for the hazard state, the reward on that
+            step still includes the dangerous-area penalty, and the explicit
+            terminal-flag state remains terminal.
+
+        Test type: unit
+        """
+        env = ContinuousLaserTagPOMDP(
+            discount_factor=0.95,
+            **_cont_lt_pinned_kwargs(
+                is_dangerous_area_hit_terminal=True,
+                dangerous_area_hit_probability=1.0,
+            ),
+        )
+        hazard_state = np.array([5.0, 3.0, 8.0, 5.0, 0.0])
+        assert env.is_terminal(hazard_state) is True
+
+        # The penalty is unchanged: entering the hazard still costs the step
+        # cost plus the dangerous-area penalty.
+        action = np.array([0.0, 0.0, 0.0])
+        reward = env.reward(hazard_state, action, next_state=hazard_state)
+        assert reward == pytest.approx(-env.step_cost - env.dangerous_area_penalty)
+
+        # Regression: explicit tag-terminal detection via state[4] still holds.
+        tag_terminal_state = np.array([1.0, 1.0, 1.0, 1.0, 1.0])
+        assert env.is_terminal(tag_terminal_state) is True
+
+    def test_dangerous_area_hit_terminal_reward_range(self):
+        """Test that the reward range lower bound includes the hazard penalty.
+
+        Purpose: Validates that reward_range accounts for the dangerous-area
+            penalty when dangerous areas are configured.
+
+        Given: A ContinuousLaserTagPOMDP with dangerous areas configured and known
+            tag_penalty, step_cost, and dangerous_area_penalty.
+        When: The reward_range attribute is read.
+        Then: reward_range[0] equals -(tag_penalty + step_cost +
+            dangerous_area_penalty) and reward_range[1] equals tag_reward.
+
+        Test type: unit
+        """
+        env = ContinuousLaserTagPOMDP(
+            discount_factor=0.95,
+            **_cont_lt_pinned_kwargs(
+                tag_penalty=10.0,
+                step_cost=1.0,
+                dangerous_area_penalty=5.0,
+                tag_reward=10.0,
+            ),
+        )
+        assert env.reward_range == (-16.0, 10.0)
+
 
 class TestInitialStateDist:
     """Tests for initial state distribution."""
@@ -2040,3 +2121,43 @@ class TestObservationLogProbabilityLowDensityB1:
         ), f"scalar single log-prob underflowed to {scalar_value} — B1 not fixed"
         assert scalar_value < -1e5
         np.testing.assert_allclose(scalar_value, batch_log_probs[0], atol=1e-6)
+
+
+class TestContinuousLaserTagHazardTerminalRollout:
+    """Tests for hazard-terminal consistency in the native rollout path."""
+
+    def test_native_rollout_from_hazard_cell_terminates(self):
+        """Test that a flag-on rollout starting in a hazard cell returns zero.
+
+        Purpose: Validates that the native rollout terminal check mirrors
+            is_terminal when is_dangerous_area_hit_terminal is enabled.
+
+        Given: A ContinuousLaserTagPOMDPDiscreteActions with
+            is_dangerous_area_hit_terminal=True and an initial state whose robot
+            already sits inside the (5, 3) dangerous area.
+        When: simulate_random_rollout is invoked from that hazard state.
+        Then: is_terminal is True for the start state and the rollout returns 0.0
+            (it terminates immediately, consistent with is_terminal).
+
+        Test type: unit
+        """
+
+        class _UniformDiscreteSampler(ActionSampler):
+            def sample(self, belief_node=None):
+                return np.random.choice(["up", "down", "right", "left", "tag"])
+
+        env = ContinuousLaserTagPOMDPDiscreteActions(
+            discount_factor=0.95,
+            **_cont_lt_pinned_kwargs(is_dangerous_area_hit_terminal=True),
+        )
+        hazard_state = np.array([5.0, 3.0, 8.0, 5.0, 0.0])
+        assert env.is_terminal(hazard_state) is True
+
+        _native.set_seed(1)
+        rollout_return = env.simulate_random_rollout(
+            state=hazard_state,
+            action_sampler=_UniformDiscreteSampler(),
+            max_depth=20,
+            discount_factor=0.95,
+        )
+        assert rollout_return == 0.0

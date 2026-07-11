@@ -177,6 +177,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         dangerous_areas: Optional[Set[Tuple[int, int]]] = {(5, 3), (7, 1), (2, 5)},
         dangerous_area_radius: float = 1.0,
         dangerous_area_penalty: float = 5.0,
+        is_dangerous_area_hit_terminal: bool = False,
         output_dir: Optional[Path] = None,
         debug: bool = False,
         use_queue_logger: bool = False,
@@ -201,6 +202,12 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
             dangerous_areas: List of dangerous area center positions as (row, col) tuples. Defaults to None.
             dangerous_area_radius: Radius around dangerous area centers. Defaults to 1.0.
             dangerous_area_penalty: Penalty magnitude applied randomly when in dangerous areas. Defaults to 2.0.
+            is_dangerous_area_hit_terminal: When ``True``, a state whose robot
+                cell lies within ``dangerous_area_radius`` of any dangerous-area
+                centre is treated as terminal by :meth:`is_terminal`, in
+                addition to the explicit terminal-flag field. Defaults to
+                ``False`` (opt-in; dangerous areas only penalise the reward and
+                do not end the episode).
             output_dir: Optional directory for logging output. Defaults to None.
             debug: Enable debug logging. Defaults to False.
             initial_state: Optional initial state as numpy array with shape (5,). If provided,
@@ -271,6 +278,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         self.dangerous_areas: List[Tuple[int, int]] = list(dangerous_areas)
         self.dangerous_area_radius = dangerous_area_radius
         self.dangerous_area_penalty = dangerous_area_penalty
+        self.is_dangerous_area_hit_terminal = is_dangerous_area_hit_terminal
         self.initial_state = initial_state
         self.transition_error_prob = transition_error_prob
         self.opponent_policy = opponent_policy
@@ -903,8 +911,34 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         return self.reward_model.compute_reward(state, action, next_state=next_state_arr)
 
     def is_terminal(self, state: np.ndarray) -> bool:
-        """Check if a state is terminal."""
-        return bool(state[4])
+        """Check if a state is terminal.
+
+        A state is terminal when its explicit terminal-flag field is set, and,
+        when ``is_dangerous_area_hit_terminal`` is enabled, also when the robot
+        cell lies within ``dangerous_area_radius`` of any dangerous-area centre.
+
+        Args:
+            state: Length-5 state ``[robot_row, robot_col, opp_row, opp_col, flag]``.
+
+        Returns:
+            ``True`` if the state is terminal, ``False`` otherwise.
+        """
+        if bool(state[4]):
+            return True
+        return self.is_dangerous_area_hit_terminal and self._robot_in_dangerous_area(state)
+
+    def _robot_in_dangerous_area(self, state: np.ndarray) -> bool:
+        if not self.dangerous_areas:
+            return False
+        radius_sq = self.dangerous_area_radius * self.dangerous_area_radius
+        robot_row = state[0]
+        robot_col = state[1]
+        for danger_row, danger_col in self.dangerous_areas:
+            delta_row = robot_row - danger_row
+            delta_col = robot_col - danger_col
+            if delta_row * delta_row + delta_col * delta_col <= radius_sq:
+                return True
+        return False
 
     def initial_state_dist(self) -> Distribution:
         """Get the initial state distribution."""
@@ -1079,6 +1113,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
                     reward_variant_code=self._native_reward_variant_code(),
                     penalty_decay=float(self.penalty_decay),
                     opponent_policy_code=self.opponent_policy.native_code,
+                    is_dangerous_area_hit_terminal=self.is_dangerous_area_hit_terminal,
                 )
             )
 
