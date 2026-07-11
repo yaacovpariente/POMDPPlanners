@@ -90,6 +90,7 @@ def laser_tag_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
         "dangerous_areas": {(5, 3), (7, 1), (2, 5)},
         "dangerous_area_radius": 1.0,
         "dangerous_area_penalty": 5.0,
+        "is_dangerous_area_hit_terminal": False,
         "initial_state": None,
         "transition_error_prob": 0.0,
         "reward_model_type": LaserTagRewardModelType.CONSTANT_HAZARD_PENALTY,
@@ -134,6 +135,7 @@ def continuous_laser_tag_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
         "dangerous_area_radius": 1.0,
         "dangerous_area_penalty": 5.0,
         "dangerous_area_hit_probability": 1.0,
+        "is_dangerous_area_hit_terminal": False,
         "initial_state": None,
         "opponent_policy": OpponentPolicy.EVADE,
     }
@@ -301,6 +303,8 @@ def continuous_push_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
         "dangerous_area_radius": 0.5,
         "dangerous_area_penalty": -10.0,
         "dangerous_area_hit_probability": 1.0,
+        "is_obstacle_hit_terminal": False,
+        "is_dangerous_area_hit_terminal": False,
         "reward_model_type": PushRewardModelType.CONSTANT_HAZARD_PENALTY,
         "penalty_decay": 1.0,
         "robot_radius": 0.3,
@@ -347,6 +351,7 @@ def pacman_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
         "dangerous_areas": None,
         "dangerous_area_radius": 1.0,
         "dangerous_area_penalty": 5.0,
+        "is_dangerous_area_hit_terminal": False,
         "reward_model_type": PacManRewardModelType.CONSTANT_HAZARD_PENALTY,
         "penalty_decay": 1.0,
     }
@@ -370,6 +375,7 @@ def rock_sample_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
         "dangerous_area_radius": 1.0,
         "dangerous_area_penalty": -5.0,
         "dangerous_area_hit_probability": 1.0,
+        "is_dangerous_area_hit_terminal": False,
         "reward_model_type": RockSampleRewardModelType.CONSTANT_HAZARD_PENALTY,
         "penalty_decay": 1.0,
     }
