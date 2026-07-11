@@ -163,6 +163,7 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
         debug: bool = False,
         reward_model_type: RewardModelType = RewardModelType.CONSTANT_HAZARD_PENALTY,
         penalty_decay: float = 1.0,
+        is_dangerous_area_hit_terminal: bool = False,
     ):
         """Initialize PacMan POMDP.
 
@@ -205,6 +206,15 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
             penalty_decay: Decay length used by the
                 ``DISTANCE_DECAYED_HAZARD_PENALTY`` reward model. Ignored by the other
                 variants. Must be strictly positive. Defaults to ``1.0``.
+            is_dangerous_area_hit_terminal: When ``True``, :meth:`is_terminal`
+                additionally returns ``True`` whenever PacMan's position lies
+                geometrically inside any configured hazard zone (squared-distance
+                membership against ``dangerous_area_radius``), ending the episode
+                on zone entry. This is a pure geometric gate on position; it does
+                not widen the state, alter the reward/penalty logic, or block
+                movement. Mirrors
+                :attr:`~POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.ContinuousLightDarkPOMDP.is_obstacle_hit_terminal`.
+                Defaults to ``False`` (opt-in).
         """
         # Calculate reward range based on parameters. The dangerous-area
         # penalty only contributes to ``min_reward`` when at least one zone
@@ -249,6 +259,7 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
         )
         self.dangerous_area_radius = float(dangerous_area_radius)
         self.dangerous_area_penalty = float(dangerous_area_penalty)
+        self.is_dangerous_area_hit_terminal = bool(is_dangerous_area_hit_terminal)
         # Pre-built (D, 2) float64 array reused by the vectorised batch-reward
         # path. Kept C-contiguous so future native callers can consume it
         # without an extra copy.
@@ -510,6 +521,17 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
     def get_terminal(self, state: np.ndarray) -> bool:
         """Return whether the state is terminal."""
         return bool(state[self._idx_terminal] > 0.5)
+
+    def _pacman_in_dangerous_area(self, state: np.ndarray) -> bool:
+        # Geometric hazard-zone membership on PacMan's position, reusing the
+        # squared-distance test of the reward kernels. Disabled unless the
+        # opt-in flag is set and at least one zone is configured.
+        if not self.is_dangerous_area_hit_terminal or self._dangerous_areas_arr.shape[0] == 0:
+            return False
+        pac_pos = np.array([state[self._idx_pac_row], state[self._idx_pac_col]], dtype=np.float64)
+        deltas = self._dangerous_areas_arr - pac_pos
+        radius_sq = self.dangerous_area_radius * self.dangerous_area_radius
+        return bool(np.any(np.sum(deltas * deltas, axis=1) <= radius_sq))
 
     def _require_state_array(self, state: Any) -> np.ndarray:
         if not isinstance(state, np.ndarray) or state.shape != (self._state_dim,):
@@ -844,6 +866,7 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
             dangerous_area_penalty=float(self.dangerous_area_penalty),
             reward_variant_code=_REWARD_VARIANT_CODES[self.reward_model_type],
             penalty_decay=float(self.penalty_decay),
+            is_dangerous_area_hit_terminal=self.is_dangerous_area_hit_terminal,
         )
 
     def reward(self, state: np.ndarray, action: int, next_state: Any = None) -> float:
@@ -1033,8 +1056,15 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
         }
 
     def is_terminal(self, state: np.ndarray) -> bool:
-        """Check if state is terminal."""
-        return self.get_terminal(self._require_state_array(state))
+        """Check if state is terminal.
+
+        Returns ``True`` for the intrinsic terminal condition (ghost collision
+        or all pellets collected, recorded in the state's terminal field) and,
+        when ``is_dangerous_area_hit_terminal`` is enabled, also when PacMan's
+        position lies geometrically inside any configured hazard zone.
+        """
+        state_arr = self._require_state_array(state)
+        return self.get_terminal(state_arr) or self._pacman_in_dangerous_area(state_arr)
 
     def initial_state_dist(self) -> DiscreteDistribution:
         """Get initial state distribution."""
