@@ -1076,6 +1076,33 @@ static bool cont_is_terminal(const double *state) noexcept {
     return (dx * dx + dy * dy) < 0.25;  // 0.5^2
 }
 
+// Hazard-aware terminal check mirroring ContinuousPushPOMDP.is_terminal:
+// object-at-target OR (flag AND robot geometrically inside a hazard). The
+// robot position is state[0:2]; obstacle overlap uses the same circle-AABB
+// test the reward path uses, and dangerous-area membership reuses
+// point_in_dangerous_areas so a hit that charges a penalty is also terminal.
+static bool cont_is_terminal_with_hazards(
+    const double *state, const std::vector<double> &obs_flat, std::size_t n_obs,
+    double robot_radius, const std::vector<double> &dangerous_flat,
+    double dangerous_area_radius_sq, bool is_obstacle_hit_terminal,
+    bool is_dangerous_area_hit_terminal) noexcept {
+    if (cont_is_terminal(state)) {
+        return true;
+    }
+    if (is_obstacle_hit_terminal) {
+        for (std::size_t i = 0; i < n_obs; ++i) {
+            if (cont_circle_aabb_overlap(state, robot_radius, &obs_flat[i * 4])) {
+                return true;
+            }
+        }
+    }
+    if (is_dangerous_area_hit_terminal) {
+        return point_in_dangerous_areas(state[0], state[1], dangerous_flat,
+                                        dangerous_area_radius_sq);
+    }
+    return false;
+}
+
 static void cont_resolve_single_circle_wall(double *pos, const double *wall,
                                             double robot_radius) noexcept {
     const double cx = wall[0];
@@ -1256,7 +1283,8 @@ double cont_simulate_rollout(
     double dangerous_area_radius, double dangerous_area_penalty,
     const py::array_t<double> &covariance,
     double obstacle_hit_probability, double dangerous_area_hit_probability,
-    int reward_variant_code, double penalty_decay) {
+    int reward_variant_code, double penalty_decay,
+    bool is_obstacle_hit_terminal, bool is_dangerous_area_hit_terminal) {
 
     if (initial_state.ndim() != 1 ||
         static_cast<std::size_t>(initial_state.shape(0)) != kPushStateDim) {
@@ -1319,7 +1347,10 @@ double cont_simulate_rollout(
     };
 
     while (depth < max_depth) {
-        if (cont_is_terminal(state)) {
+        if (cont_is_terminal_with_hazards(
+                state, obs_flat, n_obs, robot_radius, dangerous_flat,
+                dangerous_area_radius_sq, is_obstacle_hit_terminal,
+                is_dangerous_area_hit_terminal)) {
             break;
         }
         const int idx_slot = depth - start_depth;
@@ -1783,6 +1814,8 @@ PYBIND11_MODULE(_native, m) {
           py::arg("dangerous_area_hit_probability") = 1.0,
           py::arg("reward_variant_code") = 0,
           py::arg("penalty_decay") = 1.0,
+          py::arg("is_obstacle_hit_terminal") = false,
+          py::arg("is_dangerous_area_hit_terminal") = false,
           "Native random rollout for ContinuousPushPOMDP. "
           "Returns discounted return from initial_state. "
           "action_indices must be a pre-drawn int32 array of shape (steps_left,). "
