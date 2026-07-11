@@ -1215,6 +1215,27 @@ class PacManObservationCpp {
 //                                                   (no radius cutoff).
 // ---------------------------------------------------------------------------
 
+// Geometric hazard-zone membership: true when (new_pac_row, new_pac_col) lies
+// within ``dangerous_area_radius`` (squared-distance test) of any zone centre.
+// Mirrors the reward-kernel membership so the terminal gate agrees with the
+// penalty. ``dangerous_areas`` is a flat (D, 2) float64 buffer.
+inline bool pacman_in_dangerous_area(int new_pac_row, int new_pac_col,
+                                     const double *dangerous_areas, int n_dangerous,
+                                     double dangerous_area_radius) {
+    if (n_dangerous <= 0) {
+        return false;
+    }
+    const double radius_sq = dangerous_area_radius * dangerous_area_radius;
+    for (int d = 0; d < n_dangerous; ++d) {
+        const double dr = static_cast<double>(new_pac_row) - dangerous_areas[d * 2];
+        const double dc = static_cast<double>(new_pac_col) - dangerous_areas[d * 2 + 1];
+        if (dr * dr + dc * dc <= radius_sq) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // Contribution of the dangerous-area term for a single (next_pac_row,
 // next_pac_col). ``dangerous_areas`` is a flat (D, 2) float64 buffer.
 inline double dangerous_area_contribution(int variant_code, int new_pac_row, int new_pac_col,
@@ -1396,7 +1417,8 @@ double simulate_rollout_impl(
     double dangerous_area_radius,
     double dangerous_area_penalty,
     int reward_variant_code,
-    double penalty_decay)
+    double penalty_decay,
+    bool is_dangerous_area_hit_terminal)
 {
     const int state_dim = env.state_dim;
     std::vector<double> current(initial_state, initial_state + state_dim);
@@ -1467,6 +1489,17 @@ double simulate_rollout_impl(
         r += dangerous_area_contribution(reward_variant_code, new_pac_r, new_pac_c,
                                          dangerous_areas, n_dangerous, dangerous_area_radius,
                                          dangerous_area_penalty, penalty_decay, rng);
+
+        // Geometric hazard-terminal gate: when enabled, entering a hazard zone
+        // ends the episode. Applied after the reward for the entering step is
+        // fully accumulated so the penalty is still counted (matches the
+        // is_terminal geometric OR on the Python side). Marking the terminal
+        // field lets the while-loop exit on the next iteration.
+        if (is_dangerous_area_hit_terminal &&
+            pacman_in_dangerous_area(new_pac_r, new_pac_c, dangerous_areas, n_dangerous,
+                                     dangerous_area_radius)) {
+            next[env.idx_terminal] = 1.0;
+        }
 
         total += gamma_power * r;
         gamma_power *= discount_factor;
@@ -1559,7 +1592,8 @@ PYBIND11_MODULE(_native, m) {
            double dangerous_area_radius,
            double dangerous_area_penalty,
            int reward_variant_code,
-           double penalty_decay) -> double {
+           double penalty_decay,
+           bool is_dangerous_area_hit_terminal) -> double {
             if (state.ndim() != 1) {
                 throw std::invalid_argument("state must be 1-D");
             }
@@ -1614,7 +1648,8 @@ PYBIND11_MODULE(_native, m) {
                 dangerous_area_radius,
                 dangerous_area_penalty,
                 reward_variant_code,
-                penalty_decay);
+                penalty_decay,
+                is_dangerous_area_hit_terminal);
         },
         py::arg("state"),
         py::arg("action_indices"),
@@ -1648,6 +1683,7 @@ PYBIND11_MODULE(_native, m) {
         py::arg("dangerous_area_penalty"),
         py::arg("reward_variant_code"),
         py::arg("penalty_decay"),
+        py::arg("is_dangerous_area_hit_terminal") = false,
         "Run a random rollout from state using pre-drawn action_indices; "
         "returns the discounted cumulative reward.");
 
