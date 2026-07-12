@@ -16,7 +16,7 @@ Classes:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 
@@ -53,19 +53,37 @@ class RockSampleVectorizedUpdater(VectorizedParticleBeliefUpdater):
         sensor_efficiency: Sensor noise parameter (higher = less noise).
     """
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments
         self,
         map_rows: int,
         map_cols: int,
         num_rocks: int,
         rock_positions: np.ndarray,
         sensor_efficiency: float,
+        dangerous_areas_arr: Optional[np.ndarray] = None,
+        dangerous_area_radius: float = 1.0,
+        dangerous_area_hit_probability: float = 1.0,
+        reward_variant_code: int = 0,
+        penalty_decay: float = 1.0,
+        is_dangerous_area_hit_terminal: bool = False,
     ):
         self.map_rows = map_rows
         self.map_cols = map_cols
         self.num_rocks = num_rocks
         self.rock_positions = np.asarray(rock_positions, dtype=np.int32)
         self.sensor_efficiency = sensor_efficiency
+        # Hazard-terminal parameters (only consumed when the flag is enabled;
+        # the flag-off path builds the legacy 7-arg native kernel).
+        self._dangerous_areas_arr = (
+            np.empty((0, 2), dtype=np.float64)
+            if dangerous_areas_arr is None
+            else np.ascontiguousarray(dangerous_areas_arr, dtype=np.float64)
+        )
+        self._dangerous_area_radius = float(dangerous_area_radius)
+        self._dangerous_area_hit_probability = float(dangerous_area_hit_probability)
+        self._reward_variant_code = int(reward_variant_code)
+        self._penalty_decay = float(penalty_decay)
+        self._is_dangerous_area_hit_terminal = bool(is_dangerous_area_hit_terminal)
 
     @classmethod
     def from_environment(cls, env: RockSamplePOMDP) -> RockSampleVectorizedUpdater:
@@ -77,6 +95,12 @@ class RockSampleVectorizedUpdater(VectorizedParticleBeliefUpdater):
             num_rocks=len(env.rock_positions),
             rock_positions=rock_pos,
             sensor_efficiency=env.sensor_efficiency,
+            dangerous_areas_arr=env._dangerous_areas_arr,  # pylint: disable=protected-access
+            dangerous_area_radius=env.dangerous_area_radius,
+            dangerous_area_hit_probability=env.dangerous_area_hit_probability,
+            reward_variant_code=env._reward_variant_code,  # pylint: disable=protected-access
+            penalty_decay=env.penalty_decay,
+            is_dangerous_area_hit_terminal=env.is_dangerous_area_hit_terminal,
         )
 
     # ------------------------------------------------------------------
@@ -96,6 +120,17 @@ class RockSampleVectorizedUpdater(VectorizedParticleBeliefUpdater):
         action_idx = int(np.asarray(action).item())
         particles_arr = np.asarray(particles, dtype=float)
         ref_state = self._reference_state(particles_arr)
+        if not self._is_dangerous_area_hit_terminal:
+            transition = _native.RockSampleTransitionCpp(
+                state=ref_state,
+                action=action_idx,
+                map_rows=self.map_rows,
+                map_cols=self.map_cols,
+                num_rocks=self.num_rocks,
+                rock_positions=self.rock_positions,
+                sensor_efficiency=self.sensor_efficiency,
+            )
+            return transition.batch_sample(particles_arr)
         transition = _native.RockSampleTransitionCpp(
             state=ref_state,
             action=action_idx,
@@ -104,6 +139,12 @@ class RockSampleVectorizedUpdater(VectorizedParticleBeliefUpdater):
             num_rocks=self.num_rocks,
             rock_positions=self.rock_positions,
             sensor_efficiency=self.sensor_efficiency,
+            dangerous_areas=self._dangerous_areas_arr,
+            dangerous_area_radius=self._dangerous_area_radius,
+            dangerous_area_hit_probability=self._dangerous_area_hit_probability,
+            reward_variant_code=self._reward_variant_code,
+            penalty_decay=self._penalty_decay,
+            is_dangerous_area_hit_terminal=self._is_dangerous_area_hit_terminal,
         )
         return transition.batch_sample(particles_arr)
 
@@ -148,7 +189,14 @@ class RockSampleVectorizedUpdater(VectorizedParticleBeliefUpdater):
             "num_rocks": self.num_rocks,
             "rock_positions": self.rock_positions.tolist(),
             "sensor_efficiency": self.sensor_efficiency,
+            "is_dangerous_area_hit_terminal": self._is_dangerous_area_hit_terminal,
         }
+        if self._is_dangerous_area_hit_terminal:
+            cfg["dangerous_areas"] = self._dangerous_areas_arr.tolist()
+            cfg["dangerous_area_radius"] = self._dangerous_area_radius
+            cfg["dangerous_area_hit_probability"] = self._dangerous_area_hit_probability
+            cfg["reward_variant_code"] = self._reward_variant_code
+            cfg["penalty_decay"] = self._penalty_decay
         return config_to_id(cfg)
 
     # ------------------------------------------------------------------
