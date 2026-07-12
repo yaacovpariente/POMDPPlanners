@@ -42,6 +42,12 @@ from POMDPPlanners.core.environment import (
     SpaceType,
 )
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
+from POMDPPlanners.environments.environment_utils.dangerous_areas_kernels import (
+    CONSTANT_HAZARD_PENALTY_CODE,
+    DISTANCE_DECAYED_HAZARD_PENALTY_CODE,
+    hazard_hit_probability_kernel,
+)
+from POMDPPlanners.planners.planners_utils.rollout import python_random_rollout
 from POMDPPlanners.utils.statistics_utils import confidence_interval
 from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_visualizer import (  # pylint: disable=import-outside-toplevel
     LaserTagVisualizer,
@@ -184,6 +190,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         transition_error_prob: float = 0.0,
         reward_model_type: RewardModelType = RewardModelType.CONSTANT_HAZARD_PENALTY,
         penalty_decay: float = 1.0,
+        is_dangerous_area_hit_terminal: bool = False,
         opponent_policy: OpponentPolicy = OpponentPolicy.EVADE,
     ):
         """Initialize the LaserTag POMDP environment.
@@ -224,6 +231,17 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
             penalty_decay: Decay length used by the
                 ``DISTANCE_DECAYED_HAZARD_PENALTY`` reward model. Ignored by the other
                 variants. Must be strictly positive. Defaults to ``1.0``.
+            is_dangerous_area_hit_terminal: When ``True`` (default ``False``),
+                entering a dangerous area terminates the episode via a
+                draw-coupled uniform sampled in the transition, and the
+                dangerous-area penalty becomes deterministic given the terminal
+                slot. Supported for ``CONSTANT_HAZARD_PENALTY`` (termination
+                probability ``1.0`` on danger entry, matching the deterministic
+                penalty) and ``DISTANCE_DECAYED_HAZARD_PENALTY`` (termination
+                probability ``exp(-min_dist / penalty_decay)``). Raises
+                ``ValueError`` when combined with ``ZERO_MEAN_HAZARD_SHOCK``
+                (the shock hazard has no hit probability to couple to). Default
+                ``False`` preserves the legacy behaviour bit-for-bit.
             opponent_policy: Selects the opponent transition behaviour.
                 ``EVADE`` (default) makes the opponent flee the robot, placing its
                 directional mass on the distance-increasing cell and reacting to the
@@ -287,6 +305,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         }
         self.reward_model_type = reward_model_type
         self.penalty_decay = penalty_decay
+        self._configure_hazard_terminal(is_dangerous_area_hit_terminal, reward_model_type)
         self.reward_model: BaseLaserTagRewardModel = self._build_reward_model(
             reward_model_type, penalty_decay
         )
@@ -297,6 +316,45 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         self._error_actions_for: Dict[int, List[int]] = {
             a: [b for b in (0, 1, 2, 3) if b != a] for a in (0, 1, 2, 3)
         }
+
+    def _configure_hazard_terminal(
+        self,
+        is_dangerous_area_hit_terminal: bool,
+        reward_model_type: RewardModelType,
+    ) -> None:
+        if is_dangerous_area_hit_terminal and (
+            reward_model_type == RewardModelType.ZERO_MEAN_HAZARD_SHOCK
+        ):
+            raise ValueError(
+                "is_dangerous_area_hit_terminal is incompatible with the "
+                "ZERO_MEAN_HAZARD_SHOCK reward model (the shock hazard has no "
+                "hit probability to couple termination to)"
+            )
+        self.is_dangerous_area_hit_terminal = bool(is_dangerous_area_hit_terminal)
+        # Draw-coupled hazard variant code for the shared kernel: CONSTANT uses
+        # a fixed probability of 1.0 (matching its deterministic penalty),
+        # DECAYED uses exp(-min_dist / penalty_decay).
+        if reward_model_type == RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY:
+            self._hazard_variant_code = DISTANCE_DECAYED_HAZARD_PENALTY_CODE
+        else:
+            self._hazard_variant_code = CONSTANT_HAZARD_PENALTY_CODE
+        # (2, D) float64 centres (row 0 = row coord, row 1 = col coord) for the
+        # shared dangerous-areas kernels; empty (2, 0) when no areas configured.
+        if self.dangerous_areas:
+            self._hazard_centers_xy = np.ascontiguousarray(
+                np.asarray(self.dangerous_areas, dtype=np.float64).reshape(-1, 2).T
+            )
+        else:
+            self._hazard_centers_xy = np.empty((2, 0), dtype=np.float64)
+        self._hazard_radius_sq = float(self.dangerous_area_radius) ** 2
+        # Boolean wall grid for the deterministic flag-on reward's wall term
+        # (mirrors LaserTagRewardModel, though the realised robot cell is never
+        # a wall in practice).
+        wall_grid = np.zeros(self.floor_shape, dtype=bool)
+        for wall_row, wall_col in self.walls:
+            if 0 <= wall_row < self.floor_shape[0] and 0 <= wall_col < self.floor_shape[1]:
+                wall_grid[wall_row, wall_col] = True
+        self._hazard_wall_grid = wall_grid
 
     def _build_reward_model(
         self, reward_model_type: RewardModelType, penalty_decay: float
@@ -384,6 +442,17 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         self._cached_native_step_params = params
         return params
 
+    @property
+    def reward_requires_next_state(self) -> bool:
+        """Reward depends on the realised ``next_state`` iff hazard-terminal is on.
+
+        When enabled, the dangerous-area penalty is deterministic given the
+        terminal slot set during the transition, so drivers sample the
+        transition first and thread the realised ``next_state`` into
+        :meth:`reward`.
+        """
+        return self.is_dangerous_area_hit_terminal
+
     def sample_next_state(self, state: np.ndarray, action: int, n_samples: int = 1) -> Any:
         # Fast path: native single-step C++ kernel for the n_samples == 1 case
         # (the POMCPOW hot path). RNG draws are issued from numpy in the same
@@ -392,10 +461,49 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         if n_samples == 1:
             params = self._get_native_step_params()
             if params is not None:
-                return self._native_sample_next_state_one(state, action, params)
+                result = self._native_sample_next_state_one(state, action, params)
+            else:
+                result = self._python_sample_next_state(state, action, n_samples)
+        else:
+            # Slow / batch path: original numpy implementation.
+            result = self._python_sample_next_state(state, action, n_samples)
+        if self.is_dangerous_area_hit_terminal:
+            return self._apply_hazard_termination(result, n_samples)
+        return result
 
-        # Slow / batch path: original numpy implementation.
-        return self._python_sample_next_state(state, action, n_samples)
+    def _apply_hazard_termination(self, result: Any, n_samples: int) -> Any:
+        # Draw-coupled hazard termination (flag-on only). Each freshly sampled
+        # non-terminal next state is marked terminal with the hazard hit
+        # probability; already-terminal (tag) samples are absorbing.
+        if n_samples == 1:
+            return self._maybe_terminate_one(result)
+        return [self._maybe_terminate_one(sample) for sample in result]
+
+    def _maybe_terminate_one(self, next_state: np.ndarray) -> np.ndarray:
+        arr = np.asarray(next_state, dtype=np.float64)
+        if arr[4] != 0.0 or not self._hazard_terminates(arr):
+            return arr
+        arr = arr.copy()
+        arr[4] = 1.0
+        return arr
+
+    def _hazard_terminates(self, next_state: np.ndarray) -> bool:
+        if self._hazard_centers_xy.shape[1] == 0:
+            return False
+        point = np.array([float(next_state[0]), float(next_state[1])])
+        prob = hazard_hit_probability_kernel(
+            point,
+            self._hazard_centers_xy,
+            self._hazard_radius_sq,
+            1.0,
+            self.penalty_decay,
+            self._hazard_variant_code,
+        )
+        if prob <= 0.0:
+            return False
+        if prob >= 1.0:
+            return True
+        return float(np.random.random()) < prob
 
     def _native_sample_next_state_one(
         self,
@@ -900,7 +1008,31 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         else:
             next_state_arr = np.asarray(next_state, dtype=np.float64)
 
+        if self.is_dangerous_area_hit_terminal:
+            return self._deterministic_hazard_reward(state, action, next_state_arr)
         return self.reward_model.compute_reward(state, action, next_state=next_state_arr)
+
+    def _deterministic_hazard_reward(
+        self, state: np.ndarray, action: int, next_state: np.ndarray
+    ) -> float:
+        # Draw-coupled (flag-on) reward: fully deterministic given the terminal
+        # slot. Base tag / step term plus the deterministic wall penalty; the
+        # dangerous-area penalty applies iff the step terminated via the hazard
+        # (terminal ∧ not a successful tag). One ``-dangerous_area_penalty`` per
+        # hazard hit, matching the reward coupling.
+        robot_pos = (int(state[0]), int(state[1]))
+        opponent_pos = (int(state[2]), int(state[3]))
+        realised_pos = (int(next_state[0]), int(next_state[1]))
+        tag_success = action == 4 and robot_pos == opponent_pos
+        if action == 4:
+            base = self.tag_reward if tag_success else -self.tag_penalty
+        else:
+            base = -self.step_cost
+        if realised_pos in self.walls:
+            base -= self.dangerous_area_penalty
+        if bool(next_state[4]) and not tag_success:
+            base -= self.dangerous_area_penalty
+        return base
 
     def is_terminal(self, state: np.ndarray) -> bool:
         """Check if a state is terminal."""
@@ -1044,6 +1176,18 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         # The native kernel handles all three reward-model variants via the
         # ``reward_variant_code`` argument; stochastic variants consume
         # additional draws from the same module-level mt19937_64 RNG.
+        if self.is_dangerous_area_hit_terminal:
+            # Draw-coupled hazard termination lives in the Python single-step
+            # transition + deterministic reward; the native C++ rollout does
+            # not model it, so route the whole rollout through Python.
+            return python_random_rollout(
+                state=state,
+                depth=depth,
+                action_sampler=action_sampler,
+                environment=self,
+                discount_factor=discount_factor,
+                max_depth=max_depth,
+            )
         params = self._get_native_rollout_params()
         if params is not None:
             state_arr = np.ascontiguousarray(np.asarray(state, dtype=np.float64))
@@ -1160,7 +1304,45 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         if next_states is None and (self.walls or self.dangerous_areas):
             next_states = self.sample_next_state_batch(states_arr, action)
 
+        if self.is_dangerous_area_hit_terminal:
+            return self._deterministic_hazard_reward_batch(states_arr, action, next_states)
         return self.reward_model.compute_reward_batch(states_arr, action, next_states=next_states)
+
+    def _deterministic_hazard_reward_batch(
+        self, states_arr: np.ndarray, action: int, next_states: Any
+    ) -> np.ndarray:
+        # Vectorised draw-coupled reward: deterministic given the terminal slot.
+        n = states_arr.shape[0]
+        robot_r = states_arr[:, 0].astype(np.int64)
+        robot_c = states_arr[:, 1].astype(np.int64)
+        opp_r = states_arr[:, 2].astype(np.int64)
+        opp_c = states_arr[:, 3].astype(np.int64)
+        if action == 4:
+            tag_success = (robot_r == opp_r) & (robot_c == opp_c)
+            rewards = np.where(tag_success, float(self.tag_reward), float(-self.tag_penalty))
+        else:
+            tag_success = np.zeros(n, dtype=bool)
+            rewards = np.full(n, float(-self.step_cost), dtype=np.float64)
+        if next_states is not None:
+            next_arr = np.ascontiguousarray(np.asarray(next_states, dtype=np.float64))
+            if next_arr.ndim == 1:
+                next_arr = next_arr.reshape(1, -1)
+            rewards[self._realised_wall_mask(next_arr)] -= self.dangerous_area_penalty
+            hazard_hit = (next_arr[:, 4] != 0.0) & ~tag_success
+            rewards[hazard_hit] -= self.dangerous_area_penalty
+        rewards[states_arr[:, 4].astype(bool)] = 0.0
+        return rewards
+
+    def _realised_wall_mask(self, next_arr: np.ndarray) -> np.ndarray:
+        rows, cols = self.floor_shape
+        realised_r = next_arr[:, 0].astype(np.int64)
+        realised_c = next_arr[:, 1].astype(np.int64)
+        in_bounds = (
+            (realised_r >= 0) & (realised_r < rows) & (realised_c >= 0) & (realised_c < cols)
+        )
+        clipped_r = np.clip(realised_r, 0, rows - 1)
+        clipped_c = np.clip(realised_c, 0, cols - 1)
+        return in_bounds & self._hazard_wall_grid[clipped_r, clipped_c]
 
     def _count_episode_metrics(
         self, history: History, action_dirs: Dict[int, Tuple[int, int]]
