@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: MIT
+# pylint: disable=too-many-lines  # Two env variants plus hazard geometry helpers.
 
 """Continuous Push POMDP Environment Implementation.
 
@@ -157,6 +158,19 @@ class ContinuousPushPOMDP(Environment):
         Bernoulli draw internally, so all rollouts route through the
         native kernel regardless of the configured probability.
 
+    Hazard termination:
+        ``is_obstacle_hit_terminal`` and ``is_dangerous_area_hit_terminal``
+        are opt-in flags (both default ``False`` for backward
+        compatibility). When enabled, :meth:`is_terminal` additionally
+        returns ``True`` whenever the robot position already stored in
+        the state geometrically overlaps an obstacle AABB (using
+        ``robot_radius``) or lies within ``dangerous_area_radius`` of a
+        dangerous area, respectively. The check is a pure function of the
+        robot position; it does not widen the state, alter the reward /
+        penalty logic, or move any random draw. The same geometry is
+        threaded into the native rollout terminal check so planning
+        rollouts agree with :meth:`is_terminal`.
+
     Example:
         >>> import numpy as np
         >>> np.random.seed(42)
@@ -187,6 +201,8 @@ class ContinuousPushPOMDP(Environment):
         dangerous_area_radius: float = 0.5,
         dangerous_area_penalty: float = -10.0,
         dangerous_area_hit_probability: float = 1.0,
+        is_obstacle_hit_terminal: bool = False,
+        is_dangerous_area_hit_terminal: bool = False,
         reward_model_type: RewardModelType = RewardModelType.CONSTANT_HAZARD_PENALTY,
         penalty_decay: float = 1.0,
         robot_radius: float = 0.3,
@@ -229,6 +245,8 @@ class ContinuousPushPOMDP(Environment):
         self.dangerous_area_radius = float(dangerous_area_radius)
         self.dangerous_area_penalty = float(dangerous_area_penalty)
         self.dangerous_area_hit_probability = float(dangerous_area_hit_probability)
+        self.is_obstacle_hit_terminal = is_obstacle_hit_terminal
+        self.is_dangerous_area_hit_terminal = is_dangerous_area_hit_terminal
         self.reward_model_type = reward_model_type
         self.penalty_decay = float(penalty_decay)
         if self.dangerous_areas:
@@ -649,16 +667,31 @@ class ContinuousPushPOMDP(Environment):
                 dangerous_area_hit_probability=float(self.dangerous_area_hit_probability),
                 reward_variant_code=variant_code,
                 penalty_decay=penalty_decay,
+                is_obstacle_hit_terminal=bool(self.is_obstacle_hit_terminal),
+                is_dangerous_area_hit_terminal=bool(self.is_dangerous_area_hit_terminal),
             )
         )
 
     def is_terminal(self, state: np.ndarray) -> bool:
+        if self._is_object_at_target(state):
+            return True
+        if self.is_obstacle_hit_terminal and self._is_robot_hitting_obstacle(state):
+            return True
+        return bool(self.is_dangerous_area_hit_terminal and self._is_robot_in_hazard_zone(state))
+
+    def _is_object_at_target(self, state: np.ndarray) -> bool:
         # Inline 2-D distance squared comparison: avoids np.linalg.norm,
         # which goes through einsum + sqrt on a tiny vector and dominates
         # this hot path for POMCPOW.
         dx = state[2] - state[4]
         dy = state[3] - state[5]
         return bool((dx * dx + dy * dy) < 0.25)
+
+    def _is_robot_hitting_obstacle(self, state: np.ndarray) -> bool:
+        return self._is_circle_colliding_with_obstacle(state[0:2], self.robot_radius)
+
+    def _is_robot_in_hazard_zone(self, state: np.ndarray) -> bool:
+        return self._is_robot_in_dangerous_area(state[0:2])
 
     def initial_state_dist(self) -> Distribution:
         if self._initial_state is not None:
@@ -897,6 +930,8 @@ class ContinuousPushPOMDPDiscreteActions(ContinuousPushPOMDP, DiscreteActionsEnv
         dangerous_area_radius: float = 0.5,
         dangerous_area_penalty: float = -10.0,
         dangerous_area_hit_probability: float = 1.0,
+        is_obstacle_hit_terminal: bool = False,
+        is_dangerous_area_hit_terminal: bool = False,
         reward_model_type: RewardModelType = RewardModelType.CONSTANT_HAZARD_PENALTY,
         penalty_decay: float = 1.0,
         robot_radius: float = 0.3,
@@ -921,6 +956,8 @@ class ContinuousPushPOMDPDiscreteActions(ContinuousPushPOMDP, DiscreteActionsEnv
             dangerous_area_radius=dangerous_area_radius,
             dangerous_area_penalty=dangerous_area_penalty,
             dangerous_area_hit_probability=dangerous_area_hit_probability,
+            is_obstacle_hit_terminal=is_obstacle_hit_terminal,
+            is_dangerous_area_hit_terminal=is_dangerous_area_hit_terminal,
             reward_model_type=reward_model_type,
             penalty_decay=penalty_decay,
             robot_radius=robot_radius,

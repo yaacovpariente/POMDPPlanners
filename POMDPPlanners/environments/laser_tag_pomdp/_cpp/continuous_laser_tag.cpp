@@ -1329,7 +1329,8 @@ double cont_simulate_rollout(
     double tag_penalty, double step_cost,
     const py::array_t<double, py::array::c_style | py::array::forcecast> &dangerous_areas,
     double dangerous_area_radius, double dangerous_area_penalty,
-    int opponent_policy_code = kPolicyEvade) {
+    int opponent_policy_code = kPolicyEvade,
+    bool is_dangerous_area_hit_terminal = false) {
     // Validate shapes.
     if (initial_state.ndim() != 1 || initial_state.shape(0) != static_cast<py::ssize_t>(kStateDim)) {
         throw std::invalid_argument("initial_state must have shape (5,)");
@@ -1388,6 +1389,22 @@ double cont_simulate_rollout(
         // Check terminal before acting.
         if (state[4] != 0.0) {
             break;
+        }
+        // Geometric-gate terminal: the robot standing inside a dangerous area
+        // ends the episode when the opt-in flag is set (mirrors is_terminal).
+        if (is_dangerous_area_hit_terminal && !danger_areas_vec.empty()) {
+            bool robot_in_danger = false;
+            for (const auto &area : danger_areas_vec) {
+                const double ddx = state[0] - area.first;
+                const double ddy = state[1] - area.second;
+                if (ddx * ddx + ddy * ddy <= da_r_sq) {
+                    robot_in_danger = true;
+                    break;
+                }
+            }
+            if (robot_in_danger) {
+                break;
+            }
         }
         const double action[3] = {act_view(step, 0), act_view(step, 1), act_view(step, 2)};  // NOLINT
 
@@ -1754,7 +1771,8 @@ double simulate_rollout_discrete(
     double transition_error_prob,
     int reward_variant_code,
     double penalty_decay,
-    int opponent_policy_code = kPolicyEvade) {
+    int opponent_policy_code = kPolicyEvade,
+    bool is_dangerous_area_hit_terminal = false) {
 
     if (initial_state.ndim() != 1 || initial_state.shape(0) != 5) {
         throw std::invalid_argument("initial_state must have shape (5,)");
@@ -1782,6 +1800,12 @@ double simulate_rollout_discrete(
     int depth = initial_depth;
 
     while (depth < max_depth && state[4] == 0.0) {
+        // Geometric-gate terminal: the robot standing inside a dangerous area
+        // ends the episode when the opt-in flag is set (mirrors is_terminal).
+        if (is_dangerous_area_hit_terminal &&
+            disc_is_dangerous(static_cast<int>(state[0]), static_cast<int>(state[1]), env)) {
+            break;
+        }
         const int action = action_dist(rng.engine());
 
         // Reward computed on current state before transition.
@@ -2754,6 +2778,7 @@ PYBIND11_MODULE(_native, m) {
         py::arg("tag_radius"), py::arg("tag_reward"), py::arg("tag_penalty"),
         py::arg("step_cost"), py::arg("dangerous_areas"), py::arg("dangerous_area_radius"),
         py::arg("dangerous_area_penalty"), py::arg("opponent_policy_code") = 0,
+        py::arg("is_dangerous_area_hit_terminal") = false,
         "Run a full random rollout for ContinuousLaserTagPOMDP in one C++ frame.\n\n"
         "``actions_buffer`` must be shape (N, 3) float64 with N >= max_depth - start_depth.\n"
         "``opponent_policy_code`` selects the opponent behaviour: 0 = EVADE (away from\n"
@@ -2774,6 +2799,7 @@ PYBIND11_MODULE(_native, m) {
         py::arg("reward_variant_code") = 0,
         py::arg("penalty_decay") = 1.0,
         py::arg("opponent_policy_code") = 0,
+        py::arg("is_dangerous_area_hit_terminal") = false,
         "Run a full random-action rollout for the discrete LaserTagPOMDP in one C++ frame.\n\n"
         "Actions are drawn uniformly from {0,1,2,3,4} using pomdp_native::default_rng().\n"
         "Seed via set_seed() before calling to obtain reproducible trajectories.\n"

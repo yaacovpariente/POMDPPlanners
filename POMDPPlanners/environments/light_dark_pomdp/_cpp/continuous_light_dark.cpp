@@ -608,14 +608,16 @@ static int discrete_match_candidate(
     return -1;
 }
 
-// Discrete is_terminal: goal-equality OR (in any obstacle).
-// The Python is_terminal compares state against goal_state with np.all and
-// scans obstacles with np.any-on-equality (no obstacle_hit_terminal toggle
-// — discrete env always treats obstacle as terminal in is_terminal).
+// Discrete is_terminal: goal-equality OR (is_obstacle_hit_terminal AND in any
+// obstacle). The Python is_terminal compares state against goal_state with
+// np.all and scans obstacles with np.any-on-equality; the obstacle branch is
+// gated on ``is_obstacle_hit_terminal`` so callers can opt out of treating an
+// obstacle cell as terminal while still terminating at the goal.
 bool discrete_is_terminal(
     const py::array_t<double, py::array::c_style | py::array::forcecast> &state,
     const py::array_t<double, py::array::c_style | py::array::forcecast> &goal_state_arr,
-    const py::array_t<double, py::array::c_style | py::array::forcecast> &obstacles_arr) {
+    const py::array_t<double, py::array::c_style | py::array::forcecast> &obstacles_arr,
+    bool is_obstacle_hit_terminal) {
     if (state.ndim() != 1 || static_cast<std::size_t>(state.shape(0)) != kLightDarkStateDim) {
         throw std::invalid_argument("state must have shape (2,)");
     }
@@ -623,6 +625,9 @@ bool discrete_is_terminal(
     auto gv = goal_state_arr.unchecked<1>();
     if (sv(0) == gv(0) && sv(1) == gv(1)) {
         return true;
+    }
+    if (!is_obstacle_hit_terminal) {
+        return false;
     }
     if (obstacles_arr.ndim() != 1) {
         throw std::invalid_argument("obstacles must be a flat 1-D array");
@@ -835,7 +840,8 @@ double discrete_simulate_rollout(
     const py::array_t<double, py::array::c_style | py::array::forcecast> &goal_state_arr,
     const py::array_t<double, py::array::c_style | py::array::forcecast> &obstacles_arr,
     double grid_size, double fuel_cost, double goal_reward, double obstacle_reward,
-    double obstacle_hit_probability, double transition_error_prob) {
+    double obstacle_hit_probability, double transition_error_prob,
+    bool is_obstacle_hit_terminal) {
     if (initial_state.ndim() != 1 ||
         static_cast<std::size_t>(initial_state.shape(0)) != kLightDarkStateDim) {
         throw std::invalid_argument("initial_state must have shape (2,)");
@@ -877,21 +883,25 @@ double discrete_simulate_rollout(
     int depth = start_depth;
 
     while (depth < max_depth) {
-        // Terminal: goal or any obstacle (discrete is_terminal does not
-        // honor an is_obstacle_hit_terminal flag — obstacle is always
-        // terminal in the Python is_terminal()).
+        // Terminal: goal, or (when is_obstacle_hit_terminal) any obstacle.
+        // Mirrors the Python is_terminal(): the obstacle branch is gated on
+        // ``is_obstacle_hit_terminal`` so an obstacle cell only terminates the
+        // rollout when the flag is set. The obstacle penalty below is applied
+        // independently of this terminal check.
         if (sx == goal_x && sy == goal_y) {
             break;
         }
-        bool on_obstacle = false;
-        for (std::size_t j = 0; j < n_obstacles; ++j) {
-            if (sx == obstacles_packed[j * 2] && sy == obstacles_packed[j * 2 + 1]) {
-                on_obstacle = true;
+        if (is_obstacle_hit_terminal) {
+            bool on_obstacle = false;
+            for (std::size_t j = 0; j < n_obstacles; ++j) {
+                if (sx == obstacles_packed[j * 2] && sy == obstacles_packed[j * 2 + 1]) {
+                    on_obstacle = true;
+                    break;
+                }
+            }
+            if (on_obstacle) {
                 break;
             }
-        }
-        if (on_obstacle) {
-            break;
         }
 
         const int idx_slot = depth - start_depth;
@@ -1148,7 +1158,9 @@ PYBIND11_MODULE(_native, m) {
 
     m.def("discrete_is_terminal", &discrete_is_terminal,
           py::arg("state"), py::arg("goal_state"), py::arg("obstacles"),
-          "Discrete-LD is_terminal: state-equals-goal OR state in any obstacle.");
+          py::arg("is_obstacle_hit_terminal") = true,
+          "Discrete-LD is_terminal: state-equals-goal OR (is_obstacle_hit_terminal "
+          "AND state in any obstacle).");
 
     m.def("discrete_observation_log_prob", &discrete_observation_log_prob,
           py::arg("next_state"), py::arg("observations"), py::arg("beacons"),
@@ -1186,6 +1198,7 @@ PYBIND11_MODULE(_native, m) {
           py::arg("goal_state"), py::arg("obstacles"), py::arg("grid_size"),
           py::arg("fuel_cost"), py::arg("goal_reward"), py::arg("obstacle_reward"),
           py::arg("obstacle_hit_probability"), py::arg("transition_error_prob"),
+          py::arg("is_obstacle_hit_terminal") = true,
           "Native random rollout for the discrete LightDark env. Uses the module-level "
           "C++ RNG for the obstacle-hit and transition-error draws; the per-step rollout "
           "action indices are pre-drawn on the Python side.");
