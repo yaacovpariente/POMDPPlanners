@@ -94,6 +94,7 @@ def laser_tag_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
         "transition_error_prob": 0.0,
         "reward_model_type": LaserTagRewardModelType.CONSTANT_HAZARD_PENALTY,
         "penalty_decay": 1.0,
+        "is_dangerous_area_hit_terminal": False,
         "opponent_policy": OpponentPolicy.EVADE,
     }
     pinned.update(overrides)
@@ -134,6 +135,7 @@ def continuous_laser_tag_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
         "dangerous_area_radius": 1.0,
         "dangerous_area_penalty": 5.0,
         "dangerous_area_hit_probability": 1.0,
+        "is_dangerous_area_hit_terminal": False,
         "initial_state": None,
         "opponent_policy": OpponentPolicy.EVADE,
     }
