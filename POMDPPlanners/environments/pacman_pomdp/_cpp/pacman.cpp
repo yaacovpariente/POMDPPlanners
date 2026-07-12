@@ -123,7 +123,63 @@ struct TransitionEnv {
     // Mutable int32 buffer (num_ghosts,): patrol direction index per ghost.
     // Passed in from the env; mutated in place to match the Python behavior.
     std::int32_t *patrol_dir_state;
+    // Draw-coupled dangerous-area termination (hazard-terminates-episode v2).
+    // Off by default so the legacy transition is byte-for-byte unchanged.
+    bool is_dangerous_area_hit_terminal = false;
+    const double *dangerous_areas = nullptr;  // (D, 2) row-major, or nullptr
+    int n_dangerous = 0;
+    double dangerous_area_radius = 0.0;
+    int reward_variant_code = 0;  // 0=constant, 1=shock (guarded), 2=decayed
+    double penalty_decay = 1.0;
 };
+
+// True iff (r, c) lies within ``radius_sq`` of any dangerous-area centre.
+inline bool pac_in_dangerous_zone(int r, int c, const double *areas, int n_dangerous,
+                                  double radius_sq) {
+    for (int d = 0; d < n_dangerous; ++d) {
+        const double dr = static_cast<double>(r) - areas[d * 2];
+        const double dc = static_cast<double>(c) - areas[d * 2 + 1];
+        if (dr * dr + dc * dc <= radius_sq) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Draw-coupled dangerous-area termination (hazard-terminates-episode v2).
+// Returns true iff PacMan's realised next position triggers a hazard hit that
+// terminates the episode. CONSTANT variant: prob-1 on zone entry (no draw —
+// PacMan has no explicit dangerous-area hit-probability). DECAYED variant:
+// draws one uniform every non-terminal step and hits with probability
+// ``exp(-min_dist / penalty_decay)`` against the closest zone centre (no
+// radius cutoff). The uniform is drawn from the same module RNG as the
+// ghost-move noise, immediately after it, so the single-step ``sample`` and
+// the all-C++ ``simulate_rollout`` paths share one stream and stay in
+// lock-step. SHOCK is rejected at env construction, so it never reaches here.
+inline bool dangerous_hazard_terminates(const TransitionEnv &env, int new_pac_row,
+                                        int new_pac_col, std::mt19937_64 &rng) {
+    if (!env.is_dangerous_area_hit_terminal || env.n_dangerous <= 0) {
+        return false;
+    }
+    if (env.reward_variant_code == 2) {  // DISTANCE_DECAYED_HAZARD_PENALTY
+        double min_sq = std::numeric_limits<double>::infinity();
+        for (int d = 0; d < env.n_dangerous; ++d) {
+            const double dr = static_cast<double>(new_pac_row) - env.dangerous_areas[d * 2];
+            const double dc = static_cast<double>(new_pac_col) - env.dangerous_areas[d * 2 + 1];
+            const double d_sq = dr * dr + dc * dc;
+            if (d_sq < min_sq) {
+                min_sq = d_sq;
+            }
+        }
+        const double hit_prob = std::exp(-std::sqrt(min_sq) / env.penalty_decay);
+        std::uniform_real_distribution<double> unif(0.0, 1.0);
+        return unif(rng) < hit_prob;
+    }
+    // CONSTANT_HAZARD_PENALTY: deterministic termination on zone entry.
+    const double radius_sq = env.dangerous_area_radius * env.dangerous_area_radius;
+    return pac_in_dangerous_zone(new_pac_row, new_pac_col, env.dangerous_areas, env.n_dangerous,
+                                 radius_sq);
+}
 
 // ---------------------------------------------------------------------------
 // Helpers: valid moves, manhattan, argmax, softmax sampling.
@@ -481,6 +537,17 @@ void apply_transition(const TransitionEnv &env, int action, double *next_state,
     if (!any_active) {
         next_state[env.idx_terminal] = 1.0;
     }
+
+    // Draw-coupled dangerous-area termination (hazard-terminates-episode v2).
+    // Runs after the ghost-move noise and after the collision / win terminal
+    // checks, so the hazard uniform (decayed variant) is the LAST draw of the
+    // step and only fires when the step has not already terminated. The
+    // terminal flag is absorbing (the early return above freezes a terminal
+    // input before any draw).
+    if (next_state[env.idx_terminal] < 0.5 &&
+        dangerous_hazard_terminates(env, new_pac_r, new_pac_c, rng)) {
+        next_state[env.idx_terminal] = 1.0;
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -635,14 +702,19 @@ class PacManTransitionCpp {
                         int num_pellets, double pellet_reward, int idx_pac_row, int idx_pac_col,
                         int idx_ghosts_start, int idx_pellets_start, int idx_pellets_end,
                         int idx_score, int idx_terminal,
-                        py::array_t<std::int32_t> patrol_dir_state)
+                        py::array_t<std::int32_t> patrol_dir_state,
+                        py::array_t<double> dangerous_areas = py::array_t<double>(),
+                        double dangerous_area_radius = 0.0, int reward_variant_code = 0,
+                        double penalty_decay = 1.0,
+                        bool is_dangerous_area_hit_terminal = false)
         : state_array_(state),
           action_(action),
           neighbor_table_array_(neighbor_table),
           neighbor_validity_array_(neighbor_validity),
           pellet_positions_array_(pellet_positions),
           ghost_strategy_codes_array_(ghost_strategy_codes),
-          patrol_dir_state_array_(patrol_dir_state) {
+          patrol_dir_state_array_(patrol_dir_state),
+          dangerous_areas_array_(dangerous_areas) {
         // Unpack neighbor_table shape (R, C, 5, 2).
         if (neighbor_table.ndim() != 4 || neighbor_table.shape(0) != maze_rows ||
             neighbor_table.shape(1) != maze_cols || neighbor_table.shape(2) != kNumMoves ||
@@ -692,6 +764,30 @@ class PacManTransitionCpp {
             env_.ghost_strategies[g] = static_cast<GhostStrategy>(codes(g));
         }
         env_.patrol_dir_state = patrol_dir_state.mutable_data();
+
+        // Draw-coupled dangerous-area termination config (default: disabled).
+        configure_dangerous_hazard(dangerous_areas, dangerous_area_radius, reward_variant_code,
+                                   penalty_decay, is_dangerous_area_hit_terminal);
+    }
+
+    // Populate the ``env_`` hazard-termination fields from the ctor args.
+    void configure_dangerous_hazard(const py::array_t<double> &dangerous_areas,
+                                    double dangerous_area_radius, int reward_variant_code,
+                                    double penalty_decay, bool is_dangerous_area_hit_terminal) {
+        if (dangerous_areas.size() > 0) {
+            if (dangerous_areas.ndim() != 2 || dangerous_areas.shape(1) != 2) {
+                throw std::invalid_argument("dangerous_areas must have shape (D, 2)");
+            }
+            env_.n_dangerous = static_cast<int>(dangerous_areas.shape(0));
+            env_.dangerous_areas = dangerous_areas.data();
+        } else {
+            env_.n_dangerous = 0;
+            env_.dangerous_areas = nullptr;
+        }
+        env_.dangerous_area_radius = dangerous_area_radius;
+        env_.reward_variant_code = reward_variant_code;
+        env_.penalty_decay = penalty_decay;
+        env_.is_dangerous_area_hit_terminal = is_dangerous_area_hit_terminal;
     }
 
     // sample(n_samples=1) -> List[np.ndarray(state_dim,)]
@@ -834,7 +930,18 @@ class PacManTransitionCpp {
                 }
             }
             const bool all_pellets_collected = !any_active;
-            const bool expected_terminal = collision || all_pellets_collected;
+            // Draw-coupled dangerous-area termination is deterministic for the
+            // CONSTANT variant (prob-1 on zone entry), so its terminal outcome
+            // can be modelled exactly here. The DECAYED variant terminates
+            // stochastically and is NOT reflected in this analytic probability.
+            bool hazard_terminal = false;
+            if (env_.is_dangerous_area_hit_terminal && env_.reward_variant_code != 2 &&
+                env_.n_dangerous > 0) {
+                const double radius_sq = env_.dangerous_area_radius * env_.dangerous_area_radius;
+                hazard_terminal = pac_in_dangerous_zone(new_pac_r, new_pac_c, env_.dangerous_areas,
+                                                        env_.n_dangerous, radius_sq);
+            }
+            const bool expected_terminal = collision || all_pellets_collected || hazard_terminal;
             const bool cand_terminal = row[env_.idx_terminal] > 0.5;
             if (cand_terminal != expected_terminal) {
                 obuf(static_cast<py::ssize_t>(i)) = 0.0;
@@ -924,6 +1031,7 @@ class PacManTransitionCpp {
     py::array_t<std::int32_t> pellet_positions_array_;
     py::array_t<std::int32_t> ghost_strategy_codes_array_;
     py::array_t<std::int32_t> patrol_dir_state_array_;
+    py::array_t<double> dangerous_areas_array_;  // (D, 2) hazard-terminal only
     TransitionEnv env_{};
 };
 
@@ -1324,7 +1432,8 @@ py::array_t<double> reward_batch_impl(
     double dangerous_area_penalty, int reward_variant_code, double penalty_decay,
     double step_penalty, double ghost_collision_penalty, double pellet_reward, double win_reward,
     int idx_pac_row, int idx_pac_col, int idx_ghosts_start, int idx_pellets_start,
-    int idx_pellets_end, int idx_score, int idx_terminal) {
+    int idx_pellets_end, int idx_score, int idx_terminal,
+    bool is_dangerous_area_hit_terminal) {
     if (states.ndim() != 2) {
         throw std::invalid_argument("states must be 2-D");
     }
@@ -1357,9 +1466,27 @@ py::array_t<double> reward_batch_impl(
         if (state[idx_terminal] <= 0.5) {
             const int new_pac_row = static_cast<int>(next_state[idx_pac_row]);
             const int new_pac_col = static_cast<int>(next_state[idx_pac_col]);
-            reward += dangerous_area_contribution(reward_variant_code, new_pac_row, new_pac_col,
-                                                  danger_ptr, n_dangerous, dangerous_area_radius,
-                                                  dangerous_area_penalty, penalty_decay, rng);
+            if (is_dangerous_area_hit_terminal) {
+                // Draw-coupled deterministic penalty: apply ``-penalty`` iff the
+                // realised next_state terminated AND PacMan is in a zone
+                // (decayed variant has no radius cutoff -> always in-zone). No RNG.
+                if (next_state[idx_terminal] > 0.5) {
+                    bool in_zone = reward_variant_code == 2;
+                    if (!in_zone && n_dangerous > 0) {
+                        const double radius_sq = dangerous_area_radius * dangerous_area_radius;
+                        in_zone = pac_in_dangerous_zone(new_pac_row, new_pac_col, danger_ptr,
+                                                        n_dangerous, radius_sq);
+                    }
+                    if (in_zone) {
+                        reward -= dangerous_area_penalty;
+                    }
+                }
+            } else {
+                reward += dangerous_area_contribution(reward_variant_code, new_pac_row,
+                                                      new_pac_col, danger_ptr, n_dangerous,
+                                                      dangerous_area_radius,
+                                                      dangerous_area_penalty, penalty_decay, rng);
+            }
         }
         obuf(i) = reward;
     }
@@ -1462,11 +1589,29 @@ double simulate_rollout_impl(
             }
         }
 
-        // Variant-aware dangerous-area contribution. Previously omitted —
-        // this matches the parity contract enforced by reward_batch.
-        r += dangerous_area_contribution(reward_variant_code, new_pac_r, new_pac_c,
-                                         dangerous_areas, n_dangerous, dangerous_area_radius,
-                                         dangerous_area_penalty, penalty_decay, rng);
+        // Dangerous-area contribution. On the flag-on (draw-coupled) path the
+        // penalty is deterministic given the terminal slot set by
+        // ``apply_transition`` above (no RNG draw here): apply ``-penalty`` iff
+        // the step terminated AND PacMan's realised position is in a zone
+        // (decayed variant has no radius cutoff, so it is always in-zone).
+        // Otherwise use the legacy stochastic contribution.
+        if (env.is_dangerous_area_hit_terminal) {
+            if (next[env.idx_terminal] > 0.5) {
+                bool in_zone = reward_variant_code == 2;
+                if (!in_zone && n_dangerous > 0) {
+                    const double radius_sq = dangerous_area_radius * dangerous_area_radius;
+                    in_zone = pac_in_dangerous_zone(new_pac_r, new_pac_c, dangerous_areas,
+                                                    n_dangerous, radius_sq);
+                }
+                if (in_zone) {
+                    r -= dangerous_area_penalty;
+                }
+            }
+        } else {
+            r += dangerous_area_contribution(reward_variant_code, new_pac_r, new_pac_c,
+                                             dangerous_areas, n_dangerous, dangerous_area_radius,
+                                             dangerous_area_penalty, penalty_decay, rng);
+        }
 
         total += gamma_power * r;
         gamma_power *= discount_factor;
@@ -1491,7 +1636,8 @@ PYBIND11_MODULE(_native, m) {
         .def(py::init<py::array_t<double>, int, int, int, py::array_t<std::int32_t>,
                       py::array_t<std::uint8_t>, py::array_t<std::int32_t>, double, int,
                       py::array_t<std::int32_t>, int, int, double, int, int, int, int, int, int,
-                      int, py::array_t<std::int32_t>>(),
+                      int, py::array_t<std::int32_t>, py::array_t<double>, double, int, double,
+                      bool>(),
              py::arg("state"), py::arg("action"), py::arg("maze_rows"),
              py::arg("maze_cols"), py::arg("neighbor_table"), py::arg("neighbor_validity"),
              py::arg("pellet_positions"), py::arg("ghost_aggressiveness"),
@@ -1499,7 +1645,10 @@ PYBIND11_MODULE(_native, m) {
              py::arg("num_ghosts"), py::arg("num_pellets"), py::arg("pellet_reward"),
              py::arg("idx_pac_row"), py::arg("idx_pac_col"), py::arg("idx_ghosts_start"),
              py::arg("idx_pellets_start"), py::arg("idx_pellets_end"), py::arg("idx_score"),
-             py::arg("idx_terminal"), py::arg("patrol_dir_state"))
+             py::arg("idx_terminal"), py::arg("patrol_dir_state"),
+             py::arg("dangerous_areas") = py::array_t<double>(),
+             py::arg("dangerous_area_radius") = 0.0, py::arg("reward_variant_code") = 0,
+             py::arg("penalty_decay") = 1.0, py::arg("is_dangerous_area_hit_terminal") = false)
         .def("sample", &PacManTransitionCpp::sample, py::arg("n_samples") = 1)
         .def("probability", &PacManTransitionCpp::probability, py::arg("values"))
         .def("batch_sample", &PacManTransitionCpp::batch_sample, py::arg("particles"))
@@ -1559,7 +1708,8 @@ PYBIND11_MODULE(_native, m) {
            double dangerous_area_radius,
            double dangerous_area_penalty,
            int reward_variant_code,
-           double penalty_decay) -> double {
+           double penalty_decay,
+           bool is_dangerous_area_hit_terminal) -> double {
             if (state.ndim() != 1) {
                 throw std::invalid_argument("state must be 1-D");
             }
@@ -1598,6 +1748,15 @@ PYBIND11_MODULE(_native, m) {
             }
             const int n_dangerous = static_cast<int>(dangerous_areas.shape(0));
             const double *danger_ptr = (n_dangerous > 0) ? dangerous_areas.data() : nullptr;
+            // Thread the draw-coupled hazard-termination config so
+            // ``apply_transition`` sets the terminal slot and the reward path
+            // stays deterministic (mirrors the single-step transition kernel).
+            env.is_dangerous_area_hit_terminal = is_dangerous_area_hit_terminal;
+            env.dangerous_areas = danger_ptr;
+            env.n_dangerous = n_dangerous;
+            env.dangerous_area_radius = dangerous_area_radius;
+            env.reward_variant_code = reward_variant_code;
+            env.penalty_decay = penalty_decay;
             return simulate_rollout_impl(
                 env,
                 state.data(),
@@ -1648,6 +1807,7 @@ PYBIND11_MODULE(_native, m) {
         py::arg("dangerous_area_penalty"),
         py::arg("reward_variant_code"),
         py::arg("penalty_decay"),
+        py::arg("is_dangerous_area_hit_terminal") = false,
         "Run a random rollout from state using pre-drawn action_indices; "
         "returns the discounted cumulative reward.");
 
@@ -1663,15 +1823,16 @@ PYBIND11_MODULE(_native, m) {
            double dangerous_area_radius, double dangerous_area_penalty, int num_ghosts,
            double step_penalty, double ghost_collision_penalty, double pellet_reward,
            double win_reward, int idx_pac_row, int idx_pac_col, int idx_ghosts_start,
-           int idx_pellets_start, int idx_pellets_end, int idx_score,
-           int idx_terminal) -> py::array_t<double> {
+           int idx_pellets_start, int idx_pellets_end, int idx_score, int idx_terminal,
+           bool is_dangerous_area_hit_terminal) -> py::array_t<double> {
             (void)action;
             return reward_batch_impl(states, next_states, dangerous_areas, num_ghosts,
                                      dangerous_area_radius, dangerous_area_penalty,
                                      reward_variant_code, penalty_decay, step_penalty,
                                      ghost_collision_penalty, pellet_reward, win_reward,
                                      idx_pac_row, idx_pac_col, idx_ghosts_start, idx_pellets_start,
-                                     idx_pellets_end, idx_score, idx_terminal);
+                                     idx_pellets_end, idx_score, idx_terminal,
+                                     is_dangerous_area_hit_terminal);
         },
         py::arg("states"),
         py::arg("action"),
@@ -1693,5 +1854,6 @@ PYBIND11_MODULE(_native, m) {
         py::arg("idx_pellets_end"),
         py::arg("idx_score"),
         py::arg("idx_terminal"),
+        py::arg("is_dangerous_area_hit_terminal") = false,
         "Variant-aware standalone batch reward kernel. Returns (N,) float64.");
 }
