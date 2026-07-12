@@ -166,8 +166,7 @@ class EpisodeRunner:
 
     def _execute_single_action(self, action: Any) -> None:
         """Execute one action: compute reward, sample transition, update belief."""
-        reward = self._compute_reward(action)
-        next_state = self._sample_next_state(action)
+        reward, next_state = self._compute_reward_and_next_state(action)
         raw_observation = self._sample_observation(next_state=next_state, action=action)
         # The world emits a raw observation; the planner's model encodes it into the
         # space the belief filter and planner search operate in (identity by default).
@@ -179,10 +178,33 @@ class EpisodeRunner:
 
         self.state = next_state
 
-    def _compute_reward(self, action: Any) -> float:
+    def _compute_reward_and_next_state(self, action: Any) -> Tuple[float, Any]:
+        """Compute the reward and sample the transition in the correct order.
+
+        Environments whose reward depends on the realised next state (those
+        returning ``True`` from
+        :attr:`~POMDPPlanners.core.environment.environment.Environment.reward_requires_next_state`,
+        e.g. draw-coupled hazard termination) sample the transition first,
+        then compute the reward from the realised next state so both
+        consume the same draw. Every other environment keeps the historical
+        order — reward before transition — so seeded trajectories stay
+        bit-identical to previous releases.
+        """
+        if self.environment.reward_requires_next_state:
+            next_state = self._sample_next_state(action)
+            reward = self._compute_reward(action, next_state=next_state)
+        else:
+            reward = self._compute_reward(action)
+            next_state = self._sample_next_state(action)
+        return reward, next_state
+
+    def _compute_reward(self, action: Any, next_state: Any = None) -> float:
         """Compute reward and update timing metric."""
         start_time = time()
-        reward = self.environment.reward(self.state, action)
+        if next_state is None:
+            reward = self.environment.reward(self.state, action)
+        else:
+            reward = self.environment.reward(self.state, action, next_state=next_state)
         elapsed = time() - start_time
 
         step = self.current_step + 1
