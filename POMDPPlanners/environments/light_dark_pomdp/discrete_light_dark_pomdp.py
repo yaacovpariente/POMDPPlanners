@@ -90,6 +90,11 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
         start_state: Initial robot position (x, y)
         obstacles: List of (x, y) obstacle positions to avoid
         grid_size: Dimension of the square grid world
+        is_obstacle_hit_terminal: Whether entering an obstacle cell terminates
+            the episode. When True (default) an obstacle cell is terminal,
+            preserving the historical always-terminate-on-obstacle behavior.
+            When False only the goal is terminal; the obstacle penalty is still
+            applied in the reward, so termination and penalty are independent.
 
     Example:
         >>> import numpy as np
@@ -150,11 +155,13 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
         grid_size: int = 11,
         is_stochastic_reward: bool = True,
         observation_model_type: ObservationModelType = ObservationModelType.NORMAL,
+        is_obstacle_hit_terminal: bool = True,
     ):
         self.transition_error_prob = transition_error_prob
         self.observation_error_prob = observation_error_prob
         self.is_stochastic_reward = is_stochastic_reward
         self.observation_model_type = observation_model_type
+        self.is_obstacle_hit_terminal = is_obstacle_hit_terminal
 
         super().__init__(
             discount_factor=discount_factor,
@@ -734,12 +741,15 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
     def is_terminal(self, state: np.ndarray) -> bool:
         if state.shape != (2,):
             raise ValueError("state must be a 2D vector")
-        # Native fast-path: state-equals-goal OR state-in-any-obstacle (exact
-        # float equality, matching the Python np.all/np.any-on-equality rules).
+        # Native fast-path: state-equals-goal OR (is_obstacle_hit_terminal AND
+        # state-in-any-obstacle), using exact float equality and matching the
+        # Python np.all/np.any-on-equality rules. When the flag is False only
+        # the goal is terminal; an obstacle cell stays non-terminal.
         return _native.discrete_is_terminal(
             state=np.ascontiguousarray(state, dtype=np.float64),
             goal_state=self._goal_state_f64,
             obstacles=self._obstacles_flat,
+            is_obstacle_hit_terminal=self.is_obstacle_hit_terminal,
         )
 
     def simulate_random_rollout(
@@ -823,6 +833,7 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
             obstacle_reward=float(self.obstacle_reward),
             obstacle_hit_probability=float(self.obstacle_hit_probability),
             transition_error_prob=float(self.transition_error_prob),
+            is_obstacle_hit_terminal=self.is_obstacle_hit_terminal,
         )
 
     def get_metric_names(self) -> List[str]:

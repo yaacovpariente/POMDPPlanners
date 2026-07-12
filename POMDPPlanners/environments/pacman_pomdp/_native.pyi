@@ -43,6 +43,7 @@ def simulate_rollout(
     dangerous_area_penalty: float,
     reward_variant_code: int,
     penalty_decay: float,
+    is_dangerous_area_hit_terminal: bool = ...,
 ) -> float:
     """Run a random rollout from state using pre-drawn action_indices.
 

@@ -178,6 +178,7 @@ class ContinuousLaserTagPOMDP(Environment):
         dangerous_area_radius: float = 1.0,
         dangerous_area_penalty: float = 5.0,
         dangerous_area_hit_probability: float = 1.0,
+        is_dangerous_area_hit_terminal: bool = False,
         output_dir: Optional[Path] = None,
         debug: bool = False,
         use_queue_logger: bool = False,
@@ -211,6 +212,12 @@ class ContinuousLaserTagPOMDP(Environment):
                 matching legacy behavior).  Values below ``1.0`` make the
                 reward stochastic, useful for risk-sensitive planning
                 benchmarks.
+            is_dangerous_area_hit_terminal: When ``True``, a state whose
+                robot position lies geometrically inside any dangerous area
+                (within ``dangerous_area_radius`` of a centre) is treated as
+                terminal by :meth:`is_terminal`, in addition to the explicit
+                terminal-flag field. Defaults to ``False`` (opt-in; dangerous
+                areas only penalise the reward and do not end the episode).
             output_dir: Optional logging directory.
             debug: Enable debug logging.
             use_queue_logger: Use queue-based logger.
@@ -231,11 +238,20 @@ class ContinuousLaserTagPOMDP(Environment):
             action_space=SpaceType.CONTINUOUS,
             observation_space=SpaceType.CONTINUOUS,
         )
+        # The worst-case per-step reward pays the failed-tag penalty and the
+        # step cost; when dangerous areas are configured it can also incur the
+        # dangerous-area penalty, so widen the lower bound to include it.
+        effective_dangerous_areas = (
+            list(dangerous_areas) if dangerous_areas is not None else list(_DEFAULT_DANGEROUS_AREAS)
+        )
+        min_reward = -tag_penalty - step_cost
+        if effective_dangerous_areas:
+            min_reward -= dangerous_area_penalty
         super().__init__(
             discount_factor=discount_factor,
             name=name,
             space_info=space_info,
-            reward_range=(-tag_penalty - step_cost, tag_reward),
+            reward_range=(min_reward, tag_reward),
             output_dir=output_dir,
             debug=debug,
             use_queue_logger=use_queue_logger,
@@ -260,6 +276,7 @@ class ContinuousLaserTagPOMDP(Environment):
         self.dangerous_area_radius = dangerous_area_radius
         self.dangerous_area_penalty = dangerous_area_penalty
         self.dangerous_area_hit_probability = float(dangerous_area_hit_probability)
+        self.is_dangerous_area_hit_terminal = is_dangerous_area_hit_terminal
         # Packed (K, 2) float64 dangerous-area array; reused by the C++ reward kernel.
         self._dangerous_areas_arr = (
             np.ascontiguousarray(np.asarray(self.dangerous_areas, dtype=np.float64).reshape(-1, 2))
@@ -304,6 +321,7 @@ class ContinuousLaserTagPOMDP(Environment):
             "dangerous_area_radius": self.dangerous_area_radius,
             "dangerous_area_penalty": self.dangerous_area_penalty,
             "opponent_policy_code": self.opponent_policy.native_code,
+            "is_dangerous_area_hit_terminal": self.is_dangerous_area_hit_terminal,
         }
 
     # ------------------------------------------------------------------
@@ -768,7 +786,34 @@ class ContinuousLaserTagPOMDP(Environment):
         return rewards - np.where(apply_mask, deductions, 0.0)
 
     def is_terminal(self, state: np.ndarray) -> bool:
-        return bool(state[4])
+        """Check whether ``state`` is terminal.
+
+        A state is terminal when its explicit terminal-flag field is set, and,
+        when ``is_dangerous_area_hit_terminal`` is enabled, also when the robot
+        position lies geometrically inside any dangerous area.
+
+        Args:
+            state: Length-5 state ``[robot_x, robot_y, opp_x, opp_y, flag]``.
+
+        Returns:
+            ``True`` if the state is terminal, ``False`` otherwise.
+        """
+        if bool(state[4]):
+            return True
+        return self.is_dangerous_area_hit_terminal and self._robot_in_dangerous_area(state)
+
+    def _robot_in_dangerous_area(self, state: np.ndarray) -> bool:
+        if not self.dangerous_areas:
+            return False
+        radius_sq = self.dangerous_area_radius * self.dangerous_area_radius
+        robot_x = state[0]
+        robot_y = state[1]
+        for area_x, area_y in self.dangerous_areas:
+            delta_x = robot_x - area_x
+            delta_y = robot_y - area_y
+            if delta_x * delta_x + delta_y * delta_y <= radius_sq:
+                return True
+        return False
 
     def initial_state_dist(self) -> Distribution:
         if self.initial_state_value is not None:
@@ -1019,6 +1064,7 @@ class ContinuousLaserTagPOMDPDiscreteActions(ContinuousLaserTagPOMDP, DiscreteAc
         dangerous_area_radius: float = 1.0,
         dangerous_area_penalty: float = 5.0,
         dangerous_area_hit_probability: float = 1.0,
+        is_dangerous_area_hit_terminal: bool = False,
         output_dir: Optional[Path] = None,
         debug: bool = False,
         use_queue_logger: bool = False,
@@ -1044,6 +1090,7 @@ class ContinuousLaserTagPOMDPDiscreteActions(ContinuousLaserTagPOMDP, DiscreteAc
             dangerous_area_radius=dangerous_area_radius,
             dangerous_area_penalty=dangerous_area_penalty,
             dangerous_area_hit_probability=dangerous_area_hit_probability,
+            is_dangerous_area_hit_terminal=is_dangerous_area_hit_terminal,
             output_dir=output_dir,
             debug=debug,
             use_queue_logger=use_queue_logger,
