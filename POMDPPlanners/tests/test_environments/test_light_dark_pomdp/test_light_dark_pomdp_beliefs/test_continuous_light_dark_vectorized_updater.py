@@ -54,7 +54,12 @@ from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
 
 @pytest.fixture
 def env():
-    return ContinuousLightDarkPOMDP(discount_factor=0.95, **continuous_light_dark_pinned_kwargs())
+    # Flag-off (2-D particles): these updater tests validate native batch
+    # position/observation parity, which is independent of the hazard slot.
+    return ContinuousLightDarkPOMDP(
+        discount_factor=0.95,
+        **continuous_light_dark_pinned_kwargs(is_obstacle_hit_terminal=False),
+    )
 
 
 @pytest.fixture
@@ -442,7 +447,8 @@ class TestEquivalenceWithPerParticleLoop:
 @pytest.fixture
 def discrete_env():
     return ContinuousLightDarkPOMDPDiscreteActions(
-        discount_factor=0.95, **continuous_light_dark_discrete_actions_pinned_kwargs()
+        discount_factor=0.95,
+        **continuous_light_dark_discrete_actions_pinned_kwargs(is_obstacle_hit_terminal=False),
     )
 
 
@@ -600,7 +606,8 @@ def no_obs_env():
     return ContinuousLightDarkPOMDP(
         discount_factor=0.95,
         **continuous_light_dark_pinned_kwargs(
-            observation_model_type=ObservationModelType.NORMAL_NOISE_NO_OBS_IN_DARK
+            observation_model_type=ObservationModelType.NORMAL_NOISE_NO_OBS_IN_DARK,
+            is_obstacle_hit_terminal=False,
         ),
     )
 
@@ -789,7 +796,8 @@ def dist_env():
     return ContinuousLightDarkPOMDP(
         discount_factor=0.95,
         **continuous_light_dark_pinned_kwargs(
-            observation_model_type=ObservationModelType.DISTANCE_BASED
+            observation_model_type=ObservationModelType.DISTANCE_BASED,
+            is_obstacle_hit_terminal=False,
         ),
     )
 

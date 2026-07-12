@@ -167,13 +167,14 @@ class TestCreateContinuousLightDarkBelief:
 
         Given: A ContinuousLightDarkPOMDP environment and a vectorized belief.
         When: sample() is called.
-        Then: The sample has shape (2,).
+        Then: The sample has shape (3,) (the default env is hazard-terminal, so
+            particles carry a trailing terminal slot).
 
         Test type: integration
         """
         np.random.seed(42)
         belief = create_continuous_light_dark_belief(env, n_particles=50)
-        assert belief.sample().shape == (2,)
+        assert belief.sample().shape == (3,)
 
     def test_sample_shape_gaussian(self, env):
         """Test that Gaussian belief sample has the correct shape.
