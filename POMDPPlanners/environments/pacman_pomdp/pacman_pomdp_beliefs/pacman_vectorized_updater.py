@@ -159,4 +159,14 @@ class PacManVectorizedUpdater(VectorizedParticleBeliefUpdater):
             "observation_noise_factor": self.observation_noise_factor,
             "max_observation_noise": self.max_observation_noise,
         }
+        # Draw-coupled dangerous-area termination changes the batched transition
+        # (it sets the terminal slot), so the hazard config must feed the id.
+        kwargs = self._transition_ctor_kwargs
+        hazard_terminal = bool(kwargs.get("is_dangerous_area_hit_terminal", False))
+        config_dict["is_dangerous_area_hit_terminal"] = hazard_terminal
+        if hazard_terminal:
+            config_dict["dangerous_areas"] = np.asarray(kwargs["dangerous_areas"]).tolist()
+            config_dict["dangerous_area_radius"] = float(kwargs["dangerous_area_radius"])
+            config_dict["reward_variant_code"] = int(kwargs["reward_variant_code"])
+            config_dict["penalty_decay"] = float(kwargs["penalty_decay"])
         return config_to_id(config_dict)
