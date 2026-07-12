@@ -106,7 +106,7 @@ class ContinuousLaserTagPOMDPMetrics(Enum):
     AVERAGE_ALL_DANGEROUS_ENCOUNTERS = "average_all_dangerous_encounters"
 
 
-class ContinuousLaserTagPOMDP(Environment):
+class ContinuousLaserTagPOMDP(Environment):  # pylint: disable=too-many-public-methods
     """Continuous LaserTag POMDP with continuous ``[dx, dy, tag_flag]`` actions.
 
     A pursuit-evasion problem in continuous 2-D space where a robot must
@@ -212,12 +212,14 @@ class ContinuousLaserTagPOMDP(Environment):
                 matching legacy behavior).  Values below ``1.0`` make the
                 reward stochastic, useful for risk-sensitive planning
                 benchmarks.
-            is_dangerous_area_hit_terminal: When ``True``, a state whose
-                robot position lies geometrically inside any dangerous area
-                (within ``dangerous_area_radius`` of a centre) is treated as
-                terminal by :meth:`is_terminal`, in addition to the explicit
-                terminal-flag field. Defaults to ``False`` (opt-in; dangerous
-                areas only penalise the reward and do not end the episode).
+            is_dangerous_area_hit_terminal: When ``True`` (default
+                ``False``), entering a dangerous area terminates the episode
+                with probability ``dangerous_area_hit_probability`` via a
+                draw-coupled uniform sampled inside the transition. The
+                dangerous-area penalty then becomes deterministic given the
+                realised terminal slot (applied iff the step terminated in a
+                dangerous area and was not a successful tag). Default ``False``
+                preserves the legacy stochastic-reward behaviour bit-for-bit.
             output_dir: Optional logging directory.
             debug: Enable debug logging.
             use_queue_logger: Use queue-based logger.
@@ -238,20 +240,14 @@ class ContinuousLaserTagPOMDP(Environment):
             action_space=SpaceType.CONTINUOUS,
             observation_space=SpaceType.CONTINUOUS,
         )
-        # The worst-case per-step reward pays the failed-tag penalty and the
-        # step cost; when dangerous areas are configured it can also incur the
-        # dangerous-area penalty, so widen the lower bound to include it.
-        effective_dangerous_areas = (
-            list(dangerous_areas) if dangerous_areas is not None else list(_DEFAULT_DANGEROUS_AREAS)
-        )
-        min_reward = -tag_penalty - step_cost
-        if effective_dangerous_areas:
-            min_reward -= dangerous_area_penalty
         super().__init__(
             discount_factor=discount_factor,
             name=name,
             space_info=space_info,
-            reward_range=(min_reward, tag_reward),
+            # Lower bound includes the dangerous-area penalty: a step can pay
+            # -step_cost, a failed-tag -tag_penalty, and the dangerous-area
+            # deduction in the same call.
+            reward_range=(-tag_penalty - step_cost - dangerous_area_penalty, tag_reward),
             output_dir=output_dir,
             debug=debug,
             use_queue_logger=use_queue_logger,
@@ -276,7 +272,7 @@ class ContinuousLaserTagPOMDP(Environment):
         self.dangerous_area_radius = dangerous_area_radius
         self.dangerous_area_penalty = dangerous_area_penalty
         self.dangerous_area_hit_probability = float(dangerous_area_hit_probability)
-        self.is_dangerous_area_hit_terminal = is_dangerous_area_hit_terminal
+        self.is_dangerous_area_hit_terminal = bool(is_dangerous_area_hit_terminal)
         # Packed (K, 2) float64 dangerous-area array; reused by the C++ reward kernel.
         self._dangerous_areas_arr = (
             np.ascontiguousarray(np.asarray(self.dangerous_areas, dtype=np.float64).reshape(-1, 2))
@@ -321,7 +317,6 @@ class ContinuousLaserTagPOMDP(Environment):
             "dangerous_area_radius": self.dangerous_area_radius,
             "dangerous_area_penalty": self.dangerous_area_penalty,
             "opponent_policy_code": self.opponent_policy.native_code,
-            "is_dangerous_area_hit_terminal": self.is_dangerous_area_hit_terminal,
         }
 
     # ------------------------------------------------------------------
@@ -342,6 +337,9 @@ class ContinuousLaserTagPOMDP(Environment):
         kernel = self._trans_kernel_cache.get(key)
         if kernel is None:
             # Use a zero placeholder state — set_state will overwrite it.
+            # Hazard-terminal params are always passed; they are inert unless
+            # ``is_dangerous_area_hit_terminal`` is enabled (flag off ⇒ no
+            # hazard uniform is drawn ⇒ byte-identical trajectories).
             kernel = _native.ContinuousLaserTagTransitionCpp(
                 state=np.zeros(5, dtype=np.float64),
                 action=action_arr,
@@ -354,6 +352,10 @@ class ContinuousLaserTagPOMDP(Environment):
                 opponent_radius=self.opponent_radius,
                 tag_radius=self.tag_radius,
                 opponent_policy_code=self.opponent_policy.native_code,
+                dangerous_areas=self._dangerous_areas_arr.reshape(-1, 2),
+                dangerous_area_radius=self.dangerous_area_radius,
+                dangerous_area_hit_probability=self.dangerous_area_hit_probability,
+                is_dangerous_area_hit_terminal=self.is_dangerous_area_hit_terminal,
             )
             self._trans_kernel_cache[key] = kernel
         if isinstance(action, np.ndarray):
@@ -521,7 +523,14 @@ class ContinuousLaserTagPOMDP(Environment):
         correctness-preserving path for configs with danger areas.
         """
         has_dangerous_areas = self._dangerous_areas_arr.shape[0] > 0
-        if self.dangerous_area_hit_probability < 1.0 or has_dangerous_areas:
+        if (
+            self.dangerous_area_hit_probability < 1.0
+            or has_dangerous_areas
+            or self.is_dangerous_area_hit_terminal
+        ):
+            # Draw-coupled hazard termination lives in the (Python-dispatched)
+            # single-step transition + deterministic reward, so route the
+            # rollout through the Python path when the flag is on.
             return python_random_rollout(
                 state=state,
                 depth=depth,
@@ -564,6 +573,17 @@ class ContinuousLaserTagPOMDP(Environment):
             rows.append(act)
         return np.ascontiguousarray(np.stack(rows, axis=0))
 
+    @property
+    def reward_requires_next_state(self) -> bool:
+        """Reward depends on the realised ``next_state`` iff hazard-terminal is on.
+
+        When enabled, the dangerous-area penalty is deterministic given the
+        terminal slot set during the transition, so drivers must sample the
+        transition first and thread the realised ``next_state`` into
+        :meth:`reward`.
+        """
+        return self.is_dangerous_area_hit_terminal
+
     def reward(self, state: np.ndarray, action: np.ndarray, next_state: Any = None) -> float:
         # Single-state reward routes through the same C++ kernel used by
         # reward_batch — wrap the state as a (1, 5) row and unpack the
@@ -571,6 +591,8 @@ class ContinuousLaserTagPOMDP(Environment):
         # numerically equivalent.
         state_arr = np.ascontiguousarray(np.asarray(state, dtype=np.float64)).reshape(1, -1)
         action_arr = np.ascontiguousarray(np.asarray(action, dtype=np.float64)).ravel()
+        if self.is_dangerous_area_hit_terminal:
+            return self._deterministic_hazard_reward(state_arr, action_arr, next_state)
         # When the caller threads ``next_state`` (e.g. via
         # :meth:`Environment.sample_next_step`), the dangerous-area check
         # must use the realised post-transition robot position rather
@@ -601,6 +623,47 @@ class ContinuousLaserTagPOMDP(Environment):
         if next_state is None:
             return self._apply_single_state_danger_refund(base, state_arr)
         return self._apply_single_state_danger_penalty(base, state_arr, danger_state_arr)
+
+    def _deterministic_hazard_reward(
+        self, state_arr: np.ndarray, action_arr: np.ndarray, next_state: Any
+    ) -> float:
+        # Hazard-terminal (draw-coupled) reward: fully deterministic given the
+        # realised terminal slot. Base tag / step term comes from the C++
+        # kernel with NO danger areas; the dangerous-area penalty is applied
+        # here iff the step terminated in a dangerous area and was not a
+        # successful tag (tag terminals win rather than incur the hazard).
+        rewards = _native.reward_batch(
+            state_arr,
+            action_arr,
+            self.tag_radius,
+            self.tag_reward,
+            self.tag_penalty,
+            self.step_cost,
+            np.empty(0, dtype=np.float64),
+            self.dangerous_area_radius,
+            self.dangerous_area_penalty,
+        )
+        base = float(rewards[0])
+        if state_arr[0, 4] != 0.0:
+            return base  # terminal pre-state contributes zero reward
+        if next_state is None:
+            # Use the vector-accepting parent transition so this also works for
+            # the discrete-action subclass (whose override expects a str label).
+            sampled = ContinuousLaserTagPOMDP.sample_next_state(self, state_arr[0], action_arr)
+            next_arr = np.ascontiguousarray(np.asarray(sampled, dtype=np.float64)).reshape(1, -1)
+        else:
+            next_arr = np.ascontiguousarray(np.asarray(next_state, dtype=np.float64)).reshape(1, -1)
+        if next_arr[0, 4] == 0.0 or self._is_tag_success(state_arr, action_arr):
+            return base
+        n_matches = self._count_dangerous_area_matches(next_arr[0, :2])
+        return base - n_matches * self.dangerous_area_penalty
+
+    def _is_tag_success(self, state_arr: np.ndarray, action_arr: np.ndarray) -> bool:
+        if action_arr.shape[0] < 3 or action_arr[2] <= 0.5:
+            return False
+        dx = float(state_arr[0, 0]) - float(state_arr[0, 2])
+        dy = float(state_arr[0, 1]) - float(state_arr[0, 3])
+        return (dx * dx + dy * dy) <= (self.tag_radius * self.tag_radius)
 
     def _apply_single_state_danger_refund(self, base: float, state_arr: np.ndarray) -> float:
         # Legacy path (no threaded next_state): the kernel already
@@ -646,16 +709,10 @@ class ContinuousLaserTagPOMDP(Environment):
             return base
         return base - n_matches * self.dangerous_area_penalty
 
-    def reward_batch(
-        self,
-        states: Union[np.ndarray, Sequence[Any]],
-        action: np.ndarray,
-        next_states: Optional[Union[np.ndarray, Sequence[Any]]] = None,
-    ) -> np.ndarray:
+    @staticmethod
+    def _normalize_states_batch(states: Union[np.ndarray, Sequence[Any]]) -> np.ndarray:
         # Skip np.asarray re-allocation when the caller already passes a
-        # C-contiguous float64 array of the right shape (the planners hot
-        # path; matches the same short-circuit used by sample_next_state_batch
-        # in PR-D follow-ups).
+        # C-contiguous float64 (N, 5) array (the planners hot path).
         if isinstance(states, np.ndarray):
             states_nd: np.ndarray = states
             if (
@@ -663,24 +720,33 @@ class ContinuousLaserTagPOMDP(Environment):
                 and states_nd.ndim == 2
                 and states_nd.flags["C_CONTIGUOUS"]
             ):
-                states_arr = states_nd
-            else:
-                states_arr = np.ascontiguousarray(np.asarray(states_nd, dtype=np.float64))
-                if states_arr.ndim == 1:
-                    states_arr = states_arr.reshape(1, -1)
-        else:
-            states_arr = np.ascontiguousarray(np.asarray(states, dtype=np.float64))
-            if states_arr.ndim == 1:
-                states_arr = states_arr.reshape(1, -1)
+                return states_nd
+        states_arr = np.ascontiguousarray(np.asarray(states, dtype=np.float64))
+        if states_arr.ndim == 1:
+            states_arr = states_arr.reshape(1, -1)
+        return states_arr
+
+    @staticmethod
+    def _normalize_action_vector(action: np.ndarray) -> np.ndarray:
         if (
             isinstance(action, np.ndarray)
             and action.dtype == np.float64
             and action.ndim == 1
             and action.flags["C_CONTIGUOUS"]
         ):
-            action_arr = action
-        else:
-            action_arr = np.ascontiguousarray(np.asarray(action, dtype=np.float64)).ravel()
+            return action
+        return np.ascontiguousarray(np.asarray(action, dtype=np.float64)).ravel()
+
+    def reward_batch(
+        self,
+        states: Union[np.ndarray, Sequence[Any]],
+        action: np.ndarray,
+        next_states: Optional[Union[np.ndarray, Sequence[Any]]] = None,
+    ) -> np.ndarray:
+        states_arr = self._normalize_states_batch(states)
+        action_arr = self._normalize_action_vector(action)
+        if self.is_dangerous_area_hit_terminal:
+            return self._deterministic_hazard_reward_batch(states_arr, action_arr, next_states)
         # Honour a threaded ``next_states`` argument: when present, the
         # dangerous-area check (a *post-action* check) must use the
         # realised next-state robot positions rather than re-using
@@ -708,6 +774,51 @@ class ContinuousLaserTagPOMDP(Environment):
         if next_states_arr is None:
             return self._apply_stochastic_dangerous_refund(rewards, states_arr)
         return self._apply_dangerous_penalty_to_next_states(rewards, states_arr, next_states_arr)
+
+    def _deterministic_hazard_reward_batch(
+        self, states_arr: np.ndarray, action_arr: np.ndarray, next_states: Any
+    ) -> np.ndarray:
+        # Vectorised draw-coupled reward. Base tag / step term from the C++
+        # kernel with NO danger areas; the deterministic dangerous-area
+        # penalty is applied per row iff the row terminated in a dangerous
+        # area (and was not a successful tag). ``next_states=None`` is the
+        # belief-expectation estimation path — return the base term only.
+        rewards = _native.reward_batch(
+            states_arr,
+            action_arr,
+            self.tag_radius,
+            self.tag_reward,
+            self.tag_penalty,
+            self.step_cost,
+            np.empty(0, dtype=np.float64),
+            self.dangerous_area_radius,
+            self.dangerous_area_penalty,
+        )
+        if next_states is None or self._dangerous_areas_arr.size == 0:
+            return rewards
+        next_arr = np.ascontiguousarray(np.asarray(next_states, dtype=np.float64))
+        if next_arr.ndim == 1:
+            next_arr = next_arr.reshape(1, -1)
+        hazard_hit = (
+            (states_arr[:, 4] == 0.0)
+            & (next_arr[:, 4] != 0.0)
+            & ~self._tag_success_mask(states_arr, action_arr)
+        )
+        if not hazard_hit.any():
+            return rewards
+        centers = self._dangerous_areas_arr.reshape(-1, 2)
+        positions = next_arr[hazard_hit, :2]
+        deltas = positions[:, None, :] - centers[None, :, :]
+        counts = np.sum(np.sum(deltas * deltas, axis=2) <= (self.dangerous_area_radius**2), axis=1)
+        rewards[hazard_hit] -= counts.astype(np.float64) * float(self.dangerous_area_penalty)
+        return rewards
+
+    def _tag_success_mask(self, states_arr: np.ndarray, action_arr: np.ndarray) -> np.ndarray:
+        if action_arr.shape[0] < 3 or action_arr[2] <= 0.5:
+            return np.zeros(states_arr.shape[0], dtype=bool)
+        dx = states_arr[:, 0] - states_arr[:, 2]
+        dy = states_arr[:, 1] - states_arr[:, 3]
+        return np.asarray((dx * dx + dy * dy) <= (self.tag_radius * self.tag_radius), dtype=bool)
 
     def _apply_stochastic_dangerous_refund(
         self, rewards: np.ndarray, states_arr: np.ndarray
@@ -786,34 +897,7 @@ class ContinuousLaserTagPOMDP(Environment):
         return rewards - np.where(apply_mask, deductions, 0.0)
 
     def is_terminal(self, state: np.ndarray) -> bool:
-        """Check whether ``state`` is terminal.
-
-        A state is terminal when its explicit terminal-flag field is set, and,
-        when ``is_dangerous_area_hit_terminal`` is enabled, also when the robot
-        position lies geometrically inside any dangerous area.
-
-        Args:
-            state: Length-5 state ``[robot_x, robot_y, opp_x, opp_y, flag]``.
-
-        Returns:
-            ``True`` if the state is terminal, ``False`` otherwise.
-        """
-        if bool(state[4]):
-            return True
-        return self.is_dangerous_area_hit_terminal and self._robot_in_dangerous_area(state)
-
-    def _robot_in_dangerous_area(self, state: np.ndarray) -> bool:
-        if not self.dangerous_areas:
-            return False
-        radius_sq = self.dangerous_area_radius * self.dangerous_area_radius
-        robot_x = state[0]
-        robot_y = state[1]
-        for area_x, area_y in self.dangerous_areas:
-            delta_x = robot_x - area_x
-            delta_y = robot_y - area_y
-            if delta_x * delta_x + delta_y * delta_y <= radius_sq:
-                return True
-        return False
+        return bool(state[4])
 
     def initial_state_dist(self) -> Distribution:
         if self.initial_state_value is not None:
@@ -1201,7 +1285,7 @@ class ContinuousLaserTagPOMDPDiscreteActions(ContinuousLaserTagPOMDP, DiscreteAc
         discount_factor: float,
         depth: int = 0,
     ) -> float:
-        if self.dangerous_area_hit_probability < 1.0:
+        if self.dangerous_area_hit_probability < 1.0 or self.is_dangerous_area_hit_terminal:
             return python_random_rollout(
                 state=state,
                 depth=depth,

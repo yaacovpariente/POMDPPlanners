@@ -92,10 +92,8 @@ def discrete_is_terminal(
     state: NDArray[np.float64],
     goal_state: NDArray[np.float64],
     obstacles: NDArray[np.float64],
-    is_obstacle_hit_terminal: bool = ...,
 ) -> bool:
-    """Discrete-LD is_terminal: state-equals-goal OR (``is_obstacle_hit_terminal``
-    AND state-in-any-obstacle)."""
+    """Discrete-LD is_terminal: state-equals-goal OR state-in-any-obstacle."""
     ...
 
 def discrete_observation_log_prob(
@@ -170,14 +168,11 @@ def discrete_simulate_rollout(
     obstacle_reward: float,
     obstacle_hit_probability: float,
     transition_error_prob: float,
-    is_obstacle_hit_terminal: bool = ...,
 ) -> float:
     """Native random rollout for the discrete LightDark env.
 
     Pre-draws action indices on the Python side; uses the module-level C++
-    RNG for the per-step obstacle-hit and transition-error draws. When
-    ``is_obstacle_hit_terminal`` is False an obstacle cell does not terminate
-    the rollout (the obstacle penalty is still applied).
+    RNG for the per-step obstacle-hit and transition-error draws.
     """
     ...
 

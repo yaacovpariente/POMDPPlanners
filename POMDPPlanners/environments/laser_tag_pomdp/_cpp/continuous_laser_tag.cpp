@@ -417,21 +417,72 @@ std::array<double, kStateDim> parse_state(const py::object &state) {
     return pomdp_native::to_array<kStateDim>(state, "state");
 }
 
+// ── Draw-coupled hazard-termination support (hazard-terminates-episode v2) ──
+//
+// When ``is_dangerous_area_hit_terminal`` is enabled on the ContinuousLaserTag
+// transition, the realised next state's terminal slot (index 4) is set to 1.0
+// with probability ``dangerous_area_hit_probability`` whenever the robot lands
+// in a dangerous area (constant-hazard only). The hazard uniform is drawn from
+// the SAME C++ module RNG immediately AFTER the robot / opponent position
+// noise, so the Python single-step path (which routes through this kernel) and
+// the batch belief path stay in lock-step. Flag-off draws no hazard uniform, so
+// the legacy trajectory is byte-identical.
+static inline bool cont_lasertag_in_danger(
+    double x, double y, double radius_sq,
+    const std::vector<std::pair<double, double>> &areas) noexcept {
+    for (const auto &area : areas) {
+        const double dx = x - area.first;
+        const double dy = y - area.second;
+        if (dx * dx + dy * dy <= radius_sq) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Parse dangerous-area centres from a (K, 2) float64 buffer (or empty (0,) /
+// (0, 2) for none). Returns flat (cx, cy) pairs.
+static std::vector<std::pair<double, double>> cont_lasertag_load_areas(
+    const py::array_t<double, py::array::c_style | py::array::forcecast> &dangerous_areas) {
+    std::vector<std::pair<double, double>> areas;
+    if (dangerous_areas.size() == 0) {
+        return areas;
+    }
+    if (dangerous_areas.ndim() != 2 || dangerous_areas.shape(1) != 2) {
+        throw std::invalid_argument("dangerous_areas must have shape (K, 2) or be empty");
+    }
+    const auto k = static_cast<std::size_t>(dangerous_areas.shape(0));
+    areas.reserve(k);
+    auto da_view = dangerous_areas.unchecked<2>();
+    for (std::size_t i = 0; i < k; ++i) {
+        areas.emplace_back(da_view(static_cast<py::ssize_t>(i), 0),
+                           da_view(static_cast<py::ssize_t>(i), 1));
+    }
+    return areas;
+}
+
 class ContinuousLaserTagTransitionCpp {
   public:
-    ContinuousLaserTagTransitionCpp(const py::object &state_obj, const py::object &action_obj,
-                                    const py::array_t<double> &robot_cov,
-                                    const py::array_t<double> &opponent_cov, double evasion_speed,
-                                    const py::array_t<double> &walls_arr,
-                                    const py::array_t<double> &grid_size, double robot_radius,
-                                    double opponent_radius, double tag_radius,
-                                    int opponent_policy_code = kPolicyEvade)
+    ContinuousLaserTagTransitionCpp(
+        const py::object &state_obj, const py::object &action_obj,
+        const py::array_t<double> &robot_cov, const py::array_t<double> &opponent_cov,
+        double evasion_speed, const py::array_t<double> &walls_arr,
+        const py::array_t<double> &grid_size, double robot_radius, double opponent_radius,
+        double tag_radius, int opponent_policy_code = kPolicyEvade,
+        const py::array_t<double, py::array::c_style | py::array::forcecast> &dangerous_areas =
+            py::array_t<double>(),
+        double dangerous_area_radius = 1.0, double dangerous_area_hit_probability = 1.0,
+        bool is_dangerous_area_hit_terminal = false)
         : state_(parse_state(state_obj)),
           action_(parse_action(action_obj)),
           robot_noise_(pomdp_native::GaussianND<2>::from_covariance(robot_cov)),
           opp_noise_(pomdp_native::GaussianND<2>::from_covariance(opponent_cov)),
           env_(make_env_params(walls_arr, grid_size, robot_radius, opponent_radius, tag_radius,
-                               evasion_speed, opponent_policy_code)) {}
+                               evasion_speed, opponent_policy_code)),
+          danger_areas_(cont_lasertag_load_areas(dangerous_areas)),
+          danger_radius_sq_(dangerous_area_radius * dangerous_area_radius),
+          danger_hit_probability_(dangerous_area_hit_probability),
+          danger_terminal_(is_dangerous_area_hit_terminal) {}
 
     py::list sample(int n_samples) const {
         if (n_samples < 0) {
@@ -547,6 +598,7 @@ class ContinuousLaserTagTransitionCpp {
             out[2] = new_opp_x;
             out[3] = new_opp_y;
             out[4] = 0.0;
+            apply_hazard_termination(out, rng);
             return;
         }
 
@@ -580,6 +632,25 @@ class ContinuousLaserTagTransitionCpp {
         out[2] = new_opp_x;
         out[3] = new_opp_y;
         out[4] = 0.0;
+        apply_hazard_termination(out, rng);
+    }
+
+    // Draw-coupled hazard termination: when enabled and the realised robot
+    // position lands in a dangerous area, draw one uniform (from the same
+    // module RNG, immediately after the position noise) and set the terminal
+    // slot with probability ``danger_hit_probability_``. No-op when the flag is
+    // off, no areas are configured, or the state is already terminal.
+    void apply_hazard_termination(double *out, pomdp_native::RNGState &rng) const {
+        if (!danger_terminal_ || danger_areas_.empty() || out[4] != 0.0) {
+            return;
+        }
+        if (!cont_lasertag_in_danger(out[0], out[1], danger_radius_sq_, danger_areas_)) {
+            return;
+        }
+        std::uniform_real_distribution<double> uni(0.0, 1.0);
+        if (uni(rng.engine()) < danger_hit_probability_) {
+            out[4] = 1.0;
+        }
     }
 
     std::array<double, kStateDim> state_;
@@ -587,6 +658,10 @@ class ContinuousLaserTagTransitionCpp {
     pomdp_native::GaussianND<2> robot_noise_;
     pomdp_native::GaussianND<2> opp_noise_;
     EnvParams env_;
+    std::vector<std::pair<double, double>> danger_areas_;
+    double danger_radius_sq_ = 0.0;
+    double danger_hit_probability_ = 1.0;
+    bool danger_terminal_ = false;
 };
 
 class ContinuousLaserTagObservationCpp {
@@ -1329,8 +1404,7 @@ double cont_simulate_rollout(
     double tag_penalty, double step_cost,
     const py::array_t<double, py::array::c_style | py::array::forcecast> &dangerous_areas,
     double dangerous_area_radius, double dangerous_area_penalty,
-    int opponent_policy_code = kPolicyEvade,
-    bool is_dangerous_area_hit_terminal = false) {
+    int opponent_policy_code = kPolicyEvade) {
     // Validate shapes.
     if (initial_state.ndim() != 1 || initial_state.shape(0) != static_cast<py::ssize_t>(kStateDim)) {
         throw std::invalid_argument("initial_state must have shape (5,)");
@@ -1389,22 +1463,6 @@ double cont_simulate_rollout(
         // Check terminal before acting.
         if (state[4] != 0.0) {
             break;
-        }
-        // Geometric-gate terminal: the robot standing inside a dangerous area
-        // ends the episode when the opt-in flag is set (mirrors is_terminal).
-        if (is_dangerous_area_hit_terminal && !danger_areas_vec.empty()) {
-            bool robot_in_danger = false;
-            for (const auto &area : danger_areas_vec) {
-                const double ddx = state[0] - area.first;
-                const double ddy = state[1] - area.second;
-                if (ddx * ddx + ddy * ddy <= da_r_sq) {
-                    robot_in_danger = true;
-                    break;
-                }
-            }
-            if (robot_in_danger) {
-                break;
-            }
         }
         const double action[3] = {act_view(step, 0), act_view(step, 1), act_view(step, 2)};  // NOLINT
 
@@ -1771,8 +1829,7 @@ double simulate_rollout_discrete(
     double transition_error_prob,
     int reward_variant_code,
     double penalty_decay,
-    int opponent_policy_code = kPolicyEvade,
-    bool is_dangerous_area_hit_terminal = false) {
+    int opponent_policy_code = kPolicyEvade) {
 
     if (initial_state.ndim() != 1 || initial_state.shape(0) != 5) {
         throw std::invalid_argument("initial_state must have shape (5,)");
@@ -1800,12 +1857,6 @@ double simulate_rollout_discrete(
     int depth = initial_depth;
 
     while (depth < max_depth && state[4] == 0.0) {
-        // Geometric-gate terminal: the robot standing inside a dangerous area
-        // ends the episode when the opt-in flag is set (mirrors is_terminal).
-        if (is_dangerous_area_hit_terminal &&
-            disc_is_dangerous(static_cast<int>(state[0]), static_cast<int>(state[1]), env)) {
-            break;
-        }
         const int action = action_dist(rng.engine());
 
         // Reward computed on current state before transition.
@@ -2739,11 +2790,17 @@ PYBIND11_MODULE(_native, m) {
     py::class_<ContinuousLaserTagTransitionCpp>(m, "ContinuousLaserTagTransitionCpp")
         .def(py::init<const py::object &, const py::object &, const py::array_t<double> &,
                       const py::array_t<double> &, double, const py::array_t<double> &,
-                      const py::array_t<double> &, double, double, double, int>(),
+                      const py::array_t<double> &, double, double, double, int,
+                      const py::array_t<double, py::array::c_style | py::array::forcecast> &,
+                      double, double, bool>(),
              py::arg("state"), py::arg("action"), py::arg("robot_covariance"),
              py::arg("opponent_covariance"), py::arg("evasion_speed"), py::arg("walls"),
              py::arg("grid_size"), py::arg("robot_radius"), py::arg("opponent_radius"),
-             py::arg("tag_radius"), py::arg("opponent_policy_code") = 0)
+             py::arg("tag_radius"), py::arg("opponent_policy_code") = 0,
+             py::arg("dangerous_areas") = py::array_t<double>(),
+             py::arg("dangerous_area_radius") = 1.0,
+             py::arg("dangerous_area_hit_probability") = 1.0,
+             py::arg("is_dangerous_area_hit_terminal") = false)
         .def("sample", &ContinuousLaserTagTransitionCpp::sample, py::arg("n_samples") = 1)
         .def("probability", &ContinuousLaserTagTransitionCpp::probability, py::arg("values"))
         .def("batch_sample", &ContinuousLaserTagTransitionCpp::batch_sample, py::arg("particles"))
@@ -2778,7 +2835,6 @@ PYBIND11_MODULE(_native, m) {
         py::arg("tag_radius"), py::arg("tag_reward"), py::arg("tag_penalty"),
         py::arg("step_cost"), py::arg("dangerous_areas"), py::arg("dangerous_area_radius"),
         py::arg("dangerous_area_penalty"), py::arg("opponent_policy_code") = 0,
-        py::arg("is_dangerous_area_hit_terminal") = false,
         "Run a full random rollout for ContinuousLaserTagPOMDP in one C++ frame.\n\n"
         "``actions_buffer`` must be shape (N, 3) float64 with N >= max_depth - start_depth.\n"
         "``opponent_policy_code`` selects the opponent behaviour: 0 = EVADE (away from\n"
@@ -2799,7 +2855,6 @@ PYBIND11_MODULE(_native, m) {
         py::arg("reward_variant_code") = 0,
         py::arg("penalty_decay") = 1.0,
         py::arg("opponent_policy_code") = 0,
-        py::arg("is_dangerous_area_hit_terminal") = false,
         "Run a full random-action rollout for the discrete LaserTagPOMDP in one C++ frame.\n\n"
         "Actions are drawn uniformly from {0,1,2,3,4} using pomdp_native::default_rng().\n"
         "Seed via set_seed() before calling to obtain reproducible trajectories.\n"
