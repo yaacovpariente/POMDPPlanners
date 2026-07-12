@@ -395,6 +395,9 @@ class RiskAverseEnvironmentConfigsAPI:
             obstacle_radius=OBSTACLE_RADIUS,
             reward_model_type=REWARD_MODEL_TYPE,
             penalty_decay=PENALTY_DECAY,
+            # The shock reward model has no hit probability to couple
+            # termination to, so draw-coupled hazard termination is disabled.
+            is_obstacle_hit_terminal=False,
             name="ContinuousLightDarkPOMDPDiscreteActions",
         )
 
@@ -427,6 +430,9 @@ class RiskAverseEnvironmentConfigsAPI:
         OBSTACLE_RADIUS = 1.2  # Radius around obstacles for collision
         REWARD_MODEL_TYPE = RewardModelType.ZERO_MEAN_HAZARD_SHOCK  # Standard reward model
         PENALTY_DECAY = 1.0  # No decay in penalty
+        # The shock reward model has no hit probability to couple termination
+        # to, so draw-coupled hazard termination is disabled for this config.
+        IS_OBSTACLE_HIT_TERMINAL = False
 
         pomdp = ContinuousLightDarkPOMDP(
             discount_factor=DISCOUNT_FACTOR,
@@ -447,7 +453,7 @@ class RiskAverseEnvironmentConfigsAPI:
             obstacle_radius=OBSTACLE_RADIUS,
             reward_model_type=REWARD_MODEL_TYPE,
             penalty_decay=PENALTY_DECAY,
-            is_obstacle_hit_terminal=True,
+            is_obstacle_hit_terminal=IS_OBSTACLE_HIT_TERMINAL,
         )
 
         belief = create_environment_belief(pomdp, n_particles=n_particles)
