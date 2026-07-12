@@ -146,6 +146,98 @@ inline bool is_terminal_row(const double *row) {
     return static_cast<int>(row[0]) == -1 && static_cast<int>(row[1]) == -1;
 }
 
+// ── Reward-variant codes (shared across every kernel in this TU) ────────────
+//   0 -> CONSTANT_HAZARD_PENALTY, 1 -> ZERO_MEAN_HAZARD_SHOCK,
+//   2 -> DISTANCE_DECAYED_HAZARD_PENALTY. Mirrors the Python ``RewardModelType``.
+constexpr int kRewardVariantConstantHazardPenalty = 0;
+constexpr int kRewardVariantZeroMeanHazardShock = 1;
+constexpr int kRewardVariantDistanceDecayedHazardPenalty = 2;
+
+// Minimum squared distance from ``(row, col)`` to any dangerous-area centre.
+// ``dangers`` is a (K, 2) row-major float64 array; ``k`` is the centre count.
+inline double min_dist_to_danger_sq(double row, double col, const double *dangers,
+                                    std::size_t k) {
+    double best = std::numeric_limits<double>::infinity();
+    for (std::size_t j = 0; j < k; ++j) {
+        const double dr = row - dangers[j * 2];
+        const double dc = col - dangers[j * 2 + 1];
+        const double d2 = dr * dr + dc * dc;
+        if (d2 < best) best = d2;
+    }
+    return best;
+}
+
+// Load dangerous-area centres from a (K, 2) float64 array into a flat
+// row-major ``(cx, cy)`` buffer. Empty (0, 2) / empty arrays yield ``{}``.
+inline std::vector<double> load_danger_centres(
+    const py::array_t<double, py::array::c_style | py::array::forcecast> &areas) {
+    if (areas.size() == 0) {
+        return {};
+    }
+    if (areas.ndim() != 2 || areas.shape(1) != 2) {
+        throw std::invalid_argument("dangerous_areas must have shape (K, 2)");
+    }
+    const auto k = static_cast<std::size_t>(areas.shape(0));
+    std::vector<double> out(k * 2);
+    auto u = areas.unchecked<2>();
+    for (std::size_t i = 0; i < k; ++i) {
+        out[i * 2] = u(static_cast<py::ssize_t>(i), 0);
+        out[i * 2 + 1] = u(static_cast<py::ssize_t>(i), 1);
+    }
+    return out;
+}
+
+// ── Draw-coupled hazard-termination support (hazard-terminates-episode v2) ──
+//
+// When ``is_dangerous_area_hit_terminal`` is enabled the RockSample state
+// gains a LAST terminal-flag slot (0.0 = live, 1.0 = terminal). The otherwise
+// deterministic transition draws ONE hazard uniform from the C++ module RNG
+// after computing the realised next position, so the Python single-step path
+// (which routes through RockSampleTransitionCpp) and the all-C++
+// ``simulate_rollout_discrete`` share one stream and stay in lock-step. The
+// reward is then deterministic given the terminal slot (penalty fires iff
+// terminal ∧ in-zone ∧ ¬exit); no RNG on the flag-on reward path.
+struct RockHazardConfig {
+    bool dangerous_terminal = false;
+    double dangerous_area_radius_sq = 0.0;
+    double dangerous_area_hit_probability = 1.0;
+    int reward_variant_code = kRewardVariantConstantHazardPenalty;
+    double penalty_decay = 1.0;
+};
+
+// Draw the hazard-termination uniform for one realised next position and
+// return 1.0 if the step terminates, else 0.0. The decayed variant has no
+// radius cutoff (draws on every step); the constant variant draws only when
+// the position is inside a zone. ZERO_MEAN_HAZARD_SHOCK is rejected in Python
+// before reaching this path.
+inline double rock_hazard_terminal_draw(double next_row, double next_col,
+                                        const double *dangers, std::size_t k,
+                                        const RockHazardConfig &hz,
+                                        pomdp_native::RNGState &rng) {
+    if (!hz.dangerous_terminal || k == 0) {
+        return 0.0;
+    }
+    std::uniform_real_distribution<double> uni(0.0, 1.0);
+    if (hz.reward_variant_code == kRewardVariantDistanceDecayedHazardPenalty) {
+        const double u = uni(rng.engine());
+        const double min_sq = min_dist_to_danger_sq(next_row, next_col, dangers, k);
+        if (u <= 0.0) {
+            return 1.0;
+        }
+        const double log_u = std::log(u);
+        // hit iff u < exp(-min_dist / decay) == decay^2 * log_u^2 > min_dist^2.
+        if (hz.penalty_decay * hz.penalty_decay * log_u * log_u > min_sq) {
+            return 1.0;
+        }
+        return 0.0;
+    }
+    const double min_sq = min_dist_to_danger_sq(next_row, next_col, dangers, k);
+    if (min_sq > hz.dangerous_area_radius_sq) {
+        return 0.0;
+    }
+    return uni(rng.engine()) < hz.dangerous_area_hit_probability ? 1.0 : 0.0;
+}
+
 // Deterministic transition: writes next-state into ``out`` (length state_dim).
 // ``src`` is the current state row, also length state_dim. ``state_dim`` is
 // the length of the state vector used by this call (per-particle callers
@@ -226,21 +318,42 @@ class RockSampleTransitionCpp {
     RockSampleTransitionCpp(
         const py::object &state_obj, int action, int map_rows, int map_cols, int num_rocks,
         const py::array_t<std::int32_t, py::array::c_style | py::array::forcecast> &rock_positions,
-        double sensor_efficiency)
+        double sensor_efficiency,
+        const py::array_t<double, py::array::c_style | py::array::forcecast> &dangerous_areas =
+            py::array_t<double>(),
+        double dangerous_area_radius = 1.0, double dangerous_area_hit_probability = 1.0,
+        int reward_variant_code = 0, double penalty_decay = 1.0,
+        bool is_dangerous_area_hit_terminal = false)
         : env_(make_env_params(map_rows, map_cols, num_rocks, rock_positions, sensor_efficiency)),
           state_(parse_state_flexible(state_obj, "state")),
-          action_(action) {}
+          action_(action),
+          dangers_(load_danger_centres(dangerous_areas)),
+          n_dangers_(dangers_.size() / 2) {
+        hz_.dangerous_terminal = is_dangerous_area_hit_terminal;
+        hz_.dangerous_area_radius_sq = dangerous_area_radius * dangerous_area_radius;
+        hz_.dangerous_area_hit_probability = dangerous_area_hit_probability;
+        hz_.reward_variant_code = reward_variant_code;
+        hz_.penalty_decay = penalty_decay;
+    }
 
     py::list sample(int n_samples) const {
         if (n_samples < 0) {
             throw std::invalid_argument("n_samples must be non-negative");
         }
         const std::size_t state_dim = state_.size();
-        std::vector<double> next(state_dim);
-        transition_into(state_.data(), next.data(), action_, env_, state_dim);
-
         py::list out;
+        std::vector<double> next(state_dim);
+        if (!has_terminal_slot(state_dim)) {
+            transition_into(state_.data(), next.data(), action_, env_, state_dim);
+            for (int i = 0; i < n_samples; ++i) {
+                out.append(pomdp_native::array_from_vector(next.data(), state_dim));
+            }
+            return out;
+        }
+        // Flag-on: draw the hazard uniform per sample from the module RNG.
+        pomdp_native::RNGState &rng = pomdp_native::default_rng();
         for (int i = 0; i < n_samples; ++i) {
+            compute_next_hazard_row(state_.data(), next.data(), state_dim, rng);
             out.append(pomdp_native::array_from_vector(next.data(), state_dim));
         }
         return out;
@@ -257,12 +370,17 @@ class RockSampleTransitionCpp {
         std::vector<double> next(state_dim);
         transition_into(state_.data(), next.data(), action_, env_, state_dim);
 
+        // The stochastic terminal slot (last dim, hazard-terminal envs) does
+        // not participate in the deterministic transition indicator, so only
+        // the position + rock dims are compared.
+        const std::size_t cmp_dim =
+            has_terminal_slot(state_dim) ? state_dim - 1 : state_dim;
         auto out = py::array_t<double>(static_cast<py::ssize_t>(batch.n));
         auto buf = out.mutable_unchecked<1>();
         for (std::size_t i = 0; i < batch.n; ++i) {
             const double *row = batch.flat.data() + i * state_dim;
             bool equal = true;
-            for (std::size_t d = 0; d < state_dim; ++d) {
+            for (std::size_t d = 0; d < cmp_dim; ++d) {
                 if (row[d] != next[d]) {
                     equal = false;
                     break;
@@ -275,16 +393,20 @@ class RockSampleTransitionCpp {
 
     py::array_t<double> batch_sample(
         const py::array_t<double, py::array::c_style | py::array::forcecast> &particles) const {
-        // Batch path requires the canonical shape (N, 2 + num_rocks) so the
-        // caller's particle array layout is unambiguous.
-        const std::size_t batch_state_dim = static_cast<std::size_t>(2 + env_.num_rocks);
-        if (particles.ndim() != 2 ||
-            static_cast<std::size_t>(particles.shape(1)) != batch_state_dim) {
-            throw std::invalid_argument("particles must have shape (N, 2 + num_rocks)");
+        // Batch path accepts the canonical (N, 2 + num_rocks) shape or, for
+        // hazard-terminal envs, (N, 2 + num_rocks + 1) with a trailing
+        // terminal slot.
+        const std::size_t base_dim = static_cast<std::size_t>(2 + env_.num_rocks);
+        const auto width =
+            (particles.ndim() == 2) ? static_cast<std::size_t>(particles.shape(1)) : 0;
+        const bool has_slot = has_terminal_slot(width);
+        if (particles.ndim() != 2 || (width != base_dim && !has_slot)) {
+            throw std::invalid_argument(
+                "particles must have shape (N, 2 + num_rocks) or (N, 2 + num_rocks + 1)");
         }
         const auto n_rows = static_cast<std::size_t>(particles.shape(0));
         auto out = py::array_t<double>(
-            {static_cast<py::ssize_t>(n_rows), static_cast<py::ssize_t>(batch_state_dim)});
+            {static_cast<py::ssize_t>(n_rows), static_cast<py::ssize_t>(width)});
 
         const double *in_data = particles.data();
         double *out_data = out.mutable_data();
@@ -292,12 +414,17 @@ class RockSampleTransitionCpp {
         // Step 1: bulk memcpy the whole particle block; most action paths
         // only mutate a few slots per row, so starting from the input is
         // cheaper than clearing and rewriting column-by-column.
-        std::memcpy(out_data, in_data, n_rows * batch_state_dim * sizeof(double));
+        std::memcpy(out_data, in_data, n_rows * width * sizeof(double));
 
         // Step 2: action-specific vectorizable mutations. These mirror the
         // pre-port NumPy ``_apply_movement`` / ``_apply_sample`` /
         // ``_apply_exit`` kernels.
-        batch_apply_action_(out_data, n_rows, batch_state_dim);
+        batch_apply_action_(out_data, n_rows, width);
+
+        // Step 3 (hazard-terminal only): per-row draw-coupled termination.
+        if (has_slot) {
+            batch_apply_hazard_(in_data, out_data, n_rows, width);
+        }
         return out;
     }
 
@@ -413,9 +540,67 @@ class RockSampleTransitionCpp {
         }
     }
 
+    // True when the flag is on and the state row carries the trailing
+    // terminal slot (width == 2 + num_rocks + 1).
+    bool has_terminal_slot(std::size_t state_dim) const {
+        return hz_.dangerous_terminal &&
+               state_dim == static_cast<std::size_t>(env_.num_rocks + 3);
+    }
+
+    // Flag-on per-particle next-state row: deterministic transition, then one
+    // draw-coupled hazard uniform. Absorbing: an already-terminal input
+    // freezes to itself with no draw. Exit-sentinel next states keep slot 0.
+    void compute_next_hazard_row(const double *src, double *out, std::size_t state_dim,
+                                 pomdp_native::RNGState &rng) const {
+        if (src[state_dim - 1] > 0.5) {
+            for (std::size_t d = 0; d < state_dim; ++d) {
+                out[d] = src[d];
+            }
+            return;
+        }
+        transition_into(src, out, action_, env_, state_dim);
+        if (is_terminal_row(out)) {
+            out[state_dim - 1] = 0.0;
+            return;
+        }
+        out[state_dim - 1] =
+            rock_hazard_terminal_draw(out[0], out[1], dangers_.data(), n_dangers_, hz_, rng);
+    }
+
+    // Flag-on batch termination: for each row (already carrying the realised
+    // next position from ``batch_apply_action_``), latch already-terminal
+    // inputs and otherwise draw one hazard uniform. ``in_data`` supplies the
+    // pre-transition rows for the absorbing check.
+    void batch_apply_hazard_(const double *in_data, double *out_data, std::size_t n_rows,
+                             std::size_t width) const {
+        pomdp_native::RNGState &rng = pomdp_native::default_rng();
+        const std::size_t slot = width - 1;
+        for (std::size_t i = 0; i < n_rows; ++i) {
+            const double *in_row = in_data + i * width;
+            double *row = out_data + i * width;
+            if (in_row[slot] > 0.5) {
+                // Absorbing: restore the frozen input row (no draw).
+                for (std::size_t d = 0; d < width; ++d) {
+                    row[d] = in_row[d];
+                }
+                continue;
+            }
+            if (row[0] < 0.0 && row[1] < 0.0) {
+                // Exit-sentinel terminal: no hazard draw, slot stays 0.
+                row[slot] = 0.0;
+                continue;
+            }
+            row[slot] =
+                rock_hazard_terminal_draw(row[0], row[1], dangers_.data(), n_dangers_, hz_, rng);
+        }
+    }
+
     EnvParams env_;
     std::vector<double> state_;
     int action_;
+    std::vector<double> dangers_;  // (K*2,) row-major (cx, cy); hazard-terminal only
+    std::size_t n_dangers_ = 0;
+    RockHazardConfig hz_;
 };
 
 class RockSampleObservationCpp {
@@ -631,18 +816,6 @@ class RockSampleObservationCpp {
     int action_;
 };
 
-// ---------------------------------------------------------------------------
-// Reward-variant codes mirror the Python ``RewardModelType`` enum used by
-// :class:`RockSamplePOMDP`:
-//
-//   0 -> CONSTANT_HAZARD_PENALTY             (constant-probability dangerous-area penalty)
-//   1 -> ZERO_MEAN_HAZARD_SHOCK (+/- 50/50 dangerous-area perturbation)
-//   2 -> DISTANCE_DECAYED_HAZARD_PENALTY (exp(-min_dist/decay) hit probability)
-// ---------------------------------------------------------------------------
-constexpr int kRewardVariantConstantHazardPenalty = 0;
-constexpr int kRewardVariantZeroMeanHazardShock = 1;
-constexpr int kRewardVariantDistanceDecayedHazardPenalty = 2;
-
 // Base reward shared across all variants: step / exit / sample / sense.
 // ``state_row`` is the current state row (length state_dim) so this
 // matches the Python ``compute_reward`` which uses the CURRENT robot
@@ -675,20 +848,6 @@ inline double base_reward_term(const double *state_row, int action, int map_cols
         r += sensor_use_penalty;
     }
     return r;
-}
-
-// Minimum squared distance from ``(row, col)`` to any dangerous-area centre.
-// ``dangerous_areas`` is a (K, 2) row-major float64 array.
-inline double min_dist_to_danger_sq(double row, double col, const double *dangers,
-                                    std::size_t k) {
-    double best = std::numeric_limits<double>::infinity();
-    for (std::size_t j = 0; j < k; ++j) {
-        const double dr = row - dangers[j * 2];
-        const double dc = col - dangers[j * 2 + 1];
-        const double d2 = dr * dr + dc * dc;
-        if (d2 < best) best = d2;
-    }
-    return best;
 }
 
 // Compute the dangerous-area reward contribution for a single
@@ -727,26 +886,6 @@ inline double dangerous_area_term(double next_row, double next_col,
     return 0.0;
 }
 
-// Terminal test used by the rollout: the exit sentinel ``(-1, -1)`` OR,
-// when ``is_dangerous_area_hit_terminal`` is enabled, a robot position
-// geometrically inside any dangerous area (squared-distance within
-// ``dangerous_area_radius``). Mirrors ``RockSamplePOMDP.is_terminal``: a
-// pure geometric gate independent of any penalty draw.
-inline bool is_terminal_state(const double *row, bool is_dangerous_area_hit_terminal,
-                              const double *dangers, std::size_t k,
-                              double dangerous_area_radius) {
-    if (is_terminal_row(row)) {
-        return true;
-    }
-    if (is_dangerous_area_hit_terminal && k > 0) {
-        const double radius_sq = dangerous_area_radius * dangerous_area_radius;
-        if (min_dist_to_danger_sq(row[0], row[1], dangers, k) <= radius_sq) {
-            return true;
-        }
-    }
-    return false;
-}
-
 // Standalone reward batch kernel. Returns a (N,) float64 array where each
 // entry is the per-row reward under the configured variant.
 py::array_t<double> reward_batch(
@@ -761,7 +900,7 @@ py::array_t<double> reward_batch(
     const py::array_t<double, py::array::c_style | py::array::forcecast> &dangerous_areas,
     double dangerous_area_radius, double dangerous_area_penalty,
     double dangerous_area_hit_probability, int reward_variant_code,
-    double penalty_decay) {
+    double penalty_decay, bool is_dangerous_area_hit_terminal = false) {
     (void)map_rows;  // currently unused; kept for parity with the kernel API
     if (states.ndim() != 2 || states.shape(1) < 2) {
         throw std::invalid_argument("states must have shape (N, 2 + num_rocks)");
@@ -810,10 +949,31 @@ py::array_t<double> reward_batch(
         const int robot_col = static_cast<int>(cur_row[1]);
         const bool is_exit = (action == 2 && robot_col == map_cols - 1);
         if (!is_exit && n_dangers > 0) {
-            r += dangerous_area_term(nxt_row[0], nxt_row[1], dangers_data, n_dangers,
-                                     dangerous_area_radius, dangerous_area_penalty,
-                                     dangerous_area_hit_probability,
-                                     reward_variant_code, penalty_decay);
+            if (is_dangerous_area_hit_terminal) {
+                // Flag-on: deterministic penalty coupled to the terminal slot
+                // set during the transition (no RNG draw). The slot is the
+                // last dim of the next-state row.
+                const double terminal = (next_dim > static_cast<std::size_t>(2 + num_rocks))
+                                            ? nxt_row[next_dim - 1]
+                                            : 0.0;
+                if (terminal > 0.5) {
+                    const bool decayed =
+                        reward_variant_code == kRewardVariantDistanceDecayedHazardPenalty;
+                    const double radius_sq = dangerous_area_radius * dangerous_area_radius;
+                    const bool in_zone =
+                        decayed ||
+                        min_dist_to_danger_sq(nxt_row[0], nxt_row[1], dangers_data, n_dangers) <=
+                            radius_sq;
+                    if (in_zone) {
+                        r += dangerous_area_penalty;
+                    }
+                }
+            } else {
+                r += dangerous_area_term(nxt_row[0], nxt_row[1], dangers_data, n_dangers,
+                                         dangerous_area_radius, dangerous_area_penalty,
+                                         dangerous_area_hit_probability,
+                                         reward_variant_code, penalty_decay);
+            }
         }
         out_data[i] = r;
     }
@@ -856,7 +1016,7 @@ double simulate_rollout_discrete(
     double dangerous_area_hit_probability,
     int reward_variant_code,
     double penalty_decay,
-    bool is_dangerous_area_hit_terminal) {
+    bool is_dangerous_area_hit_terminal = false) {
     if (initial_state.ndim() != 1 || initial_state.shape(0) < 2) {
         throw std::invalid_argument("initial_state must be a 1-D array with length >= 2");
     }
@@ -874,10 +1034,12 @@ double simulate_rollout_discrete(
     const int n_indices = static_cast<int>(action_indices.shape(0));
 
     const std::size_t state_dim = static_cast<std::size_t>(initial_state.shape(0));
-    const int num_rocks = static_cast<int>((state_dim >= 2) ? state_dim - 2 : 0);
 
-    // Unpack rock positions from flat array
+    // Rock count is authoritative from the flat positions array (2 ints per
+    // rock), NOT ``state_dim - 2``: a hazard-terminal state carries a trailing
+    // terminal slot so its width is ``2 + num_rocks + 1``.
     const auto rp_size = static_cast<std::size_t>(rock_positions_flat.shape(0));
+    const int num_rocks = static_cast<int>(rp_size / 2);
     auto rp_view = rock_positions_flat.unchecked<1>();
     std::vector<std::int32_t> rock_rows_local;
     std::vector<std::int32_t> rock_cols_local;
@@ -906,13 +1068,24 @@ double simulate_rollout_discrete(
 
     auto ai_view = action_indices.unchecked<1>();
 
+    // Flag-on draw-coupled termination config. The state carries a trailing
+    // terminal slot when the flag is on and the width is 2 + num_rocks + 1.
+    const bool has_slot =
+        is_dangerous_area_hit_terminal && state_dim == static_cast<std::size_t>(num_rocks + 3);
+    RockHazardConfig hz{};
+    hz.dangerous_terminal = is_dangerous_area_hit_terminal;
+    hz.dangerous_area_radius_sq = dangerous_area_radius * dangerous_area_radius;
+    hz.dangerous_area_hit_probability = dangerous_area_hit_probability;
+    hz.reward_variant_code = reward_variant_code;
+    hz.penalty_decay = penalty_decay;
+    pomdp_native::RNGState &rng = pomdp_native::default_rng();
+
     double total = 0.0;
     double gamma_power = 1.0;
     int depth = start_depth;
 
     while (depth < max_depth) {
-        if (is_terminal_state(cur.data(), is_dangerous_area_hit_terminal, dangers_data,
-                              n_dangers, dangerous_area_radius)) {
+        if (is_terminal_row(cur.data()) || (has_slot && cur[state_dim - 1] > 0.5)) {
             break;
         }
 
@@ -925,11 +1098,9 @@ double simulate_rollout_discrete(
             ai = ((ai % n_actions) + n_actions) % n_actions;
         }
 
-        // Deterministic transition
+        // Deterministic transition (rock / position dynamics).
         transition_into(cur.data(), nxt.data(), ai, env_local, state_dim);
 
-        // Reward: matches _reward_from_next_state with variant-aware
-        // dangerous-area term.
         double r = base_reward_term(cur.data(), ai, map_cols, num_rocks,
                                     env_local.rock_rows.data(),
                                     env_local.rock_cols.data(), state_dim,
@@ -937,7 +1108,27 @@ double simulate_rollout_discrete(
                                     bad_rock_penalty, sensor_use_penalty);
         const int robot_col_cur = static_cast<int>(cur[1]);
         const bool is_exit = (ai == 2 && robot_col_cur == map_cols - 1);
-        if (!is_exit && n_dangers > 0) {
+
+        if (has_slot) {
+            // Draw-coupled termination: one hazard uniform (in transition
+            // order), then a deterministic penalty given the terminal slot.
+            double terminal = 0.0;
+            if (!is_terminal_row(nxt.data())) {
+                terminal =
+                    rock_hazard_terminal_draw(nxt[0], nxt[1], dangers_data, n_dangers, hz, rng);
+            }
+            nxt[state_dim - 1] = terminal;
+            if (!is_exit && n_dangers > 0 && terminal > 0.5) {
+                const bool decayed =
+                    reward_variant_code == kRewardVariantDistanceDecayedHazardPenalty;
+                const bool in_zone =
+                    decayed || min_dist_to_danger_sq(nxt[0], nxt[1], dangers_data, n_dangers) <=
+                                   hz.dangerous_area_radius_sq;
+                if (in_zone) {
+                    r += dangerous_area_penalty;
+                }
+            }
+        } else if (!is_exit && n_dangers > 0) {
             r += dangerous_area_term(nxt[0], nxt[1], dangers_data, n_dangers,
                                      dangerous_area_radius, dangerous_area_penalty,
                                      dangerous_area_hit_probability,
@@ -977,10 +1168,7 @@ PYBIND11_MODULE(_native, m) {
           "action_indices must be a pre-drawn int32 array of length (max_depth-start_depth). "
           "rock_positions_flat is a 1-D int32 array [row0, col0, row1, col1, ...]. "
           "dangerous_areas is a (K, 2) float64 array (may be empty). "
-          "reward_variant_code: 0=CONSTANT_HAZARD_PENALTY, 1=ZERO_MEAN_HAZARD_SHOCK, 2=DISTANCE_DECAYED_HAZARD_PENALTY. "
-          "is_dangerous_area_hit_terminal: when true, a robot position inside a "
-          "dangerous area terminates the rollout (geometric gate matching "
-          "RockSamplePOMDP.is_terminal).");
+          "reward_variant_code: 0=CONSTANT_HAZARD_PENALTY, 1=ZERO_MEAN_HAZARD_SHOCK, 2=DISTANCE_DECAYED_HAZARD_PENALTY.");
 
     m.def("reward_batch", &reward_batch,
           py::arg("states"), py::arg("action"), py::arg("next_states"),
@@ -991,6 +1179,7 @@ PYBIND11_MODULE(_native, m) {
           py::arg("dangerous_area_radius"), py::arg("dangerous_area_penalty"),
           py::arg("dangerous_area_hit_probability"),
           py::arg("reward_variant_code"), py::arg("penalty_decay"),
+          py::arg("is_dangerous_area_hit_terminal") = false,
           "Variant-aware standalone batch reward kernel for RockSamplePOMDP. "
           "Returns a (N,) float64 array of rewards. "
           "reward_variant_code: 0=CONSTANT_HAZARD_PENALTY, 1=ZERO_MEAN_HAZARD_SHOCK, 2=DISTANCE_DECAYED_HAZARD_PENALTY.");
@@ -998,9 +1187,16 @@ PYBIND11_MODULE(_native, m) {
     py::class_<RockSampleTransitionCpp>(m, "RockSampleTransitionCpp")
         .def(py::init<const py::object &, int, int, int, int,
                       const py::array_t<std::int32_t, py::array::c_style | py::array::forcecast> &,
-                      double>(),
+                      double,
+                      const py::array_t<double, py::array::c_style | py::array::forcecast> &,
+                      double, double, int, double, bool>(),
              py::arg("state"), py::arg("action"), py::arg("map_rows"), py::arg("map_cols"),
-             py::arg("num_rocks"), py::arg("rock_positions"), py::arg("sensor_efficiency"))
+             py::arg("num_rocks"), py::arg("rock_positions"), py::arg("sensor_efficiency"),
+             py::arg("dangerous_areas") = py::array_t<double>(),
+             py::arg("dangerous_area_radius") = 1.0,
+             py::arg("dangerous_area_hit_probability") = 1.0,
+             py::arg("reward_variant_code") = 0, py::arg("penalty_decay") = 1.0,
+             py::arg("is_dangerous_area_hit_terminal") = false)
         .def("sample", &RockSampleTransitionCpp::sample, py::arg("n_samples") = 1)
         .def("probability", &RockSampleTransitionCpp::probability, py::arg("values"))
         .def("batch_sample", &RockSampleTransitionCpp::batch_sample, py::arg("particles"))

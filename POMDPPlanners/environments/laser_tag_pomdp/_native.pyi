@@ -85,6 +85,10 @@ class ContinuousLaserTagTransitionCpp:
         opponent_radius: float,
         tag_radius: float,
         opponent_policy_code: int = ...,
+        dangerous_areas: NDArray[np.floating] = ...,
+        dangerous_area_radius: float = ...,
+        dangerous_area_hit_probability: float = ...,
+        is_dangerous_area_hit_terminal: bool = ...,
     ) -> None: ...
     def sample(self, n_samples: int = 1) -> List[NDArray[np.float64]]: ...
     def probability(
@@ -152,7 +156,6 @@ def simulate_rollout_discrete(
     reward_variant_code: int = ...,
     penalty_decay: float = ...,
     opponent_policy_code: int = ...,
-    is_dangerous_area_hit_terminal: bool = ...,
 ) -> float:
     """Run a full random-action rollout for the discrete LaserTagPOMDP in one C++ frame.
 
@@ -282,7 +285,6 @@ def cont_simulate_rollout(
     dangerous_area_radius: float,
     dangerous_area_penalty: float,
     opponent_policy_code: int = ...,
-    is_dangerous_area_hit_terminal: bool = ...,
 ) -> float:
     """Run a full random rollout for ContinuousLaserTagPOMDP in one C++ frame.
 

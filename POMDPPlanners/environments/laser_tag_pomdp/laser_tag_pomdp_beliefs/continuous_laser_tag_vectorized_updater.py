@@ -97,7 +97,11 @@ class ContinuousLaserTagVectorizedUpdater(VectorizedParticleBeliefUpdater):
         opponent_covariance: np.ndarray,
         action_to_vector: Optional[Dict[str, np.ndarray]] = None,
         opponent_policy: OpponentPolicy = OpponentPolicy.EVADE,
-    ):
+        dangerous_areas_arr: Optional[np.ndarray] = None,
+        dangerous_area_radius: float = 1.0,
+        dangerous_area_hit_probability: float = 1.0,
+        is_dangerous_area_hit_terminal: bool = False,
+    ):  # pylint: disable=too-many-arguments
         """Initialize the vectorized updater.
 
         Args:
@@ -114,6 +118,12 @@ class ContinuousLaserTagVectorizedUpdater(VectorizedParticleBeliefUpdater):
             action_to_vector: Optional mapping from string actions to
                 3-D vectors (for discrete action variant).
             opponent_policy: Opponent transition behaviour (EVADE or PURSUE).
+            dangerous_areas_arr: Optional ``(K, 2)`` dangerous-area centres,
+                consumed only for draw-coupled hazard termination.
+            dangerous_area_radius: Radius of dangerous areas.
+            dangerous_area_hit_probability: Per-step hazard hit probability.
+            is_dangerous_area_hit_terminal: When ``True`` belief transitions
+                terminate a particle (absorbing) on a draw-coupled hazard hit.
         """
         self.walls = np.asarray(walls, dtype=float).reshape(-1, 4)
         self.grid_size = np.asarray(grid_size, dtype=float)
@@ -126,6 +136,16 @@ class ContinuousLaserTagVectorizedUpdater(VectorizedParticleBeliefUpdater):
         self.opponent_covariance = np.asarray(opponent_covariance, dtype=float)
         self._action_to_vector = action_to_vector
         self.opponent_policy = opponent_policy
+        self._dangerous_areas_arr = (
+            np.empty((0, 2), dtype=np.float64)
+            if dangerous_areas_arr is None
+            else np.ascontiguousarray(
+                np.asarray(dangerous_areas_arr, dtype=np.float64).reshape(-1, 2)
+            )
+        )
+        self._dangerous_area_radius = float(dangerous_area_radius)
+        self._dangerous_area_hit_probability = float(dangerous_area_hit_probability)
+        self._is_dangerous_area_hit_terminal = bool(is_dangerous_area_hit_terminal)
 
     @classmethod
     def from_environment(
@@ -149,6 +169,10 @@ class ContinuousLaserTagVectorizedUpdater(VectorizedParticleBeliefUpdater):
             opponent_covariance=env.opponent_transition_cov_matrix,
             action_to_vector=action_map,
             opponent_policy=env.opponent_policy,
+            dangerous_areas_arr=env._dangerous_areas_arr,  # pylint: disable=protected-access
+            dangerous_area_radius=env.dangerous_area_radius,
+            dangerous_area_hit_probability=env.dangerous_area_hit_probability,
+            is_dangerous_area_hit_terminal=env.is_dangerous_area_hit_terminal,
         )
 
     # ------------------------------------------------------------------
@@ -175,6 +199,10 @@ class ContinuousLaserTagVectorizedUpdater(VectorizedParticleBeliefUpdater):
             opponent_radius=self.opponent_radius,
             tag_radius=self.tag_radius,
             opponent_policy_code=self.opponent_policy.native_code,
+            dangerous_areas=self._dangerous_areas_arr,
+            dangerous_area_radius=self._dangerous_area_radius,
+            dangerous_area_hit_probability=self._dangerous_area_hit_probability,
+            is_dangerous_area_hit_terminal=self._is_dangerous_area_hit_terminal,
         )
         return transition.batch_sample(particles_arr)
 
@@ -212,7 +240,12 @@ class ContinuousLaserTagVectorizedUpdater(VectorizedParticleBeliefUpdater):
             "robot_covariance": self.robot_covariance.tolist(),
             "opponent_covariance": self.opponent_covariance.tolist(),
             "opponent_policy": self.opponent_policy.value,
+            "is_dangerous_area_hit_terminal": self._is_dangerous_area_hit_terminal,
         }
+        if self._is_dangerous_area_hit_terminal:
+            config_dict["dangerous_areas"] = self._dangerous_areas_arr.tolist()
+            config_dict["dangerous_area_radius"] = self._dangerous_area_radius
+            config_dict["dangerous_area_hit_probability"] = self._dangerous_area_hit_probability
         if self._action_to_vector is not None:
             config_dict["action_to_vector"] = {
                 k: v.tolist() for k, v in self._action_to_vector.items()

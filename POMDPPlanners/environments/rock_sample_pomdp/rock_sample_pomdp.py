@@ -30,9 +30,6 @@ from POMDPPlanners.core.environment import (
     SpaceType,
 )
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
-from POMDPPlanners.environments.environment_utils.dangerous_areas_kernels import (
-    membership_within_radius_batch_kernel,
-)
 from POMDPPlanners.environments.rock_sample_pomdp import _native
 from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp_utils.rock_sample_reward_models import (
     BaseRockSampleRewardModel,
@@ -200,9 +197,9 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
         dangerous_area_radius: float = 1.0,
         dangerous_area_penalty: float = -5.0,
         dangerous_area_hit_probability: float = 1.0,
-        is_dangerous_area_hit_terminal: bool = False,
         reward_model_type: RewardModelType = RewardModelType.CONSTANT_HAZARD_PENALTY,
         penalty_decay: float = 1.0,
+        is_dangerous_area_hit_terminal: bool = False,
         discount_factor: float = 0.95,
         name: str = "RockSample",
         output_dir: Optional[Path] = None,
@@ -238,15 +235,6 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
                 ``reward(state, action)`` non-deterministic given a
                 state-action pair. Ignored by ``ZERO_MEAN_HAZARD_SHOCK``
                 and ``DISTANCE_DECAYED_HAZARD_PENALTY`` reward models.
-            is_dangerous_area_hit_terminal: When ``True``, a state whose
-                robot position lies inside any configured dangerous area
-                (squared-distance within ``dangerous_area_radius``) is
-                treated as terminal by :meth:`is_terminal`, ending the
-                episode. This is a pure geometric gate on position: it is
-                independent of the stochastic ``dangerous_area_hit_probability``
-                penalty draw and does not change the reward. Defaults to
-                ``False`` (opt-in; only the exit sentinel ``(-1, -1)`` is
-                terminal).
             reward_model_type: Which dangerous-area penalty model to use.
                 Defaults to ``RewardModelType.CONSTANT_HAZARD_PENALTY`` (legacy
                 constant-probability behaviour). ``ZERO_MEAN_HAZARD_SHOCK``
@@ -262,6 +250,15 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
                 ``DISTANCE_DECAYED_HAZARD_PENALTY`` reward model. Must be
                 positive. Ignored by other reward models. Defaults to
                 ``1.0``.
+            is_dangerous_area_hit_terminal: When ``True`` the state gains a
+                trailing terminal-flag slot and episode termination becomes
+                draw-coupled to the dangerous-area hazard: the transition
+                draws one uniform when the robot lands in a zone and sets the
+                slot with the hazard hit-probability; the reward then applies
+                ``dangerous_area_penalty`` deterministically iff the slot is
+                set. Defaults to ``False`` (legacy stochastic-reward path,
+                state width unchanged). Incompatible with
+                ``ZERO_MEAN_HAZARD_SHOCK`` (raises ``ValueError``).
             discount_factor: Discount factor. Defaults to 0.95.
             name: Environment name. Defaults to "RockSample".
             output_dir: Output directory for logging. Defaults to None.
@@ -269,6 +266,8 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
         """
         if not 0.0 <= dangerous_area_hit_probability <= 1.0:
             raise ValueError("dangerous_area_hit_probability must be between 0 and 1 (inclusive)")
+
+        self._configure_hazard_terminal(is_dangerous_area_hit_terminal, reward_model_type)
 
         if dangerous_area_penalty > 0:
             warnings.warn(
@@ -326,7 +325,6 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
         self.dangerous_area_radius = dangerous_area_radius
         self.dangerous_area_penalty = dangerous_area_penalty
         self.dangerous_area_hit_probability = float(dangerous_area_hit_probability)
-        self.is_dangerous_area_hit_terminal = is_dangerous_area_hit_terminal
         self.reward_model_type = reward_model_type
         self.penalty_decay = float(penalty_decay)
 
@@ -346,10 +344,15 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
             [coord for rp in self.rock_positions for coord in rp], dtype=np.int32
         )
 
-        # Cache dangerous-area centres / squared radius for the native reward
-        # and rollout kernels and the geometric ``is_terminal`` gate.
-        self._cache_dangerous_area_geometry()
-
+        # Cached (K, 2) float64 dangerous-area centres for the native
+        # reward / rollout kernels. Empty (0, 2) array when no danger
+        # zones are configured.
+        if self.dangerous_areas:
+            self._dangerous_areas_arr: np.ndarray = np.ascontiguousarray(
+                np.asarray(self.dangerous_areas, dtype=np.float64)
+            )
+        else:
+            self._dangerous_areas_arr = np.empty((0, 2), dtype=np.float64)
         self._reward_variant_code: int = {
             RewardModelType.CONSTANT_HAZARD_PENALTY: 0,
             RewardModelType.ZERO_MEAN_HAZARD_SHOCK: 1,
@@ -378,22 +381,26 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
         self._trans_kernel_cache: Dict[int, Any] = {}
         self._obs_kernel_cache: Dict[int, Any] = {}
 
-    def _cache_dangerous_area_geometry(self) -> None:
-        # pylint: disable=attribute-defined-outside-init
-        # Cached (K, 2) float64 centres for the native reward / rollout
-        # kernels (empty (0, 2) when no zones), plus the transposed (2, K)
-        # view and squared radius the geometric ``is_terminal`` gate feeds to
-        # the same membership kernel the reward path uses.
-        if self.dangerous_areas:
-            self._dangerous_areas_arr: np.ndarray = np.ascontiguousarray(
-                np.asarray(self.dangerous_areas, dtype=np.float64)
+    def _configure_hazard_terminal(
+        self,
+        is_dangerous_area_hit_terminal: bool,
+        reward_model_type: RewardModelType,
+    ) -> None:
+        # Draw-coupled hazard-termination (hazard-terminates-episode v2). When
+        # enabled, the state gains a LAST terminal-flag slot (0.0 live / 1.0
+        # terminal); otherwise the state keeps the historical 2 + num_rocks
+        # layout untouched.
+        if (
+            is_dangerous_area_hit_terminal
+            and reward_model_type == RewardModelType.ZERO_MEAN_HAZARD_SHOCK
+        ):
+            raise ValueError(
+                "is_dangerous_area_hit_terminal is incompatible with the "
+                "ZERO_MEAN_HAZARD_SHOCK reward model (the shock hazard has no "
+                "hit probability to couple termination to)"
             )
-        else:
-            self._dangerous_areas_arr = np.empty((0, 2), dtype=np.float64)
-        self._dangerous_areas_xy: np.ndarray = np.ascontiguousarray(self._dangerous_areas_arr.T)
-        self._dangerous_area_radius_sq: float = float(
-            self.dangerous_area_radius * self.dangerous_area_radius
-        )
+        self.is_dangerous_area_hit_terminal = bool(is_dangerous_area_hit_terminal)
+        self._hazard_terminal_enabled = self.is_dangerous_area_hit_terminal
 
     def _build_reward_model(self) -> BaseRockSampleRewardModel:
         common_kwargs = {
@@ -448,6 +455,17 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
         """Get all available actions."""
         return list(range(len(self.action_names)))
 
+    @property
+    def reward_requires_next_state(self) -> bool:
+        """Reward depends on the realised ``next_state`` iff the hazard flag is on.
+
+        When ``is_dangerous_area_hit_terminal`` is enabled the hazard penalty
+        is deterministic given the terminal slot set during the transition,
+        so drivers must sample the transition first and pass the realised
+        ``next_state`` to :meth:`reward`.
+        """
+        return self._hazard_terminal_enabled
+
     def reward(
         self,
         state: RockSampleState,
@@ -468,6 +486,16 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
     def _reward_from_next_state(
         self, state: RockSampleState, action: int, next_state: RockSampleState
     ) -> float:
+        if self._hazard_terminal_enabled:
+            # Flag-on reward is deterministic given the terminal slot; route
+            # through the native terminal-aware kernel (no RNG draw) so the
+            # scalar and batch reward paths share one code path.
+            rewards = self._reward_batch_vectorized(
+                np.ascontiguousarray(np.asarray(state, dtype=np.float64).reshape(1, -1)),
+                int(action),
+                np.ascontiguousarray(np.asarray(next_state, dtype=np.float64).reshape(1, -1)),
+            )
+            return float(rewards[0])
         return self.reward_model.compute_reward(state, action, next_state=next_state)
 
     def reward_batch(
@@ -528,6 +556,7 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
                 dangerous_area_hit_probability=float(self.dangerous_area_hit_probability),
                 reward_variant_code=int(self._reward_variant_code),
                 penalty_decay=float(self.penalty_decay),
+                is_dangerous_area_hit_terminal=self.is_dangerous_area_hit_terminal,
             ),
             dtype=np.float64,
         )
@@ -543,18 +572,40 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
     def _get_trans_kernel(self, action: int) -> Any:
         kernel = self._trans_kernel_cache.get(action)
         if kernel is None:
-            placeholder = np.zeros(2 + len(self.rock_positions), dtype=np.float64)
-            kernel = _native.RockSampleTransitionCpp(
+            kernel = self._build_trans_kernel(int(action))
+            self._trans_kernel_cache[action] = kernel
+        return kernel
+
+    def _build_trans_kernel(self, action: int) -> Any:
+        base_dim = 2 + len(self.rock_positions)
+        if not self._hazard_terminal_enabled:
+            # Flag-off: original 7-arg construction (no terminal slot / draw).
+            placeholder = np.zeros(base_dim, dtype=np.float64)
+            return _native.RockSampleTransitionCpp(
                 state=placeholder,
-                action=int(action),
+                action=action,
                 map_rows=self.map_size[0],
                 map_cols=self.map_size[1],
                 num_rocks=len(self.rock_positions),
                 rock_positions=self._rock_positions_int32,
                 sensor_efficiency=self.sensor_efficiency,
             )
-            self._trans_kernel_cache[action] = kernel
-        return kernel
+        placeholder = np.zeros(base_dim + 1, dtype=np.float64)
+        return _native.RockSampleTransitionCpp(
+            state=placeholder,
+            action=action,
+            map_rows=self.map_size[0],
+            map_cols=self.map_size[1],
+            num_rocks=len(self.rock_positions),
+            rock_positions=self._rock_positions_int32,
+            sensor_efficiency=self.sensor_efficiency,
+            dangerous_areas=self._dangerous_areas_arr,
+            dangerous_area_radius=float(self.dangerous_area_radius),
+            dangerous_area_hit_probability=float(self.dangerous_area_hit_probability),
+            reward_variant_code=int(self._reward_variant_code),
+            penalty_decay=float(self.penalty_decay),
+            is_dangerous_area_hit_terminal=self.is_dangerous_area_hit_terminal,
+        )
 
     def _get_obs_kernel(self, action: int) -> Any:
         kernel = self._obs_kernel_cache.get(action)
@@ -701,7 +752,7 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
             dangerous_area_hit_probability=float(self.dangerous_area_hit_probability),
             reward_variant_code=int(self._reward_variant_code),
             penalty_decay=float(self.penalty_decay),
-            is_dangerous_area_hit_terminal=bool(self.is_dangerous_area_hit_terminal),
+            is_dangerous_area_hit_terminal=self.is_dangerous_area_hit_terminal,
         )
 
     def sample_next_step(
@@ -714,33 +765,20 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
         return next_state, observation, reward
 
     def is_terminal(self, state: RockSampleState) -> bool:
-        """Check if a state is terminal.
+        """Check if state is terminal.
 
-        A state is terminal when the robot has reached the exit sentinel
-        ``(-1, -1)`` or, when ``is_dangerous_area_hit_terminal`` is enabled,
-        when the robot's position lies inside any configured dangerous area
-        (squared-distance within ``dangerous_area_radius``). The geometric
-        gate is a pure function of position and is independent of the
-        stochastic dangerous-area penalty draw.
-
-        Args:
-            state: RockSample state array ``[robot_row, robot_col, rock_0..]``.
-
-        Returns:
-            ``True`` if the state is terminal, ``False`` otherwise.
+        Terminal when the robot has exited east (the ``(-1, -1)`` sentinel)
+        or, for a hazard-terminal env, when the trailing terminal slot is set.
         """
         if int(state[0]) == -1 and int(state[1]) == -1:
             return True
-        if not self.is_dangerous_area_hit_terminal or not self.dangerous_areas:
-            return False
-        point = np.empty((1, 2), dtype=np.float64)
-        point[0, 0] = float(state[0])
-        point[0, 1] = float(state[1])
-        return bool(
-            membership_within_radius_batch_kernel(
-                point, self._dangerous_areas_xy, self._dangerous_area_radius_sq
-            )[0]
-        )
+        if (
+            self._hazard_terminal_enabled
+            and state.shape[0] == 2 + len(self.rock_positions) + 1
+            and state[-1] > 0.5
+        ):
+            return True
+        return False
 
     def __getstate__(self) -> Dict[str, Any]:
         # Per-action C++ kernel caches hold pybind11 objects that aren't
@@ -766,6 +804,9 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
         for i in range(2**num_rocks):
             rock_config = tuple(bool(i & (1 << j)) for j in range(num_rocks))
             initial_state = create_rock_sample_state(self.init_pos, rock_config)
+            if self._hazard_terminal_enabled:
+                # Append a live (0.0) terminal slot, preserving float32 dtype.
+                initial_state = np.concatenate([initial_state, np.zeros(1, dtype=np.float32)])
             possible_rock_states.append(initial_state)
 
         # Equal probability for all configurations
