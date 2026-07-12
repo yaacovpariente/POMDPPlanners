@@ -41,6 +41,7 @@ def simulate_rollout_discrete(
     dangerous_area_hit_probability: float,
     reward_variant_code: int,
     penalty_decay: float,
+    is_dangerous_area_hit_terminal: bool = ...,
 ) -> float:
     """Native random rollout for RockSamplePOMDP with variant-aware reward.
 
@@ -72,6 +73,7 @@ def reward_batch(
     dangerous_area_hit_probability: float,
     reward_variant_code: int,
     penalty_decay: float,
+    is_dangerous_area_hit_terminal: bool = ...,
 ) -> NDArray[np.float64]:
     """Variant-aware standalone batch reward kernel for RockSamplePOMDP.
 
@@ -84,12 +86,18 @@ def reward_batch(
     ...
 
 class RockSampleTransitionCpp:
-    """Native state transition sampler (deterministic RockSample dynamics)."""
+    """Native state transition sampler for RockSample.
+
+    The rock / position dynamics are deterministic. When
+    ``is_dangerous_area_hit_terminal`` is set and the state carries a trailing
+    terminal slot (width ``2 + num_rocks + 1``), the sampler draws one hazard
+    uniform after the deterministic move and sets the slot (absorbing).
+    """
 
     state: Tuple[float, ...]
     action: int
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments
         self,
         state: Union[Sequence[float], NDArray[np.floating]],
         action: int,
@@ -98,6 +106,12 @@ class RockSampleTransitionCpp:
         num_rocks: int,
         rock_positions: NDArray[np.int32],
         sensor_efficiency: float,
+        dangerous_areas: NDArray[np.float64] = ...,
+        dangerous_area_radius: float = ...,
+        dangerous_area_hit_probability: float = ...,
+        reward_variant_code: int = ...,
+        penalty_decay: float = ...,
+        is_dangerous_area_hit_terminal: bool = ...,
     ) -> None: ...
     def sample(self, n_samples: int = 1) -> List[NDArray[np.float64]]: ...
     def probability(
