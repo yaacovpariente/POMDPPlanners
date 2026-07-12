@@ -345,6 +345,33 @@ class Environment(ABC):  # pylint: disable=too-many-public-methods
     def __hash__(self) -> int:
         return hash(self.config_id)
 
+    @property
+    def reward_requires_next_state(self) -> bool:
+        """Whether :meth:`reward` must be given the realised ``next_state``.
+
+        Simulation and rollout drivers consult this hook to decide the order
+        in which they sample the transition and compute the reward:
+
+        - ``False`` (default): the reward is a pure function of
+          ``(state, action)``. Drivers compute ``reward(state, action)``
+          *before* sampling the transition, preserving the historical
+          RNG-draw interleaving so seeded trajectories stay bit-identical.
+        - ``True``: the reward depends on the realised post-transition
+          state (e.g. draw-coupled hazard termination). Drivers sample the
+          transition first, then call ``reward(state, action, next_state)``
+          with the realised next state so both consume the same draw.
+
+        Subclasses whose reward becomes next-state dependent (e.g. when a
+        draw-coupled ``is_*_hit_terminal`` flag is enabled) must override
+        this to return ``True`` only in that configuration; otherwise the
+        default keeps flag-off behaviour bit-identical to today.
+
+        Returns:
+            ``True`` if :meth:`reward` needs the realised next state,
+            ``False`` otherwise.
+        """
+        return False
+
     @abstractmethod
     def reward(self, state: Any, action: Any, next_state: Any = None) -> float:
         """Calculate the immediate reward for a state-action(-next_state) tuple.
