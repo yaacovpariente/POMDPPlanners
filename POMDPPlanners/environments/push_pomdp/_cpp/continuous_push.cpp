@@ -56,6 +56,163 @@ std::vector<double> load_obstacles(const py::array_t<double> &obstacles) {
     return out;
 }
 
+// ── Draw-coupled hazard-termination support (hazard-terminates-episode v2) ──
+//
+// When ``is_obstacle_hit_terminal`` / ``is_dangerous_area_hit_terminal`` are
+// enabled, the ContinuousPush state gains a LAST terminal-flag slot
+// (0.0 = live, 1.0 = terminal). The transition draws the hazard uniform(s)
+// (obstacle first, then dangerous) from the SAME C++ module RNG used for the
+// position noise, so the Python single-step path (which routes through these
+// kernels) and the all-C++ ``cont_simulate_rollout`` share one stream and
+// stay in lock-step. The reward becomes deterministic given the terminal
+// slot (penalty fires iff terminal ∧ in-hazard ∧ ¬goal); no RNG on the
+// flag-on reward path.
+//
+// Reward-variant codes shared across every kernel in this TU (mirrors the
+// Python ``RewardModelType`` enum).
+constexpr int kRewardVariantConstantHazardPenalty = 0;
+constexpr int kRewardVariantHighVar = 1;
+constexpr int kRewardVariantDistanceDecayedHazardPenalty = 2;
+
+// Definitions appear later in this TU; forward-declare so the transition
+// class (defined below, before them) can call them.
+static bool cont_circle_aabb_overlap(const double *pos, double robot_radius,
+                                     const double *wall) noexcept;
+static inline bool point_in_dangerous_areas(double px, double py,
+                                            const std::vector<double> &areas,
+                                            double radius_sq) noexcept;
+static inline double dangerous_min_dist_sq(double px, double py_,
+                                           const std::vector<double> &areas) noexcept;
+static bool cont_is_terminal(const double *state) noexcept;
+std::vector<double> load_dangerous_areas(const py::array_t<double> &areas);
+
+// Read the 6 position dims from a length-6 or length-7 ContinuousPush state.
+// Reports whether a 7th terminal slot was present and its value, so callers
+// can preserve the caller's state width (6-D legacy, 7-D hazard-terminal).
+static std::array<double, kPushStateDim> read_push_state6(const py::object &state_obj,
+                                                          double *terminal_out,
+                                                          bool *has_slot_out) {
+    py::array_t<double, py::array::c_style | py::array::forcecast> arr(state_obj);
+    if (arr.ndim() != 1) {
+        throw std::invalid_argument("state must be 1-D");
+    }
+    const auto n = static_cast<std::size_t>(arr.shape(0));
+    if (n != kPushStateDim && n != kPushStateDim + 1) {
+        throw std::invalid_argument("state must have shape (6,) or (7,)");
+    }
+    auto view = arr.unchecked<1>();
+    std::array<double, kPushStateDim> out{};
+    for (std::size_t d = 0; d < kPushStateDim; ++d) {
+        out[d] = view(static_cast<py::ssize_t>(d));
+    }
+    if (terminal_out != nullptr) {
+        *terminal_out = (n == kPushStateDim + 1) ? view(kPushStateDim) : 0.0;
+    }
+    if (has_slot_out != nullptr) {
+        *has_slot_out = (n == kPushStateDim + 1);
+    }
+    return out;
+}
+
+// Scalar hazard-termination / deterministic-reward configuration.
+struct ContHazardConfig {
+    bool obstacle_terminal = false;
+    bool dangerous_terminal = false;
+    double obstacle_penalty = 0.0;
+    double obstacle_hit_probability = 1.0;
+    double robot_radius = 0.0;
+    double dangerous_area_radius_sq = 0.0;
+    double dangerous_area_penalty = 0.0;
+    double dangerous_area_hit_probability = 1.0;
+    int reward_variant_code = kRewardVariantConstantHazardPenalty;
+    double penalty_decay = 1.0;
+};
+
+static inline bool cont_robot_in_any_obstacle(const double *pos,
+                                              const std::vector<double> &obs_flat,
+                                              double robot_radius) noexcept {
+    const std::size_t n_obs = obs_flat.size() / 4;
+    for (std::size_t i = 0; i < n_obs; ++i) {
+        if (cont_circle_aabb_overlap(pos, robot_radius, &obs_flat[i * 4])) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Draw the hazard-termination uniform(s) for one realised next position and
+// return 1.0 if the step terminates, else 0.0. Draw order: obstacle uniform
+// (when enabled ∧ robot in an obstacle AABB), then dangerous uniform (when
+// enabled). The decayed dangerous variant has no radius cutoff, so it draws
+// on every step; the constant variant draws only when the robot is in a zone.
+static double cont_hazard_terminal_draw(const double *next_pos, bool goal,
+                                        const std::vector<double> &obs_flat,
+                                        const std::vector<double> &dangerous_flat,
+                                        const ContHazardConfig &hz,
+                                        pomdp_native::RNGState &rng) {
+    if (goal) {
+        return 0.0;
+    }
+    std::uniform_real_distribution<double> uni(0.0, 1.0);
+    bool hit = false;
+    if (hz.obstacle_terminal && !obs_flat.empty() &&
+        cont_robot_in_any_obstacle(next_pos, obs_flat, hz.robot_radius)) {
+        if (uni(rng.engine()) < hz.obstacle_hit_probability) {
+            hit = true;
+        }
+    }
+    if (hz.dangerous_terminal && !dangerous_flat.empty()) {
+        if (hz.reward_variant_code == kRewardVariantDistanceDecayedHazardPenalty) {
+            const double u = uni(rng.engine());
+            const double min_sq =
+                dangerous_min_dist_sq(next_pos[0], next_pos[1], dangerous_flat);
+            const double log_u = u > 0.0 ? std::log(u) : 0.0;
+            if (u <= 0.0 ||
+                hz.penalty_decay * hz.penalty_decay * log_u * log_u > min_sq) {
+                hit = true;
+            }
+        } else if (point_in_dangerous_areas(next_pos[0], next_pos[1], dangerous_flat,
+                                            hz.dangerous_area_radius_sq)) {
+            if (uni(rng.engine()) < hz.dangerous_area_hit_probability) {
+                hit = true;
+            }
+        }
+    }
+    return hit ? 1.0 : 0.0;
+}
+
+// Deterministic per-step reward on the flag-on path: base distance / goal
+// terms plus a penalty for each ENABLED hazard whose zone the (terminal,
+// non-goal) robot occupies. No RNG.
+static double cont_deterministic_hazard_reward(const double *next_state, double terminal,
+                                               const std::vector<double> &obs_flat,
+                                               const std::vector<double> &dangerous_flat,
+                                               const ContHazardConfig &hz) {
+    const double rd = next_state[2] - next_state[4];
+    const double rd2 = next_state[3] - next_state[5];
+    const double dist = std::sqrt(rd * rd + rd2 * rd2);
+    double reward = -dist;
+    const bool goal = dist < 0.5;
+    if (goal) {
+        reward += 100.0;
+        return reward;
+    }
+    if (terminal > 0.5) {
+        const double pos[2] = {next_state[0], next_state[1]};  // NOLINT(modernize-avoid-c-arrays)
+        if (hz.obstacle_terminal && !obs_flat.empty() &&
+            cont_robot_in_any_obstacle(pos, obs_flat, hz.robot_radius)) {
+            reward += hz.obstacle_penalty;
+        }
+        if (hz.dangerous_terminal && !dangerous_flat.empty() &&
+            (hz.reward_variant_code == kRewardVariantDistanceDecayedHazardPenalty ||
+             point_in_dangerous_areas(pos[0], pos[1], dangerous_flat,
+                                      hz.dangerous_area_radius_sq))) {
+            reward += hz.dangerous_area_penalty;
+        }
+    }
+    return reward;
+}
+
 class ContinuousPushTransitionCpp {
   public:
     ContinuousPushTransitionCpp(const py::object &state_obj, const py::object &action_obj,
@@ -63,9 +220,16 @@ class ContinuousPushTransitionCpp {
                                 double friction_coefficient, double max_push,
                                 double robot_radius,
                                 const py::array_t<double> &obstacles,
-                                const py::array_t<double> &covariance)
-        : state_(pomdp_native::to_array<kPushStateDim>(state_obj, "state")),
-          action_(pomdp_native::to_array<kNoiseDim>(action_obj, "action")),
+                                const py::array_t<double> &covariance,
+                                const py::array_t<double> &dangerous_areas,
+                                double obstacle_hit_probability,
+                                double dangerous_area_radius,
+                                double dangerous_area_penalty,
+                                double dangerous_area_hit_probability,
+                                int reward_variant_code, double penalty_decay,
+                                bool is_obstacle_hit_terminal,
+                                bool is_dangerous_area_hit_terminal)
+        : action_(pomdp_native::to_array<kNoiseDim>(action_obj, "action")),
           grid_size_(grid_size),
           push_threshold_(push_threshold),
           friction_coefficient_(friction_coefficient),
@@ -73,7 +237,20 @@ class ContinuousPushTransitionCpp {
           robot_radius_(robot_radius),
           obstacles_(load_obstacles(obstacles)),
           n_obstacles_(obstacles_.size() / 4),
-          noise_(pomdp_native::GaussianND<kNoiseDim>::from_covariance(covariance)) {}
+          noise_(pomdp_native::GaussianND<kNoiseDim>::from_covariance(covariance)) {
+        state_ = read_push_state6(state_obj, &input_terminal_, &has_slot_);
+        dangerous_flat_ = load_dangerous_areas(dangerous_areas);
+        hz_.obstacle_terminal = is_obstacle_hit_terminal;
+        hz_.dangerous_terminal = is_dangerous_area_hit_terminal;
+        hz_.obstacle_penalty = 0.0;  // penalty lives in the reward, not here
+        hz_.obstacle_hit_probability = obstacle_hit_probability;
+        hz_.robot_radius = robot_radius;
+        hz_.dangerous_area_radius_sq = dangerous_area_radius * dangerous_area_radius;
+        hz_.dangerous_area_penalty = dangerous_area_penalty;
+        hz_.dangerous_area_hit_probability = dangerous_area_hit_probability;
+        hz_.reward_variant_code = reward_variant_code;
+        hz_.penalty_decay = penalty_decay;
+    }
 
     py::array_t<double> state_property() const {
         return pomdp_native::array_from_vector(state_.data(), kPushStateDim);
@@ -85,7 +262,7 @@ class ContinuousPushTransitionCpp {
     // Rewrite only the state field; covariance/Cholesky, action, obstacles,
     // and geometry params stay frozen so the cached factor remains valid.
     void set_state(const py::object &state_obj) {
-        state_ = pomdp_native::to_array<kPushStateDim>(state_obj, "state");
+        state_ = read_push_state6(state_obj, &input_terminal_, &has_slot_);
     }
 
     py::list sample(int n_samples) const {
@@ -94,67 +271,88 @@ class ContinuousPushTransitionCpp {
         }
         py::list out;
         pomdp_native::RNGState &rng = pomdp_native::default_rng();
-        double row[kPushStateDim];  // NOLINT(modernize-avoid-c-arrays)
+        const std::size_t width = has_slot_ ? kPushStateDim + 1 : kPushStateDim;
+        double row[kPushStateDim + 1];  // NOLINT(modernize-avoid-c-arrays)
         for (int i = 0; i < n_samples; ++i) {
-            sample_row_from_state(state_.data(), row, rng);
-            out.append(pomdp_native::array_from_vector(row, kPushStateDim));
+            const double terminal =
+                sample_next_row(state_.data(), input_terminal_, has_slot_, row, rng);
+            if (has_slot_) {
+                row[kPushStateDim] = terminal;
+            }
+            out.append(pomdp_native::array_from_vector(row, width));
         }
         return out;
     }
 
     // Hot-path entry: take the input state directly, draw one sample, and
-    // return a single (6,) ndarray. Bypasses set_state + py::list wrapping +
-    // list[0] indexing that the generic ``sample(n_samples=1)`` path incurs.
+    // return a single next-state ndarray of the SAME width as the input
+    // (6-D legacy or 7-D hazard-terminal). Bypasses set_state + py::list.
     py::array_t<double> sample_one(
         const py::array_t<double, py::array::c_style | py::array::forcecast> &state_in) const {
-        if (state_in.ndim() != 1 ||
-            static_cast<std::size_t>(state_in.shape(0)) != kPushStateDim) {
-            throw std::invalid_argument("state must have shape (6,)");
-        }
-        auto sv = state_in.unchecked<1>();
         double src[kPushStateDim];  // NOLINT(modernize-avoid-c-arrays)
-        for (std::size_t d = 0; d < kPushStateDim; ++d) {
-            src[d] = sv(static_cast<py::ssize_t>(d));
-        }
-        double row[kPushStateDim];  // NOLINT(modernize-avoid-c-arrays)
+        double terminal_in = 0.0;
+        const bool slot = read_row(state_in, src, &terminal_in);
+        double row[kPushStateDim + 1];  // NOLINT(modernize-avoid-c-arrays)
         pomdp_native::RNGState &rng = pomdp_native::default_rng();
-        sample_row_from_state(src, row, rng);
+        const double terminal = sample_next_row(src, terminal_in, slot, row, rng);
+        if (slot) {
+            row[kPushStateDim] = terminal;
+            return pomdp_native::array_from_vector(row, kPushStateDim + 1);
+        }
         return pomdp_native::array_from_vector(row, kPushStateDim);
     }
 
     // probability evaluates p(next_state) = N(robot_next | robot_pos + action, cov).
-    // Matches ContinuousPushStateTransitionModel.probability exactly.
+    // Accepts 6-D or 7-D rows (only the robot slice enters the pdf).
     py::array_t<double> probability(const py::object &values) const {
-        auto batch = pomdp_native::extract_rows_nd(values, kPushStateDim);
+        py::array_t<double, py::array::c_style | py::array::forcecast> arr(values);
+        std::size_t n_rows = 0;
+        std::size_t width = 0;
+        if (arr.ndim() == 2) {
+            n_rows = static_cast<std::size_t>(arr.shape(0));
+            width = static_cast<std::size_t>(arr.shape(1));
+        } else if (arr.ndim() == 1) {
+            n_rows = 1;
+            width = static_cast<std::size_t>(arr.shape(0));
+        } else {
+            throw std::invalid_argument("values must be 1-D or 2-D");
+        }
+        if (width != kPushStateDim && width != kPushStateDim + 1) {
+            throw std::invalid_argument("values rows must have width 6 or 7");
+        }
         double robot_mean[kNoiseDim];  // NOLINT(modernize-avoid-c-arrays)
         robot_mean[0] = state_[0] + action_[0];
         robot_mean[1] = state_[1] + action_[1];
 
-        auto out = py::array_t<double>(static_cast<py::ssize_t>(batch.n));
+        const double *data = arr.data();
+        auto out = py::array_t<double>(static_cast<py::ssize_t>(n_rows));
         auto buf = out.mutable_unchecked<1>();
-        for (std::size_t i = 0; i < batch.n; ++i) {
-            const double *x = batch.flat.data() + i * kPushStateDim;
+        for (std::size_t i = 0; i < n_rows; ++i) {
             double robot_x[kNoiseDim];  // NOLINT(modernize-avoid-c-arrays)
-            robot_x[0] = x[0];
-            robot_x[1] = x[1];
+            robot_x[0] = data[i * width + 0];
+            robot_x[1] = data[i * width + 1];
             buf(static_cast<py::ssize_t>(i)) = std::exp(noise_.log_pdf(robot_x, robot_mean));
         }
         return out;
     }
 
-    // batch_sample: (N, 6) -> (N, 6). Row state is varied per particle;
-    // the model's stored state_ is not read on this path.
+    // batch_sample: (N, W) -> (N, W) with W in {6, 7}. Row state is varied
+    // per particle; the model's stored state_ is not read on this path.
     py::array_t<double> batch_sample(
         py::array_t<double, py::array::c_style | py::array::forcecast> particles) const {
-        if (particles.ndim() != 2 ||
-            static_cast<std::size_t>(particles.shape(1)) != kPushStateDim) {
-            throw std::invalid_argument("particles must have shape (N, 6)");
+        if (particles.ndim() != 2) {
+            throw std::invalid_argument("particles must be 2-D");
         }
+        const auto width = static_cast<std::size_t>(particles.shape(1));
+        if (width != kPushStateDim && width != kPushStateDim + 1) {
+            throw std::invalid_argument("particles must have shape (N, 6) or (N, 7)");
+        }
+        const bool slot = width == kPushStateDim + 1;
         const auto n_rows = static_cast<std::size_t>(particles.shape(0));
         auto particles_view = particles.template unchecked<2>();
 
         auto out = py::array_t<double>(
-            {static_cast<py::ssize_t>(n_rows), static_cast<py::ssize_t>(kPushStateDim)});
+            {static_cast<py::ssize_t>(n_rows), static_cast<py::ssize_t>(width)});
         auto out_view = out.template mutable_unchecked<2>();
 
         pomdp_native::RNGState &rng = pomdp_native::default_rng();
@@ -165,16 +363,64 @@ class ContinuousPushTransitionCpp {
                 state_row[d] = particles_view(static_cast<py::ssize_t>(i),
                                               static_cast<py::ssize_t>(d));
             }
-            sample_row_from_state(state_row, out_row, rng);
+            const double terminal_in =
+                slot ? particles_view(static_cast<py::ssize_t>(i),
+                                      static_cast<py::ssize_t>(kPushStateDim))
+                     : 0.0;
+            const double terminal =
+                sample_next_row(state_row, terminal_in, slot, out_row, rng);
             for (std::size_t d = 0; d < kPushStateDim; ++d) {
                 out_view(static_cast<py::ssize_t>(i),
                          static_cast<py::ssize_t>(d)) = out_row[d];
+            }
+            if (slot) {
+                out_view(static_cast<py::ssize_t>(i),
+                         static_cast<py::ssize_t>(kPushStateDim)) = terminal;
             }
         }
         return out;
     }
 
   private:
+    // Read the 6 position dims from a 1-D (6,) or (7,) native array, report
+    // whether a terminal slot was present and its value.
+    static bool read_row(
+        const py::array_t<double, py::array::c_style | py::array::forcecast> &state_in,
+        double *out6, double *terminal_out) {
+        if (state_in.ndim() != 1) {
+            throw std::invalid_argument("state must be 1-D");
+        }
+        const auto n = static_cast<std::size_t>(state_in.shape(0));
+        if (n != kPushStateDim && n != kPushStateDim + 1) {
+            throw std::invalid_argument("state must have shape (6,) or (7,)");
+        }
+        auto sv = state_in.unchecked<1>();
+        for (std::size_t d = 0; d < kPushStateDim; ++d) {
+            out6[d] = sv(static_cast<py::ssize_t>(d));
+        }
+        *terminal_out = (n == kPushStateDim + 1) ? sv(kPushStateDim) : 0.0;
+        return n == kPushStateDim + 1;
+    }
+
+    // Draw one next-state row. Writes the 6 position dims into ``out6`` and
+    // returns the terminal-slot value (only emitted when the caller keeps a
+    // 7-D row). Absorbing: an already-terminal input freezes to itself.
+    double sample_next_row(const double *state_row6, double input_terminal, bool slot,
+                           double *out6, pomdp_native::RNGState &rng) const {
+        if (slot && input_terminal > 0.5) {
+            for (std::size_t d = 0; d < kPushStateDim; ++d) {
+                out6[d] = state_row6[d];
+            }
+            return 1.0;
+        }
+        sample_row_from_state(state_row6, out6, rng);
+        if (!slot) {
+            return 0.0;
+        }
+        const bool goal = cont_is_terminal(out6);
+        return cont_hazard_terminal_draw(out6, goal, obstacles_, dangerous_flat_, hz_, rng);
+    }
+
     // Given a 6-D input state row, draw one full next-state row (writing
     // robot, object, target into ``out``). ``out`` may not alias ``state_row``.
     void sample_row_from_state(const double *state_row, double *out,
@@ -311,7 +557,7 @@ class ContinuousPushTransitionCpp {
         out_obj[1] = std::clamp(intended[1], 0.0, grid_size_ - 1.0);
     }
 
-    std::array<double, kPushStateDim> state_;
+    std::array<double, kPushStateDim> state_{};
     std::array<double, kNoiseDim> action_;
     double grid_size_;
     double push_threshold_;
@@ -321,18 +567,23 @@ class ContinuousPushTransitionCpp {
     std::vector<double> obstacles_;  // (M*4,) row-major
     std::size_t n_obstacles_;
     pomdp_native::GaussianND<kNoiseDim> noise_;
+    std::vector<double> dangerous_flat_;  // (K*2,) row-major, hazard-terminal only
+    ContHazardConfig hz_{};
+    bool has_slot_ = false;
+    double input_terminal_ = 0.0;
 };
 
 class ContinuousPushObservationCpp {
   public:
     ContinuousPushObservationCpp(const py::object &next_state_obj, const py::object &action_obj,
                                  double observation_noise, double grid_size)
-        : next_state_(pomdp_native::to_array<kPushStateDim>(next_state_obj, "next_state")),
-          action_(pomdp_native::to_array<kNoiseDim>(action_obj, "action")),
+        : action_(pomdp_native::to_array<kNoiseDim>(action_obj, "action")),
           observation_noise_(observation_noise),
           grid_size_(grid_size),
           obs_variance_(observation_noise * observation_noise),
-          obs_log_normalization_(-std::log(2.0 * M_PI * observation_noise * observation_noise)) {}
+          obs_log_normalization_(-std::log(2.0 * M_PI * observation_noise * observation_noise)) {
+        next_state_ = read_push_state6(next_state_obj, &next_terminal_, &has_slot_);
+    }
 
     py::array_t<double> next_state_property() const {
         return pomdp_native::array_from_vector(next_state_.data(), kPushStateDim);
@@ -344,12 +595,13 @@ class ContinuousPushObservationCpp {
     // Rewrite only the next_state field; observation_noise and grid_size
     // stay frozen so the cached normalizer/variance remain valid.
     void set_next_state(const py::object &next_state_obj) {
-        next_state_ = pomdp_native::to_array<kPushStateDim>(next_state_obj, "next_state");
+        next_state_ = read_push_state6(next_state_obj, &next_terminal_, &has_slot_);
     }
 
-    // Samples full 6-D observations: robot and target are exact; object has
-    // additive isotropic Gaussian noise clipped to the grid. Mirrors
-    // ContinuousPushObservationModel.sample exactly.
+    // Samples observations of the SAME width as next_state (6-D legacy or 7-D
+    // hazard-terminal): robot and target are exact, object gets additive
+    // isotropic Gaussian noise, and the terminal slot (when present) is
+    // carried through unchanged. Mirrors ContinuousPushObservationModel.sample.
     py::list sample(int n_samples) const {
         if (n_samples < 0) {
             throw std::invalid_argument("n_samples must be non-negative");
@@ -357,87 +609,81 @@ class ContinuousPushObservationCpp {
         py::list out;
         pomdp_native::RNGState &rng = pomdp_native::default_rng();
         std::normal_distribution<double> standard_normal(0.0, 1.0);
-        double row[kPushStateDim];  // NOLINT(modernize-avoid-c-arrays)
+        const std::size_t width = has_slot_ ? kPushStateDim + 1 : kPushStateDim;
+        double row[kPushStateDim + 1];  // NOLINT(modernize-avoid-c-arrays)
         for (int i = 0; i < n_samples; ++i) {
-            row[0] = next_state_[0];
-            row[1] = next_state_[1];
-            // Python uses np.random.normal(0, sigma, size=2); each call consumes
-            // one standard normal then scales by sigma. Reproduce that here using
-            // the module RNG.
             const double nx = standard_normal(rng.engine()) * observation_noise_;
             const double ny = standard_normal(rng.engine()) * observation_noise_;
-            double obj_x = next_state_[2] + nx;
-            double obj_y = next_state_[3] + ny;
-            obj_x = std::clamp(obj_x, 0.0, grid_size_ - 1.0);
-            obj_y = std::clamp(obj_y, 0.0, grid_size_ - 1.0);
-            row[2] = obj_x;
-            row[3] = obj_y;
-            row[4] = next_state_[4];
-            row[5] = next_state_[5];
-            out.append(pomdp_native::array_from_vector(row, kPushStateDim));
+            fill_observation_row(next_state_.data(), next_terminal_, has_slot_, nx, ny, row);
+            out.append(pomdp_native::array_from_vector(row, width));
         }
         return out;
     }
 
-    // Hot-path single-sample entry: take the next_state directly, draw one
-    // observation, return a single (6,) ndarray. Bypasses set_next_state +
-    // py::list wrapping + list[0] indexing.
+    // Hot-path single-sample entry: draw one observation of the same width as
+    // the input next_state (6-D or 7-D). Bypasses set_next_state + py::list.
     py::array_t<double> sample_one(
         const py::array_t<double, py::array::c_style | py::array::forcecast> &next_state_in)
         const {
-        if (next_state_in.ndim() != 1 ||
-            static_cast<std::size_t>(next_state_in.shape(0)) != kPushStateDim) {
-            throw std::invalid_argument("next_state must have shape (6,)");
-        }
-        auto sv = next_state_in.unchecked<1>();
+        double src[kPushStateDim];  // NOLINT(modernize-avoid-c-arrays)
+        double terminal_in = 0.0;
+        const bool slot = read_row(next_state_in, src, &terminal_in);
         pomdp_native::RNGState &rng = pomdp_native::default_rng();
         std::normal_distribution<double> standard_normal(0.0, 1.0);
-        double row[kPushStateDim];  // NOLINT(modernize-avoid-c-arrays)
-        row[0] = sv(0);
-        row[1] = sv(1);
         const double nx = standard_normal(rng.engine()) * observation_noise_;
         const double ny = standard_normal(rng.engine()) * observation_noise_;
-        const double obj_x = std::clamp(sv(2) + nx, 0.0, grid_size_ - 1.0);
-        const double obj_y = std::clamp(sv(3) + ny, 0.0, grid_size_ - 1.0);
-        row[2] = obj_x;
-        row[3] = obj_y;
-        row[4] = sv(4);
-        row[5] = sv(5);
-        return pomdp_native::array_from_vector(row, kPushStateDim);
+        double row[kPushStateDim + 1];  // NOLINT(modernize-avoid-c-arrays)
+        fill_observation_row(src, terminal_in, slot, nx, ny, row);
+        return pomdp_native::array_from_vector(row, slot ? kPushStateDim + 1 : kPushStateDim);
     }
 
-    // probability(values): values rows are 6-D observations; use the
-    // object-position slice (cols 2:4) against next_state_[2:4]. Matches
-    // ContinuousPushObservationModel.probability exactly (isotropic 2-D
-    // Gaussian on object position).
+    // probability(values): rows are 6-D or 7-D observations; use the
+    // object-position slice (cols 2:4) against next_state_[2:4].
     py::array_t<double> probability(const py::object &values) const {
-        auto batch = pomdp_native::extract_rows_nd(values, kPushStateDim);
-        auto out = py::array_t<double>(static_cast<py::ssize_t>(batch.n));
+        py::array_t<double, py::array::c_style | py::array::forcecast> arr(values);
+        std::size_t n_rows = 0;
+        std::size_t width = 0;
+        if (arr.ndim() == 2) {
+            n_rows = static_cast<std::size_t>(arr.shape(0));
+            width = static_cast<std::size_t>(arr.shape(1));
+        } else if (arr.ndim() == 1) {
+            n_rows = 1;
+            width = static_cast<std::size_t>(arr.shape(0));
+        } else {
+            throw std::invalid_argument("values must be 1-D or 2-D");
+        }
+        if (width != kPushStateDim && width != kPushStateDim + 1) {
+            throw std::invalid_argument("values rows must have width 6 or 7");
+        }
+        const double *data = arr.data();
+        auto out = py::array_t<double>(static_cast<py::ssize_t>(n_rows));
         auto buf = out.mutable_unchecked<1>();
         const double normalization = 1.0 / (2.0 * M_PI * obs_variance_);
-        for (std::size_t i = 0; i < batch.n; ++i) {
-            const double *x = batch.flat.data() + i * kPushStateDim;
-            const double dx = x[2] - next_state_[2];
-            const double dy = x[3] - next_state_[3];
+        for (std::size_t i = 0; i < n_rows; ++i) {
+            const double dx = data[i * width + 2] - next_state_[2];
+            const double dy = data[i * width + 3] - next_state_[3];
             const double log_prob = -0.5 * (dx * dx + dy * dy) / obs_variance_;
             buf(static_cast<py::ssize_t>(i)) = normalization * std::exp(log_prob);
         }
         return out;
     }
 
-    // batch_log_likelihood: next_particles (N, 6), observation (6,) -> (N,).
-    // Matches ContinuousPushVectorizedUpdater.batch_observation_log_likelihood
-    // bit-for-bit: isotropic Gaussian log-pdf on object-position slice.
+    // batch_log_likelihood: next_particles (N, W), observation (W,) -> (N,)
+    // with W in {6, 7}. Isotropic Gaussian log-pdf on the object slice.
     py::array_t<double> batch_log_likelihood(
         py::array_t<double, py::array::c_style | py::array::forcecast> next_particles,
         py::array_t<double, py::array::c_style | py::array::forcecast> observation) const {
-        if (next_particles.ndim() != 2 ||
-            static_cast<std::size_t>(next_particles.shape(1)) != kPushStateDim) {
-            throw std::invalid_argument("next_particles must have shape (N, 6)");
+        if (next_particles.ndim() != 2) {
+            throw std::invalid_argument("next_particles must be 2-D");
+        }
+        const auto width = static_cast<std::size_t>(next_particles.shape(1));
+        if (width != kPushStateDim && width != kPushStateDim + 1) {
+            throw std::invalid_argument("next_particles must have shape (N, 6) or (N, 7)");
         }
         if (observation.ndim() != 1 ||
-            static_cast<std::size_t>(observation.shape(0)) != kPushStateDim) {
-            throw std::invalid_argument("observation must have shape (6,)");
+            (static_cast<std::size_t>(observation.shape(0)) != kPushStateDim &&
+             static_cast<std::size_t>(observation.shape(0)) != kPushStateDim + 1)) {
+            throw std::invalid_argument("observation must have shape (6,) or (7,)");
         }
         const auto n_rows = static_cast<std::size_t>(next_particles.shape(0));
         auto particles_view = next_particles.template unchecked<2>();
@@ -458,12 +704,46 @@ class ContinuousPushObservationCpp {
     }
 
   private:
-    std::array<double, kPushStateDim> next_state_;
+    // Read the 6 position dims from a 1-D (6,) or (7,) native array.
+    static bool read_row(
+        const py::array_t<double, py::array::c_style | py::array::forcecast> &state_in,
+        double *out6, double *terminal_out) {
+        if (state_in.ndim() != 1) {
+            throw std::invalid_argument("next_state must be 1-D");
+        }
+        const auto n = static_cast<std::size_t>(state_in.shape(0));
+        if (n != kPushStateDim && n != kPushStateDim + 1) {
+            throw std::invalid_argument("next_state must have shape (6,) or (7,)");
+        }
+        auto sv = state_in.unchecked<1>();
+        for (std::size_t d = 0; d < kPushStateDim; ++d) {
+            out6[d] = sv(static_cast<py::ssize_t>(d));
+        }
+        *terminal_out = (n == kPushStateDim + 1) ? sv(kPushStateDim) : 0.0;
+        return n == kPushStateDim + 1;
+    }
+
+    void fill_observation_row(const double *next_state6, double terminal, bool slot,
+                              double nx, double ny, double *row) const {
+        row[0] = next_state6[0];
+        row[1] = next_state6[1];
+        row[2] = std::clamp(next_state6[2] + nx, 0.0, grid_size_ - 1.0);
+        row[3] = std::clamp(next_state6[3] + ny, 0.0, grid_size_ - 1.0);
+        row[4] = next_state6[4];
+        row[5] = next_state6[5];
+        if (slot) {
+            row[kPushStateDim] = terminal;
+        }
+    }
+
+    std::array<double, kPushStateDim> next_state_{};
     std::array<double, kNoiseDim> action_;
     double observation_noise_;
     double grid_size_;
     double obs_variance_;
     double obs_log_normalization_;  // log(1 / (2 pi sigma^2))
+    bool has_slot_ = false;
+    double next_terminal_ = 0.0;
 };
 
 // ─── Discrete Push rollout kernel ────────────────────────────────────────────
@@ -519,7 +799,7 @@ std::vector<double> load_discrete_obstacles(const py::array_t<double> &obstacles
 // Load dangerous-area centres: shape (K, 2), (0, 2), or (0,) 1-D for empty.
 // Returns flat (cx, cy) pairs.
 std::vector<double> load_dangerous_areas(const py::array_t<double> &areas) {
-    if (areas.ndim() == 1 && areas.shape(0) == 0) {
+    if (areas.size() == 0) {
         return {};
     }
     if (areas.ndim() != 2 || areas.shape(1) != 2) {
@@ -564,12 +844,6 @@ static inline bool discrete_collides(double px, double py,
     }
     return false;
 }
-
-// Reward-variant codes shared between the standalone batch kernels and the
-// inline rollout reward paths. Mirrors the Python ``RewardModelType`` enum.
-constexpr int kRewardVariantConstantHazardPenalty = 0;
-constexpr int kRewardVariantHighVar = 1;
-constexpr int kRewardVariantDistanceDecayedHazardPenalty = 2;
 
 // Squared Euclidean distance from (px, py) to the nearest dangerous-area
 // centre. Used by the Decaying variant to evaluate the exponential
@@ -1256,11 +1530,13 @@ double cont_simulate_rollout(
     double dangerous_area_radius, double dangerous_area_penalty,
     const py::array_t<double> &covariance,
     double obstacle_hit_probability, double dangerous_area_hit_probability,
-    int reward_variant_code, double penalty_decay) {
+    int reward_variant_code, double penalty_decay,
+    bool is_obstacle_hit_terminal, bool is_dangerous_area_hit_terminal) {
 
     if (initial_state.ndim() != 1 ||
-        static_cast<std::size_t>(initial_state.shape(0)) != kPushStateDim) {
-        throw std::invalid_argument("initial_state must have shape (6,)");
+        (static_cast<std::size_t>(initial_state.shape(0)) != kPushStateDim &&
+         static_cast<std::size_t>(initial_state.shape(0)) != kPushStateDim + 1)) {
+        throw std::invalid_argument("initial_state must have shape (6,) or (7,)");
     }
     if (action_array.ndim() != 2 ||
         static_cast<std::size_t>(action_array.shape(1)) != kNoiseDim) {
@@ -1293,12 +1569,18 @@ double cont_simulate_rollout(
 
     const auto noise = pomdp_native::GaussianND<kNoiseDim>::from_covariance(covariance);
 
+    const bool flag_on = is_obstacle_hit_terminal || is_dangerous_area_hit_terminal;
+
     auto is_view = initial_state.unchecked<1>();
     double state[kPushStateDim];      // NOLINT(modernize-avoid-c-arrays)
     double next_state[kPushStateDim]; // NOLINT(modernize-avoid-c-arrays)
     for (std::size_t d = 0; d < kPushStateDim; ++d) {
         state[d] = is_view(static_cast<py::ssize_t>(d));
     }
+    double cur_terminal =
+        (static_cast<std::size_t>(initial_state.shape(0)) == kPushStateDim + 1)
+            ? is_view(kPushStateDim)
+            : 0.0;
 
     auto aa_view = action_array.unchecked<2>();
     auto ai_view = action_indices.unchecked<1>();
@@ -1317,9 +1599,20 @@ double cont_simulate_rollout(
         reward_variant_code,
         penalty_decay,
     };
+    ContHazardConfig hz{};
+    hz.obstacle_terminal = is_obstacle_hit_terminal;
+    hz.dangerous_terminal = is_dangerous_area_hit_terminal;
+    hz.obstacle_penalty = obstacle_penalty;
+    hz.obstacle_hit_probability = obstacle_hit_probability;
+    hz.robot_radius = robot_radius;
+    hz.dangerous_area_radius_sq = dangerous_area_radius_sq;
+    hz.dangerous_area_penalty = dangerous_area_penalty;
+    hz.dangerous_area_hit_probability = dangerous_area_hit_probability;
+    hz.reward_variant_code = reward_variant_code;
+    hz.penalty_decay = penalty_decay;
 
     while (depth < max_depth) {
-        if (cont_is_terminal(state)) {
+        if (cont_is_terminal(state) || cur_terminal > 0.5) {
             break;
         }
         const int idx_slot = depth - start_depth;
@@ -1338,9 +1631,20 @@ double cont_simulate_rollout(
                                    friction_coefficient, max_push, robot_radius,
                                    obs_flat, n_obs, noise, next_state, rng);
 
-        const double reward = cont_step_reward(next_state, obs_flat, n_obs,
-                                               robot_radius, dangerous_flat,
-                                               reward_cfg, rng);
+        double reward;
+        if (flag_on) {
+            // Draw-coupled termination (position noise already drawn above),
+            // then a deterministic reward given the terminal slot. Draw order
+            // matches the ContinuousPushTransitionCpp single-step path.
+            const double next_terminal = cont_hazard_terminal_draw(
+                next_state, cont_is_terminal(next_state), obs_flat, dangerous_flat, hz, rng);
+            reward = cont_deterministic_hazard_reward(next_state, next_terminal, obs_flat,
+                                                      dangerous_flat, hz);
+            cur_terminal = next_terminal;
+        } else {
+            reward = cont_step_reward(next_state, obs_flat, n_obs, robot_radius,
+                                      dangerous_flat, reward_cfg, rng);
+        }
 
         total += gamma_power * reward;
         gamma_power *= discount_factor;
@@ -1565,12 +1869,14 @@ py::array_t<double> push_observation_log_probability_step(
     const py::array_t<double, py::array::c_style | py::array::forcecast> &observations,
     double observation_noise) {
     if (next_state.ndim() != 1 ||
-        static_cast<std::size_t>(next_state.shape(0)) != kPushStateDim) {
-        throw std::invalid_argument("next_state must have shape (6,)");
+        (static_cast<std::size_t>(next_state.shape(0)) != kPushStateDim &&
+         static_cast<std::size_t>(next_state.shape(0)) != kPushStateDim + 1)) {
+        throw std::invalid_argument("next_state must have shape (6,) or (7,)");
     }
     if (observations.ndim() != 2 ||
-        static_cast<std::size_t>(observations.shape(1)) != kPushStateDim) {
-        throw std::invalid_argument("observations must have shape (N, 6)");
+        (static_cast<std::size_t>(observations.shape(1)) != kPushStateDim &&
+         static_cast<std::size_t>(observations.shape(1)) != kPushStateDim + 1)) {
+        throw std::invalid_argument("observations must have shape (N, 6) or (N, 7)");
     }
     auto sv = next_state.unchecked<1>();
     auto ov = observations.unchecked<2>();
@@ -1694,12 +2000,15 @@ py::array_t<double> cont_push_reward_batch(
     const py::array_t<double, py::array::c_style | py::array::forcecast> &dangerous_areas,
     double dangerous_area_radius, double dangerous_area_penalty,
     double dangerous_area_hit_probability, int reward_variant_code,
-    double penalty_decay) {
+    double penalty_decay, bool is_obstacle_hit_terminal,
+    bool is_dangerous_area_hit_terminal) {
     (void)states;
     (void)action;
-    if (next_states.ndim() != 2 || next_states.shape(1) != 6) {
-        throw std::invalid_argument("next_states must have shape (N, 6)");
+    if (next_states.ndim() != 2 ||
+        (next_states.shape(1) != 6 && next_states.shape(1) != 7)) {
+        throw std::invalid_argument("next_states must have shape (N, 6) or (N, 7)");
     }
+    const auto width = static_cast<std::size_t>(next_states.shape(1));
     const auto n = static_cast<std::size_t>(next_states.shape(0));
     auto out = py::array_t<double>(static_cast<py::ssize_t>(n));
     if (n == 0) {
@@ -1718,17 +2027,19 @@ py::array_t<double> cont_push_reward_batch(
     std::uniform_real_distribution<double> uni(0.0, 1.0);
     const bool has_areas = !areas_flat.empty();
     for (std::size_t i = 0; i < n; ++i) {
-        const double rx = next_data[i * 6 + 0];
-        const double ry = next_data[i * 6 + 1];
-        const double ox = next_data[i * 6 + 2];
-        const double oy = next_data[i * 6 + 3];
-        const double tx = next_data[i * 6 + 4];
-        const double ty = next_data[i * 6 + 5];
+        const double rx = next_data[i * width + 0];
+        const double ry = next_data[i * width + 1];
+        const double ox = next_data[i * width + 2];
+        const double oy = next_data[i * width + 3];
+        const double tx = next_data[i * width + 4];
+        const double ty = next_data[i * width + 5];
+        const double terminal = width == 7 ? next_data[i * width + 6] : 0.0;
         const double dxg = ox - tx;
         const double dyg = oy - ty;
         const double dist = std::sqrt(dxg * dxg + dyg * dyg);
+        const bool goal = dist < 0.5;
         double reward = -dist;
-        if (dist < 0.5) {
+        if (goal) {
             reward += 100.0;
         }
         if (n_obs > 0) {
@@ -1741,22 +2052,38 @@ py::array_t<double> cont_push_reward_batch(
                 }
             }
             if (collide) {
-                if (obstacle_hit_probability >= 1.0 ||
-                    uni(rng.engine()) < obstacle_hit_probability) {
+                if (is_obstacle_hit_terminal) {
+                    // Draw-coupled: penalty fires iff the step terminated.
+                    if (terminal > 0.5 && !goal) {
+                        reward += obstacle_penalty;
+                    }
+                } else if (obstacle_hit_probability >= 1.0 ||
+                           uni(rng.engine()) < obstacle_hit_probability) {
                     reward += obstacle_penalty;
                 }
             }
         }
         if (has_areas) {
-            const bool in_zone =
-                point_in_dangerous_areas(rx, ry, areas_flat, area_r_sq);
-            const double min_sq = (reward_variant_code == kRewardVariantDistanceDecayedHazardPenalty)
-                                      ? dangerous_min_dist_sq(rx, ry, areas_flat)
-                                      : 0.0;
-            reward += dangerous_contribution(reward_variant_code, in_zone,
-                                             dangerous_area_penalty,
-                                             dangerous_area_hit_probability,
-                                             min_sq, penalty_decay, rng);
+            if (is_dangerous_area_hit_terminal) {
+                const bool decayed =
+                    reward_variant_code == kRewardVariantDistanceDecayedHazardPenalty;
+                const bool in_zone =
+                    decayed || point_in_dangerous_areas(rx, ry, areas_flat, area_r_sq);
+                if (terminal > 0.5 && !goal && in_zone) {
+                    reward += dangerous_area_penalty;
+                }
+            } else {
+                const bool in_zone =
+                    point_in_dangerous_areas(rx, ry, areas_flat, area_r_sq);
+                const double min_sq =
+                    (reward_variant_code == kRewardVariantDistanceDecayedHazardPenalty)
+                        ? dangerous_min_dist_sq(rx, ry, areas_flat)
+                        : 0.0;
+                reward += dangerous_contribution(reward_variant_code, in_zone,
+                                                 dangerous_area_penalty,
+                                                 dangerous_area_hit_probability,
+                                                 min_sq, penalty_decay, rng);
+            }
         }
         out_data[i] = reward;
     }
@@ -1783,6 +2110,8 @@ PYBIND11_MODULE(_native, m) {
           py::arg("dangerous_area_hit_probability") = 1.0,
           py::arg("reward_variant_code") = 0,
           py::arg("penalty_decay") = 1.0,
+          py::arg("is_obstacle_hit_terminal") = false,
+          py::arg("is_dangerous_area_hit_terminal") = false,
           "Native random rollout for ContinuousPushPOMDP. "
           "Returns discounted return from initial_state. "
           "action_indices must be a pre-drawn int32 array of shape (steps_left,). "
@@ -1861,6 +2190,8 @@ PYBIND11_MODULE(_native, m) {
           py::arg("dangerous_area_penalty"),
           py::arg("dangerous_area_hit_probability"),
           py::arg("reward_variant_code"), py::arg("penalty_decay"),
+          py::arg("is_obstacle_hit_terminal") = false,
+          py::arg("is_dangerous_area_hit_terminal") = false,
           "Standalone variant-aware reward batch for ContinuousPushPOMDP.\n\n"
           "Same three variants as push_reward_batch. Obstacle test is a\n"
           "circle-vs-AABB overlap on next_state[:2] with robot_radius;\n"
@@ -1884,11 +2215,22 @@ PYBIND11_MODULE(_native, m) {
 
     py::class_<ContinuousPushTransitionCpp>(m, "ContinuousPushTransitionCpp")
         .def(py::init<const py::object &, const py::object &, double, double, double, double,
-                      double, const py::array_t<double> &, const py::array_t<double> &>(),
+                      double, const py::array_t<double> &, const py::array_t<double> &,
+                      const py::array_t<double> &, double, double, double, double, int, double,
+                      bool, bool>(),
              py::arg("state"), py::arg("action"), py::arg("grid_size"),
              py::arg("push_threshold"), py::arg("friction_coefficient"),
              py::arg("max_push"), py::arg("robot_radius"), py::arg("obstacles"),
-             py::arg("covariance"))
+             py::arg("covariance"),
+             py::arg("dangerous_areas") = py::array_t<double>(),
+             py::arg("obstacle_hit_probability") = 1.0,
+             py::arg("dangerous_area_radius") = 0.5,
+             py::arg("dangerous_area_penalty") = 0.0,
+             py::arg("dangerous_area_hit_probability") = 1.0,
+             py::arg("reward_variant_code") = 0,
+             py::arg("penalty_decay") = 1.0,
+             py::arg("is_obstacle_hit_terminal") = false,
+             py::arg("is_dangerous_area_hit_terminal") = false)
         .def("sample", &ContinuousPushTransitionCpp::sample, py::arg("n_samples") = 1)
         .def("sample_one", &ContinuousPushTransitionCpp::sample_one, py::arg("state"))
         .def("probability", &ContinuousPushTransitionCpp::probability, py::arg("values"))
