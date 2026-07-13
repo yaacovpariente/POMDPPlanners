@@ -42,26 +42,25 @@ from POMDPPlanners.environments.environment_utils.dangerous_areas_kernels import
 def is_terminal_kernel(
     state: np.ndarray,
     goal_state: np.ndarray,
-    obstacles: np.ndarray,
     goal_state_radius: float,
-    obstacle_radius: float,
     is_obstacle_hit_terminal: bool,
 ) -> bool:
+    """Draw-coupled terminal check for the Continuous Light-Dark POMDP.
+
+    ``state`` is terminal iff it lies within ``goal_state_radius`` of the goal
+    OR (``is_obstacle_hit_terminal`` and the appended terminal slot is set).
+    The old v1 geometric obstacle gate is gone: standing in an obstacle no
+    longer terminates on its own — termination is decided by the draw-coupled
+    hazard uniform in ``sample_next_state`` and recorded in the absorbing
+    terminal slot (state index 2, present only on the hazard-terminal path).
+    """
     dx = state[0] - goal_state[0]
     dy = state[1] - goal_state[1]
     if (dx * dx + dy * dy) ** 0.5 <= goal_state_radius:
         return True
 
-    if not is_obstacle_hit_terminal:
-        return False
-
-    n_obs = obstacles.shape[1]
-    radius_sq = obstacle_radius * obstacle_radius
-    for i in range(n_obs):
-        ox = state[0] - obstacles[0, i]
-        oy = state[1] - obstacles[1, i]
-        if ox * ox + oy * oy <= radius_sq:
-            return True
+    if is_obstacle_hit_terminal and state.shape[0] > 2 and state[2] > 0.5:
+        return True
     return False
 
 

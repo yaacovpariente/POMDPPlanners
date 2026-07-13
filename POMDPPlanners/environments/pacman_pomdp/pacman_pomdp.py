@@ -157,6 +157,7 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
         dangerous_areas: Optional[Set[Tuple[int, int]]] = None,
         dangerous_area_radius: float = 1.0,
         dangerous_area_penalty: float = 5.0,
+        is_dangerous_area_hit_terminal: bool = False,
         discount_factor: float = 0.95,
         name: str = "PacManPOMDP",
         output_dir: Optional[Path] = None,
@@ -189,6 +190,15 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
                 Euclidean distance. Defaults to 1.0.
             dangerous_area_penalty: Non-negative penalty subtracted from the reward when
                 PacMan's realised next position lies inside any hazard zone. Defaults to 5.0.
+            is_dangerous_area_hit_terminal: When ``True`` the dangerous-area hazard becomes
+                draw-coupled and *absorbing*: the transition sets the terminal state slot when
+                PacMan enters a hazard zone (deterministically for ``CONSTANT_HAZARD_PENALTY``
+                — PacMan has no explicit hit probability, so entry always terminates; with
+                probability ``exp(-min_dist / penalty_decay)`` for
+                ``DISTANCE_DECAYED_HAZARD_PENALTY``), and the reward penalty becomes
+                deterministic given that slot (no RNG). Defaults to ``False`` (behaviour is
+                byte-for-byte identical to before). Incompatible with
+                ``ZERO_MEAN_HAZARD_SHOCK`` (which has no hit probability to couple to).
             discount_factor: Discount factor. Defaults to 0.95.
             name: Environment name. Defaults to "PacManPOMDP".
             output_dir: Output directory for logging. Defaults to None.
@@ -339,9 +349,26 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
 
         self.reward_model_type = reward_model_type
         self.penalty_decay = float(penalty_decay)
+        self._configure_hazard_terminal(is_dangerous_area_hit_terminal, reward_model_type)
         self.reward_model: BasePacManRewardModel = self._build_reward_model(
             reward_model_type, self.penalty_decay
         )
+
+    def _configure_hazard_terminal(
+        self,
+        is_dangerous_area_hit_terminal: bool,
+        reward_model_type: RewardModelType,
+    ) -> None:
+        if (
+            is_dangerous_area_hit_terminal
+            and reward_model_type == RewardModelType.ZERO_MEAN_HAZARD_SHOCK
+        ):
+            raise ValueError(
+                "is_dangerous_area_hit_terminal is incompatible with the "
+                "ZERO_MEAN_HAZARD_SHOCK reward model (the shock hazard has no "
+                "hit probability to couple termination to)"
+            )
+        self.is_dangerous_area_hit_terminal = bool(is_dangerous_area_hit_terminal)
 
     def _build_reward_model(
         self,
@@ -644,6 +671,17 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
                     f"Dangerous area {i} position {danger_pos} is outside maze bounds {self.maze_size}"
                 )
 
+    @property
+    def reward_requires_next_state(self) -> bool:
+        """Reward depends on the realised ``next_state`` iff hazard-terminal is on.
+
+        When ``is_dangerous_area_hit_terminal`` is enabled, the dangerous-area
+        penalty is deterministic given the terminal slot set during the
+        transition, so drivers must sample the transition first and pass the
+        realised ``next_state`` to :meth:`reward`.
+        """
+        return self.is_dangerous_area_hit_terminal
+
     def get_actions(self) -> List[int]:
         """Get all available actions."""
         return list(range(len(self.action_names)))
@@ -844,6 +882,7 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
             dangerous_area_penalty=float(self.dangerous_area_penalty),
             reward_variant_code=_REWARD_VARIANT_CODES[self.reward_model_type],
             penalty_decay=float(self.penalty_decay),
+            is_dangerous_area_hit_terminal=self.is_dangerous_area_hit_terminal,
         )
 
     def reward(self, state: np.ndarray, action: int, next_state: Any = None) -> float:
@@ -863,6 +902,15 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
             next_state_arr = self.sample_next_state(state, action)
         else:
             next_state_arr = self._require_state_array(next_state)
+
+        if self.is_dangerous_area_hit_terminal:
+            # Draw-coupled reward is deterministic given the terminal slot set
+            # by the transition; route through the terminal-aware native batch
+            # kernel so there is one reward code path (no RNG draw here).
+            rewards = self._reward_batch_cpp(
+                state.reshape(1, -1), action, next_state_arr.reshape(1, -1)
+            )
+            return float(rewards[0])
 
         return self.reward_model.compute_reward(state, action, next_state=next_state_arr)
 
@@ -938,6 +986,7 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
                 idx_pellets_end=int(self._idx_pellets_end),
                 idx_score=int(self._idx_score),
                 idx_terminal=int(self._idx_terminal),
+                is_dangerous_area_hit_terminal=self.is_dangerous_area_hit_terminal,
             ),
             dtype=np.float64,
         )
@@ -1030,6 +1079,15 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
             "idx_pellets_end": self._idx_pellets_end,
             "idx_score": self._idx_score,
             "idx_terminal": self._idx_terminal,
+            # Draw-coupled dangerous-area termination (default disabled): the
+            # native transition sets the terminal slot when PacMan enters a
+            # hazard zone. Threaded here so the single-step kernel and the
+            # vectorized belief updater's batch_sample share the config.
+            "dangerous_areas": self._dangerous_areas_arr,
+            "dangerous_area_radius": float(self.dangerous_area_radius),
+            "reward_variant_code": _REWARD_VARIANT_CODES[self.reward_model_type],
+            "penalty_decay": float(self.penalty_decay),
+            "is_dangerous_area_hit_terminal": self.is_dangerous_area_hit_terminal,
         }
 
     def is_terminal(self, state: np.ndarray) -> bool:

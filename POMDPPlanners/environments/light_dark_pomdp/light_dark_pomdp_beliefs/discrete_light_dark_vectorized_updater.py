@@ -24,7 +24,7 @@ Classes:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Dict, List, Union
+from typing import TYPE_CHECKING, Dict, List, Optional, Union
 
 import numpy as np
 
@@ -75,7 +75,7 @@ class DiscreteLightDarkVectorizedUpdater(VectorizedParticleBeliefUpdater):
         (3,)
     """
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments
         self,
         transition_error_prob: float,
         observation_error_prob: float,
@@ -84,6 +84,10 @@ class DiscreteLightDarkVectorizedUpdater(VectorizedParticleBeliefUpdater):
         grid_size: int,
         actions: List[str],
         action_to_vector: Dict[str, np.ndarray],
+        is_obstacle_hit_terminal: bool = False,
+        obstacles: Optional[np.ndarray] = None,
+        obstacle_hit_probability: float = 0.2,
+        goal_state: Optional[np.ndarray] = None,
     ):
         """Initialize the vectorized updater.
 
@@ -104,6 +108,18 @@ class DiscreteLightDarkVectorizedUpdater(VectorizedParticleBeliefUpdater):
         self.grid_size = grid_size
         self.actions = actions
         self.action_to_vector = action_to_vector
+
+        # Draw-coupled hazard-termination parameters (default off; consumed only
+        # when the flag is on, in which case particles carry a terminal slot).
+        self._is_obstacle_hit_terminal = bool(is_obstacle_hit_terminal)
+        self._obstacle_hit_probability = float(obstacle_hit_probability)
+        self._goal_state = (
+            np.zeros(2, dtype=float) if goal_state is None else np.asarray(goal_state, dtype=float)
+        )
+        obs_arr = np.empty((2, 0), dtype=float) if obstacles is None else np.asarray(obstacles)
+        self._obstacle_tuples = {
+            (int(obs_arr[0, j]), int(obs_arr[1, j])) for j in range(obs_arr.shape[1])
+        }
 
         self._precompute_tables()
 
@@ -127,16 +143,21 @@ class DiscreteLightDarkVectorizedUpdater(VectorizedParticleBeliefUpdater):
             grid_size=env.grid_size,
             actions=list(env.actions),
             action_to_vector={k: v.copy() for k, v in env.action_to_vector.items()},
+            is_obstacle_hit_terminal=env.is_obstacle_hit_terminal,
+            obstacles=env.obstacles,
+            obstacle_hit_probability=env.obstacle_hit_probability,
+            goal_state=env.goal_state,
         )
 
     # ------------------------------------------------------------------
     # VectorizedParticleBeliefUpdater interface
     # ------------------------------------------------------------------
 
-    def batch_transition(self, particles: np.ndarray, action: np.ndarray) -> np.ndarray:
+    def batch_transition(self, particles: np.ndarray, action: Union[np.ndarray, str]) -> np.ndarray:
         action_str = action if isinstance(action, str) else str(action)
         intended_idx = self.actions.index(action_str)
         n = particles.shape[0]
+        pos = particles[:, :2] if self._is_obstacle_hit_terminal else particles
 
         error_mask = np.random.random(n) < self.transition_error_prob
         chosen = np.full(n, intended_idx, dtype=int)
@@ -146,7 +167,33 @@ class DiscreteLightDarkVectorizedUpdater(VectorizedParticleBeliefUpdater):
             other = [i for i in range(self._n_actions) if i != intended_idx]
             chosen[error_mask] = np.random.choice(other, size=error_count)
 
-        return particles + self._action_vectors_matrix[chosen]
+        next_pos = pos + self._action_vectors_matrix[chosen]
+        if not self._is_obstacle_hit_terminal:
+            return next_pos
+        return self._augment_batch_terminal(particles, next_pos)
+
+    def _augment_batch_terminal(self, particles: np.ndarray, next_pos: np.ndarray) -> np.ndarray:
+        input_slots = (
+            particles[:, 2] if particles.shape[1] > 2 else np.zeros(len(particles), dtype=float)
+        )
+        out = np.empty((len(next_pos), 3), dtype=float)
+        for i, next_row in enumerate(next_pos):
+            if input_slots[i] > 0.5:
+                out[i, :2] = particles[i, :2]
+                out[i, 2] = 1.0
+            else:
+                out[i, :2] = next_row
+                out[i, 2] = self._draw_terminal_slot(next_row)
+        return out
+
+    def _draw_terminal_slot(self, next_pos: np.ndarray) -> float:
+        nx = int(next_pos[0])
+        ny = int(next_pos[1])
+        if (nx, ny) == (int(self._goal_state[0]), int(self._goal_state[1])):
+            return 0.0
+        if (nx, ny) in self._obstacle_tuples and np.random.rand() < self._obstacle_hit_probability:
+            return 1.0
+        return 0.0
 
     def batch_observation_log_likelihood(
         self,
@@ -224,6 +271,9 @@ class DiscreteLightDarkVectorizedUpdater(VectorizedParticleBeliefUpdater):
         return np.sqrt(sq_distances.min(axis=1))
 
     def _match_observation_offset(self, next_particles: np.ndarray, obs: np.ndarray) -> np.ndarray:
+        # Drop any hazard-terminal slot; matching is on the 2-D position.
+        next_particles = next_particles[:, :2]
+        obs = np.asarray(obs).ravel()[:2]
         diff = obs - next_particles  # (N, 2)
         # Compare against each of the n_obs offsets
         # offsets: (n_obs, 2), diff: (N, 2)
@@ -238,7 +288,7 @@ class DiscreteLightDarkVectorizedUpdater(VectorizedParticleBeliefUpdater):
         return result
 
     def _build_config_dict(self, class_name: str) -> dict:
-        return {
+        config: dict = {
             "class": class_name,
             "transition_error_prob": self.transition_error_prob,
             "observation_error_prob": self.observation_error_prob,
@@ -247,7 +297,13 @@ class DiscreteLightDarkVectorizedUpdater(VectorizedParticleBeliefUpdater):
             "grid_size": self.grid_size,
             "actions": self.actions,
             "action_to_vector": {k: v.tolist() for k, v in self.action_to_vector.items()},
+            "is_obstacle_hit_terminal": self._is_obstacle_hit_terminal,
         }
+        if self._is_obstacle_hit_terminal:
+            config["obstacle_hit_probability"] = self._obstacle_hit_probability
+            config["goal_state"] = self._goal_state.tolist()
+            config["obstacles"] = sorted(self._obstacle_tuples)
+        return config
 
 
 class DiscreteLightDarkNoObsInDarkVectorizedUpdater(

@@ -196,6 +196,72 @@ def test_two_env_belief_update_runs_on_model() -> None:
     assert len(history.history) > 0
 
 
+class EncodingSpyModel(SpyTiger):
+    """A model whose ``encode_observation`` tags observations.
+
+    Tagging lets a test tell apart the raw observation the world emitted (recorded
+    in history) from the encoded observation the belief update consumes. The
+    belief-update likelihood entry point (``observation_log_probability_per_state``)
+    records the observation it was handed, then strips the tag before delegating so
+    the underlying Tiger scoring still works.
+    """
+
+    def __init__(self, discount_factor: float = 0.95) -> None:
+        super().__init__(discount_factor=discount_factor)
+        self.encoded_inputs: List[Any] = []
+        self.belief_observations: List[Any] = []
+
+    def encode_observation(self, observation: Any) -> Any:
+        self.encoded_inputs.append(observation)
+        return ("encoded", observation)
+
+    def observation_log_probability_per_state(
+        self, next_states: Any, action: Any, observation: Any
+    ) -> Any:
+        self.belief_observations.append(observation)
+        raw = (
+            observation[1]
+            if isinstance(observation, tuple) and observation[0] == "encoded"
+            else observation
+        )
+        assert isinstance(raw, str)  # decoded Tiger observation; narrows for the typed super call
+        return super().observation_log_probability_per_state(next_states, action, raw)
+
+
+def test_two_env_history_records_raw_and_belief_receives_encoded() -> None:
+    """History keeps the raw observation while the belief update consumes the encoded one.
+
+    Purpose: Validates the encode_observation seam routes raw to history and encoded to belief
+
+    Given: A world emitting raw Tiger observations and a model whose encode_observation
+        tags each observation
+    When: An episode is run through EpisodeRunner
+    Then: Each recorded history observation is the raw (untagged) world observation,
+        encode_observation saw those exact raw observations, and the belief update was
+        handed the encoded (tagged) form corresponding to each
+
+    Test type: integration
+    """
+    model = EncodingSpyModel(discount_factor=0.95)
+    world = SpyTiger(discount_factor=0.95)
+    policy = FixedActionPolicy(environment=model, discount_factor=0.95)
+    belief = get_initial_belief(model, n_particles=5)
+
+    history = EpisodeRunner(
+        environment=world, policy=policy, initial_belief=belief, num_steps=3, logger=None
+    ).run()
+
+    steps = [step for step in history.history if step.observation is not None]
+    assert steps  # sanity: the episode produced non-terminal steps
+    # History keeps the raw world observation, never the encoded tag.
+    for step in steps:
+        assert not (isinstance(step.observation, tuple) and step.observation[0] == "encoded")
+    # encode_observation was applied to exactly those raw observations.
+    assert model.encoded_inputs == [step.observation for step in steps]
+    # The belief update was fed the encoded form corresponding to each raw observation.
+    assert model.belief_observations == [("encoded", step.observation) for step in steps]
+
+
 def test_two_env_discount_mismatch_raises() -> None:
     """A world/model discount-factor mismatch is rejected at construction.
 

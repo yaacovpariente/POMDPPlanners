@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: MIT
 
+# pylint: disable=too-many-lines
+
 import random
 from bisect import bisect
 from collections.abc import Hashable
@@ -8,6 +10,7 @@ from typing import Any, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
+from POMDPPlanners.core.distributions import DiscreteDistribution
 from POMDPPlanners.core.environment import DiscreteActionsEnvironment
 from POMDPPlanners.core.simulation import History, MetricValue
 from POMDPPlanners.environments.light_dark_pomdp import (
@@ -122,6 +125,7 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
     - Light-Dark domain: Classic POMDP benchmark for testing observation uncertainty
     """
 
+    # pylint: disable=dangerous-default-value
     def __init__(
         self,
         discount_factor: float,
@@ -150,11 +154,21 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
         grid_size: int = 11,
         is_stochastic_reward: bool = True,
         observation_model_type: ObservationModelType = ObservationModelType.NORMAL,
+        is_obstacle_hit_terminal: bool = False,
     ):
         self.transition_error_prob = transition_error_prob
         self.observation_error_prob = observation_error_prob
         self.is_stochastic_reward = is_stochastic_reward
         self.observation_model_type = observation_model_type
+        # Draw-coupled hazard termination (hazard-terminates-episode v2). Default
+        # False keeps the historical behaviour bit-identical: obstacles are
+        # always terminal (geometric ``discrete_is_terminal``) with a stochastic
+        # ``obstacle_hit_probability`` reward Bernoulli, and states stay 2-D.
+        # When True, the state gains a trailing terminal slot and termination is
+        # coupled to the obstacle-hit Bernoulli (obstacles become
+        # Bernoulli-terminal rather than always-terminal).
+        self.is_obstacle_hit_terminal = bool(is_obstacle_hit_terminal)
+        self._hazard_terminal_enabled = self.is_obstacle_hit_terminal
 
         super().__init__(
             discount_factor=discount_factor,
@@ -264,7 +278,135 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
             self._obs_probs_far, dtype=np.float64
         )
 
+    @property
+    def reward_requires_next_state(self) -> bool:
+        """Reward depends on the realised ``next_state`` iff the flag is on.
+
+        When enabled, the obstacle penalty is deterministic given the terminal
+        slot drawn during the transition, so drivers sample the transition
+        first and pass the realised ``next_state`` to :meth:`reward`.
+        """
+        return self._hazard_terminal_enabled
+
+    def initial_state_dist(self):
+        if not self._hazard_terminal_enabled:
+            return super().initial_state_dist()
+        padded = self._pad_terminal_slot(np.asarray(self.start_state))
+        return DiscreteDistribution(values=[padded], probs=np.array([1.0]))
+
+    def _pad_terminal_slot(self, state: np.ndarray) -> np.ndarray:
+        arr = np.asarray(state)
+        if self._hazard_terminal_enabled and arr.shape[0] == 2:
+            return np.concatenate([arr, np.zeros(1, dtype=arr.dtype)])
+        return arr
+
+    def _draw_terminal_slot(self, next_pos: np.ndarray) -> float:
+        # One obstacle-hit Bernoulli, drawn only when the realised (non-goal)
+        # position lands on an obstacle cell. Returns the absorbing terminal
+        # slot value (0.0/1.0). Uses ``np.random`` so ``sample_next_state`` and
+        # ``reward(state, action, next_state)`` agree on the same triple.
+        nx = int(next_pos[0])
+        ny = int(next_pos[1])
+        if nx == self._goal_x and ny == self._goal_y:
+            return 0.0
+        if (nx, ny) in self._obstacle_tuples and np.random.rand() < self.obstacle_hit_probability:
+            return 1.0
+        return 0.0
+
+    def _deterministic_hazard_reward(self, next_state: np.ndarray) -> float:
+        # Deterministic flag-on reward: fuel + goal-distance base, goal bonus,
+        # and an obstacle penalty applied iff the realised next state is
+        # terminal (obstacle hit) or out of grid. No RNG on this path.
+        nx = int(next_state[0])
+        ny = int(next_state[1])
+        dx = nx - self._goal_x
+        dy = ny - self._goal_y
+        reward = -self.fuel_cost - (dx * dx + dy * dy) ** 0.5
+        if dx == 0 and dy == 0:
+            return float(reward + self.goal_reward)
+        terminal = next_state.shape[0] > 2 and float(next_state[2]) > 0.5
+        if terminal:
+            return float(reward + self.obstacle_reward)
+        if nx < 0 or ny < 0 or nx > self.grid_size or ny > self.grid_size:
+            return float(reward + self.obstacle_reward)
+        return float(reward)
+
+    def _deterministic_hazard_reward_batch(
+        self,
+        states: Union[np.ndarray, Sequence[Any]],
+        action: str,
+        next_states: Optional[Union[np.ndarray, Sequence[Any]]],
+    ) -> np.ndarray:
+        states_arr = np.asarray(states)
+        if next_states is None:
+            positions = states_arr[:, :2] + self.action_to_vector[action]
+            terminal = np.zeros(len(positions))
+        else:
+            ns_arr = np.asarray(next_states)
+            positions = ns_arr[:, :2]
+            terminal = ns_arr[:, 2] if ns_arr.shape[1] > 2 else np.zeros(len(ns_arr))
+        dists = np.linalg.norm(positions - self.goal_state, axis=1)
+        rewards = -self.fuel_cost - dists
+        goal_mask = np.all(positions == self.goal_state, axis=1)
+        rewards[goal_mask] += self.goal_reward
+        hazard_mask = (terminal > 0.5) & ~goal_mask
+        rewards[hazard_mask] += self.obstacle_reward
+        oob = (
+            (np.any(positions < 0, axis=1) | np.any(positions > self.grid_size, axis=1))
+            & ~goal_mask
+            & (terminal <= 0.5)
+        )
+        rewards[oob] += self.obstacle_reward
+        return rewards
+
+    def _sample_next_state_batch_hazard(self, states_arr: np.ndarray, action: str) -> np.ndarray:
+        pos = states_arr[:, :2]
+        input_slots = states_arr[:, 2] if states_arr.shape[1] > 2 else np.zeros(len(states_arr))
+        n = len(states_arr)
+        cumprobs = self._transition_cumprobs_np[action]
+        idxs = np.clip(np.searchsorted(cumprobs, np.random.rand(n)), 0, self._n_actions - 1)
+        raw = pos + np.stack([self._action_vectors[i] for i in idxs], axis=0)
+        out = np.empty((n, 3), dtype=float)
+        for i in range(n):
+            if input_slots[i] > 0.5:
+                out[i, :2] = pos[i]
+                out[i, 2] = 1.0
+            else:
+                out[i, :2] = raw[i]
+                out[i, 2] = self._draw_terminal_slot(raw[i])
+        return out
+
+    def _sample_next_state_hazard(self, state: np.ndarray, action: Any, n_samples: int) -> Any:
+        state_arr = np.asarray(state)
+        if state_arr.shape[0] > 2 and float(state_arr[2]) > 0.5:
+            frozen = state_arr.copy()
+            if n_samples == 1:
+                return frozen
+            return np.repeat(frozen[np.newaxis, :], n_samples, axis=0)
+        pos = state_arr[:2]
+        cumprobs = self._transition_cumprobs_np[action]
+        if n_samples == 1:
+            idx = min(int(np.searchsorted(cumprobs, np.random.rand())), self._n_actions - 1)
+            nxt = pos + self._action_vectors[idx]
+            return np.concatenate([nxt, [self._draw_terminal_slot(nxt)]])
+        draws = np.random.rand(n_samples)
+        idxs = np.clip(np.searchsorted(cumprobs, draws), 0, self._n_actions - 1)
+        rows = [
+            np.concatenate(
+                [
+                    pos + self._action_vectors[i],
+                    [self._draw_terminal_slot(pos + self._action_vectors[i])],
+                ]
+            )
+            for i in idxs
+        ]
+        return np.stack(rows, axis=0)
+
     def sample_next_step(self, state: np.ndarray, action: Any) -> Tuple[Any, Any, float]:
+        if self._hazard_terminal_enabled:
+            # Generic path threads the realised next_state into the
+            # deterministic reward (reward_requires_next_state is True).
+            return super().sample_next_step(state, action)
         if self.observation_model_type != ObservationModelType.NORMAL:
             return super().sample_next_step(state, action)
 
@@ -495,6 +637,8 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
         # _cumprobs = np.cumsum(probs); .sample() does
         # idx = int(np.searchsorted(_cumprobs, np.random.rand())) clamped
         # to len(values)-1. Same RNG draw is preserved here.
+        if self._hazard_terminal_enabled:
+            return self._sample_next_state_hazard(state, action, n_samples)
         cumprobs = self._transition_cumprobs_np[action]
         if n_samples == 1:
             uniform_draw = float(np.random.rand())
@@ -519,7 +663,18 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
         offsets = np.stack([self._action_vectors[i] for i in idxs], axis=0)
         return state + offsets
 
+    def _pos2d(self, values: np.ndarray) -> np.ndarray:
+        # Project a (possibly hazard-terminal) state/particle onto its 2-D
+        # position slice for the observation / transition-probability paths.
+        arr = np.asarray(values)
+        if not self._hazard_terminal_enabled:
+            return arr
+        if arr.ndim == 1:
+            return arr[:2]
+        return arr[:, :2]
+
     def sample_observation(self, next_state: np.ndarray, action: Any, n_samples: int = 1) -> Any:
+        next_state = self._pos2d(next_state)
         # Dispatch on observation_model_type. NORMAL stays inlined here for
         # the original hot-path; NO_OBS_IN_DARK and DISTANCE_BASED route
         # through helpers that mirror the deleted wrapper sampling logic
@@ -582,6 +737,7 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
     ) -> np.ndarray:
         action_index = self.actions.index(action)
         probs = self._transition_probs[action]
+        state = self._pos2d(state)
         # Wrapper-equivalent values list: state + action_to_vector[a] for
         # each action, in self.actions order. Match by exact equality.
         candidates = np.stack(
@@ -590,6 +746,7 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
         next_states_array = np.asarray(next_states)
         if next_states_array.ndim == 1:
             next_states_array = next_states_array.reshape(1, -1)
+        next_states_array = self._pos2d(next_states_array)
         out = np.full(len(next_states_array), -np.inf, dtype=np.float64)
         for i, ns in enumerate(next_states_array):
             for j, candidate in enumerate(candidates):
@@ -606,6 +763,7 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
     def observation_log_probability(
         self, next_state: np.ndarray, action: Any, observations: Any
     ) -> np.ndarray:
+        next_state = self._pos2d(next_state)
         del action  # unused; observation log-prob depends only on next_state
         if self.observation_model_type == ObservationModelType.NO_OBS_IN_DARK:
             return self._log_prob_no_obs_in_dark(next_state, observations)
@@ -628,6 +786,12 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
         )
 
     def reward(self, state: np.ndarray, action: Any, next_state: Any = None) -> float:
+        if self._hazard_terminal_enabled:
+            if next_state is None:
+                ns = np.asarray(state)[:2] + self.action_to_vector[action]
+            else:
+                ns = np.asarray(next_state)
+            return self._deterministic_hazard_reward(ns)
         if state.shape != (2,):
             raise ValueError("state must be a 2D vector")
 
@@ -664,6 +828,8 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
         next_states: Optional[Union[np.ndarray, Sequence[Any]]] = None,
     ) -> np.ndarray:
         states = np.asarray(states)
+        if self._hazard_terminal_enabled:
+            return self._deterministic_hazard_reward_batch(states, action, next_states)
         # Honour per-row realised ``next_states`` threaded by callers so
         # obstacle / goal / out-of-grid checks score against the realised
         # trajectory. Only synthesise the deterministic-action next_states
@@ -698,6 +864,8 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
         self, states: Union[np.ndarray, Sequence[Any]], action: str
     ) -> np.ndarray:
         states_arr = np.asarray(states)
+        if self._hazard_terminal_enabled:
+            return self._sample_next_state_batch_hazard(states_arr, action)
         n = len(states_arr)
         cumprobs = self._transition_cumprobs_np[action]
         draws = np.random.rand(n)
@@ -720,7 +888,8 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
         next_states_arr = np.ascontiguousarray(np.asarray(next_states, dtype=np.float64))
         if next_states_arr.ndim == 1:
             next_states_arr = next_states_arr.reshape(1, -1)
-        observation_arr = np.ascontiguousarray(np.asarray(observation, dtype=np.float64))
+        next_states_arr = np.ascontiguousarray(self._pos2d(next_states_arr))
+        observation_arr = np.ascontiguousarray(np.asarray(observation, dtype=np.float64))[:2]
         return _native.discrete_observation_log_prob_per_state(
             next_states=next_states_arr,
             observation=observation_arr,
@@ -732,6 +901,14 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
         )
 
     def is_terminal(self, state: np.ndarray) -> bool:
+        if self._hazard_terminal_enabled:
+            if state.shape[0] not in (2, 3):
+                raise ValueError("state must be a 2D or 3D vector")
+            # Draw-coupled v2: terminal iff at goal OR the appended terminal
+            # slot is set. Obstacle cells no longer terminate on geometry.
+            if state.shape[0] > 2 and float(state[2]) > 0.5:
+                return True
+            return bool(int(state[0]) == self._goal_x and int(state[1]) == self._goal_y)
         if state.shape != (2,):
             raise ValueError("state must be a 2D vector")
         # Native fast-path: state-equals-goal OR state-in-any-obstacle (exact
@@ -796,7 +973,14 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
         bypass_native_for_realised_pos = (
             self.transition_error_prob > 0.0 and self._obstacles_flat.shape[0] > 0
         )
-        if not self.is_stochastic_reward or bypass_native_for_realised_pos:
+        # Draw-coupled hazard termination is implemented on the Python path
+        # only; the native discrete rollout uses the v1 always-terminal
+        # obstacle gate, so route flag-on rollouts through Python.
+        if (
+            not self.is_stochastic_reward
+            or bypass_native_for_realised_pos
+            or self._hazard_terminal_enabled
+        ):
             return python_random_rollout(
                 state=state,
                 depth=depth,
@@ -848,17 +1032,20 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
             out_of_grid_counter_in_history = 0
 
             for _, step in enumerate(history.history):
-                if np.array_equal(step.state, self.goal_state):
+                # Score metrics on the 2-D position; hazard-terminal states
+                # carry a trailing terminal slot.
+                position = np.asarray(step.state)[:2]
+                if np.array_equal(position, self.goal_state):
                     goal_reached_in_history = True
                     break
 
                 # Check if step hits an obstacle
-                if np.any(np.all(step.state.reshape(-1, 1) == self.obstacles, axis=0)):
+                if np.any(np.all(position.reshape(-1, 1) == self.obstacles, axis=0)):
                     obstacle_hit_in_history = True
                     obstacle_hit_counter_in_history += 1
 
                 # Check if step is out of grid
-                is_out_of_grid = np.any(step.state < 0) or np.any(step.state > self.grid_size)
+                is_out_of_grid = np.any(position < 0) or np.any(position > self.grid_size)
                 if is_out_of_grid:
                     out_of_grid_in_history = True
                     out_of_grid_counter_in_history += 1

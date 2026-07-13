@@ -50,6 +50,9 @@ def _build_env(variant: RewardModelType) -> ContinuousLightDarkPOMDP:
             obstacles=[(3.0, 3.0), (6.0, 6.0), (8.0, 2.0)],
             reward_model_type=variant,
             penalty_decay=_PENALTY_DECAY_BY_VARIANT[variant],
+            # Reward-model↔native parity is a flag-off (stochastic-reward)
+            # property; the shock variant is also incompatible with the flag.
+            is_obstacle_hit_terminal=False,
         ),
     )
 

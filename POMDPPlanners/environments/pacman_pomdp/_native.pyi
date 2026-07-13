@@ -43,12 +43,17 @@ def simulate_rollout(
     dangerous_area_penalty: float,
     reward_variant_code: int,
     penalty_decay: float,
+    is_dangerous_area_hit_terminal: bool = False,
 ) -> float:
     """Run a random rollout from state using pre-drawn action_indices.
 
     Returns the discounted cumulative reward accumulated until terminal or
     max_depth is reached. action_indices must have length >= (max_depth - depth).
     Reward per step includes the variant-aware dangerous-area contribution.
+
+    When ``is_dangerous_area_hit_terminal`` is set the dangerous-area hazard is
+    draw-coupled: the transition sets the (absorbing) terminal slot on a hazard
+    hit and the per-step penalty becomes deterministic given that slot.
     """
 
 def reward_batch(
@@ -72,8 +77,15 @@ def reward_batch(
     idx_pellets_end: int,
     idx_score: int,
     idx_terminal: int,
+    is_dangerous_area_hit_terminal: bool = False,
 ) -> NDArray[np.float64]:
-    """Variant-aware standalone batch reward kernel. Returns (N,) float64."""
+    """Variant-aware standalone batch reward kernel. Returns (N,) float64.
+
+    When ``is_dangerous_area_hit_terminal`` is set the dangerous-area penalty is
+    deterministic: ``-dangerous_area_penalty`` is applied iff the row's realised
+    ``next_states`` terminal slot is set and PacMan is in a zone (the decayed
+    variant has no radius cutoff, so it is always in-zone).
+    """
 
 class PacManTransitionCpp:
     """Native transition kernel for PacMan POMDP (pybind11-backed)."""
@@ -101,6 +113,11 @@ class PacManTransitionCpp:
         idx_score: int,
         idx_terminal: int,
         patrol_dir_state: NDArray[np.int32],
+        dangerous_areas: NDArray[np.float64] = ...,
+        dangerous_area_radius: float = 0.0,
+        reward_variant_code: int = 0,
+        penalty_decay: float = 1.0,
+        is_dangerous_area_hit_terminal: bool = False,
     ) -> None: ...
     def sample(self, n_samples: int = 1) -> List[NDArray[np.float64]]: ...
     def probability(

@@ -327,12 +327,13 @@ def test_beacons_and_obstacles_array_structure():
 
 
 def test_state_transition_model(pomdp):
-    # Test state transition via the env-level sample API.
-    state = np.array([0.0, 0.0])
+    # Test state transition via the env-level sample API. The pinned fixture
+    # enables hazard termination, so states carry a trailing terminal slot.
+    state = np.array([0.0, 0.0, 0.0])
     action = np.array([0.0, 0.0])
     next_state = pomdp.sample_next_state(state, action)
     assert isinstance(next_state, np.ndarray)
-    assert next_state.shape == (2,)
+    assert next_state.shape == (3,)
 
 
 def test_observation_model(pomdp):
@@ -345,24 +346,27 @@ def test_observation_model(pomdp):
 
 
 def test_sample_next_step(pomdp):
-    # Test sample_next_step method
-    state = np.array([0.0, 0.0])
+    # Test sample_next_step method. Hazard-terminal states are 3-D; the
+    # position observation stays 2-D.
+    state = np.array([0.0, 0.0, 0.0])
     action = np.array([0.0, 0.0])
     next_state, observation, reward = pomdp.sample_next_step(state, action)
 
     assert isinstance(next_state, np.ndarray)
-    assert next_state.shape == (2,)
+    assert next_state.shape == (3,)
     assert isinstance(observation, np.ndarray)
     assert observation.shape == (2,)
     assert isinstance(reward, float)
 
 
 def test_initial_state_distribution(pomdp):
-    # Test initial state distribution
+    # Test initial state distribution. The hazard-terminal env appends a live
+    # (0.0) terminal slot to the 2-D start state.
     dist = pomdp.initial_state_dist()
     state = dist.sample()[0]
     assert isinstance(state, np.ndarray)
-    assert state.shape == (2,)
+    assert state.shape == (3,)
+    assert state[2] == 0.0
 
 
 def test_reward_function():
@@ -403,16 +407,21 @@ def test_is_terminal():
     assert env.is_terminal(env.goal_state)
     assert env.is_terminal(env.goal_state + np.array([1, 0]))  # Within radius
 
-    # Test obstacle state (within radius)
-    assert env.is_terminal(env.obstacles[:, 0])  # First obstacle
-    assert env.is_terminal(env.obstacles[:, 0] + np.array([1, 0]))  # Within radius
+    # Draw-coupled v2: standing on an obstacle position is NOT terminal on its
+    # own — termination is recorded in the appended terminal slot. A non-goal
+    # position with a live (0.0) slot is not terminal; the same position with a
+    # set (1.0) slot is.
+    obstacle_live = np.concatenate([env.obstacles[:, 0], [0.0]])
+    obstacle_hit = np.concatenate([env.obstacles[:, 0], [1.0]])
+    assert not env.is_terminal(obstacle_live)
+    assert env.is_terminal(obstacle_hit)
 
     # Test out of grid state (no longer terminal)
-    assert not env.is_terminal(np.array([-1, 5]))
-    assert not env.is_terminal(np.array([12, 5]))  # grid_size + 1
+    assert not env.is_terminal(np.array([-1, 5, 0.0]))
+    assert not env.is_terminal(np.array([12, 5, 0.0]))  # grid_size + 1
 
     # Test non-terminal state
-    assert not env.is_terminal(np.array([1, 1]))
+    assert not env.is_terminal(np.array([1, 1, 0.0]))
 
 
 def test_reward_range():
@@ -707,8 +716,9 @@ def test_continuous_light_dark_pomdp_state_transition_model(
 
     next_state = env.sample_next_state(state, action)
     expected_next_state = state + action
-    # Allow for noise in state transition (3 standard deviations)
-    assert np.allclose(next_state, expected_next_state, atol=3.0)
+    # Allow for noise in state transition (3 standard deviations). The
+    # hazard-terminal env appends a terminal slot; compare the position slice.
+    assert np.allclose(next_state[:2], expected_next_state, atol=3.0)
 
 
 def test_continuous_light_dark_pomdp_observation_model(
@@ -748,14 +758,15 @@ def test_continuous_light_dark_pomdp_is_terminal(base_continuous_light_dark_pomd
     # Goal state
     assert env.is_terminal(env.goal_state)
     assert env.is_terminal(env.goal_state + np.array([1, 0]))
-    # Obstacle state
-    assert env.is_terminal(env.obstacles[:, 0])
-    assert env.is_terminal(env.obstacles[:, 0] + np.array([1, 0]))
+    # Draw-coupled v2: obstacle position terminates only when its terminal
+    # slot is set, not on geometry.
+    assert not env.is_terminal(np.concatenate([env.obstacles[:, 0], [0.0]]))
+    assert env.is_terminal(np.concatenate([env.obstacles[:, 0], [1.0]]))
     # Out of grid (no longer terminal)
-    assert not env.is_terminal(np.array([-1, 5]))
-    assert not env.is_terminal(np.array([12, 5]))
+    assert not env.is_terminal(np.array([-1, 5, 0.0]))
+    assert not env.is_terminal(np.array([12, 5, 0.0]))
     # Non-terminal
-    assert not env.is_terminal(np.array([1, 1]))
+    assert not env.is_terminal(np.array([1, 1, 0.0]))
 
 
 def test_continuous_light_dark_pomdp_compute_metrics(base_continuous_light_dark_pomdp):
@@ -878,6 +889,9 @@ def test_high_variance_states_reward_model():
             beacon_radius=1.0,
             obstacle_radius=1.5,
             reward_model_type=RewardModelType.ZERO_MEAN_HAZARD_SHOCK,
+            # The shock reward model is a flag-off (stochastic-reward) path;
+            # it is incompatible with draw-coupled hazard termination.
+            is_obstacle_hit_terminal=False,
         ),
     )
 
@@ -931,6 +945,10 @@ def test_single_obstacle_reward_behavior():
             beacon_radius=1.0,
             obstacle_radius=1.0,
             obstacles=single_obstacle,
+            # Exercise the flag-off stochastic obstacle-reward model directly
+            # (reward scored from ``reward(state, action)`` without a realised
+            # next_state).
+            is_obstacle_hit_terminal=False,
         ),
     )
 
@@ -1851,20 +1869,22 @@ def test_continuous_light_dark_sample_next_state_shapes_and_distribution():
     state = np.array([2.0, 3.0])
     action = np.array([1.0, -0.5])
 
+    # Hazard-terminal states carry a trailing terminal slot, so shapes gain a
+    # third dimension and the position mean is compared on the [:2] slice.
     single = env.sample_next_state(state, action, n_samples=1)
     assert isinstance(single, np.ndarray)
-    assert single.shape == (2,)
+    assert single.shape == (3,)
 
     five = env.sample_next_state(state, action, n_samples=5)
     assert isinstance(five, np.ndarray)
-    assert five.shape == (5, 2)
+    assert five.shape == (5, 3)
 
     many = env.sample_next_state(state, action, n_samples=100)
-    assert many.shape == (100, 2)
+    assert many.shape == (100, 3)
 
     # Empirical mean is close to state+action.
     expected_mean = state + action
-    actual_mean = many.mean(axis=0)
+    actual_mean = many[:, :2].mean(axis=0)
     assert np.allclose(actual_mean, expected_mean, atol=0.5)
 
     # Samples are not all identical.
@@ -2213,13 +2233,14 @@ def test_continuous_sample_next_state_n_samples_shapes(n_samples):
     state = np.array([3.0, 4.0])
     action = np.array([1.0, 0.5])
 
+    # Hazard-terminal states carry a trailing terminal slot (3-D).
     direct = env.sample_next_state(state, action, n_samples=n_samples)
     if n_samples == 1:
         assert isinstance(direct, np.ndarray)
-        assert direct.shape == (2,)
+        assert direct.shape == (3,)
     else:
         assert isinstance(direct, np.ndarray)
-        assert direct.shape == (n_samples, 2)
+        assert direct.shape == (n_samples, 3)
 
 
 @pytest.mark.parametrize("n_samples", [1, 5, 100])
@@ -2555,7 +2576,12 @@ def test_continuous_reward_in_obstacle_zone_drifts_by_p_hit_times_obstacle_rewar
     Test type: unit
     """
     np.random.seed(2024)
-    env = ContinuousLightDarkPOMDP(discount_factor=0.95, **continuous_light_dark_pinned_kwargs())
+    # Exercise the flag-off stochastic obstacle-reward model (the drift is a
+    # property of the reward model, not draw-coupled termination).
+    env = ContinuousLightDarkPOMDP(
+        discount_factor=0.95,
+        **continuous_light_dark_pinned_kwargs(is_obstacle_hit_terminal=False),
+    )
     in_obs = np.array([5.0, 5.0])
     free = np.array([8.0, 4.0])
     action = np.array([0.0, 0.0])
@@ -2605,10 +2631,11 @@ def test_continuous_reward_in_obstacle_depends_on_reward_model_type(
     Test type: unit
     """
     np.random.seed(31)
+    # Reward-model drift is a flag-off (stochastic-reward) property.
     env = ContinuousLightDarkPOMDP(
         discount_factor=0.95,
         **continuous_light_dark_pinned_kwargs(
-            reward_model_type=reward_model_type, penalty_decay=1.0
+            reward_model_type=reward_model_type, penalty_decay=1.0, is_obstacle_hit_terminal=False
         ),
     )
     state = np.array([5.0, 5.0])
@@ -2656,10 +2683,13 @@ def test_continuous_decaying_hit_probability_reward_decays_with_obstacle_distanc
     Test type: unit
     """
     np.random.seed(55)
+    # The decay formula is a flag-off (stochastic-reward) property.
     env = ContinuousLightDarkPOMDP(
         discount_factor=0.95,
         **continuous_light_dark_pinned_kwargs(
-            reward_model_type=RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY, penalty_decay=1.0
+            reward_model_type=RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY,
+            penalty_decay=1.0,
+            is_obstacle_hit_terminal=False,
         ),
     )
     obstacle = np.array([5.0, 5.0])
@@ -2913,29 +2943,31 @@ def test_continuous_is_terminal_outside_goal_radius_boundary_is_false():
 
 
 def test_continuous_is_obstacle_hit_terminal_flag_controls_obstacle_termination():
-    """is_obstacle_hit_terminal=False keeps an obstacle-zone state non-terminal.
+    """is_obstacle_hit_terminal gates draw-coupled termination via the slot.
 
-    Purpose: Validates the is_obstacle_hit_terminal flag is plumbed through to
-        is_terminal_kernel. With the default (True), an obstacle-zone state is
-        terminal; with False the same state is non-terminal.
+    Purpose: Validates that the flag controls whether a set terminal slot
+        terminates. Draw-coupled v2 replaces the v1 geometric obstacle gate:
+        merely standing in an obstacle zone is never terminal — only a set
+        terminal slot is, and only when the flag is on.
 
-    Given: Two ContinuousLightDarkPOMDPs identical except for the
-        is_obstacle_hit_terminal flag. Anchor state=[5.0, 5.0] (default
-        obstacle position, dist_to_goal=5 > goal_state_radius=1.5).
-    When: is_terminal is queried on the same state for each env.
-    Then: True when the flag is True; False when the flag is False.
+    Given: A flag-on and a flag-off ContinuousLightDarkPOMDP. Anchor position
+        [5.0, 5.0] (default obstacle position, dist_to_goal=5 > radius=1.5)
+        with a live (0.0) and a set (1.0) terminal slot.
+    When: is_terminal is queried for each env / slot combination.
+    Then: The flag-on env terminates only on the set slot; the flag-off env
+        (2-D states) never terminates on an obstacle position.
 
     Test type: unit
     """
-    state = np.array([5.0, 5.0])
     env_term = ContinuousLightDarkPOMDP(
         discount_factor=0.95, **continuous_light_dark_pinned_kwargs(is_obstacle_hit_terminal=True)
     )
     env_continue = ContinuousLightDarkPOMDP(
         discount_factor=0.95, **continuous_light_dark_pinned_kwargs(is_obstacle_hit_terminal=False)
     )
-    assert env_term.is_terminal(state) is True
-    assert env_continue.is_terminal(state) is False
+    assert env_term.is_terminal(np.array([5.0, 5.0, 1.0])) is True
+    assert env_term.is_terminal(np.array([5.0, 5.0, 0.0])) is False
+    assert env_continue.is_terminal(np.array([5.0, 5.0])) is False
 
 
 # ---------------------------------------------------------------------------
@@ -2980,7 +3012,7 @@ def test_continuous_sample_outputs_finite_and_in_grid(
     n_samples = 1000
 
     transitions = env.sample_next_state(state, action, n_samples=n_samples)
-    assert transitions.shape == (n_samples, 2)
+    assert transitions.shape == (n_samples, 3)
     assert np.all(np.isfinite(transitions))
 
     observations = env.sample_observation(state, action, n_samples=n_samples)
@@ -3018,9 +3050,15 @@ def test_continuous_sample_next_state_batch_matches_looped_sample():
 
     Test type: unit
     """
+    # Flag-off env: the transition is a pure C++-RNG Gaussian, so batch and
+    # scalar paths share one stream and stay bit-identical. (The flag-on path
+    # additionally draws the hazard slot from NumPy, whose global state is not
+    # reset by ``_native.set_seed`` — that parity is covered separately.)
     env = ContinuousLightDarkPOMDP(
         discount_factor=0.95,
-        **continuous_light_dark_pinned_kwargs(state_transition_cov_matrix=np.eye(2) * 0.05),
+        **continuous_light_dark_pinned_kwargs(
+            state_transition_cov_matrix=np.eye(2) * 0.05, is_obstacle_hit_terminal=False
+        ),
     )
     rng = np.random.RandomState(7)
     states = rng.uniform(0.0, env.grid_size, size=(32, 2))

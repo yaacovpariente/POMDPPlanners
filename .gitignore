@@ -76,3 +76,7 @@ docs/api/
 docs/docs/
 docs/examples/planners_comparison_results/
 docs/examples/researcher_cache/
+
+# Local-only POMCPOW demo scripts (kept on disk, not tracked)
+carla_pomcpow_example.py
+nuplan_pomcpow_example.py
