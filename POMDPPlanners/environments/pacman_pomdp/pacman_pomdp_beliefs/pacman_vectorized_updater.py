@@ -46,6 +46,13 @@ class PacManVectorizedUpdater(VectorizedParticleBeliefUpdater):
         ghost_strategies: Per-ghost strategy list.
         observation_noise_factor: Multiplier for observation noise.
         max_observation_noise: Maximum observation noise std.
+
+    Note:
+        When the environment exposes a ``slip_probability`` attribute (e.g. a
+        slippery PacMan variant), :meth:`from_environment` reads it so the
+        belief transition mixes in a uniformly random action with that
+        probability, matching the environment's stochastic motion. The default
+        of ``0.0`` reproduces deterministic base-PacMan motion exactly.
     """
 
     # pylint: disable=too-many-instance-attributes
@@ -64,7 +71,11 @@ class PacManVectorizedUpdater(VectorizedParticleBeliefUpdater):
         transition_ctor_kwargs: Dict[str, Any],
         observation_ctor_kwargs: Dict[str, Any],
         patrol_dir_state: np.ndarray,
+        slip_probability: float = 0.0,
+        n_actions: int = 5,
     ):
+        if not 0.0 <= slip_probability <= 1.0:
+            raise ValueError(f"slip_probability must be in [0, 1], got {slip_probability}")
         self.maze_size = maze_size
         self.num_ghosts = num_ghosts
         self.num_pellets = num_pellets
@@ -77,6 +88,8 @@ class PacManVectorizedUpdater(VectorizedParticleBeliefUpdater):
         self._transition_ctor_kwargs = transition_ctor_kwargs
         self._observation_ctor_kwargs = observation_ctor_kwargs
         self._patrol_dir_state = patrol_dir_state
+        self._slip_probability = float(slip_probability)
+        self._n_actions = int(n_actions)
         # Layout indices mirrored on the updater for diagnostics and tests;
         # all pulled from the transition ctor kwargs so they stay in sync.
         self._idx_pac_row: int = transition_ctor_kwargs["idx_pac_row"]
@@ -108,6 +121,8 @@ class PacManVectorizedUpdater(VectorizedParticleBeliefUpdater):
             transition_ctor_kwargs=env.get_transition_cpp_ctor_kwargs(),
             observation_ctor_kwargs=env.get_observation_cpp_ctor_kwargs(),
             patrol_dir_state=env.ghost_patrol_directions,
+            slip_probability=float(getattr(env, "slip_probability", 0.0)),
+            n_actions=len(env.get_actions()),
         )
 
     # ------------------------------------------------------------------
@@ -120,6 +135,11 @@ class PacManVectorizedUpdater(VectorizedParticleBeliefUpdater):
         particles_f = np.ascontiguousarray(particles, dtype=np.float64)
         if particles_f.shape[0] == 0:
             return particles_f
+        if self._slip_probability <= 0.0:
+            return self._batch_sample_for_action(particles_f, int(action))
+        return self._batch_transition_with_slip(particles_f, int(action))
+
+    def _batch_sample_for_action(self, particles_f: np.ndarray, action: int) -> np.ndarray:
         ref_state = particles_f[0] if particles_f.shape[0] > 0 else self._scratch_state
         tm = _native.PacManTransitionCpp(
             state=ref_state,
@@ -128,6 +148,27 @@ class PacManVectorizedUpdater(VectorizedParticleBeliefUpdater):
             patrol_dir_state=self._patrol_dir_state,
         )
         return tm.batch_sample(particles_f)
+
+    def _batch_transition_with_slip(
+        self, particles_f: np.ndarray, intended_action: int
+    ) -> np.ndarray:
+        # With probability ``slip_probability`` each particle's intended action
+        # is replaced by a uniformly random action. Particles are grouped by
+        # their (possibly slipped) action so each group is transitioned with a
+        # single native batch_sample call: at most ``n_actions`` native calls,
+        # keeping the update vectorized rather than per-particle.
+        num_particles = particles_f.shape[0]
+        actions = np.full(num_particles, intended_action, dtype=np.int64)
+        slipped = np.random.random(num_particles) < self._slip_probability
+        num_slipped = int(np.count_nonzero(slipped))
+        if num_slipped:
+            actions[slipped] = np.random.randint(0, self._n_actions, size=num_slipped)
+        next_particles = np.empty_like(particles_f)
+        for action_value in np.unique(actions):
+            group_idx = np.nonzero(actions == action_value)[0]
+            group = np.ascontiguousarray(particles_f[group_idx])
+            next_particles[group_idx] = self._batch_sample_for_action(group, int(action_value))
+        return next_particles
 
     def batch_observation_log_likelihood(
         self,
@@ -158,5 +199,6 @@ class PacManVectorizedUpdater(VectorizedParticleBeliefUpdater):
             "ghost_strategies": self.ghost_strategies,
             "observation_noise_factor": self.observation_noise_factor,
             "max_observation_noise": self.max_observation_noise,
+            "slip_probability": self._slip_probability,
         }
         return config_to_id(config_dict)
