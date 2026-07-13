@@ -38,6 +38,9 @@ from POMDPPlanners.core.belief.vectorized_particle_belief_updater import (
     VectorizedParticleBeliefUpdater,
 )
 from POMDPPlanners.core.environment import SpaceType
+from POMDPPlanners.environments.environment_utils.dangerous_areas_kernels import (
+    hazard_hit_probability_batch_kernel,
+)
 from POMDPPlanners.environments.light_dark_pomdp import (
     _native,  # pylint: disable=no-name-in-module
 )
@@ -78,15 +81,15 @@ class ContinuousLightDarkVectorizedUpdater(VectorizedParticleBeliefUpdater):
         >>> particles = np.random.rand(50, 2) * 10
         >>> action = np.array([1.0, 0.0])
         >>> next_p = updater.batch_transition(particles, action)
-        >>> next_p.shape
-        (50, 2)
+        >>> next_p.shape  # default env is hazard-terminal: trailing slot
+        (50, 3)
         >>> obs = np.array([5.0, 5.0])
         >>> ll = updater.batch_observation_log_likelihood(next_p, action, obs)
         >>> ll.shape
         (50,)
     """
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments
         self,
         state_transition_dist: CovarianceParameterizedMultivariateNormal,
         obs_dist_near_beacon: CovarianceParameterizedMultivariateNormal,
@@ -95,6 +98,14 @@ class ContinuousLightDarkVectorizedUpdater(VectorizedParticleBeliefUpdater):
         beacon_radius: float,
         grid_size: int,
         action_to_vector: Optional[Dict[str, np.ndarray]] = None,
+        is_obstacle_hit_terminal: bool = False,
+        obstacles: Optional[np.ndarray] = None,
+        obstacle_radius: float = 1.0,
+        obstacle_hit_probability: float = 1.0,
+        goal_state: Optional[np.ndarray] = None,
+        goal_state_radius: float = 1.5,
+        reward_variant_code: int = 0,
+        penalty_decay: float = 1.0,
     ):
         """Initialize the vectorized updater.
 
@@ -117,6 +128,23 @@ class ContinuousLightDarkVectorizedUpdater(VectorizedParticleBeliefUpdater):
         self.beacon_radius_sq = beacon_radius * beacon_radius
         self.grid_size = grid_size
         self._action_to_vector = action_to_vector
+
+        # Draw-coupled hazard-termination parameters (only consumed when the
+        # flag is on; flag-off keeps the historical 2-D particle path).
+        self._is_obstacle_hit_terminal = bool(is_obstacle_hit_terminal)
+        self._obstacles = (
+            np.empty((2, 0), dtype=float)
+            if obstacles is None
+            else np.ascontiguousarray(obstacles, dtype=float)
+        )
+        self._obstacle_radius_sq = float(obstacle_radius) * float(obstacle_radius)
+        self._obstacle_hit_probability = float(obstacle_hit_probability)
+        self._goal_state = (
+            np.zeros(2, dtype=float) if goal_state is None else np.asarray(goal_state, dtype=float)
+        )
+        self._goal_state_radius = float(goal_state_radius)
+        self._reward_variant_code = int(reward_variant_code)
+        self._penalty_decay = float(penalty_decay)
 
         # Cached covariance arrays for the native batch entry points. The
         # MVN objects' ``covariance`` property returns a copy, so we pay
@@ -154,6 +182,14 @@ class ContinuousLightDarkVectorizedUpdater(VectorizedParticleBeliefUpdater):
             beacon_radius=env.beacon_radius,
             grid_size=env.grid_size,
             action_to_vector=action_map,
+            is_obstacle_hit_terminal=env.is_obstacle_hit_terminal,
+            obstacles=env.obstacles,
+            obstacle_radius=env.obstacle_radius,
+            obstacle_hit_probability=env.obstacle_hit_probability,
+            goal_state=env.goal_state,
+            goal_state_radius=env.goal_state_radius,
+            reward_variant_code=env._reward_variant_code,
+            penalty_decay=env.penalty_decay,
         )
         # pylint: enable=protected-access
 
@@ -167,6 +203,8 @@ class ContinuousLightDarkVectorizedUpdater(VectorizedParticleBeliefUpdater):
         # share the same C++ RNG (closes the cross-path divergence that
         # used to fail the equivalence tests).
         action_vec = self._resolve_action(action)
+        if self._is_obstacle_hit_terminal:
+            return self._batch_transition_hazard(particles, action_vec)
         transition = _native.ContinuousLightDarkTransitionCpp(
             state=particles[0],
             action=action_vec,
@@ -174,23 +212,59 @@ class ContinuousLightDarkVectorizedUpdater(VectorizedParticleBeliefUpdater):
         )
         return transition.batch_sample(particles)
 
+    def _batch_transition_hazard(self, particles: np.ndarray, action_vec: np.ndarray) -> np.ndarray:
+        pos = np.ascontiguousarray(np.asarray(particles, dtype=float)[:, :2])
+        input_slots = (
+            particles[:, 2] if particles.shape[1] > 2 else np.zeros(len(particles), dtype=float)
+        )
+        transition = _native.ContinuousLightDarkTransitionCpp(
+            state=pos[0],
+            action=action_vec,
+            covariance=self._state_transition_cov,
+        )
+        raw = np.asarray(transition.batch_sample(pos), dtype=float)
+        slots = self._draw_terminal_slots(raw)
+        absorb = input_slots > 0.5
+        out = np.empty((len(raw), 3), dtype=float)
+        out[:, :2] = np.where(absorb[:, np.newaxis], pos, raw)
+        out[:, 2] = np.where(absorb, 1.0, slots)
+        return out
+
+    def _draw_terminal_slots(self, positions: np.ndarray) -> np.ndarray:
+        probs = hazard_hit_probability_batch_kernel(
+            np.ascontiguousarray(positions, dtype=float),
+            self._obstacles,
+            self._obstacle_radius_sq,
+            self._obstacle_hit_probability,
+            self._penalty_decay,
+            self._reward_variant_code,
+        )
+        gx = positions[:, 0] - self._goal_state[0]
+        gy = positions[:, 1] - self._goal_state[1]
+        goal_mask = np.sqrt(gx * gx + gy * gy) <= self._goal_state_radius
+        draws = np.random.rand(len(positions))
+        hit = (~goal_mask) & (probs > 0.0) & (draws < probs)
+        return hit.astype(float)
+
     def batch_observation_log_likelihood(
         self, next_particles: np.ndarray, action: np.ndarray, observation: np.ndarray
     ) -> np.ndarray:
         # Delegate to the native C++ observation log-likelihood. The
         # per-row near/far decision is made inside C++ using the same
-        # beacon-distance test as the per-particle model.
-        observation_arr = np.asarray(observation, dtype=float).ravel()
+        # beacon-distance test as the per-particle model. The native kernel
+        # is 2-D, so drop any hazard-terminal slot from the particles.
+        observation_arr = np.asarray(observation, dtype=float).ravel()[:2]
         action_vec = self._resolve_action(action)
+        next_pos = np.ascontiguousarray(np.asarray(next_particles, dtype=float)[:, :2])
         obs_model = _native.ContinuousLightDarkObservationCpp(
-            next_state=next_particles[0],
+            next_state=next_pos[0],
             action=action_vec,
             covariance_near=self._obs_cov_near,
             covariance_far=self._obs_cov_far,
             beacons=self.beacons,
             beacon_radius=float(self.beacon_radius),
         )
-        return obs_model.batch_log_likelihood(next_particles, observation_arr)
+        return obs_model.batch_log_likelihood(next_pos, observation_arr)
 
     @property
     def config_id(self) -> str:
@@ -259,7 +333,16 @@ class ContinuousLightDarkVectorizedUpdater(VectorizedParticleBeliefUpdater):
             "beacons": self.beacons.tolist(),
             "beacon_radius": self.beacon_radius,
             "grid_size": self.grid_size,
+            "is_obstacle_hit_terminal": self._is_obstacle_hit_terminal,
         }
+        if self._is_obstacle_hit_terminal:
+            config_dict["obstacles"] = self._obstacles.tolist()
+            config_dict["obstacle_radius_sq"] = self._obstacle_radius_sq
+            config_dict["obstacle_hit_probability"] = self._obstacle_hit_probability
+            config_dict["goal_state"] = self._goal_state.tolist()
+            config_dict["goal_state_radius"] = self._goal_state_radius
+            config_dict["reward_variant_code"] = self._reward_variant_code
+            config_dict["penalty_decay"] = self._penalty_decay
         if self._action_to_vector is not None:
             config_dict["action_to_vector"] = {
                 k: v.tolist() for k, v in self._action_to_vector.items()

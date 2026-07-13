@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: MIT
 
+# pylint: disable=too-many-lines
+
 """Continuous Light-Dark POMDP Environment Implementation.
 
 This module implements the continuous Light-Dark domain, a classic POMDP benchmark
@@ -34,6 +36,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
+from POMDPPlanners.core.distributions import DiscreteDistribution, Distribution
 from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
     SpaceInfo,
@@ -56,6 +59,9 @@ from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_da
     ContinuousLDZeroMeanHazardShockRewardModel,
     ContinuousLightDarkDistanceDecayedHazardPenaltyRewardModel,
     ContinuousLightDarkRewardModel,
+)
+from POMDPPlanners.environments.environment_utils.dangerous_areas_kernels import (
+    hazard_hit_probability_kernel,
 )
 from POMDPPlanners.utils.numba_kernels import (
     any_point_within_radius_kernel,
@@ -232,7 +238,7 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         self.beacon_radius = beacon_radius
         self.observation_model_type = observation_model_type
         self.penalty_decay = penalty_decay
-        self.is_obstacle_hit_terminal = is_obstacle_hit_terminal
+        self._configure_hazard_terminal(is_obstacle_hit_terminal, reward_model_type)
 
         # Create distributions with pre-computed Cholesky decomposition
         self._state_transition_dist = CovarianceParameterizedMultivariateNormal(
@@ -336,6 +342,95 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
             raise ValueError("beacon_radius must be greater than 0")
         if obstacle_radius <= 0:
             raise ValueError("obstacle_radius must be greater than 0")
+
+    def _configure_hazard_terminal(
+        self, is_obstacle_hit_terminal: bool, reward_model_type: RewardModelType
+    ) -> None:
+        # Draw-coupled hazard termination (hazard-terminates-episode v2). When
+        # the flag is on, the state gains a LAST terminal-flag slot (0.0 live /
+        # 1.0 terminal); the flag-off state keeps the historical 2-D layout and
+        # every flag-off code path is byte-for-byte unchanged.
+        if is_obstacle_hit_terminal and reward_model_type == RewardModelType.ZERO_MEAN_HAZARD_SHOCK:
+            raise ValueError(
+                "is_obstacle_hit_terminal is incompatible with the "
+                "ZERO_MEAN_HAZARD_SHOCK reward model (the shock hazard has no "
+                "hit probability to couple termination to)"
+            )
+        self.is_obstacle_hit_terminal = bool(is_obstacle_hit_terminal)
+        self._hazard_terminal_enabled = self.is_obstacle_hit_terminal
+        self._state_dim = 3 if self._hazard_terminal_enabled else 2
+        self._obstacle_radius_sq = float(self.obstacle_radius) * float(self.obstacle_radius)
+
+    @property
+    def reward_requires_next_state(self) -> bool:
+        """Reward depends on the realised ``next_state`` iff the flag is on.
+
+        When enabled, the hazard penalty is deterministic given the terminal
+        slot set during the transition, so drivers sample the transition first
+        and pass the realised ``next_state`` to :meth:`reward`.
+        """
+        return self._hazard_terminal_enabled
+
+    def initial_state_dist(self) -> Distribution:
+        if not self._hazard_terminal_enabled:
+            return super().initial_state_dist()
+        padded = self._pad_terminal_slot(np.asarray(self.start_state, dtype=np.float64))
+        return DiscreteDistribution(values=[padded], probs=np.array([1.0]))
+
+    def _pad_terminal_slot(self, state: np.ndarray) -> np.ndarray:
+        # Append a live (0.0) terminal slot to a 2-D state when the env carries
+        # the slot; pass a 3-D state through unchanged.
+        arr = np.asarray(state, dtype=np.float64)
+        if self._hazard_terminal_enabled and arr.shape[0] == 2:
+            return np.concatenate([arr, np.zeros(1)])
+        return arr
+
+    def _draw_terminal_slot(self, next_pos: np.ndarray) -> float:
+        # One NumPy uniform, drawn only when a hazard could fire. Returns the
+        # absorbing terminal slot value (0.0/1.0). The native rollout is
+        # bypassed whenever the flag is on and obstacles are configured (see
+        # ``simulate_random_rollout``), so the hazard uniform lives on the
+        # NumPy stream — there is no all-C++ flag-on rollout to stay in
+        # lock-step with.
+        if self._is_goal(next_pos):
+            return 0.0
+        probability = float(
+            hazard_hit_probability_kernel(
+                np.ascontiguousarray(next_pos[:2], dtype=np.float64),
+                self.obstacles,
+                self._obstacle_radius_sq,
+                float(self.obstacle_hit_probability),
+                float(self.penalty_decay),
+                self._reward_variant_code,
+            )
+        )
+        if probability > 0.0 and float(np.random.rand()) < probability:
+            return 1.0
+        return 0.0
+
+    def _is_goal(self, next_pos: np.ndarray) -> bool:
+        dx = float(next_pos[0]) - float(self.goal_state[0])
+        dy = float(next_pos[1]) - float(self.goal_state[1])
+        return (dx * dx + dy * dy) ** 0.5 <= self.goal_state_radius
+
+    def _deterministic_hazard_reward(self, next_state: np.ndarray) -> float:
+        # Deterministic flag-on reward: fuel + goal-distance base, goal bonus,
+        # and a hazard penalty applied iff the realised next state is terminal
+        # (obstacle hit) or out of grid. No RNG on this path.
+        nx = float(next_state[0])
+        ny = float(next_state[1])
+        gx = nx - float(self.goal_state[0])
+        gy = ny - float(self.goal_state[1])
+        dist_to_goal = (gx * gx + gy * gy) ** 0.5
+        reward = -float(self.fuel_cost) - dist_to_goal
+        if dist_to_goal <= self.goal_state_radius:
+            return reward + float(self.goal_reward)
+        terminal = next_state.shape[0] > 2 and float(next_state[2]) > 0.5
+        if terminal:
+            return reward + float(self.obstacle_reward)
+        if nx < 0.0 or ny < 0.0 or nx > self.grid_size or ny > self.grid_size:
+            return reward + float(self.obstacle_reward)
+        return reward
 
     # ── Helpers for non-NORMAL_NOISE observation models (inlined post-PR-D) ──
     # These replace the deleted Python wrapper classes
@@ -507,15 +602,49 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
     def sample_next_state(
         self, state: np.ndarray, action: np.ndarray, n_samples: int = 1
     ) -> np.ndarray:
+        if self._hazard_terminal_enabled:
+            return self._sample_next_state_hazard(state, action, n_samples)
         kernel = self._get_trans_kernel(action)
         kernel.set_state(state)
         if n_samples == 1:
             return kernel.sample()[0]
         return np.asarray(kernel.sample(n_samples), dtype=np.float64)
 
+    def _sample_next_state_hazard(
+        self, state: np.ndarray, action: np.ndarray, n_samples: int
+    ) -> np.ndarray:
+        state_arr = np.asarray(state, dtype=np.float64)
+        if state_arr.shape[0] > 2 and float(state_arr[2]) > 0.5:
+            # Absorbing terminal state: freeze in place, draw nothing.
+            frozen = state_arr.copy()
+            if n_samples == 1:
+                return frozen
+            return np.repeat(frozen[np.newaxis, :], n_samples, axis=0)
+        pos = np.ascontiguousarray(state_arr[:2])
+        kernel = self._get_trans_kernel(action)
+        kernel.set_state(pos)
+        if n_samples == 1:
+            nxt = np.asarray(kernel.sample()[0], dtype=np.float64)
+            return np.concatenate([nxt, [self._draw_terminal_slot(nxt)]])
+        raw = np.asarray(kernel.sample(n_samples), dtype=np.float64)
+        slots = np.array([self._draw_terminal_slot(raw[i]) for i in range(n_samples)])
+        return np.concatenate([raw, slots.reshape(-1, 1)], axis=1)
+
+    def _pos2d(self, values: np.ndarray) -> np.ndarray:
+        # Project a (possibly hazard-terminal) state/particle onto its 2-D
+        # position slice for the native (2-D) transition / observation kernels.
+        # The terminal slot is never part of a Gaussian position computation.
+        arr = np.asarray(values, dtype=np.float64)
+        if not self._hazard_terminal_enabled:
+            return arr
+        if arr.ndim == 1:
+            return np.ascontiguousarray(arr[:2])
+        return np.ascontiguousarray(arr[:, :2])
+
     def sample_observation(
         self, next_state: np.ndarray, action: np.ndarray, n_samples: int = 1
     ) -> Any:
+        next_state = self._pos2d(next_state)
         if self.observation_model_type == ObservationModelType.NORMAL_NOISE:
             kernel = self._get_obs_kernel(action)
             kernel.set_next_state(next_state)
@@ -538,10 +667,11 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         self, state: np.ndarray, action: np.ndarray, next_states: Any
     ) -> np.ndarray:
         kernel = self._get_trans_kernel(action)
-        kernel.set_state(state)
+        kernel.set_state(self._pos2d(state))
         next_states_array = np.asarray(next_states, dtype=np.float64)
         if next_states_array.ndim == 1:
             next_states_array = next_states_array.reshape(1, -1)
+        next_states_array = self._pos2d(next_states_array)
         probs = np.asarray(kernel.probability(next_states_array), dtype=np.float64)
         with np.errstate(divide="ignore"):
             return np.log(probs)
@@ -549,6 +679,7 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
     def observation_log_probability(
         self, next_state: np.ndarray, action: np.ndarray, observations: Any
     ) -> np.ndarray:
+        next_state = self._pos2d(next_state)
         if self.observation_model_type == ObservationModelType.NORMAL_NOISE:
             kernel = self._get_obs_kernel(action)
             kernel.set_next_state(next_state)
@@ -569,10 +700,31 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         states_array = np.ascontiguousarray(np.asarray(states, dtype=np.float64))
         if states_array.ndim == 1:
             states_array = states_array.reshape(1, -1)
+        if self._hazard_terminal_enabled:
+            return self._sample_next_state_batch_hazard(states_array, action)
         kernel = self._get_trans_kernel(action)
         # batch_sample reads the per-row state from the input, not the
         # kernel's stored state, so no set_state is needed here.
         return np.asarray(kernel.batch_sample(states_array), dtype=np.float64)
+
+    def _sample_next_state_batch_hazard(
+        self, states_array: np.ndarray, action: np.ndarray
+    ) -> np.ndarray:
+        pos = np.ascontiguousarray(states_array[:, :2])
+        input_slots = (
+            states_array[:, 2] if states_array.shape[1] > 2 else np.zeros(len(states_array))
+        )
+        kernel = self._get_trans_kernel(action)
+        raw = np.asarray(kernel.batch_sample(pos), dtype=np.float64)
+        out = np.empty((len(raw), 3), dtype=np.float64)
+        for i, raw_row in enumerate(raw):
+            if input_slots[i] > 0.5:
+                out[i, :2] = pos[i]
+                out[i, 2] = 1.0
+            else:
+                out[i, :2] = raw_row
+                out[i, 2] = self._draw_terminal_slot(raw_row)
+        return out
 
     def observation_log_probability_per_state(
         self, next_states: Any, action: np.ndarray, observation: Any
@@ -586,6 +738,7 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         next_states_array = np.ascontiguousarray(np.asarray(next_states, dtype=np.float64))
         if next_states_array.ndim == 1:
             next_states_array = next_states_array.reshape(1, -1)
+        next_states_array = self._pos2d(next_states_array)
         observation_array = np.ascontiguousarray(np.asarray(observation, dtype=np.float64))
         kernel = self._get_obs_kernel(action)
         # batch_log_likelihood reads next_state per row from the input;
@@ -655,11 +808,16 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         return log_norm - 0.5 * m_sq
 
     def reward(self, state: np.ndarray, action: np.ndarray, next_state: Any = None) -> float:
-        # Thread the realised ``next_state`` from
-        # :meth:`Environment.sample_next_step` into the reward model so the
-        # obstacle / goal / out-of-grid checks score against the same draw
-        # as the trajectory rather than the deterministic ``state + action``
-        # pre-noise position.
+        # Flag-on: the hazard penalty is deterministic given the terminal slot
+        # drawn during the transition (no RNG here). Flag-off: unchanged — the
+        # reward model threads the realised ``next_state`` and draws the
+        # stochastic obstacle Bernoulli exactly as before.
+        if self._hazard_terminal_enabled:
+            if next_state is None:
+                ns = np.asarray(state, dtype=np.float64)[:2] + np.asarray(action, dtype=np.float64)
+            else:
+                ns = np.asarray(next_state, dtype=np.float64)
+            return self._deterministic_hazard_reward(ns)
         return self.reward_model.compute_reward(state, action, next_state=next_state)
 
     def reward_batch(
@@ -673,20 +831,50 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         # The variant-aware native ``_native.compute_reward_batch`` is exposed
         # separately for callers that opt into sample-mean parity (e.g.
         # belief-tree expansion paths and the C++/Python parity tests).
+        if self._hazard_terminal_enabled:
+            return self._deterministic_hazard_reward_batch(states, action, next_states)
         next_states_arr = None if next_states is None else np.asarray(next_states)
         return self.reward_model.compute_reward_batch(
             np.asarray(states), action, next_states=next_states_arr
         )
 
+    def _deterministic_hazard_reward_batch(
+        self,
+        states: Union[np.ndarray, Sequence[Any]],
+        action: np.ndarray,
+        next_states: Optional[Union[np.ndarray, Sequence[Any]]],
+    ) -> np.ndarray:
+        states_arr = np.asarray(states, dtype=np.float64)
+        if next_states is None:
+            positions = states_arr[:, :2] + np.asarray(action, dtype=np.float64)
+            terminal = np.zeros(len(positions), dtype=np.float64)
+        else:
+            ns_arr = np.asarray(next_states, dtype=np.float64)
+            positions = ns_arr[:, :2]
+            terminal = ns_arr[:, 2] if ns_arr.shape[1] > 2 else np.zeros(len(ns_arr))
+        gx = positions[:, 0] - float(self.goal_state[0])
+        gy = positions[:, 1] - float(self.goal_state[1])
+        dist_to_goal = np.sqrt(gx * gx + gy * gy)
+        rewards = -float(self.fuel_cost) - dist_to_goal
+        goal_mask = dist_to_goal <= self.goal_state_radius
+        rewards[goal_mask] += float(self.goal_reward)
+        hazard_mask = (terminal > 0.5) & ~goal_mask
+        rewards[hazard_mask] += float(self.obstacle_reward)
+        oob = (
+            (np.any(positions < 0.0, axis=1) | np.any(positions > self.grid_size, axis=1))
+            & ~goal_mask
+            & (terminal <= 0.5)
+        )
+        rewards[oob] += float(self.obstacle_reward)
+        return rewards
+
     def is_terminal(self, state: np.ndarray) -> bool:
-        if state.shape != (2,):
-            raise ValueError("state must be a 2D vector")
+        if state.shape[0] not in (2, 3):
+            raise ValueError("state must be a 2D or 3D vector")
         return is_terminal_kernel(
             state,
             self.goal_state,
-            self.obstacles,
             self.goal_state_radius,
-            self.obstacle_radius,
             self.is_obstacle_hit_terminal,
         )
 
@@ -713,18 +901,21 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
             out_of_grid_counter_in_history = 0
 
             for _, step in enumerate(history.history):
-                if np.linalg.norm(step.state - self.goal_state) <= self.goal_state_radius:
+                # Score metrics on the 2-D position; hazard-terminal states
+                # carry a trailing terminal slot that must not enter the norms.
+                position = np.asarray(step.state)[:2]
+                if np.linalg.norm(position - self.goal_state) <= self.goal_state_radius:
                     goal_reached_in_history = True
                     break
 
                 # Calculate distance to each obstacle (obstacles are 2xN format)
-                distances = np.linalg.norm(step.state.reshape(-1, 1) - self.obstacles, axis=0)
+                distances = np.linalg.norm(position.reshape(-1, 1) - self.obstacles, axis=0)
                 if np.any(distances <= self.obstacle_radius):
                     obstacle_hit_in_history = True
                     obstacle_hit_counter_in_history += 1
 
                 # Check if step is out of grid
-                is_out_of_grid = np.any(step.state < 0) or np.any(step.state > self.grid_size)
+                is_out_of_grid = np.any(position < 0) or np.any(position > self.grid_size)
                 if is_out_of_grid:
                     out_of_grid_in_history = True
                     out_of_grid_counter_in_history += 1
@@ -812,6 +1003,7 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
             and self.beacon_radius == other.beacon_radius
             and self.obstacle_radius == other.obstacle_radius
             and self.observation_model_type == other.observation_model_type
+            and self.is_obstacle_hit_terminal == other.is_obstacle_hit_terminal
         )
 
     def hash_action(self, action: Any) -> Hashable:
@@ -1018,7 +1210,13 @@ class ContinuousLightDarkPOMDPDiscreteActions(ContinuousLightDarkPOMDP, Discrete
         # obstacles are configured, route through Python so the rollout
         # reward agrees with ``reward()`` on the realised next_state.
         cov_diag_max = float(np.max(np.abs(self.state_transition_cov_matrix)))
-        bypass_native_for_realised_pos = cov_diag_max > 0.0 and self._obstacles_flat.shape[0] > 0
+        # Draw-coupled hazard termination (flag-on) is implemented only on the
+        # Python single-step path, so route flag-on rollouts with reachable
+        # obstacles through Python. When the flag is on but no obstacles are
+        # configured, no hazard can fire and the native (2-D) rollout is safe.
+        bypass_native_for_realised_pos = self._obstacles_flat.shape[0] > 0 and (
+            cov_diag_max > 0.0 or self._hazard_terminal_enabled
+        )
         if bypass_native_for_realised_pos:
             return python_random_rollout(
                 state=state,
@@ -1033,7 +1231,9 @@ class ContinuousLightDarkPOMDPDiscreteActions(ContinuousLightDarkPOMDP, Discrete
         if steps_left <= 0:
             return 0.0
 
-        state_arr = np.ascontiguousarray(np.asarray(state, dtype=np.float64).ravel())
+        # Native rollout runs on 2-D positions; drop any terminal slot (only
+        # reached when no obstacles exist, so the slot is always live here).
+        state_arr = np.ascontiguousarray(np.asarray(state, dtype=np.float64).ravel()[:2])
         action_indices = np.random.randint(0, len(self.actions), size=steps_left, dtype=np.int32)
 
         return _native.simulate_rollout(
@@ -1080,6 +1280,7 @@ class ContinuousLightDarkPOMDPDiscreteActions(ContinuousLightDarkPOMDP, Discrete
             and self.obstacle_radius == other.obstacle_radius
             and self.observation_model_type == other.observation_model_type
             and self.penalty_decay == other.penalty_decay
+            and self.is_obstacle_hit_terminal == other.is_obstacle_hit_terminal
             and self.actions == other.actions
             and all(
                 np.array_equal(value, other.action_to_vector[k])

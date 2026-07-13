@@ -2,11 +2,12 @@
 
 """Plain particle belief that stamps the observed agent block onto its particles.
 
-Perception lives in the world's observation model: a
-:class:`~POMDPPlanners.environments.carla_pomdp.carla_perception.carla_pipeline.CarlaPerceptionPipeline`
-run inside :class:`~POMDPPlanners.environments.carla_pomdp.carla_pomdp.CarlaPOMDP` turns the raw
-sensors into the *perceived* observation, so the ``agents`` channel the belief receives is
-already the tracked object list. The belief therefore does no perception at all.
+Perception lives on the planner's generative model, not here and not in the world: the
+forward-only :class:`~POMDPPlanners.environments.carla_pomdp.carla_pomdp.CarlaPOMDP` emits a raw,
+ground-truth observation, and the model's
+:meth:`~POMDPPlanners.environments.carla_pomdp.carla_generative_models.carla_model_pomdp.CarlaModelPOMDP.encode_observation`
+degrades it into the *perceived* observation the belief receives, so the ``agents`` channel the
+belief sees is already the tracked object list. The belief therefore does no perception at all.
 
 It still cannot be a bare particle filter, though: a weight-only update can reweight and
 propagate the agents a particle was seeded with, but it can never *acquire* a vehicle that
@@ -50,8 +51,9 @@ class PerceivedAgentsBelief(WeightedParticleBeliefReinvigoration):
     After the standard particle-filter weight update and resample, the reinvigoration step
     writes the current observation's ``agents`` block into every particle's agent slots (plus
     optional per-particle jitter), leaving the ego block to the filter. The belief holds no
-    perception state — perception is the world's observation model — so a plain observation with
-    a perceived ``agents`` block is all it needs.
+    perception state — perception is the planner model's, applied upstream by
+    ``encode_observation`` — so a plain observation with a perceived ``agents`` block is all it
+    needs.
 
     Attributes:
         max_tracked_agents: Number of fixed agent slots carried in each particle.

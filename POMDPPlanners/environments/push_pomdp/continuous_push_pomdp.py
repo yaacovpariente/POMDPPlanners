@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: MIT
 
+# pylint: disable=too-many-lines
+
 """Continuous Push POMDP Environment Implementation.
 
 This module implements a continuous-action variant of the Push POMDP where
@@ -84,10 +86,14 @@ class _RandomInitialStateDistribution(Distribution):
 
     def sample(self, n_samples: int = 1) -> List[np.ndarray]:
         states = []
+        enabled = self._parent.hazard_terminal_enabled
         for _ in range(n_samples):
             robot = self._generate_robot_position()
             obj = self._generate_object_position()
-            states.append(np.concatenate([robot, obj, self._parent.target_pos]))
+            parts = [robot, obj, self._parent.target_pos]
+            if enabled:
+                parts.append(np.zeros(1))
+            states.append(np.concatenate(parts))
         return states
 
     # pylint: disable=protected-access
@@ -192,6 +198,8 @@ class ContinuousPushPOMDP(Environment):
         robot_radius: float = 0.3,
         state_transition_cov_matrix: np.ndarray = np.eye(2) * 0.1,
         initial_state: Optional[np.ndarray] = None,
+        is_obstacle_hit_terminal: bool = False,
+        is_dangerous_area_hit_terminal: bool = False,
         name: str = "ContinuousPushPOMDP",
         output_dir: Optional[Path] = None,
         debug: bool = False,
@@ -206,6 +214,9 @@ class ContinuousPushPOMDP(Environment):
             and penalty_decay <= 0.0
         ):
             raise ValueError("penalty_decay must be strictly positive")
+        self._configure_hazard_terminal(
+            is_obstacle_hit_terminal, is_dangerous_area_hit_terminal, reward_model_type
+        )
 
         self.grid_size = grid_size
         self.push_threshold = push_threshold
@@ -294,6 +305,31 @@ class ContinuousPushPOMDP(Environment):
         # batch ref covers both entry points.
         self._compute_reward_batch = self.reward_model.compute_reward_batch
 
+    def _configure_hazard_terminal(
+        self,
+        is_obstacle_hit_terminal: bool,
+        is_dangerous_area_hit_terminal: bool,
+        reward_model_type: RewardModelType,
+    ) -> None:
+        if (
+            is_dangerous_area_hit_terminal
+            and reward_model_type == RewardModelType.ZERO_MEAN_HAZARD_SHOCK
+        ):
+            raise ValueError(
+                "is_dangerous_area_hit_terminal is incompatible with the "
+                "ZERO_MEAN_HAZARD_SHOCK reward model (the shock hazard has no "
+                "hit probability to couple termination to)"
+            )
+        self.is_obstacle_hit_terminal = bool(is_obstacle_hit_terminal)
+        self.is_dangerous_area_hit_terminal = bool(is_dangerous_area_hit_terminal)
+        # When either hazard-terminal flag is enabled the state gains a LAST
+        # terminal-flag slot (0.0 live / 1.0 terminal); otherwise the state
+        # keeps the historical 6-D layout untouched.
+        self._hazard_terminal_enabled = (
+            self.is_obstacle_hit_terminal or self.is_dangerous_area_hit_terminal
+        )
+        self._state_dim = 7 if self._hazard_terminal_enabled else 6
+
     def _build_reward_model(self) -> BasePushRewardModel:
         # ``Dict[str, Any]`` opt-out is required so pyright doesn't narrow
         # the value type to ``ndarray | float`` (the lub of obstacles +
@@ -329,6 +365,21 @@ class ContinuousPushPOMDP(Environment):
             rows.append([cx, cy, half_size, half_size])
         return np.array(rows, dtype=float)
 
+    @property
+    def hazard_terminal_enabled(self) -> bool:
+        """Whether a hazard-terminal flag is enabled (state carries a terminal slot)."""
+        return self._hazard_terminal_enabled
+
+    @property
+    def reward_requires_next_state(self) -> bool:
+        """Reward depends on the realised ``next_state`` iff a hazard flag is on.
+
+        When enabled, the hazard penalty is deterministic given the terminal
+        slot set during the transition, so drivers must sample the transition
+        first and pass the realised ``next_state`` to :meth:`reward`.
+        """
+        return self._hazard_terminal_enabled
+
     # ------------------------------------------------------------------
     # Environment interface
     # ------------------------------------------------------------------
@@ -357,7 +408,16 @@ class ContinuousPushPOMDP(Environment):
         key = action_arr.tobytes()
         kernel = self._trans_kernel_cache.get(key)
         if kernel is None:
-            kernel = _native.ContinuousPushTransitionCpp(
+            kernel = self._build_trans_kernel(action_arr)
+            self._trans_kernel_cache[key] = kernel
+        if isinstance(action, np.ndarray):
+            self._trans_kernel_id_cache[id(action)] = kernel
+        return kernel
+
+    def _build_trans_kernel(self, action_arr: np.ndarray) -> Any:
+        # Flag-off: original 9-arg construction (6-D states, no hazard draw).
+        if not self._hazard_terminal_enabled:
+            return _native.ContinuousPushTransitionCpp(
                 state=np.zeros(6, dtype=np.float64),
                 action=action_arr,
                 grid_size=float(self.grid_size),
@@ -368,10 +428,27 @@ class ContinuousPushPOMDP(Environment):
                 obstacles=self.obstacles,
                 covariance=self._trans_cov_view,
             )
-            self._trans_kernel_cache[key] = kernel
-        if isinstance(action, np.ndarray):
-            self._trans_kernel_id_cache[id(action)] = kernel
-        return kernel
+        variant_code, penalty_decay = self._reward_variant_native_params()
+        return _native.ContinuousPushTransitionCpp(
+            state=np.zeros(7, dtype=np.float64),
+            action=action_arr,
+            grid_size=float(self.grid_size),
+            push_threshold=float(self.push_threshold),
+            friction_coefficient=float(self.friction_coefficient),
+            max_push=float(self.max_push),
+            robot_radius=float(self.robot_radius),
+            obstacles=self.obstacles,
+            covariance=self._trans_cov_view,
+            dangerous_areas=self._dangerous_areas_arr,
+            obstacle_hit_probability=float(self.obstacle_hit_probability),
+            dangerous_area_radius=float(self.dangerous_area_radius),
+            dangerous_area_penalty=float(self.dangerous_area_penalty),
+            dangerous_area_hit_probability=float(self.dangerous_area_hit_probability),
+            reward_variant_code=variant_code,
+            penalty_decay=penalty_decay,
+            is_obstacle_hit_terminal=self.is_obstacle_hit_terminal,
+            is_dangerous_area_hit_terminal=self.is_dangerous_area_hit_terminal,
+        )
 
     def _get_obs_kernel(self, action: np.ndarray) -> Any:
         cached_id = self._obs_kernel_id_cache.get(id(action))
@@ -478,7 +555,12 @@ class ContinuousPushPOMDP(Environment):
             next_states_arr = np.ascontiguousarray(
                 np.asarray(next_state, dtype=np.float64)
             ).reshape(1, -1)
-        rewards = self._compute_reward_batch(state_arr, action_arr, next_states_arr)
+        if self._hazard_terminal_enabled:
+            # Flag-on reward is deterministic given the terminal slot; route
+            # through the native terminal-aware kernel (no RNG draw).
+            rewards = self._native_reward_batch(state_arr, action_arr, next_states_arr)
+        else:
+            rewards = self._compute_reward_batch(state_arr, action_arr, next_states_arr)
         return float(rewards[0])
 
     def reward_batch(
@@ -527,6 +609,8 @@ class ContinuousPushPOMDP(Environment):
                 dangerous_area_hit_probability=float(self.dangerous_area_hit_probability),
                 reward_variant_code=variant_code,
                 penalty_decay=penalty_decay,
+                is_obstacle_hit_terminal=self.is_obstacle_hit_terminal,
+                is_dangerous_area_hit_terminal=self.is_dangerous_area_hit_terminal,
             ),
             dtype=np.float64,
         )
@@ -649,21 +733,33 @@ class ContinuousPushPOMDP(Environment):
                 dangerous_area_hit_probability=float(self.dangerous_area_hit_probability),
                 reward_variant_code=variant_code,
                 penalty_decay=penalty_decay,
+                is_obstacle_hit_terminal=self.is_obstacle_hit_terminal,
+                is_dangerous_area_hit_terminal=self.is_dangerous_area_hit_terminal,
             )
         )
 
     def is_terminal(self, state: np.ndarray) -> bool:
-        # Inline 2-D distance squared comparison: avoids np.linalg.norm,
-        # which goes through einsum + sqrt on a tiny vector and dominates
-        # this hot path for POMCPOW.
+        # Absorbing terminal slot (hazard-terminal envs only), then the goal
+        # check. Inline 2-D distance squared comparison avoids np.linalg.norm,
+        # which dominates this hot path for POMCPOW.
+        if state.shape[0] > 6 and state[6] > 0.5:
+            return True
         dx = state[2] - state[4]
         dy = state[3] - state[5]
         return bool((dx * dx + dy * dy) < 0.25)
 
     def initial_state_dist(self) -> Distribution:
         if self._initial_state is not None:
-            return _FixedStateDistribution(self._initial_state)
+            return _FixedStateDistribution(self._pad_terminal_slot(self._initial_state))
         return _RandomInitialStateDistribution(self)
+
+    def _pad_terminal_slot(self, state: np.ndarray) -> np.ndarray:
+        # Append a live (0.0) terminal slot to a caller-provided 6-D state
+        # when the env carries the slot; pass a 7-D state through unchanged.
+        arr = np.asarray(state, dtype=np.float64)
+        if self._hazard_terminal_enabled and arr.shape[0] == 6:
+            return np.concatenate([arr, np.zeros(1)])
+        return arr
 
     def initial_observation_dist(self) -> Distribution:
         return self.initial_state_dist()
@@ -902,6 +998,8 @@ class ContinuousPushPOMDPDiscreteActions(ContinuousPushPOMDP, DiscreteActionsEnv
         robot_radius: float = 0.3,
         state_transition_cov_matrix: np.ndarray = np.eye(2) * 0.1,
         initial_state: Optional[np.ndarray] = None,
+        is_obstacle_hit_terminal: bool = False,
+        is_dangerous_area_hit_terminal: bool = False,
         name: str = "ContinuousPushPOMDPDiscreteActions",
         output_dir: Optional[Path] = None,
         debug: bool = False,
@@ -926,6 +1024,8 @@ class ContinuousPushPOMDPDiscreteActions(ContinuousPushPOMDP, DiscreteActionsEnv
             robot_radius=robot_radius,
             state_transition_cov_matrix=state_transition_cov_matrix,
             initial_state=initial_state,
+            is_obstacle_hit_terminal=is_obstacle_hit_terminal,
+            is_dangerous_area_hit_terminal=is_dangerous_area_hit_terminal,
             name=name,
             output_dir=output_dir,
             debug=debug,
