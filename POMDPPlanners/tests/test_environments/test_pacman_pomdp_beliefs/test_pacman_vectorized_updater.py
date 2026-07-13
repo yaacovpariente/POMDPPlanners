@@ -469,3 +469,108 @@ class TestConfigId:
         u1 = PacManVectorizedUpdater.from_environment(simple_env)
         u2 = PacManVectorizedUpdater.from_environment(simple_env)
         assert u1.config_id == u2.config_id
+
+    def test_slip_probability_changes_config_id(self, simple_env):
+        """Test that differing slip_probability yields a distinct config_id.
+
+        Purpose: Validates slip_probability participates in the cache key so
+        beliefs built with different slip are not conflated.
+
+        Given: Two updaters from the same layout, slip 0.0 vs 0.9.
+        When: config_id is accessed on each.
+        Then: The two config_id strings differ.
+
+        Test type: unit
+        """
+        u0 = PacManVectorizedUpdater.from_environment(simple_env)
+        simple_env.slip_probability = 0.9
+        u9 = PacManVectorizedUpdater.from_environment(simple_env)
+        assert u0.config_id != u9.config_id
+
+
+def _tiled_particles(env, pacman_pos, n_particles):
+    """Replicate a single non-terminal start state into ``n_particles`` rows."""
+    state = env.make_state(
+        pacman_pos=pacman_pos,
+        ghost_positions=((4, 4),),
+        pellets=((1, 1), (3, 3)),
+        score=0.0,
+        terminal=False,
+    )
+    return np.tile(np.asarray(state, dtype=float), (n_particles, 1))
+
+
+class TestSlipAwareTransition:
+    """Regression coverage: the belief transition must model motion slip.
+
+    The stochastic PacMan variant injects motion *slip* (with probability
+    ``slip_probability`` an intended move is replaced by a uniformly random
+    action). If the vectorized updater ignores slip, every particle takes the
+    intended move and the planner optimizes against a deterministic model that
+    does not contain the environment's stochasticity.
+    """
+
+    def test_batch_transition_depends_on_slip_probability(self, simple_env):
+        """Test that batch_transition outcomes depend on slip_probability.
+
+        Purpose: Validates that the belief transition is not deterministic when
+        slip_probability > 0 (the core bug: slip invisible to the planner).
+
+        Given: Two updaters over an identical layout, slip 0.0 vs 0.9, and a
+            batch of identical non-terminal particles at an interior cell.
+        When: batch_transition is applied with a single move action to both.
+        Then: The slip-free updater sends every particle to one PacMan cell,
+            while the slippery updater scatters PacMan across several cells, and
+            the two destination sets differ.
+
+        Test type: unit
+        """
+        u0 = PacManVectorizedUpdater.from_environment(simple_env)
+        simple_env.slip_probability = 0.9
+        u9 = PacManVectorizedUpdater.from_environment(simple_env)
+
+        parts = _tiled_particles(simple_env, (2, 1), 3000)
+        cols = [u0._idx_pac_row, u0._idx_pac_col]
+
+        np.random.seed(0)
+        _native.set_seed(0)
+        out0 = u0.batch_transition(parts.copy(), np.asarray(2))  # South
+        np.random.seed(0)
+        _native.set_seed(0)
+        out9 = u9.batch_transition(parts.copy(), np.asarray(2))  # South
+
+        dests0 = np.unique(out0[:, cols], axis=0)
+        dests9 = np.unique(out9[:, cols], axis=0)
+        assert len(dests0) == 1
+        assert len(dests9) > 1
+        assert not np.array_equal(np.sort(dests0, axis=0), np.sort(dests9, axis=0))
+
+    def test_batch_transition_slip_mixture_fraction(self, simple_env):
+        """Test that the slipped transition follows the slip mixture law.
+
+        Purpose: Validates the acceptance criterion that the fraction of
+        particles taking the intended move is ~ 1 - slip * (1 - 1/n_actions).
+
+        Given: PacMan at interior cell (1,1) where all five actions lead to
+            distinct in-bounds cells, and a slip-0.9 updater (5 actions).
+        When: batch_transition is applied with the East action to a large
+            batch of identical particles.
+        Then: The fraction of particles reaching the intended East cell (1,2)
+            is close to 1 - 0.9 * (4/5) = 0.28.
+
+        Test type: unit
+        """
+        simple_env.slip_probability = 0.9
+        updater = PacManVectorizedUpdater.from_environment(simple_env)
+        n_particles = 8000
+        parts = _tiled_particles(simple_env, (1, 1), n_particles)
+
+        np.random.seed(1)
+        _native.set_seed(1)
+        out = updater.batch_transition(parts, np.asarray(1))  # East -> intended (1, 2)
+
+        at_intended = np.mean(
+            (out[:, updater._idx_pac_row] == 1) & (out[:, updater._idx_pac_col] == 2)
+        )
+        expected = 1.0 - 0.9 * (1.0 - 1.0 / 5.0)
+        assert abs(at_intended - expected) < 0.03
