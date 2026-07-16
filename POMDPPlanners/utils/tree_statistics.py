@@ -4,11 +4,13 @@ from enum import Enum
 from typing import List
 
 import numpy as np
+import torch
 from scipy.stats import entropy
 
 from POMDPPlanners.core.policy import PolicyInfoVariable
 from POMDPPlanners.core.tree import ActionNode, BeliefNode
 from POMDPPlanners.core.tree.arena import Tree
+from POMDPPlanners.core.tree.vectorized_belief_tree import VectorizedBeliefTree
 
 
 class TreeMetrics(Enum):
@@ -194,6 +196,86 @@ def compute_tree_metrics(tree: BeliefNode) -> List[PolicyInfoVariable]:
     ]
 
 
+def _leaf_tree_metrics() -> List[PolicyInfoVariable]:
+    return [
+        PolicyInfoVariable(name=TreeMetrics.MIN_ACTIONS_VISIT_COUNT.value, value=0),
+        PolicyInfoVariable(name=TreeMetrics.MAX_ACTIONS_VISIT_COUNT.value, value=0),
+        PolicyInfoVariable(name=TreeMetrics.ACTIONS_VISIT_COUNT_ENTROPY.value, value=0),
+        PolicyInfoVariable(name=TreeMetrics.IS_LEAF.value, value=1),
+    ]
+
+
+def compute_vectorized_tree_metrics(tree: VectorizedBeliefTree) -> List[PolicyInfoVariable]:
+    """Compute root-tree statistics for a flat-tensor belief tree.
+
+    Produces the same :class:`TreeMetrics` set as :func:`compute_tree_metrics`
+    and :func:`compute_arena_tree_metrics`, so a vectorized planner (VOPP /
+    PORPP) is directly comparable to the MCTS planners. The metrics summarise
+    the root belief's action children: their visit counts drive the
+    min / max / entropy statistics, while the root visit count is the total of
+    those action visits and the max depth is the deepest belief-node depth.
+
+    Args:
+        tree: The belief tree built by a vectorized planning run.
+
+    Returns:
+        List of :class:`PolicyInfoVariable` holding the computed metrics. When
+        the root has no expanded actions, a leaf-marked subset is returned
+        (mirroring the MCTS variants).
+    """
+    root = tree.root_index
+    num_actions = tree.num_action_nodes
+    root_action_ids = _root_action_ids(tree, root, num_actions)
+    if root_action_ids.numel() == 0:
+        return _leaf_tree_metrics()
+
+    visit_counts = tree.action_visit_count[root_action_ids].cpu().numpy()
+    total_visits = int(visit_counts.sum())
+    if total_visits > 0:
+        entropy_value = float(entropy(visit_counts / total_visits, base=2))
+    else:
+        entropy_value = 0.0
+    max_depth = int(tree.belief_depth[: tree.num_belief_nodes].max().item())
+
+    return [
+        PolicyInfoVariable(
+            name=TreeMetrics.MIN_ACTIONS_VISIT_COUNT.value,
+            value=int(np.min(visit_counts)),
+        ),
+        PolicyInfoVariable(
+            name=TreeMetrics.MAX_ACTIONS_VISIT_COUNT.value,
+            value=int(np.max(visit_counts)),
+        ),
+        PolicyInfoVariable(
+            name=TreeMetrics.ACTIONS_VISIT_COUNT_ENTROPY.value,
+            value=entropy_value,
+        ),
+        PolicyInfoVariable(
+            name=TreeMetrics.N_ACTIONS_FROM_ROOT.value,
+            value=int(visit_counts.shape[0]),
+        ),
+        PolicyInfoVariable(
+            name=TreeMetrics.ROOT_VISIT_COUNT.value,
+            value=total_visits,
+        ),
+        PolicyInfoVariable(
+            name=TreeMetrics.TREE_MAX_DEPTH.value,
+            value=max_depth,
+        ),
+        PolicyInfoVariable(
+            name=TreeMetrics.IS_LEAF.value,
+            value=0,
+        ),
+    ]
+
+
+def _root_action_ids(tree: VectorizedBeliefTree, root: int, num_actions: int) -> torch.Tensor:
+    if num_actions == 0:
+        return torch.empty(0, dtype=torch.int64, device=tree.device)
+    parents = tree.action_parent_belief[:num_actions]
+    return torch.nonzero(parents == root, as_tuple=False).flatten()
+
+
 def compute_arena_tree_metrics(tree: Tree, root_id: int) -> List[PolicyInfoVariable]:
     """Arena variant of :func:`compute_tree_metrics`.
 
@@ -224,8 +306,7 @@ def compute_arena_tree_metrics(tree: Tree, root_id: int) -> List[PolicyInfoVaria
     frontier = [(root_id, 0)]
     while frontier:
         node_id, depth = frontier.pop()
-        if depth > max_depth:
-            max_depth = depth
+        max_depth = max(max_depth, depth)
         for cid in tree.children_ids[node_id]:
             frontier.append((cid, depth + 1))
 
