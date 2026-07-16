@@ -39,7 +39,7 @@ from torch import Tensor
 from POMDPPlanners.core.environment.vectorized_generative_model import (
     VectorizedGenerativeModel,
 )
-from POMDPPlanners.planners.vectorized_planners.vopp import VOPPPlanner
+from POMDPPlanners.planners.vectorized_planners.vopp.vopp import VOPPPlanner
 
 WorldTransition = Callable[[Tensor, Tensor], Tensor]
 WorldObservation = Callable[[Tensor, Tensor], Tensor]
@@ -101,9 +101,9 @@ class VOPPEpisodeRunner:
         >>> from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_vectorized_model import (
         ...     ContinuousLightDarkVectorizedModel,
         ... )
-        >>> from POMDPPlanners.planners.vectorized_planners import VOPPPlanner
-        >>> from POMDPPlanners.planners.vectorized_planners.vopp_episode_runner import (
+        >>> from POMDPPlanners.planners.vectorized_planners import (
         ...     VOPPEpisodeRunner,
+        ...     VOPPPlanner,
         ... )
         >>> _ = torch.manual_seed(0)
         >>> env = ContinuousLightDarkPOMDP(discount_factor=0.95, is_obstacle_hit_terminal=False)
