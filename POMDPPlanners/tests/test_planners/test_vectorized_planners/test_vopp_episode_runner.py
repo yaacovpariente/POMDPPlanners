@@ -19,7 +19,7 @@ from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_vectorize
     ContinuousLightDarkVectorizedModel,
 )
 from POMDPPlanners.planners.vectorized_planners import VOPPPlanner
-from POMDPPlanners.planners.vectorized_planners.vopp_episode_runner import (
+from POMDPPlanners.planners.vectorized_planners.vopp.vopp_episode_runner import (
     VOPPEpisodeRunner,
 )
 
