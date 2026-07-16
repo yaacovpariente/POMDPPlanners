@@ -208,6 +208,7 @@ ignore-imports = false
 # the binary is missing.
 ignored-modules = [
     "numpy",
+    "torch",
     "cvxopt",
     "carla",
     "nuplan",
