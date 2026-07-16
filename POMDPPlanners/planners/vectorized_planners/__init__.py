@@ -11,10 +11,13 @@ per-simulation loop and no host/device synchronization.
 
 Currently provided:
 
-* :class:`~POMDPPlanners.planners.vectorized_planners.vopp.VOPPPlanner` --
+* :class:`~POMDPPlanners.planners.vectorized_planners.vopp.vopp.VOPPPlanner` --
   the Vectorized Online POMDP Planner (VOPP / PORPP).
 """
 
-from POMDPPlanners.planners.vectorized_planners.vopp import VOPPPlanner
+from POMDPPlanners.planners.vectorized_planners.vopp import (
+    VOPPEpisodeRunner,
+    VOPPPlanner,
+)
 
-__all__ = ["VOPPPlanner"]
+__all__ = ["VOPPPlanner", "VOPPEpisodeRunner"]
