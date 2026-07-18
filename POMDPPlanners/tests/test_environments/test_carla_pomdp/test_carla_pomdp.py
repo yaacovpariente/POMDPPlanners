@@ -11,6 +11,7 @@ CARLA-specific assertion that the observation differs from the state.
 
 # pylint: disable=protected-access,too-many-lines  # Tests inspect live-session internals
 
+import json
 import pickle
 from types import SimpleNamespace
 from typing import Any, Dict, List, Optional, Tuple
@@ -1081,6 +1082,107 @@ def test_include_flags_thread_into_session(fake_session: FakeCarlaSession) -> No
     assert env.include_lidar is False
     assert env.observation_camera_config["image_size_x"] == "128"
     assert env.lidar_config["channels"] == "32"
+
+
+def _write_single_server_pool(pool_dir: Path, rpc_port: int, tm_port: int) -> None:
+    """Hand-write a one-server pool spec + lease file (no server processes)."""
+    (pool_dir / "server_0.lease").touch()
+    spec = {
+        "host": "127.0.0.1",
+        "servers": [
+            {
+                "index": 0,
+                "rpc_port": rpc_port,
+                "traffic_manager_port": tm_port,
+                "lease_file": "server_0.lease",
+            }
+        ],
+    }
+    (pool_dir / "pool.json").write_text(json.dumps(spec))
+
+
+def test_server_pool_dir_survives_pickle_roundtrip(
+    fake_session: FakeCarlaSession, tmp_path: Path
+) -> None:
+    """server_pool_dir is plain config, so it survives pickling to workers.
+
+    Purpose: Validates that the pool wiring reaches joblib workers, which receive
+        the environment via pickle and must re-resolve their lease lazily.
+
+    Given: A CarlaPOMDP constructed with a server_pool_dir
+    When: It is pickled and unpickled
+    Then: server_pool_dir is preserved and the live session is dropped
+
+    Test type: unit
+    """
+    del fake_session
+    env = CarlaPOMDP(discount_factor=0.95, server_pool_dir=tmp_path)
+    restored = pickle.loads(pickle.dumps(env))
+
+    assert restored.server_pool_dir == str(tmp_path)
+    assert restored._session is None
+
+
+def test_get_session_resolves_ports_from_pool_lease(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """With a pool configured, the session connects to the leased server's ports.
+
+    Purpose: Validates that _get_session overrides the static host/port/
+        traffic_manager_port with the per-process pool lease.
+
+    Given: A hand-written one-server pool directory and a recording _CarlaSession
+        stub, and a CarlaPOMDP constructed with server_pool_dir and default ports
+    When: The environment builds its session via _get_session
+    Then: _CarlaSession receives the leased rpc/traffic-manager ports and host,
+        not the constructor defaults
+
+    Test type: unit
+    """
+    captured: Dict[str, Any] = {}
+
+    def _recording_session(**kwargs: Any) -> str:
+        captured.update(kwargs)
+        return "session"
+
+    monkeypatch.setattr(carla_pomdp, "_CarlaSession", _recording_session)
+    _write_single_server_pool(tmp_path, rpc_port=2404, tm_port=8321)
+    env = CarlaPOMDP(discount_factor=0.95, server_pool_dir=tmp_path)
+
+    assert env._get_session() == "session"
+    assert captured["host"] == "127.0.0.1"
+    assert captured["port"] == 2404
+    assert captured["traffic_manager_port"] == 8321
+
+
+def test_get_session_uses_static_ports_without_pool(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Without a pool, the session connects to the constructor's static ports.
+
+    Purpose: Validates the default (no-pool) connection path forwards the
+        configured host/port/traffic_manager_port to _CarlaSession.
+
+    Given: A recording _CarlaSession stub and a CarlaPOMDP with explicit
+        host/port/traffic_manager_port and no server_pool_dir
+    When: The environment builds its session via _get_session
+    Then: _CarlaSession receives exactly the configured endpoints
+
+    Test type: unit
+    """
+    captured: Dict[str, Any] = {}
+
+    def _recording_session(**kwargs: Any) -> str:
+        captured.update(kwargs)
+        return "session"
+
+    monkeypatch.setattr(carla_pomdp, "_CarlaSession", _recording_session)
+    env = CarlaPOMDP(discount_factor=0.95, host="myhost", port=2345, traffic_manager_port=8123)
+
+    assert env._get_session() == "session"
+    assert captured["host"] == "myhost"
+    assert captured["port"] == 2345
+    assert captured["traffic_manager_port"] == 8123
 
 
 def test_hash_observation_handles_dict_observations(world: CarlaPOMDP) -> None:
