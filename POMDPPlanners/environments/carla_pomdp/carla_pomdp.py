@@ -94,13 +94,14 @@ from collections.abc import Hashable
 from enum import Enum
 from pathlib import Path
 from queue import Queue
-from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple, Union
 
 import numpy as np
 
 from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.core.environment import Environment, SpaceInfo, SpaceType
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
+from POMDPPlanners.environments.carla_pomdp.carla_server_pool import acquire_pool_lease
 from POMDPPlanners.utils.statistics_utils import confidence_interval
 
 # Default discrete control presets as ``(throttle, steer, brake)`` triples.
@@ -855,6 +856,7 @@ class CarlaPOMDP(Environment):
         num_walkers: int = DEFAULT_NUM_WALKERS,
         max_tracked_agents: int = DEFAULT_MAX_TRACKED_AGENTS,
         traffic_manager_port: int = DEFAULT_TRAFFIC_MANAGER_PORT,
+        server_pool_dir: Optional[Union[str, Path]] = None,
         randomize_spawn: bool = True,
         observation_extractor: Optional[Callable[[Dict[str, np.ndarray]], Any]] = None,
         vehicle_filter: str = "vehicle.tesla.model3",
@@ -910,6 +912,12 @@ class CarlaPOMDP(Environment):
                 :data:`DEFAULT_MAX_TRACKED_AGENTS`.
             traffic_manager_port: CARLA Traffic Manager RPC port used to drive the
                 traffic vehicles. Defaults to :data:`DEFAULT_TRAFFIC_MANAGER_PORT`.
+            server_pool_dir: Optional directory of a
+                :class:`~POMDPPlanners.environments.carla_pomdp.carla_server_pool.CarlaServerPool`.
+                When set, ``host``/``port``/``traffic_manager_port`` are overridden
+                by a per-process server lease acquired lazily on first session
+                build, so parallel workers each connect to their own pool server.
+                The pool must outlive the environment. Defaults to None.
             randomize_spawn: If True, sample a random ego spawn point (and weather)
                 each reset instead of a fixed one. Defaults to True.
             observation_extractor: Optional callable applied to the full
@@ -957,6 +965,7 @@ class CarlaPOMDP(Environment):
         self.num_walkers = num_walkers
         self.max_tracked_agents = max_tracked_agents
         self.traffic_manager_port = traffic_manager_port
+        self.server_pool_dir = str(server_pool_dir) if server_pool_dir is not None else None
         self.randomize_spawn = randomize_spawn
         self.observation_extractor = observation_extractor
         self.vehicle_filter = vehicle_filter
@@ -1013,11 +1022,20 @@ class CarlaPOMDP(Environment):
         self._served_roles = set()
 
     # ── Live simulator management ───────────────────────────────────────
+    def _resolve_connection(self) -> Tuple[str, int, int]:
+        # Without a pool the static endpoints apply; with one, this process's
+        # lease (acquired once, cached for the process lifetime) overrides them.
+        if self.server_pool_dir is None:
+            return self.host, self.port, self.traffic_manager_port
+        lease = acquire_pool_lease(self.server_pool_dir)
+        return lease.host, lease.rpc_port, lease.traffic_manager_port
+
     def _get_session(self) -> Any:
         if self._session is None:
+            host, port, traffic_manager_port = self._resolve_connection()
             self._session = _CarlaSession(
-                host=self.host,
-                port=self.port,
+                host=host,
+                port=port,
                 town=self.town,
                 fixed_delta_seconds=self.fixed_delta_seconds,
                 sensor_config=self.sensor_config,
@@ -1033,7 +1051,7 @@ class CarlaPOMDP(Environment):
                 num_vehicles=self.num_vehicles,
                 num_walkers=self.num_walkers,
                 max_tracked_agents=self.max_tracked_agents,
-                traffic_manager_port=self.traffic_manager_port,
+                traffic_manager_port=traffic_manager_port,
                 randomize_spawn=self.randomize_spawn,
                 observation_extractor=self.observation_extractor,
             )

@@ -13,9 +13,16 @@ Classes:
     DreamerCarlaModelPOMDP: Concrete CARLA model backed by a Dreamer world model.
     PerceivedAgentsBelief: Particle belief that stamps the perception pipeline's agent block.
     CarlaPerceptionPipeline: Standalone, swappable perception + prediction stage.
+    CarlaServerPool: Context manager owning N headless CARLA servers for parallel episodes.
+    CarlaServerLease: Connection endpoints of one leased pool server.
 """
 
 from POMDPPlanners.environments.carla_pomdp.carla_pomdp import CarlaPOMDP
+from POMDPPlanners.environments.carla_pomdp.carla_server_pool import (
+    CarlaServerLease,
+    CarlaServerPool,
+    acquire_pool_lease,
+)
 from POMDPPlanners.environments.carla_pomdp.carla_belief import PerceivedAgentsBelief
 from POMDPPlanners.environments.carla_pomdp.carla_perception import (
     CarlaPerceptionPipeline,
@@ -41,4 +48,7 @@ __all__ = [
     "MotionTracker",
     "LidarCameraPerceptionModel",
     "OracleAgentPerceptionModel",
+    "CarlaServerPool",
+    "CarlaServerLease",
+    "acquire_pool_lease",
 ]
