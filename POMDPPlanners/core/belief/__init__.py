@@ -2,6 +2,7 @@
 
 # Import all classes to maintain backward compatibility
 from POMDPPlanners.core.belief.base_belief import Belief
+from POMDPPlanners.core.belief.batched_particle_belief import BatchedParticleBelief
 from POMDPPlanners.core.belief.particle_beliefs import (
     UnweightedParticleBelief,
     WeightedParticleBelief,
@@ -36,6 +37,7 @@ from POMDPPlanners.core.belief.belief_utils import (
 
 __all__ = [
     "Belief",
+    "BatchedParticleBelief",
     "UnweightedParticleBelief",
     "WeightedParticleBelief",
     "WeightedParticleBeliefReinvigoration",
