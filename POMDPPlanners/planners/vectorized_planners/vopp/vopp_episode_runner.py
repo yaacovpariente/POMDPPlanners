@@ -36,6 +36,7 @@ from typing import Callable, List, Optional
 import torch
 from torch import Tensor
 
+from POMDPPlanners.core.belief.batched_particle_belief import BatchedParticleBelief
 from POMDPPlanners.core.environment.vectorized_generative_model import (
     VectorizedGenerativeModel,
 )
@@ -241,25 +242,18 @@ class VOPPEpisodeRunner:
         return 0
 
     def _filter_belief(self, particles: Tensor, action_index: int, observation: Tensor) -> Tensor:
-        """Propagate, weight, and resample the belief (a SIR particle filter)."""
-        actions = torch.full(
-            (particles.shape[0],), action_index, dtype=torch.int64, device=self.device
-        )
-        propagated = self._model.sample_next_states(particles, actions)
-        observations = observation.expand(particles.shape[0], -1)
-        log_weights = self._model.observation_log_probs(propagated, actions, observations)
-        weights = self._normalize_weights(log_weights)
-        resampled = torch.multinomial(weights, particles.shape[0], replacement=True)
-        return propagated[resampled]
+        """Propagate, weight, and resample the belief (a SIR particle filter).
 
-    def _normalize_weights(self, log_weights: Tensor) -> Tensor:
-        """Softmax the log-weights, falling back to uniform on total degeneracy.
-
-        If every particle assigns zero likelihood to the observation (all
-        log-weights ``-inf``), the softmax would be all-NaN and resampling would
-        fail; in that case the belief carries no information and we resample
-        uniformly instead.
+        Delegates to a batch-of-one :class:`BatchedParticleBelief`: propagate
+        through the model transition, reweight by the observation likelihood
+        (with the all-``-inf`` degeneracy falling back to uniform weights),
+        and resample back to an unweighted ``[num_particles, ds]`` cloud.
         """
-        if not bool(torch.isfinite(log_weights).any()):
-            return torch.full_like(log_weights, 1.0 / log_weights.shape[0])
-        return torch.softmax(log_weights, dim=0)
+        belief = BatchedParticleBelief(
+            particles=particles.unsqueeze(0),
+            log_weights=torch.zeros(1, particles.shape[0], device=self.device),
+            model=self._model,
+        )
+        actions = torch.tensor([action_index], dtype=torch.int64, device=self.device)
+        posterior = belief.propagate(actions).reweight(actions, observation.reshape(1, -1))
+        return posterior.sample_states(particles.shape[0]).squeeze(0)
