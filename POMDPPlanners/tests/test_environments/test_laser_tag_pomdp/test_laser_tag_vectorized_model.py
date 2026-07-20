@@ -193,20 +193,38 @@ def test_terminal_observation_log_probs_match_native(case: _Case) -> None:
 
 
 @pytest.mark.parametrize(
-    "state, action",
+    "policy, state, action",
     [
-        (np.array([2.0, 2.0, 6.0, 5.0, 0.0]), 0),
-        (np.array([4.0, 3.0, 4.0, 1.0, 0.0]), 2),
-        (np.array([5.0, 2.0, 3.0, 2.0, 0.0]), 4),
-        (np.array([3.0, 3.0, 3.0, 3.0, 0.0]), 4),
+        # EVADE: opponent flees the robot's pre-move cell.
+        (OpponentPolicy.EVADE, np.array([2.0, 2.0, 6.0, 5.0, 0.0]), 0),
+        (OpponentPolicy.EVADE, np.array([4.0, 3.0, 4.0, 1.0, 0.0]), 2),
+        (OpponentPolicy.EVADE, np.array([5.0, 2.0, 3.0, 2.0, 0.0]), 4),
+        (OpponentPolicy.EVADE, np.array([3.0, 3.0, 3.0, 3.0, 0.0]), 4),
+        # PURSUE: opponent chases the robot's post-move cell, so the move
+        # action (which shifts the robot) changes the opponent conditioning.
+        (OpponentPolicy.PURSUE, np.array([2.0, 2.0, 6.0, 5.0, 0.0]), 0),
+        (OpponentPolicy.PURSUE, np.array([4.0, 3.0, 4.0, 1.0, 0.0]), 2),
+        (OpponentPolicy.PURSUE, np.array([5.0, 2.0, 3.0, 2.0, 0.0]), 1),
+        (OpponentPolicy.PURSUE, np.array([3.0, 3.0, 3.0, 3.0, 0.0]), 4),
+        # EVADE_WHEN_SPOTTED, spotted branch: opponent shares the robot's row
+        # (an unoccluded east ray) so it flees like EVADE.
+        (OpponentPolicy.EVADE_WHEN_SPOTTED, np.array([2.0, 2.0, 2.0, 5.0, 0.0]), 4),
+        # EVADE_WHEN_SPOTTED, unspotted branch: opponent off every laser ray so
+        # it moves uniformly at random.
+        (OpponentPolicy.EVADE_WHEN_SPOTTED, np.array([2.0, 2.0, 5.0, 4.0, 0.0]), 4),
+        (OpponentPolicy.EVADE_WHEN_SPOTTED, np.array([1.0, 1.0, 8.0, 5.0, 0.0]), 0),
     ],
 )
-def test_transition_distribution_matches_native(state: np.ndarray, action: int) -> None:
+def test_transition_distribution_matches_native(
+    policy: OpponentPolicy, state: np.ndarray, action: int
+) -> None:
     """Sampled next-state frequencies match the env's analytic transition.
 
-    Purpose: Validates the EVADE opponent-move + robot-move categorical
+    Purpose: Validates the opponent-move + robot-move categorical for every
+        supported opponent policy (EVADE, PURSUE, EVADE_WHEN_SPOTTED)
 
-    Given: A fixed state/action sampled many times by the torch model
+    Given: A fixed state/action and opponent policy sampled many times by the
+        torch model
     When: Empirical frequencies of each distinct next state are compared to
         the env's transition_log_probability over the same support
     Then: Every outcome agrees within a Monte Carlo tolerance and the env
@@ -215,7 +233,7 @@ def test_transition_distribution_matches_native(state: np.ndarray, action: int) 
     Test type: unit
     """
     torch.manual_seed(0)
-    env = LaserTagPOMDP(discount_factor=0.95)
+    env = LaserTagPOMDP(discount_factor=0.95, opponent_policy=policy)
     model = LaserTagVectorizedModel(env, device=torch.device("cpu"), dtype=torch.float64)
     count = 60000
     samples = model.sample_next_states(
@@ -326,20 +344,27 @@ def test_unsupported_reward_model_raises() -> None:
         LaserTagVectorizedModel(env)
 
 
-def test_unsupported_opponent_policy_raises() -> None:
-    """Constructing on a non-EVADE opponent policy is rejected.
+@pytest.mark.parametrize(
+    "policy",
+    [OpponentPolicy.EVADE, OpponentPolicy.PURSUE, OpponentPolicy.EVADE_WHEN_SPOTTED],
+    ids=["evade", "pursue", "evade-when-spotted"],
+)
+def test_every_opponent_policy_constructs(policy: OpponentPolicy) -> None:
+    """All three opponent policies build a conforming vectorized model.
 
-    Purpose: Validates the scope guard on the opponent policy
+    Purpose: Validates that PURSUE and EVADE_WHEN_SPOTTED are supported
+        alongside EVADE (the guard no longer rejects them)
 
-    Given: An env configured with the PURSUE opponent policy
+    Given: An env configured with each supported opponent policy
     When: A vectorized model is constructed from it
-    Then: NotImplementedError is raised
+    Then: Construction succeeds and yields a conforming generative model
 
     Test type: unit
     """
-    env = LaserTagPOMDP(discount_factor=0.95, opponent_policy=OpponentPolicy.PURSUE)
-    with pytest.raises(NotImplementedError):
-        LaserTagVectorizedModel(env)
+    env = LaserTagPOMDP(discount_factor=0.95, opponent_policy=policy)
+    model = LaserTagVectorizedModel(env, device=torch.device("cpu"), dtype=torch.float64)
+    assert isinstance(model, VectorizedGenerativeModel)
+    assert model.num_actions == 5
 
 
 def test_unsupported_transition_error_raises() -> None:

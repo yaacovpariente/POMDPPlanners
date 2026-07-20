@@ -7,9 +7,10 @@ GPU-friendly implementation of
 :class:`~POMDPPlanners.core.environment.vectorized_generative_model.VectorizedGenerativeModel`
 for :class:`~POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp.LaserTagPOMDP`.
 
-It re-expresses the environment's EVADE opponent-motion kernel, its
-8-direction laser observation kernel, and its ``CONSTANT_HAZARD_PENALTY``
-reward kernel as torch tensor operations so a vectorized planner (VOPP) can
+It re-expresses the environment's opponent-motion kernel (all of ``EVADE``,
+``PURSUE``, and ``EVADE_WHEN_SPOTTED``), its 8-direction laser observation
+kernel, and its ``CONSTANT_HAZARD_PENALTY`` reward kernel as torch tensor
+operations so a vectorized planner (VOPP) can
 run tens of thousands of parallel simulations on the GPU without a
 host/device sync. Every constant (grid geometry, walls, dangerous areas,
 measurement noise, costs, action directions) is read from a live environment
@@ -18,11 +19,11 @@ configuration; only the numeric kernels are duplicated in torch. The
 accompanying parity test pins these kernels to the environment's native
 scalar kernels.
 
-Only the single most standard LaserTag configuration is supported: the
-``CONSTANT_HAZARD_PENALTY`` reward model, the ``EVADE`` opponent policy,
-deterministic robot motion (``transition_error_prob == 0.0``), and
-``is_dangerous_area_hit_terminal=False``. Any other configuration is checked
-at construction and raises :class:`NotImplementedError`.
+Only the ``CONSTANT_HAZARD_PENALTY`` reward model, deterministic robot motion
+(``transition_error_prob == 0.0``), and ``is_dangerous_area_hit_terminal=False``
+are supported; all three opponent policies (``EVADE``, ``PURSUE``,
+``EVADE_WHEN_SPOTTED``) are modeled. Any other configuration is checked at
+construction and raises :class:`NotImplementedError`.
 """
 
 from typing import Optional
@@ -110,9 +111,9 @@ class LaserTagVectorizedModel:
                 laser observations into integer tree keys.
 
         Raises:
-            NotImplementedError: If ``env`` uses a reward model, opponent
-                policy, transition-error, or hazard-terminal configuration
-                the torch kernels do not model.
+            NotImplementedError: If ``env`` uses a reward model,
+                transition-error, or hazard-terminal configuration the torch
+                kernels do not model.
             ValueError: If ``observation_resolution`` is not positive.
         """
         self._require_supported_config(env)
@@ -122,6 +123,7 @@ class LaserTagVectorizedModel:
         self.dtype = dtype
         self._obs_resolution = float(observation_resolution)
         self.num_actions = int(len(env.get_actions()))
+        self._opponent_policy = env.opponent_policy
         self._build_geometry(env)
         self._build_noise_and_reward(env)
 
@@ -135,8 +137,6 @@ class LaserTagVectorizedModel:
             raise NotImplementedError(
                 "vectorized model supports only the CONSTANT_HAZARD_PENALTY reward model"
             )
-        if env.opponent_policy is not OpponentPolicy.EVADE:
-            raise NotImplementedError("vectorized model supports only the EVADE opponent policy")
         if float(env.transition_error_prob) != 0.0:
             raise NotImplementedError(
                 "vectorized model supports only deterministic robot motion "
@@ -186,7 +186,8 @@ class LaserTagVectorizedModel:
     def sample_next_states(self, states: Tensor, actions: Tensor) -> Tensor:
         robot, opp = states[:, 0:2], states[:, 2:4]
         robot_next = self._robot_next(robot, actions)
-        probs = self._opponent_move_probs(robot, opp)
+        reference = self._opponent_robot_reference(robot, robot_next)
+        probs = self._opponent_move_probs(reference, opp)
         choice = torch.multinomial(probs, 1).squeeze(1)
         opp_next = opp + self._opp_offsets[choice]
         tag_success = (actions == _TAG_ACTION) & self._same_cell(robot, opp)
@@ -251,13 +252,51 @@ class LaserTagVectorizedModel:
         valid = self._cell_valid(candidate)
         return torch.where(valid[:, None], candidate, robot)
 
+    def _opponent_robot_reference(self, robot: Tensor, robot_next: Tensor) -> Tensor:
+        # PURSUE conditions the opponent move on the robot's post-move cell;
+        # EVADE and EVADE_WHEN_SPOTTED on its pre-move cell. Mirrors the scalar
+        # LaserTagPOMDP._opponent_robot_reference.
+        if self._opponent_policy is OpponentPolicy.PURSUE:
+            return robot_next
+        return robot
+
     def _opponent_move_probs(self, robot: Tensor, opp: Tensor) -> Tensor:
+        if self._opponent_policy is OpponentPolicy.EVADE_WHEN_SPOTTED:
+            flee = self._directional_move_probs(robot, opp)
+            wander = self._random_move_probs(opp)
+            spotted = self._opponent_spotted(robot, opp)
+            return torch.where(spotted[:, None], flee, wander)
+        return self._directional_move_probs(robot, opp)
+
+    def _directional_move_probs(self, robot: Tensor, opp: Tensor) -> Tensor:
+        # EVADE puts the 0.4 directional mass on the distance-increasing cell,
+        # PURSUE on the distance-decreasing cell; the flags flip accordingly.
         robot_r, robot_c = robot[:, 0], robot[:, 1]
         opp_r, opp_c = opp[:, 0], opp[:, 1]
-        north = self._flee_prob(robot_r > opp_r, robot_r == opp_r)
-        south = self._flee_prob(robot_r < opp_r, robot_r == opp_r)
-        east = self._flee_prob(robot_c < opp_c, robot_c == opp_c)
-        west = self._flee_prob(robot_c > opp_c, robot_c == opp_c)
+        if self._opponent_policy is OpponentPolicy.PURSUE:
+            north_hot, south_hot = robot_r < opp_r, robot_r > opp_r
+            east_hot, west_hot = robot_c > opp_c, robot_c < opp_c
+        else:
+            north_hot, south_hot = robot_r > opp_r, robot_r < opp_r
+            east_hot, west_hot = robot_c < opp_c, robot_c > opp_c
+        row_aligned, col_aligned = robot_r == opp_r, robot_c == opp_c
+        north = self._directional_prob(north_hot, row_aligned)
+        south = self._directional_prob(south_hot, row_aligned)
+        east = self._directional_prob(east_hot, col_aligned)
+        west = self._directional_prob(west_hot, col_aligned)
+        return self._assemble_move_probs(opp, north, south, east, west)
+
+    def _random_move_probs(self, opp: Tensor) -> Tensor:
+        # EVADE_WHEN_SPOTTED's unspotted branch: uniform 0.2 on each cardinal
+        # neighbour, with invalid neighbours falling through to stay.
+        weight = torch.full((opp.shape[0],), 0.2, dtype=self.dtype, device=self.device)
+        return self._assemble_move_probs(opp, weight, weight, weight, weight)
+
+    def _assemble_move_probs(
+        self, opp: Tensor, north: Tensor, south: Tensor, east: Tensor, west: Tensor
+    ) -> Tensor:
+        # Zero out moves into invalid cells (their mass falls through to stay,
+        # matching the scalar slack redistribution) and derive the stay mass.
         north = north * self._cell_valid(opp + self._opp_offsets[1]).to(self.dtype)
         south = south * self._cell_valid(opp + self._opp_offsets[2]).to(self.dtype)
         east = east * self._cell_valid(opp + self._opp_offsets[3]).to(self.dtype)
@@ -265,17 +304,37 @@ class LaserTagVectorizedModel:
         stay = 1.0 - (north + south + east + west)
         return torch.stack([stay, north, south, east, west], dim=1)
 
-    def _flee_prob(self, away: Tensor, aligned: Tensor) -> Tensor:
-        # EVADE puts 0.4 on the away cell, or a symmetric 0.2 split when aligned.
+    def _directional_prob(self, hot: Tensor, aligned: Tensor) -> Tensor:
+        # 0.4 on the hot (toward/away) cell, a symmetric 0.2 when the robot and
+        # opponent share the axis coordinate, otherwise 0.0.
         return torch.where(
-            away,
-            torch.full_like(away, 0.4, dtype=self.dtype),
+            hot,
+            torch.full_like(hot, 0.4, dtype=self.dtype),
             torch.where(
                 aligned,
                 torch.full_like(aligned, 0.2, dtype=self.dtype),
-                torch.zeros(away.shape, dtype=self.dtype, device=self.device),
+                torch.zeros(hot.shape, dtype=self.dtype, device=self.device),
             ),
         )
+
+    def _opponent_spotted(self, robot: Tensor, opp: Tensor) -> Tensor:
+        # Batched mirror of LaserTagPOMDP._is_opponent_spotted: True iff the
+        # opponent lies on one of the robot's 8 laser rays, unoccluded by a wall
+        # or the grid boundary. Opponent detection takes priority over a wall in
+        # the same cell (they can never coincide) exactly as the scalar ray walk.
+        batch = robot.shape[0]
+        pos = robot[:, None, :].expand(batch, 8, 2).clone()
+        opp_cell = opp[:, None, :]
+        active = torch.ones(batch, 8, dtype=torch.bool, device=self.device)
+        spotted = torch.zeros(batch, 8, dtype=torch.bool, device=self.device)
+        for _ in range(self._max_ray):
+            pos = pos + self._laser_dirs
+            in_bounds = self._in_bounds(pos)
+            is_wall = self._wall_at(pos) & in_bounds
+            is_opp = (pos == opp_cell).all(dim=2)
+            spotted = spotted | (active & in_bounds & is_opp)
+            active = active & ~(~in_bounds | is_wall | is_opp)
+        return spotted.any(dim=1)
 
     def _laser_distances(self, robot: Tensor, opp: Tensor) -> Tensor:
         batch = robot.shape[0]
