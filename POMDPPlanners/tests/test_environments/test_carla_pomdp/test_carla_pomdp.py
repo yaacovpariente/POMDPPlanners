@@ -74,13 +74,13 @@ class FakeCarlaSession:
 
     def step(
         self, throttle: float, steer: float, brake: float
-    ) -> Tuple[np.ndarray, Dict[str, np.ndarray], bool]:
+    ) -> Tuple[np.ndarray, Dict[str, np.ndarray], bool, bool]:
         self.step_calls += 1
         self.last_control = (throttle, steer, brake)
         self._t += 1
         state = np.array([float(self._t), 0.0, 0.0, float(self._t), 0.0, 0.0, 0.0])
-        terminated = self._t >= 3
-        return state, _make_observation(48.0 + self._t), terminated
+        collided = self._t >= 3
+        return state, _make_observation(48.0 + self._t), collided, False
 
 
 class FixedActionPolicy(Policy):
@@ -442,13 +442,13 @@ class StationaryThenMovingSession:
 
     def step(
         self, throttle: float, steer: float, brake: float
-    ) -> Tuple[np.ndarray, Dict[str, np.ndarray], bool]:
+    ) -> Tuple[np.ndarray, Dict[str, np.ndarray], bool, bool]:
         del throttle, steer, brake
         self.step_calls += 1
         self._t += 1
         position = 0.0 if self._t <= 2 else float(self._t - 2)
         state = np.array([position, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
-        return state, _make_observation(48.0), False
+        return state, _make_observation(48.0), False, False
 
 
 def test_stationary_ego_does_not_freeze_the_world(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -711,7 +711,7 @@ def test_reward_penalizes_leaving_the_lane(world: CarlaPOMDP) -> None:
     """
     next_state = np.array([0.0, 0.0, 0.0, 1.0, 0.0, 3.0, 0.0])
 
-    reward = world._compute_reward(next_state, 0, terminated=False)
+    reward = world._compute_reward(next_state, 0, collided=False, success=False)
 
     assert reward == pytest.approx(1.0 - 1.0 - 0.1)
 
@@ -731,7 +731,7 @@ def test_reward_penalizes_exceeding_desired_speed(world: CarlaPOMDP) -> None:
     """
     next_state = np.array([0.0, 0.0, 0.0, 10.0, 0.0, 0.0, 0.0])
 
-    reward = world._compute_reward(next_state, 0, terminated=False)
+    reward = world._compute_reward(next_state, 0, collided=False, success=False)
 
     assert reward == pytest.approx(10.0 - 10.0 - 0.1)
 
@@ -751,7 +751,7 @@ def test_reward_penalizes_steering(world: CarlaPOMDP) -> None:
     """
     next_state = np.array([0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0])
 
-    reward = world._compute_reward(next_state, 1, terminated=False)
+    reward = world._compute_reward(next_state, 1, collided=False, success=False)
 
     assert reward == pytest.approx(1.0 - 5 * 0.25 - 0.2 * 0.5 - 0.1)
 
@@ -778,6 +778,7 @@ def test_lane_geometry_returns_signed_offset_and_wrapped_heading_error() -> None
     session._map = SimpleNamespace(
         get_waypoint=lambda location, project_to_road, lane_type: waypoint
     )
+    session._route_xy = None  # no route: fall back to the lane-based reference
     ego_location = SimpleNamespace(x=0.0, y=1.5)
 
     lateral, heading_err = session._lane_geometry(ego_location, 10.0)
@@ -1300,6 +1301,8 @@ def test_get_metric_names_lists_the_full_carla_metric_set() -> None:
 
     assert env.get_metric_names() == [
         "collision_rate",
+        "success_rate",
+        "route_completion",
         "average_progress",
         "average_speed",
         "red_light_violation_rate",
@@ -1642,12 +1645,12 @@ class _LidarVehicleSession:
 
     def step(
         self, throttle: float, steer: float, brake: float
-    ) -> Tuple[np.ndarray, Dict[str, np.ndarray], bool]:
+    ) -> Tuple[np.ndarray, Dict[str, np.ndarray], bool, bool]:
         del throttle, steer, brake
         self.step_calls += 1
         self._t += 1
         state = np.array([float(self._t), 0.0, 0.0, float(self._t), 0.0, 0.0, 0.0])
-        return state, self._observation(), self._t >= 3
+        return state, self._observation(), self._t >= 3, False
 
 
 def test_world_emits_raw_agents_never_perceived(
@@ -1676,3 +1679,448 @@ def test_world_emits_raw_agents_never_perceived(
     observation = world.sample_observation(next_state, 0)
 
     assert np.all(np.asarray(observation["agents"]) == 0.0)
+
+
+# ── Destination / route support ──────────────────────────────────────────────
+
+
+def _route_session(route_xy: np.ndarray, route_yaw: np.ndarray, goal_radius: float = 5.0) -> Any:
+    """Bare _CarlaSession with a hand-set route polyline and no CARLA connection."""
+    session: Any = object.__new__(carla_pomdp._CarlaSession)
+    session._route_xy = route_xy
+    session._route_yaw = route_yaw
+    segment_lengths = np.hypot(np.diff(route_xy[:, 0]), np.diff(route_xy[:, 1]))
+    session._route_cumlen = np.concatenate([[0.0], np.cumsum(segment_lengths)])
+    session._route_index = 0
+    session._goal_xy = route_xy[-1]
+    session._goal_radius = goal_radius
+    return session
+
+
+def _fake_waypoint(x: float, y: float, yaw_deg: float = 0.0) -> SimpleNamespace:
+    """A CARLA-like waypoint with transform.location / transform.rotation."""
+    return SimpleNamespace(
+        transform=SimpleNamespace(
+            location=SimpleNamespace(x=x, y=y),
+            rotation=SimpleNamespace(yaw=yaw_deg),
+        )
+    )
+
+
+def test_route_geometry_measures_offset_against_route_not_lane() -> None:
+    """With a route present, lat/heading_err are measured against the route line.
+
+    Purpose: Validates the route-relative geometry that redefines the ego state's
+        lat/heading_err fields when a destination route exists
+
+    Given: A session with a straight route along +x and an ego 2 m to the route's
+        left heading 30 degrees
+    When: _lane_geometry is queried
+    Then: The lateral offset is +2 m and the heading error is 30 degrees, without
+        any CARLA map lane projection being consulted
+
+    Test type: unit
+    """
+    route_xy = np.array([[float(x), 0.0] for x in range(0, 20, 2)])
+    session = _route_session(route_xy, np.zeros(len(route_xy)))
+    session._map = None  # would raise if the lane fallback were consulted
+
+    lateral, heading_err = session._lane_geometry(SimpleNamespace(x=4.0, y=2.0), 30.0)
+
+    assert lateral == pytest.approx(2.0)
+    assert heading_err == pytest.approx(np.radians(30.0))
+
+
+def test_route_geometry_index_advances_monotonically() -> None:
+    """The nearest-route-waypoint index never moves backwards.
+
+    Purpose: Validates the monotonic projection cache that keeps a self-crossing
+        route from snapping the reference point back to an earlier segment
+
+    Given: A straight route and an ego queried at x=10 and then back at x=2
+    When: _lane_geometry is queried at both positions in order
+    Then: The second query still references the x=10 waypoint (index unchanged)
+
+    Test type: unit
+    """
+    route_xy = np.array([[float(x), 0.0] for x in range(0, 20, 2)])
+    session = _route_session(route_xy, np.zeros(len(route_xy)))
+
+    session._lane_geometry(SimpleNamespace(x=10.0, y=0.0), 0.0)
+    index_after_forward = session._route_index
+    session._lane_geometry(SimpleNamespace(x=2.0, y=0.0), 0.0)
+
+    assert index_after_forward == 5
+    assert session._route_index == 5
+
+
+def test_read_state_goal_reports_destination_and_progress() -> None:
+    """The goal slot carries the destination and the covered route fraction.
+
+    Purpose: Validates the ground-truth goal slot appended to the world state
+
+    Given: A session with a 18 m straight route whose ego has advanced to x=9
+    When: _lane_geometry has projected the ego and _read_state_goal is read
+    Then: The slot is [goal_x, goal_y, 0.5]
+
+    Test type: unit
+    """
+    route_xy = np.array([[float(x), 0.0] for x in range(0, 20, 2)])
+    session = _route_session(route_xy, np.zeros(len(route_xy)))
+
+    session._lane_geometry(SimpleNamespace(x=9.0, y=0.0), 0.0)
+    goal_slot = session._read_state_goal()
+
+    assert goal_slot == pytest.approx(np.array([18.0, 0.0, 8.0 / 18.0]))
+
+
+def test_reached_goal_is_true_within_goal_radius() -> None:
+    """_reached_goal fires exactly when the ego is within goal_radius of the goal.
+
+    Purpose: Validates the success terminal condition
+
+    Given: A session with a route ending at (18, 0) and goal_radius 5
+    When: _reached_goal is evaluated with the ego at x=10 and then x=14
+    Then: It is False at 8 m from the goal and True at 4 m
+
+    Test type: unit
+    """
+    route_xy = np.array([[float(x), 0.0] for x in range(0, 20, 2)])
+    session = _route_session(route_xy, np.zeros(len(route_xy)), goal_radius=5.0)
+
+    session._vehicle = SimpleNamespace(get_location=lambda: SimpleNamespace(x=10.0, y=0.0))
+    far = session._reached_goal()
+    session._vehicle = SimpleNamespace(get_location=lambda: SimpleNamespace(x=14.0, y=0.0))
+    near = session._reached_goal()
+
+    assert far is False
+    assert near is True
+
+
+def test_store_route_builds_polyline_and_cumulative_length() -> None:
+    """_store_route extracts xy/yaw arrays and cumulative arc length from a route.
+
+    Purpose: Validates the conversion of a GlobalRoutePlanner route into the
+        session's numpy polyline representation
+
+    Given: A traced route of three waypoints spanning two 3-4-5 segments
+    When: _store_route stores it
+    Then: The xy/yaw arrays, cumulative lengths, and goal point match the waypoints
+
+    Test type: unit
+    """
+    session: Any = object.__new__(carla_pomdp._CarlaSession)
+    route = [
+        (_fake_waypoint(0.0, 0.0, 0.0), "LANEFOLLOW"),
+        (_fake_waypoint(3.0, 4.0, 45.0), "LANEFOLLOW"),
+        (_fake_waypoint(6.0, 8.0, 90.0), "LANEFOLLOW"),
+    ]
+
+    session._store_route(route)
+
+    assert session._route_xy == pytest.approx(np.array([[0.0, 0.0], [3.0, 4.0], [6.0, 8.0]]))
+    assert session._route_yaw == pytest.approx(np.radians([0.0, 45.0, 90.0]))
+    assert session._route_cumlen == pytest.approx(np.array([0.0, 5.0, 10.0]))
+    assert session._route_index == 0
+    assert session._goal_xy == pytest.approx(np.array([6.0, 8.0]))
+
+
+def test_sample_destination_route_skips_too_short_routes() -> None:
+    """Sampled destinations must yield a route of at least min_route_length.
+
+    Purpose: Validates the min-route-length filter of destination sampling
+
+    Given: A map with a near spawn point (10 m route) and a far one (200 m route)
+    When: _sample_destination_route is called with min_route_length 100
+    Then: The far spawn point's route is returned regardless of sampling order
+
+    Test type: unit
+    """
+    session: Any = object.__new__(carla_pomdp._CarlaSession)
+    session._min_route_length = 100.0
+    session._rng = np.random.default_rng(0)
+    near = SimpleNamespace(location=SimpleNamespace(x=10.0, y=0.0))
+    far = SimpleNamespace(location=SimpleNamespace(x=200.0, y=0.0))
+    session._map = SimpleNamespace(get_spawn_points=lambda: [near, far])
+
+    def _trace(start: Any, goal: Any) -> List[Tuple[SimpleNamespace, str]]:
+        del start
+        return [
+            (_fake_waypoint(0.0, 0.0), "LANEFOLLOW"),
+            (_fake_waypoint(goal.x, goal.y), "LANEFOLLOW"),
+        ]
+
+    session._route_planner = SimpleNamespace(trace_route=_trace)
+
+    route = session._sample_destination_route(SimpleNamespace(x=0.0, y=0.0))
+
+    assert route[-1][0].transform.location.x == pytest.approx(200.0)
+
+
+def test_sample_destination_route_raises_when_no_spawn_is_far_enough() -> None:
+    """Destination sampling fails loudly when no route can satisfy the minimum.
+
+    Purpose: Validates the descriptive error for unsatisfiable min_route_length
+
+    Given: A map whose only spawn point is 10 m of route away
+    When: _sample_destination_route is called with min_route_length 100
+    Then: RuntimeError is raised naming min_route_length
+
+    Test type: unit
+    """
+    session: Any = object.__new__(carla_pomdp._CarlaSession)
+    session._min_route_length = 100.0
+    session._rng = np.random.default_rng(0)
+    near = SimpleNamespace(location=SimpleNamespace(x=10.0, y=0.0))
+    session._map = SimpleNamespace(get_spawn_points=lambda: [near])
+    session._route_planner = SimpleNamespace(
+        trace_route=lambda start, goal: [
+            (_fake_waypoint(0.0, 0.0), "LANEFOLLOW"),
+            (_fake_waypoint(goal.x, goal.y), "LANEFOLLOW"),
+        ]
+    )
+
+    with pytest.raises(RuntimeError, match="min_route_length"):
+        session._sample_destination_route(SimpleNamespace(x=0.0, y=0.0))
+
+
+def test_get_route_planner_requires_carla_root(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Route planning without CARLA_ROOT fails with a descriptive error.
+
+    Purpose: Validates the guarded lazy import of GlobalRoutePlanner
+
+    Given: A session with no CARLA_ROOT in the environment
+    When: _get_route_planner is called
+    Then: RuntimeError is raised naming CARLA_ROOT
+
+    Test type: unit
+    """
+    session: Any = object.__new__(carla_pomdp._CarlaSession)
+    session._route_planner = None
+    monkeypatch.delenv("CARLA_ROOT", raising=False)
+
+    with pytest.raises(RuntimeError, match="CARLA_ROOT"):
+        session._get_route_planner()
+
+
+class _GoalReachingSession(FakeCarlaSession):
+    """Scripted session whose third tick reaches the destination (no collision)."""
+
+    def step(
+        self, throttle: float, steer: float, brake: float
+    ) -> Tuple[np.ndarray, Dict[str, np.ndarray], bool, bool]:
+        self.step_calls += 1
+        self.last_control = (throttle, steer, brake)
+        self._t += 1
+        state = np.array([float(self._t), 0.0, 0.0, float(self._t), 0.0, 0.0, 0.0])
+        return state, _make_observation(48.0 + self._t), False, self._t >= 3
+
+
+def test_reaching_the_goal_terminates_with_success_bonus(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Arrival terminates the episode and earns +success_reward, not -collision_penalty.
+
+    Purpose: Validates that the world distinguishes the success terminal from the
+        collision terminal in both the terminal flag and the reward
+
+    Given: A world whose session reports reached_goal=True on the third step
+    When: The world is stepped three times
+    Then: The first two rewards carry no bonus, the third adds success_reward, and
+        the world is terminal after the third step
+
+    Test type: unit
+    """
+    session = _GoalReachingSession()
+    monkeypatch.setattr(CarlaPOMDP, "_get_session", lambda self: session)
+    world = CarlaPOMDP(discount_factor=0.95, success_reward=100.0)
+    state = world.initial_state_dist().sample()[0]
+
+    rewards = []
+    for _ in range(3):
+        state, _, reward = world.sample_next_step(state, 0)
+        rewards.append(reward)
+
+    assert rewards[0] == pytest.approx(1.0 - 0.1)
+    assert rewards[1] == pytest.approx(2.0 - 0.1)
+    assert rewards[2] == pytest.approx(3.0 - 0.1 + 100.0)
+    assert world.is_terminal(state) is True
+
+
+def test_destination_options_thread_into_session(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The destination/goal constructor options reach the session build.
+
+    Purpose: Validates the new goal kwargs are stored publicly (config) and
+        forwarded to _CarlaSession
+
+    Given: A recording _CarlaSession stub and a CarlaPOMDP with destination,
+        goal_radius, and min_route_length set
+    When: The environment builds its session via _get_session
+    Then: _CarlaSession receives exactly those values
+
+    Test type: unit
+    """
+    captured: Dict[str, Any] = {}
+
+    def _recording_session(**kwargs: Any) -> str:
+        captured.update(kwargs)
+        return "session"
+
+    monkeypatch.setattr(carla_pomdp, "_CarlaSession", _recording_session)
+    env = CarlaPOMDP(
+        discount_factor=0.95,
+        destination=(120.0, -40.0),
+        goal_radius=3.0,
+        min_route_length=50.0,
+        success_reward=42.0,
+    )
+
+    assert env._get_session() == "session"
+    assert captured["destination"] == (120.0, -40.0)
+    assert captured["goal_radius"] == 3.0
+    assert captured["min_route_length"] == 50.0
+    assert env.success_reward == 42.0
+
+
+def test_config_id_changes_with_destination(fake_session: FakeCarlaSession) -> None:
+    """The destination is part of the environment configuration identity.
+
+    Purpose: Validates destination participates in config_id so cached results
+        from different goals never collide
+
+    Given: Two CarlaPOMDPs differing only in destination
+    When: Their config_id values are compared
+    Then: They differ
+
+    Test type: configuration
+    """
+    del fake_session
+    env_a = CarlaPOMDP(discount_factor=0.95, destination=(10.0, 0.0))
+    env_b = CarlaPOMDP(discount_factor=0.95, destination=(20.0, 0.0))
+
+    assert env_a.config_id != env_b.config_id
+
+
+def _goal_state(x: float, y: float, goal_x: float, goal_y: float, frac: float) -> np.ndarray:
+    """Build a full ego+agents+light+goal state for the goal-metric tests."""
+    offset = carla_pomdp.EGO_STATE_WIDTH + carla_pomdp.DEFAULT_MAX_TRACKED_AGENTS * (
+        carla_pomdp.AGENT_SLOT_WIDTH
+    )
+    state = np.zeros(offset + carla_pomdp.LIGHT_SLOT_WIDTH + carla_pomdp.GOAL_SLOT_WIDTH)
+    state[0], state[1] = x, y
+    goal_offset = offset + carla_pomdp.LIGHT_SLOT_WIDTH
+    state[goal_offset], state[goal_offset + 1], state[goal_offset + 2] = goal_x, goal_y, frac
+    return state
+
+
+def test_success_rate_and_route_completion_read_the_goal_slot() -> None:
+    """success_rate and route_completion come from the final state's goal slot.
+
+    Purpose: Validates the goal-slot-driven metrics
+
+    Given: One episode ending 2 m from its goal at 90% completion and one ending
+        50 m away at 40% completion, with goal_radius 5
+    When: compute_metrics is called
+    Then: success_rate is 0.5 and route_completion is 0.65
+
+    Test type: unit
+    """
+    env = CarlaPOMDP(discount_factor=0.95, goal_radius=5.0)
+    reached = _metrics_history(
+        [(_goal_state(0.0, 0.0, 18.0, 0.0, 0.0), _goal_state(16.0, 0.0, 18.0, 0.0, 0.9))],
+        reach_terminal=True,
+    )
+    missed = _metrics_history(
+        [(_goal_state(0.0, 0.0, 50.0, 0.0, 0.0), _goal_state(0.0, 0.0, 50.0, 0.0, 0.4))],
+        reach_terminal=False,
+    )
+
+    metrics = env.compute_metrics([reached, missed])
+
+    assert _metric_by_name(metrics, "success_rate").value == pytest.approx(0.5)
+    assert _metric_by_name(metrics, "route_completion").value == pytest.approx(0.65)
+
+
+def test_collision_rate_excludes_goal_reaching_terminals() -> None:
+    """A terminal episode that reached its goal is a success, not a collision.
+
+    Purpose: Validates collision_rate no longer counts every terminal episode now
+        that reaching the destination also terminates
+
+    Given: Two terminal episodes: one ending at its goal, one ending far from it
+    When: compute_metrics is called
+    Then: collision_rate is 0.5 and success_rate is 0.5
+
+    Test type: unit
+    """
+    env = CarlaPOMDP(discount_factor=0.95, goal_radius=5.0)
+    success = _metrics_history(
+        [(_goal_state(0.0, 0.0, 18.0, 0.0, 0.0), _goal_state(18.0, 0.0, 18.0, 0.0, 1.0))],
+        reach_terminal=True,
+    )
+    crash = _metrics_history(
+        [(_goal_state(0.0, 0.0, 50.0, 0.0, 0.0), _goal_state(5.0, 0.0, 50.0, 0.0, 0.1))],
+        reach_terminal=True,
+    )
+
+    metrics = env.compute_metrics([success, crash])
+
+    assert _metric_by_name(metrics, "collision_rate").value == pytest.approx(0.5)
+    assert _metric_by_name(metrics, "success_rate").value == pytest.approx(0.5)
+
+
+def test_plan_route_handles_destination_at_spawn() -> None:
+    """A spawn landing on the destination still yields a valid (trivial) route.
+
+    Purpose: Regression for reset crashing when a random spawn coincides with the
+        configured destination and the route planner returns a degenerate trace
+
+    Given: A session whose destination equals the ego spawn and whose route planner
+        returns a single-waypoint route
+    When: _plan_route runs
+    Then: A straight start->goal polyline is stored and the goal counts as reached
+
+    Test type: unit
+    """
+    session: Any = object.__new__(carla_pomdp._CarlaSession)
+    session._destination = (5.0, 5.0)
+    session._goal_radius = 5.0
+    session._carla = SimpleNamespace(Location=lambda x, y, z: SimpleNamespace(x=x, y=y, z=z))
+    spawn = SimpleNamespace(x=5.0, y=5.0, z=0.0)
+    session._vehicle = SimpleNamespace(
+        get_transform=lambda: SimpleNamespace(location=spawn),
+        get_location=lambda: spawn,
+    )
+    session._route_planner = SimpleNamespace(trace_route=lambda start, goal: [])
+
+    session._plan_route()
+
+    assert session._route_xy == pytest.approx(np.array([[5.0, 5.0], [5.0, 5.0]]))
+    assert session._route_cumlen == pytest.approx(np.array([0.0, 0.0]))
+    assert session._reached_goal() is True
+
+
+def test_route_geometry_ignores_later_pass_through_same_area() -> None:
+    """The bounded search window keeps the index on the current route pass.
+
+    Purpose: Regression for the nearest-waypoint index jumping to a later route
+        segment when a route revisits the same area (loop / repeated junction)
+
+    Given: An out-and-back route whose inbound leg passes nearer the ego than the
+        outbound leg it is currently on
+    When: _lane_geometry projects an ego early on the outbound leg
+    Then: The reference index stays on the outbound leg instead of snapping to the
+        geometrically closer inbound waypoint far ahead
+
+    Test type: unit
+    """
+    outbound = [[float(x), 0.5] for x in range(0, 42, 2)]
+    inbound = [[float(x), 0.0] for x in range(40, -2, -2)]
+    route_xy = np.array(outbound + inbound)
+    session = _route_session(route_xy, np.zeros(len(route_xy)))
+
+    session._lane_geometry(SimpleNamespace(x=2.0, y=0.1), 0.0)
+
+    assert session._route_index == 1  # outbound (2, 0.5), not inbound (2, 0.0)
