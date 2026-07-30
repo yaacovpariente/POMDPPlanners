@@ -90,6 +90,8 @@ Classes:
     CarlaPOMDP: Forward-only adapter exposing a CARLA session as a world Environment.
 """
 
+import os
+import sys
 from collections.abc import Hashable
 from enum import Enum
 from pathlib import Path
@@ -136,25 +138,30 @@ def _wrap_to_pi(angle: float) -> float:
 def driving_quality_reward(
     next_state: np.ndarray,
     steer: float,
-    terminated: bool,
+    collided: bool,
     desired_speed: float,
     out_lane_thresh: float,
     collision_penalty: float,
+    success: bool = False,
+    success_reward: float = 0.0,
 ) -> float:
     """Score a transition with a gym-carla-style driving-quality reward.
 
-    Rewards along-lane progress and penalises overspeed, drifting out of lane, harsh /
-    high-speed steering, each elapsed step, and a terminal collision. Shared by the
-    :class:`CarlaPOMDP` world and the planner-side factored model so the two score a
-    transition identically by construction.
+    Rewards along-route progress and penalises overspeed, drifting off the route, harsh /
+    high-speed steering, each elapsed step, and a terminal collision; reaching the
+    destination earns a terminal success bonus. Shared by the :class:`CarlaPOMDP` world
+    and the planner-side factored model so the two score a transition identically by
+    construction.
 
     Args:
         next_state: Resulting ego state ``[x, y, yaw(deg), vx, vy, lat, heading_err]``.
         steer: Steering command applied on the transition (from the action preset).
-        terminated: Whether the transition ended in a terminal collision.
+        collided: Whether the transition ended in a terminal collision.
         desired_speed: Target longitudinal speed (m/s); exceeding it is penalised.
-        out_lane_thresh: Lateral offset (m) beyond which the ego is treated as out of lane.
+        out_lane_thresh: Lateral offset (m) beyond which the ego is treated as off route.
         collision_penalty: Penalty scale applied on a terminal collision.
+        success: Whether the transition reached the destination. Defaults to False.
+        success_reward: Bonus applied on a successful arrival. Defaults to 0.0.
 
     Returns:
         The scalar reward for the transition.
@@ -167,12 +174,14 @@ def driving_quality_reward(
 
     r_fast = -1.0 if lspeed_lon > desired_speed else 0.0
     r_out = -1.0 if abs(lateral) > out_lane_thresh else 0.0
-    r_collision = -1.0 if terminated else 0.0
+    r_collision = -1.0 if collided else 0.0
+    r_success = 1.0 if success else 0.0
     r_steer = -(steer**2)
     r_lat = -abs(steer) * lspeed_lon**2
 
     return float(
         collision_penalty * r_collision
+        + success_reward * r_success
         + REWARD_SPEED_WEIGHT * lspeed_lon
         + REWARD_FAST_PENALTY * r_fast
         + REWARD_OUT_PENALTY * r_out
@@ -202,8 +211,27 @@ AGENT_SLOT_WIDTH = 5  # [present, rel_x, rel_y, rel_yaw, rel_speed]
 # of the ``TRAFFIC_LIGHT_*`` codes below, ``time_to_change`` in seconds). It carries the light
 # governing the ego (CARLA affiliates at most one) as ground truth for the evaluation metrics,
 # independent of whether the *observation* exposes the light. ``present == 0`` when no light
-# affects the ego. The full state width is ``EGO_STATE_WIDTH + K*AGENT_SLOT_WIDTH + LIGHT_SLOT_WIDTH``.
+# affects the ego. The full state width is
+# ``EGO_STATE_WIDTH + K*AGENT_SLOT_WIDTH + LIGHT_SLOT_WIDTH + GOAL_SLOT_WIDTH``.
 LIGHT_SLOT_WIDTH = 5  # [present, rel_x, rel_y, state_code, time_to_change]
+
+# The ground-truth state additionally ends with a goal slot ``[goal_x, goal_y,
+# route_progress_frac]`` (world coordinates; progress is the fraction of the planned
+# route's arc length already covered). Like the light slot it is world-side ground
+# truth for the evaluation metrics; the planner-model state does not carry it.
+GOAL_SLOT_WIDTH = 3  # [goal_x, goal_y, route_progress_frac]
+
+# Route/goal defaults. The route is traced once per reset by CARLA's
+# GlobalRoutePlanner at this waypoint sampling resolution (metres).
+_ROUTE_RESOLUTION = 2.0
+# Forward window (in waypoints, ~20 m at the 2 m resolution) searched when advancing
+# the nearest-route-waypoint index. Bounding the search keeps a route that revisits
+# the same area (loops, repeated junctions) from snapping the index far ahead; the
+# window is far wider than the ego can travel in one tick.
+_ROUTE_SEARCH_WINDOW = 10
+DEFAULT_GOAL_RADIUS = 5.0  # metres to destination that counts as arrival
+DEFAULT_MIN_ROUTE_LENGTH = 100.0  # minimum route length (m) for sampled destinations
+DEFAULT_SUCCESS_REWARD = 100.0  # terminal bonus on reaching the destination
 
 # state_code values carried in the traffic-light state slot.
 TRAFFIC_LIGHT_GREEN = 0.0
@@ -229,6 +257,8 @@ class CarlaPOMDPMetrics(Enum):
     """Metric names for the CARLA POMDP environment."""
 
     COLLISION_RATE = "collision_rate"
+    SUCCESS_RATE = "success_rate"
+    ROUTE_COMPLETION = "route_completion"
     AVERAGE_PROGRESS = "average_progress"
     AVERAGE_SPEED = "average_speed"
     RED_LIGHT_VIOLATION_RATE = "red_light_violation_rate"
@@ -345,10 +375,16 @@ class _CarlaSession:
         traffic_manager_port: int = DEFAULT_TRAFFIC_MANAGER_PORT,
         randomize_spawn: bool = True,
         observation_extractor: Optional[Callable[[Dict[str, np.ndarray]], Any]] = None,
+        destination: Optional[Tuple[float, float]] = None,
+        goal_radius: float = DEFAULT_GOAL_RADIUS,
+        min_route_length: float = DEFAULT_MIN_ROUTE_LENGTH,
     ) -> None:
         import carla  # pylint: disable=import-outside-toplevel,import-error
 
         self._carla = carla
+        self._destination = destination
+        self._goal_radius = goal_radius
+        self._min_route_length = min_route_length
         self._observation_extractor = observation_extractor
         self._sensor_config = sensor_config
         self._vehicle_filter = vehicle_filter
@@ -387,6 +423,10 @@ class _CarlaSession:
         self._latest_camera: Optional[np.ndarray] = None
         self._latest_lidar: Optional[np.ndarray] = None
         self._collided: bool = False
+        self._route_planner: Optional[Any] = None
+        self._route_index: int = 0
+        # Route polyline live state; filled by _plan_route on each reset.
+        self._route_xy = self._route_yaw = self._route_cumlen = self._goal_xy = None
         self._traffic_vehicles: List[Any] = []
         self._walkers: List[Any] = []
         self._walker_controllers: List[Any] = []
@@ -405,6 +445,7 @@ class _CarlaSession:
         self._frames = []
         self._randomize_weather()
         self._spawn_actors()
+        self._plan_route()
         self._spawn_traffic()
         self._collided = False
         self._world.tick()
@@ -427,13 +468,19 @@ class _CarlaSession:
 
     def step(
         self, throttle: float, steer: float, brake: float
-    ) -> Tuple[np.ndarray, Dict[str, np.ndarray], bool]:
-        """Apply a control, advance one fixed tick, and read the outcome."""
+    ) -> Tuple[np.ndarray, Dict[str, np.ndarray], bool, bool]:
+        """Apply a control, advance one fixed tick, and read the outcome.
+
+        Returns:
+            ``(state, observation, collided, reached_goal)`` — the two terminal
+            causes are reported separately so the reward can penalise a collision
+            and reward an arrival.
+        """
         control = self._carla.VehicleControl(throttle=throttle, steer=steer, brake=brake)
         self._vehicle.apply_control(control)
         self._world.tick()
         self._capture_frame()
-        return self._read_state(), self._read_observation(), self._collided
+        return self._read_state(), self._read_observation(), self._collided, self._reached_goal()
 
     def _apply_synchronous_settings(self, fixed_delta_seconds: float) -> None:
         settings = self._world.get_settings()
@@ -455,6 +502,98 @@ class _CarlaSession:
             self._obs_camera_sensor = self._attach_observation_camera(blueprint_library)
         if self._include_lidar:
             self._lidar_sensor = self._attach_lidar(blueprint_library)
+
+    # ── Route planning (destination/goal support) ────────────────────────
+    def _get_route_planner(self) -> Any:
+        # GlobalRoutePlanner ships with the CARLA install (PythonAPI/carla/agents),
+        # not with the pip wheel, so it is imported from $CARLA_ROOT lazily.
+        if self._route_planner is None:
+            carla_root = os.environ.get("CARLA_ROOT")
+            if not carla_root:
+                raise RuntimeError(
+                    "Route planning needs the CARLA_ROOT environment variable pointing at "
+                    "the CARLA installation; its PythonAPI/carla directory provides "
+                    "agents.navigation.global_route_planner."
+                )
+            api_path = str(Path(carla_root) / "PythonAPI" / "carla")
+            if api_path not in sys.path:
+                sys.path.insert(0, api_path)
+            from agents.navigation.global_route_planner import (  # pylint: disable=import-outside-toplevel,import-error
+                GlobalRoutePlanner,
+            )
+
+            self._route_planner = GlobalRoutePlanner(self._map, _ROUTE_RESOLUTION)
+        return self._route_planner
+
+    def _plan_route(self) -> None:
+        # Trace the episode route from the ego spawn to the configured destination,
+        # or to a sampled spawn point at least `_min_route_length` metres of route away.
+        start = self._vehicle.get_transform().location
+        if self._destination is None:
+            self._store_route(self._sample_destination_route(start))
+            return
+        goal = self._carla.Location(
+            x=float(self._destination[0]), y=float(self._destination[1]), z=start.z
+        )
+        route = self._get_route_planner().trace_route(start, goal)
+        if len(route) >= 2:
+            self._store_route(route)
+            return
+        # Degenerate trace: the spawn already sits at/beside the destination (possible
+        # under randomize_spawn). Use the straight start->goal segment so reset still
+        # yields a valid episode, one that terminates in immediate success.
+        xy = np.array([[start.x, start.y], [goal.x, goal.y]])
+        yaw = np.full(2, float(np.arctan2(goal.y - start.y, goal.x - start.x)))
+        self._store_polyline(xy, yaw)
+
+    def _sample_destination_route(self, start: Any) -> List[Any]:
+        spawn_points = self._map.get_spawn_points()
+        planner = self._get_route_planner()
+        for index in self._rng.permutation(len(spawn_points)):
+            candidate = spawn_points[int(index)].location
+            route = planner.trace_route(start, candidate)
+            if self._route_length(route) >= self._min_route_length:
+                return route
+        raise RuntimeError(
+            f"No spawn point yields a route of at least {self._min_route_length} m "
+            "from the ego spawn; lower min_route_length or pick another town."
+        )
+
+    @staticmethod
+    def _route_length(route: Sequence[Any]) -> float:
+        locations = [waypoint.transform.location for waypoint, _option in route]
+        return float(
+            sum(
+                np.hypot(second.x - first.x, second.y - first.y)
+                for first, second in zip(locations, locations[1:])
+            )
+        )
+
+    def _store_route(self, route: Sequence[Any]) -> None:
+        xy = np.array(
+            [
+                [waypoint.transform.location.x, waypoint.transform.location.y]
+                for waypoint, _option in route
+            ]
+        )
+        yaw = np.array([np.radians(waypoint.transform.rotation.yaw) for waypoint, _option in route])
+        self._store_polyline(xy, yaw)
+
+    def _store_polyline(self, xy: np.ndarray, yaw: np.ndarray) -> None:
+        # pylint: disable=attribute-defined-outside-init
+        self._route_xy = xy
+        self._route_yaw = yaw
+        segment_lengths = np.hypot(np.diff(xy[:, 0]), np.diff(xy[:, 1]))
+        self._route_cumlen = np.concatenate([[0.0], np.cumsum(segment_lengths)])
+        self._route_index = 0
+        self._goal_xy = xy[-1]
+
+    def _reached_goal(self) -> bool:
+        if self._goal_xy is None:
+            return False
+        location = self._vehicle.get_location()
+        distance = float(np.hypot(location.x - self._goal_xy[0], location.y - self._goal_xy[1]))
+        return distance <= self._goal_radius
 
     def _spawn_traffic(self) -> None:
         """Populate the world with autopilot vehicles and walking pedestrians."""
@@ -600,7 +739,27 @@ class _CarlaSession:
             ]
         )
         agent_rows = self._agent_rows()
-        return np.concatenate([ego, agent_rows.reshape(-1), self._read_state_traffic_light()])
+        return np.concatenate(
+            [
+                ego,
+                agent_rows.reshape(-1),
+                self._read_state_traffic_light(),
+                self._read_state_goal(),
+            ]
+        )
+
+    def _read_state_goal(self) -> np.ndarray:
+        """Ground-truth goal slot ``[goal_x, goal_y, route_progress_frac]``.
+
+        Records the episode destination and the fraction of the planned route's arc
+        length already covered, for the evaluation metrics. All zeros when the session
+        has no route (e.g. unit-test fixtures).
+        """
+        if self._goal_xy is None or self._route_cumlen is None:
+            return np.zeros(GOAL_SLOT_WIDTH)
+        total = float(self._route_cumlen[-1])
+        progress = float(self._route_cumlen[self._route_index]) / total if total > 0 else 1.0
+        return np.array([self._goal_xy[0], self._goal_xy[1], progress])
 
     def _read_state_traffic_light(self) -> np.ndarray:
         """Ground-truth light slot ``[present, rel_x, rel_y, state_code, time_to_change]``.
@@ -688,12 +847,16 @@ class _CarlaSession:
         return rows
 
     def _lane_geometry(self, location: Any, yaw_deg: float) -> Tuple[float, float]:
-        """Signed lateral offset (m) and heading error (rad) w.r.t. the driving lane.
+        """Signed lateral offset (m) and heading error (rad) w.r.t. the route.
 
-        Projects the ego onto the centre of the nearest driving lane via the CARLA
-        map, then returns how far it sits to the side of that lane centre and how
-        far its heading deviates from the lane direction (wrapped to ``[-pi, pi]``).
+        Projects the ego onto the nearest waypoint of the planned route, then returns
+        how far it sits to the side of the route line and how far its heading deviates
+        from the route direction (wrapped to ``[-pi, pi]``). When no route exists (a
+        session built without one, e.g. in unit tests) the reference falls back to the
+        centre of the nearest driving lane via the CARLA map.
         """
+        if self._route_xy is not None:
+            return self._route_geometry(location, yaw_deg)
         waypoint = self._map.get_waypoint(
             location, project_to_road=True, lane_type=self._carla.LaneType.Driving
         )
@@ -703,6 +866,22 @@ class _CarlaSession:
         delta_y = location.y - lane_transform.location.y
         lateral = float(-np.sin(lane_yaw) * delta_x + np.cos(lane_yaw) * delta_y)
         heading_err = float(_wrap_to_pi(np.radians(yaw_deg) - lane_yaw))
+        return lateral, heading_err
+
+    def _route_geometry(self, location: Any, yaw_deg: float) -> Tuple[float, float]:
+        # The nearest-waypoint index only ever advances, and only within a bounded
+        # forward window, so on self-crossing routes the projection can neither snap
+        # back to an earlier segment nor jump ahead to a later pass through the area.
+        assert self._route_xy is not None and self._route_yaw is not None
+        window = self._route_xy[self._route_index : self._route_index + _ROUTE_SEARCH_WINDOW]
+        distances = np.hypot(window[:, 0] - location.x, window[:, 1] - location.y)
+        self._route_index += int(np.argmin(distances))
+        reference_xy = self._route_xy[self._route_index]
+        reference_yaw = float(self._route_yaw[self._route_index])
+        delta_x = location.x - reference_xy[0]
+        delta_y = location.y - reference_xy[1]
+        lateral = float(-np.sin(reference_yaw) * delta_x + np.cos(reference_yaw) * delta_y)
+        heading_err = float(_wrap_to_pi(np.radians(yaw_deg) - reference_yaw))
         return lateral, heading_err
 
     def _read_observation(self) -> Dict[str, np.ndarray]:
@@ -852,6 +1031,10 @@ class CarlaPOMDP(Environment):
         collision_penalty: float = 100.0,
         desired_speed: float = 8.0,
         out_lane_thresh: float = 2.0,
+        destination: Optional[Tuple[float, float]] = None,
+        goal_radius: float = DEFAULT_GOAL_RADIUS,
+        min_route_length: float = DEFAULT_MIN_ROUTE_LENGTH,
+        success_reward: float = DEFAULT_SUCCESS_REWARD,
         num_vehicles: int = DEFAULT_NUM_VEHICLES,
         num_walkers: int = DEFAULT_NUM_WALKERS,
         max_tracked_agents: int = DEFAULT_MAX_TRACKED_AGENTS,
@@ -903,6 +1086,20 @@ class CarlaPOMDP(Environment):
                 overspeed penalty. Defaults to 8.0.
             out_lane_thresh: Lateral offset in metres beyond which the ego is treated
                 as out of lane and penalised. Defaults to 2.0.
+            destination: Optional goal ``(x, y)`` in world coordinates. A route from
+                the ego spawn to the destination is traced each reset and the ego
+                state's ``lat``/``heading_err`` are measured against it. The effective
+                goal is the traced route's final waypoint — the destination projected
+                onto the drivable road network — so an off-road coordinate resolves to
+                the nearest reachable road point. When None, a destination is sampled
+                each reset from the map's spawn points with a route length of at least
+                ``min_route_length`` (reproducible via ``seed``). Defaults to None.
+            goal_radius: Distance to the destination (m) at which the episode
+                terminates in success. Defaults to :data:`DEFAULT_GOAL_RADIUS`.
+            min_route_length: Minimum route length (m) required of sampled
+                destinations. Defaults to :data:`DEFAULT_MIN_ROUTE_LENGTH`.
+            success_reward: Terminal reward bonus on reaching the destination.
+                Defaults to :data:`DEFAULT_SUCCESS_REWARD`.
             num_vehicles: Number of autopilot traffic vehicles spawned into the
                 world each reset. Defaults to :data:`DEFAULT_NUM_VEHICLES`.
             num_walkers: Number of walking pedestrians spawned into the world each
@@ -961,6 +1158,12 @@ class CarlaPOMDP(Environment):
         self.collision_penalty = collision_penalty
         self.desired_speed = desired_speed
         self.out_lane_thresh = out_lane_thresh
+        self.destination = (
+            (float(destination[0]), float(destination[1])) if destination is not None else None
+        )
+        self.goal_radius = goal_radius
+        self.min_route_length = min_route_length
+        self.success_reward = success_reward
         self.num_vehicles = num_vehicles
         self.num_walkers = num_walkers
         self.max_tracked_agents = max_tracked_agents
@@ -1054,6 +1257,9 @@ class CarlaPOMDP(Environment):
                 traffic_manager_port=traffic_manager_port,
                 randomize_spawn=self.randomize_spawn,
                 observation_extractor=self.observation_extractor,
+                destination=self.destination,
+                goal_radius=self.goal_radius,
+                min_route_length=self.min_route_length,
             )
         return self._session
 
@@ -1078,20 +1284,25 @@ class CarlaPOMDP(Environment):
     def _states_equal(self, state_a: Any, state_b: Any) -> bool:
         return np.array_equal(np.asarray(state_a), np.asarray(state_b))
 
-    def _compute_reward(self, next_state: np.ndarray, action: Any, terminated: bool) -> float:
+    def _compute_reward(
+        self, next_state: np.ndarray, action: Any, collided: bool, success: bool
+    ) -> float:
         """Score a transition with a gym-carla-style driving-quality reward.
 
-        Rewards along-lane progress and penalises overspeed, drifting out of lane,
-        harsh / high-speed steering, each elapsed step, and a terminal collision.
+        Rewards along-route progress and penalises overspeed, drifting off route,
+        harsh / high-speed steering, each elapsed step, and a terminal collision;
+        reaching the destination earns the ``success_reward`` bonus.
         """
         _, steer, _ = self._to_control(action)
         return driving_quality_reward(
             next_state,
             steer,
-            terminated,
+            collided,
             self.desired_speed,
             self.out_lane_thresh,
             self.collision_penalty,
+            success=success,
+            success_reward=self.success_reward,
         )
 
     def _ensure_stepped(self, state: Any, action: Any, role: str) -> Dict[str, Any]:
@@ -1125,16 +1336,20 @@ class CarlaPOMDP(Environment):
 
         session = self._get_session()
         throttle, steer, brake = self._to_control(action)
-        next_state, observation, terminated = session.step(throttle, steer, brake)
+        next_state, observation, collided, reached_goal = session.step(throttle, steer, brake)
         next_state = np.asarray(next_state)
-        done = bool(terminated)
+        collided = bool(collided)
+        reached_goal = bool(reached_goal)
+        done = collided or reached_goal
         pending = {
             "state": np.asarray(state).copy(),
             "action": action,
             "next_state": next_state,
             "observation": observation,
-            "reward": self._compute_reward(next_state, action, done),
+            "reward": self._compute_reward(next_state, action, collided, reached_goal),
             "terminated": done,
+            "collided": collided,
+            "reached_goal": reached_goal,
         }
         self._pending = pending
         self._served_roles = {role}
@@ -1181,10 +1396,10 @@ class CarlaPOMDP(Environment):
 
         Returns:
             The metric name strings produced by :meth:`compute_metrics`:
-            ``collision_rate``, ``average_progress``, ``average_speed``,
-            ``red_light_violation_rate``, ``red_light_violation_count``,
-            ``traffic_light_malfunction_count``, ``near_miss_count`` and
-            ``min_vehicle_distance``.
+            ``collision_rate``, ``success_rate``, ``route_completion``,
+            ``average_progress``, ``average_speed``, ``red_light_violation_rate``,
+            ``red_light_violation_count``, ``traffic_light_malfunction_count``,
+            ``near_miss_count`` and ``min_vehicle_distance``.
         """
         return [metric.value for metric in CarlaPOMDPMetrics]
 
@@ -1198,8 +1413,12 @@ class CarlaPOMDP(Environment):
             A list of :class:`MetricValue` with 95% confidence bounds across
             episodes:
 
-            - ``collision_rate``: fraction of episodes that ended in a collision
-              (the environment's only terminal condition).
+            - ``collision_rate``: fraction of episodes that ended in a terminal state
+              without reaching the destination (i.e. in a collision).
+            - ``success_rate``: fraction of episodes whose final state is within
+              ``goal_radius`` of the episode destination.
+            - ``route_completion``: mean over episodes of the fraction of the planned
+              route's arc length covered by the end of the episode.
             - ``average_progress``: mean per-episode ground distance travelled by
               the ego, in metres.
             - ``average_speed``: mean ego speed over the driven trajectory, in m/s.
@@ -1218,7 +1437,13 @@ class CarlaPOMDP(Environment):
         """
         if not histories:
             return []
-        collisions = [1.0 if history.reach_terminal_state else 0.0 for history in histories]
+        outcomes = [self._episode_goal_outcome(h) for h in histories]
+        successes = [success for success, _completion in outcomes]
+        completions = [completion for _success, completion in outcomes]
+        collisions = [
+            1.0 if history.reach_terminal_state and success == 0.0 else 0.0
+            for history, (success, _completion) in zip(histories, outcomes)
+        ]
         path_lengths = [self._episode_path_length(h) for h in histories if h.history]
         mean_speeds = [self._episode_mean_speed(h) for h in histories if h.history]
         events = [self._episode_traffic_light_events(h) for h in histories if h.history]
@@ -1230,6 +1455,8 @@ class CarlaPOMDP(Environment):
         min_distances = [dist for _count, dist in near if np.isfinite(dist)]
         return [
             self._metric_from_samples(CarlaPOMDPMetrics.COLLISION_RATE.value, collisions),
+            self._metric_from_samples(CarlaPOMDPMetrics.SUCCESS_RATE.value, successes),
+            self._metric_from_samples(CarlaPOMDPMetrics.ROUTE_COMPLETION.value, completions),
             self._metric_from_samples(CarlaPOMDPMetrics.AVERAGE_PROGRESS.value, path_lengths),
             self._metric_from_samples(CarlaPOMDPMetrics.AVERAGE_SPEED.value, mean_speeds),
             self._metric_from_samples(CarlaPOMDPMetrics.RED_LIGHT_VIOLATION_RATE.value, red_rates),
@@ -1299,6 +1526,27 @@ class CarlaPOMDP(Environment):
                 functioning += 1
                 red_runs += 1 if code == TRAFFIC_LIGHT_RED else 0
         return red_runs, functioning, malfunction
+
+    def _episode_goal_outcome(self, history: History) -> Tuple[float, float]:
+        """Return ``(success, route_completion)`` for one episode.
+
+        Reads the goal slot of the final ``next_state``: success is 1.0 when the ego
+        ended within ``goal_radius`` of the episode destination, and route completion
+        is the fraction of the planned route's arc length covered. States lacking a
+        goal slot (non-CARLA fixtures) yield ``(0.0, 0.0)``.
+        """
+        goal_offset = (
+            EGO_STATE_WIDTH + self.max_tracked_agents * AGENT_SLOT_WIDTH + LIGHT_SLOT_WIDTH
+        )
+        if not history.history:
+            return 0.0, 0.0
+        final = np.asarray(history.history[-1].next_state, dtype=float)
+        if len(final) < goal_offset + GOAL_SLOT_WIDTH:
+            return 0.0, 0.0
+        goal_x, goal_y, completion = final[goal_offset : goal_offset + GOAL_SLOT_WIDTH]
+        distance = float(np.hypot(final[0] - goal_x, final[1] - goal_y))
+        success = 1.0 if distance <= self.goal_radius else 0.0
+        return success, float(completion)
 
     def _episode_path_length(self, history: History) -> float:
         total = 0.0
