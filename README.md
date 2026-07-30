@@ -6,6 +6,14 @@
 
 A comprehensive Python package for **POMDP (Partially Observable Markov Decision Process)** planning algorithms and environments. POMDPPlanners provides standardized simulation studies for research and reliable implementations of planning algorithms for industrial applications.
 
+<p align="center">
+  <img src="docs/images/carla_chase_camera.png" alt="CARLA autonomous driving environment rendered by CarlaPOMDP's chase camera" width="49%">
+  <img src="docs/images/isaac_lab_franka_reach.png" alt="Isaac Sim Franka reach task rendered by IsaacLabPOMDP's viewport camera" width="49%">
+</p>
+<p align="center">
+  <em>Rendered by the package itself: the <a href="POMDPPlanners/environments/carla_pomdp">CARLA</a> driving environment (left) and the <a href="POMDPPlanners/environments/isaac_lab_pomdp">Isaac Sim / IsaacLab</a> Franka reach environment (right). Realistic environments are integrated from the open-source simulators <a href="https://github.com/carla-simulator/carla">CARLA</a> and <a href="https://github.com/isaac-sim/IsaacLab">NVIDIA Isaac Lab</a> — credit to their authors.</em>
+</p>
+
 ## 🎯 Key Features
 
 - **Comprehensive Algorithm Library**: Implementations of state-of-the-art POMDP planning algorithms including POMCP, POMCPOW, POMCP-DPW, PFT-DPW, Sparse PFT, BetaZero, ConstrainedZero, and more
