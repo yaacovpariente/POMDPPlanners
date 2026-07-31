@@ -4,7 +4,7 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/release/python-3100/)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
-A comprehensive Python package for **POMDP (Partially Observable Markov Decision Process)** planning algorithms and environments. POMDPPlanners provides standardized simulation studies for research and reliable implementations of planning algorithms for industrial applications.
+POMDPPlanners is a set of reliable implementations of **POMDP (Partially Observable Markov Decision Process)** planning algorithms and environments in Python. It provides standardized simulation studies for research and production-quality planners for industrial applications — from classic benchmarks like Tiger and RockSample to photorealistic autonomous driving and robotic manipulation.
 
 <p align="center">
   <img src="docs/images/carla_chase_camera.png" alt="CARLA autonomous driving environment rendered by CarlaPOMDP's chase camera" width="49%">
@@ -14,36 +14,47 @@ A comprehensive Python package for **POMDP (Partially Observable Markov Decision
   <em>Rendered by the package itself: the <a href="POMDPPlanners/environments/carla_pomdp">CARLA</a> driving environment (left) and the <a href="POMDPPlanners/environments/isaac_lab_pomdp">Isaac Sim / IsaacLab</a> Franka reach environment (right). Realistic environments are integrated from the open-source simulators <a href="https://github.com/carla-simulator/carla">CARLA</a> and <a href="https://github.com/isaac-sim/IsaacLab">NVIDIA Isaac Lab</a> — credit to their authors.</em>
 </p>
 
-## 🎯 Key Features
+## Main Features
 
-- **Comprehensive Algorithm Library**: Implementations of state-of-the-art POMDP planning algorithms including POMCP, POMCPOW, POMCP-DPW, PFT-DPW, Sparse PFT, BetaZero, ConstrainedZero, and more
-- **Rich Environment Collection**: Classic and modern POMDP environments (Tiger, Light-Dark, RockSample, LaserTag, PacMan, CartPole, Push, Safety-Ant-Velocity, etc.)
-- **Flexible Belief Representations**: Particle filters, weighted beliefs, Gaussian beliefs, Gaussian mixture beliefs, and vectorized belief updaters
-- **Simulation Framework**: Complete experiment management with hyperparameter tuning, high-level evaluation workflows, and distributed computing support
-- **Visualization Tools**: Built-in plotting and visualization capabilities for analysis and debugging
-- **Production Ready**: Designed for both research experiments and industrial applications
+| **Features**                                          | **POMDPPlanners** |
+| ----------------------------------------------------- | ----------------- |
+| State-of-the-art online POMDP planners                | :heavy_check_mark: |
+| Classic benchmarks & realistic simulator environments | :heavy_check_mark: |
+| Easy to define custom environments                    | :heavy_check_mark: |
+| Rich belief representations                           | :heavy_check_mark: |
+| GPU-vectorized planning & belief updates              | :heavy_check_mark: |
+| Risk-sensitive (CVaR) & constrained planning          | :heavy_check_mark: |
+| Parallel experiment framework with persistent caching | :heavy_check_mark: |
+| Hyperparameter tuning (Optuna)                        | :heavy_check_mark: |
+| Progress tracking & Slack notifications               | :heavy_check_mark: |
+| Tutorial notebooks                                    | :heavy_check_mark: |
+| Documentation                                         | :heavy_check_mark: |
+| Comprehensive test suite & type hints                 | :heavy_check_mark: |
 
-## 🚀 Quick Start
+## Documentation
 
-### Installation
+Documentation is available online: https://yaacovpariente.github.io/POMDPPlanners/
+
+## Installation
+
+**Note:** POMDPPlanners requires Python 3.10+.
 
 ```bash
 # Clone the repository
 git clone https://github.com/yaacovpariente/POMDPPlanners.git
 cd POMDPPlanners
 
-# Create and activate virtual environment
+# Create and activate a virtual environment
 python -m venv .venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
-# Install package (standard)
+# Install the package
 pip install -e .
-
-# Install with development dependencies
-pip install -e ".[dev]"
 ```
 
-### Basic Usage
+## Example
+
+Plan with POMCP on the classic Tiger problem in just a few lines:
 
 ```python
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
@@ -60,10 +71,7 @@ actions, _ = planner.action(belief)
 print(f"Recommended action: {actions[0]}")
 ```
 
-See [Running Experiments](#-running-experiments) below for a parallel
-multi-policy evaluation example.
-
-## 📊 Running Experiments
+## Running Experiments
 
 The recommended entry point for end-to-end experiments is `LocalSimulationsAPI`,
 which runs parallel episodes, applies persistent caching, and returns aggregated
@@ -104,20 +112,14 @@ For hyperparameter search, `LocalSimulationsAPI.run_optimize_and_evaluate(...)`
 accepts `HyperParameterRunParams` with Optuna search ranges and forwards the
 best configuration to evaluation automatically.
 
-### Progress Tracking and Slack Notifications
-
-Long-running experiments emit lifecycle events (`run_started`,
-`episode_completed` heartbeat, `run_finished`, `run_failed`) to a local
-SQLite progress DB and, optionally, to Slack. Export `SLACK_WEBHOOK_URL`
-before constructing the API and notifications are picked up automatically;
-for per-instance control (e.g. routing two parallel simulations to
-different channels), pass a `NotificationConfig` directly. An external
-watcher CLI catches hard process death (SIGKILL / OOM / reboot) by
-monitoring heartbeat age. See
+Long-running experiments can report progress to Slack and a local progress
+database, including detection of crashed or stalled runs — set
+`SLACK_WEBHOOK_URL` in your environment and notifications are picked up
+automatically. See
 [`NotificationConfig`](POMDPPlanners/simulations/simulations_deployment/run_progress/config.py)
-for the full env-var list and watcher invocation.
+for details.
 
-### Tutorial Notebooks
+## Tutorial Notebooks
 
 Self-contained Jupyter notebooks with executable end-to-end examples live in
 [`docs/examples/`](docs/examples/):
@@ -130,80 +132,54 @@ Self-contained Jupyter notebooks with executable end-to-end examples live in
 | [`hyperparameter_tuning.ipynb`](docs/examples/hyperparameter_tuning.ipynb) | End-to-end Optuna search via `run_optimize_and_evaluate` |
 | [`advanced_optimization.ipynb`](docs/examples/advanced_optimization.ipynb) | Multi-config tuning, custom search spaces |
 | [`custom_environment.ipynb`](docs/examples/custom_environment.ipynb) | Implementing a new `Environment` subclass |
+| [`tree_analysis_debugging.ipynb`](docs/examples/tree_analysis_debugging.ipynb) | Inspecting and debugging search trees |
 
-## 🧪 Testing
+## Implemented Algorithms
 
-Run the comprehensive test suite:
+| **Algorithm** | **Description** |
+| ------------- | --------------- |
+| POMCP | Monte Carlo tree search with unweighted particle beliefs (Silver & Veness, 2010) |
+| POMCP-DPW | POMCP with double progressive widening for large action/observation spaces |
+| POMCPOW | Weighted-particle MCTS for continuous observation spaces (Sunberg & Kochenderfer, 2018) |
+| PFT-DPW | Particle filter tree with double progressive widening (Sunberg & Kochenderfer, 2018) |
+| Sparse PFT | Particle filter tree with sparse observation branching |
+| Sparse Sampling | Depth-limited sparse sampling of the belief MDP (Kearns et al., 2002) |
+| BetaZero | Neural-network-guided belief-state MCTS with learned policy and value |
+| ConstrainedZero | Safety-constrained variant of BetaZero |
+| Constrained POMCPOW / Constrained PFT-DPW | Cost-constrained online planning |
+| iCVaR POMCPOW / iCVaR PFT-DPW / iCVaR Sparse Sampling | Risk-averse planning with iterated CVaR objectives |
+| VOPP | Fully GPU-vectorized online POMDP planning (Hoerger et al., 2025) |
+| Discrete Action Sequences | Open-loop baseline planner |
 
-```bash
-# Activate virtual environment
-source .venv/bin/activate
+## Implemented Environments
 
-# Run all tests
-pytest
+| **Environment** | **Description** |
+| --------------- | --------------- |
+| Tiger | Classic information-gathering benchmark |
+| Light-Dark | Navigation under state-dependent observation noise (continuous & discrete variants) |
+| RockSample | Rover science mission with sensing trade-offs |
+| LaserTag | Pursuit with laser range-finder observations |
+| PacMan | Arcade-style pursuit-evasion with rendering |
+| CartPole / MountainCar | Partially observable versions of the Gym classics |
+| Push | Object manipulation under contact uncertainty |
+| Safety-Ant-Velocity | Safety-constrained quadruped locomotion |
+| CARLA | Photorealistic autonomous driving in the [CARLA](https://github.com/carla-simulator/carla) simulator |
+| Isaac Lab | Franka reach manipulation in [NVIDIA Isaac Lab](https://github.com/isaac-sim/IsaacLab) / Isaac Sim |
+| nuPlan | Autonomous driving planning on real-world driving logs |
+| Sanity | Minimal environment for quick sanity checks |
 
-# Run specific test categories
-pytest POMDPPlanners/tests/test_core/
-pytest POMDPPlanners/tests/test_environments/
-pytest POMDPPlanners/tests/test_planners/
+Custom environments are first-class: subclass `Environment`, implement the
+transition, observation, and reward models, and every planner and the whole
+experiment framework work with it out of the box. See
+[`custom_environment.ipynb`](docs/examples/custom_environment.ipynb).
 
-# Run with verbose output
-pytest -v
+## Belief Representations
 
-# Run specific test file
-pytest POMDPPlanners/tests/test_core/test_belief.py
-```
+Beliefs are pluggable and planner-independent: unweighted and weighted particle
+filters, batched particle beliefs, Gaussian and Gaussian-mixture beliefs, and
+GPU-vectorized particle belief updaters for large-scale simulation.
 
-## 🔧 Development
-
-### Code Quality
-
-```bash
-# Format code
-black .
-
-# Type checking
-python -m pyright POMDPPlanners/
-
-# Run linting
-pylint POMDPPlanners/
-flake8 .
-
-# Install pre-commit hooks
-pre-commit install
-```
-
-### Virtual Environment
-
-**Important**: Always activate the virtual environment before development:
-
-```bash
-source .venv/bin/activate  # Linux/Mac
-# .venv\Scripts\activate   # Windows
-```
-
-All commands should be run within this environment for consistent dependency management.
-
-## 📚 Documentation
-
-Comprehensive documentation is generated from docstrings using Sphinx:
-
-```bash
-# Build documentation
-cd docs/
-sphinx-build -b html . _build/html
-
-# Serve locally
-python -m http.server 8000 -d _build/html
-```
-
-Visit the documentation at: [Project Documentation](https://yaacovpariente.github.io/POMDPPlanners/)
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details.
-
-## 🎓 Citation
+## Citing the Project
 
 If you use POMDPPlanners in your research, please cite:
 
@@ -219,10 +195,11 @@ If you use POMDPPlanners in your research, please cite:
 }
 ```
 
-## 🛠️ Requirements
+## Contributing & Support
 
-- Python 3.10 or higher
-- Core dependencies managed via `pyproject.toml` (`pip install -e .`)
-- Development dependencies: `pip install -e ".[dev]"`
+Questions, bug reports, and feature requests are welcome on the
+[issue tracker](https://github.com/yaacovpariente/POMDPPlanners/issues).
 
----
+## License
+
+This project is licensed under the MIT License — see the [LICENSE.md](LICENSE.md) file for details.
