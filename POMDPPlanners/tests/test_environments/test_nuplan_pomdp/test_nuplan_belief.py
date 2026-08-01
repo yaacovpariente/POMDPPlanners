@@ -48,6 +48,39 @@ def test_reinvigorate_stamps_observed_agents_onto_particles() -> None:
     assert stamped[0, EGO_STATE_WIDTH + 1] == 8.0
 
 
+def test_stamped_agent_yaw_is_wrapped_to_pi() -> None:
+    """Pose jitter never pushes a stamped relative yaw outside [-pi, pi].
+
+    Purpose: Validates the stamped agent block keeps the wrapped-angle slot invariant, so the
+        observation density never compares a wrapped yaw against an unwrapped one.
+
+    Given: An observed agent whose relative yaw sits just below +pi and large pose jitter
+    When: reinvigorate stamps the observation onto the particles
+    Then: every particle's stamped relative yaw lies in [-pi, pi]
+
+    Test type: unit
+    """
+    np.random.seed(0)
+    width = EGO_STATE_WIDTH + _MAX_AGENTS * AGENT_SLOT_WIDTH
+    particles = [np.zeros(width) for _ in range(8)]
+    belief = PerceivedAgentsBelief(
+        particles=particles,
+        log_weights=np.log(np.ones(8) / 8),
+        max_tracked_agents=_MAX_AGENTS,
+        agent_pose_jitter=1.0,
+    )
+    base = WeightedParticleBelief(particles=particles, log_weights=belief.log_weights)
+    observation = {
+        "ego": np.zeros(EGO_STATE_WIDTH),
+        "agents": np.array([1.0, 8.0, 0.0, np.pi - 0.01, 5.0]),
+    }
+
+    stamped = np.asarray(belief.reinvigorate("noop", observation, None, base).particles)
+
+    yaws = stamped[:, EGO_STATE_WIDTH + 3]
+    assert np.all(yaws >= -np.pi) and np.all(yaws <= np.pi)
+
+
 def test_reinvigorate_preserves_trailing_light_slot() -> None:
     """Stamping leaves any trailing traffic-light slot untouched.
 
