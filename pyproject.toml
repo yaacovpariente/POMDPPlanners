@@ -83,6 +83,7 @@ docs = [
 Homepage = "https://github.com/yaacovpariente/POMDPPlanners"
 "Bug Reports" = "https://github.com/yaacovpariente/POMDPPlanners/issues"
 Documentation = "https://yaacovpariente.github.io/POMDPPlanners/"
+Changelog = "https://yaacovpariente.github.io/POMDPPlanners/misc/changelog.html"
 
 [tool.setuptools.packages.find]
 where = ["."]
