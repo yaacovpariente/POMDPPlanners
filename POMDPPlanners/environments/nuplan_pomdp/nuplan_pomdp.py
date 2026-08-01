@@ -108,8 +108,19 @@ REWARD_LAT_WEIGHT = 0.2  # penalty on |steer| * longitudinal_speed**2 (fast turn
 REWARD_STEP_COST = 0.1  # constant per-step time cost
 
 
-def _wrap_to_pi(angle: float) -> float:
-    """Wrap an angle in radians to the ``[-pi, pi]`` interval."""
+def wrap_to_pi(angle: float) -> float:
+    """Wrap an angle in radians to the ``[-pi, pi]`` interval.
+
+    Every angle in the nuPlan state/observation layout (ego ``yaw`` and ``heading_err``, each
+    agent slot's ``rel_yaw``) carries this invariant, so world, model and belief all route their
+    angle arithmetic through here.
+
+    Args:
+        angle: Angle in radians.
+
+    Returns:
+        The equivalent angle in ``[-pi, pi]``.
+    """
     return (angle + np.pi) % (2.0 * np.pi) - np.pi
 
 
@@ -206,6 +217,15 @@ class NuPlanPOMDPMetrics(Enum):
     MIN_VEHICLE_DISTANCE = "min_vehicle_distance"
 
 
+def _driven_steps(history: History) -> List[Any]:
+    """The steps of ``history`` that actually advanced the world.
+
+    An episode that ends in a collision is closed by the runner with a terminal
+    ``StepData`` carrying ``next_state=None``; metrics reading a transition must skip it.
+    """
+    return [step for step in history.history if step.next_state is not None]
+
+
 def relative_agent_row(
     ego_x: float,
     ego_y: float,
@@ -238,7 +258,7 @@ def relative_agent_row(
     sin_yaw = np.sin(ego_yaw_rad)
     rel_x = float(cos_yaw * delta_x + sin_yaw * delta_y)
     rel_y = float(-sin_yaw * delta_x + cos_yaw * delta_y)
-    rel_yaw = float(_wrap_to_pi(other_yaw_rad - ego_yaw_rad))
+    rel_yaw = float(wrap_to_pi(other_yaw_rad - ego_yaw_rad))
     return np.array([1.0, rel_x, rel_y, rel_yaw, float(other_speed)])
 
 
@@ -405,9 +425,17 @@ class _NuPlanSession:
         return Simulation(simulation_setup=setup)
 
     def _constant_control_trajectory(self, acceleration: float, steering_angle: float) -> Any:
-        """Roll the kinematic-bicycle model forward under a constant control command."""
+        """Roll the kinematic-bicycle model forward under a constant control command.
+
+        The action preset is ``(longitudinal acceleration, steering *angle*)``, while nuPlan's
+        motion model consumes a rear-axle acceleration vector and a tire steering *rate*. The
+        acceleration is commanded directly; the steering angle is converted into the rate that
+        reaches it within one integration step and then held (rate 0), so the rollout tracks the
+        constant angle the reward scores.
+        """
         # pylint: disable=import-outside-toplevel,import-error
         from nuplan.common.actor_state.dynamic_car_state import DynamicCarState
+        from nuplan.common.actor_state.state_representation import StateVector2D
         from nuplan.planning.simulation.trajectory.interpolated_trajectory import (
             InterpolatedTrajectory,
         )
@@ -417,16 +445,18 @@ class _NuPlanSession:
         states = [current]
         steps = max(1, int(round(self._simulation_horizon / self._fixed_delta_seconds)))
         for _ in range(steps):
+            steering_rate = (
+                steering_angle - float(states[-1].tire_steering_angle)
+            ) / self._fixed_delta_seconds
             command = DynamicCarState.build_from_rear_axle(
                 rear_axle_to_center_dist=states[-1].car_footprint.rear_axle_to_center_dist,
                 rear_axle_velocity_2d=states[-1].dynamic_car_state.rear_axle_velocity_2d,
-                rear_axle_acceleration_2d=states[-1].dynamic_car_state.rear_axle_acceleration_2d,
-                tire_steering_rate=steering_angle,
+                rear_axle_acceleration_2d=StateVector2D(acceleration, 0.0),
+                tire_steering_rate=steering_rate,
             )
             states.append(
                 self._motion_model.propagate_state(states[-1], command, self._fixed_delta_seconds)
             )
-        del acceleration
         return InterpolatedTrajectory(states)
 
     def _read_state(self) -> np.ndarray:
@@ -825,8 +855,7 @@ class NuPlanPOMDP(Environment):
         """
         agents_end = EGO_STATE_WIDTH + self.max_tracked_agents * AGENT_SLOT_WIDTH
         distances: List[float] = []
-        for step in history.history:
-            state = np.asarray(step.state, dtype=float)
+        for state in self._episode_states(history):
             if len(state) < agents_end:
                 continue
             rows = state[EGO_STATE_WIDTH:agents_end].reshape(
@@ -844,9 +873,23 @@ class NuPlanPOMDP(Environment):
         finite = [distance for distance in distances if np.isfinite(distance)]
         return events, (min(finite) if finite else float("inf"))
 
+    @staticmethod
+    def _episode_states(history: History) -> List[np.ndarray]:
+        """Every state the episode actually visited, including the one it ended in.
+
+        Acting states alone miss the final transition's endpoint — the very state a
+        collision or closest approach happens in — so the last driven ``next_state`` is
+        appended when the runner did not already close the episode with it.
+        """
+        states = [np.asarray(step.state, dtype=float) for step in history.history]
+        driven = _driven_steps(history)
+        if driven and driven[-1] is history.history[-1]:
+            states.append(np.asarray(driven[-1].next_state, dtype=float))
+        return states
+
     def _episode_path_length(self, history: History) -> float:
         total = 0.0
-        for step in history.history:
+        for step in _driven_steps(history):
             start = np.asarray(step.state)[_EGO_POSITION_SLICE]
             end = np.asarray(step.next_state)[_EGO_POSITION_SLICE]
             total += float(np.linalg.norm(end - start))
@@ -855,7 +898,7 @@ class NuPlanPOMDP(Environment):
     def _episode_mean_speed(self, history: History) -> float:
         speeds = [
             float(np.linalg.norm(np.asarray(step.next_state)[_EGO_VELOCITY_SLICE]))
-            for step in history.history
+            for step in _driven_steps(history)
         ]
         return float(np.mean(speeds)) if speeds else 0.0
 
