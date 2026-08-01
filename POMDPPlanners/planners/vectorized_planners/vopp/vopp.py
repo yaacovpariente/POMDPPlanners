@@ -44,6 +44,10 @@ VOPP assumes a fixed, finite *representative* action set indexed
 ``0 .. num_actions - 1``; the model's ``action_keys`` must return exactly that
 integer index so it can address a column of the dense ``preferences`` field.
 
+References:
+    Hoerger, M., Sudrajat, M., & Kurniawati, H. (2026). Vectorized Online POMDP
+    Planning. arXiv:2510.27191. https://arxiv.org/abs/2510.27191
+
 Example:
     Planning one step in Continuous Light-Dark::
 
