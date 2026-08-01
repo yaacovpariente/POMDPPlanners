@@ -387,6 +387,7 @@ Next Steps
    jupyter notebook docs/examples/planners_comparison.ipynb
    jupyter notebook docs/examples/hyperparameter_tuning.ipynb
    jupyter notebook docs/examples/advanced_optimization.ipynb
+   jupyter notebook docs/examples/nuplan_evaluation.ipynb
 
 **API Reference**
 
