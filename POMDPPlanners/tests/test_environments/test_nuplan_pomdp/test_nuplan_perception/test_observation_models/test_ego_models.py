@@ -3,6 +3,7 @@
 """Unit tests for the ego-channel observation model."""
 
 import numpy as np
+import pytest
 
 from POMDPPlanners.environments.nuplan_pomdp.nuplan_perception.observation_models.ego_models import (
     EgoObservationModel,
@@ -45,6 +46,24 @@ def test_log_probability_peaks_at_the_clean_value() -> None:
     displaced = clean.copy()
     displaced[0] = 1.0
     assert model.log_probability(clean, clean) > model.log_probability(clean, displaced)
+
+
+def test_ego_density_is_a_normalised_gaussian() -> None:
+    """The ego density carries its Gaussian normalising constant.
+
+    Purpose: Validates log_probability is a proper log-density, not an unnormalised score.
+
+    Given: An EgoObservationModel with ego_std 1.0 and an observation at the clean value
+    When: log_probability scores it
+    Then: the score equals -0.5 * EGO_STATE_WIDTH * log(2 pi)
+
+    Test type: unit
+    """
+    model = EgoObservationModel(ego_std=1.0)
+    clean = np.zeros(EGO_STATE_WIDTH)
+    expected = -0.5 * EGO_STATE_WIDTH * np.log(2.0 * np.pi)
+
+    assert model.log_probability(clean, clean) == pytest.approx(expected)
 
 
 def test_supports_density_flag_is_set() -> None:

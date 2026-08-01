@@ -63,5 +63,7 @@ class EgoObservationModel(NuPlanObservationModel):
         ego = np.asarray(channel_observation, dtype=float)[:EGO_STATE_WIDTH]
         diff = ego - truth
         return float(
-            -0.5 * np.sum((diff / self.ego_std) ** 2) - EGO_STATE_WIDTH * np.log(self.ego_std)
+            -0.5 * np.sum((diff / self.ego_std) ** 2)
+            - EGO_STATE_WIDTH * np.log(self.ego_std)
+            - 0.5 * EGO_STATE_WIDTH * np.log(2.0 * np.pi)
         )

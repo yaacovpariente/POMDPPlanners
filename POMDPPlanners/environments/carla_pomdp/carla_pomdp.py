@@ -1499,6 +1499,16 @@ class CarlaPOMDP(Environment):
         finite = [distance for distance in distances if np.isfinite(distance)]
         return events, (min(finite) if finite else float("inf"))
 
+    @staticmethod
+    def _driven_steps(history: History) -> List[Any]:
+        """The steps of ``history`` that actually advanced the world.
+
+        An episode that ends terminal (collision or destination reached) is closed by the
+        runner with a terminal ``StepData`` carrying ``next_state=None``; metrics reading a
+        transition must skip it.
+        """
+        return [step for step in history.history if step.next_state is not None]
+
     def _episode_traffic_light_events(self, history: History) -> Tuple[int, int, int]:
         """Count ``(red_runs, functioning_crossings, malfunction_crossings)`` for one episode.
 
@@ -1509,8 +1519,11 @@ class CarlaPOMDP(Environment):
         States lacking a light slot (e.g. non-CARLA test fixtures) yield no events.
         """
         offset = EGO_STATE_WIDTH + self.max_tracked_agents * AGENT_SLOT_WIDTH
-        states = [np.asarray(step.state, dtype=float) for step in history.history]
-        states.append(np.asarray(history.history[-1].next_state, dtype=float))
+        driven = self._driven_steps(history)
+        if not driven:
+            return 0, 0, 0
+        states = [np.asarray(step.state, dtype=float) for step in driven]
+        states.append(np.asarray(driven[-1].next_state, dtype=float))
         red_runs = functioning = malfunction = 0
         for prev, curr in zip(states, states[1:]):
             if len(prev) < offset + LIGHT_SLOT_WIDTH:
@@ -1538,9 +1551,10 @@ class CarlaPOMDP(Environment):
         goal_offset = (
             EGO_STATE_WIDTH + self.max_tracked_agents * AGENT_SLOT_WIDTH + LIGHT_SLOT_WIDTH
         )
-        if not history.history:
+        driven = self._driven_steps(history)
+        if not driven:
             return 0.0, 0.0
-        final = np.asarray(history.history[-1].next_state, dtype=float)
+        final = np.asarray(driven[-1].next_state, dtype=float)
         if len(final) < goal_offset + GOAL_SLOT_WIDTH:
             return 0.0, 0.0
         goal_x, goal_y, completion = final[goal_offset : goal_offset + GOAL_SLOT_WIDTH]
@@ -1550,7 +1564,7 @@ class CarlaPOMDP(Environment):
 
     def _episode_path_length(self, history: History) -> float:
         total = 0.0
-        for step in history.history:
+        for step in self._driven_steps(history):
             start = np.asarray(step.state)[_EGO_POSITION_SLICE]
             end = np.asarray(step.next_state)[_EGO_POSITION_SLICE]
             total += float(np.linalg.norm(end - start))
@@ -1559,7 +1573,7 @@ class CarlaPOMDP(Environment):
     def _episode_mean_speed(self, history: History) -> float:
         speeds = [
             float(np.linalg.norm(np.asarray(step.next_state)[_EGO_VELOCITY_SLICE]))
-            for step in history.history
+            for step in self._driven_steps(history)
         ]
         return float(np.mean(speeds)) if speeds else 0.0
 

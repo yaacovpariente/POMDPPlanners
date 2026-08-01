@@ -88,12 +88,14 @@ class FactoredAgentObservationModel(NuPlanObservationModel):
         return self.render(clean_channel, noisy=True)
 
     def render(self, clean_channel: Any, noisy: bool) -> np.ndarray:
-        """Gate the clean agent block per slot, optionally adding Gaussian pose noise.
+        """Gate the clean agent block per slot, optionally sampling the sensor noise.
 
         Args:
             clean_channel: The noise-free flat ``agents`` block.
-            noisy: When True, add pose Gaussian noise (the sampler path); when False, return the
-                gated but noise-free block.
+            noisy: When True, take the sampler path — a visible slot is detected with
+                probability ``detect_prob`` and its pose is corrupted by Gaussian noise, matching
+                what :meth:`log_probability` scores. When False, return the gated but noise-free
+                block (every visible slot detected).
 
         Returns:
             The perceived flat ``agents`` block.
@@ -103,7 +105,12 @@ class FactoredAgentObservationModel(NuPlanObservationModel):
             if rows[slot, 0] != 1.0 or not self._visible(rows, slot):
                 rows[slot] = 0.0
             elif noisy:
-                rows[slot, 1:] += np.random.normal(0.0, self.pose_std, size=AGENT_SLOT_WIDTH - 1)
+                if np.random.random() >= self.detect_prob:
+                    rows[slot] = 0.0  # a missed detection, at rate 1 - detect_prob
+                else:
+                    rows[slot, 1:] += np.random.normal(
+                        0.0, self.pose_std, size=AGENT_SLOT_WIDTH - 1
+                    )
         return rows.reshape(-1)
 
     def log_probability(self, clean_channel: Any, channel_observation: Any) -> float:
@@ -147,7 +154,12 @@ class FactoredAgentObservationModel(NuPlanObservationModel):
         if not obs_present:
             return float(np.log(max(1.0 - self.detect_prob, np.exp(_LOG_EPS))))  # a miss
         diff = obs_rows[slot, 1:] - rows[slot, 1:]
-        gauss = -0.5 * np.sum((diff / self.pose_std) ** 2) - (AGENT_SLOT_WIDTH - 1) * np.log(
-            self.pose_std
+        # Normalised Gaussian: the -d/2 log(2 pi) constant does not cancel between particles,
+        # since missed / invisible slots contribute no Gaussian term at all.
+        dims = AGENT_SLOT_WIDTH - 1
+        gauss = (
+            -0.5 * np.sum((diff / self.pose_std) ** 2)
+            - dims * np.log(self.pose_std)
+            - 0.5 * dims * np.log(2.0 * np.pi)
         )
         return float(np.log(self.detect_prob) + gauss)
