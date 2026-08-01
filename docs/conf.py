@@ -34,8 +34,15 @@ extensions = [
     "sphinx.ext.viewcode",
     "sphinx.ext.napoleon",  # For Google/NumPy style docstrings
     "sphinx.ext.intersphinx",
+    "sphinx.ext.extlinks",  # For the :gh: pull-request role used in the changelog
     "sphinx_autodoc_typehints",  # Better type hint formatting
 ]
+
+# Shorthand for pull-request references in docs/misc/changelog.rst:
+# ``:gh:`210``` renders as a link to pull request #210.
+extlinks = {
+    "gh": ("https://github.com/yaacovpariente/POMDPPlanners/pull/%s", "#%s"),
+}
 
 # Napoleon settings for Google-style docstrings
 napoleon_google_docstring = True
