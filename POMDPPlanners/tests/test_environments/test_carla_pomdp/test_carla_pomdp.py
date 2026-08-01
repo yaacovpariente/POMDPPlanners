@@ -1239,9 +1239,15 @@ def _ego_state(x: float, y: float, vx: float = 0.0, vy: float = 0.0) -> np.ndarr
 
 
 def _metrics_history(
-    transitions: List[Tuple[np.ndarray, np.ndarray]], reach_terminal: bool
+    transitions: List[Tuple[np.ndarray, np.ndarray]],
+    reach_terminal: bool,
+    append_terminal_marker: bool = False,
 ) -> History:
-    """Build a History from (state, next_state) ego transitions for metric tests."""
+    """Build a History from (state, next_state) ego transitions for metric tests.
+
+    With ``append_terminal_marker`` the runner's closing StepData is appended: the state the
+    episode stopped in, with ``action``/``next_state``/``observation``/``reward`` all None.
+    """
     belief: Belief = WeightedParticleBelief([np.zeros(1), np.zeros(1)], np.array([0.0, -1.0]))
     steps = [
         StepData(
@@ -1254,6 +1260,17 @@ def _metrics_history(
         )
         for state, next_state in transitions
     ]
+    if append_terminal_marker:
+        steps.append(
+            StepData(
+                state=transitions[-1][1],
+                action=None,
+                next_state=None,
+                observation=None,
+                reward=None,
+                belief=belief,
+            )
+        )
     return History(
         history=steps,
         discount_factor=0.95,
@@ -2069,6 +2086,34 @@ def test_collision_rate_excludes_goal_reaching_terminals() -> None:
 
     assert _metric_by_name(metrics, "collision_rate").value == pytest.approx(0.5)
     assert _metric_by_name(metrics, "success_rate").value == pytest.approx(0.5)
+
+
+def test_compute_metrics_handles_terminal_step_without_next_state() -> None:
+    """An episode closed by the runner's terminal marker is summarised, not crashed on.
+
+    Purpose: Validates every per-episode metric helper skips the terminal StepData the
+        episode runner appends, which carries ``next_state=None``
+
+    Given: One episode driving (0,0)->(3,0) at 2 m/s, closed by the terminal marker
+    When: compute_metrics is called
+    Then: The full metric set is returned, progress is 3 m, speed is 2 m/s, and the goal
+        slot of the last driven transition still drives success_rate
+
+    Test type: unit
+    """
+    env = CarlaPOMDP(discount_factor=0.95, goal_radius=5.0)
+    start = _goal_state(0.0, 0.0, 3.0, 0.0, 0.0)
+    end = _goal_state(3.0, 0.0, 3.0, 0.0, 1.0)
+    end[3] = 2.0  # ego velocity at the end of the driven step
+    history = _metrics_history([(start, end)], reach_terminal=True, append_terminal_marker=True)
+
+    metrics = env.compute_metrics([history])
+
+    assert {metric.name for metric in metrics} == set(env.get_metric_names())
+    assert _metric_by_name(metrics, "average_progress").value == pytest.approx(3.0)
+    assert _metric_by_name(metrics, "average_speed").value == pytest.approx(2.0)
+    assert _metric_by_name(metrics, "success_rate").value == pytest.approx(1.0)
+    assert _metric_by_name(metrics, "route_completion").value == pytest.approx(1.0)
 
 
 def test_plan_route_handles_destination_at_spawn() -> None:

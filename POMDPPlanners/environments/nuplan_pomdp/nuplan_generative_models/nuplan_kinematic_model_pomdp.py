@@ -30,6 +30,7 @@ from POMDPPlanners.environments.nuplan_pomdp.nuplan_pomdp import (
     DEFAULT_MAX_TRACKED_AGENTS,
     EGO_STATE_WIDTH,
     driving_quality_reward,
+    wrap_to_pi,
 )
 
 
@@ -208,11 +209,13 @@ class KinematicNuPlanModelPOMDP(FactoredNuPlanModelPOMDP):
 
         speed_next = max(0.0, speed + acceleration * self.dt - self.drag * speed * self.dt)
         yaw_rate = (speed_next / self.wheelbase) * np.tan(steering_angle)
-        yaw_next = yaw + yaw_rate * self.dt
+        # Angles stay wrapped to [-pi, pi], the state layout's invariant: an unwrapped yaw
+        # would straddle the branch cut in the observation density and any angle comparison.
+        yaw_next = wrap_to_pi(yaw + yaw_rate * self.dt)
 
         vx_next = speed_next * np.cos(yaw_next)
         vy_next = speed_next * np.sin(yaw_next)
-        heading_err_next = heading_err + yaw_rate * self.dt
+        heading_err_next = wrap_to_pi(heading_err + yaw_rate * self.dt)
         lateral_next = lateral + speed_next * np.sin(heading_err_next) * self.dt
         return np.array(
             [

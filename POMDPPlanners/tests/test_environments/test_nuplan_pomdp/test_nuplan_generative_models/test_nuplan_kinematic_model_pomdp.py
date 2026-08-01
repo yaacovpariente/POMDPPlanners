@@ -42,6 +42,30 @@ def _state_with_agent(rel_x: float, rel_y: float = 0.0, rel_speed: float = 0.0) 
     return state
 
 
+def test_propagated_angles_stay_wrapped_to_pi() -> None:
+    """Yaw and heading error stay inside [-pi, pi] after propagation.
+
+    Purpose: Validates the transition preserves the documented wrapped-angle state layout,
+        so densities and comparisons never straddle the branch cut.
+
+    Given: A state whose yaw and heading error sit just below +pi, moving forward
+    When: a right-steering action propagates them past pi
+    Then: both angles come back wrapped into [-pi, pi]
+
+    Test type: unit
+    """
+    model = _model()
+    state = _zero_state()
+    state[2] = np.pi - 0.01  # yaw
+    state[3] = 5.0  # vx, so the yaw rate is non-zero
+    state[6] = np.pi - 0.01  # heading error vs the route baseline
+
+    next_state = model.sample_next_state(state, 2)  # (0.0, 0.3) coast, steer right
+
+    assert -np.pi <= next_state[2] <= np.pi
+    assert -np.pi <= next_state[6] <= np.pi
+
+
 def test_acceleration_produces_forward_velocity() -> None:
     """The accelerate preset moves the ego forward.
 

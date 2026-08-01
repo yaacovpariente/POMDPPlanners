@@ -42,6 +42,7 @@ from POMDPPlanners.environments.nuplan_pomdp.nuplan_pomdp import (
     AGENT_SLOT_WIDTH,
     DEFAULT_MAX_TRACKED_AGENTS,
     EGO_STATE_WIDTH,
+    wrap_to_pi,
 )
 
 
@@ -147,4 +148,6 @@ class PerceivedAgentsBelief(WeightedParticleBeliefReinvigoration):
                 0.0, self.agent_pose_jitter, size=(count, AGENT_SLOT_WIDTH - 1)
             )
             stamped[present, 1:] += jitter
+            # rel_yaw keeps the layout's wrapped-angle invariant even after jitter.
+            stamped[present, 3] = [wrap_to_pi(float(yaw)) for yaw in stamped[present, 3]]
         return stamped.reshape(-1)
