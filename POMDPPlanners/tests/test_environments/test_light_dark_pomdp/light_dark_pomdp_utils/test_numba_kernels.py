@@ -22,18 +22,15 @@ from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.numba_ke
 def _ref_is_terminal(
     state: np.ndarray,
     goal_state: np.ndarray,
-    obstacles: np.ndarray,
     goal_state_radius: float,
-    obstacle_radius: float,
     is_obstacle_hit_terminal: bool,
 ) -> bool:
-    is_goal = bool(np.linalg.norm(state - goal_state) <= goal_state_radius)
+    # Draw-coupled v2 semantics: terminal iff at goal OR (flag on and the
+    # appended terminal slot at index 2 is set). No geometric obstacle gate.
+    is_goal = bool(np.linalg.norm(state[:2] - goal_state) <= goal_state_radius)
     if is_goal:
         return True
-    if not is_obstacle_hit_terminal:
-        return False
-    distances = np.linalg.norm(state.reshape(-1, 1) - obstacles, axis=0)
-    return bool(np.any(distances <= obstacle_radius))
+    return bool(is_obstacle_hit_terminal and state.shape[0] > 2 and state[2] > 0.5)
 
 
 def _ref_compute_reward_standard(
@@ -120,63 +117,62 @@ def default_goal() -> np.ndarray:
 @pytest.mark.parametrize(
     "state",
     [
-        np.array([0.0, 5.0]),
-        np.array([5.0, 5.0]),
-        np.array([9.9, 5.1]),
-        np.array([3.5, 7.2]),
-        np.array([-0.5, 5.0]),
+        np.array([0.0, 5.0, 0.0]),
+        np.array([10.0, 5.0, 0.0]),
+        np.array([9.9, 5.1, 0.0]),
+        np.array([3.5, 7.2, 1.0]),
+        np.array([-0.5, 5.0, 0.0]),
     ],
 )
-def test_is_terminal_kernel_matches_reference(state, default_goal, default_obstacles):
+def test_is_terminal_kernel_matches_reference(state, default_goal):
     """Validates is_terminal_kernel numerical equivalence to the NumPy reference.
 
-    Purpose: Ensure the Numba is_terminal kernel agrees with the pre-refactor
-        ContinuousLightDarkPOMDP.is_terminal logic on representative states.
+    Purpose: Ensure the Numba draw-coupled is_terminal kernel agrees with the
+        v2 reference (goal OR set terminal slot) on representative states.
 
-    Given: Various states inside/outside goal, obstacle, and grid regions.
+    Given: Various 3-D states inside/outside goal with live/set terminal slots.
     When: is_terminal_kernel and _ref_is_terminal are both evaluated.
     Then: They return the same boolean.
 
     Test type: unit
     """
     for is_term in (True, False):
-        got = is_terminal_kernel(state, default_goal, default_obstacles, 1.5, 1.5, is_term)
-        expected = _ref_is_terminal(state, default_goal, default_obstacles, 1.5, 1.5, is_term)
+        got = is_terminal_kernel(state, default_goal, 1.5, is_term)
+        expected = _ref_is_terminal(state, default_goal, 1.5, is_term)
         assert got == expected
 
 
-def test_is_terminal_kernel_obstacle_hit_flag_off(default_goal, default_obstacles):
-    """Validates that obstacle checks are skipped when is_obstacle_hit_terminal=False.
+def test_is_terminal_kernel_obstacle_hit_flag_off(default_goal):
+    """Validates the terminal slot is ignored when is_obstacle_hit_terminal=False.
 
-    Purpose: Ensure that with the obstacle-terminal flag disabled the kernel
-        returns False on an obstacle overlap, matching env behavior.
+    Purpose: Ensure that with the flag disabled the kernel never terminates on
+        the slot — only the goal region terminates.
 
-    Given: A state directly on an obstacle coordinate.
-    When: is_terminal_kernel is called with is_obstacle_hit_terminal=False.
-    Then: The result is False.
-
-    Test type: unit
-    """
-    # default_obstacles layout: row0=[x0,x1]=[3,5], row1=[y0,y1]=[7,5] → obstacles at (3,7),(5,5)
-    on_obstacle = np.array([3.0, 7.0])
-    assert not is_terminal_kernel(on_obstacle, default_goal, default_obstacles, 1.5, 1.5, False)
-    assert is_terminal_kernel(on_obstacle, default_goal, default_obstacles, 1.5, 1.5, True)
-
-
-def test_is_terminal_kernel_empty_obstacles():
-    """Validates is_terminal_kernel accepts an empty (2, 0) obstacles array.
-
-    Purpose: Edge case — no obstacles configured.
-
-    Given: An empty 2x0 obstacles array.
-    When: is_terminal_kernel is called on a non-goal state.
-    Then: Returns False (no goal, no obstacles).
+    Given: A non-goal state whose terminal slot is set.
+    When: is_terminal_kernel is called with the flag off vs on.
+    Then: Off returns False, on returns True.
 
     Test type: unit
     """
-    empty_obs = np.empty((2, 0))
-    state = np.array([5.0, 5.0])
-    assert not is_terminal_kernel(state, np.array([10.0, 5.0]), empty_obs, 1.5, 1.5, True)
+    terminal_slot_set = np.array([3.0, 7.0, 1.0])
+    assert not is_terminal_kernel(terminal_slot_set, default_goal, 1.5, False)
+    assert is_terminal_kernel(terminal_slot_set, default_goal, 1.5, True)
+
+
+def test_is_terminal_kernel_live_slot_not_terminal(default_goal):
+    """Validates a non-goal state with an unset terminal slot is not terminal.
+
+    Purpose: A robot standing in an obstacle region no longer terminates on
+        geometry alone (the v1 geometric gate is gone) — only a set slot does.
+
+    Given: A non-goal state at an obstacle coordinate with a live (0.0) slot.
+    When: is_terminal_kernel is called with the flag on.
+    Then: Returns False.
+
+    Test type: unit
+    """
+    on_obstacle_live = np.array([3.0, 7.0, 0.0])
+    assert not is_terminal_kernel(on_obstacle_live, default_goal, 1.5, True)
 
 
 # ---------------------------------------------------------------------------

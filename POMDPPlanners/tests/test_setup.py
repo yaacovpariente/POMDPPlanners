@@ -20,16 +20,16 @@ def test_package_installed():
 
     Purpose: Validates that POMDPPlanners package is properly installed and accessible with correct version
 
-    Given: POMDPPlanners package should be installed in the Python environment with version 0.4.0
+    Given: POMDPPlanners package should be installed in the Python environment with version 0.5.0
     When: Package is imported and version is checked
-    Then: Import succeeds without error and version matches expected 0.4.0
+    Then: Import succeeds without error and version matches expected 0.5.0
 
     Test type: unit
     """
     try:
-        assert POMDPPlanners.__version__ == "0.4.0"
+        assert POMDPPlanners.__version__ == "0.5.0"
     except ImportError as e:
-        raise AssertionError(f"Failed to import POMDPPlanners: {e}")
+        raise AssertionError(f"Failed to import POMDPPlanners: {e}") from e
 
 
 def test_required_packages():
@@ -88,4 +88,4 @@ def test_imports():
         try:
             importlib.import_module(module_name)
         except ImportError as e:
-            raise AssertionError(f"Failed to import {module_name}: {e}")
+            raise AssertionError(f"Failed to import {module_name}: {e}") from e

@@ -16,10 +16,11 @@ Classes:
     SpaceInfo: Data class containing space type information
 """
 
+# pylint: disable=too-many-lines  # foundational module; split tracked separately
+
 import importlib
 import inspect
 import logging
-import math
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
@@ -344,6 +345,34 @@ class Environment(ABC):  # pylint: disable=too-many-public-methods
     def __hash__(self) -> int:
         return hash(self.config_id)
 
+    @property
+    def reward_requires_next_state(self) -> bool:
+        """Whether :meth:`reward` must be given the realised ``next_state``.
+
+        Simulation and rollout drivers consult this hook to decide the order
+        in which they sample the transition and compute the reward:
+
+        - ``False`` (default): the reward is a pure function of
+          ``(state, action)``. Drivers compute ``reward(state, action)``
+          *before* sampling the transition, preserving the historical
+          RNG-draw interleaving so seeded trajectories stay bit-identical.
+        - ``True``: the reward depends on the realised post-transition
+          state (e.g. draw-coupled hazard termination). Drivers sample the
+          transition first, then call ``reward(state, action, next_state)``
+          with the realised next state so both consume the same draw.
+
+        Subclasses whose reward becomes next-state dependent (e.g. when a
+        draw-coupled ``is_*_hit_terminal`` flag is enabled) must override
+        this to return ``True`` only in that configuration; otherwise the
+        default keeps flag-off behaviour bit-identical to today.
+
+        Returns:
+            ``True`` if :meth:`reward` needs the realised next state,
+            ``False`` otherwise.
+        """
+        return False
+
+    @abstractmethod
     def reward(self, state: Any, action: Any, next_state: Any = None) -> float:
         """Calculate the immediate reward for a state-action(-next_state) tuple.
 
@@ -643,15 +672,43 @@ class Environment(ABC):  # pylint: disable=too-many-public-methods
 
         return next_state, next_observation, reward
 
-    def cache_visualization(self, history: "List[StepData]", cache_path: Path) -> None:
+    def encode_observation(self, observation: Any) -> Any:
+        """Encode a raw observation into the space the belief and planner use.
+
+        The base implementation is the identity: for environments whose raw and
+        working observations coincide (the classic single-environment case), the
+        observation is returned unchanged. A planner-side model whose working
+        observation is an encoding of a richer raw observation (e.g. an image
+        encoder the user supplies) overrides this to map the world's raw
+        observation into that encoded space.
+
+        This is the *only* method that consumes a raw observation; every other
+        observation method (:meth:`sample_observation`,
+        :meth:`observation_log_probability`, :meth:`hash_observation`,
+        :meth:`is_equal_observation`) operates in the encoded space.
+
+        Args:
+            observation: The raw observation emitted by the world.
+
+        Returns:
+            The observation in the encoded space the belief and planner use.
+        """
+        return observation
+
+    def cache_visualization(
+        self, history: "List[StepData]", output_dir: Path, episode_index: int
+    ) -> None:
         """Cache visualization data for an episode history.
 
         This method can be overridden by subclasses to provide environment-specific
-        visualization caching capabilities.
+        visualization caching capabilities. The environment owns the output file
+        name and extension: callers provide only the destination directory and the
+        episode index, and each environment writes whatever artifact(s) it chooses.
 
         Args:
             history: List of step data from an episode
-            cache_path: Path where visualization data should be cached
+            output_dir: Directory into which the visualization file(s) are written
+            episode_index: Zero-based index of the episode, used to name the file
         """
 
     def get_metric_names(self) -> List[str]:
@@ -672,9 +729,8 @@ class Environment(ABC):  # pylint: disable=too-many-public-methods
         """
         return []
 
-    def compute_metrics(
-        self, histories: "List[History]"
-    ) -> "List[MetricValue]":  # pylint: disable=unused-argument
+    # pylint: disable-next=unused-argument
+    def compute_metrics(self, histories: "List[History]") -> "List[MetricValue]":
         """Compute environment-specific metrics from episode histories.
 
         This method can be overridden by subclasses to provide custom

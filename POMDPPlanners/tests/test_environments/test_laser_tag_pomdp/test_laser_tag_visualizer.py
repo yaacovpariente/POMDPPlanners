@@ -8,8 +8,8 @@ This module tests the LaserTag POMDP visualization features, focusing on:
 """
 
 import random
+import tempfile
 from pathlib import Path
-from typing import cast
 
 import numpy as np
 import pytest
@@ -18,6 +18,9 @@ from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.policy import PolicyRunData
 from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.environments.laser_tag_pomdp import LaserTagPOMDP
+from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_visualizer import (
+    LaserTagVisualizer,
+)
 from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
     laser_tag_pinned_kwargs as _lt_pinned_kwargs,
 )
@@ -96,16 +99,10 @@ class TestLaserTagVisualization:
             policy_run_data=[PolicyRunData(info_variables=[])],
         )
 
-        cache_path = Path("test_laser_tag_visualization.gif")
-
         try:
-            # This should not raise an exception
-            env.cache_visualization(history.history, cache_path)
-
-            # Clean up if file was created
-            if cache_path.exists():
-                cache_path.unlink()
-
+            with tempfile.TemporaryDirectory() as temp_dir:
+                # This should not raise an exception
+                env.cache_visualization(history.history, Path(temp_dir), 0)
         except Exception as e:
             pytest.fail(f"cache_visualization raised an exception: {e}")
 
@@ -166,17 +163,28 @@ class TestLaserTagVisualization:
             policy_run_data=[PolicyRunData(info_variables=[])],
         )
 
+        # The environment owns the output file name; path-shape validation now
+        # lives in the visualizer it delegates to, so those cases target it directly.
+        visualizer = LaserTagVisualizer(
+            floor_shape=env.floor_shape,
+            walls=env.walls,
+            dangerous_areas=env.dangerous_areas,
+            dangerous_area_radius=env.dangerous_area_radius,
+        )
+
         # Test with non-Path cache_path
         with pytest.raises(TypeError, match="cache_path must be a Path object"):
-            env.cache_visualization(non_empty_history.history, cast(Path, "invalid_path"))
+            visualizer.create_visualization(
+                non_empty_history.history, "invalid_path"  # type: ignore[arg-type]
+            )
 
         # Test with non-gif extension
         with pytest.raises(ValueError, match="cache_path must end with .gif"):
-            env.cache_visualization(non_empty_history.history, Path("test.png"))
+            visualizer.create_visualization(non_empty_history.history, Path("test.png"))
 
-        # Test with empty history
+        # Test with empty history (validated through the environment hook)
         with pytest.raises(ValueError, match="Cannot visualize empty history"):
-            env.cache_visualization(dummy_history.history, Path("test.gif"))
+            env.cache_visualization(dummy_history.history, Path("test_dir"), 0)
 
 
 if __name__ == "__main__":

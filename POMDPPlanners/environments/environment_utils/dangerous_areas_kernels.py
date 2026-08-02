@@ -257,3 +257,93 @@ def decaying_prob_penalty_batch_kernel(
         if uniforms[s] < hit_prob:
             out[s] = penalty
     return out
+
+
+# Reward-variant codes shared with the native (C++) kernels. These mirror the
+# ``_REWARD_VARIANT_CODE_BY_TYPE`` mappings used across the environments so the
+# hazard hit-probability kernel below dispatches identically to the transition
+# and reward paths.
+CONSTANT_HAZARD_PENALTY_CODE = 0
+ZERO_MEAN_HAZARD_SHOCK_CODE = 1
+DISTANCE_DECAYED_HAZARD_PENALTY_CODE = 2
+
+
+@njit(cache=True)  # type: ignore[misc]
+def hazard_hit_probability_kernel(
+    point: np.ndarray,
+    centers: np.ndarray,
+    radius_sq: float,
+    hit_probability: float,
+    penalty_decay: float,
+    reward_variant_code: int,
+) -> float:
+    """Hazard hit-probability at ``point`` for draw-coupled termination.
+
+    Returns the probability that landing at ``point`` (without having
+    reached the goal) triggers an absorbing hazard hit. The draw-coupled
+    transition draws a single ``uniform ~ U[0, 1)`` and marks the next
+    state terminal iff ``uniform < hazard_hit_probability_kernel(...)``.
+    The returned probability is *exactly* the probability with which the
+    corresponding reward penalty fires today, so termination and penalty
+    stay perfectly coupled:
+
+    - ``CONSTANT_HAZARD_PENALTY_CODE`` (0): returns ``hit_probability`` iff
+      the point lies inside any of the ``D`` zones (squared-distance check
+      against ``radius_sq``), else ``0.0``. Matches
+      :func:`constant_prob_penalty_kernel`.
+    - ``DISTANCE_DECAYED_HAZARD_PENALTY_CODE`` (2): returns
+      ``exp(-min_dist / penalty_decay)`` for the closest zone centre, with
+      no radius cutoff. Matches :func:`decaying_prob_penalty_kernel`.
+    - ``ZERO_MEAN_HAZARD_SHOCK_CODE`` (1) or any other code: returns
+      ``0.0``. The shock model has no hit probability, so draw-coupled
+      termination does not apply; callers must reject that combination
+      before reaching this kernel.
+    """
+    x = point[0]
+    y = point[1]
+    n_centers = centers.shape[1]
+    if reward_variant_code == DISTANCE_DECAYED_HAZARD_PENALTY_CODE:
+        min_sq = np.inf
+        for i in range(n_centers):
+            dx = x - centers[0, i]
+            dy = y - centers[1, i]
+            d_sq = dx * dx + dy * dy
+            min_sq = min(min_sq, d_sq)
+        return np.exp(-(min_sq**0.5) / penalty_decay)
+    if reward_variant_code == CONSTANT_HAZARD_PENALTY_CODE:
+        for i in range(n_centers):
+            dx = x - centers[0, i]
+            dy = y - centers[1, i]
+            if dx * dx + dy * dy <= radius_sq:
+                return hit_probability
+        return 0.0
+    return 0.0
+
+
+@njit(cache=True)  # type: ignore[misc]
+def hazard_hit_probability_batch_kernel(
+    points: np.ndarray,
+    centers: np.ndarray,
+    radius_sq: float,
+    hit_probability: float,
+    penalty_decay: float,
+    reward_variant_code: int,
+) -> np.ndarray:
+    """Batched form of :func:`hazard_hit_probability_kernel`.
+
+    ``points`` is shape ``(N, 2)``; returns a length-``N`` array of hazard
+    hit-probabilities. Vectorized transition / reward paths use this to
+    decide draw-coupled termination for a batch of realised next states.
+    """
+    n_points = points.shape[0]
+    out = np.zeros(n_points, dtype=np.float64)
+    for s in range(n_points):
+        out[s] = hazard_hit_probability_kernel(
+            points[s],
+            centers,
+            radius_sq,
+            hit_probability,
+            penalty_decay,
+            reward_variant_code,
+        )
+    return out

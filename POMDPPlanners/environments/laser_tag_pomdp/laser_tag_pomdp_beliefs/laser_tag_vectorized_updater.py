@@ -24,12 +24,15 @@ Classes:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Tuple
+from typing import TYPE_CHECKING, Optional, Tuple
 
 import numpy as np
 
 from POMDPPlanners.core.belief.vectorized_particle_belief_updater import (
     VectorizedParticleBeliefUpdater,
+)
+from POMDPPlanners.environments.environment_utils.dangerous_areas_kernels import (
+    hazard_hit_probability_batch_kernel,
 )
 from POMDPPlanners.environments.laser_tag_pomdp import _native
 from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_utils import (
@@ -124,7 +127,12 @@ class LaserTagVectorizedUpdater(VectorizedParticleBeliefUpdater):
         measurement_noise: float,
         transition_error_prob: float,
         opponent_policy: OpponentPolicy = OpponentPolicy.EVADE,
-    ):
+        hazard_centers_xy: Optional[np.ndarray] = None,
+        hazard_radius_sq: float = 1.0,
+        hazard_penalty_decay: float = 1.0,
+        hazard_variant_code: int = 0,
+        is_dangerous_area_hit_terminal: bool = False,
+    ):  # pylint: disable=too-many-arguments
         """Initialize the vectorized updater.
 
         Args:
@@ -134,6 +142,13 @@ class LaserTagVectorizedUpdater(VectorizedParticleBeliefUpdater):
             measurement_noise: Standard deviation of laser noise.
             transition_error_prob: Probability of executing a random action.
             opponent_policy: Opponent transition behaviour (EVADE or PURSUE).
+            hazard_centers_xy: ``(2, D)`` dangerous-area centres (row/col),
+                consumed only for draw-coupled hazard termination.
+            hazard_radius_sq: Squared dangerous-area radius.
+            hazard_penalty_decay: Decay length for the decayed hazard variant.
+            hazard_variant_code: Shared-kernel hazard variant code.
+            is_dangerous_area_hit_terminal: When ``True`` belief transitions
+                terminate a particle (absorbing) on a draw-coupled hazard hit.
         """
         self.floor_shape = floor_shape
         self.valid_cell = valid_cell
@@ -141,6 +156,15 @@ class LaserTagVectorizedUpdater(VectorizedParticleBeliefUpdater):
         self.measurement_noise = measurement_noise
         self.transition_error_prob = transition_error_prob
         self.opponent_policy = opponent_policy
+        self._hazard_centers_xy = (
+            np.empty((2, 0), dtype=np.float64)
+            if hazard_centers_xy is None
+            else np.ascontiguousarray(np.asarray(hazard_centers_xy, dtype=np.float64))
+        )
+        self._hazard_radius_sq = float(hazard_radius_sq)
+        self._hazard_penalty_decay = float(hazard_penalty_decay)
+        self._hazard_variant_code = int(hazard_variant_code)
+        self._is_dangerous_area_hit_terminal = bool(is_dangerous_area_hit_terminal)
 
         # Precompute observation constants
         self._variance = measurement_noise**2
@@ -177,6 +201,13 @@ class LaserTagVectorizedUpdater(VectorizedParticleBeliefUpdater):
             measurement_noise=env.measurement_noise,
             transition_error_prob=env.transition_error_prob,
             opponent_policy=env.opponent_policy,
+            # pylint: disable=protected-access
+            hazard_centers_xy=env._hazard_centers_xy,
+            hazard_radius_sq=env._hazard_radius_sq,
+            hazard_penalty_decay=float(env.penalty_decay),
+            hazard_variant_code=env._hazard_variant_code,
+            is_dangerous_area_hit_terminal=env.is_dangerous_area_hit_terminal,
+            # pylint: enable=protected-access
         )
 
     # ------------------------------------------------------------------
@@ -187,7 +218,7 @@ class LaserTagVectorizedUpdater(VectorizedParticleBeliefUpdater):
         # particles: (N, 5) = [robot_row, robot_col, opp_row, opp_col, terminal]
         action_idx = int(action)
         particles_arr = np.ascontiguousarray(particles, dtype=np.float64)
-        return _native.belief_batch_transition_discrete(
+        next_particles = _native.belief_batch_transition_discrete(
             particles=particles_arr,
             action_idx=action_idx,
             transition_error_prob=float(self.transition_error_prob),
@@ -196,6 +227,29 @@ class LaserTagVectorizedUpdater(VectorizedParticleBeliefUpdater):
             cols=self._cols,
             opponent_policy_code=self.opponent_policy.native_code,
         )
+        if self._is_dangerous_area_hit_terminal:
+            self._apply_hazard_termination(next_particles)
+        return next_particles
+
+    def _apply_hazard_termination(self, next_particles: np.ndarray) -> None:
+        # Draw-coupled hazard termination for belief particles: a live particle
+        # landing in a dangerous area becomes terminal (absorbing) with the
+        # hazard hit probability. Mutates ``next_particles`` in place.
+        if self._hazard_centers_xy.shape[1] == 0 or next_particles.shape[0] == 0:
+            return
+        live = next_particles[:, 4] == 0.0
+        if not live.any():
+            return
+        probs = hazard_hit_probability_batch_kernel(
+            np.ascontiguousarray(next_particles[:, :2]),
+            self._hazard_centers_xy,
+            self._hazard_radius_sq,
+            1.0,
+            self._hazard_penalty_decay,
+            self._hazard_variant_code,
+        )
+        hit = live & (np.random.random(next_particles.shape[0]) < probs)
+        next_particles[hit, 4] = 1.0
 
     def batch_observation_log_likelihood(
         self,
@@ -225,5 +279,11 @@ class LaserTagVectorizedUpdater(VectorizedParticleBeliefUpdater):
             "measurement_noise": self.measurement_noise,
             "transition_error_prob": self.transition_error_prob,
             "opponent_policy": self.opponent_policy.value,
+            "is_dangerous_area_hit_terminal": self._is_dangerous_area_hit_terminal,
         }
+        if self._is_dangerous_area_hit_terminal:
+            config_dict["hazard_centers_xy"] = self._hazard_centers_xy.tolist()
+            config_dict["hazard_radius_sq"] = self._hazard_radius_sq
+            config_dict["hazard_penalty_decay"] = self._hazard_penalty_decay
+            config_dict["hazard_variant_code"] = self._hazard_variant_code
         return config_to_id(config_dict)

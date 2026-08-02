@@ -68,7 +68,7 @@ class ContinuousPushVectorizedUpdater(VectorizedParticleBeliefUpdater):
         50
     """
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments
         self,
         obs_dist: CovarianceParameterizedMultivariateNormal,
         state_transition_dist: CovarianceParameterizedMultivariateNormal,
@@ -79,6 +79,15 @@ class ContinuousPushVectorizedUpdater(VectorizedParticleBeliefUpdater):
         obstacles: np.ndarray,
         robot_radius: float,
         action_to_vector: Optional[Dict[str, np.ndarray]] = None,
+        dangerous_areas_arr: Optional[np.ndarray] = None,
+        obstacle_hit_probability: float = 1.0,
+        dangerous_area_radius: float = 0.5,
+        dangerous_area_penalty: float = 0.0,
+        dangerous_area_hit_probability: float = 1.0,
+        reward_variant_code: int = 0,
+        penalty_decay: float = 1.0,
+        is_obstacle_hit_terminal: bool = False,
+        is_dangerous_area_hit_terminal: bool = False,
     ):
         self.obs_dist = obs_dist
         self.state_transition_dist = state_transition_dist
@@ -89,6 +98,24 @@ class ContinuousPushVectorizedUpdater(VectorizedParticleBeliefUpdater):
         self.obstacles = obstacles
         self.robot_radius = float(robot_radius)
         self._action_to_vector = action_to_vector
+        # Hazard-terminal parameters (only consumed when a flag is enabled;
+        # the flag-off path builds the legacy 9-arg native kernel).
+        self._dangerous_areas_arr = (
+            np.empty((0, 2), dtype=np.float64)
+            if dangerous_areas_arr is None
+            else np.ascontiguousarray(dangerous_areas_arr, dtype=np.float64)
+        )
+        self._obstacle_hit_probability = float(obstacle_hit_probability)
+        self._dangerous_area_radius = float(dangerous_area_radius)
+        self._dangerous_area_penalty = float(dangerous_area_penalty)
+        self._dangerous_area_hit_probability = float(dangerous_area_hit_probability)
+        self._reward_variant_code = int(reward_variant_code)
+        self._penalty_decay = float(penalty_decay)
+        self._is_obstacle_hit_terminal = bool(is_obstacle_hit_terminal)
+        self._is_dangerous_area_hit_terminal = bool(is_dangerous_area_hit_terminal)
+        self._hazard_terminal_enabled = (
+            self._is_obstacle_hit_terminal or self._is_dangerous_area_hit_terminal
+        )
         # Cache the object-position marginal noise (scalar sigma) used by
         # the native observation model. The full obs_dist is retained for
         # back-compat access via the public attribute.
@@ -116,6 +143,7 @@ class ContinuousPushVectorizedUpdater(VectorizedParticleBeliefUpdater):
         )
         action_map = getattr(env, "action_to_vector", None) if has_discrete else None
 
+        variant_code, penalty_decay = env._reward_variant_native_params()
         return cls(
             obs_dist=obs_dist,
             state_transition_dist=env._state_transition_dist,
@@ -126,6 +154,15 @@ class ContinuousPushVectorizedUpdater(VectorizedParticleBeliefUpdater):
             obstacles=env.obstacles,
             robot_radius=env.robot_radius,
             action_to_vector=action_map,
+            dangerous_areas_arr=env._dangerous_areas_arr,
+            obstacle_hit_probability=env.obstacle_hit_probability,
+            dangerous_area_radius=env.dangerous_area_radius,
+            dangerous_area_penalty=env.dangerous_area_penalty,
+            dangerous_area_hit_probability=env.dangerous_area_hit_probability,
+            reward_variant_code=variant_code,
+            penalty_decay=penalty_decay,
+            is_obstacle_hit_terminal=env.is_obstacle_hit_terminal,
+            is_dangerous_area_hit_terminal=env.is_dangerous_area_hit_terminal,
         )
         # pylint: enable=protected-access
 
@@ -136,10 +173,22 @@ class ContinuousPushVectorizedUpdater(VectorizedParticleBeliefUpdater):
     def batch_transition(self, particles: np.ndarray, action: np.ndarray) -> np.ndarray:
         action_vec = self._resolve_action(action)
         # Delegate to the native C++ batch sampler so both this path and
-        # the per-particle ContinuousPushStateTransitionModel.sample()
-        # share the same C++ RNG. The ``state=particles[0]`` passed to the
-        # ctor is unused on the batch path; only the ctor signature
-        # requires it.
+        # the per-particle transition share the same C++ RNG. The
+        # ``state=particles[0]`` passed to the ctor is unused on the batch
+        # path; only the ctor signature requires it.
+        if not self._hazard_terminal_enabled:
+            transition = _native.ContinuousPushTransitionCpp(
+                state=particles[0],
+                action=action_vec,
+                grid_size=self.grid_size,
+                push_threshold=self.push_threshold,
+                friction_coefficient=self.friction_coefficient,
+                max_push=self.max_push,
+                robot_radius=self.robot_radius,
+                obstacles=self._obstacles_arr,
+                covariance=self._state_transition_cov,
+            )
+            return transition.batch_sample(particles)
         transition = _native.ContinuousPushTransitionCpp(
             state=particles[0],
             action=action_vec,
@@ -150,6 +199,15 @@ class ContinuousPushVectorizedUpdater(VectorizedParticleBeliefUpdater):
             robot_radius=self.robot_radius,
             obstacles=self._obstacles_arr,
             covariance=self._state_transition_cov,
+            dangerous_areas=self._dangerous_areas_arr,
+            obstacle_hit_probability=self._obstacle_hit_probability,
+            dangerous_area_radius=self._dangerous_area_radius,
+            dangerous_area_penalty=self._dangerous_area_penalty,
+            dangerous_area_hit_probability=self._dangerous_area_hit_probability,
+            reward_variant_code=self._reward_variant_code,
+            penalty_decay=self._penalty_decay,
+            is_obstacle_hit_terminal=self._is_obstacle_hit_terminal,
+            is_dangerous_area_hit_terminal=self._is_dangerous_area_hit_terminal,
         )
         return transition.batch_sample(particles)
 
@@ -184,7 +242,17 @@ class ContinuousPushVectorizedUpdater(VectorizedParticleBeliefUpdater):
             "max_push": self.max_push,
             "obstacles": self.obstacles.tolist(),
             "robot_radius": self.robot_radius,
+            "is_obstacle_hit_terminal": self._is_obstacle_hit_terminal,
+            "is_dangerous_area_hit_terminal": self._is_dangerous_area_hit_terminal,
         }
+        if self._hazard_terminal_enabled:
+            config_dict["dangerous_areas"] = self._dangerous_areas_arr.tolist()
+            config_dict["dangerous_area_radius"] = self._dangerous_area_radius
+            config_dict["dangerous_area_penalty"] = self._dangerous_area_penalty
+            config_dict["dangerous_area_hit_probability"] = self._dangerous_area_hit_probability
+            config_dict["obstacle_hit_probability"] = self._obstacle_hit_probability
+            config_dict["reward_variant_code"] = self._reward_variant_code
+            config_dict["penalty_decay"] = self._penalty_decay
         if self._action_to_vector is not None:
             config_dict["action_to_vector"] = {
                 k: v.tolist() for k, v in self._action_to_vector.items()
