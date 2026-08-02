@@ -882,7 +882,8 @@ def test_update_weights_skips_asarray_round_trip_on_native_path():
     # ndarray views. This is the load-bearing assertion -- if it fails, the
     # asarray + per-particle list rebuild is back.
     assert isinstance(next_particles, np.ndarray)
-    assert next_particles.shape == (8, 2)
+    state_dim = np.asarray(init_particles[0]).shape[0]
+    assert next_particles.shape == (8, state_dim)
 
     # The log-weights must match the manual formula applied to the very
     # next-particles we just got back -- no covert list-rebuild detour

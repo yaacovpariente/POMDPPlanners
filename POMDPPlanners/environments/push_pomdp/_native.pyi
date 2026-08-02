@@ -75,13 +75,21 @@ def cont_simulate_rollout(
     dangerous_area_hit_probability: float = 1.0,
     reward_variant_code: int = 0,
     penalty_decay: float = 1.0,
+    is_obstacle_hit_terminal: bool = False,
+    is_dangerous_area_hit_terminal: bool = False,
 ) -> float:
     """Native random rollout for ContinuousPushPOMDP.
 
-    Returns the discounted sum of immediate rewards from ``initial_state``.
-    ``action_indices`` must be a pre-drawn int32 array of shape
-    ``(steps_left,)``.  ``obstacles`` must have shape ``(M, 4)`` with
+    Returns the discounted sum of immediate rewards from ``initial_state``
+    (which may be 6-D or, for hazard-terminal envs, 7-D with a trailing
+    terminal slot).  ``action_indices`` must be a pre-drawn int32 array of
+    shape ``(steps_left,)``.  ``obstacles`` must have shape ``(M, 4)`` with
     rows ``(cx, cy, hx, hy)``.
+
+    When ``is_obstacle_hit_terminal`` / ``is_dangerous_area_hit_terminal``
+    is set, the step draws a hazard uniform after the position noise and
+    terminates (absorbing) on a hit; the reward is then deterministic
+    given the terminal slot.
 
     ``dangerous_areas`` must have shape ``(K, 2)`` (rows ``(cx, cy)``) or
     be empty. Per-step reward consults the REALISED post-action robot
@@ -95,7 +103,14 @@ def cont_simulate_rollout(
     ...
 
 class ContinuousPushTransitionCpp:
-    """Native 6-D transition sampler for Continuous Push POMDP."""
+    """Native transition sampler for Continuous Push POMDP.
+
+    Accepts 6-D states (legacy) or 7-D states with a trailing terminal slot
+    (hazard-terminal envs). When ``is_obstacle_hit_terminal`` /
+    ``is_dangerous_area_hit_terminal`` is set and the input is 7-D, the
+    sampler draws the hazard uniform(s) after the position noise and sets
+    the terminal slot; an already-terminal input is absorbing.
+    """
 
     state: NDArray[np.float64]
     action: NDArray[np.float64]
@@ -111,6 +126,15 @@ class ContinuousPushTransitionCpp:
         robot_radius: float,
         obstacles: NDArray[np.floating],
         covariance: NDArray[np.floating],
+        dangerous_areas: NDArray[np.floating] = ...,
+        obstacle_hit_probability: float = 1.0,
+        dangerous_area_radius: float = 0.5,
+        dangerous_area_penalty: float = 0.0,
+        dangerous_area_hit_probability: float = 1.0,
+        reward_variant_code: int = 0,
+        penalty_decay: float = 1.0,
+        is_obstacle_hit_terminal: bool = False,
+        is_dangerous_area_hit_terminal: bool = False,
     ) -> None: ...
     def sample(self, n_samples: int = 1) -> List[NDArray[np.float64]]: ...
     def sample_one(self, state: NDArray[np.floating]) -> NDArray[np.float64]: ...
@@ -233,12 +257,17 @@ def cont_push_reward_batch(
     dangerous_area_hit_probability: float,
     reward_variant_code: int,
     penalty_decay: float,
+    is_obstacle_hit_terminal: bool = False,
+    is_dangerous_area_hit_terminal: bool = False,
 ) -> NDArray[np.float64]:
     """Standalone variant-aware reward-batch kernel for ContinuousPushPOMDP.
 
     Mirrors :func:`push_reward_batch` but uses a circle-vs-AABB overlap on
     ``next_state[:2]`` with ``robot_radius`` for the obstacle penalty.
-    ``obstacles`` rows are ``(cx, cy, hx, hy)``.
+    ``obstacles`` rows are ``(cx, cy, hx, hy)``. ``next_states`` may be 6-D
+    or 7-D; when a hazard-terminal flag is set the corresponding penalty is
+    deterministic (applied iff the row's terminal slot is set and the robot
+    is in that hazard's zone), otherwise it uses the stochastic contract.
     """
     ...
 

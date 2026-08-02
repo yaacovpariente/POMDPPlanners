@@ -1643,13 +1643,17 @@ def test_simulator_caches_visualizations_with_continuous_light_dark_pomdp(
     cache_viz_sig = signature(environment.cache_visualization)
     param_names = list(cache_viz_sig.parameters.keys())
 
-    # The method should have 'history' and 'cache_path' parameters (plus 'self')
+    # The environment owns the output file name: the hook takes a destination
+    # directory and an episode index (plus 'history' and 'self').
     assert (
         "history" in param_names
     ), f"cache_visualization missing 'history' parameter. Found: {param_names}"
     assert (
-        "cache_path" in param_names
-    ), f"cache_visualization missing 'cache_path' parameter. Found: {param_names}"
+        "output_dir" in param_names
+    ), f"cache_visualization missing 'output_dir' parameter. Found: {param_names}"
+    assert (
+        "episode_index" in param_names
+    ), f"cache_visualization missing 'episode_index' parameter. Found: {param_names}"
 
     # 4. If integration was successful, verify GIF files
     if integration_successful:
@@ -1674,14 +1678,14 @@ def test_simulator_caches_visualizations_with_continuous_light_dark_pomdp(
 
     # 5. Verify that environment works with the simulator's expected interface
     # Test that environment can handle the exact data structure the simulator provides
-    test_cache_path = viz_dir / "integration_test.gif"
-
     # This is the key integration test - can the environment handle simulator's data?
     environment_compatible = False
     environment_error = ""  # Initialize to avoid unbound variable error
     try:
         # Test the exact interface the simulator uses (List[StepData])
-        environment.cache_visualization(history=test_history.history, cache_path=test_cache_path)
+        environment.cache_visualization(
+            history=test_history.history, output_dir=viz_dir, episode_index=0
+        )
         environment_compatible = True
     except Exception as e:
         environment_error = str(e)
