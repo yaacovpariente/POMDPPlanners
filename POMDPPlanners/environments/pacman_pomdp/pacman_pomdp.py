@@ -20,6 +20,7 @@ Classes:
     PacManPOMDP: The main POMDP environment implementation
 """
 
+import dataclasses
 from enum import Enum
 from pathlib import Path
 from collections.abc import Hashable
@@ -34,6 +35,11 @@ from POMDPPlanners.core.environment import (
     SpaceType,
 )
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
+from POMDPPlanners.core.simulation.step_info_metrics import (
+    EpisodeReduction,
+    StepInfoMetric,
+    order_and_fill_metrics,
+)
 from POMDPPlanners.environments.pacman_pomdp import _native  # pylint: disable=no-name-in-module
 from POMDPPlanners.environments.pacman_pomdp.pacman_pomdp_utils.pacman_reward_models import (
     BasePacManRewardModel,
@@ -45,6 +51,36 @@ from POMDPPlanners.utils.statistics_utils import confidence_interval
 
 _GHOST_COORDINATION_CODES = {"independent": 0, "coordinated": 1, "mixed": 2}
 _GHOST_STRATEGY_CODES = {"aggressive": 0, "patrol": 1, "ambush": 2}
+
+
+# Per-ghost distance channels are generated per ghost id, so they cannot be enum
+# members. The prefix is distinct from "ghost_collision" on purpose: the
+# malformed-episode neutralizer selects these channels by prefix.
+GHOST_DISTANCE_CHANNEL_PREFIX = "ghost_distance_"
+
+
+def ghost_distance_channel(ghost_id: int) -> str:
+    """Build the per-step channel name carrying the distance to one ghost.
+
+    Args:
+        ghost_id: Zero-based ghost index.
+
+    Returns:
+        The channel name, e.g. ``"ghost_distance_0"``.
+    """
+    return f"{GHOST_DISTANCE_CHANNEL_PREFIX}{ghost_id}"
+
+
+class PacManStepChannel(Enum):
+    """Per-step measurement channels reported by :meth:`PacManPOMDP.step_info`."""
+
+    RECORDED_STEP = "recorded_step"
+    WON = "won"
+    PELLETS_COLLECTED = "pellets_collected"
+    CLOSEST_GHOST_DISTANCE = "closest_ghost_distance"
+    GHOST_COLLISION = "ghost_collision"
+    IN_DANGEROUS_AREA = "in_dangerous_area"
+    DANGEROUS_ENCOUNTER = "dangerous_encounter"
 
 
 class PacManPOMDPMetrics(Enum):
@@ -1364,68 +1400,209 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
             ghost-collision and dangerous-area-step events; a step that is both
             counts twice.
         """
-        # Start with standard metrics
-        metric_names = [metric.value for metric in PacManPOMDPMetrics]
+        return [spec.name for spec in self.get_metric_specs()]
 
-        # Add dynamic per-ghost metrics for multi-ghost scenarios
-        if self.num_ghosts > 1:
-            for ghost_id in range(self.num_ghosts):
-                metric_names.append(f"avg_pacman_ghost_{ghost_id}_distance")
+    def step_info(self, state: Any, action: Any, next_state: Any) -> Dict[str, float]:
+        """Report win status, pellets, ghost proximity and hazard exposure.
 
-        return metric_names
+        Args:
+            state: The state the step was taken from, or the final state on the
+                terminal step.
+            action: Unused; every channel here is a property of the state.
+            next_state: Unused; each state is scored when it is recorded.
 
-    def compute_metrics(self, histories: List[History]) -> List[MetricValue]:
-        """Compute environment-specific metrics."""
-        if not histories:
-            return []
+        Returns:
+            The per-step channels. ``recorded_step`` is emitted even for a
+            malformed state, because the historical episode length counted every
+            recorded step regardless of state validity, while every other channel
+            is omitted for such a state, matching the historical ``continue``.
+        """
+        del action, next_state
+        # Emitted unconditionally: avg_episode_length is len(history.history),
+        # which never depended on the state being well formed.
+        info: Dict[str, float] = {PacManStepChannel.RECORDED_STEP.value: 1.0}
+        if not (isinstance(state, np.ndarray) and state.shape == (self._state_dim,)):
+            return info
 
-        # Collect metrics from all episodes
-        wins = []
-        pellets_collected = []
-        episode_lengths = []
-        pacman_ghost_distances = []
-        collision_encounters = []
-        dangerous_area_steps = []
-        all_dangerous_encounters = []
+        pacman_pos = self.get_pacman_pos(state)
+        ghost_positions = self.get_ghost_positions(state)
+        collision = float(self._is_collision(pacman_pos, ghost_positions))
+        in_dangerous_area = float(self._is_in_dangerous_area(pacman_pos))
+        info.update(
+            {
+                PacManStepChannel.WON.value: float(self._check_episode_win_status(state)),
+                PacManStepChannel.PELLETS_COLLECTED.value: float(
+                    self._count_pellets_collected(state)
+                ),
+                PacManStepChannel.GHOST_COLLISION.value: collision,
+                PacManStepChannel.IN_DANGEROUS_AREA.value: in_dangerous_area,
+                # Own channel: the aggregator cannot add two. A step that is both
+                # a collision and inside a dangerous area counts twice, as before.
+                PacManStepChannel.DANGEROUS_ENCOUNTER.value: collision + in_dangerous_area,
+            }
+        )
 
-        for history in histories:
-            episode_data = self._process_episode_metrics(history)
-            episode_lengths.append(episode_data["episode_length"])
-            wins.append(episode_data["won"])
-            pellets_collected.append(episode_data["pellets_collected"])
-            collision_encounters.append(episode_data["collisions"])
-            dangerous_area_steps.append(episode_data["dangerous_area_steps"])
-            all_dangerous_encounters.append(episode_data["all_dangerous_encounters"])
+        closest_distance = self._get_closest_ghost_distance(pacman_pos, ghost_positions)
+        if closest_distance is not None:
+            # Omitted rather than zeroed when there are no ghosts: the historical
+            # code appended no distance, so such a step never entered the mean.
+            info[PacManStepChannel.CLOSEST_GHOST_DISTANCE.value] = float(closest_distance)
 
-            if episode_data["avg_distance"] is not None:
-                pacman_ghost_distances.append(episode_data["avg_distance"])
+        for ghost_id, ghost_pos in enumerate(ghost_positions):
+            info[ghost_distance_channel(ghost_id)] = self._calculate_manhattan_distance(
+                pacman_pos, ghost_pos
+            )
+        return info
 
-        # Create standard metrics using helper
-        metrics = []
-        metric_definitions = [
-            (PacManPOMDPMetrics.WIN_RATE.value, wins),
-            (PacManPOMDPMetrics.AVG_PELLETS_COLLECTED.value, pellets_collected),
-            (PacManPOMDPMetrics.AVG_EPISODE_LENGTH.value, episode_lengths),
-            (PacManPOMDPMetrics.AVG_PACMAN_CLOSEST_GHOST_DISTANCE.value, pacman_ghost_distances),
-            (PacManPOMDPMetrics.AVG_COLLISION_ENCOUNTERS.value, collision_encounters),
-            (PacManPOMDPMetrics.AVG_DANGEROUS_AREA_STEPS.value, dangerous_area_steps),
-            (
-                PacManPOMDPMetrics.AVG_ALL_DANGEROUS_ENCOUNTERS.value,
-                all_dangerous_encounters,
+    def get_metric_specs(self) -> List[StepInfoMetric]:
+        """Declare the PacMan metrics derived from the per-step channels.
+
+        Returns:
+            The seven standard specs in enum order, followed by one per-ghost
+            distance spec per ghost when there is more than one ghost -- which
+            reproduces the historical name ordering exactly.
+        """
+        specs = [
+            StepInfoMetric(
+                name=PacManPOMDPMetrics.WIN_RATE.value,
+                channel=PacManStepChannel.WON.value,
+                per_episode=EpisodeReduction.LAST,
+                empty_episode_value=0.0,
+            ),
+            StepInfoMetric(
+                name=PacManPOMDPMetrics.AVG_PELLETS_COLLECTED.value,
+                channel=PacManStepChannel.PELLETS_COLLECTED.value,
+                per_episode=EpisodeReduction.LAST,
+                empty_episode_value=0.0,
+            ),
+            StepInfoMetric(
+                name=PacManPOMDPMetrics.AVG_EPISODE_LENGTH.value,
+                channel=PacManStepChannel.RECORDED_STEP.value,
+                per_episode=EpisodeReduction.SUM,
+                empty_episode_value=0.0,
+            ),
+            StepInfoMetric(
+                name=PacManPOMDPMetrics.AVG_PACMAN_CLOSEST_GHOST_DISTANCE.value,
+                channel=PacManStepChannel.CLOSEST_GHOST_DISTANCE.value,
+                per_episode=EpisodeReduction.MEAN,
+            ),
+            StepInfoMetric(
+                name=PacManPOMDPMetrics.AVG_COLLISION_ENCOUNTERS.value,
+                channel=PacManStepChannel.GHOST_COLLISION.value,
+                per_episode=EpisodeReduction.SUM,
+                empty_episode_value=0.0,
+            ),
+            StepInfoMetric(
+                name=PacManPOMDPMetrics.AVG_DANGEROUS_AREA_STEPS.value,
+                channel=PacManStepChannel.IN_DANGEROUS_AREA.value,
+                per_episode=EpisodeReduction.SUM,
+                empty_episode_value=0.0,
+            ),
+            StepInfoMetric(
+                name=PacManPOMDPMetrics.AVG_ALL_DANGEROUS_ENCOUNTERS.value,
+                channel=PacManStepChannel.DANGEROUS_ENCOUNTER.value,
+                per_episode=EpisodeReduction.SUM,
+                empty_episode_value=0.0,
             ),
         ]
-
-        for name, values in metric_definitions:
-            metric = self._create_metric_value(name, values)
-            if metric:
-                metrics.append(metric)
-
-        # Multi-ghost specific metrics
         if self.num_ghosts > 1:
-            per_ghost_metrics = self._compute_per_ghost_distance_metrics(histories)
-            metrics.extend(per_ghost_metrics)
+            specs.extend(
+                StepInfoMetric(
+                    name=f"avg_pacman_ghost_{ghost_id}_distance",
+                    channel=ghost_distance_channel(ghost_id),
+                    per_episode=EpisodeReduction.MEAN,
+                )
+                for ghost_id in range(self.num_ghosts)
+            )
+        return specs
 
-        return metrics
+    def compute_metrics(self, histories: List[History]) -> List[MetricValue]:
+        """Compute PacMan metrics, preserving the malformed-final-state rule.
+
+        Args:
+            histories: List of simulation histories.
+
+        Returns:
+            One MetricValue per declared metric name, in declaration order, or an
+            empty list when there are no histories.
+        """
+        if not histories:
+            return []
+        return order_and_fill_metrics(
+            self.get_metric_names(),
+            super().compute_metrics(self._neutralize_malformed_episodes(histories)),
+            optional=self._distance_metric_names(),
+        )
+
+    def _distance_metric_names(self) -> List[str]:
+        # Historically the distance metrics disappeared when nothing contributed
+        # to them, rather than being reported as zero: the closest-ghost mean was
+        # built from a list that stayed empty, and the per-ghost pass skipped
+        # episodes with no steps entirely. The other seven always appeared,
+        # backed by initialized zeros.
+        names = [PacManPOMDPMetrics.AVG_PACMAN_CLOSEST_GHOST_DISTANCE.value]
+        if self.num_ghosts > 1:
+            names.extend(
+                f"avg_pacman_ghost_{ghost_id}_distance" for ghost_id in range(self.num_ghosts)
+            )
+        return names
+
+    def _neutralize_malformed_episodes(self, histories: List[History]) -> List[History]:
+        # An episode whose *final* state is malformed has always reported zeros
+        # for the seven standard metrics -- the historical code discarded
+        # everything it had collected and returned its initialized defaults --
+        # while still counting the episode's length, and while leaving the
+        # per-ghost distances untouched, because those were computed by a
+        # separate pass that never consulted the final state.
+        #
+        # Zeroing must be explicit rather than by omission: an episode that
+        # reports no value for a channel is dropped from that metric's average,
+        # where this one contributed a 0.
+        neutralized: List[History] = []
+        for history in histories:
+            if not history.history or self._has_well_formed_final_state(history):
+                neutralized.append(history)
+                continue
+            steps = [
+                step._replace(info=self._neutralized_step_info(step.info))
+                for step in history.history
+            ]
+            # The per-ghost pass gave a non-empty episode with no well-formed
+            # state an average of 0.0 per ghost, rather than skipping it. Only
+            # a step-less episode was skipped, and those never reach here.
+            if self.num_ghosts > 1 and not any(
+                channel.startswith(GHOST_DISTANCE_CHANNEL_PREFIX)
+                for step in steps
+                for channel in (step.info or {})
+            ):
+                zeros = {
+                    ghost_distance_channel(ghost_id): 0.0 for ghost_id in range(self.num_ghosts)
+                }
+                steps[0] = steps[0]._replace(info={**(steps[0].info or {}), **zeros})
+            neutralized.append(dataclasses.replace(history, history=steps))
+        return neutralized
+
+    def _has_well_formed_final_state(self, history: History) -> bool:
+        final_state = history.history[-1].state
+        return isinstance(final_state, np.ndarray) and final_state.shape == (self._state_dim,)
+
+    @staticmethod
+    def _neutralized_step_info(step_info: Optional[Dict[str, float]]) -> Dict[str, float]:
+        zeroed = {
+            PacManStepChannel.RECORDED_STEP.value: 1.0,
+            PacManStepChannel.WON.value: 0.0,
+            PacManStepChannel.PELLETS_COLLECTED.value: 0.0,
+            PacManStepChannel.GHOST_COLLISION.value: 0.0,
+            PacManStepChannel.IN_DANGEROUS_AREA.value: 0.0,
+            PacManStepChannel.DANGEROUS_ENCOUNTER.value: 0.0,
+        }
+        # The closest-ghost distance is dropped rather than zeroed, matching the
+        # historical ``avg_distance = None`` that excluded the episode from that
+        # one mean. The per-ghost channels are carried through untouched.
+        for channel, value in (step_info or {}).items():
+            if channel.startswith(GHOST_DISTANCE_CHANNEL_PREFIX):
+                zeroed[channel] = value
+        return zeroed
 
     def visualize_path(self, path: List[np.ndarray], actions: List[int], cache_path: Path):
         """Visualize PacMan path through the maze using sprite-based rendering.

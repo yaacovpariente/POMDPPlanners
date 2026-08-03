@@ -18,6 +18,7 @@ import scipy.stats
 
 from POMDPPlanners.environments.mountain_car_pomdp import MountainCarPOMDP
 from POMDPPlanners.tests.test_utils.env_pinned_kwargs import mountain_car_pinned_kwargs
+from POMDPPlanners.tests.test_utils.golden_metric_snapshot import attach_step_info
 
 # Set seeds for reproducible tests
 np.random.seed(42)
@@ -1131,7 +1132,7 @@ def test_compute_metrics_goal_reaching():
     )
 
     # Compute metrics
-    metrics = pomdp.compute_metrics([history1, history2, history3])
+    metrics = pomdp.compute_metrics(attach_step_info(pomdp, [history1, history2, history3]))
 
     # Convert metrics to dictionary for easier access
     metrics_dict = {metric.name: metric for metric in metrics}
@@ -1273,7 +1274,7 @@ def test_compute_metrics_values_within_confidence_intervals():
             )
         )
 
-    metrics = env.compute_metrics(histories)
+    metrics = env.compute_metrics(attach_step_info(env, histories))
     verify_metrics_within_confidence_intervals(metrics)
     verify_metric_sanity(metrics, histories, env)
     verify_history_returns_bounded(histories, env)

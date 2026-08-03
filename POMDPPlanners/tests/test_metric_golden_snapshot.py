@@ -19,10 +19,14 @@ import pytest
 from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.tests.metric_golden_values import (
     GOLDEN_METRIC_NAMES,
+    GOLDEN_METRIC_ORDER,
     GOLDEN_METRIC_VALUES,
+    GOLDEN_METRIC_VALUES_WITH_TERMINAL,
 )
 from POMDPPlanners.tests.test_utils.golden_metric_snapshot import (
+    append_terminal_step,
     build_registry,
+    compute_metric_order,
     compute_metric_snapshot,
     load_snapshot_histories,
 )
@@ -69,6 +73,64 @@ class TestMetricGoldenSnapshot:
             ), f"{slug}.{name} changed: {expected_value} -> {actual[name]}"
 
     @pytest.mark.parametrize("slug", _ENV_SLUGS)
+    def test_metric_values_match_frozen_baseline_with_terminal_step(
+        self, slug: str, frozen_histories: Dict[str, List[History]]
+    ) -> None:
+        """Test that metric values are unchanged on the terminated-episode shape.
+
+        Purpose: Validates that the final state of a terminated episode is still
+            counted exactly as before, which the raw fixture cannot show because
+            it carries no terminal bookkeeping step
+
+        Given: The frozen histories extended with a terminal bookkeeping step,
+            and the pre-change golden values for that shape
+        When: compute_metrics() is run for the environment against them
+        Then: Every metric name is present and every value matches the baseline
+
+        Test type: unit
+        """
+        environment = build_registry()[slug]()
+        actual = compute_metric_snapshot(environment, append_terminal_step(frozen_histories[slug]))
+        expected = GOLDEN_METRIC_VALUES_WITH_TERMINAL[slug]
+
+        assert set(actual) == set(expected), (
+            f"{slug}: produced metric names drifted from the terminal-shape baseline. "
+            f"Added={sorted(set(actual) - set(expected))}, "
+            f"removed={sorted(set(expected) - set(actual))}"
+        )
+        for name, expected_value in expected.items():
+            assert math.isclose(
+                actual[name], expected_value, rel_tol=1e-9, abs_tol=1e-12
+            ), f"{slug}.{name} changed on the terminal shape: {expected_value} -> {actual[name]}"
+
+    @pytest.mark.parametrize("slug", _ENV_SLUGS)
+    def test_metric_order_matches_frozen_baseline(
+        self, slug: str, frozen_histories: Dict[str, List[History]]
+    ) -> None:
+        """Test that produced and declared metric orders are unchanged.
+
+        Purpose: Validates that no environment reordered its metrics. Both other
+            value/name assertions are order-blind -- one compares a dict, the
+            other sorts -- so a reordering would otherwise pass unnoticed while
+            silently changing positional consumers such as tuning objectives
+
+        Given: An environment from the registry and its frozen order baseline
+        When: compute_metrics() and get_metric_names() are called
+        Then: Both emit exactly the baseline names in exactly the baseline order
+
+        Test type: unit
+        """
+        environment = build_registry()[slug]()
+        expected = GOLDEN_METRIC_ORDER[slug]
+
+        assert (
+            compute_metric_order(environment, frozen_histories[slug]) == expected
+        ), f"{slug}: compute_metrics() changed the order it emits metrics in."
+        assert (
+            list(environment.get_metric_names()) == expected
+        ), f"{slug}: get_metric_names() changed the order it declares metrics in."
+
+    @pytest.mark.parametrize("slug", _ENV_SLUGS)
     def test_metric_names_match_frozen_baseline(self, slug: str) -> None:
         """Test that each environment's declared metric names are unchanged.
 
@@ -99,7 +161,13 @@ class TestMetricGoldenSnapshot:
 
         Test type: unit
         """
-        assert set(build_registry()) == set(GOLDEN_METRIC_VALUES) == set(GOLDEN_METRIC_NAMES)
+        assert (
+            set(build_registry())
+            == set(GOLDEN_METRIC_VALUES)
+            == set(GOLDEN_METRIC_VALUES_WITH_TERMINAL)
+            == set(GOLDEN_METRIC_NAMES)
+            == set(GOLDEN_METRIC_ORDER)
+        )
 
     def test_frozen_history_fixture_is_well_formed(
         self, frozen_histories: Dict[str, List[History]]

@@ -396,10 +396,22 @@ class Environment(ABC):  # pylint: disable=too-many-public-methods
         arguments are typically used only to assert the request matches the
         transition actually taken.
 
+        This is also called once more per *terminated* episode, for the terminal
+        bookkeeping step, with ``action`` and ``next_state`` both ``None`` — that
+        step records the final state, which no transition ever produces a
+        successor for. Implementations must therefore tolerate ``None`` and
+        report a neutral value for any channel that describes the transition
+        rather than the state. Predicates written as
+        ``float(action == <something>)`` already do this, since ``None`` matches
+        nothing. Channels measured from ``state`` alone should still be reported,
+        because a metric that counts every visited state needs the final one.
+
         Args:
-            state: The state the step was taken from.
-            action: The action taken.
-            next_state: The realised successor state.
+            state: The state the step was taken from, or the final state on the
+                terminal bookkeeping step.
+            action: The action taken, or ``None`` on the terminal step.
+            next_state: The realised successor state, or ``None`` on the terminal
+                step.
 
         Returns:
             A flat mapping of channel name to scalar, e.g.
@@ -412,6 +424,15 @@ class Environment(ABC):  # pylint: disable=too-many-public-methods
             cross-environment channel vocabulary on purpose: a name like
             ``"impact"`` could mean a force, an impulse, an energy or a count,
             and a shared name would imply a comparability that does not hold.
+
+        Warning:
+            Implementations must be side-effect-free and must not consume
+            randomness. This runs inside the episode loop, between the transition
+            and the belief update, so a single ``np.random`` draw here shifts the
+            stream for every subsequent transition and observation — silently
+            changing seeded trajectories throughout the run, not just the
+            metrics. Where a value would have to be resampled to be reported, do
+            not report it.
         """
         return {}
 

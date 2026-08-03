@@ -35,9 +35,19 @@ from POMDPPlanners.core.environment import (
     SpaceType,
 )
 from POMDPPlanners.core.simulation import History, MetricValue
+from POMDPPlanners.core.simulation.step_info_metrics import (
+    EpisodeReduction,
+    StepInfoMetric,
+    order_and_fill_metrics,
+)
 from POMDPPlanners.environments.cartpole_pomdp import _native
 from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
-from POMDPPlanners.utils.statistics_utils import confidence_interval
+
+
+class CartPoleStepChannel(Enum):
+    """Per-step measurement channels reported by :meth:`CartPolePOMDP.step_info`."""
+
+    UPRIGHT = "upright"
 
 
 class CartPolePOMDPMetrics(Enum):
@@ -438,40 +448,51 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
         # Discrete int actions (0, 1); already hashable.
         return action
 
-    def get_metric_names(self) -> List[str]:
-        """Get names of CartPole POMDP specific metrics.
-
-        Returns:
-            List containing metric names: goal_reaching_rate
-        """
-        return [metric.value for metric in CartPolePOMDPMetrics]
-
-    def compute_metrics(self, histories: List[History]) -> List[MetricValue]:
-        """Compute CartPole POMDP specific metrics from simulation histories.
+    def step_info(self, state: Any, action: Any, next_state: Any) -> Dict[str, float]:
+        """Report whether the pole is still upright in this step's state.
 
         Args:
-            histories: List of simulation histories
+            state: The state the step was taken from, or the final state on the
+                terminal step.
+            action: Unused; balance is a property of the state alone.
+            next_state: Unused; each state is scored when it is recorded.
 
         Returns:
-            List of MetricValue objects containing the computed metrics
+            The ``upright`` indicator for this step's state.
         """
-        goal_reached = []
-        for history in histories:
-            goal_reached_in_history = True  # Goal is reached if episode didn't crash
-            for step in history.history:
-                if self.is_terminal(step.state):
-                    goal_reached_in_history = False
-                    break
-            goal_reached.append(1 if goal_reached_in_history else 0)
+        del action, next_state
+        return {CartPoleStepChannel.UPRIGHT.value: float(not self.is_terminal(state))}
 
-        avg_goal_reached = float(np.mean(goal_reached))
-        goal_reached_ci = confidence_interval(data=goal_reached, confidence=0.95)
+    def compute_metrics(self, histories: List[History]) -> List[MetricValue]:
+        """Compute the CartPole metrics, always reporting every declared name.
 
+        The shared aggregator omits a metric no episode reported, which happens
+        for an empty history list or an episode with no recorded steps. This
+        environment has always reported a zero-valued goal_reaching_rate in that case, so the
+        declared names are filled rather than dropped.
+
+        Args:
+            histories: List of simulation histories.
+
+        Returns:
+            One MetricValue per declared metric name, in declaration order.
+        """
+        return order_and_fill_metrics(self.get_metric_names(), super().compute_metrics(histories))
+
+    def get_metric_specs(self) -> List[StepInfoMetric]:
+        """Declare the CartPole metric derived from the per-step channel.
+
+        Returns:
+            A spec for ``goal_reaching_rate``, which succeeds only if the pole
+            stayed upright for the whole episode. ``ALL`` rather than ``ANY`` is
+            what encodes that: a single crashed state fails the episode, and the
+            crash is normally the *last* state, recorded on the terminal step.
+        """
         return [
-            MetricValue(
+            StepInfoMetric(
                 name=CartPolePOMDPMetrics.GOAL_REACHING_RATE.value,
-                value=avg_goal_reached,
-                lower_confidence_bound=goal_reached_ci[0],
-                upper_confidence_bound=goal_reached_ci[1],
-            ),
+                channel=CartPoleStepChannel.UPRIGHT.value,
+                per_episode=EpisodeReduction.ALL,
+                empty_episode_value=1.0,
+            )
         ]

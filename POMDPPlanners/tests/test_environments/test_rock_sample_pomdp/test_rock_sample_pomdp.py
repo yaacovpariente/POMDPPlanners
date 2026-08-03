@@ -38,6 +38,7 @@ from POMDPPlanners.tests.test_utils.metric_invariants_utils import (
     verify_metric_sanity,
     verify_return_shift_linearity,
 )
+from POMDPPlanners.tests.test_utils.golden_metric_snapshot import attach_step_info
 
 # Set seeds for reproducible tests
 np.random.seed(42)
@@ -1305,7 +1306,7 @@ class TestMetricsComputation:
             history = build_test_history(steps=steps, reach_terminal=False)
             histories.append(history)
 
-        metrics = pomdp.compute_metrics(histories)
+        metrics = pomdp.compute_metrics(attach_step_info(pomdp, histories))
 
         # Find rocks sampled metric
         rocks_metric = next((m for m in metrics if m.name == "avg_rocks_sampled"), None)
@@ -1357,7 +1358,7 @@ class TestMetricsComputation:
         )
         histories.append(fail_history)
 
-        metrics = pomdp.compute_metrics(histories)
+        metrics = pomdp.compute_metrics(attach_step_info(pomdp, histories))
 
         # Find exit success rate metric
         exit_metric = next((m for m in metrics if m.name == "exit_success_rate"), None)
@@ -1452,7 +1453,7 @@ class TestMetricsComputation:
             build_test_history(steps=sample_twice_steps, actual_num_steps=2, reach_terminal=False),
         ]
 
-        metrics = pomdp.compute_metrics(histories)
+        metrics = pomdp.compute_metrics(attach_step_info(pomdp, histories))
         verify_metrics_within_confidence_intervals(metrics)
         verify_metric_sanity(metrics, histories, pomdp)
         verify_history_returns_bounded(histories, pomdp)

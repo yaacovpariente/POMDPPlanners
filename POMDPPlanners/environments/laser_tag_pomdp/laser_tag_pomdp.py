@@ -42,6 +42,11 @@ from POMDPPlanners.core.environment import (
     SpaceType,
 )
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
+from POMDPPlanners.core.simulation.step_info_metrics import (
+    EpisodeReduction,
+    StepInfoMetric,
+    order_and_fill_metrics,
+)
 from POMDPPlanners.environments.environment_utils.dangerous_areas_kernels import (
     CONSTANT_HAZARD_PENALTY_CODE,
     DISTANCE_DECAYED_HAZARD_PENALTY_CODE,
@@ -74,6 +79,21 @@ _LASER_DIRECTIONS: List[Tuple[int, int]] = [
     (0, -1),
     (-1, -1),
 ]
+
+
+# Action ids: 0=North, 1=South, 2=East, 3=West, 4=Tag.
+MOVE_ACTIONS = (0, 1, 2, 3)
+TAG_ACTION = 4
+
+
+class LaserTagStepChannel(Enum):
+    """Per-step measurement channels reported by :meth:`LaserTagPOMDP.step_info`."""
+
+    TAGGED = "tagged"
+    RECORDED_STEP = "recorded_step"
+    OBSTACLE_COLLISION = "obstacle_collision"
+    IN_DANGEROUS_AREA = "in_dangerous_area"
+    DANGEROUS_ENCOUNTER = "dangerous_encounter"
 
 
 class LaserTagPOMDPMetrics(Enum):
@@ -120,7 +140,7 @@ class RewardModelType(Enum):
 #   is_terminal = bool(state[4])
 
 
-class LaserTagPOMDP(DiscreteActionsEnvironment):
+class LaserTagPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-methods
     """LaserTag POMDP environment implementation.
 
     This is a pursuit-evasion problem where a robot must navigate a grid to tag
@@ -1344,276 +1364,178 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         clipped_c = np.clip(realised_c, 0, cols - 1)
         return in_bounds & self._hazard_wall_grid[clipped_r, clipped_c]
 
-    def _count_episode_metrics(
-        self, history: History, action_dirs: Dict[int, Tuple[int, int]]
-    ) -> Tuple[int, int, int, int]:
-        episode_failed_tags = 0
-        episode_obstacle_collisions = 0
-        episode_dangerous_area_steps = 0
+    def step_info(self, state: Any, action: Any, next_state: Any) -> Dict[str, float]:
+        """Report tag status, hazard exposure and wall collisions for this step.
 
-        for step in history.history:
-            if step.action == 4 and step.reward is not None and step.reward < 0:
-                episode_failed_tags += 1
+        Args:
+            state: The state the step was taken from, or the final state on the
+                terminal step.
+            action: The action taken, or ``None`` on the terminal step.
+            next_state: The realised successor state, or ``None`` on the terminal
+                step. Needed to tell a blocked move from a completed one.
 
-            if isinstance(step.state, np.ndarray) and len(step.state) == 5:
-                robot_pos = (int(step.state[0]), int(step.state[1]))
-                if self._is_in_dangerous_area(robot_pos):
-                    episode_dangerous_area_steps += 1
+        Returns:
+            The per-step channels. ``recorded_step`` is a constant 1.0 so that
+            summing it reproduces ``len(history.history)``, including the
+            terminal bookkeeping step, which the historical episode-length count
+            included.
 
-            if step.action in [0, 1, 2, 3]:
-                if (
-                    isinstance(step.state, np.ndarray)
-                    and len(step.state) == 5
-                    and hasattr(step, "next_state")
-                    and isinstance(step.next_state, np.ndarray)
-                    and len(step.next_state) == 5
-                ):
-                    if step.action in action_dirs:
-                        dr, dc = action_dirs[step.action]
-                        robot_pos = (int(step.state[0]), int(step.state[1]))
-                        next_robot_pos = (int(step.next_state[0]), int(step.next_state[1]))
-                        intended_pos = (robot_pos[0] + dr, robot_pos[1] + dc)
+        Note:
+            Nothing here reads the realised reward, which ``step_info`` is not
+            given. ``tag_success_rate`` and ``average_failed_tag_attempts`` are
+            defined in terms of it, so they stay in :meth:`compute_metrics`.
+            Recomputing the reward here is not an option: two of the reward
+            models draw from ``np.random``, so it would both return a different
+            number and shift the RNG stream for every later transition.
+        """
+        is_state_valid = isinstance(state, np.ndarray) and len(state) == 5
+        in_dangerous_area = 0.0
+        if is_state_valid:
+            robot_pos = (int(state[0]), int(state[1]))
+            in_dangerous_area = float(self._is_in_dangerous_area(robot_pos))
+        obstacle_collision = float(self._is_blocked_by_wall(state, action, next_state))
+        return {
+            LaserTagStepChannel.TAGGED.value: (float(bool(state[4])) if is_state_valid else 0.0),
+            LaserTagStepChannel.RECORDED_STEP.value: 1.0,
+            LaserTagStepChannel.OBSTACLE_COLLISION.value: obstacle_collision,
+            LaserTagStepChannel.IN_DANGEROUS_AREA.value: in_dangerous_area,
+            # Emitted as its own channel because the aggregator reduces one
+            # channel at a time and cannot add two. Summing the per-step sum
+            # equals summing each part, so this matches the historical
+            # collisions + dangerous-steps total exactly.
+            LaserTagStepChannel.DANGEROUS_ENCOUNTER.value: obstacle_collision + in_dangerous_area,
+        }
 
-                        if intended_pos in self.walls and next_robot_pos == robot_pos:
-                            episode_obstacle_collisions += 1
+    def _is_blocked_by_wall(self, state: Any, action: Any, next_state: Any) -> bool:
+        # A collision is a move action whose intended cell is a wall and which
+        # left the robot where it started. Both states must be well formed, and
+        # the terminal step (action None) is never a collision. Restricted to the
+        # movement actions: ``_action_directions`` also maps the tag action, to
+        # a zero displacement, which was never considered a collision candidate.
+        if action not in MOVE_ACTIONS:
+            return False
+        if not (isinstance(state, np.ndarray) and len(state) == 5):
+            return False
+        if not (isinstance(next_state, np.ndarray) and len(next_state) == 5):
+            return False
+        row_delta, col_delta = self._action_directions[action]
+        robot_pos = (int(state[0]), int(state[1]))
+        next_robot_pos = (int(next_state[0]), int(next_state[1]))
+        intended_pos = (robot_pos[0] + row_delta, robot_pos[1] + col_delta)
+        return intended_pos in self.walls and next_robot_pos == robot_pos
 
-        return (
-            episode_failed_tags,
-            episode_obstacle_collisions,
-            episode_dangerous_area_steps,
-            episode_obstacle_collisions + episode_dangerous_area_steps,
-        )
+    def get_metric_specs(self) -> List[StepInfoMetric]:
+        """Declare the LaserTag metrics derived from the per-step channels.
 
-    def _collect_episode_data(self, histories: List[History]) -> Tuple:
-        episode_lengths = []
-        success_indicators = []
-        goal_reached_indicators = []
-        failed_tags_per_episode = []
-        obstacle_collisions_per_episode = []
-        dangerous_area_steps_per_episode = []
-        all_dangerous_encounters_per_episode = []
-
-        action_dirs = {0: (-1, 0), 1: (1, 0), 2: (0, 1), 3: (0, -1)}
-
-        for history in histories:
-            episode_length = len(history.history)
-            episode_lengths.append(episode_length)
-
-            episode_successful = (
-                history.history
-                and history.history[-1].reward is not None
-                and history.history[-1].reward > 0
-            )
-            success_indicators.append(1 if episode_successful else 0)
-
-            # Check if goal was reached (opponent was tagged) by checking if any step reached terminal state
-            goal_reached = False
-            for step in history.history:
-                if isinstance(step.state, np.ndarray) and len(step.state) == 5:
-                    if bool(step.state[4]):  # Terminal flag is set when tag is successful
-                        goal_reached = True
-                        break
-            goal_reached_indicators.append(1 if goal_reached else 0)
-
-            (
-                episode_failed_tags,
-                episode_obstacle_collisions,
-                episode_dangerous_area_steps,
-                episode_all_dangerous_encounters,
-            ) = self._count_episode_metrics(history, action_dirs)
-
-            failed_tags_per_episode.append(episode_failed_tags)
-            obstacle_collisions_per_episode.append(episode_obstacle_collisions)
-            dangerous_area_steps_per_episode.append(episode_dangerous_area_steps)
-            all_dangerous_encounters_per_episode.append(episode_all_dangerous_encounters)
-
-        return (
-            episode_lengths,
-            success_indicators,
-            goal_reached_indicators,
-            failed_tags_per_episode,
-            obstacle_collisions_per_episode,
-            dangerous_area_steps_per_episode,
-            all_dangerous_encounters_per_episode,
-        )
-
-    def _calculate_confidence_intervals(
-        self,
-        total_episodes: int,
-        success_indicators: List[int],
-        goal_reached_indicators: List[int],
-        episode_lengths: List[int],
-        failed_tags_per_episode: List[int],
-        obstacle_collisions_per_episode: List[int],
-        dangerous_area_steps_per_episode: List[int],
-        all_dangerous_encounters_per_episode: List[int],
-    ) -> Tuple:
-        if total_episodes >= 2:
-            success_ci = confidence_interval(data=success_indicators, confidence=0.95)
-            goal_reached_ci = confidence_interval(data=goal_reached_indicators, confidence=0.95)
-            episode_length_ci = confidence_interval(data=episode_lengths, confidence=0.95)
-            failed_tags_ci = confidence_interval(data=failed_tags_per_episode, confidence=0.95)
-            obstacle_collisions_ci = confidence_interval(
-                data=obstacle_collisions_per_episode, confidence=0.95
-            )
-            dangerous_area_steps_ci = confidence_interval(
-                data=dangerous_area_steps_per_episode, confidence=0.95
-            )
-            all_dangerous_encounters_ci = confidence_interval(
-                data=all_dangerous_encounters_per_episode, confidence=0.95
-            )
-        else:
-            success_ci = (-np.inf, np.inf)
-            goal_reached_ci = (-np.inf, np.inf)
-            episode_length_ci = (-np.inf, np.inf)
-            failed_tags_ci = (-np.inf, np.inf)
-            obstacle_collisions_ci = (-np.inf, np.inf)
-            dangerous_area_steps_ci = (-np.inf, np.inf)
-            all_dangerous_encounters_ci = (-np.inf, np.inf)
-
-        return (
-            success_ci,
-            goal_reached_ci,
-            episode_length_ci,
-            failed_tags_ci,
-            obstacle_collisions_ci,
-            dangerous_area_steps_ci,
-            all_dangerous_encounters_ci,
-        )
+        Returns:
+            Specs for the five state- and transition-derived metrics, in the
+            same order the enum declares them. The two reward-derived metrics
+            are absent here and produced by :meth:`compute_metrics`.
+        """
+        return [
+            StepInfoMetric(
+                name=LaserTagPOMDPMetrics.GOAL_REACHING_RATE.value,
+                channel=LaserTagStepChannel.TAGGED.value,
+                per_episode=EpisodeReduction.ANY,
+                empty_episode_value=0.0,
+            ),
+            StepInfoMetric(
+                name=LaserTagPOMDPMetrics.AVERAGE_EPISODE_LENGTH.value,
+                channel=LaserTagStepChannel.RECORDED_STEP.value,
+                per_episode=EpisodeReduction.SUM,
+                empty_episode_value=0.0,
+            ),
+            StepInfoMetric(
+                name=LaserTagPOMDPMetrics.AVERAGE_OBSTACLE_COLLISIONS.value,
+                channel=LaserTagStepChannel.OBSTACLE_COLLISION.value,
+                per_episode=EpisodeReduction.SUM,
+                empty_episode_value=0.0,
+            ),
+            StepInfoMetric(
+                name=LaserTagPOMDPMetrics.AVERAGE_DANGEROUS_AREA_STEPS.value,
+                channel=LaserTagStepChannel.IN_DANGEROUS_AREA.value,
+                per_episode=EpisodeReduction.SUM,
+                empty_episode_value=0.0,
+            ),
+            StepInfoMetric(
+                name=LaserTagPOMDPMetrics.AVERAGE_ALL_DANGEROUS_ENCOUNTERS.value,
+                channel=LaserTagStepChannel.DANGEROUS_ENCOUNTER.value,
+                per_episode=EpisodeReduction.SUM,
+                empty_episode_value=0.0,
+            ),
+        ]
 
     def get_metric_names(self) -> List[str]:
         """Get names of LaserTag POMDP specific metrics.
 
         Returns:
-            List containing metric names: tag_success_rate, average_episode_length,
-            average_failed_tag_attempts, average_obstacle_collisions,
-            average_dangerous_area_steps, and average_all_dangerous_encounters
+            All seven metric names in enum order: the five derived from per-step
+            channels plus the two reward-derived ones.
         """
         return [metric.value for metric in LaserTagPOMDPMetrics]
 
-    def _build_metric_values(
-        self,
-        success_rate: float,
-        goal_reaching_rate: float,
-        avg_episode_length: float,
-        avg_failed_tags: float,
-        avg_obstacle_collisions: float,
-        avg_dangerous_area_steps: float,
-        avg_all_dangerous_encounters: float,
-        success_ci: Tuple[float, float],
-        goal_reached_ci: Tuple[float, float],
-        episode_length_ci: Tuple[float, float],
-        failed_tags_ci: Tuple[float, float],
-        obstacle_collisions_ci: Tuple[float, float],
-        dangerous_area_steps_ci: Tuple[float, float],
-        all_dangerous_encounters_ci: Tuple[float, float],
-    ) -> List[MetricValue]:
+    def _reward_derived_metrics(self, histories: List[History]) -> List[MetricValue]:
+        # Both of these are defined in terms of the realised reward recorded on
+        # the step, which the per-step channel cannot carry.
+        success_indicators: List[int] = []
+        failed_tags_per_episode: List[int] = []
+        for history in histories:
+            steps = history.history
+            # The last recorded step of a terminated episode is the terminal
+            # bookkeeping step, whose reward is None -- so such an episode has
+            # never counted as a success. Preserved deliberately.
+            successful = bool(steps) and steps[-1].reward is not None and steps[-1].reward > 0
+            success_indicators.append(1 if successful else 0)
+            failed_tags_per_episode.append(
+                sum(
+                    1
+                    for step in steps
+                    if step.action == TAG_ACTION and step.reward is not None and step.reward < 0
+                )
+            )
+
         return [
-            MetricValue(
-                name=LaserTagPOMDPMetrics.TAG_SUCCESS_RATE.value,
-                value=success_rate,
-                lower_confidence_bound=success_ci[0],
-                upper_confidence_bound=success_ci[1],
+            self._metric_from_samples(
+                LaserTagPOMDPMetrics.TAG_SUCCESS_RATE.value, success_indicators
             ),
-            MetricValue(
-                name=LaserTagPOMDPMetrics.GOAL_REACHING_RATE.value,
-                value=goal_reaching_rate,
-                lower_confidence_bound=goal_reached_ci[0],
-                upper_confidence_bound=goal_reached_ci[1],
-            ),
-            MetricValue(
-                name=LaserTagPOMDPMetrics.AVERAGE_EPISODE_LENGTH.value,
-                value=avg_episode_length,
-                lower_confidence_bound=episode_length_ci[0],
-                upper_confidence_bound=episode_length_ci[1],
-            ),
-            MetricValue(
-                name=LaserTagPOMDPMetrics.AVERAGE_FAILED_TAG_ATTEMPTS.value,
-                value=avg_failed_tags,
-                lower_confidence_bound=failed_tags_ci[0],
-                upper_confidence_bound=failed_tags_ci[1],
-            ),
-            MetricValue(
-                name=LaserTagPOMDPMetrics.AVERAGE_OBSTACLE_COLLISIONS.value,
-                value=avg_obstacle_collisions,
-                lower_confidence_bound=obstacle_collisions_ci[0],
-                upper_confidence_bound=obstacle_collisions_ci[1],
-            ),
-            MetricValue(
-                name=LaserTagPOMDPMetrics.AVERAGE_DANGEROUS_AREA_STEPS.value,
-                value=avg_dangerous_area_steps,
-                lower_confidence_bound=dangerous_area_steps_ci[0],
-                upper_confidence_bound=dangerous_area_steps_ci[1],
-            ),
-            MetricValue(
-                name=LaserTagPOMDPMetrics.AVERAGE_ALL_DANGEROUS_ENCOUNTERS.value,
-                value=avg_all_dangerous_encounters,
-                lower_confidence_bound=all_dangerous_encounters_ci[0],
-                upper_confidence_bound=all_dangerous_encounters_ci[1],
+            self._metric_from_samples(
+                LaserTagPOMDPMetrics.AVERAGE_FAILED_TAG_ATTEMPTS.value, failed_tags_per_episode
             ),
         ]
 
+    @staticmethod
+    def _metric_from_samples(name: str, samples: List[int]) -> MetricValue:
+        mean_value = float(np.mean(samples))
+        if len(samples) >= 2:
+            lower, upper = confidence_interval(data=samples, confidence=0.95)
+        else:
+            lower, upper = (-np.inf, np.inf)
+        return MetricValue(
+            name=name,
+            value=mean_value,
+            lower_confidence_bound=float(lower),
+            upper_confidence_bound=float(upper),
+        )
+
     def compute_metrics(self, histories: List[History]) -> List[MetricValue]:
-        """Compute LaserTag POMDP specific metrics from simulation histories."""
-        total_episodes = len(histories)
-        if total_episodes == 0:
+        """Compute LaserTag POMDP specific metrics from simulation histories.
+
+        Args:
+            histories: List of simulation histories.
+
+        Returns:
+            All seven metrics in declaration order, or an empty list when there
+            are no histories.
+        """
+        if not histories:
             return []
-
-        (
-            episode_lengths,
-            success_indicators,
-            goal_reached_indicators,
-            failed_tags_per_episode,
-            obstacle_collisions_per_episode,
-            dangerous_area_steps_per_episode,
-            all_dangerous_encounters_per_episode,
-        ) = self._collect_episode_data(histories)
-
-        successful_tags = sum(success_indicators)
-        success_rate = successful_tags / total_episodes
-        goals_reached = sum(goal_reached_indicators)
-        goal_reaching_rate = goals_reached / total_episodes
-        avg_episode_length = float(np.mean(episode_lengths))
-        avg_failed_tags = float(np.mean(failed_tags_per_episode))
-        avg_obstacle_collisions = float(np.mean(obstacle_collisions_per_episode))
-        avg_dangerous_area_steps = float(np.mean(dangerous_area_steps_per_episode))
-        avg_all_dangerous_encounters = float(np.mean(all_dangerous_encounters_per_episode))
-
-        (
-            success_ci,
-            goal_reached_ci,
-            episode_length_ci,
-            failed_tags_ci,
-            obstacle_collisions_ci,
-            dangerous_area_steps_ci,
-            all_dangerous_encounters_ci,
-        ) = self._calculate_confidence_intervals(
-            total_episodes,
-            success_indicators,
-            goal_reached_indicators,
-            episode_lengths,
-            failed_tags_per_episode,
-            obstacle_collisions_per_episode,
-            dangerous_area_steps_per_episode,
-            all_dangerous_encounters_per_episode,
+        computed = list(super().compute_metrics(histories)) + self._reward_derived_metrics(
+            histories
         )
-
-        return self._build_metric_values(
-            success_rate,
-            goal_reaching_rate,
-            avg_episode_length,
-            avg_failed_tags,
-            avg_obstacle_collisions,
-            avg_dangerous_area_steps,
-            avg_all_dangerous_encounters,
-            success_ci,
-            goal_reached_ci,
-            episode_length_ci,
-            failed_tags_ci,
-            obstacle_collisions_ci,
-            dangerous_area_steps_ci,
-            all_dangerous_encounters_ci,
-        )
+        # Ordered and gap-filled rather than concatenated: the declared name list
+        # is a fixed contract, and the aggregator drops a metric whose channel no
+        # episode reported.
+        return order_and_fill_metrics(self.get_metric_names(), computed)
 
     def cache_visualization(
         self, history: List[StepData], output_dir: Path, episode_index: int

@@ -30,6 +30,11 @@ from POMDPPlanners.core.environment import (
     SpaceType,
 )
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
+from POMDPPlanners.core.simulation.step_info_metrics import (
+    EpisodeReduction,
+    StepInfoMetric,
+    order_and_fill_metrics,
+)
 from POMDPPlanners.environments.rock_sample_pomdp import _native
 from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp_utils.rock_sample_reward_models import (
     BaseRockSampleRewardModel,
@@ -37,7 +42,18 @@ from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp_utils.rock_s
     RockSampleZeroMeanHazardShockRewardModel,
     RockSampleRewardModel,
 )
-from POMDPPlanners.utils.statistics_utils import confidence_interval
+
+
+# Actions are plain ints: 0=sample, 1=north, 2=east, 3=south, 4=west, 5+=check_rock_i.
+SAMPLE_ACTION = 0
+
+
+class RockSampleStepChannel(Enum):
+    """Per-step measurement channels reported by :meth:`RockSamplePOMDP.step_info`."""
+
+    SAMPLED_ROCK = "sampled_rock"
+    TERMINAL_STATE = "terminal_state"
+    IN_DANGEROUS_AREA = "in_dangerous_area"
 
 
 class RockSamplePOMDPMetrics(Enum):
@@ -826,85 +842,79 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
         # Discrete int actions; already hashable.
         return action
 
-    def get_metric_names(self) -> List[str]:
-        """Get names of RockSample POMDP specific metrics.
+    def step_info(self, state: Any, action: Any, next_state: Any) -> Dict[str, float]:
+        """Report the sampling action, terminal status and hazard exposure.
+
+        Args:
+            state: The state the step was taken from, or the final state on the
+                terminal step. On the terminal step this carries the exit
+                sentinel position, which the dangerous-area test is applied to
+                exactly as it always was.
+            action: The action taken, or ``None`` on the terminal step.
+            next_state: Unused; each state is scored when it is recorded.
 
         Returns:
-            List containing metric names: avg_rocks_sampled, exit_success_rate,
-            and average_dangerous_area_steps
+            The ``sampled_rock``, ``terminal_state`` and ``in_dangerous_area``
+            indicators for this step.
         """
-        return [metric.value for metric in RockSamplePOMDPMetrics]
+        del next_state
+        robot_pos = get_robot_pos(state)
+        return {
+            # ``action == SAMPLE_ACTION`` is False for the terminal step's None,
+            # which is how the historical scan counted it too.
+            RockSampleStepChannel.SAMPLED_ROCK.value: float(action == SAMPLE_ACTION),
+            RockSampleStepChannel.TERMINAL_STATE.value: float(self.is_terminal(state)),
+            RockSampleStepChannel.IN_DANGEROUS_AREA.value: float(
+                self._is_in_dangerous_area(robot_pos)
+            ),
+        }
 
     def compute_metrics(self, histories: List[History]) -> List[MetricValue]:
-        """Compute environment-specific metrics."""
+        """Compute the RockSample metrics, always reporting every declared name.
+
+        Args:
+            histories: List of simulation histories.
+
+        Returns:
+            One MetricValue per declared metric name, in declaration order, or an
+            empty list when there are no histories at all.
+        """
+        # No histories has always meant no metrics here, unlike the zero-valued
+        # metrics other environments report. Preserved rather than unified.
         if not histories:
             return []
+        # Beyond that, every declared name is reported: the shared aggregator
+        # omits a metric no episode reported, which an episode with no recorded
+        # steps would trigger, where this environment counted a zero.
+        return order_and_fill_metrics(self.get_metric_names(), super().compute_metrics(histories))
 
-        metrics = []
+    def get_metric_specs(self) -> List[StepInfoMetric]:
+        """Declare the RockSample metrics derived from the per-step channels.
 
-        # Calculate average number of rocks sampled
-        rocks_sampled = []
-        for history in histories:
-            sampled_count = 0
-            for step in history.history:
-                if hasattr(step, "action") and step.action == 0:  # Sample action
-                    sampled_count += 1
-            rocks_sampled.append(sampled_count)
-
-        if rocks_sampled:
-            mean_rocks = float(np.mean(rocks_sampled))
-            ci_low, ci_high = confidence_interval(rocks_sampled)
-            metrics.append(
-                MetricValue(
-                    name=RockSamplePOMDPMetrics.AVG_ROCKS_SAMPLED.value,
-                    value=mean_rocks,
-                    lower_confidence_bound=ci_low,
-                    upper_confidence_bound=ci_high,
-                )
-            )
-
-        # Calculate exit success rate
-        exits = [
-            1 if any(self.is_terminal(step.state) for step in history.history) else 0
-            for history in histories
+        Returns:
+            Specs for ``avg_rocks_sampled``, ``exit_success_rate`` and
+            ``average_dangerous_area_steps``.
+        """
+        return [
+            StepInfoMetric(
+                name=RockSamplePOMDPMetrics.AVG_ROCKS_SAMPLED.value,
+                channel=RockSampleStepChannel.SAMPLED_ROCK.value,
+                per_episode=EpisodeReduction.SUM,
+                empty_episode_value=0.0,
+            ),
+            StepInfoMetric(
+                name=RockSamplePOMDPMetrics.EXIT_SUCCESS_RATE.value,
+                channel=RockSampleStepChannel.TERMINAL_STATE.value,
+                per_episode=EpisodeReduction.ANY,
+                empty_episode_value=0.0,
+            ),
+            StepInfoMetric(
+                name=RockSamplePOMDPMetrics.AVERAGE_DANGEROUS_AREA_STEPS.value,
+                channel=RockSampleStepChannel.IN_DANGEROUS_AREA.value,
+                per_episode=EpisodeReduction.SUM,
+                empty_episode_value=0.0,
+            ),
         ]
-
-        if exits:
-            exit_rate = float(np.mean(exits))
-            ci_low, ci_high = confidence_interval(exits)
-            metrics.append(
-                MetricValue(
-                    name=RockSamplePOMDPMetrics.EXIT_SUCCESS_RATE.value,
-                    value=exit_rate,
-                    lower_confidence_bound=ci_low,
-                    upper_confidence_bound=ci_high,
-                )
-            )
-
-        # Calculate dangerous area metrics
-        dangerous_area_steps = []
-        for history in histories:
-            steps_in_danger = 0
-            for step in history.history:
-                robot_pos = get_robot_pos(step.state)
-                if self._is_in_dangerous_area(robot_pos):
-                    steps_in_danger += 1
-            dangerous_area_steps.append(steps_in_danger)
-
-        if dangerous_area_steps:
-            avg_dangerous_steps = float(np.mean(dangerous_area_steps))
-            ci_low, ci_high = confidence_interval(dangerous_area_steps)
-
-            metrics.append(
-                MetricValue(
-                    name=RockSamplePOMDPMetrics.AVERAGE_DANGEROUS_AREA_STEPS.value,
-                    value=avg_dangerous_steps,
-                    lower_confidence_bound=ci_low,
-                    upper_confidence_bound=ci_high,
-                )
-            )
-
-        return metrics
 
     def cache_visualization(
         self, history: List[StepData], output_dir: Path, episode_index: int
