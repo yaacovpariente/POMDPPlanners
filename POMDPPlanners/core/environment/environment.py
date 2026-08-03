@@ -42,6 +42,7 @@ from POMDPPlanners.utils.logger import get_logger
 
 if TYPE_CHECKING:
     from POMDPPlanners.core.simulation import History, MetricValue, StepData
+    from POMDPPlanners.core.simulation.step_info_metrics import StepInfoMetric
 
 
 def _serialize_space_info(space_info: Any) -> dict:
@@ -371,6 +372,48 @@ class Environment(ABC):  # pylint: disable=too-many-public-methods
             ``False`` otherwise.
         """
         return False
+
+    # pylint: disable-next=unused-argument
+    def step_info(self, state: Any, action: Any, next_state: Any) -> Dict[str, float]:
+        """Report auxiliary measurements for the transition just taken.
+
+        Simulation drivers call this once per recorded step and store the result
+        on :attr:`~POMDPPlanners.core.simulation.history.StepData.info`, so the
+        values travel back with the episode ``History``.
+
+        This exists because a quantity may only be *measurable* at step time —
+        an impact impulse read from a physics engine, a termination reason from a
+        task manager — while
+        :meth:`compute_metrics` runs afterwards, in the parent process, on a
+        different instance of this environment. Accumulating such a value on
+        ``self`` during an episode is therefore silently lost under every
+        multiprocess task manager; routing it through the returned mapping is
+        what makes it survive.
+
+        Environments whose measurements are a pure function of the transition
+        should implement this as such. Environments wrapping a live simulator may
+        instead serve values cached during their own step, in which case the
+        arguments are typically used only to assert the request matches the
+        transition actually taken.
+
+        Args:
+            state: The state the step was taken from.
+            action: The action taken.
+            next_state: The realised successor state.
+
+        Returns:
+            A flat mapping of channel name to scalar, e.g.
+            ``{"success": 1.0, "impact": 12.4}``. Values must be plain picklable
+            scalars. The default implementation reports nothing.
+
+        Note:
+            Name channels after the quantity and unit actually measured (e.g.
+            ``"contact_impulse_ns"``), not after a category. There is no shared
+            cross-environment channel vocabulary on purpose: a name like
+            ``"impact"`` could mean a force, an impulse, an energy or a count,
+            and a shared name would imply a comparability that does not hold.
+        """
+        return {}
 
     @abstractmethod
     def reward(self, state: Any, action: Any, next_state: Any = None) -> float:
@@ -711,6 +754,24 @@ class Environment(ABC):  # pylint: disable=too-many-public-methods
             episode_index: Zero-based index of the episode, used to name the file
         """
 
+    def get_metric_specs(self) -> "List[StepInfoMetric]":
+        """Declare metrics derived from this environment's per-step channels.
+
+        Environments that report measurements through :meth:`step_info` can
+        declare how those channels become metrics here, and get the aggregation,
+        averaging and confidence intervals from the default :meth:`compute_metrics`
+        instead of hand-rolling them.
+
+        Only declare a channel this environment actually emits on every step. A
+        declared-but-unreported channel yields a metric that is silently dropped,
+        which breaks the invariant that declared names match produced names.
+
+        Returns:
+            The metric specifications to compute. Empty by default, so
+            environments that do not use the per-step channel are unaffected.
+        """
+        return []
+
     def get_metric_names(self) -> List[str]:
         """Get names of environment-specific metrics.
 
@@ -719,22 +780,24 @@ class Environment(ABC):  # pylint: disable=too-many-public-methods
         what metrics are available for hyperparameter optimization.
 
         Returns:
-            List of metric names that this environment produces.
-            Default implementation returns empty list for environments without custom metrics.
+            List of metric names that this environment produces. Derived from
+            :meth:`get_metric_specs`, so declaring a spec is enough; environments
+            with a bespoke ``compute_metrics`` override this directly instead.
 
         Note:
             Subclasses that override compute_metrics() should also override this method
             to return the names of metrics they produce. Use an Enum to ensure consistency
             between the names returned here and the names used in compute_metrics().
         """
-        return []
+        return [spec.name for spec in self.get_metric_specs()]
 
-    # pylint: disable-next=unused-argument
     def compute_metrics(self, histories: "List[History]") -> "List[MetricValue]":
         """Compute environment-specific metrics from episode histories.
 
-        This method can be overridden by subclasses to provide custom
-        metric calculations beyond standard return and episode length.
+        The default implementation aggregates the per-step channels reported by
+        :meth:`step_info` according to :meth:`get_metric_specs`. Subclasses with
+        metrics that are not expressible as a per-step channel (for example ones
+        needing cross-step reasoning) override this instead.
 
         Args:
             histories: List of episode histories to analyze
@@ -742,7 +805,19 @@ class Environment(ABC):  # pylint: disable=too-many-public-methods
         Returns:
             List of computed metrics with confidence intervals
         """
-        return []
+        specs = self.get_metric_specs()
+        if not specs:
+            return []
+        # Imported here rather than at module scope: core.simulation pulls in
+        # modules that reference Environment, so a top-level import would close
+        # a cycle.
+        # pylint: disable-next=import-outside-toplevel
+        from POMDPPlanners.core.simulation.step_info_metrics import (
+            aggregate_step_info_metrics,
+            extract_episode_step_infos,
+        )
+
+        return aggregate_step_info_metrics(extract_episode_step_infos(histories), specs)
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize environment to dictionary format.

@@ -14,9 +14,13 @@ from typing import Any, Dict, List, cast
 
 import numpy as np
 
-from POMDPPlanners.core.belief import WeightedParticleBelief
+from POMDPPlanners.core.belief import WeightedParticleBelief, get_initial_belief
 from POMDPPlanners.core.simulation import History, StepData, TaskManagerExternalDB
 from POMDPPlanners.core.simulation.tasks import SimulationTask, DataBaseInterface
+from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
+from POMDPPlanners.simulations.episodes import run_episode
+from POMDPPlanners.utils.logger import get_logger
 
 # Set seeds for reproducible tests
 np.random.seed(42)
@@ -341,3 +345,179 @@ def test_task_manager_external_db_all_cached():
     assert len(successful_ids) == 2
     assert "id1" in successful_ids
     assert "id2" in successful_ids
+
+
+class _StepInfoTigerPOMDP(TigerPOMDP):
+    """Tiger variant that reports a per-step channel through ``step_info``."""
+
+    def step_info(self, state: Any, action: Any, next_state: Any) -> Dict[str, float]:
+        del state, next_state
+        return {"success": float(action != "listen"), "listened": float(action == "listen")}
+
+
+def test_step_data_info_defaults_to_none():
+    """Test that StepData.info is optional and defaults to None.
+
+    Purpose: Validates that the per-step info channel is purely additive, so
+        every existing construction site keeps working unchanged
+
+    Given: A StepData constructed without the info argument
+    When: Its info attribute is read
+    Then: It is None and the tuple still exposes the original six values
+
+    Test type: unit
+    """
+    step = StepData(
+        state="s",
+        action="a",
+        next_state="s2",
+        observation="o",
+        reward=1.0,
+        belief=create_test_belief(),
+    )
+
+    assert step.info is None
+    assert step[:5] == ("s", "a", "s2", "o", 1.0)
+
+
+def test_step_data_info_round_trips_through_history_dict():
+    """Test that per-step info survives History serialization.
+
+    Purpose: Validates that measurements reach compute_metrics through the
+        JSON-shaped History payload used by the caching layer
+
+    Given: A History whose steps carry info mappings
+    When: It is converted with to_dict() and rebuilt with from_dict()
+    Then: Each step's info mapping is preserved exactly
+
+    Test type: unit
+    """
+    steps = [
+        StepData(
+            state="s",
+            action="a",
+            next_state="s2",
+            observation="o",
+            reward=1.0,
+            belief=create_test_belief(),
+            info={"success": 1.0, "impact": 2.5},
+        ),
+        StepData(
+            state="s2",
+            action="a2",
+            next_state="s3",
+            observation="o2",
+            reward=0.0,
+            belief=create_test_belief(),
+        ),
+    ]
+    history = History(
+        history=steps,
+        discount_factor=0.95,
+        average_state_sampling_time=0.0,
+        average_action_time=0.0,
+        average_observation_time=0.0,
+        average_belief_update_time=0.0,
+        average_reward_time=0.0,
+        actual_num_steps=2,
+        reach_terminal_state=False,
+        policy_run_data=[],
+    )
+
+    restored = History.from_dict(history.to_dict())
+
+    assert restored.history[0].info == {"success": 1.0, "impact": 2.5}
+    assert restored.history[1].info is None
+
+
+def test_history_from_dict_accepts_payload_without_info_key():
+    """Test that History payloads predating the info field still deserialize.
+
+    Purpose: Validates backward compatibility for cached histories written
+        before the per-step info channel existed
+
+    Given: A serialized History whose step dicts have no "info" key
+    When: History.from_dict() is called on it
+    Then: Deserialization succeeds and info defaults to None
+
+    Test type: unit
+    """
+    payload = History(
+        history=[
+            StepData(
+                state="s",
+                action="a",
+                next_state="s2",
+                observation="o",
+                reward=1.0,
+                belief=create_test_belief(),
+            )
+        ],
+        discount_factor=0.95,
+        average_state_sampling_time=0.0,
+        average_action_time=0.0,
+        average_observation_time=0.0,
+        average_belief_update_time=0.0,
+        average_reward_time=0.0,
+        actual_num_steps=1,
+        reach_terminal_state=False,
+        policy_run_data=[],
+    ).to_dict()
+    for step_dict in payload["history"]:
+        step_dict.pop("info")
+
+    restored = History.from_dict(payload)
+
+    assert restored.history[0].info is None
+
+
+def test_environment_step_info_defaults_to_empty_mapping():
+    """Test that the base Environment reports no per-step measurements.
+
+    Purpose: Validates that the new hook is opt-in, so environments that do not
+        implement it are entirely unaffected
+
+    Given: A stock environment that does not override step_info
+    When: step_info() is called with an arbitrary transition
+    Then: An empty mapping is returned
+
+    Test type: unit
+    """
+    env = TigerPOMDP(discount_factor=0.95)
+
+    reported = env.step_info("tiger_left", "listen", "tiger_left")
+
+    assert isinstance(reported, dict)
+    assert not reported
+
+
+def test_episode_runner_records_environment_step_info():
+    """Test that the episode loop stores step_info on each recorded step.
+
+    Purpose: Validates the end-to-end transport from an environment's
+        measurement hook into the episode History
+
+    Given: An environment overriding step_info and a POMCP policy
+    When: An episode is run
+    Then: Every non-terminal step carries the reported channels
+
+    Test type: integration
+    """
+    env = _StepInfoTigerPOMDP(discount_factor=0.95)
+    policy = POMCP(
+        environment=env,
+        discount_factor=0.95,
+        depth=3,
+        exploration_constant=1.0,
+        name="step-info-test",
+        n_simulations=5,
+    )
+    belief = get_initial_belief(env, n_particles=10)
+    history = run_episode(env, policy, belief, num_steps=3, logger=get_logger("t", debug=False))
+
+    recorded = [step for step in history.history if step.action is not None]
+    assert recorded, "episode produced no non-terminal steps"
+    for step in recorded:
+        assert step.info is not None
+        assert set(step.info) == {"success", "listened"}
+        assert step.info["listened"] == float(step.action == "listen")
