@@ -43,14 +43,47 @@ Classes:
 """
 
 import importlib
+from enum import Enum
 from collections.abc import Hashable
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
 
 import numpy as np
 
 from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.core.environment import Environment, SpaceInfo, SpaceType
+from POMDPPlanners.core.simulation.step_info_metrics import EpisodeReduction, StepInfoMetric
+
+if TYPE_CHECKING:
+    from POMDPPlanners.core.simulation import StepData
+
+
+class IsaacLabStepChannel(Enum):
+    """Per-step channels this world reports through ``step_info``.
+
+    Names state the measured quantity, not a category. There is deliberately no
+    generic "impact" channel: a differently-measured quantity (peak force in N,
+    lost kinetic energy in J, a collision count) is a *different* channel and
+    must not reuse this name, because averaging those together would be
+    meaningless.
+    """
+
+    #: Whether the configured success predicate held on this step (1.0 / 0.0).
+    SUCCESS = "success"
+    #: Contact impulse over this control step, in newton-seconds.
+    CONTACT_IMPULSE_NS = "contact_impulse_ns"
+
+
+class IsaacLabMetric(Enum):
+    """Metric names this world declares."""
+
+    #: Fraction of episodes in which the configured success predicate held,
+    #: under the configured per-episode reduction (``ANY`` for "goal reached at
+    #: some point", ``ALL`` for "never failed").
+    SUCCESS_RATE = "success_rate"
+    #: Mean over episodes of the episode's largest per-step contact impulse (N*s).
+    MAX_CONTACT_IMPULSE_NS = "max_contact_impulse_ns"
+
 
 # Module-level SimulationApp handle. IsaacLab permits exactly one per process;
 # guard so a second IsaacLabPOMDP reuses it instead of relaunching.
@@ -80,6 +113,7 @@ def _build_isaac_env(
     env_cfg_kwargs: Dict[str, Any],
     headless: bool,
     render_mode: Optional[str] = None,
+    env_cfg_modifier: Optional[Callable[[Any], None]] = None,
 ) -> Any:
     """Build a registered IsaacLab task env.
 
@@ -87,6 +121,12 @@ def _build_isaac_env(
     launching Isaac Sim. Passing ``render_mode="rgb_array"`` enables offscreen
     cameras and forwards the render mode to ``gymnasium.make`` so ``env.render()``
     yields RGB frames of the simulator viewport.
+
+    ``env_cfg_modifier`` is invoked on the parsed task config before the env is
+    built, which is the only point at which the scene can still be changed. It
+    exists so a task that ships no contact sensor can have one attached for
+    impact measurement; ``parse_env_cfg`` keyword arguments cannot add scene
+    entities.
     """
     _launch_simulation_app(headless, enable_cameras=render_mode == "rgb_array")
     import gymnasium as gym  # pylint: disable=import-outside-toplevel
@@ -97,6 +137,8 @@ def _build_isaac_env(
     parse_env_cfg = importlib.import_module("isaaclab_tasks.utils").parse_env_cfg
 
     cfg = parse_env_cfg(task_id, device=device, num_envs=num_envs, **env_cfg_kwargs)
+    if env_cfg_modifier is not None:
+        env_cfg_modifier(cfg)
     if render_mode is not None:
         return gym.make(task_id, cfg=cfg, render_mode=render_mode)
     return gym.make(task_id, cfg=cfg)
@@ -184,6 +226,13 @@ class IsaacLabPOMDP(Environment):
         headless: bool = True,
         render_mode: Optional[str] = None,
         seed: Optional[int] = None,
+        contact_sensor_key: Optional[str] = None,
+        success_termination_term: Optional[str] = None,
+        success_reduction: EpisodeReduction = EpisodeReduction.ANY,
+        impact_extractor: Optional[Callable[[Any], float]] = None,
+        success_extractor: Optional[Callable[[Any, Dict[str, Any], bool, bool], bool]] = None,
+        env_cfg_modifier: Optional[Callable[[Any], None]] = None,
+        record_video: bool = False,
         name: Optional[str] = None,
         reward_range: Optional[Tuple[float, float]] = None,
         output_dir: Optional[Path] = None,
@@ -214,6 +263,40 @@ class IsaacLabPOMDP(Environment):
                 cameras so :meth:`render` returns RGB frames of the simulator
                 viewport (for video capture). Defaults to None (no rendering).
             seed: Optional seed applied to the first ``reset``. Defaults to None.
+            contact_sensor_key: Scene key of a ``ContactSensor`` to read impact
+                magnitude from. ``None`` (default) disables impact measurement,
+                so no ``impact`` channel is reported and no impact metric is
+                declared. Most manipulation tasks ship no contact sensor; one can
+                be attached through ``env_cfg_modifier``.
+            success_termination_term: Name of the termination-manager term that
+                marks task success. ``None`` (default) disables success
+                measurement. Most IsaacLab tasks declare only *failure* and
+                timeout terms and have no success term at all, in which case an
+                explicit ``success_extractor`` is required — a missing term
+                raises rather than being guessed at, because inferring success
+                from "terminated but not truncated" would count every failure as
+                a success.
+            success_reduction: How per-step success collapses to one value per
+                episode. ``ANY`` (default) suits a goal that is reached at some
+                point. Use ``ALL`` for a "never failed" predicate such as a
+                legged robot staying upright — under ``ANY`` a robot that falls
+                on the final step would still be scored a success because the
+                earlier steps were fine.
+            impact_extractor: Optional ``env -> float`` reading impact magnitude.
+                Defaults to the peak contact impulse over the sensor's bodies.
+            success_extractor: Optional
+                ``(env, info, terminated, truncated) -> bool``. Defaults to
+                reading ``success_termination_term`` from the termination
+                manager, falling back to ``terminated and not truncated``.
+            env_cfg_modifier: Optional ``cfg -> None`` applied to the parsed task
+                config before the env is built, e.g. to attach a
+                ``ContactSensorCfg``. Set its ``history_length`` to the task's
+                decimation, otherwise peak force is under-reported: one
+                ``env.step`` covers several physics substeps and the force buffer
+                is read only at the end.
+            record_video: Buffer an RGB frame per step so
+                :meth:`cache_visualization` can write an episode video. Requires
+                ``render_mode="rgb_array"``. Defaults to False.
             name: Environment identifier. Defaults to ``"IsaacLabPOMDP-<task_id>"``.
             reward_range: Optional ``(min, max)`` reward bounds. Defaults to None.
             output_dir: Optional directory for logging output. Defaults to None.
@@ -221,12 +304,18 @@ class IsaacLabPOMDP(Environment):
             use_queue_logger: Whether to use queue-based logging. Defaults to False.
 
         Raises:
-            ValueError: If ``num_envs`` is not 1.
+            ValueError: If ``num_envs`` is not 1, or if ``record_video`` is set
+                without ``render_mode="rgb_array"``.
         """
         if num_envs != 1:
             raise ValueError(
                 "IsaacLabPOMDP is a forward-only world environment and requires "
                 f"num_envs=1 (got {num_envs}); a world drives a single true trajectory."
+            )
+        if record_video and render_mode != "rgb_array":
+            raise ValueError(
+                "IsaacLabPOMDP(record_video=True) requires render_mode='rgb_array'; "
+                "the simulator only produces RGB frames when offscreen cameras are enabled."
             )
 
         self.task_id = task_id
@@ -240,11 +329,18 @@ class IsaacLabPOMDP(Environment):
         self.headless = headless
         self.render_mode = render_mode
         self.seed = seed
+        self.contact_sensor_key = contact_sensor_key
+        self.success_termination_term = success_termination_term
+        self.success_reduction = success_reduction
+        self.record_video = record_video
 
         # Custom extractors are kept private so they neither participate in
         # ``config_id`` nor are picked up by ``to_dict`` parameter introspection.
         self._state_extractor = state_extractor
         self._observation_extractor = observation_extractor
+        self._impact_extractor = impact_extractor
+        self._success_extractor = success_extractor
+        self._env_cfg_modifier = env_cfg_modifier
 
         # Live-simulator state: rebuilt lazily and never serialized.
         self._env: Optional[Any] = None
@@ -252,6 +348,7 @@ class IsaacLabPOMDP(Environment):
         self._terminated: bool = False
         self._seeded: bool = False
         self._pending: Optional[Dict[str, Any]] = None
+        self._frames: List[np.ndarray] = []
 
         super().__init__(
             discount_factor=discount_factor,
@@ -274,6 +371,7 @@ class IsaacLabPOMDP(Environment):
         state["_terminated"] = False
         state["_seeded"] = False
         state["_pending"] = None
+        state["_frames"] = []
         return state
 
     def __setstate__(self, state: Dict[str, Any]) -> None:
@@ -283,6 +381,7 @@ class IsaacLabPOMDP(Environment):
         self._terminated = False
         self._seeded = False
         self._pending = None
+        self._frames = []
 
     # ── Live simulator management ───────────────────────────────────────
     def _get_env(self) -> Any:
@@ -294,8 +393,24 @@ class IsaacLabPOMDP(Environment):
                 self.env_cfg_kwargs,
                 self.headless,
                 self.render_mode,
+                self._env_cfg_modifier,
             )
         return self._env
+
+    @property
+    def action_space(self) -> Any:
+        """The underlying task's Gymnasium action space.
+
+        Exposed because a caller usually has to build its own discretization of
+        a continuous IsaacLab task (VOPP, for instance, addresses actions by
+        integer index into a fixed set) and needs the action dimension to do so
+        before any stepping happens.
+
+        Returns:
+            The task's ``gymnasium`` action space. Accessing it builds the
+            simulator if it is not running yet.
+        """
+        return self._get_env().action_space
 
     def render(self) -> np.ndarray:
         """Return the current simulator viewport as an RGB frame.
@@ -335,7 +450,13 @@ class IsaacLabPOMDP(Environment):
         self._live_state = state
         self._terminated = False
         self._pending = None
+        self._frames = []
+        self._capture_frame()
         return state
+
+    def _capture_frame(self) -> None:
+        if self.record_video:
+            self._frames.append(self.render())
 
     def _extract_state(self, env: Any) -> np.ndarray:
         if self._state_extractor is not None:
@@ -382,6 +503,119 @@ class IsaacLabPOMDP(Environment):
             f"'{self.observation_sensor}'; pass a custom observation_extractor."
         )
 
+    # ── Impact / success measurement ────────────────────────────────────
+    def _extract_impact(self, env: Any) -> Optional[float]:
+        if self._impact_extractor is not None:
+            return float(self._impact_extractor(env))
+        if self.contact_sensor_key is None:
+            return None
+        return self._default_impact_extractor(env)
+
+    def _default_impact_extractor(self, env: Any) -> float:
+        """Read the worst body's contact impulse (N*s) over this control step.
+
+        The impulse is estimated as ``mean(|F|) * step_dt`` over the force
+        samples belonging to *this* step, which keeps the measurement a property
+        of the transition rather than of the sensor's configuration:
+
+        * The history buffer is sliced to the step's decimation. Summing the
+          whole buffer instead would fold in forces from previous control steps
+          when ``history_length`` exceeds the decimation, and drop forces when it
+          is shorter — making the number depend on how the sensor was set up.
+        * Averaging then scaling by ``step_dt`` reduces exactly to
+          ``sum(|F|) * physics_dt`` when a full step of substeps is available,
+          and degrades gracefully to the single end-of-step reading when the
+          sensor keeps no history at all.
+
+        The maximum is taken over bodies only: an episode is characterized by its
+        worst contact point, not by the average across the robot.
+        """
+        data = env.unwrapped.scene[self.contact_sensor_key].data
+        samples = self._contact_force_samples(data)
+        # (samples, bodies, 3) -> magnitude per body per sample.
+        magnitudes = np.linalg.norm(samples.reshape(samples.shape[0], -1, 3), axis=-1)
+        return float(magnitudes.mean(axis=0).max()) * self._step_duration(env)
+
+    def _contact_force_samples(self, data: Any) -> np.ndarray:
+        """Force samples covering the current control step, shaped (n, bodies, 3)."""
+        history = getattr(data, "net_forces_w_history", None)
+        if history is not None:
+            samples = _to_numpy(history)[0]
+            # IsaacLab documents this buffer as newest-first: "In the history
+            # dimension, the first index is the most recent and the last index is
+            # the oldest." Take the leading entries, which are this step's
+            # substeps; trailing ones belong to control steps already accounted
+            # for. Slicing from the end would silently report stale forces.
+            return samples[: self._control_substeps]
+
+        forces = getattr(data, "net_forces_w", None)
+        if forces is None:
+            raise RuntimeError(
+                f"No contact force buffer found on scene sensor "
+                f"'{self.contact_sensor_key}'; pass a custom impact_extractor."
+            )
+        # No history: the single end-of-step reading stands in for the whole
+        # step. A spike between substeps is invisible; set history_length to
+        # capture it.
+        return _to_numpy(forces)[0][np.newaxis, ...]
+
+    @property
+    def _control_substeps(self) -> int:
+        """Physics substeps per control step, from the live simulator's timing."""
+        env = self._get_env()
+        step_dt = getattr(env.unwrapped, "step_dt", None)
+        physics_dt = getattr(env.unwrapped, "physics_dt", None)
+        if not step_dt or not physics_dt:
+            return 1
+        return max(1, int(round(float(step_dt) / float(physics_dt))))
+
+    @staticmethod
+    def _step_duration(env: Any) -> float:
+        # Mean force (N) times the control-step duration gives an impulse (N*s),
+        # comparable across tasks with different control rates.
+        step_dt = getattr(env.unwrapped, "step_dt", None)
+        return float(step_dt) if step_dt is not None else 1.0
+
+    def _extract_success(
+        self, env: Any, info: Dict[str, Any], terminated: bool, truncated: bool
+    ) -> Optional[bool]:
+        if self._success_extractor is not None:
+            return bool(self._success_extractor(env, info, terminated, truncated))
+        if self.success_termination_term is None:
+            return None
+        del terminated, truncated
+        return self._default_success_extractor(env)
+
+    def _default_success_extractor(self, env: Any) -> bool:
+        """Read the configured success term from the termination manager.
+
+        There is deliberately no fallback. Inferring success from
+        ``terminated and not truncated`` looks reasonable but is wrong for most
+        IsaacLab tasks: they terminate on *failure* (a robot falling, a cart
+        leaving its bounds) and only truncate on timeout, so that rule reports
+        every failure as a success and silently inverts the metric. A
+        misconfigured term name must fail loudly instead.
+
+        Raises:
+            RuntimeError: If the task exposes no termination manager, or no term
+                by the configured name.
+        """
+        manager = getattr(env.unwrapped, "termination_manager", None)
+        getter = getattr(manager, "get_term", None)
+        if getter is None:
+            raise RuntimeError(
+                f"success_termination_term='{self.success_termination_term}' was configured "
+                "but this task exposes no termination manager; pass a custom success_extractor."
+            )
+        try:
+            return _scalar_bool(getter(self.success_termination_term))
+        except (KeyError, ValueError) as error:
+            raise RuntimeError(
+                f"Termination term '{self.success_termination_term}' not found on task "
+                f"'{self.task_id}'. Most IsaacLab tasks declare only failure and timeout "
+                "terms, so success usually needs an explicit success_extractor."
+            ) from error
+
     def _to_isaac_action(self, action: Any) -> Any:
         import torch  # pylint: disable=import-outside-toplevel
 
@@ -419,8 +653,13 @@ class IsaacLabPOMDP(Environment):
             )
 
         env = self._get_env()
-        _, reward, terminated, truncated, _ = env.step(self._to_isaac_action(action))
-        done = _scalar_bool(terminated) or _scalar_bool(truncated)
+        _, reward, terminated, truncated, info = env.step(self._to_isaac_action(action))
+        # Keep terminated and truncated apart, not just their disjunction: the
+        # difference between "the task ended" and "the clock ran out" is exactly
+        # the task-completion signal.
+        is_terminated = _scalar_bool(terminated)
+        is_truncated = _scalar_bool(truncated)
+        done = is_terminated or is_truncated
         pending = {
             "state": np.asarray(state).copy(),
             "action": action,
@@ -428,10 +667,15 @@ class IsaacLabPOMDP(Environment):
             "observation": self._extract_observation(env),
             "reward": _scalar_float(reward),
             "terminated": done,
+            "is_terminated": is_terminated,
+            "is_truncated": is_truncated,
+            "impact": self._extract_impact(env),
+            "success": self._extract_success(env, info or {}, is_terminated, is_truncated),
         }
         self._pending = pending
         self._live_state = pending["next_state"]
         self._terminated = done
+        self._capture_frame()
         return pending
 
     # ── Environment interface ───────────────────────────────────────────
@@ -457,6 +701,115 @@ class IsaacLabPOMDP(Environment):
     def reward(self, state: Any, action: Any, next_state: Any = None) -> float:
         del next_state
         return self._ensure_stepped(state, action)["reward"]
+
+    def step_info(self, state: Any, action: Any, next_state: Any) -> Dict[str, float]:
+        """Report impact severity and task success for the step just taken.
+
+        Values are served from the cache filled by the single ``env.step`` of
+        this interaction — a forward-only world cannot re-measure a transition,
+        so the arguments are used only to confirm the request refers to it.
+
+        Args:
+            state: The state the step was taken from.
+            action: The action taken.
+            next_state: The realised successor state.
+
+        Returns:
+            A mapping that may contain ``"impact"`` (peak contact impulse, N*s)
+            and ``"success"`` (1.0 / 0.0). A channel is absent when this world was
+            not configured to measure it, so that an unmeasured quantity is never
+            confused with a measured zero.
+        """
+        del state, action
+        pending = self._pending
+        if pending is None or not self._states_equal(pending["next_state"], next_state):
+            return {}
+
+        info: Dict[str, float] = {}
+        if pending["impact"] is not None:
+            info[IsaacLabStepChannel.CONTACT_IMPULSE_NS.value] = float(pending["impact"])
+        if pending["success"] is not None:
+            info[IsaacLabStepChannel.SUCCESS.value] = float(pending["success"])
+        return info
+
+    def get_metric_specs(self) -> List[StepInfoMetric]:
+        """Declare the metrics this world's configured measurements support.
+
+        Only channels this world actually emits are declared, so the declared
+        names always match the produced ones. A task with no contact sensor
+        reports no impact metric rather than a fabricated zero.
+
+        Returns:
+            Specs for the success rate and/or the max contact impulse,
+            depending on which measurements were configured.
+        """
+        specs: List[StepInfoMetric] = []
+        if self.success_termination_term is not None or self._success_extractor is not None:
+            specs.append(
+                StepInfoMetric(
+                    name=IsaacLabMetric.SUCCESS_RATE.value,
+                    channel=IsaacLabStepChannel.SUCCESS.value,
+                    per_episode=self.success_reduction,
+                )
+            )
+        if self.contact_sensor_key is not None or self._impact_extractor is not None:
+            specs.append(
+                StepInfoMetric(
+                    name=IsaacLabMetric.MAX_CONTACT_IMPULSE_NS.value,
+                    channel=IsaacLabStepChannel.CONTACT_IMPULSE_NS.value,
+                    per_episode=EpisodeReduction.MAX,
+                )
+            )
+        return specs
+
+    def cache_visualization(
+        self, history: "List[StepData]", output_dir: Path, episode_index: int
+    ) -> None:
+        """Write the buffered simulator frames as an episode video.
+
+        Args:
+            history: Unused. Frames are captured live during the episode because
+                the simulator viewport cannot be reconstructed from recorded
+                states.
+            output_dir: Directory to write into.
+            episode_index: Zero-based episode index, used to name the file.
+
+        Raises:
+            RuntimeError: If the world was not constructed with
+                ``record_video=True``.
+        """
+        del history
+        if not self.record_video:
+            raise RuntimeError(
+                "IsaacLabPOMDP.cache_visualization requires record_video=True; "
+                "construct the world with record_video=True (and "
+                "render_mode='rgb_array') to capture an episode video."
+            )
+        if not self._frames:
+            self.logger.warning("No frames buffered for episode %s; skipping video", episode_index)
+            return
+
+        # Imported lazily: the visualizer module is only needed when a video is
+        # actually written, and importing it pulls in matplotlib.
+        # pylint: disable-next=import-outside-toplevel
+        from POMDPPlanners.environments.isaac_lab_pomdp.isaac_lab_visualizer import (
+            IsaacLabPOMDPVisualizer,
+        )
+
+        output_dir.mkdir(parents=True, exist_ok=True)
+        cache_path = output_dir / f"agent_path_{episode_index}.mp4"
+        IsaacLabPOMDPVisualizer(self).frames_to_video(list(self._frames), cache_path)
+        self.logger.info("Cached episode video to %s", cache_path)
+
+    @property
+    def frames(self) -> List[np.ndarray]:
+        """The RGB frames buffered for the current episode.
+
+        Returns:
+            The frames captured since the last reset. Empty when
+            ``record_video`` is False.
+        """
+        return self._frames
 
     def is_terminal(self, state: Any) -> bool:
         if self._live_state is not None and not self._states_equal(state, self._live_state):

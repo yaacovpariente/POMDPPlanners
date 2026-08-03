@@ -13,6 +13,7 @@ task only when ``RUN_ISAAC_SMOKE`` is set (Isaac installed locally, not in CI).
 
 import os
 import pickle
+from types import SimpleNamespace
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
@@ -50,20 +51,76 @@ class _FakeSensorData:
         self.ray_hits_w = torch.tensor([[float(t)] * 4])
 
 
+class _FakeContactData:
+    """Contact-sensor buffers as torch tensors, mirroring IsaacLab's layout.
+
+    ``net_forces_w_history`` is shaped ``(1, history, bodies, 3)`` and is
+    **newest-first**, matching IsaacLab's documented convention: "In the history
+    dimension, the first index is the most recent and the last index is the
+    oldest." Reading it from the wrong end yields stale forces that still look
+    plausible, so the ordering is reproduced faithfully here.
+    """
+
+    def __init__(self, t: int, with_history: bool = True, stale: bool = False) -> None:
+        self.net_forces_w = torch.tensor([[[0.0, 0.0, 3.0 * t]]])
+        if not with_history:
+            return
+        # This control step's substeps, newest first. The 4t entry is the spike
+        # the non-history buffer would miss.
+        current = [[0.0, 0.0, 3.0 * t], [0.0, 4.0 * t, 0.0]]
+        if stale:
+            # Forces from *earlier* control steps live at the tail of the buffer.
+            # A correct reader must not integrate them into this step.
+            current = [*current, [0.0, 0.0, 500.0], [0.0, 900.0, 0.0]]
+        self.net_forces_w_history = torch.tensor([current])
+
+
+class _FakeTerminationManager:
+    """Termination manager exposing named terms, as IsaacLab's manager does."""
+
+    def __init__(self) -> None:
+        self._terms: Dict[str, torch.Tensor] = {}
+
+    def set_term(self, name: str, value: bool) -> None:
+        self._terms[name] = torch.tensor([value])
+
+    def get_term(self, name: str) -> torch.Tensor:
+        if name not in self._terms:
+            raise KeyError(name)
+        return self._terms[name]
+
+
 class FakeIsaacEnv:
     """Scripted IsaacLab-like env: torch tensors, a scene, deterministic steps.
 
-    The scene exposes a ``robot`` articulation and a ``lidar`` sensor whose
-    buffers advance with an internal step counter. The episode terminates once
-    ``terminate_after`` steps have been taken.
+    The scene exposes a ``robot`` articulation, a ``lidar`` sensor and a
+    ``contact_forces`` sensor whose buffers advance with an internal step
+    counter. The episode terminates once ``terminate_after`` steps have been
+    taken.
     """
 
-    def __init__(self, terminate_after: int = 3) -> None:
+    def __init__(
+        self,
+        terminate_after: int = 3,
+        contact_history: bool = True,
+        stale_history: bool = False,
+    ) -> None:
         self._t = 0
         self._terminate_after = terminate_after
+        self._contact_history = contact_history
+        self._stale_history = stale_history
         self.reset_calls = 0
         self.step_calls = 0
         self.render_calls = 0
+        self.step_dt = 0.5
+        self.action_space = SimpleNamespace(shape=(1, 2))
+        self.physics_dt = 0.25
+        self.termination_manager = _FakeTerminationManager()
+        # A task that declares a success term, initially unmet. Tasks without one
+        # are modelled by asking for a term name this manager does not have.
+        self.termination_manager.set_term("success", False)
+        self.step_info: Dict[str, Any] = {}
+        self.truncate = False
         self.scene: Dict[str, _FakeEntity] = {}
         self._refresh()
 
@@ -80,6 +137,11 @@ class FakeIsaacEnv:
         self.scene = {
             "robot": _FakeEntity(_FakeArticulationData(self._t)),
             "lidar": _FakeEntity(_FakeSensorData(self._t)),
+            "contact_forces": _FakeEntity(
+                _FakeContactData(
+                    self._t, with_history=self._contact_history, stale=self._stale_history
+                )
+            ),
         }
 
     def reset(self, *, seed: Any = None) -> Tuple[Dict[str, Any], Dict[str, Any]]:
@@ -98,8 +160,8 @@ class FakeIsaacEnv:
         self._refresh()
         reward = torch.tensor([1.0])
         terminated = torch.tensor([self._t >= self._terminate_after])
-        truncated = torch.tensor([False])
-        return {"policy": torch.zeros((1, 2))}, reward, terminated, truncated, {}
+        truncated = torch.tensor([self.truncate])
+        return {"policy": torch.zeros((1, 2))}, reward, terminated, truncated, self.step_info
 
 
 @pytest.fixture(name="fake_env")

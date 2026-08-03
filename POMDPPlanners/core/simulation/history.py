@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 
 from dataclasses import dataclass, fields
-from typing import TYPE_CHECKING, Any, List, NamedTuple, Union
+from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Union
 
 import numpy as np
 
@@ -13,12 +13,36 @@ if TYPE_CHECKING:
 
 
 class StepData(NamedTuple):
+    """One recorded interaction of an episode.
+
+    Attributes:
+        state: The state the step was taken from.
+        action: The action taken. ``None`` on the terminal bookkeeping step.
+        next_state: The realised successor state. ``None`` on the terminal step.
+        observation: The raw observation emitted by the world. ``None`` on the
+            terminal step.
+        reward: The realised reward. ``None`` on the terminal step.
+        belief: The belief held when the action was selected.
+        info: Optional auxiliary per-step measurements supplied by the
+            environment's
+            :meth:`~POMDPPlanners.core.environment.environment.Environment.step_info`
+            hook, as a flat mapping of channel name to scalar (e.g.
+            ``{"success": 1.0, "impact": 12.4}``).
+
+            This is the transport that lets an environment report a quantity it
+            can only measure *at step time* — a contact impulse, a termination
+            reason — to ``compute_metrics``, which runs later and in a different
+            process. Values must be plain picklable scalars so they survive every
+            task manager. ``None`` means the environment reported nothing.
+    """
+
     state: Any
     action: Any
     next_state: Any
     observation: Any
     reward: Union[float, None]
     belief: "Belief"
+    info: Optional[Dict[str, float]] = None
 
 
 @dataclass(frozen=True)
@@ -155,11 +179,13 @@ class History:
                     )
             history.append(StepData(**step_data))
 
-        # Handle policy_run_data deserialization
+        # Handle policy_run_data deserialization (local import breaks a cycle:
+        # core.policy imports from core.simulation).
+        # pylint: disable-next=import-outside-toplevel
         from POMDPPlanners.core.policy import (
             PolicyInfoVariable,
             PolicyRunData,
-        )  # pylint: disable=import-outside-toplevel
+        )
 
         policy_run_data = data.get("policy_run_data", None)
         if isinstance(policy_run_data, dict):
