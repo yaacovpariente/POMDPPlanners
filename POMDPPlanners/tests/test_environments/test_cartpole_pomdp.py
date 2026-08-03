@@ -24,6 +24,7 @@ from POMDPPlanners.environments.cartpole_pomdp import (
     _native,
 )
 from POMDPPlanners.tests.test_utils.env_pinned_kwargs import cartpole_pinned_kwargs
+from POMDPPlanners.tests.test_utils.golden_metric_snapshot import attach_step_info
 
 # Set seeds for reproducible tests
 np.random.seed(42)
@@ -857,7 +858,7 @@ def test_compute_metrics_goal_reaching():
     )
 
     # Compute metrics
-    metrics = env.compute_metrics([history1, history2, history3])
+    metrics = env.compute_metrics(attach_step_info(env, [history1, history2, history3]))
 
     # Convert metrics to dictionary for easier access
     metrics_dict = {metric.name: metric for metric in metrics}
@@ -1002,7 +1003,7 @@ def test_compute_metrics_values_within_confidence_intervals():
             )
         )
 
-    metrics = env.compute_metrics(histories)
+    metrics = env.compute_metrics(attach_step_info(env, histories))
     verify_metrics_within_confidence_intervals(metrics)
     verify_metric_sanity(metrics, histories, env)
     verify_history_returns_bounded(histories, env)

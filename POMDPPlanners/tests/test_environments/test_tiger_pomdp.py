@@ -19,6 +19,7 @@ from POMDPPlanners.tests.test_utils.metric_invariants_utils import (
     verify_metric_sanity,
     verify_return_shift_linearity,
 )
+from POMDPPlanners.tests.test_utils.golden_metric_snapshot import attach_step_info
 
 np.random.seed(42)
 random.seed(42)
@@ -446,7 +447,7 @@ class TestTigerPOMDPMetrics:
             )
 
         # Compute metrics for the perfect agent
-        metrics = tiger_pomdp.compute_metrics(histories)
+        metrics = tiger_pomdp.compute_metrics(attach_step_info(tiger_pomdp, histories))
 
         # Should have 100% success rate
         success_metric = next(m for m in metrics if m.name == "success_rate")
@@ -506,7 +507,7 @@ class TestTigerPOMDPMetrics:
             )
 
         # Compute metrics for the failing agent
-        metrics = tiger_pomdp.compute_metrics(histories)
+        metrics = tiger_pomdp.compute_metrics(attach_step_info(tiger_pomdp, histories))
 
         # Should have 0% success rate
         success_metric = next(m for m in metrics if m.name == "success_rate")
@@ -565,7 +566,7 @@ class TestTigerPOMDPMetrics:
             )
 
         # Compute metrics for the mixed performance agent
-        metrics = tiger_pomdp.compute_metrics(histories)
+        metrics = tiger_pomdp.compute_metrics(attach_step_info(tiger_pomdp, histories))
 
         # Should have 50% success rate
         success_metric = next(m for m in metrics if m.name == "success_rate")
@@ -621,7 +622,7 @@ class TestTigerPOMDPMetrics:
             reach_terminal_state=False,
             policy_run_data=[],
         )
-        metrics = tiger_pomdp.compute_metrics([empty_history])
+        metrics = tiger_pomdp.compute_metrics(attach_step_info(tiger_pomdp, [empty_history]))
 
         success_metric = next(m for m in metrics if m.name == "success_rate")
         listens_metric = next(m for m in metrics if m.name == "average_listens")
@@ -691,7 +692,7 @@ def test_metrics_confidence_intervals(tiger_pomdp):
         )
 
     # Compute metrics
-    metrics = tiger_pomdp.compute_metrics(histories)
+    metrics = tiger_pomdp.compute_metrics(attach_step_info(tiger_pomdp, histories))
 
     # Use generic confidence interval verification
     verify_metrics_within_confidence_intervals(metrics)

@@ -38,6 +38,7 @@ from POMDPPlanners.tests.test_utils.metric_invariants_utils import (
     verify_return_shift_linearity,
 )
 from POMDPPlanners.utils.logger import get_logger
+from POMDPPlanners.tests.test_utils.golden_metric_snapshot import attach_step_info
 
 # Set seeds for reproducible tests
 np.random.seed(42)
@@ -1642,7 +1643,7 @@ class TestLaserTagPOMDP:
             policy_run_data=[PolicyRunData(info_variables=[])],
         )
 
-        histories = [history]
+        histories = attach_step_info(env, [history])
         metrics = env.compute_metrics(histories)
 
         # Find wall collision metric

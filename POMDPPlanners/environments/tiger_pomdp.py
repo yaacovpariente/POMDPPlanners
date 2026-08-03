@@ -23,7 +23,7 @@ Classes:
 from enum import Enum
 from pathlib import Path
 from collections.abc import Hashable
-from typing import Any, List, Optional, Sequence, Union
+from typing import Any, Dict, List, Optional, Sequence, Union
 
 import numpy as np
 
@@ -34,10 +34,23 @@ from POMDPPlanners.core.environment import (
     SpaceType,
 )
 from POMDPPlanners.core.simulation import History, MetricValue
+from POMDPPlanners.core.simulation.step_info_metrics import (
+    EpisodeReduction,
+    StepInfoMetric,
+    order_and_fill_metrics,
+)
 
 STATES = ["tiger_left", "tiger_right"]
 ACTIONS = ["listen", "open_left", "open_right"]
 OBSERVATIONS = ["hear_left", "hear_right", "hear_nothing"]
+OPEN_ACTIONS = ("open_left", "open_right")
+
+
+class TigerStepChannel(Enum):
+    """Per-step measurement channels reported by :meth:`TigerPOMDP.step_info`."""
+
+    CORRECT_DOOR_OPENED = "correct_door_opened"
+    LISTENED = "listened"
 
 
 class TigerPOMDPMetrics(Enum):
@@ -269,61 +282,65 @@ class TigerPOMDP(DiscreteActionsEnvironment):
         # Discrete-action env: actions are str labels (LISTEN/OPEN_LEFT/...).
         return action
 
-    def get_metric_names(self) -> List[str]:
-        """Get names of Tiger POMDP specific metrics.
-
-        Returns:
-            List containing metric names: success_rate and average_listens
-        """
-        return [metric.value for metric in TigerPOMDPMetrics]
-
-    def compute_metrics(self, histories: List[History]) -> List[MetricValue]:
-        """Compute Tiger POMDP specific metrics from simulation histories.
+    def step_info(self, state: Any, action: Any, next_state: Any) -> Dict[str, float]:
+        """Report which door was opened and whether the agent listened.
 
         Args:
-            histories: List of simulation histories
+            state: The state the step was taken from, i.e. where the tiger is.
+            action: The action taken, or ``None`` on the terminal step.
+            next_state: Unused; the Tiger transition carries no extra signal.
 
         Returns:
-            List of MetricValue objects containing the computed metrics
+            The ``correct_door_opened`` and ``listened`` indicators.
         """
-        # Calculate success rate (opening correct door)
-        success_count = 0
-        total_episodes = len(histories)
+        del next_state
+        # Both channels are equality tests against ``action``, so the terminal
+        # bookkeeping step (``action is None``) reports 0.0 for each. That is
+        # what preserves the historical reading of ``history.history[-1]``:
+        # a terminated episode's last recorded step has no action, so it never
+        # counted as a success however it ended.
+        opened_correct_door = action in OPEN_ACTIONS and (
+            (action == "open_left") == (state == "tiger_right")
+        )
+        return {
+            TigerStepChannel.CORRECT_DOOR_OPENED.value: float(opened_correct_door),
+            TigerStepChannel.LISTENED.value: float(action == "listen"),
+        }
 
-        for history in histories:
-            if not history.history:
-                continue
-            # Check if the last action was opening a door
-            last_step = history.history[-1]
-            if last_step.action in ["open_left", "open_right"]:
-                # Check if the door opened was correct
-                if (last_step.action == "open_left" and last_step.state == "tiger_right") or (
-                    last_step.action == "open_right" and last_step.state == "tiger_left"
-                ):
-                    success_count += 1
+    def compute_metrics(self, histories: List[History]) -> List[MetricValue]:
+        """Compute the Tiger metrics, always reporting every declared name.
 
-        success_rate = success_count / total_episodes if total_episodes > 0 else 0.0
+        The shared aggregator omits a metric no episode reported, which happens
+        for an empty history list or an episode with no recorded steps. Tiger has
+        always reported both metrics as ``0.0`` in that case, so the declared
+        names are filled rather than dropped.
 
-        # Calculate average number of listens before opening a door
-        listen_counts = []
-        for history in histories:
-            listen_count = sum(1 for step in history.history if step.action == "listen")
-            listen_counts.append(listen_count)
+        Args:
+            histories: List of simulation histories.
 
-        avg_listens = sum(listen_counts) / len(listen_counts) if listen_counts else 0.0
+        Returns:
+            One MetricValue per declared metric name, in declaration order.
+        """
+        return order_and_fill_metrics(self.get_metric_names(), super().compute_metrics(histories))
 
-        # Create MetricValue objects
+    def get_metric_specs(self) -> List[StepInfoMetric]:
+        """Declare the Tiger metrics derived from the per-step channels.
+
+        Returns:
+            Specs for ``success_rate`` (the last step's door choice) and
+            ``average_listens`` (how often the agent listened per episode).
+        """
         return [
-            MetricValue(
+            StepInfoMetric(
                 name=TigerPOMDPMetrics.SUCCESS_RATE.value,
-                value=success_rate,
-                lower_confidence_bound=success_rate,  # Simple implementation, could be improved with proper confidence intervals
-                upper_confidence_bound=success_rate,
+                channel=TigerStepChannel.CORRECT_DOOR_OPENED.value,
+                per_episode=EpisodeReduction.LAST,
+                empty_episode_value=0.0,
             ),
-            MetricValue(
+            StepInfoMetric(
                 name=TigerPOMDPMetrics.AVERAGE_LISTENS.value,
-                value=avg_listens,
-                lower_confidence_bound=avg_listens,
-                upper_confidence_bound=avg_listens,
+                channel=TigerStepChannel.LISTENED.value,
+                per_episode=EpisodeReduction.SUM,
+                empty_episode_value=0.0,
             ),
         ]

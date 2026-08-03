@@ -27,6 +27,7 @@ Classes:
 Functions:
     aggregate_step_info_metrics: Reduce declared specs into MetricValues.
     extract_episode_step_infos: Pull per-step info mappings out of histories.
+    order_and_fill_metrics: Impose a declared name order, filling any gap.
 """
 
 from dataclasses import dataclass
@@ -104,6 +105,14 @@ class StepInfoMetric:
             ``None`` (the default) means such steps are skipped entirely. Use
             0.0 only when a missing channel genuinely means zero — treating
             "not measured" as "did not happen" silently biases the metric.
+        empty_episode_value: Value contributed by an *episode* that reported the
+            channel on no step at all, such as one with no recorded steps.
+            ``None`` (the default) drops that episode from the average entirely.
+            Set it when an episode that measured nothing still has a defined
+            answer: a "never crashed" predicate is vacuously true over no steps,
+            so it contributes 1.0, while a count of occurrences contributes 0.0.
+            Note this is not the same as ``default``, which fills in a missing
+            *step* within an episode that did report the channel elsewhere.
     """
 
     name: str
@@ -111,6 +120,7 @@ class StepInfoMetric:
     per_episode: EpisodeReduction
     scale: float = 1.0
     default: Optional[float] = None
+    empty_episode_value: Optional[float] = None
 
 
 def extract_episode_step_infos(histories: Sequence["History"]) -> List[List[Dict[str, float]]]:
@@ -202,6 +212,66 @@ def aggregate_step_info_metrics(
             values = _episode_values(episode, spec)
             if values is not None:
                 per_episode.append(_reduce_episode(spec.per_episode, values) * spec.scale)
+            elif spec.empty_episode_value is not None:
+                per_episode.append(spec.empty_episode_value * spec.scale)
         if per_episode:
             metrics.append(_metric_from_episode_values(spec, per_episode))
     return metrics
+
+
+def order_and_fill_metrics(
+    names: Sequence[str],
+    metrics: Sequence[MetricValue],
+    optional: Sequence[str] = (),
+) -> List[MetricValue]:
+    """Impose a declared name order on computed metrics, filling any gap.
+
+    Environments that combine spec-driven metrics with hand-written ones need
+    both halves emitted in their declared order, not concatenated: the position
+    of a metric is observable through
+    :func:`~POMDPPlanners.simulations.simulation_statistics.get_metric_names_from_environment_policy_pair`,
+    which feeds hyperparameter-tuning objective selection.
+
+    A declared name with no computed metric is filled with a zero-valued entry
+    on an unbounded interval, so the produced name list always equals the
+    declared one. That matters because
+    :func:`aggregate_step_info_metrics` deliberately omits a metric whose channel
+    no episode reported, which would otherwise shorten the list silently.
+
+    Note:
+        This is deliberately *not* applied by
+        :meth:`~POMDPPlanners.core.environment.environment.Environment.compute_metrics`.
+        For an environment that declares a channel only when the corresponding
+        sensor is configured, omission is meaningful — it distinguishes "never
+        measured" from "measured zero" — and filling would erase that. Use this
+        only where the declared name list is a fixed contract.
+
+    Args:
+        names: The declared metric names, in the order they must be emitted.
+        metrics: The computed metrics, in any order. Entries whose name is not in
+            ``names`` are dropped; duplicates resolve to the last occurrence.
+        optional: Names that are omitted rather than filled when absent, for
+            metrics whose historical behaviour is to disappear when nothing
+            contributed to them rather than to report a zero.
+
+    Returns:
+        One metric per declared name, in ``names`` order, minus any optional
+        name that was not computed.
+    """
+    by_name = {metric.name: metric for metric in metrics}
+    optional_names = set(optional)
+    ordered: List[MetricValue] = []
+    for name in names:
+        metric = by_name.get(name)
+        if metric is not None:
+            ordered.append(metric)
+        elif name not in optional_names:
+            ordered.append(
+                MetricValue(
+                    name=name,
+                    value=0.0,
+                    lower_confidence_bound=float(_UNBOUNDED_INTERVAL[0]),
+                    upper_confidence_bound=float(_UNBOUNDED_INTERVAL[1]),
+                )
+            )
+    return ordered

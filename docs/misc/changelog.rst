@@ -9,6 +9,56 @@ This project adheres to `Semantic Versioning <https://semver.org/spec/v2.0.0.htm
 Each ``#NNN`` links to the pull request that introduced the change.
 
 
+Release 0.6.0 (WIP)
+-------------------
+
+**Existing environments migrated onto the shared per-step metrics channel**
+
+Breaking Changes:
+^^^^^^^^^^^^^^^^^
+
+- Environment metrics are now derived from the per-step ``StepData.info``
+  channel, so an episode ``History`` cached *before* that field existed yields
+  no environment metrics when replayed. The simulation cache
+  (``DiskCacheDB``, keyed by config id) is short-lived run-recovery state, so
+  no compatibility shim is provided: clear the cache, or re-run the affected
+  configs. Metric names, values and ordering are unchanged for any history
+  produced by the current code.
+
+New Features:
+^^^^^^^^^^^^^
+
+- Migrated nine environments — Tiger, CartPole, MountainCar, RockSample, both
+  LaserTag variants, both Push variants and PacMan — onto
+  ``Environment.step_info`` and ``get_metric_specs``, replacing nine
+  hand-rolled ``compute_metrics`` bodies and their inconsistent
+  confidence-interval handling with the shared aggregator. Metrics that cannot
+  be expressed as a per-episode reduction of a per-step channel are kept
+  as-is: the LaserTag metrics defined in terms of a realised reward, and the
+  Push ``*_rate`` metrics, which are pooled across episodes.
+- ``Environment.step_info`` is now also called once per terminated episode,
+  for the terminal bookkeeping step, with ``action`` and ``next_state`` both
+  ``None``. Metrics that count every visited state need that final state, and
+  it is recorded on no other step.
+- Added ``order_and_fill_metrics`` to
+  :mod:`POMDPPlanners.core.simulation.step_info_metrics`, so an environment
+  with a fixed declared metric list always produces every declared name in
+  declaration order, even when the aggregator has nothing to report for one.
+
+Others:
+^^^^^^^
+
+- Extended the frozen metric baseline with a terminated-episode shape and a
+  metric-ordering snapshot, which is what makes the migration's
+  "no name, value or ordering moved" claim checkable rather than assumed.
+- Two deliberate behaviour changes came out of the migration, both confined to
+  confidence bounds and degenerate inputs; no metric's point estimate moved.
+  Tiger reported ``lower == upper == value`` — a placeholder its own comment
+  called out — and now gets a real 95% t-interval. Environments that previously
+  raised ``ValueError`` from ``confidence_interval`` on an empty history list
+  (CartPole, MountainCar, Push) now return zero-valued metrics instead.
+
+
 Release 0.5.0 (WIP)
 -------------------
 

@@ -300,6 +300,28 @@ class TestStepInfoContract:
 
         assert not world.step_info(state, np.zeros(2), np.array([99.0, 99.0]))
 
+    def test_step_info_for_the_terminal_step_reports_nothing(self, fake_env: FakeIsaacEnv) -> None:
+        """Test that the terminal bookkeeping call yields no measurements.
+
+        Purpose: Validates that the episode loop's terminal-step call cannot
+            mis-attribute the last transition's cached contact impulse and
+            success flag to the terminal state, which has no transition of its
+            own
+
+        Given: A world that has taken one step, holding a pending measurement
+        When: step_info is called the way _add_terminal_step calls it, with
+            action and next_state both None
+        Then: An empty mapping is returned and no extra physics step is taken
+
+        Test type: unit
+        """
+        world = _measuring_world()
+        state = world._live_state
+        world.sample_next_state(state, np.zeros(2))
+
+        assert not world.step_info(state, None, None)
+        assert fake_env.step_calls == 1
+
 
 class TestMetricSpecs:
     """Declared metric specs track the configured measurements."""
