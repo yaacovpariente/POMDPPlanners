@@ -31,7 +31,7 @@ reward, the planning wall-clock time, and the planner's tree metrics.
 
 import time
 from dataclasses import dataclass, field
-from typing import Callable, List, Optional
+from typing import Callable, Dict, List, Optional
 
 import torch
 from torch import Tensor
@@ -44,6 +44,8 @@ from POMDPPlanners.planners.vectorized_planners.vopp.vopp import VOPPPlanner
 
 WorldTransition = Callable[[Tensor, Tensor], Tensor]
 WorldObservation = Callable[[Tensor, Tensor], Tensor]
+WorldStepInfo = Callable[[], Dict[str, float]]
+WorldTerminal = Callable[[], bool]
 
 
 @dataclass
@@ -58,8 +60,19 @@ class VOPPEpisodeResult:
         plan_times: Wall-clock seconds spent inside each :meth:`plan` call.
         root_visit_counts: Planner root visit count (forward-search particle
             simulations) backing each step's action.
-        reached_goal: Whether the world reached a terminal (goal) state.
+        reached_terminal_state: Whether the episode ended because a terminal
+            state was reached, rather than by exhausting ``max_steps``. This is
+            *generic* termination, not success: with a ``world_terminal`` hook it
+            is whatever the world calls terminal, and IsaacLab tasks typically
+            terminate on **failure** (a robot falling, a cart leaving its bounds)
+            or timeout. Read task success from the ``success`` channel in
+            :attr:`step_infos`, never from this flag.
         num_steps: Number of executed actions.
+        step_infos: Per-step auxiliary measurements reported by the world, one
+            mapping per executed action. Mirrors
+            :attr:`~POMDPPlanners.core.simulation.history.StepData.info` so the
+            same metric aggregator serves both this runner and the standard
+            episode loop. Empty when no ``world_step_info`` hook was supplied.
     """
 
     states: List[Tensor] = field(default_factory=list)
@@ -68,8 +81,27 @@ class VOPPEpisodeResult:
     rewards: List[float] = field(default_factory=list)
     plan_times: List[float] = field(default_factory=list)
     root_visit_counts: List[int] = field(default_factory=list)
-    reached_goal: bool = False
+    step_infos: List[Dict[str, float]] = field(default_factory=list)
+    reached_terminal_state: bool = False
     num_steps: int = 0
+
+    @property
+    def reached_goal(self) -> bool:
+        """Deprecated attribute alias for :attr:`reached_terminal_state`.
+
+        The old name claimed more than the flag delivers: a terminal state is
+        usually a *failure* in IsaacLab tasks, not a goal. Reading and writing
+        this attribute still works, but it is **not** accepted as a constructor
+        keyword — ``VOPPEpisodeResult(reached_goal=...)`` is a breaking change and
+        must become ``VOPPEpisodeResult(reached_terminal_state=...)``. The only
+        construction site in this repository is the no-argument one in
+        :meth:`VOPPEpisodeRunner.run_episode`.
+        """
+        return self.reached_terminal_state
+
+    @reached_goal.setter
+    def reached_goal(self, value: bool) -> None:
+        self.reached_terminal_state = bool(value)
 
     @property
     def total_plan_time(self) -> float:
@@ -129,6 +161,8 @@ class VOPPEpisodeRunner:
         max_steps: int = 50,
         world_transition: Optional[WorldTransition] = None,
         world_observation: Optional[WorldObservation] = None,
+        world_step_info: Optional[WorldStepInfo] = None,
+        world_terminal: Optional[WorldTerminal] = None,
     ) -> None:
         """Initialise the runner.
 
@@ -142,6 +176,17 @@ class VOPPEpisodeRunner:
                 overriding the ground-truth transition (e.g. a real simulator).
             world_observation: Optional ``(next_state, action) -> observation``
                 hook overriding the ground-truth observation model.
+            world_step_info: Optional ``() -> {channel: value}`` hook reporting
+                the world's auxiliary measurements for the step just taken,
+                recorded into :attr:`VOPPEpisodeResult.step_infos`. Called after
+                the world transition, so it can serve values the world cached
+                during its own step.
+            world_terminal: Optional ``() -> bool`` hook deciding episode
+                termination from the *world* rather than the model. Supply it
+                whenever the surrogate model cannot represent termination — with
+                a model whose ``terminal_mask`` is constantly false, episodes
+                otherwise always run the full ``max_steps`` and never report
+                having reached the goal.
 
         Raises:
             ValueError: If ``num_belief_particles`` or ``max_steps`` is not
@@ -158,6 +203,8 @@ class VOPPEpisodeRunner:
         self.device = model.device
         self._world_transition = world_transition or model.sample_next_states
         self._world_observation = world_observation or model.sample_observations
+        self._world_step_info = world_step_info
+        self._world_terminal = world_terminal
 
     def run_episode(
         self, initial_state: Tensor, initial_particles: Optional[Tensor] = None
@@ -184,8 +231,8 @@ class VOPPEpisodeRunner:
             next_state, reward, observation = self._step_world(state, action_index)
             self._record_step(result, state, particles, action_index, reward, plan_time)
             state = next_state
-            if bool(self._model.terminal_mask(state).any()):
-                result.reached_goal = True
+            if self._is_terminal(state):
+                result.reached_terminal_state = True
                 break
             particles = self._filter_belief(particles, action_index, observation)
         result.states.append(state.squeeze(0))
@@ -219,6 +266,13 @@ class VOPPEpisodeRunner:
         observation = self._world_observation(next_state, action)
         return next_state, reward, observation
 
+    def _is_terminal(self, state: Tensor) -> bool:
+        # The world's own verdict wins when available: a surrogate model fitted
+        # from rollouts generally cannot represent termination at all.
+        if self._world_terminal is not None:
+            return bool(self._world_terminal())
+        return bool(self._model.terminal_mask(state).any())
+
     def _record_step(
         self,
         result: VOPPEpisodeResult,
@@ -234,6 +288,8 @@ class VOPPEpisodeRunner:
         result.rewards.append(reward)
         result.plan_times.append(plan_time)
         result.root_visit_counts.append(self._root_visit_count())
+        if self._world_step_info is not None:
+            result.step_infos.append(dict(self._world_step_info()))
 
     def _root_visit_count(self) -> int:
         for variable in self._planner.tree_metrics():
