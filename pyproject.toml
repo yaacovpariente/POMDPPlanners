@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "POMDPPlanners"
-version = "0.4.0"
+version = "0.5.0"
 description = "A Python package for POMDP planning algorithms and environments"
 readme = "README.md"
 license = "MIT"
@@ -83,6 +83,7 @@ docs = [
 Homepage = "https://github.com/yaacovpariente/POMDPPlanners"
 "Bug Reports" = "https://github.com/yaacovpariente/POMDPPlanners/issues"
 Documentation = "https://yaacovpariente.github.io/POMDPPlanners/"
+Changelog = "https://yaacovpariente.github.io/POMDPPlanners/misc/changelog.html"
 
 [tool.setuptools.packages.find]
 where = ["."]

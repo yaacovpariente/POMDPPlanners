@@ -101,6 +101,12 @@ Basic Usage
 
    api/modules
 
+.. toctree::
+   :maxdepth: 1
+   :caption: Misc
+
+   misc/changelog
+
 🏗️ Architecture Overview
 -------------------------
 
