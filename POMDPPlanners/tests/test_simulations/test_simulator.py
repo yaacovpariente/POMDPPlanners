@@ -203,11 +203,17 @@ def test_pomdp_simulator_parallel_execution_completes_multiple_policy_episodes(
         assert history.actual_num_steps == expected_steps
         assert isinstance(history.reach_terminal_state, bool)
 
-        # Verify history contains valid step data (state, action, next_state, observation, reward, belief)
+        # Verify history contains valid step data. Assert on the field names
+        # rather than the tuple arity: StepData gains optional trailing fields
+        # (e.g. per-step ``info``) and an arity check breaks on every addition
+        # without saying anything about the data actually being well-formed.
         for step_idx, step_data in enumerate(history.history):
-            assert (
-                len(step_data) == 6
+            assert isinstance(
+                step_data, StepData
             ), f"Episode {episode_idx}, step {step_idx} has invalid data format"
+            assert {"state", "action", "next_state", "observation", "reward", "belief"}.issubset(
+                step_data._fields
+            ), f"Episode {episode_idx}, step {step_idx} is missing core fields"
 
 
 def test_pomdp_simulator_comparison_generates_statistics_dataframe(simulator):

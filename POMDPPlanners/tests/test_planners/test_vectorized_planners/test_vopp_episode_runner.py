@@ -19,7 +19,13 @@ from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_vectorize
     ContinuousLightDarkVectorizedModel,
 )
 from POMDPPlanners.planners.vectorized_planners import VOPPPlanner
+from POMDPPlanners.core.simulation.step_info_metrics import (
+    EpisodeReduction,
+    StepInfoMetric,
+    aggregate_step_info_metrics,
+)
 from POMDPPlanners.planners.vectorized_planners.vopp.vopp_episode_runner import (
+    VOPPEpisodeResult,
     VOPPEpisodeRunner,
 )
 
@@ -150,7 +156,7 @@ def test_runner_records_consistent_trajectory_lengths():
 def test_runner_reaches_terminal_state():
     """Test that reaching a terminal world state ends the episode as a goal.
 
-    Purpose: Validates terminal detection and the ``reached_goal`` flag,
+    Purpose: Validates terminal detection and the ``reached_terminal_state`` flag,
         independent of planner optimality.
 
     Given: A world transition that deterministically advances the true state by
@@ -174,7 +180,7 @@ def test_runner_reaches_terminal_state():
     )
     torch.manual_seed(0)
     result = runner.run_episode(torch.zeros(1, 1))
-    assert result.reached_goal
+    assert result.reached_terminal_state
     assert result.num_steps == 3
     assert float(result.states[-1][0]) == pytest.approx(3.0)
 
@@ -276,5 +282,191 @@ def test_runner_light_dark_end_to_end_reaches_goal():
     )
     runner = VOPPEpisodeRunner(planner, model, num_belief_particles=256, max_steps=40)
     result = runner.run_episode(torch.tensor([[0.0, 5.0]]))
-    assert result.reached_goal
+    assert result.reached_terminal_state
     assert all(belief.shape == (256, 2) for belief in result.beliefs)
+
+
+class _NonTerminatingModel(DriftModel):
+    """DriftModel whose terminal_mask is constantly false.
+
+    Mirrors ``IsaacLabVectorizedModel``, whose ``terminal_mask`` is hardcoded to
+    all-False: without a world-side hook such a model can never end an episode.
+    """
+
+    def terminal_mask(self, states: Tensor) -> Tensor:
+        return torch.zeros(states.shape[0], dtype=torch.bool, device=states.device)
+
+
+def test_runner_records_world_step_info_per_step():
+    """Test that the world's per-step measurements are recorded.
+
+    Purpose: Validates that VOPP episodes carry the same per-step channels as the
+        standard episode loop, so one metric aggregator serves both runners
+
+    Given: A world_step_info hook reporting an incrementing impact channel
+    When: An episode of three steps is run
+    Then: One mapping per executed action is recorded, in order
+
+    Test type: unit
+    """
+    device = torch.device("cpu")
+    model = _NonTerminatingModel(device=device)
+    planner = VOPPPlanner(model, num_actions=model.num_actions, num_planning_iterations=2)
+    calls = {"n": 0}
+
+    def world_step_info() -> dict:
+        calls["n"] += 1
+        return {"impact": float(calls["n"]), "success": 0.0}
+
+    runner = VOPPEpisodeRunner(
+        planner, model, num_belief_particles=32, max_steps=3, world_step_info=world_step_info
+    )
+    torch.manual_seed(0)
+    result = runner.run_episode(torch.zeros(1, 1))
+
+    assert result.num_steps == 3
+    assert [info["impact"] for info in result.step_infos] == [1.0, 2.0, 3.0]
+
+
+def test_step_infos_empty_without_the_hook():
+    """Test that step_infos stays empty when no hook is supplied.
+
+    Purpose: Validates that the new field is opt-in and costs nothing for
+        existing callers
+
+    Given: A runner constructed without world_step_info
+    When: An episode is run
+    Then: No step infos are recorded
+
+    Test type: unit
+    """
+    device = torch.device("cpu")
+    model = DriftModel(device=device)
+    planner = VOPPPlanner(model, num_actions=model.num_actions, num_planning_iterations=2)
+    runner = VOPPEpisodeRunner(planner, model, num_belief_particles=32, max_steps=2)
+
+    torch.manual_seed(0)
+    result = runner.run_episode(torch.zeros(1, 1))
+
+    assert not result.step_infos
+
+
+def test_world_terminal_hook_ends_the_episode():
+    """Test that the world can end an episode a non-terminating model cannot.
+
+    Purpose: Validates the path that makes task completion measurable at all
+        against a surrogate model whose terminal_mask is constantly false
+
+    Given: A model that never reports terminal and a world_terminal hook firing
+        on the second step
+    When: An episode with max_steps=10 is run
+    Then: The episode stops after two steps and reports having reached the goal
+
+    Test type: unit
+    """
+    device = torch.device("cpu")
+    model = _NonTerminatingModel(device=device)
+    planner = VOPPPlanner(model, num_actions=model.num_actions, num_planning_iterations=2)
+    calls = {"n": 0}
+
+    def world_terminal() -> bool:
+        calls["n"] += 1
+        return calls["n"] >= 2
+
+    runner = VOPPEpisodeRunner(
+        planner, model, num_belief_particles=32, max_steps=10, world_terminal=world_terminal
+    )
+    torch.manual_seed(0)
+    result = runner.run_episode(torch.zeros(1, 1))
+
+    assert result.num_steps == 2
+    assert result.reached_terminal_state is True
+
+
+def test_without_world_terminal_a_non_terminating_model_runs_to_max_steps():
+    """Test the failure mode the world_terminal hook exists to fix.
+
+    Purpose: Documents that a model whose terminal_mask is always false never
+        ends an episode early nor reports reaching the goal, which is why task
+        completion needs a world-side signal
+
+    Given: A model that never reports terminal and no world_terminal hook
+    When: An episode with max_steps=4 is run
+    Then: All four steps execute and reached_terminal_state stays False
+
+    Test type: unit
+    """
+    device = torch.device("cpu")
+    model = _NonTerminatingModel(device=device)
+    planner = VOPPPlanner(model, num_actions=model.num_actions, num_planning_iterations=2)
+    runner = VOPPEpisodeRunner(planner, model, num_belief_particles=32, max_steps=4)
+
+    torch.manual_seed(0)
+    result = runner.run_episode(torch.zeros(1, 1))
+
+    assert result.num_steps == 4
+    assert result.reached_terminal_state is False
+
+
+def test_vopp_step_infos_feed_the_shared_metric_aggregator():
+    """Test that VOPP results flow into the shared metric aggregation.
+
+    Purpose: Validates the design claim that the VOPP runner and the standard
+        episode loop produce the same metric shapes despite different result types
+
+    Given: Two VOPP episodes reporting success on one of them
+    When: Their step_infos are aggregated with a completion-rate spec
+    Then: task_completion_rate is 0.5
+
+    Test type: integration
+    """
+    device = torch.device("cpu")
+    model = _NonTerminatingModel(device=device)
+    planner = VOPPPlanner(model, num_actions=model.num_actions, num_planning_iterations=2)
+
+    def make_result(success: float) -> VOPPEpisodeResult:
+        runner = VOPPEpisodeRunner(
+            planner,
+            model,
+            num_belief_particles=32,
+            max_steps=2,
+            world_step_info=lambda: {"success": success},
+        )
+        torch.manual_seed(0)
+        return runner.run_episode(torch.zeros(1, 1))
+
+    episodes = [make_result(1.0).step_infos, make_result(0.0).step_infos]
+    spec = StepInfoMetric(
+        name="task_completion_rate",
+        channel="success",
+        per_episode=EpisodeReduction.ANY,
+    )
+
+    metrics = aggregate_step_info_metrics(episodes, [spec])
+
+    assert metrics[0].name == "task_completion_rate"
+    assert metrics[0].value == pytest.approx(0.5)
+
+
+def test_reached_goal_alias_reads_and_writes_terminal_state():
+    """Test the deprecated reached_goal alias in both directions.
+
+    Purpose: Validates that renaming the flag to reached_terminal_state does not
+        break attribute reads or writes for existing callers, while documenting
+        that the flag means generic termination rather than success
+
+    Given: A fresh VOPPEpisodeResult
+    When: The alias is read, written, and the canonical field is written
+    Then: Both names stay in sync in both directions
+
+    Test type: unit
+    """
+    result = VOPPEpisodeResult()
+
+    assert result.reached_goal is False
+
+    result.reached_goal = True
+    assert result.reached_terminal_state is True
+
+    result.reached_terminal_state = False
+    assert result.reached_goal is False
