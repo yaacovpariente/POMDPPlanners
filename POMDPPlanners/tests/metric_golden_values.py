@@ -30,9 +30,13 @@ Attributes:
         shape of the fixture (see ``append_terminal_step``).
     GOLDEN_METRIC_NAMES: env slug -> sorted ``get_metric_names()`` output.
     GOLDEN_METRIC_ORDER: env slug -> unsorted metric names, in emission order.
+    GOLDEN_METRIC_BOUNDS: env slug -> metric name -> frozen (lower, upper)
+        confidence bounds.
+    GOLDEN_METRIC_BOUNDS_WITH_TERMINAL: the same, over the terminated-episode
+        shape of the fixture.
 """
 
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 GOLDEN_METRIC_VALUES: Dict[str, Dict[str, float]] = {
     "tiger": {"success_rate": 0.6666666666666666, "average_listens": 2.0},
@@ -342,4 +346,171 @@ GOLDEN_METRIC_ORDER: Dict[str, List[str]] = {
         "avg_all_dangerous_encounters",
     ],
     "rock_sample": ["avg_rocks_sampled", "exit_success_rate", "average_dangerous_area_steps"],
+}
+
+# Captured the same way as GOLDEN_METRIC_VALUES, by running the pre-migration
+# compute_metrics over the same frozen fixture. A MetricValue is a point estimate
+# *and* an interval, and the value assertions above see only half of it: a
+# reduction that produced the right mean from the wrong per-episode samples would
+# pass them and move the interval. These pin the other half.
+GOLDEN_METRIC_BOUNDS: Dict[str, Dict[str, Tuple[float, float]]] = {
+    "cartpole": {
+        "goal_reaching_rate": (1.0, 1.0),
+    },
+    "continuous_laser_tag": {
+        "average_all_dangerous_encounters": (0.0, 0.0),
+        "average_dangerous_area_steps": (0.0, 0.0),
+        "average_episode_length": (5.0, 5.0),
+        "average_failed_tag_attempts": (0.0, 0.0),
+        "average_wall_collisions": (0.0, 0.0),
+        "goal_reaching_rate": (0.0, 0.0),
+        "tag_success_rate": (0.0, 0.0),
+    },
+    "continuous_light_dark": {
+        "avg_high_variance_states_counter": (-0.7675509098987142, 2.1008842432320476),
+        "avg_obstacle_hit_counter": (0.0, 0.0),
+        "goal_reaching_rate": (0.0, 0.0),
+        "obstacle_hit_rate": (0.0, 0.0),
+        "out_of_grid_rate": (-0.7675509098987142, 2.1008842432320476),
+    },
+    "continuous_push": {
+        "dangerous_area_rate": (0.0, 0.0),
+        "goal_reaching_rate": (0.0, 0.0),
+        "object_obstacle_collision_rate": (0.0, 0.0),
+        "robot_obstacle_collision_rate": (0.0, 0.0),
+        "total_all_obstacle_collisions": (0.0, 0.0),
+        "total_dangerous_area_steps": (0.0, 0.0),
+        "total_object_obstacle_collisions": (0.0, 0.0),
+        "total_obstacle_collision_rate": (0.0, 0.0),
+        "total_robot_obstacle_collisions": (0.0, 0.0),
+    },
+    "discrete_light_dark": {
+        "avg_high_variance_states_counter": (-2.201768486464095, 3.535101819797428),
+        "avg_obstacle_hit_counter": (0.0, 0.0),
+        "goal_reaching_rate": (0.0, 0.0),
+        "obstacle_hit_rate": (0.0, 0.0),
+        "out_of_grid_rate": (-1.1008842432320476, 1.767550909898714),
+    },
+    "laser_tag": {
+        "average_all_dangerous_encounters": (-4.40353697292819, 7.070203639594856),
+        "average_dangerous_area_steps": (-4.40353697292819, 7.070203639594856),
+        "average_episode_length": (5.0, 5.0),
+        "average_failed_tag_attempts": (1.0, 1.0),
+        "average_obstacle_collisions": (0.0, 0.0),
+        "goal_reaching_rate": (0.0, 0.0),
+        "tag_success_rate": (0.0, 0.0),
+    },
+    "mountain_car": {
+        "goal_reaching_rate": (0.0, 0.0),
+    },
+    "pacman": {
+        "avg_all_dangerous_encounters": (0.0, 0.0),
+        "avg_collision_encounters": (0.0, 0.0),
+        "avg_dangerous_area_steps": (0.0, 0.0),
+        "avg_episode_length": (5.0, 5.0),
+        "avg_pacman_closest_ghost_distance": (9.574416726623387, 11.092249940043281),
+        "avg_pellets_collected": (1.0, 1.0),
+        "win_rate": (0.0, 0.0),
+    },
+    "push": {
+        "dangerous_area_rate": (0.0, 0.0),
+        "goal_reaching_rate": (0.0, 0.0),
+        "object_obstacle_collision_rate": (0.0, 0.0),
+        "robot_obstacle_collision_rate": (0.0, 0.0),
+        "total_all_obstacle_collisions": (0.0, 0.0),
+        "total_dangerous_area_steps": (0.0, 0.0),
+        "total_object_obstacle_collisions": (0.0, 0.0),
+        "total_obstacle_collision_rate": (0.0, 0.0),
+        "total_robot_obstacle_collisions": (0.0, 0.0),
+    },
+    "rock_sample": {
+        "average_dangerous_area_steps": (0.0, 0.0),
+        "avg_rocks_sampled": (1.0, 1.0),
+        "exit_success_rate": (0.0, 0.0),
+    },
+    "tiger": {
+        "average_listens": (2.0, 2.0),
+        "success_rate": (0.6666666666666666, 0.6666666666666666),
+    },
+}
+
+GOLDEN_METRIC_BOUNDS_WITH_TERMINAL: Dict[str, Dict[str, Tuple[float, float]]] = {
+    "cartpole": {
+        "goal_reaching_rate": (1.0, 1.0),
+    },
+    "continuous_laser_tag": {
+        "average_all_dangerous_encounters": (0.0, 0.0),
+        "average_dangerous_area_steps": (0.0, 0.0),
+        "average_episode_length": (6.0, 6.0),
+        "average_failed_tag_attempts": (0.0, 0.0),
+        "average_wall_collisions": (0.0, 0.0),
+        "goal_reaching_rate": (0.0, 0.0),
+        "tag_success_rate": (0.0, 0.0),
+    },
+    "continuous_light_dark": {
+        "avg_high_variance_states_counter": (-0.7675509098987142, 2.1008842432320476),
+        "avg_obstacle_hit_counter": (0.0, 0.0),
+        "goal_reaching_rate": (0.0, 0.0),
+        "obstacle_hit_rate": (0.0, 0.0),
+        "out_of_grid_rate": (-0.7675509098987142, 2.1008842432320476),
+    },
+    "continuous_push": {
+        "dangerous_area_rate": (0.0, 0.0),
+        "goal_reaching_rate": (0.0, 0.0),
+        "object_obstacle_collision_rate": (0.0, 0.0),
+        "robot_obstacle_collision_rate": (0.0, 0.0),
+        "total_all_obstacle_collisions": (0.0, 0.0),
+        "total_dangerous_area_steps": (0.0, 0.0),
+        "total_object_obstacle_collisions": (0.0, 0.0),
+        "total_obstacle_collision_rate": (0.0, 0.0),
+        "total_robot_obstacle_collisions": (0.0, 0.0),
+    },
+    "discrete_light_dark": {
+        "avg_high_variance_states_counter": (-3.302652729696142, 5.302652729696142),
+        "avg_obstacle_hit_counter": (0.0, 0.0),
+        "goal_reaching_rate": (0.0, 0.0),
+        "obstacle_hit_rate": (0.0, 0.0),
+        "out_of_grid_rate": (-1.1008842432320476, 1.767550909898714),
+    },
+    "laser_tag": {
+        "average_all_dangerous_encounters": (-5.504421216160236, 8.83775454949357),
+        "average_dangerous_area_steps": (-5.504421216160236, 8.83775454949357),
+        "average_episode_length": (6.0, 6.0),
+        "average_failed_tag_attempts": (1.0, 1.0),
+        "average_obstacle_collisions": (0.0, 0.0),
+        "goal_reaching_rate": (0.0, 0.0),
+        "tag_success_rate": (0.0, 0.0),
+    },
+    "mountain_car": {
+        "goal_reaching_rate": (0.0, 0.0),
+    },
+    "pacman": {
+        "avg_all_dangerous_encounters": (0.0, 0.0),
+        "avg_collision_encounters": (0.0, 0.0),
+        "avg_dangerous_area_steps": (0.0, 0.0),
+        "avg_episode_length": (6.0, 6.0),
+        "avg_pacman_closest_ghost_distance": (8.601554733051053, 11.509556378060058),
+        "avg_pellets_collected": (1.0, 1.0),
+        "win_rate": (0.0, 0.0),
+    },
+    "push": {
+        "dangerous_area_rate": (0.0, 0.0),
+        "goal_reaching_rate": (0.0, 0.0),
+        "object_obstacle_collision_rate": (0.0, 0.0),
+        "robot_obstacle_collision_rate": (0.0, 0.0),
+        "total_all_obstacle_collisions": (0.0, 0.0),
+        "total_dangerous_area_steps": (0.0, 0.0),
+        "total_object_obstacle_collisions": (0.0, 0.0),
+        "total_obstacle_collision_rate": (0.0, 0.0),
+        "total_robot_obstacle_collisions": (0.0, 0.0),
+    },
+    "rock_sample": {
+        "average_dangerous_area_steps": (0.0, 0.0),
+        "avg_rocks_sampled": (1.0, 1.0),
+        "exit_success_rate": (0.0, 0.0),
+    },
+    "tiger": {
+        "average_listens": (2.0, 2.0),
+        "success_rate": (0.0, 0.0),
+    },
 }

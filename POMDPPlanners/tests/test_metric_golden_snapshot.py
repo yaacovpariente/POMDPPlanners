@@ -18,6 +18,8 @@ import pytest
 
 from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.tests.metric_golden_values import (
+    GOLDEN_METRIC_BOUNDS,
+    GOLDEN_METRIC_BOUNDS_WITH_TERMINAL,
     GOLDEN_METRIC_NAMES,
     GOLDEN_METRIC_ORDER,
     GOLDEN_METRIC_VALUES,
@@ -26,12 +28,20 @@ from POMDPPlanners.tests.metric_golden_values import (
 from POMDPPlanners.tests.test_utils.golden_metric_snapshot import (
     append_terminal_step,
     build_registry,
+    compute_metric_bounds,
     compute_metric_order,
     compute_metric_snapshot,
     load_snapshot_histories,
 )
 
 _ENV_SLUGS = sorted(build_registry())
+
+# The one bound this migration deliberately moved. Tiger reported
+# ``lower == upper == value`` -- a placeholder its own source comment called out
+# -- and now gets a real 95% t-interval from the shared aggregator. Listed here
+# rather than baked into the baseline so the exception stays visible: every other
+# environment, metric and shape is asserted unchanged.
+_DELIBERATELY_CHANGED_BOUNDS = {("tiger", "success_rate")}
 
 
 @pytest.fixture(name="frozen_histories", scope="module")
@@ -102,6 +112,46 @@ class TestMetricGoldenSnapshot:
             assert math.isclose(
                 actual[name], expected_value, rel_tol=1e-9, abs_tol=1e-12
             ), f"{slug}.{name} changed on the terminal shape: {expected_value} -> {actual[name]}"
+
+    @pytest.mark.parametrize("slug", _ENV_SLUGS)
+    @pytest.mark.parametrize("shape", ["plain", "terminal"])
+    def test_confidence_bounds_match_frozen_baseline(
+        self, slug: str, shape: str, frozen_histories: Dict[str, List[History]]
+    ) -> None:
+        """Test that each environment's confidence bounds are unchanged.
+
+        Purpose: Validates the half of every MetricValue the value assertions
+            cannot see. A declared reduction that yields the right mean from the
+            wrong per-episode samples passes those and moves the interval, which
+            is precisely the failure mode a per-episode reduction can introduce
+
+        Given: The frozen histories, in both the plain and terminated-episode
+            shapes, and the pre-change bounds baseline for that shape
+        When: compute_metrics() is run for the environment against them
+        Then: Every metric's (lower, upper) pair matches the baseline, except
+            the bounds this migration deliberately changed
+
+        Test type: unit
+        """
+        histories = frozen_histories[slug]
+        expected = GOLDEN_METRIC_BOUNDS[slug]
+        if shape == "terminal":
+            histories = append_terminal_step(histories)
+            expected = GOLDEN_METRIC_BOUNDS_WITH_TERMINAL[slug]
+
+        actual = compute_metric_bounds(build_registry()[slug](), histories)
+
+        for name, (expected_lower, expected_upper) in expected.items():
+            if (slug, name) in _DELIBERATELY_CHANGED_BOUNDS:
+                continue
+            assert name in actual, f"{slug}.{name} disappeared on the {shape} shape."
+            actual_lower, actual_upper = actual[name]
+            assert math.isclose(
+                actual_lower, expected_lower, rel_tol=1e-9, abs_tol=1e-12
+            ) and math.isclose(actual_upper, expected_upper, rel_tol=1e-9, abs_tol=1e-12), (
+                f"{slug}.{name} confidence bounds changed on the {shape} shape: "
+                f"({expected_lower}, {expected_upper}) -> ({actual_lower}, {actual_upper})"
+            )
 
     @pytest.mark.parametrize("slug", _ENV_SLUGS)
     def test_metric_order_matches_frozen_baseline(

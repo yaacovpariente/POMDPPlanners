@@ -900,19 +900,16 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
                 name=RockSamplePOMDPMetrics.AVG_ROCKS_SAMPLED.value,
                 channel=RockSampleStepChannel.SAMPLED_ROCK.value,
                 per_episode=EpisodeReduction.SUM,
-                empty_episode_value=0.0,
             ),
             StepInfoMetric(
                 name=RockSamplePOMDPMetrics.EXIT_SUCCESS_RATE.value,
                 channel=RockSampleStepChannel.TERMINAL_STATE.value,
                 per_episode=EpisodeReduction.ANY,
-                empty_episode_value=0.0,
             ),
             StepInfoMetric(
                 name=RockSamplePOMDPMetrics.AVERAGE_DANGEROUS_AREA_STEPS.value,
                 channel=RockSampleStepChannel.IN_DANGEROUS_AREA.value,
                 per_episode=EpisodeReduction.SUM,
-                empty_episode_value=0.0,
             ),
         ]
 

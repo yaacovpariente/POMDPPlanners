@@ -276,6 +276,43 @@ class TaskManagerExternalDB(TaskManager):
             List[Any]: Results from executing the tasks
         """
 
+    def _cached_result_is_usable(self, task: SimulationTask, result: Any, task_id: str) -> bool:
+        """Decide whether a cached result can still be scored, or must be redone.
+
+        The cache key is the task's configuration, which says nothing about the
+        format of the episode it produced. An entry written before
+        :attr:`~POMDPPlanners.core.simulation.history.StepData.info` existed
+        therefore still hits, and unpickles cleanly with every measurement
+        missing -- which, for an environment deriving its metrics from that
+        channel, yields a full set of zero-valued metrics rather than an obvious
+        failure.
+
+        Such an entry is reported as unusable so the caller reruns that one task.
+        Only the stale entries are redone; everything recorded in the current
+        format is still reused, so a resumed run keeps its recovery.
+        """
+        environment = getattr(task, "environment", None)
+        if environment is None or not hasattr(environment, "get_metric_specs"):
+            return True
+        if not hasattr(result, "history"):
+            return True
+        # Imported here rather than at module scope: core.simulation.__init__
+        # imports this module, so a top-level import would close a cycle.
+        # pylint: disable-next=import-outside-toplevel
+        from POMDPPlanners.core.simulation.step_info_metrics import unmeasured_episode_index
+
+        if unmeasured_episode_index([result], environment.get_metric_specs()) is None:
+            return True
+
+        self.logger.warning(
+            "Cached result for task %s predates the per-step measurement channel: it carries "
+            "none of %s's channels, so its metrics would all read zero. Rerunning this task "
+            "and replacing the cache entry.",
+            task_id,
+            type(environment).__name__,
+        )
+        return False
+
     def run_tasks(
         self, tasks: List[SimulationTask], task_identifiers: list
     ) -> Tuple[List[Any], list]:
@@ -301,8 +338,9 @@ class TaskManagerExternalDB(TaskManager):
         cached_tasks = 0
         for i, task in enumerate(tasks):
             task_id = task.get_config_id()
-            if self.cache_db.is_key_in_cache(task_id):
-                results[i] = self.cache_db.get(task_id)
+            cached = self.cache_db.get(task_id) if self.cache_db.is_key_in_cache(task_id) else None
+            if cached is not None and self._cached_result_is_usable(task, cached, task_id):
+                results[i] = cached
                 cached_tasks += 1
             else:
                 tasks_to_run.append(task)

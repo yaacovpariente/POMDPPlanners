@@ -894,31 +894,26 @@ class ContinuousPushPOMDP(Environment):  # pylint: disable=too-many-public-metho
                 name=ContinuousPushPOMDPMetrics.GOAL_REACHING_RATE.value,
                 channel=ContinuousPushStepChannel.GOAL_REACHED.value,
                 per_episode=EpisodeReduction.ANY,
-                empty_episode_value=0.0,
             ),
             StepInfoMetric(
                 name=ContinuousPushPOMDPMetrics.TOTAL_ROBOT_OBSTACLE_COLLISIONS.value,
                 channel=ContinuousPushStepChannel.ROBOT_OBSTACLE_COLLISION.value,
                 per_episode=EpisodeReduction.SUM,
-                empty_episode_value=0.0,
             ),
             StepInfoMetric(
                 name=ContinuousPushPOMDPMetrics.TOTAL_OBJECT_OBSTACLE_COLLISIONS.value,
                 channel=ContinuousPushStepChannel.OBJECT_OBSTACLE_COLLISION.value,
                 per_episode=EpisodeReduction.SUM,
-                empty_episode_value=0.0,
             ),
             StepInfoMetric(
                 name=ContinuousPushPOMDPMetrics.TOTAL_ALL_OBSTACLE_COLLISIONS.value,
                 channel=ContinuousPushStepChannel.ANY_OBSTACLE_COLLISION.value,
                 per_episode=EpisodeReduction.SUM,
-                empty_episode_value=0.0,
             ),
             StepInfoMetric(
                 name=ContinuousPushPOMDPMetrics.TOTAL_DANGEROUS_AREA_STEPS.value,
                 channel=ContinuousPushStepChannel.IN_DANGEROUS_AREA.value,
                 per_episode=EpisodeReduction.SUM,
-                empty_episode_value=0.0,
             ),
         ]
 

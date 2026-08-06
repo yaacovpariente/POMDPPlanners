@@ -436,6 +436,5 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
                 name=MountainCarPOMDPMetrics.GOAL_REACHING_RATE.value,
                 channel=MountainCarStepChannel.AT_GOAL.value,
                 per_episode=EpisodeReduction.ANY,
-                empty_episode_value=0.0,
             )
         ]

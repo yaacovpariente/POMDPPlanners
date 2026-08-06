@@ -18,24 +18,47 @@ Breaking Changes:
 ^^^^^^^^^^^^^^^^^
 
 - Environment metrics are now derived from the per-step ``StepData.info``
-  channel, so an episode ``History`` cached *before* that field existed yields
-  no environment metrics when replayed. The simulation cache
-  (``DiskCacheDB``, keyed by config id) is short-lived run-recovery state, so
-  no compatibility shim is provided: clear the cache, or re-run the affected
-  configs. Metric names, values and ordering are unchanged for any history
-  produced by the current code.
+  channel, so an episode ``History`` cached *before* that field existed can no
+  longer be scored. ``compute_metrics`` raises ``ValueError`` for it rather
+  than returning metrics, because every channel would be absent and a rate
+  would read 0.0 — indistinguishable from a planner that never succeeded.
+  Metric names, values and ordering are unchanged for any history produced by
+  the current code.
+- The same guard fires for a history built by hand or by a runner that does not
+  call ``step_info``, and it is applied per episode, so a partially warm cache
+  cannot let one measured episode vouch for unmeasured ones beside it. It keys
+  on the environment's declared channels, not on ``info`` merely being
+  non-empty. An episode with no transition steps, and an empty history list,
+  are exempt: they legitimately measured nothing.
 
 New Features:
 ^^^^^^^^^^^^^
 
-- Migrated nine environments — Tiger, CartPole, MountainCar, RockSample, both
-  LaserTag variants, both Push variants and PacMan — onto
-  ``Environment.step_info`` and ``get_metric_specs``, replacing nine
-  hand-rolled ``compute_metrics`` bodies and their inconsistent
-  confidence-interval handling with the shared aggregator. Metrics that cannot
-  be expressed as a per-episode reduction of a per-step channel are kept
-  as-is: the LaserTag metrics defined in terms of a realised reward, and the
-  Push ``*_rate`` metrics, which are pooled across episodes.
+- Migrated eight environments — Tiger, CartPole, MountainCar, RockSample, both
+  LaserTag variants and both Push variants — onto ``Environment.step_info``
+  and ``get_metric_specs``, replacing eight hand-rolled ``compute_metrics``
+  bodies and their inconsistent confidence-interval handling with the shared
+  aggregator. Metrics that cannot be expressed as a per-episode reduction of a
+  per-step channel are kept as-is: the LaserTag metrics defined in terms of a
+  realised reward, and the Push ``*_rate`` metrics, which are pooled across
+  episodes.
+- PacMan and both light-dark environments are deliberately left on their own
+  ``compute_metrics``. PacMan's rule that an episode ending in a malformed
+  state reports zeros is an episode-level decision a stateless per-step channel
+  cannot express, and reproducing it through the shared aggregator required
+  rewriting each episode's measurements before aggregating — more code than the
+  loop it replaced, in service of preserving a quirk. The light-dark metrics
+  likewise come out of a single loop that stops at the goal.
+- A resumed run no longer has to throw its cache away. The simulation caches
+  are keyed on a task's configuration, which says nothing about the format of
+  the episode it produced, so an entry written before the per-step channel
+  existed still hits and unpickles cleanly with every measurement missing. Both
+  layers now treat such an entry as a cache *miss* — ``run_tasks``, which
+  consults the cache database before a task reaches the executor, and
+  ``JoblibTaskManager``, for entries held only in the joblib store. Each logs a
+  warning naming the task, reruns that one episode and replaces the entry.
+  Everything recorded in the current format is still reused, so recovery
+  survives the upgrade instead of costing a full re-run.
 - ``Environment.step_info`` is now also called once per terminated episode,
   for the terminal bookkeeping step, with ``action`` and ``next_state`` both
   ``None``. Metrics that count every visited state need that final state, and
@@ -48,15 +71,28 @@ New Features:
 Others:
 ^^^^^^^
 
-- Extended the frozen metric baseline with a terminated-episode shape and a
-  metric-ordering snapshot, which is what makes the migration's
-  "no name, value or ordering moved" claim checkable rather than assumed.
-- Two deliberate behaviour changes came out of the migration, both confined to
-  confidence bounds and degenerate inputs; no metric's point estimate moved.
+- Extended the frozen metric baseline with a terminated-episode shape, a
+  metric-ordering snapshot and a confidence-bounds snapshot, which is what
+  makes the migration's "no name, value or ordering moved" claim checkable
+  rather than assumed. The bounds matter on their own: a declared reduction
+  that yields the right mean from the wrong per-episode samples leaves the
+  point estimate intact and moves only the interval.
+- Three deliberate behaviour changes came out of the migration, all confined to
+  confidence bounds and degenerate inputs. No point estimate moved on any
+  history an episode runner can produce.
   Tiger reported ``lower == upper == value`` — a placeholder its own comment
   called out — and now gets a real 95% t-interval. Environments that previously
   raised ``ValueError`` from ``confidence_interval`` on an empty history list
   (CartPole, MountainCar, Push) now return zero-valued metrics instead.
+  Finally, an episode that reports a metric's channel on no step at all is now
+  dropped from that metric's average rather than contributing a declared
+  stand-in value. What an unmeasured episode would have measured is not a
+  property of the metric, so there is no per-spec knob for it; an episode that
+  ran but was never measured is rejected upstream instead of scored as zero.
+  ``EpisodeRunner`` always records a measured step, including the terminal
+  bookkeeping one, so this is reachable only from hand-built histories — where
+  a mixed list of real and stepless episodes now reports the mean over the real
+  ones alone.
 
 
 Release 0.5.0 (WIP)

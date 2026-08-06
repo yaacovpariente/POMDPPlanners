@@ -1437,31 +1437,26 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-pub
                 name=LaserTagPOMDPMetrics.GOAL_REACHING_RATE.value,
                 channel=LaserTagStepChannel.TAGGED.value,
                 per_episode=EpisodeReduction.ANY,
-                empty_episode_value=0.0,
             ),
             StepInfoMetric(
                 name=LaserTagPOMDPMetrics.AVERAGE_EPISODE_LENGTH.value,
                 channel=LaserTagStepChannel.RECORDED_STEP.value,
                 per_episode=EpisodeReduction.SUM,
-                empty_episode_value=0.0,
             ),
             StepInfoMetric(
                 name=LaserTagPOMDPMetrics.AVERAGE_OBSTACLE_COLLISIONS.value,
                 channel=LaserTagStepChannel.OBSTACLE_COLLISION.value,
                 per_episode=EpisodeReduction.SUM,
-                empty_episode_value=0.0,
             ),
             StepInfoMetric(
                 name=LaserTagPOMDPMetrics.AVERAGE_DANGEROUS_AREA_STEPS.value,
                 channel=LaserTagStepChannel.IN_DANGEROUS_AREA.value,
                 per_episode=EpisodeReduction.SUM,
-                empty_episode_value=0.0,
             ),
             StepInfoMetric(
                 name=LaserTagPOMDPMetrics.AVERAGE_ALL_DANGEROUS_ENCOUNTERS.value,
                 channel=LaserTagStepChannel.DANGEROUS_ENCOUNTER.value,
                 per_episode=EpisodeReduction.SUM,
-                empty_episode_value=0.0,
             ),
         ]
 

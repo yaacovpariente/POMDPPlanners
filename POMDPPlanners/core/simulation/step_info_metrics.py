@@ -105,14 +105,14 @@ class StepInfoMetric:
             ``None`` (the default) means such steps are skipped entirely. Use
             0.0 only when a missing channel genuinely means zero — treating
             "not measured" as "did not happen" silently biases the metric.
-        empty_episode_value: Value contributed by an *episode* that reported the
-            channel on no step at all, such as one with no recorded steps.
-            ``None`` (the default) drops that episode from the average entirely.
-            Set it when an episode that measured nothing still has a defined
-            answer: a "never crashed" predicate is vacuously true over no steps,
-            so it contributes 1.0, while a count of occurrences contributes 0.0.
-            Note this is not the same as ``default``, which fills in a missing
-            *step* within an episode that did report the channel elsewhere.
+
+    Note:
+        An episode that reported the channel on no step at all contributes
+        nothing: it is dropped from the average rather than filled with a
+        stand-in. What an unmeasured episode "should" have measured is not a
+        property of the metric, so there is no per-spec knob for it. An episode
+        that ran but was never measured is a different matter, and is rejected
+        upstream by :func:`require_measured_episodes` rather than scored as zero.
     """
 
     name: str
@@ -120,7 +120,6 @@ class StepInfoMetric:
     per_episode: EpisodeReduction
     scale: float = 1.0
     default: Optional[float] = None
-    empty_episode_value: Optional[float] = None
 
 
 def extract_episode_step_infos(histories: Sequence["History"]) -> List[List[Dict[str, float]]]:
@@ -134,6 +133,97 @@ def extract_episode_step_infos(histories: Sequence["History"]) -> List[List[Dict
         the terminal bookkeeping step) contribute an empty mapping.
     """
     return [[step.info or {} for step in history.history] for history in histories]
+
+
+def unmeasured_episode_index(
+    histories: Sequence["History"], specs: Sequence[StepInfoMetric]
+) -> Optional[int]:
+    """Find the first episode that recorded transitions but no declared channel.
+
+    Such an episode was produced before the per-step channel existed, or by a
+    runner that does not call ``step_info``. Callers use this either to refuse it
+    (:func:`require_measured_episodes`) or to recompute it: the task manager
+    treats a cached episode that fails this check as a cache miss, so a resumed
+    run redoes the stale entries instead of scoring them as zero or aborting.
+
+    An episode with no transition steps is exempt. It measured nothing
+    legitimately, and an environment serving values cached during its own step
+    (a live simulator) has nothing to report for the terminal bookkeeping step
+    that such an episode consists of.
+
+    Args:
+        histories: The episode histories to check.
+        specs: The metric specs whose channels are required. No specs means
+            nothing is required, so every history passes.
+
+    Returns:
+        The index of the first unmeasured episode, or ``None`` if every episode
+        either carries a declared channel or is exempt.
+    """
+    declared = {spec.channel for spec in specs}
+    if not declared:
+        return None
+    for index, history in enumerate(histories):
+        steps = history.history
+        if not any(step.action is not None for step in steps):
+            continue
+        if any(declared & set(step.info or {}) for step in steps):
+            continue
+        return index
+    return None
+
+
+def require_measured_episodes(
+    histories: Sequence["History"],
+    specs: Sequence[StepInfoMetric],
+    environment_name: str,
+) -> None:
+    """Reject episodes that were never measured, instead of scoring them as zero.
+
+    An environment whose metrics come from the per-step channel reads nothing at
+    all out of a history recorded before ``step_info`` existed, or by a runner
+    that does not call it. Left alone that is not a missing result but a wrong
+    one: every channel is absent, so a rate reads 0.0 and a count reads 0 — "the
+    planner never reached the goal" is indistinguishable from "nobody measured".
+    Environments pinning a fixed declared name list through
+    :func:`order_and_fill_metrics` turn the omission into that zero explicitly.
+
+    The check is per episode, not over the batch: a partially warm cache yields
+    some measured episodes beside unmeasured ones, and one measured episode must
+    not vouch for the rest — they would silently drop out of every average.
+
+    It also keys on the *declared* channels rather than on ``info`` being
+    non-empty, so unrelated per-step bookkeeping cannot vouch for a measurement
+    that was never taken. Any one declared channel is enough: an environment
+    that declares a channel only when the corresponding sensor is configured
+    legitimately reports a subset, and :func:`aggregate_step_info_metrics` omits
+    the rest.
+
+    See :func:`unmeasured_episode_index` for exactly which episodes qualify,
+    including the exemption for one with no transition steps.
+
+    Args:
+        histories: The episode histories about to be scored.
+        specs: The metric specs whose channels are required.
+        environment_name: Name used in the error message.
+
+    Raises:
+        ValueError: If an episode recorded transition steps and not one of its
+            steps carries any declared channel.
+    """
+    index = unmeasured_episode_index(histories, specs)
+    if index is None:
+        return
+    raise ValueError(
+        f"{environment_name} derives its metrics from the per-step measurement "
+        f"channel, but episode {index} carries none of its channels "
+        f"({sorted(spec.channel for spec in specs)}) on any of its "
+        f"{len(histories[index].history)} recorded steps. That history was produced "
+        "before the channel existed, or by a runner that does not call step_info; "
+        "scoring it would report every metric as zero rather than as unmeasured. "
+        "Re-run the affected configs, clearing the simulation cache if they were "
+        "replayed from it."
+    )
 
 
 def _episode_values(
@@ -181,7 +271,8 @@ def aggregate_step_info_metrics(
         whose channel was reported by at least one episode, in spec order. A spec
         whose channel never appears is omitted rather than reported as zero, so a
         measurement that was never taken is never mistaken for a measurement of
-        zero.
+        zero. An individual episode that reported the channel on no step is
+        dropped from that spec's average for the same reason.
 
     Example:
         Task completion rate over three episodes::
@@ -212,8 +303,6 @@ def aggregate_step_info_metrics(
             values = _episode_values(episode, spec)
             if values is not None:
                 per_episode.append(_reduce_episode(spec.per_episode, values) * spec.scale)
-            elif spec.empty_episode_value is not None:
-                per_episode.append(spec.empty_episode_value * spec.scale)
         if per_episode:
             metrics.append(_metric_from_episode_values(spec, per_episode))
     return metrics
@@ -222,7 +311,6 @@ def aggregate_step_info_metrics(
 def order_and_fill_metrics(
     names: Sequence[str],
     metrics: Sequence[MetricValue],
-    optional: Sequence[str] = (),
 ) -> List[MetricValue]:
     """Impose a declared name order on computed metrics, filling any gap.
 
@@ -250,28 +338,20 @@ def order_and_fill_metrics(
         names: The declared metric names, in the order they must be emitted.
         metrics: The computed metrics, in any order. Entries whose name is not in
             ``names`` are dropped; duplicates resolve to the last occurrence.
-        optional: Names that are omitted rather than filled when absent, for
-            metrics whose historical behaviour is to disappear when nothing
-            contributed to them rather than to report a zero.
 
     Returns:
-        One metric per declared name, in ``names`` order, minus any optional
-        name that was not computed.
+        One metric per declared name, in ``names`` order.
     """
     by_name = {metric.name: metric for metric in metrics}
-    optional_names = set(optional)
     ordered: List[MetricValue] = []
     for name in names:
         metric = by_name.get(name)
-        if metric is not None:
-            ordered.append(metric)
-        elif name not in optional_names:
-            ordered.append(
-                MetricValue(
-                    name=name,
-                    value=0.0,
-                    lower_confidence_bound=float(_UNBOUNDED_INTERVAL[0]),
-                    upper_confidence_bound=float(_UNBOUNDED_INTERVAL[1]),
-                )
+        if metric is None:
+            metric = MetricValue(
+                name=name,
+                value=0.0,
+                lower_confidence_bound=float(_UNBOUNDED_INTERVAL[0]),
+                upper_confidence_bound=float(_UNBOUNDED_INTERVAL[1]),
             )
+        ordered.append(metric)
     return ordered

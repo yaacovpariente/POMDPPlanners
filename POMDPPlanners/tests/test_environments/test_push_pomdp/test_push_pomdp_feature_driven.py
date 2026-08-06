@@ -632,6 +632,9 @@ def test_metric_names_match_compute_metrics_output() -> None:
     # WeightedParticleBelief requires at least one nonzero log-weight, so
     # use two particles with arbitrary unequal log-weights.
     belief = WeightedParticleBelief([state, state], np.array([0.0, -1.0]))
+    # Measured as EpisodeRunner._record_step measures it: this environment's
+    # metrics come from the per-step channel, so an unmeasured step carries none
+    # of the names under test.
     step = StepData(
         state=state,
         action="up",
@@ -639,6 +642,7 @@ def test_metric_names_match_compute_metrics_output() -> None:
         observation=observation,
         reward=reward,
         belief=belief,
+        info=env.step_info(state, "up", next_state) or None,
     )
     history = History(
         history=[step],

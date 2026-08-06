@@ -350,12 +350,39 @@ def compute_metric_snapshot(environment: Environment, histories: List[History]) 
             the per-step channel sees the same input it would in a real run.
 
     Returns:
-        Mapping from metric name to point estimate. Confidence bounds are
-        deliberately excluded: with three episodes several are infinite, which
-        makes them useless as a stable baseline.
+        Mapping from metric name to point estimate. The confidence bounds are
+        pinned separately by :func:`compute_metric_bounds`.
     """
     metrics = environment.compute_metrics(attach_step_info(environment, histories))
     return {metric.name: float(metric.value) for metric in metrics}
+
+
+def compute_metric_bounds(
+    environment: Environment, histories: List[History]
+) -> Dict[str, Tuple[float, float]]:
+    """Compute one environment's confidence bounds as a name -> (lower, upper) mapping.
+
+    A ``MetricValue`` is a point estimate *and* an interval, and
+    :func:`compute_metric_snapshot` pins only the former. That is not merely
+    incomplete: a reduction that produced the right mean from the wrong
+    per-episode samples — the exact failure mode this migration risks, since it
+    replaces bespoke per-episode accumulation with declared reductions — leaves
+    the mean intact and moves the interval.
+
+    Args:
+        environment: The environment to snapshot.
+        histories: The frozen histories to feed it, measured through
+            :func:`attach_step_info` first, exactly as in
+            :func:`compute_metric_snapshot`.
+
+    Returns:
+        Mapping from metric name to its ``(lower, upper)`` confidence bounds.
+    """
+    metrics = environment.compute_metrics(attach_step_info(environment, histories))
+    return {
+        metric.name: (float(metric.lower_confidence_bound), float(metric.upper_confidence_bound))
+        for metric in metrics
+    }
 
 
 def compute_metric_order(environment: Environment, histories: List[History]) -> List[str]:

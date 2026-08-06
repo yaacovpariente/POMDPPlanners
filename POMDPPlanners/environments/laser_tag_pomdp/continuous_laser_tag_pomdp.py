@@ -1001,31 +1001,26 @@ class ContinuousLaserTagPOMDP(Environment):  # pylint: disable=too-many-public-m
                 name=ContinuousLaserTagPOMDPMetrics.GOAL_REACHING_RATE.value,
                 channel=ContinuousLaserTagStepChannel.TAGGED.value,
                 per_episode=EpisodeReduction.ANY,
-                empty_episode_value=0.0,
             ),
             StepInfoMetric(
                 name=ContinuousLaserTagPOMDPMetrics.AVERAGE_EPISODE_LENGTH.value,
                 channel=ContinuousLaserTagStepChannel.RECORDED_STEP.value,
                 per_episode=EpisodeReduction.SUM,
-                empty_episode_value=0.0,
             ),
             StepInfoMetric(
                 name=ContinuousLaserTagPOMDPMetrics.AVERAGE_WALL_COLLISIONS.value,
                 channel=ContinuousLaserTagStepChannel.WALL_COLLISION.value,
                 per_episode=EpisodeReduction.SUM,
-                empty_episode_value=0.0,
             ),
             StepInfoMetric(
                 name=ContinuousLaserTagPOMDPMetrics.AVERAGE_DANGEROUS_AREA_STEPS.value,
                 channel=ContinuousLaserTagStepChannel.IN_DANGEROUS_AREA.value,
                 per_episode=EpisodeReduction.SUM,
-                empty_episode_value=0.0,
             ),
             StepInfoMetric(
                 name=ContinuousLaserTagPOMDPMetrics.AVERAGE_ALL_DANGEROUS_ENCOUNTERS.value,
                 channel=ContinuousLaserTagStepChannel.DANGEROUS_ENCOUNTER.value,
                 per_episode=EpisodeReduction.SUM,
-                empty_episode_value=0.0,
             ),
         ]
 

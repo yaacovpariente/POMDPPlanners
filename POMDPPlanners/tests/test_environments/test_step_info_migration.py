@@ -16,14 +16,16 @@ cannot see:
 - its values ride back to the parent process inside a pickled ``History``.
 """
 
+import dataclasses
 import pickle
+import random
 from typing import Dict, List
 
 import numpy as np
 import pytest
 
 from POMDPPlanners.core.environment import Environment
-from POMDPPlanners.core.simulation import History
+from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.environments.isaac_lab_pomdp.isaac_lab_pomdp import IsaacLabPOMDP
 from POMDPPlanners.tests.test_utils.golden_metric_snapshot import (
     append_terminal_step,
@@ -57,6 +59,18 @@ def _measured_steps(environment: Environment, histories: List[History]) -> List[
 # a real one divides by zero. That defect predates this migration and was carried
 # over verbatim rather than quietly fixed, so these tests expect it.
 _ZERO_STEP_DIVIDES_BY_ZERO = {"push"}
+
+# Channels that describe the *transition* rather than the state, per environment.
+# The terminal bookkeeping step took no action and produced no successor, so
+# these must read as zero there or a SUM would count an event that never
+# happened. Listed explicitly rather than derived: which channels are
+# transition-derived is a property of the measurement, not something the spec or
+# the mapping's shape reveals.
+_TRANSITION_DERIVED_CHANNELS = {
+    "tiger": ("correct_door_opened", "listened"),
+    "laser_tag": ("obstacle_collision",),
+    "rock_sample": ("sampled_rock",),
+}
 
 
 def _empty_history() -> History:
@@ -133,10 +147,10 @@ class TestDeclaredChannelsAreReported:
         """Test that a stepless episode yields declared names in declared order.
 
         Purpose: Validates the contract on the degenerate input. An episode with
-            no recorded steps reports no channels, so each metric either falls
-            back to the value its environment historically reported or is omitted
-            -- but the result must never contain a name that was not declared,
-            and must never reorder the ones it does contain
+            no recorded steps reports no channels, so each metric is either
+            omitted by the aggregator or filled by the environment's declared
+            name list -- but the result must never contain a name that was not
+            declared, and must never reorder the ones it does contain
 
         Given: A migrated environment and one history containing no steps
         When: compute_metrics is called
@@ -206,18 +220,17 @@ class TestDegenerateHistoryShapes:
     def test_a_stepless_episode_does_not_shift_a_real_one(
         self, slug: str, frozen_histories: Dict[str, List[History]]
     ) -> None:
-        """Test that a stepless episode contributes rather than disappearing.
+        """Test that a stepless episode leaves a real episode's metrics alone.
 
-        Purpose: Validates ``empty_episode_value``. An episode that reported no
-            channels is excluded from a metric's average by default, but the
-            pre-migration implementations appended a value for it, so excluding
-            it would change the mean. This checks the declared value is actually
-            being contributed
+        Purpose: Validates that an episode reporting no channel at all is
+            dropped from a spec's average rather than contributing a stand-in
+            value. What an unmeasured episode would have measured is not knowable
+            from the metric's declaration, so inventing a number for it would
+            move the mean on the strength of a guess
 
         Given: One real episode, and the same episode paired with a stepless one
         When: compute_metrics is run on both lists
-        Then: Any metric declaring an empty-episode contribution moves, because
-            the stepless episode entered its average
+        Then: Every spec-derived metric reports the same value in both
 
         Test type: unit
         """
@@ -225,13 +238,10 @@ class TestDegenerateHistoryShapes:
             pytest.skip(f"{slug} raises on a stepless episode, preserved from before the migration")
         environment = build_registry()[slug]()
         real = frozen_histories[slug][:1]
-        contributing = {
-            spec.name: spec.empty_episode_value
-            for spec in environment.get_metric_specs()
-            if spec.empty_episode_value is not None
-        }
-        if not contributing:
-            pytest.skip(f"{slug} declares no empty-episode contributions")
+        # Only the spec-derived names. An environment keeping bespoke metrics
+        # divides them by the episode count itself, so a stepless episode does
+        # move those -- that is their pre-existing behaviour, not this one's.
+        spec_driven = {spec.name for spec in environment.get_metric_specs()}
 
         alone = {
             m.name: m.value
@@ -244,13 +254,13 @@ class TestDegenerateHistoryShapes:
             )
         }
 
-        for name, empty_value in contributing.items():
-            if name not in alone:
-                continue
-            expected = (alone[name] + empty_value) / 2
-            assert with_empty[name] == pytest.approx(expected), (
-                f"{slug}.{name}: a stepless episode contributing {empty_value} should move "
-                f"the mean from {alone[name]} to {expected}, got {with_empty[name]}"
+        compared = spec_driven & set(alone)
+        assert compared, f"{slug}: no spec-derived metric was produced, nothing would be asserted"
+
+        for name in compared:
+            assert with_empty[name] == pytest.approx(alone[name]), (
+                f"{slug}.{name}: a stepless episode must not shift the mean, but it "
+                f"moved from {alone[name]} to {with_empty[name]}"
             )
 
 
@@ -290,21 +300,27 @@ class TestStepInfoContract:
             the stream and silently change every subsequent transition and
             observation, breaking seeded reproducibility far beyond metrics
 
-        Given: A migrated environment and a seeded global RNG
+        Given: A migrated environment and seeded numpy and stdlib RNGs
         When: step_info is called for every recorded transition
-        Then: The RNG state is byte-identical to before
+        Then: Both RNG states are byte-identical to before
 
         Test type: unit
         """
         environment = build_registry()[slug]()
         np.random.seed(4242)
+        random.seed(4242)
         before = np.random.get_state(legacy=True)
+        # Covered separately from numpy: an implementation reaching for
+        # ``random.random()`` would leave the numpy stream untouched and still
+        # break reproducibility for anything seeded through the stdlib.
+        before_stdlib = random.getstate()
 
         for history in frozen_histories[slug]:
             for step in history.history:
                 environment.step_info(step.state, step.action, step.next_state)
 
         after = np.random.get_state(legacy=True)
+        assert random.getstate() == before_stdlib, f"{slug}: step_info advanced the stdlib RNG"
         assert isinstance(before, tuple) and isinstance(after, tuple)
         # The Mersenne Twister key is an ndarray, so the tuples cannot be
         # compared directly; the position counter is what a stray draw moves.
@@ -324,16 +340,32 @@ class TestStepInfoContract:
 
         Given: A migrated environment and the final state of each frozen episode
         When: step_info is called the way _add_terminal_step calls it
-        Then: It returns a mapping, and every channel it also reports for a real
-            transition is present, so no metric loses the final state
+        Then: Every channel reported for a real transition is reported here too,
+            so no metric loses the final state, and every transition-derived
+            channel reports its neutral value, so none gains a phantom event
 
         Test type: unit
         """
         environment = build_registry()[slug]()
+        transition_channels = set()
+        for step_info in _measured_steps(environment, frozen_histories[slug]):
+            transition_channels.update(step_info)
+
         for history in frozen_histories[slug]:
             final_state = history.history[-1].next_state
             terminal_info = environment.step_info(final_state, None, None)
-            assert isinstance(terminal_info, dict)
+
+            missing = transition_channels - set(terminal_info)
+            assert not missing, (
+                f"{slug}: the terminal step drops channels {sorted(missing)}. A SUM "
+                "or MEAN over them would then exclude the final state."
+            )
+            for channel in _TRANSITION_DERIVED_CHANNELS.get(slug, ()):
+                assert terminal_info[channel] == 0.0, (
+                    f"{slug}: the terminal step reports {channel}="
+                    f"{terminal_info[channel]}, inventing an event for a step where "
+                    "no action was taken and no transition happened."
+                )
 
     def test_isaac_lab_step_info_tolerates_the_terminal_call(self) -> None:
         """Test that a live-simulator environment survives the terminal call.
@@ -408,3 +440,148 @@ class TestTerminalStepIsCounted:
                 f"{slug}: the terminal step carries no measurements, so any metric "
                 f"counting every visited state silently loses the final state"
             )
+
+
+class TestUnmeasuredHistoriesAreRejected:
+    """Histories carrying no measurements must fail loudly, not score as zero."""
+
+    @pytest.mark.parametrize("slug", _SPEC_DRIVEN_SLUGS)
+    def test_unmeasured_histories_raise_instead_of_reporting_zeros(
+        self, slug: str, frozen_histories: Dict[str, List[History]]
+    ) -> None:
+        """Test that histories with no per-step info are refused.
+
+        Purpose: Validates the guard on the most dangerous failure mode of
+            deriving metrics from a per-step channel. A history recorded before
+            the channel existed, or by a runner that never calls step_info,
+            carries no measurements at all -- and an absent channel reads as a
+            rate of 0.0, which is indistinguishable from a planner that always
+            failed
+
+        Given: A migrated environment and the frozen histories exactly as
+            recorded, with no info attached
+        When: compute_metrics is called on them
+        Then: A ValueError naming the environment is raised, rather than a full
+            set of zero-valued metrics
+
+        Test type: unit
+        """
+        environment = build_registry()[slug]()
+
+        with pytest.raises(ValueError, match="per-step measurement channel"):
+            environment.compute_metrics(frozen_histories[slug])
+
+    @pytest.mark.parametrize("slug", _SPEC_DRIVEN_SLUGS)
+    def test_stepless_episodes_are_not_mistaken_for_unmeasured_ones(self, slug: str) -> None:
+        """Test that an episode with no recorded steps still scores.
+
+        Purpose: Validates that the guard keys on "steps were recorded and none
+            carries a measurement", not on "no measurement is present". An
+            episode with no steps legitimately measured nothing, and every
+            migrated environment has always scored it
+
+        Given: A migrated environment and a history with no recorded steps
+        When: compute_metrics is called on it
+        Then: It returns without raising
+
+        Test type: unit
+        """
+        environment = build_registry()[slug]()
+
+        assert isinstance(environment.compute_metrics([_empty_history()]), list)
+
+    @pytest.mark.parametrize("slug", _SPEC_DRIVEN_SLUGS)
+    def test_one_measured_episode_does_not_vouch_for_an_unmeasured_one(
+        self, slug: str, frozen_histories: Dict[str, List[History]]
+    ) -> None:
+        """Test that a measured episode beside an unmeasured one still raises.
+
+        Purpose: Validates that the guard is per episode rather than over the
+            batch. A partially warm cache produces exactly this mix, and an
+            unmeasured episode that slipped through would not raise and not
+            report -- it would silently drop out of every average, shifting each
+            metric toward whichever episodes happened to be re-run
+
+        Given: A migrated environment, one measured episode and one identical
+            but unmeasured episode
+        When: compute_metrics is called on both together
+        Then: A ValueError is raised, naming the unmeasured episode's position
+
+        Test type: unit
+        """
+        environment = build_registry()[slug]()
+        measured = attach_step_info(environment, frozen_histories[slug])[0]
+        unmeasured = frozen_histories[slug][0]
+
+        with pytest.raises(ValueError, match="episode 1"):
+            environment.compute_metrics([measured, unmeasured])
+
+    @pytest.mark.parametrize("slug", _SPEC_DRIVEN_SLUGS)
+    def test_unrelated_info_does_not_vouch_for_a_declared_channel(
+        self, slug: str, frozen_histories: Dict[str, List[History]]
+    ) -> None:
+        """Test that bookkeeping in info does not satisfy the guard.
+
+        Purpose: Validates that the guard keys on the declared channels rather
+            than on info being non-empty. A future runner stamping unrelated
+            per-step bookkeeping into the same mapping would otherwise vouch for
+            measurements that were never taken
+
+        Given: A migrated environment and histories whose steps carry an info
+            mapping containing only a channel no spec declares
+        When: compute_metrics is called on them
+        Then: A ValueError is still raised
+
+        Test type: unit
+        """
+        environment = build_registry()[slug]()
+        decoys = [
+            dataclasses.replace(
+                history,
+                history=[
+                    step._replace(info={"unrelated_bookkeeping": 1.0}) for step in history.history
+                ],
+            )
+            for history in frozen_histories[slug]
+        ]
+
+        with pytest.raises(ValueError, match="per-step measurement channel"):
+            environment.compute_metrics(decoys)
+
+    @pytest.mark.parametrize("slug", _SPEC_DRIVEN_SLUGS)
+    def test_terminal_only_episode_is_exempt(
+        self, slug: str, frozen_histories: Dict[str, List[History]]
+    ) -> None:
+        """Test that an episode of only a terminal step is not rejected.
+
+        Purpose: Validates the exemption the guard needs for an environment
+            serving values cached during its own step. A live simulator has
+            nothing to report for the terminal bookkeeping call, so an episode
+            consisting solely of that step legitimately carries no measurement
+            and must not be mistaken for an uninstrumented one
+
+        Given: A migrated environment and a history whose only step is a
+            terminal bookkeeping step carrying no info
+        When: compute_metrics is called on it
+        Then: It returns without raising
+
+        Test type: unit
+        """
+        environment = build_registry()[slug]()
+        final_state = frozen_histories[slug][0].history[-1].next_state
+        terminal_only = dataclasses.replace(
+            _empty_history(),
+            history=[
+                StepData(
+                    state=final_state,
+                    action=None,
+                    next_state=None,
+                    observation=None,
+                    reward=None,
+                    belief=frozen_histories[slug][0].history[-1].belief,
+                    info=None,
+                )
+            ],
+        )
+
+        assert isinstance(environment.compute_metrics([terminal_only]), list)
