@@ -32,7 +32,6 @@ from POMDPPlanners.environments.pacman_pomdp import (
     PacManPOMDP,
     create_simple_maze_pacman,
 )
-from POMDPPlanners.tests.test_utils.golden_metric_snapshot import attach_step_info
 
 # Set seeds for reproducible tests
 np.random.seed(42)
@@ -1017,7 +1016,7 @@ class TestPacManPOMDPMetrics:
 
         Test type: unit
         """
-        metrics = self.pomdp.compute_metrics(attach_step_info(self.pomdp, []))
+        metrics = self.pomdp.compute_metrics([])
         assert metrics == []
 
     def test_compute_metrics_win_rate(self):
@@ -1098,7 +1097,7 @@ class TestPacManPOMDPMetrics:
 
         histories = [win_history, lose_history, win_history]  # 2 wins, 1 loss
 
-        metrics = self.pomdp.compute_metrics(attach_step_info(self.pomdp, histories))
+        metrics = self.pomdp.compute_metrics(histories)
 
         # Find win rate metric
         win_rate_metric = next((m for m in metrics if m.name == "win_rate"), None)
@@ -1182,7 +1181,7 @@ class TestPacManPOMDPMetrics:
             ),
         ]
 
-        metrics = self.pomdp.compute_metrics(attach_step_info(self.pomdp, histories))
+        metrics = self.pomdp.compute_metrics(histories)
 
         # Find pellets collected metric
         pellets_metric = next((m for m in metrics if m.name == "avg_pellets_collected"), None)
@@ -1298,7 +1297,7 @@ class TestPacManPOMDPMetrics:
             policy_run_data=[],
         )
 
-        metrics = self.pomdp.compute_metrics(attach_step_info(self.pomdp, [history1, history2]))
+        metrics = self.pomdp.compute_metrics([history1, history2])
 
         # Find distance metric
         distance_metric = next(
@@ -1428,7 +1427,7 @@ class TestPacManPOMDPMetrics:
             policy_run_data=[],
         )
 
-        metrics = self.pomdp.compute_metrics(attach_step_info(self.pomdp, [history1, history2]))
+        metrics = self.pomdp.compute_metrics([history1, history2])
 
         # Find collision encounters metric
         collision_metric = next((m for m in metrics if m.name == "avg_collision_encounters"), None)
@@ -1564,7 +1563,7 @@ class TestPacManPOMDPMetrics:
                 )
             )
 
-        metrics = self.pomdp.compute_metrics(attach_step_info(self.pomdp, histories))
+        metrics = self.pomdp.compute_metrics(histories)
         verify_metrics_within_confidence_intervals(metrics)
         verify_metric_sanity(metrics, histories, self.pomdp)
         verify_history_returns_bounded(histories, self.pomdp)
@@ -1660,7 +1659,7 @@ class TestPacManPOMDPDangerMetrics:
             ]
         )
 
-        metrics = self.pomdp.compute_metrics(attach_step_info(self.pomdp, [ep_a, ep_b]))
+        metrics = self.pomdp.compute_metrics([ep_a, ep_b])
         danger_metric = next((m for m in metrics if m.name == "avg_dangerous_area_steps"), None)
 
         assert danger_metric is not None
@@ -1700,7 +1699,7 @@ class TestPacManPOMDPDangerMetrics:
             ]
         )
 
-        metrics = self.pomdp.compute_metrics(attach_step_info(self.pomdp, [ep_a, ep_b]))
+        metrics = self.pomdp.compute_metrics([ep_a, ep_b])
         by_name = {m.name: m for m in metrics}
 
         collisions = by_name.get("avg_collision_encounters")

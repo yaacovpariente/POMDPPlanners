@@ -493,6 +493,5 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
                 name=CartPolePOMDPMetrics.GOAL_REACHING_RATE.value,
                 channel=CartPoleStepChannel.UPRIGHT.value,
                 per_episode=EpisodeReduction.ALL,
-                empty_episode_value=1.0,
             )
         ]

@@ -335,12 +335,10 @@ class TigerPOMDP(DiscreteActionsEnvironment):
                 name=TigerPOMDPMetrics.SUCCESS_RATE.value,
                 channel=TigerStepChannel.CORRECT_DOOR_OPENED.value,
                 per_episode=EpisodeReduction.LAST,
-                empty_episode_value=0.0,
             ),
             StepInfoMetric(
                 name=TigerPOMDPMetrics.AVERAGE_LISTENS.value,
                 channel=TigerStepChannel.LISTENED.value,
                 per_episode=EpisodeReduction.SUM,
-                empty_episode_value=0.0,
             ),
         ]

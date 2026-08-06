@@ -191,7 +191,7 @@ class TestEmptyEpisodes:
             being silently counted as a zero
 
         Given: Two episodes, one reporting the channel and one reporting nothing
-        When: The spec leaves empty_episode_value unset
+        When: The metrics are aggregated
         Then: The mean is taken over the reporting episode alone
 
         Test type: unit
@@ -201,51 +201,51 @@ class TestEmptyEpisodes:
 
         assert metrics[0].value == 1.0
 
-    def test_empty_episode_value_contributes_to_the_average(self) -> None:
-        """Test that a declared empty-episode value is counted.
+    def test_a_reporting_episode_is_unaffected_by_how_many_report_nothing(self) -> None:
+        """Test that unmeasured episodes cannot move a measured episode's mean.
 
-        Purpose: Validates the hook that lets an environment say what an episode
-            measuring nothing means. A "never failed" predicate is vacuously
-            true over no steps, so such an episode is a success, not an absence
+        Purpose: Validates that the number of episodes measuring nothing is not
+            observable in the result. Were they filled with a stand-in, adding
+            more of them would drag the mean towards that value, making the
+            metric depend on how often measurement failed rather than on what
+            was measured
 
-        Given: Two episodes, one reporting 1.0 and one reporting nothing
-        When: The spec declares empty_episode_value=0.0
-        Then: The mean is taken over both, giving 0.5
+        Given: Two reporting episodes averaging 0.5, alongside zero, one and
+            eight silent ones. The 0.5 is chosen to sit strictly between the two
+            stand-ins an implementation might plausibly invent, so filling with
+            either 0.0 or 1.0 would move it and fail this test
+        When: The metrics are aggregated for each list
+        Then: All three report 0.5
 
         Test type: unit
         """
-        spec = StepInfoMetric(
-            name="rate",
-            channel=_SUCCESS,
-            per_episode=EpisodeReduction.ANY,
-            empty_episode_value=0.0,
-        )
-        metrics = aggregate_step_info_metrics([[{_SUCCESS: 1.0}], [{}]], [spec])
+        spec = StepInfoMetric(name="rate", channel=_SUCCESS, per_episode=EpisodeReduction.ANY)
+        reporting = [[{_SUCCESS: 1.0}], [{_SUCCESS: 0.0}]]
 
-        assert metrics[0].value == 0.5
+        values = [
+            aggregate_step_info_metrics(reporting + [[{}]] * silent, [spec])[0].value
+            for silent in (0, 1, 8)
+        ]
 
-    def test_empty_episode_value_alone_still_produces_the_metric(self) -> None:
-        """Test that a metric survives when every episode measured nothing.
+        assert values == [0.5, 0.5, 0.5]
 
-        Purpose: Validates that declaring an empty-episode value also prevents
-            the metric being dropped, which is what distinguishes "every episode
-            answered zero" from "nothing was ever measured"
+    def test_metric_is_omitted_when_every_episode_reported_nothing(self) -> None:
+        """Test that a wholly unmeasured metric is absent rather than zero.
+
+        Purpose: Validates that "nobody measured this" is reported as an absence,
+            so a caller cannot mistake it for a measurement of zero. Environments
+            whose declared name list is a fixed contract turn the absence into an
+            explicit zero themselves, through order_and_fill_metrics
 
         Given: Two episodes that report no channels at all
-        When: The spec declares empty_episode_value=1.0
-        Then: The metric is produced with value 1.0
+        When: The metrics are aggregated
+        Then: No metric is produced
 
         Test type: unit
         """
-        spec = StepInfoMetric(
-            name="alive",
-            channel=_SUCCESS,
-            per_episode=EpisodeReduction.ALL,
-            empty_episode_value=1.0,
-        )
-        metrics = aggregate_step_info_metrics([[{}], [{}]], [spec])
+        spec = StepInfoMetric(name="alive", channel=_SUCCESS, per_episode=EpisodeReduction.ALL)
 
-        assert [(m.name, m.value) for m in metrics] == [("alive", 1.0)]
+        assert not aggregate_step_info_metrics([[{}], [{}]], [spec])
 
 
 class TestOrderAndFill:
@@ -277,26 +277,29 @@ class TestOrderAndFill:
         assert ordered[0].lower_confidence_bound == -np.inf
         assert ordered[0].upper_confidence_bound == np.inf
 
-    def test_optional_name_is_omitted_rather_than_filled(self) -> None:
-        """Test that an optional declared name disappears when not computed.
+    def test_undeclared_computed_metric_is_dropped(self) -> None:
+        """Test that a metric outside the declared name list is not emitted.
 
-        Purpose: Validates the escape hatch for metrics whose historical
-            behaviour is to vanish when nothing contributed, rather than to
-            report a zero that would read as a real measurement
+        Purpose: Validates that the declared list is the whole contract, so a
+            stray computed metric cannot widen an environment's reported names
+            behind ``get_metric_names``
 
-        Given: A declared list whose second name was not computed
-        When: That name is passed as optional
-        Then: It is left out instead of filled
+        Given: Computed metrics containing a name the caller did not declare
+        When: order_and_fill_metrics is applied
+        Then: Only the declared names are returned
 
         Test type: unit
         """
         computed = [
             MetricValue(
                 name="first", value=1.0, lower_confidence_bound=0.0, upper_confidence_bound=2.0
-            )
+            ),
+            MetricValue(
+                name="stray", value=9.0, lower_confidence_bound=8.0, upper_confidence_bound=10.0
+            ),
         ]
 
-        ordered = order_and_fill_metrics(["first", "second"], computed, optional=["second"])
+        ordered = order_and_fill_metrics(["first"], computed)
 
         assert [m.name for m in ordered] == ["first"]
 

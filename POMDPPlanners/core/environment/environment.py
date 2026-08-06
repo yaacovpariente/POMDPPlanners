@@ -825,6 +825,14 @@ class Environment(ABC):  # pylint: disable=too-many-public-methods
 
         Returns:
             List of computed metrics with confidence intervals
+
+        Raises:
+            ValueError: If this environment declares metric specs and any
+                episode recorded transition steps while carrying none of the
+                declared channels — a history produced before the per-step
+                channel existed, or by a runner that does not call
+                :meth:`step_info`. Scoring those would report every metric as
+                zero rather than as unmeasured.
         """
         specs = self.get_metric_specs()
         if not specs:
@@ -836,8 +844,10 @@ class Environment(ABC):  # pylint: disable=too-many-public-methods
         from POMDPPlanners.core.simulation.step_info_metrics import (
             aggregate_step_info_metrics,
             extract_episode_step_infos,
+            require_measured_episodes,
         )
 
+        require_measured_episodes(histories, specs, type(self).__name__)
         return aggregate_step_info_metrics(extract_episode_step_infos(histories), specs)
 
     def to_dict(self) -> Dict[str, Any]:

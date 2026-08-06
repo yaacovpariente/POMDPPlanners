@@ -998,7 +998,6 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
                 name=PushPOMDPMetrics.GOAL_REACHING_RATE.value,
                 channel=PushStepChannel.GOAL_REACHED.value,
                 per_episode=EpisodeReduction.ANY,
-                empty_episode_value=0.0,
             ),
             StepInfoMetric(
                 name=PushPOMDPMetrics.TOTAL_ROBOT_OBSTACLE_COLLISIONS.value,

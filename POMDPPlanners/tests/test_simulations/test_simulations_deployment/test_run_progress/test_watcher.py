@@ -131,7 +131,7 @@ def test_main_is_idempotent_across_calls(populated_db, db_path):
     assert mock_urlopen.call_count == 1
 
 
-def test_main_no_webhook_logs_and_returns_zero(populated_db, db_path, caplog):
+def test_main_no_webhook_logs_and_returns_zero(populated_db, db_path, caplog, monkeypatch):
     """Verify the watcher logs (does not crash) when no webhook is configured.
 
     Purpose: Validates the "configured for stall detection but no webhook"
@@ -145,6 +145,10 @@ def test_main_no_webhook_logs_and_returns_zero(populated_db, db_path, caplog):
     Test type: integration
     """
     del populated_db
+    # Cleared explicitly: this is the only test here that depends on *no*
+    # webhook being configured, so an exported SLACK_WEBHOOK_URL in the
+    # developer's shell would otherwise be picked up and the watcher would post.
+    monkeypatch.delenv("SLACK_WEBHOOK_URL", raising=False)
 
     with patch("urllib.request.urlopen") as mock_urlopen:
         with caplog.at_level("WARNING", logger="run_progress.watcher"):
