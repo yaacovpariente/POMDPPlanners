@@ -1249,17 +1249,19 @@ class TestMetricsComputation:
     def test_compute_metrics_empty_histories(self):
         """Test metrics computation with empty histories.
 
-        Purpose: Validates proper handling of empty history list
+        Purpose: Validates that an empty batch is rejected rather than scored. A
+            zero-valued avg_rocks_sampled over no episodes is indistinguishable
+            from a run in which no rock was ever sampled
 
         Given: Empty list of histories
         When: compute_metrics() is called
-        Then: Returns empty list of metrics
+        Then: A ValueError naming the environment is raised
 
         Test type: unit
         """
         pomdp = RockSamplePOMDP(discount_factor=0.95, **rock_sample_pinned_kwargs())
-        metrics = pomdp.compute_metrics([])
-        assert metrics == []
+        with pytest.raises(ValueError, match="received no episode histories"):
+            pomdp.compute_metrics([])
 
     def test_compute_metrics_rocks_sampled(self):
         """Test computation of rocks sampled metric.

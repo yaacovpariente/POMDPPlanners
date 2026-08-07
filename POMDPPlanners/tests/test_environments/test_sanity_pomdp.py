@@ -724,16 +724,17 @@ class TestSanityPOMDPMetrics:
     def test_compute_metrics_empty_histories(self, sanity_pomdp):
         """Test metrics computation with empty histories.
 
-        Purpose: Validates that SanityPOMDP compute_metrics handles empty history lists correctly
+        Purpose: Validates that an empty batch is rejected rather than scored,
+            even for an environment that declares no metrics of its own
 
         Given: A SanityPOMDP environment and empty history list []
         When: compute_metrics method is called with empty histories
-        Then: Returns empty list [], confirming that no metrics are computed for empty input
+        Then: A ValueError naming the environment is raised
 
         Test type: unit
         """
-        metrics = sanity_pomdp.compute_metrics([])
-        assert metrics == []
+        with pytest.raises(ValueError, match="received no episode histories"):
+            sanity_pomdp.compute_metrics([])
 
     def test_compute_metrics_with_histories(self, sanity_pomdp):
         """Test metrics computation with sample histories.

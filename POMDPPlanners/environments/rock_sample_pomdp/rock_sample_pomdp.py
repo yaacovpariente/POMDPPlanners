@@ -876,14 +876,14 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
             histories: List of simulation histories.
 
         Returns:
-            One MetricValue per declared metric name, in declaration order, or an
-            empty list when there are no histories at all.
+            One MetricValue per declared metric name, in declaration order.
+
+        Raises:
+            ValueError: If ``histories`` is empty, or if an episode ran without
+                being measured. See
+                :meth:`~POMDPPlanners.core.environment.environment.Environment.compute_metrics`.
         """
-        # No histories has always meant no metrics here, unlike the zero-valued
-        # metrics other environments report. Preserved rather than unified.
-        if not histories:
-            return []
-        # Beyond that, every declared name is reported: the shared aggregator
+        # Every declared name is reported: the shared aggregator
         # omits a metric no episode reported, which an episode with no recorded
         # steps would trigger, where this environment counted a zero.
         return order_and_fill_metrics(self.get_metric_names(), super().compute_metrics(histories))

@@ -39,6 +39,7 @@ from POMDPPlanners.core.environment import (
     SpaceType,
 )
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
+from POMDPPlanners.core.simulation.step_info_metrics import require_non_empty_histories
 from POMDPPlanners.environments.safety_ant_velocity_pomdp import _native
 from POMDPPlanners.environments.safety_ant_velocity_pomdp.safety_ant_velocity_visualizer import (
     SafeAntVelocityVisualizer,
@@ -312,6 +313,7 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
         return [metric.value for metric in SafeAntVelocityPOMDPMetrics]
 
     def compute_metrics(self, histories: List[History]) -> List[MetricValue]:
+        require_non_empty_histories(histories, type(self).__name__)
         # Initialize metrics
         safety_violations = []
         critical_violations = []

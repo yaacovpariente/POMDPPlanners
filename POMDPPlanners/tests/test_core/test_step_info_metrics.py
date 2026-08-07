@@ -248,6 +248,67 @@ class TestEmptyEpisodes:
         assert not aggregate_step_info_metrics([[{}], [{}]], [spec])
 
 
+class TestEmptyHistoryBatch:
+    """Scoring no episodes at all."""
+
+    def test_no_histories_is_rejected(self) -> None:
+        """Test that an empty batch raises instead of producing metrics.
+
+        Purpose: Validates that no value is invented for a run with no episodes.
+            A metric over no episodes is an average over nothing, and every
+            answer an environment could give — a zero, an omitted name, an empty
+            list — reads exactly like a real measurement
+
+        Given: A spec-driven environment and an empty history list
+        When: compute_metrics is called
+        Then: A ValueError naming the environment is raised
+
+        Test type: unit
+        """
+        env = _SpecSanity(discount_factor=0.95, **sanity_pinned_kwargs())
+
+        with pytest.raises(ValueError, match="received no episode histories"):
+            env.compute_metrics([])
+
+    def test_environment_without_specs_also_rejects_an_empty_batch(self) -> None:
+        """Test that the guard precedes the no-specs shortcut.
+
+        Purpose: Validates that the empty-batch rule is a property of the input,
+            not of whether the environment happens to declare metrics. An
+            environment with no specs returns an empty list for a real batch too,
+            so returning one here would leave the caller's mistake invisible
+
+        Given: A stock environment declaring no metric specs
+        When: compute_metrics is called with an empty history list
+        Then: A ValueError naming the environment is raised
+
+        Test type: unit
+        """
+        env = SanityPOMDP(discount_factor=0.95, **sanity_pinned_kwargs())
+
+        assert not env.get_metric_specs()
+        with pytest.raises(ValueError, match="received no episode histories"):
+            env.compute_metrics([])
+
+    def test_aggregator_itself_still_tolerates_an_empty_episode_list(self) -> None:
+        """Test that the guard sits at the environment boundary, not the aggregator.
+
+        Purpose: Validates that the rejection is a policy about scoring a run,
+            applied where a caller passes histories in. The aggregator is a pure
+            reduction reused by runners that produce no History, and giving it a
+            second opinion on emptiness would duplicate the rule
+
+        Given: An empty episode list and one spec
+        When: aggregate_step_info_metrics is called directly
+        Then: It returns no metrics without raising
+
+        Test type: unit
+        """
+        spec = StepInfoMetric(name="rate", channel=_SUCCESS, per_episode=EpisodeReduction.ANY)
+
+        assert not aggregate_step_info_metrics([], [spec])
+
+
 class TestOrderAndFill:
     """Imposing a declared name order on a partially computed metric list."""
 
