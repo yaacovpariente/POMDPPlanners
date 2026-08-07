@@ -38,6 +38,7 @@ from POMDPPlanners.tests.test_utils.metric_invariants_utils import (
     verify_metric_sanity,
     verify_return_shift_linearity,
 )
+from POMDPPlanners.tests.test_utils.golden_metric_snapshot import attach_step_info
 
 
 def _make_env(**overrides) -> ContinuousPushPOMDP:
@@ -552,7 +553,7 @@ class TestContinuousPushPOMDP:
             reach_terminal_state=False,
             policy_run_data=[PolicyRunData(info_variables=[])],
         )
-        metrics = self.env.compute_metrics([history])
+        metrics = self.env.compute_metrics(attach_step_info(self.env, [history]))
         metric_names = {m.name for m in metrics}
         assert "goal_reaching_rate" in metric_names
         assert "robot_obstacle_collision_rate" in metric_names
@@ -681,7 +682,7 @@ class TestContinuousPushPOMDP:
                 )
             )
 
-        metrics = self.env.compute_metrics(histories)
+        metrics = self.env.compute_metrics(attach_step_info(self.env, histories))
         verify_metrics_within_confidence_intervals(metrics)
         verify_metric_sanity(metrics, histories, self.env)
         verify_history_returns_bounded(histories, self.env)
@@ -1104,7 +1105,7 @@ class TestContinuousPushDangerousAreas:
             reach_terminal_state=False,
             policy_run_data=[PolicyRunData(info_variables=[])],
         )
-        metrics = {m.name: m for m in env.compute_metrics([history])}
+        metrics = {m.name: m for m in env.compute_metrics(attach_step_info(env, [history]))}
         assert "dangerous_area_rate" in metrics
         assert "total_dangerous_area_steps" in metrics
         assert metrics["total_dangerous_area_steps"].value == pytest.approx(2.0)

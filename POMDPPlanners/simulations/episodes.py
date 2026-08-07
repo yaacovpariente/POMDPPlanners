@@ -273,6 +273,11 @@ class EpisodeRunner:
 
     def _add_terminal_step(self) -> None:
         """Add terminal step to history."""
+        # Measured like any other step: metrics that scan every recorded state
+        # must see the final one too, and it is only ever recorded here. The
+        # transition arguments are None because no transition was taken -- an
+        # environment reports whatever it can measure from the state alone.
+        info = self.environment.step_info(self.state, None, None)
         terminal_step = StepData(
             state=self.state,
             action=None,
@@ -280,6 +285,7 @@ class EpisodeRunner:
             observation=None,
             reward=None,
             belief=self.belief,
+            info=info or None,
         )
         self.history.append(terminal_step)
 

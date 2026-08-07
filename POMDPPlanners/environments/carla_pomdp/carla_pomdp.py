@@ -103,6 +103,7 @@ import numpy as np
 from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.core.environment import Environment, SpaceInfo, SpaceType
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
+from POMDPPlanners.core.simulation.step_info_metrics import require_non_empty_histories
 from POMDPPlanners.environments.carla_pomdp.carla_server_pool import acquire_pool_lease
 from POMDPPlanners.utils.statistics_utils import confidence_interval
 
@@ -1435,8 +1436,7 @@ class CarlaPOMDP(Environment):
               vehicle, in metres (a safety-margin metric; episodes that saw no vehicle are
               excluded).
         """
-        if not histories:
-            return []
+        require_non_empty_histories(histories, type(self).__name__)
         outcomes = [self._episode_goal_outcome(h) for h in histories]
         successes = [success for success, _completion in outcomes]
         completions = [completion for _success, completion in outcomes]

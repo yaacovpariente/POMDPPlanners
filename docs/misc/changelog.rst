@@ -9,6 +9,102 @@ This project adheres to `Semantic Versioning <https://semver.org/spec/v2.0.0.htm
 Each ``#NNN`` links to the pull request that introduced the change.
 
 
+Release 0.6.0 (WIP)
+-------------------
+
+**Existing environments migrated onto the shared per-step metrics channel**
+
+Breaking Changes:
+^^^^^^^^^^^^^^^^^
+
+- Environment metrics are now derived from the per-step ``StepData.info``
+  channel, so an episode ``History`` cached *before* that field existed can no
+  longer be scored. ``compute_metrics`` raises ``ValueError`` for it rather
+  than returning metrics, because every channel would be absent and a rate
+  would read 0.0 — indistinguishable from a planner that never succeeded.
+  Metric names, values and ordering are unchanged for any history produced by
+  the current code.
+- The same guard fires for a history built by hand or by a runner that does not
+  call ``step_info``, and it is applied per episode, so a partially warm cache
+  cannot let one measured episode vouch for unmeasured ones beside it. It keys
+  on the environment's declared channels, not on ``info`` merely being
+  non-empty. An episode with no transition steps is exempt: it legitimately
+  measured nothing.
+- ``compute_metrics`` now raises ``ValueError`` on an empty history list, in
+  every environment. A metric over no episodes is an average over nothing, so
+  any answer is invented: a zero reads like a genuine measurement of zero, an
+  omitted name silently shortens the declared list, and an empty list claims the
+  environment has no metrics. The three disagreed environment by environment
+  before — Tiger, MountainCar, CartPole, RockSample and both Push variants
+  returned zeros, both LaserTags, PacMan, CARLA and nuPlan returned ``[]``, and
+  the light-dark pair raised ``Data must contain at least one element`` from
+  ``confidence_interval``. Nothing in the simulation pipeline produces an empty
+  batch: ``compute_statistics_environment_policy_pair`` already rejects one
+  before metrics are reached, so this is a caller error, not a degenerate run.
+
+New Features:
+^^^^^^^^^^^^^
+
+- Migrated eight environments — Tiger, CartPole, MountainCar, RockSample, both
+  LaserTag variants and both Push variants — onto ``Environment.step_info``
+  and ``get_metric_specs``, replacing eight hand-rolled ``compute_metrics``
+  bodies and their inconsistent confidence-interval handling with the shared
+  aggregator. Metrics that cannot be expressed as a per-episode reduction of a
+  per-step channel are kept as-is: the LaserTag metrics defined in terms of a
+  realised reward, and the Push ``*_rate`` metrics, which are pooled across
+  episodes.
+- PacMan and both light-dark environments are deliberately left on their own
+  ``compute_metrics``. PacMan's rule that an episode ending in a malformed
+  state reports zeros is an episode-level decision a stateless per-step channel
+  cannot express, and reproducing it through the shared aggregator required
+  rewriting each episode's measurements before aggregating — more code than the
+  loop it replaced, in service of preserving a quirk. The light-dark metrics
+  likewise come out of a single loop that stops at the goal.
+- A resumed run no longer has to throw its cache away. The simulation caches
+  are keyed on a task's configuration, which says nothing about the format of
+  the episode it produced, so an entry written before the per-step channel
+  existed still hits and unpickles cleanly with every measurement missing. Both
+  layers now treat such an entry as a cache *miss* — ``run_tasks``, which
+  consults the cache database before a task reaches the executor, and
+  ``JoblibTaskManager``, for entries held only in the joblib store. Each logs a
+  warning naming the task, reruns that one episode and replaces the entry.
+  Everything recorded in the current format is still reused, so recovery
+  survives the upgrade instead of costing a full re-run.
+- ``Environment.step_info`` is now also called once per terminated episode,
+  for the terminal bookkeeping step, with ``action`` and ``next_state`` both
+  ``None``. Metrics that count every visited state need that final state, and
+  it is recorded on no other step.
+- Added ``order_and_fill_metrics`` to
+  :mod:`POMDPPlanners.core.simulation.step_info_metrics`, so an environment
+  with a fixed declared metric list always produces every declared name in
+  declaration order, even when the aggregator has nothing to report for one.
+
+Others:
+^^^^^^^
+
+- Extended the frozen metric baseline with a terminated-episode shape, a
+  metric-ordering snapshot and a confidence-bounds snapshot, which is what
+  makes the migration's "no name, value or ordering moved" claim checkable
+  rather than assumed. The bounds matter on their own: a declared reduction
+  that yields the right mean from the wrong per-episode samples leaves the
+  point estimate intact and moves only the interval.
+- Three deliberate behaviour changes came out of the migration, all confined to
+  confidence bounds and degenerate inputs. No point estimate moved on any
+  history an episode runner can produce.
+  Tiger reported ``lower == upper == value`` — a placeholder its own comment
+  called out — and now gets a real 95% t-interval. Every environment now rejects
+  an empty history list rather than answering it, replacing three different
+  answers with one error. Finally, an episode that reports a metric's channel on no step at all is now
+  dropped from that metric's average rather than contributing a declared
+  stand-in value. What an unmeasured episode would have measured is not a
+  property of the metric, so there is no per-spec knob for it; an episode that
+  ran but was never measured is rejected upstream instead of scored as zero.
+  ``EpisodeRunner`` always records a measured step, including the terminal
+  bookkeeping one, so this is reachable only from hand-built histories — where
+  a mixed list of real and stepless episodes now reports the mean over the real
+  ones alone.
+
+
 Release 0.5.0 (WIP)
 -------------------
 

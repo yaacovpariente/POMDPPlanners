@@ -12,6 +12,7 @@ from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.policy import Policy
 from POMDPPlanners.core.simulation import History
+from POMDPPlanners.tests.test_utils.golden_metric_snapshot import attach_step_info
 
 
 def verify_environment_metric_consistency(
@@ -53,8 +54,13 @@ def verify_environment_metric_consistency(
     # Get declared metric names
     declared_names = set(environment.get_metric_names())
 
-    # Get actual metric names from compute_metrics()
-    actual_metrics = environment.compute_metrics(histories)
+    # Get actual metric names from compute_metrics(). The histories are measured
+    # first: an environment reporting through the per-step channel derives its
+    # metrics from StepData.info, which hand-built histories do not carry, so
+    # without this the comparison would be vacuous -- every declared name would
+    # look missing.
+    measured = attach_step_info(environment, histories)
+    actual_metrics = environment.compute_metrics(measured)
     actual_names = set(metric.name for metric in actual_metrics)
 
     # Verify exact match

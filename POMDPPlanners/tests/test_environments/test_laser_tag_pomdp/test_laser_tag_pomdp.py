@@ -38,6 +38,7 @@ from POMDPPlanners.tests.test_utils.metric_invariants_utils import (
     verify_return_shift_linearity,
 )
 from POMDPPlanners.utils.logger import get_logger
+from POMDPPlanners.tests.test_utils.golden_metric_snapshot import attach_step_info
 
 # Set seeds for reproducible tests
 np.random.seed(42)
@@ -1642,7 +1643,7 @@ class TestLaserTagPOMDP:
             policy_run_data=[PolicyRunData(info_variables=[])],
         )
 
-        histories = [history]
+        histories = attach_step_info(env, [history])
         metrics = env.compute_metrics(histories)
 
         # Find wall collision metric
@@ -1814,7 +1815,11 @@ class TestLaserTagPOMDP:
                     particles=dummy_particles, log_weights=dummy_log_weights
                 )
 
-                # Create step data
+                # Create step data. The info mapping is filled exactly as
+                # EpisodeRunner._record_step fills it: this environment derives
+                # its metrics from the per-step channel, so a hand-rolled episode
+                # that skipped it would not be the realistic history this test
+                # claims to build.
                 step = StepData(
                     state=current_state,
                     action=action,
@@ -1822,6 +1827,7 @@ class TestLaserTagPOMDP:
                     observation=observation,
                     reward=reward,
                     belief=test_belief,
+                    info=env.step_info(current_state, action, next_state) or None,
                 )
                 steps.append(step)
 
@@ -1978,8 +1984,16 @@ class TestLaserTagPOMDP:
             belief=test_belief,
         )
 
+        # Measured as EpisodeRunner._record_step measures them: the metrics under
+        # test come from the per-step channel, so an unmeasured history would
+        # exercise the "never measured" guard rather than the None-reward path.
+        measured_steps = [
+            step._replace(info=env.step_info(step.state, step.action, step.next_state) or None)
+            for step in [step1, step2, step3]
+        ]
+
         history = History(
-            history=[step1, step2, step3],
+            history=measured_steps,
             discount_factor=env.discount_factor,
             average_state_sampling_time=0.01,
             average_action_time=0.01,

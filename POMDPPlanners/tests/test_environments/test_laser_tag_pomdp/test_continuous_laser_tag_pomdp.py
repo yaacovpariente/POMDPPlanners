@@ -34,6 +34,7 @@ from POMDPPlanners.tests.test_utils.metric_invariants_utils import (
     verify_metric_sanity,
     verify_return_shift_linearity,
 )
+from POMDPPlanners.tests.test_utils.golden_metric_snapshot import attach_step_info
 
 
 @pytest.fixture
@@ -1160,15 +1161,18 @@ class TestMetrics:
     def test_compute_metrics_empty(self, env):
         """Test compute_metrics with empty histories.
 
-        Purpose: Validates empty input handling.
+        Purpose: Validates that an empty batch is rejected rather than scored. A
+            zero tag_success_rate over no episodes is indistinguishable from a
+            run in which the agent never tagged the opponent.
 
         Given: An empty history list.
         When: compute_metrics() is called.
-        Then: Returns empty list.
+        Then: A ValueError naming the environment is raised.
 
         Test type: unit
         """
-        assert env.compute_metrics([]) == []
+        with pytest.raises(ValueError, match="received no episode histories"):
+            env.compute_metrics([])
 
     def test_compute_metrics_discrete_actions(self, env_discrete):
         """Test compute_metrics with discrete string actions.
@@ -1218,7 +1222,7 @@ class TestMetrics:
             policy_run_data=[PolicyRunData(info_variables=[])],
         )
 
-        metrics = env_discrete.compute_metrics([history])
+        metrics = env_discrete.compute_metrics(attach_step_info(env_discrete, [history]))
         assert len(metrics) > 0
         metrics_dict = {m.name: m for m in metrics}
         assert "tag_success_rate" in metrics_dict
@@ -1303,7 +1307,7 @@ class TestMetrics:
             policy_run_data=[PolicyRunData(info_variables=[])],
         )
 
-        metrics = env.compute_metrics([history])
+        metrics = env.compute_metrics(attach_step_info(env, [history]))
         expected_names = env.get_metric_names()
         assert len(expected_names) == 7
         metrics_dict = {m.name: m for m in metrics}
@@ -1360,7 +1364,7 @@ class TestMetrics:
             policy_run_data=[PolicyRunData(info_variables=[])],
         )
 
-        metrics = env_discrete.compute_metrics([history])
+        metrics = env_discrete.compute_metrics(attach_step_info(env_discrete, [history]))
         metrics_dict = {m.name: m for m in metrics}
         assert metrics_dict["average_failed_tag_attempts"].value > 0
 
@@ -1420,7 +1424,7 @@ class TestMetrics:
             policy_run_data=[PolicyRunData(info_variables=[])],
         )
 
-        metrics = env.compute_metrics([history])
+        metrics = env.compute_metrics(attach_step_info(env, [history]))
         metrics_dict = {m.name: m for m in metrics}
         assert metrics_dict["average_dangerous_area_steps"].value > 0
 
@@ -1498,7 +1502,7 @@ class TestMetrics:
             terminal=True,
         )
 
-        metrics = env.compute_metrics([h1, h2, h3])
+        metrics = env.compute_metrics(attach_step_info(env, [h1, h2, h3]))
         assert len(metrics) == 7
 
         metrics_dict = {m.name: m for m in metrics}
