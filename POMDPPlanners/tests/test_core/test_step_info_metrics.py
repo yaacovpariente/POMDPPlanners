@@ -15,12 +15,13 @@ import pytest
 
 from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.environment import Environment
-from POMDPPlanners.core.simulation import History, StepData
+from POMDPPlanners.core.simulation import History, MetricValue, StepData
 from POMDPPlanners.core.simulation.step_info_metrics import (
     EpisodeReduction,
     StepInfoMetric,
     aggregate_step_info_metrics,
     extract_episode_step_infos,
+    order_and_fill_metrics,
 )
 from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
 from POMDPPlanners.tests.test_utils.env_pinned_kwargs import sanity_pinned_kwargs
@@ -178,6 +179,190 @@ class TestEpisodeReductions:
         metrics = aggregate_step_info_metrics([[{_IMPACT: 4.0}]], [spec])
 
         assert metrics[0].value == 2.0
+
+
+class TestEmptyEpisodes:
+    """What an episode that reported nothing at all contributes."""
+
+    def test_episode_reporting_nothing_is_excluded_by_default(self) -> None:
+        """Test that an episode with no values does not enter the average.
+
+        Purpose: Validates the default, which keeps an unmeasured episode from
+            being silently counted as a zero
+
+        Given: Two episodes, one reporting the channel and one reporting nothing
+        When: The metrics are aggregated
+        Then: The mean is taken over the reporting episode alone
+
+        Test type: unit
+        """
+        spec = StepInfoMetric(name="rate", channel=_SUCCESS, per_episode=EpisodeReduction.ANY)
+        metrics = aggregate_step_info_metrics([[{_SUCCESS: 1.0}], [{}]], [spec])
+
+        assert metrics[0].value == 1.0
+
+    def test_a_reporting_episode_is_unaffected_by_how_many_report_nothing(self) -> None:
+        """Test that unmeasured episodes cannot move a measured episode's mean.
+
+        Purpose: Validates that the number of episodes measuring nothing is not
+            observable in the result. Were they filled with a stand-in, adding
+            more of them would drag the mean towards that value, making the
+            metric depend on how often measurement failed rather than on what
+            was measured
+
+        Given: Two reporting episodes averaging 0.5, alongside zero, one and
+            eight silent ones. The 0.5 is chosen to sit strictly between the two
+            stand-ins an implementation might plausibly invent, so filling with
+            either 0.0 or 1.0 would move it and fail this test
+        When: The metrics are aggregated for each list
+        Then: All three report 0.5
+
+        Test type: unit
+        """
+        spec = StepInfoMetric(name="rate", channel=_SUCCESS, per_episode=EpisodeReduction.ANY)
+        reporting = [[{_SUCCESS: 1.0}], [{_SUCCESS: 0.0}]]
+
+        values = [
+            aggregate_step_info_metrics(reporting + [[{}]] * silent, [spec])[0].value
+            for silent in (0, 1, 8)
+        ]
+
+        assert values == [0.5, 0.5, 0.5]
+
+    def test_metric_is_omitted_when_every_episode_reported_nothing(self) -> None:
+        """Test that a wholly unmeasured metric is absent rather than zero.
+
+        Purpose: Validates that "nobody measured this" is reported as an absence,
+            so a caller cannot mistake it for a measurement of zero. Environments
+            whose declared name list is a fixed contract turn the absence into an
+            explicit zero themselves, through order_and_fill_metrics
+
+        Given: Two episodes that report no channels at all
+        When: The metrics are aggregated
+        Then: No metric is produced
+
+        Test type: unit
+        """
+        spec = StepInfoMetric(name="alive", channel=_SUCCESS, per_episode=EpisodeReduction.ALL)
+
+        assert not aggregate_step_info_metrics([[{}], [{}]], [spec])
+
+
+class TestEmptyHistoryBatch:
+    """Scoring no episodes at all."""
+
+    def test_no_histories_is_rejected(self) -> None:
+        """Test that an empty batch raises instead of producing metrics.
+
+        Purpose: Validates that no value is invented for a run with no episodes.
+            A metric over no episodes is an average over nothing, and every
+            answer an environment could give — a zero, an omitted name, an empty
+            list — reads exactly like a real measurement
+
+        Given: A spec-driven environment and an empty history list
+        When: compute_metrics is called
+        Then: A ValueError naming the environment is raised
+
+        Test type: unit
+        """
+        env = _SpecSanity(discount_factor=0.95, **sanity_pinned_kwargs())
+
+        with pytest.raises(ValueError, match="received no episode histories"):
+            env.compute_metrics([])
+
+    def test_environment_without_specs_also_rejects_an_empty_batch(self) -> None:
+        """Test that the guard precedes the no-specs shortcut.
+
+        Purpose: Validates that the empty-batch rule is a property of the input,
+            not of whether the environment happens to declare metrics. An
+            environment with no specs returns an empty list for a real batch too,
+            so returning one here would leave the caller's mistake invisible
+
+        Given: A stock environment declaring no metric specs
+        When: compute_metrics is called with an empty history list
+        Then: A ValueError naming the environment is raised
+
+        Test type: unit
+        """
+        env = SanityPOMDP(discount_factor=0.95, **sanity_pinned_kwargs())
+
+        assert not env.get_metric_specs()
+        with pytest.raises(ValueError, match="received no episode histories"):
+            env.compute_metrics([])
+
+    def test_aggregator_itself_still_tolerates_an_empty_episode_list(self) -> None:
+        """Test that the guard sits at the environment boundary, not the aggregator.
+
+        Purpose: Validates that the rejection is a policy about scoring a run,
+            applied where a caller passes histories in. The aggregator is a pure
+            reduction reused by runners that produce no History, and giving it a
+            second opinion on emptiness would duplicate the rule
+
+        Given: An empty episode list and one spec
+        When: aggregate_step_info_metrics is called directly
+        Then: It returns no metrics without raising
+
+        Test type: unit
+        """
+        spec = StepInfoMetric(name="rate", channel=_SUCCESS, per_episode=EpisodeReduction.ANY)
+
+        assert not aggregate_step_info_metrics([], [spec])
+
+
+class TestOrderAndFill:
+    """Imposing a declared name order on a partially computed metric list."""
+
+    def test_missing_name_is_filled_and_order_follows_the_declaration(self) -> None:
+        """Test that gaps are filled and ordering comes from the declared names.
+
+        Purpose: Validates the helper that keeps a fixed declared metric list
+            intact when the aggregator omitted one of its entries
+
+        Given: Metrics computed out of order with one declared name missing
+        When: order_and_fill_metrics is applied
+        Then: Every declared name appears, in declaration order, the missing one
+            carrying a zero on an unbounded interval
+
+        Test type: unit
+        """
+        computed = [
+            MetricValue(
+                name="second", value=2.0, lower_confidence_bound=1.0, upper_confidence_bound=3.0
+            )
+        ]
+
+        ordered = order_and_fill_metrics(["first", "second"], computed)
+
+        assert [m.name for m in ordered] == ["first", "second"]
+        assert ordered[0].value == 0.0
+        assert ordered[0].lower_confidence_bound == -np.inf
+        assert ordered[0].upper_confidence_bound == np.inf
+
+    def test_undeclared_computed_metric_is_dropped(self) -> None:
+        """Test that a metric outside the declared name list is not emitted.
+
+        Purpose: Validates that the declared list is the whole contract, so a
+            stray computed metric cannot widen an environment's reported names
+            behind ``get_metric_names``
+
+        Given: Computed metrics containing a name the caller did not declare
+        When: order_and_fill_metrics is applied
+        Then: Only the declared names are returned
+
+        Test type: unit
+        """
+        computed = [
+            MetricValue(
+                name="first", value=1.0, lower_confidence_bound=0.0, upper_confidence_bound=2.0
+            ),
+            MetricValue(
+                name="stray", value=9.0, lower_confidence_bound=8.0, upper_confidence_bound=10.0
+            ),
+        ]
+
+        ordered = order_and_fill_metrics(["first"], computed)
+
+        assert [m.name for m in ordered] == ["first"]
 
 
 class TestMissingChannels:

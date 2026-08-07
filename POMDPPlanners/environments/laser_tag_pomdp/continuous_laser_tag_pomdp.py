@@ -52,6 +52,11 @@ from POMDPPlanners.core.environment import (
     SpaceType,
 )
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
+from POMDPPlanners.core.simulation.step_info_metrics import (
+    EpisodeReduction,
+    StepInfoMetric,
+    order_and_fill_metrics,
+)
 from POMDPPlanners.environments.laser_tag_pomdp import _native
 from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_utils import (
     OpponentPolicy,
@@ -92,6 +97,16 @@ _DEFAULT_DANGEROUS_AREAS: List[Tuple[float, float]] = [
     (7.0, 1.0),
     (2.0, 5.0),
 ]
+
+
+class ContinuousLaserTagStepChannel(Enum):
+    """Per-step channels reported by :meth:`ContinuousLaserTagPOMDP.step_info`."""
+
+    TAGGED = "tagged"
+    RECORDED_STEP = "recorded_step"
+    WALL_COLLISION = "wall_collision"
+    IN_DANGEROUS_AREA = "in_dangerous_area"
+    DANGEROUS_ENCOUNTER = "dangerous_encounter"
 
 
 class ContinuousLaserTagPOMDPMetrics(Enum):
@@ -937,13 +952,96 @@ class ContinuousLaserTagPOMDP(Environment):  # pylint: disable=too-many-public-m
     def get_metric_names(self) -> List[str]:
         return [m.value for m in ContinuousLaserTagPOMDPMetrics]
 
-    def compute_metrics(self, histories: List[History]) -> List[MetricValue]:
-        if not histories:
-            return []
+    def step_info(self, state: Any, action: Any, next_state: Any) -> Dict[str, float]:
+        """Report tag status and hazard exposure for this step.
 
-        episode_data = self._collect_episode_data(histories)
-        cis = self._compute_confidence_intervals(episode_data)
-        return self._build_metrics(episode_data, cis)
+        Args:
+            state: The state the step was taken from, or the final state on the
+                terminal step.
+            action: Unused; every channel here is a property of the state.
+            next_state: Unused; each state is scored when it is recorded.
+
+        Returns:
+            The per-step channels. ``recorded_step`` is a constant 1.0 so that
+            summing it reproduces ``len(history.history)``, terminal bookkeeping
+            step included.
+
+        Note:
+            ``tag_success_rate`` and ``average_failed_tag_attempts`` are defined
+            in terms of the realised reward, which ``step_info`` is not given, so
+            they stay in :meth:`compute_metrics`.
+        """
+        del action, next_state
+        is_state_valid = isinstance(state, np.ndarray) and len(state) == 5
+        in_dangerous_area = float(self._is_in_dangerous_area(state[:2])) if is_state_valid else 0.0
+        return {
+            ContinuousLaserTagStepChannel.TAGGED.value: (
+                float(bool(state[4])) if is_state_valid else 0.0
+            ),
+            ContinuousLaserTagStepChannel.RECORDED_STEP.value: 1.0,
+            # Constant zero, preserved deliberately: the historical counter was
+            # initialised to zero and never incremented, so average_wall_collisions
+            # has always reported 0.0. This is a preserved dead metric, not a
+            # measurement -- and it is why average_all_dangerous_encounters equals
+            # the dangerous-area count.
+            ContinuousLaserTagStepChannel.WALL_COLLISION.value: 0.0,
+            ContinuousLaserTagStepChannel.IN_DANGEROUS_AREA.value: in_dangerous_area,
+            ContinuousLaserTagStepChannel.DANGEROUS_ENCOUNTER.value: in_dangerous_area,
+        }
+
+    def get_metric_specs(self) -> List[StepInfoMetric]:
+        """Declare the metrics derived from the per-step channels.
+
+        Returns:
+            Specs for the five state-derived metrics, in enum order. The two
+            reward-derived metrics are produced by :meth:`compute_metrics`.
+        """
+        return [
+            StepInfoMetric(
+                name=ContinuousLaserTagPOMDPMetrics.GOAL_REACHING_RATE.value,
+                channel=ContinuousLaserTagStepChannel.TAGGED.value,
+                per_episode=EpisodeReduction.ANY,
+            ),
+            StepInfoMetric(
+                name=ContinuousLaserTagPOMDPMetrics.AVERAGE_EPISODE_LENGTH.value,
+                channel=ContinuousLaserTagStepChannel.RECORDED_STEP.value,
+                per_episode=EpisodeReduction.SUM,
+            ),
+            StepInfoMetric(
+                name=ContinuousLaserTagPOMDPMetrics.AVERAGE_WALL_COLLISIONS.value,
+                channel=ContinuousLaserTagStepChannel.WALL_COLLISION.value,
+                per_episode=EpisodeReduction.SUM,
+            ),
+            StepInfoMetric(
+                name=ContinuousLaserTagPOMDPMetrics.AVERAGE_DANGEROUS_AREA_STEPS.value,
+                channel=ContinuousLaserTagStepChannel.IN_DANGEROUS_AREA.value,
+                per_episode=EpisodeReduction.SUM,
+            ),
+            StepInfoMetric(
+                name=ContinuousLaserTagPOMDPMetrics.AVERAGE_ALL_DANGEROUS_ENCOUNTERS.value,
+                channel=ContinuousLaserTagStepChannel.DANGEROUS_ENCOUNTER.value,
+                per_episode=EpisodeReduction.SUM,
+            ),
+        ]
+
+    def compute_metrics(self, histories: List[History]) -> List[MetricValue]:
+        """Compute all seven metrics, in declaration order.
+
+        Args:
+            histories: List of simulation histories.
+
+        Returns:
+            All seven metrics, in declaration order.
+
+        Raises:
+            ValueError: If ``histories`` is empty, or if an episode ran without
+                being measured. See
+                :meth:`~POMDPPlanners.core.environment.environment.Environment.compute_metrics`.
+        """
+        computed = list(super().compute_metrics(histories)) + self._reward_derived_metrics(
+            histories
+        )
+        return order_and_fill_metrics(self.get_metric_names(), computed)
 
     # ------------------------------------------------------------------
     # Visualization
@@ -1023,88 +1121,52 @@ class ContinuousLaserTagPOMDP(Environment):  # pylint: disable=too-many-public-m
         dy = centers[:, 1] - float(position[1])
         return int(np.sum(dx * dx + dy * dy <= self.dangerous_area_radius**2))
 
-    def _collect_episode_data(self, histories: List[History]) -> Dict[str, list]:
-        data: Dict[str, list] = {
-            "lengths": [],
-            "success": [],
-            "goal_reached": [],
-            "failed_tags": [],
-            "wall_collisions": [],
-            "dangerous_steps": [],
-            "all_dangerous": [],
-        }
+    def _reward_derived_metrics(self, histories: List[History]) -> List[MetricValue]:
+        # Both are defined in terms of the realised reward recorded on the step,
+        # which the per-step channel cannot carry.
+        success_indicators: List[int] = []
+        failed_tags_per_episode: List[int] = []
         for history in histories:
             steps = history.history
-            data["lengths"].append(len(steps))
-            data["success"].append(
-                1 if steps and steps[-1].reward is not None and steps[-1].reward > 0 else 0
-            )
-            goal = any(
-                isinstance(s.state, np.ndarray) and len(s.state) == 5 and bool(s.state[4])
-                for s in steps
-            )
-            data["goal_reached"].append(1 if goal else 0)
+            # A terminated episode's last recorded step is the terminal
+            # bookkeeping step, whose reward is None, so it has never counted as
+            # a success. Preserved deliberately.
+            successful = bool(steps) and steps[-1].reward is not None and steps[-1].reward > 0
+            success_indicators.append(1 if successful else 0)
+            failed_tags_per_episode.append(self._count_failed_tags(steps))
 
-            failed, wall_col, danger_steps = self._count_episode_metrics(steps)
-            data["failed_tags"].append(failed)
-            data["wall_collisions"].append(wall_col)
-            data["dangerous_steps"].append(danger_steps)
-            data["all_dangerous"].append(wall_col + danger_steps)
-        return data
+        return [
+            self._metric_from_samples(
+                ContinuousLaserTagPOMDPMetrics.TAG_SUCCESS_RATE.value, success_indicators
+            ),
+            self._metric_from_samples(
+                ContinuousLaserTagPOMDPMetrics.AVERAGE_FAILED_TAG_ATTEMPTS.value,
+                failed_tags_per_episode,
+            ),
+        ]
 
-    def _count_episode_metrics(self, steps: List[StepData]) -> Tuple[int, int, int]:
+    def _count_failed_tags(self, steps: List[StepData]) -> int:
         failed_tags = 0
-        wall_collisions = 0
-        dangerous_steps = 0
-
         for step in steps:
             action = np.asarray(step.action, dtype=float) if step.action is not None else None
             if action is not None and len(action) >= 3 and action[2] > 0.5:
                 if step.reward is not None and step.reward < 0:
                     failed_tags += 1
+        return failed_tags
 
-            if isinstance(step.state, np.ndarray) and len(step.state) == 5:
-                if self._is_in_dangerous_area(step.state[:2]):
-                    dangerous_steps += 1
-
-        return failed_tags, wall_collisions, dangerous_steps
-
-    def _compute_confidence_intervals(
-        self, data: Dict[str, list]
-    ) -> Dict[str, Tuple[float, float]]:
-        n = len(data["lengths"])
-        if n < 2:
-            return {k: (-np.inf, np.inf) for k in data}
-        return {k: confidence_interval(data=v, confidence=0.95) for k, v in data.items()}
-
-    def _build_metrics(
-        self,
-        data: Dict[str, list],
-        cis: Dict[str, Tuple[float, float]],
-    ) -> List[MetricValue]:
-        n = len(data["lengths"])
-        metric_map = [
-            (ContinuousLaserTagPOMDPMetrics.TAG_SUCCESS_RATE, "success"),
-            (ContinuousLaserTagPOMDPMetrics.GOAL_REACHING_RATE, "goal_reached"),
-            (ContinuousLaserTagPOMDPMetrics.AVERAGE_EPISODE_LENGTH, "lengths"),
-            (ContinuousLaserTagPOMDPMetrics.AVERAGE_FAILED_TAG_ATTEMPTS, "failed_tags"),
-            (ContinuousLaserTagPOMDPMetrics.AVERAGE_WALL_COLLISIONS, "wall_collisions"),
-            (ContinuousLaserTagPOMDPMetrics.AVERAGE_DANGEROUS_AREA_STEPS, "dangerous_steps"),
-            (ContinuousLaserTagPOMDPMetrics.AVERAGE_ALL_DANGEROUS_ENCOUNTERS, "all_dangerous"),
-        ]
-        metrics = []
-        for metric_enum, key in metric_map:
-            val = float(np.mean(data[key])) if n > 0 else 0.0
-            ci = cis[key]
-            metrics.append(
-                MetricValue(
-                    name=metric_enum.value,
-                    value=val,
-                    lower_confidence_bound=ci[0],
-                    upper_confidence_bound=ci[1],
-                )
-            )
-        return metrics
+    @staticmethod
+    def _metric_from_samples(name: str, samples: List[int]) -> MetricValue:
+        mean_value = float(np.mean(samples))
+        if len(samples) >= 2:
+            lower, upper = confidence_interval(data=samples, confidence=0.95)
+        else:
+            lower, upper = (-np.inf, np.inf)
+        return MetricValue(
+            name=name,
+            value=mean_value,
+            lower_confidence_bound=float(lower),
+            upper_confidence_bound=float(upper),
+        )
 
 
 class ContinuousLaserTagPOMDPDiscreteActions(ContinuousLaserTagPOMDP, DiscreteActionsEnvironment):
@@ -1308,14 +1370,16 @@ class ContinuousLaserTagPOMDPDiscreteActions(ContinuousLaserTagPOMDP, DiscreteAc
             rows.append(self.action_to_vector[action_str])
         return np.ascontiguousarray(np.stack(rows, axis=0))
 
-    def _count_episode_metrics(self, steps: List[StepData]) -> Tuple[int, int, int]:
+    def _count_failed_tags(self, steps: List[StepData]) -> int:
+        # Actions are str labels here; the base counter reads the tag component
+        # of an action vector, so map them before delegating.
         converted = []
         for step in steps:
             if step.action is not None and isinstance(step.action, str):
                 converted.append(step._replace(action=self.action_to_vector[step.action]))
             else:
                 converted.append(step)
-        return super()._count_episode_metrics(converted)
+        return super()._count_failed_tags(converted)
 
     def hash_action(self, action: Any) -> Hashable:
         # Discrete-action variant: actions are str labels (e.g. "up").

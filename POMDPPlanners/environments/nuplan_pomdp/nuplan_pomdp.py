@@ -80,6 +80,7 @@ import numpy as np
 from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.core.environment import Environment, SpaceInfo, SpaceType
 from POMDPPlanners.core.simulation import History, MetricValue
+from POMDPPlanners.core.simulation.step_info_metrics import require_non_empty_histories
 from POMDPPlanners.utils.statistics_utils import confidence_interval
 
 # Default discrete control presets as ``(acceleration, steering_angle)`` pairs, in
@@ -829,8 +830,7 @@ class NuPlanPOMDP(Environment):
             - ``min_vehicle_distance``: mean over episodes of the closest the ego came to any
               agent (m); episodes that saw no agent are excluded.
         """
-        if not histories:
-            return []
+        require_non_empty_histories(histories, type(self).__name__)
         collisions = [1.0 if history.reach_terminal_state else 0.0 for history in histories]
         path_lengths = [self._episode_path_length(h) for h in histories if h.history]
         mean_speeds = [self._episode_mean_speed(h) for h in histories if h.history]

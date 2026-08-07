@@ -9,6 +9,7 @@ from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.policy import PolicyInfoVariable, PolicyRunData
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+from POMDPPlanners.tests.test_utils.golden_metric_snapshot import attach_step_info
 from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
 from POMDPPlanners.planners.sparse_sampling_planners.sparse_sampling import (
     SparseSamplingDiscreteActionsPlanner,
@@ -33,6 +34,13 @@ def create_test_history(rewards: List[float], discount_factor: float = 0.95) -> 
             resampling=False,
         )
 
+    # Measured as EpisodeRunner._record_step measures it. TigerPOMDP derives its
+    # environment metrics from the per-step channel, so a history built without
+    # info is not a stand-in for a recorded one -- it is an unmeasured history,
+    # which compute_metrics rejects rather than scoring as zero.
+    environment = TigerPOMDP(discount_factor=discount_factor)
+    step_info = environment.step_info("tiger_left", "listen", "tiger_left") or None
+
     steps = [
         StepData(
             state="tiger_left",
@@ -41,6 +49,7 @@ def create_test_history(rewards: List[float], discount_factor: float = 0.95) -> 
             observation="hear_left",
             reward=r,
             belief=create_test_belief("tiger_left"),
+            info=step_info,
         )
         for r in rewards
     ]
@@ -350,9 +359,14 @@ def test_compute_statistics_environment_policy_pair():
         ),
     ]
 
-    # Compute statistics
+    # Compute statistics. The histories are measured first, exactly as the
+    # episode runner measures a recorded one: TigerPOMDP's metrics come from the
+    # per-step channel, which a hand-built history carries nothing in.
     statistics = compute_statistics_environment_policy_pair(
-        env=environment, histories=histories, alpha=0.1, confidence_interval_level=0.95
+        env=environment,
+        histories=attach_step_info(environment, histories),
+        alpha=0.1,
+        confidence_interval_level=0.95,
     )
 
     # Verify statistics
@@ -513,10 +527,11 @@ def test_compute_statistics_environments_policies_comparison():
         ),
     ]
 
-    # Create histories dictionary
+    # Create histories dictionary, measured as the episode runner measures a
+    # recorded history: TigerPOMDP's metrics come from the per-step channel.
     histories = {
-        "TigerPOMDP_1": {"Policy1": history1},
-        "TigerPOMDP_2": {"Policy2": history2},
+        "TigerPOMDP_1": {"Policy1": attach_step_info(env1, history1)},
+        "TigerPOMDP_2": {"Policy2": attach_step_info(env2, history2)},
     }
 
     # Compute statistics

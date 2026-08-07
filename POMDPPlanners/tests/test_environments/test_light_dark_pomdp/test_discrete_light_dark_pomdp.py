@@ -1133,6 +1133,25 @@ def test_visualize_path(tmp_path):
     assert cache_path.exists()
 
 
+def test_compute_metrics_empty_histories_is_rejected():
+    """Test that scoring an empty batch of episodes raises.
+
+    Purpose: Validates that an empty batch is rejected rather than scored. A
+        zero goal_reaching_rate over no episodes is indistinguishable from a run
+        in which the agent never reached the goal
+
+    Given: A DiscreteLightDarkPOMDP environment and an empty history list
+    When: compute_metrics is called
+    Then: A ValueError naming the environment is raised
+
+    Test type: unit
+    """
+    env = DiscreteLightDarkPOMDP(discount_factor=0.95, **discrete_light_dark_pinned_kwargs())
+
+    with pytest.raises(ValueError, match="received no episode histories"):
+        env.compute_metrics([])
+
+
 def test_compute_metrics():
     """Test computation of metrics for different simulation histories
 

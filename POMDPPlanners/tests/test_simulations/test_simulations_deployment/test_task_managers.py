@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: MIT
 
 # pylint: disable=protected-access  # Tests need to access protected members
+import dataclasses
+import logging
 import shutil
 import tempfile
 import threading
@@ -9,6 +11,7 @@ import warnings
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+import joblib
 import numpy as np
 import pytest
 from dask.distributed import LocalCluster
@@ -3026,3 +3029,185 @@ def test_joblib_task_manager_log_cache_statistics_precision(cache_db):
 #         assert manager.memory == "1GB"
 #         assert manager.walltime == "00:10:00"
 #         assert isinstance(manager, DaskTaskManager)
+
+
+class _WarningCollector(logging.Handler):
+    """Collect warnings from the task manager's logger.
+
+    The project's loggers set ``propagate = False``, so pytest's ``caplog`` sees
+    nothing. Attaching a handler directly is also the only option that keeps the
+    task manager picklable: joblib hashes ``self`` to build the cache key, and a
+    mock anywhere in that object graph makes the hash fail.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(logging.WARNING)
+        self.messages: list = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.messages.append(record.getMessage())
+
+
+def _tiger_episode_task(environment, temp_cache_dir):
+    """Build an EpisodeSimulationTask whose cache key repeats across calls.
+
+    The policy is constructed fresh each time on purpose: running an episode
+    mutates the planner, and joblib keys on the pickled task, so a reused policy
+    instance would hash differently the second time and miss the cache.
+    """
+    return EpisodeSimulationTask(
+        environment=environment,
+        policy=SparsePFT(
+            environment=environment,
+            discount_factor=0.95,
+            depth=3,
+            c_ucb=1.0,
+            beta_ucb=0.5,
+            belief_child_num=4,
+            n_simulations=2,
+        ),
+        initial_belief=create_test_belief(),
+        num_steps=2,
+        episode_id=0,
+        seed=7,
+        discount_factor=0.95,
+        cache_dir=temp_cache_dir,
+        console_output=False,
+    )
+
+
+def test_stale_cached_episode_is_recomputed_with_a_warning(cache_db, environment, temp_cache_dir):
+    """Test that a cached episode predating the measurement channel is redone.
+
+    Purpose: Validates the run-recovery path. The joblib cache key is the task
+        configuration, which says nothing about the format of the episode it
+        produced, so an entry written before StepData.info existed still hits and
+        unpickles cleanly with every measurement missing. Scoring it would report
+        every metric as zero, and refusing it would fail a resumed run at metrics
+        time, so it must be treated as a miss and recomputed
+
+    Given: A JoblibTaskManager whose cached entry for a task has been rewritten
+        to carry no per-step info, as a pre-channel run would have left it
+    When: The same task configuration is run through the cache again
+    Then: The stale entry is recomputed into a measured history, and a warning
+        names the task and says why it was redone
+
+    Test type: integration
+    """
+    collector = _WarningCollector()
+    logging.getLogger("task_manager").addHandler(collector)
+    try:
+        with JoblibTaskManager(
+            cache_db=cache_db, n_jobs=1, cache_dir=temp_cache_dir, no_logs=True
+        ) as task_manager:
+            first = task_manager._run_cached_task(_tiger_episode_task(environment, temp_cache_dir))
+            assert isinstance(first, History)
+            assert any(
+                step.info for step in first.history
+            ), "the fresh run recorded no measurements"
+
+            # Rewrite the cache entry the way a pre-channel run would have left it.
+            cached_outputs = list(Path(task_manager.joblib_cache_dir).rglob("output.pkl"))
+            assert cached_outputs, "the first run populated no joblib cache entry"
+            stale = dataclasses.replace(
+                first, history=[step._replace(info=None) for step in first.history]
+            )
+            for path in cached_outputs:
+                joblib.dump(stale, path)
+
+            replayed = task_manager._cached_run(_tiger_episode_task(environment, temp_cache_dir))
+            assert isinstance(replayed, History)
+            assert not any(
+                step.info for step in replayed.history
+            ), "the cache entry was not actually poisoned, so the rest proves nothing"
+
+            second = task_manager._run_cached_task(_tiger_episode_task(environment, temp_cache_dir))
+    finally:
+        logging.getLogger("task_manager").removeHandler(collector)
+
+    assert any(
+        step.info for step in second.history
+    ), "the stale cache entry was returned instead of being recomputed"
+    assert any("predates the per-step measurement channel" in m for m in collector.messages)
+
+
+def test_measured_cached_episode_is_reused_without_recomputing(
+    cache_db, environment, temp_cache_dir
+):
+    """Test that a well-formed cached episode is still served from the cache.
+
+    Purpose: Validates that the stale-entry check costs nothing in the normal
+        case. Recovery is the whole point of the cache, so an entry recorded in
+        the current format must still be reused rather than quietly redone
+
+    Given: A JoblibTaskManager that has already cached a measured episode
+    When: The same task configuration is run through the cache again
+    Then: The call is reported as cached, the same measurements come back, and
+        no recomputation warning is emitted
+
+    Test type: integration
+    """
+    collector = _WarningCollector()
+    logging.getLogger("task_manager").addHandler(collector)
+    try:
+        with JoblibTaskManager(
+            cache_db=cache_db, n_jobs=1, cache_dir=temp_cache_dir, no_logs=True
+        ) as task_manager:
+            first = task_manager._run_cached_task(_tiger_episode_task(environment, temp_cache_dir))
+
+            repeat = _tiger_episode_task(environment, temp_cache_dir)
+            assert task_manager._cached_run.check_call_in_cache(repeat)
+            second = task_manager._run_cached_task(repeat)
+    finally:
+        logging.getLogger("task_manager").removeHandler(collector)
+
+    assert [step.info for step in second.history] == [step.info for step in first.history]
+    assert not any("predates the per-step measurement channel" in m for m in collector.messages)
+
+
+def test_stale_cache_db_entry_is_rerun_with_a_warning(cache_db, environment, temp_cache_dir):
+    """Test that a stale result in the cache DB is rerun rather than returned.
+
+    Purpose: Validates the primary recovery path. run_tasks consults the cache
+        database before a task ever reaches the executor, so an entry written
+        before StepData.info existed would otherwise be handed straight back and
+        scored as a full set of zeros -- the joblib layer never sees it
+
+    Given: A cache database primed with an episode carrying no per-step info,
+        under the config id of a task that has not been run
+    When: run_tasks is called for that task
+    Then: The task is rerun into a measured history, the cache entry is
+        replaced, and a warning names the task and says why
+
+    Test type: integration
+    """
+    task = _tiger_episode_task(environment, temp_cache_dir)
+    task_id = task.get_config_id()
+
+    collector = _WarningCollector()
+    logging.getLogger("task_manager").addHandler(collector)
+    try:
+        with JoblibTaskManager(
+            cache_db=cache_db, n_jobs=1, cache_dir=temp_cache_dir, no_logs=True
+        ) as task_manager:
+            measured = task_manager._run_cached_task(
+                _tiger_episode_task(environment, temp_cache_dir)
+            )
+            assert isinstance(measured, History)
+            stale = dataclasses.replace(
+                measured, history=[step._replace(info=None) for step in measured.history]
+            )
+            cache_db.set(task_id, stale)
+
+            results, identifiers = task_manager.run_tasks([task], [task_id])
+    finally:
+        logging.getLogger("task_manager").removeHandler(collector)
+
+    assert identifiers == [task_id]
+    assert any(
+        step.info for step in results[0].history
+    ), "the stale cache entry was returned instead of being rerun"
+    assert any("predates the per-step measurement channel" in m for m in collector.messages)
+    assert any(
+        step.info for step in cache_db.get(task_id).history
+    ), "the cache kept the stale entry"

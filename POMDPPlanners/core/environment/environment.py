@@ -396,10 +396,22 @@ class Environment(ABC):  # pylint: disable=too-many-public-methods
         arguments are typically used only to assert the request matches the
         transition actually taken.
 
+        This is also called once more per *terminated* episode, for the terminal
+        bookkeeping step, with ``action`` and ``next_state`` both ``None`` — that
+        step records the final state, which no transition ever produces a
+        successor for. Implementations must therefore tolerate ``None`` and
+        report a neutral value for any channel that describes the transition
+        rather than the state. Predicates written as
+        ``float(action == <something>)`` already do this, since ``None`` matches
+        nothing. Channels measured from ``state`` alone should still be reported,
+        because a metric that counts every visited state needs the final one.
+
         Args:
-            state: The state the step was taken from.
-            action: The action taken.
-            next_state: The realised successor state.
+            state: The state the step was taken from, or the final state on the
+                terminal bookkeeping step.
+            action: The action taken, or ``None`` on the terminal step.
+            next_state: The realised successor state, or ``None`` on the terminal
+                step.
 
         Returns:
             A flat mapping of channel name to scalar, e.g.
@@ -412,6 +424,15 @@ class Environment(ABC):  # pylint: disable=too-many-public-methods
             cross-environment channel vocabulary on purpose: a name like
             ``"impact"`` could mean a force, an impulse, an energy or a count,
             and a shared name would imply a comparability that does not hold.
+
+        Warning:
+            Implementations must be side-effect-free and must not consume
+            randomness. This runs inside the episode loop, between the transition
+            and the belief update, so a single ``np.random`` draw here shifts the
+            stream for every subsequent transition and observation — silently
+            changing seeded trajectories throughout the run, not just the
+            metrics. Where a value would have to be resampled to be reported, do
+            not report it.
         """
         return {}
 
@@ -804,10 +825,17 @@ class Environment(ABC):  # pylint: disable=too-many-public-methods
 
         Returns:
             List of computed metrics with confidence intervals
+
+        Raises:
+            ValueError: If ``histories`` is empty — a metric over no episodes is
+                an average over nothing, so any value reported for it is
+                invented. Also if this environment declares metric specs and any
+                episode recorded transition steps while carrying none of the
+                declared channels — a history produced before the per-step
+                channel existed, or by a runner that does not call
+                :meth:`step_info`. Scoring those would report every metric as
+                zero rather than as unmeasured.
         """
-        specs = self.get_metric_specs()
-        if not specs:
-            return []
         # Imported here rather than at module scope: core.simulation pulls in
         # modules that reference Environment, so a top-level import would close
         # a cycle.
@@ -815,8 +843,15 @@ class Environment(ABC):  # pylint: disable=too-many-public-methods
         from POMDPPlanners.core.simulation.step_info_metrics import (
             aggregate_step_info_metrics,
             extract_episode_step_infos,
+            require_measured_episodes,
+            require_non_empty_histories,
         )
 
+        require_non_empty_histories(histories, type(self).__name__)
+        specs = self.get_metric_specs()
+        if not specs:
+            return []
+        require_measured_episodes(histories, specs, type(self).__name__)
         return aggregate_step_info_metrics(extract_episode_step_infos(histories), specs)
 
     def to_dict(self) -> Dict[str, Any]:

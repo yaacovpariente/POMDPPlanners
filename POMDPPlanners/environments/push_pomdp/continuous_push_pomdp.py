@@ -38,6 +38,12 @@ from POMDPPlanners.core.environment import (
     SpaceType,
 )
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
+from POMDPPlanners.core.simulation.step_info_metrics import (
+    EpisodeReduction,
+    StepInfoMetric,
+    extract_episode_step_infos,
+    order_and_fill_metrics,
+)
 from POMDPPlanners.environments.push_pomdp import _native
 from POMDPPlanners.planners.planners_utils.rollout import python_random_rollout
 from POMDPPlanners.environments.push_pomdp.continuous_push_geometry import (
@@ -56,6 +62,16 @@ from POMDPPlanners.utils.statistics_utils import confidence_interval
 from POMDPPlanners.environments.push_pomdp.continuous_push_pomdp_visualizer import (  # pylint: disable=import-outside-toplevel
     ContinuousPushPOMDPVisualizer,
 )
+
+
+class ContinuousPushStepChannel(Enum):
+    """Per-step channels reported by :meth:`ContinuousPushPOMDP.step_info`."""
+
+    GOAL_REACHED = "goal_reached"
+    ROBOT_OBSTACLE_COLLISION = "robot_obstacle_collision"
+    OBJECT_OBSTACLE_COLLISION = "object_obstacle_collision"
+    ANY_OBSTACLE_COLLISION = "any_obstacle_collision"
+    IN_DANGEROUS_AREA = "in_dangerous_area"
 
 
 class ContinuousPushPOMDPMetrics(Enum):
@@ -117,7 +133,7 @@ class _RandomInitialStateDistribution(Distribution):
     # pylint: enable=protected-access
 
 
-class ContinuousPushPOMDP(Environment):
+class ContinuousPushPOMDP(Environment):  # pylint: disable=too-many-public-methods
     """Continuous-action Push POMDP environment.
 
     A robot (circle) must push an object (point) to a target location on
@@ -832,128 +848,143 @@ class ContinuousPushPOMDP(Environment):
         """
         return [m.value for m in ContinuousPushPOMDPMetrics]
 
-    def compute_metrics(  # pylint: disable=too-many-locals
-        self, histories: List[History]
-    ) -> List[MetricValue]:
-        goal_reached_list: List[int] = []
-        robot_col_list: List[int] = []
-        obj_col_list: List[int] = []
-        total_col_list: List[int] = []
-        dangerous_steps_list: List[int] = []
+    def step_info(self, state: Any, action: Any, next_state: Any) -> Dict[str, float]:
+        """Report obstacle contact and hazard exposure for this step's state.
 
-        for history in histories:
-            goal_hit = False
-            r_cols = 0
-            o_cols = 0
-            d_steps = 0
+        Args:
+            state: The state the step was taken from, or the final state on the
+                terminal step.
+            action: Unused; every channel here is a property of the state.
+            next_state: Unused; each state is scored when it is recorded.
 
-            for step in history.history:
-                if self.is_terminal(step.state):
-                    goal_hit = True
-                if self._is_circle_colliding_with_obstacle(step.state[:2], self.robot_radius):
-                    r_cols += 1
-                if self._is_point_colliding_with_obstacle(step.state[2:4]):
-                    o_cols += 1
-                if self._is_robot_in_dangerous_area(step.state[:2]):
-                    d_steps += 1
-
-            goal_reached_list.append(1 if goal_hit else 0)
-            robot_col_list.append(r_cols)
-            obj_col_list.append(o_cols)
-            total_col_list.append(r_cols + o_cols)
-            dangerous_steps_list.append(d_steps)
-
-        total_steps = sum(len(h.history) for h in histories)
-        avg_r = sum(robot_col_list) / total_steps if total_steps > 0 else 0
-        avg_o = sum(obj_col_list) / total_steps if total_steps > 0 else 0
-        avg_t = sum(total_col_list) / total_steps if total_steps > 0 else 0
-        avg_d = sum(dangerous_steps_list) / total_steps if total_steps > 0 else 0
-
-        r_rates = [c / len(h.history) for c, h in zip(robot_col_list, histories) if len(h.history)]
-        o_rates = [c / len(h.history) for c, h in zip(obj_col_list, histories) if len(h.history)]
-        t_rates = [c / len(h.history) for c, h in zip(total_col_list, histories) if len(h.history)]
-        d_rates = [
-            c / len(h.history) for c, h in zip(dangerous_steps_list, histories) if len(h.history)
-        ]
-
-        r_ci = confidence_interval(data=r_rates, confidence=0.95) if r_rates else (0, 0)
-        o_ci = confidence_interval(data=o_rates, confidence=0.95) if o_rates else (0, 0)
-        t_ci = confidence_interval(data=t_rates, confidence=0.95) if t_rates else (0, 0)
-        d_ci = confidence_interval(data=d_rates, confidence=0.95) if d_rates else (0, 0)
-
-        tr_ci = (
-            confidence_interval(data=robot_col_list, confidence=0.95) if robot_col_list else (0, 0)
+        Returns:
+            The robot / object collision indicators, their sum, and the
+            dangerous-area indicator.
+        """
+        del action, next_state
+        robot_pos = state[:2]
+        robot_collision = float(
+            self._is_circle_colliding_with_obstacle(robot_pos, self.robot_radius)
         )
-        to_ci = confidence_interval(data=obj_col_list, confidence=0.95) if obj_col_list else (0, 0)
-        ta_ci = (
-            confidence_interval(data=total_col_list, confidence=0.95) if total_col_list else (0, 0)
-        )
-        td_ci = (
-            confidence_interval(data=dangerous_steps_list, confidence=0.95)
-            if dangerous_steps_list
-            else (0, 0)
-        )
+        object_collision = float(self._is_point_colliding_with_obstacle(state[2:4]))
+        return {
+            ContinuousPushStepChannel.GOAL_REACHED.value: float(self.is_terminal(state)),
+            ContinuousPushStepChannel.ROBOT_OBSTACLE_COLLISION.value: robot_collision,
+            ContinuousPushStepChannel.OBJECT_OBSTACLE_COLLISION.value: object_collision,
+            # Own channel: the aggregator reduces one channel at a time and
+            # cannot add two. A step where both collide counts twice, as before.
+            ContinuousPushStepChannel.ANY_OBSTACLE_COLLISION.value: (
+                robot_collision + object_collision
+            ),
+            ContinuousPushStepChannel.IN_DANGEROUS_AREA.value: float(
+                self._is_robot_in_dangerous_area(robot_pos)
+            ),
+        }
 
-        avg_goal = float(np.mean(goal_reached_list)) if goal_reached_list else 0.0
-        g_ci = (
-            confidence_interval(data=goal_reached_list, confidence=0.95)
-            if goal_reached_list
-            else (0, 0)
-        )
+    def get_metric_specs(self) -> List[StepInfoMetric]:
+        """Declare the metrics derived from the per-step channels.
 
+        Returns:
+            Specs for the goal rate and the four per-episode totals. The four
+            ``*_rate`` metrics are pooled across episodes and cannot be expressed
+            as a per-episode reduction, so :meth:`compute_metrics` produces them.
+        """
         return [
-            MetricValue(
-                ContinuousPushPOMDPMetrics.GOAL_REACHING_RATE.value, avg_goal, g_ci[0], g_ci[1]
+            StepInfoMetric(
+                name=ContinuousPushPOMDPMetrics.GOAL_REACHING_RATE.value,
+                channel=ContinuousPushStepChannel.GOAL_REACHED.value,
+                per_episode=EpisodeReduction.ANY,
             ),
-            MetricValue(
-                ContinuousPushPOMDPMetrics.ROBOT_OBSTACLE_COLLISION_RATE.value,
-                avg_r,
-                r_ci[0],
-                r_ci[1],
+            StepInfoMetric(
+                name=ContinuousPushPOMDPMetrics.TOTAL_ROBOT_OBSTACLE_COLLISIONS.value,
+                channel=ContinuousPushStepChannel.ROBOT_OBSTACLE_COLLISION.value,
+                per_episode=EpisodeReduction.SUM,
             ),
-            MetricValue(
-                ContinuousPushPOMDPMetrics.OBJECT_OBSTACLE_COLLISION_RATE.value,
-                avg_o,
-                o_ci[0],
-                o_ci[1],
+            StepInfoMetric(
+                name=ContinuousPushPOMDPMetrics.TOTAL_OBJECT_OBSTACLE_COLLISIONS.value,
+                channel=ContinuousPushStepChannel.OBJECT_OBSTACLE_COLLISION.value,
+                per_episode=EpisodeReduction.SUM,
             ),
-            MetricValue(
-                ContinuousPushPOMDPMetrics.TOTAL_OBSTACLE_COLLISION_RATE.value,
-                avg_t,
-                t_ci[0],
-                t_ci[1],
+            StepInfoMetric(
+                name=ContinuousPushPOMDPMetrics.TOTAL_ALL_OBSTACLE_COLLISIONS.value,
+                channel=ContinuousPushStepChannel.ANY_OBSTACLE_COLLISION.value,
+                per_episode=EpisodeReduction.SUM,
             ),
-            MetricValue(
-                ContinuousPushPOMDPMetrics.TOTAL_ROBOT_OBSTACLE_COLLISIONS.value,
-                float(np.mean(robot_col_list)) if robot_col_list else 0.0,
-                tr_ci[0],
-                tr_ci[1],
-            ),
-            MetricValue(
-                ContinuousPushPOMDPMetrics.TOTAL_OBJECT_OBSTACLE_COLLISIONS.value,
-                float(np.mean(obj_col_list)) if obj_col_list else 0.0,
-                to_ci[0],
-                to_ci[1],
-            ),
-            MetricValue(
-                ContinuousPushPOMDPMetrics.TOTAL_ALL_OBSTACLE_COLLISIONS.value,
-                float(np.mean(total_col_list)) if total_col_list else 0.0,
-                ta_ci[0],
-                ta_ci[1],
-            ),
-            MetricValue(
-                ContinuousPushPOMDPMetrics.DANGEROUS_AREA_RATE.value,
-                avg_d,
-                d_ci[0],
-                d_ci[1],
-            ),
-            MetricValue(
-                ContinuousPushPOMDPMetrics.TOTAL_DANGEROUS_AREA_STEPS.value,
-                float(np.mean(dangerous_steps_list)) if dangerous_steps_list else 0.0,
-                td_ci[0],
-                td_ci[1],
+            StepInfoMetric(
+                name=ContinuousPushPOMDPMetrics.TOTAL_DANGEROUS_AREA_STEPS.value,
+                channel=ContinuousPushStepChannel.IN_DANGEROUS_AREA.value,
+                per_episode=EpisodeReduction.SUM,
             ),
         ]
+
+    def compute_metrics(self, histories: List[History]) -> List[MetricValue]:
+        """Compute all nine metrics, in declaration order.
+
+        Args:
+            histories: List of simulation histories.
+
+        Returns:
+            One MetricValue per declared metric name, in declaration order.
+
+        Raises:
+            ValueError: If ``histories`` is empty, or if an episode ran without
+                being measured. See
+                :meth:`~POMDPPlanners.core.environment.environment.Environment.compute_metrics`.
+        """
+        computed = list(super().compute_metrics(histories)) + self._pooled_rate_metrics(histories)
+        return order_and_fill_metrics(self.get_metric_names(), computed)
+
+    def _pooled_rate_metrics(self, histories: List[History]) -> List[MetricValue]:
+        # Pooled over all steps of all episodes -- sum(counts) / sum(lengths) --
+        # which is not the mean of per-episode values unless every episode has
+        # the same length, so the shared aggregator cannot express these. Their
+        # confidence intervals come from per-episode rates while their point
+        # estimates are the pooled ratio; that predates this migration and is
+        # preserved rather than quietly fixed.
+        counts = self._per_episode_counts(histories)
+        total_steps = sum(len(history.history) for history in histories)
+
+        metrics: List[MetricValue] = []
+        for name, key in (
+            (ContinuousPushPOMDPMetrics.ROBOT_OBSTACLE_COLLISION_RATE.value, "robot"),
+            (ContinuousPushPOMDPMetrics.OBJECT_OBSTACLE_COLLISION_RATE.value, "object"),
+            (ContinuousPushPOMDPMetrics.TOTAL_OBSTACLE_COLLISION_RATE.value, "total"),
+            (ContinuousPushPOMDPMetrics.DANGEROUS_AREA_RATE.value, "dangerous"),
+        ):
+            episode_counts = counts[key]
+            value = sum(episode_counts) / total_steps if total_steps > 0 else 0
+            rates = [
+                count / len(history.history)
+                for count, history in zip(episode_counts, histories)
+                if len(history.history)
+            ]
+            lower, upper = confidence_interval(data=rates, confidence=0.95) if rates else (0, 0)
+            metrics.append(
+                MetricValue(
+                    name=name,
+                    value=value,
+                    lower_confidence_bound=lower,
+                    upper_confidence_bound=upper,
+                )
+            )
+        return metrics
+
+    def _per_episode_counts(self, histories: List[History]) -> Dict[str, List[float]]:
+        # Read back the same channels the specs consume, so a pooled rate and its
+        # matching total can never be computed from different measurements. Every
+        # episode contributes an entry, including one with no steps, matching the
+        # historical unconditional append.
+        counts: Dict[str, List[float]] = {"robot": [], "object": [], "total": [], "dangerous": []}
+        channels = {
+            "robot": ContinuousPushStepChannel.ROBOT_OBSTACLE_COLLISION.value,
+            "object": ContinuousPushStepChannel.OBJECT_OBSTACLE_COLLISION.value,
+            "total": ContinuousPushStepChannel.ANY_OBSTACLE_COLLISION.value,
+            "dangerous": ContinuousPushStepChannel.IN_DANGEROUS_AREA.value,
+        }
+        for episode in extract_episode_step_infos(histories):
+            for key, channel in channels.items():
+                counts[key].append(sum(step_info.get(channel, 0.0) for step_info in episode))
+        return counts
 
 
 class ContinuousPushPOMDPDiscreteActions(ContinuousPushPOMDP, DiscreteActionsEnvironment):

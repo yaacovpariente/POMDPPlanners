@@ -14,6 +14,7 @@ from dask.distributed import Client, Future, LocalCluster
 from dask_jobqueue.pbs import PBSCluster
 from joblib import Memory, Parallel, delayed
 from joblib.externals.loky import get_reusable_executor
+from joblib.memory import MemorizedFunc
 from tqdm import tqdm
 
 from POMDPPlanners.core.simulation import (
@@ -23,6 +24,7 @@ from POMDPPlanners.core.simulation import (
     TaskManager,
     TaskManagerExternalDB,
 )
+from POMDPPlanners.core.simulation.step_info_metrics import unmeasured_episode_index
 
 _dask_logger = logging.getLogger(__name__)
 
@@ -272,7 +274,17 @@ class JoblibTaskManager(TaskManagerExternalDB):
             self.cache_db.clear()
 
         # Create a cached version of the task runner
-        self._cached_run = self.memory.cache(self._run_single_task)
+        cached_run = self.memory.cache(self._run_single_task)
+        # Memory.cache degenerates to a pass-through wrapper when it has no
+        # location. This Memory always has one, and _run_cached_task needs the
+        # real thing: only MemorizedFunc exposes ``call``, which is what forces a
+        # recompute past a stale entry.
+        if not isinstance(cached_run, MemorizedFunc):
+            raise TypeError(
+                f"Expected a memoizing cache for {self.joblib_cache_dir}, got "
+                f"{type(cached_run).__name__}"
+            )
+        self._cached_run = cached_run
 
         self._on_progress: Optional[Callable[[], None]] = None
 
@@ -325,6 +337,52 @@ class JoblibTaskManager(TaskManagerExternalDB):
             self.logger.warning("Task %s returned None result", task.get_config_id())
 
         return result
+
+    def _run_cached_task(self, task: SimulationTask) -> Any:
+        """Run one task through the joblib cache, redoing a stale cached result.
+
+        The cache key is the task's configuration, which says nothing about the
+        format of the episode it produced. An entry written before
+        :attr:`~POMDPPlanners.core.simulation.history.StepData.info` existed
+        therefore still hits, and unpickles cleanly with every measurement
+        missing -- which for an environment deriving its metrics from that
+        channel is not a missing result but a wrong one.
+
+        Rather than fail the run at metrics time, after the compute has been
+        paid for, such an entry is treated as a miss and recomputed. Only the
+        stale entries are redone; everything recorded in the current format is
+        still reused, so a resumed run keeps its recovery.
+
+        Args:
+            task: The simulation task to run.
+
+        Returns:
+            The task's result, freshly computed if the cached one predates the
+            per-step measurement channel.
+        """
+        # Captured before the call: a task that actually runs clears its
+        # environment reference during cleanup, while one served from cache
+        # keeps it.
+        environment = getattr(task, "environment", None)
+        specs = environment.get_metric_specs() if environment is not None else []
+
+        result = self._cached_run(task)
+        if not specs or not isinstance(result, History):
+            return result
+        if unmeasured_episode_index([result], specs) is None:
+            return result
+
+        self.logger.warning(
+            "Cached result for task %s predates the per-step measurement channel: it "
+            "carries none of %s's channels, so its metrics would all read zero. "
+            "Recomputing this episode and replacing the cache entry.",
+            task.get_config_id(),
+            type(environment).__name__,
+        )
+        # ``call`` re-runs the task and overwrites the cache entry. It returns
+        # ``(output, metadata)``; the metadata is of no use here.
+        recomputed = self._cached_run.call(task)
+        return recomputed[0] if isinstance(recomputed, tuple) else recomputed
 
     def _run_tasks(self, tasks: List[SimulationTask]) -> list:
         """Run tasks in parallel using joblib."""
@@ -392,7 +450,7 @@ class JoblibTaskManager(TaskManagerExternalDB):
         parallel = Parallel(n_jobs=self.n_jobs, verbose=self.verbose, return_as="generator")
         results: list = []
         with tqdm(total=len(tasks), desc="Running tasks", disable=self.no_logs) as pbar:
-            for result in parallel(delayed(self._cached_run)(task) for task in tasks):
+            for result in parallel(delayed(self._run_cached_task)(task) for task in tasks):
                 results.append(result)
                 pbar.update(1)
                 self._fire_progress_callback()
@@ -804,7 +862,7 @@ class SequentialTaskManager(JoblibTaskManager):
             with tqdm(tasks, desc="Running tasks", disable=self.no_logs) as pbar:
                 results = []
                 for task in pbar:
-                    results.append(self._cached_run(task))
+                    results.append(self._run_cached_task(task))
 
             end_time = time.time()
             total_time = end_time - start_time

@@ -28,6 +28,7 @@ from POMDPPlanners.tests.test_utils.metric_invariants_utils import (
     verify_metric_sanity,
     verify_return_shift_linearity,
 )
+from POMDPPlanners.tests.test_utils.golden_metric_snapshot import attach_step_info
 
 # Set seeds for reproducible tests
 np.random.seed(42)
@@ -1744,7 +1745,7 @@ class TestPushDangerousAreas:
             reach_terminal_state=False,
             policy_run_data=[PolicyRunData(info_variables=[])],
         )
-        metrics = {m.name: m for m in env.compute_metrics([history])}
+        metrics = {m.name: m for m in env.compute_metrics(attach_step_info(env, [history]))}
         assert "dangerous_area_rate" in metrics
         assert "total_dangerous_area_steps" in metrics
         assert metrics["total_dangerous_area_steps"].value == pytest.approx(2.0)
@@ -2527,7 +2528,7 @@ def test_compute_metrics_values_within_confidence_intervals():
             )
         )
 
-    metrics = env.compute_metrics(histories)
+    metrics = env.compute_metrics(attach_step_info(env, histories))
     verify_metrics_within_confidence_intervals(metrics)
     verify_metric_sanity(metrics, histories, env)
     verify_history_returns_bounded(histories, env)
