@@ -174,7 +174,7 @@ class TestDegenerateHistoryShapes:
     """Inputs the frozen fixture and a live episode cannot produce."""
 
     @pytest.mark.parametrize("slug", _SPEC_DRIVEN_SLUGS)
-    @pytest.mark.parametrize("shape", ["no_histories", "one_empty", "two_empty", "empty_plus_real"])
+    @pytest.mark.parametrize("shape", ["one_empty", "two_empty", "empty_plus_real"])
     def test_degenerate_shapes_do_not_raise_or_invent_names(
         self, slug: str, shape: str, frozen_histories: Dict[str, List[History]]
     ) -> None:
@@ -186,8 +186,8 @@ class TestDegenerateHistoryShapes:
             well-formed result whose names are a subsequence of the declared
             ones, never an invented or reordered name
 
-        Given: A migrated environment and a degenerate history list -- none, one
-            or two episodes with no steps, or a stepless episode beside a real one
+        Given: A migrated environment and a degenerate history list -- one or two
+            episodes with no steps, or a stepless episode beside a real one
         When: compute_metrics is called
         Then: It returns without raising, and every produced name is declared,
             in declared order
@@ -196,7 +196,6 @@ class TestDegenerateHistoryShapes:
         """
         environment = build_registry()[slug]()
         shapes = {
-            "no_histories": [],
             "one_empty": [_empty_history()],
             "two_empty": [_empty_history(), _empty_history()],
             "empty_plus_real": [_empty_history(), frozen_histories[slug][0]],
@@ -215,6 +214,26 @@ class TestDegenerateHistoryShapes:
         assert all(
             name in remaining for name in produced
         ), f"{slug}/{shape}: produced {produced}, not a subsequence of {declared}"
+
+    @pytest.mark.parametrize("slug", _SPEC_DRIVEN_SLUGS)
+    def test_no_histories_at_all_is_rejected(self, slug: str) -> None:
+        """Test that scoring an empty batch of episodes raises.
+
+        Purpose: Validates that no metric is invented for a run with no
+            episodes. A metric over no episodes is an average over nothing, and
+            every value an environment could report for it -- a zero, an omitted
+            name, an empty list -- reads exactly like a real measurement
+
+        Given: A migrated environment and an empty history list
+        When: compute_metrics is called
+        Then: A ValueError naming the environment is raised
+
+        Test type: unit
+        """
+        environment = build_registry()[slug]()
+
+        with pytest.raises(ValueError, match="received no episode histories"):
+            environment.compute_metrics([])
 
     @pytest.mark.parametrize("slug", _SPEC_DRIVEN_SLUGS)
     def test_a_stepless_episode_does_not_shift_a_real_one(

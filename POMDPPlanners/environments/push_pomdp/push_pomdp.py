@@ -1029,6 +1029,11 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
 
         Returns:
             One MetricValue per declared metric name, in declaration order.
+
+        Raises:
+            ValueError: If ``histories`` is empty, or if an episode ran without
+                being measured. See
+                :meth:`~POMDPPlanners.core.environment.environment.Environment.compute_metrics`.
         """
         computed = list(super().compute_metrics(histories)) + self._pooled_rate_metrics(histories)
         return order_and_fill_metrics(self.get_metric_names(), computed)

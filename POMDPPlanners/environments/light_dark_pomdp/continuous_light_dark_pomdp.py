@@ -43,6 +43,7 @@ from POMDPPlanners.core.environment import (
     SpaceType,
 )
 from POMDPPlanners.core.simulation import History, MetricValue
+from POMDPPlanners.core.simulation.step_info_metrics import require_non_empty_histories
 from POMDPPlanners.environments.light_dark_pomdp import (
     _native,  # pylint: disable=no-name-in-module
 )
@@ -888,6 +889,7 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         return [metric.value for metric in ContinuousLightDarkPOMDPMetrics]
 
     def compute_metrics(self, histories: List[History]) -> List[MetricValue]:
+        require_non_empty_histories(histories, type(self).__name__)
         goal_reached = []
         obstacle_hits = []
         obstacle_hit_counter = []

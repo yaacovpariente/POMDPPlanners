@@ -311,15 +311,20 @@ class TigerPOMDP(DiscreteActionsEnvironment):
         """Compute the Tiger metrics, always reporting every declared name.
 
         The shared aggregator omits a metric no episode reported, which happens
-        for an empty history list or an episode with no recorded steps. Tiger has
-        always reported both metrics as ``0.0`` in that case, so the declared
-        names are filled rather than dropped.
+        for an episode with no recorded steps. Tiger has always reported both
+        metrics as ``0.0`` in that case, so the declared names are filled rather
+        than dropped.
 
         Args:
             histories: List of simulation histories.
 
         Returns:
             One MetricValue per declared metric name, in declaration order.
+
+        Raises:
+            ValueError: If ``histories`` is empty, or if an episode ran without
+                being measured. See
+                :meth:`~POMDPPlanners.core.environment.environment.Environment.compute_metrics`.
         """
         return order_and_fill_metrics(self.get_metric_names(), super().compute_metrics(histories))
 

@@ -1008,16 +1008,18 @@ class TestPacManPOMDPMetrics:
     def test_compute_metrics_empty_histories(self):
         """Test metrics computation with empty histories.
 
-        Purpose: Validates that empty history list returns empty metrics
+        Purpose: Validates that an empty batch is rejected rather than scored. A
+            win rate over no episodes is indistinguishable from a run in which
+            PacMan never won
 
         Given: Empty list of episode histories
         When: compute_metrics() is called
-        Then: Returns empty list of metrics
+        Then: A ValueError naming the environment is raised
 
         Test type: unit
         """
-        metrics = self.pomdp.compute_metrics([])
-        assert metrics == []
+        with pytest.raises(ValueError, match="received no episode histories"):
+            self.pomdp.compute_metrics([])
 
     def test_compute_metrics_win_rate(self):
         """Test win rate metric calculation.

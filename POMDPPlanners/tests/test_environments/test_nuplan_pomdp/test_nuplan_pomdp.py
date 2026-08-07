@@ -231,6 +231,23 @@ def test_collision_is_terminal_and_penalised(monkeypatch: pytest.MonkeyPatch) ->
     assert reward < -50.0
 
 
+def test_compute_metrics_empty_histories_is_rejected(world: NuPlanPOMDP) -> None:
+    """compute_metrics rejects an empty batch of episodes.
+
+    Purpose: Validates that an empty batch is rejected rather than scored. A
+        zero collision_rate over no episodes is indistinguishable from a run in
+        which the ego never crashed.
+
+    Given: A NuPlanPOMDP world and an empty history list
+    When: compute_metrics is called
+    Then: A ValueError naming the environment is raised
+
+    Test type: unit
+    """
+    with pytest.raises(ValueError, match="received no episode histories"):
+        world.compute_metrics([])
+
+
 def test_compute_metrics_reports_named_metrics(world: NuPlanPOMDP) -> None:
     """compute_metrics returns the declared nuPlan metric names.
 

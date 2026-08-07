@@ -1330,20 +1330,23 @@ def test_get_metric_names_lists_the_full_carla_metric_set() -> None:
     ]
 
 
-def test_compute_metrics_empty_histories_returns_empty_list() -> None:
+def test_compute_metrics_empty_histories_is_rejected() -> None:
     """No histories yields no metrics.
 
-    Purpose: Validates compute_metrics degrades gracefully on empty input
+    Purpose: Validates that an empty batch is rejected rather than scored. A
+        zero collision_rate over no episodes is indistinguishable from a run in
+        which the ego never crashed
 
     Given: A CarlaPOMDP world
     When: compute_metrics is called with an empty history list
-    Then: An empty list is returned (no division by zero, no CI on empty data)
+    Then: A ValueError naming the environment is raised
 
     Test type: unit
     """
     env = CarlaPOMDP(discount_factor=0.95)
 
-    assert not env.compute_metrics([])
+    with pytest.raises(ValueError, match="received no episode histories"):
+        env.compute_metrics([])
 
 
 def test_compute_metrics_emits_the_three_named_metrics() -> None:

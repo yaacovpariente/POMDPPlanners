@@ -579,23 +579,18 @@ class TestTigerPOMDPMetrics:
     def test_compute_metrics_empty_histories(self, tiger_pomdp: TigerPOMDP):
         """Test metrics with empty history list.
 
-        Purpose: Validates that TigerPOMDP compute_metrics handles empty history lists correctly
+        Purpose: Validates that an empty batch is rejected rather than scored. A
+            zero success rate over no episodes is indistinguishable from a run in
+            which the agent never opened the correct door
 
         Given: A TigerPOMDP environment and empty history list []
         When: compute_metrics is called with empty histories
-        Then: Returns 0% success rate and 0 listens, confirming proper handling of empty input
+        Then: A ValueError naming the environment is raised
 
         Test type: unit
         """
-        metrics = tiger_pomdp.compute_metrics([])
-
-        # Should have 0% success rate
-        success_metric = next(m for m in metrics if m.name == "success_rate")
-        assert success_metric.value == 0.0
-
-        # Should have 0 listens
-        listens_metric = next(m for m in metrics if m.name == "average_listens")
-        assert listens_metric.value == 0.0
+        with pytest.raises(ValueError, match="received no episode histories"):
+            tiger_pomdp.compute_metrics([])
 
     def test_compute_metrics_history_with_zero_steps(self, tiger_pomdp: TigerPOMDP):
         """Regression: compute_metrics must not IndexError when an episode has zero steps.

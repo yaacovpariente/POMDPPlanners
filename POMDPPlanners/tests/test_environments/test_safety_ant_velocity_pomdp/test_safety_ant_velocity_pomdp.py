@@ -369,6 +369,28 @@ def test_sample_next_step():
     assert np.isclose(reward, expected_reward, rtol=1e-10)
 
 
+def test_compute_metrics_empty_histories_is_rejected():
+    """Test that scoring an empty batch of episodes raises.
+
+    Purpose: Validates that an empty batch is rejected rather than scored. A
+        zero safety_violation_rate over no episodes is indistinguishable from a
+        run in which the ant never exceeded the velocity threshold
+
+    Given: A SafeAntVelocityPOMDP environment and an empty history list
+    When: compute_metrics is called
+    Then: A ValueError naming the environment is raised
+
+    Test type: unit
+    """
+    env = SafeAntVelocityPOMDP(
+        discount_factor=0.95,
+        **safety_ant_velocity_pinned_kwargs(safe_velocity_threshold=2.0),
+    )
+
+    with pytest.raises(ValueError, match="received no episode histories"):
+        env.compute_metrics([])
+
+
 def test_compute_metrics():
     """Test safety metrics computation from simulation histories.
 

@@ -28,8 +28,19 @@ Breaking Changes:
   call ``step_info``, and it is applied per episode, so a partially warm cache
   cannot let one measured episode vouch for unmeasured ones beside it. It keys
   on the environment's declared channels, not on ``info`` merely being
-  non-empty. An episode with no transition steps, and an empty history list,
-  are exempt: they legitimately measured nothing.
+  non-empty. An episode with no transition steps is exempt: it legitimately
+  measured nothing.
+- ``compute_metrics`` now raises ``ValueError`` on an empty history list, in
+  every environment. A metric over no episodes is an average over nothing, so
+  any answer is invented: a zero reads like a genuine measurement of zero, an
+  omitted name silently shortens the declared list, and an empty list claims the
+  environment has no metrics. The three disagreed environment by environment
+  before — Tiger, MountainCar, CartPole, RockSample and both Push variants
+  returned zeros, both LaserTags, PacMan, CARLA and nuPlan returned ``[]``, and
+  the light-dark pair raised ``Data must contain at least one element`` from
+  ``confidence_interval``. Nothing in the simulation pipeline produces an empty
+  batch: ``compute_statistics_environment_policy_pair`` already rejects one
+  before metrics are reached, so this is a caller error, not a degenerate run.
 
 New Features:
 ^^^^^^^^^^^^^
@@ -81,10 +92,9 @@ Others:
   confidence bounds and degenerate inputs. No point estimate moved on any
   history an episode runner can produce.
   Tiger reported ``lower == upper == value`` — a placeholder its own comment
-  called out — and now gets a real 95% t-interval. Environments that previously
-  raised ``ValueError`` from ``confidence_interval`` on an empty history list
-  (CartPole, MountainCar, Push) now return zero-valued metrics instead.
-  Finally, an episode that reports a metric's channel on no step at all is now
+  called out — and now gets a real 95% t-interval. Every environment now rejects
+  an empty history list rather than answering it, replacing three different
+  answers with one error. Finally, an episode that reports a metric's channel on no step at all is now
   dropped from that metric's average rather than contributing a declared
   stand-in value. What an unmeasured episode would have measured is not a
   property of the metric, so there is no per-spec knob for it; an episode that

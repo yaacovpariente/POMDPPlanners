@@ -1519,11 +1519,13 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-pub
             histories: List of simulation histories.
 
         Returns:
-            All seven metrics in declaration order, or an empty list when there
-            are no histories.
+            All seven metrics in declaration order.
+
+        Raises:
+            ValueError: If ``histories`` is empty, or if an episode ran without
+                being measured. See
+                :meth:`~POMDPPlanners.core.environment.environment.Environment.compute_metrics`.
         """
-        if not histories:
-            return []
         computed = list(super().compute_metrics(histories)) + self._reward_derived_metrics(
             histories
         )

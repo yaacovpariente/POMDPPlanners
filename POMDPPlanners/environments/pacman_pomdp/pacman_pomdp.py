@@ -34,6 +34,7 @@ from POMDPPlanners.core.environment import (
     SpaceType,
 )
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
+from POMDPPlanners.core.simulation.step_info_metrics import require_non_empty_histories
 from POMDPPlanners.environments.pacman_pomdp import _native  # pylint: disable=no-name-in-module
 from POMDPPlanners.environments.pacman_pomdp.pacman_pomdp_utils.pacman_reward_models import (
     BasePacManRewardModel,
@@ -1250,9 +1251,11 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
         metrics_data["pellets_collected"] = self._count_pellets_collected(final_state)
 
         # Collect distances, collisions, and danger-area steps from episode steps
-        episode_distances, episode_collisions, episode_danger_steps = (
-            self._collect_step_distances_and_collisions(history)
-        )
+        (
+            episode_distances,
+            episode_collisions,
+            episode_danger_steps,
+        ) = self._collect_step_distances_and_collisions(history)
 
         if episode_distances:
             metrics_data["avg_distance"] = float(np.mean(episode_distances))
@@ -1375,9 +1378,19 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
         return metric_names
 
     def compute_metrics(self, histories: List[History]) -> List[MetricValue]:
-        """Compute environment-specific metrics."""
-        if not histories:
-            return []
+        """Compute environment-specific metrics.
+
+        Args:
+            histories: List of simulation histories.
+
+        Returns:
+            One MetricValue per declared metric name.
+
+        Raises:
+            ValueError: If ``histories`` is empty. See
+                :meth:`~POMDPPlanners.core.environment.environment.Environment.compute_metrics`.
+        """
+        require_non_empty_histories(histories, type(self).__name__)
 
         # Collect metrics from all episodes
         wins = []

@@ -470,6 +470,31 @@ def test_reward_range():
     assert env2.reward_range == expected_reward_range2
 
 
+def test_compute_metrics_empty_histories_is_rejected():
+    """Test that scoring an empty batch of episodes raises.
+
+    Purpose: Validates that an empty batch is rejected rather than scored. A
+        zero goal_reaching_rate over no episodes is indistinguishable from a run
+        in which the agent never reached the goal
+
+    Given: A ContinuousLightDarkPOMDPDiscreteActions environment and an empty
+        history list
+    When: compute_metrics is called
+    Then: A ValueError naming the environment is raised
+
+    Test type: unit
+    """
+    env = ContinuousLightDarkPOMDPDiscreteActions(
+        discount_factor=0.95,
+        **continuous_light_dark_discrete_actions_pinned_kwargs(
+            goal_state_radius=1.5, obstacle_radius=1.5
+        ),
+    )
+
+    with pytest.raises(ValueError, match="received no episode histories"):
+        env.compute_metrics([])
+
+
 def test_compute_metrics():
     """Test computation of metrics for different simulation histories"""
     env = ContinuousLightDarkPOMDPDiscreteActions(

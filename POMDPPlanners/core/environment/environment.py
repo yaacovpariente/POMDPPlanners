@@ -827,16 +827,15 @@ class Environment(ABC):  # pylint: disable=too-many-public-methods
             List of computed metrics with confidence intervals
 
         Raises:
-            ValueError: If this environment declares metric specs and any
+            ValueError: If ``histories`` is empty — a metric over no episodes is
+                an average over nothing, so any value reported for it is
+                invented. Also if this environment declares metric specs and any
                 episode recorded transition steps while carrying none of the
                 declared channels — a history produced before the per-step
                 channel existed, or by a runner that does not call
                 :meth:`step_info`. Scoring those would report every metric as
                 zero rather than as unmeasured.
         """
-        specs = self.get_metric_specs()
-        if not specs:
-            return []
         # Imported here rather than at module scope: core.simulation pulls in
         # modules that reference Environment, so a top-level import would close
         # a cycle.
@@ -845,8 +844,13 @@ class Environment(ABC):  # pylint: disable=too-many-public-methods
             aggregate_step_info_metrics,
             extract_episode_step_infos,
             require_measured_episodes,
+            require_non_empty_histories,
         )
 
+        require_non_empty_histories(histories, type(self).__name__)
+        specs = self.get_metric_specs()
+        if not specs:
+            return []
         require_measured_episodes(histories, specs, type(self).__name__)
         return aggregate_step_info_metrics(extract_episode_step_infos(histories), specs)
 

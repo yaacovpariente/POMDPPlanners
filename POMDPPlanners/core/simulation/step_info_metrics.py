@@ -28,6 +28,8 @@ Functions:
     aggregate_step_info_metrics: Reduce declared specs into MetricValues.
     extract_episode_step_infos: Pull per-step info mappings out of histories.
     order_and_fill_metrics: Impose a declared name order, filling any gap.
+    require_measured_episodes: Reject episodes that ran but were never measured.
+    require_non_empty_histories: Reject an empty episode batch.
 """
 
 from dataclasses import dataclass
@@ -171,6 +173,37 @@ def unmeasured_episode_index(
             continue
         return index
     return None
+
+
+def require_non_empty_histories(histories: Sequence["History"], environment_name: str) -> None:
+    """Reject an empty episode batch instead of scoring it.
+
+    Every metric over no episodes is an average over nothing. Whatever an
+    environment returns for it is invented: a zero-valued metric reads exactly
+    like a genuine measurement of zero, an omitted metric silently shortens the
+    declared name list, and an empty list claims the environment has no metrics
+    at all. None of the three is a measurement, and the three disagreed across
+    environments before this guard existed.
+
+    Nothing in the simulation pipeline produces an empty batch — episode
+    statistics are computed from the same histories and already fail earlier on
+    an empty list — so this is a caller error, not a degenerate run.
+
+    Args:
+        histories: The episode histories about to be scored.
+        environment_name: Name used in the error message.
+
+    Raises:
+        ValueError: If ``histories`` is empty.
+    """
+    if histories:
+        return
+    raise ValueError(
+        f"{environment_name}.compute_metrics received no episode histories. Every "
+        "metric would be an average over nothing, and any value reported for it "
+        "would be indistinguishable from a genuine measurement. Check that the "
+        "simulation produced episodes before computing metrics."
+    )
 
 
 def require_measured_episodes(
