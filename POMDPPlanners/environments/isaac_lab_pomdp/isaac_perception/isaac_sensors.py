@@ -123,19 +123,34 @@ def ray_caster_ranges(env: Any, sensor: str = "lidar", max_range: float = 10.0) 
     return np.clip(np.nan_to_num(distances, nan=max_range, posinf=max_range), 0.0, max_range)
 
 
-def height_scan(env: Any, sensor: str = "height_scanner") -> np.ndarray:
-    """Height of each ray hit relative to the sensor origin.
+def height_scan(
+    env: Any, sensor: str = "height_scanner", relative_to_sensor: bool = False
+) -> np.ndarray:
+    """World-frame height of each ray hit, or its height relative to the sensor.
+
+    The default is the **world-frame** height, because that is the quantity
+    :class:`~POMDPPlanners.environments.isaac_lab_pomdp.isaac_perception.observation_models.ray_caster_models.HeightScanObservationModel`
+    predicts: its ``floor_height`` and obstacle heights are absolute. Pairing the two on
+    different conventions is silent and expensive — over a zero-height floor the world would
+    report a large negative number where the model expects zero, and every particle weight would
+    be wrong in the same direction, which reads as "the belief cannot localise" rather than as a
+    unit mismatch.
 
     Args:
         env: The live IsaacLab env.
         sensor: Scene key of the height-scanner ``RayCaster``.
+        relative_to_sensor: Return ``hit_z - sensor_z`` instead. This is the convention
+            IsaacLab's own height-scan observation terms use; pick it only when whatever consumes
+            the reading uses it too.
 
     Returns:
-        Shape ``(M,)`` of signed heights; positive means the hit is above the sensor.
+        Shape ``(M,)`` of heights, one per ray.
     """
     hits = _ray_hits(env, sensor)
-    origin = _sensor_origin(env, sensor)
-    return np.nan_to_num(hits[:, 2] - origin[2], nan=0.0, posinf=0.0, neginf=0.0)
+    heights = hits[:, 2]
+    if relative_to_sensor:
+        heights = heights - _sensor_origin(env, sensor)[2]
+    return np.nan_to_num(heights, nan=0.0, posinf=0.0, neginf=0.0)
 
 
 def policy_observation(env: Any, group: str = "policy") -> np.ndarray:

@@ -115,7 +115,12 @@ class FactoredIsaacModelPOMDP(IsaacModelPOMDP):
                 width is that block's width, not necessarily the whole state's.
             reward_model: The objective the planner optimizes. ``None`` (the default) yields a
                 flat zero reward and therefore undirected planning — supply one to make the
-                planner solve the task.
+                planner solve the task. Note the asymmetry with ``transition``: the reward model
+                is handed the **whole** state, not just the driven block, because a reward often
+                depends on channels the dynamics do not drive. A model fitted on a narrower block
+                must therefore be wrapped in a
+                :class:`~POMDPPlanners.environments.isaac_lab_pomdp.isaac_generative_models.isaac_learned_model.BlockRewardModel`
+                or it will silently multiply its coefficients against blocks it never saw.
             transition_channels: State blocks the transition drives. ``None`` (the default) means
                 it drives the whole vector.
             observation_models: ``{channel: IsaacObservationModel}``.
@@ -141,6 +146,7 @@ class FactoredIsaacModelPOMDP(IsaacModelPOMDP):
             tuple(transition_channels) if transition_channels is not None else None
         )
         self._driven_indices = self._resolve_driven_indices()
+        self._carried_indices = self._resolve_carried_indices()
 
     def _resolve_driven_indices(self) -> Optional[np.ndarray]:
         if self.transition_channels is None:
@@ -152,6 +158,12 @@ class FactoredIsaacModelPOMDP(IsaacModelPOMDP):
                 f"schema has {list(self.state_schema.names)}"
             )
         return self.state_schema.indices_of(self.transition_channels)
+
+    def _resolve_carried_indices(self) -> Optional[np.ndarray]:
+        if self.transition_channels is None:
+            return None
+        carried = [name for name in self.state_schema.names if name not in self.transition_channels]
+        return self.state_schema.indices_of(carried) if carried else None
 
     def _driven(self, vectors: Any) -> np.ndarray:
         """Slice the transition-driven block out of one or many state vectors."""
@@ -181,10 +193,29 @@ class FactoredIsaacModelPOMDP(IsaacModelPOMDP):
         return self._recombine(state, driven_next, n_samples)
 
     def transition_log_probability(self, state: Any, action: Any, next_states: Any) -> np.ndarray:
-        # Blocks outside the driven set are deterministic, so they contribute no density term.
-        return self._transition.log_probability(
-            self._driven(state), action, self._driven(next_states)
-        )
+        """Log-density of ``next_states``, with a carried block that changed scored as impossible.
+
+        Blocks outside the driven set are *copied* by :meth:`sample_next_state`, so their
+        conditional law is a point mass. A candidate that preserves them contributes no density
+        term and is scored by the driven block alone; a candidate that changed one cannot have
+        come from this transition at all and scores ``-inf``. Scoring both alike would let a
+        density-based belief update put weight on a latent variable spontaneously flipping — which
+        is the one thing the carried block exists to prevent.
+        """
+        driven = np.asarray(
+            self._transition.log_probability(
+                self._driven(state), action, self._driven(next_states)
+            ),
+            dtype=float,
+        ).reshape(-1)
+        if self._carried_indices is None:
+            return driven
+        source = np.asarray(state, dtype=float).reshape(-1)[self._carried_indices]
+        candidates = np.atleast_2d(np.asarray(next_states, dtype=float))[:, self._carried_indices]
+        # Exact equality would be right for a copied block, but a candidate that has been through
+        # a float32 round trip must not be called impossible over one ULP.
+        changed = ~np.all(np.isclose(candidates, source[np.newaxis, :]), axis=-1)
+        return np.where(changed, -np.inf, driven)
 
     def reward(self, state: Any, action: Any, next_state: Any = None) -> float:
         if self._reward_model is None:

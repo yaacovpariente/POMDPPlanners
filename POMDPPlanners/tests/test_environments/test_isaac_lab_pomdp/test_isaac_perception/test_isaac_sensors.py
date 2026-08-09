@@ -166,20 +166,37 @@ def test_ray_caster_ranges_clip_a_ray_that_hit_nothing() -> None:
     assert ranges == pytest.approx([1.0, 10.0])
 
 
-def test_height_scan_reports_hit_height_relative_to_the_sensor() -> None:
-    """A height scan is only comparable across poses if it is sensor-relative.
+def test_height_scan_defaults_to_world_frame_heights() -> None:
+    """The default must match what HeightScanObservationModel predicts, which is absolute.
 
-    Purpose: Validates the height-scan reader's reference frame
+    Purpose: Validates the height-scan reader's default reference frame
 
     Given: A sensor 1 m up with hits at z = 0.0 and z = 0.4
-    When: The scan is read
+    When: The scan is read with the default convention
+    Then: It reports the hits' world heights, 0.0 and 0.4, not their offsets from the sensor
+
+    Test type: unit
+    """
+    hits = torch.tensor([[[0.0, 0.0, 0.0], [0.1, 0.0, 0.4]]], dtype=torch.float64)
+    origin = torch.tensor([[0.0, 0.0, 1.0]], dtype=torch.float64)
+    assert height_scan(_sensor_env(hits, origin), sensor="lidar") == pytest.approx([0.0, 0.4])
+
+
+def test_height_scan_can_report_sensor_relative_heights() -> None:
+    """IsaacLab's own observation terms use the sensor-relative form, so it stays available.
+
+    Purpose: Validates the opt-in sensor-relative convention
+
+    Given: The same sensor 1 m up
+    When: The scan is read with relative_to_sensor set
     Then: It reports -1.0 and -0.6
 
     Test type: unit
     """
     hits = torch.tensor([[[0.0, 0.0, 0.0], [0.1, 0.0, 0.4]]], dtype=torch.float64)
     origin = torch.tensor([[0.0, 0.0, 1.0]], dtype=torch.float64)
-    assert height_scan(_sensor_env(hits, origin), sensor="lidar") == pytest.approx([-1.0, -0.6])
+    scan = height_scan(_sensor_env(hits, origin), sensor="lidar", relative_to_sensor=True)
+    assert scan == pytest.approx([-1.0, -0.6])
 
 
 def test_a_non_ray_caster_sensor_raises_rather_than_returning_nothing() -> None:

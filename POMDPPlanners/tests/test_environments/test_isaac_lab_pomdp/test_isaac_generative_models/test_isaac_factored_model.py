@@ -156,24 +156,65 @@ def test_the_transition_only_ever_sees_the_driven_block() -> None:
     assert SCHEMA.block(successor, "robot").shape == (4,)
 
 
-def test_transition_density_scores_only_the_driven_block() -> None:
-    """The carried block is deterministic, so it must contribute no density term.
+def test_transition_density_ignores_a_carried_block_that_was_preserved() -> None:
+    """A copied block contributes no density term, so the driven block alone decides the score.
 
-    Purpose: Validates that the transition density ignores the undriven channels
+    Purpose: Validates that a preserved carried block does not perturb the transition density
 
-    Given: Two candidate successors identical on the robot block but differing on the type block
-    When: Both are scored
-    Then: The scores agree
+    Given: A candidate successor that keeps the source's type block
+    When: It is scored through the model and through the bare transition on the robot block
+    Then: The two agree
 
     Test type: unit
     """
     model = _model()
-    state = _state()
+    state = _state(types=(0.0, 1.0))
     robot_next = np.array([0.1, 0.1, 0.1, 0.1])
-    first = SCHEMA.pack({"robot": robot_next, "hazard_type": [0.0, 1.0]})
-    second = SCHEMA.pack({"robot": robot_next, "hazard_type": [1.0, 0.0]})
-    scores = model.transition_log_probability(state, np.ones(3), np.stack([first, second]))
-    assert scores[0] == pytest.approx(scores[1])
+    candidate = SCHEMA.pack({"robot": robot_next, "hazard_type": [0.0, 1.0]})
+    expected = _fitted_transition().log_probability(
+        SCHEMA.block(state, "robot"), np.ones(3), robot_next
+    )
+    scored = model.transition_log_probability(state, np.ones(3), candidate)
+    assert float(scored[0]) == pytest.approx(float(np.ravel(expected)[0]))
+
+
+def test_a_carried_block_that_changed_is_scored_as_impossible() -> None:
+    """The carried block is copied, so a candidate that changed it cannot have come from here.
+
+    Purpose: Validates that the transition density rejects a spontaneous latent-type flip
+
+    Given: Two candidates identical on the robot block, one preserving the type block and one
+        flipping it
+    When: Both are scored
+    Then: The preserving one is finite and the flipped one is -inf
+
+    Test type: unit
+    """
+    model = _model()
+    state = _state(types=(0.0, 1.0))
+    robot_next = np.array([0.1, 0.1, 0.1, 0.1])
+    preserved = SCHEMA.pack({"robot": robot_next, "hazard_type": [0.0, 1.0]})
+    flipped = SCHEMA.pack({"robot": robot_next, "hazard_type": [1.0, 0.0]})
+    scores = model.transition_log_probability(state, np.ones(3), np.stack([preserved, flipped]))
+    assert np.isfinite(scores[0])
+    assert scores[1] == float("-inf")
+
+
+def test_a_carried_block_survives_a_float32_round_trip() -> None:
+    """A candidate that lost precision in transit must not be called impossible over one ULP.
+
+    Purpose: Validates the tolerance on the carried-block comparison
+
+    Given: A successor whose carried block has been through float32
+    When: It is scored
+    Then: The score is finite
+
+    Test type: unit
+    """
+    model = _model()
+    state = _state(types=(0.0, 1.0))
+    successor = model.sample_next_state(state, np.ones(3)).astype(np.float32).astype(float)
+    assert np.isfinite(model.transition_log_probability(state, np.ones(3), successor)[0])
 
 
 def test_without_transition_channels_the_transition_drives_the_whole_state() -> None:
