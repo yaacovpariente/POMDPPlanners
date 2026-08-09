@@ -28,6 +28,7 @@ import numpy as np
 import pytest
 
 from POMDPPlanners.core.environment import SpaceType
+from POMDPPlanners.core.simulation.step_info_metrics import EpisodeReduction
 from POMDPPlanners.environments.racetrack_pomdp.racetrack_pomdp import (
     RacetrackMetric,
     RacetrackPOMDP,
@@ -610,6 +611,63 @@ def test_reset_clears_a_previous_terminal_flag(monkeypatch: pytest.MonkeyPatch) 
     assert world._pending is None
 
 
+@pytest.mark.parametrize("terminate_off_road,expected", [(True, True), (False, False)])
+def test_terminate_off_road_decides_whether_leaving_the_road_ends_the_episode(
+    monkeypatch: pytest.MonkeyPatch, terminate_off_road: bool, expected: bool
+) -> None:
+    """The off-road ending follows the constructor flag rather than being hard-coded.
+
+    Purpose: Validates that ``terminate_off_road`` reaches this adapter's own termination
+        decision and not only the simulator config. highway-env gates its ``_is_terminated``
+        on the same flag, so a world that always ended the episode off-road would report the
+        run over while the simulator kept driving -- and every metric downstream would be
+        cut short at a step that was not terminal.
+
+    Given: Two worlds scripted to leave the road on the first tick, one built with
+        terminate_off_road True and one with it False
+    When: One step is taken in each
+    Then: Only the flagged world reports the resulting state as terminal, and both record
+        the off-road event on its measurement channel either way
+
+    Test type: unit
+    """
+    session = FakeRacetrackSession(off_road_after=1)
+    _install(monkeypatch, session)
+    world = _reset_world(terminate_off_road=terminate_off_road)
+    state = world._live_state
+
+    next_state = world.sample_next_state(state, _COAST_STRAIGHT)
+    info = world.step_info(state, _COAST_STRAIGHT, next_state)
+
+    assert world.is_terminal(next_state) is expected
+    assert info[RacetrackStepChannel.OFF_ROAD.value] == 1.0
+
+
+def test_a_crash_still_ends_the_episode_when_off_road_termination_is_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Disabling the off-road ending leaves the other two terminal conditions alone.
+
+    Purpose: Guards the flag against being read as a blanket "never terminate". A crash and
+        the time limit are separate endings that highway-env applies regardless, so a
+        world that suppressed them along with the off-road ending would run every episode
+        to its step budget and silently destroy the collision metrics.
+
+    Given: A world with terminate_off_road False, scripted to crash on the first tick
+    When: One step is taken
+    Then: The resulting state is still terminal
+
+    Test type: unit
+    """
+    session = FakeRacetrackSession(crash_after=1)
+    _install(monkeypatch, session)
+    world = _reset_world(terminate_off_road=False)
+
+    next_state = world.sample_next_state(world._live_state, _COAST_STRAIGHT)
+
+    assert world.is_terminal(next_state) is True
+
+
 # ── Reset, observations and hashing ─────────────────────────────────────
 
 
@@ -825,7 +883,7 @@ def test_step_info_is_empty_before_any_step(world: RacetrackPOMDP) -> None:
     assert world.step_info(world._live_state, _COAST_STRAIGHT, world._live_state) == {}
 
 
-def test_step_info_reports_all_six_channels_after_a_step(
+def test_step_info_reports_every_channel_after_a_step(
     world: RacetrackPOMDP,
 ) -> None:
     """One tick fills every declared measurement channel with its own value.
@@ -836,7 +894,8 @@ def test_step_info_reports_all_six_channels_after_a_step(
     Given: A clean step to a state 0.5 m off centre at 1 m/s with the nearest agent 20 m
         away, beyond the 5 m near-miss threshold
     When: step_info is queried for that transition
-    Then: All six channels are present with the hand-computed values
+    Then: Every channel is present with the hand-computed values, and the collision-speed
+        channel reads 0.0 because this step did not crash
 
     Test type: unit
     """
@@ -851,8 +910,70 @@ def test_step_info_reports_all_six_channels_after_a_step(
         RacetrackStepChannel.TIME_LIMIT.value: 0.0,
         RacetrackStepChannel.ABS_LANE_OFFSET_M.value: 0.5,
         RacetrackStepChannel.SPEED_MPS.value: 1.0,
+        RacetrackStepChannel.COLLISION_SPEED_MPS.value: 0.0,
         RacetrackStepChannel.NEAR_MISS.value: 0.0,
     }
+
+
+def test_collision_speed_channel_carries_the_speed_of_the_crashing_step(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A crash records how fast the ego was going, not merely that it happened.
+
+    Purpose: Validates the severity channel that separates a scrape from a high-speed
+        impact. A collision rate alone cannot distinguish them, and the mean speed over an
+        episode averages the impact away entirely.
+
+    Given: A session scripted to crash on its second tick, where the scripted ego speed
+        equals the tick index
+    When: step_info is read on the clean first step and again on the crashing step
+    Then: The channel reads 0.0 while no crash has happened and the ego's speed on the
+        step the crash is reported, so a MAX reduction recovers the impact speed
+
+    Test type: unit
+    """
+    session = FakeRacetrackSession(crash_after=2)
+    _install(monkeypatch, session)
+    world = _reset_world()
+
+    state = world._live_state
+    clean_next = world.sample_next_state(state, _COAST_STRAIGHT)
+    clean = world.step_info(state, _COAST_STRAIGHT, clean_next)
+
+    crash_next = world.sample_next_state(clean_next, _COAST_STRAIGHT)
+    crashed = world.step_info(clean_next, _COAST_STRAIGHT, crash_next)
+
+    assert clean[RacetrackStepChannel.CRASHED.value] == 0.0
+    assert clean[RacetrackStepChannel.COLLISION_SPEED_MPS.value] == 0.0
+    assert crashed[RacetrackStepChannel.CRASHED.value] == 1.0
+    assert (
+        crashed[RacetrackStepChannel.COLLISION_SPEED_MPS.value]
+        == crashed[RacetrackStepChannel.SPEED_MPS.value]
+    )
+    assert crashed[RacetrackStepChannel.COLLISION_SPEED_MPS.value] > 0.0
+
+
+def test_collision_speed_metric_reduces_with_max_over_the_episode(
+    world: RacetrackPOMDP,
+) -> None:
+    """The impact speed survives aggregation instead of being averaged away.
+
+    Purpose: Validates the reduction choice. Most steps of a crashing episode report 0.0
+        on this channel, so a MEAN would report a speed no collision ever occurred at;
+        MAX picks the single impact out.
+
+    Given: The declared metric specs
+    When: The collision-speed spec is located
+    Then: It reduces with MAX over the episode
+
+    Test type: unit
+    """
+    spec = next(
+        s for s in world.get_metric_specs() if s.name == RacetrackMetric.COLLISION_SPEED_MPS.value
+    )
+
+    assert spec.channel == RacetrackStepChannel.COLLISION_SPEED_MPS.value
+    assert spec.per_episode is EpisodeReduction.MAX
 
 
 def test_step_info_reports_a_crash_on_the_channel_that_measures_it(
@@ -922,6 +1043,34 @@ def test_step_info_is_empty_for_a_successor_other_than_the_cached_one(
     world.sample_next_state(state, _COAST_STRAIGHT)
 
     assert world.step_info(state, _COAST_STRAIGHT, np.full(world.state_width, 5.0)) == {}
+
+
+def test_step_info_is_empty_for_a_predecessor_or_action_other_than_the_cached_one(
+    world: RacetrackPOMDP,
+) -> None:
+    """The successor alone is not enough to identify the cached tick.
+
+    Purpose: Validates the other two thirds of the cache check. Matching on the successor
+        alone is too weak precisely where this world is unusual: a crashed vehicle is
+        braked to rest, so a state can equal its own successor, and a later request
+        carrying that array as its predecessor would then be handed the earlier step's
+        measurements under a transition that never produced them.
+
+    Given: A world that has taken one step
+    When: step_info is queried for the cached successor but with a different predecessor,
+        and again with a different action
+    Then: Both requests report nothing, while the correct triple still reports the step
+
+    Test type: unit
+    """
+    state = world._live_state
+    next_state = world.sample_next_state(state, _COAST_STRAIGHT)
+    other_state = np.full(world.state_width, 5.0)
+    other_action = _COAST_STRAIGHT + 1
+
+    assert world.step_info(other_state, _COAST_STRAIGHT, next_state) == {}
+    assert world.step_info(state, other_action, next_state) == {}
+    assert world.step_info(state, _COAST_STRAIGHT, next_state)
 
 
 def test_step_info_values_are_plain_floats(world: RacetrackPOMDP) -> None:

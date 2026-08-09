@@ -495,6 +495,16 @@ class RacetrackModelPOMDP(DiscreteActionsEnvironment):
         return self._has_collision(array)
 
     def _has_collision(self, state: np.ndarray) -> bool:
+        # A centre-distance circle, where the world uses highway-env's oriented
+        # rectangle intersection. The two disagree on near misses whose outcome depends
+        # on relative heading and lateral offset: a 4 m centre gap is a collision here
+        # and often is not there, and two vehicles nose-to-tail in adjacent lanes are the
+        # reverse. That gap matters twice over, because this predicate feeds both
+        # `is_terminal` and the `crashed` term of `racetrack_reward` -- so the world and
+        # the model sharing one reward *function* does not by itself mean the planner is
+        # optimising the world's reward. Closing it means reproducing the footprint
+        # intersection with the ego's own heading, which needs an agent heading the state
+        # does not currently carry.
         rows = state_agent_rows(state, self.max_tracked_agents)
         present = rows[rows[:, AGENT_PRESENT] > 0.5]
         if present.size == 0:
