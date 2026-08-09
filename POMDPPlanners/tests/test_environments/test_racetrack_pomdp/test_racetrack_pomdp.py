@@ -20,7 +20,6 @@ be loosened to hide that.
 
 import pickle
 import random
-import tomllib
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -1247,6 +1246,30 @@ def test_metric_names_follow_the_declared_enum_order(world: RacetrackPOMDP) -> N
 # ── Packaging ───────────────────────────────────────────────────────────
 
 
+def _dev_extra_requirements() -> List[str]:
+    """The `dev` extra's requirement strings, read without a TOML parser.
+
+    Scanned as text rather than parsed: `tomllib` is standard library only from 3.11 and
+    this project supports 3.10, where the CI image runs. Pulling in `tomli` to satisfy one
+    assertion would add a dependency to check a dependency.
+    """
+    lines = (_REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8").splitlines()
+    requirements: List[str] = []
+    inside = False
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("dev = ["):
+            inside = True
+            continue
+        if inside:
+            if stripped.startswith("]"):
+                break
+            if stripped.startswith("#"):
+                continue
+            requirements.append(stripped.strip(",").strip('"').strip("'"))
+    return requirements
+
+
 def test_highway_env_is_declared_in_the_dev_extra() -> None:
     """The simulator backend is a declared test dependency.
 
@@ -1260,12 +1283,7 @@ def test_highway_env_is_declared_in_the_dev_extra() -> None:
 
     Test type: configuration
     """
-    with open(_REPO_ROOT / "pyproject.toml", "rb") as handle:
-        pyproject = tomllib.load(handle)
-
-    dev_extra: List[str] = pyproject["project"]["optional-dependencies"]["dev"]
-
-    assert any(requirement.startswith("highway-env") for requirement in dev_extra)
+    assert any(requirement.startswith("highway-env") for requirement in _dev_extra_requirements())
 
 
 # ── Real simulator ──────────────────────────────────────────────────────
