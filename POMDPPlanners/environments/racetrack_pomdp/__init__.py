@@ -18,6 +18,7 @@ package, constructing the model, or running the belief never loads the simulator
 Classes:
     RacetrackPOMDP: Forward-only adapter exposing a racetrack session as a world.
     RacetrackModelPOMDP: Planner-side generative model over the racetrack schema.
+    RacetrackVectorizedModel: Batched torch counterpart of that model, for VOPP.
     TrackedAgentsBelief: Particle belief that stamps grid-tracked agents onto particles.
     OccupancyVelocityTracker: Turns consecutive occupancy grids into cluster velocities.
     TrackedCluster: One tracked occupancy cluster with its relative velocity.
@@ -46,6 +47,9 @@ from POMDPPlanners.environments.racetrack_pomdp.racetrack_schema import (
     build_racetrack_config,
     racetrack_reward,
 )
+from POMDPPlanners.environments.racetrack_pomdp.racetrack_vectorized_model import (
+    RacetrackVectorizedModel,
+)
 
 __all__ = [
     "AGENT_SLOT_WIDTH",
@@ -58,6 +62,7 @@ __all__ = [
     "RacetrackModelPOMDP",
     "RacetrackPOMDP",
     "RacetrackStepChannel",
+    "RacetrackVectorizedModel",
     "TrackedAgentsBelief",
     "TrackedCluster",
     "build_racetrack_config",
