@@ -265,9 +265,12 @@ class TrackedAgentsBelief(WeightedParticleBeliefReinvigoration):
         # of widening the baseline.
         if grid is None or self.tracker is None:
             return ()
-        # Copied, not referenced: highway-env writes each observation into the same buffer,
-        # so holding the array would leave the reference frame equal to the current one and
-        # difference every opponent to a standstill.
+        # Copied, not referenced. highway-env 1.12.1 happens to hand back a fresh array per
+        # tick, but that is an implementation detail of its `nan_to_num(...).astype(...)`
+        # tail rather than a contract -- it fills one internal grid buffer in place -- and
+        # the encoded observation passes through this belief from an arbitrary caller. If
+        # the reference frame ever aliased the current one, every opponent would difference
+        # to a standstill: a silently velocity-blind planner, not a crash.
         window = self._previous_frames + ((grid.copy(), heading),)
         return window[-self.tracker.frame_stride :]
 
@@ -300,7 +303,10 @@ class TrackedAgentsBelief(WeightedParticleBeliefReinvigoration):
         # velocity estimate is quantised at 15 m/s, so a shared std would either erase the
         # position information or pretend the velocity is precise.
         noise = np.zeros((count, self.max_tracked_agents, AGENT_SLOT_WIDTH))
-        present = np.flatnonzero(rows[:, AGENT_PRESENT] == 1.0)
+        # Thresholded, not compared to exactly 1.0: in MDP mode these rows come from the
+        # observation rather than from this package, and a presence flag that arrived as
+        # 0.999 would silently leave a real vehicle unjittered.
+        present = np.flatnonzero(rows[:, AGENT_PRESENT] > 0.5)
         if len(present) == 0:
             return noise.reshape(count, -1)
         widths = (

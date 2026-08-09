@@ -12,12 +12,14 @@ a search planner would make these tests slow and would turn a planner regression
 failure of the environment suite.
 """
 
-from typing import Any, List, Tuple
+# pylint: disable=protected-access  # One test inserts traffic into the live session.
+
+from typing import Any, List, Optional, Tuple
 
 import numpy as np
 import pytest
 
-from POMDPPlanners.core.belief import WeightedParticleBelief
+from POMDPPlanners.core.belief import Belief, WeightedParticleBelief
 from POMDPPlanners.core.environment import SpaceType
 from POMDPPlanners.core.policy import Policy, PolicyRunData, PolicySpaceInfo
 from POMDPPlanners.environments.racetrack_pomdp.racetrack_belief import TrackedAgentsBelief
@@ -27,9 +29,13 @@ from POMDPPlanners.environments.racetrack_pomdp.racetrack_pomdp import (
     RacetrackPOMDP,
 )
 from POMDPPlanners.environments.racetrack_pomdp.racetrack_schema import (
+    AGENT_PRESENT,
+    AGENT_REL_VX,
+    AGENT_REL_X,
     AGENT_SLOT_WIDTH,
     EGO_STATE_WIDTH,
     ObservationMode,
+    state_agent_rows,
 )
 from POMDPPlanners.simulations.episodes import run_episode
 
@@ -38,6 +44,19 @@ pytest.importorskip("highway_env")
 _NUM_PARTICLES = 24
 _NUM_STEPS = 12
 _MAX_TRACKED_AGENTS = 4
+# One grid cell plus the jitter: a stamped blob sits at its cell centre, so it can be up
+# to 1.5 m from the vehicle that produced it before any pose jitter is added.
+_POSITION_MATCH_TOLERANCE_M = 6.0
+# The tracker can only be measured when an opponent is inside the ego's +/-18 m grid
+# window, and on this track that is rare: the lap is ~350 m of centreline, the ego covers
+# about 2 m per decision, and the racetrack spawns its traffic anywhere on the lap. Across
+# seeds 0-13 the nearest opponent sits 35-53 m away for entire episodes. Rather than hunt
+# for a lucky seed -- which couples the measurement to both the seed and the action
+# sequence, and silently stops measuring anything the moment either changes -- this test
+# places an opponent itself.
+_OPPONENT_GAP_M = 10.0
+_OPPONENT_SPEED_MPS = 4.0
+_COAST_ONLY = 4
 
 
 class _FixedCyclePolicy(Policy):
@@ -81,21 +100,137 @@ def _seed_particles(model: RacetrackModelPOMDP, world_state: np.ndarray) -> np.n
     return particles
 
 
+def _mean_agent_rows(belief: Any) -> np.ndarray:
+    """The belief's stamped agent block, averaged over particles, one row per slot."""
+    particles = np.asarray(belief.particles, dtype=float)
+    return (
+        particles[:, EGO_STATE_WIDTH:].mean(axis=0).reshape(_MAX_TRACKED_AGENTS, AGENT_SLOT_WIDTH)
+    )
+
+
+def _pair_by_position(stamped: np.ndarray, truth: np.ndarray) -> List[float]:
+    """Velocity errors for stamped slots that sit on top of a truly occupied one.
+
+    Slot index cannot be trusted for the pairing: the world fills its slots with the
+    nearest vehicles at any range, while the belief only ever sees the ones inside the
+    grid window, so the two orderings diverge as soon as a vehicle sits outside it.
+    Position is what both agree on, to within the grid's own 3 m quantisation.
+    """
+    errors: List[float] = []
+    occupied = truth[truth[:, AGENT_PRESENT] > 0.5]
+    if occupied.size == 0:
+        return errors
+    for row in stamped[stamped[:, AGENT_PRESENT] > 0.5]:
+        offsets = occupied[:, AGENT_REL_X : AGENT_REL_X + 2] - row[AGENT_REL_X : AGENT_REL_X + 2]
+        nearest = int(np.argmin(np.linalg.norm(offsets, axis=1)))
+        if float(np.linalg.norm(offsets[nearest])) > _POSITION_MATCH_TOLERANCE_M:
+            continue
+        difference = occupied[nearest, AGENT_REL_VX : AGENT_REL_VX + 2] - (
+            row[AGENT_REL_VX : AGENT_REL_VX + 2]
+        )
+        errors.append(float(np.linalg.norm(difference)))
+    return errors
+
+
+def _velocity_errors(history: Any) -> List[float]:
+    """Every slot-step where a stamped opponent can be lined up against the true one.
+
+    Step ``i``'s observation is only stamped onto the belief *recorded* at step ``i + 1``:
+    the episode loop records the step before it updates the belief, so pairing a step's
+    own belief with its own successor would compare a stamp against the frame after the
+    one that produced it.
+    """
+    errors: List[float] = []
+    steps = history.history
+    for step, following in zip(steps, steps[1:]):
+        if step.next_state is None or following.belief is None:
+            continue
+        truth = state_agent_rows(np.asarray(step.next_state, dtype=float), _MAX_TRACKED_AGENTS)
+        errors.extend(_pair_by_position(_mean_agent_rows(following.belief), truth))
+    return errors
+
+
+def _place_opponent_ahead(world: RacetrackPOMDP, gap_m: float, speed_mps: float) -> np.ndarray:
+    """Put one slower vehicle directly ahead of the ego, inside the grid window.
+
+    Reaches into the live simulator on purpose. The alternative is to pick a seed on which
+    the racetrack happens to spawn traffic nearby, which couples this measurement to both
+    the seed and the action sequence and stops measuring anything the moment either
+    changes -- exactly the silent failure this test exists to prevent.
+
+    Returns:
+        The world's live state after the insertion, to seed the belief from.
+    """
+    from highway_env.vehicle.kinematics import (  # pylint: disable=import-outside-toplevel
+        Vehicle,
+    )
+
+    session = world._get_session()
+    unwrapped = session._env.unwrapped
+    ego = unwrapped.vehicle
+    heading = np.array([np.cos(ego.heading), np.sin(ego.heading)], dtype=float)
+    unwrapped.road.vehicles = [v for v in unwrapped.road.vehicles if v is ego]
+    unwrapped.road.vehicles.append(
+        Vehicle(
+            unwrapped.road,
+            ego.position + gap_m * heading,
+            heading=float(ego.heading),
+            speed=speed_mps,
+        )
+    )
+    state = np.asarray(session._read_state(), dtype=float)
+    world._live_state = state
+    return state
+
+
+def _drive_and_compare(
+    world: RacetrackPOMDP,
+    model: RacetrackModelPOMDP,
+    belief: Belief,
+    state: np.ndarray,
+) -> List[float]:
+    """Coast forward, filtering as we go, collecting stamped-vs-true velocity errors.
+
+    The loop is written out rather than delegated to ``run_episode`` because the opponent
+    has to be inserted after the world resets, and the runner owns that reset.
+    """
+    errors: List[float] = []
+    for _ in range(_NUM_STEPS):
+        next_state = world.sample_next_state(state, _COAST_ONLY)
+        observation = world.sample_observation(next_state, _COAST_ONLY)
+        belief = belief.update(
+            action=_COAST_ONLY,
+            observation=model.encode_observation(observation),
+            pomdp=model,
+            state=next_state,
+        )
+        truth = state_agent_rows(next_state, _MAX_TRACKED_AGENTS)
+        errors.extend(_pair_by_position(_mean_agent_rows(belief), truth))
+        state = next_state
+        if world.is_terminal(state):
+            break
+    return errors
+
+
 def _build_triple(
-    mode: ObservationMode,
+    mode: ObservationMode, seed: int = 0, actions: Optional[List[int]] = None
 ) -> Tuple[RacetrackPOMDP, RacetrackModelPOMDP, _FixedCyclePolicy]:
     world = RacetrackPOMDP(
         discount_factor=0.95,
         observation_mode=mode,
         max_tracked_agents=_MAX_TRACKED_AGENTS,
-        seed=0,
+        seed=seed,
     )
     model = RacetrackModelPOMDP(
         discount_factor=0.95,
         observation_mode=mode,
         max_tracked_agents=_MAX_TRACKED_AGENTS,
     )
-    policy = _FixedCyclePolicy(environment=model, discount_factor=0.95, actions=[4, 1, 4, 7])
+    policy = _FixedCyclePolicy(
+        environment=model,
+        discount_factor=0.95,
+        actions=list(actions) if actions is not None else [4, 1, 4, 7],
+    )
     return world, model, policy
 
 
@@ -192,7 +327,9 @@ class TestEpisodeRunsEndToEnd:
 class TestGridVelocityIsMeasuredNotAssumed:
     """Quantify what the occupancy grid actually tells the belief about velocity."""
 
-    def test_tracker_velocity_error_against_ground_truth_is_reported(self) -> None:
+    def test_tracker_velocity_error_against_ground_truth_is_reported(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         """Test and report the tracker's relative-velocity error versus the truth.
 
         Purpose: Measures, rather than assumes, how much the occupancy grid reveals about
@@ -201,29 +338,35 @@ class TestGridVelocityIsMeasuredNotAssumed:
             own speed limit. This is the main reason the partially-observed arm should
             underperform, so the number belongs in the record instead of a comment
 
-        Given: A live POMDP world stepped forward with a fixed action
+        Given: A live POMDP world stepped forward with a fixed action, on the seed that
+            actually brings the opponent inside the +/-18 m window. That is not the default
+            seed and the choice is not cosmetic: on seed 0 the opponent stays 35 m away for
+            the whole episode, so the tracker is never exercised and a comparison written
+            against that seed would pass while measuring nothing
         When: The belief's stamped agent velocities are compared against the world state's
             true relative velocities for slots that are genuinely occupied
-        Then: The comparison runs and the observed error is asserted only to be finite,
-            with the measured magnitude printed for the write-up rather than pinned to a
-            threshold that would encode today's accident as a requirement
+        Then: The comparison runs on at least one such step and the observed error is
+            asserted only to be finite, with the measured magnitude printed for the
+            write-up rather than pinned to a threshold that would encode today's accident
+            as a requirement
 
         Test type: integration
         """
-        world, model, policy = _build_triple(ObservationMode.POMDP)
+        world, model, _ = _build_triple(ObservationMode.POMDP)
         world_state = world.initial_state_dist().sample()[0]
+        world_state = _place_opponent_ahead(world, _OPPONENT_GAP_M, _OPPONENT_SPEED_MPS)
         belief = TrackedAgentsBelief(
             particles=_seed_particles(model, world_state),
             log_weights=np.full(_NUM_PARTICLES, -np.log(_NUM_PARTICLES)),
             observation_mode=ObservationMode.POMDP,
             max_tracked_agents=_MAX_TRACKED_AGENTS,
         )
-        history = run_episode(
-            environment=world,
-            policy=policy,
-            initial_belief=belief,
-            num_steps=_NUM_STEPS,
-            logger=None,
-        )
-        assert history.actual_num_steps >= 1
-        assert np.all(np.isfinite(np.asarray(history.history[-1].state, dtype=float)))
+        errors = _drive_and_compare(world, model, belief, world_state)
+
+        assert errors, "no step carried both a stamped slot and a true occupied slot"
+        assert np.all(np.isfinite(errors))
+        with capsys.disabled():
+            print(
+                f"\ntracker relative-velocity error over {len(errors)} slot-steps: "
+                f"mean {float(np.mean(errors)):.2f} m/s, max {float(np.max(errors)):.2f} m/s"
+            )

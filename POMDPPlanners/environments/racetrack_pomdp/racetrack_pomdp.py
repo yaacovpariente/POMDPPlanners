@@ -76,6 +76,7 @@ from POMDPPlanners.core.environment import Environment, SpaceInfo, SpaceType
 from POMDPPlanners.core.simulation.step_info_metrics import EpisodeReduction, StepInfoMetric
 from POMDPPlanners.environments.racetrack_pomdp.racetrack_schema import (
     AGENT_PRESENT,
+    AGENT_REL_X,
     AGENT_SLOT_WIDTH,
     DEFAULT_ACTION_PRESETS,
     DEFAULT_ACTION_REWARD,
@@ -90,6 +91,8 @@ from POMDPPlanners.environments.racetrack_pomdp.racetrack_schema import (
     DEFAULT_POLICY_FREQUENCY,
     DEFAULT_SIMULATION_FREQUENCY,
     DEFAULT_SPEED_LIMIT,
+    EGO_LAT,
+    EGO_SPEED,
     EGO_STATE_WIDTH,
     MAX_ACCELERATION_MPS2,
     ObservationMode,
@@ -112,6 +115,7 @@ class RacetrackStepChannel(Enum):
     TIME_LIMIT = "time_limit"
     ABS_LANE_OFFSET_M = "abs_lane_offset_m"
     SPEED_MPS = "speed_mps"
+    COLLISION_SPEED_MPS = "collision_speed_mps"
     NEAR_MISS = "near_miss"
 
 
@@ -123,6 +127,7 @@ class RacetrackMetric(Enum):
     TIME_LIMIT_RATE = "time_limit_rate"
     MEAN_ABS_LANE_OFFSET_M = "mean_abs_lane_offset_m"
     MEAN_SPEED_MPS = "mean_speed_mps"
+    COLLISION_SPEED_MPS = "collision_speed_mps"
     NEAR_MISS_RATE = "near_miss_rate"
 
 
@@ -314,6 +319,10 @@ class RacetrackPOMDP(Environment):
         )
         self.max_tracked_agents = max_tracked_agents
         self.near_miss_distance_m = near_miss_distance_m
+        # Kept as an attribute as well as a config key: highway-env consults it in
+        # `_is_terminated`, and this adapter decides termination itself rather than
+        # reading the simulator's flag, so the two must be driven by the same value.
+        self.terminate_off_road = terminate_off_road
         self.render_mode = render_mode
         self.seed = seed
         self.collision_reward = collision_reward
@@ -440,16 +449,25 @@ class RacetrackPOMDP(Environment):
         present = rows[rows[:, AGENT_PRESENT] > 0.5]
         if present.size == 0:
             return float("inf")
-        return float(np.min(np.linalg.norm(present[:, 1:3], axis=1)))
+        offsets = present[:, AGENT_REL_X : AGENT_REL_X + 2]
+        return float(np.min(np.linalg.norm(offsets, axis=1)))
 
     def _measure(self, outcome: Dict[str, Any], next_state: np.ndarray) -> Dict[str, float]:
         """Derive the per-step measurement channels from one completed tick."""
+        crashed = bool(outcome["crashed"])
+        speed = float(next_state[EGO_SPEED])
         return {
-            RacetrackStepChannel.CRASHED.value: float(outcome["crashed"]),
+            RacetrackStepChannel.CRASHED.value: float(crashed),
             RacetrackStepChannel.OFF_ROAD.value: float(outcome["off_road"]),
             RacetrackStepChannel.TIME_LIMIT.value: float(outcome["truncated"]),
-            RacetrackStepChannel.ABS_LANE_OFFSET_M.value: abs(float(next_state[4])),
-            RacetrackStepChannel.SPEED_MPS.value: float(next_state[3]),
+            RacetrackStepChannel.ABS_LANE_OFFSET_M.value: abs(float(next_state[EGO_LAT])),
+            RacetrackStepChannel.SPEED_MPS.value: speed,
+            # Impact severity, not just its occurrence. This is the speed the ego was
+            # doing when it hit something: highway-env only applies its crash braking
+            # (acceleration = -speed) on the *following* action, so the state recorded
+            # on the crashing step still carries the pre-impact speed. Non-crash steps
+            # report 0.0 so a MAX reduction picks the impact out of the episode.
+            RacetrackStepChannel.COLLISION_SPEED_MPS.value: speed if crashed else 0.0,
             RacetrackStepChannel.NEAR_MISS.value: float(
                 self._min_agent_range(next_state) <= self.near_miss_distance_m
             ),
@@ -484,14 +502,19 @@ class RacetrackPOMDP(Environment):
         acceleration, steering = self._to_control(action)
         outcome = self._get_session().step(acceleration, steering)
         next_state = np.asarray(outcome["state"])
-        done = outcome["crashed"] or outcome["off_road"] or outcome["truncated"]
+        # Mirrors highway-env's own `_is_terminated`, which gates the off-road ending on
+        # `terminate_off_road`, plus its separate truncation. Hard-coding the off-road
+        # ending here would make the constructor flag a lie: the simulator would keep the
+        # episode alive while this adapter reported it over.
+        ends_episode = outcome["crashed"] or (self.terminate_off_road and outcome["off_road"])
+        done = bool(ends_episode or outcome["truncated"])
         pending = {
             "state": np.asarray(state).copy(),
             "action": action,
             "next_state": next_state,
             "observation": outcome["observation"],
             "reward": racetrack_reward(
-                float(next_state[4]),
+                float(next_state[EGO_LAT]),
                 (acceleration, steering),
                 outcome["crashed"],
                 not outcome["off_road"],
@@ -547,7 +570,11 @@ class RacetrackPOMDP(Environment):
         Values are served from the cache the single simulator tick already filled — a
         forward-only world cannot re-measure a transition — so this consumes no randomness
         and has no side effects, which matters because it runs inside the episode loop.
-        The arguments are used only to confirm the request refers to that tick.
+        All three arguments are used, and only to confirm the request refers to that tick.
+        Matching on the successor alone would be too weak: a crashed vehicle is braked to
+        rest, so ``next_state == state`` is an ordinary reading here, and a later request
+        carrying that same array as its *predecessor* would then be served the earlier
+        step's measurements.
 
         Args:
             state: The state the step was taken from.
@@ -556,14 +583,17 @@ class RacetrackPOMDP(Environment):
                 bookkeeping call.
 
         Returns:
-            The six measurement channels for that transition, or an empty mapping when
-            the request does not refer to the cached tick.
+            The measurement channels for that transition, or an empty mapping when the
+            request does not refer to the cached tick.
         """
-        del state, action
         pending = self._pending
         if pending is None or next_state is None:
             return {}
         if not self._states_equal(pending["next_state"], next_state):
+            return {}
+        if not self._states_equal(pending["state"], state):
+            return {}
+        if self.hash_action(pending["action"]) != self.hash_action(action):
             return {}
         return dict(pending["info"])
 
@@ -602,6 +632,15 @@ class RacetrackPOMDP(Environment):
                 name=RacetrackMetric.MEAN_SPEED_MPS.value,
                 channel=RacetrackStepChannel.SPEED_MPS.value,
                 per_episode=EpisodeReduction.MEAN,
+            ),
+            # MAX, not MEAN: an episode has at most one crash, so the maximum is the
+            # impact speed itself, while a mean over mostly-zero steps would report a
+            # number no collision ever happened at. Episodes that never crash
+            # contribute 0.0, so read this alongside collision_rate.
+            StepInfoMetric(
+                name=RacetrackMetric.COLLISION_SPEED_MPS.value,
+                channel=RacetrackStepChannel.COLLISION_SPEED_MPS.value,
+                per_episode=EpisodeReduction.MAX,
             ),
             StepInfoMetric(
                 name=RacetrackMetric.NEAR_MISS_RATE.value,
