@@ -71,6 +71,10 @@ dev = [
     "pytest-benchmark>=4.0.0",
     "pybind11>=2.12",
     "build>=1.0.0",
+    # Racetrack POMDP backend. Test-only on purpose: the environment imports it
+    # lazily, so a runtime install never loads it, but CI must have it because
+    # the racetrack tests exercise the real simulator rather than a stand-in.
+    "highway-env>=1.12.1",
 ]
 docs = [
     "sphinx>=5.0.0",
@@ -213,6 +217,7 @@ ignored-modules = [
     "cvxopt",
     "carla",
     "nuplan",
+    "highway_env",
     "POMDPPlanners.core._native",
     "POMDPPlanners.environments.mountain_car_pomdp._native",
     "POMDPPlanners.environments.cartpole_pomdp._native",

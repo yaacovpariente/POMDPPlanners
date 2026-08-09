@@ -27,6 +27,7 @@ import pytest
 from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.environments.isaac_lab_pomdp.isaac_lab_pomdp import IsaacLabPOMDP
+from POMDPPlanners.environments.racetrack_pomdp.racetrack_pomdp import RacetrackPOMDP
 from POMDPPlanners.tests.test_utils.golden_metric_snapshot import (
     append_terminal_step,
     attach_step_info,
@@ -403,6 +404,25 @@ class TestStepInfoContract:
         world = IsaacLabPOMDP.__new__(IsaacLabPOMDP)
         world._pending = None  # pylint: disable=protected-access
         assert not IsaacLabPOMDP.step_info(world, np.zeros(2), None, None)
+
+    def test_racetrack_step_info_tolerates_the_terminal_call(self) -> None:
+        """Test that the racetrack world survives the terminal call.
+
+        Purpose: Validates the same terminal-call contract for the racetrack world,
+            which like IsaacLab serves cached measurements from a live simulator
+            rather than computing them from its arguments. It is checked here rather
+            than through the shared registry sweep because that sweep replays a
+            frozen pickle of hermetic episodes, which a live simulator cannot join
+
+        Given: A RacetrackPOMDP instance that has taken no step
+        When: step_info is called with action and next_state both None
+        Then: An empty mapping is returned rather than an exception
+
+        Test type: unit
+        """
+        world = RacetrackPOMDP.__new__(RacetrackPOMDP)
+        world._pending = None  # pylint: disable=protected-access
+        assert not RacetrackPOMDP.step_info(world, np.zeros(27), None, None)
 
     @pytest.mark.parametrize("slug", _SPEC_DRIVEN_SLUGS)
     def test_reported_values_survive_pickling(
