@@ -26,14 +26,22 @@ flag is a dynamics key applied identically to both arms, so the matched pair is 
 **State layout** (identical in the world and in the model, on purpose — a wider world
 state is what makes CARLA's agent-slot reshape unsafe against a world vector)::
 
-    [x, y, heading, speed, lat, ang, curvature] + max_tracked_agents * [present, rel_x, rel_y, rel_vx, rel_vy]
+    [x, y, heading, speed, lat, ang, s] + max_tracked_agents * [present, rel_x, rel_y, rel_vx, rel_vy]
 
 The ego block is world-frame position in metres, heading in radians, scalar speed in m/s,
 then the Frenet terms: signed lateral offset from the lane centreline in metres, the angle
-between the heading and the lane direction in radians, and the signed curvature of the
-current lane in 1/m. Agent slots are in the ego body frame — ``rel_x`` forward, ``rel_y``
-left — and hold **relative** velocity, because that is exactly what differencing two
-ego-aligned occupancy grids can measure.
+between the heading and the lane direction in radians, and the distance travelled along the
+track centreline in metres.
+
+The last slot is deliberately the car's **arclength**, not the road's curvature. Curvature is
+a property of the road, so freezing it in the state encodes a prediction about the future
+rather than a fact about the present, and a rollout that reuses it drives straight through
+every corner. Where the road bends is the transition model's business: see
+:mod:`~POMDPPlanners.environments.racetrack_pomdp.racetrack_track_geometry`.
+
+Agent slots are in the ego body frame — ``rel_x`` forward, ``rel_y`` left — and hold
+**relative** velocity, because that is exactly what differencing two ego-aligned
+occupancy grids can measure.
 
 Classes:
     ObservationMode: Which observation the world emits; dynamics are unaffected.
@@ -55,7 +63,7 @@ EGO_HEADING = 2
 EGO_SPEED = 3
 EGO_LAT = 4
 EGO_ANG = 5
-EGO_CURVATURE = 6
+EGO_ARCLENGTH_M = 6
 
 AGENT_PRESENT = 0
 AGENT_REL_X = 1
@@ -78,19 +86,21 @@ ON_ROAD_LAYER = 1
 MAX_ACCELERATION_MPS2 = 5.0
 MAX_STEERING_RAD = np.pi / 4
 
-# A 3x3 grid of (acceleration, steering) commands, both normalised to [-1, 1].
+# Every acceleration crossed with every steering angle, both normalised to [-1, 1].
 # The planner selects an index into this tuple, so the world and the model share
 # one action vocabulary by construction rather than by convention.
-DEFAULT_ACTION_PRESETS: Tuple[Tuple[float, float], ...] = (
-    (1.0, -1.0),
-    (1.0, 0.0),
-    (1.0, 1.0),
-    (0.0, -1.0),
-    (0.0, 0.0),
-    (0.0, 1.0),
-    (-1.0, -1.0),
-    (-1.0, 0.0),
-    (-1.0, 1.0),
+# Steering is sampled finely near zero and coarsely at the extremes. Full lock is
+# pi/4 = 45 degrees, which on this track is a spin rather than a correction: sweeping
+# constant steering through the first bend, -1.0 survives 5 steps while -0.05 survives
+# 29. A bang-bang set of {-1, 0, +1} simply does not contain the manoeuvre the track
+# needs, so no amount of planning can select it.
+STEERING_PRESETS: Tuple[float, ...] = (-1.0, -0.25, -0.1, -0.05, 0.0, 0.05, 0.1, 0.25, 1.0)
+ACCELERATION_PRESETS: Tuple[float, ...] = (1.0, 0.0, -1.0)
+
+DEFAULT_ACTION_PRESETS: Tuple[Tuple[float, float], ...] = tuple(
+    (acceleration, steering)
+    for acceleration in ACCELERATION_PRESETS
+    for steering in STEERING_PRESETS
 )
 
 # ── Simulator defaults (racetrack-v0, verified against highway-env 1.12.1) ──

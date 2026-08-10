@@ -1,11 +1,20 @@
 # SPDX-License-Identifier: MIT
 
-"""Tests for the planner-side racetrack generative model.
+"""Tests for the abstract planner-side racetrack generative model.
 
-Every test but the last is pure NumPy and never touches highway-env: the model exists so a
-planner can run without the simulator, and a test suite that needed the simulator to check
-the model would not be checking that. The last test is the exception on purpose — it is the
-only thing that can show the reproduced bicycle really tracks the one the world integrates.
+The class under test cannot be instantiated — it is abstract precisely because it does not
+know where the road bends — so everything here is exercised through the thinnest concrete
+subclass available, a
+:class:`~POMDPPlanners.environments.racetrack_pomdp.racetrack_known_track_model.KnownTrackModel`
+over a one-segment map. What is being checked is the *base* behaviour: the bicycle
+integration, the Frenet coupling, the densities, the rasteriser and the arclength slot.
+Behaviour specific to either subclass lives in its own file.
+
+Every test but the last two is pure NumPy and never touches highway-env: the model exists so
+a planner can run without the simulator, and a test suite that needed the simulator to check
+the model would not be checking that. The last two are the exception on purpose — they are
+the only things that can show the reproduced bicycle really tracks the one the world
+integrates.
 """
 
 from typing import Any, Dict
@@ -13,6 +22,7 @@ from typing import Any, Dict
 import numpy as np
 import pytest
 
+from POMDPPlanners.environments.racetrack_pomdp.racetrack_known_track_model import KnownTrackModel
 from POMDPPlanners.environments.racetrack_pomdp.racetrack_model_pomdp import RacetrackModelPOMDP
 from POMDPPlanners.environments.racetrack_pomdp.racetrack_schema import (
     AGENT_PRESENT,
@@ -23,7 +33,7 @@ from POMDPPlanners.environments.racetrack_pomdp.racetrack_schema import (
     AGENT_SLOT_WIDTH,
     DEFAULT_ACTION_PRESETS,
     EGO_ANG,
-    EGO_CURVATURE,
+    EGO_ARCLENGTH_M,
     EGO_HEADING,
     EGO_LAT,
     EGO_SPEED,
@@ -36,21 +46,41 @@ from POMDPPlanners.environments.racetrack_pomdp.racetrack_schema import (
     ON_ROAD_LAYER,
     PRESENCE_LAYER,
     ObservationMode,
+    racetrack_reward,
 )
+from POMDPPlanners.environments.racetrack_pomdp.racetrack_track_geometry import TrackGeometry
 
-# Indices into DEFAULT_ACTION_PRESETS, named so the tests read as driving commands.
-COAST_STRAIGHT = 4
-ACCELERATE_STRAIGHT = 1
-COAST_FULL_LEFT = 5
+# Indices into DEFAULT_ACTION_PRESETS, named so the tests read as driving commands. The
+# table is the 3 accelerations crossed with the 9 steering angles, acceleration major.
+COAST_STRAIGHT = 13
+ACCELERATE_STRAIGHT = 4
+COAST_FULL_LEFT = 17
 
 DT = 0.2
 
+# A map with one segment and no bends, so the base class's dynamics are exercised without
+# a subclass's curvature source doing anything interesting.
+_STRAIGHT_LAP_M = 1000.0
 
-def _model(**overrides: Any) -> RacetrackModelPOMDP:
-    """Build a model with deterministic dynamics unless a test asks for noise."""
-    settings: Dict[str, Any] = {"discount_factor": 0.95, "process_noise_std": 0.0}
+
+def _flat_geometry(curvature: float = 0.0) -> TrackGeometry:
+    """A single-segment lap of constant curvature."""
+    return TrackGeometry(
+        segment_starts=np.array([0.0]),
+        segment_curvatures=np.array([curvature]),
+        total_length_m=_STRAIGHT_LAP_M,
+    )
+
+
+def _model(**overrides: Any) -> KnownTrackModel:
+    """Build a model with deterministic dynamics on a straight map, unless asked otherwise."""
+    settings: Dict[str, Any] = {
+        "discount_factor": 0.95,
+        "process_noise_std": 0.0,
+        "track_geometry": _flat_geometry(),
+    }
     settings.update(overrides)
-    return RacetrackModelPOMDP(**settings)
+    return KnownTrackModel(**settings)
 
 
 def _ego_state(
@@ -60,7 +90,7 @@ def _ego_state(
     heading: float = 0.0,
     lateral: float = 0.0,
     angle: float = 0.0,
-    curvature: float = 0.0,
+    arclength: float = 0.0,
 ) -> np.ndarray:
     """A state with the given ego block and every agent slot empty."""
     state = np.zeros(model.state_width, dtype=float)
@@ -68,7 +98,7 @@ def _ego_state(
     state[EGO_HEADING] = heading
     state[EGO_LAT] = lateral
     state[EGO_ANG] = angle
-    state[EGO_CURVATURE] = curvature
+    state[EGO_ARCLENGTH_M] = arclength
     return state
 
 
@@ -99,15 +129,33 @@ def _occupancy(grid: np.ndarray) -> dict:
     return {"occupancy": occupancy}
 
 
+def test_the_base_model_cannot_be_instantiated_without_a_curvature_source():
+    """Test that the base class is abstract on the one method that matters.
+
+    Purpose: The base class deliberately does not know the track. Leaving it concrete with
+        a zero-curvature default would let a caller build a model that silently drives
+        straight through every corner, which is the exact bug the split exists to prevent
+
+    Given: The abstract RacetrackModelPOMDP class
+    When: It is constructed directly with otherwise valid arguments
+    Then: TypeError names the unimplemented curvature hook
+
+    Test type: unit
+    """
+    # pylint: disable=abstract-class-instantiated
+    with pytest.raises(TypeError, match="_curvature_for"):
+        RacetrackModelPOMDP(discount_factor=0.95)  # type: ignore[abstract]
+
+
 def test_actions_index_the_presets_and_hash_action_round_trips():
     """Test that the discrete action set enumerates the shared control presets.
 
     Purpose: Validates that the planner's action vocabulary is exactly the indices into
         the preset table the world also indexes, and that hashing an action is reversible
 
-    Given: A model built with the default nine-entry preset grid
+    Given: A model built with the default 27-entry preset grid
     When: get_actions() is enumerated and each action is hashed
-    Then: The actions are 0..8 in order and each hash equals the action itself
+    Then: The actions are 0..26 in order and each hash equals the action itself
 
     Test type: unit
     """
@@ -193,22 +241,57 @@ def test_non_zero_curvature_bends_the_lane_relative_angle():
         the ego does not, so the heading-versus-lane angle must drift negative on a
         left-curving lane
 
-    Given: Two identical coasting states differing only in curvature, 0.0 and 0.05 1/m
+    Given: Two identical coasting states, propagated by two models whose maps differ only
+        in curvature, 0.0 and 0.05 1/m
     When: Each is propagated one decision with no steering
     Then: The straight lane leaves the angle at zero while the curved lane makes it
         negative, at roughly -curvature * speed * dt
 
     Test type: unit
     """
-    model = _model()
     curvature = 0.05
+    flat = _model()
+    curved_model = _model(track_geometry=_flat_geometry(curvature))
 
-    straight = model.sample_next_state(_ego_state(model), COAST_STRAIGHT)
-    curved = model.sample_next_state(_ego_state(model, curvature=curvature), COAST_STRAIGHT)
+    straight = flat.sample_next_state(_ego_state(flat), COAST_STRAIGHT)
+    curved = curved_model.sample_next_state(_ego_state(curved_model), COAST_STRAIGHT)
 
     assert straight[EGO_ANG] == pytest.approx(0.0, abs=1e-12)
     assert curved[EGO_ANG] < 0.0
     assert curved[EGO_ANG] == pytest.approx(-curvature * 10.0 * DT, rel=0.05)
+
+
+def test_arclength_advances_monotonically_and_its_lookup_wraps_at_the_lap_seam():
+    """Test the arclength slot the curvature hook is indexed by.
+
+    Purpose: The slot replaced a frozen curvature value, and the whole point is that it
+        moves: a rollout has to walk along the track for a lookup by arclength to ever see
+        a different segment. It also has to survive crossing the finish line, which a
+        planning horizon on the last segment routinely does
+
+    Given: A one-segment 1000 m map, and a state seeded 4 m short of the lap seam
+    When: Ten coasting decisions are propagated from each of arclength 0 and 996
+    Then: The slot strictly increases on every step, advances by speed * dt per step on a
+        straight, and the map's own lookup wraps a past-the-seam arclength back onto the
+        first segment rather than clamping to the last
+
+    Test type: unit
+    """
+    model = _model()
+    state = _ego_state(model)
+    history = [float(state[EGO_ARCLENGTH_M])]
+    for _ in range(10):
+        state = model.sample_next_state(state, COAST_STRAIGHT)
+        history.append(float(state[EGO_ARCLENGTH_M]))
+
+    assert all(later > earlier for earlier, later in zip(history, history[1:]))
+    assert history[-1] == pytest.approx(10 * 10.0 * DT, abs=1e-9)
+
+    past_seam = _ego_state(model, arclength=_STRAIGHT_LAP_M - 4.0)
+    for _ in range(10):
+        past_seam = model.sample_next_state(past_seam, COAST_STRAIGHT)
+    assert past_seam[EGO_ARCLENGTH_M] > _STRAIGHT_LAP_M
+    assert float(model.track_geometry.curvature_at(past_seam[EGO_ARCLENGTH_M])) == 0.0
 
 
 def test_sample_next_state_batch_matches_a_seeded_loop_over_sample_next_state():
@@ -239,6 +322,29 @@ def test_sample_next_state_batch_matches_a_seeded_loop_over_sample_next_state():
 
     assert batched.shape == (5, model.state_width)
     np.testing.assert_array_equal(batched, looped)
+
+
+def test_process_noise_leaves_the_arclength_slot_alone():
+    """Test that the transition's noise stops short of the arclength slot.
+
+    Purpose: Arclength is not an independent coordinate but the integral of the ego's own
+        motion, and a known-track model indexes its curvature profile with it. Jittering it
+        would scatter particles onto different parts of the circuit for no modelling reason
+
+    Given: A noisy model and one particle propagated many times from the same state
+    When: The successors' arclength slots are compared
+    Then: Every draw carries exactly the same arclength, while the ego position does vary
+
+    Test type: unit
+    """
+    model = _model(process_noise_std=0.1)
+    state = _ego_state(model, arclength=25.0)
+
+    draws = model.sample_next_state(state, COAST_STRAIGHT, n_samples=32)
+
+    assert len(np.unique(draws[:, EGO_ARCLENGTH_M])) == 1
+    assert draws[0, EGO_ARCLENGTH_M] == pytest.approx(25.0 + 10.0 * DT, abs=1e-9)
+    assert len(np.unique(draws[:, EGO_X])) > 1
 
 
 def test_transition_log_probability_is_finite_and_peaks_at_the_deterministic_successor():
@@ -286,6 +392,41 @@ def test_transition_log_probability_rejects_a_noise_free_model():
 
     with pytest.raises(ValueError, match="point mass"):
         model.transition_log_probability(state, COAST_STRAIGHT, [state])
+
+
+def test_reward_matches_the_shared_racetrack_reward_on_the_resulting_state():
+    """Test that the model scores a transition with the world's own reward function.
+
+    Purpose: The world and the planner call one reward function so the planner cannot be
+        optimising a different objective; that only holds if the model feeds it the same
+        arguments the world does — the *resulting* lateral offset and the applied command
+
+    Given: A coasting state and its deterministic successor
+    When: reward is called with the successor and, separately, with the successor left out
+    Then: Both equal racetrack_reward evaluated on the successor's lateral offset with this
+        model's own weights, and the off-road case scores exactly zero
+
+    Test type: unit
+    """
+    model = _model()
+    state = _ego_state(model, lateral=0.4)
+    successor = model.sample_next_state(state, COAST_FULL_LEFT)
+    expected = racetrack_reward(
+        float(successor[EGO_LAT]),
+        model.action_presets[COAST_FULL_LEFT],
+        False,
+        True,
+        collision_reward=model.collision_reward,
+        lane_centering_cost=model.lane_centering_cost,
+        lane_centering_reward=model.lane_centering_reward,
+        action_reward=model.action_reward,
+    )
+
+    assert model.reward(state, COAST_FULL_LEFT, successor) == pytest.approx(expected, abs=1e-12)
+    assert model.reward(state, COAST_FULL_LEFT) == pytest.approx(expected, abs=1e-12)
+
+    off_road = _ego_state(model, lateral=model.lane_half_width + 1.0)
+    assert model.reward(off_road, COAST_STRAIGHT, off_road) == pytest.approx(0.0, abs=1e-12)
 
 
 def test_is_terminal_fires_off_road_and_on_a_near_agent_but_not_in_the_clear():
@@ -369,6 +510,31 @@ def test_pomdp_observation_log_probability_prefers_the_matching_grid():
     assert log_probs[0] > log_probs[1]
 
 
+def test_pomdp_sample_observation_returns_the_two_layer_grid_the_world_emits():
+    """Test the shape and layer count of a sampled occupancy observation.
+
+    Purpose: The belief and the vectorized model both reshape this array by position, so a
+        model that emitted a single layer, or the layers transposed, would be caught only
+        far downstream
+
+    Given: A POMDP-mode model and a state with one agent ahead
+    When: Three observations are drawn
+    Then: Each is a dict holding one (2, 12, 12) array whose presence layer is binary
+
+    Test type: unit
+    """
+    model = _model(observation_mode=ObservationMode.POMDP)
+    state = _place_agent(_ego_state(model), slot=0, rel_x=9.0, rel_y=-3.0)
+
+    draws = model.sample_observation(state, COAST_STRAIGHT, n_samples=3)
+
+    assert len(draws) == 3
+    for draw in draws:
+        grid = np.asarray(draw["occupancy"])
+        assert grid.shape == (2, GRID_CELLS, GRID_CELLS)
+        assert set(np.unique(grid[PRESENCE_LAYER])).issubset({0.0, 1.0})
+
+
 def test_mdp_encode_observation_rotates_absolute_rows_into_the_ego_body_frame():
     """Test that the MDP encoder converts absolute vehicle rows to ego-relative ones.
 
@@ -403,10 +569,13 @@ def _track_live_world(action: int, steps: int = 10) -> tuple:
     from POMDPPlanners.environments.racetrack_pomdp.racetrack_pomdp import (  # pylint: disable=import-outside-toplevel
         RacetrackPOMDP,
     )
+    from POMDPPlanners.environments.racetrack_pomdp.racetrack_track_geometry import (  # pylint: disable=import-outside-toplevel
+        geometry_from_world,
+    )
 
     world = RacetrackPOMDP(discount_factor=0.95, seed=0, other_vehicles=0)
-    model = _model()
     truth = np.asarray(world.initial_state_dist().sample()[0], dtype=float)
+    model = _model(track_geometry=geometry_from_world(world)[0])
     predicted = truth.copy()
     for _ in range(steps):
         predicted = model.sample_next_state(predicted, action)
@@ -422,19 +591,26 @@ def test_model_tracks_the_live_simulator_over_ten_coasting_steps(monkeypatch):
         and comparing the ego pose is what rules that out
 
     Given: A live racetrack world seeded at 0 with no extra opponents, and a noise-free
-        model started from the world's true state
+        model started from the world's true state and carrying the world's own track map
     When: Ten coast-straight decisions are applied to both, the model propagating from its
         own prediction rather than being re-synchronised
-    Then: The predicted (x, y, heading, lateral offset) stays within 1e-6 of the
+    Then: The predicted (x, y, heading, lateral offset, arclength) stays within 1e-6 of the
         simulator's. The tolerance is tight on purpose: the ego update is reproduced term
         for term, so the only expected difference is float accumulation over thirty
         substeps — the measured error at this seed is in fact exactly zero, and anything
         near 1e-6 would already be a real disagreement rather than drift
 
+    Note:
+        The arclength comparison is only valid because ten steps from the spawn point do
+        not reach the lap seam. The world derives arclength from lane offsets, so it wraps
+        into ``[0, lap)``; the model integrates it and leaves it unbounded, exactly as
+        ``curvature_at`` expects. Extend this drive past a full lap and the two must be
+        compared modulo the lap length, the same caveat heading already carries
+
     Test type: integration
     """
     pytest.importorskip("highway_env")
-    monkeypatch.setenv("SDL_VIDEODRIVER", "dummy")
+    monkeypatch.setenv("SDL_VIDEODRIVER", "offscreen")
 
     predicted, truth = _track_live_world(COAST_STRAIGHT)
 
@@ -442,6 +618,7 @@ def test_model_tracks_the_live_simulator_over_ten_coasting_steps(monkeypatch):
     assert abs(predicted[EGO_Y] - truth[EGO_Y]) < 1e-6
     assert abs(predicted[EGO_HEADING] - truth[EGO_HEADING]) < 1e-6
     assert abs(predicted[EGO_LAT] - truth[EGO_LAT]) < 1e-6
+    assert abs(predicted[EGO_ARCLENGTH_M] - truth[EGO_ARCLENGTH_M]) < 1e-6
 
 
 def test_model_tracks_the_live_simulator_through_a_full_lock_arc(monkeypatch):
@@ -455,15 +632,12 @@ def test_model_tracks_the_live_simulator_through_a_full_lock_arc(monkeypatch):
     Given: The same seeded world and noise-free model
     When: Ten full-lock left decisions are applied to both
     Then: Position, heading and lateral offset all match to 1e-6. Heading is compared
-        modulo 2*pi because the model wraps to [-pi, pi) and highway-env does not; the
-        lateral check holds while the ego stays over one lane segment, which this 2 s arc
-        does — a manoeuvre that crossed to the neighbouring lane would jump by a lane width,
-        and that is a limit of the fixed-curvature model, not a defect in the integration
+        modulo 2*pi because the model wraps to [-pi, pi) and highway-env does not
 
     Test type: integration
     """
     pytest.importorskip("highway_env")
-    monkeypatch.setenv("SDL_VIDEODRIVER", "dummy")
+    monkeypatch.setenv("SDL_VIDEODRIVER", "offscreen")
 
     predicted, truth = _track_live_world(COAST_FULL_LEFT)
 
