@@ -19,13 +19,16 @@ import numpy as np
 import pytest
 
 from POMDPPlanners.environments.racetrack_pomdp.racetrack_schema import (
+    ACCELERATION_PRESETS,
     AGENT_SLOT_WIDTH,
+    DEFAULT_ACTION_PRESETS,
     DEFAULT_ACTION_REWARD,
     DEFAULT_COLLISION_REWARD,
     DEFAULT_MAX_TRACKED_AGENTS,
     EGO_STATE_WIDTH,
     GRID_HALF_EXTENT_M,
     GRID_STEP_M,
+    STEERING_PRESETS,
     ObservationMode,
     build_racetrack_config,
     observation_config,
@@ -216,6 +219,49 @@ def test_action_block_enables_longitudinal_control() -> None:
         assert action["type"] == "ContinuousAction"
         assert action["longitudinal"] is True
         assert action["lateral"] is True
+
+
+def test_action_presets_are_the_full_acceleration_by_steering_grid() -> None:
+    """The preset table is every acceleration crossed with every steering angle, in order.
+
+    Purpose: Validates the shape of the action vocabulary the world, the scalar model and
+        the vectorized model all index into. They share it by construction, so an index
+        that moves moves everywhere at once and nothing complains
+
+    Given: The shipped acceleration and steering preset tuples
+    When: DEFAULT_ACTION_PRESETS is inspected
+    Then: It is the full product, acceleration-major, with no duplicates
+
+    Test type: unit
+    """
+    expected = [
+        (acceleration, steering)
+        for acceleration in ACCELERATION_PRESETS
+        for steering in STEERING_PRESETS
+    ]
+    assert list(DEFAULT_ACTION_PRESETS) == expected
+    assert len(DEFAULT_ACTION_PRESETS) == len(ACCELERATION_PRESETS) * len(STEERING_PRESETS)
+    assert len(set(DEFAULT_ACTION_PRESETS)) == len(DEFAULT_ACTION_PRESETS)
+
+
+def test_steering_presets_are_fine_near_zero_and_include_the_useful_angle() -> None:
+    """Steering is sampled finely near centre, not bang-bang between the lock stops.
+
+    Purpose: Pins the reason the table is nine steering angles rather than three. Full lock
+        is pi/4, which on this track is a spin: sweeping constant steering through the first
+        bend, -1.0 survives 5 steps while -0.05 survives 29. A set of {-1, 0, +1} does not
+        contain the manoeuvre the track needs, so no amount of planning can select it
+
+    Given: The shipped steering presets
+    When: They are inspected
+    Then: They are symmetric about an exact zero, ascending, and include -0.05
+
+    Test type: unit
+    """
+    assert 0.0 in STEERING_PRESETS
+    assert -0.05 in STEERING_PRESETS
+    assert list(STEERING_PRESETS) == sorted(STEERING_PRESETS)
+    assert list(STEERING_PRESETS) == [-angle for angle in reversed(STEERING_PRESETS)]
 
 
 def test_overrides_are_applied_to_both_arms() -> None:

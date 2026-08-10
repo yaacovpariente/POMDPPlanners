@@ -74,6 +74,9 @@ import numpy as np
 from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.core.environment import Environment, SpaceInfo, SpaceType
 from POMDPPlanners.core.simulation.step_info_metrics import EpisodeReduction, StepInfoMetric
+from POMDPPlanners.environments.racetrack_pomdp.racetrack_track_geometry import (
+    lane_curvature,
+)
 from POMDPPlanners.environments.racetrack_pomdp.racetrack_schema import (
     AGENT_PRESENT,
     AGENT_REL_X,
@@ -131,22 +134,6 @@ class RacetrackMetric(Enum):
     NEAR_MISS_RATE = "near_miss_rate"
 
 
-def lane_curvature(lane: Any) -> float:
-    """Signed curvature of a highway-env lane, in 1/m.
-
-    Args:
-        lane: A highway-env lane object.
-
-    Returns:
-        ``0.0`` for a straight lane, otherwise ``direction / radius`` where ``direction``
-        is ``+1`` clockwise and ``-1`` counter-clockwise.
-    """
-    radius = getattr(lane, "radius", None)
-    if radius is None or float(radius) == 0.0:
-        return 0.0
-    return float(getattr(lane, "direction", 1.0)) / float(radius)
-
-
 class _RacetrackSession:
     """Live highway-env session: the only object in this package touching the backend."""
 
@@ -171,6 +158,7 @@ class _RacetrackSession:
         # unwrapped racetrack env.
         self._env: Any = gymnasium.make(env_id, config=config, render_mode=render_mode)
         self._max_tracked_agents = max_tracked_agents
+        self._lane_offsets: Dict[Any, float] = {}
 
     def render_frame(self) -> Optional[np.ndarray]:
         """Return the current bird's-eye frame, or None if not rendering."""
@@ -208,11 +196,39 @@ class _RacetrackSession:
                 float(vehicle.speed),
                 float(offset[1]),
                 float(offset[2]),
-                lane_curvature(vehicle.lane),
+                self._arclength_of(vehicle),
             ],
             dtype=float,
         )
         return np.concatenate([ego, self._read_agent_slots(vehicle)])
+
+    def _arclength_of(self, vehicle: Any) -> float:
+        """Distance travelled along the track centreline, in metres.
+
+        ``lane_offset`` is measured within the current lane, so it restarts at every
+        segment boundary. Adding the lap offset of that lane makes it monotonic around the
+        lap, which is what the planner's model indexes its curvature profile with.
+        """
+        lane_index = vehicle.lane_index
+        if lane_index not in self._lane_offsets:
+            self._lane_offsets = self._build_lane_offsets(lane_index)
+        local = float(np.asarray(vehicle.lane_offset, dtype=float)[0])
+        return self._lane_offsets.get(lane_index, 0.0) + local
+
+    def _build_lane_offsets(self, lane_index: Any) -> Dict[Any, float]:
+        """Cumulative lap offset of every lane reachable by following ``next_lane``."""
+        network = self._env.unwrapped.road.network
+        offsets: Dict[Any, float] = {}
+        total = 0.0
+        current = lane_index
+        for _ in range(64):
+            if current in offsets:
+                break
+            lane = network.get_lane(current)
+            offsets[current] = total
+            total += float(lane.length)
+            current = network.next_lane(current, position=lane.position(lane.length, 0))
+        return offsets
 
     def _read_agent_slots(self, ego: Any) -> np.ndarray:
         rows = np.zeros((self._max_tracked_agents, AGENT_SLOT_WIDTH), dtype=float)
