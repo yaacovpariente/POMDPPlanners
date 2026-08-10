@@ -45,6 +45,36 @@ Breaking Changes:
 New Features:
 ^^^^^^^^^^^^^
 
+- Added ``RacetrackPOMDP``, a racing environment on HighwayEnv's ``racetrack-v0``
+  with a **matched fully-observed baseline**. Both arms are selected by one
+  ``ObservationMode`` argument and share a single dynamics path: the assembled
+  simulator configurations are equal except for the ``observation`` key, which is
+  asserted by a test rather than left as a convention. The point is attribution —
+  every other driving environment here is partially observed by construction, so a
+  planner's performance drop could never be pinned on partial observability alone
+  rather than on a change of dynamics, reward or map. The POMDP arm observes a
+  12x12 occupancy grid of presence and on-road flags over a ±18 m window,
+  withholding every velocity, every vehicle identity and everything outside it; the
+  baseline observes absolute position and velocity for the ego and the nearest
+  vehicles. Ships with a forward-only world, a planner-side generative model whose
+  ego dynamics reproduce the simulator's kinematic bicycle exactly, and a belief
+  that recovers opponent motion by differencing consecutive grids.
+- Two deliberate departures from what ``racetrack-v0`` ships, both worth knowing
+  before reading a result off this environment. **Longitudinal control is enabled.**
+  Under the shipped action configuration ``ContinuousAction`` is lateral-only:
+  acceleration is pinned at zero and the ``target_speeds`` key is inert, because it
+  belongs to ``DiscreteMetaAction``. The ego could therefore never brake for the
+  opponent and could only swerve, which removes most of what partial observability
+  costs. The flag is a dynamics key applied identically to both arms, so the matched
+  pair is preserved. And **the baseline is a near-MDP, not a true MDP**: it still
+  withholds the other vehicles' driver policy, so a gap measured against it is a
+  lower bound on the cost of partial observability, not the whole of it.
+- ``highway-env`` is a development dependency only. It is lazily imported, so a
+  runtime install never loads it and nothing outside the racetrack package depends
+  on it, but it is in the ``dev`` extra rather than absent entirely: the environment
+  was chosen over the alternatives precisely because it needs no binary, no server
+  and no GPU and therefore runs in CI, and tests that exercise a stand-in instead of
+  the real simulator would give that up.
 - Migrated eight environments — Tiger, CartPole, MountainCar, RockSample, both
   LaserTag variants and both Push variants — onto ``Environment.step_info``
   and ``get_metric_specs``, replacing eight hand-rolled ``compute_metrics``
