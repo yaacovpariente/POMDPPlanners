@@ -35,13 +35,17 @@ from POMDPPlanners.environments.racetrack_pomdp.racetrack_pomdp import (
 )
 from POMDPPlanners.environments.racetrack_pomdp.racetrack_schema import (
     AGENT_SLOT_WIDTH,
+    DEFAULT_ACTION_PRESETS,
     DEFAULT_MAX_TRACKED_AGENTS,
     EGO_STATE_WIDTH,
     GRID_CELLS,
     ObservationMode,
 )
 
-_COAST_STRAIGHT = 4  # Index of the (0.0, 0.0) preset in the default 3x3 action grid.
+# Index of the (0.0, 0.0) preset: coast, straight ahead. Looked up rather than written as a
+# literal, because the shipped table is a 3-by-9 grid of accelerations by steering angles
+# and every index moves whenever the steering resolution changes.
+_COAST_STRAIGHT = DEFAULT_ACTION_PRESETS.index((0.0, 0.0))
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 
 

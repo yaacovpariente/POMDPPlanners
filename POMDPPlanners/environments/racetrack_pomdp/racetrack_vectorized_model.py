@@ -14,6 +14,23 @@ Every dynamics, reward and perception parameter is read off a live ``RacetrackMo
 instance, so the scalar model stays the single source of truth for configuration; only the
 numeric kernels are duplicated here, and the parity test pins the two together.
 
+**One torch model, two curvature sources.** The scalar side is abstract in exactly one
+place — :meth:`RacetrackModelPOMDP._curvature_for`, which answers where the road bends under
+each particle — and its two subclasses answer it from a track map and from the observation
+respectively. That difference is a single lookup, so it is a *parameter* here rather than a
+second module: :class:`RacetrackVectorizedModel` takes a curvature source, resolves the
+right one off the scalar model it is built from, and is otherwise one implementation. Two
+torch files differing in one line would drift.
+
+The map lookup is written in torch — a ``searchsorted`` over the segment starts — rather
+than by calling
+:meth:`~POMDPPlanners.environments.racetrack_pomdp.racetrack_track_geometry.TrackGeometry.curvature_at`
+and converting. That method is NumPy, so reusing it would mean a device round-trip *per
+substep*, which on CUDA is a synchronisation in the middle of the hot loop and defeats the
+point of batching. The profile is three short arrays of constants, so mirroring the lookup
+costs four lines and no accuracy: both sides take ``searchsorted(..., right) - 1`` on the
+same floored modulo.
+
 **Tensor layouts.** The state is the schema's own vector, ``EGO_STATE_WIDTH + K *
 AGENT_SLOT_WIDTH`` wide, and its column indices come from
 :mod:`~POMDPPlanners.environments.racetrack_pomdp.racetrack_schema` rather than from
@@ -29,21 +46,35 @@ the protocol trades in ``[N, do]`` tensors rather than dictionaries:
 Note:
     The scalar model's deliberate approximations carry over unchanged, because reproducing
     it is the point: agent slots drift at constant velocity while the world drives them
-    with IDM, collisions use a centre-distance circle rather than an oriented rectangle,
-    and the lane curvature is held fixed over the horizon.
+    with IDM, and collisions use a centre-distance circle rather than an oriented rectangle.
+
+The on-road layer is parameterised the same way and dispatched on the same signal, because
+it is the same question asked twice: a model that reads the road out of its observations is
+exactly the model that has to predict the road back in order to score them, while a model
+holding a map gains nothing by rendering a layer every particle would agree on.
 
 Classes:
     RacetrackVectorizedModel: Batched torch counterpart of ``RacetrackModelPOMDP``.
 """
 
 import math
-from typing import Optional, Tuple
+import numbers
+from typing import Callable, Optional, Protocol, Tuple
 
 import numpy as np
 import torch
 from torch import Tensor
 
 from POMDPPlanners.environments.racetrack_pomdp.racetrack_model_pomdp import RacetrackModelPOMDP
+
+# Imported from the mapless model rather than copied, deliberately. The torch rasteriser has
+# to sample the predicted centreline at exactly the points the scalar one does, or the two
+# layers disagree on the cells at either end of the sweep -- a difference the parity test
+# would catch, but only after someone had already shipped two definitions of the same road.
+from POMDPPlanners.environments.racetrack_pomdp.racetrack_observed_track_model import (
+    LANE_SAMPLE_REACH_M,
+    LANE_SAMPLE_STEP_M,
+)
 from POMDPPlanners.environments.racetrack_pomdp.racetrack_schema import (
     AGENT_PRESENT,
     AGENT_REL_VX,
@@ -51,7 +82,7 @@ from POMDPPlanners.environments.racetrack_pomdp.racetrack_schema import (
     AGENT_REL_Y,
     AGENT_SLOT_WIDTH,
     EGO_ANG,
-    EGO_CURVATURE,
+    EGO_ARCLENGTH_M,
     EGO_HEADING,
     EGO_LAT,
     EGO_SPEED,
@@ -67,11 +98,40 @@ from POMDPPlanners.environments.racetrack_pomdp.racetrack_schema import (
     PRESENCE_LAYER,
     ObservationMode,
 )
+from POMDPPlanners.environments.racetrack_pomdp.racetrack_track_geometry import TrackGeometry
+
+# Given the ego block at the start of a substep, ``[N, EGO_STATE_WIDTH]``, return the signed
+# curvature in 1/m under each row, ``[N]``. The torch counterpart of the scalar model's
+# ``_curvature_for``, and the one thing that differs between a planner with a map and one
+# without.
+CurvatureSource = Callable[[Tensor], Tensor]
+
+# The public attribute a mapless scalar model exposes its per-step estimate on. Read by name
+# rather than by class, so a model does not have to be one of the two shipped ones.
+_CURVATURE_ESTIMATE_ATTR = "curvature_estimate"
+
+
+class RoadLayer(Protocol):
+    """What the model predicts the observation's on-road layer looks like, and its weight.
+
+    The second thing the scalar side leaves to its subclass. A model with a map does not
+    bother predicting the road; a model that reads the road out of its observations has to,
+    because that is what it scores them against.
+    """
+
+    def render(self, states: Tensor) -> Tensor:
+        """Predicted on-road layer per row, ``[N, 144]``, in the model's floating dtype."""
+        ...  # pylint: disable=unnecessary-ellipsis
+
+    def log_probs(self, states: Tensor, observations: Tensor) -> Tensor:
+        """Contribution of the on-road layer to each row's log-likelihood, ``[N]``."""
+        ...  # pylint: disable=unnecessary-ellipsis
+
 
 # Mirrors the scalar model: process noise touches the first six ego entries only, stopping
-# short of curvature, which is a property of the lane rather than a state the vehicle
-# diffuses through.
-_EGO_NOISE_WIDTH = EGO_CURVATURE
+# short of arclength. Arclength is integrated from the along-track rate, so jittering it
+# would teleport a particle to a different part of the circuit rather than blur its pose.
+_EGO_NOISE_WIDTH = EGO_ARCLENGTH_M
 
 # The ego sits in the middle cell of the occupancy grid, at (6, 6) for the shipped 12x12.
 _GRID_CENTRE = GRID_CELLS // 2
@@ -116,6 +176,228 @@ def _rotate(vectors: Tensor, angles: Tensor) -> Tensor:
     )
 
 
+class TrackMapCurvature:
+    """Torch mirror of ``TrackGeometry.curvature_at``: a table lookup by arclength.
+
+    Holds the profile as device tensors so the whole substep loop stays on one device. The
+    NumPy original is not called here on purpose — see the module docstring — but the two
+    agree by construction: the same floored modulo, the same ``searchsorted(..., right) - 1``
+    and the same clamp, so a rollout on the map cannot diverge between the two models.
+
+    Attributes:
+        total_length_m: Length of one lap in metres, the modulus the arclength wraps on.
+    """
+
+    def __init__(self, geometry: TrackGeometry, device: torch.device, dtype: torch.dtype) -> None:
+        """Move a curvature profile onto a device.
+
+        Args:
+            geometry: The lap's piecewise-constant curvature profile.
+            device: Device the lookup's tensors live on.
+            dtype: Floating dtype of the returned curvature.
+        """
+        # The starts are held in the *model's* dtype, matching the arclength they are
+        # compared against, and that is deliberate. In a float32 model the arclength itself
+        # is already rounded -- a boundary like 372.2208 m is off by up to 1.1e-5 m before
+        # the lookup sees it -- so holding the starts in float64 cannot recover the
+        # intended segment, and measurably makes it worse: on the shipped circuit's nine
+        # boundaries, float32 starts agree with NumPy on all nine and float64 starts on
+        # five. Matching dtypes is what makes a boundary compare equal.
+        self._starts = torch.as_tensor(
+            np.asarray(geometry.segment_starts, dtype=np.float64), dtype=dtype, device=device
+        )
+        self._curvatures = torch.as_tensor(
+            np.asarray(geometry.segment_curvatures, dtype=np.float64), dtype=dtype, device=device
+        )
+        self.total_length_m = float(geometry.total_length_m)
+
+    def __call__(self, ego: Tensor) -> Tensor:
+        distance = torch.remainder(ego[:, EGO_ARCLENGTH_M], self.total_length_m)
+        index = torch.searchsorted(self._starts, distance.contiguous(), right=True) - 1
+        return self._curvatures[index.clamp_(0, self._curvatures.shape[0] - 1)]
+
+
+class ObservedCurvature:
+    """A single estimated curvature, refreshed each real step and shared by every row.
+
+    The counterpart of :class:`TrackMapCurvature` for a planner with no map, which estimates
+    one curvature per step from what it can see and has nothing better to assume further
+    ahead. The value is read through a callable rather than copied in, because the estimate
+    is replaced on every real step while this model is built once: caching it would freeze
+    the planner on the corner it happened to start in.
+    """
+
+    def __init__(self, read_curvature: Callable[[], float]) -> None:
+        """Wrap a live per-step curvature estimate.
+
+        Args:
+            read_curvature: Zero-argument callable returning the current estimate in 1/m.
+        """
+        self._read_curvature = read_curvature
+
+    def __call__(self, ego: Tensor) -> Tensor:
+        return torch.full_like(ego[:, EGO_ARCLENGTH_M], float(self._read_curvature()))
+
+
+class AllRoadLayer:
+    """The base model's on-road layer: drivable everywhere, and worth nothing in a weight.
+
+    All-ones is the honest answer for a model with no picture of the road, and because it
+    does not depend on the state it is identical across every particle — so its likelihood
+    term shifts all the log-weights alike and vanishes at normalisation. Returning zero is
+    not a shortcut; it is the same number, without 144 cells of arithmetic per particle.
+    """
+
+    def __init__(self, dtype: torch.dtype, device: torch.device) -> None:
+        """Record the tensor kind the rendered layers should come back as."""
+        self._dtype = dtype
+        self._device = device
+
+    def render(self, states: Tensor) -> Tensor:
+        return torch.ones(states.shape[0], _GRID_CELL_COUNT, dtype=self._dtype, device=self._device)
+
+    def log_probs(self, states: Tensor, observations: Tensor) -> Tensor:
+        del observations
+        return torch.zeros(states.shape[0], dtype=self._dtype, device=self._device)
+
+
+class LaneCorridorLayer:
+    """The mapless model's on-road layer: its own lane centreline, drawn from one estimate.
+
+    One lane, not the whole road — the model has no idea how many lanes the circuit has, so
+    it draws the only piece of road it can locate, the centreline it measures its own offset
+    from. Unlike :class:`AllRoadLayer` this *does* depend on the state, through the ego's
+    lateral offset and lane-relative angle, so it separates particles and its likelihood has
+    to be scored rather than dropped.
+    """
+
+    def __init__(
+        self,
+        read_curvature: Callable[[], float],
+        cell_flip_prob: float,
+        dtype: torch.dtype,
+        device: torch.device,
+    ) -> None:
+        """Build the corridor rasteriser.
+
+        Args:
+            read_curvature: Zero-argument callable returning the current estimate in 1/m.
+            cell_flip_prob: Per-cell probability that an on-road bit is read wrong.
+            dtype: Floating dtype of the rendered layers.
+            device: Device the rendered layers live on.
+        """
+        self._read_curvature = read_curvature
+        self._flip_prob = cell_flip_prob
+        self._dtype = dtype
+        self._device = device
+        # Built in NumPy with the scalar model's own arange arguments, then moved once. The
+        # sample points have to land on exactly the same cells as the scalar rasteriser's,
+        # and re-deriving the sequence in torch risks a different final element.
+        self._arclength = torch.as_tensor(
+            np.arange(
+                -LANE_SAMPLE_REACH_M,
+                LANE_SAMPLE_REACH_M + LANE_SAMPLE_STEP_M,
+                LANE_SAMPLE_STEP_M,
+            ),
+            dtype=dtype,
+            device=device,
+        )
+
+    def render(self, states: Tensor) -> Tensor:
+        lateral = states[:, EGO_LAT][:, None]
+        angle = states[:, EGO_ANG][:, None]
+        curvature = float(self._read_curvature())
+        # Centreline in the lane frame relative to the ego, then rotated into the body frame
+        # by the ego's lane-relative angle. A centreline the ego sits ``lateral`` metres from
+        # appears at ``-lateral`` across-track.
+        lane_across = 0.5 * curvature * self._arclength**2 - lateral
+        cos_a, sin_a = torch.cos(angle), torch.sin(angle)
+        body_along = cos_a * self._arclength + sin_a * lane_across
+        body_across = -sin_a * self._arclength + cos_a * lane_across
+        return self._scatter_cells(body_along, body_across)
+
+    def log_probs(self, states: Tensor, observations: Tensor) -> Tensor:
+        start = ON_ROAD_LAYER * _GRID_CELL_COUNT
+        observed = observations[:, start : start + _GRID_CELL_COUNT] > 0.5
+        return _bernoulli_cell_log_probs(
+            self.render(states) > 0.5, observed, self._flip_prob, self._dtype
+        )
+
+    def _scatter_cells(self, body_along: Tensor, body_across: Tensor) -> Tensor:
+        """Mark the cell each sample point falls in, dropping the ones off the window."""
+        rows = torch.floor((body_along + GRID_HALF_EXTENT_M) / GRID_STEP_M)
+        columns = torch.floor((body_across + GRID_HALF_EXTENT_M) / GRID_STEP_M)
+        inside = (rows >= 0.0) & (rows < GRID_CELLS) & (columns >= 0.0) & (columns < GRID_CELLS)
+        cell = (rows * GRID_CELLS + columns).to(torch.int64)
+        # One column wider than the grid, used as a bin for the sample points that fall
+        # outside it. Unlike the presence grid there is no always-set cell to redirect them
+        # onto, so the extra column is sliced off at the end instead.
+        sink = torch.full_like(cell, _GRID_CELL_COUNT)
+        flat = torch.zeros(
+            body_along.shape[0], _GRID_CELL_COUNT + 1, dtype=self._dtype, device=self._device
+        )
+        flat.scatter_(1, torch.where(inside, cell, sink), 1.0)
+        return flat[:, :_GRID_CELL_COUNT]
+
+
+def _bernoulli_cell_log_probs(
+    predicted: Tensor, observed: Tensor, flip_prob: float, dtype: torch.dtype
+) -> Tensor:
+    """Independent per-cell flip model over two boolean ``[N, cells]`` grids."""
+    agreements = (observed == predicted).sum(dim=1).to(dtype)
+    disagreements = float(predicted.shape[1]) - agreements
+    return agreements * math.log1p(-flip_prob) + disagreements * math.log(flip_prob)
+
+
+def _resolve_curvature_source(
+    env: RacetrackModelPOMDP, device: torch.device, dtype: torch.dtype
+) -> CurvatureSource:
+    """Pick the torch curvature lookup matching the scalar model's own ``_curvature_for``.
+
+    Dispatches on what the model exposes rather than on its class, so a third subclass with
+    a track map or a per-step estimate works without editing this module. Anything else is
+    rejected rather than defaulted to zero curvature: a silent straight-line model would
+    still run, still look plausible, and drive through every corner.
+    """
+    geometry = getattr(env, "track_geometry", None)
+    if isinstance(geometry, TrackGeometry):
+        return TrackMapCurvature(geometry, device, dtype)
+    if _has_curvature_estimate(env):
+        return ObservedCurvature(lambda: float(getattr(env, _CURVATURE_ESTIMATE_ATTR)))
+    raise ValueError(
+        f"Cannot infer a curvature source from {type(env).__name__}: it exposes neither a "
+        f"'track_geometry' nor a '{_CURVATURE_ESTIMATE_ATTR}'. Pass curvature_source= "
+        f"explicitly. Defaulting to zero curvature would give a model that runs, looks "
+        f"plausible, and drives straight through every corner."
+    )
+
+
+def _resolve_road_layer(
+    env: RacetrackModelPOMDP, device: torch.device, dtype: torch.dtype
+) -> RoadLayer:
+    """Pick the on-road layer matching the scalar model's ``_render_on_road_layer``.
+
+    Dispatched on the same signal as the curvature, and for the same reason: a model that
+    reads the road out of its observations is exactly the model that has to predict the road
+    back to score them, while a model holding a map gains nothing by rendering a layer every
+    particle would agree on.
+    """
+    if _has_curvature_estimate(env):
+        return LaneCorridorLayer(
+            lambda: float(getattr(env, _CURVATURE_ESTIMATE_ATTR)),
+            float(np.clip(env.cell_flip_prob, _FLIP_PROB_EPS, 1.0 - _FLIP_PROB_EPS)),
+            dtype,
+            device,
+        )
+    return AllRoadLayer(dtype, device)
+
+
+def _has_curvature_estimate(env: RacetrackModelPOMDP) -> bool:
+    # numbers.Real rather than float, so an estimate held as a NumPy scalar -- the natural
+    # thing to fall out of a fit over the on-road layer -- is recognised too.
+    return isinstance(getattr(env, _CURVATURE_ESTIMATE_ATTR, None), numbers.Real)
+
+
 def _hash_weights(count: int) -> np.ndarray:
     """Fixed pseudo-random odd int64 weights, one per observation entry.
 
@@ -145,26 +427,41 @@ class RacetrackVectorizedModel:
         num_actions: Number of discrete control presets.
         state_dim: Width of the state vectors (``EGO_STATE_WIDTH + K * AGENT_SLOT_WIDTH``).
         observation_dim: Width of the flattened observation vectors.
+        curvature_source: Where each substep's curvature comes from — a track map, a live
+            per-step estimate, or whatever the caller supplied.
+        road_layer: What the model predicts the observation's on-road layer looks like, and
+            what that prediction is worth in a weight.
 
     Example:
+        >>> import numpy as np
         >>> import torch
-        >>> from POMDPPlanners.environments.racetrack_pomdp.racetrack_model_pomdp import (
-        ...     RacetrackModelPOMDP,
+        >>> from POMDPPlanners.environments.racetrack_pomdp.racetrack_known_track_model import (
+        ...     KnownTrackModel,
+        ... )
+        >>> from POMDPPlanners.environments.racetrack_pomdp.racetrack_track_geometry import (
+        ...     TrackGeometry,
         ... )
         >>> from POMDPPlanners.environments.racetrack_pomdp.racetrack_vectorized_model import (
         ...     RacetrackVectorizedModel,
         ... )
         >>> torch.manual_seed(0)  # doctest: +ELLIPSIS
         <torch._C.Generator object at ...>
-        >>> env = RacetrackModelPOMDP(discount_factor=0.95)
+        >>> geometry = TrackGeometry(  # a 10 m straight into a 10 m left-hand arc
+        ...     segment_starts=np.array([0.0, 10.0]),
+        ...     segment_curvatures=np.array([0.0, 0.05]),
+        ...     total_length_m=20.0,
+        ... )
+        >>> env = KnownTrackModel(discount_factor=0.95, track_geometry=geometry)
         >>> model = RacetrackVectorizedModel(env, device=torch.device("cpu"))
         >>> states = torch.zeros(3, model.state_dim)
         >>> states[:, 3] = 10.0  # speed, m/s
-        >>> actions = torch.full((3,), 4, dtype=torch.int64)  # coast, straight ahead
+        >>> actions = torch.full((3,), 13, dtype=torch.int64)  # coast, straight ahead
         >>> next_states = model.sample_next_states(states, actions)
         >>> rewards = model.rewards(states, actions, next_states)
         >>> tuple(next_states.shape), tuple(rewards.shape)
         ((3, 27), (3,))
+        >>> bool(next_states[0, 6] > 0.0)  # the arclength advanced along the track
+        True
     """
 
     def __init__(
@@ -174,6 +471,8 @@ class RacetrackVectorizedModel:
         device: Optional[torch.device] = None,
         dtype: torch.dtype = torch.float32,
         observation_resolution: float = 1.0,
+        curvature_source: Optional[CurvatureSource] = None,
+        road_layer: Optional[RoadLayer] = None,
     ) -> None:
         """Build the model from a live scalar racetrack model.
 
@@ -185,9 +484,17 @@ class RacetrackVectorizedModel:
             observation_resolution: Grid spacing used to quantize observations into integer
                 tree keys. Defaults to 1.0, which leaves the POMDP arm's already-binary
                 occupancy cells untouched and bins the MDP arm's metres.
+            curvature_source: Torch counterpart of the scalar model's ``_curvature_for``,
+                mapping an ego block to a per-row curvature. Defaults to None, which reads
+                a track map or a live per-step estimate off ``env``.
+            road_layer: Torch counterpart of the scalar model's ``_render_on_road_layer``
+                and ``_on_road_log_prob``. Defaults to None, which picks the corridor
+                render for a mapless model and the all-ones layer for every other.
 
         Raises:
-            ValueError: If ``observation_resolution`` is not positive.
+            ValueError: If ``observation_resolution`` is not positive, or if
+                ``curvature_source`` is omitted and ``env`` exposes neither a track map nor
+                a per-step curvature estimate.
         """
         if observation_resolution <= 0.0:
             raise ValueError(
@@ -200,6 +507,14 @@ class RacetrackVectorizedModel:
         self._num_agents = int(env.max_tracked_agents)
         self.state_dim = EGO_STATE_WIDTH + self._num_agents * AGENT_SLOT_WIDTH
         self.observation_dim = self._observation_width()
+        self.curvature_source: CurvatureSource = (
+            curvature_source
+            if curvature_source is not None
+            else _resolve_curvature_source(env, self.device, dtype)
+        )
+        self.road_layer: RoadLayer = (
+            road_layer if road_layer is not None else _resolve_road_layer(env, self.device, dtype)
+        )
         self._read_action_table(env)
         self._read_dynamics_params(env)
         self._read_reward_params(env)
@@ -303,7 +618,10 @@ class RacetrackVectorizedModel:
         """One explicit-Euler sub-interval, mirroring the scalar model's update order."""
         speed, heading = ego[:, EGO_SPEED], ego[:, EGO_HEADING]
         lateral, angle = ego[:, EGO_LAT], ego[:, EGO_ANG]
-        curvature = ego[:, EGO_CURVATURE]
+        # Read at the *start* of the substep, as the scalar model does, so a particle that
+        # crosses into a corner mid-decision picks the new curvature up on the next
+        # sub-interval rather than a whole decision late.
+        curvature = self.curvature_source(ego)
 
         yaw_rate = speed * torch.sin(slip) / self._wheelbase
         # The Frenet rates use the velocity direction ``ang + slip``, not the heading, so
@@ -312,8 +630,8 @@ class RacetrackVectorizedModel:
         denominator = torch.clamp_min(1.0 - curvature * lateral, _MIN_FRENET_DENOMINATOR)
         along_rate = speed * torch.cos(drift) / denominator
 
-        # Cloned rather than empty: curvature is carried over untouched, and a widened ego
-        # block would inherit its old value rather than uninitialised memory.
+        # Cloned rather than empty: a widened ego block would then carry its old values
+        # over rather than uninitialised memory.
         updated = ego.clone()
         updated[:, EGO_X] = ego[:, EGO_X] + speed * torch.cos(heading + slip) * self._step
         updated[:, EGO_Y] = ego[:, EGO_Y] + speed * torch.sin(heading + slip) * self._step
@@ -321,6 +639,10 @@ class RacetrackVectorizedModel:
         updated[:, EGO_LAT] = lateral + speed * torch.sin(drift) * self._step
         updated[:, EGO_ANG] = _wrap_to_pi(angle + (yaw_rate - curvature * along_rate) * self._step)
         updated[:, EGO_SPEED] = speed + acceleration * self._step
+        # Advanced by the along-track rate, not by ``speed * step``: the two differ once the
+        # ego is yawed relative to the lane or offset from its centreline on an arc, and it
+        # is the along-track one that indexes the curvature profile correctly.
+        updated[:, EGO_ARCLENGTH_M] = ego[:, EGO_ARCLENGTH_M] + along_rate * self._step
         return updated, self._drift_agents(agents, -yaw_rate * self._step)
 
     def _drift_agents(self, agents: Tensor, rotation: Tensor) -> Tensor:
@@ -449,18 +771,16 @@ class RacetrackVectorizedModel:
             device=self.device,
         )
         occupancy[:, PRESENCE_LAYER] = torch.logical_xor(grid, flips).to(self.dtype)
-        occupancy[:, ON_ROAD_LAYER] = 1.0
+        # The on-road layer is drawn without flip noise, as the scalar model draws it.
+        occupancy[:, ON_ROAD_LAYER] = self.road_layer.render(next_states)
         return occupancy.reshape(next_states.shape[0], -1)
 
     def _occupancy_log_probs(self, next_states: Tensor, observations: Tensor) -> Tensor:
         grid = self._render_presence_grid(next_states)
         start = PRESENCE_LAYER * _GRID_CELL_COUNT
         observed = observations[:, start : start + _GRID_CELL_COUNT] > 0.5
-        agreements = (observed == grid).sum(dim=1).to(self.dtype)
-        disagreements = float(_GRID_CELL_COUNT) - agreements
-        return agreements * math.log1p(-self._cell_flip_prob) + disagreements * math.log(
-            self._cell_flip_prob
-        )
+        presence = _bernoulli_cell_log_probs(grid, observed, self._cell_flip_prob, self.dtype)
+        return presence + self.road_layer.log_probs(next_states, observations)
 
     def _render_presence_grid(self, states: Tensor) -> Tensor:
         """Rasterise the presence layer as a flat ``[N, 144]`` boolean grid.
@@ -595,4 +915,12 @@ def _gaussian_log_prob(square_error: Tensor, count: Tensor, std: float) -> Tenso
     return -0.5 * square_error / variance - 0.5 * count * math.log(2.0 * math.pi * variance)
 
 
-__all__ = ["RacetrackVectorizedModel"]
+__all__ = [
+    "AllRoadLayer",
+    "CurvatureSource",
+    "LaneCorridorLayer",
+    "ObservedCurvature",
+    "RacetrackVectorizedModel",
+    "RoadLayer",
+    "TrackMapCurvature",
+]
