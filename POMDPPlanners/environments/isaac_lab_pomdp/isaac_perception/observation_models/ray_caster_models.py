@@ -12,6 +12,9 @@ The obstacle set is injected rather than read from the simulator: a planner-side
 must be able to cast a ray from a hypothetical state with no live Isaac process attached, and
 these models are used inside the search tree where there is none.
 
+Functions:
+    grid_scan_pattern: Body-frame grid offsets in IsaacLab's own cell order.
+
 Classes:
     RayCasterObservationModel: Planar LiDAR ranges to a disc obstacle set, with Gaussian noise.
     HeightScanObservationModel: Downward height samples on a body-frame grid, with Gaussian noise.
@@ -85,6 +88,37 @@ def _ray_disc_ranges(
     valid = hit & (distance >= 0.0)
     distance = np.where(valid, distance, np.inf)
     return np.minimum(distance.min(axis=1), float(max_range))
+
+
+def grid_scan_pattern(size: Tuple[float, float], resolution: float) -> np.ndarray:
+    """Body-frame grid offsets matching IsaacLab's ``GridPatternCfg`` cell order.
+
+    The order matters and is not obvious. IsaacLab builds the grid with ``meshgrid(x, y,
+    indexing="xy")`` and flattens it, so the reading runs ``x`` fastest within each ``y`` row. A
+    model that lays its own grid out ``y``-fastest produces a permuted prediction, every particle
+    is scored against the wrong cells, and the belief degrades in a way that looks like sensor
+    noise rather than an indexing bug.
+
+    Args:
+        size: Grid extent ``(length, width)`` in metres, the sensor's own ``size``.
+        resolution: Grid spacing in metres.
+
+    Returns:
+        Shape ``(M, 2)`` of ``(x, y)`` offsets, in the sensor's cell order.
+
+    Raises:
+        ValueError: If ``resolution`` is not positive.
+
+    Example:
+        >>> grid_scan_pattern((0.2, 0.1), 0.1).tolist()
+        [[-0.1, -0.05], [0.0, -0.05], [0.1, -0.05], [-0.1, 0.05], [0.0, 0.05], [0.1, 0.05]]
+    """
+    if resolution <= 0.0:
+        raise ValueError(f"resolution must be positive, got {resolution}")
+    axis_x = np.arange(-0.5 * size[0], 0.5 * size[0] + 1e-9, resolution)
+    axis_y = np.arange(-0.5 * size[1], 0.5 * size[1] + 1e-9, resolution)
+    grid_x, grid_y = np.meshgrid(axis_x, axis_y, indexing="xy")
+    return np.stack([grid_x.reshape(-1), grid_y.reshape(-1)], axis=-1)
 
 
 @register_observation_model("ray_caster")

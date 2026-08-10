@@ -24,6 +24,7 @@ Classes:
     RayCasterObservationModel: Planar LiDAR ranges to a disc obstacle set.
     HeightScanObservationModel: Downward height samples on a body-frame grid.
     LatentTypeSignalObservationModel: Per-zone binary signal, informative only inside the zone.
+    GoalRelativePoseObservationModel: The commanded goal seen in the robot's base frame.
 """
 
 from POMDPPlanners.environments.isaac_lab_pomdp.isaac_perception.observation_models.registry import (
@@ -38,10 +39,15 @@ from POMDPPlanners.environments.isaac_lab_pomdp.isaac_perception.observation_mod
 from POMDPPlanners.environments.isaac_lab_pomdp.isaac_perception.observation_models.ray_caster_models import (  # noqa: E501  pylint: disable=line-too-long
     HeightScanObservationModel,
     RayCasterObservationModel,
+    grid_scan_pattern,
 )
 from POMDPPlanners.environments.isaac_lab_pomdp.isaac_perception.observation_models.hazard_signal_models import (  # noqa: E501  pylint: disable=line-too-long
     UNINFORMATIVE_ACCURACY,
     LatentTypeSignalObservationModel,
+)
+from POMDPPlanners.environments.isaac_lab_pomdp.isaac_perception.observation_models.goal_relative_models import (  # noqa: E501  pylint: disable=line-too-long
+    GoalRelativePoseObservationModel,
+    wrap_to_pi,
 )
 
 __all__ = [
@@ -52,6 +58,9 @@ __all__ = [
     "GaussianChannelObservationModel",
     "HeightScanObservationModel",
     "RayCasterObservationModel",
+    "grid_scan_pattern",
     "LatentTypeSignalObservationModel",
+    "GoalRelativePoseObservationModel",
+    "wrap_to_pi",
     "UNINFORMATIVE_ACCURACY",
 ]
