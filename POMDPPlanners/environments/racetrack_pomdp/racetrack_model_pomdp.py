@@ -13,9 +13,19 @@ The transition reproduces highway-env's kinematic bicycle **exactly** for the eg
 ``arctan(tan(delta)/2)`` slip angle, the same ``LENGTH / 2`` wheelbase term, the same update
 order, integrated over ``substeps`` sub-intervals of ``dt / substeps`` so the model takes
 the same number of physics steps per decision as the simulator. The Frenet pair
-``(lat, ang)`` is integrated alongside it against the state's own ``curvature``, held fixed
-over the planning horizon — the racetrack is straights and constant-radius arcs, so that is
-exact within a lane segment and wrong only where the lane changes underneath the ego.
+``(lat, ang)`` is integrated alongside it against the curvature of the road under the ego.
+
+**Where the road bends is the subclass's job.** This class is abstract for exactly one
+reason: it does not know the track. Every substep asks :meth:`RacetrackModelPOMDP._curvature_for`
+what the curvature is under each particle, and the two shipped subclasses answer it from
+two different places —
+:class:`~POMDPPlanners.environments.racetrack_pomdp.racetrack_known_track_model.KnownTrackModel`
+looks the circuit up by arclength, and
+:class:`~POMDPPlanners.environments.racetrack_pomdp.racetrack_observed_track_model.ObservedTrackModel`
+reads it out of the observation's on-road layer. Curvature is deliberately *not* a state
+slot: it is a property of the road, so freezing it in the state would encode a prediction
+rather than a fact, and a rollout reusing one frozen value drives straight through every
+corner.
 
 **The model error is deliberate and lives in the other vehicles.** Agent slots are
 propagated as constant-velocity drift in the ego body frame, while the world drives them
@@ -32,9 +42,10 @@ Note:
     model heading with a world heading modulo ``2 * pi`` rather than by subtraction.
 
 Classes:
-    RacetrackModelPOMDP: Generative model paired with the forward-only racetrack world.
+    RacetrackModelPOMDP: Abstract generative model paired with the forward-only world.
 """
 
+from abc import abstractmethod
 from collections.abc import Hashable
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
@@ -57,7 +68,7 @@ from POMDPPlanners.environments.racetrack_pomdp.racetrack_schema import (
     DEFAULT_MAX_TRACKED_AGENTS,
     DEFAULT_SPEED_LIMIT,
     EGO_ANG,
-    EGO_CURVATURE,
+    EGO_ARCLENGTH_M,
     EGO_HEADING,
     EGO_LAT,
     EGO_SPEED,
@@ -77,11 +88,12 @@ from POMDPPlanners.environments.racetrack_pomdp.racetrack_schema import (
     state_agent_rows,
 )
 
-# Process noise is applied to the first six ego entries only. Curvature is the seventh and
-# is excluded on purpose: it is a property of the lane the ego occupies, not a state the
-# vehicle diffuses through, and the dynamics hold it fixed over the horizon. Jittering it
-# would scatter particles onto imaginary lanes of wildly different radius.
-_EGO_NOISE_WIDTH = EGO_CURVATURE
+# Process noise is applied to the first six ego entries only. Arclength is the seventh and
+# is excluded on purpose: it is not an independent coordinate but the running integral of
+# the ego's own along-track motion, already noisy through the speed it is integrated from.
+# Jittering it on top would teleport a particle down the track and, worse, re-index the
+# curvature profile a known-track model reads with it.
+_EGO_NOISE_WIDTH = EGO_ARCLENGTH_M
 
 # The ego sits in the middle cell of the occupancy grid, at (6, 6) for the shipped 12x12.
 _GRID_CENTRE = GRID_CELLS // 2
@@ -94,7 +106,7 @@ _MIN_FRENET_DENOMINATOR = 1e-3
 # -inf log-likelihood, which would annihilate an otherwise good particle.
 _FLIP_PROB_EPS = 1e-12
 
-_OCCUPANCY_KEY = "occupancy"
+OCCUPANCY_KEY = "occupancy"
 _EGO_KEY = "ego"
 _AGENTS_KEY = "agents"
 
@@ -133,13 +145,18 @@ def _gaussian_log_prob(deviation: np.ndarray, std: float) -> float:
 
 
 class RacetrackModelPOMDP(DiscreteActionsEnvironment):
-    """Generative racetrack model: the planner's beliefs about the forward-only world.
+    """Abstract generative racetrack model: the planner's beliefs about the world.
 
     Reproduces the world's ego dynamics exactly and its other vehicles only crudely (see the
     module docstring). The observation follows whichever arm of the matched pair the world is
     running, selected by ``observation_mode``; :meth:`encode_observation` is the single seam
     where the world's raw reading enters, and every other observation method works in the
     encoded space.
+
+    Subclasses supply :meth:`_curvature_for`, the one thing this class does not know: where
+    the road bends. They may also override :meth:`_render_on_road_layer` and
+    :meth:`_on_road_log_prob` if their curvature source lets them predict the observation's
+    on-road layer; the defaults here decline to, and say why.
 
     Attributes:
         observation_mode: Which arm of the matched pair this model scores.
@@ -152,25 +169,11 @@ class RacetrackModelPOMDP(DiscreteActionsEnvironment):
         collision_distance: Range (m) at or below which a present agent slot is a collision.
         lane_half_width: Lateral offset (m) beyond which the ego has left the lane.
 
-    Example:
-        >>> import numpy as np
-        >>> np.random.seed(42)  # For reproducible results
-        >>>
-        >>> # Initialize the planner-side model
-        >>> env = RacetrackModelPOMDP(discount_factor=0.95)
-        >>>
-        >>> # The action set indexes the shared control presets
-        >>> len(env.get_actions())
-        9
-        >>>
-        >>> # Propagate a state cruising straight at the speed limit
-        >>> state = np.zeros(env.state_width)
-        >>> state[3] = 10.0  # speed, m/s
-        >>> next_state = env.sample_next_state(state, action=4)  # coast, straight ahead
-        >>> next_state.shape == (env.state_width,)
-        True
-        >>> bool(next_state[0] > state[0])  # the ego moved forward
-        True
+    Note:
+        This is an abstract base class and cannot be instantiated directly. Use
+        :class:`~POMDPPlanners.environments.racetrack_pomdp.racetrack_known_track_model.KnownTrackModel`
+        or
+        :class:`~POMDPPlanners.environments.racetrack_pomdp.racetrack_observed_track_model.ObservedTrackModel`.
     """
 
     def __init__(
@@ -271,7 +274,7 @@ class RacetrackModelPOMDP(DiscreteActionsEnvironment):
 
         super().__init__(
             discount_factor=discount_factor,
-            name=name if name is not None else f"RacetrackModelPOMDP-{observation_mode.value}",
+            name=name if name is not None else f"{type(self).__name__}-{observation_mode.value}",
             space_info=SpaceInfo(
                 action_space=SpaceType.DISCRETE,
                 observation_space=SpaceType.CONTINUOUS,
@@ -295,6 +298,27 @@ class RacetrackModelPOMDP(DiscreteActionsEnvironment):
         return int(action)
 
     # ── Transition (highway-env's kinematic bicycle, reproduced) ─────────
+    @abstractmethod
+    def _curvature_for(self, ego: np.ndarray) -> np.ndarray:
+        """Signed curvature in 1/m for each row of the ego block, shape ``(B,)``.
+
+        Called once per integration substep with the ego block ``(B, EGO_STATE_WIDTH)`` as
+        it stands *at the start of that substep*, so a subclass indexing by arclength sees
+        the arclength the ego has actually reached rather than the one it started the
+        decision at.
+
+        Args:
+            ego: The ego block of the particle batch, shape ``(B, EGO_STATE_WIDTH)``.
+
+        Returns:
+            Signed curvature in 1/m per row, positive in the same sense as
+            :class:`~POMDPPlanners.environments.racetrack_pomdp.racetrack_track_geometry.TrackGeometry`.
+
+        Note:
+            Subclasses must implement this. It is the only thing separating a model that
+            knows the circuit from one that has to read the road out of its observations.
+        """
+
     def sample_next_state(self, state: Any, action: Any, n_samples: int = 1) -> np.ndarray:
         """Propagate ``state`` one decision forward under ``action``, with process noise.
 
@@ -331,7 +355,7 @@ class RacetrackModelPOMDP(DiscreteActionsEnvironment):
     def transition_log_probability(self, state: Any, action: Any, next_states: Any) -> np.ndarray:
         """Log-density of each candidate successor under the noisy propagation.
 
-        The density covers the first six ego entries only. Curvature and every agent slot
+        The density covers the first six ego entries only. Arclength and every agent slot
         are *deterministic* functions of ``(state, action)`` — no noise is added to them — so
         including them would contribute a constant at best and an infinite mismatch penalty
         at worst.
@@ -404,7 +428,7 @@ class RacetrackModelPOMDP(DiscreteActionsEnvironment):
         heading = ego[:, EGO_HEADING].copy()
         lateral = ego[:, EGO_LAT].copy()
         angle = ego[:, EGO_ANG].copy()
-        curvature = ego[:, EGO_CURVATURE]
+        curvature = self._curvature_for(ego)
 
         yaw_rate = speed * np.sin(slip) / (self.vehicle_length / 2.0)
         # The Frenet rates use the *velocity* direction, ``ang + slip``, not the heading:
@@ -423,6 +447,10 @@ class RacetrackModelPOMDP(DiscreteActionsEnvironment):
         ego[:, EGO_LAT] = lateral + speed * np.sin(drift) * step
         ego[:, EGO_ANG] = _wrap_to_pi_array(angle + (yaw_rate - curvature * along_rate) * step)
         ego[:, EGO_SPEED] = speed + acceleration * step
+        # Advanced by the *along-track* rate, not by ``speed * step``: the two differ once
+        # the ego is yawed relative to the lane or offset from its centreline on an arc,
+        # and it is the along-track one that indexes the curvature profile correctly.
+        ego[:, EGO_ARCLENGTH_M] = ego[:, EGO_ARCLENGTH_M] + along_rate * step
 
         self._drift_agents(agents, -yaw_rate * step, step)
 
@@ -531,7 +559,7 @@ class RacetrackModelPOMDP(DiscreteActionsEnvironment):
             rel_vy]}``, with absent rows left at zero.
         """
         if self.observation_mode is ObservationMode.POMDP:
-            return {_OCCUPANCY_KEY: np.asarray(observation, dtype=np.float32)}
+            return {OCCUPANCY_KEY: np.asarray(observation, dtype=np.float32)}
         return self._encode_kinematics(np.asarray(observation, dtype=float))
 
     def _encode_kinematics(self, rows: np.ndarray) -> Dict[str, np.ndarray]:
@@ -573,10 +601,9 @@ class RacetrackModelPOMDP(DiscreteActionsEnvironment):
         """Log-density of each observation given ``next_state``.
 
         In POMDP mode this is an independent Bernoulli over the 144 presence cells of the
-        grid :meth:`sample_observation` would have rasterised. **The on-road layer is
-        excluded**: it is a function of track geometry, which this model's state does not
-        carry, so it is identical across every particle and can only add a constant — a term
-        that cannot discriminate has no business in a weight.
+        grid :meth:`sample_observation` would have rasterised, plus whatever
+        :meth:`_on_road_log_prob` contributes for the second layer — nothing at all, unless
+        the subclass can predict the road.
 
         In MDP mode it is a diagonal Gaussian over the ego row and the *present* agent slots;
         absent slots contribute nothing, because a slot that holds no vehicle carries no
@@ -603,7 +630,13 @@ class RacetrackModelPOMDP(DiscreteActionsEnvironment):
         candidates = [observations] if isinstance(observations, dict) else list(observations)
         if self.observation_mode is ObservationMode.POMDP:
             grid = self._render_presence_grid(next_state)
-            return np.array([self._grid_log_prob(grid, obs) for obs in candidates], dtype=float)
+            return np.array(
+                [
+                    self._grid_log_prob(grid, obs) + self._on_road_log_prob(next_state, obs)
+                    for obs in candidates
+                ],
+                dtype=float,
+            )
         clean = self._clean_kinematics(next_state)
         return np.array([self._kinematics_log_prob(clean, obs) for obs in candidates], dtype=float)
 
@@ -617,8 +650,31 @@ class RacetrackModelPOMDP(DiscreteActionsEnvironment):
         flips = np.random.random(grid.shape) < self.cell_flip_prob
         occupancy = np.zeros((2, GRID_CELLS, GRID_CELLS), dtype=np.float32)
         occupancy[PRESENCE_LAYER] = np.logical_xor(grid, flips)
-        occupancy[ON_ROAD_LAYER] = 1.0
-        return {_OCCUPANCY_KEY: occupancy}
+        occupancy[ON_ROAD_LAYER] = self._render_on_road_layer(state)
+        return {OCCUPANCY_KEY: occupancy}
+
+    def _render_on_road_layer(self, state: Any) -> np.ndarray:
+        """The on-road layer this model predicts for ``state``; all-ones by default.
+
+        All-ones is the honest answer for a model with no picture of the road: it says
+        "drivable everywhere I can see", which is what the shipped racetrack shows on a
+        straight anyway. A subclass that carries a road model should override this so that
+        the observations it *samples* are the same shape as the ones it *reads* — otherwise
+        it feeds itself an all-clear corridor on the approach to every corner.
+        """
+        del state
+        return np.ones((GRID_CELLS, GRID_CELLS), dtype=np.float32)
+
+    def _on_road_log_prob(self, state: Any, observation: Any) -> float:
+        """Contribution of the on-road layer to the likelihood; zero by default.
+
+        Zero, and not a Bernoulli over the layer, because the default
+        :meth:`_render_on_road_layer` does not depend on ``state``: a term identical across
+        every particle shifts all the log-weights alike and vanishes at normalisation, so it
+        buys nothing but 144 cells of arithmetic per particle per step.
+        """
+        del state, observation
+        return 0.0
 
     def _draw_kinematics(self, state: Any) -> Dict[str, np.ndarray]:
         clean = self._clean_kinematics(state)
@@ -660,9 +716,13 @@ class RacetrackModelPOMDP(DiscreteActionsEnvironment):
         return grid
 
     def _grid_log_prob(self, grid: np.ndarray, observation: Any) -> float:
-        observed = np.asarray(observation[_OCCUPANCY_KEY], dtype=float)[PRESENCE_LAYER] > 0.5
+        observed = np.asarray(observation[OCCUPANCY_KEY], dtype=float)[PRESENCE_LAYER] > 0.5
+        return self._bernoulli_cell_log_prob(grid, observed)
+
+    def _bernoulli_cell_log_prob(self, predicted: np.ndarray, observed: np.ndarray) -> float:
+        """Independent per-cell flip model over two boolean grids of the same shape."""
         flip_prob = float(np.clip(self.cell_flip_prob, _FLIP_PROB_EPS, 1.0 - _FLIP_PROB_EPS))
-        agreements = int(np.count_nonzero(observed == grid))
+        agreements = int(np.count_nonzero(observed == predicted))
         disagreements = observed.size - agreements
         return agreements * float(np.log1p(-flip_prob)) + disagreements * float(np.log(flip_prob))
 

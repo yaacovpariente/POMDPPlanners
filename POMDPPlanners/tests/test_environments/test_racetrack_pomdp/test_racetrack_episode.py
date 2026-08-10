@@ -23,6 +23,7 @@ from POMDPPlanners.core.belief import Belief, WeightedParticleBelief
 from POMDPPlanners.core.environment import SpaceType
 from POMDPPlanners.core.policy import Policy, PolicyRunData, PolicySpaceInfo
 from POMDPPlanners.environments.racetrack_pomdp.racetrack_belief import TrackedAgentsBelief
+from POMDPPlanners.environments.racetrack_pomdp.racetrack_known_track_model import KnownTrackModel
 from POMDPPlanners.environments.racetrack_pomdp.racetrack_model_pomdp import RacetrackModelPOMDP
 from POMDPPlanners.environments.racetrack_pomdp.racetrack_pomdp import (
     RacetrackMetric,
@@ -33,10 +34,12 @@ from POMDPPlanners.environments.racetrack_pomdp.racetrack_schema import (
     AGENT_REL_VX,
     AGENT_REL_X,
     AGENT_SLOT_WIDTH,
+    DEFAULT_ACTION_PRESETS,
     EGO_STATE_WIDTH,
     ObservationMode,
     state_agent_rows,
 )
+from POMDPPlanners.environments.racetrack_pomdp.racetrack_track_geometry import geometry_from_world
 from POMDPPlanners.simulations.episodes import run_episode
 
 pytest.importorskip("highway_env")
@@ -56,7 +59,22 @@ _POSITION_MATCH_TOLERANCE_M = 6.0
 # places an opponent itself.
 _OPPONENT_GAP_M = 10.0
 _OPPONENT_SPEED_MPS = 4.0
-_COAST_ONLY = 4
+
+
+def _preset(acceleration: float, steering: float) -> int:
+    """Index of a control preset, looked up rather than written as a literal.
+
+    The shipped table is a 3-by-9 grid of accelerations by steering angles, so every index
+    moves whenever the steering resolution changes. Naming the command keeps these tests
+    testing what they say they test.
+    """
+    return DEFAULT_ACTION_PRESETS.index((acceleration, steering))
+
+
+_COAST_ONLY = _preset(0.0, 0.0)
+# Coast, accelerate, coast, brake -- all straight ahead, so the ego stays on the lane long
+# enough for the episode to record something.
+_STRAIGHT_CYCLE = [_COAST_ONLY, _preset(1.0, 0.0), _COAST_ONLY, _preset(-1.0, 0.0)]
 
 
 class _FixedCyclePolicy(Policy):
@@ -221,15 +239,22 @@ def _build_triple(
         max_tracked_agents=_MAX_TRACKED_AGENTS,
         seed=seed,
     )
-    model = RacetrackModelPOMDP(
+    # Reset before the map is walked, and walk it from the world's own starting lane. The
+    # world writes arclength as an offset from that lane, so a map built from any other
+    # starting point would put its corners in the wrong place relative to the state the
+    # belief is seeded with -- consistent-looking numbers, silently misaligned track.
+    world.initial_state_dist().sample()
+    track_geometry, _ = geometry_from_world(world)
+    model = KnownTrackModel(
         discount_factor=0.95,
+        track_geometry=track_geometry,
         observation_mode=mode,
         max_tracked_agents=_MAX_TRACKED_AGENTS,
     )
     policy = _FixedCyclePolicy(
         environment=model,
         discount_factor=0.95,
-        actions=list(actions) if actions is not None else [4, 1, 4, 7],
+        actions=list(actions) if actions is not None else list(_STRAIGHT_CYCLE),
     )
     return world, model, policy
 
