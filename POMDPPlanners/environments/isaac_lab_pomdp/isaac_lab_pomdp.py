@@ -72,6 +72,8 @@ class IsaacLabStepChannel(Enum):
     SUCCESS = "success"
     #: Contact impulse over this control step, in newton-seconds.
     CONTACT_IMPULSE_NS = "contact_impulse_ns"
+    #: Largest instantaneous contact force during this control step, in newtons.
+    CONTACT_PEAK_FORCE_N = "contact_peak_force_n"
 
 
 class IsaacLabMetric(Enum):
@@ -83,6 +85,16 @@ class IsaacLabMetric(Enum):
     SUCCESS_RATE = "success_rate"
     #: Mean over episodes of the episode's largest per-step contact impulse (N*s).
     MAX_CONTACT_IMPULSE_NS = "max_contact_impulse_ns"
+    #: Mean over episodes of the episode's largest instantaneous contact force (N).
+    MAX_CONTACT_PEAK_FORCE_N = "max_contact_peak_force_n"
+
+
+#: The metric each impact channel rolls up into. Kept as one mapping so a new impact channel
+#: cannot be added without saying what it aggregates to.
+IMPACT_METRIC_BY_CHANNEL = {
+    IsaacLabStepChannel.CONTACT_IMPULSE_NS: IsaacLabMetric.MAX_CONTACT_IMPULSE_NS,
+    IsaacLabStepChannel.CONTACT_PEAK_FORCE_N: IsaacLabMetric.MAX_CONTACT_PEAK_FORCE_N,
+}
 
 
 # Module-level SimulationApp handle. IsaacLab permits exactly one per process;
@@ -161,6 +173,66 @@ def _scalar_bool(value: Any) -> bool:
     return bool(_to_numpy(value).reshape(-1)[0])
 
 
+def control_substeps(env: Any) -> int:
+    """Physics substeps per control step, from the live simulator's timing.
+
+    Args:
+        env: The live IsaacLab env.
+
+    Returns:
+        The number of physics substeps one control step spans, at least 1. Falls
+        back to 1 when the env does not report its timing.
+    """
+    step_dt = getattr(env.unwrapped, "step_dt", None)
+    physics_dt = getattr(env.unwrapped, "physics_dt", None)
+    if not step_dt or not physics_dt:
+        return 1
+    return max(1, int(round(float(step_dt) / float(physics_dt))))
+
+
+def step_duration(env: Any) -> float:
+    """Duration of one control step in seconds, or 1.0 when the env omits it."""
+    step_dt = getattr(env.unwrapped, "step_dt", None)
+    return float(step_dt) if step_dt is not None else 1.0
+
+
+def contact_force_samples(env: Any, sensor_key: str) -> np.ndarray:
+    """Contact force samples covering the current control step.
+
+    IsaacLab documents the history buffer as newest-first: "In the history
+    dimension, the first index is the most recent and the last index is the
+    oldest." Only the leading :func:`control_substeps` entries belong to the step
+    just taken; trailing ones belong to control steps already accounted for, so
+    slicing from the end would silently report stale forces.
+
+    Args:
+        env: The live IsaacLab env.
+        sensor_key: Scene key of the ``ContactSensor``.
+
+    Returns:
+        The sensor's world-frame net forces in newtons, leading axis this step's
+        samples and trailing axes the sensor's own body layout. A sensor keeping
+        no history contributes its single end-of-step reading, so a spike between
+        substeps is invisible; widen ``history_length`` to the task's decimation
+        to capture it.
+
+    Raises:
+        RuntimeError: If the sensor exposes no contact force buffer at all.
+    """
+    data = env.unwrapped.scene[sensor_key].data
+    history = getattr(data, "net_forces_w_history", None)
+    if history is not None:
+        return _to_numpy(history)[0][: control_substeps(env)]
+
+    forces = getattr(data, "net_forces_w", None)
+    if forces is None:
+        raise RuntimeError(
+            f"No contact force buffer found on scene sensor "
+            f"'{sensor_key}'; pass a custom impact_extractor."
+        )
+    return _to_numpy(forces)[0][np.newaxis, ...]
+
+
 class IsaacLabPOMDP(Environment):
     """Forward-only adapter exposing an IsaacLab task as a world POMDP.
 
@@ -230,6 +302,7 @@ class IsaacLabPOMDP(Environment):
         success_termination_term: Optional[str] = None,
         success_reduction: EpisodeReduction = EpisodeReduction.ANY,
         impact_extractor: Optional[Callable[[Any], float]] = None,
+        impact_channel: IsaacLabStepChannel = IsaacLabStepChannel.CONTACT_IMPULSE_NS,
         success_extractor: Optional[Callable[[Any, Dict[str, Any], bool, bool], bool]] = None,
         env_cfg_modifier: Optional[Callable[[Any], None]] = None,
         record_video: bool = False,
@@ -284,6 +357,15 @@ class IsaacLabPOMDP(Environment):
                 earlier steps were fine.
             impact_extractor: Optional ``env -> float`` reading impact magnitude.
                 Defaults to the peak contact impulse over the sensor's bodies.
+            impact_channel: Which channel the impact reading is reported under,
+                and so which metric it rolls up into. An override that measures a
+                *different quantity* — the peak force in newtons rather than the
+                impulse in newton-seconds, say — must say so here: reporting it
+                under the impulse channel would average newtons and
+                newton-seconds into one number that means nothing, and nothing
+                downstream could tell.
+
+                Raises ``ValueError`` for a channel that is not an impact channel.
             success_extractor: Optional
                 ``(env, info, terminated, truncated) -> bool``. Defaults to
                 reading ``success_termination_term`` from the termination
@@ -339,6 +421,13 @@ class IsaacLabPOMDP(Environment):
         self._state_extractor = state_extractor
         self._observation_extractor = observation_extractor
         self._impact_extractor = impact_extractor
+        if impact_channel not in IMPACT_METRIC_BY_CHANNEL:
+            raise ValueError(
+                f"impact_channel must be one of "
+                f"{[channel.value for channel in IMPACT_METRIC_BY_CHANNEL]}, "
+                f"got {impact_channel}"
+            )
+        self.impact_channel = impact_channel
         self._success_extractor = success_extractor
         self._env_cfg_modifier = env_cfg_modifier
 
@@ -530,51 +619,18 @@ class IsaacLabPOMDP(Environment):
         The maximum is taken over bodies only: an episode is characterized by its
         worst contact point, not by the average across the robot.
         """
-        data = env.unwrapped.scene[self.contact_sensor_key].data
-        samples = self._contact_force_samples(data)
+        sensor_key = self.contact_sensor_key
+        if sensor_key is None:
+            raise RuntimeError(
+                "The default impact extractor needs a contact sensor; set contact_sensor_key "
+                "or pass an impact_extractor."
+            )
+        samples = contact_force_samples(env, sensor_key)
         # (samples, bodies, 3) -> magnitude per body per sample.
         magnitudes = np.linalg.norm(samples.reshape(samples.shape[0], -1, 3), axis=-1)
-        return float(magnitudes.mean(axis=0).max()) * self._step_duration(env)
-
-    def _contact_force_samples(self, data: Any) -> np.ndarray:
-        """Force samples covering the current control step, shaped (n, bodies, 3)."""
-        history = getattr(data, "net_forces_w_history", None)
-        if history is not None:
-            samples = _to_numpy(history)[0]
-            # IsaacLab documents this buffer as newest-first: "In the history
-            # dimension, the first index is the most recent and the last index is
-            # the oldest." Take the leading entries, which are this step's
-            # substeps; trailing ones belong to control steps already accounted
-            # for. Slicing from the end would silently report stale forces.
-            return samples[: self._control_substeps]
-
-        forces = getattr(data, "net_forces_w", None)
-        if forces is None:
-            raise RuntimeError(
-                f"No contact force buffer found on scene sensor "
-                f"'{self.contact_sensor_key}'; pass a custom impact_extractor."
-            )
-        # No history: the single end-of-step reading stands in for the whole
-        # step. A spike between substeps is invisible; set history_length to
-        # capture it.
-        return _to_numpy(forces)[0][np.newaxis, ...]
-
-    @property
-    def _control_substeps(self) -> int:
-        """Physics substeps per control step, from the live simulator's timing."""
-        env = self._get_env()
-        step_dt = getattr(env.unwrapped, "step_dt", None)
-        physics_dt = getattr(env.unwrapped, "physics_dt", None)
-        if not step_dt or not physics_dt:
-            return 1
-        return max(1, int(round(float(step_dt) / float(physics_dt))))
-
-    @staticmethod
-    def _step_duration(env: Any) -> float:
         # Mean force (N) times the control-step duration gives an impulse (N*s),
         # comparable across tasks with different control rates.
-        step_dt = getattr(env.unwrapped, "step_dt", None)
-        return float(step_dt) if step_dt is not None else 1.0
+        return float(magnitudes.mean(axis=0).max()) * step_duration(env)
 
     def _extract_success(
         self, env: Any, info: Dict[str, Any], terminated: bool, truncated: bool
@@ -727,7 +783,7 @@ class IsaacLabPOMDP(Environment):
 
         info: Dict[str, float] = {}
         if pending["impact"] is not None:
-            info[IsaacLabStepChannel.CONTACT_IMPULSE_NS.value] = float(pending["impact"])
+            info[self.impact_channel.value] = float(pending["impact"])
         if pending["success"] is not None:
             info[IsaacLabStepChannel.SUCCESS.value] = float(pending["success"])
         return info
@@ -740,8 +796,9 @@ class IsaacLabPOMDP(Environment):
         reports no impact metric rather than a fabricated zero.
 
         Returns:
-            Specs for the success rate and/or the max contact impulse,
-            depending on which measurements were configured.
+            Specs for the success rate and/or the impact metric matching the
+            configured ``impact_channel``, depending on which measurements were
+            configured.
         """
         specs: List[StepInfoMetric] = []
         if self.success_termination_term is not None or self._success_extractor is not None:
@@ -755,8 +812,8 @@ class IsaacLabPOMDP(Environment):
         if self.contact_sensor_key is not None or self._impact_extractor is not None:
             specs.append(
                 StepInfoMetric(
-                    name=IsaacLabMetric.MAX_CONTACT_IMPULSE_NS.value,
-                    channel=IsaacLabStepChannel.CONTACT_IMPULSE_NS.value,
+                    name=IMPACT_METRIC_BY_CHANNEL[self.impact_channel].value,
+                    channel=self.impact_channel.value,
                     per_episode=EpisodeReduction.MAX,
                 )
             )

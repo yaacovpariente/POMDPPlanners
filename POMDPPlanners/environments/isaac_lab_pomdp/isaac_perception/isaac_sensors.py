@@ -21,14 +21,25 @@ Functions:
     ray_caster_ranges: Distance from a ``RayCaster``'s origin to each of its ray hits.
     height_scan: Height of each ray hit relative to the sensor origin.
     policy_observation: The task's own policy observation group.
+    command_pose_world: A pose command's target in world coordinates.
+    command_pose_base: A pose command's target in the robot's base frame.
+    contact_body_indices: Contact-sensor body slots whose names match a regex.
+    peak_contact_force: Largest instantaneous contact force over a control step.
+    contact_impulse: Step-averaged contact impulse over a control step.
+    make_peak_contact_force_extractor: Bind :func:`peak_contact_force` to a body set.
     concat_extractors: Compose several extractors into one flat vector.
 """
 
-from typing import Any, Callable, Sequence
+import re
+from typing import Any, Callable, List, Sequence
 
 import numpy as np
 
-from POMDPPlanners.environments.isaac_lab_pomdp.isaac_lab_pomdp import _to_numpy
+from POMDPPlanners.environments.isaac_lab_pomdp.isaac_lab_pomdp import (
+    _to_numpy,
+    contact_force_samples,
+    step_duration,
+)
 
 Extractor = Callable[[Any], np.ndarray]
 
@@ -174,6 +185,157 @@ def policy_observation(env: Any, group: str = "policy") -> np.ndarray:
             "pass an explicit extractor."
         )
     return _to_numpy(compute(group))[0].reshape(-1)
+
+
+def _command_term(env: Any, command_name: str) -> Any:
+    manager = getattr(env.unwrapped, "command_manager", None)
+    get_term = getattr(manager, "get_term", None)
+    if get_term is None:
+        raise RuntimeError(
+            f"Task exposes no command manager, so command '{command_name}' cannot be read; "
+            "pass an explicit extractor."
+        )
+    return get_term(command_name)
+
+
+def command_pose_world(env: Any, command_name: str = "pose_command") -> np.ndarray:
+    """Read a 2-D pose command's target as ``(x, y, heading)`` in world coordinates.
+
+    This is **privileged**: the command term keeps the target in world coordinates for its own
+    bookkeeping, and a robot only ever sees the base-frame version through
+    :func:`command_pose_base`. It belongs in the state, where it makes the base-frame reading a
+    genuine function of the robot's pose — which is what turns that reading into a localisation
+    signal instead of a restatement of the state.
+
+    Args:
+        env: The live IsaacLab env.
+        command_name: Name of the command term. Defaults to ``"pose_command"``.
+
+    Returns:
+        Shape ``(3,)`` of ``(x, y, heading)`` in the world frame.
+
+    Raises:
+        RuntimeError: If the task exposes no command manager, or the named term keeps no
+            world-frame target.
+    """
+    term = _command_term(env, command_name)
+    position = getattr(term, "pos_command_w", None)
+    heading = getattr(term, "heading_command_w", None)
+    if position is None or heading is None:
+        raise RuntimeError(
+            f"Command term '{command_name}' exposes no world-frame target "
+            "(pos_command_w / heading_command_w); pass an explicit extractor."
+        )
+    world = _to_numpy(position)[0].reshape(-1)
+    return np.array([world[0], world[1], float(_to_numpy(heading).reshape(-1)[0])])
+
+
+def command_pose_base(env: Any, command_name: str = "pose_command") -> np.ndarray:
+    """Read a command term's value in the robot's base frame — what the robot actually sees.
+
+    Args:
+        env: The live IsaacLab env.
+        command_name: Name of the command term. Defaults to ``"pose_command"``.
+
+    Returns:
+        The command vector for the single env, flat. For a 2-D pose command that is
+        ``(dx, dy, dz, dheading)`` with the offsets expressed in the base frame.
+
+    Raises:
+        RuntimeError: If the task exposes no command manager or no such term.
+    """
+    return _to_numpy(_command_term(env, command_name).command)[0].reshape(-1)
+
+
+def contact_body_indices(
+    env: Any, sensor: str = "contact_forces", pattern: str = ".*"
+) -> List[int]:
+    """Body slots of a contact sensor whose names fully match a regex.
+
+    Args:
+        env: The live IsaacLab env.
+        sensor: Scene key of the ``ContactSensor``.
+        pattern: Regex matched against each body name in full, IsaacLab's own convention for
+            body selection. Defaults to every body.
+
+    Returns:
+        The matching indices into the sensor's body axis, in sensor order.
+
+    Raises:
+        RuntimeError: If no body name matches, which would otherwise reduce silently to a
+            measurement over an empty body set.
+    """
+    names = list(env.unwrapped.scene[sensor].body_names)
+    compiled = re.compile(pattern)
+    indices = [index for index, name in enumerate(names) if compiled.fullmatch(name)]
+    if not indices:
+        raise RuntimeError(
+            f"No body of scene sensor '{sensor}' matches '{pattern}'; available: {names}"
+        )
+    return indices
+
+
+def _contact_magnitudes(env: Any, sensor: str, pattern: str) -> np.ndarray:
+    samples = contact_force_samples(env, sensor)
+    magnitudes = np.linalg.norm(samples.reshape(samples.shape[0], -1, 3), axis=-1)
+    return magnitudes[:, contact_body_indices(env, sensor, pattern)]
+
+
+def peak_contact_force(env: Any, sensor: str = "contact_forces", pattern: str = ".*") -> float:
+    """Largest instantaneous contact force (N) on the selected bodies this control step.
+
+    Prefer this to :func:`contact_impulse` when the point is *how hard* an obstacle was, not how
+    long it was leaned on. A step-averaged impulse cannot tell a hard obstacle from a soft one:
+    pushing steadily against an immovable post and shoving a light one along integrate to about the
+    same number, and on a legged robot the post-impact lean dominates the average outright. The
+    difference lives in the transient at first contact, which only the peak sees — and it is only
+    visible at all when the sensor's ``history_length`` covers the step's substeps.
+
+    Args:
+        env: The live IsaacLab env.
+        sensor: Scene key of the ``ContactSensor``.
+        pattern: Regex selecting the bodies to measure over.
+
+    Returns:
+        The peak force magnitude in newtons.
+    """
+    return float(_contact_magnitudes(env, sensor, pattern).max())
+
+
+def contact_impulse(env: Any, sensor: str = "contact_forces", pattern: str = ".*") -> float:
+    """Step-averaged contact impulse (N*s) on the worst of the selected bodies.
+
+    Args:
+        env: The live IsaacLab env.
+        sensor: Scene key of the ``ContactSensor``.
+        pattern: Regex selecting the bodies to measure over.
+
+    Returns:
+        The largest per-body mean force over the step, times the control-step duration.
+    """
+    return float(_contact_magnitudes(env, sensor, pattern).mean(axis=0).max()) * step_duration(env)
+
+
+def make_peak_contact_force_extractor(
+    sensor: str = "contact_forces", pattern: str = ".*"
+) -> Callable[[Any], float]:
+    """Bind :func:`peak_contact_force` to a sensor and body set.
+
+    Shaped for ``IsaacLabPOMDP``'s ``impact_extractor`` hook, which replaces the world's default
+    step-averaged impulse with the peak.
+
+    Args:
+        sensor: Scene key of the ``ContactSensor``.
+        pattern: Regex selecting the bodies to measure over.
+
+    Returns:
+        An ``env -> float`` reader of the peak contact force in newtons.
+    """
+
+    def _extract(env: Any) -> float:
+        return peak_contact_force(env, sensor, pattern)
+
+    return _extract
 
 
 def concat_extractors(*extractors: Extractor) -> Extractor:
