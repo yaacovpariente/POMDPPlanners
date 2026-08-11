@@ -66,6 +66,7 @@ db.sqlite3-journal
 # Other
 **/cache/
 experiments/results
+results/vopp_tasks/
 dask-worker-space/
 joblib_cache/
 experiments_/
