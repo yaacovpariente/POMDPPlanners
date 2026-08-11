@@ -13,23 +13,45 @@ the whole path end to end on a real physics simulator:
 3. :func:`~POMDPPlanners.core.simulation.step_info_metrics.aggregate_step_info_metrics`
    turns them into metrics with 95% confidence intervals.
 
-**Why the success predicate is per task.** None of the three tasks ships a
-"success" termination term — probing them shows only failure and timeout terms
+**Why the success predicate is per task.** None of these tasks ships a "success"
+termination term — probing them shows only failure and timeout terms
 (``base_contact``, ``cart_out_of_bounds``, ``time_out``). Task completion is
-therefore defined per task by an injected ``success_extractor``, which is exactly
-the split the design intends: the *measurement* is environment-specific, the
-*channel name*, the aggregation and the confidence intervals are shared.
+therefore defined per task in :mod:`isaac_vopp_tasks` and injected as a
+``success_extractor``, which is exactly the split the design intends: the
+*measurement* is environment-specific, the *channel name*, the aggregation and
+the confidence intervals are shared.
 
-**Why a contact sensor is injected.** Only the locomotion task ships one. For the
-other two an ``env_cfg_modifier`` attaches a ``ContactSensorCfg`` and switches on
+Cartpole shows why the shipped terms are not enough on their own. Its only
+failure term bounds the *cart*, leaving the pole angle unconstrained, so a policy
+that does nothing while the pole spins through a full rotation scores 1.0. Its
+predicate therefore also requires the pole to stay within a right angle of
+vertical — measured, not assumed: a do-nothing, a frozen-action and a
+random-action rollout each score 0/10 under it.
+
+**Why a contact sensor is injected.** Only the locomotion tasks ship one. For the
+others an ``env_cfg_modifier`` attaches a ``ContactSensorCfg`` and switches on
 the asset's contact-reporter API, without which the sensor finds no bodies.
 
-**Planner-side model.** IsaacLab's dynamics and reward are not analytic, so each
-task first runs a short warm-up of random actions, then fits a
-``LinearGaussianTransition`` and a ``LinearRewardModel`` from the collected
-samples. These are crude first-order system-identification baselines: they steer
-behaviour but do not solve locomotion. The metrics are the deliverable here, not
-the control quality.
+**Planner-side model.** Three are wired here, selectable per task and overridable
+with ``--model-kind``.
+
+The default fits a ``LinearGaussianTransition`` and a ``LinearRewardModel`` from a
+short warm-up of random actions -- a crude system-identification baseline that
+steers behaviour but does not solve locomotion.
+
+On ``Isaac-Reach-Franka-v0`` it does not steer at all: one linear map over a 7-DoF
+arm scores every action alike, so the planner emits a single action index for the
+whole episode (``unique_actions == 1``) and never reaches. That task therefore
+uses ``ManipulatorIsaacModel`` -- a joint lag whose gain is calibrated from the
+same warm-up rollout, exact forward kinematics through the Panda's DH chain, and
+the reach task's own distance objective. Only the lag is fitted.
+
+``Isaac-Navigation-Flat-Anymal-C-v0`` fails the same way for a different reason:
+its observation carries no base position, so a fitted map over it cannot learn
+where turning takes the robot. That task uses ``NavigationIsaacModel``, which
+integrates the goal *in the base frame* forward under the velocity command --
+exactly the quantity the observation does carry -- and scores it with the task's
+own pose-tracking reward. Only the command-tracking scales are fitted.
 
 Because IsaacLab launches a single global ``SimulationApp`` per process, each task
 runs in its own child process (each rendering Isaac Sim uses ~4.25 GB of GPU
@@ -52,12 +74,27 @@ import json
 import os
 import subprocess
 import sys
-from dataclasses import dataclass
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 
+from isaac_vopp_planner_models import (
+    GAMMA,
+    build_manipulator_model,
+    build_navigation_model,
+    build_vectorized_model,
+)
+from isaac_vopp_tasks import (
+    MODEL_KIND_SUCCESS_KIND,
+    TASKS,
+    TaskSpec,
+    ThresholdSuccessProbe,
+    make_contact_sensor_injector,
+    make_success_extractor,
+    policy_observation,
+)
 from POMDPPlanners.core.simulation.step_info_metrics import EpisodeReduction
 from POMDPPlanners.environments.isaac_lab_pomdp.isaac_lab_pomdp import (
     IsaacLabMetric,
@@ -68,74 +105,21 @@ ISAAC_PYTHON = os.environ.get(
     "ISAAC_PYTHON", "/home/kobi/Documents/tmp/isaac_sim_playground/env_isaacsim/bin/python"
 )
 
-GAMMA = 0.99
 VIDEO_FPS = 10
 WARMUP_TRANSITIONS = 200
+# Control steps each warm-up action is held for. A command redrawn every step measures a permanent
+# transient rather than the system's tracking; see collect_warmup_samples for the measurement.
+WARMUP_ACTION_HOLD_STEPS = 10
 NUM_ACTION_PRESETS = 8
-OBSERVATION_NOISE_STD = 0.1
 BELIEF_PARTICLES = 256
 PLANNING_PARTICLES = 128
 PLANNING_DEPTH = 8
 PLANNING_ITERATIONS = 16
-OBSERVATION_RESOLUTION = 5.0
 DEFAULT_EPISODES = 3
 DEFAULT_STEPS = 40
 # A rendering Isaac Sim needs ~4-6 GB; anything at this scale is a real workload,
 # not desktop compositing.
 GPU_BUSY_THRESHOLD_MB = 2000.0
-
-
-@dataclass
-class TaskSpec:
-    """One IsaacLab task and the per-task measurement configuration it needs.
-
-    Attributes:
-        task_id: Registered IsaacLab task id.
-        contact_sensor_key: Scene key holding the contact sensor to read.
-        contact_body_regex: Body pattern for an injected sensor; ``None`` when the
-            task already ships one.
-        success_kind: Which success predicate to build for this task.
-        success_reduction: How per-step success collapses per episode. A
-            "never failed" predicate needs ``ALL``; a "goal reached" predicate
-            needs ``ANY``.
-        success_threshold: Distance threshold for the ``reach`` predicate.
-        ee_body: End-effector body name for the ``reach`` predicate.
-    """
-
-    task_id: str
-    contact_sensor_key: str
-    contact_body_regex: Optional[str] = None
-    success_kind: str = "no_failure"
-    failure_term: Optional[str] = None
-    success_reduction: str = "all"
-    success_threshold: float = 0.1
-    ee_body: str = ""
-
-
-TASKS: List[TaskSpec] = [
-    TaskSpec(
-        task_id="Isaac-Velocity-Flat-Anymal-C-v0",
-        contact_sensor_key="contact_forces",
-        success_kind="no_failure",
-        failure_term="base_contact",
-    ),
-    TaskSpec(
-        task_id="Isaac-Reach-Franka-v0",
-        contact_sensor_key="injected_contacts",
-        contact_body_regex="panda_hand",
-        success_kind="reach",
-        success_reduction="any",
-        success_threshold=0.15,
-        ee_body="panda_hand",
-    ),
-    TaskSpec(
-        task_id="Isaac-Cartpole-v0",
-        contact_sensor_key="injected_contacts",
-        contact_body_regex="pole",
-        success_kind="no_failure",
-        failure_term="cart_out_of_bounds",
-    ),
-]
 
 
 # ── Isaac interpreter bootstrap ─────────────────────────────────────────
@@ -163,110 +147,6 @@ def _reexec_under_isaac_if_needed() -> None:
 # ── World-side helpers ──────────────────────────────────────────────────
 
 
-def _first_row(value: Any) -> np.ndarray:
-    """Detach a torch tensor (or array-like) to the first environment's row."""
-    if hasattr(value, "detach"):
-        value = value.detach().cpu().numpy()
-    return np.asarray(value)[0].reshape(-1)
-
-
-def _policy_observation(env: Any) -> np.ndarray:
-    """Read the agent's ``policy`` observation group (partial, sensor-derived).
-
-    Used as both the state and the observation extractor so the planner-side
-    vectorized model, which requires equal state and observation dimensions, has
-    a single consistent space to work in.
-    """
-    manager = getattr(env.unwrapped, "observation_manager", None)
-    if manager is not None:
-        return _first_row(manager.compute_group("policy"))
-    return _first_row(env.unwrapped.obs_buf)
-
-
-def make_contact_sensor_injector(body_regex: str) -> Callable[[Any], None]:
-    """Build an ``env_cfg_modifier`` attaching a contact sensor to the robot.
-
-    Args:
-        body_regex: Body-name pattern under the robot prim to sense.
-
-    Returns:
-        A callable mutating a parsed task config in place.
-    """
-
-    def _inject(cfg: Any) -> None:
-        # pylint: disable-next=import-outside-toplevel,import-error
-        from isaaclab.sensors import ContactSensorCfg
-
-        # Without activating the reporter API on the asset's bodies the sensor
-        # raises "could not find any bodies with contact reporter API".
-        spawn = getattr(cfg.scene.robot, "spawn", None)
-        if spawn is not None:
-            spawn.activate_contact_sensors = True
-        # history_length lets the peak force between control steps be seen; one
-        # env.step spans several physics substeps.
-        cfg.scene.injected_contacts = ContactSensorCfg(
-            prim_path=f"{{ENV_REGEX_NS}}/Robot/{body_regex}",
-            history_length=3,
-            track_air_time=False,
-        )
-
-    return _inject
-
-
-def _term_is_set(env: Any, term_name: str) -> bool:
-    manager = getattr(env.unwrapped, "termination_manager", None)
-    getter = getattr(manager, "get_term", None)
-    if getter is None:
-        return False
-    try:
-        return bool(_first_row(getter(term_name))[0])
-    except (KeyError, ValueError, IndexError):
-        return False
-
-
-def make_success_extractor(spec: TaskSpec) -> Callable[[Any, Dict[str, Any], bool, bool], bool]:
-    """Build the task's success predicate.
-
-    None of these tasks declares a success termination term, so completion is
-    defined here: locomotion and cartpole succeed by *not* failing, and the reach
-    task succeeds when the end effector is within a threshold of its commanded
-    pose.
-
-    Args:
-        spec: The task configuration.
-
-    Returns:
-        A ``(env, info, terminated, truncated) -> bool`` predicate.
-    """
-    if spec.success_kind == "reach":
-
-        def _reach_success(env: Any, info: Dict[str, Any], terminated: bool, truncated: bool):
-            del info, terminated, truncated
-            return _reach_distance(env, spec.ee_body) <= spec.success_threshold
-
-        return _reach_success
-
-    failure_term = spec.failure_term or ""
-
-    def _no_failure(env: Any, info: Dict[str, Any], terminated: bool, truncated: bool) -> bool:
-        del info, terminated, truncated
-        return not _term_is_set(env, failure_term)
-
-    return _no_failure
-
-
-def _reach_distance(env: Any, ee_body: str) -> float:
-    """Distance from the end effector to its commanded pose, in metres."""
-    scene = env.unwrapped.scene
-    robot = scene["robot"]
-    command = env.unwrapped.command_manager.get_command("ee_pose")
-    goal_in_base = _first_row(command)[:3]
-    root_pos = _first_row(robot.data.root_pos_w)[:3]
-    body_index = list(robot.body_names).index(ee_body)
-    ee_pos = np.asarray(robot.data.body_pos_w.detach().cpu().numpy())[0, body_index, :3]
-    return float(np.linalg.norm(ee_pos - (root_pos + goal_in_base)))
-
-
 def build_action_presets(action_dim: int, num_presets: int, seed: int) -> np.ndarray:
     """Build a finite representative action set: the zero action plus samples.
 
@@ -282,7 +162,7 @@ def build_action_presets(action_dim: int, num_presets: int, seed: int) -> np.nda
         A ``(num_presets, action_dim)`` float32 array.
     """
     rng = np.random.default_rng(seed)
-    presets = [np.zeros(action_dim, dtype=np.float32)]
+    presets: List[np.ndarray] = [np.zeros(action_dim, dtype=np.float32)]
     for _ in range(max(0, num_presets - 1)):
         presets.append(rng.uniform(-1.0, 1.0, size=action_dim).astype(np.float32))
     return np.asarray(presets, dtype=np.float32)
@@ -349,17 +229,42 @@ class WorldDriver:
 
 
 def collect_warmup_samples(
-    driver: WorldDriver, num_transitions: int
+    driver: WorldDriver, num_transitions: int, hold_steps: int = WARMUP_ACTION_HOLD_STEPS
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """Roll out random actions to fit the planner-side dynamics and reward.
+    """Roll out held random actions to fit the planner-side dynamics and reward.
+
+    **Why the action is held.** A system-identification rollout has to excite the system at the
+    timescale it responds on. Redrawing a fresh command every control step does not: it measures a
+    permanent transient. Measured on the ANYmal navigation task, the fraction of a commanded
+    velocity the base achieves reads 0.25 when the command changes every 0.2 s, 0.47 when it is
+    held four steps and 0.71 when it is held ten -- the gait needs about a second to reach the
+    velocity it was asked for. Calibrating on the redrawn rollout therefore characterises a robot
+    that is never allowed to follow its command, and every model fitted on it under-predicts how
+    far the robot travels.
+
+    Holding costs no action coverage here, because the action set is a finite preset table: 200
+    transitions held ten at a time still draw twenty commands from a table of eight.
+
+    **Episode boundaries are dropped, not fitted.** IsaacLab auto-resets inside ``step()``, so the
+    successor of a terminal transition is a fresh episode's observation rather than the result of
+    the action. Keeping those rows teaches a fitted model that some action teleports, and biases a
+    calibrated one by the size of the jump. Collection continues until ``num_transitions`` usable
+    rows exist, so every model is still fitted on the same budget.
 
     Args:
         driver: Driver wrapping the live world.
-        num_transitions: Number of transitions to collect.
+        num_transitions: Number of usable transitions to collect, excluding dropped boundaries.
+        hold_steps: Control steps each drawn action is held for before a new one is drawn. The
+            schedule restarts after an episode reset.
 
     Returns:
         Arrays of states, action vectors, next states and rewards.
+
+    Raises:
+        ValueError: If ``hold_steps`` is not positive.
     """
+    if hold_steps <= 0:
+        raise ValueError(f"hold_steps must be positive, got {hold_steps}")
     states: List[np.ndarray] = []
     actions: List[np.ndarray] = []
     next_states: List[np.ndarray] = []
@@ -367,17 +272,30 @@ def collect_warmup_samples(
 
     rng = np.random.default_rng(0)
     state = driver.reset()
-    for _ in range(num_transitions):
-        action = driver.action_presets[int(rng.integers(len(driver.action_presets)))]
+    action = driver.action_presets[0]
+    held_for = 0
+    while len(states) < num_transitions:
+        if held_for == 0:
+            action = driver.action_presets[int(rng.integers(len(driver.action_presets)))]
         reward = driver.world.reward(state, action)
         next_state = driver.world.sample_next_state(state, action)
-        states.append(state)
-        actions.append(action)
-        next_states.append(next_state)
-        rewards.append(float(reward))
+        ended = driver.world.is_terminal(next_state)
+        if not ended:
+            # A transition whose successor is IsaacLab's post-reset observation is not a transition
+            # of the system: the env auto-resets inside step(), so the "next state" is a fresh
+            # episode metres away. Fitting it teaches every model that some action teleports.
+            states.append(state)
+            actions.append(action)
+            next_states.append(next_state)
+            rewards.append(float(reward))
         state = next_state
-        if driver.world.is_terminal(state):
+        held_for = (held_for + 1) % hold_steps
+        if ended:
+            # Restart the hold too. Resuming a half-finished block would hand the freshly reset
+            # system a command it has only a few steps left to follow, which is the transient this
+            # whole hold exists to avoid measuring.
             state = driver.reset()
+            held_for = 0
     return (
         np.asarray(states, dtype=np.float64),
         np.asarray(actions, dtype=np.float64),
@@ -386,41 +304,12 @@ def collect_warmup_samples(
     )
 
 
-def build_vectorized_model(
-    samples: Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
-    action_presets: np.ndarray,
-    device: Any,
+def build_world(
+    spec: TaskSpec,
+    cache_dir: Path,
+    record_video: bool,
+    success_extractor: Optional[Callable[[Any, Dict[str, Any], bool, bool], bool]] = None,
 ) -> Any:
-    """Fit the linear dynamics/reward and wrap them in the vectorized model."""
-    # pylint: disable-next=import-outside-toplevel
-    from POMDPPlanners.environments.isaac_lab_pomdp import (
-        GaussianObservationModel,
-        LinearGaussianTransition,
-        LinearRewardModel,
-    )
-
-    # pylint: disable-next=import-outside-toplevel
-    from POMDPPlanners.environments.isaac_lab_pomdp.isaac_lab_vectorized_model import (
-        IsaacLabVectorizedModel,
-    )
-
-    states, actions, next_states, rewards = samples
-    transition = LinearGaussianTransition.fit(states, actions, next_states)
-    reward_model = LinearRewardModel.fit(states, actions, next_states, rewards)
-    observation_model = GaussianObservationModel(
-        observation_dim=states.shape[1], noise_std=OBSERVATION_NOISE_STD
-    )
-    return IsaacLabVectorizedModel(
-        transition=transition,
-        observation_model=observation_model,
-        reward_model=reward_model,
-        action_presets=action_presets,
-        device=device,
-        observation_resolution=OBSERVATION_RESOLUTION,
-    )
-
-
-def build_world(spec: TaskSpec, cache_dir: Path, record_video: bool) -> Any:
     """Construct the IsaacLab world configured for this task's measurements."""
     # pylint: disable-next=import-outside-toplevel
     from POMDPPlanners.environments.isaac_lab_pomdp import IsaacLabPOMDP
@@ -433,10 +322,10 @@ def build_world(spec: TaskSpec, cache_dir: Path, record_video: bool) -> Any:
     return IsaacLabPOMDP(
         task_id=spec.task_id,
         discount_factor=GAMMA,
-        state_extractor=_policy_observation,
-        observation_extractor=_policy_observation,
+        state_extractor=policy_observation,
+        observation_extractor=policy_observation,
         contact_sensor_key=spec.contact_sensor_key,
-        success_extractor=make_success_extractor(spec),
+        success_extractor=success_extractor or make_success_extractor(spec),
         success_reduction=EpisodeReduction(spec.success_reduction),
         env_cfg_modifier=modifier,
         render_mode="rgb_array" if record_video else None,
@@ -446,15 +335,20 @@ def build_world(spec: TaskSpec, cache_dir: Path, record_video: bool) -> Any:
 
 
 def run_episodes(
-    driver: WorldDriver, model: Any, num_episodes: int, num_steps: int
+    driver: WorldDriver,
+    model: Any,
+    num_episodes: int,
+    num_steps: int,
+    probe: Optional[ThresholdSuccessProbe] = None,
 ) -> Tuple[List[List[Dict[str, float]]], List[Dict[str, Any]]]:
     """Run VOPP episodes and collect their per-step measurements.
 
     Args:
         driver: Driver wrapping the live world.
-        model: The fitted vectorized model VOPP plans inside.
+        model: The vectorized model VOPP plans inside.
         num_episodes: Number of episodes to run.
         num_steps: Maximum steps per episode.
+        probe: Probe to read the task's own per-episode measurements from, when it has one.
 
     Returns:
         The per-episode step-info sequences, and a per-episode summary.
@@ -487,21 +381,26 @@ def run_episodes(
     summaries: List[Dict[str, Any]] = []
     for episode_index in range(num_episodes):
         state = driver.reset()
+        if probe is not None:
+            probe.reset()
         torch.manual_seed(episode_index)
         result = runner.run_episode(
             torch.as_tensor(np.asarray(state, dtype=np.float32), device=model.device).unsqueeze(0)
         )
         episodes.append(result.step_infos)
-        summaries.append(
-            {
-                "episode": episode_index,
-                "steps": result.num_steps,
-                "reached_terminal": result.reached_terminal_state,
-                "model_return": float(sum(result.rewards)),
-                "plan_time_s": round(result.total_plan_time, 3),
-                "unique_actions": len(set(result.action_indices)),
-            }
-        )
+        steps = max(1, result.num_steps)
+        summary: Dict[str, Any] = {
+            "episode": episode_index,
+            "steps": result.num_steps,
+            "reached_terminal": result.reached_terminal_state,
+            "model_return": float(sum(result.rewards)),
+            "plan_time_s": round(result.total_plan_time, 3),
+            "plan_time_per_step_s": round(result.total_plan_time / steps, 3),
+            "unique_actions": len(set(result.action_indices)),
+        }
+        if probe is not None:
+            summary.update(probe.summary())
+        summaries.append(summary)
         if episode_index == 0 and driver.world.record_video:
             driver.world.cache_visualization([], driver.world.output_dir, episode_index)
     return episodes, summaries
@@ -546,7 +445,9 @@ def run_task(spec: TaskSpec, cache_dir: Path, num_episodes: int, num_steps: int)
     task_dir = cache_dir / spec.task_id
     task_dir.mkdir(parents=True, exist_ok=True)
 
-    world = build_world(spec, task_dir, record_video=True)
+    success_extractor = make_success_extractor(spec)
+    probe = success_extractor if isinstance(success_extractor, ThresholdSuccessProbe) else None
+    world = build_world(spec, task_dir, record_video=True, success_extractor=success_extractor)
     action_dim = int(np.asarray(world.action_space.shape)[-1])
     action_presets = build_action_presets(action_dim, NUM_ACTION_PRESETS, seed=0)
 
@@ -556,8 +457,13 @@ def run_task(spec: TaskSpec, cache_dir: Path, num_episodes: int, num_steps: int)
     driver = WorldDriver(world, action_presets, device)
 
     samples = collect_warmup_samples(driver, WARMUP_TRANSITIONS)
-    model = build_vectorized_model(samples, action_presets, device)
-    episodes, summaries = run_episodes(driver, model, num_episodes, num_steps)
+    if spec.model_kind == "manipulator":
+        model = build_manipulator_model(world, samples, action_presets, device)
+    elif spec.model_kind == "navigation":
+        model = build_navigation_model(world, samples, action_presets, device)
+    else:
+        model = build_vectorized_model(samples, action_presets, device)
+    episodes, summaries = run_episodes(driver, model, num_episodes, num_steps, probe)
 
     video = task_dir / "agent_path_0.mp4"
     return {
@@ -568,6 +474,7 @@ def run_task(spec: TaskSpec, cache_dir: Path, num_episodes: int, num_steps: int)
         "state_dim": int(samples[0].shape[1]),
         "action_dim": action_dim,
         "num_action_presets": len(action_presets),
+        "model_kind": spec.model_kind,
     }
 
 
@@ -610,12 +517,48 @@ def _spawn_task_process(
         str(steps),
         "--cache-dir",
         str(cache_dir),
+        # Forwarded explicitly: the child re-reads TASKS from source, so a --model-kind override
+        # applied in the parent would otherwise be lost on the way down.
+        "--model-kind",
+        spec.model_kind,
     ]
     completed = subprocess.run(command, check=False)
     if completed.returncode != 0 or not out.exists():
         print(f"WARNING: task {spec.task_id} failed (exit {completed.returncode})")
         return None
     return json.loads(out.read_text(encoding="utf-8"))
+
+
+#: The per-episode quantity each predicate is scored on, as ``{summary key: unit}``. Each task's
+#: number keeps its own unit rather than sharing a column heading, because a metre of goal error
+#: and a degree of pole lean are not comparable and a shared heading would invite reading them so.
+EPISODE_MEASUREMENT_UNITS = {
+    "min_reach_distance_m": "m",
+    "min_goal_distance_m": "m",
+    "max_pole_angle_deg": "deg",
+}
+
+
+def _episode_measurement(episode: Dict[str, Any]) -> str:
+    """The episode's decisive measurement with its unit, whichever probe recorded it."""
+    for key, unit in EPISODE_MEASUREMENT_UNITS.items():
+        if key in episode:
+            return f"{float(episode[key]):.4g} {unit}"
+    return "n/a"
+
+
+def _episode_ending(episode: Dict[str, Any]) -> str:
+    """How the episode ended, as the world reported it on its last step.
+
+    ``reached_terminal`` alone conflates a failure with a timeout, and for a fixed-length task the
+    difference is the whole diagnosis: 40 steps and truncated is the task running its course, 12
+    steps and terminated is the robot on the floor.
+    """
+    if episode.get("terminated"):
+        return "terminated"
+    if episode.get("truncated"):
+        return "truncated"
+    return "cut off" if episode.get("reached_terminal") else "ran out of steps"
 
 
 def format_report(results: Sequence[Dict[str, Any]]) -> str:
@@ -634,15 +577,20 @@ def format_report(results: Sequence[Dict[str, Any]]) -> str:
             )
     lines.append("")
     lines.append(
-        "| Task | Episode | Steps | Terminal | Model return | Plan time (s) | Distinct actions |"
+        "| Task | Model | Episode | Steps | Model return | Plan time/step (s) | "
+        "Distinct actions | Decisive measurement | Ended |"
     )
-    lines.append("| --- | --- | --- | --- | --- | --- | --- |")
+    lines.append("| --- | --- | --- | --- | --- | --- | --- | --- | --- |")
     for result in results:
         for episode in result["episodes"]:
             lines.append(
-                f"| {result['task_id']} | {episode['episode']} | {episode['steps']} | "
-                f"{episode['reached_terminal']} | {episode['model_return']:.4g} | "
-                f"{episode['plan_time_s']} | {episode['unique_actions']} |"
+                f"| {result['task_id']} | {result.get('model_kind', 'linear')} | "
+                f"{episode['episode']} | {episode['steps']} | "
+                f"{episode['model_return']:.4g} | "
+                f"{episode.get('plan_time_per_step_s', episode['plan_time_s'])} | "
+                f"{episode['unique_actions']} | "
+                f"{_episode_measurement(episode)} | "
+                f"{_episode_ending(episode)} |"
             )
     lines.append("")
     for result in results:
@@ -657,6 +605,13 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser.add_argument("--episodes", type=int, default=DEFAULT_EPISODES)
     parser.add_argument("--steps", type=int, default=DEFAULT_STEPS)
     parser.add_argument("--cache-dir", type=Path, default=Path("isaac_vopp_metrics"))
+    parser.add_argument(
+        "--model-kind",
+        choices=["linear", "manipulator", "navigation"],
+        default=None,
+        help="Override the planner-side model for every selected task, so an analytic model and "
+        "the fitted linear baseline can be compared on identical settings.",
+    )
     parser.add_argument("--single-process", action="store_true", help="Run one task in-process.")
     return parser.parse_args(argv)
 
@@ -710,6 +665,23 @@ def main(argv: Optional[List[str]] = None) -> None:
     selected = [spec for spec in TASKS if args.task is None or spec.task_id in args.task]
     if not selected:
         sys.exit(f"No matching task. Known: {[spec.task_id for spec in TASKS]}")
+    if args.model_kind is not None:
+        # Each analytic model is built for one shape of task. Applied to the wrong one it would
+        # fail deep inside a manager read, after a SimulationApp had already been launched and
+        # several GB of GPU claimed; say so before paying that.
+        required = MODEL_KIND_SUCCESS_KIND.get(args.model_kind)
+        incompatible = [
+            spec.task_id
+            for spec in selected
+            if required is not None and spec.success_kind != required
+        ]
+        if incompatible:
+            sys.exit(
+                f"--model-kind {args.model_kind} applies only to a '{required}' task, but "
+                f"{incompatible} were selected. Restrict the run with --task, or drop the "
+                "override."
+            )
+        selected = [replace(spec, model_kind=args.model_kind) for spec in selected]
     args.cache_dir.mkdir(parents=True, exist_ok=True)
 
     # Re-exec before spawning: children inherit this interpreter, so switching
