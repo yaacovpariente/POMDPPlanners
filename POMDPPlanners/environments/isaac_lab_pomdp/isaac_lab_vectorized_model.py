@@ -35,6 +35,7 @@ import numpy as np
 import torch
 from torch import Tensor
 
+from POMDPPlanners.environments.isaac_lab_pomdp.isaac_lab_helpers import spatial_hash_primes
 from POMDPPlanners.environments.isaac_lab_pomdp.isaac_lab_model_pomdp import (
     GaussianObservationModel,
     LinearGaussianTransition,
@@ -175,18 +176,7 @@ class IsaacLabVectorizedModel:
         self._reward_bias = float(reward_model._bias)  # pylint: disable=protected-access
 
     def _build_hash_primes(self, dim: int) -> Tensor:
-        primes = self._first_primes(dim)
-        return torch.as_tensor(primes, dtype=torch.int64, device=self.device)
-
-    @staticmethod
-    def _first_primes(count: int) -> np.ndarray:
-        primes = []
-        candidate = 73856093
-        while len(primes) < count:
-            if all(candidate % p != 0 for p in range(2, int(candidate**0.5) + 1)):
-                primes.append(candidate)
-            candidate += 2
-        return np.asarray(primes, dtype=np.int64)
+        return torch.as_tensor(spatial_hash_primes(dim), dtype=torch.int64, device=self.device)
 
     def _to_tensor(self, array: np.ndarray) -> Tensor:
         return torch.as_tensor(np.asarray(array), dtype=self.dtype, device=self.device)

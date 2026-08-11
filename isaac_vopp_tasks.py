@@ -32,6 +32,8 @@ from typing import Any, Callable, Dict, List, Optional
 
 import numpy as np
 
+from POMDPPlanners.environments.isaac_lab_pomdp.isaac_lab_helpers import first_row
+
 
 @dataclass
 class TaskSpec:
@@ -115,13 +117,6 @@ MODEL_KIND_SUCCESS_KIND = {"manipulator": "reach", "navigation": "navigate"}
 # ── World-side helpers ──────────────────────────────────────────────────
 
 
-def _first_row(value: Any) -> np.ndarray:
-    """Detach a torch tensor (or array-like) to the first environment's row."""
-    if hasattr(value, "detach"):
-        value = value.detach().cpu().numpy()
-    return np.asarray(value)[0].reshape(-1)
-
-
 def policy_observation(env: Any) -> np.ndarray:
     """Read the agent's ``policy`` observation group (partial, sensor-derived).
 
@@ -131,8 +126,8 @@ def policy_observation(env: Any) -> np.ndarray:
     """
     manager = getattr(env.unwrapped, "observation_manager", None)
     if manager is not None:
-        return _first_row(manager.compute_group("policy"))
-    return _first_row(env.unwrapped.obs_buf)
+        return first_row(manager.compute_group("policy"))
+    return first_row(env.unwrapped.obs_buf)
 
 
 def make_contact_sensor_injector(body_regex: str) -> Callable[[Any], None]:
@@ -171,7 +166,7 @@ def _term_is_set(env: Any, term_name: str) -> bool:
     if getter is None:
         return False
     try:
-        return bool(_first_row(getter(term_name))[0])
+        return bool(first_row(getter(term_name))[0])
     except (KeyError, ValueError, IndexError):
         return False
 
@@ -196,7 +191,7 @@ def _require_term_is_set(env: Any, term_name: str) -> bool:
             "exposes no termination manager"
         )
     try:
-        return bool(_first_row(getter(term_name))[0])
+        return bool(first_row(getter(term_name))[0])
     except (KeyError, ValueError, IndexError) as error:
         raise RuntimeError(
             f"the success predicate needs the '{term_name}' termination term, which this task "
@@ -424,8 +419,8 @@ def _reach_distance(env: Any, ee_body: str) -> float:
     scene = env.unwrapped.scene
     robot = scene["robot"]
     command = env.unwrapped.command_manager.get_command("ee_pose")
-    goal_in_base = _first_row(command)[:3]
-    root_pos = _first_row(robot.data.root_pos_w)[:3]
+    goal_in_base = first_row(command)[:3]
+    root_pos = first_row(robot.data.root_pos_w)[:3]
     body_index = list(robot.body_names).index(ee_body)
     ee_pos = np.asarray(robot.data.body_pos_w.detach().cpu().numpy())[0, body_index, :3]
     return float(np.linalg.norm(ee_pos - (root_pos + goal_in_base)))
