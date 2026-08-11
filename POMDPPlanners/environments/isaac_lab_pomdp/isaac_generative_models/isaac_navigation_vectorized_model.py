@@ -46,6 +46,7 @@ from POMDPPlanners.environments.isaac_lab_pomdp.isaac_generative_models.isaac_na
     VELOCITY_COMMAND_WIDTH,
     NavigationIsaacModel,
 )
+from POMDPPlanners.environments.isaac_lab_pomdp.isaac_lab_helpers import spatial_hash_primes
 
 
 class NavigationVectorizedModel:
@@ -130,7 +131,7 @@ class NavigationVectorizedModel:
         self._build_transition(model)
         self._build_reward(model)
         self._hash_primes = torch.as_tensor(
-            _first_primes(self.state_dim), dtype=torch.int64, device=self.device
+            spatial_hash_primes(self.state_dim), dtype=torch.int64, device=self.device
         )
 
     # ------------------------------------------------------------------ #
@@ -285,14 +286,3 @@ def _wrap_angle(angle: Tensor) -> Tensor:
 def _bounds(span: slice) -> Tuple[int, int]:
     """Turn a schema slice into an explicit ``(start, stop)`` pair."""
     return int(span.start), int(span.stop)
-
-
-def _first_primes(count: int) -> np.ndarray:
-    """Return ``count`` large primes used as spatial-hash weights."""
-    primes = []
-    candidate = 73856093
-    while len(primes) < count:
-        if all(candidate % divisor != 0 for divisor in range(2, int(candidate**0.5) + 1)):
-            primes.append(candidate)
-        candidate += 2
-    return np.asarray(primes, dtype=np.int64)

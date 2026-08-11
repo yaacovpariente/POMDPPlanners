@@ -44,6 +44,7 @@ from POMDPPlanners.environments.isaac_lab_pomdp.isaac_generative_models.isaac_ma
 from POMDPPlanners.environments.isaac_lab_pomdp.isaac_generative_models.isaac_model_pomdp import (
     IsaacChannelSchema,
 )
+from POMDPPlanners.environments.isaac_lab_pomdp.isaac_lab_helpers import first_row
 
 #: Franka arm joints in the order the kinematic chain expects them.
 FRANKA_ARM_JOINTS: Tuple[str, ...] = tuple(f"panda_joint{index}" for index in range(1, 8))
@@ -93,13 +94,6 @@ class FrankaReachLayout:
         )
 
 
-def _first_row(value: Any) -> np.ndarray:
-    """Detach a torch tensor (or array-like) down to the first environment's row."""
-    if hasattr(value, "detach"):
-        value = value.detach().cpu().numpy()
-    return np.asarray(value)[0].reshape(-1)
-
-
 def franka_reach_layout(
     env: Any, arm_joints: Sequence[str] = FRANKA_ARM_JOINTS
 ) -> FrankaReachLayout:
@@ -127,7 +121,7 @@ def franka_reach_layout(
         )
     arm_indices = tuple(joint_names.index(name) for name in arm_joints)
     action_cfg = env.unwrapped.cfg.actions.arm_action
-    defaults = _first_row(robot.data.default_joint_pos)
+    defaults = first_row(robot.data.default_joint_pos)
     return FrankaReachLayout(
         joint_names=tuple(joint_names),
         arm_indices=arm_indices,
