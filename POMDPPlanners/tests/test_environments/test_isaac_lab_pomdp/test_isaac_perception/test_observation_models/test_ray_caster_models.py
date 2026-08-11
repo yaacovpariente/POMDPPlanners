@@ -15,6 +15,7 @@ import pytest
 from POMDPPlanners.environments.isaac_lab_pomdp.isaac_perception import (
     HeightScanObservationModel,
     RayCasterObservationModel,
+    grid_scan_pattern,
 )
 
 ORIGIN = {"base_pose": np.array([0.0, 0.0, 0.0])}
@@ -308,3 +309,77 @@ def test_height_scan_rejects_obstacle_arrays_of_unequal_length() -> None:
             obstacle_radii=[0.5],
             obstacle_heights=[0.4, 0.4],
         )
+
+
+class TestGridScanPattern:
+    """The grid layout a height-scan model must share with the sensor it predicts.
+
+    Ordering is the trap. IsaacLab flattens ``meshgrid(x, y, indexing="xy")``, so the reading runs
+    x fastest. A model laying the same points out y-fastest scores every particle against permuted
+    cells, and the belief degrades in a way that reads as sensor noise.
+    """
+
+    def test_cell_count_matches_the_sensor_grid(self) -> None:
+        """A width mismatch makes every likelihood -inf, which looks like a dead belief.
+
+        Purpose: Validates the number of cells for a given extent and resolution
+
+        Given: A 0.8 x 0.6 m grid at 0.1 m resolution
+        When: The pattern is built
+        Then: It has 9 x 7 = 63 cells
+
+        Test type: unit
+        """
+        assert grid_scan_pattern((0.8, 0.6), 0.1).shape == (63, 2)
+
+    def test_x_varies_fastest_within_a_row(self) -> None:
+        """This is IsaacLab's own flattening order, and it is not the intuitive one.
+
+        Purpose: Validates the cell ordering against IsaacLab's "xy" meshgrid
+
+        Given: A 0.2 x 0.1 m grid at 0.1 m resolution
+        When: The pattern is built
+        Then: The first three cells share a y and sweep x
+
+        Test type: unit
+        """
+        pattern = grid_scan_pattern((0.2, 0.1), 0.1)
+        assert pattern[:3, 1] == pytest.approx(np.full(3, -0.05))
+        assert pattern[:3, 0] == pytest.approx(np.array([-0.1, 0.0, 0.1]))
+
+    def test_a_non_positive_resolution_is_rejected(self) -> None:
+        """A zero resolution would build an empty or unbounded grid.
+
+        Purpose: Validates rejection of a non-positive resolution
+
+        Given: A resolution of zero
+        When: The pattern is built
+        Then: ValueError is raised
+
+        Test type: unit
+        """
+        with pytest.raises(ValueError, match="resolution must be positive"):
+            grid_scan_pattern((0.8, 0.6), 0.0)
+
+    def test_the_pattern_drives_the_height_scan_model(self) -> None:
+        """The pattern exists to be handed to the model, so the pairing is the contract.
+
+        Purpose: Validates that a model built on the pattern reports one height per cell
+
+        Given: A height-scan model built with a 0.2 x 0.1 m pattern over one obstacle disc
+        When: Clean heights are computed at the origin
+        Then: There is one height per pattern cell and the covered cells read the disc height
+
+        Test type: unit
+        """
+        pattern = grid_scan_pattern((0.2, 0.1), 0.1)
+        model = HeightScanObservationModel(
+            channel="height_scan",
+            pattern=pattern,
+            obstacle_centers=[(0.0, 0.0)],
+            obstacle_radii=[0.06],
+            obstacle_heights=[0.3],
+        )
+        heights = model.clean_heights({"base_pose": np.zeros(3)})
+        assert heights.shape == (pattern.shape[0],)
+        assert heights.max() == pytest.approx(0.3)

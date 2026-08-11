@@ -115,6 +115,24 @@ class UnicycleTransition(TransitionModel):
             ]
         )
 
+    def body_frame_delta(self, action: Any) -> np.ndarray:
+        """The base's own ``(dx, dy, dyaw)`` over one step, in the frame it starts the step in.
+
+        Integrating from the origin with zero yaw is what makes this the *relative* motion: the
+        rotation by the current yaw that :meth:`sample_next_state` applies drops out. A model whose
+        state is expressed relative to the base — a goal in the base frame, say — needs exactly
+        this quantity and nothing else about where the base is on the floor, so exposing it keeps
+        one integration serving both.
+
+        Args:
+            action: The ``(v_x, v_y, omega_z)`` body-frame velocity command.
+
+        Returns:
+            The ``(dx, dy, dyaw)`` displacement, already scaled by ``command_scale`` and
+            ``step_dt``.
+        """
+        return self._mean(np.zeros(POSE_WIDTH), action)
+
     def sample_next_state(self, state: Any, action: Any, n_samples: int = 1) -> np.ndarray:
         mean = self._mean(state, action)
         samples = mean[np.newaxis, :] + np.random.normal(

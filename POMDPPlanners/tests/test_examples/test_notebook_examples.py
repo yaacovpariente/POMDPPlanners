@@ -136,7 +136,6 @@ class TestNotebookExamples:
         notebook_files = list(examples_dir.glob("*.ipynb"))
 
         for notebook_path in notebook_files:
-
             with open(notebook_path) as f:
                 notebook_data = json.load(f)
 
@@ -169,7 +168,6 @@ class TestNotebookExamples:
         notebook_files = list(examples_dir.glob("*.ipynb"))
 
         for notebook_path in notebook_files:
-
             with open(notebook_path) as f:
                 notebook_data = json.load(f)
 
