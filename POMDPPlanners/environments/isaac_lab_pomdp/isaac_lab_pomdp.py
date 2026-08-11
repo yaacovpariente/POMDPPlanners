@@ -487,6 +487,22 @@ class IsaacLabPOMDP(Environment):
         return self._env
 
     @property
+    def task_env(self) -> Any:
+        """The underlying IsaacLab task environment.
+
+        Exposed for the same reason as :attr:`action_space`: a caller that builds an *analytic*
+        planner-side model has to read the task's own configuration first — the control-step
+        duration, the action term's scale, the articulation's joint names and its default joint
+        pose. Those are properties of the robot and the task, fixed before the episode starts, and
+        reading them here is calibration, not privileged access to the live state.
+
+        Returns:
+            The wrapped ``gymnasium`` environment. Accessing it builds the simulator if it is not
+            running yet.
+        """
+        return self._get_env()
+
+    @property
     def action_space(self) -> Any:
         """The underlying task's Gymnasium action space.
 
