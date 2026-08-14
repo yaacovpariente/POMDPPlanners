@@ -14,6 +14,7 @@ Like the sibling world tests these run against ``FakeIsaacEnv`` through the
 
 import pickle
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Dict, List
 
 import numpy as np
@@ -579,3 +580,167 @@ def test_action_space_is_exposed_without_reaching_into_privates(fake_env: FakeIs
     world = _measuring_world()
 
     assert world.action_space is fake_env.action_space
+
+
+class TestContactSampleReaders:
+    """The module-level contact readers, shared by the world and the sensor helpers.
+
+    They were split out of the world so both paths slice the same samples. If they drift, the
+    impulse the world reports through ``step_info`` and the peak an ``impact_extractor`` reads
+    stop describing the same control step, and nothing in either number says so.
+    """
+
+    @staticmethod
+    def _env(history: Any = None, forces: Any = None, **timing: float) -> Any:
+        data = SimpleNamespace()
+        if history is not None:
+            data.net_forces_w_history = history
+        if forces is not None:
+            data.net_forces_w = forces
+        scene = {"contact_forces": SimpleNamespace(data=data)}
+        return SimpleNamespace(unwrapped=SimpleNamespace(scene=scene, **timing))
+
+    def test_substeps_come_from_the_simulator_timing(self) -> None:
+        """The slice width is a property of the task, not something a caller should pass.
+
+        Purpose: Validates the substeps-per-control-step calculation
+
+        Given: An env reporting a 0.2 s control step over a 0.005 s physics step
+        When: The substep count is read
+        Then: It is 40
+
+        Test type: unit
+        """
+        env = self._env(step_dt=0.2, physics_dt=0.005)
+        assert isaac_module.control_substeps(env) == 40
+
+    @pytest.mark.parametrize("timing", [{}, {"step_dt": 0.2}, {"step_dt": 0.0, "physics_dt": 0.0}])
+    def test_incomplete_timing_falls_back_to_one_substep(self, timing: Dict[str, float]) -> None:
+        """A fake or minimal env must degrade to the end-of-step reading, not divide by zero.
+
+        Purpose: Validates the fallback when the env omits its timing
+
+        Given: An env missing one or both timing fields
+        When: The substep count is read
+        Then: It is 1
+
+        Test type: unit
+        """
+        assert isaac_module.control_substeps(self._env(**timing)) == 1
+
+    def test_step_duration_defaults_to_one_second(self) -> None:
+        """A missing step_dt must not silently scale every impulse by zero.
+
+        Purpose: Validates the step-duration fallback
+
+        Given: An env that does not report step_dt
+        When: The step duration is read
+        Then: It is 1.0
+
+        Test type: unit
+        """
+        assert isaac_module.step_duration(self._env()) == pytest.approx(1.0)
+
+    def test_samples_are_sliced_to_the_current_step(self) -> None:
+        """Trailing history entries belong to steps already measured.
+
+        Purpose: Validates the newest-first slice of the force history
+
+        Given: A history of 6 samples where a control step spans 2
+        When: The samples are read
+        Then: Only the two leading entries are returned
+
+        Test type: unit
+        """
+        history = np.arange(6 * 1 * 3, dtype=float).reshape(1, 6, 1, 3)
+        env = self._env(history=history, step_dt=0.2, physics_dt=0.1)
+        assert isaac_module.contact_force_samples(env, "contact_forces").shape == (2, 1, 3)
+
+    def test_a_sensor_with_no_force_buffer_is_reported_not_guessed(self) -> None:
+        """A missing buffer means the sensor is not what the caller thinks it is.
+
+        Purpose: Validates the error when neither force buffer is present
+
+        Given: A contact sensor exposing no force fields
+        When: The samples are read
+        Then: RuntimeError names the sensor and suggests a custom extractor
+
+        Test type: unit
+        """
+        with pytest.raises(RuntimeError, match="contact_forces"):
+            isaac_module.contact_force_samples(self._env(), "contact_forces")
+
+
+class TestImpactChannelSelection:
+    """Which name a configured impact measurement is reported under.
+
+    The default extractor measures an impulse in newton-seconds. An override that measures the
+    peak force in newtons is a *different quantity*, and reporting it under the impulse channel
+    would roll newtons and newton-seconds into one mean with nothing downstream able to notice.
+    """
+
+    def test_the_default_reports_the_impulse_channel(self, fake_env: FakeIsaacEnv) -> None:
+        """The unconfigured path must keep reporting exactly what it always did.
+
+        Purpose: Validates the default impact channel and metric
+
+        Given: A world with a contact sensor and no channel override
+        When: Its metric specs are read
+        Then: The impulse channel rolls up into the max-impulse metric
+
+        Test type: unit
+        """
+        del fake_env
+        world = _measuring_world()
+        spec = next(spec for spec in world.get_metric_specs() if "impulse" in spec.name)
+        assert spec.channel == isaac_module.IsaacLabStepChannel.CONTACT_IMPULSE_NS.value
+        assert spec.name == isaac_module.IsaacLabMetric.MAX_CONTACT_IMPULSE_NS.value
+
+    def test_a_peak_force_extractor_reports_the_peak_force_channel(
+        self, fake_env: FakeIsaacEnv
+    ) -> None:
+        """A newton reading under a newton-second name is a silent unit error.
+
+        Purpose: Validates that the selected channel drives both step_info and the metric spec
+
+        Given: A world whose impact extractor returns a peak force, declaring that channel
+        When: A step is taken and the metric specs are read
+        Then: The reading appears under the peak-force channel and its metric, and the impulse
+            channel is absent
+
+        Test type: unit
+        """
+        del fake_env
+        world = _measuring_world(
+            impact_extractor=lambda env: 9481.0,
+            impact_channel=isaac_module.IsaacLabStepChannel.CONTACT_PEAK_FORCE_N,
+        )
+        state = world._live_state
+        next_state = world.sample_next_state(state, np.zeros(2))
+        info = world.step_info(state, np.zeros(2), next_state)
+
+        peak_channel = isaac_module.IsaacLabStepChannel.CONTACT_PEAK_FORCE_N.value
+        assert info[peak_channel] == pytest.approx(9481.0)
+        assert isaac_module.IsaacLabStepChannel.CONTACT_IMPULSE_NS.value not in info
+        spec = next(spec for spec in world.get_metric_specs() if spec.channel == peak_channel)
+        assert spec.name == isaac_module.IsaacLabMetric.MAX_CONTACT_PEAK_FORCE_N.value
+
+    def test_a_channel_that_is_not_an_impact_channel_is_rejected(self) -> None:
+        """Selecting the success channel would overwrite the success flag with a force.
+
+        Purpose: Validates construction-time rejection of a non-impact channel
+
+        Given: A world configured with the success channel as its impact channel
+        When: It is constructed
+        Then: ValueError lists the channels that are allowed
+
+        Test type: unit
+        """
+        with pytest.raises(ValueError, match="contact_peak_force_n"):
+            IsaacLabPOMDP(
+                task_id="Fake-Isaac-v0",
+                discount_factor=0.99,
+                device="cpu",
+                contact_sensor_key="contact_forces",
+                impact_channel=isaac_module.IsaacLabStepChannel.SUCCESS,
+            )

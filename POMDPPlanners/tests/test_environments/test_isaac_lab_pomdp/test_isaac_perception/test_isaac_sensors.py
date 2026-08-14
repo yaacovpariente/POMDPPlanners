@@ -15,9 +15,15 @@ import pytest
 import torch
 
 from POMDPPlanners.environments.isaac_lab_pomdp.isaac_perception import (
+    command_pose_base,
+    command_pose_world,
     concat_extractors,
     constant_extractor,
+    contact_body_indices,
+    contact_impulse,
     height_scan,
+    make_peak_contact_force_extractor,
+    peak_contact_force,
     joint_state,
     policy_observation,
     ray_caster_ranges,
@@ -280,3 +286,195 @@ def test_constant_extractor_hands_back_a_fresh_copy_each_call() -> None:
     first = extractor(None)
     first[0] = 99.0
     assert extractor(None) == pytest.approx([0.0, 1.0])
+
+
+class _FakeContactSensor(_FakeEntity):
+    """A contact sensor exposing both a body-name list and a force history."""
+
+    def __init__(self, body_names, data) -> None:
+        super().__init__(data)
+        self.body_names = body_names
+
+
+def _contact_env(history: torch.Tensor, step_dt: float = 0.2, physics_dt: float = 0.05) -> Any:
+    """A contact sensor over one env, whose history is ``(num_envs, samples, bodies, 3)``."""
+    sensor = _FakeContactSensor(
+        ["base", "LF_FOOT", "RF_FOOT"],
+        SimpleNamespace(net_forces_w_history=history.unsqueeze(0)),
+    )
+    return SimpleNamespace(
+        unwrapped=SimpleNamespace(
+            scene=_FakeScene({"contact_forces": sensor}),
+            step_dt=step_dt,
+            physics_dt=physics_dt,
+        )
+    )
+
+
+def _command_env(base: torch.Tensor, world_pos: torch.Tensor, world_heading: torch.Tensor) -> Any:
+    term = SimpleNamespace(command=base, pos_command_w=world_pos, heading_command_w=world_heading)
+    manager = SimpleNamespace(get_term=lambda name: term)
+    return SimpleNamespace(unwrapped=SimpleNamespace(command_manager=manager))
+
+
+def test_command_pose_world_reads_the_privileged_target() -> None:
+    """The world-frame target is what makes the base-frame reading a function of the pose.
+
+    Purpose: Validates that the command's world target is read as (x, y, heading)
+
+    Given: A command term holding a world position and heading
+    When: The world pose is read
+    Then: It is the planar position followed by the heading
+
+    Test type: unit
+    """
+    env = _command_env(
+        torch.zeros((1, 4), dtype=torch.float64),
+        torch.tensor([[1.5, -2.5, 0.6]], dtype=torch.float64),
+        torch.tensor([0.25], dtype=torch.float64),
+    )
+    assert command_pose_world(env) == pytest.approx(np.array([1.5, -2.5, 0.25]))
+
+
+def test_command_pose_base_reads_what_the_robot_sees() -> None:
+    """The base-frame command is the observation; the world target must not leak into it.
+
+    Purpose: Validates that the command term's own value is returned flat
+
+    Given: A command term holding a four-wide base-frame command
+    When: The base pose is read
+    Then: It is that vector for the single env
+
+    Test type: unit
+    """
+    env = _command_env(
+        torch.tensor([[2.0, 0.5, 0.0, -0.3]], dtype=torch.float64),
+        torch.zeros((1, 3), dtype=torch.float64),
+        torch.zeros(1, dtype=torch.float64),
+    )
+    assert command_pose_base(env) == pytest.approx(np.array([2.0, 0.5, 0.0, -0.3]))
+
+
+def test_command_readers_reject_a_task_with_no_command_manager() -> None:
+    """Guessing a goal would silently invent the quantity the study measures against.
+
+    Purpose: Validates the error when the task exposes no command manager
+
+    Given: An env whose unwrapped object has no command manager
+    When: A command reader is called
+    Then: RuntimeError names the command and asks for an explicit extractor
+
+    Test type: unit
+    """
+    env = SimpleNamespace(unwrapped=SimpleNamespace())
+    with pytest.raises(RuntimeError, match="pose_command"):
+        command_pose_base(env)
+
+
+def test_contact_body_indices_matches_names_in_full() -> None:
+    """A substring match would fold the base into a foot-only measurement.
+
+    Purpose: Validates full-match regex body selection
+
+    Given: A sensor with bodies base, LF_FOOT and RF_FOOT
+    When: The feet are selected by a suffix regex
+    Then: Only the two feet are returned, in sensor order
+
+    Test type: unit
+    """
+    env = _contact_env(torch.zeros((4, 3, 3), dtype=torch.float64))
+    assert contact_body_indices(env, "contact_forces", ".*FOOT") == [1, 2]
+    assert contact_body_indices(env, "contact_forces", "base") == [0]
+
+
+def test_contact_body_indices_rejects_a_pattern_matching_nothing() -> None:
+    """An empty body set reduces to a measurement over no bodies, silently.
+
+    Purpose: Validates the error when no body name matches
+
+    Given: A sensor with no body called "gripper"
+    When: That pattern is selected
+    Then: RuntimeError lists the names that are available
+
+    Test type: unit
+    """
+    env = _contact_env(torch.zeros((4, 3, 3), dtype=torch.float64))
+    with pytest.raises(RuntimeError, match="LF_FOOT"):
+        contact_body_indices(env, "contact_forces", "gripper")
+
+
+def test_peak_contact_force_finds_the_transient_the_mean_hides() -> None:
+    """A spike lasting one substep is the whole difference between a hard and a soft hit.
+
+    Purpose: Validates that the peak is the maximum over samples and bodies
+
+    Given: A base whose force spikes to 900 N for one of four samples and is 100 N otherwise
+    When: The peak force over the base is read
+    Then: It is the spike, not the 300 N mean the impulse reports
+
+    Test type: unit
+    """
+    history = torch.zeros((4, 3, 3), dtype=torch.float64)
+    history[:, 0, 0] = torch.tensor([900.0, 100.0, 100.0, 100.0], dtype=torch.float64)
+    env = _contact_env(history)
+    assert peak_contact_force(env, "contact_forces", "base") == pytest.approx(900.0)
+    assert contact_impulse(env, "contact_forces", "base") == pytest.approx(300.0 * 0.2)
+
+
+def test_contact_readers_use_only_this_step_of_the_history() -> None:
+    """Folding in older substeps makes the reading depend on how the sensor was configured.
+
+    Purpose: Validates that the history is sliced to the step's substeps
+
+    Given: A history of 8 samples where a control step spans 4, with a spike in the stale half
+    When: The peak force is read
+    Then: The stale spike is excluded
+
+    Test type: unit
+    """
+    history = torch.zeros((8, 3, 3), dtype=torch.float64)
+    history[:, 0, 0] = torch.tensor(
+        [10.0, 10.0, 10.0, 10.0, 5000.0, 0.0, 0.0, 0.0], dtype=torch.float64
+    )
+    env = _contact_env(history, step_dt=0.2, physics_dt=0.05)
+    assert peak_contact_force(env, "contact_forces", "base") == pytest.approx(10.0)
+
+
+def test_a_sensor_without_history_falls_back_to_the_end_of_step_reading() -> None:
+    """A task whose sensor keeps no history must still report something, not raise.
+
+    Purpose: Validates the no-history path
+
+    Given: A sensor exposing only net_forces_w
+    When: The peak force is read
+    Then: It is the magnitude of that single reading
+
+    Test type: unit
+    """
+    sensor = _FakeContactSensor(
+        ["base"], SimpleNamespace(net_forces_w=torch.tensor([[[3.0, 4.0, 0.0]]]))
+    )
+    env = SimpleNamespace(
+        unwrapped=SimpleNamespace(
+            scene=_FakeScene({"contact_forces": sensor}), step_dt=0.2, physics_dt=0.05
+        )
+    )
+    assert peak_contact_force(env, "contact_forces", "base") == pytest.approx(5.0)
+
+
+def test_peak_contact_force_extractor_binds_the_sensor_and_bodies() -> None:
+    """The extractor is handed to the world as a bare env -> float, so the binding is the API.
+
+    Purpose: Validates the impact_extractor factory
+
+    Given: An extractor bound to the feet of a contact sensor
+    When: It is called on a scene whose feet peak at 700 N and whose base peaks higher
+    Then: It reports the feet's peak
+
+    Test type: unit
+    """
+    history = torch.zeros((4, 3, 3), dtype=torch.float64)
+    history[:, 0, 0] = 5000.0
+    history[:, 1, 0] = torch.tensor([700.0, 10.0, 10.0, 10.0], dtype=torch.float64)
+    extractor = make_peak_contact_force_extractor("contact_forces", ".*FOOT")
+    assert extractor(_contact_env(history)) == pytest.approx(700.0)
