@@ -1,33 +1,49 @@
 # SPDX-License-Identifier: MIT
 
-"""Particle belief that stamps tracked opponents onto its particles each step.
+"""Particle belief that stamps this step's detections onto its particles.
 
-The racetrack POMDP hides every velocity. Its observation is a presence/on-road occupancy
-grid, so a single frame fixes where the other vehicles are and says nothing about where they
-are going. The planner's state, though, carries ``[present, rel_x, rel_y, rel_vx, rel_vy]``
-per agent slot, and those velocity terms are what let a rollout predict a closing opponent
-instead of re-discovering it on the step it arrives.
+The planner's state carries ``[present, rel_x, rel_y, rel_vx, rel_vy]`` per agent slot, and
+those velocity terms are what let a rollout predict a closing opponent instead of
+re-discovering it on the step it arrives. :class:`TrackedAgentsBelief` fills those slots from
+the observation.
 
-:class:`TrackedAgentsBelief` fills those slots. On every update it keeps the previous frame,
-hands both frames to :class:`~POMDPPlanners.environments.racetrack_pomdp.
-racetrack_occupancy_tracker.OccupancyVelocityTracker`, and writes the resulting blob positions
-and relative velocities into every particle's agent block. As with
-:class:`~POMDPPlanners.environments.carla_pomdp.carla_belief.PerceivedAgentsBelief`, the agent
-block is *trusted* rather than re-filtered as a per-particle latent: a weight-only filter can
-propagate the opponents a particle was seeded with but can never acquire one that appears
-mid-episode, and a slot seeded empty would stay empty for the whole episode. The ego block is
-left to the particle filter, which is where the actual Bayesian work happens.
+**What a detection gives, and what it does not.** A detection reports a vehicle's relative
+position and its *whole* relative velocity, so both components go straight into the slot and
+nothing has to be resolved along a line of sight. ``agent_pose_jitter`` and
+``agent_velocity_jitter`` then cover the measurement noise on what was reported, and nothing
+more — the arm's hidden state is a vehicle that produced no detection at all, not a component
+of one that did.
+
+That is why a slot with no detection behind it is left empty rather than jittered: there is
+no reading to spread around. Recovering such a vehicle is the weight update's job, through
+the model's prediction that a slot inside sensor range *should* have been reported.
+
+As with
+:class:`~POMDPPlanners.environments.carla_pomdp.carla_belief.PerceivedAgentsBelief`, the
+agent block is *trusted* rather than re-filtered as a per-particle latent: a weight-only
+filter can propagate the opponents a particle was seeded with but can never acquire one that
+appears mid-episode, and a slot seeded empty would stay empty for the whole episode. The ego
+block is left to the particle filter, which is where the actual Bayesian work happens.
+
+**The observed ego speed is deliberately not stamped**, even though the same argument might
+seem to apply to it. Stamping the reading into every particle and then scoring the particles
+on agreeing with it is double-counting, and it would flatten the speed spread to zero — which
+makes the likelihood term identical across particles and therefore worthless. The model's
+process noise spreads the particles across the ego block, the speed slot included, so the
+speedometer has something real to discriminate on and does its work through the weights
+instead. Unlike the opponents, the ego cannot fail to be acquired, so there is nothing here
+that a weight-only filter cannot reach.
 
 The same class serves the MDP arm of the matched pair, where the observation already contains
-the agent rows and the tracker is never constructed. Running one belief across both arms is
-deliberate: it keeps the arms differing in the observation alone, which is the whole point of
-the comparison.
+the agent rows. Running one belief across both arms is deliberate: it keeps the arms
+differing in the observation alone, which is the whole point of the comparison.
 
 Classes:
-    TrackedAgentsBelief: Particle belief that stamps tracked agent rows onto particles.
+    TrackedAgentsBelief: Particle belief that stamps observed agent rows onto particles.
 """
 
-from typing import Any, List, Optional, Sequence, Tuple
+import warnings
+from typing import Any
 
 import numpy as np
 
@@ -36,61 +52,47 @@ from POMDPPlanners.core.belief.particle_beliefs import (
     WeightedParticleBeliefReinvigoration,
 )
 from POMDPPlanners.core.environment import Environment
-from POMDPPlanners.environments.racetrack_pomdp.racetrack_occupancy_tracker import (
-    OccupancyVelocityTracker,
-    TrackedCluster,
-)
 from POMDPPlanners.environments.racetrack_pomdp.racetrack_schema import (
     AGENT_PRESENT,
     AGENT_REL_VX,
     AGENT_REL_X,
     AGENT_SLOT_WIDTH,
     DEFAULT_MAX_TRACKED_AGENTS,
-    EGO_HEADING,
+    DETECTION_PRESENT,
+    DETECTION_REL_VX,
+    DETECTION_REL_X,
+    DETECTION_SLOT_WIDTH,
     EGO_STATE_WIDTH,
     ObservationMode,
-    wrap_to_pi,
 )
 from POMDPPlanners.utils.config_to_id import config_to_id
 
-OCCUPANCY_KEY = "occupancy"
+DETECTIONS_KEY = "detections"
 AGENTS_KEY = "agents"
 
 
 class TrackedAgentsBelief(WeightedParticleBeliefReinvigoration):
-    """Weighted particle belief that stamps tracked opponent rows onto every particle.
+    """Weighted particle belief that stamps observed opponent rows onto every particle.
 
     After the ordinary particle-filter weight update and resample, the reinvigoration step
-    derives this step's agent rows — from the occupancy tracker in ``POMDP`` mode, straight
-    off the observation in ``MDP`` mode — and writes them into every particle's agent slots
-    with per-particle jitter. The returned belief is another ``TrackedAgentsBelief`` carrying
-    the current grid and ego heading forward, so the tracking repeats every step. It keeps a
-    window of ``tracker.frame_stride`` frames rather than just the last one, so raising the
-    stride really does difference frames that far apart instead of dividing a one-step
-    displacement by several steps.
+    derives this step's agent rows — from the detections in ``POMDP`` mode, straight off the
+    observation in ``MDP`` mode — and writes them into every particle's agent slots with
+    per-particle jitter. The returned belief is another ``TrackedAgentsBelief``, so the
+    stamping repeats every step.
 
     Note:
-        What the ``POMDP`` arm recovers is velocity **relative to a moving, turning car**, not
-        the opponents' velocity over the ground. That matches what the state's agent slots
-        hold, so nothing is inconsistent — but it is not the obvious reading of "the belief
-        infers the other vehicles' velocities", and a rollout that treats those numbers as
-        absolute will be wrong by the ego's own motion. The magnitudes are coarse on top of
-        that: a vehicle marks one 3 m cell per 0.2 s step, so the smallest non-zero reading is
-        15 m/s. ``agent_velocity_jitter`` exists to cover that quantisation and defaults an
-        order of magnitude above ``agent_pose_jitter`` for exactly that reason.
+        In ``POMDP`` mode a detection carries the vehicle's full relative velocity, so both
+        components are stamped as reported. A vehicle crossing the ego's path at 6 m/s
+        directly abeam is stamped at 6 m/s across, and the particles agree about where it
+        will be next step to within the jitter. What they cannot agree about is a vehicle no
+        detection mentions — beyond ``max_detection_range_m``, or behind a closer one — and
+        that is the only inference this arm asks for.
 
     Note:
-        The frames carried between steps live on the private ``_previous_frames`` attribute.
-        That is not a style choice: ``config_id`` deliberately ignores underscore-prefixed
-        attributes, so a public grid would fold hundreds of floats of per-step observation
-        into the belief's identity and into ``__hash__``, and two beliefs that a planner
-        should treat as the same node would stop comparing equal. Private attributes are
-        ordinary ``__dict__`` entries, so plain pickling still carries them to a worker.
-
-        The flip side is the accepted cost: two beliefs holding identical particles but
-        different tracking histories do hash alike even though their next step differs. The
-        histories are one step of observation, not configuration, and the alternative -- an
-        identity that changes on every frame -- defeats the caching the id exists for.
+        What is recovered is velocity **relative to a moving, turning car**, not the
+        opponents' velocity over the ground. That matches what the state's agent slots hold,
+        so nothing is inconsistent — but a rollout treating those numbers as absolute will be
+        wrong by the ego's own motion.
 
     Attributes:
         observation_mode: Which arm of the matched pair this belief is reading.
@@ -98,13 +100,12 @@ class TrackedAgentsBelief(WeightedParticleBeliefReinvigoration):
         agent_pose_jitter: Std of the Gaussian noise added to each stamped ``(rel_x, rel_y)``.
         agent_velocity_jitter: Std of the Gaussian noise added to each stamped
             ``(rel_vx, rel_vy)``.
-        tracker: The occupancy tracker, or ``None`` in ``MDP`` mode where none is needed.
 
     Example:
         >>> import numpy as np
         >>> np.random.seed(0)
         >>> from POMDPPlanners.environments.racetrack_pomdp.racetrack_schema import (
-        ...     EGO_STATE_WIDTH, GRID_CELLS)
+        ...     EGO_STATE_WIDTH)
         >>> width = EGO_STATE_WIDTH + 1 * 5
         >>> particles = np.zeros((4, width))
         >>> belief = TrackedAgentsBelief(  # jitter off so the stamped row is exact
@@ -114,13 +115,12 @@ class TrackedAgentsBelief(WeightedParticleBeliefReinvigoration):
         ...     agent_pose_jitter=0.0,
         ...     agent_velocity_jitter=0.0,
         ... )
-        >>> grid = np.zeros((2, GRID_CELLS, GRID_CELLS), dtype=np.float32)
-        >>> grid[0, 6, 6] = 1.0  # the ego, always written to the centre cell
-        >>> grid[0, 9, 6] = 1.0  # an opponent ~9 m ahead
+        >>> # 10 m ahead, closing at 2 m/s and crossing left at 3 m/s
+        >>> detections = np.array([[1.0, 10.0, 0.0, -2.0, 3.0]])
         >>> base = WeightedParticleBelief(particles=particles, log_weights=belief.log_weights)
-        >>> refreshed = belief.reinvigorate("noop", {"occupancy": grid}, None, base)
-        >>> np.asarray(refreshed.particles)[0, EGO_STATE_WIDTH:]  # present, ahead, no velocity
-        array([ 1. , 10.5,  1.5,  0. ,  0. ])
+        >>> refreshed = belief.reinvigorate("noop", {"detections": detections}, None, base)
+        >>> np.asarray(refreshed.particles)[0, EGO_STATE_WIDTH:]
+        array([ 1., 10.,  0., -2.,  3.])
         >>> isinstance(refreshed, TrackedAgentsBelief)  # stamping repeats next step
         True
     """
@@ -133,10 +133,8 @@ class TrackedAgentsBelief(WeightedParticleBeliefReinvigoration):
         max_tracked_agents: int = DEFAULT_MAX_TRACKED_AGENTS,
         agent_pose_jitter: float = 0.5,
         agent_velocity_jitter: float = 1.0,
-        tracker: Optional[OccupancyVelocityTracker] = None,
         resampling: bool = True,
         ess_factor: float = 0.5,
-        previous_frames: Optional[Sequence[Tuple[np.ndarray, float]]] = None,
     ):
         """Initialize the tracked-agents belief.
 
@@ -146,23 +144,19 @@ class TrackedAgentsBelief(WeightedParticleBeliefReinvigoration):
             observation_mode: Which arm of the matched pair the observation comes from.
                 Defaults to ``ObservationMode.POMDP``.
             max_tracked_agents: Number of fixed agent slots carried per particle. Defaults
-                to 4.
+                to 4. A reading carrying more detections than there are slots warns and drops
+                the furthest, because those become empty road to the planner rather than an
+                error it can see.
             agent_pose_jitter: Std of the noise added to each stamped ``(rel_x, rel_y)``, in
-                metres. Defaults to 0.5.
+                metres. Defaults to 0.5, matching the radar's own position noise.
             agent_velocity_jitter: Std of the noise added to each stamped
-                ``(rel_vx, rel_vy)``, in m/s. Defaults to 1.0.
-            tracker: Occupancy tracker to use in ``POMDP`` mode. Defaults to None, which
-                builds one with the shipped grid geometry; in ``MDP`` mode the default stays
-                ``None`` because no tracking is done.
+                ``(rel_vx, rel_vy)``, in m/s. Defaults to 1.0. Both components are now
+                measured, so this covers observation noise plus slack for the
+                constant-velocity drift the model propagates them with — it is wider than
+                the sensor's own velocity width on purpose, and it is a tuning knob rather
+                than a sensor constant.
             resampling: Enable automatic resampling when ESS drops. Defaults to True.
             ess_factor: Effective-sample-size threshold factor. Defaults to 0.5.
-            previous_frames: Up to ``tracker.frame_stride`` earlier ``(grid, ego_heading)``
-                pairs, oldest first. The oldest is what the next observation is differenced
-                against, so a stride of 3 needs three of them before any velocity is
-                reported. Defaults to None, meaning the next step is the episode's first and
-                will report positions only. This is how :meth:`reinvigorate` hands its frames
-                to its successor; they are stored privately so ``config_id`` never sees
-                them.
         """
         super().__init__(
             particles=particles,
@@ -174,16 +168,16 @@ class TrackedAgentsBelief(WeightedParticleBeliefReinvigoration):
         self.max_tracked_agents = max_tracked_agents
         self.agent_pose_jitter = agent_pose_jitter
         self.agent_velocity_jitter = agent_velocity_jitter
-        self.tracker = _resolve_tracker(observation_mode, tracker)
-        self._previous_frames: Tuple[Tuple[np.ndarray, float], ...] = tuple(previous_frames or ())
 
     @property
     def config_id(self) -> str:
         """Deterministic identifier covering the particles and the stamping configuration.
 
         Two beliefs holding identical particles but jittering them differently behave
-        differently on the next step, so the jitter widths belong in the identity. The carried
-        frames do not: they are observation, not configuration.
+        differently on the next step, so the jitter widths belong in the identity. The
+        observation does not: it is one step's reading, not configuration, and folding it in
+        would give an identity that changes every frame and defeats the caching the id exists
+        for.
         """
         return config_to_id(
             {
@@ -202,25 +196,22 @@ class TrackedAgentsBelief(WeightedParticleBeliefReinvigoration):
         pomdp: Environment,
         belief: "WeightedParticleBelief",
     ) -> "TrackedAgentsBelief":
-        """Stamp this step's tracked agent rows onto every particle."""
+        """Stamp this step's observed agent rows onto every particle."""
         del action, pomdp
         particles = np.array(belief.particles, dtype=float, copy=True)
-        heading = _mean_heading(particles, belief.normalized_weights)
-        grid: Optional[np.ndarray] = None
         if self.observation_mode is ObservationMode.MDP:
             rows = self._mdp_rows(observation)
         else:
-            grid = self._require_grid(observation)
-            rows = self._pomdp_rows(grid, heading)
+            rows = self._detection_rows(observation)
         self._stamp(particles, rows)
-        return self._successor(particles, belief, grid, heading)
+        return self._successor(particles, belief)
 
     def _mdp_rows(self, observation: Any) -> np.ndarray:
         if not _has_key(observation, AGENTS_KEY):
             raise ValueError(
                 f"ObservationMode.MDP expects an '{AGENTS_KEY}' block in the observation, got "
                 f"keys {_observation_keys(observation)}. Silently falling back to the "
-                f"occupancy grid would leave the MDP arm reading a degraded observation."
+                f"detections would leave the MDP arm reading a degraded observation."
             )
         rows = np.asarray(observation[AGENTS_KEY], dtype=float)
         expected = self.max_tracked_agents * AGENT_SLOT_WIDTH
@@ -231,61 +222,52 @@ class TrackedAgentsBelief(WeightedParticleBeliefReinvigoration):
             )
         return rows.reshape(self.max_tracked_agents, AGENT_SLOT_WIDTH)
 
-    def _require_grid(self, observation: Any) -> np.ndarray:
-        if not _has_key(observation, OCCUPANCY_KEY):
-            raise ValueError(
-                f"ObservationMode.POMDP expects an '{OCCUPANCY_KEY}' grid in the observation, "
-                f"got keys {_observation_keys(observation)}. Degrading to zero agent rows "
-                f"here would produce a velocity-blind planner that still looks like it works."
+    def _detection_rows(self, observation: Any) -> np.ndarray:
+        """Turn ``(D, 5)`` detections into ``(K, 5)`` agent slots, nearest first.
+
+        A detection and an agent slot now carry the same four numbers in the same frame, so
+        this is a copy rather than a reconstruction: the relative position and both
+        components of relative velocity go straight across, and only the presence flag has to
+        be filled in.
+        """
+        detections = self._require_detections(observation)
+        reported = detections[detections[:, DETECTION_PRESENT] > 0.5]
+        # Nearest-K is the policy, and dropping the rest is intended -- but doing it quietly
+        # is not. In traffic heavier than anything this has been run against the planner would
+        # simply stop seeing the overflow and treat that road as empty. That is a false
+        # negative in the one channel the POMDP arm has, and it looks exactly like success.
+        if len(reported) > self.max_tracked_agents:
+            warnings.warn(
+                f"Observed {len(reported)} detections but only max_tracked_agents="
+                f"{self.max_tracked_agents} slots are available; the "
+                f"{len(reported) - self.max_tracked_agents} furthest were dropped and the "
+                f"planner will treat that road as empty. Raise max_tracked_agents.",
+                UserWarning,
+                stacklevel=3,
             )
-        return np.asarray(observation[OCCUPANCY_KEY])
-
-    def _pomdp_rows(self, grid: np.ndarray, heading: float) -> np.ndarray:
-        tracker = self.tracker
-        if tracker is None:
-            raise ValueError("ObservationMode.POMDP requires a tracker, but tracker is None.")
-        if len(self._previous_frames) < tracker.frame_stride:
-            # Not enough history yet: report where the opponents are and admit that their
-            # velocity is unknown, rather than differencing against a frame that does not
-            # exist or one closer than the configured baseline. With the default stride of 1
-            # this is the episode's first step only.
-            clusters = tracker.detect_clusters(grid)
-        else:
-            reference_grid, reference_heading = self._previous_frames[0]
-            clusters = tracker.track(reference_grid, grid, wrap_to_pi(heading - reference_heading))
-        return self._rows_from_clusters(clusters)
-
-    def _next_frames(
-        self, grid: Optional[np.ndarray], heading: float
-    ) -> Tuple[Tuple[np.ndarray, float], ...]:
-        # The window holds exactly `frame_stride` frames, so its oldest entry is always the
-        # one `frame_stride` steps back. Keeping only the immediately preceding frame would
-        # make a stride above 1 divide a one-step displacement by several steps and
-        # under-report every velocity by that factor -- the knob would silently lie instead
-        # of widening the baseline.
-        if grid is None or self.tracker is None:
-            return ()
-        # Copied, not referenced. highway-env 1.12.1 happens to hand back a fresh array per
-        # tick, but that is an implementation detail of its `nan_to_num(...).astype(...)`
-        # tail rather than a contract -- it fills one internal grid buffer in place -- and
-        # the encoded observation passes through this belief from an arbitrary caller. If
-        # the reference frame ever aliased the current one, every opponent would difference
-        # to a standstill: a silently velocity-blind planner, not a crash.
-        window = self._previous_frames + ((grid.copy(), heading),)
-        return window[-self.tracker.frame_stride :]
-
-    def _rows_from_clusters(self, clusters: List[TrackedCluster]) -> np.ndarray:
         rows = np.zeros((self.max_tracked_agents, AGENT_SLOT_WIDTH), dtype=float)
-        nearest = sorted(clusters, key=lambda cluster: float(np.linalg.norm(cluster.centre)))
-        for slot, cluster in enumerate(nearest[: self.max_tracked_agents]):
-            rows[slot] = (
-                1.0,
-                float(cluster.centre[0]),
-                float(cluster.centre[1]),
-                float(cluster.velocity[0]),
-                float(cluster.velocity[1]),
-            )
+        kept = reported[: self.max_tracked_agents]
+        filled = len(kept)
+        rows[:filled, AGENT_PRESENT] = 1.0
+        rows[:filled, AGENT_REL_X : AGENT_REL_X + 2] = kept[
+            :, DETECTION_REL_X : DETECTION_REL_X + 2
+        ]
+        rows[:filled, AGENT_REL_VX : AGENT_REL_VX + 2] = kept[
+            :, DETECTION_REL_VX : DETECTION_REL_VX + 2
+        ]
         return rows
+
+    def _require_detections(self, observation: Any) -> np.ndarray:
+        if not _has_key(observation, DETECTIONS_KEY):
+            raise ValueError(
+                f"ObservationMode.POMDP expects a '{DETECTIONS_KEY}' block in the "
+                f"observation, got keys {_observation_keys(observation)}. Degrading to zero "
+                f"agent rows here would produce a planner that sees no traffic at all and "
+                f"still looks like it works."
+            )
+        return np.asarray(observation[DETECTIONS_KEY], dtype=float).reshape(
+            -1, DETECTION_SLOT_WIDTH
+        )
 
     def _stamp(self, particles: np.ndarray, rows: np.ndarray) -> None:
         expected = EGO_STATE_WIDTH + rows.size
@@ -299,9 +281,9 @@ class TrackedAgentsBelief(WeightedParticleBeliefReinvigoration):
         particles[:, EGO_STATE_WIDTH:] = block + self._jitter(len(particles), rows)
 
     def _jitter(self, count: int, rows: np.ndarray) -> np.ndarray:
-        # Two widths, not one: the position estimate is good to about a cell while the
-        # velocity estimate is quantised at 15 m/s, so a shared std would either erase the
-        # position information or pretend the velocity is precise.
+        # Two widths, not one: the two blocks are measured to different accuracies and
+        # propagated with different amounts of model error, so a shared std would either
+        # erase the position information or under-spread the velocity.
         noise = np.zeros((count, self.max_tracked_agents, AGENT_SLOT_WIDTH))
         # Thresholded, not compared to exactly 1.0: in MDP mode these rows come from the
         # observation rather than from this package, and a presence flag that arrived as
@@ -321,11 +303,7 @@ class TrackedAgentsBelief(WeightedParticleBeliefReinvigoration):
         return noise.reshape(count, -1)
 
     def _successor(
-        self,
-        particles: np.ndarray,
-        belief: "WeightedParticleBelief",
-        grid: Optional[np.ndarray],
-        heading: float,
+        self, particles: np.ndarray, belief: "WeightedParticleBelief"
     ) -> "TrackedAgentsBelief":
         return TrackedAgentsBelief(
             particles=particles,
@@ -334,34 +312,9 @@ class TrackedAgentsBelief(WeightedParticleBeliefReinvigoration):
             max_tracked_agents=self.max_tracked_agents,
             agent_pose_jitter=self.agent_pose_jitter,
             agent_velocity_jitter=self.agent_velocity_jitter,
-            tracker=self.tracker,
             resampling=belief.resampling,
             ess_factor=belief.ess_factor,
-            previous_frames=self._next_frames(grid, heading),
         )
-
-
-def _resolve_tracker(
-    observation_mode: ObservationMode, tracker: Optional[OccupancyVelocityTracker]
-) -> Optional[OccupancyVelocityTracker]:
-    if tracker is not None:
-        return tracker
-    if observation_mode is ObservationMode.MDP:
-        return None
-    return OccupancyVelocityTracker()
-
-
-def _mean_heading(particles: np.ndarray, weights: np.ndarray) -> float:
-    # Weighted circular mean, on two counts. Circular because headings wrap, so averaging the
-    # raw radians puts the mean near zero whenever the particles straddle +/-pi -- a bogus yaw
-    # delta of about pi that would de-rotate the whole reference frame backwards. Weighted
-    # because the filter only resamples when ESS drops, so between resamples the particle
-    # cloud can be dominated by a handful of heavy particles and an unweighted mean would let
-    # near-zero-probability headings steer the de-rotation.
-    headings = particles[:, EGO_HEADING]
-    sin_mean = float(np.sum(weights * np.sin(headings)))
-    cos_mean = float(np.sum(weights * np.cos(headings)))
-    return float(np.arctan2(sin_mean, cos_mean))
 
 
 def _has_key(observation: Any, key: str) -> bool:

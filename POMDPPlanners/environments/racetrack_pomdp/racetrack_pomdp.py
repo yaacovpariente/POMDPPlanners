@@ -12,8 +12,9 @@ partial observability, the two runs being compared must differ in what the agent
 in nothing else. Every other driving environment here is partially observed by
 construction, so that comparison was impossible. Selecting
 :class:`~POMDPPlanners.environments.racetrack_pomdp.racetrack_schema.ObservationMode`
-swaps only the observation block of the simulator config; the track, the opponent, the
-dynamics, the step rates and the reward are shared. See
+changes only what the world measures; the track, the opponent, the dynamics, the step rates
+and the reward come off one code path, and a test asserts the two arms' simulator
+configurations are byte-identical once the observation block is removed. See
 :mod:`~POMDPPlanners.environments.racetrack_pomdp.racetrack_schema`.
 
 Like the CARLA and nuPlan worlds, this one is **forward-only**: it advances a single true
@@ -30,13 +31,39 @@ The **state** is the same in both modes and is documented in ``racetrack_schema`
 - ``ObservationMode.MDP``: a ``(max_tracked_agents + 1, 5)`` float32 table of
   ``[presence, x, y, vx, vy]``, absolute and unnormalised, ego first. Only the other
   vehicles' driver policy stays hidden, so this is a *near*-MDP baseline, not a true MDP.
-- ``ObservationMode.POMDP``: a ``(2, 12, 12)`` float32 occupancy grid of presence and
-  on-road flags over a +/-18 m window at 3 m resolution, aligned to the ego's own axes.
-  Every velocity, every vehicle identity, and everything outside the window is withheld.
+- ``ObservationMode.POMDP``: a :class:`~POMDPPlanners.environments.racetrack_pomdp.
+  racetrack_schema.RacetrackObservation` — the ego's own pose and speed, a noisy lane-camera
+  reading of lateral offset and lane-relative heading, the lane's curvature at fixed
+  distances ahead, and a list of unlabeled detections.
 
-Note:
-    The ego is written into the occupancy grid, always at the centre cell. Anything
-    reading the grid must account for that; the belief's tracker drops it explicitly.
+**The rule the POMDP arm is built on: the reading is the whole state, minus the vehicles the
+sensor cannot see.** That is what decides each channel:
+
+* **Ego pose.** ``x``, ``y``, heading and arclength along the lap, at the near-exact widths
+  GPS/IMU and a wheel odometer deliver. Withholding these made the arm a localisation
+  problem as well as a tracking one, and only the second is what a range gate controls.
+* **Speedometer.** Emitted exactly, which a real one is to well under a percent.
+* **Lane camera.** Lateral offset and lane-relative heading, with noise, because
+  highway-env's ``lane_offset`` is exact and no camera is.
+* **Curvature ahead.** The same camera's other product: the curvature of the lane at each of
+  ``curvature_lookahead_m`` metres along it. This world reads it off the true track geometry
+  — the lane graph walked from the ego's own lane, which is also what its arclength slot is
+  numbered against — and corrupts it at ``curvature_std_1pm``.
+* **Detections.** For every vehicle within ``max_detection_range_m`` that is not behind a
+  closer one, a noisy ``[rel_x, rel_y, rel_vx, rel_vy]`` in the ego body frame — the whole
+  kinematic row, not a projection of it. A vehicle failing either test produces **no row at
+  all**, and that absence is the arm's hidden state. Detections carry no identity and are
+  ordered by measured range, so a planner cannot follow one across a step except through its
+  filter.
+
+``max_detection_range_m`` is therefore the dial, and the two arms are its two ends: at
+``R -> inf`` this reading is the state to within the sensor widths, and as R shrinks the
+traffic drops out of it first. What stays hidden at any R is the other drivers' intent,
+whatever sits behind an occluder, and which return was which vehicle.
+
+The noise is drawn from NumPy's global generator, so ``np.random.seed`` reproduces a run.
+The constructor's ``seed=`` covers the simulator's own randomness and not this, which is a
+known limit rather than a design choice.
 
 Classes:
     RacetrackPOMDP: Forward-only adapter exposing a racetrack session as a world.
@@ -60,8 +87,16 @@ Example:
     >>> # Sample complete step (action is an index into the control presets)
     >>> action = 4  # coast, straight ahead
     >>> next_state, observation, reward = env.sample_next_step(initial_state, action)
-    >>> observation.shape
-    (2, 12, 12)
+    >>> observation.ego_pose.shape
+    (4,)
+    >>> observation.ego_speed.shape
+    (1,)
+    >>> observation.lane_pose.shape
+    (2,)
+    >>> observation.curvature_ahead.shape
+    (3,)
+    >>> observation.detections.shape
+    (4, 5)
 """
 
 from collections.abc import Hashable
@@ -75,7 +110,14 @@ from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.core.environment import Environment, SpaceInfo, SpaceType
 from POMDPPlanners.core.simulation.step_info_metrics import EpisodeReduction, StepInfoMetric
 from POMDPPlanners.environments.racetrack_pomdp.racetrack_track_geometry import (
+    TrackGeometry,
+    build_track_geometry,
     lane_curvature,
+)
+from POMDPPlanners.environments.racetrack_pomdp.racetrack_world_sensors import (
+    SensorConfig,
+    WorldSensors,
+    relative_vehicles,
 )
 from POMDPPlanners.environments.racetrack_pomdp.racetrack_schema import (
     AGENT_PRESENT,
@@ -83,11 +125,22 @@ from POMDPPlanners.environments.racetrack_pomdp.racetrack_schema import (
     AGENT_SLOT_WIDTH,
     DEFAULT_ACTION_PRESETS,
     DEFAULT_ACTION_REWARD,
+    DEFAULT_BLOCKER_HALF_WIDTH_M,
     DEFAULT_COLLISION_REWARD,
+    DEFAULT_CURVATURE_LOOKAHEAD_M,
+    DEFAULT_CURVATURE_STD_1PM,
+    DEFAULT_DETECTION_POSITION_STD_M,
+    DEFAULT_DETECTION_VELOCITY_STD,
     DEFAULT_DURATION,
+    DEFAULT_EGO_ARCLENGTH_STD_M,
+    DEFAULT_EGO_HEADING_STD_RAD,
+    DEFAULT_EGO_POSITION_STD_M,
     DEFAULT_ENV_ID,
     DEFAULT_LANE_CENTERING_COST,
     DEFAULT_LANE_CENTERING_REWARD,
+    DEFAULT_LANE_HEADING_STD_RAD,
+    DEFAULT_LANE_LATERAL_STD_M,
+    DEFAULT_MAX_DETECTION_RANGE_M,
     DEFAULT_MAX_TRACKED_AGENTS,
     DEFAULT_NEAR_MISS_DISTANCE_M,
     DEFAULT_OTHER_VEHICLES,
@@ -99,15 +152,29 @@ from POMDPPlanners.environments.racetrack_pomdp.racetrack_schema import (
     EGO_STATE_WIDTH,
     MAX_ACCELERATION_MPS2,
     ObservationMode,
+    RacetrackObservation,
     build_racetrack_config,
+    ego_speed_from_kinematics_row,
     racetrack_reward,
-    rotate,
     state_agent_rows,
     wrap_to_pi,
 )
 
 _ROLE_NEXT_STATE = "next_state"
 _ROLE_REWARD = "reward"
+
+
+def _observation_arrays(observation: Any) -> Tuple[np.ndarray, ...]:
+    """The arrays making up one reading: four in POMDP mode, one in MDP mode."""
+    if isinstance(observation, tuple):
+        return tuple(np.asarray(part) for part in observation)
+    return (np.asarray(observation),)
+
+
+def _copy_observation(observation: Any) -> Any:
+    if isinstance(observation, RacetrackObservation):
+        return RacetrackObservation(*(np.array(part, copy=True) for part in observation))
+    return np.array(observation, copy=True)
 
 
 class RacetrackStepChannel(Enum):
@@ -142,6 +209,8 @@ class _RacetrackSession:
         env_id: str,
         config: Dict[str, Any],
         max_tracked_agents: int,
+        observation_mode: ObservationMode,
+        sensor: SensorConfig,
         render_mode: Optional[str] = None,
     ) -> None:
         # Imported here, not at module scope, so the package can be imported, and the
@@ -158,16 +227,19 @@ class _RacetrackSession:
         # unwrapped racetrack env.
         self._env: Any = gymnasium.make(env_id, config=config, render_mode=render_mode)
         self._max_tracked_agents = max_tracked_agents
+        self._observation_mode = observation_mode
+        self._sensors = WorldSensors(sensor, max_tracked_agents)
         self._lane_offsets: Dict[Any, float] = {}
+        self._geometry: Optional[TrackGeometry] = None
 
     def render_frame(self) -> Optional[np.ndarray]:
         """Return the current bird's-eye frame, or None if not rendering."""
         frame = self._env.render()
         return None if frame is None else np.asarray(frame)
 
-    def reset(self, seed: Optional[int] = None) -> Tuple[np.ndarray, np.ndarray]:
+    def reset(self, seed: Optional[int] = None) -> Tuple[np.ndarray, Any]:
         observation = self._env.reset(seed=seed)[0]
-        return self._read_state(), np.asarray(observation)
+        return self._read_state(), self._encode(observation)
 
     def step(self, acceleration: float, steering: float) -> Dict[str, Any]:
         command = np.array([acceleration, steering], dtype=np.float32)
@@ -176,11 +248,45 @@ class _RacetrackSession:
         vehicle = self._ego()
         return {
             "state": self._read_state(),
-            "observation": np.asarray(observation),
+            "observation": self._encode(observation),
             "crashed": bool(vehicle.crashed),
             "off_road": not bool(vehicle.on_road),
             "truncated": bool(truncated),
         }
+
+    def _encode(self, observation: Any) -> Any:
+        """Turn the simulator's raw reading into what this world promises to emit.
+
+        In MDP mode that is the kinematics table unchanged. In POMDP mode only the ego's own
+        speed comes from the simulator's reading, and everything else in that block is
+        dropped here before the observation leaves the world; see the note beside
+        ``EGO_KINEMATICS_VEHICLES_COUNT`` for why the block arrives wider than the ego row.
+
+        Every other channel is measured off the ego vehicle, the road network and the vehicle
+        list by
+        :class:`~POMDPPlanners.environments.racetrack_pomdp.racetrack_world_sensors.WorldSensors`,
+        because highway-env has no observation type reporting arclength around a lap,
+        lane-relative pose, curvature ahead, a range gate or occlusion.
+        """
+        if self._observation_mode is not ObservationMode.POMDP:
+            return np.asarray(observation)
+        vehicle = self._ego()
+        return self._sensors.read(
+            ego_speed=ego_speed_from_kinematics_row(np.asarray(observation, dtype=float)[0]),
+            ego=vehicle,
+            arclength=self._arclength_of(vehicle),
+            geometry=self._track_geometry(),
+            others=self._other_vehicles(vehicle),
+        )
+
+    def _other_vehicles(self, ego: Any) -> List[Any]:
+        return [vehicle for vehicle in self._env.unwrapped.road.vehicles if vehicle is not ego]
+
+    def _track_geometry(self) -> TrackGeometry:
+        if self._geometry is None:
+            self._arclength_of(self._ego())
+        assert self._geometry is not None
+        return self._geometry
 
     def _ego(self) -> Any:
         return self._env.unwrapped.vehicle
@@ -211,7 +317,11 @@ class _RacetrackSession:
         """
         lane_index = vehicle.lane_index
         if lane_index not in self._lane_offsets:
+            # The curvature profile is rebuilt from the same lane in the same breath. Both
+            # number distance from that lane's start, so a re-base that moved one and not the
+            # other would have the camera reporting the corner at the wrong arclength.
             self._lane_offsets = self._build_lane_offsets(lane_index)
+            self._geometry = build_track_geometry(self._env.unwrapped.road.network, lane_index)
         local = float(np.asarray(vehicle.lane_offset, dtype=float)[0])
         return self._lane_offsets.get(lane_index, 0.0) + local
 
@@ -231,14 +341,21 @@ class _RacetrackSession:
         return offsets
 
     def _read_agent_slots(self, ego: Any) -> np.ndarray:
+        # The true state, so no range gate, no occlusion and no noise: what the sensor can
+        # and cannot see is a property of the observation, not of the world's state.
         rows = np.zeros((self._max_tracked_agents, AGENT_SLOT_WIDTH), dtype=float)
-        others = [v for v in self._env.unwrapped.road.vehicles if v is not ego]
-        ranked = sorted(others, key=lambda v: float(np.linalg.norm(v.position - ego.position)))
-        heading = float(ego.heading)
-        for slot, other in enumerate(ranked[: self._max_tracked_agents]):
-            position = rotate(np.asarray(other.position, dtype=float) - ego.position, -heading)
-            velocity = rotate(np.asarray(other.velocity, dtype=float) - ego.velocity, -heading)
-            rows[slot] = [1.0, position[0], position[1], velocity[0], velocity[1]]
+        positions, velocities = relative_vehicles(ego, self._other_vehicles(ego))
+        if len(positions) == 0:
+            return rows.reshape(-1)
+        ranked = np.argsort(np.linalg.norm(positions, axis=1))[: self._max_tracked_agents]
+        for slot, index in enumerate(ranked):
+            rows[slot] = [
+                1.0,
+                positions[index, 0],
+                positions[index, 1],
+                velocities[index, 0],
+                velocities[index, 1],
+            ]
         return rows.reshape(-1)
 
 
@@ -257,6 +374,17 @@ class RacetrackPOMDP(Environment):
             index into this sequence.
         max_tracked_agents: Number of fixed agent slots in the state.
         near_miss_distance_m: Range at or below which a step counts as a near miss.
+        ego_position_std_m: Localisation noise on the reported ``x`` and ``y``, in metres.
+        ego_heading_std_rad: Localisation noise on the reported heading, in radians.
+        ego_arclength_std_m: Odometry noise on the reported arclength, in metres.
+        lane_lateral_std_m: Lane camera's lateral-offset noise, in metres.
+        lane_heading_std_rad: Lane camera's heading noise, in radians.
+        curvature_lookahead_m: Distances along the lane the camera reports curvature at.
+        curvature_std_1pm: Lane camera's curvature noise, in 1/m.
+        max_detection_range_m: Range beyond which no vehicle is reported. The dial.
+        detection_position_std_m: Per-axis position noise on a detection, in metres.
+        detection_velocity_std: Per-axis relative-velocity noise on a detection, in m/s.
+        blocker_half_width_m: Half-width of an occluding vehicle, in metres.
 
     Example:
         Running one interaction against the live simulator::
@@ -283,6 +411,17 @@ class RacetrackPOMDP(Environment):
         action_reward: float = DEFAULT_ACTION_REWARD,
         speed_limit: float = DEFAULT_SPEED_LIMIT,
         near_miss_distance_m: float = DEFAULT_NEAR_MISS_DISTANCE_M,
+        ego_position_std_m: float = DEFAULT_EGO_POSITION_STD_M,
+        ego_heading_std_rad: float = DEFAULT_EGO_HEADING_STD_RAD,
+        ego_arclength_std_m: float = DEFAULT_EGO_ARCLENGTH_STD_M,
+        lane_lateral_std_m: float = DEFAULT_LANE_LATERAL_STD_M,
+        lane_heading_std_rad: float = DEFAULT_LANE_HEADING_STD_RAD,
+        curvature_lookahead_m: Sequence[float] = DEFAULT_CURVATURE_LOOKAHEAD_M,
+        curvature_std_1pm: float = DEFAULT_CURVATURE_STD_1PM,
+        max_detection_range_m: float = DEFAULT_MAX_DETECTION_RANGE_M,
+        detection_position_std_m: float = DEFAULT_DETECTION_POSITION_STD_M,
+        detection_velocity_std: float = DEFAULT_DETECTION_VELOCITY_STD,
+        blocker_half_width_m: float = DEFAULT_BLOCKER_HALF_WIDTH_M,
         terminate_off_road: bool = True,
         config_overrides: Optional[Dict[str, Any]] = None,
         render_mode: Optional[str] = None,
@@ -312,6 +451,44 @@ class RacetrackPOMDP(Environment):
             action_reward: Weight on the control-effort penalty. Defaults to -0.3.
             speed_limit: Track speed limit in m/s. Defaults to 10.0.
             near_miss_distance_m: Near-miss range in metres. Defaults to 5.0.
+            ego_position_std_m: Localisation noise on the reported ``x`` and ``y``, in
+                metres. Defaults to 0.1, the decimetre band a production GPS/IMU stack
+                delivers. Near-exact on purpose: this arm withholds *vehicles*, not the
+                ego's own pose, and a wide width here would add a localisation problem on
+                top of the tracking one the range gate poses.
+            ego_heading_std_rad: Localisation noise on the reported heading, in radians.
+                Defaults to 0.01, which is 0.57 degrees.
+            ego_arclength_std_m: Odometry noise on the reported distance round the lap, in
+                metres. Defaults to 0.1. It reads off the same lane walk the arclength state
+                slot is numbered against, so the two cannot disagree about where a corner is.
+            lane_lateral_std_m: Lane camera's lateral-offset noise, in metres. Defaults to
+                0.05, the conservative end of the centimetre-scale accuracy a production
+                mono-camera lane detector is specified at over the few metres this window
+                covers. Unlike the speedometer this is real sensor noise: highway-env's
+                ``lane_offset`` is exact, and emitting it unchanged would hand the planner
+                a lane-relative pose no camera delivers. Set to 0.0 only in tests.
+            lane_heading_std_rad: Lane camera's heading noise, in radians. Defaults to
+                0.01, which is 0.57 degrees — the sub-degree band the same detectors quote.
+            curvature_lookahead_m: Distances along the lane, in metres, that the camera
+                reports curvature at. Defaults to ``(10.0, 20.0, 30.0)``. The planner's
+                model must be built with the same distances; it scores one Gaussian per
+                entry, so a mismatch compares curvature at one distance against another.
+            curvature_std_1pm: Lane camera's curvature noise, in 1/m. Defaults to 0.002,
+                derived from the same detector's decimetre lateral accuracy carried out to
+                the nearest lookahead; see the note beside its constant.
+            max_detection_range_m: Range in metres beyond which no vehicle is reported.
+                Defaults to 40.0. **This is the arm's dial**: everything else in the state
+                is observed, so raising it towards infinity walks the POMDP arm continuously
+                back to the MDP baseline and lowering it hides more of the traffic.
+            detection_position_std_m: Per-axis position noise on a detection, in metres.
+                Defaults to 0.5.
+            detection_velocity_std: Per-axis relative-velocity noise on a detection, in m/s.
+                Defaults to 0.3, tighter than the position width because a velocity comes
+                off a frequency shift rather than a time of flight. Applied to both
+                components alike: a visible vehicle's whole velocity is reported.
+            blocker_half_width_m: Half-width in metres of a vehicle treated as an occluder.
+                Defaults to 1.0, a 2 m-wide car. Occlusion is deterministic: a vehicle is
+                masked when a closer one lies within the half-angle its body subtends.
             terminate_off_road: Whether leaving the road ends the episode. Defaults to True.
             config_overrides: Extra HighwayEnv config keys, applied to both arms alike.
             seed: Seed for the first reset, for reproducibility. Defaults to None.
@@ -335,6 +512,19 @@ class RacetrackPOMDP(Environment):
         )
         self.max_tracked_agents = max_tracked_agents
         self.near_miss_distance_m = near_miss_distance_m
+        self.ego_position_std_m = float(ego_position_std_m)
+        self.ego_heading_std_rad = float(ego_heading_std_rad)
+        self.ego_arclength_std_m = float(ego_arclength_std_m)
+        self.lane_lateral_std_m = float(lane_lateral_std_m)
+        self.lane_heading_std_rad = float(lane_heading_std_rad)
+        self.curvature_lookahead_m: Tuple[float, ...] = tuple(
+            float(distance) for distance in curvature_lookahead_m
+        )
+        self.curvature_std_1pm = float(curvature_std_1pm)
+        self.max_detection_range_m = float(max_detection_range_m)
+        self.detection_position_std_m = float(detection_position_std_m)
+        self.detection_velocity_std = float(detection_velocity_std)
+        self.blocker_half_width_m = float(blocker_half_width_m)
         # Kept as an attribute as well as a config key: highway-env consults it in
         # `_is_terminated`, and this adapter decides termination itself rather than
         # reading the simulator's flag, so the two must be driven by the same value.
@@ -365,7 +555,7 @@ class RacetrackPOMDP(Environment):
 
         self._session: Optional[_RacetrackSession] = None
         self._live_state: Optional[np.ndarray] = None
-        self._latest_obs: Optional[np.ndarray] = None
+        self._latest_obs: Optional[Any] = None
         self._terminated: bool = False
         self._seeded: bool = False
         self._pending: Optional[Dict[str, Any]] = None
@@ -422,6 +612,20 @@ class RacetrackPOMDP(Environment):
                 env_id=self.env_id,
                 config=self.simulator_config,
                 max_tracked_agents=self.max_tracked_agents,
+                observation_mode=self.observation_mode,
+                sensor=SensorConfig(
+                    ego_position_std_m=self.ego_position_std_m,
+                    ego_heading_std_rad=self.ego_heading_std_rad,
+                    ego_arclength_std_m=self.ego_arclength_std_m,
+                    lane_lateral_std_m=self.lane_lateral_std_m,
+                    lane_heading_std_rad=self.lane_heading_std_rad,
+                    curvature_lookahead_m=self.curvature_lookahead_m,
+                    curvature_std_1pm=self.curvature_std_1pm,
+                    max_detection_range_m=self.max_detection_range_m,
+                    detection_position_std_m=self.detection_position_std_m,
+                    detection_velocity_std=self.detection_velocity_std,
+                    blocker_half_width_m=self.blocker_half_width_m,
+                ),
                 render_mode=self.render_mode,
             )
         return self._session
@@ -686,15 +890,19 @@ class RacetrackPOMDP(Environment):
                     parent._reset()
                     observation = parent._latest_obs
                 assert observation is not None
-                return [np.array(observation, copy=True) for _ in range(n_samples)]
+                return [_copy_observation(observation) for _ in range(n_samples)]
 
         return InitialObservation()
 
     def is_equal_observation(self, observation1: Any, observation2: Any) -> bool:
-        return np.array_equal(np.asarray(observation1), np.asarray(observation2))
+        left = _observation_arrays(observation1)
+        right = _observation_arrays(observation2)
+        return len(left) == len(right) and all(
+            np.array_equal(one, other) for one, other in zip(left, right)
+        )
 
     def hash_observation(self, observation: Any) -> Hashable:
-        return np.asarray(observation).tobytes()
+        return tuple(array.tobytes() for array in _observation_arrays(observation))
 
     def hash_action(self, action: Any) -> Hashable:
         if isinstance(action, np.ndarray):
