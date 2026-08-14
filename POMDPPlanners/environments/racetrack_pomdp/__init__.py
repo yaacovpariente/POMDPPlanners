@@ -23,9 +23,11 @@ Classes:
     ObservedTrackModel: Planner estimates curvature from the road it can see.
     TrackGeometry: Piecewise-constant curvature of a lap, indexed by arclength.
     RacetrackVectorizedModel: Batched torch counterpart of that model, for VOPP.
-    TrackedAgentsBelief: Particle belief that stamps grid-tracked agents onto particles.
-    OccupancyVelocityTracker: Turns consecutive occupancy grids into cluster velocities.
-    TrackedCluster: One tracked occupancy cluster with its relative velocity.
+    TrackedAgentsBelief: Particle belief that stamps observed detections onto particles.
+    SensorObservationModel: The POMDP arm's ego pose, lane camera and detections.
+    KinematicsObservationModel: The MDP arm's near-fully-observed kinematics table.
+    WorldSensors: What the world measures before its reading leaves the simulator.
+    SensorConfig: Every width and limit those sensors are simulated at.
     ObservationMode: Selects the fully-observed or partially-observed arm.
     RacetrackMetric: Episode-level metric names.
     RacetrackStepChannel: Per-step measurement channel names.
@@ -39,14 +41,14 @@ from POMDPPlanners.environments.racetrack_pomdp.racetrack_model_pomdp import Rac
 from POMDPPlanners.environments.racetrack_pomdp.racetrack_observed_track_model import (
     ObservedTrackModel,
 )
-from POMDPPlanners.environments.racetrack_pomdp.racetrack_occupancy_tracker import (
-    OccupancyVelocityTracker,
-    TrackedCluster,
-)
 from POMDPPlanners.environments.racetrack_pomdp.racetrack_pomdp import (
     RacetrackMetric,
     RacetrackPOMDP,
     RacetrackStepChannel,
+)
+from POMDPPlanners.environments.racetrack_pomdp.racetrack_sensor_model import (
+    KinematicsObservationModel,
+    SensorObservationModel,
 )
 from POMDPPlanners.environments.racetrack_pomdp.racetrack_schema import (
     AGENT_SLOT_WIDTH,
@@ -65,24 +67,30 @@ from POMDPPlanners.environments.racetrack_pomdp.racetrack_track_geometry import 
 from POMDPPlanners.environments.racetrack_pomdp.racetrack_vectorized_model import (
     RacetrackVectorizedModel,
 )
+from POMDPPlanners.environments.racetrack_pomdp.racetrack_world_sensors import (
+    SensorConfig,
+    WorldSensors,
+)
 
 __all__ = [
     "AGENT_SLOT_WIDTH",
     "DEFAULT_ACTION_PRESETS",
     "DEFAULT_MAX_TRACKED_AGENTS",
     "EGO_STATE_WIDTH",
+    "KinematicsObservationModel",
     "KnownTrackModel",
     "ObservationMode",
     "ObservedTrackModel",
-    "OccupancyVelocityTracker",
     "RacetrackMetric",
     "RacetrackModelPOMDP",
     "RacetrackPOMDP",
     "RacetrackStepChannel",
     "RacetrackVectorizedModel",
+    "SensorConfig",
+    "SensorObservationModel",
     "TrackGeometry",
     "TrackedAgentsBelief",
-    "TrackedCluster",
+    "WorldSensors",
     "build_racetrack_config",
     "build_track_geometry",
     "geometry_from_world",

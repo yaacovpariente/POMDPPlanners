@@ -22,7 +22,7 @@ two different places —
 :class:`~POMDPPlanners.environments.racetrack_pomdp.racetrack_known_track_model.KnownTrackModel`
 looks the circuit up by arclength, and
 :class:`~POMDPPlanners.environments.racetrack_pomdp.racetrack_observed_track_model.ObservedTrackModel`
-reads it out of the observation's on-road layer. Curvature is deliberately *not* a state
+reads it out of the observation's curvature channel. Curvature is deliberately *not* a state
 slot: it is a property of the road, so freezing it in the state would encode a prediction
 rather than a fact, and a rollout reusing one frozen value drives straight through every
 corner.
@@ -54,18 +54,45 @@ import numpy as np
 
 from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.core.environment import DiscreteActionsEnvironment, SpaceInfo, SpaceType
+from POMDPPlanners.environments.racetrack_pomdp.racetrack_detection import (
+    validate_detection_rates,
+)
+from POMDPPlanners.environments.racetrack_pomdp.racetrack_sensor_model import (
+    CURVATURE_AHEAD_KEY,
+    DETECTIONS_KEY,
+    EGO_POSE_KEY,
+    EGO_SPEED_KEY,
+    LANE_POSE_KEY,
+    KinematicsObservationModel,
+    ObservationArm,
+    SensorObservationModel,
+)
 from POMDPPlanners.environments.racetrack_pomdp.racetrack_schema import (
     AGENT_PRESENT,
     AGENT_REL_VX,
     AGENT_REL_X,
-    AGENT_REL_Y,
     AGENT_SLOT_WIDTH,
     DEFAULT_ACTION_PRESETS,
     DEFAULT_ACTION_REWARD,
+    DEFAULT_BLOCKER_HALF_WIDTH_M,
+    DEFAULT_CLUTTER_POSITION_SCALE_M,
+    DEFAULT_CLUTTER_VELOCITY_SCALE,
     DEFAULT_COLLISION_REWARD,
+    DEFAULT_CURVATURE_LOOKAHEAD_M,
+    DEFAULT_CURVATURE_STD_1PM,
+    DEFAULT_DETECTION_POSITION_STD_M,
+    DEFAULT_DETECTION_VELOCITY_STD,
+    DEFAULT_EGO_ARCLENGTH_STD_M,
+    DEFAULT_EGO_HEADING_STD_RAD,
+    DEFAULT_EGO_POSITION_STD_M,
     DEFAULT_LANE_CENTERING_COST,
     DEFAULT_LANE_CENTERING_REWARD,
+    DEFAULT_LANE_HEADING_STD_RAD,
+    DEFAULT_LANE_LATERAL_STD_M,
+    DEFAULT_MAX_DETECTION_RANGE_M,
     DEFAULT_MAX_TRACKED_AGENTS,
+    DEFAULT_PRESENCE_FALSE_ALARM_PROB,
+    DEFAULT_PRESENCE_MISS_PROB,
     DEFAULT_SPEED_LIMIT,
     EGO_ANG,
     EGO_ARCLENGTH_M,
@@ -75,16 +102,10 @@ from POMDPPlanners.environments.racetrack_pomdp.racetrack_schema import (
     EGO_STATE_WIDTH,
     EGO_X,
     EGO_Y,
-    GRID_CELLS,
-    GRID_HALF_EXTENT_M,
-    GRID_STEP_M,
     MAX_ACCELERATION_MPS2,
     MAX_STEERING_RAD,
-    ON_ROAD_LAYER,
-    PRESENCE_LAYER,
     ObservationMode,
     racetrack_reward,
-    rotate,
     state_agent_rows,
 )
 
@@ -95,20 +116,9 @@ from POMDPPlanners.environments.racetrack_pomdp.racetrack_schema import (
 # curvature profile a known-track model reads with it.
 _EGO_NOISE_WIDTH = EGO_ARCLENGTH_M
 
-# The ego sits in the middle cell of the occupancy grid, at (6, 6) for the shipped 12x12.
-_GRID_CENTRE = GRID_CELLS // 2
-
 # Floor for the Frenet denominator ``1 - curvature * lat``, which vanishes at the centre of
 # curvature and would otherwise divide by zero on a tight arc.
 _MIN_FRENET_DENOMINATOR = 1e-3
-
-# Keeps a flip probability of exactly 0 or 1 from turning a single mismatched cell into a
-# -inf log-likelihood, which would annihilate an otherwise good particle.
-_FLIP_PROB_EPS = 1e-12
-
-OCCUPANCY_KEY = "occupancy"
-_EGO_KEY = "ego"
-_AGENTS_KEY = "agents"
 
 
 def _wrap_to_pi_array(angles: np.ndarray) -> np.ndarray:
@@ -135,28 +145,21 @@ def _rotate_per_row(vectors: np.ndarray, angles: np.ndarray) -> np.ndarray:
     )
 
 
-def _gaussian_log_prob(deviation: np.ndarray, std: float) -> float:
-    """Log-density of a zero-mean isotropic Gaussian at ``deviation``, summed over entries."""
-    variance = float(std) ** 2
-    flat = np.asarray(deviation, dtype=float).reshape(-1)
-    return float(
-        -0.5 * np.sum(flat**2) / variance - 0.5 * flat.size * np.log(2.0 * np.pi * variance)
-    )
-
-
 class RacetrackModelPOMDP(DiscreteActionsEnvironment):
     """Abstract generative racetrack model: the planner's beliefs about the world.
 
     Reproduces the world's ego dynamics exactly and its other vehicles only crudely (see the
     module docstring). The observation follows whichever arm of the matched pair the world is
-    running, selected by ``observation_mode``; :meth:`encode_observation` is the single seam
-    where the world's raw reading enters, and every other observation method works in the
-    encoded space.
+    running, selected by ``observation_mode``; the reading is encoded, drawn and scored by
+    the :class:`~POMDPPlanners.environments.racetrack_pomdp.racetrack_sensor_model.ObservationArm`
+    on :attr:`observation_model`, and :meth:`encode_observation` is the single seam where the
+    world's raw reading enters.
 
     Subclasses supply :meth:`_curvature_for`, the one thing this class does not know: where
-    the road bends. They may also override :meth:`_render_on_road_layer` and
-    :meth:`_on_road_log_prob` if their curvature source lets them predict the observation's
-    on-road layer; the defaults here decline to, and say why.
+    the road bends. A subclass whose curvature source reaches further than the ego's own
+    position should also override :meth:`curvature_ahead`, which is what the observation's
+    curvature channel is scored against; the default here holds one value across the channel
+    and says why.
 
     Attributes:
         observation_mode: Which arm of the matched pair this model scores.
@@ -168,6 +171,7 @@ class RacetrackModelPOMDP(DiscreteActionsEnvironment):
         max_tracked_agents: Number of fixed agent slots in the state.
         collision_distance: Range (m) at or below which a present agent slot is a collision.
         lane_half_width: Lateral offset (m) beyond which the ego has left the lane.
+        curvature_lookahead_m: Distances the observed curvature channel reports at.
 
     Note:
         This is an abstract base class and cannot be instantiated directly. Use
@@ -191,7 +195,22 @@ class RacetrackModelPOMDP(DiscreteActionsEnvironment):
         lane_centering_cost: float = DEFAULT_LANE_CENTERING_COST,
         lane_centering_reward: float = DEFAULT_LANE_CENTERING_REWARD,
         action_reward: float = DEFAULT_ACTION_REWARD,
-        cell_flip_prob: float = 0.05,
+        curvature_lookahead_m: Sequence[float] = DEFAULT_CURVATURE_LOOKAHEAD_M,
+        curvature_std_1pm: float = DEFAULT_CURVATURE_STD_1PM,
+        max_detection_range_m: float = DEFAULT_MAX_DETECTION_RANGE_M,
+        detection_position_std_m: float = DEFAULT_DETECTION_POSITION_STD_M,
+        detection_velocity_std: float = DEFAULT_DETECTION_VELOCITY_STD,
+        blocker_half_width_m: float = DEFAULT_BLOCKER_HALF_WIDTH_M,
+        presence_miss_prob: float = DEFAULT_PRESENCE_MISS_PROB,
+        presence_false_alarm_prob: float = DEFAULT_PRESENCE_FALSE_ALARM_PROB,
+        clutter_position_scale_m: float = DEFAULT_CLUTTER_POSITION_SCALE_M,
+        clutter_velocity_scale: float = DEFAULT_CLUTTER_VELOCITY_SCALE,
+        ego_position_std_m: float = DEFAULT_EGO_POSITION_STD_M,
+        ego_heading_std_rad: float = DEFAULT_EGO_HEADING_STD_RAD,
+        ego_arclength_std_m: float = DEFAULT_EGO_ARCLENGTH_STD_M,
+        ego_speed_std: float = 0.1,
+        lane_lateral_std_m: float = DEFAULT_LANE_LATERAL_STD_M,
+        lane_heading_std_rad: float = DEFAULT_LANE_HEADING_STD_RAD,
         ego_pose_std: float = 0.5,
         agent_pose_std: float = 1.0,
         agent_velocity_std: float = 2.0,
@@ -223,8 +242,72 @@ class RacetrackModelPOMDP(DiscreteActionsEnvironment):
             lane_centering_cost: Sharpness of the lane-centering falloff. Defaults to 4.0.
             lane_centering_reward: Weight on the lane-centering term. Defaults to 1.0.
             action_reward: Weight on the control-effort penalty. Defaults to -0.3.
-            cell_flip_prob: Per-cell probability an occupancy presence bit is wrong.
-                Defaults to 0.05.
+            curvature_lookahead_m: Distances (m) along the lane the observed curvature
+                channel reports at. Defaults to ``(10.0, 20.0, 30.0)`` and **must match the
+                world's**: the likelihood scores one Gaussian per entry, so a mismatch
+                compares the curvature at one distance against the curvature at another.
+            curvature_std_1pm: Width (1/m) of the curvature channel's likelihood. Defaults
+                to 0.002, the world's own camera noise.
+            max_detection_range_m: Range (m) beyond which this model predicts a tracked
+                opponent is *not* reported. Defaults to 40.0, matching the world. This is the
+                arm's dial, and it acts through the likelihood as much as through the world:
+                a slot the model believes is out of range costs a particle nothing when the
+                reading does not show it, and a slot inside range does.
+            detection_position_std_m: Width (m) of a detection's position likelihood.
+                Defaults to 0.5, the world's own noise.
+            detection_velocity_std: Width (m/s) of a detection's relative-velocity
+                likelihood, applied to both components. Defaults to 0.3, the world's own.
+            blocker_half_width_m: Half-width (m) of a vehicle when predicting occlusion.
+                Defaults to 1.0. Together with ``max_detection_range_m`` this is what lets
+                the model predict *whether* a slot should have produced a detection, which
+                is why a particle placing an opponent behind another one is not punished for
+                the observation not showing it.
+            presence_miss_prob: Rate at which a vehicle this model tracks fails to appear in
+                the observation. Defaults to 0.0.
+            presence_false_alarm_prob: Rate at which the observation reports a vehicle this
+                model tracks nothing behind. Defaults to 0.0. Together with
+                ``presence_miss_prob`` this is the **detection model**, and it is a different
+                kind of number from the widths above: those say how wrong a reported quantity
+                is, these say whether the report happens at all. It is what lets the
+                likelihood score *whether* a vehicle is there rather than only where —
+                without it a particle with empty slots is scored on its ego row alone and
+                pays nothing for a reading full of traffic. Both default to zero because this
+                world's detection decision is deterministic: the range gate and the occlusion
+                rule run on true positions, and the radar drops nothing it can see and
+                invents nothing. A particle contradicting the reading's visibility is
+                therefore excluded, at a 27.6-nat floor rather than ``-inf`` so the filter's
+                normalisation survives it. Nonzero values model a lossy radar, which is a
+                legitimate configuration and not this world.
+            clutter_position_scale_m: Cauchy scale (m) of where a false alarm reports a
+                phantom. Defaults to 18.0.
+            clutter_velocity_scale: Cauchy scale (m/s) of a phantom's reported velocity.
+                Defaults to 10.0, the speed limit. Both belong to the lossy-radar
+                configuration: at a false-alarm rate of zero no phantom is ever drawn, and
+                with a rate configured they are what keeps a bare probability comparable with
+                a matched detection's *density* — leaving the clutter term out inverts the
+                likelihood outright, see ``DEFAULT_CLUTTER_POSITION_SCALE_M``.
+            ego_position_std_m: Width (m) of the ego-pose channel's ``x`` and ``y``
+                likelihood. Defaults to 0.1, the world's own localisation noise. Like the
+                lane camera's widths and unlike ``ego_speed_std``, this **is** a sensor
+                model and must match the world's or the filter is confidently wrong.
+            ego_heading_std_rad: Width (rad) of the ego-pose channel's heading likelihood,
+                taken modulo 2*pi so a particle either side of the branch cut is not charged
+                6.28 rad of error. Defaults to 0.01.
+            ego_arclength_std_m: Width (m) of the ego-pose channel's arclength likelihood.
+                Defaults to 0.1. This is the term that pins a particle's position around the
+                lap, which the curvature channel alone used to have to do.
+            ego_speed_std: Width (m/s) of the POMDP speedometer likelihood. Defaults to 0.1.
+                **Not a sensor model**: the world emits ego speed exactly, and a real
+                speedometer is accurate to well under a percent. It stands for this model's
+                own ego-dynamics error, and a zero-width likelihood would be a delta that
+                collapses the filter on the first mismatch. Left unfitted deliberately —
+                fitting it to the world would fit it to zero.
+            lane_lateral_std_m: Width (m) of the lane camera's lateral likelihood. Defaults
+                to 0.05. Unlike ``ego_speed_std`` this one **is** a sensor model: the world
+                genuinely corrupts its lane reading at this width, and the two must match or
+                the filter is confidently wrong. Change it only alongside the world's.
+            lane_heading_std_rad: Width (rad) of the lane camera's heading likelihood.
+                Defaults to 0.01, matching the world's default for the same reason.
             ego_pose_std: Observation noise (m and m/s) on the MDP ego row. Defaults to 0.5.
             agent_pose_std: Observation noise (m) on an MDP agent's relative position.
                 Defaults to 1.0.
@@ -239,8 +322,9 @@ class RacetrackModelPOMDP(DiscreteActionsEnvironment):
             use_queue_logger: Whether to use queue-based logging.
 
         Raises:
-            ValueError: If ``max_tracked_agents`` or ``substeps`` is below 1, or ``dt`` is
-                not positive.
+            ValueError: If ``max_tracked_agents`` or ``substeps`` is below 1, ``dt`` is not
+                positive, ``curvature_lookahead_m`` is empty, or the two detection rates are
+                not each in ``[0, 1)`` and summing below 1.
         """
         if max_tracked_agents < 1:
             raise ValueError(f"max_tracked_agents must be at least 1, got {max_tracked_agents}.")
@@ -248,6 +332,21 @@ class RacetrackModelPOMDP(DiscreteActionsEnvironment):
             raise ValueError(f"substeps must be at least 1, got {substeps}.")
         if dt <= 0.0:
             raise ValueError(f"dt must be positive, got {dt}.")
+        if len(tuple(curvature_lookahead_m)) == 0:
+            raise ValueError(
+                "curvature_lookahead_m must name at least one distance; an empty channel "
+                "would silently drop the only reading that says where the road bends."
+            )
+        validate_detection_rates(presence_miss_prob, presence_false_alarm_prob)
+        for scale_name, scale in (
+            ("clutter_position_scale_m", clutter_position_scale_m),
+            ("clutter_velocity_scale", clutter_velocity_scale),
+        ):
+            if scale <= 0.0:
+                raise ValueError(
+                    f"{scale_name} must be positive, got {scale}. It is the scale of a "
+                    f"Cauchy over where a false alarm reports a phantom."
+                )
 
         self.observation_mode = observation_mode
         self.dt = float(dt)
@@ -266,11 +365,29 @@ class RacetrackModelPOMDP(DiscreteActionsEnvironment):
         self.lane_centering_cost = lane_centering_cost
         self.lane_centering_reward = lane_centering_reward
         self.action_reward = action_reward
-        self.cell_flip_prob = float(cell_flip_prob)
+        self.curvature_lookahead_m: Tuple[float, ...] = tuple(
+            float(distance) for distance in curvature_lookahead_m
+        )
+        self.curvature_std_1pm = float(curvature_std_1pm)
+        self.max_detection_range_m = float(max_detection_range_m)
+        self.detection_position_std_m = float(detection_position_std_m)
+        self.detection_velocity_std = float(detection_velocity_std)
+        self.blocker_half_width_m = float(blocker_half_width_m)
+        self.presence_miss_prob = float(presence_miss_prob)
+        self.presence_false_alarm_prob = float(presence_false_alarm_prob)
+        self.clutter_position_scale_m = float(clutter_position_scale_m)
+        self.clutter_velocity_scale = float(clutter_velocity_scale)
+        self.ego_position_std_m = float(ego_position_std_m)
+        self.ego_heading_std_rad = float(ego_heading_std_rad)
+        self.ego_arclength_std_m = float(ego_arclength_std_m)
+        self.ego_speed_std = float(ego_speed_std)
+        self.lane_lateral_std_m = float(lane_lateral_std_m)
+        self.lane_heading_std_rad = float(lane_heading_std_rad)
         self.ego_pose_std = float(ego_pose_std)
         self.agent_pose_std = float(agent_pose_std)
         self.agent_velocity_std = float(agent_velocity_std)
         self.process_noise_std = float(process_noise_std)
+        self._observation_model = self._build_observation_model()
 
         super().__init__(
             discount_factor=discount_factor,
@@ -283,6 +400,52 @@ class RacetrackModelPOMDP(DiscreteActionsEnvironment):
             output_dir=output_dir,
             debug=debug,
             use_queue_logger=use_queue_logger,
+        )
+
+    @property
+    def observation_model(self) -> ObservationArm:
+        """The arm this model encodes, draws and scores readings with.
+
+        A property rather than an ordinary attribute, and not for style: ``config_id``
+        walks ``__dict__`` and recurses into anything holding one, so a public attribute
+        pointing at a collaborator that points back here recurses until the stack ends.
+        Nothing is lost by hiding it from the identity — every width the collaborator was
+        built from is already a public attribute of this model.
+        """
+        return self._observation_model
+
+    def _build_observation_model(self) -> ObservationArm:
+        """The arm this model observes in, built once from the widths above."""
+        if self.observation_mode is ObservationMode.POMDP:
+            return SensorObservationModel(
+                self,
+                self.max_tracked_agents,
+                ego_position_std_m=self.ego_position_std_m,
+                ego_heading_std_rad=self.ego_heading_std_rad,
+                ego_arclength_std_m=self.ego_arclength_std_m,
+                ego_speed_std=self.ego_speed_std,
+                lane_lateral_std_m=self.lane_lateral_std_m,
+                lane_heading_std_rad=self.lane_heading_std_rad,
+                curvature_std_1pm=self.curvature_std_1pm,
+                curvature_lookahead_count=len(self.curvature_lookahead_m),
+                max_detection_range_m=self.max_detection_range_m,
+                detection_position_std_m=self.detection_position_std_m,
+                detection_velocity_std=self.detection_velocity_std,
+                blocker_half_width_m=self.blocker_half_width_m,
+                presence_miss_prob=self.presence_miss_prob,
+                presence_false_alarm_prob=self.presence_false_alarm_prob,
+                clutter_position_scale_m=self.clutter_position_scale_m,
+                clutter_velocity_scale=self.clutter_velocity_scale,
+            )
+        return KinematicsObservationModel(
+            self.max_tracked_agents,
+            ego_pose_std=self.ego_pose_std,
+            agent_pose_std=self.agent_pose_std,
+            agent_velocity_std=self.agent_velocity_std,
+            presence_miss_prob=self.presence_miss_prob,
+            presence_false_alarm_prob=self.presence_false_alarm_prob,
+            clutter_position_scale_m=self.clutter_position_scale_m,
+            clutter_velocity_scale=self.clutter_velocity_scale,
         )
 
     @property
@@ -541,44 +704,47 @@ class RacetrackModelPOMDP(DiscreteActionsEnvironment):
         return bool(np.any(ranges <= self.collision_distance))
 
     # ── Observation ──────────────────────────────────────────────────────
+    def curvature_ahead(self, ego: np.ndarray) -> np.ndarray:
+        """Curvature at each lookahead distance per ego row, shape ``(B, L)``.
+
+        The default holds the curvature under the ego across the whole channel, which is the
+        honest answer for a model whose only source *is* that channel: a mapless planner has
+        nothing to say about 30 m ahead that it did not read off the observation it is
+        scoring, so the residual comes out identical for every particle and the term drops
+        out at normalisation. A model holding a track map should override this — the
+        curvature 30 m along the lane from a particle's own arclength is exactly the kind of
+        prediction that separates one particle from another.
+
+        Args:
+            ego: The ego block of the particle batch, shape ``(B, EGO_STATE_WIDTH)``.
+
+        Returns:
+            Signed curvature in 1/m, one column per entry of :attr:`curvature_lookahead_m`.
+        """
+        return np.repeat(
+            self._curvature_for(ego).reshape(-1, 1), len(self.curvature_lookahead_m), axis=1
+        )
+
     def encode_observation(self, observation: Any) -> Dict[str, np.ndarray]:
         """Encode the world's raw reading into the space the belief and planner use.
 
-        This is the single raw-observation seam. In POMDP mode the raw ``(2, 12, 12)``
-        occupancy grid is wrapped unchanged; in MDP mode the raw ``(K + 1, 5)`` table of
-        absolute ``[presence, x, y, vx, vy]`` rows is split into the ego row and the other
-        vehicles, and the others are moved into the ego body frame — the frame the state's
-        agent slots already live in, so the model scores like against like.
+        This is the single raw-observation seam, and it delegates to whichever arm's
+        observation model this instance was built with; see
+        :mod:`~POMDPPlanners.environments.racetrack_pomdp.racetrack_sensor_model`.
 
         Args:
             observation: The raw observation emitted by the world, in this model's mode.
 
         Returns:
-            POMDP mode: ``{"occupancy": (2, 12, 12) float32}``. MDP mode:
-            ``{"ego": (4,) [x, y, vx, vy], "agents": (K, 5) [present, rel_x, rel_y, rel_vx,
-            rel_vy]}``, with absent rows left at zero.
+            POMDP mode: ``{"ego_pose": (4,), "ego_speed": (1,), "lane_pose": (2,),
+            "curvature_ahead": (L,), "detections": (K, 5)}``, all float32.
+            MDP mode: ``{"ego": (4,), "agents": (K, 5)}``, the agent rows in the ego body
+            frame with absent ones left at zero.
+
+        Raises:
+            ValueError: If a POMDP reading is not the five-part sensor tuple.
         """
-        if self.observation_mode is ObservationMode.POMDP:
-            return {OCCUPANCY_KEY: np.asarray(observation, dtype=np.float32)}
-        return self._encode_kinematics(np.asarray(observation, dtype=float))
-
-    def _encode_kinematics(self, rows: np.ndarray) -> Dict[str, np.ndarray]:
-        ego = np.array(rows[0, 1:5], dtype=float)
-        heading = float(np.arctan2(ego[3], ego[2]))
-        others = rows[1 : self.max_tracked_agents + 1]
-        present = others[:, AGENT_PRESENT] > 0.5
-
-        block = np.zeros((len(others), AGENT_SLOT_WIDTH), dtype=float)
-        block[present, AGENT_PRESENT] = 1.0
-        block[present, AGENT_REL_X : AGENT_REL_X + 2] = rotate(
-            others[present, 1:3] - ego[:2], -heading
-        )
-        block[present, AGENT_REL_VX : AGENT_REL_VX + 2] = rotate(
-            others[present, 3:5] - ego[2:4], -heading
-        )
-        agents = np.zeros((self.max_tracked_agents, AGENT_SLOT_WIDTH), dtype=float)
-        agents[: len(others)] = block
-        return {_EGO_KEY: ego, _AGENTS_KEY: agents}
+        return self._observation_model.encode(observation)
 
     def sample_observation(self, next_state: Any, action: Any, n_samples: int = 1) -> Any:
         """Draw observations of ``next_state`` in this model's observation mode.
@@ -592,7 +758,7 @@ class RacetrackModelPOMDP(DiscreteActionsEnvironment):
             One observation dictionary when ``n_samples == 1``, else a list of them.
         """
         del action
-        draws = [self._draw_observation(next_state) for _ in range(max(n_samples, 1))]
+        draws = [self._observation_model.draw(next_state) for _ in range(max(n_samples, 1))]
         return draws[0] if n_samples == 1 else draws
 
     def observation_log_probability(
@@ -600,23 +766,20 @@ class RacetrackModelPOMDP(DiscreteActionsEnvironment):
     ) -> np.ndarray:
         """Log-density of each observation given ``next_state``.
 
-        In POMDP mode this is an independent Bernoulli over the 144 presence cells of the
-        grid :meth:`sample_observation` would have rasterised, plus whatever
-        :meth:`_on_road_log_prob` contributes for the second layer — nothing at all, unless
-        the subclass can predict the road.
+        In POMDP mode this is a product of closed-form terms, one per sensor: four Gaussians
+        over the ego-pose channel, one in the speedometer residual, two in the lane camera's,
+        one per curvature-ahead sample against whatever :meth:`curvature_ahead` predicts, and
+        a Bernoulli over the detection ranks with a Gaussian in each matched detection's
+        position and full relative velocity. Detections are associated to slots by range
+        rank, which is a known limit in dense traffic. In MDP mode it is the
+        near-fully-observed kinematics density.
 
-        In MDP mode it is a diagonal Gaussian over the ego row and the *present* agent slots;
-        absent slots contribute nothing, because a slot that holds no vehicle carries no
-        measurement.
-
-        Note:
-            Presence is read from the state, never from the observation, so the MDP
-            likelihood cannot discriminate on *whether* a vehicle is there — only on where
-            it is. A particle whose slots are empty is scored on its ego row alone and pays
-            nothing for an observation full of traffic. Fixing that needs a detection model
-            (a miss and false-alarm rate) rather than a hard zero: presence flags disagree
-            routinely as vehicles enter and leave the tracking window, and a ``-inf`` there
-            would collapse the filter every time one did.
+        Both arms discriminate on *whether* a vehicle is there and not only where, and both
+        do it at a rate rather than a hard zero — an opponent leaves sensor range or slips
+        behind a closer car every few steps, and a ``-inf`` would collapse the filter each
+        time one did. That term is where ``max_detection_range_m`` bites: a reading with no
+        row for a car a particle places inside the gate is charged, and one for a car it
+        places outside is not.
 
         Args:
             next_state: The state being observed.
@@ -628,134 +791,8 @@ class RacetrackModelPOMDP(DiscreteActionsEnvironment):
         """
         del action
         candidates = [observations] if isinstance(observations, dict) else list(observations)
-        if self.observation_mode is ObservationMode.POMDP:
-            grid = self._render_presence_grid(next_state)
-            return np.array(
-                [
-                    self._grid_log_prob(grid, obs) + self._on_road_log_prob(next_state, obs)
-                    for obs in candidates
-                ],
-                dtype=float,
-            )
-        clean = self._clean_kinematics(next_state)
-        return np.array([self._kinematics_log_prob(clean, obs) for obs in candidates], dtype=float)
-
-    def _draw_observation(self, state: Any) -> Dict[str, np.ndarray]:
-        if self.observation_mode is ObservationMode.POMDP:
-            return self._draw_occupancy(state)
-        return self._draw_kinematics(state)
-
-    def _draw_occupancy(self, state: Any) -> Dict[str, np.ndarray]:
-        grid = self._render_presence_grid(state)
-        flips = np.random.random(grid.shape) < self.cell_flip_prob
-        occupancy = np.zeros((2, GRID_CELLS, GRID_CELLS), dtype=np.float32)
-        occupancy[PRESENCE_LAYER] = np.logical_xor(grid, flips)
-        occupancy[ON_ROAD_LAYER] = self._render_on_road_layer(state)
-        return {OCCUPANCY_KEY: occupancy}
-
-    def _render_on_road_layer(self, state: Any) -> np.ndarray:
-        """The on-road layer this model predicts for ``state``; all-ones by default.
-
-        All-ones is the honest answer for a model with no picture of the road: it says
-        "drivable everywhere I can see", which is what the shipped racetrack shows on a
-        straight anyway. A subclass that carries a road model should override this so that
-        the observations it *samples* are the same shape as the ones it *reads* — otherwise
-        it feeds itself an all-clear corridor on the approach to every corner.
-        """
-        del state
-        return np.ones((GRID_CELLS, GRID_CELLS), dtype=np.float32)
-
-    def _on_road_log_prob(self, state: Any, observation: Any) -> float:
-        """Contribution of the on-road layer to the likelihood; zero by default.
-
-        Zero, and not a Bernoulli over the layer, because the default
-        :meth:`_render_on_road_layer` does not depend on ``state``: a term identical across
-        every particle shifts all the log-weights alike and vanishes at normalisation, so it
-        buys nothing but 144 cells of arithmetic per particle per step.
-        """
-        del state, observation
-        return 0.0
-
-    def _draw_kinematics(self, state: Any) -> Dict[str, np.ndarray]:
-        clean = self._clean_kinematics(state)
-        ego = clean[_EGO_KEY] + np.random.normal(scale=self.ego_pose_std, size=4)
-        agents = clean[_AGENTS_KEY]
-        present = agents[:, AGENT_PRESENT] > 0.5
-        count = int(np.count_nonzero(present))
-        agents[present, AGENT_REL_X : AGENT_REL_X + 2] += np.random.normal(
-            scale=self.agent_pose_std, size=(count, 2)
-        )
-        agents[present, AGENT_REL_VX : AGENT_REL_VX + 2] += np.random.normal(
-            scale=self.agent_velocity_std, size=(count, 2)
-        )
-        return {_EGO_KEY: ego, _AGENTS_KEY: agents}
-
-    def _render_presence_grid(self, state: Any) -> np.ndarray:
-        """Rasterise the presence layer the world's occupancy grid would show.
-
-        One rasteriser serves both the sampler and the density, so the two agree by
-        construction rather than by two edits staying in step. Axis 0 is along-track and
-        axis 1 across-track, matching highway-env 1.12.1, and the ego is written into the
-        centre cell exactly as the simulator writes the observer into its own grid. A
-        vehicle marks one cell, not a footprint.
-        """
-        grid = np.zeros((GRID_CELLS, GRID_CELLS), dtype=bool)
-        grid[_GRID_CENTRE, _GRID_CENTRE] = True
-
-        rows = state_agent_rows(np.asarray(state, dtype=float), self.max_tracked_agents)
-        along = np.floor((rows[:, AGENT_REL_X] + GRID_HALF_EXTENT_M) / GRID_STEP_M).astype(int)
-        across = np.floor((rows[:, AGENT_REL_Y] + GRID_HALF_EXTENT_M) / GRID_STEP_M).astype(int)
-        inside = (
-            (rows[:, AGENT_PRESENT] > 0.5)
-            & (along >= 0)
-            & (along < GRID_CELLS)
-            & (across >= 0)
-            & (across < GRID_CELLS)
-        )
-        grid[along[inside], across[inside]] = True
-        return grid
-
-    def _grid_log_prob(self, grid: np.ndarray, observation: Any) -> float:
-        observed = np.asarray(observation[OCCUPANCY_KEY], dtype=float)[PRESENCE_LAYER] > 0.5
-        return self._bernoulli_cell_log_prob(grid, observed)
-
-    def _bernoulli_cell_log_prob(self, predicted: np.ndarray, observed: np.ndarray) -> float:
-        """Independent per-cell flip model over two boolean grids of the same shape."""
-        flip_prob = float(np.clip(self.cell_flip_prob, _FLIP_PROB_EPS, 1.0 - _FLIP_PROB_EPS))
-        agreements = int(np.count_nonzero(observed == predicted))
-        disagreements = observed.size - agreements
-        return agreements * float(np.log1p(-flip_prob)) + disagreements * float(np.log(flip_prob))
-
-    def _clean_kinematics(self, state: Any) -> Dict[str, np.ndarray]:
-        """The noise-free MDP reading of a state; the mean both the sampler and density use."""
-        array = np.asarray(state, dtype=float)
-        speed, heading = float(array[EGO_SPEED]), float(array[EGO_HEADING])
-        ego = np.array(
-            [array[EGO_X], array[EGO_Y], speed * np.cos(heading), speed * np.sin(heading)],
-            dtype=float,
-        )
-        agents = np.array(state_agent_rows(array, self.max_tracked_agents), dtype=float)
-        return {_EGO_KEY: ego, _AGENTS_KEY: agents}
-
-    def _kinematics_log_prob(self, clean: Dict[str, np.ndarray], observation: Any) -> float:
-        agents = clean[_AGENTS_KEY]
-        present = agents[:, AGENT_PRESENT] > 0.5
-        observed_agents = np.asarray(observation[_AGENTS_KEY], dtype=float)
-        positions = slice(AGENT_REL_X, AGENT_REL_X + 2)
-        velocities = slice(AGENT_REL_VX, AGENT_REL_VX + 2)
-        return (
-            _gaussian_log_prob(
-                np.asarray(observation[_EGO_KEY], dtype=float) - clean[_EGO_KEY],
-                self.ego_pose_std,
-            )
-            + _gaussian_log_prob(
-                observed_agents[present, positions] - agents[present, positions],
-                self.agent_pose_std,
-            )
-            + _gaussian_log_prob(
-                observed_agents[present, velocities] - agents[present, velocities],
-                self.agent_velocity_std,
-            )
+        return np.array(
+            [self._observation_model.log_prob(next_state, obs) for obs in candidates], dtype=float
         )
 
     def is_equal_observation(self, observation1: Any, observation2: Any) -> bool:
@@ -807,4 +844,11 @@ class RacetrackModelPOMDP(DiscreteActionsEnvironment):
         return self._perturb(state.reshape(1, -1))[0]
 
 
-__all__ = ["RacetrackModelPOMDP"]
+__all__ = [
+    "CURVATURE_AHEAD_KEY",
+    "DETECTIONS_KEY",
+    "EGO_POSE_KEY",
+    "EGO_SPEED_KEY",
+    "LANE_POSE_KEY",
+    "RacetrackModelPOMDP",
+]
