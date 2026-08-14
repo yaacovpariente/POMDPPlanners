@@ -2,52 +2,58 @@
 
 """Tests for the racetrack tracked-agents belief.
 
-Grids are built by hand and ``reinvigorate`` is called directly, the same way the base class
-calls it after its weight update, so no simulator or generative model is needed here.
+Detection blocks are built by hand and ``reinvigorate`` is called directly, the same way the
+base class calls it after its weight update, so no simulator or generative model is needed
+here.
+
+The tests that matter most are the ones about **what a detection carries**. A detection now
+reports a vehicle's whole relative velocity, so both components are copied straight into the
+slot and nothing is resolved along a line of sight. A vehicle crossing the ego's path abeam
+used to be stamped at zero velocity because nothing radial was measured; it is now stamped at
+the rate it is really crossing at, and several tests below exist to hold that flip in place.
+
+What stays hidden is a vehicle that produced *no* detection at all — outside
+``max_detection_range_m``, or behind a closer one. That is the weight update's business, not
+the stamp's, so these tests say nothing about it; ``agent_velocity_jitter`` is now ordinary
+measurement noise plus slack for the constant-velocity drift, not a stand-in for a component
+the sensor never reported.
 """
 
-# The carried frames are private on purpose -- config_id must not see them -- so the tests
-# that pin that behaviour have to reach for the private attributes.
-# pylint: disable=protected-access
-
 import pickle
-from typing import Any, Tuple
+import warnings
+from typing import Any
 
 import numpy as np
 import pytest
 
 from POMDPPlanners.core.belief.particle_beliefs import WeightedParticleBelief
 from POMDPPlanners.environments.racetrack_pomdp.racetrack_belief import TrackedAgentsBelief
-from POMDPPlanners.environments.racetrack_pomdp.racetrack_occupancy_tracker import (
-    OccupancyVelocityTracker,
-)
 from POMDPPlanners.environments.racetrack_pomdp.racetrack_schema import (
     AGENT_SLOT_WIDTH,
+    DETECTION_SLOT_WIDTH,
     EGO_STATE_WIDTH,
-    GRID_CELLS,
-    GRID_HALF_EXTENT_M,
-    GRID_STEP_M,
     ObservationMode,
-    PRESENCE_LAYER,
 )
 
-EGO_CELL = (6, 6)
 ONE_AGENT = 1
-ONE_CELL_SPEED = GRID_STEP_M / 0.2
+
+# A vehicle 10 m dead ahead, closing at 2 m/s and not crossing at all: the simplest row there
+# is, and the one the sign convention is fixed against.
+AHEAD_CLOSING = [1.0, 10.0, 0.0, -2.0, 0.0]
+# A vehicle 10 m directly abeam, moving at 6 m/s along the ego's forward axis. That velocity
+# is entirely perpendicular to the line of sight, so it is exactly what the old radial
+# projection threw away and what the current stamp has to keep.
+ABEAM_CROSSING = [1.0, 0.0, 10.0, 6.0, 0.0]
+# A vehicle off the nose whose four numbers are all different in size and two of them in sign,
+# so a swapped column pair cannot pass by symmetry.
+OFF_THE_NOSE = [1.0, 8.0, -3.0, -2.0, 5.0]
 
 
-def grid_with(*cells: Tuple[int, int]) -> np.ndarray:
-    """A presence grid marking ``cells``, plus the ego at the centre as the simulator does."""
-    grid = np.zeros((2, GRID_CELLS, GRID_CELLS), dtype=np.float32)
-    grid[PRESENCE_LAYER][EGO_CELL] = 1.0
-    for cell in cells:
-        grid[PRESENCE_LAYER][cell] = 1.0
-    return grid
-
-
-def cell_centre(along: int, across: int) -> np.ndarray:
-    """The ego-frame metre position of a cell's centre."""
-    return -GRID_HALF_EXTENT_M + (np.array([along, across], dtype=float) + 0.5) * GRID_STEP_M
+def detections(*rows: Any) -> np.ndarray:
+    """A ``(D, 5)`` detection block, which is what the sensor emits ordered by range."""
+    if not rows:
+        return np.zeros((0, DETECTION_SLOT_WIDTH), dtype=float)
+    return np.array(rows, dtype=float)
 
 
 def make_particles(count: int = 4, max_tracked_agents: int = ONE_AGENT) -> np.ndarray:
@@ -93,218 +99,197 @@ def agent_rows(belief: WeightedParticleBelief) -> np.ndarray:
     return particles[:, EGO_STATE_WIDTH:].reshape(len(particles), -1, AGENT_SLOT_WIDTH)
 
 
-def test_first_step_stamps_positions_with_zero_velocity_and_second_step_measures_motion():
-    """Test that velocity appears only once there are two frames to difference.
+def test_a_detection_dead_ahead_stamps_its_reported_velocity_onto_the_forward_axis():
+    """Test the simplest geometry there is, which is where the conventions are fixed.
 
-    Purpose: Validates the episode's first step, where inventing a velocity from a single
-        frame would be worse than admitting none, and validates that the carried frame makes
-        the following step a real measurement
+    Purpose: Validates the stamp in the case with nothing to argue about, which fixes the
+        sign convention and the units before any of the harder rows are read. A closing
+        vehicle must arrive with a *negative* forward rate, because the range is shrinking;
+        the opposite sign would have every rollout predict opponents running away
 
-    Given: A belief with one agent slot, an opponent at along-index 9 on the first frame and
-        at along-index 8 on the second, and jitter switched off
-    When: reinvigorate is called on the first frame and then again on the second
-    Then: The first stamp carries the opponent's position with zero velocity, and the second
-        carries the closing speed of one cell per step
+    Given: A belief with one agent slot, jitter off, and one detection 10 m dead ahead
+        closing at 2 m/s
+    When: reinvigorate is called on it
+    Then: Every particle carries [1, 10, 0, -2, 0] exactly
 
     Test type: unit
     """
     particles = make_particles()
     belief = make_belief(particles)
 
-    first = stamp(belief, {"occupancy": grid_with((9, 6))}, particles)
-    np.testing.assert_allclose(agent_rows(first)[0, 0], [1.0, *cell_centre(9, 6), 0.0, 0.0])
+    refreshed = stamp(belief, {"detections": detections(AHEAD_CLOSING)}, particles)
 
-    second = stamp(first, {"occupancy": grid_with((8, 6))}, np.asarray(first.particles))
     np.testing.assert_allclose(
-        agent_rows(second)[0, 0], [1.0, *cell_centre(8, 6), -ONE_CELL_SPEED, 0.0], atol=1e-9
+        agent_rows(refreshed)[:, 0], np.tile([1.0, 10.0, 0.0, -2.0, 0.0], (4, 1))
     )
 
 
-def test_reinvigorate_returns_a_tracked_belief_carrying_the_grid_forward():
-    """Test that the returned belief is set up to track again on the next step.
+def test_a_detection_directly_abeam_stamps_the_crossing_rate_the_projection_used_to_discard():
+    """Test the geometry the previous design deliberately got wrong.
 
-    Purpose: Validates the carry-forward. A plain particle belief coming back here would stop
-        the stamping after one step and silently leave every later agent slot stale.
+    Purpose: This is the flip that the detection redesign is for, and the case it is sharpest
+        on. A vehicle abeam is moving perpendicular to its own line of sight, so a Doppler
+        closing rate measured nothing about it and the belief used to stamp it as stationary
+        -- a car crossing at 6 m/s predicted, by every rollout, to still be there next step.
+        The detection now carries both components, so the stamp has to be the real crossing
+        rate. Stamping zero here again would be the old blind spot coming back
 
-    Given: A belief and one occupancy observation
-    When: reinvigorate is called
-    Then: The result is a TrackedAgentsBelief whose carried frame equals the observed grid
-        but is a copy rather than the caller's array
-
-    Test type: unit
-    """
-    particles = make_particles()
-    grid = grid_with((9, 6))
-
-    refreshed = stamp(make_belief(particles), {"occupancy": grid}, particles)
-
-    assert isinstance(refreshed, TrackedAgentsBelief)
-    carried_grid, carried_heading = refreshed._previous_frames[0]
-    np.testing.assert_array_equal(carried_grid, grid)
-    assert carried_grid is not grid
-    assert carried_heading == 0.0
-
-
-def test_mdp_mode_stamps_the_observed_rows_without_a_tracker():
-    """Test that the MDP arm uses the observation's agent rows directly.
-
-    Purpose: Validates that the near-MDP baseline is not degraded through the tracker. Its
-        rows already carry exact velocities, so re-deriving them from a grid would hand the
-        baseline the POMDP arm's quantisation error and destroy the matched comparison.
-
-    Given: A belief constructed in MDP mode and an observation whose agents block holds one
-        present vehicle 12 m ahead closing at 4 m/s
-    When: reinvigorate is called
-    Then: No tracker was ever constructed, and every particle carries the observed row exactly
+    Given: A belief with jitter off and one detection 10 m directly abeam of the ego, moving
+        at 6 m/s along the ego's forward axis -- entirely perpendicular to the line of sight
+    When: reinvigorate is called on it
+    Then: The slot carries the full 6 m/s, not the zero the radial projection produced
 
     Test type: unit
     """
     particles = make_particles()
-    belief = make_belief(particles, observation_mode=ObservationMode.MDP)
-    observation = {"agents": np.array([[1.0, 12.0, 0.0, -4.0, 0.5]])}
+    belief = make_belief(particles)
 
-    refreshed = stamp(belief, observation, particles)
+    refreshed = stamp(belief, {"detections": detections(ABEAM_CROSSING)}, particles)
 
-    assert belief.tracker is None
-    assert refreshed.tracker is None
-    np.testing.assert_allclose(agent_rows(refreshed)[:, 0], np.tile(observation["agents"], (4, 1)))
+    np.testing.assert_allclose(agent_rows(refreshed)[0, 0], [1.0, 0.0, 10.0, 6.0, 0.0])
 
 
-@pytest.mark.parametrize(
-    "mode, observation, expected",
-    [
-        (ObservationMode.POMDP, {"agents": np.zeros((1, AGENT_SLOT_WIDTH))}, "occupancy"),
-        (ObservationMode.MDP, {"occupancy": np.zeros((2, GRID_CELLS, GRID_CELLS))}, "agents"),
-    ],
-)
-def test_observation_from_the_wrong_arm_raises(mode, observation, expected):
-    """Test that a belief handed the other arm's observation fails loudly.
+def test_a_detection_whose_components_all_differ_keeps_each_one_in_its_own_column():
+    """Test the copy column by column, against a row that cannot pass by symmetry.
 
-    Purpose: Validates that a mode mismatch cannot degrade silently. A POMDP belief that
-        quietly found no grid would stamp empty agent slots forever and produce a
-        velocity-blind planner whose episodes still run to completion.
+    Purpose: The stamp is now two slice assignments, and the failure mode a slice invites is
+        a swapped or shifted pair -- position written into the velocity columns, or rel_vx and
+        rel_vy exchanged. A row with equal components, or with velocity lying along the line
+        of sight, passes every such mistake; this one fails all of them, because no two of its
+        four numbers agree
 
-    Given: A belief in one observation mode and an observation carrying only the other mode's
-        key
-    When: reinvigorate is called
-    Then: ValueError is raised naming the key that was expected
+    Given: A belief with jitter off and one detection at (8, -3) m moving at (-2, 5) m/s
+    When: reinvigorate is called on it
+    Then: Every column arrives where it was sent, signs included
 
     Test type: unit
     """
     particles = make_particles()
-    belief = make_belief(particles, observation_mode=mode)
+    belief = make_belief(particles)
 
-    with pytest.raises(ValueError, match=expected):
-        stamp(belief, observation, particles)
+    refreshed = stamp(belief, {"detections": detections(OFF_THE_NOSE)}, particles)
+
+    np.testing.assert_allclose(agent_rows(refreshed)[0, 0], [1.0, 8.0, -3.0, -2.0, 5.0])
 
 
-def test_config_id_ignores_the_carried_frame_but_tracks_the_jitter_width():
-    """Test that the belief's identity covers configuration and not the observation history.
+def test_a_detection_at_zero_range_is_stamped_like_any_other_and_stays_finite():
+    """Test the bearing that used to need a special case, now that nothing is divided by it.
 
-    Purpose: Validates the reason the carried frames are private. config_id feeds __hash__ and
-        __eq__, so folding a per-step grid into it would make two otherwise identical beliefs
-        unequal; the jitter widths, by contrast, change how the next step behaves and do
-        belong in the identity.
+    Purpose: A detection on the ego's own origin has no bearing, so the old projection
+        divided by a zero range and needed a guard that zeroed the velocity to avoid emitting
+        a NaN into every rollout. The copy has no such singularity, and the guard is gone with
+        it -- so the reading that reaches the planner is now the vehicle's real velocity. The
+        finiteness check is kept because a NaN here still poisons a whole rollout, and it is
+        the degenerate row that would produce one
 
-    Given: Three beliefs over identical particles -- one untouched, one carrying a previous
-        frame, and one with a wider pose jitter
-    When: Their config_id values are compared
-    Then: The carried frame leaves config_id unchanged while the jitter width changes it
+    Given: A belief with jitter off and one detection at the origin of the ego body frame
+        closing at 3 m/s
+    When: reinvigorate is called on it
+    Then: The slot is present at the origin carrying that 3 m/s, and every field is finite
 
     Test type: unit
     """
     particles = make_particles()
-    plain = make_belief(particles)
-    carrying = make_belief(particles, previous_frames=((grid_with((9, 6)), 0.7),))
-    jittered = make_belief(particles, agent_pose_jitter=2.0)
+    belief = make_belief(particles)
 
-    assert carrying.config_id == plain.config_id
-    assert hash(carrying) == hash(plain)
-    assert jittered.config_id != plain.config_id
+    refreshed = stamp(belief, {"detections": detections([1.0, 0.0, 0.0, -3.0, 0.0])}, particles)
 
-
-def test_pickle_round_trip_preserves_the_carried_frame():
-    """Test that a belief shipped to a worker process keeps its tracking history.
-
-    Purpose: Validates that the private carry-forward survives serialization. The simulator
-        pickles beliefs across processes, and a frame lost in transit would silently reset
-        every opponent's velocity to zero on the step after the hand-off.
-
-    Given: A belief carrying one previous frame and the ego heading that went with it
-    When: It is pickled and unpickled
-    Then: The carried grid and heading come back unchanged
-
-    Test type: unit
-    """
-    belief = make_belief(make_particles(), previous_frames=((grid_with((9, 6)), 0.25),))
-
-    restored = pickle.loads(pickle.dumps(belief))
-
-    np.testing.assert_array_equal(restored._previous_frames[0][0], belief._previous_frames[0][0])
-    assert restored._previous_frames[0][1] == 0.25
+    row = agent_rows(refreshed)[0, 0]
+    assert np.all(np.isfinite(row))
+    np.testing.assert_allclose(row, [1.0, 0.0, 0.0, -3.0, 0.0])
 
 
-def test_pose_and_velocity_jitter_are_zero_mean_and_use_their_own_widths():
-    """Test that the two jitter widths are applied to their own halves of the agent row.
+def test_undetected_slots_are_dropped_rather_than_stamped_as_vehicles_at_the_origin():
+    """Test that the zero rows a real reading pads with are filtered on the presence flag.
 
-    Purpose: Validates the split. The grid fixes an opponent's position to about a cell but
-        quantises its velocity at 15 m/s, so a single shared width would either wash out the
-        position or claim a precision the velocity does not have.
+    Purpose: The sensor emits a fixed-width block with undetected slots left at zero. Read
+        without the presence filter, each of those becomes a vehicle sitting on the ego's own
+        bumper -- which the model would score as an immediate collision on every step
 
-    Given: 20000 particles, one present agent, a pose jitter of 0.5 m and a velocity jitter
-        of 4.0 m/s
-    When: reinvigorate stamps them
-    Then: Both jittered pairs are centred on the tracked row, the position spread matches the
-        pose width, the velocity spread matches the velocity width, and the presence flag is
-        left exactly 1.0
-
-    Test type: unit
-    """
-    np.random.seed(7)
-    particles = make_particles(count=20000)
-    belief = make_belief(particles, agent_pose_jitter=0.5, agent_velocity_jitter=4.0)
-
-    rows = agent_rows(stamp(belief, {"occupancy": grid_with((9, 6))}, particles))[:, 0]
-
-    assert np.all(rows[:, 0] == 1.0)
-    np.testing.assert_allclose(rows[:, 1:3].mean(axis=0), cell_centre(9, 6), atol=0.02)
-    np.testing.assert_allclose(rows[:, 3:5].mean(axis=0), [0.0, 0.0], atol=0.15)
-    np.testing.assert_allclose(rows[:, 1:3].std(axis=0), [0.5, 0.5], rtol=0.05)
-    np.testing.assert_allclose(rows[:, 3:5].std(axis=0), [4.0, 4.0], rtol=0.05)
-
-
-def test_absent_slots_stay_empty_and_the_nearest_agents_win_the_slots():
-    """Test slot allocation when the frame holds more vehicles than there are slots.
-
-    Purpose: Validates that the fixed-width agent block is filled nearest-first and zero
-        padded. A far vehicle displacing a near one would hide the collision risk that the
-        slots exist to represent.
-
-    Given: A belief with two agent slots and a frame holding three opponents at increasing
-        range
-    When: reinvigorate is called
-    Then: The two nearest opponents occupy the slots in range order and no third row exists
+    Given: A belief with two agent slots and a four-row detection block holding one real
+        detection followed by three all-zero rows
+    When: reinvigorate is called on it
+    Then: Slot 0 carries the detection and slot 1 stays entirely zero
 
     Test type: unit
     """
     particles = make_particles(count=2, max_tracked_agents=2)
     belief = make_belief(particles, max_tracked_agents=2)
-    grid = grid_with((7, 6), (9, 6), (11, 6))
+    block = np.zeros((4, DETECTION_SLOT_WIDTH), dtype=float)
+    block[0] = AHEAD_CLOSING
 
-    rows = agent_rows(stamp(belief, {"occupancy": grid}, particles))
+    rows = agent_rows(stamp(belief, {"detections": block}, particles))
+
+    np.testing.assert_allclose(rows[0, 0], [1.0, 10.0, 0.0, -2.0, 0.0])
+    np.testing.assert_array_equal(rows[0, 1], np.zeros(AGENT_SLOT_WIDTH))
+
+
+def test_more_detections_than_slots_warns_and_drops_the_furthest():
+    """Test that overflowing the fixed agent slots is reported rather than absorbed.
+
+    Purpose: The truncation is intended -- the state carries a fixed number of slots and the
+        nearest vehicles are the ones that matter -- but doing it quietly turns a visible
+        opponent into empty road, which is a false negative in the only channel the POMDP arm
+        has and looks exactly like success
+
+    Given: A belief with two agent slots and a three-detection block ordered by range, as the
+        sensor emits it, at 5 m, 10 m and 20 m ahead
+    When: reinvigorate is called on it
+    Then: A UserWarning names both counts and how many were dropped, and the two nearest
+        detections are the ones occupying the slots
+
+    Test type: unit
+    """
+    particles = make_particles(count=2, max_tracked_agents=2)
+    belief = make_belief(particles, max_tracked_agents=2)
+    block = detections(
+        [1.0, 5.0, 0.0, -1.0, 0.0],
+        [1.0, 10.0, 0.0, -2.0, 0.0],
+        [1.0, 20.0, 0.0, -3.0, 0.0],
+    )
+
+    with pytest.warns(
+        UserWarning, match=r"Observed 3 detections.*max_tracked_agents=2.*1 furthest"
+    ):
+        rows = agent_rows(stamp(belief, {"detections": block}, particles))
 
     assert rows.shape[1] == 2
-    np.testing.assert_allclose(rows[0, 0], [1.0, *cell_centre(7, 6), 0.0, 0.0])
-    np.testing.assert_allclose(rows[0, 1], [1.0, *cell_centre(9, 6), 0.0, 0.0])
+    np.testing.assert_allclose(rows[0, 0], [1.0, 5.0, 0.0, -1.0, 0.0])
+    np.testing.assert_allclose(rows[0, 1], [1.0, 10.0, 0.0, -2.0, 0.0])
 
 
-def test_empty_frame_leaves_every_slot_zeroed_and_unjittered():
-    """Test that an empty window produces empty slots rather than jittered phantoms.
+def test_exactly_filling_the_agent_slots_does_not_warn():
+    """Test that the overflow guard fires on overflow only.
+
+    Purpose: A warning that fired whenever the slots were merely full would be ignored within
+        one episode, and the real overflow would then be ignored along with it
+
+    Given: A belief with two agent slots and a block holding exactly two detections
+    When: reinvigorate is called with warnings promoted to errors
+    Then: Nothing is raised and both detections are stamped
+
+    Test type: unit
+    """
+    particles = make_particles(count=2, max_tracked_agents=2)
+    belief = make_belief(particles, max_tracked_agents=2)
+    block = detections([1.0, 5.0, 0.0, -1.0, 0.0], [1.0, 10.0, 0.0, -2.0, 0.0])
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", UserWarning)
+        rows = agent_rows(stamp(belief, {"detections": block}, particles))
+
+    np.testing.assert_allclose(rows[0, 0], [1.0, 5.0, 0.0, -1.0, 0.0])
+    np.testing.assert_allclose(rows[0, 1], [1.0, 10.0, 0.0, -2.0, 0.0])
+
+
+def test_an_empty_reading_leaves_every_slot_zeroed_and_unjittered():
+    """Test that empty road produces empty slots rather than jittered phantoms.
 
     Purpose: Validates that jitter is applied to present slots only. Noise on an absent slot
-        would give the planner a vehicle at a random position that nothing observed.
+        would hand the planner a vehicle at a random position that nothing observed, and with
+        a wide jitter that phantom lands close enough to matter
 
-    Given: A belief with a wide jitter and a frame holding nothing but the ego
+    Given: A belief with a 5 m and 5 m/s jitter, and a reading holding no detections at all
     When: reinvigorate is called
     Then: Every particle's agent block is exactly zero
 
@@ -314,65 +299,139 @@ def test_empty_frame_leaves_every_slot_zeroed_and_unjittered():
     particles = make_particles()
     belief = make_belief(particles, agent_pose_jitter=5.0, agent_velocity_jitter=5.0)
 
-    refreshed = stamp(belief, {"occupancy": grid_with()}, particles)
+    refreshed = stamp(belief, {"detections": detections()}, particles)
 
     np.testing.assert_array_equal(agent_rows(refreshed), np.zeros((4, 1, AGENT_SLOT_WIDTH)))
 
 
-def test_ego_yaw_change_between_frames_is_taken_from_the_particles():
-    """Test that the belief de-rotates using the heading change its own particles imply.
+def test_a_missing_detections_block_raises_instead_of_stamping_empty_road():
+    """Test that a POMDP belief handed a reading with no detections key fails loudly.
 
-    Purpose: Validates that the yaw delta is read from the particle set rather than plumbed in
-        from outside. The occupancy grid turns with the ego, so a belief that could not
-        recover its own heading change would report a static world as moving.
+    Purpose: Validates that the one configuration mistake this class invites cannot degrade
+        quietly. A belief that found no detections and stamped zeros would produce a planner
+        that sees no traffic at all, runs every episode to completion, and looks like it works
 
-    Given: A world-static opponent seen at cell (11, 6) and then, after the ego yaws by about
-        0.18 rad, at cell (11, 5) -- with the particles' ego heading advanced by that same
-        angle between the two calls
-    When: reinvigorate is called on both frames in turn
-    Then: The second stamp reports essentially zero relative velocity, not the 15 m/s the
-        frame rotation alone would suggest
+    Given: A belief in POMDP mode and an observation carrying only the MDP arm's agents block
+    When: reinvigorate is called
+    Then: ValueError names the missing key and says what silence would have cost
 
     Test type: unit
     """
-    yaw_delta = 2.0 * np.arctan2(1.5, 16.5)
     particles = make_particles()
-    first = stamp(make_belief(particles), {"occupancy": grid_with((11, 6))}, particles)
+    belief = make_belief(particles)
+    observation = {"agents": np.zeros((ONE_AGENT, AGENT_SLOT_WIDTH))}
 
-    turned = np.asarray(first.particles, dtype=float).copy()
-    turned[:, 2] += yaw_delta  # EGO_HEADING
-    second = stamp(first, {"occupancy": grid_with((11, 5))}, turned)
-
-    np.testing.assert_allclose(agent_rows(second)[0, 0, 3:5], [0.0, 0.0], atol=1e-9)
+    with pytest.raises(ValueError, match="sees no traffic at all and still looks like it works"):
+        stamp(belief, observation, particles)
 
 
-def test_an_explicit_tracker_is_reused_by_the_successor_belief():
-    """Test that a caller-supplied tracker is carried into the next belief.
+def test_the_readings_ego_pose_channel_is_ignored_and_the_ego_block_is_left_to_the_filter():
+    """Test that the new ego-pose channel does not get stamped into the particles.
 
-    Purpose: Validates that a tuned tracker -- a wider frame_stride, say, chosen to beat the
-        velocity quantisation -- is not silently replaced by the default one step later
+    Purpose: The observation now reports where the ego is, and stamping it would be the
+        obvious thing to do with it. It is also wrong: the particles are then scored on
+        agreeing with a number every one of them was just handed, which is double-counting,
+        and it collapses the ego spread to zero so the likelihood becomes identical across
+        the belief and stops discriminating at all. The ego block is the weight update's job
+        -- unlike an opponent, the ego cannot fail to be acquired -- so this class must leave
+        it exactly as the filter produced it
 
-    Given: A belief constructed with a tracker whose frame_stride is 3
-    When: reinvigorate returns a successor
-    Then: The successor holds the very same tracker object
+    Given: A belief in POMDP mode over particles whose ego blocks all differ, and a reading
+        carrying both an ego pose that matches none of them and one detection
+    When: reinvigorate is called
+    Then: Every ego block comes back bit-for-bit unchanged, spread intact, while the agent
+        slot is stamped from the detection
 
     Test type: unit
     """
-    tracker = OccupancyVelocityTracker(frame_stride=3)
+    particles = make_particles(count=4)
+    particles[:, :EGO_STATE_WIDTH] = np.arange(4 * EGO_STATE_WIDTH).reshape(4, EGO_STATE_WIDTH)
+    before = particles.copy()
+    belief = make_belief(particles)
+    observation = {
+        "ego_pose": np.array([12.0, -4.0, 0.3, 88.0]),
+        "detections": detections(AHEAD_CLOSING),
+    }
+
+    refreshed = stamp(belief, observation, particles)
+
+    ego = np.asarray(refreshed.particles, dtype=float)[:, :EGO_STATE_WIDTH]
+    np.testing.assert_array_equal(ego, before[:, :EGO_STATE_WIDTH])
+    np.testing.assert_allclose(agent_rows(refreshed)[0, 0], AHEAD_CLOSING)
+
+
+def test_mdp_mode_stamps_the_observed_agent_rows_exactly_as_given():
+    """Test that the MDP arm reads its agents block instead of any detection geometry.
+
+    Purpose: The MDP arm's block lists every vehicle on the road, in range or not. Deriving
+        the rows from the detections instead would hand the baseline the POMDP arm's range
+        gate and its occlusions -- which, now that both arms stamp the same five numbers per
+        vehicle, is the *only* thing left separating them and the whole content of the
+        comparison
+
+    Given: A belief constructed in MDP mode and an agents block holding one vehicle 12 m ahead
+        with a relative velocity of (-4, 0.5)
+    When: reinvigorate is called
+    Then: Every particle carries that row unchanged
+
+    Test type: unit
+    """
     particles = make_particles()
-    belief = make_belief(particles, tracker=tracker)
+    belief = make_belief(particles, observation_mode=ObservationMode.MDP)
+    observation = {"agents": np.array([[1.0, 12.0, 0.0, -4.0, 0.5]])}
 
-    refreshed = stamp(belief, {"occupancy": grid_with((9, 6))}, particles)
+    refreshed = stamp(belief, observation, particles)
 
-    assert refreshed.tracker is tracker
+    np.testing.assert_allclose(agent_rows(refreshed)[:, 0], np.tile(observation["agents"], (4, 1)))
+
+
+def test_mdp_mode_without_an_agents_block_raises_rather_than_reading_the_detections():
+    """Test that the MDP arm refuses to fall back on the POMDP arm's reading.
+
+    Purpose: Falling back would leave the MDP baseline quietly consuming a degraded
+        observation -- the same detections the other arm reads -- so the two arms would no
+        longer differ in the one thing the comparison controls for
+
+    Given: A belief in MDP mode and an observation carrying only a detections block
+    When: reinvigorate is called
+    Then: ValueError names the missing agents block
+
+    Test type: unit
+    """
+    particles = make_particles()
+    belief = make_belief(particles, observation_mode=ObservationMode.MDP)
+
+    with pytest.raises(ValueError, match="expects an 'agents' block"):
+        stamp(belief, {"detections": detections(AHEAD_CLOSING)}, particles)
+
+
+def test_an_mdp_agents_block_of_the_wrong_size_is_rejected():
+    """Test that an agents block sized for a different slot count raises.
+
+    Purpose: The block is reshaped straight into the fixed slots, so a size mismatch is
+        either a cryptic reshape error or, worse, a silent misalignment that shifts every
+        field of every row by one
+
+    Given: A belief configured for one agent slot and an agents block holding two vehicles
+    When: reinvigorate is called
+    Then: ValueError names the value count and the slot count
+
+    Test type: unit
+    """
+    particles = make_particles()
+    belief = make_belief(particles, observation_mode=ObservationMode.MDP)
+    observation = {"agents": np.zeros((2, AGENT_SLOT_WIDTH))}
+
+    with pytest.raises(ValueError, match="max_tracked_agents=1"):
+        stamp(belief, observation, particles)
 
 
 def test_particles_narrower_than_the_agent_slots_are_rejected():
     """Test that a belief whose slot count disagrees with the particle width raises.
 
-    Purpose: Validates a loud failure on the one configuration mistake this class invites.
-        The agent rows are written straight into fixed slots, so a mismatch is either a
-        cryptic broadcast error or, worse, a silent misalignment of every field.
+    Purpose: Validates a loud failure on a configuration mistake whose quiet form is far
+        worse. The agent rows are written straight into fixed slots, so a mismatch is either
+        a cryptic broadcast error or a silent misalignment of every field
 
     Given: Particles sized for one agent slot and a belief configured for two
     When: reinvigorate is called
@@ -384,67 +443,165 @@ def test_particles_narrower_than_the_agent_slots_are_rejected():
     belief = make_belief(particles, max_tracked_agents=2)
 
     with pytest.raises(ValueError, match="max_tracked_agents"):
-        stamp(belief, {"occupancy": grid_with((9, 6))}, particles)
+        stamp(belief, {"detections": detections(AHEAD_CLOSING)}, particles)
 
 
-def test_frame_stride_widens_the_baseline_across_successive_updates():
-    """Test that a strided tracker differences frames that are really that far apart.
+def test_zero_jitter_stamps_the_exact_row_and_each_width_spreads_only_its_own_block():
+    """Test the two jitter widths against the two different things they stand for.
 
-    Purpose: Validates that frame_stride buys a wider measurement baseline rather than just a
-        larger divisor. A belief that kept only the immediately preceding frame would divide a
-        one-step displacement by three steps and under-report every velocity by that factor --
-        a silently wrong number, which is the worst outcome for a knob whose whole purpose is
-        to make the coarse velocities more trustworthy.
+    Purpose: Validates the split, and the reason there are two widths rather than one. The
+        position and the velocity are measured to different accuracies and propagated with
+        different amounts of model error -- the velocity width also has to carry the drift of
+        a constant-velocity rollout, which the position width does not -- so a single shared
+        std would either erase the position information or under-spread the velocity. Both
+        blocks must stay centred on what was reported: jitter is noise around a measurement,
+        not a correction to it
 
-    Given: A belief whose tracker has frame_stride 2, and an opponent closing by one cell on
-        each of three successive frames
-    When: reinvigorate is called on each frame in turn
-    Then: The first two steps report position only, and the third reports the true closing
-        speed of 15 m/s measured over the two-step baseline -- not the 7.5 m/s a
-        consecutive-frame difference divided by two steps would give
-
-    Test type: unit
-    """
-    tracker = OccupancyVelocityTracker(frame_stride=2, gate_radius_m=9.0)
-    particles = make_particles()
-    belief = make_belief(particles, tracker=tracker)
-
-    speeds = []
-    for along in (10, 9, 8):
-        belief = stamp(belief, {"occupancy": grid_with((along, 6))}, particles)
-        speeds.append(float(agent_rows(belief)[0, 0, 3]))
-
-    assert speeds[:2] == [0.0, 0.0]
-    assert speeds[2] == pytest.approx(-ONE_CELL_SPEED)
-
-
-def test_yaw_delta_follows_the_particle_weights_not_the_particle_count():
-    """Test that the de-rotation is driven by the weighted mean heading.
-
-    Purpose: Validates that low-probability particles cannot steer the de-rotation. The base
-        filter resamples only when the effective sample size drops, so between resamples a
-        cloud can be dominated by a few heavy particles; an unweighted mean would let the
-        light majority rotate the reference frame and manufacture velocity.
-
-    Given: A world-static opponent, and a second frame whose particles hold the true turned
-        heading on one heavy particle and the untouched heading on three light ones
-    When: reinvigorate is called on both frames in turn
-    Then: The de-rotation follows the heavy particle and the reported relative velocity is
-        essentially zero, which the unweighted mean of the four headings could not produce
+    Given: 20000 particles and one detection off the nose at (8, -3) m moving at (-2, 5) m/s,
+        stamped twice: once with both widths at zero and once at 0.5 m and 4.0 m/s
+    When: reinvigorate stamps them
+    Then: The zero-width stamp is identical on every particle; the jittered one is centred on
+        the same four numbers, with each block spread at its own width and neither at the
+        other's
 
     Test type: unit
     """
-    yaw_delta = 2.0 * np.arctan2(1.5, 16.5)
-    particles = make_particles()
-    first = stamp(make_belief(particles), {"occupancy": grid_with((11, 6))}, particles)
-
-    turned = np.asarray(first.particles, dtype=float).copy()
-    turned[0, 2] = yaw_delta  # EGO_HEADING on the one heavy particle
-    weighted: Any = turned
-    base = WeightedParticleBelief(
-        particles=weighted, log_weights=np.log(np.array([1e6, 1.0, 1.0, 1.0]))
+    np.random.seed(7)
+    particles = make_particles(count=20000)
+    exact = agent_rows(
+        stamp(make_belief(particles), {"detections": detections(OFF_THE_NOSE)}, particles)
     )
-    pomdp: Any = None
-    second = first.reinvigorate("noop", {"occupancy": grid_with((11, 5))}, pomdp, base)
+    belief = make_belief(particles, agent_pose_jitter=0.5, agent_velocity_jitter=4.0)
 
-    np.testing.assert_allclose(agent_rows(second)[0, 0, 3:5], [0.0, 0.0], atol=1e-3)
+    rows = agent_rows(stamp(belief, {"detections": detections(OFF_THE_NOSE)}, particles))[:, 0]
+
+    np.testing.assert_allclose(exact[:, 0], np.tile(OFF_THE_NOSE, (20000, 1)))
+    assert np.all(rows[:, 0] == 1.0)
+    np.testing.assert_allclose(rows[:, 1:3].mean(axis=0), [8.0, -3.0], atol=0.02)
+    np.testing.assert_allclose(rows[:, 3:5].mean(axis=0), [-2.0, 5.0], atol=0.15)
+    np.testing.assert_allclose(rows[:, 1:3].std(axis=0), [0.5, 0.5], rtol=0.05)
+    np.testing.assert_allclose(rows[:, 3:5].std(axis=0), [4.0, 4.0], rtol=0.05)
+
+
+def test_config_id_covers_the_jitter_widths_and_is_stable_across_identical_beliefs():
+    """Test that the belief's identity covers configuration and only configuration.
+
+    Purpose: config_id feeds __hash__ and __eq__ and the simulator's result caching, so it has
+        to be stable across two beliefs configured the same way. The jitter widths belong in
+        it because they change how the next step behaves; this step's reading does not, and
+        folding it in would give an identity that changed every frame
+
+    Given: Two beliefs built separately over identical particles with the same jitter widths,
+        and two more differing only in one width apiece
+    When: Their config_id values and hashes are compared
+    Then: The two identically configured beliefs agree on both, and each changed width
+        produces a different identity
+
+    Test type: unit
+    """
+    particles = make_particles()
+    one = make_belief(particles, agent_pose_jitter=0.5, agent_velocity_jitter=1.0)
+    same = make_belief(particles, agent_pose_jitter=0.5, agent_velocity_jitter=1.0)
+    wider_pose = make_belief(particles, agent_pose_jitter=2.0, agent_velocity_jitter=1.0)
+    wider_velocity = make_belief(particles, agent_pose_jitter=0.5, agent_velocity_jitter=3.0)
+
+    assert one.config_id == same.config_id
+    assert hash(one) == hash(same)
+    assert wider_pose.config_id != one.config_id
+    assert wider_velocity.config_id != one.config_id
+
+
+def test_reinvigorate_returns_a_belief_configured_to_stamp_again_next_step():
+    """Test that the successor keeps stamping instead of going inert after one step.
+
+    Purpose: A plain particle belief coming back here would stop the stamping after one step
+        and leave every later agent slot holding whatever the transition model drifted it to,
+        with no observation correcting it -- and the episode would still run to completion
+
+    Given: A belief with two agent slots and non-default jitter widths, and one reading
+    When: reinvigorate returns a successor
+    Then: The successor is a TrackedAgentsBelief carrying the same mode, slot count and jitter
+        widths as the belief it came from
+
+    Test type: unit
+    """
+    particles = make_particles(count=2, max_tracked_agents=2)
+    belief = make_belief(
+        particles, max_tracked_agents=2, agent_pose_jitter=0.25, agent_velocity_jitter=1.5
+    )
+
+    refreshed = stamp(belief, {"detections": detections(AHEAD_CLOSING)}, particles)
+
+    assert isinstance(refreshed, TrackedAgentsBelief)
+    assert refreshed.observation_mode is belief.observation_mode
+    assert refreshed.max_tracked_agents == 2
+    assert refreshed.agent_pose_jitter == 0.25
+    assert refreshed.agent_velocity_jitter == 1.5
+
+
+def test_pickle_round_trip_preserves_the_stamping_configuration():
+    """Test that a belief shipped to a worker process keeps stamping the way it was built.
+
+    Purpose: The simulator pickles beliefs across processes. A jitter width lost in transit
+        would come back as the default, so a run tuned for a wide velocity spread would
+        silently narrow it at the process boundary and the change would show up only as
+        slightly worse returns
+
+    Given: A belief with a non-default slot count and both jitter widths set
+    When: It is pickled and unpickled
+    Then: The restored belief carries the same configuration and the same identity
+
+    Test type: unit
+    """
+    belief = make_belief(
+        make_particles(count=2, max_tracked_agents=2),
+        max_tracked_agents=2,
+        agent_pose_jitter=0.25,
+        agent_velocity_jitter=1.5,
+    )
+
+    restored = pickle.loads(pickle.dumps(belief))
+
+    assert restored.max_tracked_agents == 2
+    assert restored.agent_pose_jitter == 0.25
+    assert restored.agent_velocity_jitter == 1.5
+    assert restored.config_id == belief.config_id
+
+
+def test_the_class_docstring_example_stamps_the_crossing_rate_it_advertises():
+    """Test the usage example in the TrackedAgentsBelief docstring.
+
+    Purpose: The example is what a reader copies, and it is also the class's own claim about
+        the redesign: it shows a vehicle closing at 2 m/s *and* crossing left at 3 m/s and
+        promises both numbers reach the slot. An example that drifted from the code would
+        advertise the old radial behaviour long after it was removed
+
+    Given: The example's own four zero particles, one agent slot and both jitter widths off,
+        and its detection 10 m ahead closing at 2 m/s and crossing left at 3 m/s
+    When: reinvigorate is called exactly as the example calls it
+    Then: The agent block is [1, 10, 0, -2, 3], the crossing rate included, and the successor
+        is another TrackedAgentsBelief so the stamping repeats next step
+
+    Test type: example
+    """
+    np.random.seed(0)
+    width = EGO_STATE_WIDTH + 1 * 5
+    particles = np.zeros((4, width))
+    belief = TrackedAgentsBelief(
+        particles=particles,
+        log_weights=np.log(np.ones(4) / 4),
+        max_tracked_agents=1,
+        agent_pose_jitter=0.0,
+        agent_velocity_jitter=0.0,
+    )
+    # The example names this `detections`; renamed here only to keep the module-level helper
+    # of that name visible. The reinvigorate call below is the example's, verbatim.
+    reported = np.array([[1.0, 10.0, 0.0, -2.0, 3.0]])
+    pomdp: Any = None
+
+    refreshed = belief.reinvigorate("noop", {"detections": reported}, pomdp, as_base(particles))
+
+    np.testing.assert_array_equal(
+        np.asarray(refreshed.particles)[0, EGO_STATE_WIDTH:], [1.0, 10.0, 0.0, -2.0, 3.0]
+    )
+    assert isinstance(refreshed, TrackedAgentsBelief)

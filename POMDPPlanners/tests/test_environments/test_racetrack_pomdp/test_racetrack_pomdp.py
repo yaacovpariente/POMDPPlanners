@@ -8,12 +8,20 @@ the structural contracts -- one tick per interaction, the cache guards, pickling
 per-step measurement channels -- testable without a simulator, and makes the outcomes
 (crash, off-road, truncation) deterministic rather than something to wait for.
 
-A smaller group of tests runs the real HighwayEnv backend, because three claims cannot be
-checked against a stand-in: that each arm emits the observation shape it promises, that
-the shared reward reproduces highway-env's own, and above all that the two arms share one
-dynamics path. The last one is the matched pair. If the cross-mode trajectory test fails,
-the comparison the environment exists to support is invalid, and no assertion here should
-be loosened to hide that.
+A larger group of tests runs the real HighwayEnv backend, because a fake session would be
+asserting its own arithmetic. What those tests pin about the sensors is the *wiring*: that
+the emitted reading describes the ego, the road and the traffic the world's own state
+vector describes, at the same arclength along the same lane walk. That is the one thing a
+stand-in cannot be asked. The reward parity and the matched pair are on the real backend
+for the same reason. If the cross-mode trajectory test fails, the comparison the
+environment exists to support is invalid, and no assertion here should be loosened to hide
+that.
+
+What each sensor *measures* -- the noise widths, the range gate, the occlusion rule, the
+ordering, the wrapped heading -- lives in ``test_racetrack_world_sensors.py``, next to the
+``WorldSensors`` code it moved out with. Those are properties of a chosen configuration of
+vehicles rather than of a live road, and a coasting rollout visits whichever configurations
+it happens to visit.
 """
 
 # pylint: disable=protected-access,too-many-lines  # Tests inspect live-session internals
@@ -21,7 +29,7 @@ be loosened to hide that.
 import pickle
 import random
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 import numpy as np
 import pytest
@@ -34,12 +42,41 @@ from POMDPPlanners.environments.racetrack_pomdp.racetrack_pomdp import (
     RacetrackStepChannel,
 )
 from POMDPPlanners.environments.racetrack_pomdp.racetrack_schema import (
+    AGENT_PRESENT,
+    AGENT_REL_VX,
+    AGENT_REL_X,
     AGENT_SLOT_WIDTH,
     DEFAULT_ACTION_PRESETS,
+    DEFAULT_CURVATURE_LOOKAHEAD_M,
     DEFAULT_MAX_TRACKED_AGENTS,
+    DETECTION_PRESENT,
+    DETECTION_REL_VX,
+    DETECTION_SLOT_WIDTH,
+    EGO_ANG,
+    EGO_ARCLENGTH_M,
+    EGO_HEADING,
+    EGO_LAT,
+    EGO_POSE_ARCLENGTH,
+    EGO_POSE_HEADING,
+    EGO_POSE_X,
+    EGO_POSE_Y,
+    EGO_SPEED,
     EGO_STATE_WIDTH,
-    GRID_CELLS,
+    EGO_X,
+    EGO_Y,
+    LANE_POSE_ANG,
+    LANE_POSE_LAT,
+    OBSERVED_EGO_POSE_WIDTH,
+    OBSERVED_EGO_SPEED_WIDTH,
+    OBSERVED_LANE_POSE_WIDTH,
     ObservationMode,
+    RacetrackObservation,
+    radial_velocities,
+    state_agent_rows,
+)
+from POMDPPlanners.environments.racetrack_pomdp.racetrack_track_geometry import (
+    TrackGeometry,
+    build_track_geometry,
 )
 
 # Index of the (0.0, 0.0) preset: coast, straight ahead. Looked up rather than written as a
@@ -47,6 +84,10 @@ from POMDPPlanners.environments.racetrack_pomdp.racetrack_schema import (
 # and every index moves whenever the steering resolution changes.
 _COAST_STRAIGHT = DEFAULT_ACTION_PRESETS.index((0.0, 0.0))
 _REPO_ROOT = Path(__file__).resolve().parents[4]
+
+# A detection gate wide enough that nothing on this circuit is ever range-gated out, so a
+# test about some other part of the radar is not silently testing the gate as well.
+_UNLIMITED_RANGE_M = 1000.0
 
 
 class FakeRacetrackSession:
@@ -99,11 +140,25 @@ class FakeRacetrackSession:
             rows[0] = [1.0, self.agent_range_m, 0.0, 0.0, 0.0]
         return np.concatenate([ego, rows.reshape(-1)])
 
-    def observation_at(self, tick: int) -> np.ndarray:
-        """The scripted occupancy grid after ``tick`` ticks, distinct per tick."""
-        return np.full((2, GRID_CELLS, GRID_CELLS), float(tick), dtype=np.float32)
+    def observation_at(self, tick: int) -> RacetrackObservation:
+        """The scripted reading after ``tick`` ticks: every channel filled with the tick.
 
-    def reset(self, seed: Optional[int] = None) -> Tuple[np.ndarray, np.ndarray]:
+        The values are not a plausible sensor output and are not meant to be -- these tests
+        are about which reading is served for which tick, so what matters is that the five
+        channels are distinguishable per tick and shaped as the world promises.
+        """
+        value = float(tick)
+        return RacetrackObservation(
+            ego_pose=np.full(OBSERVED_EGO_POSE_WIDTH, value, dtype=np.float32),
+            ego_speed=np.full(OBSERVED_EGO_SPEED_WIDTH, value, dtype=np.float32),
+            lane_pose=np.full(OBSERVED_LANE_POSE_WIDTH, value, dtype=np.float32),
+            curvature_ahead=np.full(len(DEFAULT_CURVATURE_LOOKAHEAD_M), value, dtype=np.float32),
+            detections=np.full(
+                (self.max_tracked_agents, DETECTION_SLOT_WIDTH), value, dtype=np.float32
+            ),
+        )
+
+    def reset(self, seed: Optional[int] = None) -> Tuple[np.ndarray, RacetrackObservation]:
         self.reset_calls += 1
         self.last_seed = seed
         self._tick = 0
@@ -136,6 +191,63 @@ def _reset_world(**kwargs: Any) -> RacetrackPOMDP:
     world = RacetrackPOMDP(discount_factor=0.95, **kwargs)
     world.initial_state_dist().sample()
     return world
+
+
+def _quiet_world(**kwargs: Any) -> RacetrackPOMDP:
+    """A live world with every sensor width set to zero, so its readings are the truth.
+
+    A sensor test either asks what the reading measures or how wrong it is, and the two need
+    opposite settings: the first needs the noise gone so a mismatch is a wrong quantity
+    rather than a draw, the second sets its own widths. This builds the first.
+    """
+    silent: Dict[str, float] = {
+        "ego_position_std_m": 0.0,
+        "ego_heading_std_rad": 0.0,
+        "ego_arclength_std_m": 0.0,
+        "lane_lateral_std_m": 0.0,
+        "lane_heading_std_rad": 0.0,
+        "curvature_std_1pm": 0.0,
+        "detection_position_std_m": 0.0,
+        "detection_velocity_std": 0.0,
+    }
+    for name, width in silent.items():
+        kwargs.setdefault(name, width)
+    return RacetrackPOMDP(discount_factor=0.95, **kwargs)
+
+
+def _drive(
+    world: RacetrackPOMDP, start: np.ndarray, steps: int, action: int = _COAST_STRAIGHT
+) -> Iterator[Tuple[np.ndarray, Any]]:
+    """Step a live world, yielding each successor state and the reading it produced.
+
+    Stops early at termination, which coasting on this circuit reaches in about twenty
+    steps, so every caller has to tolerate a short rollout.
+    """
+    state = start
+    for _ in range(steps):
+        world.reward(state, action)
+        state = world.sample_next_state(state, action)
+        yield state, world.sample_observation(state, action)
+        if world.is_terminal(state):
+            return
+
+
+def _ego_lane_geometry(world: RacetrackPOMDP) -> TrackGeometry:
+    """The curvature profile of the lane the live ego is on, built independently.
+
+    Built here from the road network rather than read off the session, so the curvature
+    tests compare the emitted channel against the track and not against the same cached
+    object the channel came from. Call it straight after the reset the world's own
+    arclength base was fixed at.
+    """
+    unwrapped = world._get_session()._env.unwrapped
+    return build_track_geometry(unwrapped.road.network, unwrapped.vehicle.lane_index)
+
+
+def _present_agent_rows(state: np.ndarray, max_tracked_agents: int) -> np.ndarray:
+    """The occupied agent slots of a state, as a ``(n, 5)`` block."""
+    rows = state_agent_rows(state, max_tracked_agents)
+    return rows[rows[:, AGENT_PRESENT] > 0.5]
 
 
 @pytest.fixture(name="fake_session")
@@ -311,7 +423,7 @@ def test_reward_and_next_state_share_a_single_simulator_tick(
 
     assert fake_session.step_calls - before == 1
     assert np.array_equal(next_state, fake_session.state_at(1))
-    assert np.array_equal(observation, fake_session.observation_at(1))
+    assert world.is_equal_observation(observation, fake_session.observation_at(1))
     # lateral -0.5 m, no control effort, no crash: (1/(1+4*0.25) + 1) / 2.
     assert reward == pytest.approx(0.75)
 
@@ -392,7 +504,7 @@ def test_observation_query_adds_no_tick(
     readings = [world.sample_observation(next_state, _COAST_STRAIGHT) for _ in range(3)]
 
     assert fake_session.step_calls == after_step
-    assert all(np.array_equal(reading, readings[0]) for reading in readings)
+    assert all(world.is_equal_observation(reading, readings[0]) for reading in readings)
 
 
 # ── Forward-only guards ─────────────────────────────────────────────────
@@ -730,23 +842,25 @@ def test_initial_observation_is_a_copy_the_caller_cannot_corrupt(
 ) -> None:
     """Mutating a drawn observation leaves the world's own reading intact.
 
-    Purpose: Validates the defensive copy. The world hands out its cached array, so
-        without a copy a caller that normalised or scaled the observation in place would
-        corrupt the world's state.
+    Purpose: Validates the defensive copy. The world hands out its cached arrays, so
+        without a copy a caller that normalised or scaled a channel in place would corrupt
+        the world's state. The copy has to reach every channel of the named tuple, not just
+        the first one, which is why each is mutated here.
 
     Given: A world reset to its live state
-    When: An initial observation is drawn and then mutated
+    When: An initial observation is drawn and every channel of it is mutated
     Then: A freshly drawn observation is unaffected
 
     Test type: unit
     """
     drawn = world.initial_observation_dist().sample()[0]
-    drawn[...] = 99.0
+    for channel in drawn:
+        channel[...] = 99.0
 
     redrawn = world.initial_observation_dist().sample()[0]
 
-    assert not np.array_equal(drawn, redrawn)
-    assert float(np.max(redrawn)) == 0.0
+    assert world.is_equal_observation(drawn, redrawn) is False
+    assert max(float(np.max(channel)) for channel in redrawn) == 0.0
 
 
 def test_initial_observation_resets_when_no_episode_has_started(
@@ -770,30 +884,39 @@ def test_initial_observation_resets_when_no_episode_has_started(
     observation = world.initial_observation_dist().sample()[0]
 
     assert session.reset_calls == 1
-    assert np.array_equal(observation, session.observation_at(0))
+    assert world.is_equal_observation(observation, session.observation_at(0))
 
 
-def test_observation_equality_and_hashing_agree_on_arrays(world: RacetrackPOMDP) -> None:
-    """Equal observations compare equal and hash alike; different ones do not.
+def test_observation_equality_and_hashing_agree_on_every_channel(
+    world: RacetrackPOMDP, fake_session: FakeRacetrackSession
+) -> None:
+    """Equal readings compare equal and hash alike; a change in any channel splits them.
 
-    Purpose: Validates the observation identity used to key planner tree nodes. A hash
-        that ignored the values would merge distinct observation branches.
+    Purpose: Validates the observation identity used to key planner tree nodes. The reading
+        is four separate arrays now, so a hash built from only one of them -- or from a
+        stacked view that quietly dropped a channel -- would merge branches that saw
+        different roads or different traffic.
 
-    Given: Two identical occupancy grids and one that differs in a single cell
+    Given: One scripted reading, an identical copy, and one copy perturbed in each channel
+        in turn
     When: is_equal_observation and hash_observation are applied
-    Then: The identical pair matches on both, and the differing one on neither
+    Then: The identical pair matches on both, and every perturbed copy on neither
 
     Test type: unit
     """
-    grid = np.zeros((2, GRID_CELLS, GRID_CELLS), dtype=np.float32)
-    same = grid.copy()
-    other = grid.copy()
-    other[0, 3, 4] = 1.0
+    reading = fake_session.observation_at(1)
+    same = fake_session.observation_at(1)
 
-    assert world.is_equal_observation(grid, same) is True
-    assert world.hash_observation(grid) == world.hash_observation(same)
-    assert world.is_equal_observation(grid, other) is False
-    assert world.hash_observation(grid) != world.hash_observation(other)
+    assert world.is_equal_observation(reading, same) is True
+    assert world.hash_observation(reading) == world.hash_observation(same)
+
+    for index in range(len(reading)):
+        channels = [channel.copy() for channel in reading]
+        channels[index].reshape(-1)[0] += 1.0
+        other = RacetrackObservation(*channels)
+
+        assert world.is_equal_observation(reading, other) is False
+        assert world.hash_observation(reading) != world.hash_observation(other)
 
 
 # ── Serialization ───────────────────────────────────────────────────────
@@ -830,11 +953,14 @@ def test_pickling_preserves_the_configuration(world: RacetrackPOMDP) -> None:
     """The restored world is configured exactly as the original was.
 
     Purpose: Validates that what survives pickling is the whole public configuration, so a
-        worker runs the arm the parent process intended rather than a default one.
+        worker runs the arm the parent process intended rather than a default one. The
+        sensor widths are checked alongside the simulator config because they live only on
+        this object -- highway-env knows nothing about them -- so a worker that lost them
+        would emit a differently-corrupted reading than the one the planner's model assumes.
 
     Given: A world in a known observation mode
     When: It is pickled and unpickled
-    Then: name, observation_mode and the simulator config are unchanged
+    Then: name, observation_mode, the simulator config and every sensor width are unchanged
 
     Test type: unit
     """
@@ -843,6 +969,15 @@ def test_pickling_preserves_the_configuration(world: RacetrackPOMDP) -> None:
     assert restored.name == world.name
     assert restored.observation_mode == world.observation_mode
     assert restored.simulator_config == world.simulator_config
+    assert restored.ego_position_std_m == world.ego_position_std_m
+    assert restored.ego_heading_std_rad == world.ego_heading_std_rad
+    assert restored.ego_arclength_std_m == world.ego_arclength_std_m
+    assert restored.curvature_lookahead_m == world.curvature_lookahead_m
+    assert restored.curvature_std_1pm == world.curvature_std_1pm
+    assert restored.max_detection_range_m == world.max_detection_range_m
+    assert restored.detection_position_std_m == world.detection_position_std_m
+    assert restored.detection_velocity_std == world.detection_velocity_std
+    assert restored.blocker_half_width_m == world.blocker_half_width_m
 
 
 def test_pickled_world_reopens_a_session_on_demand(
@@ -1204,6 +1339,33 @@ def test_near_miss_fires_only_for_a_present_agent_within_range(
     assert info[RacetrackStepChannel.NEAR_MISS.value] == expected
 
 
+def test_the_near_miss_channel_ignores_the_detection_range_gate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A near miss is measured off the true state, not off what the radar reported.
+
+    Purpose: The range gate belongs to the observation. Measuring the metric through it
+        would make the reported near-miss rate a property of the sensor rather than of the
+        driving, and the two arms of the comparison would then be scored on different
+        events -- which is the one thing this environment may not do.
+
+    Given: A world whose radar is gated at half a metre, scripted with an agent 3 m away
+    When: One step is taken and step_info is queried
+    Then: The near miss is still reported
+
+    Test type: unit
+    """
+    session = FakeRacetrackSession(agent_range_m=3.0)
+    _install(monkeypatch, session)
+    world = _reset_world(max_detection_range_m=0.5)
+    state = world._live_state
+
+    next_state = world.sample_next_state(state, _COAST_STRAIGHT)
+    info = world.step_info(state, _COAST_STRAIGHT, next_state)
+
+    assert info[RacetrackStepChannel.NEAR_MISS.value] == 1.0
+
+
 # ── Declared metrics versus produced channels ───────────────────────────
 
 
@@ -1290,36 +1452,61 @@ def test_highway_env_is_declared_in_the_dev_extra() -> None:
     assert any(requirement.startswith("highway-env") for requirement in _dev_extra_requirements())
 
 
-# ── Real simulator ──────────────────────────────────────────────────────
+# ── Real simulator: the matched pair ────────────────────────────────────
 
 
-@pytest.mark.parametrize(
-    "mode,expected_shape",
-    [
-        (ObservationMode.POMDP, (2, GRID_CELLS, GRID_CELLS)),
-        (ObservationMode.MDP, (DEFAULT_MAX_TRACKED_AGENTS + 1, 5)),
-    ],
-)
-def test_live_observation_shape_and_dtype_per_mode(
-    headless: None, mode: ObservationMode, expected_shape: Tuple[int, ...]
+def test_live_pomdp_observation_channels_have_the_promised_shapes_and_dtype(
+    headless: None,
 ) -> None:
-    """Each arm emits the observation the module documents.
+    """The POMDP arm emits the five channels the module documents.
 
-    Purpose: Validates the two observation blocks against the real backend, which is the
-        only place the promised shapes can actually be confirmed.
+    Purpose: Validates the reading's structure against the real backend, which is the only
+        place the promised shapes can actually be confirmed. The planner's model unflattens
+        this reading by position, so a channel of the wrong width silently shifts every
+        later channel into the wrong slot -- and the ego-pose channel now sits first, so a
+        world that emitted the old four-channel reading would misalign every later one.
 
-    Given: A live racetrack world in each observation mode
+    Given: A live racetrack world in POMDP mode
     When: An initial observation is drawn
-    Then: It has the documented shape and float32 dtype
+    Then: It is a five-channel RacetrackObservation with the documented widths, all float32
 
     Test type: integration
     """
     del headless
-    world = RacetrackPOMDP(discount_factor=0.95, observation_mode=mode, seed=0)
+    world = RacetrackPOMDP(discount_factor=0.95, observation_mode=ObservationMode.POMDP, seed=0)
 
     observation = world.initial_observation_dist().sample()[0]
 
-    assert observation.shape == expected_shape
+    assert isinstance(observation, RacetrackObservation)
+    assert len(observation) == 5
+    assert observation.ego_pose.shape == (OBSERVED_EGO_POSE_WIDTH,)
+    assert observation.ego_speed.shape == (OBSERVED_EGO_SPEED_WIDTH,)
+    assert observation.lane_pose.shape == (OBSERVED_LANE_POSE_WIDTH,)
+    assert observation.curvature_ahead.shape == (len(DEFAULT_CURVATURE_LOOKAHEAD_M),)
+    assert observation.detections.shape == (DEFAULT_MAX_TRACKED_AGENTS, DETECTION_SLOT_WIDTH)
+    assert all(channel.dtype == np.float32 for channel in observation)
+
+
+def test_live_mdp_observation_is_the_kinematics_table(headless: None) -> None:
+    """The MDP arm still emits the ego-first kinematics table, unchanged.
+
+    Purpose: Validates the baseline arm against the real backend. The POMDP arm's reading
+        was redesigned; this pins that the fully-observed arm it is compared against was
+        not touched, since a shifted baseline would move the measured gap on its own.
+
+    Given: A live racetrack world in MDP mode
+    When: An initial observation is drawn
+    Then: It is a single float32 table with one row per tracked agent plus the ego
+
+    Test type: integration
+    """
+    del headless
+    world = RacetrackPOMDP(discount_factor=0.95, observation_mode=ObservationMode.MDP, seed=0)
+
+    observation = world.initial_observation_dist().sample()[0]
+
+    assert isinstance(observation, np.ndarray)
+    assert observation.shape == (DEFAULT_MAX_TRACKED_AGENTS + 1, 5)
     assert observation.dtype == np.float32
 
 
@@ -1443,12 +1630,13 @@ def test_a_live_episode_runs_to_termination_or_the_step_budget(headless: None) -
     """A full rollout against the real backend completes without raising.
 
     Purpose: A smoke test over the whole live path -- reset, control conversion, state
-        reading, reward, observation and terminality -- which the scripted fake by
+        reading, reward, all five sensors and terminality -- which the scripted fake by
         construction cannot exercise.
 
     Given: A live world and a budget of thirty steps
     When: Actions are taken until termination or the budget runs out
-    Then: Every step yields a finite reward and a correctly shaped state and observation
+    Then: Every step yields a finite reward, a correctly shaped state, and a reading whose
+        every channel is finite and correctly shaped
 
     Test type: integration
     """
@@ -1464,8 +1652,356 @@ def test_a_live_episode_runs_to_termination_or_the_step_budget(headless: None) -
         steps += 1
         assert np.isfinite(reward)
         assert state.shape == (world.state_width,)
-        assert observation.shape == (2, GRID_CELLS, GRID_CELLS)
-        if world.is_terminal(state):
-            break
+        assert observation.ego_pose.shape == (OBSERVED_EGO_POSE_WIDTH,)
+        assert observation.ego_speed.shape == (OBSERVED_EGO_SPEED_WIDTH,)
+        assert observation.lane_pose.shape == (OBSERVED_LANE_POSE_WIDTH,)
+        assert observation.curvature_ahead.shape == (len(DEFAULT_CURVATURE_LOOKAHEAD_M),)
+        assert observation.detections.shape == (DEFAULT_MAX_TRACKED_AGENTS, DETECTION_SLOT_WIDTH)
+        assert all(np.all(np.isfinite(channel)) for channel in observation)
 
     assert steps >= 1
+
+
+# ── The ego pose channel ────────────────────────────────────────────────
+
+
+def test_the_zero_noise_ego_pose_is_the_states_own_pose_and_arclength(headless: None) -> None:
+    """What the arm reports as its pose is the pose the state vector holds.
+
+    Purpose: This is the wiring of the channel the redesign added, and only the live world
+        can be asked it. The sensors are handed a vehicle and an arclength; this pins that
+        those are *the ego* and *the state's own distance round the lap*. The arclength
+        matters most: it is numbered by walking lanes from the one the episode started on,
+        and the state slot, the curvature channel and this reading all have to be numbered
+        against the same walk. A channel re-basing at a segment boundary, or measuring the
+        lane-local offset instead, would read plausibly and put the planner's mapped model
+        a whole segment out.
+
+    Given: A live POMDP world with every ego-pose width set to zero, driven a few steps
+    When: Each reading's ego_pose is compared with the state it was emitted for
+    Then: The four entries are that state's x, y, heading and arclength
+
+    Test type: integration
+    """
+    del headless
+    world = _quiet_world(seed=0, other_vehicles=0)
+    start = world.initial_state_dist().sample()[0]
+
+    steps = 0
+    for state, observation in _drive(world, start, 12):
+        steps += 1
+        pose = observation.ego_pose
+        assert float(pose[EGO_POSE_X]) == pytest.approx(float(state[EGO_X]), abs=1e-3)
+        assert float(pose[EGO_POSE_Y]) == pytest.approx(float(state[EGO_Y]), abs=1e-3)
+        assert float(pose[EGO_POSE_HEADING]) == pytest.approx(float(state[EGO_HEADING]), abs=1e-5)
+        assert float(pose[EGO_POSE_ARCLENGTH]) == pytest.approx(
+            float(state[EGO_ARCLENGTH_M]), abs=1e-3
+        )
+
+    assert steps > 5, "too few steps to have crossed a segment boundary"
+
+
+# ── The ego speedometer ─────────────────────────────────────────────────
+
+
+def test_the_observed_ego_speed_tracks_the_true_state_slot(headless: None) -> None:
+    """What the POMDP arm reports as its speed is what the state slot holds.
+
+    Purpose: Validates the whole point of the speedometer -- that it is a measurement of
+        EGO_SPEED and not of something adjacent to it. The reduction runs through
+        highway-env's kinematics block, so a wrong feature order, a normalised block or a
+        relative frame would all show up here as a mismatch rather than downstream as a
+        planner that mysteriously mis-times its braking.
+
+    Given: A live POMDP world driven for 20 coasting steps
+    When: Each observation's ego_speed is compared with the next state's EGO_SPEED slot
+    Then: They agree to float32 precision at every step
+
+    Test type: integration
+    """
+    del headless
+    world = RacetrackPOMDP(discount_factor=0.95, seed=0)
+    start = world.initial_state_dist().sample()[0]
+
+    steps = 0
+    for state, observation in _drive(world, start, 20):
+        steps += 1
+        assert float(observation.ego_speed[0]) == pytest.approx(float(state[EGO_SPEED]), abs=1e-4)
+
+    assert steps > 1
+
+
+def test_the_observed_ego_speed_goes_negative_when_the_ego_reverses(headless: None) -> None:
+    """Braking through zero reports a negative speed, not its magnitude.
+
+    Purpose: The state's EGO_SPEED is signed and the racetrack ego really does reverse
+        under sustained braking. Reducing the velocity with a Euclidean norm would agree
+        with the state everywhere the car drives forwards and silently report a reversing
+        car as an accelerating one, which is exactly the reading a planner would act on.
+
+    Given: A live POMDP world braking flat out from its 10 m/s start
+    When: The episode is driven until the state's own speed slot goes negative
+    Then: The observed speed is negative too and still matches the slot
+
+    Test type: integration
+    """
+    del headless
+    brake_straight = DEFAULT_ACTION_PRESETS.index((-1.0, 0.0))
+    world = RacetrackPOMDP(discount_factor=0.95, seed=0)
+    start = world.initial_state_dist().sample()[0]
+
+    observed_negative = False
+    for state, observation in _drive(world, start, 30, action=brake_straight):
+        if float(state[EGO_SPEED]) < -0.5:
+            observed_negative = True
+            assert float(observation.ego_speed[0]) == pytest.approx(
+                float(state[EGO_SPEED]), abs=1e-4
+            )
+            break
+
+    assert observed_negative, "the ego never reversed, so the signed case went untested"
+
+
+def test_the_reading_carries_the_whole_relative_velocity_and_not_only_its_radial_half(
+    headless: None,
+) -> None:
+    """Both components of an opponent's relative motion are emitted, crossing rate included.
+
+    Purpose: A detection row used to carry the projection onto the line of sight and
+        nothing else, so the crossing rate had to be inferred -- a different estimation
+        problem from the one this environment poses. This pins the replacement on the live
+        world: the row carries the state's own relative velocity in full, and a step where
+        the crossing rate differs from the closing rate is what tells the two apart. It also
+        pins the trim of the kinematics block the speedometer is read out of -- highway-env
+        1.12.1 returns a row per vehicle for the two it was asked about, and the second row
+        must not survive.
+
+    Given: A live noiseless POMDP world with an opponent and no range gate to speak of
+    When: Each reading is compared with the true relative velocity in the state's slots, at
+        steps where the crossing rate and the closing rate disagree
+    Then: The row's two velocity entries are that slot's relative velocity, neither of them
+        the radial projection alone, and the speedometer is still one number equal to
+        EGO_SPEED
+
+    Test type: integration
+    """
+    del headless
+    world = _quiet_world(seed=2, other_vehicles=1, max_detection_range_m=_UNLIMITED_RANGE_M)
+    start = world.initial_state_dist().sample()[0]
+
+    checked = 0
+    for state, observation in _drive(world, start, 8):
+        assert len(observation) == 5
+        assert observation.ego_speed.size == OBSERVED_EGO_SPEED_WIDTH
+        assert float(observation.ego_speed[0]) == pytest.approx(float(state[EGO_SPEED]), abs=1e-4)
+
+        present = _present_agent_rows(state, DEFAULT_MAX_TRACKED_AGENTS)
+        if len(present) != 1 or observation.detections[0, DETECTION_PRESENT] < 0.5:
+            continue
+        offset = present[:, AGENT_REL_X : AGENT_REL_X + 2]
+        velocity = present[:, AGENT_REL_VX : AGENT_REL_VX + 2]
+        radial = float(radial_velocities(offset, velocity)[0])
+        reported = np.asarray(
+            observation.detections[0, DETECTION_REL_VX : DETECTION_REL_VX + 2], dtype=float
+        )
+        if abs(float(np.linalg.norm(velocity[0])) - abs(radial)) < 1.0:
+            continue  # Almost head-on here, so the extra component proves nothing.
+
+        assert reported == pytest.approx(velocity[0], abs=1e-3)
+        # A radial-only row would have norm |radial| exactly; the guard above put the true
+        # relative speed a whole metre per second above that.
+        assert float(np.linalg.norm(reported)) - abs(radial) > 0.5
+        checked += 1
+
+    assert checked > 0, "no step had a crossing rate distinguishable from its closing rate"
+
+
+# ── The lane camera ─────────────────────────────────────────────────────
+
+
+def test_zero_lane_noise_gives_back_the_exact_lane_offset(headless: None) -> None:
+    """Configuring both widths to zero recovers the simulator's own lane pose exactly.
+
+    Purpose: Pins the reading to the state slots it is supposed to measure, on the live
+        road. The camera's own arithmetic and its noise widths are covered against a
+        stand-in vehicle in ``test_racetrack_world_sensors.py``; what only the live world
+        can answer is whether the pose it measured is the *ego's* -- a channel fed the
+        wrong vehicle or the wrong entries of ``lane_offset`` would still be a plausible
+        two-vector, and the model's likelihood would score a residual against a mean it
+        never converges on.
+
+    Given: A live POMDP world with both lane-noise widths set to 0.0, driven a few steps
+    When: Each reading is compared with the EGO_LAT and EGO_ANG of the state it saw
+    Then: They agree to float32 precision
+
+    Test type: integration
+    """
+    del headless
+    world = _quiet_world(seed=5, other_vehicles=0)
+    start = world.initial_state_dist().sample()[0]
+
+    steps = 0
+    for state, observation in _drive(world, start, 5):
+        steps += 1
+        assert float(observation.lane_pose[LANE_POSE_LAT]) == pytest.approx(
+            float(state[EGO_LAT]), abs=1e-6
+        )
+        assert float(observation.lane_pose[LANE_POSE_ANG]) == pytest.approx(
+            float(state[EGO_ANG]), abs=1e-6
+        )
+
+    assert steps > 1
+
+
+# ── Curvature ahead ─────────────────────────────────────────────────────
+
+
+def test_zero_noise_curvature_is_the_track_geometry_at_the_ego_arclength_plus_each_lookahead(
+    headless: None,
+) -> None:
+    """Noiseless, the channel is the road: the profile read at ``arclength + d``.
+
+    Purpose: Pins the channel to the geometry the planner's model indexes, and to the same
+        lane walk the arclength state slot is numbered against. If the camera read a
+        different walk -- or numbered its distances from a different origin -- the two would
+        disagree about where a corner starts, and every mapped model built on this world
+        would be scoring curvature at the wrong place along the track.
+
+    Given: A live POMDP world with zero curvature noise, and the curvature profile of its
+        starting lane built independently from the road network
+    When: Each reading is compared against the profile at the state's own arclength plus
+        each configured lookahead
+    Then: They agree at every step
+
+    Test type: integration
+    """
+    del headless
+    lookaheads = (10.0, 20.0, 30.0)
+    world = _quiet_world(seed=0, other_vehicles=0, curvature_lookahead_m=lookaheads)
+    start = world.initial_state_dist().sample()[0]
+    geometry = _ego_lane_geometry(world)
+
+    steps = 0
+    for state, observation in _drive(world, start, 20):
+        steps += 1
+        expected = geometry.curvature_at(float(state[EGO_ARCLENGTH_M]) + np.asarray(lookaheads))
+        assert observation.curvature_ahead == pytest.approx(expected, abs=1e-6)
+
+    assert steps > 5, "too few steps to have crossed a segment boundary"
+
+
+def test_curvature_ahead_leads_the_ego_into_a_bend(headless: None) -> None:
+    """Approaching a corner, the channel reports a bend the ego is not yet in.
+
+    Purpose: This is the channel's reason to exist. A reading that only ever reported the
+        curvature at the ego's own arclength would tell a planner nothing it could not read
+        off its own state, and a rollout could not brake before a corner it cannot see. The
+        test therefore pins the lead itself: a step where the road under the car is straight
+        while the far sample already carries a curvature the car reaches later.
+
+    Given: A live noiseless POMDP world coasting towards the circuit's first bend
+    When: Each step's furthest lookahead is compared with the curvature at the ego's own
+        arclength
+    Then: Some step reports a bend ahead while the ego is still on a straight, and the ego
+        later arrives at exactly that curvature
+
+    Test type: integration
+    """
+    del headless
+    world = _quiet_world(seed=0, other_vehicles=0)
+    start = world.initial_state_dist().sample()[0]
+    geometry = _ego_lane_geometry(world)
+
+    profile: List[Tuple[float, float]] = []
+    for state, observation in _drive(world, start, 25):
+        here = float(geometry.curvature_at(float(state[EGO_ARCLENGTH_M])))
+        profile.append((here, float(observation.curvature_ahead[-1])))
+
+    leading = [index for index, (here, ahead) in enumerate(profile) if here == 0.0 and ahead != 0.0]
+    assert leading, "the rollout never approached a bend, so the lead went untested"
+    announced = profile[leading[0]][1]
+    arrived = [here for here, _ in profile[leading[0] + 1 :] if here == pytest.approx(announced)]
+    assert arrived, f"curvature {announced} was announced ahead but the ego never reached it"
+
+
+def test_the_curvature_channel_is_noisy_at_the_width_it_was_configured_with(
+    headless: None,
+) -> None:
+    """The camera's curvature reading is corrupted, by the amount it was told to be.
+
+    Purpose: A mapless planner reading this channel is estimating the road rather than
+        being told it, and that is only true if the reading is wrong. Emitting the true
+        curvature would hand a POMDP planner a piece of ground truth the fully-observed arm
+        does not even carry in its observation, which would invert the comparison.
+
+    Given: Four live episodes with curvature noise of 0.02 1/m, an order above the default
+        so the spread is measurable in the steps a coasting episode survives
+    When: Each reading is compared with the track's own curvature at the same lookaheads
+    Then: No reading is exact and the residuals' spread sits near the configured width
+
+    Test type: integration
+    """
+    del headless
+    np.random.seed(23)
+    curvature_std = 0.02
+
+    residuals: List[float] = []
+    for seed in range(4):
+        world = RacetrackPOMDP(
+            discount_factor=0.95, seed=seed, other_vehicles=0, curvature_std_1pm=curvature_std
+        )
+        start = world.initial_state_dist().sample()[0]
+        geometry = _ego_lane_geometry(world)
+        for state, observation in _drive(world, start, 15):
+            truth = geometry.curvature_at(
+                float(state[EGO_ARCLENGTH_M]) + np.asarray(DEFAULT_CURVATURE_LOOKAHEAD_M)
+            )
+            residuals.extend((np.asarray(observation.curvature_ahead) - truth).tolist())
+
+    errors = np.asarray(residuals)
+    assert len(errors) > 30, "too few readings survived to measure a spread"
+    assert not np.any(errors == 0.0), "an exact reading means the camera noise is missing"
+    assert float(errors.std()) == pytest.approx(curvature_std, rel=0.5)
+
+
+# ── Reproducibility of the sensor noise ─────────────────────────────────
+
+
+def _seeded_readings(numpy_seed: int, steps: int = 4) -> np.ndarray:
+    """Drive a live world under a given global NumPy seed and flatten what it saw."""
+    np.random.seed(numpy_seed)
+    world = RacetrackPOMDP(
+        discount_factor=0.95, seed=0, other_vehicles=1, max_detection_range_m=_UNLIMITED_RANGE_M
+    )
+    start = world.initial_state_dist().sample()[0]
+    rows = [
+        np.concatenate([np.asarray(channel, dtype=float).reshape(-1) for channel in observation])
+        for _, observation in _drive(world, start, steps)
+    ]
+    return np.asarray(rows)
+
+
+def test_seeding_numpy_reproduces_a_reading(headless: None) -> None:
+    """The same global seed replays the same sensor noise; a different one does not.
+
+    Purpose: All four sensors draw from NumPy's global generator, which is what makes a
+        seeded experiment repeatable -- and what makes an unnoticed extra draw anywhere in
+        the world shift every later reading. Both halves are asserted: without the second,
+        a world that had lost its noise entirely would pass the first trivially.
+
+    Given: Two live POMDP episodes run under the same NumPy seed and one under another,
+        all with the same simulator seed
+    When: Their readings are compared
+    Then: The matching pair is identical and the third differs
+
+    Test type: integration
+    """
+    del headless
+    first = _seeded_readings(12345)
+    repeat = _seeded_readings(12345)
+    different = _seeded_readings(999)
+
+    assert first.size > 0
+    assert np.array_equal(first, repeat)
+    assert first.shape == different.shape
+    assert not np.array_equal(first, different)
