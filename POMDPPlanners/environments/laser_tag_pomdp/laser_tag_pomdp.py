@@ -286,11 +286,23 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-pub
             observation_space=SpaceType.CONTINUOUS,  # Continuous 8-dimensional laser measurements with noise
         )
 
+        danger_term_min = 0.0
+        danger_term_max = 0.0
+        if reward_model_type == RewardModelType.ZERO_MEAN_HAZARD_SHOCK:
+            if walls:
+                danger_term_min -= abs(dangerous_area_penalty)
+            if dangerous_areas is None or dangerous_areas:
+                danger_term_min -= abs(dangerous_area_penalty)
+                danger_term_max += abs(dangerous_area_penalty)
+
         super().__init__(
             discount_factor=discount_factor,
             name=name,
             space_info=space_info,
-            reward_range=(-tag_penalty, tag_reward),
+            reward_range=(
+                -tag_penalty + danger_term_min,
+                tag_reward + danger_term_max,
+            ),
             output_dir=output_dir,
             debug=debug,
             use_queue_logger=use_queue_logger,
