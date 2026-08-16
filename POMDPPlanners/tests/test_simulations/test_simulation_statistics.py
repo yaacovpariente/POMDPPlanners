@@ -4,6 +4,7 @@ import random
 from typing import List
 
 import numpy as np
+import pytest
 
 from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.policy import PolicyInfoVariable, PolicyRunData
@@ -18,6 +19,7 @@ from POMDPPlanners.simulations.simulation_statistics import (
     StandardMetrics,
     compute_statistics_environment_policy_pair,
     compute_statistics_environments_policies_comparison,
+    get_available_optimization_metrics,
     get_metric_names_from_environment_policy_pair,
 )
 
@@ -844,3 +846,48 @@ def test_metric_estimates_within_confidence_intervals():
             f"Metric '{metric.name}': value {metric.value} not within CI "
             f"[{metric.lower_confidence_bound}, {metric.upper_confidence_bound}]"
         )
+
+
+def test_cvar_return_rejects_samples_outside_declared_reward_range():
+    """CVaR concentration bounds must not use an invalid return support."""
+    histories = [create_test_history([-100.0], discount_factor=0.0) for _ in range(10)]
+    environment = TigerPOMDP(discount_factor=0.0)
+    environment.reward_range = (-1.0, 1.0)
+
+    with pytest.raises(ValueError, match="outside the distribution support"):
+        compute_statistics_environment_policy_pair(
+            env=environment,
+            histories=histories,
+            alpha=0.1,
+            confidence_interval_level=0.95,
+        )
+
+
+def test_cvar_metric_omitted_without_reward_range():
+    """CVaR is unavailable when the environment has no known reward support."""
+    environment = TigerPOMDP(discount_factor=0.95)
+    environment.reward_range = None
+    histories = [create_test_history([float(i)]) for i in range(1, 11)]
+
+    metrics = compute_statistics_environment_policy_pair(
+        env=environment,
+        histories=histories,
+        alpha=0.1,
+        confidence_interval_level=0.95,
+    )
+    assert StandardMetrics.RETURN_CVAR.value not in {metric.name for metric in metrics}
+
+    dataframe = compute_statistics_environments_policies_comparison(
+        histories={environment.name: {"test_policy": histories}},
+        environments=[environment],
+        alpha=0.1,
+        confidence_interval_level=0.95,
+    )
+    assert not any(column.startswith("return_cvar") for column in dataframe.columns)
+
+    assert StandardMetrics.RETURN_CVAR.value not in get_metric_names_from_environment_policy_pair(
+        environment, POMCP
+    )
+    assert StandardMetrics.RETURN_CVAR.value not in get_available_optimization_metrics(
+        environment, POMCP
+    )
