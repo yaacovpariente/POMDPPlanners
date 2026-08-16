@@ -301,12 +301,20 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
         # advertised lower bound. Maximum distance is diagonal from corner to
         # corner: sqrt(2) * (grid_size - 1).
         max_distance = np.sqrt(2) * (grid_size - 1)
+        if self.dangerous_areas:
+            if reward_model_type == RewardModelType.ZERO_MEAN_HAZARD_SHOCK:
+                danger_term_min = -abs(dangerous_area_penalty)
+                danger_term_max = abs(dangerous_area_penalty)
+            else:
+                danger_term_min = min(0.0, dangerous_area_penalty)
+                danger_term_max = max(0.0, dangerous_area_penalty)
+        else:
+            danger_term_min = 0.0
+            danger_term_max = 0.0
         min_reward = (
-            -max_distance
-            + min(0.0, obstacle_penalty if self.obstacles else 0.0)
-            + min(0.0, dangerous_area_penalty if self.dangerous_areas else 0.0)
+            -max_distance + min(0.0, obstacle_penalty if self.obstacles else 0.0) + danger_term_min
         )
-        max_reward = 100.0  # Best case: at target with bonus reward
+        max_reward = 100.0 + danger_term_max
 
         super().__init__(
             discount_factor=discount_factor,

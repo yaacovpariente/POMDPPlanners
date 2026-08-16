@@ -1457,6 +1457,21 @@ class TestLaserTagPOMDP:
 
         assert env2.reward_range == (expected_min2, expected_max2)
 
+    def test_zero_mean_danger_shock_expands_both_reward_range_bounds(self):
+        """A zero-mean danger shock advertises both possible shock signs."""
+        env = LaserTagPOMDP(
+            discount_factor=0.95,
+            **_lt_pinned_kwargs(
+                tag_reward=15.0,
+                tag_penalty=20.0,
+                walls=set(),
+                dangerous_areas={(5, 3)},
+                dangerous_area_penalty=5.0,
+                reward_model_type=RewardModelType.ZERO_MEAN_HAZARD_SHOCK,
+            ),
+        )
+        assert env.reward_range == (-25.0, 20.0)
+
     def test_initial_state_distribution(self):
         """Test initial state distribution properties.
 

@@ -222,10 +222,19 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
         # is configured, so disabling the feature preserves the historical
         # reward range exactly.
         _has_dangerous_areas = bool(dangerous_areas)
-        min_reward = step_penalty + ghost_collision_penalty
         if _has_dangerous_areas:
-            min_reward -= float(dangerous_area_penalty)
-        max_reward = step_penalty + pellet_reward + win_reward
+            if reward_model_type == RewardModelType.ZERO_MEAN_HAZARD_SHOCK:
+                danger_term_min = -abs(dangerous_area_penalty)
+                danger_term_max = abs(dangerous_area_penalty)
+            else:
+                danger_contribution = -float(dangerous_area_penalty)
+                danger_term_min = min(0.0, danger_contribution)
+                danger_term_max = max(0.0, danger_contribution)
+        else:
+            danger_term_min = 0.0
+            danger_term_max = 0.0
+        min_reward = step_penalty + ghost_collision_penalty + danger_term_min
+        max_reward = step_penalty + pellet_reward + win_reward + danger_term_max
 
         space_info = SpaceInfo(
             action_space=SpaceType.DISCRETE, observation_space=SpaceType.DISCRETE

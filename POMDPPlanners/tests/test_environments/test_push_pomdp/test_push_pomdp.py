@@ -19,6 +19,7 @@ import pytest
 from POMDPPlanners.core.policy import PolicyRunData
 from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.environments.push_pomdp import PushPOMDP, _native as push_native
+from POMDPPlanners.environments.push_pomdp.push_pomdp import RewardModelType
 from POMDPPlanners.tests.test_utils.confidence_interval_utils import (
     verify_metrics_within_confidence_intervals,
 )
@@ -1836,6 +1837,20 @@ class TestPushDangerousAreas:
             ),
         )
         assert env_yes.reward_range[0] == pytest.approx(env_no.reward_range[0] - 3.5)
+
+    def test_zero_mean_danger_shock_expands_both_reward_range_bounds(self):
+        """A zero-mean danger shock advertises both possible shock signs."""
+        env = PushPOMDP(
+            discount_factor=0.95,
+            **push_pinned_kwargs(
+                grid_size=10,
+                dangerous_areas=[(2.0, 2.0)],
+                dangerous_area_penalty=-3.5,
+                reward_model_type=RewardModelType.ZERO_MEAN_HAZARD_SHOCK,
+            ),
+        )
+        max_distance = np.sqrt(2) * 9
+        assert env.reward_range == pytest.approx((-max_distance - 3.5, 103.5))
 
 
 class TestSampleNextStepEquivalence:
