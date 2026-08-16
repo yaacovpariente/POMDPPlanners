@@ -216,7 +216,7 @@ def cvar_confidence_interval(
     dist_upper_bound: Optional[float] = None,
 ):
     """
-    Calculate the confidence interval for the CVaR of a dataset using the t-distribution.
+    Calculate finite-sample CVaR concentration bounds using the Thomas method.
 
     Args:
         data: Array of values
@@ -231,29 +231,55 @@ def cvar_confidence_interval(
         tuple: (lower_bound, upper_bound) of the confidence interval
 
     Raises:
-        ValueError: If data contains NaN values or has insufficient samples
+        ValueError: If parameters, data, support, or computed bounds are invalid
     """
 
-    if not 0 <= alpha <= 1:
-        raise ValueError("confidence must be between 0 and 1")
-    if len(data) == 0:
-        raise ValueError("Input vector must not be empty")
+    if not 0 < alpha <= 1:
+        raise ValueError("alpha must be between 0 (exclusive) and 1")
+    if not 0 < delta < 1:
+        raise ValueError("delta must be between 0 and 1 (exclusive)")
 
-    # For single data point, return the value as both bounds
-    if len(data) == 1:
-        cvar_value = cvar_estimator(data, alpha)
+    data_arr = np.asarray(data, dtype=float)
+    if data_arr.size == 0:
+        raise ValueError("Input vector must not be empty")
+    if not np.all(np.isfinite(data_arr)):
+        raise ValueError("Input vector must contain only finite values")
+
+    effective_lower = (
+        float(dist_lower_bound) if dist_lower_bound is not None else float(np.min(data_arr))
+    )
+    effective_upper = (
+        float(dist_upper_bound) if dist_upper_bound is not None else float(np.max(data_arr))
+    )
+    if not np.isfinite(effective_lower) or not np.isfinite(effective_upper):
+        raise ValueError("Distribution support bounds must be finite")
+    if effective_lower > effective_upper:
+        raise ValueError("Distribution lower bound must not exceed upper bound")
+
+    sample_lower = float(np.min(data_arr))
+    sample_upper = float(np.max(data_arr))
+    if sample_lower < effective_lower or sample_upper > effective_upper:
+        raise ValueError(
+            "Data contains values outside the distribution support: "
+            f"observed [{sample_lower}, {sample_upper}], "
+            f"support [{effective_lower}, {effective_upper}]"
+        )
+
+    # For a single data point, the CVaR is known exactly.
+    if data_arr.size == 1:
+        cvar_value = cvar_estimator(data_arr, alpha)
         return (cvar_value, cvar_value)
 
-    data_arr = np.asarray(data)
-    effective_lower = dist_lower_bound if dist_lower_bound is not None else float(np.min(data_arr))
-    effective_upper = dist_upper_bound if dist_upper_bound is not None else float(np.max(data_arr))
-
     lower_bound = cvar_probabilistic_lower_bound_thomas(
-        vec=data, alpha=alpha, delta=delta / 2, dist_lower_bound=effective_lower
+        vec=data_arr, alpha=alpha, delta=delta / 2, dist_lower_bound=effective_lower
     )
     upper_bound = cvar_probabilistic_upper_bound_thomas(
-        vec=data, alpha=alpha, delta=delta / 2, dist_upper_bound=effective_upper
+        vec=data_arr, alpha=alpha, delta=delta / 2, dist_upper_bound=effective_upper
     )
+    if not np.isfinite(lower_bound) or not np.isfinite(upper_bound):
+        raise ValueError("CVaR confidence bounds must be finite")
+    if lower_bound > upper_bound:
+        raise ValueError(f"CVaR confidence bounds are reversed: [{lower_bound}, {upper_bound}]")
     return lower_bound, upper_bound
 
 
