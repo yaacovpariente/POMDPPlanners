@@ -32,6 +32,15 @@ class StandardMetrics(Enum):
     AVERAGE_REACH_TERMINAL_STATE = "average_reach_terminal_state"
 
 
+def _standard_metric_names(env: Environment) -> List[str]:
+    """Return standard metrics supported by the environment metadata."""
+    return [
+        metric.value
+        for metric in StandardMetrics
+        if metric is not StandardMetrics.RETURN_CVAR or env.reward_range is not None
+    ]
+
+
 def _cvar_return_bounds(
     env: Environment,
 ) -> Tuple[Optional[float], Optional[float]]:
@@ -202,18 +211,26 @@ def compute_statistics_environment_policy_pair(  # pylint: disable=too-many-stat
 
     average_return = sum(return_samples) / len(return_samples)
 
-    return_cvar = -cvar_estimator(-np.array(return_samples), alpha)
     return_value_at_risk = np.percentile(return_samples, alpha * 100)
 
-    neg_lower, neg_upper = _cvar_return_bounds(env)
-    neg_ci = cvar_confidence_interval(
-        data=list(-np.array(return_samples)),
-        alpha=alpha,
-        delta=1 - confidence_interval_level,
-        dist_lower_bound=neg_lower,
-        dist_upper_bound=neg_upper,
-    )
-    cvar_return_confidence_interval = (-neg_ci[1], -neg_ci[0])
+    cvar_return_metric = None
+    if env.reward_range is not None:
+        return_cvar = -cvar_estimator(-np.array(return_samples), alpha)
+        neg_lower, neg_upper = _cvar_return_bounds(env)
+        neg_ci = cvar_confidence_interval(
+            data=list(-np.array(return_samples)),
+            alpha=alpha,
+            delta=1 - confidence_interval_level,
+            dist_lower_bound=neg_lower,
+            dist_upper_bound=neg_upper,
+        )
+        cvar_return_confidence_interval = (-neg_ci[1], -neg_ci[0])
+        cvar_return_metric = MetricValue(
+            name=StandardMetrics.RETURN_CVAR.value,
+            value=float(return_cvar),
+            lower_confidence_bound=cvar_return_confidence_interval[0],
+            upper_confidence_bound=cvar_return_confidence_interval[1],
+        )
     return_value_at_risk_confidence_interval = quantile_confidence_interval(
         data=return_samples, alpha=alpha, conf_level=confidence_interval_level
     )
@@ -267,12 +284,7 @@ def compute_statistics_environment_policy_pair(  # pylint: disable=too-many-stat
                 lower_confidence_bound=average_return_confidence_interval[0],
                 upper_confidence_bound=average_return_confidence_interval[1],
             ),
-            MetricValue(
-                name=StandardMetrics.RETURN_CVAR.value,
-                value=float(return_cvar),
-                lower_confidence_bound=cvar_return_confidence_interval[0],
-                upper_confidence_bound=cvar_return_confidence_interval[1],
-            ),
+            *([cvar_return_metric] if cvar_return_metric is not None else []),
             MetricValue(
                 name=StandardMetrics.RETURN_VALUE_AT_RISK.value,
                 value=float(return_value_at_risk),
@@ -548,8 +560,8 @@ def get_metric_names_from_environment_policy_pair(
     # Policy-specific metrics (second, prefixed with "policy_info_")
     policy_metrics = [f"policy_info_{name}" for name in policy_class.get_info_variable_names()]
 
-    # Standard metrics (last, always available)
-    standard_metrics = [metric.value for metric in StandardMetrics]
+    # Standard metrics (last, conditional on required environment metadata)
+    standard_metrics = _standard_metric_names(environment)
 
     return env_metrics + policy_metrics + standard_metrics
 
@@ -601,8 +613,8 @@ def get_available_optimization_metrics(
         >>> "policy_info_min_actions_visit_count" in available_metrics
         True
     """
-    # Standard metrics (always available)
-    standard = [metric.value for metric in StandardMetrics]
+    # Standard metrics (conditional on required environment metadata)
+    standard = _standard_metric_names(environment)
 
     # Environment-specific metrics
     env_metrics = environment.get_metric_names()
