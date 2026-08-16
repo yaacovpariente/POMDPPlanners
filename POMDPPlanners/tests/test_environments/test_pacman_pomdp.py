@@ -32,6 +32,7 @@ from POMDPPlanners.environments.pacman_pomdp import (
     PacManPOMDP,
     create_simple_maze_pacman,
 )
+from POMDPPlanners.environments.pacman_pomdp.pacman_pomdp import RewardModelType
 
 # Set seeds for reproducible tests
 np.random.seed(42)
@@ -2933,3 +2934,17 @@ class TestPacManDangerousAreas:
         )
         expected_max = self.pomdp.step_penalty + self.pomdp.pellet_reward + self.pomdp.win_reward
         assert self.pomdp.reward_range == (expected_min, expected_max)
+
+    def test_zero_mean_danger_shock_expands_both_reward_range_bounds(self):
+        """A zero-mean danger shock advertises both possible shock signs."""
+        env = PacManPOMDP(
+            discount_factor=0.95,
+            **pacman_pinned_kwargs(
+                dangerous_areas={(3, 3)},
+                dangerous_area_penalty=5.0,
+                reward_model_type=RewardModelType.ZERO_MEAN_HAZARD_SHOCK,
+            ),
+        )
+        base_min = env.step_penalty + env.ghost_collision_penalty
+        base_max = env.step_penalty + env.pellet_reward + env.win_reward
+        assert env.reward_range == (base_min - 5.0, base_max + 5.0)
