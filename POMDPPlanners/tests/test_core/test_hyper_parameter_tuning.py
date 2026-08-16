@@ -1103,6 +1103,7 @@ class TestOptimizedPolicyResultValidation:
                     discount_factor=0.95,
                     name="mock_env",
                     space_info=SpaceInfo(SpaceType.DISCRETE, SpaceType.DISCRETE),
+                    reward_range=(-1.0, 1.0),
                 )
 
             @property
