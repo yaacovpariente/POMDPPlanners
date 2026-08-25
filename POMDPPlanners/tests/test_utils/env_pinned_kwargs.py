@@ -283,6 +283,7 @@ def push_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
         "penalty_decay": 1.0,
         "initial_state": None,
         "transition_error_prob": 0.0,
+        "is_dangerous_area_hit_terminal": False,
     }
     pinned.update(overrides)
     return pinned
