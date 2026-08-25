@@ -1186,13 +1186,26 @@ class PushDiscreteTransitionCpp {
         py::array_t<double, py::array::c_style | py::array::forcecast> action_dxdy,
         double grid_size, double push_threshold, double friction_coefficient,
         py::array_t<double, py::array::c_style | py::array::forcecast> obstacles_flat,
-        int n_obstacles, double obstacle_radius)
+        int n_obstacles, double obstacle_radius,
+        py::array_t<double, py::array::c_style | py::array::forcecast> dangerous_areas,
+        double dangerous_area_radius, double dangerous_area_hit_probability,
+        int reward_variant_code, double penalty_decay,
+        bool is_dangerous_area_hit_terminal)
         : grid_size_(grid_size),
           push_threshold_(push_threshold),
           friction_coefficient_(friction_coefficient),
           n_obstacles_(n_obstacles),
           obstacle_radius_(obstacle_radius),
-          state_(kPushStateDim, 0.0) {
+          state_(kPushStateDim, 0.0),
+          dangerous_flat_(load_dangerous_areas(dangerous_areas)),
+          hazard_enabled_(is_dangerous_area_hit_terminal) {
+        // The hazard config must be complete BEFORE load_state_ runs: it is
+        // what decides whether a 7-D state is acceptable at all.
+        hz_.dangerous_terminal = is_dangerous_area_hit_terminal;
+        hz_.dangerous_area_radius_sq = dangerous_area_radius * dangerous_area_radius;
+        hz_.dangerous_area_hit_probability = dangerous_area_hit_probability;
+        hz_.reward_variant_code = reward_variant_code;
+        hz_.penalty_decay = penalty_decay;
         load_action_(action_dxdy, action_dxdy_);
         load_obstacles_flat_(obstacles_flat);
         load_state_(state);
@@ -1204,11 +1217,30 @@ class PushDiscreteTransitionCpp {
     }
 
     py::array_t<double> compute_next_state() const {
-        auto out = py::array_t<double>(static_cast<py::ssize_t>(kPushStateDim));
-        compute_next_state_into_(action_dxdy_, out.mutable_data());
+        if (!has_slot_) {
+            auto out = py::array_t<double>(static_cast<py::ssize_t>(kPushStateDim));
+            compute_next_state_into_(action_dxdy_, out.mutable_data());
+            return out;
+        }
+        auto out = py::array_t<double>(static_cast<py::ssize_t>(kPushStateDim + 1));
+        double *row = out.mutable_data();
+        if (input_terminal_ > 0.5) {
+            // Absorbing: echo the input state verbatim, consume no RNG.
+            for (std::size_t d = 0; d < kPushStateDim; ++d) {
+                row[d] = state_[d];
+            }
+            row[kPushStateDim] = 1.0;
+            return out;
+        }
+        compute_next_state_into_(action_dxdy_, row);
+        const bool goal = discrete_is_terminal(row);
+        row[kPushStateDim] = discrete_hazard_terminal_draw(
+            row[0], row[1], goal, dangerous_flat_, hz_, pomdp_native::default_rng());
         return out;
     }
 
+    // Deterministic 6-D reference geometry used by transition_log_probability
+    // to score alternative (error) actions; it intentionally never draws.
     py::array_t<double> compute_next_state_for_action(
         py::array_t<double, py::array::c_style | py::array::forcecast> action_dxdy) const {
         std::array<double, 2> override_action{};
@@ -1245,14 +1277,20 @@ class PushDiscreteTransitionCpp {
 
     void load_state_(
         const py::array_t<double, py::array::c_style | py::array::forcecast> &state) {
-        if (state.ndim() != 1 ||
-            static_cast<std::size_t>(state.shape(0)) != kPushStateDim) {
-            throw std::invalid_argument("state must have shape (6,)");
+        const std::size_t n =
+            state.ndim() == 1 ? static_cast<std::size_t>(state.shape(0)) : 0;
+        const bool slot = hazard_enabled_ && n == kPushStateDim + 1;
+        if (state.ndim() != 1 || (n != kPushStateDim && !slot)) {
+            throw std::invalid_argument(hazard_enabled_
+                                            ? "state must have shape (6,) or (7,)"
+                                            : "state must have shape (6,)");
         }
         auto sv = state.unchecked<1>();
         for (std::size_t d = 0; d < kPushStateDim; ++d) {
             state_[d] = sv(static_cast<py::ssize_t>(d));
         }
+        has_slot_ = slot;
+        input_terminal_ = slot ? sv(static_cast<py::ssize_t>(kPushStateDim)) : 0.0;
     }
 
     bool collides_(double px, double py_) const noexcept {
@@ -1334,6 +1372,11 @@ class PushDiscreteTransitionCpp {
     int n_obstacles_;
     double obstacle_radius_;
     std::vector<double> state_;
+    std::vector<double> dangerous_flat_;
+    bool hazard_enabled_;
+    DiscreteHazardConfig hz_{};
+    bool has_slot_ = false;
+    double input_terminal_ = 0.0;
 };
 
 // simulate_rollout_discrete: run a full rollout in one C++ frame.
@@ -2322,11 +2365,27 @@ PYBIND11_MODULE(_native, m) {
                       py::array_t<double, py::array::c_style | py::array::forcecast>,
                       double, double, double,
                       py::array_t<double, py::array::c_style | py::array::forcecast>,
-                      int, double>(),
+                      int, double,
+                      py::array_t<double, py::array::c_style | py::array::forcecast>,
+                      double, double, int, double, bool>(),
              py::arg("state"), py::arg("action_dxdy"), py::arg("grid_size"),
              py::arg("push_threshold"), py::arg("friction_coefficient"),
              py::arg("obstacles_flat"), py::arg("n_obstacles"),
-             py::arg("obstacle_radius"))
+             py::arg("obstacle_radius"),
+             py::arg("dangerous_areas") = py::array_t<double>(),
+             py::arg("dangerous_area_radius") = 0.5,
+             py::arg("dangerous_area_hit_probability") = 1.0,
+             py::arg("reward_variant_code") = 0,
+             py::arg("penalty_decay") = 1.0,
+             py::arg("is_dangerous_area_hit_terminal") = false,
+             "Deterministic discrete Push transition kernel.\n\n"
+             "``state`` is 6-D [rx, ry, ox, oy, tx, ty]. When\n"
+             "``is_dangerous_area_hit_terminal`` is true it may instead be 7-D\n"
+             "with a trailing terminal slot in {0.0, 1.0}; compute_next_state\n"
+             "then returns 7-D too, echoing an already-terminal input verbatim\n"
+             "and otherwise drawing the dangerous-area hazard for the realised\n"
+             "next robot position. compute_next_state_for_action stays\n"
+             "deterministic 6-D in both modes.")
         .def("set_state", &PushDiscreteTransitionCpp::set_state, py::arg("state"))
         .def("compute_next_state", &PushDiscreteTransitionCpp::compute_next_state)
         .def("compute_next_state_for_action",
