@@ -1939,21 +1939,35 @@ inline void discrete_apply_action_batch(int action_idx, std::size_t n,
 //   push_threshold       : maximum robot-object distance for a push
 //   friction_coefficient : friction reducing push force (push_scale = 1 - f)
 //
-// Returns: (N, 6) float64 array of next particles.
+// With ``is_dangerous_area_hit_terminal`` the particles may instead be
+// (N, 7): the 6-D state plus a trailing terminal slot (0.0 live /
+// 1.0 terminated). Absorbing rows (input slot > 0.5) are echoed verbatim and
+// consume NO RNG; live rows run today's geometry and then draw the
+// dangerous-area hazard slot.
+//
+// Returns: (N, width) float64 array of next particles (width = 6 or 7).
 py::array_t<double> belief_batch_transition_discrete(
     const py::array_t<double, py::array::c_style | py::array::forcecast> &particles,
     int action_idx, double transition_error_prob,
     const py::array_t<double, py::array::c_style | py::array::forcecast> &obstacles_arr,
     double obstacle_radius, double grid_size, double push_threshold,
-    double friction_coefficient) {
-    if (particles.ndim() != 2 || particles.shape(1) != 6) {
-        throw std::invalid_argument("particles must have shape (N, 6)");
+    double friction_coefficient,
+    const py::array_t<double, py::array::c_style | py::array::forcecast> &dangerous_areas,
+    double dangerous_area_radius, double dangerous_area_hit_probability,
+    int reward_variant_code, double penalty_decay,
+    bool is_dangerous_area_hit_terminal) {
+    const bool flag_on = is_dangerous_area_hit_terminal;
+    const py::ssize_t width = particles.ndim() == 2 ? particles.shape(1) : -1;
+    if (!(width == 6 || (flag_on && width == 7))) {
+        throw std::invalid_argument(flag_on
+                                        ? "particles must have shape (N, 6) or (N, 7)"
+                                        : "particles must have shape (N, 6)");
     }
     if (action_idx < 0 || action_idx > 3) {
         throw std::invalid_argument("action_idx must be in {0,1,2,3}");
     }
     const auto n = static_cast<std::size_t>(particles.shape(0));
-    auto out = py::array_t<double>({static_cast<py::ssize_t>(n), static_cast<py::ssize_t>(6)});
+    auto out = py::array_t<double>({static_cast<py::ssize_t>(n), width});
     if (n == 0) {
         return out;
     }
@@ -1971,6 +1985,85 @@ py::array_t<double> belief_batch_transition_discrete(
 
     const double *in_data = particles.data();
     double *out_data = out.mutable_data();
+
+    if (width == 7) {
+        // Flag-on branch (never taken with the flag off, where ``width`` can
+        // only be 6 and the legacy code below runs unchanged).
+        //
+        // Batch RNG order: first ALL action-error draws in row order, then
+        // ALL hazard draws in row order. Absorbing rows (input slot > 0.5)
+        // consume nothing in either stage -- no error draw, no hazard draw --
+        // and are copied to the output verbatim.
+        DiscreteHazardConfig hz;
+        hz.dangerous_terminal = true;
+        hz.dangerous_area_radius_sq = dangerous_area_radius * dangerous_area_radius;
+        hz.dangerous_area_hit_probability = dangerous_area_hit_probability;
+        hz.reward_variant_code = reward_variant_code;
+        hz.penalty_decay = penalty_decay;
+        const std::vector<double> dangerous_flat = load_dangerous_areas(dangerous_areas);
+
+        // 6-D prefix of every row; the geometry kernels are stride-6.
+        std::vector<double> in6(n * 6);
+        for (std::size_t i = 0; i < n; ++i) {
+            for (std::size_t d = 0; d < 6; ++d) {
+                in6[i * 6 + d] = in_data[i * 7 + d];
+            }
+        }
+
+        // Action stage -------------------------------------------------------
+        std::vector<double> out6(n * 6, 0.0);
+        pomdp_native::RNGState &rng = pomdp_native::default_rng();
+        if (transition_error_prob <= 0.0) {
+            discrete_apply_action_batch(action_idx, n, in6.data(), out6.data(), grid_max,
+                                         push_threshold_sq, push_scale,
+                                         obstacle_radius_sq, obstacles);
+        } else {
+            std::array<std::vector<double>, 4> candidates;
+            for (int a = 0; a < 4; ++a) {
+                candidates[static_cast<std::size_t>(a)].assign(n * 6, 0.0);
+                discrete_apply_action_batch(a, n, in6.data(),
+                                             candidates[static_cast<std::size_t>(a)].data(),
+                                             grid_max, push_threshold_sq, push_scale,
+                                             obstacle_radius_sq, obstacles);
+            }
+            std::uniform_real_distribution<double> uniform(0.0, 1.0);
+            std::uniform_int_distribution<int> err_choice(0, 2);
+            const auto &err_table = kErrorActions[static_cast<std::size_t>(action_idx)];
+            for (std::size_t i = 0; i < n; ++i) {
+                if (in_data[i * 7 + 6] > 0.5) {
+                    // Absorbing: no draws; the out6 row is never read.
+                    continue;
+                }
+                const double err_u = uniform(rng.engine());
+                int chosen = action_idx;
+                if (err_u < transition_error_prob) {
+                    chosen = err_table[static_cast<std::size_t>(err_choice(rng.engine()))];
+                }
+                const double *src = candidates[static_cast<std::size_t>(chosen)].data() + i * 6;
+                for (std::size_t d = 0; d < 6; ++d) {
+                    out6[i * 6 + d] = src[d];
+                }
+            }
+        }
+
+        // Hazard stage -------------------------------------------------------
+        for (std::size_t i = 0; i < n; ++i) {
+            double *dst = out_data + i * 7;
+            if (in_data[i * 7 + 6] > 0.5) {
+                for (std::size_t d = 0; d < 7; ++d) {
+                    dst[d] = in_data[i * 7 + d];
+                }
+                continue;
+            }
+            for (std::size_t d = 0; d < 6; ++d) {
+                dst[d] = out6[i * 6 + d];
+            }
+            const bool goal = discrete_is_terminal(dst);
+            dst[6] = discrete_hazard_terminal_draw(dst[0], dst[1], goal, dangerous_flat,
+                                                   hz, rng);
+        }
+        return out;
+    }
 
     // Fast path: no error → single dispatch.
     if (transition_error_prob <= 0.0) {
@@ -2017,8 +2110,11 @@ py::array_t<double> belief_batch_transition_discrete(
 // Python ``CovarianceParameterizedMultivariateNormal.log_pdf`` for diag(σ²).
 //
 // Parameters:
-//   next_particles    : (N, 6) float64 input particles (post-transition)
-//   observation       : (6,) float64 observation vector; only obs[2:4] used
+//   next_particles    : (N, 6) or (N, 7) float64 input particles
+//                       (post-transition; the trailing hazard-terminal slot
+//                       of a 7-wide row is ignored)
+//   observation       : (6,) or (7,) float64 observation vector; only
+//                       obs[2:4] used
 //   observation_noise : standard deviation σ of the isotropic 2-D Gaussian
 //
 // Returns: (N,) float64 log-likelihoods.
@@ -2026,12 +2122,15 @@ py::array_t<double> belief_batch_obs_log_likelihood_discrete(
     const py::array_t<double, py::array::c_style | py::array::forcecast> &next_particles,
     const py::array_t<double, py::array::c_style | py::array::forcecast> &observation,
     double observation_noise) {
-    if (next_particles.ndim() != 2 || next_particles.shape(1) != 6) {
-        throw std::invalid_argument("next_particles must have shape (N, 6)");
+    if (next_particles.ndim() != 2 ||
+        (next_particles.shape(1) != 6 && next_particles.shape(1) != 7)) {
+        throw std::invalid_argument("next_particles must have shape (N, 6) or (N, 7)");
     }
-    if (observation.ndim() != 1 || observation.shape(0) != 6) {
-        throw std::invalid_argument("observation must have shape (6,)");
+    if (observation.ndim() != 1 ||
+        (observation.shape(0) != 6 && observation.shape(0) != 7)) {
+        throw std::invalid_argument("observation must have shape (6,) or (7,)");
     }
+    const auto stride = static_cast<std::size_t>(next_particles.shape(1));
     const auto n = static_cast<std::size_t>(next_particles.shape(0));
     auto out = py::array_t<double>(static_cast<py::ssize_t>(n));
     if (n == 0) {
@@ -2049,8 +2148,8 @@ py::array_t<double> belief_batch_obs_log_likelihood_discrete(
     const double obs_obj_y = obs_data[3];
 
     for (std::size_t i = 0; i < n; ++i) {
-        const double dx = part_data[i * 6 + 2] - obs_obj_x;
-        const double dy = part_data[i * 6 + 3] - obs_obj_y;
+        const double dx = part_data[i * stride + 2] - obs_obj_x;
+        const double dy = part_data[i * stride + 3] - obs_obj_y;
         out_data[i] = log_norm - (dx * dx + dy * dy) * inv_2var;
     }
     return out;
@@ -2361,11 +2460,26 @@ PYBIND11_MODULE(_native, m) {
           py::arg("particles"), py::arg("action_idx"), py::arg("transition_error_prob"),
           py::arg("obstacles"), py::arg("obstacle_radius"), py::arg("grid_size"),
           py::arg("push_threshold"), py::arg("friction_coefficient"),
+          py::arg("dangerous_areas") = py::array_t<double>(),
+          py::arg("dangerous_area_radius") = 0.5,
+          py::arg("dangerous_area_hit_probability") = 1.0,
+          py::arg("reward_variant_code") = 0,
+          py::arg("penalty_decay") = 1.0,
+          py::arg("is_dangerous_area_hit_terminal") = false,
           "Native batch transition for the discrete Push belief updater. "
           "Applies action_idx to all (N, 6) particles in one C++ call. "
           "When transition_error_prob > 0, an independent C++ RNG decides "
           "per-particle which action actually executes (matches Python "
-          "PushVectorizedUpdater._batch_transition_with_error semantics).");
+          "PushVectorizedUpdater._batch_transition_with_error semantics).\n\n"
+          "With ``is_dangerous_area_hit_terminal=True`` the particles may "
+          "instead be ``(N, 7)`` -- the 6-D state plus a trailing terminal "
+          "slot (0.0 live / 1.0 terminated) -- and the returned array keeps "
+          "that width. A row whose input slot is > 0.5 is absorbing: it is "
+          "echoed verbatim and consumes NO RNG. Live rows run today's "
+          "geometry and then draw the dangerous-area hazard slot. Batch RNG "
+          "order is all action-error draws in row order, then all hazard "
+          "draws in row order. With the flag off the particles must be "
+          "``(N, 6)`` and the legacy path is unchanged.");
 
     m.def("belief_batch_obs_log_likelihood_discrete",
           &belief_batch_obs_log_likelihood_discrete,
@@ -2373,9 +2487,12 @@ PYBIND11_MODULE(_native, m) {
           py::arg("observation_noise"),
           "Native batch observation log-likelihood for the discrete Push "
           "belief updater. Returns the per-particle log N(obs[2:4] | "
-          "particle[2:4], σ²·I_2) over all (N, 6) particles. "
-          "Bit-for-bit equivalent to PushVectorizedUpdater."
-          "batch_observation_log_likelihood (no RNG involved).");
+          "particle[2:4], σ²·I_2) over all (N, 6) -- or (N, 7) -- particles; "
+          "the observation may likewise be ``(6,)`` or ``(7,)``. Any trailing "
+          "hazard-terminal slot is ignored, so a 7-wide input scores exactly "
+          "like its 6-D prefix. Bit-for-bit equivalent to "
+          "PushVectorizedUpdater.batch_observation_log_likelihood "
+          "(no RNG involved).");
 
     m.def("push_reward_batch", &push_reward_batch,
           py::arg("states"), py::arg("action_idx"), py::arg("next_states"),
