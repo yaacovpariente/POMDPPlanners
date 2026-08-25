@@ -20,7 +20,7 @@ Classes:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 
@@ -58,6 +58,12 @@ class PushVectorizedUpdater(VectorizedParticleBeliefUpdater):
         obstacle_radius: Collision radius for each obstacle.
         transition_error_prob: Probability of executing a random other action.
 
+    When the environment sets ``is_dangerous_area_hit_terminal`` the particles
+    carry a trailing absorbing slot (7-D states) and the hazard geometry is
+    threaded through to the native batch transition, which draws that slot on
+    the C++ RNG. With the flag off the updater behaves exactly as before: 6-D
+    states and no hazard kwargs on the native call.
+
     Example:
         >>> import numpy as np
         >>> np.random.seed(42)
@@ -78,7 +84,7 @@ class PushVectorizedUpdater(VectorizedParticleBeliefUpdater):
     ACTION_VECTORS = np.array([[0, 1], [0, -1], [1, 0], [-1, 0]], dtype=float)
     ACTION_NAME_TO_INDEX = {"up": 0, "down": 1, "right": 2, "left": 3}
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments
         self,
         obs_dist: CovarianceParameterizedMultivariateNormal,
         grid_size: int,
@@ -87,6 +93,12 @@ class PushVectorizedUpdater(VectorizedParticleBeliefUpdater):
         obstacles: np.ndarray,
         obstacle_radius: float,
         transition_error_prob: float,
+        dangerous_areas_arr: Optional[np.ndarray] = None,
+        dangerous_area_radius: float = 0.5,
+        dangerous_area_hit_probability: float = 1.0,
+        reward_variant_code: int = 0,
+        penalty_decay: float = 1.0,
+        is_dangerous_area_hit_terminal: bool = False,
     ):
         """Initialize the vectorized updater.
 
@@ -98,6 +110,16 @@ class PushVectorizedUpdater(VectorizedParticleBeliefUpdater):
             obstacles: Obstacle centres, shape (M, 2).
             obstacle_radius: Collision radius for each obstacle.
             transition_error_prob: Probability of executing a random action.
+            dangerous_areas_arr: Dangerous-area centres, shape (K, 2); ``None``
+                means no dangerous areas.
+            dangerous_area_radius: Hit radius around each dangerous area.
+            dangerous_area_hit_probability: Probability a dangerous area is
+                actually hit when the robot is inside its radius.
+            reward_variant_code: Native code for the environment's reward
+                variant (selects the hazard-draw semantics).
+            penalty_decay: Decay constant for the distance-decayed variant.
+            is_dangerous_area_hit_terminal: When ``True`` the particles carry a
+                trailing absorbing slot and hazard hits are terminal.
         """
         self.obs_dist = obs_dist
         self.grid_size = grid_size
@@ -114,6 +136,19 @@ class PushVectorizedUpdater(VectorizedParticleBeliefUpdater):
         # Pre-flatten obstacles for the C++ kernel (one allocation here,
         # reused on every batch_transition call).
         self._obstacles_arr = np.ascontiguousarray(obstacles, dtype=np.float64)
+        # Hazard-terminal parameters (only consumed when the flag is enabled;
+        # the flag-off path builds the legacy 8-kwarg native call).
+        self._dangerous_areas_arr = (
+            np.empty((0, 2), dtype=np.float64)
+            if dangerous_areas_arr is None
+            else np.ascontiguousarray(dangerous_areas_arr, dtype=np.float64)
+        )
+        self._dangerous_area_radius = float(dangerous_area_radius)
+        self._dangerous_area_hit_probability = float(dangerous_area_hit_probability)
+        self._reward_variant_code = int(reward_variant_code)
+        self._penalty_decay = float(penalty_decay)
+        self._is_dangerous_area_hit_terminal = bool(is_dangerous_area_hit_terminal)
+        self._hazard_terminal_enabled = self._is_dangerous_area_hit_terminal
 
     @classmethod
     def from_environment(cls, env: "PushPOMDP") -> "PushVectorizedUpdater":
@@ -125,9 +160,11 @@ class PushVectorizedUpdater(VectorizedParticleBeliefUpdater):
         Returns:
             A new ``PushVectorizedUpdater`` instance.
         """
+        # pylint: disable=protected-access
         cov = np.diag([env.observation_noise**2, env.observation_noise**2])
         obs_dist = CovarianceParameterizedMultivariateNormal(cov)
         obstacles = np.array(env.obstacles, dtype=float) if env.obstacles else np.empty((0, 2))
+        variant_code, penalty_decay = env._reward_variant_native_params()
         return cls(
             obs_dist=obs_dist,
             grid_size=env.grid_size,
@@ -136,16 +173,37 @@ class PushVectorizedUpdater(VectorizedParticleBeliefUpdater):
             obstacles=obstacles,
             obstacle_radius=env.obstacle_radius,
             transition_error_prob=env.transition_error_prob,
+            dangerous_areas_arr=env._dangerous_areas_arr,
+            dangerous_area_radius=env.dangerous_area_radius,
+            dangerous_area_hit_probability=env.dangerous_area_hit_probability,
+            reward_variant_code=variant_code,
+            penalty_decay=penalty_decay,
+            is_dangerous_area_hit_terminal=env.is_dangerous_area_hit_terminal,
         )
+        # pylint: enable=protected-access
 
     # ------------------------------------------------------------------
     # VectorizedParticleBeliefUpdater interface
     # ------------------------------------------------------------------
 
     def batch_transition(self, particles: np.ndarray, action: np.ndarray) -> np.ndarray:
-        # particles: (N, 6) = [robot_x, robot_y, obj_x, obj_y, target_x, target_y]
+        # particles: (N, 6) = [robot_x, robot_y, obj_x, obj_y, target_x, target_y],
+        # or (N, 7) with a trailing absorbing slot when the hazard-terminal flag
+        # is set. In that case already-absorbing rows are echoed verbatim and the
+        # slot for the remaining rows is drawn on the C++ RNG.
         action_idx = self.ACTION_NAME_TO_INDEX[action] if isinstance(action, str) else int(action)
         particles_arr = np.ascontiguousarray(particles, dtype=np.float64)
+        if not self._hazard_terminal_enabled:
+            return _native.belief_batch_transition_discrete(
+                particles=particles_arr,
+                action_idx=action_idx,
+                transition_error_prob=float(self.transition_error_prob),
+                obstacles=self._obstacles_arr,
+                obstacle_radius=float(self.obstacle_radius),
+                grid_size=float(self.grid_size),
+                push_threshold=float(self.push_threshold),
+                friction_coefficient=float(self.friction_coefficient),
+            )
         return _native.belief_batch_transition_discrete(
             particles=particles_arr,
             action_idx=action_idx,
@@ -155,6 +213,12 @@ class PushVectorizedUpdater(VectorizedParticleBeliefUpdater):
             grid_size=float(self.grid_size),
             push_threshold=float(self.push_threshold),
             friction_coefficient=float(self.friction_coefficient),
+            dangerous_areas=self._dangerous_areas_arr,
+            dangerous_area_radius=float(self._dangerous_area_radius),
+            dangerous_area_hit_probability=float(self._dangerous_area_hit_probability),
+            reward_variant_code=int(self._reward_variant_code),
+            penalty_decay=float(self._penalty_decay),
+            is_dangerous_area_hit_terminal=True,
         )
 
     def batch_observation_log_likelihood(
@@ -163,6 +227,9 @@ class PushVectorizedUpdater(VectorizedParticleBeliefUpdater):
         action: np.ndarray,
         observation: np.ndarray,
     ) -> np.ndarray:
+        # Accepts 6- or 7-wide particles and observations; with the
+        # hazard-terminal flag the trailing absorbing slot is ignored, since
+        # only the object-position slice carries observation noise.
         del action  # unused: observation model depends only on next_state
         observation_arr = np.ascontiguousarray(np.asarray(observation, dtype=np.float64).ravel())
         next_particles_arr = np.ascontiguousarray(next_particles, dtype=np.float64)
@@ -184,4 +251,11 @@ class PushVectorizedUpdater(VectorizedParticleBeliefUpdater):
             "obstacle_radius": self.obstacle_radius,
             "transition_error_prob": self.transition_error_prob,
         }
+        if self._hazard_terminal_enabled:
+            config_dict["is_dangerous_area_hit_terminal"] = self._is_dangerous_area_hit_terminal
+            config_dict["dangerous_areas"] = self._dangerous_areas_arr.tolist()
+            config_dict["dangerous_area_radius"] = self._dangerous_area_radius
+            config_dict["dangerous_area_hit_probability"] = self._dangerous_area_hit_probability
+            config_dict["reward_variant_code"] = self._reward_variant_code
+            config_dict["penalty_decay"] = self._penalty_decay
         return config_to_id(config_dict)

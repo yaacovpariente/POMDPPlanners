@@ -22,9 +22,12 @@ these kernels to the environment's native (C++/numpy) implementations.
 The discrete Push POMDP is a natural fit for VOPP: its four moves
 (``up``/``down``/``right``/``left``) form the fixed, finite representative
 action set indexed ``0..3`` directly, with no preset-table synthesis. Only
-the standard ``CONSTANT_HAZARD_PENALTY`` reward model is supported; the
-zero-mean-shock and distance-decayed reward variants are not modeled and are
-rejected at construction with :class:`NotImplementedError`.
+the standard ``CONSTANT_HAZARD_PENALTY`` reward model and
+``is_dangerous_area_hit_terminal=False`` are supported: the zero-mean-shock
+and distance-decayed reward variants are not modeled, and the draw-coupled
+hazard-terminal path couples an absorbing state slot to the reward draw, which
+is not modeled either. Both conditions are checked at construction and any
+mismatch raises :class:`NotImplementedError`.
 """
 
 import math
@@ -101,7 +104,8 @@ class PushVectorizedModel:
 
         Raises:
             NotImplementedError: If ``env`` uses a reward model other than the
-                supported ``CONSTANT_HAZARD_PENALTY`` variant.
+                supported ``CONSTANT_HAZARD_PENALTY`` variant, or the
+                draw-coupled ``is_dangerous_area_hit_terminal`` path.
             ValueError: If ``observation_resolution`` is not positive.
         """
         self._require_supported_models(env)
@@ -125,6 +129,11 @@ class PushVectorizedModel:
         if env.reward_model_type is not RewardModelType.CONSTANT_HAZARD_PENALTY:
             raise NotImplementedError(
                 "vectorized model supports only the CONSTANT_HAZARD_PENALTY reward model"
+            )
+        if env.hazard_terminal_enabled:
+            raise NotImplementedError(
+                "vectorized model requires is_dangerous_area_hit_terminal=False "
+                "(the draw-coupled hazard-terminal absorbing slot is not modeled)"
             )
 
     def _build_transition_geometry(self, env: PushPOMDP) -> None:
