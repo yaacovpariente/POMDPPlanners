@@ -952,20 +952,31 @@ static double discrete_step_reward(double nrx, double nry, double nox, double no
     return reward;
 }
 
-// Apply one discrete Push step, writing the next state into the 6-element
-// output array.  Returns the immediate reward.
-//
-// action_idx must be in [0, 3].  Uses the same semantics as
-// PushPOMDP._sample_one_next_state and PushPOMDP._reward_from_next_state.
-static double discrete_step(const double *state, int action_idx, double *next_state,
-                             double grid_max, double push_threshold_sq,
-                             double push_scale, double obstacle_radius_sq,
-                             const std::vector<double> &obstacles,
-                             const std::vector<double> &dangerous_areas,
-                             const DiscreteStepRewardConfig &reward_cfg,
-                             pomdp_native::RNGState &rng,
-                             double transition_error_prob) {
-    // Resolve action error ---------------------------------------------------
+// Flag-on (draw-coupled) hazard configuration for the discrete kernels.
+// Used when ``is_dangerous_area_hit_terminal`` is enabled: the dangerous-area
+// hazard uniform is hoisted into the TRANSITION (it produces the 7th terminal
+// slot of the state) and the reward becomes deterministic given that slot.
+// Discrete obstacles are NOT coupled to termination -- they keep their legacy
+// uncoupled Bernoulli penalty -- so their radius / penalty / probability live
+// here too, purely for the reward side.
+struct DiscreteHazardConfig {
+    bool dangerous_terminal = false;
+    double obstacle_radius_sq = 0.0;
+    double obstacle_penalty = 0.0;
+    double obstacle_hit_probability = 1.0;
+    double dangerous_area_radius_sq = 0.0;
+    double dangerous_area_penalty = 0.0;
+    double dangerous_area_hit_probability = 1.0;
+    int reward_variant_code = kRewardVariantConstantHazardPenalty;
+    double penalty_decay = 1.0;
+};
+
+// Resolve the action-error draw: with probability ``transition_error_prob``
+// the intended action index is replaced by one of the three others, picked
+// uniformly. Extracted verbatim from ``discrete_step`` so the flag-on
+// transition can share its identical RNG consumption.
+static int discrete_resolve_action(int action_idx, double transition_error_prob,
+                                   pomdp_native::RNGState &rng) {
     int actual_idx = action_idx;
     if (transition_error_prob > 0.0) {
         std::uniform_real_distribution<double> uni(0.0, 1.0);
@@ -976,10 +987,18 @@ static double discrete_step(const double *state, int action_idx, double *next_st
                                       [static_cast<std::size_t>(pick(rng.engine()))];
         }
     }
+    return actual_idx;
+}
 
-    const int dx = kDiscreteDXY[static_cast<std::size_t>(actual_idx)][0];
-    const int dy = kDiscreteDXY[static_cast<std::size_t>(actual_idx)][1];
-
+// Deterministic discrete geometry for one already-resolved (dx, dy): robot
+// move (blocked when the intended cell collides with an obstacle), object
+// push (blocked the same way), then the grid clamp. Writes next_state[0..5].
+// Extracted verbatim from ``discrete_step``; consumes no RNG.
+static void discrete_apply_geometry(const double *state, int dx, int dy,
+                                    double *next_state, double grid_max,
+                                    double push_threshold_sq, double push_scale,
+                                    double obstacle_radius_sq,
+                                    const std::vector<double> &obstacles) {
     const double rx = state[0];
     const double ry = state[1];
     const double ox = state[2];
@@ -1033,13 +1052,114 @@ static double discrete_step(const double *state, int action_idx, double *next_st
     next_state[3] = noy;
     next_state[4] = tx;
     next_state[5] = ty;
+}
+
+// Draw the dangerous-area hazard uniform for one realised next robot position
+// and return the terminal slot (1.0 = terminated, 0.0 = live). Mirrors
+// ``cont_hazard_terminal_draw`` minus its obstacle branch (discrete obstacles
+// are never coupled to termination). A goal step wins outright: no draw. The
+// decayed variant has no radius cutoff so it draws on EVERY step; the
+// constant variant draws only when the robot is inside a zone. Any other
+// variant code (the zero-mean shock, which never reaches C++ with the flag
+// on) draws nothing and never hits.
+[[maybe_unused]] static double discrete_hazard_terminal_draw(
+    double nrx, double nry, bool goal, const std::vector<double> &dangerous_areas,
+    const DiscreteHazardConfig &hz, pomdp_native::RNGState &rng) {
+    if (goal) {
+        return 0.0;
+    }
+    if (dangerous_areas.empty()) {
+        return 0.0;
+    }
+    std::uniform_real_distribution<double> uni(0.0, 1.0);
+    bool hit = false;
+    if (hz.reward_variant_code == kRewardVariantDistanceDecayedHazardPenalty) {
+        const double u = uni(rng.engine());
+        const double min_dist_sq = dangerous_min_dist_sq(nrx, nry, dangerous_areas);
+        const double log_u = u > 0.0 ? std::log(u) : 0.0;
+        if (u <= 0.0 ||
+            hz.penalty_decay * hz.penalty_decay * log_u * log_u > min_dist_sq) {
+            hit = true;
+        }
+    } else if (hz.reward_variant_code == kRewardVariantConstantHazardPenalty) {
+        if (point_in_dangerous_areas(nrx, nry, dangerous_areas,
+                                     hz.dangerous_area_radius_sq)) {
+            if (uni(rng.engine()) < hz.dangerous_area_hit_probability) {
+                hit = true;
+            }
+        }
+    }
+    return hit ? 1.0 : 0.0;
+}
+
+// Per-row reward on the flag-on path. The base distance / goal terms are
+// unchanged, and at the goal no penalty applies at all. The obstacle term
+// keeps its legacy uncoupled Bernoulli with the identical draw pattern to
+// ``discrete_step_reward`` (one uniform, only when colliding with p < 1). The
+// dangerous term is deterministic given the terminal slot -- it fires iff the
+// step terminated in a zone (the decayed variant has no radius cutoff, so
+// termination alone implies it) -- and consumes no RNG.
+[[maybe_unused]] static double discrete_hazard_reward_row(
+    const double *next_state, double terminal, const std::vector<double> &obstacles,
+    const std::vector<double> &dangerous_areas, const DiscreteHazardConfig &hz,
+    pomdp_native::RNGState &rng) {
+    const double rdx = next_state[2] - next_state[4];
+    const double rdy = next_state[3] - next_state[5];
+    const double dist_to_target = std::sqrt(rdx * rdx + rdy * rdy);
+    double reward = -dist_to_target;
+    if (dist_to_target < 0.5) {
+        reward += 100.0;
+        return reward;
+    }
+    const double rx = next_state[0];
+    const double ry = next_state[1];
+    std::uniform_real_distribution<double> uni(0.0, 1.0);
+    if (!obstacles.empty() &&
+        discrete_collides(rx, ry, obstacles, hz.obstacle_radius_sq)) {
+        if (hz.obstacle_hit_probability >= 1.0 ||
+            uni(rng.engine()) < hz.obstacle_hit_probability) {
+            reward += hz.obstacle_penalty;
+        }
+    }
+    if (terminal > 0.5 && !dangerous_areas.empty() &&
+        (hz.reward_variant_code == kRewardVariantDistanceDecayedHazardPenalty ||
+         point_in_dangerous_areas(rx, ry, dangerous_areas,
+                                  hz.dangerous_area_radius_sq))) {
+        reward += hz.dangerous_area_penalty;
+    }
+    return reward;
+}
+
+// Apply one discrete Push step, writing the next state into the 6-element
+// output array.  Returns the immediate reward.
+//
+// action_idx must be in [0, 3].  Uses the same semantics as
+// PushPOMDP._sample_one_next_state and PushPOMDP._reward_from_next_state.
+static double discrete_step(const double *state, int action_idx, double *next_state,
+                             double grid_max, double push_threshold_sq,
+                             double push_scale, double obstacle_radius_sq,
+                             const std::vector<double> &obstacles,
+                             const std::vector<double> &dangerous_areas,
+                             const DiscreteStepRewardConfig &reward_cfg,
+                             pomdp_native::RNGState &rng,
+                             double transition_error_prob) {
+    // Resolve action error ---------------------------------------------------
+    const int actual_idx = discrete_resolve_action(action_idx, transition_error_prob, rng);
+
+    const int dx = kDiscreteDXY[static_cast<std::size_t>(actual_idx)][0];
+    const int dy = kDiscreteDXY[static_cast<std::size_t>(actual_idx)][1];
+
+    // Geometry: robot move, object push, grid clamp -> next_state[0..5]. ------
+    discrete_apply_geometry(state, dx, dy, next_state, grid_max, push_threshold_sq,
+                            push_scale, obstacle_radius_sq, obstacles);
 
     // Reward (uses realised post-action robot position; matches the Python
     // ``DiscretePushRewardModel`` family and the variant-aware
     // ``push_reward_batch`` standalone kernel).
-    return discrete_step_reward(nrx, nry, nox, noy, tx, ty, obstacles,
-                                obstacle_radius_sq, dangerous_areas, reward_cfg,
-                                rng);
+    return discrete_step_reward(next_state[0], next_state[1], next_state[2],
+                                next_state[3], next_state[4], next_state[5],
+                                obstacles, obstacle_radius_sq, dangerous_areas,
+                                reward_cfg, rng);
 }
 
 // Is-terminal: (obj_x - tgt_x)^2 + (obj_y - tgt_y)^2 < 0.25.
