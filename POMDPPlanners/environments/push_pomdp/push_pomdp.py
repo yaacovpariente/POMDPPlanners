@@ -114,7 +114,11 @@ class RandomInitialStateDistribution(Distribution):
         for _ in range(n_samples):
             robot_pos = self._generate_robot_position()
             object_pos = self._generate_object_position()
-            initial_state = np.concatenate([robot_pos, object_pos, self.target_pos])
+            parts = [robot_pos, object_pos, self.target_pos]
+            if self.parent.hazard_terminal_enabled:
+                # Hazard-terminal envs carry a trailing live (0.0) slot.
+                parts.append(np.zeros(1))
+            initial_state = np.concatenate(parts)
             initial_states.append(initial_state)
         return initial_states
 
@@ -196,6 +200,27 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
         Bernoulli draw internally, so all rollouts route through the
         native kernel regardless of the configured probability.
 
+    Hazard termination (draw-coupled):
+        With ``is_dangerous_area_hit_terminal=True`` the dangerous-area
+        hazard both terminates the episode and pays its penalty on the
+        SAME draw. The state gains a trailing terminal slot, becoming
+        7-D ``[rx, ry, ox, oy, tx, ty, terminal]`` with ``terminal``
+        ``0.0`` (live) / ``1.0`` (terminated); an already-terminal state
+        is absorbing (echoed verbatim by the transition). The
+        ``dangerous_area_hit_probability`` Bernoulli is drawn inside the
+        C++ transition kernel against the realised post-action robot
+        position, so ``reward`` becomes DETERMINISTIC given the realised
+        ``next_state`` — hence :attr:`reward_requires_next_state` is
+        ``True`` and drivers must sample the transition first and pass
+        ``next_state`` to :meth:`reward`. Reaching the goal wins over the
+        hazard (the slot stays ``0.0`` at the goal). Obstacles are NOT
+        coupled to termination and keep their legacy uncoupled Bernoulli
+        penalty. The flag is incompatible with
+        ``RewardModelType.ZERO_MEAN_HAZARD_SHOCK`` (that variant has no
+        hit probability to couple termination to). With the flag off
+        (the default) the state stays 6-D and every code path is
+        unchanged.
+
     Example:
         >>> import numpy as np
         >>> np.random.seed(42)  # For reproducible results
@@ -245,6 +270,7 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
         penalty_decay: float = 1.0,
         initial_state: Optional[np.ndarray] = None,
         transition_error_prob: float = 0.0,
+        is_dangerous_area_hit_terminal: bool = False,
         name: str = "PushPOMDP",
         output_dir: Optional[Path] = None,
         debug: bool = False,
@@ -259,6 +285,7 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
             and penalty_decay <= 0.0
         ):
             raise ValueError("penalty_decay must be strictly positive")
+        self._configure_hazard_terminal(is_dangerous_area_hit_terminal, reward_model_type)
 
         self.grid_size = grid_size
         self.push_threshold = push_threshold
@@ -376,8 +403,60 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
         # attribute lookup on each call (~50–100 ns saved per call). Bound
         # methods pickle correctly via ``(class, name, instance)``, so
         # __setstate__ doesn't need to rebuild them.
-        self._compute_reward = self.reward_model.compute_reward
+        # Hazard-terminal envs route the scalar reward through the native
+        # batch kernel too: with the flag on the dangerous term is read off
+        # the realised terminal slot (deterministic, no RNG), which the
+        # Python reward model does not model. Flag-off keeps the historical
+        # bound-method fast path byte-for-byte.
+        self._compute_reward = (
+            self._native_reward_scalar
+            if self._hazard_terminal_enabled
+            else self.reward_model.compute_reward
+        )
         self._compute_reward_batch = self.reward_model.compute_reward_batch
+
+    def _configure_hazard_terminal(
+        self,
+        is_dangerous_area_hit_terminal: bool,
+        reward_model_type: RewardModelType,
+    ) -> None:
+        if (
+            is_dangerous_area_hit_terminal
+            and reward_model_type == RewardModelType.ZERO_MEAN_HAZARD_SHOCK
+        ):
+            raise ValueError(
+                "is_dangerous_area_hit_terminal is incompatible with the "
+                "ZERO_MEAN_HAZARD_SHOCK reward model (the shock hazard has no "
+                "hit probability to couple termination to)"
+            )
+        self.is_dangerous_area_hit_terminal = bool(is_dangerous_area_hit_terminal)
+        # When the hazard-terminal flag is enabled the state gains a LAST
+        # terminal-flag slot (0.0 live / 1.0 terminal); otherwise the state
+        # keeps the historical 6-D layout untouched.
+        self._hazard_terminal_enabled = self.is_dangerous_area_hit_terminal
+        self._state_dim = 7 if self._hazard_terminal_enabled else 6
+
+    @property
+    def hazard_terminal_enabled(self) -> bool:
+        """Whether the hazard-terminal flag is on (state carries a terminal slot)."""
+        return self._hazard_terminal_enabled
+
+    @property
+    def reward_requires_next_state(self) -> bool:
+        """Reward depends on the realised ``next_state`` iff the hazard flag is on.
+
+        When enabled, the hazard penalty is deterministic given the terminal
+        slot set during the transition, so drivers must sample the transition
+        first and pass the realised ``next_state`` to :meth:`reward`.
+        """
+        return self._hazard_terminal_enabled
+
+    def _native_reward_scalar(self, state: Any, action: str, next_state: Any) -> float:
+        # Scalar entry point for hazard-terminal envs: reshape to (1, D) and
+        # reuse the native batch kernel, which reads the terminal slot.
+        states_array = np.ascontiguousarray(state, dtype=np.float64).reshape(1, -1)
+        next_states_arr = np.ascontiguousarray(next_state, dtype=np.float64).reshape(1, -1)
+        return float(self._native_reward_batch(states_array, action, next_states_arr)[0])
 
     def _build_reward_model(self) -> BasePushRewardModel:
         # ``Dict[str, Any]`` opt-out is required so pyright doesn't narrow
@@ -474,16 +553,37 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
         if cached is not None:
             return cached
         action_dxdy = self._action_dxdy_map[action]
-        kernel = _native.PushDiscreteTransitionCpp(
-            state=np.zeros(6, dtype=np.float64),
-            action_dxdy=action_dxdy,
-            grid_size=float(self.grid_size),
-            push_threshold=float(self.push_threshold),
-            friction_coefficient=float(self.friction_coefficient),
-            obstacles_flat=self._obstacles_flat_arr,
-            n_obstacles=len(self.obstacles),
-            obstacle_radius=float(self.obstacle_radius),
-        )
+        if self._hazard_terminal_enabled:
+            # Hazard-terminal: 7-D kernel that also draws the terminal slot
+            # for the realised next robot position on the C++ RNG.
+            variant_code, penalty_decay = self._reward_variant_native_params()
+            kernel = _native.PushDiscreteTransitionCpp(
+                state=np.zeros(7, dtype=np.float64),
+                action_dxdy=action_dxdy,
+                grid_size=float(self.grid_size),
+                push_threshold=float(self.push_threshold),
+                friction_coefficient=float(self.friction_coefficient),
+                obstacles_flat=self._obstacles_flat_arr,
+                n_obstacles=len(self.obstacles),
+                obstacle_radius=float(self.obstacle_radius),
+                dangerous_areas=self._dangerous_areas_arr,
+                dangerous_area_radius=float(self.dangerous_area_radius),
+                dangerous_area_hit_probability=float(self.dangerous_area_hit_probability),
+                reward_variant_code=variant_code,
+                penalty_decay=penalty_decay,
+                is_dangerous_area_hit_terminal=True,
+            )
+        else:
+            kernel = _native.PushDiscreteTransitionCpp(
+                state=np.zeros(6, dtype=np.float64),
+                action_dxdy=action_dxdy,
+                grid_size=float(self.grid_size),
+                push_threshold=float(self.push_threshold),
+                friction_coefficient=float(self.friction_coefficient),
+                obstacles_flat=self._obstacles_flat_arr,
+                n_obstacles=len(self.obstacles),
+                obstacle_radius=float(self.obstacle_radius),
+            )
         self._trans_kernel_cache[action] = kernel
         return kernel
 
@@ -600,13 +700,16 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
         nox = max(0.0, min(ox + float(noise[0]), gmax))
         noy = max(0.0, min(oy + float(noise[1]), gmax))
 
-        observation = np.empty(6)
+        observation = np.empty(next_state.shape[0])
         observation[0] = rx
         observation[1] = ry
         observation[2] = nox
         observation[3] = noy
         observation[4] = tx
         observation[5] = ty
+        if next_state.shape[0] > 6:
+            # Hazard-terminal slot is observed exactly (copied verbatim).
+            observation[6] = float(next_state[6])
         return observation
 
     def transition_log_probability(
@@ -621,7 +724,15 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
         # compute_next_state_for_action(other_dxdy) for the error branch.
         kernel = self._get_trans_kernel(action)
         kernel.set_state(np.ascontiguousarray(state, dtype=np.float64))
-        intended_next = np.asarray(kernel.compute_next_state())
+        if self._hazard_terminal_enabled:
+            # Flag-on: ``compute_next_state`` would also draw the hazard slot
+            # on the C++ RNG. A probability query must not perturb the RNG
+            # stream, so use the deterministic 6-D geometry entry point.
+            intended_next = np.asarray(
+                kernel.compute_next_state_for_action(self._action_dxdy_map[action])
+            )
+        else:
+            intended_next = np.asarray(kernel.compute_next_state())
         error_actions = [a for a in self.actions if a != action]
         num_error_actions = len(error_actions)
         error_results: List[np.ndarray] = []
@@ -633,12 +744,22 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
                 for error_action in error_actions
             ]
 
+        # Hazard-terminal envs carry a 7th terminal slot whose draw probability
+        # is intentionally NOT modelled here (same as ``ContinuousPushPOMDP``):
+        # the closed form covers only the deterministic movement geometry, so
+        # the slot is marginalised out by comparing the first six entries.
+        matches = (
+            (lambda c, ref: np.array_equal(np.asarray(c)[:6], np.asarray(ref)[:6]))
+            if self._hazard_terminal_enabled
+            else np.array_equal
+        )
+
         probabilities = np.empty(len(next_states), dtype=float)
         for i, candidate in enumerate(next_states):
-            prob_intended = 1.0 if np.array_equal(candidate, intended_next) else 0.0
+            prob_intended = 1.0 if matches(candidate, intended_next) else 0.0
             prob_error = 0.0
             if error_results:
-                error_match_count = sum(1 for er in error_results if np.array_equal(candidate, er))
+                error_match_count = sum(1 for er in error_results if matches(candidate, er))
                 prob_error = (
                     self.transition_error_prob
                     * (1.0 / num_error_actions)
@@ -687,6 +808,10 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
         return self._compute_reward(state, action, next_state)
 
     def is_terminal(self, state: np.ndarray) -> bool:
+        # Absorbing terminal slot (hazard-terminal envs only), then the
+        # historical goal check.
+        if len(state) > 6 and float(state[6]) > 0.5:
+            return True
         # Episode ends when object is close to target
         dx = float(state[2] - state[4])
         dy = float(state[3] - state[5])
@@ -695,11 +820,19 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
     def initial_state_dist(self) -> Distribution:
         # If a fixed initial state is provided, return a deterministic distribution
         if self._initial_state is not None:
-            return FixedStateDistribution(self._initial_state)
+            return FixedStateDistribution(self._pad_terminal_slot(self._initial_state))
 
         return RandomInitialStateDistribution(
             self.grid_size, self.target_pos, self.obstacles, self.obstacle_radius, self
         )
+
+    def _pad_terminal_slot(self, state: np.ndarray) -> np.ndarray:
+        # Append a live (0.0) terminal slot to a caller-provided 6-D state
+        # when the env carries the slot; pass a 7-D state through unchanged.
+        arr = np.asarray(state, dtype=np.float64)
+        if self._hazard_terminal_enabled and arr.shape[0] == 6:
+            return np.concatenate([arr, np.zeros(1)])
+        return arr
 
     def initial_observation_dist(self) -> Distribution:
         return self.initial_state_dist()
@@ -793,6 +926,7 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
                 dangerous_area_hit_probability=float(self.dangerous_area_hit_probability),
                 reward_variant_code=variant_code,
                 penalty_decay=penalty_decay,
+                is_dangerous_area_hit_terminal=self.is_dangerous_area_hit_terminal,
             )
         )
 
@@ -909,6 +1043,7 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
                 dangerous_area_hit_probability=float(self.dangerous_area_hit_probability),
                 reward_variant_code=variant_code,
                 penalty_decay=penalty_decay,
+                is_dangerous_area_hit_terminal=self.is_dangerous_area_hit_terminal,
             ),
             dtype=np.float64,
         )
