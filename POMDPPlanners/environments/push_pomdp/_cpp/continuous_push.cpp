@@ -2230,13 +2230,24 @@ py::array_t<double> push_reward_batch(
     const py::array_t<double, py::array::c_style | py::array::forcecast> &dangerous_areas,
     double dangerous_area_radius, double dangerous_area_penalty,
     double dangerous_area_hit_probability, int reward_variant_code,
-    double penalty_decay) {
+    double penalty_decay, bool is_dangerous_area_hit_terminal) {
     (void)action_idx;  // reward depends on realised next_state, not the action
-    if (next_states.ndim() != 2 || next_states.shape(1) != 6) {
-        throw std::invalid_argument("next_states must have shape (N, 6)");
+    const bool flag_on = is_dangerous_area_hit_terminal;
+    // ``next_states`` is scored row by row; ``states`` is consulted only for
+    // its shape. With the flag on either may carry the trailing hazard-terminal
+    // slot, so width 7 is accepted alongside width 6.
+    const py::ssize_t next_width =
+        next_states.ndim() == 2 ? next_states.shape(1) : -1;
+    if (!(next_width == 6 || (flag_on && next_width == 7))) {
+        throw std::invalid_argument(flag_on
+                                        ? "next_states must have shape (N, 6) or (N, 7)"
+                                        : "next_states must have shape (N, 6)");
     }
-    if (states.ndim() != 2 || states.shape(1) != 6) {
-        throw std::invalid_argument("states must have shape (N, 6)");
+    const py::ssize_t state_width = states.ndim() == 2 ? states.shape(1) : -1;
+    if (!(state_width == 6 || (flag_on && state_width == 7))) {
+        throw std::invalid_argument(flag_on
+                                        ? "states must have shape (N, 6) or (N, 7)"
+                                        : "states must have shape (N, 6)");
     }
     const auto n = static_cast<std::size_t>(next_states.shape(0));
     auto out = py::array_t<double>(static_cast<py::ssize_t>(n));
@@ -2248,6 +2259,34 @@ py::array_t<double> push_reward_batch(
         obs_flat = load_discrete_obstacles(obstacles);
     }
     std::vector<double> areas_flat = load_dangerous_areas(dangerous_areas);
+    if (flag_on) {
+        // Flag-on branch: the dangerous-area hazard uniform is consumed by the
+        // TRANSITION (it produced the 7th terminal slot), so the dangerous term
+        // here is deterministic given that slot and draws no RNG. Obstacles are
+        // uncoupled and keep their legacy Bernoulli. A 6-wide ``next_states``
+        // scores as if every terminal slot were 0.
+        DiscreteHazardConfig hz;
+        hz.dangerous_terminal = true;
+        hz.obstacle_radius_sq = obstacle_radius * obstacle_radius;
+        hz.obstacle_penalty = obstacle_penalty;
+        hz.obstacle_hit_probability = obstacle_hit_probability;
+        hz.dangerous_area_radius_sq = dangerous_area_radius * dangerous_area_radius;
+        hz.dangerous_area_penalty = dangerous_area_penalty;
+        hz.dangerous_area_hit_probability = dangerous_area_hit_probability;
+        hz.reward_variant_code = reward_variant_code;
+        hz.penalty_decay = penalty_decay;
+        const auto width = static_cast<std::size_t>(next_states.shape(1));
+        const double *next_data = next_states.data();
+        double *out_data = out.mutable_data();
+        pomdp_native::RNGState &rng = pomdp_native::default_rng();
+        for (std::size_t i = 0; i < n; ++i) {
+            // ``discrete_hazard_reward_row`` reads only indices 0..5 of the row.
+            const double terminal = width == 7 ? next_data[i * width + 6] : 0.0;
+            out_data[i] = discrete_hazard_reward_row(next_data + i * width, terminal,
+                                                     obs_flat, areas_flat, hz, rng);
+        }
+        return out;
+    }
     const double obs_r_sq = obstacle_radius * obstacle_radius;
     const double area_r_sq = dangerous_area_radius * dangerous_area_radius;
     const double *next_data = next_states.data();
@@ -2502,13 +2541,25 @@ PYBIND11_MODULE(_native, m) {
           py::arg("dangerous_area_penalty"),
           py::arg("dangerous_area_hit_probability"),
           py::arg("reward_variant_code"), py::arg("penalty_decay"),
+          py::arg("is_dangerous_area_hit_terminal") = false,
           "Standalone variant-aware reward batch for PushPOMDP (discrete).\n\n"
           "Implements all three RewardModelType variants:\n"
           "  0 = CONSTANT_HAZARD_PENALTY: deterministic per-zone penalty (optional Bernoulli).\n"
           "  1 = ZERO_MEAN_HAZARD_SHOCK: ±penalty 50/50 when in zone.\n"
           "  2 = DISTANCE_DECAYED_HAZARD_PENALTY: penalty fires with probability\n"
           "      exp(-min_dist / penalty_decay) for every row (no radius cutoff).\n"
-          "Obstacle penalty fires on next_state[:2] (realised position).");
+          "Obstacle penalty fires on next_state[:2] (realised position).\n\n"
+          "With is_dangerous_area_hit_terminal=True, next_states may be (N, 6) or\n"
+          "(N, 7) with a trailing hazard-terminal slot (states likewise, though it\n"
+          "is consulted only for its shape). The dangerous-area hazard uniform has\n"
+          "then already been consumed by the transition, so the dangerous term is\n"
+          "deterministic given that slot and draws no RNG: dangerous_area_penalty\n"
+          "is added iff the slot is set (variant 2 needs nothing more; the other\n"
+          "variants also require the row to be in a zone). A 6-wide next_states\n"
+          "scores as if every terminal slot were 0.\n"
+          "Obstacles stay uncoupled from termination and keep their legacy\n"
+          "Bernoulli. With the flag off (the default) behaviour is unchanged and\n"
+          "both arrays must be (N, 6).");
 
     m.def("cont_push_reward_batch", &cont_push_reward_batch,
           py::arg("states"), py::arg("action"), py::arg("next_states"),
