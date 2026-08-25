@@ -36,11 +36,21 @@ def simulate_rollout_discrete(
     dangerous_area_hit_probability: float = 1.0,
     reward_variant_code: int = 0,
     penalty_decay: float = 1.0,
+    is_dangerous_area_hit_terminal: bool = False,
 ) -> float:
     """Run a full discrete Push POMDP rollout in C++.
 
     Returns the discounted sum of immediate rewards along the sampled
     trajectory, using pre-drawn action indices supplied by the caller.
+
+    ``state`` is ``(6,)``, or ``(7,)`` with a trailing terminal slot
+    (``0.0`` live / ``1.0`` terminated) when
+    ``is_dangerous_area_hit_terminal`` is set. With the flag on, the
+    dangerous-area hazard uniform is drawn inside the transition and
+    produces that slot, so the dangerous term of the reward becomes
+    deterministic given the slot; obstacles keep their legacy Bernoulli
+    penalty, and an already-terminal input returns ``0.0``. With the flag
+    off the behaviour is unchanged.
 
     ``dangerous_areas`` must have shape ``(K, 2)`` (rows ``(cx, cy)``) or
     be empty. Per-step reward consults the REALISED post-action robot
@@ -194,6 +204,12 @@ def belief_batch_transition_discrete(
     grid_size: float,
     push_threshold: float,
     friction_coefficient: float,
+    dangerous_areas: NDArray[np.floating] = ...,
+    dangerous_area_radius: float = 0.5,
+    dangerous_area_hit_probability: float = 1.0,
+    reward_variant_code: int = 0,
+    penalty_decay: float = 1.0,
+    is_dangerous_area_hit_terminal: bool = False,
 ) -> NDArray[np.float64]:
     """Native batch transition for the discrete Push belief updater.
 
@@ -201,6 +217,12 @@ def belief_batch_transition_discrete(
     When ``transition_error_prob > 0`` an independent C++ RNG decides
     per-particle which action actually executes (matches the Python
     ``PushVectorizedUpdater._batch_transition_with_error`` semantics).
+
+    ``particles`` is ``(N, 6)``, or ``(N, 7)`` with a trailing terminal
+    slot when ``is_dangerous_area_hit_terminal`` is set; the output keeps
+    the input width. Absorbing rows (terminal slot ``> 0.5``) are echoed
+    verbatim and consume no RNG. The batch RNG order is all action-error
+    draws in row order, then all hazard draws in row order.
     """
     ...
 
@@ -214,6 +236,11 @@ def belief_batch_obs_log_likelihood_discrete(
     Returns the per-particle log N(obs[2:4] | particle[2:4], sigma**2 * I_2)
     over all (N, 6) particles. Bit-for-bit equivalent to the Python
     ``PushVectorizedUpdater.batch_observation_log_likelihood`` (no RNG).
+
+    ``next_particles`` may be ``(N, 6)`` or ``(N, 7)`` and ``observation``
+    may be ``(6,)`` or ``(7,)``: any trailing hazard-terminal slot is
+    ignored, so a 7-wide input scores exactly like its 6-D prefix (only
+    columns ``2:4`` are used).
     """
     ...
 
@@ -231,6 +258,7 @@ def push_reward_batch(
     dangerous_area_hit_probability: float,
     reward_variant_code: int,
     penalty_decay: float,
+    is_dangerous_area_hit_terminal: bool = False,
 ) -> NDArray[np.float64]:
     """Standalone variant-aware reward-batch kernel for the discrete PushPOMDP.
 
@@ -240,6 +268,13 @@ def push_reward_batch(
         * 2 — DISTANCE_DECAYED_HAZARD_PENALTY (penalty fires with probability
           ``exp(-min_dist / penalty_decay)``, no radius cutoff).
     Returns a ``(N,)`` float64 array of per-row rewards.
+
+    When ``is_dangerous_area_hit_terminal`` is set, ``next_states`` (and
+    ``states``) may be ``(N, 7)`` with a trailing terminal slot, and the
+    dangerous term becomes deterministic given that slot: variant 0
+    additionally requires the robot to be in the zone, variant 2 does not.
+    Obstacles keep the legacy Bernoulli contract. With the flag off the
+    behaviour is unchanged.
     """
     ...
 
@@ -280,6 +315,11 @@ class PushDiscreteTransitionCpp:
     action, and ``compute_next_state_for_action`` evaluates an alternative
     (dx, dy) without rebuilding (used by the error-action branch in
     ``transition_log_probability``).
+
+    ``state`` is ``(6,)``, or ``(7,)`` with a trailing terminal slot
+    (``0.0`` live / ``1.0`` terminated) only when
+    ``is_dangerous_area_hit_terminal`` is set; a 7-D state with the flag
+    off raises ``ValueError``.
     """
 
     def __init__(
@@ -292,9 +332,34 @@ class PushDiscreteTransitionCpp:
         obstacles_flat: NDArray[np.floating],
         n_obstacles: int,
         obstacle_radius: float,
+        dangerous_areas: NDArray[np.floating] = ...,
+        dangerous_area_radius: float = 0.5,
+        dangerous_area_hit_probability: float = 1.0,
+        reward_variant_code: int = 0,
+        penalty_decay: float = 1.0,
+        is_dangerous_area_hit_terminal: bool = False,
     ) -> None: ...
-    def set_state(self, state: NDArray[np.floating]) -> None: ...
-    def compute_next_state(self) -> NDArray[np.float64]: ...
+    def set_state(self, state: NDArray[np.floating]) -> None:
+        """Swap the input state; accepts ``(6,)``, or ``(7,)`` only when
+        ``is_dangerous_area_hit_terminal`` is set (a 7-D state with the
+        flag off raises ``ValueError``)."""
+        ...
+
+    def compute_next_state(self) -> NDArray[np.float64]:
+        """Next state for the cached action, at the input state's width.
+
+        For a 7-D state an already-terminal input is echoed verbatim (no
+        RNG); otherwise the hazard slot is drawn for the realised next
+        robot position on the module RNG (see :func:`set_seed`).
+        """
+        ...
+
     def compute_next_state_for_action(
         self, action_dxdy: NDArray[np.floating]
-    ) -> NDArray[np.float64]: ...
+    ) -> NDArray[np.float64]:
+        """Deterministic 6-D geometry for an alternative ``(dx, dy)``.
+
+        Always 6-D and never draws (used by
+        ``transition_log_probability``).
+        """
+        ...
