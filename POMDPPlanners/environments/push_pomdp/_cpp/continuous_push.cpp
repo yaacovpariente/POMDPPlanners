@@ -1062,7 +1062,7 @@ static void discrete_apply_geometry(const double *state, int dx, int dy,
 // constant variant draws only when the robot is inside a zone. Any other
 // variant code (the zero-mean shock, which never reaches C++ with the flag
 // on) draws nothing and never hits.
-[[maybe_unused]] static double discrete_hazard_terminal_draw(
+static double discrete_hazard_terminal_draw(
     double nrx, double nry, bool goal, const std::vector<double> &dangerous_areas,
     const DiscreteHazardConfig &hz, pomdp_native::RNGState &rng) {
     if (goal) {
@@ -1099,7 +1099,7 @@ static void discrete_apply_geometry(const double *state, int dx, int dy,
 // dangerous term is deterministic given the terminal slot -- it fires iff the
 // step terminated in a zone (the decayed variant has no radius cutoff, so
 // termination alone implies it) -- and consumes no RNG.
-[[maybe_unused]] static double discrete_hazard_reward_row(
+static double discrete_hazard_reward_row(
     const double *next_state, double terminal, const std::vector<double> &obstacles,
     const std::vector<double> &dangerous_areas, const DiscreteHazardConfig &hz,
     pomdp_native::RNGState &rng) {
@@ -1397,6 +1397,9 @@ class PushDiscreteTransitionCpp {
 //   obstacle_radius – obstacle radius for point-in-circle tests.
 //   obstacle_penalty – negative penalty added to reward on robot collision.
 //   transition_error_prob – probability of picking a random other action.
+//   is_dangerous_area_hit_terminal – when true the dangerous-area hazard is
+//                   drawn inside the transition (state may carry a 7th
+//                   terminal slot) and an already-terminal state returns 0.0.
 //
 // Returns:
 //   Discounted sum of immediate rewards (scalar float).
@@ -1411,9 +1414,14 @@ double simulate_rollout_discrete(
     double dangerous_area_radius, double dangerous_area_penalty,
     double transition_error_prob, double obstacle_hit_probability,
     double dangerous_area_hit_probability, int reward_variant_code,
-    double penalty_decay) {
-    if (state_arr.ndim() != 1 || state_arr.shape(0) != 6) {
-        throw std::invalid_argument("state must be a 1-D array of length 6");
+    double penalty_decay, bool is_dangerous_area_hit_terminal) {
+    const bool flag_on = is_dangerous_area_hit_terminal;
+    // Length 6 is always accepted; the 7-slot form only with the flag on.
+    const py::ssize_t len = state_arr.ndim() == 1 ? state_arr.shape(0) : -1;
+    if (len != 6 && !(flag_on && len == 7)) {
+        throw std::invalid_argument(
+            flag_on ? "state must be a 1-D array of length 6 or 7"
+                    : "state must be a 1-D array of length 6");
     }
     if (action_indices.ndim() != 1) {
         throw std::invalid_argument("action_indices must be 1-D");
@@ -1444,6 +1452,8 @@ double simulate_rollout_discrete(
     for (int d = 0; d < 6; ++d) {
         cur[d] = state_view(d);
     }
+    // Flag-on terminal slot: > 0.5 means the input state is already absorbing.
+    double cur_terminal = (len == 7) ? state_view(6) : 0.0;
 
     pomdp_native::RNGState &rng = pomdp_native::default_rng();
     double total = 0.0;
@@ -1460,18 +1470,47 @@ double simulate_rollout_discrete(
         penalty_decay,
     };
 
-    while (depth < max_depth && !discrete_is_terminal(cur)) {
+    // Flag-on (draw-coupled) configuration; unused on the legacy path.
+    const DiscreteHazardConfig hz{
+        flag_on,
+        obstacle_radius_sq,
+        obstacle_penalty,
+        obstacle_hit_probability,
+        dangerous_area_radius_sq,
+        dangerous_area_penalty,
+        dangerous_area_hit_probability,
+        reward_variant_code,
+        penalty_decay,
+    };
+
+    while (depth < max_depth && !discrete_is_terminal(cur) && cur_terminal <= 0.5) {
         if (action_cursor >= n_actions) {
             break;  // Ran out of pre-drawn actions; stop cleanly.
         }
         const int action_idx = static_cast<int>(idx_view(action_cursor));
         ++action_cursor;
 
-        const double r = discrete_step(cur, action_idx, nxt, grid_max,
-                                       push_threshold_sq, push_scale,
-                                       obstacle_radius_sq, obstacles,
-                                       dangerous_areas, reward_cfg,
-                                       rng, transition_error_prob);
+        double r = 0.0;
+        if (!flag_on) {
+            r = discrete_step(cur, action_idx, nxt, grid_max,
+                              push_threshold_sq, push_scale,
+                              obstacle_radius_sq, obstacles,
+                              dangerous_areas, reward_cfg,
+                              rng, transition_error_prob);
+        } else {
+            // Draw-coupled step: error draw, geometry, hazard draw, reward.
+            const int actual_idx =
+                discrete_resolve_action(action_idx, transition_error_prob, rng);
+            const int dx = kDiscreteDXY[static_cast<std::size_t>(actual_idx)][0];
+            const int dy = kDiscreteDXY[static_cast<std::size_t>(actual_idx)][1];
+            discrete_apply_geometry(cur, dx, dy, nxt, grid_max, push_threshold_sq,
+                                    push_scale, obstacle_radius_sq, obstacles);
+            const double terminal = discrete_hazard_terminal_draw(
+                nxt[0], nxt[1], discrete_is_terminal(nxt), dangerous_areas, hz, rng);
+            r = discrete_hazard_reward_row(nxt, terminal, obstacles, dangerous_areas,
+                                           hz, rng);
+            cur_terminal = terminal;
+        }
         total += gamma_power * r;
         gamma_power *= discount;
         std::copy(nxt, nxt + 6, cur);
@@ -2301,13 +2340,22 @@ PYBIND11_MODULE(_native, m) {
           py::arg("dangerous_area_hit_probability") = 1.0,
           py::arg("reward_variant_code") = 0,
           py::arg("penalty_decay") = 1.0,
+          py::arg("is_dangerous_area_hit_terminal") = false,
           "Run a full discrete Push rollout in C++. Returns discounted reward sum. "
           "dangerous_areas must have shape (K, 2) (or empty). Per-step reward "
           "consults the REALISED post-action robot position (next_state[:2]) "
           "for obstacle / danger tests, with Bernoulli ``*_hit_probability`` "
           "gating. ``reward_variant_code`` selects the dangerous-area contract "
           "(0=CONSTANT_HAZARD_PENALTY, 1=ZERO_MEAN_HAZARD_SHOCK, 2=DISTANCE_DECAYED_HAZARD_PENALTY); "
-          "``penalty_decay`` is the decay length used by variant 2.");
+          "``penalty_decay`` is the decay length used by variant 2.\n\n"
+          "With ``is_dangerous_area_hit_terminal=True`` the state may be ``(7,)`` "
+          "with a trailing terminal slot (0.0 live / 1.0 terminated); the "
+          "dangerous-area hazard draw is coupled into the TRANSITION (it "
+          "produces that slot) and the dangerous term of the reward becomes "
+          "deterministic given it, while discrete obstacles keep their legacy "
+          "uncoupled Bernoulli penalty. An already-terminal input state is "
+          "absorbing and returns 0.0. With the flag off the state must be "
+          "``(6,)`` and the legacy path is unchanged.");
 
     m.def("belief_batch_transition_discrete", &belief_batch_transition_discrete,
           py::arg("particles"), py::arg("action_idx"), py::arg("transition_error_prob"),
