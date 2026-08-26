@@ -812,7 +812,13 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
         # historical goal check.
         if len(state) > 6 and float(state[6]) > 0.5:
             return True
-        # Episode ends when object is close to target
+        return self._object_at_goal(state)
+
+    @staticmethod
+    def _object_at_goal(state: Any) -> bool:
+        # Episode ends when object is close to target. Goal-only predicate:
+        # deliberately ignores the hazard-terminal slot so metrics can tell a
+        # goal arrival from a hazard death.
         dx = float(state[2] - state[4])
         dy = float(state[3] - state[5])
         return dx * dx + dy * dy < 0.25  # 0.5^2 = 0.25
@@ -1119,7 +1125,9 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
         robot_collision = float(self._is_colliding_with_obstacle(robot_pos))
         object_collision = float(self._is_colliding_with_obstacle(object_pos))
         return {
-            PushStepChannel.GOAL_REACHED.value: float(self.is_terminal(state)),
+            # Goal-only: a hazard-terminated state (7-D slot set) is NOT a goal
+            # arrival and must not inflate GOAL_REACHING_RATE.
+            PushStepChannel.GOAL_REACHED.value: float(self._object_at_goal(state)),
             PushStepChannel.ROBOT_OBSTACLE_COLLISION.value: robot_collision,
             PushStepChannel.OBJECT_OBSTACLE_COLLISION.value: object_collision,
             # Own channel: the aggregator reduces one channel at a time and

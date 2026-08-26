@@ -501,6 +501,28 @@ def test_is_terminal_disjunction():
     assert env.is_terminal(np.array([1.0, 1.0, 9.0, 9.0, 9.0, 9.0, 0.0])) is True
 
 
+def test_step_info_goal_reached_excludes_hazard_termination():
+    """``step_info`` reports a hazard death as NOT reaching the goal.
+
+    Purpose: Validates that the GOAL_REACHED channel (and hence
+        ``goal_reaching_rate``) is a goal-only predicate under the flag, so a
+        hazard-terminated episode is not counted as a success.
+
+    Given: A flag-on env, a hazard-terminated non-goal state, and a goal state.
+    When: ``step_info`` is evaluated on each.
+    Then: The hazard state reports ``0.0`` (although it is terminal) and the
+        goal state reports ``1.0``.
+
+    Test type: unit
+    """
+    env = _danger_env()
+    hazard_dead = np.array([3.0, 3.0, 8.0, 8.0, 9.0, 9.0, 1.0])
+    at_goal = np.array([1.0, 1.0, 9.0, 9.0, 9.0, 9.0, 0.0])
+    assert env.is_terminal(hazard_dead) is True
+    assert env.step_info(hazard_dead, "up", hazard_dead)["goal_reached"] == 0.0
+    assert env.step_info(at_goal, "up", at_goal)["goal_reached"] == 1.0
+
+
 def test_observation_carries_terminal_slot():
     """Observations follow the state width and copy the terminal slot verbatim.
 
