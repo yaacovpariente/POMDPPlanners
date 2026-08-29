@@ -291,31 +291,42 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-pub
         has_walls = walls is None or bool(walls)
         has_dangerous_areas = dangerous_areas is None or bool(dangerous_areas)
 
+        # Whether the wall and dangerous-area contributions stack. The plain
+        # constant model charges a single ``-dangerous_area_penalty`` on wall
+        # *or* danger (LaserTagRewardModel._compute_area_penalty_scalar).
+        # Every other path applies the two independently: the decayed model
+        # adds a decayed danger term on top of the wall penalty, the shock
+        # model applies a wall penalty and a separate +/- shock, and the
+        # draw-coupled hazard-terminal path (_deterministic_hazard_reward)
+        # subtracts one for each. A step that hits both then costs two.
+        hazards_stack = (
+            reward_model_type != RewardModelType.CONSTANT_HAZARD_PENALTY
+            or is_dangerous_area_hit_terminal
+        )
+
         danger_term_min = 0.0
         danger_term_max = 0.0
-        if reward_model_type == RewardModelType.ZERO_MEAN_HAZARD_SHOCK:
-            # Wall and danger contributions are applied independently here, and
-            # the danger one is a +/- shock, so it widens the range both ways.
+        if hazards_stack:
             if has_walls:
                 danger_term_min -= abs(dangerous_area_penalty)
             if has_dangerous_areas:
                 danger_term_min -= abs(dangerous_area_penalty)
-                danger_term_max += abs(dangerous_area_penalty)
         elif has_walls or has_dangerous_areas:
-            # The constant and distance-decayed models subtract at most one
-            # ``dangerous_area_penalty`` on top of the base reward (see
-            # LaserTagRewardModel._compute_area_penalty_scalar), so a failed tag
-            # taken onto a wall or hazard costs tag_penalty + that penalty. The
-            # declared minimum previously omitted it entirely and the env could
-            # emit a reward below its own declared range.
             danger_term_min -= abs(dangerous_area_penalty)
+        if reward_model_type == RewardModelType.ZERO_MEAN_HAZARD_SHOCK and has_dangerous_areas:
+            # This model's danger contribution is a +/- shock of equal
+            # magnitude, so it raises the maximum as well as lowering the
+            # minimum. Wall hits stay deterministically negative.
+            danger_term_max += abs(dangerous_area_penalty)
 
         super().__init__(
             discount_factor=discount_factor,
             name=name,
             space_info=space_info,
             reward_range=(
-                -tag_penalty + danger_term_min,
+                # The worst base reward is a failed tag or, if a movement step
+                # costs more than a failed tag does, that step cost.
+                -max(tag_penalty, step_cost) + danger_term_min,
                 tag_reward + danger_term_max,
             ),
             output_dir=output_dir,

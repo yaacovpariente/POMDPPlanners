@@ -424,14 +424,23 @@ def test_is_terminal():
     assert not env.is_terminal(np.array([1, 1, 0.0]))
 
 
-def test_reward_range():
-    """Test that reward range is correctly calculated.
+def test_reward_range_is_undeclared_because_the_reward_is_unbounded():
+    """Test that no reward range is declared.
 
-    Purpose: Validates that ContinuousLightDarkPOMDPDiscreteActions calculates reward range based on environment parameters
+    Purpose: Validates that the environment declares no reward range, because
+        its reward has no finite lower bound. The reward carries a
+        ``-dist_to_goal`` term; leaving the grid is penalised but is not
+        terminal, and the transition sampler deliberately does not clip
+        samples to the grid, so a state can drift arbitrarily far and the
+        reward diverges with it. This previously declared the in-grid diagonal
+        as the minimum, which the environment's own rollouts fall below --
+        and a declared-but-violated range silently invalidates the CVaR
+        concentration bound computed over it
 
-    Given: A ContinuousLightDarkPOMDPDiscreteActions environment with specific parameters
-    When: Environment reward_range attribute is checked
-    Then: Returns calculated range based on maximum distance to goal and reward parameters
+    Given: ContinuousLightDarkPOMDPDiscreteActions environments built with
+        different reward parameters and grid sizes
+    When: The reward_range attribute is checked
+    Then: It is None regardless of those parameters
 
     Test type: unit
     """
@@ -441,33 +450,15 @@ def test_reward_range():
             obstacle_reward=-15.0, goal_reward=25.0, fuel_cost=2.0, grid_size=11
         ),
     )
+    assert env.reward_range is None
 
-    # Expected calculation for CONSTANT_HAZARD_PENALTY reward model:
-    # Maximum distance to goal is diagonal of grid: sqrt(2) * grid_size
-    max_distance_to_goal = np.sqrt(2) * 11  # grid_size=11
-    # Min: -fuel_cost - max_distance + obstacle_reward
-    expected_min = -2.0 - max_distance_to_goal + (-15.0)
-    # Max: -fuel_cost + goal_reward
-    expected_max = -2.0 + 25.0
-
-    expected_reward_range = (expected_min, expected_max)
-    assert env.reward_range == expected_reward_range
-
-    # Test with another environment instance with different parameters
     env2 = ContinuousLightDarkPOMDPDiscreteActions(
         discount_factor=0.99,
         **continuous_light_dark_discrete_actions_pinned_kwargs(
             obstacle_reward=-50.0, goal_reward=100.0, fuel_cost=3.0, grid_size=15
         ),
     )
-
-    # Calculate expected range for different parameters
-    max_distance2 = np.sqrt(2) * 15  # grid_size=15
-    expected_min2 = -3.0 - max_distance2 + (-50.0)
-    expected_max2 = -3.0 + 100.0
-    expected_reward_range2 = (expected_min2, expected_max2)
-
-    assert env2.reward_range == expected_reward_range2
+    assert env2.reward_range is None
 
 
 def test_compute_metrics_empty_histories_is_rejected():
