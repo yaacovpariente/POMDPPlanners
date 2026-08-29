@@ -323,6 +323,25 @@ class Environment(ABC):  # pylint: disable=too-many-public-methods
                 if v1.keys() != v2.keys():
                     return False
                 return all(_compare_values(v1[k], v2[k], depth) for k in v1)
+            # Enum members define no __eq__ of their own, so without this they
+            # would fall into the structural branch below and be compared by
+            # walking __objclass__ — the enum class, whose _member_map_ leads
+            # back to every member and to the class again. Correct but
+            # needlessly expensive, and config_id compares an Enum by its
+            # value long before it reaches its __dict__. Identity is the right
+            # comparison for a member of one enum class.
+            if isinstance(v1, Enum) or isinstance(v2, Enum):
+                return v1 == v2
+            # A class or plain function named in a config is compared the way
+            # config_id serializes it: by qualified name. Structural comparison
+            # would call every distinct function equal, since ``vars(fn)`` is
+            # empty for essentially all of them — and "equal but hashing
+            # differently" is the one direction that actually breaks dict and
+            # set deduplication.
+            if _is_config_callable(v1) or _is_config_callable(v2):
+                if not (_is_config_callable(v1) and _is_config_callable(v2)):
+                    return False
+                return (v1.__module__, v1.__qualname__) == (v2.__module__, v2.__qualname__)
             # A sub-object built deterministically from this env's own config
             # (a reward model, an observation model) carries no identity of its
             # own. Left to ``v1 == v2`` it would compare by *identity*, because

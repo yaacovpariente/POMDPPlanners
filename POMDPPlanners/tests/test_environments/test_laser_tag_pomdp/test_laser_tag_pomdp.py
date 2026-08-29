@@ -1528,9 +1528,14 @@ class TestLaserTagPOMDP:
 
         Purpose: ``_deterministic_hazard_reward`` subtracts one
             dangerous_area_penalty for a wall and another for the terminal
-            hazard flag, so the constant model stacks them too once
+            hazard flag, so the constant model stacks them once
             ``is_dangerous_area_hit_terminal`` is on -- even though it charges
-            only one with the flag off.
+            only one with the flag off. This pins the *declared* range for both
+            configurations; unlike its decayed-model sibling it does not
+            demonstrate a reward reaching the flag-on minimum, because the
+            realised robot cell is never a wall on the transition path (see
+            _is_valid_position_inline), so that bound is deliberately
+            conservative rather than tight
 
         Given: Two constant-model LaserTagPOMDPs differing only in
             ``is_dangerous_area_hit_terminal``.

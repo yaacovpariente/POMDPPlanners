@@ -53,6 +53,7 @@ turns green automatically the moment the fix lands.
 import importlib
 import random
 from copy import deepcopy
+from enum import Enum
 from typing import Any, Callable, List, Tuple
 
 import numpy as np
@@ -963,15 +964,45 @@ def test_equality_agrees_with_hash_and_config_id(env_builder: EnvBuilder) -> Non
     assert first.config_id == second.config_id
 
 
+def _perturbable_config_sub_attribute(env: Environment) -> Any:
+    """Find a scalar inside a config sub-object of ``env`` that can be nudged.
+
+    The structural branch of ``Environment.__eq__`` exists for values like a
+    reward or observation model: built from the env's own config, defining no
+    equality of their own, and otherwise compared by object identity. This
+    locates a scalar *inside* one so a test can perturb it and check the
+    difference is still noticed.
+
+    Returns:
+        A ``(sub_object, attribute_name)`` pair, or ``None`` when the env
+        holds no such sub-object carrying a scalar.
+    """
+    for key, value in vars(env).items():
+        if key.startswith("_") or callable(value):
+            continue
+        # Enum members are process-wide singletons compared by identity, not
+        # structurally — perturbing one would mutate it for both envs and for
+        # every other test in the session.
+        if isinstance(value, (Enum, np.ndarray, Environment)):
+            continue
+        if not hasattr(value, "__dict__"):
+            continue
+        if type(value).__eq__ is not object.__eq__:
+            continue
+        for attribute, inner in vars(value).items():
+            if isinstance(inner, bool) or not isinstance(inner, (int, float)):
+                continue
+            return value, attribute
+    return None
+
+
 @pytest.mark.parametrize("env_builder", _all_env_params())
 def test_inequality_survives_a_changed_discount_factor(env_builder: EnvBuilder) -> None:
-    """Envs differing in configuration still compare unequal.
+    """Envs differing in a top-level value compare unequal.
 
-    Purpose: Guards the other half of the equality contract. Fixing
-        ``__eq__`` to compare config sub-objects structurally must not
-        make it so permissive that two genuinely different environments
-        match — ``__eq__`` and ``__hash__`` feed caching and dedup, so a
-        false match silently serves the wrong environment's results.
+    Purpose: The base half of the equality contract — equality must still
+        separate environments that differ in their plainest scalar
+        configuration.
 
     Given: Two environments from the same builder differing only in
         ``discount_factor``.
@@ -986,7 +1017,42 @@ def test_inequality_survives_a_changed_discount_factor(env_builder: EnvBuilder) 
 
     assert first != second, (
         f"{type(first).__name__} compares equal to an env with a different "
-        "discount factor; __eq__ is too permissive"
+        "discount factor"
+    )
+    assert first.config_id != second.config_id
+
+
+@pytest.mark.parametrize("env_builder", _all_env_params())
+def test_inequality_survives_a_changed_config_sub_object(env_builder: EnvBuilder) -> None:
+    """A difference inside a config sub-object still makes envs unequal.
+
+    Purpose: Guards the structural comparison specifically. ``__eq__``
+        descends into sub-objects that define no equality of their own
+        (the reward model) instead of comparing them by identity, and
+        that must not turn into "any two reward models are the same".
+        A perturbation of a top-level scalar would not exercise this
+        branch at all, so this reaches inside one.
+
+    Given: Two environments from the same builder, with one scalar
+        attribute inside a config sub-object perturbed on the second.
+    When: They are compared.
+    Then: They are not equal, and their ``config_id`` values differ —
+        equality and the config hash agreeing on the difference.
+
+    Test type: integration
+    """
+    first = env_builder()
+    second = env_builder()
+    found = _perturbable_config_sub_attribute(second)
+    if found is None:
+        pytest.skip(f"{type(first).__name__} holds no comparable config sub-object")
+    sub_object, perturbed = found
+    setattr(sub_object, perturbed, float(getattr(sub_object, perturbed)) + 123.5)
+
+    assert first != second, (
+        f"{type(first).__name__} compares equal to an env whose "
+        f"{type(sub_object).__name__}.{perturbed} differs; the structural "
+        "comparison is too permissive"
     )
     assert first.config_id != second.config_id
 
