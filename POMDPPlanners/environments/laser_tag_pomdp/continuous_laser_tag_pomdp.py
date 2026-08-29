@@ -273,8 +273,10 @@ class ContinuousLaserTagPOMDP(Environment):  # pylint: disable=too-many-public-m
         # derived ndarray, so a to_dict/from_dict round trip hands an ndarray
         # back to this constructor -- and an env whose grid_size_tuple was an
         # ndarray would not compare equal to the tuple-valued original.
-        self.grid_size_tuple: Tuple[float, float] = tuple(
-            float(value) for value in np.asarray(grid_size, dtype=float).reshape(-1)
+        _grid_size_values = np.asarray(grid_size, dtype=float).reshape(-1)
+        self.grid_size_tuple: Tuple[float, float] = (
+            float(_grid_size_values[0]),
+            float(_grid_size_values[1]),
         )
         self._grid_size = np.array(grid_size, dtype=float)
         wall_list = walls if walls is not None else _DEFAULT_WALLS
