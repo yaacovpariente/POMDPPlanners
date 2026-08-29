@@ -241,67 +241,27 @@ SERIALIZATION_ROUND_TRIP_BROKEN_ENVS: frozenset = frozenset()
 CONFIG_ID_UNSTABLE_AFTER_USE_ENVS: frozenset = frozenset()
 
 
-# Envs that emit a reward outside their own declared ``reward_range``.
+# No env is known to emit a reward outside its own declared ``reward_range``.
 #
-# Deliberately left unfixed. The declared minimum is
-# ``-fuel_cost - sqrt(2) * grid_size + obstacle_reward``, which assumes the
-# agent stays inside the grid. It does not: ``_sample_mvn`` documents that
-# samples are NOT clipped to the grid, because clipping the sampler while the
-# observation PDF stays unclipped would break importance weights near the
-# edges. The distance-to-goal term is therefore unbounded and *no* finite
-# minimum is correct — this needs a design decision (bound the state, or
-# accept an unbounded reward and teach the CVaR/CI consumers about it), not a
-# contract fix, so widening the number here would only paper over it.
-#
-# ``ContinuousLightDarkPOMDP`` shares the same defect and is absent from this
-# set only because the pinned seeds below never push it far enough outside
-# the grid; it is not sound either.
-REWARD_RANGE_BROKEN_ENVS = frozenset({"ContinuousLightDarkPOMDPDiscreteActions"})
+# Both ContinuousLightDark variants used to. Their declared minimum assumed the
+# agent stays inside the grid, which it does not: leaving the grid is penalised
+# but not terminal, and _sample_mvn deliberately does not clip samples. Those
+# envs now declare no range at all, which is the honest statement for a reward
+# with no finite lower bound -- an env that declares nothing is skipped here.
+REWARD_RANGE_BROKEN_ENVS: frozenset = frozenset()
 
 
-# Envs that do not reproduce a trajectory from a seed.
+# No env is known to lose seed determinism.
 #
-# ``ContinuousPushPOMDP._get_trans_kernel`` (and its observation twin) keeps a
-# shortcut cache keyed by ``id(action)`` while holding no reference to the
-# action array. CPython recycles the id of a freed object, so once a
-# transient action array is collected a *different* action array allocated at
-# the same address hits that entry and is simulated with the previous action's
-# kernel. Measured on a 200-step rollout of freshly allocated unit-vector
-# actions: 10 kernels built, 190 steps served a kernel built for a different
-# action.
-#
-# The DiscreteActions variant is unaffected because it maps each action label
-# to one long-lived cached ndarray, so those ids never get recycled.
-#
-# ``strict=False`` deliberately: whether an id is recycled depends on what the
-# process allocated earlier, so this fails when the file runs after its
-# neighbours and passes when it runs alone. A strict marker would then fail in
-# the other direction.
-#
-# Left unfixed on purpose. Correcting the cache changes which action every
-# continuous-action rollout actually executes, so it moves every number
-# measured on this environment — a decision to take deliberately, not as a
-# side effect of a contract fix.
-SEED_DETERMINISM_BROKEN_ENVS = frozenset({"ContinuousPushPOMDP"})
-
-
-def _seed_determinism_params() -> List[pytest.param]:  # type: ignore[valid-type]
-    """Env-builder params for the determinism test, with a non-strict xfail."""
-    params: List[pytest.param] = []  # type: ignore[valid-type]
-    for env_id, builder in ENV_BUILDERS:
-        if env_id in SEED_DETERMINISM_BROKEN_ENVS:
-            mark = pytest.mark.xfail(
-                strict=False,
-                reason=(
-                    f"{env_id} reuses a per-action C++ kernel cached under a recycled "
-                    "id(action), so a rollout can execute a different action than the "
-                    "one passed. Order-dependent, hence non-strict."
-                ),
-            )
-            params.append(pytest.param(builder, id=env_id, marks=mark))
-        else:
-            params.append(pytest.param(builder, id=env_id))
-    return params
+# ``ContinuousPushPOMDP`` used to, and the cause is worth remembering: its
+# per-action C++ kernel caches were keyed by ``id(action)`` while holding no
+# reference to the action array. CPython hands the id of a freed object to the
+# next object allocated there, so a transient action array could hit the entry
+# left by an earlier one and be simulated with the wrong action's kernel
+# (measured: 10 kernels built over a 200-step rollout, 190 steps served the
+# wrong one). Those caches are now populated only for env-owned action arrays
+# pinned via ``_pin_action_vectors``.
+SEED_DETERMINISM_BROKEN_ENVS: frozenset = frozenset()
 
 
 # ``_native`` extension modules that own their own C++ RNG. ``np.random.seed``
@@ -951,6 +911,87 @@ def test_serialization_round_trip_preserves_config_id(env_builder: EnvBuilder) -
 
 
 @pytest.mark.parametrize("env_builder", _all_env_params())
+def test_serialization_round_trip_preserves_equality(env_builder: EnvBuilder) -> None:
+    """``from_dict(to_dict(env))`` compares equal to the env it came from.
+
+    Purpose: ``__eq__`` and ``config_id`` are two answers to the same
+        question — is this the same environment — and they have to agree.
+        They did not: ``__eq__`` fell back to ``v1 == v2`` for a sub-object
+        like the reward model, whose class defines no ``__eq__``, so it
+        compared by *identity*. An env and its own rebuild were never
+        equal, however faithfully the rebuild was constructed.
+
+    Given: A freshly built environment.
+    When: It is serialized with ``to_dict`` and rebuilt with ``from_dict``.
+    Then: The rebuild compares equal to the original.
+
+    Test type: integration
+    """
+    env = env_builder()
+    rebuilt = type(env).from_dict(env.to_dict())
+    assert rebuilt == env, (
+        f"{type(env).__name__} does not compare equal to its own to_dict/from_dict "
+        "rebuild, even though the two carry the same configuration"
+    )
+
+
+@pytest.mark.parametrize("env_builder", _all_env_params())
+def test_equality_agrees_with_hash_and_config_id(env_builder: EnvBuilder) -> None:
+    """Two identically built envs are equal, and hash alike.
+
+    Purpose: ``__hash__`` is ``hash(config_id)``, so equality is already
+        *defined* to be about configuration. If ``__eq__`` disagrees, two
+        envs with one configuration land in the same hash bucket and then
+        refuse to match, and every dict or set keyed on an environment
+        stops deduplicating.
+
+    Given: Two environments built from the same builder with identical
+        pinned kwargs.
+    When: They are compared, hashed, and their ``config_id`` read.
+    Then: They are equal, their hashes match, and their ``config_id``
+        values match — all three agreeing.
+
+    Test type: integration
+    """
+    first = env_builder()
+    second = env_builder()
+    assert first == second, (
+        f"{type(first).__name__} instances built from identical config are not equal; "
+        "__eq__ is comparing something that is not configuration"
+    )
+    assert hash(first) == hash(second)
+    assert first.config_id == second.config_id
+
+
+@pytest.mark.parametrize("env_builder", _all_env_params())
+def test_inequality_survives_a_changed_discount_factor(env_builder: EnvBuilder) -> None:
+    """Envs differing in configuration still compare unequal.
+
+    Purpose: Guards the other half of the equality contract. Fixing
+        ``__eq__`` to compare config sub-objects structurally must not
+        make it so permissive that two genuinely different environments
+        match — ``__eq__`` and ``__hash__`` feed caching and dedup, so a
+        false match silently serves the wrong environment's results.
+
+    Given: Two environments from the same builder differing only in
+        ``discount_factor``.
+    When: They are compared.
+    Then: They are not equal, and their ``config_id`` values differ.
+
+    Test type: integration
+    """
+    first = env_builder()
+    second = env_builder()
+    second.discount_factor = first.discount_factor / 2.0
+
+    assert first != second, (
+        f"{type(first).__name__} compares equal to an env with a different "
+        "discount factor; __eq__ is too permissive"
+    )
+    assert first.config_id != second.config_id
+
+
+@pytest.mark.parametrize("env_builder", _all_env_params())
 def test_config_id_is_stable_across_identical_constructions(env_builder: EnvBuilder) -> None:
     """Two identically configured envs share one ``config_id``.
 
@@ -1253,7 +1294,7 @@ def test_declared_reward_range_bounds_observed_rewards(env_builder: EnvBuilder) 
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("env_builder", _seed_determinism_params())
+@pytest.mark.parametrize("env_builder", _all_env_params())
 def test_same_seed_reproduces_trajectory(env_builder: EnvBuilder) -> None:
     """One seed and one env config give one trajectory.
 
