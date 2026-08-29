@@ -1430,7 +1430,9 @@ class TestLaserTagPOMDP:
 
         Given: A LaserTagPOMDP environment with specific tag reward and penalty parameters
         When: Environment reward_range attribute is checked
-        Then: Returns range based on worst case (-tag_penalty) and best case (tag_reward)
+        Then: Returns range based on the worst case (a failed tag taken onto a
+            wall or dangerous area, so -tag_penalty - dangerous_area_penalty)
+            and the best case (tag_reward)
 
         Test type: unit
         """
@@ -1439,9 +1441,10 @@ class TestLaserTagPOMDP:
             **_lt_pinned_kwargs(tag_reward=15.0, tag_penalty=20.0, step_cost=2.0),
         )
 
-        # Expected calculation from LaserTagPOMDP constructor:
-        # reward_range=(-tag_penalty, tag_reward) = (-20.0, 15.0)
-        expected_min = -20.0  # Failed tag penalty
+        # The constant-hazard model subtracts one dangerous_area_penalty (5.0
+        # in the pinned config) on top of the base reward, so a failed tag onto
+        # a wall or hazard is the true worst case.
+        expected_min = -25.0  # -tag_penalty - dangerous_area_penalty
         expected_max = 15.0  # Successful tag reward
 
         assert env.reward_range == (expected_min, expected_max)
@@ -1452,10 +1455,35 @@ class TestLaserTagPOMDP:
             **_lt_pinned_kwargs(tag_reward=50.0, tag_penalty=100.0, step_cost=1.0),
         )
 
-        expected_min2 = -100.0  # Failed tag penalty
+        expected_min2 = -105.0  # -tag_penalty - dangerous_area_penalty
         expected_max2 = 50.0  # Successful tag reward
 
         assert env2.reward_range == (expected_min2, expected_max2)
+
+    def test_reward_range_omits_hazard_term_without_walls_or_dangerous_areas(self):
+        """With no walls and no dangerous areas the hazard term drops out.
+
+        Purpose: Validates that the hazard allowance in the declared range is
+            conditional on there being a hazard to hit, so an env configured
+            without either does not advertise a reachable-but-impossible
+            minimum.
+
+        Given: A LaserTagPOMDP with empty walls and empty dangerous areas.
+        When: Environment reward_range attribute is checked.
+        Then: The range is exactly (-tag_penalty, tag_reward).
+
+        Test type: unit
+        """
+        env = LaserTagPOMDP(
+            discount_factor=0.95,
+            **_lt_pinned_kwargs(
+                tag_reward=15.0,
+                tag_penalty=20.0,
+                walls=set(),
+                dangerous_areas=set(),
+            ),
+        )
+        assert env.reward_range == (-20.0, 15.0)
 
     def test_zero_mean_danger_shock_expands_both_reward_range_bounds(self):
         """A zero-mean danger shock advertises both possible shock signs."""

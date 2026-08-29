@@ -25,9 +25,15 @@ to this file, were tested for at most a handful of environments:
   constructions. ``test_environment_serialization.py`` hand-writes one
   block per env, so a new env gets zero coverage until someone
   remembers to add one; the parametrized test here closes that gap.
-* declared metric channels — every name in ``get_metric_names()`` must
-  actually be produced by ``compute_metrics``, or the metric is silently
-  dropped by consumers that look it up by name.
+* ``step_info`` — must consume no randomness (a single draw there shifts
+  the RNG stream for every later transition and observation), and must
+  tolerate the terminal bookkeeping step's ``action=None,
+  next_state=None``.
+* declared metric channels — every channel in ``get_metric_specs()`` must
+  be a key ``step_info`` actually emits, and every name in
+  ``get_metric_names()`` must actually be produced by
+  ``compute_metrics``, or the metric is silently dropped by consumers
+  that look it up by name.
 * declared reward range — every reward observed on a rollout must fall
   inside ``reward_range``, which the base class validates on
   construction and which downstream CVaR / confidence-interval code
@@ -224,58 +230,78 @@ HASH_OBSERVATION_BROKEN_ENVS = frozenset(
 # Envs whose ``sample_next_state_batch`` disagrees with the per-state
 # ``sample_next_state`` on the *type* of the states it produces. Marked
 # ``xfail(strict=True)`` so the gap is documented until the fix lands.
-SAMPLE_NEXT_STATE_BATCH_BROKEN_ENVS = frozenset(
-    {
-        # Batch path returns an int64 grid array; sample_next_state returns
-        # float64. A particle filter that mixes the two paths ends up with a
-        # belief whose particles silently round to grid corners.
-        "DiscreteLightDarkPOMDP",
-    }
-)
+SAMPLE_NEXT_STATE_BATCH_BROKEN_ENVS: frozenset = frozenset()
 
 
-# Envs whose ``to_dict`` / ``from_dict`` round-trip is broken today.
-SERIALIZATION_ROUND_TRIP_BROKEN_ENVS = frozenset(
-    {
-        # ``to_dict`` raises ValueError ("truth value of an empty array is
-        # ambiguous") while serializing one of its ndarray-valued kwargs.
-        # ``ContinuousPushPOMDPDiscreteActions`` inherits the break.
-        "ContinuousPushPOMDP",
-        "ContinuousPushPOMDPDiscreteActions",
-        # ``from_dict`` round-trips ``dangerous_areas`` as a list of
-        # ``{"__type__": "tuple", ...}`` envelopes rather than back into
-        # tuples, so the constructor raises TypeError.
-        "ContinuousLaserTagPOMDP",
-        "ContinuousLaserTagPOMDPDiscreteActions",
-    }
-)
+# No env is known to break the ``to_dict`` / ``from_dict`` round trip.
+SERIALIZATION_ROUND_TRIP_BROKEN_ENVS: frozenset = frozenset()
 
 
-# Envs whose ``config_id`` changes once the env has been used. ``config_id``
-# hashes the instance ``__dict__``, so any lazily populated cache attribute
-# leaks into the identity.
-CONFIG_ID_UNSTABLE_AFTER_USE_ENVS = frozenset(
-    {
-        # ``_cached_vectorized_updater`` is None on a fresh env and populated
-        # on the first batch call, so the same env hashes differently before
-        # and after a particle filter touches it.
-        "LaserTagPOMDP",
-    }
-)
+# No env is known to change its ``config_id`` once it has been used.
+CONFIG_ID_UNSTABLE_AFTER_USE_ENVS: frozenset = frozenset()
 
 
 # Envs that emit a reward outside their own declared ``reward_range``.
-REWARD_RANGE_BROKEN_ENVS = frozenset(
-    {
-        # Declares (-10.0, 10.0) but a step that both collides and fails a
-        # tag charges step_cost + tag_penalty, reaching -15.0.
-        "LaserTagPOMDP",
-        # Declares a minimum of about -27.556 but the discrete action set
-        # can reach a state whose reward is about -27.570; the declared
-        # bound is computed from the continuous action set only.
-        "ContinuousLightDarkPOMDPDiscreteActions",
-    }
-)
+#
+# Deliberately left unfixed. The declared minimum is
+# ``-fuel_cost - sqrt(2) * grid_size + obstacle_reward``, which assumes the
+# agent stays inside the grid. It does not: ``_sample_mvn`` documents that
+# samples are NOT clipped to the grid, because clipping the sampler while the
+# observation PDF stays unclipped would break importance weights near the
+# edges. The distance-to-goal term is therefore unbounded and *no* finite
+# minimum is correct — this needs a design decision (bound the state, or
+# accept an unbounded reward and teach the CVaR/CI consumers about it), not a
+# contract fix, so widening the number here would only paper over it.
+#
+# ``ContinuousLightDarkPOMDP`` shares the same defect and is absent from this
+# set only because the pinned seeds below never push it far enough outside
+# the grid; it is not sound either.
+REWARD_RANGE_BROKEN_ENVS = frozenset({"ContinuousLightDarkPOMDPDiscreteActions"})
+
+
+# Envs that do not reproduce a trajectory from a seed.
+#
+# ``ContinuousPushPOMDP._get_trans_kernel`` (and its observation twin) keeps a
+# shortcut cache keyed by ``id(action)`` while holding no reference to the
+# action array. CPython recycles the id of a freed object, so once a
+# transient action array is collected a *different* action array allocated at
+# the same address hits that entry and is simulated with the previous action's
+# kernel. Measured on a 200-step rollout of freshly allocated unit-vector
+# actions: 10 kernels built, 190 steps served a kernel built for a different
+# action.
+#
+# The DiscreteActions variant is unaffected because it maps each action label
+# to one long-lived cached ndarray, so those ids never get recycled.
+#
+# ``strict=False`` deliberately: whether an id is recycled depends on what the
+# process allocated earlier, so this fails when the file runs after its
+# neighbours and passes when it runs alone. A strict marker would then fail in
+# the other direction.
+#
+# Left unfixed on purpose. Correcting the cache changes which action every
+# continuous-action rollout actually executes, so it moves every number
+# measured on this environment — a decision to take deliberately, not as a
+# side effect of a contract fix.
+SEED_DETERMINISM_BROKEN_ENVS = frozenset({"ContinuousPushPOMDP"})
+
+
+def _seed_determinism_params() -> List[pytest.param]:  # type: ignore[valid-type]
+    """Env-builder params for the determinism test, with a non-strict xfail."""
+    params: List[pytest.param] = []  # type: ignore[valid-type]
+    for env_id, builder in ENV_BUILDERS:
+        if env_id in SEED_DETERMINISM_BROKEN_ENVS:
+            mark = pytest.mark.xfail(
+                strict=False,
+                reason=(
+                    f"{env_id} reuses a per-action C++ kernel cached under a recycled "
+                    "id(action), so a rollout can execute a different action than the "
+                    "one passed. Order-dependent, hence non-strict."
+                ),
+            )
+            params.append(pytest.param(builder, id=env_id, marks=mark))
+        else:
+            params.append(pytest.param(builder, id=env_id))
+    return params
 
 
 # ``_native`` extension modules that own their own C++ RNG. ``np.random.seed``
@@ -463,6 +489,12 @@ def _rollout(
     return trace
 
 
+def _uniform_belief(env: Environment) -> WeightedParticleBelief:
+    """Return a four-particle uniform belief drawn from the initial state dist."""
+    particles = env.initial_state_dist().sample(4)
+    return WeightedParticleBelief(particles, np.log(np.full(4, 0.25)))
+
+
 def _rollout_history(env: Environment, seed: int, max_steps: int = 8) -> History:
     """Build a :class:`History` from a short random rollout of ``env``.
 
@@ -476,15 +508,39 @@ def _rollout_history(env: Environment, seed: int, max_steps: int = 8) -> History
     action_rng = np.random.default_rng(seed)
     state = env.initial_state_dist().sample()[0]
     steps: List[StepData] = []
+    terminated = False
     for _ in range(max_steps):
         if env.is_terminal(state):
+            terminated = True
             break
         action = _random_action(env, action_rng)
         next_state, observation, reward = env.sample_next_step(state, action)
-        particles = env.initial_state_dist().sample(4)
-        belief = WeightedParticleBelief(particles, np.log(np.full(4, 0.25)))
-        steps.append(StepData(state, action, next_state, observation, float(reward), belief))
+        steps.append(
+            StepData(
+                state=state,
+                action=action,
+                next_state=next_state,
+                observation=observation,
+                reward=float(reward),
+                belief=_uniform_belief(env),
+                info=env.step_info(state, action, next_state) or None,
+            )
+        )
         state = next_state
+    if terminated:
+        # Mirror EpisodeRunner._add_terminal_step: the final state is only ever
+        # recorded here, and metrics that scan every visited state need it.
+        steps.append(
+            StepData(
+                state=state,
+                action=None,
+                next_state=None,
+                observation=None,
+                reward=None,
+                belief=_uniform_belief(env),
+                info=env.step_info(state, None, None) or None,
+            )
+        )
     return History(
         history=steps,
         discount_factor=env.discount_factor,
@@ -494,7 +550,7 @@ def _rollout_history(env: Environment, seed: int, max_steps: int = 8) -> History
         average_belief_update_time=0.0,
         average_reward_time=0.0,
         actual_num_steps=len(steps),
-        reach_terminal_state=env.is_terminal(state),
+        reach_terminal_state=terminated,
         policy_run_data=[],
     )
 
@@ -966,6 +1022,155 @@ def test_config_id_survives_using_the_environment(env_builder: EnvBuilder) -> No
 
 
 # ---------------------------------------------------------------------------
+# step_info
+# ---------------------------------------------------------------------------
+
+
+def _one_transition(env: Environment, seed: int = 0) -> Tuple[Any, Any, Any]:
+    """Return one ``(state, action, next_state)`` triple from a seeded draw."""
+    _seed_all(seed)
+    state = env.initial_state_dist().sample()[0]
+    action = _sample_action(env)
+    next_state = env.sample_next_state(state=state, action=action)
+    return state, action, next_state
+
+
+def _numpy_state_key() -> Tuple[Any, ...]:
+    """Return a comparable snapshot of the global numpy RNG state."""
+    state = np.random.get_state()
+    return (state[0], state[1].tobytes(), state[2], state[3], state[4])
+
+
+@pytest.mark.parametrize("env_builder", _all_env_params())
+def test_step_info_consumes_no_randomness(env_builder: EnvBuilder) -> None:
+    """``step_info`` draws from no RNG stream.
+
+    Purpose: The base ``step_info`` docstring carries an explicit warning
+        about this. The hook runs inside the episode loop, between the
+        transition and the belief update, so a single draw there shifts
+        the stream for every subsequent transition and observation —
+        silently changing seeded trajectories throughout the run, not
+        just the metrics. The damage is invisible: the metric looks
+        fine, and the trajectory is wrong somewhere else entirely.
+
+    Given: One seeded ``(state, action, next_state)`` transition, and
+        snapshots of both Python-level RNG streams.
+    When: ``step_info`` is called on that transition.
+    Then: The stdlib ``random`` and ``np.random`` states are byte-for-byte
+        unchanged, and a probe transition drawn afterwards matches the
+        one drawn without the ``step_info`` call — the probe is what
+        catches a draw from a native C++ RNG, whose state no Python API
+        exposes.
+
+    Test type: integration
+    """
+    env = env_builder()
+    state, action, next_state = _one_transition(env)
+
+    _seed_all(7)
+    expected_probe = _trajectory_key(env.sample_next_state(state=state, action=action))
+
+    _seed_all(7)
+    numpy_before = _numpy_state_key()
+    random_before = random.getstate()
+    env.step_info(state, action, next_state)
+    assert _numpy_state_key() == numpy_before, (
+        f"{type(env).__name__}.step_info advanced the np.random stream; every "
+        "subsequent transition and observation in a seeded run is now shifted"
+    )
+    assert random.getstate() == random_before, (
+        f"{type(env).__name__}.step_info advanced the stdlib random stream; every "
+        "subsequent transition and observation in a seeded run is now shifted"
+    )
+    actual_probe = _trajectory_key(env.sample_next_state(state=state, action=action))
+    assert actual_probe == expected_probe, (
+        f"{type(env).__name__}.step_info consumed randomness from a native RNG: the "
+        "next transition drawn after it differs from the same transition drawn without it"
+    )
+
+
+@pytest.mark.parametrize("env_builder", _all_env_params())
+def test_step_info_tolerates_terminal_bookkeeping_step(env_builder: EnvBuilder) -> None:
+    """``step_info`` accepts the terminal step's ``action=None, next_state=None``.
+
+    Purpose: ``EpisodeRunner._add_terminal_step`` calls ``step_info``
+        once per terminated episode with both transition arguments
+        ``None``, because the final state is only ever recorded there and
+        metrics that scan every visited state need it. An implementation
+        that assumes a transition raises, and the whole episode is lost
+        at the point where its result is being recorded.
+
+    Given: A state reached by a short seeded rollout.
+    When: ``step_info(state, None, None)`` is called.
+    Then: It does not raise, and returns a mapping of channel name to a
+        plain finite scalar — the values must be picklable scalars to
+        survive the trip back from a worker process.
+
+    Test type: integration
+    """
+    env = env_builder()
+    _seed_all(0)
+    state = env.initial_state_dist().sample()[0]
+
+    info = env.step_info(state, None, None)
+
+    assert isinstance(info, dict), (
+        f"{type(env).__name__}.step_info returned {type(info).__name__} on the terminal "
+        "bookkeeping step; the contract is a flat name -> scalar mapping"
+    )
+    for channel, value in info.items():
+        assert isinstance(channel, str), (
+            f"{type(env).__name__}.step_info used a non-string channel name {channel!r}"
+        )
+        assert isinstance(value, (int, float)) and not isinstance(value, bool), (
+            f"{type(env).__name__}.step_info reported {channel!r} as "
+            f"{type(value).__name__}; values must be plain picklable scalars"
+        )
+        assert np.isfinite(float(value)), (
+            f"{type(env).__name__}.step_info reported {channel!r} as {value} on the "
+            "terminal bookkeeping step; transition-describing channels must report a "
+            "neutral value there, not NaN"
+        )
+
+
+@pytest.mark.parametrize("env_builder", _all_env_params())
+def test_declared_metric_spec_channels_are_emitted(env_builder: EnvBuilder) -> None:
+    """Every channel in ``get_metric_specs()`` is a key ``step_info`` emits.
+
+    Purpose: ``get_metric_specs`` states the rule directly: only declare
+        a channel the environment actually emits on every step, because a
+        declared-but-unreported channel yields a metric that is silently
+        dropped. Nothing enforces it — the aggregation just omits the
+        metric, so the name survives in ``get_metric_names`` while no
+        value is ever produced for it.
+
+        ``test_step_info_migration.py`` checks the same invariant, but
+        over its own list of migrated env slugs. This one rides on
+        :data:`ENV_BUILDERS`, so an env added to the registry is covered
+        without also being remembered into that list.
+
+    Given: An env that declares at least one metric spec, and one seeded
+        transition.
+    When: ``step_info`` is called on that transition.
+    Then: Every declared channel appears among the returned keys.
+
+    Test type: integration
+    """
+    env = env_builder()
+    declared = {spec.channel for spec in env.get_metric_specs()}
+    if not declared:
+        pytest.skip(f"{type(env).__name__} declares no step_info metric specs")
+
+    state, action, next_state = _one_transition(env)
+    emitted = set(env.step_info(state, action, next_state))
+    missing = sorted(declared - emitted)
+    assert not missing, (
+        f"{type(env).__name__} declares metric spec channels that step_info never "
+        f"emits, so those metrics are silently dropped: {missing}"
+    )
+
+
+# ---------------------------------------------------------------------------
 # declared metric channels
 # ---------------------------------------------------------------------------
 
@@ -1048,7 +1253,7 @@ def test_declared_reward_range_bounds_observed_rewards(env_builder: EnvBuilder) 
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("env_builder", _all_env_params())
+@pytest.mark.parametrize("env_builder", _seed_determinism_params())
 def test_same_seed_reproduces_trajectory(env_builder: EnvBuilder) -> None:
     """One seed and one env config give one trajectory.
 

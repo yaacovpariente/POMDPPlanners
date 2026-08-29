@@ -286,14 +286,29 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-pub
             observation_space=SpaceType.CONTINUOUS,  # Continuous 8-dimensional laser measurements with noise
         )
 
+        # ``None`` means "use the built-in default set", which is non-empty for
+        # both, so a None here still admits a hazard contribution.
+        has_walls = walls is None or bool(walls)
+        has_dangerous_areas = dangerous_areas is None or bool(dangerous_areas)
+
         danger_term_min = 0.0
         danger_term_max = 0.0
         if reward_model_type == RewardModelType.ZERO_MEAN_HAZARD_SHOCK:
-            if walls:
+            # Wall and danger contributions are applied independently here, and
+            # the danger one is a +/- shock, so it widens the range both ways.
+            if has_walls:
                 danger_term_min -= abs(dangerous_area_penalty)
-            if dangerous_areas is None or dangerous_areas:
+            if has_dangerous_areas:
                 danger_term_min -= abs(dangerous_area_penalty)
                 danger_term_max += abs(dangerous_area_penalty)
+        elif has_walls or has_dangerous_areas:
+            # The constant and distance-decayed models subtract at most one
+            # ``dangerous_area_penalty`` on top of the base reward (see
+            # LaserTagRewardModel._compute_area_penalty_scalar), so a failed tag
+            # taken onto a wall or hazard costs tag_penalty + that penalty. The
+            # declared minimum previously omitted it entirely and the env could
+            # emit a reward below its own declared range.
+            danger_term_min -= abs(dangerous_area_penalty)
 
         super().__init__(
             discount_factor=discount_factor,

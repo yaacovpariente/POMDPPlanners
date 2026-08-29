@@ -864,7 +864,12 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
     def sample_next_state_batch(
         self, states: Union[np.ndarray, Sequence[Any]], action: str
     ) -> np.ndarray:
-        states_arr = np.asarray(states)
+        # float64, matching sample_next_state: that path casts to float64 for
+        # the native call and so always returns float64. Left as the caller's
+        # dtype, an integer particle array would come back int64 here, and a
+        # belief that mixes the batch and single paths would silently truncate
+        # half its particles to the grid.
+        states_arr = np.asarray(states, dtype=np.float64)
         if self._hazard_terminal_enabled:
             return self._sample_next_state_batch_hazard(states_arr, action)
         n = len(states_arr)

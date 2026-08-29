@@ -245,9 +245,7 @@ class ContinuousPushPOMDP(Environment):  # pylint: disable=too-many-public-metho
         self.state_transition_cov_matrix = state_transition_cov_matrix
         self._initial_state = initial_state
 
-        self._obstacle_tuples: List[Tuple[float, float, float]] = (
-            obstacles if obstacles is not None else []
-        )
+        self._obstacle_tuples = self._normalize_obstacle_tuples(obstacles)
         self.obstacles = self._build_obstacle_array(self._obstacle_tuples)
 
         self.dangerous_areas: List[Tuple[float, float]] = (
@@ -370,6 +368,37 @@ class ContinuousPushPOMDP(Environment):  # pylint: disable=too-many-public-metho
                 penalty_decay=self.penalty_decay, **common_kwargs
             )
         raise ValueError(f"Unknown reward model type: {self.reward_model_type}")
+
+    @staticmethod
+    def _normalize_obstacle_tuples(obstacles: Any) -> List[Tuple[float, float, float]]:
+        """Coerce the ``obstacles`` argument to the canonical tuple list.
+
+        ``self.obstacles`` holds the derived ``(N, 4)`` corner array rather
+        than the constructor argument, and :meth:`to_dict` serializes
+        attributes by constructor-parameter name. A ``to_dict``/``from_dict``
+        round trip therefore hands that array straight back in, so the
+        constructor has to accept it as well as the documented list of
+        ``(cx, cy, half_size)`` tuples.
+
+        Args:
+            obstacles: ``None``, a sequence of ``(cx, cy, half_size)``
+                tuples, or an ``(N, 4)`` array of ``(cx, cy, hx, hy)`` rows
+                as produced by :meth:`_build_obstacle_array`.
+
+        Returns:
+            The obstacles as a list of ``(cx, cy, half_size)`` tuples.
+        """
+        if obstacles is None:
+            return []
+        array = np.asarray(obstacles, dtype=float)
+        if array.size == 0:
+            return []
+        if array.ndim != 2 or array.shape[1] not in (3, 4):
+            raise ValueError(
+                "obstacles must be a sequence of (cx, cy, half_size) tuples or an "
+                f"(N, 4) corner array; got shape {array.shape}"
+            )
+        return [(float(row[0]), float(row[1]), float(row[2])) for row in array]
 
     def _build_obstacle_array(
         self, obstacle_tuples: List[Tuple[float, float, float]]
