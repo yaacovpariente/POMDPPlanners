@@ -21,6 +21,7 @@ Classes:
 import importlib
 import inspect
 import logging
+import typing
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
@@ -317,7 +318,18 @@ class Environment(ABC):  # pylint: disable=too-many-public-methods
             if isinstance(value, (list, tuple)):
                 return [serialize_value(v) for v in value]
             if isinstance(value, dict):
-                return {str(k): serialize_value(v) for k, v in sorted(value.items())}
+                # Callables are excluded exactly as they are at the top level
+                # below. A nested attribute holding a bound or native method is
+                # never configuration: it is a memoized fast path an env fills
+                # in on first use. Left in, a pybind11 method falls through to
+                # ``str(value)``, whose repr embeds a memory address — so the
+                # config_id of an env that has been used becomes both
+                # use-dependent and process-dependent.
+                return {
+                    str(k): serialize_value(v)
+                    for k, v in sorted(value.items())
+                    if not callable(v) and not isinstance(v, logging.Logger)
+                }
             if isinstance(value, SpaceInfo):
                 return {
                     "action_space": serialize_value(value.action_space),
@@ -1021,8 +1033,19 @@ class Environment(ABC):  # pylint: disable=too-many-public-methods
                 f"Failed to import environment class {data['class']}: {str(e)}"
             ) from e
 
-        # Deserialize parameters with type hints
+        # Deserialize parameters with type hints. Annotations are resolved
+        # rather than read off the signature: a module using postponed
+        # evaluation (``from __future__ import annotations``) hands back the
+        # annotation as a *string*, which every type-directed branch below
+        # silently fails to match — so e.g. a List[Tuple[...]] parameter would
+        # come back as raw {"__type__": "tuple"} envelopes the constructor
+        # rejects. Unresolvable forward references fall back to the raw
+        # annotation, which is no worse than before.
         sig = inspect.signature(env_class.__init__)
+        try:
+            resolved_hints = typing.get_type_hints(env_class.__init__)
+        except Exception:  # pylint: disable=broad-except
+            resolved_hints = {}
         params = {}
 
         for param_name, param in sig.parameters.items():
@@ -1030,9 +1053,10 @@ class Environment(ABC):  # pylint: disable=too-many-public-methods
                 continue
             if param_name in data["params"]:
                 value = data["params"][param_name]
+                annotation = resolved_hints.get(param_name, param.annotation)
                 # Try to deserialize with type annotation if available
-                if param.annotation != inspect.Parameter.empty:
-                    value = deserialize_value(value, param.annotation, param_name)
+                if annotation != inspect.Parameter.empty:
+                    value = deserialize_value(value, annotation, param_name)
                 else:
                     value = deserialize_value(value, type(value), param_name)
                 params[param_name] = value
