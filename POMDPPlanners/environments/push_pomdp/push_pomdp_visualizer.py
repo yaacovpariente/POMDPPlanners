@@ -21,6 +21,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from POMDPPlanners.core.simulation import StepData
+from POMDPPlanners.environments.push_pomdp.continuous_push_pomdp_visualizer import (
+    BELIEF_OBJECT_COLOR,
+    BELIEF_PARTICLE_ALPHA,
+    BELIEF_PARTICLE_SIZE,
+    BELIEF_ROBOT_COLOR,
+    BELIEF_ZORDER,
+    extract_belief_positions,
+)
 
 if TYPE_CHECKING:
     from POMDPPlanners.environments.push_pomdp.push_pomdp import PushPOMDP
@@ -59,7 +67,8 @@ class PushPOMDPVisualizer:
         """Create animated visualization of a Push POMDP episode.
 
         Creates an animated GIF showing the robot pushing the object toward the target,
-        with obstacles, collision detection, distance indicators, and success feedback.
+        with obstacles, collision detection, distance indicators, belief particles over
+        the robot and object positions, and success feedback.
 
         Args:
             history: Episode history containing states, actions, and rewards
@@ -70,11 +79,12 @@ class PushPOMDPVisualizer:
             TypeError: If cache_path is not a Path object
         """
         self._validate_visualization_inputs(history, cache_path)
-        states, actions, rewards = self._extract_episode_data(history)
+        states, actions, rewards, beliefs = self._extract_episode_data(history)
         fig, ax = self._setup_visualization_figure()
         robot_scatter, object_scatter, target_scatter = self._initialize_entity_scatters(ax)
         self._initialize_obstacles(ax)
         self._initialize_dangerous_areas(ax)
+        robot_belief_scatter, object_belief_scatter = self._initialize_belief_scatters(ax)
         push_arrow, connection_line = self._initialize_push_visuals(ax)
         action_arrow = self._initialize_action_arrow(ax)
         step_text, distance_text, reward_text, success_text, collision_text = (
@@ -92,9 +102,12 @@ class PushPOMDPVisualizer:
             states,
             actions,
             rewards,
+            beliefs,
             robot_scatter,
             object_scatter,
             target_scatter,
+            robot_belief_scatter,
+            object_belief_scatter,
             push_arrow,
             connection_line,
             action_arrow,
@@ -127,11 +140,12 @@ class PushPOMDPVisualizer:
 
     def _extract_episode_data(
         self, history: List[StepData]
-    ) -> Tuple[List[Any], List[Any], List[Any]]:
+    ) -> Tuple[List[Any], List[Any], List[Any], List[Any]]:
         states = [step.state for step in history]
         actions = [step.action for step in history[:-1]]  # Last step has no action
         rewards = [step.reward for step in history]
-        return states, actions, rewards
+        beliefs = [getattr(step, "belief", None) for step in history]
+        return states, actions, rewards, beliefs
 
     def _setup_visualization_figure(self) -> Tuple[Figure, Axes]:
         fig_temp, ax_temp = plt.subplots(figsize=(12, 10))
@@ -209,6 +223,40 @@ class PushPOMDPVisualizer:
                 label="Dangerous Areas" if i == 0 else "",
             )
             ax.add_patch(danger_circle)
+
+    def _initialize_belief_scatters(self, ax: Axes) -> Tuple[Any, Any]:
+        """Create the (initially empty) belief particle clouds."""
+        robot_belief_scatter = ax.scatter(
+            [],
+            [],
+            s=BELIEF_PARTICLE_SIZE,
+            c=BELIEF_ROBOT_COLOR,
+            alpha=BELIEF_PARTICLE_ALPHA,
+            zorder=BELIEF_ZORDER,
+            label="Robot Belief",
+        )
+        object_belief_scatter = ax.scatter(
+            [],
+            [],
+            s=BELIEF_PARTICLE_SIZE,
+            c=BELIEF_OBJECT_COLOR,
+            alpha=BELIEF_PARTICLE_ALPHA,
+            zorder=BELIEF_ZORDER,
+            label="Object Belief",
+        )
+        return robot_belief_scatter, object_belief_scatter
+
+    def _update_belief_scatters(
+        self,
+        robot_belief_scatter: Any,
+        object_belief_scatter: Any,
+        beliefs: List[Any],
+        frame: int,
+    ) -> None:
+        belief = beliefs[frame] if frame < len(beliefs) else None
+        robot_points, object_points = extract_belief_positions(belief)
+        robot_belief_scatter.set_offsets(robot_points)
+        object_belief_scatter.set_offsets(object_points)
 
     def _initialize_push_visuals(self, ax: Axes) -> Tuple[Any, Line2D]:
         push_arrow = ax.annotate(
@@ -423,9 +471,12 @@ class PushPOMDPVisualizer:
         states: List[Any],
         actions: List[Any],
         rewards: List[Any],
+        beliefs: List[Any],
         robot_scatter: Any,
         object_scatter: Any,
         target_scatter: Any,
+        robot_belief_scatter: Any,
+        object_belief_scatter: Any,
         push_arrow: Any,
         connection_line: Line2D,
         action_arrow: Any,
@@ -441,6 +492,8 @@ class PushPOMDPVisualizer:
                     robot_scatter,
                     object_scatter,
                     target_scatter,
+                    robot_belief_scatter,
+                    object_belief_scatter,
                     push_arrow,
                     connection_line,
                     action_arrow,
@@ -453,6 +506,9 @@ class PushPOMDPVisualizer:
             state = states[frame]
             robot_pos, object_pos, target_pos = self._update_entity_positions(
                 robot_scatter, object_scatter, target_scatter, state
+            )
+            self._update_belief_scatters(
+                robot_belief_scatter, object_belief_scatter, beliefs, frame
             )
             distance_to_target = float(np.linalg.norm(object_pos - target_pos))
             robot_to_object_dist = float(np.linalg.norm(robot_pos - object_pos))
@@ -491,6 +547,8 @@ class PushPOMDPVisualizer:
                 robot_scatter,
                 object_scatter,
                 target_scatter,
+                robot_belief_scatter,
+                object_belief_scatter,
                 push_arrow,
                 connection_line,
                 action_arrow,
