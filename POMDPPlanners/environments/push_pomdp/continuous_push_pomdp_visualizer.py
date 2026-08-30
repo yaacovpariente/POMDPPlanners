@@ -15,6 +15,7 @@ Classes:
         Continuous Push POMDP
 """
 
+import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, List, Tuple, cast
 
@@ -44,16 +45,67 @@ BELIEF_PARTICLE_ALPHA = 0.6
 # Above obstacles (zorder 2) and dangerous areas (zorder 1), below the true
 # robot/object/target markers so the ground truth is never hidden.
 BELIEF_ZORDER = 3
+# A belief is always drawn as points, never as a shape. An ellipse would hide
+# the one thing eye-review is for -- whether the filter actually collapsed --
+# so a belief carrying no particle support of its own (a Gaussian, say) is
+# sampled into points instead. Fixed count and fixed seed: the golden-file
+# tests hash the rendered GIF, so an unseeded draw would make every render a
+# different file.
+BELIEF_SAMPLE_COUNT = 200
+BELIEF_SAMPLE_SEED = 0
+
+logger = logging.getLogger(__name__)
+
+
+def belief_is_sampled(belief: Any) -> bool:
+    """Whether this belief has to be sampled before it can be drawn.
+
+    A particle belief is drawn exactly: its points *are* the belief. Any other
+    belief is drawn from ``BELIEF_SAMPLE_COUNT`` draws, which is a picture of
+    the belief rather than the belief itself. Callers use this to say so in the
+    legend, because the two are indistinguishable on screen.
+
+    Args:
+        belief: Belief object, or None.
+
+    Returns:
+        True when the belief has no particle support and will be sampled.
+    """
+    return (
+        belief is not None
+        and not hasattr(belief, "to_unique_support_distribution")
+        and hasattr(belief, "sample")
+    )
+
+
+def _sample_belief_states(belief: Any) -> List[np.ndarray]:
+    """Draw ``BELIEF_SAMPLE_COUNT`` states from a belief that has no particles.
+
+    ``Belief.sample`` draws from the global NumPy stream, so the seed is set
+    around the draw and the caller's stream restored afterwards -- seeding
+    keeps repeated renders byte-identical, restoring keeps the visualizer from
+    perturbing whatever else is using NumPy.
+    """
+    saved_state = np.random.get_state()
+    try:
+        np.random.seed(BELIEF_SAMPLE_SEED)
+        return [np.asarray(belief.sample(), dtype=float) for _ in range(BELIEF_SAMPLE_COUNT)]
+    finally:
+        np.random.set_state(saved_state)
 
 
 def extract_belief_positions(belief: Any) -> Tuple[np.ndarray, np.ndarray]:
     """Extract robot and object positions from a belief over Push states.
 
     Push states are ``(robot_x, robot_y, object_x, object_y, target_x,
-    target_y)``. Duplicate particles are collapsed via
+    target_y)``, so the two clouds are columns 0-1 and 2-3 of whatever states
+    the belief yields.
+
+    A particle belief yields its own particles through
     ``to_unique_support_distribution`` -- the same accessor the LaserTag and
-    Pacman visualizers use -- which iterates in a deterministic order, so the
-    rendered frame is reproducible across runs.
+    Pacman visualizers use -- which collapses duplicates and iterates in a
+    deterministic order. Any other belief is sampled through
+    :func:`_sample_belief_states`; see :func:`belief_is_sampled`.
 
     Args:
         belief: Belief object, or None.
@@ -63,13 +115,25 @@ def extract_belief_positions(belief: Any) -> Tuple[np.ndarray, np.ndarray]:
         float array. Both are empty when the belief is missing or unusable.
     """
     empty = np.empty((0, 2))
-    if belief is None or not hasattr(belief, "to_unique_support_distribution"):
+    if belief is None:
         return empty, empty
     try:
-        unique = belief.to_unique_support_distribution()
+        if hasattr(belief, "to_unique_support_distribution"):
+            states = list(belief.to_unique_support_distribution().values)
+        elif hasattr(belief, "sample"):
+            states = _sample_belief_states(belief)
+        else:
+            # Not silent: an empty cloud otherwise looks exactly like a
+            # collapsed filter, which is a real state this plot must show.
+            logger.warning(
+                "Belief of type %s exposes neither to_unique_support_distribution "
+                "nor sample; drawing no belief particles.",
+                type(belief).__name__,
+            )
+            return empty, empty
         robot_points = []
         object_points = []
-        for particle in unique.values:
+        for particle in states:
             state = np.asarray(particle, dtype=float)
             if state.ndim != 1 or state.shape[0] < 4:
                 continue
@@ -79,6 +143,11 @@ def extract_belief_positions(belief: Any) -> Tuple[np.ndarray, np.ndarray]:
             return empty, empty
         return np.array(robot_points), np.array(object_points)
     except Exception:  # pylint: disable=broad-exception-caught
+        logger.warning(
+            "Failed to read belief of type %s; drawing no belief particles.",
+            type(belief).__name__,
+            exc_info=True,
+        )
         return empty, empty
 
 
@@ -134,7 +203,9 @@ class ContinuousPushPOMDPVisualizer:
         robot_circle_patch = self._initialize_robot_circle(ax)
         self._initialize_obstacles(ax)
         self._initialize_dangerous_areas(ax)
-        robot_belief_scatter, object_belief_scatter = self._initialize_belief_scatters(ax)
+        robot_belief_scatter, object_belief_scatter = self._initialize_belief_scatters(
+            ax, any(belief_is_sampled(belief) for belief in beliefs)
+        )
         push_arrow, connection_line = self._initialize_push_visuals(ax)
         action_arrow = self._initialize_action_arrow(ax)
         step_text, distance_text, reward_text, success_text, collision_text = (
@@ -314,8 +385,16 @@ class ContinuousPushPOMDPVisualizer:
             )
             ax.add_patch(danger_circle)
 
-    def _initialize_belief_scatters(self, ax: Axes) -> Tuple[Any, Any]:
-        """Create the (initially empty) belief particle clouds."""
+    def _initialize_belief_scatters(self, ax: Axes, sampled: bool = False) -> Tuple[Any, Any]:
+        """Create the (initially empty) belief particle clouds.
+
+        Args:
+            ax: Axes to draw on.
+            sampled: Whether the episode's beliefs are sampled rather than
+                drawn exactly. Marked in the legend, because a sparse sampled
+                cloud and a collapsed particle filter look identical.
+        """
+        suffix = " (sampled)" if sampled else ""
         robot_belief_scatter = ax.scatter(
             [],
             [],
@@ -323,7 +402,7 @@ class ContinuousPushPOMDPVisualizer:
             c=BELIEF_ROBOT_COLOR,
             alpha=BELIEF_PARTICLE_ALPHA,
             zorder=BELIEF_ZORDER,
-            label="Robot Belief",
+            label=f"Robot Belief{suffix}",
         )
         object_belief_scatter = ax.scatter(
             [],
@@ -332,7 +411,7 @@ class ContinuousPushPOMDPVisualizer:
             c=BELIEF_OBJECT_COLOR,
             alpha=BELIEF_PARTICLE_ALPHA,
             zorder=BELIEF_ZORDER,
-            label="Object Belief",
+            label=f"Object Belief{suffix}",
         )
         return robot_belief_scatter, object_belief_scatter
 

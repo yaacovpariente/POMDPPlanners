@@ -21,13 +21,16 @@ import pytest
 
 matplotlib.use("Agg")
 
-from POMDPPlanners.core.belief import WeightedParticleBelief
+from POMDPPlanners.core.belief import GaussianBelief, WeightedParticleBelief
+from POMDPPlanners.core.belief.gaussian_belief_updaters import LinearKalmanFilterUpdater
 from POMDPPlanners.core.simulation import StepData
 from POMDPPlanners.environments.push_pomdp.continuous_push_pomdp import (
     ContinuousPushPOMDP,
 )
 from POMDPPlanners.environments.push_pomdp.continuous_push_pomdp_visualizer import (
+    BELIEF_SAMPLE_COUNT,
     ContinuousPushPOMDPVisualizer,
+    belief_is_sampled,
     extract_belief_positions,
 )
 from POMDPPlanners.environments.push_pomdp.push_pomdp import PushPOMDP
@@ -59,6 +62,28 @@ def _spread_belief(center: np.ndarray, n: int = 25, spread: float = 0.4) -> Weig
     return _belief_from(particles)
 
 
+def _gaussian_belief(center: np.ndarray, spread: float = 0.4) -> GaussianBelief:
+    """Build a 6-dimensional Gaussian belief over Push states.
+
+    Push has no Gaussian belief factory of its own; this stands in for any
+    belief that carries no particle support, which the visualizers must still
+    draw as points.
+    """
+    dim = 6
+    updater = LinearKalmanFilterUpdater(
+        A=np.eye(dim),
+        B=np.zeros((dim, 1)),
+        H=np.eye(dim),
+        Q=0.1 * np.eye(dim),
+        R=0.5 * np.eye(dim),
+    )
+    return GaussianBelief(
+        mean=np.asarray(center, dtype=float),
+        covariance=(spread**2) * np.eye(dim),
+        updater=updater,
+    )
+
+
 def _history(states: List[np.ndarray], actions: List[Any], beliefs: List[Any]) -> List[StepData]:
     """Build an episode history with one StepData per state."""
     history = []
@@ -75,6 +100,20 @@ def _history(states: List[np.ndarray], actions: List[Any], beliefs: List[Any]) -
             )
         )
     return history
+
+
+def _legend_labels(visualizer: Any, states, actions, beliefs) -> List[str]:
+    """Collect the belief scatter labels the visualizer would put in the legend."""
+    import matplotlib.pyplot as plt
+
+    _, ax = plt.subplots()
+    try:
+        visualizer._initialize_belief_scatters(
+            ax, any(belief_is_sampled(belief) for belief in beliefs)
+        )
+        return list(ax.get_legend_handles_labels()[1])
+    finally:
+        plt.close("all")
 
 
 def _file_hash(path: Path) -> str:
@@ -370,3 +409,175 @@ class TestPushVisualizerBeliefRendering:
 
         assert output.exists()
         assert output.stat().st_size > 0
+
+
+class TestNonParticleBeliefs:
+    """Test that a belief without particles is still drawn, as points.
+
+    Purpose: Validates the standard that a belief is always rendered as a
+        point cloud, never as a shape, whatever family it belongs to
+
+    Given: A Gaussian belief over Push states
+    When: The visualizers read and draw it
+    Then: Points are produced, deterministically, and marked as sampled
+
+    Test type: unit
+    """
+
+    CENTER = np.array([2.0, 3.0, 4.0, 5.0, 8.0, 8.0])
+
+    def test_gaussian_belief_yields_points(self):
+        """Purpose: Validates a Gaussian belief is drawn instead of skipped.
+
+        Given: A 6-dimensional Gaussian belief
+        When: extract_belief_positions is called
+        Then: BELIEF_SAMPLE_COUNT robot and object points are returned
+
+        Test type: unit
+        """
+        robot_points, object_points = extract_belief_positions(_gaussian_belief(self.CENTER))
+
+        assert robot_points.shape == (BELIEF_SAMPLE_COUNT, 2)
+        assert object_points.shape == (BELIEF_SAMPLE_COUNT, 2)
+
+    def test_gaussian_points_surround_the_mean(self):
+        """Purpose: Validates the sampled cloud describes the belief it came from.
+
+        Given: A Gaussian belief centred on a known state
+        When: extract_belief_positions is called
+        Then: Each cloud is centred on its own two mean components
+
+        Test type: unit
+        """
+        robot_points, object_points = extract_belief_positions(
+            _gaussian_belief(self.CENTER, spread=0.4)
+        )
+
+        np.testing.assert_allclose(robot_points.mean(axis=0), self.CENTER[:2], atol=0.15)
+        np.testing.assert_allclose(object_points.mean(axis=0), self.CENTER[2:4], atol=0.15)
+
+    def test_gaussian_sampling_is_deterministic(self):
+        """Purpose: Validates the golden-file hashes survive a sampled belief.
+
+        Given: The same Gaussian belief read twice
+        When: extract_belief_positions is called on each read
+        Then: The point arrays are identical
+
+        Test type: unit
+        """
+        belief = _gaussian_belief(self.CENTER)
+
+        first_robot, first_object = extract_belief_positions(belief)
+        second_robot, second_object = extract_belief_positions(belief)
+
+        np.testing.assert_array_equal(first_robot, second_robot)
+        np.testing.assert_array_equal(first_object, second_object)
+
+    def test_sampling_restores_the_callers_random_stream(self):
+        """Purpose: Validates drawing a belief does not perturb the episode.
+
+        Given: A seeded global NumPy stream
+        When: A Gaussian belief is read
+        Then: The next draw is the one that would have come anyway
+
+        Test type: unit
+        """
+        np.random.seed(1234)
+        expected = np.random.standard_normal(3)
+
+        np.random.seed(1234)
+        extract_belief_positions(_gaussian_belief(self.CENTER))
+        actual = np.random.standard_normal(3)
+
+        np.testing.assert_array_equal(expected, actual)
+
+    def test_belief_without_sample_or_particles_draws_nothing(self):
+        """Purpose: Validates an unknown belief type degrades to an empty cloud.
+
+        Given: An object with neither accessor
+        When: extract_belief_positions is called
+        Then: Two empty (0, 2) arrays are returned
+
+        Test type: unit
+        """
+        robot_points, object_points = extract_belief_positions(object())
+
+        assert robot_points.shape == (0, 2)
+        assert object_points.shape == (0, 2)
+
+    @pytest.mark.parametrize(
+        "belief_factory, expected",
+        [
+            (lambda: _spread_belief(TestNonParticleBeliefs.CENTER), False),
+            (lambda: _gaussian_belief(TestNonParticleBeliefs.CENTER), True),
+            (lambda: None, False),
+        ],
+        ids=["particle", "gaussian", "none"],
+    )
+    def test_only_non_particle_beliefs_are_reported_as_sampled(self, belief_factory, expected):
+        """Purpose: Validates the legend can tell exact points from sampled ones.
+
+        Given: A particle belief, a Gaussian belief, and None
+        When: belief_is_sampled is called
+        Then: Only the Gaussian reports True
+
+        Test type: unit
+        """
+        assert belief_is_sampled(belief_factory()) is expected
+
+    @pytest.mark.parametrize("env_kind", ["discrete", "continuous"])
+    def test_both_visualizers_draw_a_gaussian_belief(self, env_kind, tmp_path):
+        """Purpose: Validates the whole render path, not just the helper.
+
+        Given: An episode whose every step carries a Gaussian belief
+        When: The episode is visualized
+        Then: A GIF is produced and the legend marks the clouds as sampled
+
+        Test type: integration
+        """
+        if env_kind == "discrete":
+            env = PushPOMDP(discount_factor=0.99, **push_pinned_kwargs())
+            visualizer = PushPOMDPVisualizer(env)
+            actions = ["up", "right"]
+        else:
+            env = ContinuousPushPOMDP(discount_factor=0.99, **continuous_push_pinned_kwargs())
+            visualizer = ContinuousPushPOMDPVisualizer(env)
+            actions = [np.array([0.0, 1.0]), np.array([1.0, 0.0])]
+
+        states = [self.CENTER.copy() for _ in range(3)]
+        beliefs = [_gaussian_belief(state) for state in states]
+        output = tmp_path / f"{env_kind}_gaussian.gif"
+
+        visualizer.create_visualization(_history(states, actions, beliefs), output)
+
+        assert output.exists()
+        labels = _legend_labels(visualizer, states, actions, beliefs)
+        assert "Robot Belief (sampled)" in labels
+        assert "Object Belief (sampled)" in labels
+
+    @pytest.mark.parametrize("env_kind", ["discrete", "continuous"])
+    def test_particle_beliefs_are_not_labelled_sampled(self, env_kind):
+        """Purpose: Validates the sampled marker is not applied to real particles.
+
+        Given: An episode whose every step carries a particle belief
+        When: The legend labels are collected
+        Then: They read "Robot Belief" and "Object Belief" unqualified
+
+        Test type: integration
+        """
+        if env_kind == "discrete":
+            env = PushPOMDP(discount_factor=0.99, **push_pinned_kwargs())
+            visualizer = PushPOMDPVisualizer(env)
+            actions = ["up", "right"]
+        else:
+            env = ContinuousPushPOMDP(discount_factor=0.99, **continuous_push_pinned_kwargs())
+            visualizer = ContinuousPushPOMDPVisualizer(env)
+            actions = [np.array([0.0, 1.0]), np.array([1.0, 0.0])]
+
+        states = [self.CENTER.copy() for _ in range(3)]
+        beliefs = [_spread_belief(state) for state in states]
+
+        labels = _legend_labels(visualizer, states, actions, beliefs)
+
+        assert "Robot Belief" in labels
+        assert "Object Belief" in labels

@@ -27,6 +27,7 @@ from POMDPPlanners.environments.push_pomdp.continuous_push_pomdp_visualizer impo
     BELIEF_PARTICLE_SIZE,
     BELIEF_ROBOT_COLOR,
     BELIEF_ZORDER,
+    belief_is_sampled,
     extract_belief_positions,
 )
 
@@ -84,7 +85,9 @@ class PushPOMDPVisualizer:
         robot_scatter, object_scatter, target_scatter = self._initialize_entity_scatters(ax)
         self._initialize_obstacles(ax)
         self._initialize_dangerous_areas(ax)
-        robot_belief_scatter, object_belief_scatter = self._initialize_belief_scatters(ax)
+        robot_belief_scatter, object_belief_scatter = self._initialize_belief_scatters(
+            ax, any(belief_is_sampled(belief) for belief in beliefs)
+        )
         push_arrow, connection_line = self._initialize_push_visuals(ax)
         action_arrow = self._initialize_action_arrow(ax)
         step_text, distance_text, reward_text, success_text, collision_text = (
@@ -224,8 +227,16 @@ class PushPOMDPVisualizer:
             )
             ax.add_patch(danger_circle)
 
-    def _initialize_belief_scatters(self, ax: Axes) -> Tuple[Any, Any]:
-        """Create the (initially empty) belief particle clouds."""
+    def _initialize_belief_scatters(self, ax: Axes, sampled: bool = False) -> Tuple[Any, Any]:
+        """Create the (initially empty) belief particle clouds.
+
+        Args:
+            ax: Axes to draw on.
+            sampled: Whether the episode's beliefs are sampled rather than
+                drawn exactly. Marked in the legend, because a sparse sampled
+                cloud and a collapsed particle filter look identical.
+        """
+        suffix = " (sampled)" if sampled else ""
         robot_belief_scatter = ax.scatter(
             [],
             [],
@@ -233,7 +244,7 @@ class PushPOMDPVisualizer:
             c=BELIEF_ROBOT_COLOR,
             alpha=BELIEF_PARTICLE_ALPHA,
             zorder=BELIEF_ZORDER,
-            label="Robot Belief",
+            label=f"Robot Belief{suffix}",
         )
         object_belief_scatter = ax.scatter(
             [],
@@ -242,7 +253,7 @@ class PushPOMDPVisualizer:
             c=BELIEF_OBJECT_COLOR,
             alpha=BELIEF_PARTICLE_ALPHA,
             zorder=BELIEF_ZORDER,
-            label="Object Belief",
+            label=f"Object Belief{suffix}",
         )
         return robot_belief_scatter, object_belief_scatter
 
