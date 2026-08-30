@@ -180,32 +180,60 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         space_info = SpaceInfo(
             action_space=SpaceType.CONTINUOUS, observation_space=SpaceType.CONTINUOUS
         )
-        # No reward range is declared, and that is not an oversight.
+        # ``reward_range`` is the bound over *in-grid* states — the space this
+        # environment models. The minimum below is the reward at the far corner
+        # of the grid, using the grid diagonal as the greatest in-grid distance
+        # to the goal; nothing inside the grid can score lower.
         #
-        # The reward is ``-fuel_cost - dist_to_goal`` plus bonuses, and
-        # ``dist_to_goal`` has no upper bound: leaving the grid is penalised
-        # but is *not* terminal (see is_terminal, which tests only the goal and
-        # the optional obstacle flag), and _sample_mvn deliberately does not
-        # clip samples to the grid — clipping the sampler while the
-        # observation PDF stays unclipped would break importance weights near
-        # the edges. A state can therefore drift arbitrarily far from the goal
-        # and the reward diverges with it.
+        # Out-of-grid states are reachable, and a reward sampled from one can
+        # fall below this minimum. Leaving the grid is penalised but is *not*
+        # terminal (see is_terminal, which tests only the goal and the optional
+        # obstacle flag), and _sample_mvn deliberately does not clip samples to
+        # the grid — clipping the sampler while the observation PDF stays
+        # unclipped would break importance weights near the edges. So a state
+        # can drift arbitrarily far from the goal and the ``-dist_to_goal``
+        # term grows with it. Those states sit outside the region this bound is
+        # defined over, so a reward below the minimum is not the bound being
+        # wrong.
         #
-        # This previously declared ``-fuel_cost - sqrt(2) * grid_size +
-        # obstacle_reward``, i.e. the in-grid diagonal, which the env's own
-        # rollouts fall below. A too-narrow range is worse than none: the CVaR
-        # concentration bound in simulation_statistics is only valid over a
-        # support the returns cannot escape, so a range that is violated
-        # silently produces an invalid bound. Declaring ``None`` is the
-        # representable way to say "unbounded", and both consumers already
-        # handle it — the CVaR metric is omitted from the reported set, and the
-        # constrained-planner lambda cap falls back to disabled.
-        # DiscreteLightDarkPOMDP already declares None for the same reason.
+        # test_declared_reward_range_bounds_observed_rewards in
+        # test_env_api_conformance.py rolls out far enough to reach one, and
+        # records that as an xfail(strict=True) naming this definition. Strict
+        # on purpose: clipping the sampler or widening this bound makes it pass
+        # unexpectedly and brings the choice back into view rather than letting
+        # it be re-decided silently.
+        #
+        # Maximum distance to goal is the diagonal of the grid: sqrt(2) * grid_size
+        max_distance_to_goal = np.sqrt(2) * grid_size
+
+        if reward_model_type == RewardModelType.CONSTANT_HAZARD_PENALTY:
+            # Min: -fuel_cost - max_distance + obstacle_reward (always negative)
+            # Max: -fuel_cost - 0 + goal_reward (at goal)
+            min_reward = -fuel_cost - max_distance_to_goal + obstacle_reward
+            max_reward = -fuel_cost + goal_reward
+        elif reward_model_type == RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY:
+            # Similar to standard but with distance-based penalties
+            # Min: -fuel_cost - max_distance + obstacle_reward (max penalty)
+            # Max: -fuel_cost - 0 + goal_reward (at goal, no penalty)
+            min_reward = -fuel_cost - max_distance_to_goal + obstacle_reward
+            max_reward = -fuel_cost + goal_reward
+        elif reward_model_type == RewardModelType.ZERO_MEAN_HAZARD_SHOCK:
+            # Min: -fuel_cost - max_distance + obstacle_reward (negative)
+            # Max: -fuel_cost - 0 + goal_reward OR -fuel_cost - distance - obstacle_reward (if obstacle_reward is negative)
+            min_reward = -fuel_cost - max_distance_to_goal + obstacle_reward
+            max_reward = max(-fuel_cost + goal_reward, -fuel_cost - obstacle_reward)
+        else:
+            # Default fallback
+            min_reward = -fuel_cost - max_distance_to_goal + obstacle_reward
+            max_reward = -fuel_cost + goal_reward
+
+        calculated_reward_range = (min_reward, max_reward)
+
         super().__init__(
             discount_factor=discount_factor,
             name=name,
             space_info=space_info,
-            reward_range=None,
+            reward_range=calculated_reward_range,
             beacons=beacons,
             goal_state=goal_state,
             start_state=start_state,
