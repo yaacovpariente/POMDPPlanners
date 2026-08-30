@@ -878,12 +878,15 @@ def test_lambda_max_computed_from_reward_range_and_budget(environment, action_sa
     Purpose: Regression for the λ stability cap that prevents dual ascent
         from running away on infeasible problems.
 
-    Given: A planner whose env has a known ``reward_range``.
+    Given: A planner whose env has a known ``reward_range``. The base env
+        declares none (its reward is unbounded below), so the test pins one
+        explicitly rather than depending on a particular env's declaration.
     When: The planner is constructed.
     Then: ``_lambda_max`` equals the closed-form formula element-wise.
 
     Test type: unit
     """
+    environment.reward_range = (-20.0, 10.0)
     cpft = CPFT_DPW(
         environment=environment,
         discount_factor=0.95,
@@ -896,6 +899,38 @@ def test_lambda_max_computed_from_reward_range_and_budget(environment, action_sa
     r_min, r_max = environment.reward_range
     expected = (r_max - r_min) / ((1.0 - 0.95) * np.array([0.5, 2.0]))
     np.testing.assert_allclose(cpft._lambda_max, expected)
+
+
+def test_lambda_max_is_disabled_when_env_declares_no_reward_range(
+    environment, action_sampler
+):
+    """``_lambda_max`` falls back to ``+inf`` when the env declares no range.
+
+    Purpose: Covers the documented fallback in ``_compute_lambda_max``. An env
+        whose reward has no finite bound declares ``reward_range = None``, and
+        the cap must then be disabled rather than computed from a made-up
+        support -- only the lower bound at 0 applies, matching the planner's
+        pre-cap behaviour.
+
+    Given: A planner whose env declares no ``reward_range``. The range is
+        cleared on the instance rather than relying on a particular env
+        declaring none, so the test covers the fallback itself.
+    When: The planner is constructed.
+    Then: Every entry of ``_lambda_max`` is ``+inf``.
+
+    Test type: unit
+    """
+    environment.reward_range = None
+    cpft = CPFT_DPW(
+        environment=environment,
+        discount_factor=0.95,
+        depth=2,
+        name="cap-disabled",
+        action_sampler=action_sampler,
+        cost_budget=np.array([0.5, 2.0]),
+        n_simulations=5,
+    )
+    assert np.all(np.isinf(cpft._lambda_max))
 
 
 def test_dual_ascent_clips_lambda_at_lambda_max(environment, action_sampler):
