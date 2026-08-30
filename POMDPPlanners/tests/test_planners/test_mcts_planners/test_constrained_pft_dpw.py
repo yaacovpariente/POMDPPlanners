@@ -912,13 +912,15 @@ def test_lambda_max_is_disabled_when_env_declares_no_reward_range(
         support -- only the lower bound at 0 applies, matching the planner's
         pre-cap behaviour.
 
-    Given: A planner whose env declares no ``reward_range``.
+    Given: A planner whose env declares no ``reward_range``. The range is
+        cleared on the instance rather than relying on a particular env
+        declaring none, so the test covers the fallback itself.
     When: The planner is constructed.
     Then: Every entry of ``_lambda_max`` is ``+inf``.
 
     Test type: unit
     """
-    assert environment.reward_range is None
+    environment.reward_range = None
     cpft = CPFT_DPW(
         environment=environment,
         discount_factor=0.95,

@@ -424,23 +424,25 @@ def test_is_terminal():
     assert not env.is_terminal(np.array([1, 1, 0.0]))
 
 
-def test_reward_range_is_undeclared_because_the_reward_is_unbounded():
-    """Test that no reward range is declared.
+def test_reward_range_is_the_bound_over_in_grid_states():
+    """Test that reward range is correctly calculated over in-grid states.
 
-    Purpose: Validates that the environment declares no reward range, because
-        its reward has no finite lower bound. The reward carries a
-        ``-dist_to_goal`` term; leaving the grid is penalised but is not
-        terminal, and the transition sampler deliberately does not clip
-        samples to the grid, so a state can drift arbitrarily far and the
-        reward diverges with it. This previously declared the in-grid diagonal
-        as the minimum, which the environment's own rollouts fall below --
-        and a declared-but-violated range silently invalidates the CVaR
-        concentration bound computed over it
+    Purpose: Validates that reward_range is the bound over the states this
+        environment models -- those inside the grid. The minimum is the reward
+        at the far corner, using the grid diagonal as the greatest in-grid
+        distance to the goal, so nothing inside the grid scores lower.
+        Out-of-grid states are reachable, because leaving the grid is penalised
+        rather than terminal and the transition sampler deliberately does not
+        clip, and a reward sampled from one of those falls below this minimum;
+        those states are outside the region the bound is defined over, so the
+        two do not contradict. test_env_api_conformance records that case as a
+        strict xfail
 
-    Given: ContinuousLightDarkPOMDPDiscreteActions environments built with
-        different reward parameters and grid sizes
-    When: The reward_range attribute is checked
-    Then: It is None regardless of those parameters
+    Given: ContinuousLightDarkPOMDPDiscreteActions environments with specific
+        reward parameters and grid sizes
+    When: Environment reward_range attribute is checked
+    Then: Returns the range calculated from the grid diagonal and the reward
+        parameters
 
     Test type: unit
     """
@@ -450,15 +452,29 @@ def test_reward_range_is_undeclared_because_the_reward_is_unbounded():
             obstacle_reward=-15.0, goal_reward=25.0, fuel_cost=2.0, grid_size=11
         ),
     )
-    assert env.reward_range is None
 
+    # Greatest in-grid distance to the goal is the diagonal: sqrt(2) * grid_size
+    max_distance_to_goal = np.sqrt(2) * 11  # grid_size=11
+    # Min: -fuel_cost - max_distance + obstacle_reward
+    expected_min = -2.0 - max_distance_to_goal + (-15.0)
+    # Max: -fuel_cost + goal_reward
+    expected_max = -2.0 + 25.0
+
+    assert env.reward_range == (expected_min, expected_max)
+
+    # Test with another environment instance with different parameters
     env2 = ContinuousLightDarkPOMDPDiscreteActions(
         discount_factor=0.99,
         **continuous_light_dark_discrete_actions_pinned_kwargs(
             obstacle_reward=-50.0, goal_reward=100.0, fuel_cost=3.0, grid_size=15
         ),
     )
-    assert env2.reward_range is None
+
+    max_distance2 = np.sqrt(2) * 15  # grid_size=15
+    expected_min2 = -3.0 - max_distance2 + (-50.0)
+    expected_max2 = -3.0 + 100.0
+
+    assert env2.reward_range == (expected_min2, expected_max2)
 
 
 def test_compute_metrics_empty_histories_is_rejected():

@@ -1519,7 +1519,9 @@ class TestLaserTagPOMDP:
         np.random.seed(0)
         state = np.array([float(wall[0]), float(wall[1]), 9.0, 9.0, 0.0])
         worst = min(env.reward_model.compute_reward(state, 4, None) for _ in range(50))
-        low, high = env.reward_range
+        reward_range = env.reward_range
+        assert reward_range is not None
+        low, high = reward_range
         assert low <= worst <= high
         assert worst == pytest.approx(-20.0)
 
