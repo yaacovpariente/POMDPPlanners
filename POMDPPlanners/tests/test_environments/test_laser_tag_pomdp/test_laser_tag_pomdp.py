@@ -1430,7 +1430,9 @@ class TestLaserTagPOMDP:
 
         Given: A LaserTagPOMDP environment with specific tag reward and penalty parameters
         When: Environment reward_range attribute is checked
-        Then: Returns range based on worst case (-tag_penalty) and best case (tag_reward)
+        Then: Returns range based on the worst case (a failed tag taken onto a
+            wall or dangerous area, so -tag_penalty - dangerous_area_penalty)
+            and the best case (tag_reward)
 
         Test type: unit
         """
@@ -1439,9 +1441,10 @@ class TestLaserTagPOMDP:
             **_lt_pinned_kwargs(tag_reward=15.0, tag_penalty=20.0, step_cost=2.0),
         )
 
-        # Expected calculation from LaserTagPOMDP constructor:
-        # reward_range=(-tag_penalty, tag_reward) = (-20.0, 15.0)
-        expected_min = -20.0  # Failed tag penalty
+        # The constant-hazard model subtracts one dangerous_area_penalty (5.0
+        # in the pinned config) on top of the base reward, so a failed tag onto
+        # a wall or hazard is the true worst case.
+        expected_min = -25.0  # -tag_penalty - dangerous_area_penalty
         expected_max = 15.0  # Successful tag reward
 
         assert env.reward_range == (expected_min, expected_max)
@@ -1452,10 +1455,110 @@ class TestLaserTagPOMDP:
             **_lt_pinned_kwargs(tag_reward=50.0, tag_penalty=100.0, step_cost=1.0),
         )
 
-        expected_min2 = -100.0  # Failed tag penalty
+        expected_min2 = -105.0  # -tag_penalty - dangerous_area_penalty
         expected_max2 = 50.0  # Successful tag reward
 
         assert env2.reward_range == (expected_min2, expected_max2)
+
+    def test_reward_range_omits_hazard_term_without_walls_or_dangerous_areas(self):
+        """With no walls and no dangerous areas the hazard term drops out.
+
+        Purpose: Validates that the hazard allowance in the declared range is
+            conditional on there being a hazard to hit, so an env configured
+            without either does not advertise a reachable-but-impossible
+            minimum.
+
+        Given: A LaserTagPOMDP with empty walls and empty dangerous areas.
+        When: Environment reward_range attribute is checked.
+        Then: The range is exactly (-tag_penalty, tag_reward).
+
+        Test type: unit
+        """
+        env = LaserTagPOMDP(
+            discount_factor=0.95,
+            **_lt_pinned_kwargs(
+                tag_reward=15.0,
+                tag_penalty=20.0,
+                walls=set(),
+                dangerous_areas=set(),
+            ),
+        )
+        assert env.reward_range == (-20.0, 15.0)
+
+    def test_reward_range_stacks_both_hazards_for_the_decayed_model(self):
+        """The decayed model charges wall and danger penalties independently.
+
+        Purpose: Regression for a bound violation. The constant model charges a
+            single penalty on wall *or* danger, but the decayed model subtracts
+            the wall penalty and then adds a decayed danger contribution on top,
+            so a step that hits both costs two penalties. The declared minimum
+            allowed only one and the env could fall below it.
+
+        Given: A decayed-model LaserTagPOMDP whose only dangerous area sits on a
+            wall cell, so both contributions fire at the same position.
+        When: A failed tag is scored at that position and compared to the range.
+        Then: The declared minimum is -tag_penalty - 2 * dangerous_area_penalty
+            and the observed reward reaches but does not pass it.
+
+        Test type: unit
+        """
+        wall = (1, 2)
+        env = LaserTagPOMDP(
+            discount_factor=0.95,
+            **_lt_pinned_kwargs(
+                tag_reward=10.0,
+                tag_penalty=10.0,
+                walls={wall},
+                dangerous_areas={wall},
+                dangerous_area_penalty=5.0,
+                reward_model_type=RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY,
+            ),
+        )
+        assert env.reward_range == (-20.0, 10.0)
+
+        np.random.seed(0)
+        state = np.array([float(wall[0]), float(wall[1]), 9.0, 9.0, 0.0])
+        worst = min(env.reward_model.compute_reward(state, 4, None) for _ in range(50))
+        reward_range = env.reward_range
+        assert reward_range is not None
+        low, high = reward_range
+        assert low <= worst <= high
+        assert worst == pytest.approx(-20.0)
+
+    def test_reward_range_stacks_both_hazards_under_hazard_terminal(self):
+        """The draw-coupled hazard-terminal path also charges both penalties.
+
+        Purpose: ``_deterministic_hazard_reward`` subtracts one
+            dangerous_area_penalty for a wall and another for the terminal
+            hazard flag, so the constant model stacks them once
+            ``is_dangerous_area_hit_terminal`` is on -- even though it charges
+            only one with the flag off. This pins the *declared* range for both
+            configurations; unlike its decayed-model sibling it does not
+            demonstrate a reward reaching the flag-on minimum, because the
+            realised robot cell is never a wall on the transition path (see
+            _is_valid_position_inline), so that bound is deliberately
+            conservative rather than tight
+
+        Given: Two constant-model LaserTagPOMDPs differing only in
+            ``is_dangerous_area_hit_terminal``.
+        When: Their declared reward ranges are compared.
+        Then: The flag-on env declares room for two penalties, the flag-off env
+            for one.
+
+        Test type: unit
+        """
+        kwargs = dict(
+            tag_reward=10.0,
+            tag_penalty=10.0,
+            dangerous_area_penalty=5.0,
+        )
+        flag_off = LaserTagPOMDP(discount_factor=0.95, **_lt_pinned_kwargs(**kwargs))
+        flag_on = LaserTagPOMDP(
+            discount_factor=0.95,
+            **_lt_pinned_kwargs(is_dangerous_area_hit_terminal=True, **kwargs),
+        )
+        assert flag_off.reward_range == (-15.0, 10.0)
+        assert flag_on.reward_range == (-20.0, 10.0)
 
     def test_zero_mean_danger_shock_expands_both_reward_range_bounds(self):
         """A zero-mean danger shock advertises both possible shock signs."""

@@ -21,6 +21,7 @@ Classes:
 import importlib
 import inspect
 import logging
+import typing
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
@@ -43,6 +44,11 @@ from POMDPPlanners.utils.logger import get_logger
 if TYPE_CHECKING:
     from POMDPPlanners.core.simulation import History, MetricValue, StepData
     from POMDPPlanners.core.simulation.step_info_metrics import StepInfoMetric
+
+
+# Cap on how deep __eq__ descends into sub-objects that define no equality of
+# their own, so a cyclic back-reference cannot recurse forever.
+_MAX_EQ_RECURSION_DEPTH = 6
 
 
 def _serialize_space_info(space_info: Any) -> dict:
@@ -85,6 +91,47 @@ def _deserialize_space_info(data: dict) -> Any:
             observation_space=SpaceType(data["observation_space"]),
         )
     raise ValueError(f"Cannot deserialize SpaceInfo from {data}")
+
+
+def _is_config_callable(value: Any) -> bool:
+    """Whether a callable attribute is configuration rather than a memoized shortcut.
+
+    A class or plain function named in a config is a real choice, and its
+    qualified name identifies it stably. Anything else callable — a bound
+    method, a builtin, a pybind11 method — is a fast path an environment
+    memoizes onto itself on first use, and must not reach either
+    :meth:`Environment.config_id` or :meth:`Environment.__eq__`: it is not
+    part of what the environment *is*, and its ``repr`` embeds a memory
+    address.
+
+    Args:
+        value: The attribute value to classify.
+
+    Returns:
+        ``True`` if the callable is part of the configuration.
+    """
+    return isinstance(value, type) or inspect.isfunction(value)
+
+
+def _config_attributes(obj: Any) -> Dict[str, Any]:
+    """Return the attributes of ``obj`` that make up its configuration identity.
+
+    Shared by :meth:`Environment.config_id` and :meth:`Environment.__eq__` when
+    they descend into a sub-object, so the two answers to "is this the same
+    environment" are computed over the same surface and cannot drift apart.
+
+    Args:
+        obj: The object whose ``__dict__`` is being inspected.
+
+    Returns:
+        The configuration-bearing attributes, keyed by name.
+    """
+    return {
+        key: value
+        for key, value in vars(obj).items()
+        if not isinstance(value, logging.Logger)
+        and not (callable(value) and not _is_config_callable(value))
+    }
 
 
 class SpaceType(Enum):
@@ -262,7 +309,7 @@ class Environment(ABC):  # pylint: disable=too-many-public-methods
         if self.__class__ != other.__class__:
             return False
 
-        def _compare_values(v1, v2):  # pylint: disable=too-many-return-statements
+        def _compare_values(v1, v2, depth=0):  # pylint: disable=too-many-return-statements
             """Helper function to compare values, handling numpy arrays specially."""
             if isinstance(v1, np.ndarray) or isinstance(v2, np.ndarray):
                 if not (isinstance(v1, np.ndarray) and isinstance(v2, np.ndarray)):
@@ -271,11 +318,48 @@ class Environment(ABC):  # pylint: disable=too-many-public-methods
             if isinstance(v1, (list, tuple)) and isinstance(v2, (list, tuple)):
                 if len(v1) != len(v2):
                     return False
-                return all(_compare_values(x1, x2) for x1, x2 in zip(v1, v2))
+                return all(_compare_values(x1, x2, depth) for x1, x2 in zip(v1, v2))
             if isinstance(v1, dict) and isinstance(v2, dict):
                 if v1.keys() != v2.keys():
                     return False
-                return all(_compare_values(v1[k], v2[k]) for k in v1)
+                return all(_compare_values(v1[k], v2[k], depth) for k in v1)
+            # Enum members define no __eq__ of their own, so without this they
+            # would fall into the structural branch below and be compared by
+            # walking __objclass__ — the enum class, whose _member_map_ leads
+            # back to every member and to the class again. Correct but
+            # needlessly expensive, and config_id compares an Enum by its
+            # value long before it reaches its __dict__. Identity is the right
+            # comparison for a member of one enum class.
+            if isinstance(v1, Enum) or isinstance(v2, Enum):
+                return v1 == v2
+            # A class or plain function named in a config is compared the way
+            # config_id serializes it: by qualified name. Structural comparison
+            # would call every distinct function equal, since ``vars(fn)`` is
+            # empty for essentially all of them — and "equal but hashing
+            # differently" is the one direction that actually breaks dict and
+            # set deduplication.
+            if _is_config_callable(v1) or _is_config_callable(v2):
+                if not (_is_config_callable(v1) and _is_config_callable(v2)):
+                    return False
+                return (v1.__module__, v1.__qualname__) == (v2.__module__, v2.__qualname__)
+            # A sub-object built deterministically from this env's own config
+            # (a reward model, an observation model) carries no identity of its
+            # own. Left to ``v1 == v2`` it would compare by *identity*, because
+            # those classes define no __eq__ — so two envs built from identical
+            # kwargs would never be equal, and neither would an env and its own
+            # from_dict rebuild. config_id already compares such sub-objects
+            # structurally; do the same here, over the same attribute surface,
+            # so equality and the config hash agree. The depth cap stops a
+            # cyclic back-reference from recursing forever.
+            if (
+                depth < _MAX_EQ_RECURSION_DEPTH
+                and type(v1) is type(v2)
+                and hasattr(v1, "__dict__")
+                and type(v1).__eq__ is object.__eq__
+            ):
+                return _compare_values(
+                    _config_attributes(v1), _config_attributes(v2), depth + 1
+                )
             return v1 == v2
 
         # Compare all public attributes (excluding callables and private)
@@ -317,7 +401,20 @@ class Environment(ABC):  # pylint: disable=too-many-public-methods
             if isinstance(value, (list, tuple)):
                 return [serialize_value(v) for v in value]
             if isinstance(value, dict):
-                return {str(k): serialize_value(v) for k, v in sorted(value.items())}
+                serialized_items = {}
+                for k, v in sorted(value.items()):
+                    if isinstance(v, logging.Logger):
+                        continue
+                    if callable(v):
+                        # See _is_config_callable: a class or plain function is
+                        # config and gets a stable qualified name; a memoized
+                        # bound / native method is not, and would otherwise
+                        # reach ``str(value)`` and embed a memory address.
+                        if _is_config_callable(v):
+                            serialized_items[str(k)] = f"{v.__module__}.{v.__qualname__}"
+                        continue
+                    serialized_items[str(k)] = serialize_value(v)
+                return serialized_items
             if isinstance(value, SpaceInfo):
                 return {
                     "action_space": serialize_value(value.action_space),
@@ -993,11 +1090,15 @@ class Environment(ABC):  # pylint: disable=too-many-public-methods
                     result = np.array(result)
                 return result
 
-            # Handle numpy array type annotations
-            if target_type == np.ndarray or (
-                hasattr(target_type, "__name__") and "ndarray" in target_type.__name__
+            # Handle numpy array type annotations. Tested against the
+            # Optional-unwrapped type: on Python 3.10 get_type_hints still
+            # auto-wraps ``x: np.ndarray = None`` into Optional[np.ndarray],
+            # which would otherwise slip past this branch and come back as a
+            # plain list.
+            if unwrapped_type == np.ndarray or (
+                hasattr(unwrapped_type, "__name__") and "ndarray" in unwrapped_type.__name__
             ):
-                result = deserialize_value_base(value, target_type)
+                result = deserialize_value_base(value, unwrapped_type)
                 if not isinstance(result, np.ndarray):
                     result = np.array(result)
                 return result
@@ -1021,8 +1122,19 @@ class Environment(ABC):  # pylint: disable=too-many-public-methods
                 f"Failed to import environment class {data['class']}: {str(e)}"
             ) from e
 
-        # Deserialize parameters with type hints
+        # Deserialize parameters with type hints. Annotations are resolved
+        # rather than read off the signature: a module using postponed
+        # evaluation (``from __future__ import annotations``) hands back the
+        # annotation as a *string*, which every type-directed branch below
+        # silently fails to match — so e.g. a List[Tuple[...]] parameter would
+        # come back as raw {"__type__": "tuple"} envelopes the constructor
+        # rejects. Unresolvable forward references fall back to the raw
+        # annotation, which is no worse than before.
         sig = inspect.signature(env_class.__init__)
+        try:
+            resolved_hints = typing.get_type_hints(env_class.__init__)
+        except Exception:  # pylint: disable=broad-except
+            resolved_hints = {}
         params = {}
 
         for param_name, param in sig.parameters.items():
@@ -1030,9 +1142,10 @@ class Environment(ABC):  # pylint: disable=too-many-public-methods
                 continue
             if param_name in data["params"]:
                 value = data["params"][param_name]
+                annotation = resolved_hints.get(param_name, param.annotation)
                 # Try to deserialize with type annotation if available
-                if param.annotation != inspect.Parameter.empty:
-                    value = deserialize_value(value, param.annotation, param_name)
+                if annotation != inspect.Parameter.empty:
+                    value = deserialize_value(value, annotation, param_name)
                 else:
                     value = deserialize_value(value, type(value), param_name)
                 params[param_name] = value
