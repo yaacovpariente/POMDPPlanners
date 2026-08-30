@@ -40,7 +40,7 @@ from __future__ import annotations
 from enum import Enum
 from pathlib import Path
 from collections.abc import Hashable
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, FrozenSet, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
@@ -268,7 +268,16 @@ class ContinuousLaserTagPOMDP(Environment):  # pylint: disable=too-many-public-m
             use_queue_logger=use_queue_logger,
         )
 
-        self.grid_size_tuple = grid_size
+        # Normalised to the documented tuple form rather than stored verbatim.
+        # ``to_dict`` serializes the ``grid_size`` *property*, which is the
+        # derived ndarray, so a to_dict/from_dict round trip hands an ndarray
+        # back to this constructor -- and an env whose grid_size_tuple was an
+        # ndarray would not compare equal to the tuple-valued original.
+        _grid_size_values = np.asarray(grid_size, dtype=float).reshape(-1)
+        self.grid_size_tuple: Tuple[float, float] = (
+            float(_grid_size_values[0]),
+            float(_grid_size_values[1]),
+        )
         self._grid_size = np.array(grid_size, dtype=float)
         wall_list = walls if walls is not None else _DEFAULT_WALLS
         self._walls = np.array(wall_list, dtype=float).reshape(-1, 4)
@@ -313,8 +322,18 @@ class ContinuousLaserTagPOMDP(Environment):  # pylint: disable=too-many-public-m
         # label to a single cached ndarray).
         self._trans_kernel_cache: Dict[bytes, Any] = {}
         self._obs_kernel_cache: Dict[bytes, Any] = {}
+        # Only action arrays this env owns are eligible for the id-keyed
+        # shortcut, and they are registered through _pin_action_vectors. An
+        # id() is a valid key only while the object it names is alive: CPython
+        # hands the same id to the next object allocated at that address, so
+        # caching a transient action array by id lets an unrelated later array
+        # collide with its entry and be simulated with the wrong action's
+        # kernel. Pinning keeps a strong reference for the env's lifetime,
+        # which is what makes the id stable.
         self._trans_kernel_id_cache: Dict[int, Any] = {}
         self._obs_kernel_id_cache: Dict[int, Any] = {}
+        self._pinned_actions: Tuple[np.ndarray, ...] = ()
+        self._pinned_action_ids: FrozenSet[int] = frozenset()
         # Static params for cont_simulate_rollout: built once, unpacked per call.
         self._rollout_static_params: Dict[str, Any] = {
             "robot_covariance": self._robot_transition_dist.covariance,
@@ -342,6 +361,28 @@ class ContinuousLaserTagPOMDP(Environment):  # pylint: disable=too-many-public-m
     # Skip the Python wrapper subclass; fetch/reuse a cached per-action C++
     # kernel (Cholesky factored once, walls repacked once) and mutate only
     # the stored state via set_state / set_next_state.
+
+    def _pin_action_vectors(self, actions: Sequence[np.ndarray]) -> None:
+        """Declare action arrays this env owns as eligible for id() caching.
+
+        The id() shortcut in :meth:`_get_trans_kernel` and
+        :meth:`_get_obs_kernel` is only sound for objects that outlive the
+        cache entry naming them. Pinning stores a strong reference here, so the
+        id stays bound to that array for as long as the env lives and can never
+        be handed to a later, unrelated action array.
+
+        Args:
+            actions: The env-owned action vectors (the DiscreteActions
+                wrapper's one ndarray per action label).
+        """
+        # Drop entries keyed by the previously pinned arrays first: replacing
+        # the tuple releases the only strong reference to them, so their ids
+        # become recyclable and a stale entry would be exactly the collision
+        # this pinning prevents.
+        self._trans_kernel_id_cache.clear()
+        self._obs_kernel_id_cache.clear()
+        self._pinned_actions = tuple(actions)
+        self._pinned_action_ids = frozenset(id(a) for a in self._pinned_actions)
 
     def _get_trans_kernel(self, action: np.ndarray) -> Any:
         cached = self._trans_kernel_id_cache.get(id(action))
@@ -373,7 +414,7 @@ class ContinuousLaserTagPOMDP(Environment):  # pylint: disable=too-many-public-m
                 is_dangerous_area_hit_terminal=self.is_dangerous_area_hit_terminal,
             )
             self._trans_kernel_cache[key] = kernel
-        if isinstance(action, np.ndarray):
+        if id(action) in self._pinned_action_ids:
             self._trans_kernel_id_cache[id(action)] = kernel
         return kernel
 
@@ -394,7 +435,7 @@ class ContinuousLaserTagPOMDP(Environment):  # pylint: disable=too-many-public-m
                 opponent_radius=self.opponent_radius,
             )
             self._obs_kernel_cache[key] = kernel
-        if isinstance(action, np.ndarray):
+        if id(action) in self._pinned_action_ids:
             self._obs_kernel_id_cache[id(action)] = kernel
         return kernel
 
@@ -1097,6 +1138,11 @@ class ContinuousLaserTagPOMDP(Environment):  # pylint: disable=too-many-public-m
         self._obs_kernel_cache = {}
         self._trans_kernel_id_cache = {}
         self._obs_kernel_id_cache = {}
+        # Unpickling rebuilds the pinned arrays as new objects, so the ids
+        # recorded before the round trip name nothing here (and could collide
+        # with an unrelated later array). Re-derive them from the arrays that
+        # actually came back.
+        self._pin_action_vectors(getattr(self, "_pinned_actions", ()))
 
     # ------------------------------------------------------------------
     # Private helpers
@@ -1261,6 +1307,9 @@ class ContinuousLaserTagPOMDPDiscreteActions(ContinuousLaserTagPOMDP, DiscreteAc
             "left": np.ascontiguousarray([-1.0, 0.0, 0.0], dtype=np.float64),
             "tag": np.ascontiguousarray([0.0, 0.0, 1.0], dtype=np.float64),
         }
+        # These five arrays live as long as the env, so the per-action kernel
+        # caches may key them by id().
+        self._pin_action_vectors(list(self.action_to_vector.values()))
 
     def get_actions(self) -> List[str]:
         return self.actions

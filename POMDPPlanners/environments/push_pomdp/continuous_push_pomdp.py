@@ -26,7 +26,7 @@ Classes:
 from enum import Enum
 from pathlib import Path
 from collections.abc import Hashable
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, FrozenSet, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
@@ -245,9 +245,7 @@ class ContinuousPushPOMDP(Environment):  # pylint: disable=too-many-public-metho
         self.state_transition_cov_matrix = state_transition_cov_matrix
         self._initial_state = initial_state
 
-        self._obstacle_tuples: List[Tuple[float, float, float]] = (
-            obstacles if obstacles is not None else []
-        )
+        self._obstacle_tuples = self._normalize_obstacle_tuples(obstacles)
         self.obstacles = self._build_obstacle_array(self._obstacle_tuples)
 
         self.dangerous_areas: List[Tuple[float, float]] = (
@@ -286,8 +284,18 @@ class ContinuousPushPOMDP(Environment):  # pylint: disable=too-many-public-metho
         # ndarray object repeatedly (typical for the DiscreteActions wrapper
         # where each action label maps to a single ndarray), id() lookup
         # avoids np.ascontiguousarray + tobytes hashing per call.
+        #
+        # Only action arrays this env itself owns are eligible, and they are
+        # registered through _pin_action_vectors. An id() is only a valid key
+        # while the object it names is alive: CPython hands the same id to the
+        # next object allocated at that address, so caching a transient action
+        # array by id lets an unrelated later array collide with its entry and
+        # be simulated with the wrong action's kernel. Pinning keeps a strong
+        # reference for the env's lifetime, which is what makes the id stable.
         self._trans_kernel_id_cache: Dict[int, Any] = {}
         self._obs_kernel_id_cache: Dict[int, Any] = {}
+        self._pinned_actions: Tuple[np.ndarray, ...] = ()
+        self._pinned_action_ids: FrozenSet[int] = frozenset()
 
         # Cached (N_actions, 2) float64 array used by simulate_random_rollout.
         # Built lazily on first rollout call; reset to None on pickle round-trips.
@@ -371,6 +379,37 @@ class ContinuousPushPOMDP(Environment):  # pylint: disable=too-many-public-metho
             )
         raise ValueError(f"Unknown reward model type: {self.reward_model_type}")
 
+    @staticmethod
+    def _normalize_obstacle_tuples(obstacles: Any) -> List[Tuple[float, float, float]]:
+        """Coerce the ``obstacles`` argument to the canonical tuple list.
+
+        ``self.obstacles`` holds the derived ``(N, 4)`` corner array rather
+        than the constructor argument, and :meth:`to_dict` serializes
+        attributes by constructor-parameter name. A ``to_dict``/``from_dict``
+        round trip therefore hands that array straight back in, so the
+        constructor has to accept it as well as the documented list of
+        ``(cx, cy, half_size)`` tuples.
+
+        Args:
+            obstacles: ``None``, a sequence of ``(cx, cy, half_size)``
+                tuples, or an ``(N, 4)`` array of ``(cx, cy, hx, hy)`` rows
+                as produced by :meth:`_build_obstacle_array`.
+
+        Returns:
+            The obstacles as a list of ``(cx, cy, half_size)`` tuples.
+        """
+        if obstacles is None:
+            return []
+        array = np.asarray(obstacles, dtype=float)
+        if array.size == 0:
+            return []
+        if array.ndim != 2 or array.shape[1] not in (3, 4):
+            raise ValueError(
+                "obstacles must be a sequence of (cx, cy, half_size) tuples or an "
+                f"(N, 4) corner array; got shape {array.shape}"
+            )
+        return [(float(row[0]), float(row[1]), float(row[2])) for row in array]
+
     def _build_obstacle_array(
         self, obstacle_tuples: List[Tuple[float, float, float]]
     ) -> np.ndarray:
@@ -411,12 +450,35 @@ class ContinuousPushPOMDP(Environment):  # pylint: disable=too-many-public-metho
     # set_next_state. The C++ RNG state lives on the kernel, so each
     # cached kernel maintains a single RNG stream per (env, action).
 
+    def _pin_action_vectors(self, actions: Sequence[np.ndarray]) -> None:
+        """Declare action arrays this env owns as eligible for id() caching.
+
+        The id() shortcut in :meth:`_get_trans_kernel` and
+        :meth:`_get_obs_kernel` is only sound for objects that outlive the
+        cache entry naming them. Pinning stores a strong reference here, so
+        the id stays bound to that array for as long as the env lives and can
+        never be handed to a later, unrelated action array.
+
+        Args:
+            actions: The env-owned action vectors (e.g. the DiscreteActions
+                wrapper's one ndarray per action label).
+        """
+        # Drop entries keyed by the previously pinned arrays first. Replacing
+        # the tuple releases the only strong reference to them, so their ids
+        # become recyclable — a stale entry left behind would be exactly the
+        # collision this pinning exists to prevent.
+        self._trans_kernel_id_cache.clear()
+        self._obs_kernel_id_cache.clear()
+        self._pinned_actions = tuple(actions)
+        self._pinned_action_ids = frozenset(id(a) for a in self._pinned_actions)
+
     def _get_trans_kernel(self, action: np.ndarray) -> Any:
-        # Fast path: when ``action`` is the same Python object as a previously-
-        # seen call (typical for DiscreteActions, which maps each action label
-        # to a single cached ndarray), id-based lookup skips
+        # Fast path: when ``action`` is one of the env's own pinned action
+        # arrays (the DiscreteActions wrapper maps each action label to a
+        # single cached ndarray), id-based lookup skips
         # ``np.ascontiguousarray`` + ``tobytes`` and the resulting bytes-key
-        # dict probe entirely.
+        # dict probe entirely. Transient action arrays are never cached by id
+        # -- see the note in __init__ on id reuse.
         cached_id = self._trans_kernel_id_cache.get(id(action))
         if cached_id is not None:
             return cached_id
@@ -426,7 +488,7 @@ class ContinuousPushPOMDP(Environment):  # pylint: disable=too-many-public-metho
         if kernel is None:
             kernel = self._build_trans_kernel(action_arr)
             self._trans_kernel_cache[key] = kernel
-        if isinstance(action, np.ndarray):
+        if id(action) in self._pinned_action_ids:
             self._trans_kernel_id_cache[id(action)] = kernel
         return kernel
 
@@ -481,7 +543,7 @@ class ContinuousPushPOMDP(Environment):  # pylint: disable=too-many-public-metho
                 grid_size=float(self.grid_size),
             )
             self._obs_kernel_cache[key] = kernel
-        if isinstance(action, np.ndarray):
+        if id(action) in self._pinned_action_ids:
             self._obs_kernel_id_cache[id(action)] = kernel
         return kernel
 
@@ -657,6 +719,12 @@ class ContinuousPushPOMDP(Environment):  # pylint: disable=too-many-public-metho
         self._trans_kernel_id_cache = {}
         self._obs_kernel_id_cache = {}
         self._rollout_actions_array = None
+        # Unpickling rebuilds the pinned arrays as new objects, so the ids
+        # recorded before the round trip name nothing here (and could collide
+        # with an unrelated later array). Re-derive them from the arrays that
+        # actually came back; pickle memoization keeps these the same objects
+        # the discrete wrapper's label map now holds.
+        self._pin_action_vectors(getattr(self, "_pinned_actions", ()))
 
     def _build_rollout_actions_array(self) -> Optional[np.ndarray]:
         action_to_vector: Optional[Dict[str, np.ndarray]] = getattr(self, "action_to_vector", None)
@@ -1077,6 +1145,9 @@ class ContinuousPushPOMDPDiscreteActions(ContinuousPushPOMDP, DiscreteActionsEnv
             "right": np.ascontiguousarray([1.0, 0.0], dtype=np.float64),
             "left": np.ascontiguousarray([-1.0, 0.0], dtype=np.float64),
         }
+        # These four arrays live as long as the env, so the per-action kernel
+        # caches may key them by id().
+        self._pin_action_vectors(list(self.action_to_vector.values()))
 
     def get_actions(self) -> List[str]:
         return self.actions

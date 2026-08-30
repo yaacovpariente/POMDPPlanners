@@ -180,8 +180,30 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         space_info = SpaceInfo(
             action_space=SpaceType.CONTINUOUS, observation_space=SpaceType.CONTINUOUS
         )
-        # Calculate reward range based on reward model type
-        # Maximum distance to goal is diagonal of grid: sqrt(2) * grid_size
+        # ``reward_range`` is the bound over *in-grid* states — the space this
+        # environment models. The minimum below is the reward at the far corner
+        # of the grid, using the grid diagonal as the greatest in-grid distance
+        # to the goal; nothing inside the grid can score lower.
+        #
+        # Out-of-grid states are reachable, and a reward sampled from one can
+        # fall below this minimum. Leaving the grid is penalised but is *not*
+        # terminal (see is_terminal, which tests only the goal and the optional
+        # obstacle flag), and _sample_mvn deliberately does not clip samples to
+        # the grid — clipping the sampler while the observation PDF stays
+        # unclipped would break importance weights near the edges. So a state
+        # can drift arbitrarily far from the goal and the ``-dist_to_goal``
+        # term grows with it. Those states sit outside the region this bound is
+        # defined over, so a reward below the minimum is not the bound being
+        # wrong.
+        #
+        # test_declared_reward_range_bounds_observed_rewards in
+        # test_env_api_conformance.py rolls out far enough to reach one, and
+        # records that as an xfail(strict=True) naming this definition. Strict
+        # on purpose: clipping the sampler or widening this bound makes it pass
+        # unexpectedly and brings the choice back into view rather than letting
+        # it be re-decided silently.
+        #
+        # Maximum distance to goal is the diagonal of the grid: sqrt(2) * grid_size
         max_distance_to_goal = np.sqrt(2) * grid_size
 
         if reward_model_type == RewardModelType.CONSTANT_HAZARD_PENALTY:
@@ -991,23 +1013,6 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         self._trans_kernel_cache = {}
         self._obs_kernel_cache = {}
 
-    def __eq__(self, other):
-        if not isinstance(other, ContinuousLightDarkPOMDP):
-            return False
-
-        if not super().__eq__(other):
-            return False
-
-        return (
-            np.array_equal(self.state_transition_cov_matrix, other.state_transition_cov_matrix)
-            and np.array_equal(self.observation_cov_matrix, other.observation_cov_matrix)
-            and self.goal_state_radius == other.goal_state_radius
-            and self.beacon_radius == other.beacon_radius
-            and self.obstacle_radius == other.obstacle_radius
-            and self.observation_model_type == other.observation_model_type
-            and self.is_obstacle_hit_terminal == other.is_obstacle_hit_terminal
-        )
-
     def hash_action(self, action: Any) -> Hashable:
         # Continuous actions are ndarray; bytes match np.array_equal semantics
         # for arrays of identical shape and dtype.
@@ -1258,36 +1263,6 @@ class ContinuousLightDarkPOMDPDiscreteActions(ContinuousLightDarkPOMDP, Discrete
             reward_variant_code=self._reward_variant_code,
             penalty_decay=float(self.penalty_decay),
             covariance=self._trans_cov_view,
-        )
-
-    def __eq__(self, other):
-        if not isinstance(other, ContinuousLightDarkPOMDPDiscreteActions):
-            return False
-        # Compare only configuration parameters, ignoring internal objects like reward_model
-        return (
-            self.discount_factor == other.discount_factor
-            and np.array_equal(self.state_transition_cov_matrix, other.state_transition_cov_matrix)
-            and np.array_equal(self.observation_cov_matrix, other.observation_cov_matrix)
-            and np.array_equal(self.beacons, other.beacons)
-            and np.array_equal(self.goal_state, other.goal_state)
-            and np.array_equal(self.start_state, other.start_state)
-            and np.array_equal(self.obstacles, other.obstacles)
-            and self.obstacle_hit_probability == other.obstacle_hit_probability
-            and self.obstacle_reward == other.obstacle_reward
-            and self.goal_reward == other.goal_reward
-            and self.fuel_cost == other.fuel_cost
-            and self.grid_size == other.grid_size
-            and self.goal_state_radius == other.goal_state_radius
-            and self.beacon_radius == other.beacon_radius
-            and self.obstacle_radius == other.obstacle_radius
-            and self.observation_model_type == other.observation_model_type
-            and self.penalty_decay == other.penalty_decay
-            and self.is_obstacle_hit_terminal == other.is_obstacle_hit_terminal
-            and self.actions == other.actions
-            and all(
-                np.array_equal(value, other.action_to_vector[k])
-                for k, value in self.action_to_vector.items()
-            )
         )
 
     def hash_action(self, action: Any) -> Hashable:
