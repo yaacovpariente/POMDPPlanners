@@ -29,6 +29,7 @@ from POMDPPlanners.environments.isaac_lab_pomdp.isaac_lab_model_pomdp import (
 )
 from POMDPPlanners.training.model_learning import (
     ControlPoint,
+    ProbabilisticEnsembleTransition,
     LearningCurve,
     LinearGaussianLearner,
     ProbabilisticEnsembleLearner,
@@ -85,8 +86,18 @@ def _round(round_index: int, seed: int = 0) -> RoundResult:
     )
 
 
-def _ensemble(seed: int = 0):
-    return ProbabilisticEnsembleLearner(num_members=2, epochs=3, seed=seed).fit(_dataset(seed=seed))
+def _ensemble(seed: int = 0) -> ProbabilisticEnsembleTransition:
+    """A fitted ensemble, as its own type -- the save and fingerprint hooks are its."""
+    model = ProbabilisticEnsembleLearner(num_members=2, epochs=3, seed=seed).fit(_dataset(seed=seed))
+    assert isinstance(model, ProbabilisticEnsembleTransition)
+    return model
+
+
+def _linear(seed: int = 0) -> LinearGaussianTransition:
+    """A fitted linear-Gaussian transition, as its own type."""
+    model = LinearGaussianLearner().fit(_dataset(seed=seed))
+    assert isinstance(model, LinearGaussianTransition)
+    return model
 
 
 class TestEnsemblePersistence:
@@ -100,8 +111,6 @@ class TestEnsemblePersistence:
         Then: The log-densities match the original's exactly, so the reload kept
             the normalization statistics and not only the weights
         """
-        from POMDPPlanners.training.model_learning import ProbabilisticEnsembleTransition
-
         model = _ensemble()
         state = np.array([0.3, -0.2])
         action = np.array([1.0])
@@ -120,8 +129,6 @@ class TestEnsemblePersistence:
         Then: They draw the same successors, so a reloaded model reproduces the
             run it was scored in rather than restarting its stream
         """
-        from POMDPPlanners.training.model_learning import ProbabilisticEnsembleTransition
-
         model = _ensemble()
         state = np.array([0.3, -0.2])
         action = np.array([1.0])
@@ -159,7 +166,7 @@ class TestLinearPersistence:
         When: It is loaded back
         Then: It reports the same log-density as the original
         """
-        model = LinearGaussianLearner().fit(_dataset())
+        model = _linear()
         state = np.array([0.3, -0.2])
         action = np.array([1.0])
         candidates = np.array([[0.25, -0.15], [1.0, 1.0]])
@@ -176,8 +183,8 @@ class TestLinearPersistence:
         When: Their fingerprints are compared
         Then: They differ
         """
-        first = LinearGaussianLearner().fit(_dataset(seed=0))
-        second = LinearGaussianLearner().fit(_dataset(seed=5))
+        first = _linear(seed=0)
+        second = _linear(seed=5)
 
         assert first.fingerprint != second.fingerprint
 
@@ -203,8 +210,8 @@ class TestFittedTransitionReachesTheCacheKey:
         Then: They differ, so the simulation cache cannot serve one round's
             episodes as the next round's
         """
-        first = self._model(LinearGaussianLearner().fit(_dataset(seed=0)))
-        second = self._model(LinearGaussianLearner().fit(_dataset(seed=5)))
+        first = self._model(_linear(seed=0))
+        second = self._model(_linear(seed=5))
 
         assert first.config_id != second.config_id
 
@@ -303,7 +310,6 @@ class TestMLflowTracker:
         mlflow = pytest.importorskip("mlflow")
         from POMDPPlanners.training.model_learning import (
             MLflowModelLearningTracker,
-            ProbabilisticEnsembleTransition,
             load_round_models,
         )
 
@@ -317,6 +323,7 @@ class TestMLflowTracker:
             diagnostics={"held_out_log_likelihood": 2.5, "horizon_drift_ratio": 0.8},
             control=ControlPoint(round_index=1, cumulative_transitions=120, returns=(-1.0, -1.4)),
         )
+        assert result.control is not None
         curve = LearningCurve(method="dagger", seed=0, points=(result.control,))
 
         tracker = MLflowModelLearningTracker(

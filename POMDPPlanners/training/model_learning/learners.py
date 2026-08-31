@@ -380,7 +380,7 @@ def _train_member(
             optimizer.step()
             epoch_loss += float(loss.detach())
         losses.append(epoch_loss / steps)
-        if holdout_input_tensor is not None:
+        if holdout_input_tensor is not None and holdout_target_tensor is not None:
             member.eval()
             with torch.no_grad():
                 holdout_losses.append(
