@@ -26,7 +26,7 @@ Classes:
 """
 
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, Optional
 
 import numpy as np
 
@@ -69,6 +69,21 @@ class TransitionModel(ABC):
         Returns:
             A ``(n,)`` array of log-densities.
         """
+
+    @property
+    def fingerprint(self) -> Optional[str]:
+        """Hash of the fitted parameters, or ``None`` when there are none to hash.
+
+        An environment holds its transition privately, and ``config_id`` skips
+        private attributes, so nothing about a *fitted* transition reaches the
+        simulation cache key on its own: two rounds of a fitting loop look like
+        the same experiment and the second is served the first's episodes. A
+        transition with fitted parameters overrides this to report them.
+
+        ``None`` -- the default -- says the transition is analytic and its
+        configuration is already covered by the environment holding it.
+        """
+        return None
 
 
 class RewardModel(ABC):

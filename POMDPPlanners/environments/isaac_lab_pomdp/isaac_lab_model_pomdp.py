@@ -62,8 +62,10 @@ Classes:
     IsaacLabModelPOMDP: Discrete-action generative model POMCPOW searches inside.
 """
 
+import hashlib
 import math
 from collections.abc import Hashable
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Union
 
 import numpy as np
@@ -296,10 +298,9 @@ class LinearGaussianTransition(TransitionModel):
         self._bias = np.asarray(bias, dtype=float).reshape(-1)
         self.dim = self._weight_state.shape[0]
         self.action_dim = self._weight_action.shape[1]
-        self._normal = CovarianceParameterizedMultivariateNormal(
-            np.asarray(covariance, dtype=float)
-        )
-        self._batched = _BatchedGaussian(np.asarray(covariance, dtype=float))
+        self._covariance = np.asarray(covariance, dtype=float)
+        self._normal = CovarianceParameterizedMultivariateNormal(self._covariance)
+        self._batched = _BatchedGaussian(self._covariance)
         self._params = BackendParameters(
             weight_state=self._weight_state,
             weight_action=self._weight_action,
@@ -371,6 +372,67 @@ class LinearGaussianTransition(TransitionModel):
         means, _ = self._mean_rows(state, action)
         candidates, _ = as_rows(as_backend(next_states, means), self.dim)
         return self._batched.log_pdf(means, candidates)
+
+    @property
+    def fingerprint(self) -> str:
+        """Hash of the fitted parameters -- two different fits never share one.
+
+        The model that plans with a transition holds it privately, and an
+        environment's ``config_id`` skips private attributes, so a refitted
+        transition leaves the cache key untouched and the next run is served the
+        previous fit's episodes. An environment planning with a fitted
+        transition exposes this string to move the key with the parameters.
+
+        Returns:
+            A hex digest over ``A``, ``B``, ``b`` and the residual covariance.
+        """
+        digest = hashlib.sha256(type(self).__name__.encode())
+        for parameter in (
+            self._weight_state,
+            self._weight_action,
+            self._bias,
+            self._covariance,
+        ):
+            digest.update(np.asarray(parameter, dtype=float).tobytes())
+        return digest.hexdigest()
+
+    def save(self, path: Union[str, Path]) -> Path:
+        """Write the fitted parameters to one ``.npz`` file.
+
+        Args:
+            path: Destination file. Parent directories are created.
+
+        Returns:
+            The path written.
+        """
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        np.savez(
+            path,
+            weight_state=self._weight_state,
+            weight_action=self._weight_action,
+            bias=self._bias,
+            covariance=self._covariance,
+        )
+        return path
+
+    @classmethod
+    def load(cls, path: Union[str, Path]) -> "LinearGaussianTransition":
+        """Rebuild a transition written by :meth:`save`.
+
+        Args:
+            path: File written by :meth:`save`.
+
+        Returns:
+            The transition.
+        """
+        with np.load(Path(path)) as payload:
+            return cls(
+                weight_state=payload["weight_state"],
+                weight_action=payload["weight_action"],
+                bias=payload["bias"],
+                covariance=payload["covariance"],
+            )
 
     @classmethod
     def fit(

@@ -25,12 +25,21 @@ negative log-likelihood early in training is to declare enormous variance on the
 hard dimensions and stop modelling them. Soft bounds, learned but penalized,
 stop that without hard-clipping a variance that genuinely should be large.
 
+Why the model is saved rather than refitted. A round's model is the object a
+control number was measured on; refitting it later from the same data reproduces
+neither the initialisations nor the batch order, so the reloaded model is a
+different model with the same provenance. Every round is written to disk,
+because the guarantee is on the best model of the sequence and the best round is
+only known after the whole sequence has been scored.
+
 Classes:
     GaussianMLP: One ensemble member -- predicts mean and variance of the state change.
     ProbabilisticEnsembleTransition: Ensemble of members, usable as a TransitionModel.
 """
 
-from typing import Any, List, Optional, Sequence, Tuple
+import hashlib
+from pathlib import Path
+from typing import Any, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import torch
@@ -76,7 +85,9 @@ class GaussianMLP(nn.Module):
             width = hidden
         layers.append(nn.Linear(width, 2 * output_dim))
         self._net = nn.Sequential(*layers)
+        self._input_dim = input_dim
         self._output_dim = output_dim
+        self._hidden_sizes = tuple(hidden_sizes)
         self.max_log_variance = nn.Parameter(torch.full((output_dim,), 0.5))
         self.min_log_variance = nn.Parameter(torch.full((output_dim,), -10.0))
 
@@ -104,6 +115,11 @@ class GaussianMLP(nn.Module):
     def bound_penalty(self) -> torch.Tensor:
         """Penalty pulling the soft bounds inward, so they track the data."""
         return _BOUND_PENALTY * (self.max_log_variance.sum() - self.min_log_variance.sum())
+
+    @property
+    def shape(self) -> Tuple[int, int, Tuple[int, ...]]:
+        """``(input_dim, output_dim, hidden_sizes)`` -- what rebuilding this member needs."""
+        return self._input_dim, self._output_dim, self._hidden_sizes
 
 
 class ProbabilisticEnsembleTransition(TransitionModel):
@@ -151,6 +167,7 @@ class ProbabilisticEnsembleTransition(TransitionModel):
         self._action_scale = np.asarray(action_scale, dtype=float)
         self._delta_mean = np.asarray(delta_mean, dtype=float)
         self._delta_scale = np.asarray(delta_scale, dtype=float)
+        self._seed = int(seed)
         self._rng = np.random.default_rng(seed)
 
     @property
@@ -162,6 +179,113 @@ class ProbabilisticEnsembleTransition(TransitionModel):
     def num_members(self) -> int:
         """Number of ensemble members."""
         return len(self._members)
+
+    @property
+    def fingerprint(self) -> str:
+        """Hash of the fitted parameters -- two different fits never share one.
+
+        A learned transition is held privately by the model that plans with it,
+        and an environment's ``config_id`` skips private attributes, so nothing
+        about the fit reaches the simulation cache key on its own. Two rounds of
+        a loop would then be *the same experiment* as far as the cache is
+        concerned, and round two would be scored on round one's episodes. An
+        environment planning with a fitted transition exposes this string so the
+        cache key moves when the weights do.
+
+        Returns:
+            A hex digest over every member's parameters, the normalization
+            statistics and the seed.
+        """
+        digest = hashlib.sha256(type(self).__name__.encode())
+        for member in self._members:
+            for name, tensor in sorted(member.state_dict().items()):
+                digest.update(name.encode())
+                digest.update(tensor.detach().cpu().numpy().astype(np.float64).tobytes())
+        for statistic in (
+            self._state_mean,
+            self._state_scale,
+            self._action_mean,
+            self._action_scale,
+            self._delta_mean,
+            self._delta_scale,
+        ):
+            digest.update(np.asarray(statistic, dtype=float).tobytes())
+        digest.update(str(self._seed).encode())
+        return digest.hexdigest()
+
+    def save(self, path: Union[str, Path]) -> Path:
+        """Write the whole model to one file, ready to be planned with again.
+
+        The weights alone are not the model. Without the normalization
+        statistics the network is handed inputs on a scale it never trained on,
+        and a reload that dropped them would return a model that runs, predicts
+        nonsense, and blames the fit. The sampler's stream is saved too, so a
+        reloaded model continues the draws it was scored on rather than
+        restarting them.
+
+        Args:
+            path: Destination file. Parent directories are created.
+
+        Returns:
+            The path written.
+        """
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        input_dim, output_dim, hidden_sizes = self._members[0].shape
+        torch.save(
+            {
+                "member_state_dicts": [member.state_dict() for member in self._members],
+                "input_dim": input_dim,
+                "output_dim": output_dim,
+                "hidden_sizes": list(hidden_sizes),
+                "state_mean": self._state_mean,
+                "state_scale": self._state_scale,
+                "action_mean": self._action_mean,
+                "action_scale": self._action_scale,
+                "delta_mean": self._delta_mean,
+                "delta_scale": self._delta_scale,
+                "seed": self._seed,
+                "rng_state": self._rng.bit_generator.state,
+            },
+            path,
+        )
+        return path
+
+    @classmethod
+    def load(cls, path: Union[str, Path]) -> "ProbabilisticEnsembleTransition":
+        """Rebuild a model written by :meth:`save`.
+
+        Args:
+            path: File written by :meth:`save`.
+
+        Returns:
+            The model, on CPU, in eval mode, with the saved sampler stream.
+        """
+        # weights_only=False: the payload deliberately carries the normalization
+        # statistics and the sampler state beside the tensors, and without them
+        # the members are not a usable model. Only load files you wrote.
+        payload = torch.load(Path(path), map_location="cpu", weights_only=False)
+        members = build_members(
+            input_dim=int(payload["input_dim"]),
+            output_dim=int(payload["output_dim"]),
+            num_members=len(payload["member_state_dicts"]),
+            hidden_sizes=tuple(payload["hidden_sizes"]),
+            seed=int(payload["seed"]),
+        )
+        for member, state_dict in zip(members, payload["member_state_dicts"]):
+            member.load_state_dict(state_dict)
+        model = cls(
+            members=members,
+            state_mean=payload["state_mean"],
+            state_scale=payload["state_scale"],
+            action_mean=payload["action_mean"],
+            action_scale=payload["action_scale"],
+            delta_mean=payload["delta_mean"],
+            delta_scale=payload["delta_scale"],
+            seed=int(payload["seed"]),
+        )
+        model._rng.bit_generator.state = payload["rng_state"]  # pylint: disable=protected-access
+        return model
 
     def sample_next_state(self, state: Any, action: Any, n_samples: int = 1) -> Any:
         """Sample next states, each from a uniformly drawn member.

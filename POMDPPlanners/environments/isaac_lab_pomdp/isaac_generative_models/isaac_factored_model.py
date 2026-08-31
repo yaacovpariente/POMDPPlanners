@@ -141,6 +141,14 @@ class FactoredIsaacModelPOMDP(IsaacModelPOMDP):
             name=name,
         )
         self._transition = transition
+        # config_id skips private attributes, so a fitted transition -- which is
+        # private, like every other -- would leave the key identical across
+        # refits and the simulation cache would serve round n-1's episodes for
+        # round n. A transition that has fitted parameters reports a fingerprint
+        # over them; an analytic one has none, and its key is unchanged.
+        fingerprint = getattr(transition, "fingerprint", None)
+        if fingerprint is not None:
+            self.transition_fingerprint = str(fingerprint)
         self._reward_model = reward_model
         self.transition_channels = (
             tuple(transition_channels) if transition_channels is not None else None
