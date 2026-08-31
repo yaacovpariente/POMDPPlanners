@@ -72,6 +72,19 @@ def _dataset(num_rows: int = 400, seed: int = 0) -> TransitionDataset:
     return dataset
 
 
+def _round(round_index: int, seed: int = 0) -> RoundResult:
+    """One round's result, with a model of its own."""
+    return RoundResult(
+        round_index=round_index,
+        model=_ensemble(seed=seed + round_index),
+        dataset_size=60 * round_index,
+        source_counts={"exploration": 60 * round_index},
+        training_metrics={},
+        diagnostics={"held_out_log_likelihood": 1.0},
+        control=None,
+    )
+
+
 def _ensemble(seed: int = 0):
     return ProbabilisticEnsembleLearner(num_members=2, epochs=3, seed=seed).fit(_dataset(seed=seed))
 
@@ -372,6 +385,47 @@ class TestMLflowTracker:
         assert [entry["round_index"] for entry in record] == [1, 2]
         assert record[0]["model_fingerprint"] != record[1]["model_fingerprint"]
         assert record[0]["model_artifact"] == "models/round_1.pt"
+
+
+class TestTrackingSurvivesTheSimulator:
+    """The rollouts being evaluated log to MLflow too, and they move the global state."""
+
+    def test_a_hijacked_active_run_does_not_split_the_study(self, tmp_path) -> None:
+        """Purpose: Validates that the tracker keeps its run when another component takes over
+
+        Given: A round logged, then MLflow's tracking URI switched and its active
+            run ended -- what LocalSimulationsAPI does on every rollout batch
+        When: A second round is logged
+        Then: Both rounds are in the same run, rather than round two landing in
+            whichever store the rollouts happened to be writing to
+        """
+        mlflow = pytest.importorskip("mlflow")
+        from POMDPPlanners.training.model_learning import MLflowModelLearningTracker
+
+        tracking_uri = f"file://{tmp_path / 'mlruns'}"
+        tracker = MLflowModelLearningTracker(
+            experiment_name="model_learning_test",
+            method="dagger",
+            seed=2,
+            tracking_uri=tracking_uri,
+        )
+        tracker.log_round(_round(1))
+        run_id = tracker._run.info.run_id  # pylint: disable=protected-access
+
+        mlflow.set_tracking_uri(f"file://{tmp_path / 'other_mlruns'}")
+        mlflow.set_experiment("someone_elses_experiment")
+        mlflow.start_run()
+        mlflow.end_run()
+
+        tracker.log_round(_round(2))
+        tracker.finish()
+
+        run = mlflow.tracking.MlflowClient(tracking_uri=tracking_uri).get_run(run_id)
+        assert run.data.metrics["dataset_size"] == pytest.approx(120.0)
+        record = json.loads(
+            (_artifact_dir(run) / "evaluation" / "rounds.json").read_text(encoding="utf-8")
+        )
+        assert [entry["round_index"] for entry in record] == [1, 2]
 
 
 class TestCurveSummaries:
