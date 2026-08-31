@@ -90,6 +90,12 @@ from POMDPPlanners.training.model_learning.learners import (
     ProbabilisticEnsembleLearner,
     TransitionModelLearner,
 )
+from POMDPPlanners.training.model_learning.tracking import (
+    MLflowModelLearningTracker,
+    ModelLearningTracker,
+    curve_summaries,
+    load_round_models,
+)
 from POMDPPlanners.training.model_learning.transition_dataset import (
     TransitionBatch,
     TransitionDataset,
@@ -104,6 +110,8 @@ __all__ = [
     "GaussianMLP",
     "LearningCurve",
     "LinearGaussianLearner",
+    "MLflowModelLearningTracker",
+    "ModelLearningTracker",
     "ProbabilisticEnsembleLearner",
     "ProbabilisticEnsembleTransition",
     "RoundResult",
@@ -114,10 +122,12 @@ __all__ = [
     "best_point",
     "block_indices",
     "collect_random_preset_episode",
+    "curve_summaries",
     "curves_by_method",
     "evaluate_control",
     "evaluate_model",
     "load_learning_curves",
+    "load_round_models",
     "run_learning_curves",
     "save_learning_curves",
     "held_out_log_likelihood",

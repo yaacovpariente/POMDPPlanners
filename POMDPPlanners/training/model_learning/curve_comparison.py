@@ -89,7 +89,14 @@ def run_learning_curves(
             _check_trainer(trainer, method, seed)
             log.info("learning curve: method %s, seed %d", method, seed)
             trainer.run()
-            curves.append(trainer.learning_curve(method))
+            curve = trainer.learning_curve(method)
+            # A tracker recorded every round as the loop went; the curve is the
+            # last thing this (method, seed) produces, so hand it over here
+            # rather than making every caller remember to.
+            tracker = getattr(trainer, "tracker", None)
+            if tracker is not None and hasattr(tracker, "log_curve"):
+                tracker.log_curve(curve)
+            curves.append(curve)
     return curves
 
 
