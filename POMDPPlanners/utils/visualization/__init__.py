@@ -29,6 +29,18 @@ from POMDPPlanners.utils.visualization.policy_simulation_plots import (
     plot_policy_returns,
 )
 
+# Import from tuning_plots
+from POMDPPlanners.utils.visualization.tuning_plots import (
+    TrialRecord,
+    extract_trial_records,
+    load_trial_records,
+    plot_parameter_history,
+    plot_parameter_importances,
+    plot_parameter_slices,
+    plot_tuning_diagnostics,
+    save_trial_records,
+)
+
 # Import from plot_utils (internal utilities, prefixed with underscore)
 from POMDPPlanners.utils.visualization.plot_utils import _log_or_print, _safe_histplot
 
@@ -45,6 +57,15 @@ __all__ = [
     # Policy simulation plotting
     "plot_policy_returns",
     "AgentPath",
+    # Hyperparameter tuning diagnostics
+    "TrialRecord",
+    "extract_trial_records",
+    "load_trial_records",
+    "plot_parameter_history",
+    "plot_parameter_importances",
+    "plot_parameter_slices",
+    "plot_tuning_diagnostics",
+    "save_trial_records",
     # Utilities (internal, but exported for backward compatibility)
     "_safe_histplot",
     "_log_or_print",

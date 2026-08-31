@@ -19,6 +19,9 @@ from typing import (
 from POMDPPlanners.utils.config_to_id import config_to_id
 
 if TYPE_CHECKING:
+    from POMDPPlanners.simulations.simulations_deployment.tuning_early_stopping import (
+        EarlyStoppingConfig,
+    )
     from POMDPPlanners.core.belief import Belief
     from POMDPPlanners.core.environment import Environment
     from POMDPPlanners.core.policy import Policy
@@ -255,6 +258,8 @@ class HyperParameterRunParams:
         n_trials: Number of optimization trials to execute (must be positive)
         parameters_to_optimize: List of (metric_name, direction) tuples specifying
             which metrics to optimize and in which direction (maximize/minimize)
+        early_stopping: Optional patience settings. When set, n_trials becomes an
+            upper bound and the study ends once its Pareto front stops improving.
 
     Raises:
         ValueError: If any numerical parameter is non-positive, if hyperparameters
@@ -269,6 +274,7 @@ class HyperParameterRunParams:
     num_steps: int
     n_trials: int
     parameters_to_optimize: List[Tuple[str, HyperParameterOptimizationDirection]]
+    early_stopping: Optional["EarlyStoppingConfig"] = None
 
     def __post_init__(self) -> None:
         """Validate all parameters at construction time."""
@@ -345,6 +351,13 @@ class HyperParameterRunParams:
                 "num_steps": self.num_steps,
                 "n_trials": self.n_trials,
                 "parameters_to_optimize": self.parameters_to_optimize,
+                # Absent unless early stopping is on, so ids of studies
+                # configured before this option existed do not change.
+                **(
+                    {"early_stopping": self.early_stopping.to_dict()}
+                    if self.early_stopping is not None
+                    else {}
+                ),
             }
         )
 
