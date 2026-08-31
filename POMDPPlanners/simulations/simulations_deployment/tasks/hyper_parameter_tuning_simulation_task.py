@@ -23,6 +23,7 @@ from POMDPPlanners.core.simulation import (
     SimulationTask,
 )
 from POMDPPlanners.core.simulation.hyperparameter_tuning import (
+    EarlyStoppingConfig,
     HyperParameterOptimizationDirection,
     OptimizedPolicyResult,
     ParallelizationLevel,
@@ -34,7 +35,6 @@ from POMDPPlanners.simulations.simulation_statistics import (
 from POMDPPlanners.simulations.simulations_deployment.cache_dbs import DiskCacheDB
 from POMDPPlanners.simulations.simulations_deployment.tuning_early_stopping import (
     EarlyStoppingCallback,
-    EarlyStoppingConfig,
     build_early_stopping_callback,
 )
 from POMDPPlanners.simulations.simulations_deployment.run_progress import (

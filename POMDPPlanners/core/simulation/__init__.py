@@ -10,6 +10,7 @@ from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     CategoricalHyperParameter,
     HyperParameterFeature,
     NumericalHyperParameter,
+    EarlyStoppingConfig,
     ParallelizationLevel,
 )
 from POMDPPlanners.core.simulation.metrics import MetricValue
@@ -31,6 +32,7 @@ __all__ = [
     "CategoricalHyperParameter",
     "NumericalHyperParameter",
     "HyperParameterFeature",
+    "EarlyStoppingConfig",
     "ParallelizationLevel",
     "MetricValue",
     "EnvironmentRunParams",

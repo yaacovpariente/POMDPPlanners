@@ -614,7 +614,9 @@ def plot_trial_durations(
     fig, axis = plt.subplots(figsize=(9, 4))
     axis.plot(
         [r.number for r in usable],
-        [r.duration_seconds for r in usable],
+        # Narrowed to float by the filter above, but only for a reader; spell
+        # it out so the type checker sees the same thing.
+        [float(r.duration_seconds) for r in usable if r.duration_seconds is not None],
         marker="o",
         markersize=3,
         linewidth=1,

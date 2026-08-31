@@ -25,57 +25,27 @@ value and the curve would not be comparable to itself.
 """
 
 import logging
-from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
+from typing import Callable, List, Optional, Sequence, Tuple
 
 import optuna
 from optuna.trial import FrozenTrial
+
+from POMDPPlanners.core.simulation.hyperparameter_tuning import EarlyStoppingConfig
 
 # Exact hypervolume by slicing costs O(n^d); with more front points than this we
 # keep an evenly spaced subsample. The measure stays a valid lower bound and the
 # callback only needs to see improvement, not the exact value.
 MAX_FRONT_POINTS_FOR_HYPERVOLUME = 128
 
-
-@dataclass(frozen=True)
-class EarlyStoppingConfig:
-    """When to stop a study before its trial budget is spent.
-
-    Attributes:
-        patience: Stop after this many completed trials with no front
-            improvement. Objective values here are means over ``num_episodes``
-            episodes and are therefore noisy, so a plateau shorter than a
-            hundred trials is often sampling noise rather than convergence.
-        min_trials: Never stop before this many trials have completed. Also the
-            point at which the normalization bounds are frozen, so it must be
-            large enough to have seen both good and bad regions of the space.
-        min_relative_improvement: Front quality must grow by at least this
-            fraction to count as improvement. Guards against a plateau being
-            hidden by floating-point drift in the hypervolume.
-    """
-
-    patience: int = 100
-    min_trials: int = 50
-    min_relative_improvement: float = 1e-3
-
-    def __post_init__(self) -> None:
-        if self.patience <= 0:
-            raise ValueError(f"patience must be positive, got {self.patience}")
-        if self.min_trials <= 0:
-            raise ValueError(f"min_trials must be positive, got {self.min_trials}")
-        if self.min_relative_improvement < 0:
-            raise ValueError(
-                f"min_relative_improvement must be non-negative, "
-                f"got {self.min_relative_improvement}"
-            )
-
-    def to_dict(self) -> Dict[str, Any]:
-        """Config-id friendly view. Included in task ids because stopping early changes results."""
-        return {
-            "patience": self.patience,
-            "min_trials": self.min_trials,
-            "min_relative_improvement": self.min_relative_improvement,
-        }
+# Re-exported so callers configuring a study import the setting and the
+# callback that reads it from one place; the definition lives in core.
+__all__ = [
+    "EarlyStoppingConfig",
+    "EarlyStoppingCallback",
+    "build_early_stopping_callback",
+    "hypervolume",
+    "non_dominated",
+]
 
 
 def non_dominated(points: Sequence[Sequence[float]]) -> List[Tuple[float, ...]]:
