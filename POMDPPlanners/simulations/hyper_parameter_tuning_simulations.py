@@ -426,6 +426,7 @@ class HyperParameterOptimizer:
                 trial_offset=running_offset,
                 total_trials_globally=total_trials,
                 progress_db_path=self.notification_config.progress_db_path,
+                early_stopping=config.early_stopping,
             )
             tasks.append(task)
             task_identifiers.append(task.get_config_id())

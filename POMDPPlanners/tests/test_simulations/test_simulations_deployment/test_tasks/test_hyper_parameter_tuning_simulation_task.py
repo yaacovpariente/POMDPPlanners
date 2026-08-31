@@ -2058,3 +2058,97 @@ class TestParallelizationLevel:
         )
 
         assert task_optuna.get_config_id() != task_episodes.get_config_id()
+
+
+def _tuning_task(environment, hyper_parameters, cache_dir, **overrides):
+    """Build a minimal tuning task; overrides tweak one setting at a time."""
+    kwargs: Dict[str, Any] = {
+        "environment": environment,
+        "belief": create_test_belief(environment),
+        "policy_cls": SparseSamplingDiscreteActionsPlanner,
+        "hyper_parameters": hyper_parameters,
+        "constant_parameters": {},
+        "num_episodes": 2,
+        "num_steps": 3,
+        "parameters_to_optimize": [
+            ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+        ],
+        "n_trials": 4,
+        "cache_dir": cache_dir,
+        "debug": False,
+        "console_output": False,
+        "n_jobs": 1,
+        "seed": 42,
+    }
+    kwargs.update(overrides)
+    return HyperParameterTuningSimulationTask(**kwargs)
+
+
+def test_early_stopping_defaults_to_off(environment, hyper_parameters, temp_cache_dir):
+    """Test that tuning tasks run their full trial budget unless early stopping is configured.
+
+    Purpose: Validates the default keeps the pre-existing behaviour
+
+    Given: A tuning task created without an early_stopping argument
+    When: The task's attributes and config ID inputs are inspected
+    Then: Early stopping is off and the config ID does not mention it
+
+    Test type: unit
+    """
+    task = _tuning_task(environment, hyper_parameters, temp_cache_dir)
+
+    assert task.early_stopping is None
+    assert "early_stopping" not in task.to_dict()
+
+
+def test_early_stopping_changes_the_config_id(environment, hyper_parameters, temp_cache_dir):
+    """Test that enabling early stopping gives the task a different config ID.
+
+    Purpose: Stopping early changes the result, so it must not reuse a cached full-budget study
+
+    Given: Two otherwise identical tuning tasks, one with early stopping configured
+    When: Their config IDs are compared
+    Then: The IDs differ and the early stopping settings appear in the task dict
+
+    Test type: unit
+    """
+    from POMDPPlanners.simulations.simulations_deployment.tuning_early_stopping import (
+        EarlyStoppingConfig,
+    )
+
+    baseline = _tuning_task(environment, hyper_parameters, temp_cache_dir)
+    with_stopping = _tuning_task(
+        environment,
+        hyper_parameters,
+        temp_cache_dir,
+        early_stopping=EarlyStoppingConfig(patience=2, min_trials=2),
+    )
+
+    assert baseline.get_config_id() != with_stopping.get_config_id()
+    assert with_stopping.to_dict()["early_stopping"]["patience"] == 2
+
+
+def test_tuning_writes_diagnostics(environment, hyper_parameters, temp_cache_dir):
+    """Test that a completed study writes its trial records and diagnostic plots.
+
+    Purpose: Validates the convergence evidence is produced automatically
+
+    Given: A tuning task with a diagnostics directory and a small trial budget
+    When: Optimization runs to completion
+    Then: The diagnostics directory holds the trial records and at least one plot
+
+    Test type: integration
+    """
+    diagnostics_dir = temp_cache_dir / "diagnostics"
+    task = _tuning_task(
+        environment,
+        hyper_parameters,
+        temp_cache_dir,
+        diagnostics_dir=diagnostics_dir,
+    )
+
+    result = task.run()
+
+    assert result is not None
+    assert (diagnostics_dir / "trial_records.json").exists()
+    assert list(diagnostics_dir.glob("*.png"))
