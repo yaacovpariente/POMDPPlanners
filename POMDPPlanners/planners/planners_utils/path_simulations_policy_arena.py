@@ -105,7 +105,10 @@ class ArenaPathSimulationPolicy(Policy):
 
     def _sample_random_action(self, belief: Belief) -> Any:
         if self.environment.space_info.action_space == SpaceType.DISCRETE:
-            return np.random.choice(self.environment.get_actions())  # type: ignore[attr-defined]
+            # np.random.choice needs 1-D input; vector-valued discrete actions
+            # (Isaac velocity presets) crash it. Draw an index instead.
+            actions = self.environment.get_actions()
+            return actions[np.random.randint(len(actions))]
         if self.environment.space_info.action_space == SpaceType.CONTINUOUS:
             if self.action_sampler is None:
                 raise ValueError("action_sampler must not be None for continuous action spaces")

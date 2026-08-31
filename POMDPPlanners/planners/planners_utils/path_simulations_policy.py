@@ -118,7 +118,12 @@ class PathSimulationPolicy(Policy):
 
     def _sample_random_action(self, belief: Belief) -> Any:
         if self.environment.space_info.action_space == SpaceType.DISCRETE:
-            return np.random.choice(self.environment.get_actions())  # type: ignore[attr-defined]
+            # ``np.random.choice`` requires a 1-D array, so it crashes on
+            # environments whose discrete actions are vectors (e.g. the Isaac
+            # velocity presets). Draw an index instead — same distribution,
+            # any action shape.
+            actions = self.environment.get_actions()
+            return actions[np.random.randint(len(actions))]
         if self.environment.space_info.action_space == SpaceType.CONTINUOUS:
             if self.action_sampler is None:
                 raise ValueError("action_sampler must not be None for continuous action spaces")
