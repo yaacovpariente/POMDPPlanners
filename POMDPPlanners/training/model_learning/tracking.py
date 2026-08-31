@@ -29,6 +29,11 @@ moves on. A run whose fingerprints repeat across rounds is a run whose later
 rounds were scored on an earlier round's episodes -- visible in the log rather
 than as an unexplained flat curve.
 
+**The fit's own curves, and the plots of them.** A learning curve that does not
+rise has two causes -- the network never fitted, or it fitted and the model still
+does not help the planner -- and only the per-epoch train and holdout losses
+separate them, so they are logged in full and drawn at the end of the run.
+
 **Both halves of the judgement.** The return says whether the model plans well;
 the diagnostics say why it does not. A drift ratio above one means the model's
 own error bars do not cover its error over the planning horizon, which is the
@@ -58,6 +63,9 @@ MODELS_ARTIFACT_PATH = "models"
 
 #: Artifact sub-directory holding the curve and the per-round record.
 EVALUATION_ARTIFACT_PATH = "evaluation"
+
+#: Artifact sub-directory holding the fit's diagnostic plots.
+PLOTS_ARTIFACT_PATH = "plots"
 
 
 class ModelLearningTracker(Protocol):
@@ -171,6 +179,7 @@ class MLflowModelLearningTracker:
             return
         if self._rounds:
             self._log_json_artifact(self._rounds, "rounds.json")
+            self._log_plots()
         self._client.set_terminated(self._run.info.run_id)
         self._run = None
 
@@ -211,6 +220,13 @@ class MLflowModelLearningTracker:
                 "dataset_size": int(result.dataset_size),
                 "source_counts": dict(result.source_counts),
                 "diagnostics": {k: float(v) for k, v in result.diagnostics.items()},
+                # The full per-epoch curves, not just their last value: they are
+                # what the training plots are drawn from, and re-fitting to
+                # recover them would not reproduce the fit that was scored.
+                "training_metrics": {
+                    name: [float(value) for value in values]
+                    for name, values in result.training_metrics.items()
+                },
                 "metrics": {k: float(v) for k, v in metrics.items()},
                 "model_fingerprint": fingerprint,
                 "model_artifact": model_artifact,
@@ -271,6 +287,28 @@ class MLflowModelLearningTracker:
                 self._run.info.run_id, str(written), MODELS_ARTIFACT_PATH
             )
             return f"{MODELS_ARTIFACT_PATH}/{written.name}"
+
+    def _log_plots(self) -> None:
+        """Draw the fit's diagnostic plots and log them under ``plots/``.
+
+        Drawn from the same records that were just written, so a plot in the run
+        and a plot redrawn later from ``rounds.json`` are the same figure. A
+        failure here loses pictures, not data, so it is logged and swallowed
+        rather than taking the run down at its last step.
+        """
+        # Deferred: matplotlib is a heavy import and the loop does not need it.
+        # pylint: disable-next=import-outside-toplevel
+        from POMDPPlanners.utils.visualization.model_learning_plots import (
+            plot_model_learning_report,
+        )
+
+        try:
+            with tempfile.TemporaryDirectory() as staging:
+                written = plot_model_learning_report(self._rounds, Path(staging))
+                for path in written.values():
+                    self._client.log_artifact(self._run.info.run_id, str(path), PLOTS_ARTIFACT_PATH)
+        except Exception as error:  # pylint: disable=broad-except
+            self._logger.warning("could not draw the model-learning plots: %s", error)
 
     def _log_json_artifact(self, payload: Any, filename: str) -> None:
         """Write ``payload`` as JSON and log it under the evaluation artifacts."""
