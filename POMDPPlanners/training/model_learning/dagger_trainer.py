@@ -143,6 +143,11 @@ class DAggerModelTrainer:
         hold_steps: Control steps an exploration action is held for.
         horizon: Steps used for the drift diagnostic; use the planner's depth.
         reward_model: Reward used for the ranking diagnostic. ``None`` skips it.
+        tracker: Optional recorder, called once per round with that round's
+            result, and expected to save the model beside the numbers -- see
+            :class:`~POMDPPlanners.training.model_learning.tracking.ModelLearningTracker`.
+            ``None`` keeps every fitted model in memory only, which makes the run
+            unreproducible the moment the process exits.
         seed: Seed for exploration draws and diagnostics.
         logger: Optional logger.
 
@@ -180,6 +185,7 @@ class DAggerModelTrainer:
         hold_steps: int = DEFAULT_HOLD_STEPS,
         horizon: int = 40,
         reward_model: Optional[Any] = None,
+        tracker: Optional[Any] = None,
         seed: int = 0,
         logger: Optional[Any] = None,
     ) -> None:
@@ -206,6 +212,7 @@ class DAggerModelTrainer:
         self.hold_steps = hold_steps
         self.horizon = horizon
         self.reward_model = reward_model
+        self.tracker = tracker
         self.seed = seed
         self._logger = logger or get_logger(__name__)
         self._rounds: List[RoundResult] = []
@@ -249,6 +256,8 @@ class DAggerModelTrainer:
                 control=self._evaluate_control(current_model, round_index),
             )
             self._rounds.append(result)
+            if self.tracker is not None:
+                self.tracker.log_round(result)
             self._logger.info(
                 "round %d/%d: %d transitions (%s), %s, return %s",
                 round_index,
