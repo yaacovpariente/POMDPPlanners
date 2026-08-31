@@ -37,6 +37,7 @@ import torch
 from torch import nn
 
 from POMDPPlanners.core.environment import TransitionModel
+from POMDPPlanners.core.environment.array_backend import as_backend, as_rows, is_tensor
 
 #: Weight on the soft-bound penalty. Small: it is a nudge keeping the bounds
 #: honest, not a term the fit should trade accuracy against.
@@ -162,24 +163,40 @@ class ProbabilisticEnsembleTransition(TransitionModel):
         """Number of ensemble members."""
         return len(self._members)
 
-    def sample_next_state(self, state: Any, action: Any, n_samples: int = 1) -> np.ndarray:
-        """Sample ``n_samples`` next states, each from a uniformly drawn member.
+    def sample_next_state(self, state: Any, action: Any, n_samples: int = 1) -> Any:
+        """Sample next states, each from a uniformly drawn member.
 
         Args:
-            state: The current state block, a length-``dim`` vector.
-            action: The action applied at ``state``.
-            n_samples: Number of next states to draw.
+            state: A ``(dim,)`` state block, or a ``(N, dim)`` batch -- one row
+                per particle, each with its own action.
+            action: The action applied at ``state``, or one per row.
+            n_samples: Draws per state.
 
         Returns:
-            A ``(dim,)`` next state when ``n_samples == 1``, else ``(n_samples, dim)``.
+            For a single state: ``(dim,)`` when ``n_samples == 1``, else
+            ``(n_samples, dim)``. For a batch: ``(N, dim)`` when
+            ``n_samples == 1``, else ``(N, n_samples, dim)``. The result follows
+            the state's backend.
+
+        Note:
+            A member is drawn **per row and per sample**, never once for the whole
+            batch. Drawing one member per call would replace the ensemble's
+            disagreement with a single member's opinion, and that disagreement is
+            the epistemic spread a risk-sensitive planner is there to price.
         """
-        state_vector = np.asarray(state, dtype=float).ravel()
-        means, variances = self._predict(state_vector, action)
-        choice = self._rng.integers(len(self._members), size=n_samples)
-        noise = self._rng.standard_normal((n_samples, self.dim))
-        deltas = means[choice] + noise * np.sqrt(variances[choice])
-        next_states = state_vector[None, :] + deltas
-        return next_states[0] if n_samples == 1 else next_states
+        rows, batched = as_rows(state, self.dim)
+        means, variances = self._predict_rows(rows, action)  # (M, N, dim)
+        num_rows = int(rows.shape[0])
+        choice = self._rng.integers(len(self._members), size=(num_rows, n_samples))
+        noise = self._rng.standard_normal((num_rows, n_samples, self.dim))
+        row_index = np.arange(num_rows)[:, None]
+        picked_mean = means[choice, row_index]  # (N, n_samples, dim)
+        picked_var = variances[choice, row_index]
+        deltas = picked_mean + noise * np.sqrt(picked_var)
+        base = rows.detach().cpu().numpy() if is_tensor(rows) else rows
+        next_states = base[:, None, :] + deltas
+        result = _shape_ensemble_samples(next_states, batched, n_samples)
+        return as_backend(result, state) if is_tensor(state) else result
 
     def log_probability(self, state: Any, action: Any, next_states: Any) -> np.ndarray:
         """Log-density of each next state under the uniform mixture over members.
@@ -192,42 +209,87 @@ class ProbabilisticEnsembleTransition(TransitionModel):
         Returns:
             A ``(n,)`` array of log-densities.
         """
-        state_vector = np.asarray(state, dtype=float).ravel()
-        candidates = np.atleast_2d(np.asarray(next_states, dtype=float))
-        means, variances = self._predict(state_vector, action)
-        deltas = candidates - state_vector[None, :]
-        # (members, n): each member's Gaussian log-density for every candidate.
-        residual = deltas[None, :, :] - means[:, None, :]
+        rows, batched = as_rows(state, self.dim)
+        base = rows.detach().cpu().numpy() if is_tensor(rows) else np.asarray(rows, dtype=float)
+        candidates = np.atleast_2d(
+            np.asarray(
+                next_states.detach().cpu().numpy() if is_tensor(next_states) else next_states,
+                dtype=float,
+            )
+        )
+        means, variances = self._predict_rows(rows, action)  # (M, N, dim)
+        if batched:
+            # Row-wise pairing: candidate i is scored under state i.
+            deltas = candidates - base
+            residual = deltas[None, :, :] - means
+            var = variances
+        else:
+            # One state, many candidates.
+            deltas = candidates - base[0][None, :]
+            residual = deltas[None, :, :] - means[:, 0][:, None, :]
+            var = variances[:, 0][:, None, :]
         per_member = -0.5 * (
-            np.sum(residual**2 / variances[:, None, :], axis=-1)
-            + np.sum(np.log(variances), axis=-1)[:, None]
+            np.sum(residual**2 / var, axis=-1)
+            + np.sum(np.log(var), axis=-1)
             + self.dim * np.log(2.0 * np.pi)
         )
-        return _log_mean_exp(per_member, axis=0)
+        result = _log_mean_exp(per_member, axis=0)
+        return as_backend(result, state) if is_tensor(state) else result
 
-    def _predict(self, state: np.ndarray, action: Any) -> Tuple[np.ndarray, np.ndarray]:
-        """Per-member mean and variance of the state change, in the raw state units."""
-        action_vector = np.asarray(action, dtype=float).ravel()
+    def _predict_rows(self, rows: Any, action: Any) -> Tuple[np.ndarray, np.ndarray]:
+        """Per-member mean and variance of the state change, one column per row.
+
+        Args:
+            rows: ``(N, dim)`` states.
+            action: The action, or one per row.
+
+        Returns:
+            ``(means, variances)``, each ``(num_members, N, dim)`` in raw state
+            units.
+
+        Note:
+            Every member sees the whole batch in one forward pass. The scalar path
+            used to build a one-row tensor per call, which for a learned model is
+            the awkward case -- batching is the natural shape here, not an
+            optimization bolted on afterwards.
+        """
+        states = rows.detach().cpu().numpy() if is_tensor(rows) else np.asarray(rows, dtype=float)
+        actions, _ = as_rows(
+            np.asarray(
+                action.detach().cpu().numpy() if is_tensor(action) else action, dtype=float
+            ),
+            self._action_mean.size,
+        )
+        actions = np.broadcast_to(actions, (states.shape[0], actions.shape[1]))
         normalized = np.concatenate(
             [
-                (state - self._state_mean) / self._state_scale,
-                (action_vector - self._action_mean) / self._action_scale,
-            ]
+                (states - self._state_mean) / self._state_scale,
+                (actions - self._action_mean) / self._action_scale,
+            ],
+            axis=1,
         )
-        inputs = torch.as_tensor(normalized, dtype=torch.float32).unsqueeze(0)
-        means = np.empty((len(self._members), self.dim), dtype=float)
+        inputs = torch.as_tensor(normalized, dtype=torch.float32)
+        num_rows = states.shape[0]
+        means = np.empty((len(self._members), num_rows, self.dim), dtype=float)
         variances = np.empty_like(means)
         with torch.no_grad():
             for index, member in enumerate(self._members):
                 mean, log_variance = member(inputs)
-                means[index] = mean.squeeze(0).numpy()
-                variances[index] = np.exp(log_variance.squeeze(0).numpy())
+                means[index] = mean.numpy()
+                variances[index] = np.exp(log_variance.numpy())
         # Undo the target normalization: a scaled Gaussian scales its variance by
         # the square of the same factor.
         return (
             means * self._delta_scale + self._delta_mean,
             variances * self._delta_scale**2,
         )
+
+
+def _shape_ensemble_samples(samples: np.ndarray, batched: bool, n_samples: int) -> np.ndarray:
+    """Give a ``(N, n_samples, dim)`` draw back in the shape the caller asked for."""
+    if not batched:
+        return samples[0, 0] if n_samples == 1 else samples[0]
+    return samples[:, 0] if n_samples == 1 else samples
 
 
 def normalization_stats(values: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
