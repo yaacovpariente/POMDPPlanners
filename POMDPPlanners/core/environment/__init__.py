@@ -5,7 +5,8 @@
 Re-exports the same names that used to live in ``core/environment.py`` so
 that ``from POMDPPlanners.core.environment import Environment, SpaceInfo, ...``
 continues to work after the package refactor. ``ConstrainedEnvironment`` is
-added here as the new sibling module's public class.
+added here as the new sibling module's public class, and ``TransitionModel`` /
+``RewardModel`` are the generative-model seams a forward-only world injects.
 """
 
 from POMDPPlanners.core.environment.environment import (
@@ -16,6 +17,7 @@ from POMDPPlanners.core.environment.environment import (
     SpaceType,
 )
 from POMDPPlanners.core.environment.constrained_environment import ConstrainedEnvironment
+from POMDPPlanners.core.environment.transition_model import RewardModel, TransitionModel
 
 
 __all__ = [
@@ -23,6 +25,8 @@ __all__ = [
     "DiscreteActionsEnvironment",
     "Environment",
     "EnvironmentGenerator",
+    "RewardModel",
     "SpaceInfo",
     "SpaceType",
+    "TransitionModel",
 ]
