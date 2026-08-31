@@ -32,6 +32,11 @@ from POMDPPlanners.simulations.simulation_statistics import (
     compute_statistics_environment_policy_pair,
 )
 from POMDPPlanners.simulations.simulations_deployment.cache_dbs import DiskCacheDB
+from POMDPPlanners.simulations.simulations_deployment.tuning_early_stopping import (
+    EarlyStoppingCallback,
+    EarlyStoppingConfig,
+    build_early_stopping_callback,
+)
 from POMDPPlanners.simulations.simulations_deployment.run_progress import (
     NotificationConfig,
     ProgressDB,
@@ -94,6 +99,8 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         trial_offset: int = 0,
         total_trials_globally: int = 0,
         progress_db_path: Optional[Path] = None,
+        early_stopping: Optional[EarlyStoppingConfig] = None,
+        diagnostics_dir: Union[Path, str, None] = None,
     ):
         """Initialize a hyperparameter tuning simulation task.
 
@@ -124,6 +131,12 @@ class HyperParameterTuningSimulationTask(SimulationTask):
                 (only used when policy implements TrainablePolicy)
             training_constant_parameters: Constant parameters for PolicyTrainer
                 (only used when policy implements TrainablePolicy)
+            early_stopping: Patience settings that end the study once its Pareto
+                front stops improving. None runs the full n_trials budget.
+            diagnostics_dir: Where to write the tuning diagnostic plots and the
+                per-trial JSON dump. Defaults to
+                ``cache_dir/tuning_diagnostics/<config_id>`` when cache_dir is
+                set; diagnostics are skipped when neither is given.
 
         Raises:
             ValueError: If any input parameter is invalid
@@ -188,6 +201,13 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         self.trial_offset = trial_offset
         self.total_trials_globally = total_trials_globally
         self.progress_db_path = progress_db_path
+
+        # Early stopping turns n_trials into an upper bound; diagnostics record
+        # the evidence that stopping there was justified.
+        self.early_stopping = early_stopping
+        self.diagnostics_dir: Optional[str] = (
+            str(diagnostics_dir) if diagnostics_dir is not None else None
+        )
 
         # Create task manager config for joblib
         task_manager_config = JoblibConfig(n_jobs=n_jobs, console_output=False, no_logs=True)
@@ -782,7 +802,16 @@ class HyperParameterTuningSimulationTask(SimulationTask):
 
         study = optuna.create_study(directions=directions)
 
-        callbacks = [self._build_progress_callback()]
+        callbacks: List[Callable[[optuna.study.Study, FrozenTrial], None]] = [
+            self._build_progress_callback()
+        ]
+        early_stopping_callback = build_early_stopping_callback(
+            config=self.early_stopping,
+            directions=study.directions,
+            logger=self.logger,
+        )
+        if early_stopping_callback is not None:
+            callbacks.append(early_stopping_callback)
 
         self.logger.info("Starting optimization trials...")
         study.optimize(
@@ -795,8 +824,88 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         # Log optimization completion
         self.logger.info("Optimization completed successfully!")
         self.logger.info("Found %d Pareto-optimal trials", len(study.best_trials))
+        self._log_early_stopping_outcome(study, early_stopping_callback, n_trials)
+        self._write_tuning_diagnostics(study, early_stopping_callback)
 
         return study
+
+    def _log_early_stopping_outcome(
+        self,
+        study: optuna.study.Study,
+        callback: Optional[Callable[[optuna.study.Study, FrozenTrial], None]],
+        n_trials: int,
+    ) -> None:
+        """Say whether the study converged or merely ran out of budget."""
+        if not isinstance(callback, EarlyStoppingCallback):
+            return
+        completed = len(
+            [t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE]
+        )
+        if callback.stopped_at_trial is None:
+            self.logger.info(
+                "Early stopping did not fire: the front was still improving after "
+                "%d of %d trials.",
+                completed,
+                n_trials,
+            )
+        else:
+            self.logger.info(
+                "Early stopping used %d of the %d allowed trials.", completed, n_trials
+            )
+
+    def _resolve_diagnostics_dir(self) -> Optional[Path]:
+        if self.diagnostics_dir is not None:
+            return Path(self.diagnostics_dir)
+        if self.cache_dir is not None:
+            return Path(self.cache_dir) / "tuning_diagnostics" / self.get_config_id()
+        return None
+
+    def _write_tuning_diagnostics(
+        self,
+        study: optuna.study.Study,
+        callback: Optional[Callable[[optuna.study.Study, FrozenTrial], None]],
+    ) -> None:
+        """Dump per-trial records and diagnostic plots for the finished study.
+
+        Best-effort, like the progress callback: a study that took hours to run
+        must not be lost because a plot backend or an importance evaluator
+        failed.
+        """
+        output_dir = self._resolve_diagnostics_dir()
+        if output_dir is None:
+            return
+
+        try:
+            # Imported here so a tuning run on a headless box without the
+            # plotting extras still completes.
+            from POMDPPlanners.utils.visualization.tuning_plots import (  # pylint: disable=import-outside-toplevel
+                extract_trial_records,
+                plot_tuning_diagnostics,
+                save_trial_records,
+            )
+
+            records = extract_trial_records(
+                study,
+                self.parameters_to_optimize,
+                confidence_interval_level=self.confidence_interval_level,
+            )
+            save_trial_records(records, output_dir / "trial_records.json")
+
+            history = callback.history if isinstance(callback, EarlyStoppingCallback) else None
+            stopped_at = (
+                callback.stopped_at_trial if isinstance(callback, EarlyStoppingCallback) else None
+            )
+            written = plot_tuning_diagnostics(
+                records=records,
+                parameters_to_optimize=self.parameters_to_optimize,
+                output_dir=output_dir,
+                front_quality_history=history,
+                stopped_at_trial=stopped_at,
+                study=study,
+            )
+            self.logger.info("Wrote %d tuning diagnostic plots to %s", len(written), output_dir)
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            self.logger.warning("Could not write tuning diagnostics: %s", exc)
 
     def _build_progress_callback(
         self,
@@ -1127,6 +1236,13 @@ class HyperParameterTuningSimulationTask(SimulationTask):
             "use_queue_logger": self.use_queue_logger,
             "training_hyper_parameters": list(self.training_hyper_parameters),
             "training_constant_parameters": self.training_constant_parameters,
+            # Only present when early stopping is on: adding an always-present
+            # key would change the id of every study already cached.
+            **(
+                {"early_stopping": self.early_stopping.to_dict()}
+                if self.early_stopping is not None
+                else {}
+            ),
         }
 
     def __eq__(self, other: object) -> bool:
