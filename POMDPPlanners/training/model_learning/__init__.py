@@ -19,6 +19,13 @@ details that decide whether the loop works, and
 :mod:`~POMDPPlanners.training.model_learning.diagnostics` for why held-out
 prediction error alone will not tell you whether a model is worth planning with.
 
+None of those diagnostics is the measure the algorithm is judged by. That is the
+return of the planner searching each round's model in the true world, against
+the data that round cost, with the non-iterative baseline drawn on the same
+axes -- see
+:mod:`~POMDPPlanners.training.model_learning.control_evaluation` and
+:mod:`~POMDPPlanners.training.model_learning.curve_comparison`.
+
 Classes:
     TransitionDataset: Transitions accumulated across rounds, sliced to named channels.
     TransitionBatch: States, actions and next states as parallel arrays.
@@ -29,13 +36,38 @@ Classes:
     GaussianMLP: One ensemble member.
     DAggerModelTrainer: The round loop.
     RoundResult: What one round produced.
+    ControlPoint: One round's return, with the data it cost.
+    LearningCurve: One method's points for one seed.
+    AggregatedCurve: A method's curve averaged across seeds.
 
 Functions:
     block_indices: Flat indices of named channels in a schema.
     collect_random_preset_episode: One held-random-action exploration rollout.
     evaluate_model: The three diagnostics for a fitted model.
+    evaluate_control: Score one round's model by running the planner with it.
+    aggregate_curves: Average one method's curves across seeds.
+    best_point: The round a curve should be reported at.
+    run_learning_curves: Run every method at every seed and collect the curves.
+    curves_by_method: Group curves by method name.
+    save_learning_curves: Write curves to JSON.
+    load_learning_curves: Read curves back.
 """
 
+from POMDPPlanners.training.model_learning.control_evaluation import (
+    AggregatedCurve,
+    ControlPoint,
+    LearningCurve,
+    aggregate_curves,
+    best_point,
+    evaluate_control,
+    load_learning_curves,
+    save_learning_curves,
+)
+from POMDPPlanners.training.model_learning.curve_comparison import (
+    DEFAULT_METHODS,
+    curves_by_method,
+    run_learning_curves,
+)
 from POMDPPlanners.training.model_learning.dagger_trainer import (
     DAggerModelTrainer,
     RoundResult,
@@ -65,8 +97,12 @@ from POMDPPlanners.training.model_learning.transition_dataset import (
 )
 
 __all__ = [
+    "DEFAULT_METHODS",
+    "AggregatedCurve",
+    "ControlPoint",
     "DAggerModelTrainer",
     "GaussianMLP",
+    "LearningCurve",
     "LinearGaussianLearner",
     "ProbabilisticEnsembleLearner",
     "ProbabilisticEnsembleTransition",
@@ -74,9 +110,16 @@ __all__ = [
     "TransitionBatch",
     "TransitionDataset",
     "TransitionModelLearner",
+    "aggregate_curves",
+    "best_point",
     "block_indices",
     "collect_random_preset_episode",
+    "curves_by_method",
+    "evaluate_control",
     "evaluate_model",
+    "load_learning_curves",
+    "run_learning_curves",
+    "save_learning_curves",
     "held_out_log_likelihood",
     "horizon_drift_ratio",
     "preset_ranking_agreement",
