@@ -659,3 +659,60 @@ def test_icvar_pft_dpw_action_selection_observes_varying_recursion_depth(
         f"expected some calls at depth < planner.depth={planner.depth}, "
         f"saw {sorted(unique_depths)}"
     )
+
+
+def test_use_rollouts_estimates_fresh_leaf_from_rollout(env, belief, action_sampler):
+    """With ``use_rollouts`` a widened belief node is not recursed into: it gets a
+    rollout cost estimate and visit count 1, and no action children."""
+    np.random.seed(0)
+    planner = ICVaR_PFT_DPW(
+        environment=env,
+        name="rollout_planner",
+        depth=3,
+        discount_factor=0.95,
+        n_simulations=1,
+        alpha=0.1,
+        delta=0.1,
+        k_o=5,
+        min_immediate_cost=0.0,
+        max_immediate_cost=1.0,
+        min_visit_count_per_action=1,
+        exploration_constant=1.0,
+        action_sampler=action_sampler,
+        k_a=2.0,
+        alpha_a=0.0,
+        alpha_o=0.0,
+        use_rollouts=True,
+    )
+    tree = Tree()
+    root_id = tree.add_belief_node(belief)
+    planner._simulate_path(tree=tree, belief_id=root_id, depth=0)
+
+    action_ids = tree.get_children_ids(root_id)
+    assert len(action_ids) == 1
+    leaf_ids = tree.get_children_ids(action_ids[0])
+    assert len(leaf_ids) == 1
+    leaf_id = leaf_ids[0]
+    # Not expanded: the single simulation stopped at the fresh leaf.
+    assert tree.get_children_ids(leaf_id) == []
+    assert tree.get_visit_count(leaf_id) == 1
+    # A rollout on Light-Dark pays fuel and distance every step, so the
+    # cost-to-go estimate is strictly positive rather than the default 0.
+    assert tree.get_v_value(leaf_id) > 0.0
+    # The parent action's q-value includes the discounted leaf estimate.
+    immediate_cost = tree.immediate_cost[action_ids[0]]
+    assert immediate_cost is not None
+    assert tree.get_q_value(action_ids[0]) > immediate_cost
+
+
+def test_default_keeps_recursive_expansion(planner, belief):
+    """Without ``use_rollouts`` the original behaviour holds: the fresh leaf is
+    recursed into, so it acquires action children and its value stays 0 only at
+    the depth boundary."""
+    np.random.seed(0)
+    tree = Tree()
+    root_id = tree.add_belief_node(belief)
+    planner._simulate_path(tree=tree, belief_id=root_id, depth=0)
+    action_ids = tree.get_children_ids(root_id)
+    leaf_id = tree.get_children_ids(action_ids[0])[0]
+    assert len(tree.get_children_ids(leaf_id)) == 1

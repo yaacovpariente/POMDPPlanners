@@ -19,9 +19,6 @@ from typing import (
 from POMDPPlanners.utils.config_to_id import config_to_id
 
 if TYPE_CHECKING:
-    from POMDPPlanners.simulations.simulations_deployment.tuning_early_stopping import (
-        EarlyStoppingConfig,
-    )
     from POMDPPlanners.core.belief import Belief
     from POMDPPlanners.core.environment import Environment
     from POMDPPlanners.core.policy import Policy
@@ -80,6 +77,51 @@ HyperParameterFeature = Union[CategoricalHyperParameter, NumericalHyperParameter
 class HyperParameterOptimizationDirection(Enum):
     MAXIMIZE = "maximize"
     MINIMIZE = "minimize"
+
+
+@dataclass(frozen=True)
+class EarlyStoppingConfig:
+    """When to stop a tuning study before its trial budget is spent.
+
+    Pure configuration, so it lives here beside the run params rather than with
+    the Optuna callback that reads it -- core must not depend on simulations.
+
+    Attributes:
+        patience: Stop after this many completed trials with no improvement to
+            the Pareto front. Objective values are means over ``num_episodes``
+            episodes and are therefore noisy, so a plateau shorter than a
+            hundred trials is often sampling noise rather than convergence.
+        min_trials: Never stop before this many trials have completed. Also the
+            point at which the objective normalization bounds are frozen, so it
+            must be large enough to have seen both good and bad regions.
+        min_relative_improvement: Front quality must grow by at least this
+            fraction to count as improvement. A guard against floating-point
+            drift, not a "was this gain meaningful" threshold -- raising it to
+            do that job stops studies that are still making progress.
+    """
+
+    patience: int = 100
+    min_trials: int = 50
+    min_relative_improvement: float = 1e-3
+
+    def __post_init__(self) -> None:
+        if self.patience <= 0:
+            raise ValueError(f"patience must be positive, got {self.patience}")
+        if self.min_trials <= 0:
+            raise ValueError(f"min_trials must be positive, got {self.min_trials}")
+        if self.min_relative_improvement < 0:
+            raise ValueError(
+                f"min_relative_improvement must be non-negative, "
+                f"got {self.min_relative_improvement}"
+            )
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Config-id friendly view. Stopping early changes results, so ids include it."""
+        return {
+            "patience": self.patience,
+            "min_trials": self.min_trials,
+            "min_relative_improvement": self.min_relative_improvement,
+        }
 
 
 class ParallelizationLevel(Enum):
@@ -274,7 +316,7 @@ class HyperParameterRunParams:
     num_steps: int
     n_trials: int
     parameters_to_optimize: List[Tuple[str, HyperParameterOptimizationDirection]]
-    early_stopping: Optional["EarlyStoppingConfig"] = None
+    early_stopping: Optional[EarlyStoppingConfig] = None
 
     def __post_init__(self) -> None:
         """Validate all parameters at construction time."""

@@ -38,6 +38,7 @@ from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
 from POMDPPlanners.planners.planners_utils.path_simulations_policy_arena import (
     ArenaPathSimulationPolicyCostSetting,
 )
+from POMDPPlanners.planners.planners_utils.rollout import random_rollout_action_sampler
 from POMDPPlanners.utils.statistics_utils import cvar_estimator_from_dist_fast
 
 
@@ -69,6 +70,7 @@ class ICVaR_PFT_DPW(ArenaPathSimulationPolicyCostSetting):
         alpha_o: float = 0.5,
         visit_count_penalty: float = 0.0,
         reserve_capacity: int = 0,
+        use_rollouts: bool = False,
     ):
         super().__init__(
             environment=environment,
@@ -104,6 +106,13 @@ class ICVaR_PFT_DPW(ArenaPathSimulationPolicyCostSetting):
         self.alpha_o = alpha_o
         self.discrete_actions = self.environment.space_info.action_space == SpaceType.DISCRETE
         self.visit_count_penalty = visit_count_penalty
+        # When True, a belief node created by observation widening is not
+        # expanded further on the simulation that created it. Its value is
+        # instead estimated by a random rollout from one of its particles,
+        # exactly as PFT-DPW does (see ``PFT_DPW._simulate_return``). The
+        # default keeps the original behaviour: recurse into the new node and
+        # leave unexpanded leaves at value 0.
+        self.use_rollouts = use_rollouts
 
     def _simulate_path(self, tree: Tree, belief_id: int, depth: int) -> None:
         if depth > self.depth:
@@ -137,12 +146,39 @@ class ICVaR_PFT_DPW(ArenaPathSimulationPolicyCostSetting):
         action_visits = tree.get_visit_count(action_id)
         if action_children_count <= self.k_o * action_visits**self.alpha_o:
             next_belief_id = self._generate_belief(tree=tree, action_id=action_id)
+            if self.use_rollouts:
+                self._rollout_leaf(tree=tree, belief_id=next_belief_id, depth=depth + 1)
+                self.update_nodes(tree=tree, belief_id=belief_id, action_id=action_id)
+                return
         else:
             next_belief_id = self._sample_next_existing_belief(tree=tree, action_id=action_id)
 
         self._simulate_path(tree=tree, belief_id=next_belief_id, depth=depth + 1)
 
         self.update_nodes(tree=tree, belief_id=belief_id, action_id=action_id)
+
+    def _rollout_leaf(self, tree: Tree, belief_id: int, depth: int) -> None:
+        """Estimate a fresh leaf's cost-to-go by a random rollout and record it.
+
+        The rollout returns a discounted *reward*; the planner works in costs,
+        so the sign is flipped. ``max_depth=self.depth + 1`` reproduces the
+        depth boundary of the recursive path (``depth > self.depth`` stops),
+        which is the same convention ``PFT_DPW._random_rollout`` documents.
+        The visit count is set to 1 so the leaf carries weight in the parent's
+        CVaR over belief children.
+        """
+        belief = tree.get_belief(belief_id)
+        if not self.is_terminal_belief(belief=belief):
+            discounted_reward = random_rollout_action_sampler(
+                state=belief.sample(),
+                depth=depth,
+                action_sampler=self.action_sampler,
+                environment=self.environment,
+                discount_factor=self.discount_factor,
+                max_depth=self.depth + 1,
+            )
+            tree.v_value[belief_id] = -discounted_reward
+        tree.increment_visit_count(belief_id)
 
     def is_terminal_belief(self, belief: Belief) -> bool:
         """Return True if all particles in ``belief`` are terminal states."""
