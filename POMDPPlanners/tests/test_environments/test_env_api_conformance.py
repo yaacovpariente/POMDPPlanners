@@ -52,12 +52,18 @@ from POMDPPlanners.environments.push_pomdp.continuous_push_pomdp import (
     ContinuousPushPOMDPDiscreteActions,
 )
 from POMDPPlanners.environments.push_pomdp.push_pomdp import PushPOMDP
+from POMDPPlanners.environments.isaac_lab_pomdp.isaac_generative_models.isaac_hazard_models import (
+    HazardNavigationIsaacModel,
+    HazardReachIsaacModel,
+)
 from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp import RockSamplePOMDP
 from POMDPPlanners.environments.safety_ant_velocity_pomdp import SafeAntVelocityPOMDP
 from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
     cartpole_pinned_kwargs,
+    hazard_navigation_pinned_kwargs,
+    hazard_reach_pinned_kwargs,
     continuous_laser_tag_discrete_actions_pinned_kwargs,
     continuous_laser_tag_pinned_kwargs,
     continuous_light_dark_discrete_actions_pinned_kwargs,
@@ -151,6 +157,14 @@ def _build_safety_ant() -> SafeAntVelocityPOMDP:
     return SafeAntVelocityPOMDP(discount_factor=0.95, **safety_ant_velocity_pinned_kwargs())
 
 
+def _build_hazard_navigation() -> HazardNavigationIsaacModel:
+    return HazardNavigationIsaacModel(discount_factor=0.95, **hazard_navigation_pinned_kwargs())
+
+
+def _build_hazard_reach() -> HazardReachIsaacModel:
+    return HazardReachIsaacModel(discount_factor=0.95, **hazard_reach_pinned_kwargs())
+
+
 # Registry of (env_id, builder). New envs added here are automatically
 # covered by every parametrized test below.
 ENV_BUILDERS: List[Tuple[str, EnvBuilder]] = [
@@ -170,6 +184,8 @@ ENV_BUILDERS: List[Tuple[str, EnvBuilder]] = [
     ("ContinuousLaserTagPOMDP", _build_continuous_laser_tag),
     ("ContinuousLaserTagPOMDPDiscreteActions", _build_continuous_laser_tag_discrete),
     ("SafeAntVelocityPOMDP", _build_safety_ant),
+    ("HazardNavigationIsaacModel", _build_hazard_navigation),
+    ("HazardReachIsaacModel", _build_hazard_reach),
 ]
 
 

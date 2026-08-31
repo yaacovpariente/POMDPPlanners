@@ -31,6 +31,15 @@ Classes:
     AnymalNavigationLayout: The navigation task's fixed timing configuration.
     BlockRewardModel: Restrict a reward model to named state blocks.
     LearnedIsaacModel: Factored model driven by a fitted linear-Gaussian transition and reward.
+    HazardRelativeTransition: Goal-relative transition that also rides hazard centres.
+    HazardNavigationRewardModel: Navigation objective plus speed-scaled bad-contact penalty.
+    HazardNavigationIsaacModel: Navigation model with latent-type hazard discs, model-is-world.
+    HazardReachRewardModel: Reach objective plus speed-scaled obstacle-contact penalty.
+    HazardReachIsaacModel: Franka reach model with one latent-presence obstacle, model-is-world.
+    ConstrainedHazardNavigationIsaacModel: Twin with the penalty moved to a constraint channel.
+    ConstrainedHazardReachIsaacModel: Twin with the penalty moved to a constraint channel.
+    RelativeHazardSignalObservationModel: Latent-type signal for base-frame hazard centres.
+    EndEffectorPresenceSignalObservationModel: Presence signal gated on end-effector proximity.
 
 Functions:
     calibrate_tracking_gain: Least-squares estimate of the controller lag gain from a rollout.
@@ -92,6 +101,17 @@ from POMDPPlanners.environments.isaac_lab_pomdp.isaac_generative_models.isaac_le
     BlockRewardModel,
     LearnedIsaacModel,
 )
+from POMDPPlanners.environments.isaac_lab_pomdp.isaac_generative_models.isaac_hazard_models import (
+    ConstrainedHazardNavigationIsaacModel,
+    ConstrainedHazardReachIsaacModel,
+    EndEffectorPresenceSignalObservationModel,
+    HazardNavigationIsaacModel,
+    HazardNavigationRewardModel,
+    HazardReachIsaacModel,
+    HazardReachRewardModel,
+    HazardRelativeTransition,
+    RelativeHazardSignalObservationModel,
+)
 
 __all__ = [
     "IsaacChannelSchema",
@@ -125,4 +145,13 @@ __all__ = [
     "navigation_state_schema",
     "BlockRewardModel",
     "LearnedIsaacModel",
+    "ConstrainedHazardNavigationIsaacModel",
+    "ConstrainedHazardReachIsaacModel",
+    "EndEffectorPresenceSignalObservationModel",
+    "HazardNavigationIsaacModel",
+    "HazardNavigationRewardModel",
+    "HazardReachIsaacModel",
+    "HazardReachRewardModel",
+    "HazardRelativeTransition",
+    "RelativeHazardSignalObservationModel",
 ]

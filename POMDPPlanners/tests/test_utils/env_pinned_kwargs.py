@@ -394,3 +394,74 @@ def safety_ant_velocity_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
     }
     pinned.update(overrides)
     return pinned
+
+
+def hazard_navigation_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
+    """Pinned optional defaults for ``HazardNavigationIsaacModel``.
+
+    ``hazards`` is required (no default) and therefore pinned here explicitly, like the required
+    ``noise_cov`` callers pass for CartPole — one hazard on the straight path to the goal.
+    ``action_presets`` and ``hazard_position_noise_std`` are ``None``-sentinels the constructor
+    substitutes; the substituted values are pinned per the module rule.
+    """
+    pinned: Dict[str, Any] = {
+        "hazards": [(2.0, 0.0, 0.4)],
+        "step_dt": 0.2,
+        "action_presets": [
+            np.array([1.0, 0.0, 0.0]),
+            np.array([0.3, 0.0, 0.0]),
+            np.array([0.5, 0.0, 0.6]),
+            np.array([0.5, 0.0, -0.6]),
+            np.array([0.0, 0.0, 0.0]),
+        ],
+        "initial_goal": (4.0, 0.0, 0.0, 0.0),
+        "p_bad": 0.5,
+        "collision_penalty": 50.0,
+        "v_max": 1.0,
+        "is_bad_contact_terminal": True,
+        "success_radius": 0.5,
+        "signal_radius": 1.5,
+        "signal_accuracy": 0.9,
+        "linear_scale": 1.0,
+        "angular_scale": 1.0,
+        "velocity_noise_std": 0.1,
+        "position_noise_std": 0.05,
+        "heading_noise_std": 0.05,
+        "hazard_position_noise_std": 0.05,
+        "observation_noise_std": 0.1,
+    }
+    pinned.update(overrides)
+    return pinned
+
+
+def hazard_reach_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
+    """Pinned optional defaults for ``HazardReachIsaacModel``."""
+    pinned: Dict[str, Any] = {
+        "obstacle_center": (0.44, 0.20, 0.51),
+        "obstacle_radius": 0.05,
+        "step_dt": 0.1,
+        "action_presets": [
+            np.zeros(7),
+            np.full(7, 0.4),
+            np.full(7, -0.4),
+            np.full(7, 0.2),
+            np.full(7, -0.2),
+        ],
+        "goal_command": (0.45, 0.25, 0.52, 1.0, 0.0, 0.0, 0.0),
+        "p_present": 0.5,
+        "collision_penalty": 25.0,
+        "ee_speed_max": 1.0,
+        "is_contact_terminal": False,
+        "success_radius": 0.15,
+        "signal_radius": 0.15,
+        "signal_accuracy": 0.9,
+        "tracking_gain": 0.5,
+        "action_scale": 0.5,
+        "default_joint_positions": (0.0, -0.569, 0.0, -2.810, 0.0, 3.037, 0.741),
+        "position_noise_std": 0.01,
+        "velocity_noise_std": 0.1,
+        "action_noise_std": 1e-3,
+        "observation_noise_std": 0.05,
+    }
+    pinned.update(overrides)
+    return pinned
