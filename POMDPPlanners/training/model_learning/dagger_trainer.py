@@ -28,6 +28,13 @@ a sequence of unrelated fits that can oscillate.
 their mixture -- not on the last one. Keeping only the final model discards the
 object the theory is about.
 
+Supply ``evaluation_fn`` and each round also records what the planner actually
+scored in the true world with that round's model. That is the only quantity the
+paper reports, and the only one that settles whether the loop is working -- see
+:mod:`~POMDPPlanners.training.model_learning.control_evaluation`. It costs
+episodes, so it is opt-in, but a run without it cannot answer the question it
+was started to ask.
+
 Two things the loop deliberately does not do. It does not learn the reward: the
 objective is our design, not a fact about the world, and holding it fixed is what
 makes a model comparison about dynamics. And it does not claim its guarantee
@@ -45,6 +52,11 @@ from typing import Any, Callable, Dict, List, Optional, Sequence
 import numpy as np
 
 from POMDPPlanners.core.environment import TransitionModel
+from POMDPPlanners.training.model_learning.control_evaluation import (
+    ControlPoint,
+    LearningCurve,
+    evaluate_control,
+)
 from POMDPPlanners.training.model_learning.diagnostics import evaluate_model
 from POMDPPlanners.training.model_learning.exploration import (
     DEFAULT_HOLD_STEPS,
@@ -71,6 +83,10 @@ class RoundResult:
         source_counts: Transitions contributed by each source, cumulative.
         training_metrics: Per-epoch training metrics from the fit.
         diagnostics: Held-out diagnostics for this round's model.
+        control: What the planner scored in the true world with this round's
+            model, or ``None`` when no ``evaluation_fn`` was supplied. This is
+            the quantity the algorithm is judged on; the diagnostics beside it
+            describe the model rather than the decision.
     """
 
     round_index: int
@@ -79,6 +95,7 @@ class RoundResult:
     source_counts: Dict[str, int] = field(default_factory=dict)
     training_metrics: Dict[str, List[float]] = field(default_factory=dict)
     diagnostics: Dict[str, float] = field(default_factory=dict)
+    control: Optional[ControlPoint] = None
 
 
 class DAggerModelTrainer:
@@ -107,7 +124,15 @@ class DAggerModelTrainer:
             Injected rather than built here because how a planner is run --
             budget, parallelism, caching -- is the caller's business. ``None``
             skips the on-policy half, which makes the loop a plain batch fit and
-            forfeits the guarantee; useful only for testing the plumbing.
+            forfeits the guarantee. That is the paper's ``Batch`` baseline, and
+            the thing an iterative run has to beat, so it is a supported
+            configuration rather than only a plumbing test.
+        evaluation_fn: Called as ``fn(model, round_index, num_episodes)`` after
+            each fit, and expected to run the planner against that round's model
+            in the *true* world, returning one return per episode. ``None``
+            records no control performance, which leaves only model-quality
+            numbers and cannot show whether the loop is working.
+        evaluation_episodes: Episodes requested from ``evaluation_fn`` each round.
         initial_model: The model round 1's planner searches. Supplying the
             calibrated analytic model starts the loop warm, so no round is spent
             with the planner driving a model fitted on nothing.
@@ -146,6 +171,8 @@ class DAggerModelTrainer:
         action_presets: Any,
         diagnostics_world: Optional[Any] = None,
         planner_rollout_fn: Optional[Callable[[TransitionModel, int, int], Sequence[Any]]] = None,
+        evaluation_fn: Optional[Callable[[TransitionModel, int, int], Sequence[float]]] = None,
+        evaluation_episodes: int = 20,
         initial_model: Optional[TransitionModel] = None,
         num_rounds: int = 5,
         episodes_per_round: int = 40,
@@ -160,12 +187,18 @@ class DAggerModelTrainer:
             raise ValueError(f"num_rounds must be positive, got {num_rounds}")
         if episodes_per_round <= 0:
             raise ValueError(f"episodes_per_round must be positive, got {episodes_per_round}")
+        if evaluation_fn is not None and evaluation_episodes <= 0:
+            raise ValueError(
+                f"evaluation_episodes must be positive, got {evaluation_episodes}"
+            )
         self.world = world
         self.diagnostics_world = world if diagnostics_world is None else diagnostics_world
         self.learner = learner
         self.dataset = dataset
         self.action_presets = np.asarray(action_presets, dtype=float)
         self.planner_rollout_fn = planner_rollout_fn
+        self.evaluation_fn = evaluation_fn
+        self.evaluation_episodes = evaluation_episodes
         self.initial_model = initial_model
         self.num_rounds = num_rounds
         self.episodes_per_round = episodes_per_round
@@ -213,17 +246,50 @@ class DAggerModelTrainer:
                     reward_model=self.reward_model,
                     seed=self.seed + round_index,
                 ),
+                control=self._evaluate_control(current_model, round_index),
             )
             self._rounds.append(result)
             self._logger.info(
-                "round %d/%d: %d transitions (%s), %s",
+                "round %d/%d: %d transitions (%s), %s, return %s",
                 round_index,
                 self.num_rounds,
                 result.dataset_size,
                 result.source_counts,
                 result.diagnostics,
+                "n/a" if result.control is None else f"{result.control.mean_return:.3f}",
             )
         return self.rounds
+
+    def learning_curve(self, method: str) -> LearningCurve:
+        """The rounds that were evaluated, as a curve ready to aggregate or plot.
+
+        Args:
+            method: Name to label the curve with, e.g. ``"dagger"`` or ``"batch"``.
+
+        Returns:
+            One point per evaluated round. Rounds with no control evaluation are
+            left out rather than filled with ``nan``, so an unevaluated run gives
+            an empty curve instead of a plottable but meaningless one.
+        """
+        return LearningCurve(
+            method=method,
+            seed=self.seed,
+            points=tuple(result.control for result in self._rounds if result.control is not None),
+        )
+
+    def _evaluate_control(
+        self, model: TransitionModel, round_index: int
+    ) -> Optional[ControlPoint]:
+        """Score this round's model in the true world, if an evaluator was given."""
+        if self.evaluation_fn is None:
+            return None
+        return evaluate_control(
+            model=model,
+            evaluation_fn=self.evaluation_fn,
+            round_index=round_index,
+            cumulative_transitions=len(self.dataset),
+            num_episodes=self.evaluation_episodes,
+        )
 
     def _split(self, round_index: int, model: Optional[TransitionModel]) -> Any:
         """Collect this round's two halves.
