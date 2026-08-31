@@ -280,7 +280,7 @@ class MLflowModelLearningTracker:
             return None
         suffix = ".npz" if type(model).__name__ == "LinearGaussianTransition" else ".pt"
         with tempfile.TemporaryDirectory() as staging:
-            path = save(Path(staging) / f"round_{round_index}{suffix}")
+            path = str(save(Path(staging) / f"round_{round_index}{suffix}"))
             # save() may append its own suffix (np.savez does), so log what exists.
             written = Path(path) if Path(path).exists() else Path(f"{path}.npz")
             self._client.log_artifact(
