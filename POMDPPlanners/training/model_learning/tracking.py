@@ -116,6 +116,7 @@ class MLflowModelLearningTracker:
         self.tracking_uri = tracking_uri
         self.run_name = run_name or f"{method}_seed{seed}"
         self._logger = logger or get_logger(__name__)
+        self._client: Any = None
         self._run = None
         self._rounds: list = []
 
@@ -134,33 +135,43 @@ class MLflowModelLearningTracker:
         A run started in a factory and finished by whoever collects the curve is
         the shape :func:`...curve_comparison.run_learning_curves` needs; requiring
         a ``with`` block there would put the tracker's lifetime in the wrong place.
+
+        Everything afterwards goes through a client bound to this run's id rather
+        than through MLflow's ambient "active run". The rollouts this loop
+        evaluates with run through ``LocalSimulationsAPI``, which sets its own
+        tracking URI and ends whatever run is active -- so a fluent-API tracker
+        loses its run in the middle of round one and silently logs the rest of
+        the study somewhere else.
         """
         # Deferred: importing MLflow costs seconds, and the loop runs without it.
-        import mlflow  # pylint: disable=import-outside-toplevel
+        from mlflow.tracking import MlflowClient  # pylint: disable=import-outside-toplevel
 
         if self._run is not None:
             return
         # MLflow >= 3.6 gates the local filesystem backend behind an opt-in, and
         # this project stores runs locally -- the same default the simulator sets.
         os.environ.setdefault("MLFLOW_ALLOW_FILE_STORE", "true")
-        if self.tracking_uri is not None:
-            mlflow.set_tracking_uri(self.tracking_uri)
-        mlflow.set_experiment(self.experiment_name)
-        self._run = mlflow.start_run(run_name=self.run_name)
-        mlflow.log_param("method", self.method)
-        mlflow.log_param("seed", self.seed)
+        self._client = MlflowClient(tracking_uri=self.tracking_uri)
+        experiment = self._client.get_experiment_by_name(self.experiment_name)
+        experiment_id = (
+            experiment.experiment_id
+            if experiment is not None
+            else self._client.create_experiment(self.experiment_name)
+        )
+        self._run = self._client.create_run(experiment_id, run_name=self.run_name)
+        run_id = self._run.info.run_id
+        self._client.log_param(run_id, "method", self.method)
+        self._client.log_param(run_id, "seed", self.seed)
         for key, value in self.params.items():
-            mlflow.log_param(key, value)
+            self._client.log_param(run_id, key, value)
 
     def finish(self) -> None:
         """Write the per-round record and close the run. Safe to call twice."""
-        import mlflow  # pylint: disable=import-outside-toplevel
-
         if self._run is None:
             return
         if self._rounds:
-            _log_json_artifact(self._rounds, "rounds.json", EVALUATION_ARTIFACT_PATH)
-        mlflow.end_run()
+            self._log_json_artifact(self._rounds, "rounds.json")
+        self._client.set_terminated(self._run.info.run_id)
         self._run = None
 
     def log_round(self, result: Any) -> None:
@@ -170,8 +181,6 @@ class MLflowModelLearningTracker:
             result: The round's
                 :class:`~POMDPPlanners.training.model_learning.dagger_trainer.RoundResult`.
         """
-        import mlflow  # pylint: disable=import-outside-toplevel
-
         self._ensure_run()
         step = int(result.round_index)
         metrics: Dict[str, float] = {"dataset_size": float(result.dataset_size)}
@@ -187,11 +196,12 @@ class MLflowModelLearningTracker:
             metrics["mean_return"] = result.control.mean_return
             metrics["return_standard_error"] = result.control.standard_error
             metrics["cumulative_transitions"] = float(result.control.cumulative_transitions)
+        run_id = self._run.info.run_id
         for name, value in metrics.items():
             # A NaN metric is rejected by some backends and silently plotted as a
             # gap by others; both hide that the quantity was never measured.
             if np.isfinite(value):
-                mlflow.log_metric(name, float(value), step=step)
+                self._client.log_metric(run_id, name, float(value), step=step)
 
         fingerprint = getattr(result.model, "fingerprint", None)
         model_artifact = self._log_model(result.model, step)
@@ -218,10 +228,9 @@ class MLflowModelLearningTracker:
         Args:
             curve: The run's curve, from ``trainer.learning_curve(method)``.
         """
-        import mlflow  # pylint: disable=import-outside-toplevel
-
         self._ensure_run()
-        _log_json_artifact(curve.to_dict(), "learning_curve.json", EVALUATION_ARTIFACT_PATH)
+        run_id = self._run.info.run_id
+        self._log_json_artifact(curve.to_dict(), "learning_curve.json")
         best = best_point(curve)
         if best is None:
             self._logger.warning(
@@ -230,9 +239,11 @@ class MLflowModelLearningTracker:
                 curve.seed,
             )
         else:
-            mlflow.log_metric("best_round_index", float(best.round_index))
-            mlflow.log_metric("best_round_mean_return", best.mean_return)
-            mlflow.log_metric("best_round_transitions", float(best.cumulative_transitions))
+            self._client.log_metric(run_id, "best_round_index", float(best.round_index))
+            self._client.log_metric(run_id, "best_round_mean_return", best.mean_return)
+            self._client.log_metric(
+                run_id, "best_round_transitions", float(best.cumulative_transitions)
+            )
         self.finish()
 
     def _log_model(self, model: Any, round_index: int) -> Optional[str]:
@@ -243,8 +254,6 @@ class MLflowModelLearningTracker:
             in which case the round's numbers still land, and the log says which
             model is missing rather than the run looking complete.
         """
-        import mlflow  # pylint: disable=import-outside-toplevel
-
         save = getattr(model, "save", None)
         if not callable(save):
             self._logger.warning(
@@ -258,18 +267,19 @@ class MLflowModelLearningTracker:
             path = save(Path(staging) / f"round_{round_index}{suffix}")
             # save() may append its own suffix (np.savez does), so log what exists.
             written = Path(path) if Path(path).exists() else Path(f"{path}.npz")
-            mlflow.log_artifact(str(written), MODELS_ARTIFACT_PATH)
+            self._client.log_artifact(
+                self._run.info.run_id, str(written), MODELS_ARTIFACT_PATH
+            )
             return f"{MODELS_ARTIFACT_PATH}/{written.name}"
 
-
-def _log_json_artifact(payload: Any, filename: str, artifact_path: str) -> None:
-    """Write ``payload`` as JSON and log it under ``artifact_path``."""
-    import mlflow  # pylint: disable=import-outside-toplevel
-
-    with tempfile.TemporaryDirectory() as staging:
-        path = Path(staging) / filename
-        path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-        mlflow.log_artifact(str(path), artifact_path)
+    def _log_json_artifact(self, payload: Any, filename: str) -> None:
+        """Write ``payload`` as JSON and log it under the evaluation artifacts."""
+        with tempfile.TemporaryDirectory() as staging:
+            path = Path(staging) / filename
+            path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+            self._client.log_artifact(
+                self._run.info.run_id, str(path), EVALUATION_ARTIFACT_PATH
+            )
 
 
 def load_round_models(run_artifacts_dir: Path) -> Dict[int, Path]:
