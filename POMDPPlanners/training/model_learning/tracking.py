@@ -126,6 +126,7 @@ class MLflowModelLearningTracker:
         self._logger = logger or get_logger(__name__)
         self._client: Any = None
         self._run = None
+        self._curves: list = []
         self._rounds: list = []
 
     def __enter__(self) -> "MLflowModelLearningTracker":
@@ -179,6 +180,7 @@ class MLflowModelLearningTracker:
             return
         if self._rounds:
             self._log_json_artifact(self._rounds, "rounds.json")
+            self._log_reports()
             self._log_plots()
         self._client.set_terminated(self._run.info.run_id)
         self._run = None
@@ -246,6 +248,7 @@ class MLflowModelLearningTracker:
         """
         self._ensure_run()
         run_id = self._run.info.run_id
+        self._curves.append(curve)
         self._log_json_artifact(curve.to_dict(), "learning_curve.json")
         best = best_point(curve)
         if best is None:
@@ -287,6 +290,21 @@ class MLflowModelLearningTracker:
                 self._run.info.run_id, str(written), MODELS_ARTIFACT_PATH
             )
             return f"{MODELS_ARTIFACT_PATH}/{written.name}"
+
+    def _log_reports(self) -> None:
+        """Write the readable tables beside the JSON and log them.
+
+        JSON is what a plot is rebuilt from; a person deciding whether to plan
+        with a model reads the table.
+        """
+        # pylint: disable-next=import-outside-toplevel
+        from POMDPPlanners.training.model_learning.reporting import write_reports
+
+        with tempfile.TemporaryDirectory() as staging:
+            for path in write_reports(self._rounds, Path(staging), curves=self._curves).values():
+                self._client.log_artifact(
+                    self._run.info.run_id, str(path), EVALUATION_ARTIFACT_PATH
+                )
 
     def _log_plots(self) -> None:
         """Draw the fit's diagnostic plots and log them under ``plots/``.

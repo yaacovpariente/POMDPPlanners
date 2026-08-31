@@ -575,6 +575,112 @@ class TestTrainingPlots:
         }
 
 
+class TestReadableReports:
+    """A run has to be readable without opening JSON."""
+
+    @staticmethod
+    def _rounds():
+        return [
+            {
+                "round_index": index,
+                "dataset_size": 100 * index,
+                "source_counts": {"exploration": 100, "planner": 50 * (index - 1)},
+                "diagnostics": {
+                    "held_out_log_likelihood": 40.0,
+                    "horizon_drift_ratio": 0.5 if index == 1 else 1.8,
+                },
+                "training_metrics": {"holdout_nll": [5.0, 3.0, 4.0]},
+                "model_artifact": f"models/round_{index}.pt",
+                "control": {
+                    "round_index": index,
+                    "cumulative_transitions": 100 * index,
+                    "returns": [-4.0 + index, -3.0 + index],
+                },
+            }
+            for index in (1, 2)
+        ]
+
+    def test_the_table_marks_the_best_round_and_flags_overconfidence(self) -> None:
+        """Purpose: Validates that the table carries the two judgements a reader needs
+
+        Given: Two rounds, the second better but with a drift ratio above one
+        When: The Markdown table is rendered
+        Then: The second round is marked best and its drift ratio is flagged, so
+            neither "report the last round" nor "a confident wrong model" passes
+            unnoticed
+        """
+        from POMDPPlanners.training.model_learning import round_table_markdown
+
+        table = round_table_markdown(self._rounds())
+
+        best_line = [line for line in table.splitlines() if "**(best)**" in line]
+        assert len(best_line) == 1
+        assert best_line[0].startswith("| 2")
+        assert "⚠" in best_line[0]
+
+    def test_the_csv_has_one_row_per_round(self) -> None:
+        """Purpose: Validates that the same rows are available for a spreadsheet
+
+        Given: Two rounds
+        When: The CSV is rendered
+        Then: It has a header and one row per round, with the round's cost and return
+        """
+        from POMDPPlanners.training.model_learning import round_table_csv
+
+        lines = round_table_csv(self._rounds()).strip().splitlines()
+
+        assert lines[0].startswith("round,transitions")
+        assert len(lines) == 3
+
+    def test_write_reports_puts_both_files_beside_the_json(self, tmp_path) -> None:
+        """Purpose: Validates the reports a run writes for a person
+
+        Given: Rounds and a method's curve
+        When: The reports are written
+        Then: A summary Markdown and a rounds CSV exist, and the summary names
+            the method
+        """
+        from POMDPPlanners.training.model_learning import write_reports
+
+        curve = LearningCurve(
+            method="dagger",
+            seed=0,
+            points=(ControlPoint(round_index=1, cumulative_transitions=100, returns=(-1.0, -2.0)),),
+        )
+
+        written = write_reports(self._rounds(), tmp_path, curves=[curve])
+
+        assert set(written) == {"summary", "rounds_csv"}
+        assert "dagger" in written["summary"].read_text(encoding="utf-8")
+
+    def test_a_tracked_run_logs_the_tables(self, tmp_path) -> None:
+        """Purpose: Validates that the tables reach MLflow with the JSON
+
+        Given: A tracker with one logged round
+        When: The run is finished
+        Then: summary.md and rounds.csv sit beside rounds.json in the artifacts
+        """
+        pytest.importorskip("mlflow")
+        from POMDPPlanners.training.model_learning import MLflowModelLearningTracker
+
+        tracker = MLflowModelLearningTracker(
+            experiment_name="model_learning_test",
+            method="dagger",
+            seed=4,
+            tracking_uri=f"file://{tmp_path / 'mlruns'}",
+        )
+        tracker.log_round(_round(1))
+        run = tracker._run  # pylint: disable=protected-access
+        tracker.finish()
+
+        evaluation = _artifact_dir(run) / "evaluation"
+        assert {path.name for path in evaluation.glob("*")} >= {
+            "rounds.json",
+            "summary.md",
+            "rounds.csv",
+        }
+
+
 class TestCurveSummaries:
     """The one table to read first."""
 

@@ -90,6 +90,12 @@ from POMDPPlanners.training.model_learning.learners import (
     ProbabilisticEnsembleLearner,
     TransitionModelLearner,
 )
+from POMDPPlanners.training.model_learning.reporting import (
+    curve_table_markdown,
+    round_table_csv,
+    round_table_markdown,
+    write_reports,
+)
 from POMDPPlanners.training.model_learning.tracking import (
     MLflowModelLearningTracker,
     ModelLearningTracker,
@@ -123,13 +129,17 @@ __all__ = [
     "block_indices",
     "collect_random_preset_episode",
     "curve_summaries",
+    "curve_table_markdown",
     "curves_by_method",
     "evaluate_control",
     "evaluate_model",
     "load_learning_curves",
     "load_round_models",
+    "round_table_csv",
+    "round_table_markdown",
     "run_learning_curves",
     "save_learning_curves",
+    "write_reports",
     "held_out_log_likelihood",
     "horizon_drift_ratio",
     "preset_ranking_agreement",
