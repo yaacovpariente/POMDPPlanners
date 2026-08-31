@@ -95,6 +95,8 @@ from POMDPPlanners.training.model_learning.reporting import (
     round_table_csv,
     round_table_markdown,
     write_reports,
+    write_run_directory,
+    write_study_directory,
 )
 from POMDPPlanners.training.model_learning.tracking import (
     MLflowModelLearningTracker,
@@ -140,6 +142,8 @@ __all__ = [
     "run_learning_curves",
     "save_learning_curves",
     "write_reports",
+    "write_run_directory",
+    "write_study_directory",
     "held_out_log_likelihood",
     "horizon_drift_ratio",
     "preset_ranking_agreement",

@@ -22,15 +22,25 @@ planning horizon is outside the spread it claims, which is the failure that make
 a risk-sensitive planner confidently wrong. A table without the flag leaves the
 reader to remember the threshold.
 
+One directory shape, two levels, and nothing at the wrong one. A run --
+one method at one seed -- owns its rounds, its models and its training curves.
+The study owns only what compares runs: the method table and the learning curve.
+A rounds table sitting at study level is a single run's numbers wearing the
+study's name, which is how the wrong method gets reported.
+
 Functions:
     round_table_markdown: Per-round table of cost, return and model quality.
     round_table_csv: The same rows, for a spreadsheet.
     curve_table_markdown: Best round per method and seed.
     write_reports: Write both tables into a directory.
+    write_run_directory: One run's rounds, models and plots, under its own name.
+    write_study_directory: The comparison across runs, plus a README pointing at them.
 """
 
 import csv
 import io
+import json
+import shutil
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
@@ -286,3 +296,156 @@ def write_reports(
     csv_path.write_text(round_table_csv(rounds), encoding="utf-8")
     written["rounds_csv"] = csv_path
     return written
+
+
+def write_run_directory(
+    rounds: Sequence[Any],
+    output_dir: Path,
+    curve: Optional[LearningCurve] = None,
+    models: Optional[Dict[int, Path]] = None,
+) -> Dict[str, Path]:
+    """Write everything about one run -- one method at one seed -- under one name.
+
+    Args:
+        rounds: The run's rounds, as results or as the tracker's dictionaries.
+        output_dir: The run's directory, e.g. ``runs/dagger_seed0``. Created if
+            missing.
+        curve: The run's control curve, written beside the rounds so the run can
+            be read without the study around it.
+        models: ``{round_index: file}`` to copy into ``models/``. The models are
+            the point of the run, and a directory that names its rounds but not
+            its models sends the reader back to MLflow's hashed tree.
+
+    Returns:
+        Report name to written path.
+    """
+    output_dir = Path(output_dir)
+    written = write_reports(rounds, output_dir)
+    (output_dir / "rounds.json").write_text(
+        json.dumps([_as_record(entry) for entry in rounds], indent=2), encoding="utf-8"
+    )
+    written["rounds_json"] = output_dir / "rounds.json"
+
+    if curve is not None:
+        (output_dir / "learning_curve.json").write_text(
+            json.dumps(curve.to_dict(), indent=2), encoding="utf-8"
+        )
+        written["learning_curve"] = output_dir / "learning_curve.json"
+
+    if models:
+        models_dir = output_dir / "models"
+        models_dir.mkdir(parents=True, exist_ok=True)
+        for round_index, source in sorted(models.items()):
+            destination = models_dir / f"round_{round_index}{Path(source).suffix}"
+            shutil.copyfile(source, destination)
+            written[f"model_round_{round_index}"] = destination
+
+    # Deferred: matplotlib is heavy and a caller may only want the tables.
+    # pylint: disable-next=import-outside-toplevel
+    from POMDPPlanners.utils.visualization.model_learning_plots import (
+        plot_model_learning_report,
+    )
+
+    written.update(plot_model_learning_report(rounds, output_dir / "plots"))
+    return written
+
+
+def write_study_directory(
+    curves: Sequence[LearningCurve],
+    output_dir: Path,
+    params: Optional[Dict[str, Any]] = None,
+    run_dirs: Optional[Dict[str, Path]] = None,
+) -> Dict[str, Path]:
+    """Write what compares the runs, and a README saying where everything is.
+
+    Args:
+        curves: Curves across methods and seeds.
+        output_dir: The study directory.
+        params: What was run -- environment, learner, planner budget, commit.
+            Written into the README, because a results directory whose settings
+            live only in the script that produced it is not a result.
+        run_dirs: Run name to its directory, listed in the README.
+
+    Returns:
+        Report name to written path.
+    """
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    written: Dict[str, Path] = {}
+
+    summary_path = output_dir / "summary.md"
+    summary_path.write_text(curve_table_markdown(curves), encoding="utf-8")
+    written["summary"] = summary_path
+
+    curves_path = output_dir / "learning_curves.json"
+    curves_path.write_text(
+        json.dumps([curve.to_dict() for curve in curves], indent=2), encoding="utf-8"
+    )
+    written["learning_curves"] = curves_path
+
+    # pylint: disable-next=import-outside-toplevel
+    from POMDPPlanners.utils.visualization.model_learning_plots import plot_learning_curves
+
+    plot = plot_learning_curves(curves, output_dir / "learning_curves.png")
+    if plot is not None:
+        written["learning_curve_plot"] = plot
+
+    written["readme"] = _write_readme(output_dir, params or {}, run_dirs or {})
+    return written
+
+
+def _write_readme(output_dir: Path, params: Dict[str, Any], run_dirs: Dict[str, Path]) -> Path:
+    """A map of the directory and the settings that produced it."""
+    lines = [
+        "# Model-learning study",
+        "",
+        "## What ran",
+        "",
+        "| Setting | Value |",
+        "|---|---|",
+    ]
+    lines += [f"| {key} | {value} |" for key, value in sorted(params.items())]
+    lines += [
+        "",
+        "## Where things are",
+        "",
+        "| Path | What it holds |",
+        "|---|---|",
+        "| `summary.md` | Best round per method and seed -- read this first. |",
+        "| `learning_curves.png` | Return against transitions, one line per method. |",
+        "| `learning_curves.json` | The same curves, for replotting. |",
+    ]
+    for name, path in sorted(run_dirs.items()):
+        lines.append(f"| `{path}/` | Everything about the {name} run. |")
+    lines += [
+        "| `mlruns/` | The same records, queryable with `mlflow ui`. |",
+        "| `sim_cache/` | Rollout cache. Disposable; delete it to force a re-run. |",
+        "",
+        "Each run directory holds `summary.md` (its rounds), `rounds.csv`,",
+        "`rounds.json`, `models/round_k.pt` and `plots/`. The model of *every*",
+        "round is kept: which round was best is known only after the whole",
+        "sequence has been scored.",
+        "",
+    ]
+    path = output_dir / "README.md"
+    path.write_text("\n".join(lines), encoding="utf-8")
+    return path
+
+
+def _as_record(entry: Any) -> Dict[str, Any]:
+    """One round as a JSON-safe dictionary, whichever shape it arrived in."""
+    if isinstance(entry, dict):
+        return entry
+    control = _field(entry, "control")
+    return {
+        "round_index": _field(entry, "round_index"),
+        "dataset_size": _field(entry, "dataset_size"),
+        "source_counts": dict(_field(entry, "source_counts", {}) or {}),
+        "diagnostics": {k: float(v) for k, v in (_field(entry, "diagnostics", {}) or {}).items()},
+        "training_metrics": {
+            name: [float(value) for value in values]
+            for name, values in (_field(entry, "training_metrics", {}) or {}).items()
+        },
+        "model_fingerprint": _short_fingerprint(entry) or None,
+        "control": None if control is None else control.to_dict(),
+    }
