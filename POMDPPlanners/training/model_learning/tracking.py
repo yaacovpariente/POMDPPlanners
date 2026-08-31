@@ -126,6 +126,7 @@ class MLflowModelLearningTracker:
         self._logger = logger or get_logger(__name__)
         self._client: Any = None
         self._run = None
+        self._artifact_dir: Optional[Path] = None
         self._curves: list = []
         self._rounds: list = []
 
@@ -168,6 +169,8 @@ class MLflowModelLearningTracker:
             else self._client.create_experiment(self.experiment_name)
         )
         self._run = self._client.create_run(experiment_id, run_name=self.run_name)
+        uri = self._run.info.artifact_uri
+        self._artifact_dir = Path(uri[len("file://") :]) if uri.startswith("file://") else None
         run_id = self._run.info.run_id
         self._client.log_param(run_id, "method", self.method)
         self._client.log_param(run_id, "seed", self.seed)
@@ -193,14 +196,14 @@ class MLflowModelLearningTracker:
         them under a readable name copies from here -- see
         :func:`~POMDPPlanners.training.model_learning.reporting.write_run_directory`.
 
+        It outlives :meth:`finish`, because a study copies the models *after*
+        the run that wrote them has been closed.
+
         Returns:
             The directory, or ``None`` before the run starts or when the store
             is remote.
         """
-        if self._run is None:
-            return None
-        uri = self._run.info.artifact_uri
-        return Path(uri[len("file://") :]) if uri.startswith("file://") else None
+        return self._artifact_dir
 
     def log_round(self, result: Any) -> None:
         """Record one round's metrics and save its model as an artifact.
