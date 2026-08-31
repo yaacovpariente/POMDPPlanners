@@ -681,6 +681,102 @@ class TestReadableReports:
         }
 
 
+class TestDirectoryLayout:
+    """One level per question: a run owns its rounds, the study owns the comparison."""
+
+    def test_a_run_directory_holds_its_rounds_models_and_plots(self, tmp_path) -> None:
+        """Purpose: Validates that one run is readable on its own
+
+        Given: A run's rounds and the model files it saved
+        When: Its directory is written
+        Then: The tables, the per-round models under readable names, and the
+            plots are all there, so nobody has to open MLflow's hashed tree
+        """
+        from POMDPPlanners.training.model_learning import write_run_directory
+
+        model_file = tmp_path / "staged.pt"
+        _ensemble().save(model_file)
+        rounds = [
+            RoundResult(
+                round_index=index,
+                model=_ensemble(seed=index),
+                dataset_size=100 * index,
+                source_counts={"exploration": 100 * index},
+                training_metrics={"train_nll": [3.0, 2.0], "holdout_nll": [3.1, 2.2]},
+                diagnostics={"held_out_log_likelihood": 2.0, "horizon_drift_ratio": 0.9},
+                control=ControlPoint(index, 100 * index, (-1.0, -2.0)),
+            )
+            for index in (1, 2)
+        ]
+
+        run_dir = tmp_path / "runs" / "dagger_seed0"
+        write_run_directory(rounds, run_dir, models={1: model_file, 2: model_file})
+
+        assert (run_dir / "summary.md").exists()
+        assert (run_dir / "rounds.csv").exists()
+        assert (run_dir / "rounds.json").exists()
+        assert {path.name for path in (run_dir / "models").glob("*")} == {
+            "round_1.pt",
+            "round_2.pt",
+        }
+        assert (run_dir / "plots" / "training_curves.png").exists()
+
+    def test_the_study_level_holds_only_what_compares_runs(self, tmp_path) -> None:
+        """Purpose: Validates that a single run's rounds are not published as the study's
+
+        Given: Curves for two methods
+        When: The study directory is written
+        Then: It holds the method comparison, the curve and a README naming the
+            run directories -- and no rounds table, which belongs to one run
+        """
+        from POMDPPlanners.training.model_learning import write_study_directory
+
+        curves = [
+            LearningCurve(method, 0, (ControlPoint(1, 100, (-1.0, -2.0)),))
+            for method in ("dagger", "batch")
+        ]
+
+        write_study_directory(
+            curves,
+            tmp_path,
+            params={"environment": "FrankaReachFragile"},
+            run_dirs={"dagger seed 0": Path("runs/dagger_seed0")},
+        )
+
+        summary = (tmp_path / "summary.md").read_text(encoding="utf-8")
+        assert "| Method | Seed |" in summary
+        assert "Best holdout epoch" not in summary
+        readme = (tmp_path / "README.md").read_text(encoding="utf-8")
+        assert "runs/dagger_seed0" in readme
+        assert "FrankaReachFragile" in readme
+
+    def test_the_tracker_points_at_the_models_it_saved(self, tmp_path) -> None:
+        """Purpose: Validates that a study can find the saved models to copy
+
+        Given: A tracker with one logged round on a local store
+        When: Its artifact directory is read
+        Then: The round's model file is there under the round's index
+        """
+        pytest.importorskip("mlflow")
+        from POMDPPlanners.training.model_learning import (
+            MLflowModelLearningTracker,
+            load_round_models,
+        )
+
+        tracker = MLflowModelLearningTracker(
+            experiment_name="model_learning_test",
+            method="dagger",
+            seed=5,
+            tracking_uri=f"file://{tmp_path / 'mlruns'}",
+        )
+        tracker.log_round(_round(1))
+        artifacts = tracker.artifact_dir
+        tracker.finish()
+
+        assert artifacts is not None
+        assert set(load_round_models(artifacts)) == {1}
+
+
 class TestCurveSummaries:
     """The one table to read first."""
 

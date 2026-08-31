@@ -185,6 +185,23 @@ class MLflowModelLearningTracker:
         self._client.set_terminated(self._run.info.run_id)
         self._run = None
 
+    @property
+    def artifact_dir(self) -> Optional[Path]:
+        """Local artifact directory of this run, when the store is on disk.
+
+        The models are written here, under hashed run ids. A study that wants
+        them under a readable name copies from here -- see
+        :func:`~POMDPPlanners.training.model_learning.reporting.write_run_directory`.
+
+        Returns:
+            The directory, or ``None`` before the run starts or when the store
+            is remote.
+        """
+        if self._run is None:
+            return None
+        uri = self._run.info.artifact_uri
+        return Path(uri[len("file://") :]) if uri.startswith("file://") else None
+
     def log_round(self, result: Any) -> None:
         """Record one round's metrics and save its model as an artifact.
 
