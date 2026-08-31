@@ -16,7 +16,7 @@ allowlisted one by one: adding a new one is a deliberate act recorded here.
 
 import ast
 from pathlib import Path
-from typing import List, Set, Tuple
+from typing import List, Set, Tuple, Union
 
 CORE_ROOT = Path(__file__).resolve().parents[2] / "core"
 
@@ -38,7 +38,7 @@ ALLOWED_DEFERRED_IMPORTS: Set[Tuple[str, str]] = {
 }
 
 
-def _imported_module(node: ast.AST) -> str:
+def _imported_module(node: Union[ast.Import, ast.ImportFrom]) -> str:
     if isinstance(node, ast.ImportFrom):
         return node.module or ""
     return node.names[0].name
