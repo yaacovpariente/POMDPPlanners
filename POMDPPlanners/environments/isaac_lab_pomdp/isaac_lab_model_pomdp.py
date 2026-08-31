@@ -62,6 +62,7 @@ Classes:
     IsaacLabModelPOMDP: Discrete-action generative model POMCPOW searches inside.
 """
 
+import math
 from collections.abc import Hashable
 from typing import Any, Callable, Dict, List, Optional, Union
 
@@ -82,6 +83,13 @@ from POMDPPlanners.core.environment import (
 from POMDPPlanners.environments.isaac_lab_pomdp.isaac_lab_pomdp import (
     _build_isaac_env,
     _to_numpy,
+)
+from POMDPPlanners.core.environment.array_backend import (
+    BackendParameters,
+    as_backend,
+    as_rows,
+    is_tensor,
+    standard_normal,
 )
 from POMDPPlanners.utils.multivariate_normal import (
     CovarianceParameterizedMultivariateNormal,
@@ -116,6 +124,86 @@ def _diagonal_covariance(dim: int, std: NoiseStd) -> np.ndarray:
     return np.diag(std_vector**2)
 
 
+def _is_legacy_call(state: Any) -> bool:
+    """Whether this call is the pre-batching case: a numpy/list 1-D state.
+
+    Those calls keep the exact code path they always took -- the shared
+    :class:`~POMDPPlanners.utils.multivariate_normal.CovarianceParameterizedMultivariateNormal`,
+    triangular solve and all. Routing them through the batched kernel instead
+    would be mathematically equivalent and numerically slightly different, and
+    "no existing result moved" is worth more than one less branch.
+    """
+    if is_tensor(state):
+        return False
+    return np.asarray(state, dtype=float).ndim == 1
+
+
+def _shape_samples(samples: Any, batched: bool, n_samples: int) -> Any:
+    """Give a ``(N, n_samples, dim)`` draw back in the shape the caller asked for."""
+    if not batched:
+        return samples[0, 0] if n_samples == 1 else samples[0]
+    return samples[:, 0] if n_samples == 1 else samples
+
+
+class _BatchedGaussian:
+    """Fixed-covariance normal over a batch of means, following its input's backend.
+
+    The scalar models already have a normal --
+    :class:`~POMDPPlanners.utils.multivariate_normal.CovarianceParameterizedMultivariateNormal`
+    -- and it stays the path every pre-existing call takes, bit for bit. This is
+    the batched counterpart: one mean *per row* rather than one mean for the whole
+    call, and tensors out when handed tensors, which is what lets a GPU planner
+    take a step without a host round trip.
+
+    Two normals rather than one widened normal is deliberate. The shared one is
+    used by several environments; widening it would put all of them on new
+    numerics for the sake of this one.
+
+    Args:
+        covariance: Positive-definite ``(dim, dim)`` covariance.
+    """
+
+    def __init__(self, covariance: np.ndarray) -> None:
+        matrix = np.asarray(covariance, dtype=float)
+        self.dim = int(matrix.shape[0])
+        self._params = BackendParameters(
+            cholesky_t=np.linalg.cholesky(matrix).T,
+            precision=np.linalg.inv(matrix),
+        )
+        self._log_normalizer = float(
+            -0.5 * (self.dim * math.log(2.0 * math.pi) + np.linalg.slogdet(matrix)[1])
+        )
+
+    def sample(self, means: Any, n_samples: int) -> Any:
+        """Draw ``n_samples`` per row.
+
+        Args:
+            means: ``(N, dim)`` means, one per row.
+            n_samples: Draws per row.
+
+        Returns:
+            ``(N, n_samples, dim)`` samples.
+        """
+        params = self._params.matching(means)
+        noise = standard_normal((int(means.shape[0]), n_samples, self.dim), means)
+        return means[:, None, :] + noise @ params["cholesky_t"]
+
+    def log_pdf(self, means: Any, values: Any) -> Any:
+        """Row-wise log-density, broadcasting a single mean across many values.
+
+        Args:
+            means: ``(N, dim)`` or ``(1, dim)`` means.
+            values: ``(N, dim)`` points.
+
+        Returns:
+            ``(N,)`` log-densities.
+        """
+        params = self._params.matching(means)
+        residual = values - means
+        mahalanobis = ((residual @ params["precision"]) * residual).sum(-1)
+        return self._log_normalizer - 0.5 * mahalanobis
+
+
 class GaussianRandomWalkTransition(TransitionModel):
     """Action-ignoring Gaussian random walk: ``next_state = state + N(0, Sigma)``.
 
@@ -138,20 +226,33 @@ class GaussianRandomWalkTransition(TransitionModel):
             process_noise_std: Scalar or per-channel std of the process noise.
         """
         self.dim = int(dim)
-        self._normal = CovarianceParameterizedMultivariateNormal(
-            _diagonal_covariance(self.dim, process_noise_std)
-        )
+        covariance = _diagonal_covariance(self.dim, process_noise_std)
+        self._normal = CovarianceParameterizedMultivariateNormal(covariance)
+        self._batched = _BatchedGaussian(covariance)
 
-    def sample_next_state(self, state: Any, action: Any, n_samples: int = 1) -> np.ndarray:
+    def sample_next_state(self, state: Any, action: Any, n_samples: int = 1) -> Any:
+        """Sample successors, accepting either one state or a batch of them.
+
+        Shapes and backend conventions are shared with
+        :meth:`LinearGaussianTransition.sample_next_state`.
+        """
         del action  # random walk ignores the action
-        mean = np.asarray(state, dtype=float).reshape(-1)
-        samples = self._normal.sample(mean, n_samples=n_samples)
-        return samples[0] if n_samples == 1 else samples
+        if _is_legacy_call(state):
+            mean = np.asarray(state, dtype=float).reshape(-1)
+            samples = self._normal.sample(mean, n_samples=n_samples)
+            return samples[0] if n_samples == 1 else samples
+        rows, batched = as_rows(state, self.dim)
+        return _shape_samples(self._batched.sample(rows, n_samples), batched, n_samples)
 
-    def log_probability(self, state: Any, action: Any, next_states: Any) -> np.ndarray:
+    def log_probability(self, state: Any, action: Any, next_states: Any) -> Any:
+        """Log-density of the successors, accepting either one state or a batch."""
         del action
-        mean = np.asarray(state, dtype=float).reshape(-1)
-        return self._normal.log_pdf(np.asarray(next_states, dtype=float), mean)
+        if _is_legacy_call(state):
+            mean = np.asarray(state, dtype=float).reshape(-1)
+            return self._normal.log_pdf(np.asarray(next_states, dtype=float), mean)
+        rows, _ = as_rows(state, self.dim)
+        candidates, _ = as_rows(as_backend(next_states, rows), self.dim)
+        return self._batched.log_pdf(rows, candidates)
 
 
 class LinearGaussianTransition(TransitionModel):
@@ -198,20 +299,78 @@ class LinearGaussianTransition(TransitionModel):
         self._normal = CovarianceParameterizedMultivariateNormal(
             np.asarray(covariance, dtype=float)
         )
+        self._batched = _BatchedGaussian(np.asarray(covariance, dtype=float))
+        self._params = BackendParameters(
+            weight_state=self._weight_state,
+            weight_action=self._weight_action,
+            bias=self._bias,
+        )
 
     def _mean(self, state: Any, action: Any) -> np.ndarray:
         state_vector = np.asarray(state, dtype=float).reshape(-1)
         action_vector = np.asarray(action, dtype=float).reshape(-1)
         return self._weight_state @ state_vector + self._weight_action @ action_vector + self._bias
 
-    def sample_next_state(self, state: Any, action: Any, n_samples: int = 1) -> np.ndarray:
-        mean = self._mean(state, action)
-        samples = self._normal.sample(mean, n_samples=n_samples)
-        return samples[0] if n_samples == 1 else samples
+    def _mean_rows(self, state: Any, action: Any) -> Any:
+        """Per-row transition means, in the backend of ``state``."""
+        states, batched = as_rows(state, self.dim)
+        actions, _ = as_rows(as_backend(action, states), self.action_dim)
+        params = self._params.matching(states)
+        mean = (
+            states @ params["weight_state"].T
+            + actions @ params["weight_action"].T
+            + params["bias"]
+        )
+        return mean, batched
 
-    def log_probability(self, state: Any, action: Any, next_states: Any) -> np.ndarray:
-        mean = self._mean(state, action)
-        return self._normal.log_pdf(np.asarray(next_states, dtype=float), mean)
+    def sample_next_state(self, state: Any, action: Any, n_samples: int = 1) -> Any:
+        """Sample successors, accepting either one state or a batch of them.
+
+        Args:
+            state: A ``(dim,)`` state, or a ``(N, dim)`` batch -- one row per
+                particle, each with its own action.
+            action: A ``(action_dim,)`` action, or a ``(N, action_dim)`` batch.
+                A single action broadcasts across a batch of states.
+            n_samples: Draws per state.
+
+        Returns:
+            For a single state: ``(dim,)`` when ``n_samples == 1``, else
+            ``(n_samples, dim)`` -- unchanged from before batching existed. For a
+            batch: ``(N, dim)`` when ``n_samples == 1``, else
+            ``(N, n_samples, dim)``.
+
+            The result follows the *state's* backend: a numpy state gives a numpy
+            array, a tensor gives a tensor on that tensor's device. That is what
+            lets a vectorized planner take a step with no host round trip.
+        """
+        if _is_legacy_call(state):
+            mean = self._mean(state, action)
+            samples = self._normal.sample(mean, n_samples=n_samples)
+            return samples[0] if n_samples == 1 else samples
+        means, batched = self._mean_rows(state, action)
+        return _shape_samples(self._batched.sample(means, n_samples), batched, n_samples)
+
+    def log_probability(self, state: Any, action: Any, next_states: Any) -> Any:
+        """Log-density of the successors, accepting either one state or a batch.
+
+        Args:
+            state: A ``(dim,)`` state, or a ``(N, dim)`` batch.
+            action: The action, or one per row.
+            next_states: For a single state, a ``(dim,)`` candidate or an
+                ``(n, dim)`` batch scored against that one state. For a batch of
+                states, an ``(N, dim)`` array paired **row-wise** -- candidate
+                ``i`` is scored under state ``i``, which is what a particle filter
+                needs and what the single-state form cannot express.
+
+        Returns:
+            ``(n,)`` or ``(N,)`` log-densities, in the state's backend.
+        """
+        if _is_legacy_call(state):
+            mean = self._mean(state, action)
+            return self._normal.log_pdf(np.asarray(next_states, dtype=float), mean)
+        means, _ = self._mean_rows(state, action)
+        candidates, _ = as_rows(as_backend(next_states, means), self.dim)
+        return self._batched.log_pdf(means, candidates)
 
     @classmethod
     def fit(
@@ -446,15 +605,47 @@ class LinearRewardModel(RewardModel):
         self._weight_action = np.asarray(weight_action, dtype=float).reshape(-1)
         self._weight_next_state = np.asarray(weight_next_state, dtype=float).reshape(-1)
         self._bias = float(bias)
+        self._params = BackendParameters(
+            weight_state=self._weight_state,
+            weight_action=self._weight_action,
+            weight_next_state=self._weight_next_state,
+        )
 
-    def reward(self, state: Any, action: Any, next_state: Any) -> float:
-        state_vector = np.asarray(state, dtype=float).reshape(-1)
-        action_vector = np.asarray(action, dtype=float).reshape(-1)
-        next_vector = np.asarray(next_state, dtype=float).reshape(-1)
-        return float(
-            self._weight_state @ state_vector
-            + self._weight_action @ action_vector
-            + self._weight_next_state @ next_vector
+    def reward(self, state: Any, action: Any, next_state: Any) -> Any:
+        """Score a transition, or a whole batch of them.
+
+        Args:
+            state: A ``(dim,)`` state, or a ``(N, dim)`` batch.
+            action: The action, or one per row.
+            next_state: The successor, or one per row.
+
+        Returns:
+            A Python ``float`` for a single transition -- unchanged from before
+            batching existed -- or an ``(N,)`` array in the state's backend for a
+            batch.
+
+            Batching the reward matters as much as batching the transition: a
+            vectorized rollout that steps on device and then drops to the host to
+            score the reward pays the sync it was built to avoid, once per step.
+        """
+        if _is_legacy_call(state):
+            state_vector = np.asarray(state, dtype=float).reshape(-1)
+            action_vector = np.asarray(action, dtype=float).reshape(-1)
+            next_vector = np.asarray(next_state, dtype=float).reshape(-1)
+            return float(
+                self._weight_state @ state_vector
+                + self._weight_action @ action_vector
+                + self._weight_next_state @ next_vector
+                + self._bias
+            )
+        states, _ = as_rows(state, self._weight_state.shape[0])
+        actions, _ = as_rows(as_backend(action, states), self._weight_action.shape[0])
+        next_states, _ = as_rows(as_backend(next_state, states), self._weight_next_state.shape[0])
+        params = self._params.matching(states)
+        return (
+            states @ params["weight_state"]
+            + actions @ params["weight_action"]
+            + next_states @ params["weight_next_state"]
             + self._bias
         )
 
