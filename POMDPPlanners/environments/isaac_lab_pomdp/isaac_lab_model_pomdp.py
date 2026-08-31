@@ -45,18 +45,23 @@ injected, via :class:`RewardModel`. :class:`LinearRewardModel` is fit from the s
 warm-up rollouts as the transition; without it the model's reward is a flat zero
 and the planner has no objective, so the task is never solved.
 
+The :class:`~POMDPPlanners.core.environment.transition_model.TransitionModel` and
+:class:`~POMDPPlanners.core.environment.transition_model.RewardModel` interfaces
+themselves live in core, because fitting one from rollouts is generic work that
+must not depend on an environment package. They are re-exported here so every
+existing import path keeps resolving.
+
 Classes:
-    TransitionModel: Interface for a state-transition model (sample + log-density).
+    TransitionModel: Interface for a state-transition model (re-exported from core).
     GaussianRandomWalkTransition: Action-ignoring Gaussian random-walk transition.
     LinearGaussianTransition: Fit-from-data linear-Gaussian action-conditioned transition.
     IsaacLabSimulatorTransition: Steps the IsaacLab simulator as the true transition.
-    RewardModel: Interface for a reward model over the state/observation space.
+    RewardModel: Interface for a reward model over a transition (re-exported from core).
     LinearRewardModel: Fit-from-data linear reward model POMCPOW optimizes.
     GaussianObservationModel: Additive-Normal observation model (obs = state + noise).
     IsaacLabModelPOMDP: Discrete-action generative model POMCPOW searches inside.
 """
 
-from abc import ABC, abstractmethod
 from collections.abc import Hashable
 from typing import Any, Callable, Dict, List, Optional, Union
 
@@ -65,8 +70,10 @@ import numpy as np
 from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
+    RewardModel,
     SpaceInfo,
     SpaceType,
+    TransitionModel,
 )
 
 # Reuse the world module's launch seam so both share the single per-process
@@ -107,45 +114,6 @@ def _diagonal_covariance(dim: int, std: NoiseStd) -> np.ndarray:
     if np.any(std_vector <= 0.0):
         raise ValueError("noise standard deviations must be strictly positive")
     return np.diag(std_vector**2)
-
-
-class TransitionModel(ABC):
-    """Interface for a state-transition model over the shared state/observation space.
-
-    A concrete transition supplies a generative next-state sampler and the matching
-    log-density, both conditioned on ``(state, action)``. Implementations here are
-    analytic Gaussians; a learned world model can implement the same two methods.
-
-    Note:
-        This is an abstract base class and cannot be instantiated directly.
-    """
-
-    @abstractmethod
-    def sample_next_state(self, state: Any, action: Any, n_samples: int = 1) -> np.ndarray:
-        """Sample ``n_samples`` next states for ``(state, action)``.
-
-        Args:
-            state: The current state, a length-``dim`` vector.
-            action: The action applied at ``state``.
-            n_samples: Number of next states to draw.
-
-        Returns:
-            A single ``(dim,)`` next state when ``n_samples == 1``, else a
-            ``(n_samples, dim)`` array.
-        """
-
-    @abstractmethod
-    def log_probability(self, state: Any, action: Any, next_states: Any) -> np.ndarray:
-        """Log-density of each of ``next_states`` under the transition for ``(state, action)``.
-
-        Args:
-            state: The current state, a length-``dim`` vector.
-            action: The action applied at ``state``.
-            next_states: A single ``(dim,)`` next state or a ``(n, dim)`` batch.
-
-        Returns:
-            A ``(n,)`` array of log-densities.
-        """
 
 
 class GaussianRandomWalkTransition(TransitionModel):
@@ -442,22 +410,6 @@ class IsaacLabSimulatorTransition(TransitionModel):
     def log_probability(self, state: Any, action: Any, next_states: Any) -> np.ndarray:
         mean = self._sim_step_mean(state, action)
         return self._normal.log_pdf(np.asarray(next_states, dtype=float), mean)
-
-
-class RewardModel(ABC):
-    """Interface for a reward model over the shared state/observation space.
-
-    A concrete reward model scores a ``(state, action, next_state)`` transition.
-    The planner-side model needs one because the forward-only world cannot be
-    queried for the reward of a hypothetical in-tree transition.
-
-    Note:
-        This is an abstract base class and cannot be instantiated directly.
-    """
-
-    @abstractmethod
-    def reward(self, state: Any, action: Any, next_state: Any) -> float:
-        """Return the scalar reward for a ``(state, action, next_state)`` transition."""
 
 
 class LinearRewardModel(RewardModel):
