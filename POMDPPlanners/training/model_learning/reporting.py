@@ -101,10 +101,22 @@ def _rows(rounds: Sequence[Any]) -> List[Dict[str, Any]]:
                 "best_holdout_epoch": (
                     int(np.argmin(holdout)) + 1 if holdout else None
                 ),
-                "model": _field(entry, "model_artifact") or "",
+                # The tracker's records name the saved file; a live round result
+                # has the model itself, and its fingerprint is what ties the row
+                # to a set of parameters either way.
+                "model": _field(entry, "model_artifact") or _short_fingerprint(entry),
             }
         )
     return rows
+
+
+def _short_fingerprint(entry: Any) -> str:
+    """First characters of the round model's fingerprint, or an empty string."""
+    fingerprint = _field(entry, "model_fingerprint")
+    if fingerprint is None:
+        model = _field(entry, "model")
+        fingerprint = getattr(model, "fingerprint", None)
+    return str(fingerprint)[:10] if fingerprint else ""
 
 
 def _number(value: Any, digits: int = 3) -> str:
