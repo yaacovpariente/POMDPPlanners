@@ -428,6 +428,146 @@ class TestTrackingSurvivesTheSimulator:
         assert [entry["round_index"] for entry in record] == [1, 2]
 
 
+class TestTrainingCurves:
+    """The ensemble is a network, so the fit needs its own curves."""
+
+    def test_the_fit_records_a_train_and_a_holdout_curve_per_epoch(self) -> None:
+        """Purpose: Validates that the ensemble reports what its training did
+
+        Given: An ensemble fitted for a known number of epochs on a dataset with
+            a holdout split
+        When: The training metrics are read
+        Then: Both the training and the held-out loss have one value per epoch,
+            so overfitting is visible rather than inferred
+        """
+        learner = ProbabilisticEnsembleLearner(num_members=2, epochs=4, seed=0)
+        learner.fit(_dataset())
+
+        metrics = learner.training_metrics()
+
+        assert len(metrics["train_nll"]) == 4
+        assert len(metrics["holdout_nll"]) == 4
+
+    def test_every_member_keeps_its_own_curve(self) -> None:
+        """Purpose: Validates that a diverged member is not hidden by the mean
+
+        Given: A three-member ensemble
+        When: The training metrics are read
+        Then: There is one curve per member beside the mean, because the
+            ensemble's spread is its uncertainty estimate and one failed member
+            corrupts it invisibly
+        """
+        learner = ProbabilisticEnsembleLearner(num_members=3, epochs=2, seed=0)
+        learner.fit(_dataset())
+
+        metrics = learner.training_metrics()
+
+        members = [key for key in metrics if key.startswith("train_nll_member_")]
+        assert len(members) == 3
+
+    def test_a_dataset_with_no_holdout_still_fits(self) -> None:
+        """Purpose: Validates that the holdout curve is optional, not required
+
+        Given: A dataset that holds nothing back
+        When: An ensemble is fitted
+        Then: The fit succeeds and reports a training curve with no holdout one
+        """
+        dataset = TransitionDataset(holdout_fraction=0.0, seed=0)
+        states, actions, next_states = _rollouts(200)
+        dataset.add_episode(states, actions, next_states, source="exploration")
+
+        learner = ProbabilisticEnsembleLearner(num_members=2, epochs=2, seed=0)
+        learner.fit(dataset)
+
+        assert "holdout_nll" not in learner.training_metrics()
+
+
+class TestTrainingPlots:
+    """The plots must be drawable from a finished run, not only from live objects."""
+
+    def test_the_plots_are_written_from_the_tracker_records(self, tmp_path) -> None:
+        """Purpose: Validates that a run's JSON record is enough to redraw the fit
+
+        Given: Per-round records in the shape the tracker writes to rounds.json
+        When: The report is drawn
+        Then: The training, per-member and diagnostic plots are all written, so
+            a study can be re-read without re-fitting anything
+        """
+        from POMDPPlanners.utils.visualization.model_learning_plots import (
+            plot_model_learning_report,
+        )
+
+        rounds = [
+            {
+                "round_index": index,
+                "diagnostics": {"held_out_log_likelihood": 1.0 * index, "horizon_drift_ratio": 1.4},
+                "training_metrics": {
+                    "train_nll": [3.0, 2.0, 1.5],
+                    "holdout_nll": [3.1, 2.4, 2.6],
+                    "train_nll_member_0": [3.0, 2.1, 1.6],
+                    "train_nll_member_1": [3.0, 1.9, 1.4],
+                },
+            }
+            for index in (1, 2)
+        ]
+
+        written = plot_model_learning_report(rounds, tmp_path / "plots")
+
+        assert set(written) == {"training_curves", "member_training_curves", "round_diagnostics"}
+        assert all(path.exists() for path in written.values())
+
+    def test_a_run_without_training_curves_draws_nothing(self, tmp_path) -> None:
+        """Purpose: Validates that an unrecorded fit is reported, not faked
+
+        Given: Rounds with no training metrics
+        When: The training plot is drawn
+        Then: Nothing is written and None comes back, rather than an empty axis
+        """
+        from POMDPPlanners.utils.visualization.model_learning_plots import plot_training_curves
+
+        assert plot_training_curves([{"round_index": 1}], tmp_path / "none.png") is None
+
+    def test_a_tracked_run_logs_its_plots(self, tmp_path) -> None:
+        """Purpose: Validates that the plots reach MLflow with the numbers
+
+        Given: A tracker with two logged rounds from a real ensemble fit
+        When: The run is finished
+        Then: The plots directory holds the training and diagnostic figures
+        """
+        pytest.importorskip("mlflow")
+        from POMDPPlanners.training.model_learning import MLflowModelLearningTracker
+
+        tracker = MLflowModelLearningTracker(
+            experiment_name="model_learning_test",
+            method="dagger",
+            seed=3,
+            tracking_uri=f"file://{tmp_path / 'mlruns'}",
+        )
+        learner = ProbabilisticEnsembleLearner(num_members=2, epochs=3, seed=0)
+        for index in (1, 2):
+            model = learner.fit(_dataset(seed=index))
+            tracker.log_round(
+                RoundResult(
+                    round_index=index,
+                    model=model,
+                    dataset_size=60 * index,
+                    source_counts={"exploration": 60 * index},
+                    training_metrics=learner.training_metrics(),
+                    diagnostics={"held_out_log_likelihood": 1.0, "horizon_drift_ratio": 1.2},
+                    control=None,
+                )
+            )
+        run = tracker._run  # pylint: disable=protected-access
+        tracker.finish()
+
+        plots = _artifact_dir(run) / "plots"
+        assert {path.name for path in plots.glob("*.png")} == {
+            "training_curves.png",
+            "member_training_curves.png",
+            "round_diagnostics.png",
+        }
+
+
 class TestCurveSummaries:
     """The one table to read first."""
 

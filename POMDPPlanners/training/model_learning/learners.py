@@ -24,7 +24,7 @@ Classes:
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 import torch
@@ -226,26 +226,41 @@ class ProbabilisticEnsembleLearner(TransitionModelLearner):
             seed=self._seed,
             device=self._device,
         )
+        holdout = dataset.holdout_batch()
+        holdout_inputs, holdout_targets = _normalized(
+            holdout, state_mean, state_scale, action_mean, action_scale, delta_mean, delta_scale
+        )
+
         rng = np.random.default_rng(self._seed)
-        per_epoch: List[List[float]] = []
+        train_curves: List[List[float]] = []
+        holdout_curves: List[List[float]] = []
         for index, member in enumerate(members):
             resample = rng.integers(len(batch), size=len(batch))
-            per_epoch.append(
-                _train_member(
-                    member,
-                    inputs[resample],
-                    targets[resample],
-                    epochs=self._epochs,
-                    batch_size=self._batch_size,
-                    learning_rate=self._learning_rate,
-                    weight_decay=self._weight_decay,
-                    seed=self._seed + index,
-                    device=self._device,
-                )
+            train_curve, holdout_curve = _train_member(
+                member,
+                inputs[resample],
+                targets[resample],
+                epochs=self._epochs,
+                batch_size=self._batch_size,
+                learning_rate=self._learning_rate,
+                weight_decay=self._weight_decay,
+                seed=self._seed + index,
+                device=self._device,
+                holdout_inputs=holdout_inputs,
+                holdout_targets=holdout_targets,
             )
-        # One curve for the ensemble: the members train independently, so the
-        # mean over members is the only per-epoch number that describes the fit.
-        self._metrics = {"train_nll": list(np.mean(np.asarray(per_epoch), axis=0))}
+            train_curves.append(train_curve)
+            holdout_curves.append(holdout_curve)
+        # The mean over members describes the ensemble; the per-member curves are
+        # kept beside it because a single member that diverged is invisible in the
+        # mean and is exactly what makes an ensemble's spread meaningless. The
+        # holdout curve is what says whether more epochs are still buying
+        # anything -- a training curve alone cannot tell fitting from memorizing.
+        self._metrics = {"train_nll": list(np.mean(np.asarray(train_curves), axis=0))}
+        if holdout_inputs is not None:
+            self._metrics["holdout_nll"] = list(np.mean(np.asarray(holdout_curves), axis=0))
+        for index, curve in enumerate(train_curves):
+            self._metrics[f"train_nll_member_{index}"] = list(curve)
         return ProbabilisticEnsembleTransition(
             members=members,
             state_mean=state_mean,
@@ -258,8 +273,53 @@ class ProbabilisticEnsembleLearner(TransitionModelLearner):
         )
 
     def training_metrics(self) -> Dict[str, List[float]]:
-        """Per-epoch mean training negative log-likelihood across members."""
+        """Per-epoch curves of the most recent fit.
+
+        Returns:
+            ``train_nll`` and, when the dataset held rows back, ``holdout_nll``
+            -- both means across members -- plus one ``train_nll_member_i`` per
+            member.
+        """
         return dict(self._metrics)
+
+
+def _normalized(
+    batch: Any,
+    state_mean: np.ndarray,
+    state_scale: np.ndarray,
+    action_mean: np.ndarray,
+    action_scale: np.ndarray,
+    delta_mean: np.ndarray,
+    delta_scale: np.ndarray,
+) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
+    """Normalized inputs and targets of a batch, using the training split's statistics.
+
+    The statistics are the *training* split's on purpose: normalizing the holdout
+    by its own would make its loss incomparable to the training loss it is
+    plotted against.
+
+    Returns:
+        ``(inputs, targets)``, or ``(None, None)`` for an empty batch.
+    """
+    if len(batch) == 0:
+        return None, None
+    inputs = np.concatenate(
+        [
+            (batch.states - state_mean) / state_scale,
+            (batch.actions - action_mean) / action_scale,
+        ],
+        axis=1,
+    )
+    return inputs, (batch.deltas - delta_mean) / delta_scale
+
+
+def _gaussian_nll(member: Any, inputs: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+    """Gaussian negative log-likelihood, up to the constant term."""
+    mean, log_variance = member(inputs)
+    residual = targets - mean
+    # The constant term shifts every model equally and only makes the reported
+    # number harder to compare against a hand-computed one.
+    return torch.mean(torch.sum(residual**2 * torch.exp(-log_variance) + log_variance, dim=-1))
 
 
 def _train_member(
@@ -272,8 +332,15 @@ def _train_member(
     weight_decay: float,
     seed: int,
     device: Optional[torch.device],
-) -> List[float]:
-    """Train one member by Gaussian negative log-likelihood; return its epoch losses."""
+    holdout_inputs: Optional[np.ndarray] = None,
+    holdout_targets: Optional[np.ndarray] = None,
+) -> Tuple[List[float], List[float]]:
+    """Train one member by Gaussian negative log-likelihood.
+
+    Returns:
+        ``(train_losses, holdout_losses)``, one entry per epoch. The second is
+        empty when no holdout rows were given.
+    """
     optimizer = torch.optim.Adam(
         member.parameters(), lr=learning_rate, weight_decay=weight_decay
     )
@@ -283,11 +350,21 @@ def _train_member(
         input_tensor = input_tensor.to(device)
         target_tensor = target_tensor.to(device)
 
+    holdout_input_tensor = None
+    holdout_target_tensor = None
+    if holdout_inputs is not None and holdout_targets is not None:
+        holdout_input_tensor = torch.as_tensor(holdout_inputs, dtype=torch.float32)
+        holdout_target_tensor = torch.as_tensor(holdout_targets, dtype=torch.float32)
+        if device is not None:
+            holdout_input_tensor = holdout_input_tensor.to(device)
+            holdout_target_tensor = holdout_target_tensor.to(device)
+
     rng = np.random.default_rng(seed)
     num_rows = input_tensor.shape[0]
     steps = max(num_rows // batch_size, 1)
     member.train()
     losses: List[float] = []
+    holdout_losses: List[float] = []
     for _ in range(epochs):
         order = rng.permutation(num_rows)
         epoch_loss = 0.0
@@ -296,22 +373,22 @@ def _train_member(
             if rows.size == 0:
                 continue
             index = torch.as_tensor(rows, dtype=torch.long, device=input_tensor.device)
-            mean, log_variance = member(input_tensor[index])
-            residual = target_tensor[index] - mean
-            # Gaussian NLL up to the constant term: the constant shifts every
-            # model equally and only makes the reported number harder to compare
-            # against a hand-computed one.
-            loss = torch.mean(
-                torch.sum(residual**2 * torch.exp(-log_variance) + log_variance, dim=-1)
-            )
+            loss = _gaussian_nll(member, input_tensor[index], target_tensor[index])
             loss = loss + member.bound_penalty()
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
             epoch_loss += float(loss.detach())
         losses.append(epoch_loss / steps)
+        if holdout_input_tensor is not None:
+            member.eval()
+            with torch.no_grad():
+                holdout_losses.append(
+                    float(_gaussian_nll(member, holdout_input_tensor, holdout_target_tensor))
+                )
+            member.train()
     member.eval()
-    return losses
+    return losses, holdout_losses
 
 
 def _mean_negative_log_likelihood(model: TransitionModel, batch: TransitionBatch) -> float:
