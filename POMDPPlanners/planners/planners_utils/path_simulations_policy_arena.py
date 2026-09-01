@@ -16,7 +16,7 @@ construction, action selection, and tree-metrics collection.
 import time
 from abc import abstractmethod
 from pathlib import Path
-from typing import Any, List, Optional, Tuple
+from typing import Any, cast, List, Optional, Tuple
 
 import numpy as np
 
@@ -29,7 +29,7 @@ from POMDPPlanners.core.belief import (
     WeightedParticleBeliefStateUpdate,
     is_terminal_belief,
 )
-from POMDPPlanners.core.environment import Environment, SpaceType
+from POMDPPlanners.core.environment import DiscreteActionsEnvironment, Environment, SpaceType
 from POMDPPlanners.core.policy import Policy, PolicyRunData, PolicySpaceInfo
 from POMDPPlanners.core.tree import (
     BeliefNode,
@@ -107,7 +107,7 @@ class ArenaPathSimulationPolicy(Policy):
         if self.environment.space_info.action_space == SpaceType.DISCRETE:
             # np.random.choice needs 1-D input; vector-valued discrete actions
             # (Isaac velocity presets) crash it. Draw an index instead.
-            actions = self.environment.get_actions()
+            actions = cast(DiscreteActionsEnvironment, self.environment).get_actions()
             return actions[np.random.randint(len(actions))]
         if self.environment.space_info.action_space == SpaceType.CONTINUOUS:
             if self.action_sampler is None:
