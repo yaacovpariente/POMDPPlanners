@@ -92,6 +92,9 @@ from POMDPPlanners.training.model_learning.learners import (
 )
 from POMDPPlanners.training.model_learning.reporting import (
     curve_table_markdown,
+    metrics_table_csv,
+    metrics_table_markdown,
+    run_metrics,
     round_table_csv,
     round_table_markdown,
     write_reports,
@@ -136,6 +139,9 @@ __all__ = [
     "evaluate_model",
     "load_learning_curves",
     "load_round_models",
+    "metrics_table_csv",
+    "metrics_table_markdown",
+    "run_metrics",
     "log_study_comparison",
     "round_table_csv",
     "round_table_markdown",

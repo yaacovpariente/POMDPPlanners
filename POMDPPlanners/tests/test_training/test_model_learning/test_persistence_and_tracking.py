@@ -632,13 +632,13 @@ class TestReadableReports:
         assert lines[0].startswith("round,transitions")
         assert len(lines) == 3
 
-    def test_write_reports_puts_both_files_beside_the_json(self, tmp_path) -> None:
+    def test_write_reports_puts_the_readable_files_beside_the_json(self, tmp_path) -> None:
         """Purpose: Validates the reports a run writes for a person
 
         Given: Rounds and a method's curve
         When: The reports are written
-        Then: A summary Markdown and a rounds CSV exist, and the summary names
-            the method
+        Then: The rounds table, the metrics table and their CSVs exist, and the
+            summary names the method
         """
         from POMDPPlanners.training.model_learning import write_reports
 
@@ -650,8 +650,9 @@ class TestReadableReports:
 
         written = write_reports(self._rounds(), tmp_path, curves=[curve])
 
-        assert set(written) == {"summary", "rounds_csv"}
+        assert set(written) == {"summary", "rounds_csv", "metrics", "metrics_csv"}
         assert "dagger" in written["summary"].read_text(encoding="utf-8")
+        assert "chosen round" in written["metrics"].read_text(encoding="utf-8")
 
     def test_a_tracked_run_logs_the_tables(self, tmp_path) -> None:
         """Purpose: Validates that the tables reach MLflow with the JSON
@@ -722,11 +723,14 @@ class TestArtifactLayout:
         assert {path.name for path in (artifacts / "models").glob("*")} == {
             "round_1.pt",
             "round_2.pt",
+            "chosen.pt",
         }
         assert {path.name for path in (artifacts / "evaluation").glob("*")} == {
             "rounds.json",
             "summary.md",
             "rounds.csv",
+            "metrics.md",
+            "metrics.csv",
             "learning_curve.json",
             "training_curves.png",
             "member_training_curves.png",
@@ -795,6 +799,101 @@ class TestArtifactLayout:
             )
             == []
         )
+
+
+class TestChosenModel:
+    """A directory of candidates needs the choice made in it, not beside it."""
+
+    def test_the_chosen_model_is_the_best_round_not_the_last(self, tmp_path) -> None:
+        """Purpose: Validates that the model to load is marked, and marked correctly
+
+        Given: Three rounds whose second scored best
+        When: The curve is logged
+        Then: models/chosen.pt is round 2's file and the run records which round
+            it was, so "later is better" cannot be assumed
+        """
+        pytest.importorskip("mlflow")
+        from POMDPPlanners.training.model_learning import (
+            MLflowModelLearningTracker,
+            ProbabilisticEnsembleTransition,
+        )
+
+        tracking_uri = f"file://{tmp_path / 'mlruns'}"
+        tracker = MLflowModelLearningTracker(
+            experiment_name="chosen_test",
+            method="dagger",
+            seed=0,
+            tracking_uri=tracking_uri,
+        )
+        returns = {1: (-5.0, -5.0), 2: (-1.0, -1.0), 3: (-3.0, -3.0)}
+        for index in (1, 2, 3):
+            tracker.log_round(
+                RoundResult(
+                    round_index=index,
+                    model=_ensemble(seed=index),
+                    dataset_size=100 * index,
+                    source_counts={"exploration": 100 * index},
+                    training_metrics={},
+                    diagnostics={"held_out_log_likelihood": 1.0},
+                    control=ControlPoint(index, 100 * index, returns[index]),
+                )
+            )
+        curve = LearningCurve(
+            "dagger",
+            0,
+            tuple(ControlPoint(index, 100 * index, returns[index]) for index in (1, 2, 3)),
+        )
+        artifacts = tracker.artifact_dir
+        tracker.log_curve(curve)
+
+        assert artifacts is not None
+        models = artifacts / "models"
+        assert {path.name for path in models.glob("*")} == {
+            "round_1.pt",
+            "round_2.pt",
+            "round_3.pt",
+            "chosen.pt",
+        }
+        chosen = ProbabilisticEnsembleTransition.load(models / "chosen.pt")
+        round_two = ProbabilisticEnsembleTransition.load(models / "round_2.pt")
+        assert chosen.fingerprint == round_two.fingerprint
+
+
+class TestMetricsTable:
+    """One row that says what the run came to."""
+
+    def test_the_metrics_name_the_chosen_round_and_what_the_last_would_cost(self) -> None:
+        """Purpose: Validates the summary metrics of a run that got worse at the end
+
+        Given: Three rounds whose second scored best
+        When: The metrics are computed
+        Then: The chosen round is 2 and the gain over the final round is the
+            difference reporting round 3 would have cost
+        """
+        from POMDPPlanners.training.model_learning import run_metrics
+
+        returns = {1: (-5.0,), 2: (-1.0,), 3: (-3.0,)}
+        rounds = [
+            {
+                "round_index": index,
+                "dataset_size": 100 * index,
+                "source_counts": {"exploration": 100 * index},
+                "diagnostics": {"held_out_log_likelihood": 2.0, "horizon_drift_ratio": 1.5},
+                "training_metrics": {},
+                "control": {
+                    "round_index": index,
+                    "cumulative_transitions": 100 * index,
+                    "returns": list(returns[index]),
+                },
+            }
+            for index in (1, 2, 3)
+        ]
+
+        metrics = run_metrics(rounds)
+
+        assert metrics["chosen_round"] == 2
+        assert metrics["gain_over_final_round"] == pytest.approx(2.0)
+        assert metrics["rounds_overconfident"] == 3
 
 
 class TestCurveSummaries:

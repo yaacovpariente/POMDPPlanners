@@ -32,6 +32,8 @@ run's numbers wearing the study's name, which is how the wrong method gets
 reported.
 
 Functions:
+    metrics_table_markdown: The run reduced to the numbers a decision needs.
+    metrics_table_csv: The same numbers, for a spreadsheet.
     round_table_markdown: Per-round table of cost, return and model quality.
     round_table_csv: The same rows, for a spreadsheet.
     curve_table_markdown: Best round per method and seed.
@@ -294,4 +296,113 @@ def write_reports(
     csv_path = output_dir / "rounds.csv"
     csv_path.write_text(round_table_csv(rounds), encoding="utf-8")
     written["rounds_csv"] = csv_path
+
+    curve = curves[0] if curves and len(curves) == 1 else None
+    metrics_path = output_dir / "metrics.md"
+    metrics_path.write_text(metrics_table_markdown(rounds, curve), encoding="utf-8")
+    written["metrics"] = metrics_path
+
+    metrics_csv = output_dir / "metrics.csv"
+    metrics_csv.write_text(metrics_table_csv(rounds, curve), encoding="utf-8")
+    written["metrics_csv"] = metrics_csv
     return written
+
+
+def run_metrics(rounds: Sequence[Any], curve: Optional[LearningCurve] = None) -> Dict[str, Any]:
+    """The whole run reduced to the numbers a decision is made on.
+
+    The per-round table says what happened; this says what it came to. Both are
+    kept because a single row cannot show a curve that rose and then collapsed,
+    and a table of rounds does not answer "so which model, and is it any good".
+
+    Args:
+        rounds: The run's rounds, as results or as the tracker's dictionaries.
+        curve: The run's control curve, if it was evaluated.
+
+    Returns:
+        Metric name to value.
+    """
+    rows = _rows(rounds)
+    scored = [row for row in rows if np.isfinite(row["mean_return"])]
+    best_row = max(scored, key=lambda row: row["mean_return"]) if scored else None
+    last = rows[-1] if rows else None
+    drifts = [row["horizon_drift_ratio"] for row in rows if np.isfinite(row["horizon_drift_ratio"])]
+    epochs = [row["best_holdout_epoch"] for row in rows if row["best_holdout_epoch"]]
+
+    metrics: Dict[str, Any] = {
+        "rounds": len(rows),
+        "transitions_total": last["transitions"] if last else 0,
+        "transitions_exploration": last["exploration"] if last else 0,
+        "transitions_planner": last["planner"] if last else 0,
+        "chosen_round": best_row["round"] if best_row else None,
+        "chosen_return": best_row["mean_return"] if best_row else float("nan"),
+        "chosen_return_standard_error": best_row["standard_error"] if best_row else float("nan"),
+        "final_round_return": last["mean_return"] if last else float("nan"),
+        # The gap the loop is judged on: a chosen round far above the last one
+        # means the sequence went backwards, which a final-round report hides.
+        "gain_over_final_round": (
+            best_row["mean_return"] - last["mean_return"]
+            if best_row and last and np.isfinite(last["mean_return"])
+            else float("nan")
+        ),
+        "final_held_out_log_likelihood": last["held_out_log_likelihood"] if last else float("nan"),
+        "max_horizon_drift_ratio": max(drifts) if drifts else float("nan"),
+        # Above one at any round means the model was overconfident somewhere in
+        # the sequence, which is the failure that does not announce itself.
+        "rounds_overconfident": sum(1 for value in drifts if value > DRIFT_WARNING_THRESHOLD),
+        "median_best_holdout_epoch": float(np.median(epochs)) if epochs else float("nan"),
+    }
+    if curve is not None:
+        metrics["evaluation_episodes_per_round"] = (
+            len(curve.points[0].returns) if curve.points else 0
+        )
+    return metrics
+
+
+def metrics_table_markdown(
+    rounds: Sequence[Any],
+    curve: Optional[LearningCurve] = None,
+    title: str = "Metrics",
+) -> str:
+    """The run's headline metrics as a Markdown table.
+
+    Args:
+        rounds: The run's rounds.
+        curve: The run's control curve, if it was evaluated.
+        title: Heading above the table.
+
+    Returns:
+        A Markdown document.
+    """
+    lines = [f"# {title}", "", "| Metric | Value |", "|---|---|"]
+    for name, value in run_metrics(rounds, curve).items():
+        lines.append(f"| {name.replace('_', ' ')} | {_number(value)} |")
+    lines += [
+        "",
+        "`chosen round` is the round to load -- `models/chosen`. `gain over final "
+        "round` is how much reporting the last round instead would have cost.",
+        "",
+        "`rounds overconfident` counts rounds whose horizon drift exceeded the "
+        "spread the model claimed. Any at all is a reason not to trust the model "
+        "in a risk-sensitive planner, however good the return looks.",
+        "",
+    ]
+    return "\n".join(lines)
+
+
+def metrics_table_csv(rounds: Sequence[Any], curve: Optional[LearningCurve] = None) -> str:
+    """The same metrics as one CSV row.
+
+    Args:
+        rounds: The run's rounds.
+        curve: The run's control curve, if it was evaluated.
+
+    Returns:
+        CSV text with a header row.
+    """
+    metrics = run_metrics(rounds, curve)
+    buffer = io.StringIO()
+    writer: csv.DictWriter = csv.DictWriter(buffer, fieldnames=list(metrics))
+    writer.writeheader()
+    writer.writerow(metrics)
+    return buffer.getvalue()
