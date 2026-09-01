@@ -514,13 +514,23 @@ class TestTrainingPlots:
                     "train_nll_member_0": [3.0, 2.1, 1.6],
                     "train_nll_member_1": [3.0, 1.9, 1.4],
                 },
+                "control": {
+                    "round_index": index,
+                    "cumulative_transitions": 100 * index,
+                    "returns": [-1.0, -2.0, -1.4],
+                },
             }
             for index in (1, 2)
         ]
 
         written = plot_model_learning_report(rounds, tmp_path / "plots")
 
-        assert set(written) == {"training_curves", "member_training_curves", "round_diagnostics"}
+        assert set(written) == {
+            "training_curves",
+            "member_training_curves",
+            "round_diagnostics",
+            "round_returns",
+        }
         assert all(path.exists() for path in written.values())
 
     def test_a_run_without_training_curves_draws_nothing(self, tmp_path) -> None:
@@ -561,7 +571,7 @@ class TestTrainingPlots:
                     source_counts={"exploration": 60 * index},
                     training_metrics=learner.training_metrics(),
                     diagnostics={"held_out_log_likelihood": 1.0, "horizon_drift_ratio": 1.2},
-                    control=None,
+                    control=ControlPoint(index, 100 * index, (-1.0, -2.0, -1.4)),
                 )
             )
         run = tracker._run  # pylint: disable=protected-access
@@ -572,6 +582,7 @@ class TestTrainingPlots:
             "training_curves.png",
             "member_training_curves.png",
             "round_diagnostics.png",
+            "round_returns.png",
         }
 
 
@@ -726,6 +737,7 @@ class TestArtifactLayout:
             "chosen.pt",
         }
         assert {path.name for path in (artifacts / "evaluation").glob("*")} == {
+            "round_returns.png",
             "rounds.json",
             "summary.md",
             "rounds.csv",
@@ -969,6 +981,50 @@ class TestConfidenceIntervals:
 
         assert table.count("[") >= 2
         assert "95% CI" in table
+
+
+class TestPlotIntervals:
+    """A band with no stated meaning is worse than no band."""
+
+    def test_the_round_return_plot_is_written_with_error_bars(self, tmp_path) -> None:
+        """Purpose: Validates the per-round return plot exists and needs evaluated rounds
+
+        Given: Rounds with evaluation episodes, and rounds without
+        When: The plot is drawn for each
+        Then: The evaluated rounds produce a file and the unevaluated ones
+            produce nothing, rather than an empty axis
+        """
+        from POMDPPlanners.utils.visualization.model_learning_plots import plot_round_returns
+
+        rounds = [
+            {
+                "round_index": index,
+                "control": {
+                    "round_index": index,
+                    "cumulative_transitions": 100 * index,
+                    "returns": [-1.0, -2.0, -1.5],
+                },
+            }
+            for index in (1, 2)
+        ]
+
+        assert plot_round_returns(rounds, tmp_path / "returns.png") is not None
+        assert plot_round_returns([{"round_index": 1}], tmp_path / "none.png") is None
+
+    def test_a_single_seed_band_is_labelled_as_episodes(self, tmp_path) -> None:
+        """Purpose: Validates that the learning curve's band never changes meaning silently
+
+        Given: One seed, where there is no spread across repetitions to show
+        When: The learning curve is drawn
+        Then: A file is written -- the band falls back to the episode interval,
+            which the legend labels, rather than vanishing or being passed off
+            as an across-seed spread
+        """
+        from POMDPPlanners.utils.visualization.model_learning_plots import plot_learning_curves
+
+        curves = [LearningCurve("dagger", 0, (ControlPoint(1, 100, (-1.0, -2.0, -1.5)),))]
+
+        assert plot_learning_curves(curves, tmp_path / "one_seed.png") is not None
 
 
 class TestCurveSummaries:
