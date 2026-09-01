@@ -27,7 +27,9 @@ Three things are logged that are easy to omit and hard to reconstruct later.
 **The model of every round, not the best one.** Which round was best is known
 only after the whole sequence has been scored, and the guarantee is about the
 best model of the sequence. Saving as you go costs a file per round; saving at
-the end costs a re-run.
+the end costs a re-run. The one to load is copied to ``models/chosen`` at the
+end, so nobody has to pick from a directory of candidates -- and nobody reaches
+for the last round on the assumption that later is better.
 
 **The fingerprint beside the model.** It is what ties a control number to the
 exact parameters that produced it, and it is what the environment's cache key
@@ -57,6 +59,7 @@ Functions:
 
 import json
 import os
+import shutil
 import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Protocol, Sequence
@@ -287,6 +290,7 @@ class MLflowModelLearningTracker:
             self._client.log_metric(
                 run_id, "best_round_transitions", float(best.cumulative_transitions)
             )
+            self._log_chosen_model(best.round_index)
         self.finish()
 
     def _log_model(self, model: Any, round_index: int) -> Optional[str]:
@@ -314,6 +318,41 @@ class MLflowModelLearningTracker:
                 self._run.info.run_id, str(written), MODELS_ARTIFACT_PATH
             )
             return f"{MODELS_ARTIFACT_PATH}/{written.name}"
+
+    def _log_chosen_model(self, round_index: int) -> None:
+        """Copy the best round's model to ``models/chosen`` -- the one to load.
+
+        Every round is kept because the sequence is not monotone and the best of
+        it is known only at the end. That leaves a directory of equally-named
+        candidates, and picking from it by eye is how the last round gets used
+        for being last. The choice is made once, here, by the same rule the
+        table reports.
+
+        Args:
+            round_index: The round :func:`best_point` selected.
+        """
+        source = next(
+            (
+                entry.get("model_artifact")
+                for entry in self._rounds
+                if entry["round_index"] == round_index and entry.get("model_artifact")
+            ),
+            None,
+        )
+        if source is None:
+            self._logger.warning(
+                "round %d has no saved model, so none was marked chosen", round_index
+            )
+            return
+        run_id = self._run.info.run_id
+        with tempfile.TemporaryDirectory() as staging:
+            downloaded = Path(
+                self._client.download_artifacts(run_id, source, staging)
+            )
+            chosen = Path(staging) / f"chosen{downloaded.suffix}"
+            shutil.copyfile(downloaded, chosen)
+            self._client.log_artifact(run_id, str(chosen), MODELS_ARTIFACT_PATH)
+        self._client.log_param(run_id, "chosen_round", round_index)
 
     def _log_reports(self) -> None:
         """Write the readable tables beside the JSON and log them.
