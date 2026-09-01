@@ -488,6 +488,22 @@ class TestTrainingCurves:
 
         assert "holdout_nll" not in learner.training_metrics()
 
+    def test_holdout_patience_stops_training_before_the_epoch_cap(self) -> None:
+        """A flat holdout loss stops the fit instead of wasting the epoch budget."""
+        learner = ProbabilisticEnsembleLearner(
+            num_members=2,
+            epochs=20,
+            learning_rate=0.0,
+            early_stopping_patience=2,
+            seed=0,
+        )
+        learner.fit(_dataset())
+
+        metrics = learner.training_metrics()
+
+        assert len(metrics["holdout_nll"]) == 3
+        assert all(len(metrics[f"train_nll_member_{index}"]) == 3 for index in range(2))
+
 
 class TestTrainingPlots:
     """The plots must be drawable from a finished run, not only from live objects."""
