@@ -539,7 +539,7 @@ class TestTrainingPlots:
 
         Given: A tracker with two logged rounds from a real ensemble fit
         When: The run is finished
-        Then: The plots directory holds the training and diagnostic figures
+        Then: The evaluation directory holds the training and diagnostic figures
         """
         pytest.importorskip("mlflow")
         from POMDPPlanners.training.model_learning import MLflowModelLearningTracker
@@ -567,8 +567,8 @@ class TestTrainingPlots:
         run = tracker._run  # pylint: disable=protected-access
         tracker.finish()
 
-        plots = _artifact_dir(run) / "plots"
-        assert {path.name for path in plots.glob("*.png")} == {
+        evaluation = _artifact_dir(run) / "evaluation"
+        assert {path.name for path in evaluation.glob("*.png")} == {
             "training_curves.png",
             "member_training_curves.png",
             "round_diagnostics.png",
@@ -681,100 +681,114 @@ class TestReadableReports:
         }
 
 
-class TestDirectoryLayout:
-    """One level per question: a run owns its rounds, the study owns the comparison."""
+class TestArtifactLayout:
+    """Two directories per run: the models, and what says which one to use."""
 
-    def test_a_run_directory_holds_its_rounds_models_and_plots(self, tmp_path) -> None:
-        """Purpose: Validates that one run is readable on its own
+    def test_a_run_holds_only_models_and_evaluation(self, tmp_path) -> None:
+        """Purpose: Validates that a finished run has one place for each question
 
-        Given: A run's rounds and the model files it saved
-        When: Its directory is written
-        Then: The tables, the per-round models under readable names, and the
-            plots are all there, so nobody has to open MLflow's hashed tree
+        Given: A tracker with two logged rounds and a curve
+        When: The run is finished
+        Then: Its artifacts are exactly models/ and evaluation/, with the models
+            named by round and the tables and figures together in evaluation
         """
-        from POMDPPlanners.training.model_learning import write_run_directory
+        pytest.importorskip("mlflow")
+        from POMDPPlanners.training.model_learning import MLflowModelLearningTracker
 
-        model_file = tmp_path / "staged.pt"
-        _ensemble().save(model_file)
-        rounds = [
-            RoundResult(
-                round_index=index,
-                model=_ensemble(seed=index),
-                dataset_size=100 * index,
-                source_counts={"exploration": 100 * index},
-                training_metrics={"train_nll": [3.0, 2.0], "holdout_nll": [3.1, 2.2]},
-                diagnostics={"held_out_log_likelihood": 2.0, "horizon_drift_ratio": 0.9},
-                control=ControlPoint(index, 100 * index, (-1.0, -2.0)),
+        tracker = MLflowModelLearningTracker(
+            experiment_name="model_learning_test",
+            method="dagger",
+            seed=6,
+            tracking_uri=f"file://{tmp_path / 'mlruns'}",
+        )
+        learner = ProbabilisticEnsembleLearner(num_members=2, epochs=2, seed=0)
+        for index in (1, 2):
+            tracker.log_round(
+                RoundResult(
+                    round_index=index,
+                    model=learner.fit(_dataset(seed=index)),
+                    dataset_size=100 * index,
+                    source_counts={"exploration": 100 * index},
+                    training_metrics=learner.training_metrics(),
+                    diagnostics={"held_out_log_likelihood": 2.0, "horizon_drift_ratio": 0.9},
+                    control=ControlPoint(index, 100 * index, (-1.0, -2.0)),
+                )
             )
-            for index in (1, 2)
-        ]
+        tracker.log_curve(LearningCurve("dagger", 6, (ControlPoint(1, 100, (-1.0,)),)))
 
-        run_dir = tmp_path / "runs" / "dagger_seed0"
-        write_run_directory(rounds, run_dir, models={1: model_file, 2: model_file})
-
-        assert (run_dir / "summary.md").exists()
-        assert (run_dir / "rounds.csv").exists()
-        assert (run_dir / "rounds.json").exists()
-        assert {path.name for path in (run_dir / "models").glob("*")} == {
+        artifacts = tracker.artifact_dir
+        assert artifacts is not None
+        assert {path.name for path in artifacts.iterdir()} == {"models", "evaluation"}
+        assert {path.name for path in (artifacts / "models").glob("*")} == {
             "round_1.pt",
             "round_2.pt",
         }
-        assert (run_dir / "plots" / "training_curves.png").exists()
+        assert {path.name for path in (artifacts / "evaluation").glob("*")} == {
+            "rounds.json",
+            "summary.md",
+            "rounds.csv",
+            "learning_curve.json",
+            "training_curves.png",
+            "member_training_curves.png",
+            "round_diagnostics.png",
+        }
 
-    def test_the_study_level_holds_only_what_compares_runs(self, tmp_path) -> None:
-        """Purpose: Validates that a single run's rounds are not published as the study's
+    def test_the_comparison_is_its_own_run(self, tmp_path) -> None:
+        """Purpose: Validates that the across-run question is recorded beside the runs
 
         Given: Curves for two methods
-        When: The study directory is written
-        Then: It holds the method comparison, the curve and a README naming the
-            run directories -- and no rounds table, which belongs to one run
+        When: The study comparison is logged
+        Then: A run holds the method table and the learning curve in the same
+            evaluation/ directory the per-method runs use, and no rounds table,
+            which belongs to one run
         """
-        from POMDPPlanners.training.model_learning import write_study_directory
+        mlflow = pytest.importorskip("mlflow")
+        from POMDPPlanners.training.model_learning import log_study_comparison
 
+        tracking_uri = f"file://{tmp_path / 'mlruns'}"
         curves = [
             LearningCurve(method, 0, (ControlPoint(1, 100, (-1.0, -2.0)),))
             for method in ("dagger", "batch")
         ]
 
-        write_study_directory(
+        run_id = log_study_comparison(
+            "model_learning_test",
             curves,
-            tmp_path,
             params={"environment": "FrankaReachFragile"},
-            run_dirs={"dagger seed 0": Path("runs/dagger_seed0")},
+            tracking_uri=tracking_uri,
         )
 
-        summary = (tmp_path / "summary.md").read_text(encoding="utf-8")
+        assert run_id is not None
+        run = mlflow.tracking.MlflowClient(tracking_uri=tracking_uri).get_run(run_id)
+        evaluation = _artifact_dir(run) / "evaluation"
+        assert {path.name for path in evaluation.glob("*")} == {
+            "summary.md",
+            "learning_curves.json",
+            "learning_curves.png",
+        }
+        summary = (evaluation / "summary.md").read_text(encoding="utf-8")
         assert "| Method | Seed |" in summary
         assert "Best holdout epoch" not in summary
-        readme = (tmp_path / "README.md").read_text(encoding="utf-8")
-        assert "runs/dagger_seed0" in readme
-        assert "FrankaReachFragile" in readme
+        assert run.data.params["environment"] == "FrankaReachFragile"
 
-    def test_the_tracker_points_at_the_models_it_saved(self, tmp_path) -> None:
-        """Purpose: Validates that a study can find the saved models to copy
+    def test_no_curves_means_no_study_run(self, tmp_path) -> None:
+        """Purpose: Validates that an unevaluated study reports nothing rather than an empty run
 
-        Given: A tracker with one logged round on a local store
-        When: Its artifact directory is read
-        Then: The round's model file is there under the round's index
+        Given: Curves with no evaluated rounds
+        When: The comparison is logged
+        Then: None comes back
         """
         pytest.importorskip("mlflow")
-        from POMDPPlanners.training.model_learning import (
-            MLflowModelLearningTracker,
-            load_round_models,
-        )
+        from POMDPPlanners.training.model_learning import log_study_comparison
 
-        tracker = MLflowModelLearningTracker(
-            experiment_name="model_learning_test",
-            method="dagger",
-            seed=5,
-            tracking_uri=f"file://{tmp_path / 'mlruns'}",
+        assert (
+            log_study_comparison(
+                "model_learning_test",
+                [LearningCurve("dagger", 0, ())],
+                tracking_uri=f"file://{tmp_path / 'mlruns'}",
+            )
+            is None
         )
-        tracker.log_round(_round(1))
-        artifacts = tracker.artifact_dir
-        tracker.finish()
-
-        assert artifacts is not None
-        assert set(load_round_models(artifacts)) == {1}
 
 
 class TestCurveSummaries:
