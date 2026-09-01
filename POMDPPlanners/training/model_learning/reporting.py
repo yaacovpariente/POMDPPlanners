@@ -22,27 +22,28 @@ planning horizon is outside the spread it claims, which is the failure that make
 a risk-sensitive planner confidently wrong. A table without the flag leaves the
 reader to remember the threshold.
 
-One directory shape, two levels, and nothing at the wrong one. A run --
-one method at one seed -- owns its rounds, its models and its training curves.
-The study owns only what compares runs: the method table and the learning curve.
-A rounds table sitting at study level is a single run's numbers wearing the
-study's name, which is how the wrong method gets reported.
+These are text, not files. Where they land is the tracker's business, and it
+puts them in one place -- the run's own artifacts -- rather than mirroring them
+into a second tree that then has to be kept in step.
+
+A rounds table belongs to one run, and the method table to the study, so the two
+are separate functions: a rounds table published at study level is a single
+run's numbers wearing the study's name, which is how the wrong method gets
+reported.
 
 Functions:
+    metrics_table_markdown: The run reduced to the numbers a decision needs.
+    metrics_table_csv: The same numbers, for a spreadsheet.
     round_table_markdown: Per-round table of cost, return and model quality.
     round_table_csv: The same rows, for a spreadsheet.
     curve_table_markdown: Best round per method and seed.
     write_reports: Write both tables into a directory.
-    write_run_directory: One run's rounds, models and plots, under its own name.
-    write_study_directory: The comparison across runs, plus a README pointing at them.
 """
 
 import csv
 import io
-import json
-import shutil
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 
@@ -51,9 +52,15 @@ from POMDPPlanners.training.model_learning.control_evaluation import (
     aggregate_curves,
     best_point,
 )
+from POMDPPlanners.utils.statistics_utils import confidence_interval
 
 #: Drift above this means the model's horizon error exceeds its claimed spread.
 DRIFT_WARNING_THRESHOLD = 1.0
+
+#: Confidence level for every interval reported here -- the repo's t-interval,
+#: the same one the simulation statistics and the paper's tables use, so a
+#: model-learning number and a planner number can sit in one table.
+CONFIDENCE_LEVEL = 0.95
 
 _COLUMNS = (
     "round",
@@ -62,6 +69,8 @@ _COLUMNS = (
     "planner",
     "mean_return",
     "standard_error",
+    "return_ci_low",
+    "return_ci_high",
     "held_out_log_likelihood",
     "horizon_drift_ratio",
     "best_holdout_epoch",
@@ -100,6 +109,8 @@ def _rows(rounds: Sequence[Any]) -> List[Dict[str, Any]]:
                     if len(returns) > 1
                     else float("nan")
                 ),
+                "return_ci_low": _interval(returns)[0],
+                "return_ci_high": _interval(returns)[1],
                 "held_out_log_likelihood": float(
                     diagnostics.get("held_out_log_likelihood", float("nan"))
                 ),
@@ -127,6 +138,25 @@ def _short_fingerprint(entry: Any) -> str:
         model = _field(entry, "model")
         fingerprint = getattr(model, "fingerprint", None)
     return str(fingerprint)[:10] if fingerprint else ""
+
+
+def _interval(values: Sequence[float]) -> Tuple[float, float]:
+    """The repo's t-interval for a mean, or ``(nan, nan)`` when it is undefined.
+
+    Below two episodes there is no interval, and reporting the point estimate as
+    though it were one is the way a single lucky episode becomes a result.
+    """
+    if len(values) < 2:
+        return float("nan"), float("nan")
+    low, high = confidence_interval(list(values), confidence=CONFIDENCE_LEVEL)
+    return float(low), float(high)
+
+
+def _range(low: float, high: float, digits: int = 3) -> str:
+    """Render an interval, or an em dash when there was not enough data for one."""
+    if not (np.isfinite(low) and np.isfinite(high)):
+        return "--"
+    return f"[{low:.{digits}f}, {high:.{digits}f}]"
 
 
 def _number(value: Any, digits: int = 3) -> str:
@@ -161,8 +191,9 @@ def round_table_markdown(rounds: Sequence[Any], title: str = "Rounds") -> str:
     lines = [
         f"# {title}",
         "",
-        "| Round | Transitions | Explore / Planner | Mean return | Held-out LL | Drift ratio | Best holdout epoch | Model |",
-        "|---|---|---|---|---|---|---|---|",
+        f"| Round | Transitions | Explore / Planner | Mean return | {int(CONFIDENCE_LEVEL * 100)}% CI | "
+        "Held-out LL | Drift ratio | Best holdout epoch | Model |",
+        "|---|---|---|---|---|---|---|---|---|",
     ]
     for row in rows:
         mark = " **(best)**" if row["round"] == best_round else ""
@@ -176,10 +207,15 @@ def round_table_markdown(rounds: Sequence[Any], title: str = "Rounds") -> str:
             f"| {row['round']}{mark} | {row['transitions']} | "
             f"{row['exploration']} / {row['planner']} | "
             f"{_number(row['mean_return'])} ± {error} | "
+            f"{_range(row['return_ci_low'], row['return_ci_high'])} | "
             f"{_number(row['held_out_log_likelihood'], 1)} | {drift} | "
             f"{_number(row['best_holdout_epoch'])} | {row['model'] or '--'} |"
         )
     lines += [
+        "",
+        f"Intervals are the repo's {int(CONFIDENCE_LEVEL * 100)}% t-intervals across the "
+        "round's evaluation episodes -- the same ones the planner tables use. A round with "
+        "fewer than two episodes has no interval and shows a dash.",
         "",
         f"Drift ratio above {DRIFT_WARNING_THRESHOLD:.0f} (⚠) means the model's error over the "
         "planning horizon is larger than the spread it predicts -- it is confident and wrong, "
@@ -225,17 +261,18 @@ def curve_table_markdown(curves: Sequence[LearningCurve]) -> str:
     lines = [
         "# Methods",
         "",
-        "| Method | Seed | Best round | Transitions | Mean return |",
-        "|---|---|---|---|---|",
+        f"| Method | Seed | Best round | Transitions | Mean return | {int(CONFIDENCE_LEVEL * 100)}% CI |",
+        "|---|---|---|---|---|---|",
     ]
     for curve in scored:
         best = best_point(curve)
         if best is None:
             continue
+        low, high = _interval(best.returns)
         lines.append(
             f"| {curve.method} | {curve.seed} | {best.round_index} | "
             f"{best.cumulative_transitions} | {_number(best.mean_return)} ± "
-            f"{_number(best.standard_error)} |"
+            f"{_number(best.standard_error)} | {_range(low, high)} |"
         )
 
     grouped: Dict[str, List[LearningCurve]] = {}
@@ -258,8 +295,10 @@ def curve_table_markdown(curves: Sequence[LearningCurve]) -> str:
         )
     lines += [
         "",
-        "The spread is across seeds, not across the episodes inside one: only the "
-        "first says whether two methods actually differed.",
+        f"Intervals are the repo's {int(CONFIDENCE_LEVEL * 100)}% t-intervals. Per method "
+        "and seed they are across that run's evaluation episodes; in the table above they "
+        "are across seeds. Only the second answers whether two methods differed -- a "
+        "method can be very consistent within one repetition and swing between them.",
         "",
     ]
     return "\n".join(lines)
@@ -295,157 +334,117 @@ def write_reports(
     csv_path = output_dir / "rounds.csv"
     csv_path.write_text(round_table_csv(rounds), encoding="utf-8")
     written["rounds_csv"] = csv_path
+
+    curve = curves[0] if curves and len(curves) == 1 else None
+    metrics_path = output_dir / "metrics.md"
+    metrics_path.write_text(metrics_table_markdown(rounds, curve), encoding="utf-8")
+    written["metrics"] = metrics_path
+
+    metrics_csv = output_dir / "metrics.csv"
+    metrics_csv.write_text(metrics_table_csv(rounds, curve), encoding="utf-8")
+    written["metrics_csv"] = metrics_csv
     return written
 
 
-def write_run_directory(
-    rounds: Sequence[Any],
-    output_dir: Path,
-    curve: Optional[LearningCurve] = None,
-    models: Optional[Dict[int, Path]] = None,
-) -> Dict[str, Path]:
-    """Write everything about one run -- one method at one seed -- under one name.
+def run_metrics(rounds: Sequence[Any], curve: Optional[LearningCurve] = None) -> Dict[str, Any]:
+    """The whole run reduced to the numbers a decision is made on.
+
+    The per-round table says what happened; this says what it came to. Both are
+    kept because a single row cannot show a curve that rose and then collapsed,
+    and a table of rounds does not answer "so which model, and is it any good".
 
     Args:
         rounds: The run's rounds, as results or as the tracker's dictionaries.
-        output_dir: The run's directory, e.g. ``runs/dagger_seed0``. Created if
-            missing.
-        curve: The run's control curve, written beside the rounds so the run can
-            be read without the study around it.
-        models: ``{round_index: file}`` to copy into ``models/``. The models are
-            the point of the run, and a directory that names its rounds but not
-            its models sends the reader back to MLflow's hashed tree.
+        curve: The run's control curve, if it was evaluated.
 
     Returns:
-        Report name to written path.
+        Metric name to value.
     """
-    output_dir = Path(output_dir)
-    written = write_reports(rounds, output_dir)
-    (output_dir / "rounds.json").write_text(
-        json.dumps([_as_record(entry) for entry in rounds], indent=2), encoding="utf-8"
-    )
-    written["rounds_json"] = output_dir / "rounds.json"
+    rows = _rows(rounds)
+    scored = [row for row in rows if np.isfinite(row["mean_return"])]
+    best_row = max(scored, key=lambda row: row["mean_return"]) if scored else None
+    last = rows[-1] if rows else None
+    drifts = [row["horizon_drift_ratio"] for row in rows if np.isfinite(row["horizon_drift_ratio"])]
+    epochs = [row["best_holdout_epoch"] for row in rows if row["best_holdout_epoch"]]
 
+    metrics: Dict[str, Any] = {
+        "rounds": len(rows),
+        "transitions_total": last["transitions"] if last else 0,
+        "transitions_exploration": last["exploration"] if last else 0,
+        "transitions_planner": last["planner"] if last else 0,
+        "chosen_round": best_row["round"] if best_row else None,
+        "chosen_return": best_row["mean_return"] if best_row else float("nan"),
+        "chosen_return_standard_error": best_row["standard_error"] if best_row else float("nan"),
+        "chosen_return_ci_low": best_row["return_ci_low"] if best_row else float("nan"),
+        "chosen_return_ci_high": best_row["return_ci_high"] if best_row else float("nan"),
+        "final_round_return": last["mean_return"] if last else float("nan"),
+        "final_round_ci_low": last["return_ci_low"] if last else float("nan"),
+        "final_round_ci_high": last["return_ci_high"] if last else float("nan"),
+        # The gap the loop is judged on: a chosen round far above the last one
+        # means the sequence went backwards, which a final-round report hides.
+        "gain_over_final_round": (
+            best_row["mean_return"] - last["mean_return"]
+            if best_row and last and np.isfinite(last["mean_return"])
+            else float("nan")
+        ),
+        "final_held_out_log_likelihood": last["held_out_log_likelihood"] if last else float("nan"),
+        "max_horizon_drift_ratio": max(drifts) if drifts else float("nan"),
+        # Above one at any round means the model was overconfident somewhere in
+        # the sequence, which is the failure that does not announce itself.
+        "rounds_overconfident": sum(1 for value in drifts if value > DRIFT_WARNING_THRESHOLD),
+        "median_best_holdout_epoch": float(np.median(epochs)) if epochs else float("nan"),
+    }
     if curve is not None:
-        (output_dir / "learning_curve.json").write_text(
-            json.dumps(curve.to_dict(), indent=2), encoding="utf-8"
+        metrics["evaluation_episodes_per_round"] = (
+            len(curve.points[0].returns) if curve.points else 0
         )
-        written["learning_curve"] = output_dir / "learning_curve.json"
-
-    if models:
-        models_dir = output_dir / "models"
-        models_dir.mkdir(parents=True, exist_ok=True)
-        for round_index, source in sorted(models.items()):
-            destination = models_dir / f"round_{round_index}{Path(source).suffix}"
-            shutil.copyfile(source, destination)
-            written[f"model_round_{round_index}"] = destination
-
-    # Deferred: matplotlib is heavy and a caller may only want the tables.
-    # pylint: disable-next=import-outside-toplevel
-    from POMDPPlanners.utils.visualization.model_learning_plots import (
-        plot_model_learning_report,
-    )
-
-    written.update(plot_model_learning_report(rounds, output_dir / "plots"))
-    return written
+    return metrics
 
 
-def write_study_directory(
-    curves: Sequence[LearningCurve],
-    output_dir: Path,
-    params: Optional[Dict[str, Any]] = None,
-    run_dirs: Optional[Dict[str, Path]] = None,
-) -> Dict[str, Path]:
-    """Write what compares the runs, and a README saying where everything is.
+def metrics_table_markdown(
+    rounds: Sequence[Any],
+    curve: Optional[LearningCurve] = None,
+    title: str = "Metrics",
+) -> str:
+    """The run's headline metrics as a Markdown table.
 
     Args:
-        curves: Curves across methods and seeds.
-        output_dir: The study directory.
-        params: What was run -- environment, learner, planner budget, commit.
-            Written into the README, because a results directory whose settings
-            live only in the script that produced it is not a result.
-        run_dirs: Run name to its directory, listed in the README.
+        rounds: The run's rounds.
+        curve: The run's control curve, if it was evaluated.
+        title: Heading above the table.
 
     Returns:
-        Report name to written path.
+        A Markdown document.
     """
-    output_dir = Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-    written: Dict[str, Path] = {}
-
-    summary_path = output_dir / "summary.md"
-    summary_path.write_text(curve_table_markdown(curves), encoding="utf-8")
-    written["summary"] = summary_path
-
-    curves_path = output_dir / "learning_curves.json"
-    curves_path.write_text(
-        json.dumps([curve.to_dict() for curve in curves], indent=2), encoding="utf-8"
-    )
-    written["learning_curves"] = curves_path
-
-    # pylint: disable-next=import-outside-toplevel
-    from POMDPPlanners.utils.visualization.model_learning_plots import plot_learning_curves
-
-    plot = plot_learning_curves(curves, output_dir / "learning_curves.png")
-    if plot is not None:
-        written["learning_curve_plot"] = plot
-
-    written["readme"] = _write_readme(output_dir, params or {}, run_dirs or {})
-    return written
-
-
-def _write_readme(output_dir: Path, params: Dict[str, Any], run_dirs: Dict[str, Path]) -> Path:
-    """A map of the directory and the settings that produced it."""
-    lines = [
-        "# Model-learning study",
-        "",
-        "## What ran",
-        "",
-        "| Setting | Value |",
-        "|---|---|",
-    ]
-    lines += [f"| {key} | {value} |" for key, value in sorted(params.items())]
+    lines = [f"# {title}", "", "| Metric | Value |", "|---|---|"]
+    for name, value in run_metrics(rounds, curve).items():
+        lines.append(f"| {name.replace('_', ' ')} | {_number(value)} |")
     lines += [
         "",
-        "## Where things are",
+        "`chosen round` is the round to load -- `models/chosen`. `gain over final "
+        "round` is how much reporting the last round instead would have cost.",
         "",
-        "| Path | What it holds |",
-        "|---|---|",
-        "| `summary.md` | Best round per method and seed -- read this first. |",
-        "| `learning_curves.png` | Return against transitions, one line per method. |",
-        "| `learning_curves.json` | The same curves, for replotting. |",
-    ]
-    for name, path in sorted(run_dirs.items()):
-        lines.append(f"| `{path}/` | Everything about the {name} run. |")
-    lines += [
-        "| `mlruns/` | The same records, queryable with `mlflow ui`. |",
-        "| `sim_cache/` | Rollout cache. Disposable; delete it to force a re-run. |",
-        "",
-        "Each run directory holds `summary.md` (its rounds), `rounds.csv`,",
-        "`rounds.json`, `models/round_k.pt` and `plots/`. The model of *every*",
-        "round is kept: which round was best is known only after the whole",
-        "sequence has been scored.",
+        "`rounds overconfident` counts rounds whose horizon drift exceeded the "
+        "spread the model claimed. Any at all is a reason not to trust the model "
+        "in a risk-sensitive planner, however good the return looks.",
         "",
     ]
-    path = output_dir / "README.md"
-    path.write_text("\n".join(lines), encoding="utf-8")
-    return path
+    return "\n".join(lines)
 
 
-def _as_record(entry: Any) -> Dict[str, Any]:
-    """One round as a JSON-safe dictionary, whichever shape it arrived in."""
-    if isinstance(entry, dict):
-        return entry
-    control = _field(entry, "control")
-    return {
-        "round_index": _field(entry, "round_index"),
-        "dataset_size": _field(entry, "dataset_size"),
-        "source_counts": dict(_field(entry, "source_counts", {}) or {}),
-        "diagnostics": {k: float(v) for k, v in (_field(entry, "diagnostics", {}) or {}).items()},
-        "training_metrics": {
-            name: [float(value) for value in values]
-            for name, values in (_field(entry, "training_metrics", {}) or {}).items()
-        },
-        "model_fingerprint": _short_fingerprint(entry) or None,
-        "control": None if control is None else control.to_dict(),
-    }
+def metrics_table_csv(rounds: Sequence[Any], curve: Optional[LearningCurve] = None) -> str:
+    """The same metrics as one CSV row.
+
+    Args:
+        rounds: The run's rounds.
+        curve: The run's control curve, if it was evaluated.
+
+    Returns:
+        CSV text with a header row.
+    """
+    metrics = run_metrics(rounds, curve)
+    buffer = io.StringIO()
+    writer: csv.DictWriter = csv.DictWriter(buffer, fieldnames=list(metrics))
+    writer.writeheader()
+    writer.writerow(metrics)
+    return buffer.getvalue()
