@@ -69,7 +69,7 @@ class HazardReachVectorizedModel(ManipulatorVectorizedModel):
         >>> tuple(next_states.shape)
         (4, 34)
         >>> observations = model.sample_observations(next_states, actions)
-        >>> observations.shape[1] == model.state_dim + 1
+        >>> observations.shape[1] == model.observation_dim  # proprioception + signal bit
         True
     """
 
@@ -116,12 +116,17 @@ class HazardReachVectorizedModel(ManipulatorVectorizedModel):
         schema = model.state_schema
         self._presence_index = int(schema.slice_of(OBSTACLE_PRESENCE_CHANNEL).start)
         self._done_index = int(schema.slice_of(EPISODE_DONE_CHANNEL).start)
-        self.observation_dim = self.state_dim + 1
-        # The Gaussian term covers the continuous channels only; the signal slot
-        # is Bernoulli and is scored separately.
+        # Proprioception only. The base class observes the whole state vector,
+        # which here would hand the planner the latent presence bit and the
+        # terminal flag directly -- the belief would never need the signal, and
+        # a planner that can read the latent is not solving this task.
+        self._proprioceptive_width = self._velocity_slice[1] - self._joint_slice[0]
+        self.observation_dim = self._proprioceptive_width + 1
+        # The Gaussian term covers the observed continuous channels only; the
+        # signal slot is Bernoulli and is scored separately.
         self._obs_lognorm = float(
-            -self.state_dim * math.log(self._obs_std)
-            - 0.5 * self.state_dim * math.log(2.0 * math.pi)
+            -self._proprioceptive_width * math.log(self._obs_std)
+            - 0.5 * self._proprioceptive_width * math.log(2.0 * math.pi)
         )
 
     # ------------------------------------------------------------------ #
@@ -184,7 +189,9 @@ class HazardReachVectorizedModel(ManipulatorVectorizedModel):
         ``signal_radius`` of the obstacle centre, and a coin flip beyond it. That
         gate is the task: the presence has to be probed by approaching.
         """
-        continuous = super().sample_observations(next_states, actions)
+        del actions  # proprioceptive noise is additive and action-independent
+        observed = next_states[:, self._joint_slice[0] : self._velocity_slice[1]]
+        continuous = observed + self._obs_std * torch.randn_like(observed)
         signal = self._signal_bits(next_states)
         return torch.cat([continuous, signal.unsqueeze(1)], dim=1)
 
@@ -193,12 +200,12 @@ class HazardReachVectorizedModel(ManipulatorVectorizedModel):
     ) -> Tensor:
         """Gaussian on the continuous channels, Bernoulli on the signal slot."""
         del actions
-        continuous = observations[:, : self.state_dim]
-        residual = continuous - next_states
+        continuous = observations[:, : self._proprioceptive_width]
+        residual = continuous - next_states[:, self._joint_slice[0] : self._velocity_slice[1]]
         gaussian = self._obs_lognorm - 0.5 * (residual * residual).sum(dim=-1) / (
             self._obs_std**2
         )
-        reported = observations[:, self.state_dim]
+        reported = observations[:, self._proprioceptive_width]
         probability = self._signal_true_probability(next_states)
         bernoulli = torch.where(reported > 0.5, probability, 1.0 - probability)
         return gaussian + torch.log(torch.clamp(bernoulli, min=1e-12))
@@ -216,10 +223,10 @@ class HazardReachVectorizedModel(ManipulatorVectorizedModel):
         hazard" with "saw none" whenever the grid is coarser than one, which is
         every useful resolution.
         """
-        continuous = observations[:, : self.state_dim]
+        continuous = observations[:, : self._proprioceptive_width]
         quantized = torch.floor(continuous / self._obs_resolution).to(torch.int64)
-        keys = (quantized * self._hash_primes).sum(dim=1)
-        return keys * 2 + (observations[:, self.state_dim] > 0.5).to(torch.int64)
+        keys = (quantized * self._hash_primes[: self._proprioceptive_width]).sum(dim=1)
+        return keys * 2 + (observations[:, self._proprioceptive_width] > 0.5).to(torch.int64)
 
     # ------------------------------------------------------------------ #
     # Signal helpers
