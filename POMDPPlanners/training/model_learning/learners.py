@@ -24,6 +24,7 @@ Classes:
 """
 
 from abc import ABC, abstractmethod
+from copy import deepcopy
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
@@ -148,6 +149,10 @@ class ProbabilisticEnsembleLearner(TransitionModelLearner):
         batch_size: Rows per gradient step.
         learning_rate: Adam learning rate.
         weight_decay: Adam weight decay.
+        early_stopping_patience: Stop a member after this many holdout epochs
+            without improvement.
+        early_stopping_min_delta: Smallest holdout loss decrease that resets
+            patience.
         seed: Seed for the member initialisations, the batch order and sampling.
         device: Device to train on. ``None`` trains on CPU, which is the right
             default: these are small networks and the batches are small, so the
@@ -165,17 +170,31 @@ class ProbabilisticEnsembleLearner(TransitionModelLearner):
         batch_size: int = 256,
         learning_rate: float = 1e-3,
         weight_decay: float = 1e-4,
+        early_stopping_patience: int = 20,
+        early_stopping_min_delta: float = 0.0,
         seed: int = 0,
         device: Optional[torch.device] = None,
     ) -> None:
         if num_members <= 0:
             raise ValueError(f"num_members must be positive, got {num_members}")
+        if early_stopping_patience <= 0:
+            raise ValueError(
+                "early_stopping_patience must be positive, "
+                f"got {early_stopping_patience}"
+            )
+        if early_stopping_min_delta < 0:
+            raise ValueError(
+                "early_stopping_min_delta must be non-negative, "
+                f"got {early_stopping_min_delta}"
+            )
         self._num_members = num_members
         self._hidden_sizes = tuple(hidden_sizes)
         self._epochs = epochs
         self._batch_size = batch_size
         self._learning_rate = learning_rate
         self._weight_decay = weight_decay
+        self._early_stopping_patience = early_stopping_patience
+        self._early_stopping_min_delta = early_stopping_min_delta
         self._seed = seed
         self._device = device
         self._metrics: Dict[str, List[float]] = {}
@@ -190,7 +209,8 @@ class ProbabilisticEnsembleLearner(TransitionModelLearner):
 
         Each member sees a bootstrap resample of the training rows, so members
         differ in data as well as in initialisation -- two independent sources of
-        the disagreement the ensemble reads as uncertainty.
+        the disagreement the ensemble reads as uncertainty. Each member stops
+        against the shared holdout split and restores its best checkpoint.
 
         Args:
             dataset: The transitions collected so far.
@@ -248,6 +268,8 @@ class ProbabilisticEnsembleLearner(TransitionModelLearner):
                 device=self._device,
                 holdout_inputs=holdout_inputs,
                 holdout_targets=holdout_targets,
+                early_stopping_patience=self._early_stopping_patience,
+                early_stopping_min_delta=self._early_stopping_min_delta,
             )
             train_curves.append(train_curve)
             holdout_curves.append(holdout_curve)
@@ -256,9 +278,9 @@ class ProbabilisticEnsembleLearner(TransitionModelLearner):
         # mean and is exactly what makes an ensemble's spread meaningless. The
         # holdout curve is what says whether more epochs are still buying
         # anything -- a training curve alone cannot tell fitting from memorizing.
-        self._metrics = {"train_nll": list(np.mean(np.asarray(train_curves), axis=0))}
+        self._metrics = {"train_nll": _mean_curves(train_curves)}
         if holdout_inputs is not None:
-            self._metrics["holdout_nll"] = list(np.mean(np.asarray(holdout_curves), axis=0))
+            self._metrics["holdout_nll"] = _mean_curves(holdout_curves)
         for index, curve in enumerate(train_curves):
             self._metrics[f"train_nll_member_{index}"] = list(curve)
         return ProbabilisticEnsembleTransition(
@@ -334,6 +356,8 @@ def _train_member(
     device: Optional[torch.device],
     holdout_inputs: Optional[np.ndarray] = None,
     holdout_targets: Optional[np.ndarray] = None,
+    early_stopping_patience: int = 20,
+    early_stopping_min_delta: float = 0.0,
 ) -> Tuple[List[float], List[float]]:
     """Train one member by Gaussian negative log-likelihood.
 
@@ -365,6 +389,9 @@ def _train_member(
     member.train()
     losses: List[float] = []
     holdout_losses: List[float] = []
+    best_holdout_loss = float("inf")
+    best_state = None
+    epochs_without_improvement = 0
     for _ in range(epochs):
         order = rng.permutation(num_rows)
         epoch_loss = 0.0
@@ -383,12 +410,33 @@ def _train_member(
         if holdout_input_tensor is not None and holdout_target_tensor is not None:
             member.eval()
             with torch.no_grad():
-                holdout_losses.append(
-                    float(_gaussian_nll(member, holdout_input_tensor, holdout_target_tensor))
+                holdout_loss = float(
+                    _gaussian_nll(member, holdout_input_tensor, holdout_target_tensor)
                 )
+                holdout_losses.append(holdout_loss)
+            if holdout_loss < best_holdout_loss - early_stopping_min_delta:
+                best_holdout_loss = holdout_loss
+                best_state = deepcopy(member.state_dict())
+                epochs_without_improvement = 0
+            else:
+                epochs_without_improvement += 1
             member.train()
+            if epochs_without_improvement >= early_stopping_patience:
+                break
+    if best_state is not None:
+        member.load_state_dict(best_state)
     member.eval()
     return losses, holdout_losses
+
+
+def _mean_curves(curves: Sequence[Sequence[float]]) -> List[float]:
+    """Mean curves of unequal length while members stop at their own best epoch."""
+    longest = max(len(curve) for curve in curves)
+    means = []
+    for epoch in range(longest):
+        values = [curve[epoch] for curve in curves if epoch < len(curve)]
+        means.append(float(np.mean(values)))
+    return means
 
 
 def _mean_negative_log_likelihood(model: TransitionModel, batch: TransitionBatch) -> float:
