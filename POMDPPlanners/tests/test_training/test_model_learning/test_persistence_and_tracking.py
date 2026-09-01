@@ -896,6 +896,81 @@ class TestMetricsTable:
         assert metrics["rounds_overconfident"] == 3
 
 
+class TestConfidenceIntervals:
+    """A mean with no interval is a number nobody can act on."""
+
+    @staticmethod
+    def _rounds(returns):
+        return [
+            {
+                "round_index": index,
+                "dataset_size": 100 * index,
+                "source_counts": {"exploration": 100 * index},
+                "diagnostics": {"held_out_log_likelihood": 2.0, "horizon_drift_ratio": 0.8},
+                "training_metrics": {},
+                "control": {
+                    "round_index": index,
+                    "cumulative_transitions": 100 * index,
+                    "returns": list(values),
+                },
+            }
+            for index, values in returns.items()
+        ]
+
+    def test_the_interval_matches_the_repo_t_interval(self) -> None:
+        """Purpose: Validates that model-learning intervals are the repo's, not a new convention
+
+        Given: A round with several evaluation episodes
+        When: Its metrics are computed
+        Then: The bounds equal utils.statistics_utils.confidence_interval, so a
+            model number and a planner number can sit in one table
+        """
+        from POMDPPlanners.training.model_learning import run_metrics
+        from POMDPPlanners.utils.statistics_utils import confidence_interval
+
+        episodes = [-1.0, -1.4, -0.8, -1.2, -1.1]
+
+        metrics = run_metrics(self._rounds({1: episodes}))
+
+        expected = confidence_interval(episodes, confidence=0.95)
+        assert metrics["chosen_return_ci_low"] == pytest.approx(expected[0])
+        assert metrics["chosen_return_ci_high"] == pytest.approx(expected[1])
+
+    def test_one_episode_reports_no_interval(self) -> None:
+        """Purpose: Validates that a single episode is not dressed up as a result
+
+        Given: A round evaluated on one episode
+        When: The rounds table is rendered
+        Then: The interval column is a dash rather than a point pretending to be
+            a range
+        """
+        from POMDPPlanners.training.model_learning import round_table_markdown
+
+        table = round_table_markdown(self._rounds({1: [-1.0]}))
+
+        row = [line for line in table.splitlines() if line.startswith("| 1")][0]
+        assert "[" not in row
+
+    def test_the_method_table_carries_an_interval_per_run(self) -> None:
+        """Purpose: Validates that the comparison table is readable as evidence
+
+        Given: Two methods' curves with several episodes each
+        When: The method table is rendered
+        Then: Each row carries a CI, so a gap between methods can be judged
+        """
+        from POMDPPlanners.training.model_learning import curve_table_markdown
+
+        curves = [
+            LearningCurve(method, 0, (ControlPoint(1, 100, (-1.0, -1.4, -0.9)),))
+            for method in ("dagger", "batch")
+        ]
+
+        table = curve_table_markdown(curves)
+
+        assert table.count("[") >= 2
+        assert "95% CI" in table
+
+
 class TestCurveSummaries:
     """The one table to read first."""
 

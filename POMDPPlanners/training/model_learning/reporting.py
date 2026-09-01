@@ -43,7 +43,7 @@ Functions:
 import csv
 import io
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 
@@ -52,9 +52,15 @@ from POMDPPlanners.training.model_learning.control_evaluation import (
     aggregate_curves,
     best_point,
 )
+from POMDPPlanners.utils.statistics_utils import confidence_interval
 
 #: Drift above this means the model's horizon error exceeds its claimed spread.
 DRIFT_WARNING_THRESHOLD = 1.0
+
+#: Confidence level for every interval reported here -- the repo's t-interval,
+#: the same one the simulation statistics and the paper's tables use, so a
+#: model-learning number and a planner number can sit in one table.
+CONFIDENCE_LEVEL = 0.95
 
 _COLUMNS = (
     "round",
@@ -63,6 +69,8 @@ _COLUMNS = (
     "planner",
     "mean_return",
     "standard_error",
+    "return_ci_low",
+    "return_ci_high",
     "held_out_log_likelihood",
     "horizon_drift_ratio",
     "best_holdout_epoch",
@@ -101,6 +109,8 @@ def _rows(rounds: Sequence[Any]) -> List[Dict[str, Any]]:
                     if len(returns) > 1
                     else float("nan")
                 ),
+                "return_ci_low": _interval(returns)[0],
+                "return_ci_high": _interval(returns)[1],
                 "held_out_log_likelihood": float(
                     diagnostics.get("held_out_log_likelihood", float("nan"))
                 ),
@@ -128,6 +138,25 @@ def _short_fingerprint(entry: Any) -> str:
         model = _field(entry, "model")
         fingerprint = getattr(model, "fingerprint", None)
     return str(fingerprint)[:10] if fingerprint else ""
+
+
+def _interval(values: Sequence[float]) -> Tuple[float, float]:
+    """The repo's t-interval for a mean, or ``(nan, nan)`` when it is undefined.
+
+    Below two episodes there is no interval, and reporting the point estimate as
+    though it were one is the way a single lucky episode becomes a result.
+    """
+    if len(values) < 2:
+        return float("nan"), float("nan")
+    low, high = confidence_interval(list(values), confidence=CONFIDENCE_LEVEL)
+    return float(low), float(high)
+
+
+def _range(low: float, high: float, digits: int = 3) -> str:
+    """Render an interval, or an em dash when there was not enough data for one."""
+    if not (np.isfinite(low) and np.isfinite(high)):
+        return "--"
+    return f"[{low:.{digits}f}, {high:.{digits}f}]"
 
 
 def _number(value: Any, digits: int = 3) -> str:
@@ -162,8 +191,9 @@ def round_table_markdown(rounds: Sequence[Any], title: str = "Rounds") -> str:
     lines = [
         f"# {title}",
         "",
-        "| Round | Transitions | Explore / Planner | Mean return | Held-out LL | Drift ratio | Best holdout epoch | Model |",
-        "|---|---|---|---|---|---|---|---|",
+        f"| Round | Transitions | Explore / Planner | Mean return | {int(CONFIDENCE_LEVEL * 100)}% CI | "
+        "Held-out LL | Drift ratio | Best holdout epoch | Model |",
+        "|---|---|---|---|---|---|---|---|---|",
     ]
     for row in rows:
         mark = " **(best)**" if row["round"] == best_round else ""
@@ -177,10 +207,15 @@ def round_table_markdown(rounds: Sequence[Any], title: str = "Rounds") -> str:
             f"| {row['round']}{mark} | {row['transitions']} | "
             f"{row['exploration']} / {row['planner']} | "
             f"{_number(row['mean_return'])} ± {error} | "
+            f"{_range(row['return_ci_low'], row['return_ci_high'])} | "
             f"{_number(row['held_out_log_likelihood'], 1)} | {drift} | "
             f"{_number(row['best_holdout_epoch'])} | {row['model'] or '--'} |"
         )
     lines += [
+        "",
+        f"Intervals are the repo's {int(CONFIDENCE_LEVEL * 100)}% t-intervals across the "
+        "round's evaluation episodes -- the same ones the planner tables use. A round with "
+        "fewer than two episodes has no interval and shows a dash.",
         "",
         f"Drift ratio above {DRIFT_WARNING_THRESHOLD:.0f} (⚠) means the model's error over the "
         "planning horizon is larger than the spread it predicts -- it is confident and wrong, "
@@ -226,17 +261,18 @@ def curve_table_markdown(curves: Sequence[LearningCurve]) -> str:
     lines = [
         "# Methods",
         "",
-        "| Method | Seed | Best round | Transitions | Mean return |",
-        "|---|---|---|---|---|",
+        f"| Method | Seed | Best round | Transitions | Mean return | {int(CONFIDENCE_LEVEL * 100)}% CI |",
+        "|---|---|---|---|---|---|",
     ]
     for curve in scored:
         best = best_point(curve)
         if best is None:
             continue
+        low, high = _interval(best.returns)
         lines.append(
             f"| {curve.method} | {curve.seed} | {best.round_index} | "
             f"{best.cumulative_transitions} | {_number(best.mean_return)} ± "
-            f"{_number(best.standard_error)} |"
+            f"{_number(best.standard_error)} | {_range(low, high)} |"
         )
 
     grouped: Dict[str, List[LearningCurve]] = {}
@@ -259,8 +295,10 @@ def curve_table_markdown(curves: Sequence[LearningCurve]) -> str:
         )
     lines += [
         "",
-        "The spread is across seeds, not across the episodes inside one: only the "
-        "first says whether two methods actually differed.",
+        f"Intervals are the repo's {int(CONFIDENCE_LEVEL * 100)}% t-intervals. Per method "
+        "and seed they are across that run's evaluation episodes; in the table above they "
+        "are across seeds. Only the second answers whether two methods differed -- a "
+        "method can be very consistent within one repetition and swing between them.",
         "",
     ]
     return "\n".join(lines)
@@ -337,7 +375,11 @@ def run_metrics(rounds: Sequence[Any], curve: Optional[LearningCurve] = None) ->
         "chosen_round": best_row["round"] if best_row else None,
         "chosen_return": best_row["mean_return"] if best_row else float("nan"),
         "chosen_return_standard_error": best_row["standard_error"] if best_row else float("nan"),
+        "chosen_return_ci_low": best_row["return_ci_low"] if best_row else float("nan"),
+        "chosen_return_ci_high": best_row["return_ci_high"] if best_row else float("nan"),
         "final_round_return": last["mean_return"] if last else float("nan"),
+        "final_round_ci_low": last["return_ci_low"] if last else float("nan"),
+        "final_round_ci_high": last["return_ci_high"] if last else float("nan"),
         # The gap the loop is judged on: a chosen round far above the last one
         # means the sequence went backwards, which a final-round report hides.
         "gain_over_final_round": (
