@@ -12,16 +12,24 @@ MLflow rather than a directory convention, because the rollouts inside this loop
 already run through it: every planner episode goes through
 ``LocalSimulationsAPI``, which logs to MLflow, so a run of the loop with a
 separate results tree would leave the control numbers and the models they came
-from in two systems that agree by hand. One run per ``(method, seed)`` with one
-child run per round keeps the sequence together, and the per-round metrics are
-step-indexed so the learning curve is a chart rather than a file to plot.
+from in two systems that agree by hand. One run per ``(method, seed)``, and the per-round
+metrics are step-indexed so the learning curve is a chart rather than a file to
+plot.
+
+Each run holds exactly two artifact directories, because there are exactly two
+things anyone comes for: ``models/`` -- one file per round, the objects to plan
+with -- and ``evaluation/`` -- the tables and figures that say which of them to
+use. Nothing is mirrored into a second tree: a copy has to be kept in step, and
+the copy is what people then find stale.
 
 Three things are logged that are easy to omit and hard to reconstruct later.
 
 **The model of every round, not the best one.** Which round was best is known
 only after the whole sequence has been scored, and the guarantee is about the
 best model of the sequence. Saving as you go costs a file per round; saving at
-the end costs a re-run.
+the end costs a re-run. The one to load is copied to ``models/chosen`` at the
+end, so nobody has to pick from a directory of candidates -- and nobody reaches
+for the last round on the assumption that later is better.
 
 **The fingerprint beside the model.** It is what ties a control number to the
 exact parameters that produced it, and it is what the environment's cache key
@@ -42,13 +50,19 @@ failure a risk-sensitive planner turns into confident bad decisions.
 Classes:
     ModelLearningTracker: Protocol the trainer calls; implement it to record elsewhere.
     MLflowModelLearningTracker: Logs rounds, models and curves to MLflow.
+
+Functions:
+    log_study_comparison: Add the across-run comparison to every run's evaluation.
+    load_round_models: Find a finished run's saved models.
+    curve_summaries: Best round per curve, as a mapping.
 """
 
 import json
 import os
+import shutil
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, Optional, Protocol, Sequence
+from typing import Any, Dict, List, Optional, Protocol, Sequence
 
 import numpy as np
 
@@ -63,9 +77,6 @@ MODELS_ARTIFACT_PATH = "models"
 
 #: Artifact sub-directory holding the curve and the per-round record.
 EVALUATION_ARTIFACT_PATH = "evaluation"
-
-#: Artifact sub-directory holding the fit's diagnostic plots.
-PLOTS_ARTIFACT_PATH = "plots"
 
 
 class ModelLearningTracker(Protocol):
@@ -192,12 +203,8 @@ class MLflowModelLearningTracker:
     def artifact_dir(self) -> Optional[Path]:
         """Local artifact directory of this run, when the store is on disk.
 
-        The models are written here, under hashed run ids. A study that wants
-        them under a readable name copies from here -- see
-        :func:`~POMDPPlanners.training.model_learning.reporting.write_run_directory`.
-
-        It outlives :meth:`finish`, because a study copies the models *after*
-        the run that wrote them has been closed.
+        It holds ``models/`` and ``evaluation/``, and outlives :meth:`finish` so
+        a caller can read a finished run's files.
 
         Returns:
             The directory, or ``None`` before the run starts or when the store
@@ -283,6 +290,7 @@ class MLflowModelLearningTracker:
             self._client.log_metric(
                 run_id, "best_round_transitions", float(best.cumulative_transitions)
             )
+            self._log_chosen_model(best.round_index)
         self.finish()
 
     def _log_model(self, model: Any, round_index: int) -> Optional[str]:
@@ -310,6 +318,41 @@ class MLflowModelLearningTracker:
                 self._run.info.run_id, str(written), MODELS_ARTIFACT_PATH
             )
             return f"{MODELS_ARTIFACT_PATH}/{written.name}"
+
+    def _log_chosen_model(self, round_index: int) -> None:
+        """Copy the best round's model to ``models/chosen`` -- the one to load.
+
+        Every round is kept because the sequence is not monotone and the best of
+        it is known only at the end. That leaves a directory of equally-named
+        candidates, and picking from it by eye is how the last round gets used
+        for being last. The choice is made once, here, by the same rule the
+        table reports.
+
+        Args:
+            round_index: The round :func:`best_point` selected.
+        """
+        source = next(
+            (
+                entry.get("model_artifact")
+                for entry in self._rounds
+                if entry["round_index"] == round_index and entry.get("model_artifact")
+            ),
+            None,
+        )
+        if source is None:
+            self._logger.warning(
+                "round %d has no saved model, so none was marked chosen", round_index
+            )
+            return
+        run_id = self._run.info.run_id
+        with tempfile.TemporaryDirectory() as staging:
+            downloaded = Path(
+                self._client.download_artifacts(run_id, source, staging)
+            )
+            chosen = Path(staging) / f"chosen{downloaded.suffix}"
+            shutil.copyfile(downloaded, chosen)
+            self._client.log_artifact(run_id, str(chosen), MODELS_ARTIFACT_PATH)
+        self._client.log_param(run_id, "chosen_round", round_index)
 
     def _log_reports(self) -> None:
         """Write the readable tables beside the JSON and log them.
@@ -344,7 +387,9 @@ class MLflowModelLearningTracker:
             with tempfile.TemporaryDirectory() as staging:
                 written = plot_model_learning_report(self._rounds, Path(staging))
                 for path in written.values():
-                    self._client.log_artifact(self._run.info.run_id, str(path), PLOTS_ARTIFACT_PATH)
+                    self._client.log_artifact(
+                        self._run.info.run_id, str(path), EVALUATION_ARTIFACT_PATH
+                    )
         except Exception as error:  # pylint: disable=broad-except
             self._logger.warning("could not draw the model-learning plots: %s", error)
 
@@ -356,6 +401,85 @@ class MLflowModelLearningTracker:
             self._client.log_artifact(
                 self._run.info.run_id, str(path), EVALUATION_ARTIFACT_PATH
             )
+
+
+def log_study_comparison(
+    experiment_name: str,
+    curves: Sequence[LearningCurve],
+    params: Optional[Dict[str, Any]] = None,
+    tracking_uri: Optional[str] = None,
+    logger: Optional[Any] = None,
+) -> List[str]:
+    """Add the across-run comparison to every run's ``evaluation/``.
+
+    The learning curve and the method table are what actually decide whether a
+    model is worth using, and they are only known once every run has finished.
+    They are copied into each run rather than parked in a run of their own: a
+    reader opens one run's ``evaluation/`` and has everything the decision
+    needs, instead of holding two directories in their head.
+
+    Args:
+        experiment_name: The experiment the runs were logged under.
+        curves: Curves across methods and seeds.
+        params: What was run -- environment, learner, planner budget, commit --
+            pinned to every run, because a result whose settings live only in
+            the script that produced it is not a result.
+        tracking_uri: MLflow tracking URI. ``None`` uses the ambient setting.
+        logger: Optional logger.
+
+    Returns:
+        The run ids that were updated.
+    """
+    # pylint: disable-next=import-outside-toplevel
+    from mlflow.tracking import MlflowClient
+
+    # pylint: disable-next=import-outside-toplevel
+    from POMDPPlanners.training.model_learning.reporting import curve_table_markdown
+
+    log = logger or get_logger(__name__)
+    if not any(curve.points for curve in curves):
+        log.warning("log_study_comparison: no evaluated rounds, nothing to compare")
+        return []
+
+    os.environ.setdefault("MLFLOW_ALLOW_FILE_STORE", "true")
+    client = MlflowClient(tracking_uri=tracking_uri)
+    experiment = client.get_experiment_by_name(experiment_name)
+    if experiment is None:
+        log.warning("log_study_comparison: no experiment named %s", experiment_name)
+        return []
+    runs = client.search_runs([experiment.experiment_id])
+    if not runs:
+        log.warning("log_study_comparison: experiment %s has no runs", experiment_name)
+        return []
+
+    with tempfile.TemporaryDirectory() as staging:
+        table = Path(staging) / "methods.md"
+        table.write_text(curve_table_markdown(curves), encoding="utf-8")
+        files = [table]
+
+        curves_json = Path(staging) / "learning_curves.json"
+        curves_json.write_text(
+            json.dumps([curve.to_dict() for curve in curves], indent=2), encoding="utf-8"
+        )
+        files.append(curves_json)
+
+        # pylint: disable-next=import-outside-toplevel
+        from POMDPPlanners.utils.visualization.model_learning_plots import plot_learning_curves
+
+        plot = plot_learning_curves(curves, Path(staging) / "learning_curves.png")
+        if plot is not None:
+            files.append(plot)
+
+        updated: List[str] = []
+        for run in runs:
+            run_id = run.info.run_id
+            for key, value in (params or {}).items():
+                if key not in run.data.params:
+                    client.log_param(run_id, key, value)
+            for path in files:
+                client.log_artifact(run_id, str(path), EVALUATION_ARTIFACT_PATH)
+            updated.append(run_id)
+    return updated
 
 
 def load_round_models(run_artifacts_dir: Path) -> Dict[int, Path]:

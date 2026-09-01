@@ -92,17 +92,19 @@ from POMDPPlanners.training.model_learning.learners import (
 )
 from POMDPPlanners.training.model_learning.reporting import (
     curve_table_markdown,
+    metrics_table_csv,
+    metrics_table_markdown,
+    run_metrics,
     round_table_csv,
     round_table_markdown,
     write_reports,
-    write_run_directory,
-    write_study_directory,
 )
 from POMDPPlanners.training.model_learning.tracking import (
     MLflowModelLearningTracker,
     ModelLearningTracker,
     curve_summaries,
     load_round_models,
+    log_study_comparison,
 )
 from POMDPPlanners.training.model_learning.transition_dataset import (
     TransitionBatch,
@@ -137,13 +139,16 @@ __all__ = [
     "evaluate_model",
     "load_learning_curves",
     "load_round_models",
+    "metrics_table_csv",
+    "metrics_table_markdown",
+    "run_metrics",
+    "log_study_comparison",
     "round_table_csv",
     "round_table_markdown",
     "run_learning_curves",
     "save_learning_curves",
     "write_reports",
-    "write_run_directory",
-    "write_study_directory",
+
     "held_out_log_likelihood",
     "horizon_drift_ratio",
     "preset_ranking_agreement",

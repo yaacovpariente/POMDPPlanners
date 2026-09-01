@@ -51,6 +51,7 @@ it can grow while the likelihood also improves.
 
 Functions:
     plot_learning_curves: Return against data, one line per method.
+    plot_round_returns: One run's per-round return with its confidence interval.
     plot_training_curves: Train and holdout loss per epoch, one panel per round.
     plot_member_training_curves: Every ensemble member's training curve.
     plot_round_diagnostics: Held-out likelihood and drift ratio per round.
@@ -64,6 +65,7 @@ from typing import Any, Dict, List, Optional, Sequence
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
+from scipy import stats
 
 from POMDPPlanners.training.model_learning.control_evaluation import (
     AggregatedCurve,
@@ -74,6 +76,10 @@ from POMDPPlanners.training.model_learning.control_evaluation import (
 matplotlib.use("Agg")  # Use non-interactive backend
 
 logger = logging.getLogger(__name__)
+
+#: Confidence level of every band and error bar here -- the same one the tables
+#: report, so a figure and a table cannot disagree.
+CONFIDENCE_LEVEL = 0.95
 
 # Enough distinct colors for the method families a comparison plausibly carries;
 # beyond this the lines stop being separable and the plot should be split.
@@ -117,7 +123,7 @@ def plot_learning_curves(
     fig, axis = plt.subplots(figsize=(9, 5))
     for index, (method, method_curves) in enumerate(sorted(grouped.items())):
         aggregated = aggregate_curves(method_curves)
-        _draw(axis, aggregated, _METHOD_COLORS[index % len(_METHOD_COLORS)])
+        _draw(axis, aggregated, _METHOD_COLORS[index % len(_METHOD_COLORS)], method_curves)
 
     if baseline_return is not None:
         axis.axhline(
@@ -144,11 +150,26 @@ def plot_learning_curves(
     return output_path
 
 
-def _draw(axis, curve: AggregatedCurve, color: str) -> None:
-    """One method's mean line, with a band of one standard error across seeds."""
+def _draw(axis, curve: AggregatedCurve, color: str, episode_curves=None) -> None:
+    """One method's mean line, with a 95% t-interval band.
+
+    Across seeds when there is more than one, because that is the spread that
+    answers whether two methods differed. With a single seed there is no such
+    spread, so the band falls back to the interval across that run's evaluation
+    episodes and says so in the label -- a plot with no band at all reads as a
+    measurement without noise, and one whose band silently changes meaning is
+    worse than either.
+    """
     transitions = np.asarray(curve.cumulative_transitions, dtype=float)
     means = np.asarray(curve.mean_returns, dtype=float)
-    errors = np.asarray(curve.standard_errors, dtype=float)
+    across_seeds = curve.num_seeds > 1
+    if across_seeds:
+        errors = np.asarray(curve.standard_errors, dtype=float)
+        half = _t_half_width(errors, curve.num_seeds)
+        band_label = f"{curve.num_seeds} seeds"
+    else:
+        half = _episode_half_widths(episode_curves)
+        band_label = "episodes, 1 seed"
     axis.plot(
         transitions,
         means,
@@ -156,11 +177,113 @@ def _draw(axis, curve: AggregatedCurve, color: str) -> None:
         linewidth=2,
         marker="o",
         markersize=4,
-        label=f"{curve.method} ({curve.num_seeds} seeds)",
+        label=f"{curve.method} ({band_label}, {int(CONFIDENCE_LEVEL * 100)}% CI)",
     )
-    if np.isfinite(errors).any():
-        band = np.nan_to_num(errors, nan=0.0)
+    if half is not None and np.isfinite(half).any():
+        band = np.nan_to_num(half, nan=0.0)[: means.size]
         axis.fill_between(transitions, means - band, means + band, color=color, alpha=0.2)
+
+
+def _t_half_width(standard_errors: np.ndarray, sample_size: int) -> Optional[np.ndarray]:
+    """Half-width of the t-interval implied by a standard error."""
+    if sample_size < 2:
+        return None
+    return np.asarray(standard_errors, dtype=float) * float(
+        stats.t.ppf(0.5 + CONFIDENCE_LEVEL / 2.0, sample_size - 1)
+    )
+
+
+def _episode_half_widths(curves) -> Optional[np.ndarray]:
+    """Per-round half-widths across a single run's evaluation episodes."""
+    if not curves:
+        return None
+    points = curves[0].points
+    half = []
+    for point in points:
+        returns = np.asarray(point.returns, dtype=float)
+        if returns.size < 2:
+            half.append(np.nan)
+            continue
+        error = float(np.std(returns, ddof=1) / np.sqrt(returns.size))
+        half.append(error * float(stats.t.ppf(0.5 + CONFIDENCE_LEVEL / 2.0, returns.size - 1)))
+    return np.asarray(half, dtype=float)
+
+
+def plot_round_returns(
+    rounds: Sequence[Any],
+    output_path: Path,
+    baseline_return: Optional[float] = None,
+    title: str = "Return per round, with 95% confidence intervals",
+) -> Optional[Path]:
+    """Plot each round's return with its interval, against the data it cost.
+
+    The learning curve compares methods; this reads one run. An interval that
+    spans the whole plot is the answer to "did round 3 beat round 2" -- no -- and
+    it is the plot that stops a noise gap being read as progress.
+
+    Args:
+        rounds: The run's rounds, as results or as the tracker's dictionaries.
+        output_path: Where to write the PNG.
+        baseline_return: Return of the model the loop started from, drawn as a
+            horizontal reference.
+        title: Plot title.
+
+    Returns:
+        The written path, or ``None`` if no round was evaluated.
+    """
+    transitions, means, lows, highs = [], [], [], []
+    for entry in rounds:
+        control = entry.get("control") if isinstance(entry, dict) else getattr(entry, "control", None)
+        if control is None:
+            continue
+        if not isinstance(control, dict):
+            control = control.to_dict()
+        returns = np.asarray(control["returns"], dtype=float)
+        if returns.size == 0:
+            continue
+        transitions.append(float(control["cumulative_transitions"]))
+        means.append(float(np.mean(returns)))
+        if returns.size < 2:
+            lows.append(0.0)
+            highs.append(0.0)
+        else:
+            error = float(np.std(returns, ddof=1) / np.sqrt(returns.size))
+            half = error * float(stats.t.ppf(0.5 + CONFIDENCE_LEVEL / 2.0, returns.size - 1))
+            lows.append(half)
+            highs.append(half)
+    if not means:
+        logger.warning("plot_round_returns: no round was evaluated")
+        return None
+
+    fig, axis = plt.subplots(figsize=(7, 4.5))
+    axis.errorbar(
+        transitions,
+        means,
+        yerr=[lows, highs],
+        color="tab:blue",
+        linewidth=2,
+        marker="o",
+        capsize=4,
+        label="round return",
+    )
+    best = int(np.argmax(means))
+    axis.scatter(
+        [transitions[best]],
+        [means[best]],
+        color="tab:green",
+        zorder=5,
+        s=90,
+        label="chosen round",
+    )
+    if baseline_return is not None:
+        axis.axhline(baseline_return, color="black", linestyle="--", linewidth=1.5,
+                     label="initial model")
+    axis.set_xlabel("Transitions collected")
+    axis.set_ylabel("Return in the true world")
+    axis.set_title(title)
+    axis.grid(True, alpha=0.3)
+    axis.legend()
+    return _finish(fig, output_path)
 
 
 def _finish(fig, output_path: Path) -> Path:
@@ -215,6 +338,25 @@ def plot_training_curves(
     for axis, (round_index, entry) in zip(axes[0], drawable):
         epochs = np.arange(1, len(entry["train_nll"]) + 1)
         axis.plot(epochs, entry["train_nll"], color="tab:blue", linewidth=2, label="train")
+        members = [
+            entry[key] for key in sorted(entry) if key.startswith("train_nll_member_")
+        ]
+        if len(members) > 1:
+            # Across members, at the same confidence as every other interval
+            # here: a mean line hides the ensemble disagreeing with itself,
+            # which is the quantity the planner treats as uncertainty.
+            stacked = np.asarray(members, dtype=float)
+            mean = stacked.mean(axis=0)
+            error = stacked.std(axis=0, ddof=1) / np.sqrt(stacked.shape[0])
+            half = error * float(stats.t.ppf(0.5 + CONFIDENCE_LEVEL / 2.0, stacked.shape[0] - 1))
+            axis.fill_between(
+                np.arange(1, stacked.shape[1] + 1),
+                mean - half,
+                mean + half,
+                color="tab:blue",
+                alpha=0.2,
+                label=f"members, {int(CONFIDENCE_LEVEL * 100)}% CI",
+            )
         holdout = entry.get("holdout_nll")
         if holdout:
             axis.plot(
@@ -355,6 +497,9 @@ def plot_model_learning_report(
     output_dir = Path(output_dir)
     written: Dict[str, Path] = {}
     candidates = {
+        "round_returns": lambda: plot_round_returns(
+            rounds, output_dir / "round_returns.png", baseline_return=baseline_return
+        ),
         "training_curves": lambda: plot_training_curves(
             rounds, output_dir / "training_curves.png"
         ),
