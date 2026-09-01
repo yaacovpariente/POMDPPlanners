@@ -12,9 +12,9 @@ MLflow rather than a directory convention, because the rollouts inside this loop
 already run through it: every planner episode goes through
 ``LocalSimulationsAPI``, which logs to MLflow, so a run of the loop with a
 separate results tree would leave the control numbers and the models they came
-from in two systems that agree by hand. One run per ``(method, seed)``, plus one run for the
-study that compares them, and the per-round metrics are step-indexed so the
-learning curve is a chart rather than a file to plot.
+from in two systems that agree by hand. One run per ``(method, seed)``, and the per-round
+metrics are step-indexed so the learning curve is a chart rather than a file to
+plot.
 
 Each run holds exactly two artifact directories, because there are exactly two
 things anyone comes for: ``models/`` -- one file per round, the objects to plan
@@ -50,7 +50,7 @@ Classes:
     MLflowModelLearningTracker: Logs rounds, models and curves to MLflow.
 
 Functions:
-    log_study_comparison: Record the across-run comparison as its own run.
+    log_study_comparison: Add the across-run comparison to every run's evaluation.
     load_round_models: Find a finished run's saved models.
     curve_summaries: Best round per curve, as a mapping.
 """
@@ -59,7 +59,7 @@ import json
 import os
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, Optional, Protocol, Sequence
+from typing import Any, Dict, List, Optional, Protocol, Sequence
 
 import numpy as np
 
@@ -369,28 +369,27 @@ def log_study_comparison(
     curves: Sequence[LearningCurve],
     params: Optional[Dict[str, Any]] = None,
     tracking_uri: Optional[str] = None,
-    run_name: str = "study",
     logger: Optional[Any] = None,
-) -> Optional[str]:
-    """Record the comparison across runs as a run of its own.
+) -> List[str]:
+    """Add the across-run comparison to every run's ``evaluation/``.
 
-    The per-method table and the learning curve answer a question no single run
-    can -- did iterating on the collection beat not iterating -- so they belong
-    beside the runs rather than inside one of them. Logged as a run named
-    ``study``, holding the same ``evaluation/`` directory the others do.
+    The learning curve and the method table are what actually decide whether a
+    model is worth using, and they are only known once every run has finished.
+    They are copied into each run rather than parked in a run of their own: a
+    reader opens one run's ``evaluation/`` and has everything the decision
+    needs, instead of holding two directories in their head.
 
     Args:
         experiment_name: The experiment the runs were logged under.
         curves: Curves across methods and seeds.
-        params: What was run -- environment, learner, planner budget, commit.
-            A result whose settings live only in the script that produced it is
-            not a result.
+        params: What was run -- environment, learner, planner budget, commit --
+            pinned to every run, because a result whose settings live only in
+            the script that produced it is not a result.
         tracking_uri: MLflow tracking URI. ``None`` uses the ambient setting.
-        run_name: Name for the study run.
         logger: Optional logger.
 
     Returns:
-        The run id, or ``None`` if no curve had an evaluated round.
+        The run ids that were updated.
     """
     # pylint: disable-next=import-outside-toplevel
     from mlflow.tracking import MlflowClient
@@ -401,45 +400,47 @@ def log_study_comparison(
     log = logger or get_logger(__name__)
     if not any(curve.points for curve in curves):
         log.warning("log_study_comparison: no evaluated rounds, nothing to compare")
-        return None
+        return []
 
     os.environ.setdefault("MLFLOW_ALLOW_FILE_STORE", "true")
     client = MlflowClient(tracking_uri=tracking_uri)
     experiment = client.get_experiment_by_name(experiment_name)
-    experiment_id = (
-        experiment.experiment_id
-        if experiment is not None
-        else client.create_experiment(experiment_name)
-    )
-    run = client.create_run(experiment_id, run_name=run_name)
-    run_id = run.info.run_id
-    for key, value in (params or {}).items():
-        client.log_param(run_id, key, value)
+    if experiment is None:
+        log.warning("log_study_comparison: no experiment named %s", experiment_name)
+        return []
+    runs = client.search_runs([experiment.experiment_id])
+    if not runs:
+        log.warning("log_study_comparison: experiment %s has no runs", experiment_name)
+        return []
 
     with tempfile.TemporaryDirectory() as staging:
-        summary = Path(staging) / "summary.md"
-        summary.write_text(curve_table_markdown(curves), encoding="utf-8")
-        client.log_artifact(run_id, str(summary), EVALUATION_ARTIFACT_PATH)
+        table = Path(staging) / "methods.md"
+        table.write_text(curve_table_markdown(curves), encoding="utf-8")
+        files = [table]
 
         curves_json = Path(staging) / "learning_curves.json"
         curves_json.write_text(
             json.dumps([curve.to_dict() for curve in curves], indent=2), encoding="utf-8"
         )
-        client.log_artifact(run_id, str(curves_json), EVALUATION_ARTIFACT_PATH)
+        files.append(curves_json)
 
         # pylint: disable-next=import-outside-toplevel
         from POMDPPlanners.utils.visualization.model_learning_plots import plot_learning_curves
 
         plot = plot_learning_curves(curves, Path(staging) / "learning_curves.png")
         if plot is not None:
-            client.log_artifact(run_id, str(plot), EVALUATION_ARTIFACT_PATH)
+            files.append(plot)
 
-    for curve in curves:
-        best = best_point(curve)
-        if best is not None:
-            client.log_metric(run_id, f"{curve.method}_best_return", best.mean_return)
-    client.set_terminated(run_id)
-    return run_id
+        updated: List[str] = []
+        for run in runs:
+            run_id = run.info.run_id
+            for key, value in (params or {}).items():
+                if key not in run.data.params:
+                    client.log_param(run_id, key, value)
+            for path in files:
+                client.log_artifact(run_id, str(path), EVALUATION_ARTIFACT_PATH)
+            updated.append(run_id)
+    return updated
 
 
 def load_round_models(run_artifacts_dir: Path) -> Dict[int, Path]:

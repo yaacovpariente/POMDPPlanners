@@ -733,61 +733,67 @@ class TestArtifactLayout:
             "round_diagnostics.png",
         }
 
-    def test_the_comparison_is_its_own_run(self, tmp_path) -> None:
-        """Purpose: Validates that the across-run question is recorded beside the runs
+    def test_the_comparison_lands_in_every_run(self, tmp_path) -> None:
+        """Purpose: Validates that one run's evaluation dir is enough to decide with
 
-        Given: Curves for two methods
-        When: The study comparison is logged
-        Then: A run holds the method table and the learning curve in the same
-            evaluation/ directory the per-method runs use, and no rounds table,
-            which belongs to one run
+        Given: Two logged runs and the curves comparing them
+        When: The comparison is logged
+        Then: Each run's evaluation/ gains the learning curve and the method
+            table, so a reader never has to open a second run to judge a model
         """
-        mlflow = pytest.importorskip("mlflow")
-        from POMDPPlanners.training.model_learning import log_study_comparison
+        pytest.importorskip("mlflow")
+        from POMDPPlanners.training.model_learning import (
+            MLflowModelLearningTracker,
+            log_study_comparison,
+        )
 
         tracking_uri = f"file://{tmp_path / 'mlruns'}"
-        curves = [
-            LearningCurve(method, 0, (ControlPoint(1, 100, (-1.0, -2.0)),))
-            for method in ("dagger", "batch")
-        ]
+        artifact_dirs = []
+        curves = []
+        for method in ("dagger", "batch"):
+            tracker = MLflowModelLearningTracker(
+                experiment_name="comparison_test",
+                method=method,
+                seed=0,
+                tracking_uri=tracking_uri,
+            )
+            tracker.log_round(_round(1))
+            artifact_dirs.append(tracker.artifact_dir)
+            curve = LearningCurve(method, 0, (ControlPoint(1, 100, (-1.0, -2.0)),))
+            curves.append(curve)
+            tracker.log_curve(curve)
 
-        run_id = log_study_comparison(
-            "model_learning_test",
+        updated = log_study_comparison(
+            "comparison_test",
             curves,
             params={"environment": "FrankaReachFragile"},
             tracking_uri=tracking_uri,
         )
 
-        assert run_id is not None
-        run = mlflow.tracking.MlflowClient(tracking_uri=tracking_uri).get_run(run_id)
-        evaluation = _artifact_dir(run) / "evaluation"
-        assert {path.name for path in evaluation.glob("*")} == {
-            "summary.md",
-            "learning_curves.json",
-            "learning_curves.png",
-        }
-        summary = (evaluation / "summary.md").read_text(encoding="utf-8")
-        assert "| Method | Seed |" in summary
-        assert "Best holdout epoch" not in summary
-        assert run.data.params["environment"] == "FrankaReachFragile"
+        assert len(updated) == 2
+        for directory in artifact_dirs:
+            assert directory is not None
+            assert {path.name for path in directory.iterdir()} == {"models", "evaluation"}
+            names = {path.name for path in (directory / "evaluation").glob("*")}
+            assert {"learning_curves.png", "methods.md", "summary.md"} <= names
 
-    def test_no_curves_means_no_study_run(self, tmp_path) -> None:
-        """Purpose: Validates that an unevaluated study reports nothing rather than an empty run
+    def test_no_curves_means_nothing_is_written(self, tmp_path) -> None:
+        """Purpose: Validates that an unevaluated study reports nothing
 
         Given: Curves with no evaluated rounds
         When: The comparison is logged
-        Then: None comes back
+        Then: No run is updated
         """
         pytest.importorskip("mlflow")
         from POMDPPlanners.training.model_learning import log_study_comparison
 
         assert (
             log_study_comparison(
-                "model_learning_test",
+                "comparison_test",
                 [LearningCurve("dagger", 0, ())],
                 tracking_uri=f"file://{tmp_path / 'mlruns'}",
             )
-            is None
+            == []
         )
 
 
