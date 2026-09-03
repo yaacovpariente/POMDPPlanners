@@ -43,7 +43,12 @@ from POMDPPlanners.core.environment import (
     SpaceType,
 )
 from POMDPPlanners.core.simulation import History, MetricValue
-from POMDPPlanners.core.simulation.step_info_metrics import require_non_empty_histories
+from POMDPPlanners.core.simulation.step_info_metrics import (
+    EpisodeReduction,
+    StepInfoMetric,
+    aggregate_step_info_metrics,
+    require_non_empty_histories,
+)
 from POMDPPlanners.environments.light_dark_pomdp import (
     _native,  # pylint: disable=no-name-in-module
 )
@@ -70,7 +75,6 @@ from POMDPPlanners.utils.numba_kernels import (
     min_distance_to_points_kernel,
     mvn_sample_2d_kernel,
 )
-from POMDPPlanners.utils.statistics_utils import confidence_interval
 
 
 class ContinuousLightDarkPOMDPMetrics(Enum):
@@ -81,6 +85,13 @@ class ContinuousLightDarkPOMDPMetrics(Enum):
     AVG_OBSTACLE_HIT_COUNTER = "avg_obstacle_hit_counter"
     OUT_OF_GRID_RATE = "out_of_grid_rate"
     AVG_HIGH_VARIANCE_STATES_COUNTER = "avg_high_variance_states_counter"
+    ENDED_BY_GOAL = "ended_by_goal"
+    ENDED_BY_FAILURE = "ended_by_failure"
+    ENDED_BY_TIMEOUT = "ended_by_timeout"
+    AVERAGE_EPISODE_LENGTH = "average_episode_length"
+    FINAL_DISTANCE_TO_GOAL = "final_distance_to_goal"
+    STEPS_IN_DARK = "steps_in_dark"
+    LOCALIZATION_ERROR_AT_GOAL = "localization_error_at_goal"
 
 
 class RewardModelType(Enum):
@@ -901,103 +912,107 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
             self.is_obstacle_hit_terminal,
         )
 
-    def get_metric_names(self) -> List[str]:
-        """Get names of Continuous Light-Dark POMDP specific metrics.
+    def step_info(self, state: Any, action: Any, next_state: Any) -> Dict[str, float]:
+        """Measure state-only LightDark channels without reward calls or random draws."""
+        del next_state
+        position = np.asarray(state, dtype=float)[:2]
+        goal = float(np.linalg.norm(position - self.goal_state) <= self.goal_state_radius)
+        obstacle = float(
+            np.any(np.linalg.norm(position.reshape(-1, 1) - self.obstacles, axis=0) <= self.obstacle_radius)
+        )
+        out_of_grid = float(np.any(position < 0.0) or np.any(position > self.grid_size))
+        in_dark = self._is_in_dark(position)
+        return {
+            "goal_reached": goal,
+            "obstacle_hit": obstacle,
+            "out_of_grid": out_of_grid,
+            "high_variance_state": obstacle + out_of_grid,
+            "ended_by_goal": goal if action is None else 0.0,
+            "ended_by_failure": float(action is None and not goal),
+            "ended_by_timeout": 0.0,
+            "recorded_step": float(action is not None),
+            "distance_to_goal": self._final_distance_to_goal(position),
+            "in_dark": in_dark if action is not None else 0.0,
+        }
 
-        Returns:
-            List containing metric names: goal_reaching_rate, obstacle_hit_rate,
-            avg_obstacle_hit_counter, out_of_grid_rate, and avg_high_variance_states_counter
-        """
-        return [metric.value for metric in ContinuousLightDarkPOMDPMetrics]
+    def _final_distance_to_goal(self, position: np.ndarray) -> float:
+        """Euclidean distance from the episode's final position to the goal centre."""
+        return float(np.linalg.norm(position - self.goal_state))
+
+    def _is_in_dark(self, position: np.ndarray) -> float:
+        """One step counted outside every beacon's low-noise radius."""
+        return float(not self._near_beacon_continuous(position))
+
+    @staticmethod
+    def _localization_error(step: Any) -> float:
+        """Distance between the belief mean and true position at the final decision step."""
+        if hasattr(step.belief, "particles"):
+            particles = np.asarray(step.belief.particles, dtype=float)[:, :2]
+            weights = np.asarray(step.belief.normalized_weights, dtype=float)
+            belief_mean = np.average(particles, axis=0, weights=weights)
+        elif hasattr(step.belief, "mean"):
+            belief_mean = np.asarray(step.belief.mean, dtype=float)[:2]
+        else:
+            raise TypeError(f"cannot compute a belief mean for {type(step.belief).__name__}")
+        return float(np.linalg.norm(belief_mean - np.asarray(step.state, dtype=float)[:2]))
+
+    def episode_metric_channels(self, history: History) -> List[Dict[str, float]]:
+        """Return the environment-owned channels for one complete episode."""
+        channels = [dict(step.info or self.step_info(step.state, step.action, step.next_state)) for step in history.history]
+        if not channels:
+            return channels
+        final_step = history.history[-1]
+        if final_step.action is not None and final_step.next_state is not None:
+            channels.append(self.step_info(final_step.next_state, None, None))
+        final = channels[-1]
+        goal = bool(any(item["goal_reached"] for item in channels))
+        failure = bool(history.reach_terminal_state and not goal)
+        final["ended_by_goal"] = float(goal)
+        final["ended_by_failure"] = float(failure)
+        final["ended_by_timeout"] = float(not history.reach_terminal_state and not goal)
+        if goal:
+            final["localization_error_at_goal"] = self._localization_error(final_step)
+        return channels
+
+    def get_metric_specs(self) -> List[StepInfoMetric]:
+        """Declare how LightDark's per-step channels reduce to episode metrics."""
+        return [
+            StepInfoMetric("goal_reaching_rate", "goal_reached", EpisodeReduction.ANY),
+            StepInfoMetric("obstacle_hit_rate", "obstacle_hit", EpisodeReduction.ANY),
+            StepInfoMetric("avg_obstacle_hit_counter", "obstacle_hit", EpisodeReduction.SUM),
+            StepInfoMetric("out_of_grid_rate", "out_of_grid", EpisodeReduction.ANY),
+            StepInfoMetric("avg_high_variance_states_counter", "high_variance_state", EpisodeReduction.SUM),
+            StepInfoMetric("ended_by_goal", "ended_by_goal", EpisodeReduction.LAST),
+            StepInfoMetric("ended_by_failure", "ended_by_failure", EpisodeReduction.LAST),
+            StepInfoMetric("ended_by_timeout", "ended_by_timeout", EpisodeReduction.LAST),
+            StepInfoMetric("average_episode_length", "recorded_step", EpisodeReduction.SUM),
+            StepInfoMetric("final_distance_to_goal", "distance_to_goal", EpisodeReduction.LAST),
+            StepInfoMetric("steps_in_dark", "in_dark", EpisodeReduction.SUM),
+            StepInfoMetric("localization_error_at_goal", "localization_error_at_goal", EpisodeReduction.LAST),
+        ]
+
+    def episode_metric_values(self, history: History) -> Dict[str, float]:
+        """Reduce one episode to the same metrics declared by ``get_metric_specs``."""
+        channels = self.episode_metric_channels(history)
+        values: Dict[str, float] = {}
+        for spec in self.get_metric_specs():
+            samples = [item[spec.channel] for item in channels if spec.channel in item]
+            if not samples:
+                continue
+            if spec.per_episode is EpisodeReduction.ANY:
+                value = float(any(sample != 0.0 for sample in samples))
+            elif spec.per_episode is EpisodeReduction.SUM:
+                value = float(sum(samples))
+            else:
+                value = float(samples[-1])
+            values[spec.name] = value * spec.scale
+        return values
 
     def compute_metrics(self, histories: List[History]) -> List[MetricValue]:
+        """Aggregate the environment-owned per-episode channels across histories."""
         require_non_empty_histories(histories, type(self).__name__)
-        goal_reached = []
-        obstacle_hits = []
-        obstacle_hit_counter = []
-        out_of_grid = []
-        high_variance_states_counter = []
-        for history in histories:
-            goal_reached_in_history = False
-            obstacle_hit_in_history = False
-            obstacle_hit_counter_in_history = 0
-            out_of_grid_in_history = False
-            out_of_grid_counter_in_history = 0
-
-            for _, step in enumerate(history.history):
-                # Score metrics on the 2-D position; hazard-terminal states
-                # carry a trailing terminal slot that must not enter the norms.
-                position = np.asarray(step.state)[:2]
-                if np.linalg.norm(position - self.goal_state) <= self.goal_state_radius:
-                    goal_reached_in_history = True
-                    break
-
-                # Calculate distance to each obstacle (obstacles are 2xN format)
-                distances = np.linalg.norm(position.reshape(-1, 1) - self.obstacles, axis=0)
-                if np.any(distances <= self.obstacle_radius):
-                    obstacle_hit_in_history = True
-                    obstacle_hit_counter_in_history += 1
-
-                # Check if step is out of grid
-                is_out_of_grid = np.any(position < 0) or np.any(position > self.grid_size)
-                if is_out_of_grid:
-                    out_of_grid_in_history = True
-                    out_of_grid_counter_in_history += 1
-
-            goal_reached.append(1 if goal_reached_in_history else 0)
-            obstacle_hits.append(1 if obstacle_hit_in_history else 0)
-            obstacle_hit_counter.append(obstacle_hit_counter_in_history)
-            out_of_grid.append(1 if out_of_grid_in_history else 0)
-            # Sum obstacle hits and out-of-grid occurrences as high-variance states
-            high_variance_states_counter.append(
-                obstacle_hit_counter_in_history + out_of_grid_counter_in_history
-            )
-
-        avg_goal_reached = float(np.mean(goal_reached))
-        avg_obstacle_hits = float(np.mean(obstacle_hits))
-        avg_obstacle_hit_counter = float(np.mean(obstacle_hit_counter))
-        avg_out_of_grid = float(np.mean(out_of_grid))
-        avg_high_variance_states_counter = float(np.mean(high_variance_states_counter))
-        goal_reached_ci = confidence_interval(data=goal_reached, confidence=0.95)
-        obstacle_hits_ci = confidence_interval(data=obstacle_hits, confidence=0.95)
-        obstacle_hit_counter_ci = confidence_interval(data=obstacle_hit_counter, confidence=0.95)
-        out_of_grid_ci = confidence_interval(data=out_of_grid, confidence=0.95)
-        high_variance_states_counter_ci = confidence_interval(
-            data=high_variance_states_counter, confidence=0.95
-        )
-
-        return [
-            MetricValue(
-                name=ContinuousLightDarkPOMDPMetrics.GOAL_REACHING_RATE.value,
-                value=avg_goal_reached,
-                lower_confidence_bound=goal_reached_ci[0],
-                upper_confidence_bound=goal_reached_ci[1],
-            ),
-            MetricValue(
-                name=ContinuousLightDarkPOMDPMetrics.OBSTACLE_HIT_RATE.value,
-                value=avg_obstacle_hits,
-                lower_confidence_bound=obstacle_hits_ci[0],
-                upper_confidence_bound=obstacle_hits_ci[1],
-            ),
-            MetricValue(
-                name=ContinuousLightDarkPOMDPMetrics.AVG_OBSTACLE_HIT_COUNTER.value,
-                value=avg_obstacle_hit_counter,
-                lower_confidence_bound=obstacle_hit_counter_ci[0],
-                upper_confidence_bound=obstacle_hit_counter_ci[1],
-            ),
-            MetricValue(
-                name=ContinuousLightDarkPOMDPMetrics.OUT_OF_GRID_RATE.value,
-                value=avg_out_of_grid,
-                lower_confidence_bound=out_of_grid_ci[0],
-                upper_confidence_bound=out_of_grid_ci[1],
-            ),
-            MetricValue(
-                name=ContinuousLightDarkPOMDPMetrics.AVG_HIGH_VARIANCE_STATES_COUNTER.value,
-                value=avg_high_variance_states_counter,
-                lower_confidence_bound=high_variance_states_counter_ci[0],
-                upper_confidence_bound=high_variance_states_counter_ci[1],
-            ),
-        ]
+        episodes = [self.episode_metric_channels(history) for history in histories]
+        return aggregate_step_info_metrics(episodes, self.get_metric_specs())
 
     def __getstate__(self):
         # Per-action C++ kernel cache holds pybind11 objects that aren't

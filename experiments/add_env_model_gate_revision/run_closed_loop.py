@@ -57,7 +57,7 @@ def run_arm(arm: str, model: Any, world: Any, replicates: Any, episodes: int, ta
     }))
     frame = pd.DataFrame(rows)
     print(f"[{arm}] {len(rows)} episodes in {elapsed:.0f}s wall; mean return {frame.discounted_return.mean():.3f} "
-          f"goal {frame.goal_reached.mean():.2f} steps {frame.steps.mean():.1f} "
+          f"goal {frame.goal_reaching_rate.mean():.2f} steps {frame.average_episode_length.mean():.1f} "
           f"action {frame.mean_action_seconds.median():.3f}s (p90 {frame.mean_action_seconds.quantile(0.9):.3f}) "
           f"sims/decision {frame.mean_simulations_per_decision.mean():.0f}", flush=True)
     return frame

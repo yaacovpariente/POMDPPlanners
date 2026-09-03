@@ -131,6 +131,20 @@ def closed_loop_table(frames: Dict[str, pd.DataFrame]) -> pd.DataFrame:
         seed_means = frame.groupby("replicate")["discounted_return"].mean()
         rows.append({
             "arm": arm,
+            "goal_reaching_rate": frame.goal_reaching_rate.mean(),
+            "ended_by_goal": frame.ended_by_goal.mean(),
+            "ended_by_failure": frame.ended_by_failure.mean(),
+            "ended_by_timeout": frame.ended_by_timeout.mean(),
+            "average_episode_length": frame.average_episode_length.mean(),
+            "out_of_grid_rate": frame.out_of_grid_rate.mean(),
+            "obstacle_hit_rate": frame.obstacle_hit_rate.mean(),
+            "avg_obstacle_hit_counter": frame.avg_obstacle_hit_counter.mean(),
+            "avg_high_variance_states_counter": frame.avg_high_variance_states_counter.mean(),
+            "final_distance_to_goal": frame.final_distance_to_goal.mean(),
+            "steps_in_dark": frame.steps_in_dark.mean(),
+            "localization_error_at_goal": frame.localization_error_at_goal.mean(),
+            "median_action_s": frame.mean_action_seconds.median(),
+            "p90_action_s": frame.mean_action_seconds.quantile(0.9),
             "mean_return": frame.discounted_return.mean(),
             "se_over_episodes": frame.discounted_return.std(ddof=1) / np.sqrt(len(frame)),
             "se_over_seeds": seed_means.std(ddof=1) / np.sqrt(len(seed_means)),
@@ -139,11 +153,6 @@ def closed_loop_table(frames: Dict[str, pd.DataFrame]) -> pd.DataFrame:
             "episodes": len(frame),
             "seeds": frame.replicate.nunique(),
             "episodes_per_seed": int(frame.groupby("replicate").size().min()),
-            "goal_rate": frame.goal_reached.mean(),
-            "out_of_grid_rate": frame.out_of_grid.mean(),
-            "mean_steps": frame.steps.mean(),
-            "median_action_s": frame.mean_action_seconds.median(),
-            "p90_action_s": frame.mean_action_seconds.quantile(0.9),
             "sims_per_decision": frame.mean_simulations_per_decision.mean(),
         })
     return pd.DataFrame(rows).set_index("arm")
@@ -152,12 +161,12 @@ def closed_loop_table(frames: Dict[str, pd.DataFrame]) -> pd.DataFrame:
 def control_gates(frames: Dict[str, pd.DataFrame]) -> Dict[str, Dict[str, Any]]:
     incumbent = frames[INCUMBENT]
     inc_means = incumbent.groupby("replicate")["discounted_return"].mean()
-    inc_goal = incumbent.groupby("replicate")["goal_reached"].mean()
+    inc_goal = incumbent.groupby("replicate")["goal_reaching_rate"].mean()
     margin = PARITY_MARGIN_FRACTION * abs(inc_means.mean())
     verdicts: Dict[str, Dict[str, Any]] = {}
     for arm, frame in frames.items():
         means = frame.groupby("replicate")["discounted_return"].mean()
-        goal = frame.groupby("replicate")["goal_reached"].mean()
+        goal = frame.groupby("replicate")["goal_reaching_rate"].mean()
         seeds_match = set(means.index) == set(inc_means.index)
         evidence = bool(
             len(means) >= MIN_SEEDS and frame.groupby("replicate").size().min() >= MIN_EPISODES_PER_SEED and seeds_match
@@ -172,8 +181,11 @@ def control_gates(frames: Dict[str, pd.DataFrame]) -> Dict[str, Dict[str, Any]]:
                                "margin": float(margin), "threshold": float(inc_means.mean() - margin),
                                "p_parity": p_parity, "p_candidate_worse_than_incumbent": p_worse, "alpha": ALPHA,
                                "per_seed_means": [float(v) for v in means], "pass": bool(p_parity < ALPHA)},
-            "control_task_metric": {"candidate_goal_rate": float(goal.mean()), "incumbent_goal_rate": float(inc_goal.mean()),
-                                    "pass": goal_not_lower},
+            "control_task_metric": {
+                "candidate_task_completion_rate": float(goal.mean()),
+                "truth_task_completion_rate": float(inc_goal.mean()),
+                "pass": goal_not_lower,
+            },
         }
         verdicts[arm]["control"] = {"pass": bool(verdicts[arm]["control_return"]["pass"] and goal_not_lower)}
     return verdicts
@@ -195,7 +207,11 @@ def main() -> Dict[str, Any]:
             "calibration": s4["calibration"], "likelihood": s4["likelihood"],
             "observation": s4["observation"], "ranking": s4["ranking"],
             "evidence": control[arm]["evidence"],
-            "control": {**control[arm]["control"], "return": control[arm]["control_return"], "task_metric": control[arm]["control_task_metric"]},
+            "control": {
+                **control[arm]["control"],
+                "return": control[arm]["control_return"],
+                "task_completion_rate": control[arm]["control_task_metric"],
+            },
         }
         failed = [g for g in ("contract", "calibration", "likelihood", "observation", "ranking", "evidence", "control") if not gates[arm][g]["pass"]]
         gates[arm]["verdict"] = "pass" if not failed else "fail"
@@ -210,7 +226,7 @@ def main() -> Dict[str, Any]:
         c = control[arm]
         print(arm, gates[arm]["verdict"], gates[arm]["failed_gates"],
               "p_parity", round(c["control_return"]["p_parity"], 4), "p_worse", round(c["control_return"]["p_candidate_worse_than_incumbent"], 4),
-              "goal", c["control_task_metric"]["candidate_goal_rate"])
+              "goal", c["control_task_metric"]["candidate_task_completion_rate"])
     return out
 
 

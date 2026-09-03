@@ -111,17 +111,17 @@ def run_batch(
 
 
 def episode_records(results: Dict[str, Dict[str, list]], world: Any, arm: str) -> List[Dict[str, Any]]:
-    """One row per episode, from the world's own history: the numbers every table is built from."""
+    """One row per episode, including every metric declared by the world."""
     rows: List[Dict[str, Any]] = []
     for env_name, by_policy in results.items():
         replicate = int(env_name.rsplit("rep", 1)[-1])
         for policy_name, histories in by_policy.items():
             for episode_index, history in enumerate(histories):
-                final_state = np.asarray(history.history[-1].state, dtype=float)
-                positions = np.array([np.asarray(step.state, dtype=float)[:2] for step in history.history])
-                goal = float(np.linalg.norm(final_state[:2] - world.goal_state) <= world.goal_state_radius)
-                hazard = float(final_state.shape[0] > 2 and final_state[2] > 0.5)
-                out_of_grid = float(np.any((positions < 0.0) | (positions > world.grid_size)))
+                environment_metrics = world.episode_metric_values(history)
+                declared = [spec.name for spec in world.get_metric_specs()]
+                missing = set(declared) - set(environment_metrics)
+                if missing - {"localization_error_at_goal"}:
+                    raise RuntimeError(f"LightDark did not measure declared metrics: {sorted(missing)}")
                 rewards = [step.reward for step in history.history if step.reward is not None]
                 sims = [
                     float(var.value)
@@ -137,11 +137,8 @@ def episode_records(results: Dict[str, Dict[str, list]], world: Any, arm: str) -
                         "episode": episode_index,
                         "discounted_return": history_to_discounted_return_value(history),
                         "undiscounted_return": float(np.sum(rewards)),
-                        "steps": int(history.actual_num_steps),
                         "terminated": bool(history.reach_terminal_state),
-                        "goal_reached": goal,
-                        "hazard_hit": hazard,
-                        "out_of_grid": out_of_grid,
+                        **{name: environment_metrics.get(name, float("nan")) for name in declared},
                         "mean_action_seconds": float(history.average_action_time),
                         "mean_belief_update_seconds": float(history.average_belief_update_time),
                         "mean_simulations_per_decision": float(np.mean(sims)) if sims else float("nan"),
