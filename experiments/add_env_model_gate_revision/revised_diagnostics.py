@@ -1,5 +1,18 @@
 # SPDX-License-Identifier: MIT
-"""Run the revised LightDark diagnostic gates on the reused held-out split."""
+"""Run the revised LightDark diagnostic gates on the reused held-out split.
+
+The calibration ratio divides each candidate's horizon drift by the world's
+drift against itself at the same seed. ``_seed_all`` resets all three noise
+sources before the floor and before every candidate, so the seed fixes the
+start states, the action sequence and both draw streams, and a rerun on the
+same seeds reproduces the ratios. It does not make the floor a *paired*
+measurement: the floor rolls the world twice, so per step it takes one native
+draw for the world and sixteen more for the world-as-model, while a candidate
+takes only the world's one and draws its own from ``np.random``. The world
+trajectories therefore differ between the floor and the candidate even at the
+same seed, which is why the recorded key is
+``mean_ratio_to_seed_matched_floor`` and not ``..._to_paired_floor``.
+"""
 
 import json
 import time
@@ -7,6 +20,7 @@ from pathlib import Path
 
 import numpy as np
 
+from POMDPPlanners.environments.light_dark_pomdp import _native as _ld_native  # pylint: disable=no-name-in-module
 from POMDPPlanners.training.model_learning import TransitionBatch, evaluate_model, horizon_drift_ratio
 from POMDPPlanners.training.model_learning.diagnostics import preset_ranking_agreement
 
@@ -27,6 +41,29 @@ SLACK_NATS = 0.1
 CALIBRATION_BAND = (1.0 / 1.5, 1.5)
 
 
+def _seed_all(seed):
+    """Reset every noise source the drift measurement draws from to ``seed``.
+
+    ``horizon_drift_ratio`` takes a ``Generator``, but that generator only picks
+    the action sequence and which of the 16 model draws to advance on. The draws
+    themselves come from two other places: the candidate transitions all sample
+    through global ``np.random`` (``GaussianMLPTransition.sample_next_state``, and
+    ``CovarianceParameterizedMultivariateNormal.sample`` under the truth and the
+    doubled-noise models), and the world side runs on the LightDark C++ kernel,
+    whose only entry point is ``_native.set_seed`` -- the same call the native
+    equivalence tests use. Seeding one of the three is not enough for a rerun to
+    reproduce the ratios, so all three are set here, to the same value, and this
+    is called immediately before the floor draw and before each candidate's.
+
+    Returns:
+        A fresh ``Generator`` on ``seed``; a ``Generator`` cannot be reseeded in
+        place, so the caller uses the one returned here.
+    """
+    np.random.seed(seed)
+    _ld_native.set_seed(seed)
+    return np.random.default_rng(seed)
+
+
 def _starts(holdout, seed):
     rng = np.random.default_rng(seed)
     chosen = rng.choice(len(holdout), size=NUM_START_STATES, replace=False)
@@ -34,9 +71,10 @@ def _starts(holdout, seed):
 
 
 def _floor(view, holdout, seed):
-    rng = np.random.default_rng(seed)
     starts = _starts(holdout, seed)
-    # Consume the same start-selection draw as evaluate_model before drift.
+    rng = _seed_all(seed)
+    # Consume the same start-selection draw as evaluate_model before drift, so
+    # the generator enters the drift loop in the same state on both sides.
     rng.choice(len(holdout), size=NUM_START_STATES, replace=False)
     return float(horizon_drift_ratio(view, view, starts, W.PRESETS, W.PLANNING_DEPTH, rng))
 
@@ -75,11 +113,20 @@ def main():
     for seed in SEEDS:
         starts = _starts(holdout, seed)
         for name, model in models.items():
+            # Same three sources, same value, immediately before this candidate's
+            # drift draw. ``evaluate_model`` builds its own Generator on ``seed``
+            # and its held-out likelihood sweep is a deterministic density
+            # evaluation, so the drift loop starts where the floor's did.
+            _seed_all(seed)
             evaluated[name][seed] = evaluate_model(
                 model, view, holdout, W.PRESETS, horizon=W.PLANNING_DEPTH,
                 reward_model=view, num_start_states=NUM_START_STATES, seed=seed,
             )
-            np.random.seed(seed)
+            # The ranking gate needs the same reset: evaluate_model has just
+            # advanced the native stream by a model-dependent number of draws,
+            # so seeding only np.random here would leave the score dependent on
+            # which arm ran before it.
+            _seed_all(seed)
             rankings[name].append(float(preset_ranking_agreement(
                 model, view, view, starts, W.PRESETS, num_samples=RANKING_SAMPLES,
             )))
@@ -97,7 +144,7 @@ def main():
         rank_mean = float(np.mean(rankings[name]))
         verdicts[name] = {
             "calibration": {"drift_by_seed": drifts, "floor_by_seed": [floors[s] for s in SEEDS],
-                            "ratio_by_seed": ratios, "mean_ratio_to_paired_floor": mean_ratio,
+                            "ratio_by_seed": ratios, "mean_ratio_to_seed_matched_floor": mean_ratio,
                             "band": list(CALIBRATION_BAND),
                             "pass": bool(CALIBRATION_BAND[0] <= mean_ratio <= CALIBRATION_BAND[1])},
             "likelihood": {"value": transition_ll[name], "incumbent": transition_ll["truth"],

@@ -29,8 +29,9 @@ from POMDPPlanners.utils.action_samplers import UnitCircleActionSampler
 from experiments.add_env_model_gate_revision import world as W
 
 POLICY_NAME = "PFT_DPW"
-#: MCTS wall-clock budget per decision, seconds. The planner-calibration band is
-#: 1-2 s; the planner takes an integer timeout and hits it exactly.
+#: Planner simulations per decision, passed as ``n_simulations``. A count, not a
+#: time budget: every arm searches the same number of simulations, so a return
+#: gap between arms is the model and not the model's speed.
 N_SIMULATIONS = 2849
 NUM_PARTICLES = 100
 NUM_STEPS = 40

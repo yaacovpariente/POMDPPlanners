@@ -9,12 +9,17 @@ of |incumbent|, alpha 0.05; and the task metric (goal-reaching rate) not lower.
 """
 
 import json
+import platform
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any, Dict
 
 import numpy as np
 import pandas as pd
 from scipy import stats
+
+import POMDPPlanners
 
 try:
     from POMDPPlanners.training.model_learning import acceptance as A
@@ -30,6 +35,84 @@ except ImportError:  # the file is git-ignored and may be absent
 OUT = Path("results/add-env-model-gate-revision")
 ARMS = ("truth", "learned", "bad")
 INCUMBENT = "truth"
+#: The worktree this experiment package sits in; the git facts are read from it.
+REPO = Path(__file__).resolve().parents[2]
+
+
+def _git(*args: str, cwd: Path = REPO) -> str:
+    """Run git in ``cwd``, or return the error instead of raising.
+
+    A provenance record that fails to write is worse than one that records why a
+    field is missing, so a git failure is captured as the field's value.
+    """
+    try:
+        return subprocess.run(
+            ["git", "-C", str(cwd), *args], check=True, capture_output=True, text=True
+        ).stdout.strip()
+    except (OSError, subprocess.CalledProcessError) as error:  # pragma: no cover - environment
+        return f"unavailable: {error}"
+
+
+def write_provenance(path: Path) -> Dict[str, Any]:
+    """Record what produced the gates, read from code rather than transcribed.
+
+    The previous provenance file was hand-written, and its revision named the
+    parent commit rather than the experiment's, so nothing on disk said which
+    version of this code ran. Every field below is read at run time: the git
+    facts from this worktree, the settings from the module constants the run
+    actually used. Fields the hand-written file carried that code cannot know --
+    the remote user and path, the transfer note, the wall-clock timestamps --
+    are dropped rather than guessed.
+    """
+    # Imported here, not at module import, so the judge still loads when the
+    # closed-loop dependencies are unavailable.
+    from experiments.add_env_model_gate_revision import closed_loop as CL
+    from experiments.add_env_model_gate_revision import revised_diagnostics as RD
+    from experiments.add_env_model_gate_revision import run_closed_loop as RC
+    from experiments.add_env_model_gate_revision import world as W
+
+    package_dir = Path(POMDPPlanners.__file__).resolve().parent
+    record = {
+        "written_by": "experiments/add_env_model_gate_revision/judge.py:write_provenance",
+        "host": platform.node(),
+        "python": sys.executable,
+        "git_revision": _git("rev-parse", "HEAD"),
+        "git_status_short": _git("status", "--short"),
+        "worktree": str(REPO),
+        "package": {
+            "version": POMDPPlanners.__version__,
+            "path": str(package_dir),
+            # Resolved against the package's own directory, not this worktree:
+            # the run imports POMDPPlanners from the venv's checkout, which can
+            # sit at a different revision than the experiment code.
+            "revision": _git("rev-parse", "HEAD", cwd=package_dir),
+        },
+        "planner": {
+            "simulations_per_decision": CL.N_SIMULATIONS,
+            "depth": W.PLANNING_DEPTH,
+            "particles": CL.NUM_PARTICLES,
+            "horizon": CL.NUM_STEPS,
+            "exploration_constant": CL.EXPLORATION_CONSTANT,
+            "policy_name": CL.POLICY_NAME,
+        },
+        "closed_loop": {
+            "arms": list(ARMS),
+            "seeds": list(RC.REPLICATES),
+            "episodes_per_seed": RC.EPISODES_PER_REPLICATE,
+            "total_episodes": len(ARMS) * len(RC.REPLICATES) * RC.EPISODES_PER_REPLICATE,
+        },
+        "diagnostics": {
+            "seeds": list(RD.SEEDS),
+            "num_start_states": RD.NUM_START_STATES,
+            "ranking_samples_per_seed": RD.RANKING_SAMPLES,
+            "calibration_band": list(RD.CALIBRATION_BAND),
+            "slack_nats": RD.SLACK_NATS,
+        },
+        "acceptance_constants_source": ACCEPTANCE_SOURCE,
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(record, indent=2))
+    return record
 
 
 def _welch_greater(first: np.ndarray, second: np.ndarray, shift: float = 0.0) -> float:
@@ -121,6 +204,7 @@ def main() -> Dict[str, Any]:
            "closed_loop": json.loads(table.reset_index().to_json(orient="records"))}
     (OUT / "gates.json").write_text(json.dumps(out, indent=2))
     table.to_csv(OUT / "closed_loop_table.csv")
+    write_provenance(OUT / "provenance.json")
     print(table.to_string())
     for arm in ARMS:
         c = control[arm]

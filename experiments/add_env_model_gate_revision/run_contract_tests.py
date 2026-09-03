@@ -25,7 +25,13 @@ def main() -> None:
         "test_file": TEST,
         "junit_xml": str(junit),
         "wall_seconds": time.time() - started,
-        "note": "LightDark batch parity and all three substituted-transition helpers",
+        "note": (
+            "LightDark batch parity over the truth, doubled-noise and learned transitions. "
+            "Of the substituted-transition helpers, assert_transition_is_used_everywhere and "
+            "assert_observation_matches_reference run on the wired model with real data; "
+            "assert_carried_channels_preserved runs with an empty carried-index list, because "
+            "this world has no carried channel, so it asserts nothing about values."
+        ),
     }
     (OUT / "contract.json").write_text(json.dumps(artifact, indent=2))
     if completed.returncode:
