@@ -11,15 +11,20 @@ This module tests the Safety Ant Velocity POMDP environment, focusing on:
 
 # pylint: disable=too-many-lines
 
+from pathlib import Path
 from unittest.mock import Mock
 
 import numpy as np
+from PIL import GifImagePlugin, Image, ImageDraw
 import pytest
 
 from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.core.policy import PolicyRunData
 from POMDPPlanners.core.simulation import History, StepData
-from POMDPPlanners.environments.safety_ant_velocity_pomdp import SafeAntVelocityPOMDP
+from POMDPPlanners.environments.safety_ant_velocity_pomdp import (
+    SafeAntVelocityPOMDP,
+    SafeAntVelocityVisualizer,
+)
 from POMDPPlanners.tests.test_utils.confidence_interval_utils import (
     verify_metrics_within_confidence_intervals,
 )
@@ -1258,3 +1263,168 @@ def test_simulate_random_rollout_safe_ant_terminal_returns_zero():
     )
 
     assert result == 0.0
+
+
+def _visualization_history() -> list[StepData]:
+    """Return a fixed history containing every visual safety state."""
+    np.random.seed(42)
+    states = [
+        np.array([0.0, 0.0, 0.5, 0.2]),
+        np.array([0.8, 0.4, 2.2, 0.0]),
+        np.array([0.8, 0.4, 2.2, 0.0]),
+        np.array([1.8, 1.0, 3.2, 0.2]),
+    ]
+    actions = [1, 2, 3, None]
+    rewards = [0.5, -7.8, -7.8, None]
+    belief = Mock(spec=Belief)
+    return [
+        StepData(state, action, None, None, reward, belief)
+        for state, action, reward in zip(states, actions, rewards)
+    ]
+
+
+def _gif_frames(path: Path) -> list[Image.Image]:
+    with Image.open(path) as gif:
+        assert isinstance(gif, GifImagePlugin.GifImageFile)
+        return [gif.seek(index) or gif.convert("RGB").copy() for index in range(gif.n_frames)]
+
+
+def _count_color(image: Image.Image, color: tuple[int, int, int]) -> int:
+    pixels = np.asarray(image)
+    return int(np.all(pixels == color, axis=2).sum())
+
+
+def test_visualizer_writes_one_timed_full_size_frame_per_state(pomdp, tmp_path: Path):
+    """The GIF keeps terminal and repeated states at the public frame rate."""
+    output = tmp_path / "nested" / "episode.gif"
+
+    SafeAntVelocityVisualizer(pomdp).create_animation(_visualization_history(), output)
+
+    with Image.open(output) as gif:
+        assert isinstance(gif, GifImagePlugin.GifImageFile)
+        assert gif.size == (1600, 800)
+        assert gif.n_frames == 4
+        assert [gif.seek(index) or gif.info["duration"] for index in range(gif.n_frames)] == [
+            1250,
+            1250,
+            1250,
+            1250,
+        ]
+
+
+def test_visualizer_is_byte_deterministic_for_fixed_history(pomdp, tmp_path: Path):
+    """The same fixed history produces identical encoded GIF bytes."""
+    first = tmp_path / "first.gif"
+    second = tmp_path / "second.gif"
+    visualizer = SafeAntVelocityVisualizer(pomdp)
+
+    visualizer.create_animation(_visualization_history(), first)
+    visualizer.create_animation(_visualization_history(), second)
+
+    assert first.read_bytes() == second.read_bytes()
+
+
+def test_visualizer_builds_static_background_once(pomdp, tmp_path: Path, monkeypatch):
+    """Static axes, labels, grid, and thresholds are rendered once per GIF."""
+    visualizer = SafeAntVelocityVisualizer(pomdp)
+    original = visualizer._build_static_background  # pylint: disable=protected-access
+    calls = 0
+
+    def counted_background(*args):
+        nonlocal calls
+        calls += 1
+        return original(*args)
+
+    monkeypatch.setattr(visualizer, "_build_static_background", counted_background)
+
+    visualizer.create_animation(_visualization_history(), tmp_path / "episode.gif")
+
+    assert calls == 1
+
+
+def test_visualizer_preserves_scene_elements_and_safety_events(pomdp, tmp_path: Path):
+    """Both panels, vectors, thresholds, rewards, and safety states remain visible."""
+    output = tmp_path / "episode.gif"
+    visualizer = SafeAntVelocityVisualizer(pomdp)
+    visualizer.create_animation(_visualization_history(), output)
+    frames = _gif_frames(output)
+
+    assert _count_color(frames[0], visualizer.BLUE) > 0
+    assert _count_color(frames[0], visualizer.GREEN) > 0
+    assert _count_color(frames[0], visualizer.PURPLE) > 0
+    assert _count_color(frames[0], visualizer.ORANGE) > 0
+    assert _count_color(frames[1], visualizer.ORANGE) > 100
+    assert _count_color(frames[-1], visualizer.RED) > 100
+    # The terminal banner must leave the step/action card readable.
+    assert _count_color(frames[-1].crop((90, 200, 230, 232)), visualizer.RED) == 0
+    assert _count_color(frames[-1].crop((0, 60, 650, 135)), visualizer.RED) > 100
+
+    states, actions, rewards = visualizer._extract_episode_data(  # pylint: disable=protected-access
+        _visualization_history()
+    )
+    geometry = visualizer._geometry(states)  # pylint: disable=protected-access
+    background = visualizer._build_static_background(  # pylint: disable=protected-access
+        states, geometry
+    )
+    captured_text = []
+    original_text_box = visualizer._text_box  # pylint: disable=protected-access
+
+    def capture_text(draw, position, text, color):
+        captured_text.append(text)
+        original_text_box(draw, position, text, color)
+
+    visualizer._text_box = capture_text  # type: ignore[method-assign]  # pylint: disable=protected-access
+    visualizer._render_frame(  # pylint: disable=protected-access
+        background, states, actions, rewards, geometry, len(states) - 1
+    )
+
+    assert "Step: 4/4\nAction: Terminal" in captured_text
+    assert "Step Reward: 0.0\nTotal Reward: -15.1" in captured_text
+    assert (
+        visualizer._world_point((1.0, 1.0), geometry)[0]
+        > visualizer._world_point((0.0, 1.0), geometry)[0]  # pylint: disable=protected-access
+    )
+    assert (
+        visualizer._world_point((1.0, 1.0), geometry)[1]
+        < visualizer._world_point((1.0, 0.0), geometry)[1]  # pylint: disable=protected-access
+    )
+
+
+@pytest.mark.parametrize("end_position", [(0.0, 9.0), (9.0, 0.0)])
+def test_visualizer_labels_follow_wide_and_tall_trajectories(pomdp, monkeypatch, end_position):
+    """Aspect changes keep captions beside the axes and the full banner on canvas."""
+    visualizer = SafeAntVelocityVisualizer(pomdp)
+    states = [np.array([0.0, 0.0, 0.0, 0.0]), np.array([*end_position, 4.0, 0.0])]
+    geometry = visualizer._geometry(states)  # pylint: disable=protected-access
+    main = visualizer._main_box(geometry)  # pylint: disable=protected-access
+    text_positions = {}
+    vertical_positions = {}
+    original_text = ImageDraw.ImageDraw.text
+    original_vertical = visualizer._vertical_text  # pylint: disable=protected-access
+
+    def capture_text(draw, xy, text, *args, **kwargs):
+        text_positions[text] = xy
+        return original_text(draw, xy, text, *args, **kwargs)
+
+    def capture_vertical(image, center, text, font):
+        vertical_positions[text] = center
+        return original_vertical(image, center, text, font)
+
+    monkeypatch.setattr(ImageDraw.ImageDraw, "text", capture_text)
+    monkeypatch.setattr(visualizer, "_vertical_text", capture_vertical)
+    background = visualizer._build_static_background(
+        states, geometry
+    )  # pylint: disable=protected-access
+    frame = visualizer._render_frame(  # pylint: disable=protected-access
+        background, states, [0], [0.0, 0.0], geometry, 1
+    )
+
+    x_caption = text_positions["X Position"]
+    assert main[0] < x_caption[0] < main[2]
+    assert main[3] < x_caption[1] < main[3] + 70
+    assert main[1] < vertical_positions["Y Position"][1] < main[3]
+    header = np.asarray(frame.crop((0, 60, 650, 135)))
+    banner_x = np.where(np.all(header == visualizer.RED, axis=2))[1]
+    assert len(banner_x) > 100
+    assert banner_x.min() > 0
+    assert banner_x.max() < 649
