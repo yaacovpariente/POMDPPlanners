@@ -55,6 +55,20 @@ from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp import (
 )
 
 
+def battleship_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
+    """Pinned optional defaults for ``BattleshipPOMDP``."""
+    pinned: Dict[str, Any] = {
+        "board_size": 5,
+        "ship_lengths": (3, 2, 2),
+        "allow_adjacent_ships": True,
+        "hit_reward": 1.0,
+        "miss_penalty": 0.1,
+        "max_layouts": 2_000_000,
+    }
+    pinned.update(overrides)
+    return pinned
+
+
 def tiger_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
     """Pinned optional defaults for ``TigerPOMDP`` (no non-framework optionals)."""
     pinned: Dict[str, Any] = {}
