@@ -5,11 +5,10 @@
 from typing import TYPE_CHECKING, Any, List, Tuple
 
 import numpy as np
-from PIL import ImageDraw
+from PIL import Image, ImageDraw
+from POMDPPlanners.environments.push_pomdp.push_visualization_assets import paste_obstacle
 
 from POMDPPlanners.environments.push_pomdp.push_visualization_utils import (
-    OBSTACLE,
-    OBSTACLE_EDGE,
     ROBOT_RADIUS,
     PushRendererBase,
 )
@@ -32,16 +31,11 @@ class ContinuousPushPOMDPVisualizer(PushRendererBase):
     def _variant_scene_key(self) -> Tuple[Any, ...]:
         return (float(self.robot_radius),)
 
-    def _draw_static_obstacles(self, draw: ImageDraw.ImageDraw) -> None:
+    def _draw_static_obstacles(self, canvas: Image.Image) -> None:
         for cx, cy, hx, hy in np.asarray(self.obstacles, dtype=float):
             left, top = self._to_px((cx - hx, cy + hy))
             right, bottom = self._to_px((cx + hx, cy - hy))
-            draw.rectangle(
-                (left, top, right, bottom),
-                fill=OBSTACLE,
-                outline=OBSTACLE_EDGE,
-                width=3,
-            )
+            paste_obstacle(canvas, (left, top, right, bottom), circle=False)
 
     def _legend_entries(self) -> List[Tuple[str, str]]:
         entries = super()._legend_entries()

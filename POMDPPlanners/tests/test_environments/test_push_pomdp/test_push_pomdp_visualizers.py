@@ -9,6 +9,7 @@ from typing import Any, cast
 import numpy as np
 from PIL import GifImagePlugin, Image
 import pytest
+from POMDPPlanners.environments.push_pomdp.push_visualization_assets import paste_obstacle
 
 from POMDPPlanners.core.simulation import StepData
 from POMDPPlanners.environments.push_pomdp.continuous_push_pomdp_visualizer import (
@@ -19,15 +20,11 @@ from POMDPPlanners.environments.push_pomdp.push_visualization_utils import (
     ACTION,
     CANVAS_SIZE,
     COLLISION_BOX,
-    DANGER,
     GIF_DURATION_MS,
-    OBJECT,
     OBSTACLE,
     PUSH_LINE,
-    ROBOT,
     ROBOT_RADIUS,
     SUCCESS_BOX,
-    TARGET,
 )
 
 
@@ -155,15 +152,39 @@ def _has_color(frame: Image.Image, color: tuple[int, int, int]) -> bool:
     return bool(np.any(np.all(pixels == color, axis=2)))
 
 
+@pytest.mark.parametrize("circle", [True, False])
+def test_tiny_obstacle_keeps_valid_outline(circle: bool) -> None:
+    canvas = Image.new("RGB", (20, 20), "white")
+    paste_obstacle(canvas, (10.0, 10.0, 11.0, 11.0), circle)
+    assert canvas.getpixel((10, 10)) != (255, 255, 255)
+
+
+def _assert_scene_art(frame: Image.Image, visualizer: Any) -> None:
+    for point, kind in (((1.0, 1.0), "robot"), ((1.7, 1.0), "object"), ((4.0, 1.0), "target")):
+        x, y = visualizer._to_px(point)
+        patch = np.asarray(
+            frame.crop((round(x) - 15, round(y) - 15, round(x) + 15, round(y) + 15))
+        ).astype(int)
+        if kind == "robot":
+            assert np.any(
+                (patch[:, :, 2] > patch[:, :, 0] + 35) & (patch[:, :, 2] > patch[:, :, 1] + 15)
+            )
+        else:
+            assert np.any(
+                (patch[:, :, 0] > patch[:, :, 2] + 60) & (patch[:, :, 0] > patch[:, :, 1] + 20)
+            )
+        assert len(np.unique(patch.reshape(-1, 3), axis=0)) > 30, "sprites retain shaded detail"
+    danger = _pixel(frame, visualizer, (2.0, 7.0))
+    assert danger[0] > danger[1] * 1.3, "hazard remains red over terrain"
+    obstacle = _pixel(frame, visualizer, (7.0, 2.0))
+    assert obstacle[0] > obstacle[1] * 1.3 and obstacle[1] < 110, "obstacle remains dark rust stone"
+
+
 def test_discrete_push_frames_preserve_scene_and_events() -> None:
     visualizer = PushPOMDPVisualizer(_DiscreteFixture())  # type: ignore[arg-type]
     first, _, collision, terminal = visualizer.render_frames(DISCRETE_HISTORY)
 
-    assert _pixel(first, visualizer, (2.0, 7.0)) == DANGER
-    assert _pixel(first, visualizer, (7.0, 2.0)) == OBSTACLE
-    assert _pixel(first, visualizer, (1.0, 1.0)) == ROBOT
-    assert _pixel(first, visualizer, (1.7, 1.0)) == OBJECT
-    assert _pixel(first, visualizer, (4.0, 1.0)) == TARGET
+    _assert_scene_art(first, visualizer)
     assert _has_color(first, ACTION), "push and action arrows must stay visible"
     assert _has_color(collision, COLLISION_BOX)
     assert _has_color(terminal, SUCCESS_BOX)
@@ -173,15 +194,15 @@ def test_continuous_push_frames_preserve_scene_and_events() -> None:
     visualizer = ContinuousPushPOMDPVisualizer(_ContinuousFixture())  # type: ignore[arg-type]
     first, _, collision, terminal = visualizer.render_frames(CONTINUOUS_HISTORY)
 
-    assert _pixel(first, visualizer, (2.0, 7.0)) == DANGER
-    assert _pixel(first, visualizer, (7.0, 2.0)) == OBSTACLE
-    assert _pixel(first, visualizer, (1.0, 1.0)) == ROBOT
-    assert _pixel(first, visualizer, (1.0, 1.25)) == ROBOT_RADIUS
-    assert _pixel(first, visualizer, (1.7, 1.0)) == OBJECT
-    assert _pixel(first, visualizer, (4.0, 1.0)) == TARGET
+    _assert_scene_art(first, visualizer)
+    rx, ry = visualizer._to_px((1.0, 1.0))
+    assert _has_color(
+        first.crop((round(rx) - 30, round(ry) - 30, round(rx) + 30, round(ry) + 30)), ROBOT_RADIUS
+    )
     assert _has_color(first, ACTION), "push and continuous action arrows must stay visible"
+    tail = _pixel(first, visualizer, (1.29, 1.0))
     assert (
-        _pixel(first, visualizer, (1.2, 1.0)) == ACTION
+        tail[0] > 200 and tail[1] < 40 and tail[2] < 40
     ), "arrow tail must overlay the radius disc"
     assert _has_color(collision, COLLISION_BOX)
     assert _has_color(terminal, SUCCESS_BOX)
@@ -195,7 +216,10 @@ def test_push_connection_is_distinct_from_obstacles() -> None:
     ]
     frame = visualizer.render_frames(history)[0]
     assert _pixel(frame, visualizer, (1.0, 1.35)) == PUSH_LINE
-    assert _pixel(frame, visualizer, (7.0, 2.0)) == OBSTACLE
+    rust = _pixel(frame, visualizer, (7.0, 2.0))
+    assert (
+        rust[0] < 190 and rust[1] > 45 and rust[2] > 25
+    ), "obstacle color must remain visibly distinct from pure-red connections"
     assert PUSH_LINE != OBSTACLE
 
 

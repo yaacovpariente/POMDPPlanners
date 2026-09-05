@@ -98,6 +98,7 @@ where = ["."]
 include = ["POMDPPlanners*"]
 
 [tool.setuptools.package-data]
+"POMDPPlanners.environments.push_pomdp" = ["push_sprite_sheet.png"]
 # PacMan visualizer loads these sprites at runtime via
 # pacman_visualizer.py: `sprite_dir / "<file>"`. Bundle them so PyPI
 # installs include the assets, not just the .py files.

@@ -5,11 +5,10 @@
 from typing import TYPE_CHECKING, Any, Tuple
 
 import numpy as np
-from PIL import ImageDraw
+from PIL import Image
+from POMDPPlanners.environments.push_pomdp.push_visualization_assets import paste_obstacle
 
 from POMDPPlanners.environments.push_pomdp.push_visualization_utils import (
-    OBSTACLE,
-    OBSTACLE_EDGE,
     PushRendererBase,
 )
 
@@ -34,16 +33,11 @@ class PushPOMDPVisualizer(PushRendererBase):
     def _variant_scene_key(self) -> Tuple[Any, ...]:
         return (float(self.obstacle_radius),)
 
-    def _draw_static_obstacles(self, draw: ImageDraw.ImageDraw) -> None:
+    def _draw_static_obstacles(self, canvas: Image.Image) -> None:
         radius = float(self.obstacle_radius) * self._px_per_unit
         for center in self.obstacles:
             x, y = self._to_px(center)
-            draw.ellipse(
-                (x - radius, y - radius, x + radius, y + radius),
-                fill=OBSTACLE,
-                outline=OBSTACLE_EDGE,
-                width=3,
-            )
+            paste_obstacle(canvas, (x - radius, y - radius, x + radius, y + radius), circle=True)
 
     def _action_vector(self, action: Any) -> np.ndarray:
         return self._ACTION_DIRS.get(action, np.array([0.0, 0.0]))
