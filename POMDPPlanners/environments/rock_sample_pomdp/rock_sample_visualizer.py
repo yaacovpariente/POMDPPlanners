@@ -98,6 +98,8 @@ class RockSampleVisualizer:
     ) -> None:
         """Save a path as a 1-frame-per-second animated GIF."""
         self._validate_path_cache_inputs(cache_path)
+        if not path:
+            raise ValueError("Cannot visualize empty path")
         frames = self.render_frames(path, actions)
         cache_path.parent.mkdir(parents=True, exist_ok=True)
         master = self._build_palette(frames[0])
@@ -203,7 +205,7 @@ class RockSampleVisualizer:
             font=_font(18),
             anchor="mm",
         )
-        self._draw_danger_areas(draw)
+        self._draw_danger_areas(canvas)
         for row in range(self.map_size[0]):
             _, y = self._cell_center(row, 0)
             draw.line([(left, y), (right, y)], fill=COLOR_GRID, width=1)
@@ -225,11 +227,17 @@ class RockSampleVisualizer:
         self._draw_legend(draw)
         return canvas
 
-    def _draw_danger_areas(self, draw: ImageDraw.ImageDraw) -> None:
+    def _draw_danger_areas(self, canvas: Image.Image) -> None:
+        # Draw on the plot crop so edge hazards cannot cover axis labels.
+        left, top, right, bottom = self._plot_bounds
+        plot = canvas.crop((left, top, right, bottom))
+        draw = ImageDraw.Draw(plot)
         radius = float(self.dangerous_area_radius) * self._pixels_per_cell
         for row, col in self.dangerous_areas:
             x, y = self._cell_center(row, col)
+            x, y = x - left, y - top
             draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill=COLOR_DANGER)
+        canvas.paste(plot, (left, top))
 
     def _draw_legend(self, draw: ImageDraw.ImageDraw) -> None:
         x = LEGEND_LEFT

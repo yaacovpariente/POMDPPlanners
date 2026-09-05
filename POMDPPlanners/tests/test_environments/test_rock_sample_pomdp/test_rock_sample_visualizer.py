@@ -6,7 +6,7 @@ import hashlib
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from PIL import Image
+from PIL import GifImagePlugin, Image
 import pytest
 
 from POMDPPlanners.core.belief import Belief
@@ -57,6 +57,7 @@ def _fixed_case():
 
 def _color_count(image: Image.Image, color) -> int:
     colors = image.getcolors(maxcolors=CANVAS_SIZE[0] * CANVAS_SIZE[1])
+    assert colors is not None
     return sum(count for count, found in colors if found == color)
 
 
@@ -71,6 +72,33 @@ class TestVisualization:
 
         with pytest.raises(ValueError, match="cache_path must end with .gif"):
             env.visualize_path(states, actions, Path("test.png"))
+
+    def test_visualize_path_rejects_empty_path(self, tmp_path):
+        env, _, _ = _fixed_case()
+        output = tmp_path / "nested" / "empty.gif"
+
+        with pytest.raises(ValueError, match="Cannot visualize empty path"):
+            env.visualize_path([], [], output)
+
+        assert not output.parent.exists()
+
+    def test_danger_areas_are_clipped_to_grid(self):
+        env, _, _ = _fixed_case()
+        env.dangerous_areas = [(0, 0), (3, 4)]
+        env.dangerous_area_radius = 1.0
+        visualizer = RockSampleVisualizer(env)
+        background = visualizer._build_static_background()
+        left, top, right, bottom = visualizer._plot_bounds
+
+        # Exclude the legend, whose danger swatch deliberately uses this color.
+        assert _color_count(background.crop((0, 0, right + 20, top)), COLOR_DANGER) == 0
+        assert _color_count(background.crop((0, top, left, bottom)), COLOR_DANGER) == 0
+        assert (
+            _color_count(background.crop((right + 1, top, right + 20, bottom)), COLOR_DANGER) == 0
+        )
+        assert _color_count(background.crop((0, bottom + 1, right + 20, 800)), COLOR_DANGER) == 0
+        assert background.getpixel((left + 5, top + 5)) == COLOR_DANGER
+        assert background.getpixel((right - 5, bottom - 5)) == COLOR_DANGER
 
     def test_cache_visualization_empty_history(self, tmp_path):
         env, _, _ = _fixed_case()
@@ -116,6 +144,7 @@ class TestVisualization:
         RockSampleVisualizer(env).visualize_path(states, actions, output)
 
         with Image.open(output) as gif:
+            assert isinstance(gif, GifImagePlugin.GifImageFile)
             assert gif.size == CANVAS_SIZE
             assert gif.n_frames == len(states)
             durations = []
