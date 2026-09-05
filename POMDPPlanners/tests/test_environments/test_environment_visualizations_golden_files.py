@@ -83,6 +83,7 @@ from POMDPPlanners.environments.t_maze_pomdp.t_maze_pomdp import (
     GOAL_LEFT,
     GOAL_RIGHT,
     OBSERVATION_EMPTY,
+    OBSERVATION_LEFT_CUE,
     TMazePOMDP,
     create_t_maze_state,
 )
@@ -707,6 +708,14 @@ def create_deterministic_t_maze_episode() -> List[StepData]:
     the weights swinging to 0.9 / 0.1 on the step that reads the cue. A point-mass
     belief would render the same picture whether the goal-side view worked or not.
 
+    The fixture is also kept physically consistent with the environment it claims
+    to come from, because the picture it pins is the one a human reviews. Its
+    particles sit on the agent's own cell rather than staying at the start (position
+    is observable here, so a filter's particles track the agent), and the step that
+    enters the cue cell reports ``left_cue`` rather than ``empty`` — that reading is
+    what justifies the belief swinging to 0.9, and an episode that swung on an
+    ``empty`` could not have happened.
+
     Returns:
         The episode's step records, terminal bookkeeping step included.
     """
@@ -717,11 +726,13 @@ def create_deterministic_t_maze_episode() -> List[StepData]:
     # Weight on the true (left) side per step: flat until the cue is read on the
     # first move, then held through the corridor, as a correct filter would.
     left_weights = [0.5, 0.9, 0.9, 0.9, 0.9]
+    # The first action steps onto the cue cell, so that step — and only that step —
+    # returns a cue. Every later step in the corridor is silent.
+    observations = [OBSERVATION_LEFT_CUE] + [OBSERVATION_EMPTY] * (len(actions) - 1)
 
     history: List[StepData] = []
-    for action, left_weight in zip(actions, left_weights):
+    for action, left_weight, observation in zip(actions, left_weights, observations):
         next_state = env.sample_next_state(state, action)
-        observation = OBSERVATION_EMPTY
         history.append(
             StepData(
                 state=state,
@@ -729,7 +740,7 @@ def create_deterministic_t_maze_episode() -> List[StepData]:
                 next_state=next_state,
                 observation=observation,
                 reward=env.reward(state, action, next_state),
-                belief=_create_t_maze_belief(env, left_weight),
+                belief=_create_t_maze_belief(state, left_weight),
             )
         )
         state = next_state
@@ -743,18 +754,25 @@ def create_deterministic_t_maze_episode() -> List[StepData]:
             next_state=state,
             observation=None,
             reward=0.0,
-            belief=_create_t_maze_belief(env, left_weights[-1]),
+            belief=_create_t_maze_belief(state, left_weights[-1]),
         )
     )
     return history
 
 
-def _create_t_maze_belief(env: TMazePOMDP, left_weight: float) -> WeightedParticleBelief:
-    """A two-particle belief carrying ``left_weight`` on the left goal side."""
+def _create_t_maze_belief(state: np.ndarray, left_weight: float) -> WeightedParticleBelief:
+    """A two-particle belief on ``state``'s own cell, ``left_weight`` on the left goal.
+
+    Both particles carry the agent's position and cue phase because position is
+    observable in this maze: a filter's particles agree about where the agent is and
+    disagree only about the goal side.
+    """
+    position = (int(state[0]), int(state[1]))
+    cue_phase = float(state[3])
     return WeightedParticleBelief(
         particles=[
-            create_t_maze_state(env.start_cell, GOAL_LEFT),
-            create_t_maze_state(env.start_cell, GOAL_RIGHT),
+            create_t_maze_state(position, GOAL_LEFT, cue_phase),
+            create_t_maze_state(position, GOAL_RIGHT, cue_phase),
         ],
         log_weights=np.log(np.array([left_weight, 1.0 - left_weight])),
     )
