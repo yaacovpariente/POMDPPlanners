@@ -1,24 +1,36 @@
-# RockSample cached renderer evidence
+# RockSample visual redesign
 
-The reviewed Pillow renderer cut the warmed six-frame saved-export median from
-0.5857 seconds to 0.0736 seconds (87.4% lower) on `ubuntu64`. Both runs used the
-same fixed history, one warm-up, five exports, and one CPU thread, with Pillow
-12.0.0. Earlier local measurements were repeated after the clipping fix.
+RockSample now uses textured orange terrain, detailed rover and mineral sprites, translucent danger zones, a dark frame and legend, and rock-quality badges. Static art is cached; GIF saving does not call an image-generation service.
 
-| Renderer | Run 1 | Run 2 | Run 3 | Run 4 | Run 5 | Median | GIF size |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Matplotlib baseline | 0.584140 s | 0.583967 s | 0.585696 s | 0.591760 s | 0.593965 s | 0.585696 s | 81,570 B |
-| Cached Pillow | 0.073689 s | 0.073631 s | 0.073685 s | 0.073581 s | 0.073594 s | 0.073631 s | 110,253 B |
+## Before and after
 
-The fixed history has six states: east movement, a rock sensor check, a
-successful sample, a failed sample after the rock changes, east movement
-toward the exit, and a terminal state. It also includes a danger area and a
-second bad rock.
+Both animations use the same six states and five actions: move east, check rock zero, sample a good rock, sample the depleted rock, move east, then terminal. Both are 1000 × 800, six one-second frames, seed 42. Before runs the renderer from develop commit `0111d3547f1be04dd960a49f83ba3c5157927ff8`.
 
-- [Before GIF](artifacts/rocksample-renderer-before.gif)
-- [After GIF](artifacts/rocksample-renderer-after.gif)
+### Before
 
-The baseline GIF SHA-256 is
-`cdb8fae69d909a1fbc2352b278de016cb501a4647f2e1b3000c85503f33537e6`.
-The Pillow GIF SHA-256 is
-`1ccfb1f8ebf1bdc912f84317c9687e584324e78bd175a6473daa6c87d1a2d233`.
+![Before: develop renderer](artifacts/rocksample-renderer-before.gif)
+
+### After
+
+![After: textured RockSample renderer](artifacts/rocksample-renderer-after.gif)
+
+## Save speed
+
+Measured on ubuntu64 in the CI dependency Docker image with one CPU thread, one warm-up, and five saved exports per renderer. The old renderer was executed, not estimated. Median save time fell from 0.596125 s to 0.155833 s (3.83× faster). More detailed pixels increase the GIF from 81,570 to 2,524,913 bytes.
+
+| Renderer | Five save times, seconds | Median |
+| --- | --- | --- |
+| Develop | 0.599044, 0.597860, 0.595764, 0.589788, 0.596125 | 0.596125 |
+| Redesigned | 0.159774, 0.155833, 0.155841, 0.155453, 0.154998 | 0.155833 |
+
+## Checks
+
+The CI Docker run passed 13 selected tests: focused renderer checks, golden-file comparison, and repeatability. Black passed for the three changed Python files. Pyright passed with zero errors and warnings on ubuntu64. A built wheel was installed into a temporary directory; all five PNG assets were present and loaded successfully.
+
+The rendering retains row zero at the top, east exit, rock quality, movement and sensor cues, both sample results, terminal robot removal, and clipped danger areas. Environment dynamics, rewards, observations, and planner behavior are unchanged.
+
+## Artwork
+
+The built-in image-generation tool created a rover/ore atlas and orange-soil texture. An extraction edit removed cast shadows, but still returned a painted checkerboard; an offline boundary-connected matte pass removed it, and the four cutouts were saved at 256 px with alpha. Only those finished cutouts and terrain ship. Runtime decoding and resizing are cached. The GIF palette reserves 64 colors for sprite detail.
+
+Fresh-process first-save samples, excluding imports: develop 0.617135 s; redesign 0.192615 s. These are single samples, distinct from the five-run warmed medians.

@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, List, Optional, Sequence, Tuple
 
 from PIL import Image, ImageDraw, ImageFont
+from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_assets import sprite, terrain
 
 from POMDPPlanners.core.simulation import StepData
 from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp import (
@@ -29,19 +30,19 @@ PLOT_MAX_BOTTOM = 668
 LEGEND_LEFT = 811
 GIF_DURATION_MS = 1000
 
-COLOR_PAGE = (255, 255, 255)
-COLOR_GRID = (215, 215, 215)
-COLOR_BORDER = (0, 0, 0)
-COLOR_TEXT = (20, 20, 20)
+COLOR_PAGE = (23, 25, 27)
+COLOR_GRID = (210, 154, 102)
+COLOR_BORDER = (96, 84, 65)
+COLOR_TEXT = (237, 229, 214)
 COLOR_GOOD_ROCK = (68, 160, 68)
 COLOR_BAD_ROCK = (248, 72, 72)
-COLOR_DANGER = (255, 166, 166)
+COLOR_DANGER = (232, 55, 40)
 COLOR_EXIT = (244, 196, 40)
 COLOR_ROBOT = (0, 35, 235)
 COLOR_PATH = (108, 108, 255)
 COLOR_ARROW = (238, 30, 30)
 COLOR_SENSOR = (232, 134, 20)
-COLOR_INFO = (246, 222, 174)
+COLOR_INFO = (35, 39, 42)
 COLOR_SUCCESS = (144, 238, 144)
 COLOR_SUCCESS_EDGE = (0, 112, 32)
 COLOR_FAILURE = (240, 128, 128)
@@ -132,11 +133,12 @@ class RockSampleVisualizer:
             if robot_pos != (-1, -1):
                 valid_path.append(robot_pos)
             self._draw_path(draw, valid_path)
-            self._draw_rocks(draw, state)
+            self._draw_rocks(canvas, state)
             action = actions[frame_index] if frame_index < len(actions) else None
             if robot_pos != (-1, -1):
-                self._draw_robot(draw, robot_pos)
+                self._draw_robot(canvas, robot_pos)
                 self._draw_action(draw, robot_pos, action)
+            self._draw_rock_badges(draw, state)
             self._draw_status(draw, frame_index, len(path), state, action)
             frames.append(canvas)
         return frames
@@ -199,23 +201,39 @@ class RockSampleVisualizer:
         left, top, right, bottom = self._plot_bounds
 
         draw.text(
-            ((left + right) / 2, 88),
-            "RockSample POMDP Episode Visualization",
+            (left, 40),
+            "RockSample",
             fill=COLOR_TEXT,
-            font=_font(18),
-            anchor="mm",
+            font=_font(30),
+            anchor="lm",
         )
+        draw.text(
+            (left, 68), "MINERAL SURVEY  /  WORLD STATE", fill=(161, 168, 173), font=_font(12)
+        )
+        draw.rounded_rectangle(
+            (left - 7, top - 7, right + 7, bottom + 7),
+            radius=4,
+            fill=(12, 14, 15),
+            outline=(100, 90, 77),
+            width=2,
+        )
+        canvas.paste(terrain(right - left, bottom - top), (left, top))
         self._draw_danger_areas(canvas)
         for row in range(self.map_size[0]):
             _, y = self._cell_center(row, 0)
-            draw.line([(left, y), (right, y)], fill=COLOR_GRID, width=1)
+            edge = top + row * self._pixels_per_cell
+            draw.line([(left, edge), (right, edge)], fill=COLOR_GRID, width=1)
             draw.text((left - 13, y), str(row), fill=COLOR_TEXT, font=_font(14), anchor="rm")
         for col in range(self.map_size[1]):
             x, _ = self._cell_center(0, col)
-            draw.line([(x, top), (x, bottom)], fill=COLOR_GRID, width=1)
+            edge = left + col * self._pixels_per_cell
+            draw.line([(edge, top), (edge, bottom)], fill=COLOR_GRID, width=1)
             draw.text((x, bottom + 10), str(col), fill=COLOR_TEXT, font=_font(14), anchor="ma")
         draw.rectangle((left, top, right, bottom), outline=COLOR_BORDER, width=1)
         draw.line([(right, top), (right, bottom)], fill=COLOR_EXIT, width=3)
+        draw.text(
+            (right + 14, bottom + 28), "EAST EXIT", fill=COLOR_EXIT, font=_font(12), anchor="rm"
+        )
         draw.text(
             ((left + right) / 2, bottom + 36),
             "Column",
@@ -225,23 +243,38 @@ class RockSampleVisualizer:
         )
         draw.text((18, (top + bottom) / 2), "Row", fill=COLOR_TEXT, font=_font(15), anchor="lm")
         self._draw_legend(draw)
+        rover = sprite("rover", 27)
+        canvas.paste(rover, (LEGEND_LEFT + 8, PLOT_TOP + 170), rover)
         return canvas
 
     def _draw_danger_areas(self, canvas: Image.Image) -> None:
         # Draw on the plot crop so edge hazards cannot cover axis labels.
         left, top, right, bottom = self._plot_bounds
         plot = canvas.crop((left, top, right, bottom))
-        draw = ImageDraw.Draw(plot)
+        draw = ImageDraw.Draw(plot, "RGBA")
         radius = float(self.dangerous_area_radius) * self._pixels_per_cell
         for row, col in self.dangerous_areas:
             x, y = self._cell_center(row, col)
             x, y = x - left, y - top
-            draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill=COLOR_DANGER)
+            draw.ellipse(
+                (x - radius, y - radius, x + radius, y + radius),
+                fill=(*COLOR_DANGER, 95),
+                outline=(*COLOR_DANGER, 240),
+                width=2,
+            )
         canvas.paste(plot, (left, top))
 
     def _draw_legend(self, draw: ImageDraw.ImageDraw) -> None:
         x = LEGEND_LEFT
-        y = PLOT_TOP + 4
+        y = PLOT_TOP + 54
+        draw.rounded_rectangle(
+            (x - 15, PLOT_TOP - 5, 984, PLOT_TOP + 276),
+            radius=9,
+            fill=(30, 34, 37),
+            outline=(81, 84, 83),
+            width=1,
+        )
+        draw.text((x, PLOT_TOP + 18), "WORLD STATE", fill=(167, 177, 183), font=_font(14))
         entries = [
             ("Good Rock", COLOR_GOOD_ROCK),
             ("Bad Rock", COLOR_BAD_ROCK),
@@ -257,31 +290,59 @@ class RockSampleVisualizer:
             elif label == "Exit":
                 draw.line([(x + 4, y), (x + 34, y)], fill=color, width=5)
             elif label == "Robot":
-                draw.ellipse((x + 9, y, x + 27, y + 18), fill=color)
+                pass  # The sprite is pasted after the legend panel is drawn.
             else:
                 draw.rectangle((x + 4, y, x + 34, y + 18), fill=color)
             draw.text((x + 44, y + 9), label, fill=COLOR_TEXT, font=_font(14), anchor="lm")
-            y += 25
+            y += 30
+        draw.text((x, PLOT_TOP + 300), "R number = rock ID", fill=(172, 175, 172), font=_font(12))
+        draw.text(
+            (x, PLOT_TOP + 320), "Border = true quality", fill=(172, 175, 172), font=_font(12)
+        )
 
     def _draw_path(self, draw: ImageDraw.ImageDraw, path: Sequence[Tuple[int, int]]) -> None:
         points = [self._cell_center(row, col) for row, col in path]
         if len(points) > 1:
             draw.line(points, fill=COLOR_PATH, width=3, joint="curve")
 
-    def _draw_rocks(self, draw: ImageDraw.ImageDraw, state: "RockSampleState") -> None:
+    def _draw_rocks(self, canvas: Image.Image, state: "RockSampleState") -> None:
+        draw = ImageDraw.Draw(canvas)
         rocks = get_rocks(state)
-        half = min(11.0, self._pixels_per_cell * 0.1)
+        size = max(8, round(self._pixels_per_cell * 0.53))
         for index, (row, col) in enumerate(self.rock_positions):
             if index >= len(rocks):
                 continue
             x, y = self._cell_center(row, col)
-            color = COLOR_GOOD_ROCK if rocks[index] else COLOR_BAD_ROCK
-            draw.rectangle((x - half, y - half, x + half, y + half), fill=color)
+            art = sprite(("ore-blue", "ore-green", "ore-red")[index % 3], size)
+            canvas.paste(art, (round(x - art.width / 2), round(y - art.height / 2)), art)
 
-    def _draw_robot(self, draw: ImageDraw.ImageDraw, robot_pos: Tuple[int, int]) -> None:
+    def _draw_rock_badges(self, draw: ImageDraw.ImageDraw, state: "RockSampleState") -> None:
+        cell = self._pixels_per_cell
+        height = min(17, cell * 0.18)
+        half_width = min(17, cell * 0.23)
+        for index, ((row, col), good) in enumerate(zip(self.rock_positions, get_rocks(state))):
+            x, y = self._cell_center(row, col)
+            color = COLOR_GOOD_ROCK if good else COLOR_BAD_ROCK
+            badge_y = y + cell * 0.28
+            draw.rounded_rectangle(
+                (x - half_width, badge_y, x + half_width, badge_y + height),
+                radius=min(3, height / 4),
+                fill=(22, 25, 24),
+                outline=color,
+                width=2,
+            )
+            draw.text(
+                (x, badge_y + height / 2),
+                f"R{index}",
+                fill=COLOR_TEXT,
+                font=_font(max(5, min(12, round(height * 0.7)))),
+                anchor="mm",
+            )
+
+    def _draw_robot(self, canvas: Image.Image, robot_pos: Tuple[int, int]) -> None:
         x, y = self._cell_center(*robot_pos)
-        radius = min(10.0, self._pixels_per_cell * 0.09)
-        draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill=COLOR_ROBOT)
+        art = sprite("rover", max(10, round(self._pixels_per_cell * 0.65)))
+        canvas.paste(art, (round(x - art.width / 2), round(y - art.height / 2)), art)
 
     def _draw_action(
         self, draw: ImageDraw.ImageDraw, robot_pos: Tuple[int, int], action: Optional[int]
@@ -362,15 +423,15 @@ class RockSampleVisualizer:
     ) -> None:
         left, top, _, bottom = self._plot_bounds
         action_name = "Terminal" if action is None else self.action_names[action]
-        text = f"Step: {frame_index + 1}/{frame_count}\nAction: {action_name}"
-        bbox = draw.multiline_textbbox((left + 12, top + 10), text, font=_font(15), spacing=2)
+        text = f"STEP {frame_index + 1:02d} / {frame_count:02d}     Action: {action_name}"
+        bbox = draw.multiline_textbbox((left + 12, 735), text, font=_font(17), spacing=2)
         draw.rounded_rectangle(
-            (bbox[0] - 5, bbox[1] - 4, bbox[2] + 5, bbox[3] + 4),
+            (bbox[0] - 10, bbox[1] - 8, bbox[2] + 10, bbox[3] + 8),
             radius=5,
             fill=COLOR_INFO,
             outline=(80, 70, 50),
         )
-        draw.multiline_text((left + 12, top + 10), text, fill=COLOR_TEXT, font=_font(15), spacing=2)
+        draw.multiline_text((left + 12, 735), text, fill=COLOR_TEXT, font=_font(17), spacing=2)
 
         if action == 0:
             success = self._check_sample_success(state)
@@ -402,10 +463,19 @@ class RockSampleVisualizer:
 
     @staticmethod
     def _build_palette(reference: Image.Image) -> Image.Image:
+        # Reserve colors for small sprites: terrain otherwise consumes nearly
+        # every palette entry and turns the blue rover into a flat neon patch.
+        art_colors = 64
+        art = Image.new("RGB", (256, 64), COLOR_PAGE)
+        for index, name in enumerate(("rover", "ore-blue", "ore-green", "ore-red")):
+            icon = sprite(name, 64)
+            art.paste(icon, (index * 64, 0), icon)
+        art_palette = art.quantize(colors=art_colors, method=Image.Quantize.MEDIANCUT)
         adaptive = reference.quantize(
-            colors=256 - len(ACCENT_COLORS), method=Image.Quantize.MEDIANCUT
+            colors=256 - len(ACCENT_COLORS) - art_colors, method=Image.Quantize.MEDIANCUT
         )
-        entries = (adaptive.getpalette() or [])[: 3 * (256 - len(ACCENT_COLORS))]
+        entries = (adaptive.getpalette() or [])[: 3 * (256 - len(ACCENT_COLORS) - art_colors)]
+        entries.extend((art_palette.getpalette() or [])[: 3 * art_colors])
         for color in ACCENT_COLORS:
             entries.extend(color)
         entries.extend([0] * (768 - len(entries)))
