@@ -11,11 +11,15 @@ panel that is the belief.
 """
 
 from pathlib import Path
+from typing import cast
 
 import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402  pylint: disable=wrong-import-position
+from matplotlib.backends.backend_agg import FigureCanvasAgg  # noqa: E402  pylint: disable=wrong-import-position
+from matplotlib.colors import to_hex  # noqa: E402  pylint: disable=wrong-import-position
+from matplotlib.text import Text  # noqa: E402  pylint: disable=wrong-import-position
 import numpy as np
 import pytest
 
@@ -179,7 +183,7 @@ class TestLabels:
         """
         fig.canvas.draw()
         return "\n".join(
-            artist.get_text() for artist in fig.findobj(match=plt.Text)
+            artist.get_text() for artist in fig.findobj(match=Text)
         )
 
     @staticmethod
@@ -197,7 +201,7 @@ class TestLabels:
             colour = handle.get_markerfacecolor()
             if colour in ("none", "None"):
                 colour = handle.get_markeredgecolor()
-            entries[text.get_text()] = matplotlib.colors.to_hex(colour)
+            entries[text.get_text()] = to_hex(colour)
         return entries
 
     def test_every_panel_says_what_it_shows(self, env) -> None:
@@ -220,7 +224,7 @@ class TestLabels:
             )
             for ax, description in zip(axes, descriptions):
                 panel_text = "\n".join(
-                    artist.get_text() for artist in ax.findobj(match=plt.Text)
+                    artist.get_text() for artist in ax.findobj(match=Text)
                 )
                 assert description in panel_text
                 assert ax.get_xlabel() == "column"
@@ -258,9 +262,9 @@ class TestLabels:
                 (_UNKNOWN, _MISS, _HIT),
                 ("not probed yet", "probed - water (miss)", "probed - ship (hit)"),
             ):
-                assert matplotlib.colors.to_hex(colormap(code)) == agent[label]
+                assert to_hex(colormap(code)) == agent[label]
             assert (
-                matplotlib.colors.to_hex(artists["probe_marker"].get_edgecolor()[0])
+                to_hex(artists["probe_marker"].get_edgecolor()[0])
                 == agent["probing now - result not on the board yet"]
             )
 
@@ -268,20 +272,20 @@ class TestLabels:
             colormap = artists["belief"].get_cmap()
             assert (
                 belief["100% - almost certainly a ship"]
-                == matplotlib.colors.to_hex(colormap(1.0))
+                == to_hex(colormap(1.0))
             )
             assert (
                 belief["0% - almost certainly water"]
-                == matplotlib.colors.to_hex(colormap(0.0))
+                == to_hex(colormap(0.0))
             )
 
             truth = self._legend_entries(axes[2])
             colormap = artists["truth"].get_cmap()
-            assert truth["ship cell"] == matplotlib.colors.to_hex(colormap(1.0))
-            assert truth["water"] == matplotlib.colors.to_hex(colormap(0.0))
+            assert truth["ship cell"] == to_hex(colormap(1.0))
+            assert truth["water"] == to_hex(colormap(0.0))
             assert (
                 truth["already probed"]
-                == matplotlib.colors.to_hex(artists["truth_probe"].get_facecolor()[0])
+                == to_hex(artists["truth_probe"].get_facecolor()[0])
             )
         finally:
             plt.close(fig)
@@ -388,7 +392,7 @@ class TestLayout:
         """
         fig, axes, _ = self._laid_out_figure(env)
         try:
-            renderer = fig.canvas.get_renderer()
+            renderer = cast(FigureCanvasAgg, fig.canvas).get_renderer()
             boxes = [ax.get_legend().get_window_extent(renderer) for ax in axes]
             for left, right in zip(boxes, boxes[1:]):
                 assert right.x0 - left.x1 >= self._MIN_GAP_PX
@@ -407,7 +411,7 @@ class TestLayout:
         """
         fig, axes, artists = self._laid_out_figure(env)
         try:
-            renderer = fig.canvas.get_renderer()
+            renderer = cast(FigureCanvasAgg, fig.canvas).get_renderer()
             width, height = fig.canvas.get_width_height()
             caption = artists["caption"].get_window_extent(renderer)
             boxes = [ax.get_legend().get_window_extent(renderer) for ax in axes]

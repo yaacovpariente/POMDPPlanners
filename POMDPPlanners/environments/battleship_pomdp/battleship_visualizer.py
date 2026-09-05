@@ -40,7 +40,9 @@ from typing import TYPE_CHECKING, Any, Dict, List, Tuple, cast
 import numpy as np
 from matplotlib import animation
 from matplotlib.axes import Axes
+from matplotlib.colors import ListedColormap
 from matplotlib.figure import Figure
+from matplotlib.lines import Line2D
 import matplotlib.pyplot as plt
 
 from POMDPPlanners.core.simulation import StepData
@@ -200,7 +202,7 @@ class BattleshipVisualizer:
 
     def _square_handle(self, color: str, label: str) -> Any:
         """A filled square legend key, outlined so pale fills stay visible."""
-        return plt.Line2D(
+        return Line2D(
             [0], [0], marker="s", linestyle="", markersize=10, color=color,
             markeredgecolor=_LEGEND_EDGE, markeredgewidth=0.6, label=label,
         )
@@ -226,7 +228,7 @@ class BattleshipVisualizer:
         fig = cast(Figure, fig_temp)
         axes = [cast(Axes, ax) for ax in np.atleast_1d(axes_temp).ravel()]
 
-        agent_cmap = plt.matplotlib.colors.ListedColormap(_AGENT_VIEW_COLORS)
+        agent_cmap = ListedColormap(_AGENT_VIEW_COLORS)
         blank = np.zeros((self.board_size, self.board_size))
 
         artists: Dict[str, Any] = {}
@@ -263,7 +265,7 @@ class BattleshipVisualizer:
             for color, label in zip(_AGENT_VIEW_COLORS, _AGENT_VIEW_LABELS)
         ]
         agent_handles.append(
-            plt.Line2D(
+            Line2D(
                 [0], [0], marker="o", linestyle="", markersize=11,
                 markerfacecolor="none", markeredgecolor=_PROBE_RING_COLOR,
                 markeredgewidth=2.5,
@@ -290,7 +292,7 @@ class BattleshipVisualizer:
             [
                 self._square_handle("#000000", "ship cell"),
                 self._square_handle("#ffffff", "water"),
-                plt.Line2D(
+                Line2D(
                     [0], [0], marker="x", linestyle="", markersize=8,
                     color=_PROBED_CROSS_COLOR, markeredgewidth=1.8,
                     label="already probed",
