@@ -378,6 +378,41 @@ class TestCue:
         assert float(probs[OBSERVATIONS.index(OBSERVATION_EMPTY)]) == pytest.approx(0.0)
         assert float(np.sum(probs)) == pytest.approx(1.0)
 
+    @pytest.mark.parametrize("cue_accuracy", [0.9, 1.0])
+    def test_per_state_likelihood_agrees_with_the_single_state_one(self, cue_accuracy):
+        """The vectorised likelihood matches the per-state one, everywhere.
+
+        Purpose: ``observation_log_probability_per_state`` is a second, vectorised
+            implementation of the same density, written for the particle filter's
+            reweighting step. Two implementations of one model is exactly where
+            this codebase has drifted before, and a belief scored by one while the
+            tree search is scored by the other would be silently inconsistent
+
+        Given: Every combination of goal side and cue phase, and every observation
+        When: Both likelihood paths are evaluated on all of them
+        Then: They agree elementwise, ``-inf`` included
+
+        Test type: unit
+        """
+        env = _env(cue_accuracy=cue_accuracy)
+        states = [
+            create_t_maze_state(cell, goal_side, phase)
+            for cell in (env.start_cell, env.cue_cell, env.junction)
+            for goal_side in (GOAL_LEFT, GOAL_RIGHT)
+            for phase in (CUE_UNSEEN, CUE_EMITTING, CUE_CONSUMED)
+        ]
+        for observation in list(OBSERVATIONS) + ["not_an_observation"]:
+            batched = env.observation_log_probability_per_state(
+                np.stack(states), "up", observation
+            )
+            looped = np.array(
+                [
+                    float(env.observation_log_probability(state, "up", [observation])[0])
+                    for state in states
+                ]
+            )
+            assert np.array_equal(batched, looped), f"disagreement on {observation!r}"
+
     def test_cue_is_right_at_about_its_stated_accuracy(self):
         """Sampling the cue reproduces ``cue_accuracy`` empirically.
 
