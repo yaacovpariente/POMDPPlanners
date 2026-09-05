@@ -1323,7 +1323,22 @@ def test_min_visit_count_per_action_enforcement(environment, discrete_action_sam
     tree, root_id = planner._learn_tree(belief=belief)
 
     action_ids = [cid for cid in tree.children_ids[root_id] if tree.kind[cid] == ACTION]
-    assert len(action_ids) >= 0
+    # ``len(action_ids) >= 0`` used to stand here, which is true of every list
+    # and so asserted nothing. The contract this test names has two halves:
+    # widening must actually have produced more than one action, and each one
+    # must have reached ``min_visit_count`` visits.
+    #
+    # The upper bound is the widening rule's own: the condition
+    # ``|children| <= k_a * N**alpha_a`` is checked *before* the child is
+    # added, so with k_a = 2 and alpha_a = 0 a new action may be created while
+    # the count is 0, 1 or 2 — a ceiling of ``int(k_a) + 1 = 3``, not 2.
+    max_actions = int(planner.k_a * (tree.visit_count[root_id] ** planner.alpha_a)) + 1
+    assert 2 <= len(action_ids) <= max_actions, (
+        f"root has {len(action_ids)} actions "
+        f"({[tree.action[cid] for cid in action_ids]}); widening must produce at least two and "
+        f"at most {max_actions} = int(k_a={planner.k_a} * visits={tree.visit_count[root_id]}"
+        f"**alpha_a={planner.alpha_a}) + 1"
+    )
 
     for action_id in action_ids:
         visits = tree.visit_count[action_id]
