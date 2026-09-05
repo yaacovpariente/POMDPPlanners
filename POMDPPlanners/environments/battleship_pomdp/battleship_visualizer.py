@@ -205,13 +205,20 @@ class BattleshipVisualizer:
             markeredgecolor=_LEGEND_EDGE, markeredgewidth=0.6, label=label,
         )
 
-    def _panel_legend(self, ax: Axes, handles: List[Any], ncol: int) -> None:
-        """Put a legend under ``ax``, below the axis label."""
+    def _panel_legend(self, ax: Axes, handles: List[Any]) -> None:
+        """Put a legend under ``ax``, below the axis label.
+
+        One key per row. A multi-column legend grows sideways with its longest
+        label, so the agent panel's legend ran wider than its own panel and
+        collided with the belief panel's. Stacked in a single column, each
+        legend is at most as wide as its longest key, which keeps every legend
+        inside the panel it explains.
+        """
         ax.legend(
             handles=handles, loc="upper center", bbox_to_anchor=(0.5, -0.16),
-            ncol=ncol, fontsize=_LEGEND_FONTSIZE, frameon=True,
+            ncol=1, fontsize=_LEGEND_FONTSIZE, frameon=True,
             facecolor=_LEGEND_FACE, edgecolor="#d0d3d8", framealpha=1.0,
-            handletextpad=0.5, columnspacing=1.2, borderpad=0.6,
+            handletextpad=0.5, labelspacing=0.45, borderpad=0.6,
         )
 
     def _setup_figure(self) -> Tuple[Figure, List[Axes], Dict[str, Any]]:
@@ -263,7 +270,7 @@ class BattleshipVisualizer:
                 label="probing now - result not on the board yet",
             )
         )
-        self._panel_legend(axes[0], agent_handles, ncol=2)
+        self._panel_legend(axes[0], agent_handles)
 
         colorbar = fig.colorbar(artists["belief"], ax=axes[1], fraction=0.046, pad=0.04)
         colorbar.set_ticks([0.0, 0.25, 0.5, 0.75, 1.0])
@@ -276,7 +283,6 @@ class BattleshipVisualizer:
                 self._square_handle("#fde725", "100% - almost certainly a ship"),
                 self._square_handle("#440154", "0% - almost certainly water"),
             ],
-            ncol=2,
         )
 
         self._panel_legend(
@@ -290,7 +296,6 @@ class BattleshipVisualizer:
                     label="already probed",
                 ),
             ],
-            ncol=3,
         )
 
         artists["probe_marker"] = axes[0].scatter(
@@ -305,6 +310,24 @@ class BattleshipVisualizer:
             linespacing=1.6,
         )
         return fig, axes, artists
+
+    @staticmethod
+    def _apply_layout(fig: Figure) -> None:
+        """Set the margins the saved frames are drawn with.
+
+        Reserved margins, not tight_layout: the legends and the two-line
+        caption live outside the axes, and a layout solver that ignored them
+        would clip whichever frame happened to have the longest text. The
+        bottom margin has to hold a single-column legend stacked under each
+        panel and still leave the two-line caption clear of it.
+
+        Kept separate from :meth:`_save` so a layout test can measure the same
+        figure the GIF is drawn from instead of restating these numbers.
+
+        Args:
+            fig: The figure to lay out.
+        """
+        fig.subplots_adjust(left=0.05, right=0.97, top=0.85, bottom=0.36, wspace=0.30)
 
     def _animation_function(
         self, frames: List[Dict[str, Any]], axes: List[Axes], artists: Dict[str, Any]
@@ -371,9 +394,6 @@ class BattleshipVisualizer:
             fig, animate, frames=num_frames, interval=1000, blit=False, repeat=False
         )
         cache_path.parent.mkdir(parents=True, exist_ok=True)
-        # Reserved margins, not tight_layout: the legends and the two-line
-        # caption live outside the axes, and a layout solver that ignored
-        # them would clip whichever frame happened to have the longest text.
-        fig.subplots_adjust(left=0.05, right=0.97, top=0.85, bottom=0.30, wspace=0.30)
+        self._apply_layout(fig)
         ani.save(cache_path, writer="pillow", fps=1)
         plt.close(fig)
