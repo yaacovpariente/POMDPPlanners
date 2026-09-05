@@ -1,272 +1,171 @@
 # SPDX-License-Identifier: MIT
 
-"""Visualization module for PacMan POMDP environment.
+"""Cached, state-driven PacMan episode rendering."""
 
-This module provides sprite-based visualization capabilities for PacMan POMDP
-episodes, rendering animated GIFs of agent behavior and game state.
-
-Classes:
-    PacManVisualizer: Handles sprite-based rendering and GIF generation
-"""
-
+from functools import lru_cache
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, List, Optional
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.core.simulation import StepData
+from POMDPPlanners.environments.pacman_pomdp.pacman_art import character, ghost, pellet, tile
 
 if TYPE_CHECKING:
     from POMDPPlanners.environments.pacman_pomdp.pacman_pomdp import PacManPOMDP
 
 
+@lru_cache(maxsize=48)
+def _font(size: int, bold: bool = False) -> Any:
+    path = Path(__file__).with_name("img") / ("DejaVuSans-Bold.ttf" if bold else "DejaVuSans.ttf")
+    try:
+        return ImageFont.truetype(str(path), size)
+    except OSError:
+        return ImageFont.load_default(size=size)
+
+
 class PacManVisualizer:
-    """Handles visualization for PacMan POMDP environments.
-
-    This class manages sprite loading, frame rendering, and GIF generation for
-    visualizing PacMan POMDP episodes. It renders the maze, PacMan, ghosts, pellets,
-    and game state information.
-
-    Attributes:
-        env: Reference to the PacMan POMDP environment
-        tile_size: Size of each tile in pixels
-        sprites: Dictionary of loaded sprite images
-    """
+    """One native cell per tile; cached art is read-only between frames."""
 
     def __init__(self, environment: "PacManPOMDP", tile_size: int = 32):
-        """Initialize visualizer with reference to environment.
-
-        Args:
-            environment: PacMan POMDP environment instance
-            tile_size: Size of each tile in pixels. Defaults to 32.
-        """
+        if not isinstance(tile_size, int) or isinstance(tile_size, bool) or tile_size < 1:
+            raise ValueError("tile_size must be a positive integer")
         self.env = environment
         self.tile_size = tile_size
+        self.sprites = {"pacman": character("player", tile_size)}
+        self.sprites.update({f"ghost_{i}": ghost(tile_size, i) for i in range(8)})
+        self.font_regular = _font(13)
+        self.font_bold = _font(14, True)
+        self._background: Optional[Image.Image] = None
+        self._background_key: Optional[tuple] = None
+        self._palette: Optional[Image.Image] = None
 
-        # Load sprites from the img directory
-        module_dir = Path(__file__).parent
-        sprite_dir = module_dir / "img"
-        self.sprites = self._load_sprites(sprite_dir, tile_size)
-        # Fonts are bundled in the same img/ directory so rendering is
-        # byte-identical across systems regardless of OS-installed fonts
-        # (golden-file tests run in a slim Docker image without DejaVu).
-        self.font_regular: Any = self._load_font(sprite_dir, 13)
-        self.font_bold: Any = self._load_font(sprite_dir, 14, bold=True)
+    def _scene_key(self, tile_size: int) -> tuple:
+        return (
+            tuple(self.env.maze_size),
+            tuple(sorted(self.env.walls)),
+            tile_size,
+            tuple(sorted(getattr(self.env, "dangerous_areas", ()))),
+            float(getattr(self.env, "dangerous_area_radius", 1.0)),
+        )
 
-    @staticmethod
-    def _load_font(sprite_dir: Path, size: int, bold: bool = False) -> Any:
-        """Load the bundled DejaVu Sans font; fall back to PIL's default."""
-        font_name = "DejaVuSans-Bold.ttf" if bold else "DejaVuSans.ttf"
-        font_path = sprite_dir / font_name
-        try:
-            return ImageFont.truetype(str(font_path), size)
-        except (OSError, IOError):
-            return ImageFont.load_default()
-
-    def _colorize_sprite(self, image: Image.Image, color: Tuple[int, int, int, int]) -> Image.Image:
-        """Apply color overlay to sprite image."""
-        overlay = Image.new("RGBA", image.size, color)  # type: ignore[arg-type]
-        result = Image.blend(image.convert("RGBA"), overlay, 0.3)
-        result.putalpha(image.split()[-1])
-        return result
-
-    def _load_pacman_sprite(self, sprite_dir: Path, tile_size: int) -> Image.Image:
-        """Load or generate PacMan sprite."""
-        pacman_head_path = sprite_dir / "pacman_head.jpg"
-        pacman_png_path = sprite_dir / "pocman.png"
-
-        if pacman_head_path.exists():
-            return Image.open(pacman_head_path).convert("RGBA").resize((tile_size, tile_size))
-        if pacman_png_path.exists():
-            return Image.open(pacman_png_path).convert("RGBA").resize((tile_size, tile_size))
-        img = Image.new("RGBA", (tile_size, tile_size), (0, 0, 0, 0))  # type: ignore[arg-type]
-        draw = ImageDraw.Draw(img)
-        draw.ellipse([4, 4, tile_size - 4, tile_size - 4], fill=(255, 255, 0, 255))
-        return img
-
-    def _load_ghost_sprites(self, sprite_dir: Path, tile_size: int) -> dict:
-        """Load or generate ghost sprites with different colors."""
-        ghost_colors = [
-            (255, 0, 0, 255),  # Red ghost
-            (0, 255, 0, 255),  # Green ghost
-            (0, 0, 255, 255),  # Blue ghost
-            (255, 0, 255, 255),  # Magenta ghost
-            (255, 165, 0, 255),  # Orange ghost
-            (0, 255, 255, 255),  # Cyan ghost
-            (255, 255, 0, 255),  # Yellow ghost
-            (128, 0, 128, 255),  # Purple ghost
-        ]
-
-        sprites = {}
-        ghost_path = sprite_dir / "ghosts.png"
-        if ghost_path.exists():
-            base_ghost = Image.open(ghost_path).convert("RGBA")
-            for i, color in enumerate(ghost_colors):
-                colored_ghost = self._colorize_sprite(base_ghost, color)
-                sprites[f"ghost_{i}"] = colored_ghost.resize((tile_size, tile_size))
-        else:
-            for i, color in enumerate(ghost_colors):
-                img = Image.new("RGBA", (tile_size, tile_size), (0, 0, 0, 0))  # type: ignore[arg-type]
-                draw = ImageDraw.Draw(img)
-                draw.rectangle([4, 4, tile_size - 4, tile_size - 4], fill=color)
-                sprites[f"ghost_{i}"] = img
-
-        return sprites
-
-    def _load_sprites(self, sprite_dir: Path, tile_size: int) -> dict:
-        """Load all sprites for visualization."""
-        sprites = {}
-        sprites["pacman"] = self._load_pacman_sprite(sprite_dir, tile_size)
-        ghost_sprites = self._load_ghost_sprites(sprite_dir, tile_size)
-        sprites.update(ghost_sprites)
-        return sprites
-
-    def _draw_maze_background(self, draw: ImageDraw.ImageDraw, tile_size: int) -> None:
-        """Draw maze background with walls and corridors."""
+    def _build_background(self, tile_size: int) -> Image.Image:
         rows, cols = self.env.maze_size
-        for r in range(rows):
-            for c in range(cols):
-                x, y = c * tile_size, r * tile_size
-                if (r, c) in self.env.walls:
-                    draw.rectangle([x, y, x + tile_size, y + tile_size], fill=(20, 20, 80, 255))
-                else:
-                    draw.rectangle([x, y, x + tile_size, y + tile_size], fill=(0, 0, 0, 255))
+        canvas = Image.new("RGBA", (cols * tile_size, rows * tile_size + 80), (8, 10, 16, 255))
+        for row in range(rows):
+            for col in range(cols):
+                canvas.paste(
+                    tile(tile_size, (row, col) in self.env.walls),
+                    (col * tile_size, row * tile_size),
+                )
+        self._draw_dangerous_areas(canvas, tile_size)
+        return canvas
 
     def _draw_dangerous_areas(self, canvas: Image.Image, tile_size: int) -> None:
-        """Overlay dangerous areas as translucent red circles.
-
-        Painted into a separate RGBA overlay so the configured alpha blends
-        with the maze background without clobbering pellets, ghosts, or
-        PacMan, which are composited on top in :meth:`_render_frame`.
-        """
+        """Clip red danger circles to the map, below belief and entities."""
         areas = getattr(self.env, "dangerous_areas", None)
         if not areas:
             return
-        radius = float(getattr(self.env, "dangerous_area_radius", 1.0))
-        overlay = Image.new("RGBA", canvas.size, (0, 0, 0, 0))  # type: ignore[arg-type]
-        draw_overlay = ImageDraw.Draw(overlay)
-        px_radius = max(1, int(round(radius * tile_size)))
-        for danger_row, danger_col in areas:
-            cx = int(danger_col * tile_size + tile_size / 2)
-            cy = int(danger_row * tile_size + tile_size / 2)
-            draw_overlay.ellipse(
-                [cx - px_radius, cy - px_radius, cx + px_radius, cy + px_radius],
+        rows, cols = self.env.maze_size
+        overlay = Image.new("RGBA", (cols * tile_size, rows * tile_size))
+        draw = ImageDraw.Draw(overlay)
+        radius = max(1, round(float(getattr(self.env, "dangerous_area_radius", 1.0)) * tile_size))
+        for row, col in areas:
+            x, y = (col + 0.5) * tile_size, (row + 0.5) * tile_size
+            draw.ellipse(
+                (x - radius, y - radius, x + radius, y + radius),
                 fill=(255, 0, 0, 90),
+                outline=(255, 64, 40, 160),
             )
         canvas.alpha_composite(overlay)
-
-    def _draw_pellets(self, state: np.ndarray, draw: ImageDraw.ImageDraw, tile_size: int) -> None:
-        """Draw pellets on the maze."""
-        rows, cols = self.env.maze_size
-        pellets = self.env.get_pellets(state)
-        for r in range(rows):
-            for c in range(cols):
-                if (r, c) in pellets:
-                    x, y = c * tile_size, r * tile_size
-                    cx, cy = x + tile_size // 2, y + tile_size // 2
-                    rdot = 4
-                    draw.ellipse(
-                        [cx - rdot, cy - rdot, cx + rdot, cy + rdot],
-                        fill=(255, 255, 255, 255),
-                    )
 
     def _draw_ghost_belief(
         self, belief: Optional[Belief], canvas: Image.Image, tile_size: int
     ) -> None:
-        """Overlay the belief over ghost positions as a translucent red heatmap.
-
-        Each cell's red intensity is proportional to the marginal probability
-        (sum of normalized particle weights) that any ghost occupies that cell.
-        """
+        """Show marginal ghost mass relative to the most occupied belief cell."""
         if belief is None:
             return
         particles = getattr(belief, "particles", None)
         weights = getattr(belief, "normalized_weights", None)
         if particles is None or weights is None or len(particles) == 0:
             return
-
         rows, cols = self.env.maze_size
         heatmap = np.zeros((rows, cols), dtype=np.float64)
         for particle, weight in zip(particles, weights):
-            for ghost_pos in self.env.get_ghost_positions(particle):
-                gr, gc = int(ghost_pos[0]), int(ghost_pos[1])
-                if 0 <= gr < rows and 0 <= gc < cols:
-                    heatmap[gr, gc] += float(weight)
-
-        max_w = float(heatmap.max())
-        if max_w <= 0.0:
+            for row, col in self.env.get_ghost_positions(particle):
+                if 0 <= row < rows and 0 <= col < cols:
+                    heatmap[row, col] += float(weight)
+        maximum = float(heatmap.max())
+        if maximum <= 0:
             return
-
-        overlay = Image.new("RGBA", canvas.size, (0, 0, 0, 0))  # type: ignore[arg-type]
-        draw_overlay = ImageDraw.Draw(overlay)
-        for r in range(rows):
-            for c in range(cols):
-                w = heatmap[r, c]
-                if w <= 0.0:
-                    continue
-                alpha = int(180.0 * (w / max_w))
-                x, y = c * tile_size, r * tile_size
-                draw_overlay.rectangle(
-                    [x, y, x + tile_size, y + tile_size],
-                    fill=(255, 0, 0, alpha),
-                )
+        overlay = Image.new("RGBA", (cols * tile_size, rows * tile_size))
+        draw = ImageDraw.Draw(overlay)
+        for row, col in zip(*np.nonzero(heatmap)):
+            alpha = int(180 * heatmap[row, col] / maximum)
+            x, y = int(col) * tile_size, int(row) * tile_size
+            draw.rectangle((x, y, x + tile_size - 1, y + tile_size - 1), fill=(255, 0, 0, alpha))
         canvas.alpha_composite(overlay)
+
+    def _draw_pellets(self, state: np.ndarray, canvas: Image.Image, tile_size: int) -> None:
+        rows, cols = self.env.maze_size
+        art = pellet(tile_size)
+        for row, col in self.env.get_pellets(state):
+            if 0 <= row < rows and 0 <= col < cols:
+                canvas.alpha_composite(art, (col * tile_size, row * tile_size))
 
     def _draw_ghosts(
         self, state: np.ndarray, canvas: Image.Image, sprites: dict, tile_size: int
     ) -> None:
-        """Draw ghosts on the canvas."""
         rows, cols = self.env.maze_size
-        for i, ghost_pos in enumerate(self.env.get_ghost_positions(state)):
-            gr, gc = ghost_pos
-            if 0 <= gr < rows and 0 <= gc < cols:
-                ghost_x, ghost_y = gc * tile_size, gr * tile_size
-                ghost_sprite_key = f"ghost_{i % 8}"
-                if ghost_sprite_key in sprites:
-                    canvas.paste(
-                        sprites[ghost_sprite_key],
-                        (ghost_x, ghost_y),
-                        sprites[ghost_sprite_key],
-                    )
-
-    def _draw_pacman(
-        self,
-        state: np.ndarray,
-        canvas: Image.Image,
-        draw: ImageDraw.ImageDraw,
-        sprites: dict,
-        tile_size: int,
-    ) -> None:
-        """Draw PacMan on the canvas."""
-        rows, cols = self.env.maze_size
-        pacman_pos = self.env.get_pacman_pos(state)
-        ghost_positions = self.env.get_ghost_positions(state)
-        pr, pc = pacman_pos
-        if 0 <= pr < rows and 0 <= pc < cols:
-            pacman_x, pacman_y = pc * tile_size, pr * tile_size
-            if pacman_pos in ghost_positions:
-                draw.ellipse(
-                    [
-                        pacman_x,
-                        pacman_y,
-                        pacman_x + tile_size,
-                        pacman_y + tile_size,
-                    ],
-                    fill=(255, 0, 0, 200),
+        positions = self.env.get_ghost_positions(state)
+        for index, (row, col) in enumerate(positions):
+            if 0 <= row < rows and 0 <= col < cols:
+                # Each sprite contains exactly one ghost, not the old four-ghost atlas.
+                canvas.alpha_composite(
+                    sprites[f"ghost_{index % 8}"], (col * tile_size, row * tile_size)
                 )
-                num_colliding_ghosts = sum(
-                    1 for ghost_pos in ghost_positions if ghost_pos == pacman_pos
-                )
-                explosion_text = "💥" * min(num_colliding_ghosts, 3)
-                draw.text(
-                    (pacman_x + 2, pacman_y + 2),
-                    explosion_text,
+        for row, col in set(positions):
+            count = positions.count((row, col))
+            if count > 1 and 0 <= row < rows and 0 <= col < cols:
+                ImageDraw.Draw(canvas).text(
+                    (col * tile_size + 2, row * tile_size + 2),
+                    str(count),
+                    font=_font(max(6, min(12, tile_size // 3)), True),
                     fill=(255, 255, 255),
                 )
-            else:
-                canvas.paste(sprites["pacman"], (pacman_x, pacman_y), sprites["pacman"])
+
+    def _draw_pacman(
+        self, state: np.ndarray, canvas: Image.Image, tile_size: int, direction: str
+    ) -> None:
+        rows, cols = self.env.maze_size
+        row, col = self.env.get_pacman_pos(state)
+        if 0 <= row < rows and 0 <= col < cols:
+            canvas.alpha_composite(
+                character("player", tile_size, direction), (col * tile_size, row * tile_size)
+            )
+            if tile_size >= 3 and (row, col) in self.env.get_ghost_positions(state):
+                edge = max(1, tile_size // 16)
+                ImageDraw.Draw(canvas).rounded_rectangle(
+                    (
+                        col * tile_size + edge,
+                        row * tile_size + edge,
+                        (col + 1) * tile_size - edge,
+                        (row + 1) * tile_size - edge,
+                    ),
+                    radius=max(1, tile_size // 6),
+                    outline=(255, 66, 40),
+                    width=edge,
+                )
+
+    @staticmethod
+    def _fit_text(
+        draw: ImageDraw.ImageDraw, text: str, width: int, size: int = 14, bold: bool = False
+    ) -> Any:
+        while size > 4 and draw.textlength(text, font=_font(size, bold)) > width:
+            size -= 1
+        return _font(size, bold)
 
     def _draw_text_overlay(
         self,
@@ -276,80 +175,62 @@ class PacManVisualizer:
         action_name: str,
         tile_size: int,
     ) -> None:
-        """Draw text overlay with game state information and legend."""
         rows, cols = self.env.maze_size
-        canvas_w = cols * tile_size
-        panel_top = rows * tile_size
-        # Paint an opaque dark panel under the text so the white/grey
-        # foreground text isn't washed out by the GIF's transparent
-        # default background.
-        draw.rectangle(
-            [0, panel_top, canvas_w, panel_top + 80],
-            fill=(15, 15, 30, 255),
-        )
-
-        text_y = panel_top + 6
-        pellets = self.env.get_pellets(state)
+        width, top = cols * tile_size, rows * tile_size
+        draw.rectangle((0, top, width, top + 80), fill=(8, 10, 16, 255))
+        draw.line((0, top, width, top), fill=(61, 80, 107), width=1)
+        pellets = len(self.env.get_pellets(state))
         score = self.env.get_score(state)
-        score_display = int(score) if float(score).is_integer() else score
-
-        # Line 1: step + action
-        draw.text(
-            (6, text_y),
-            f"Step {step_num}: {action_name}",
-            fill=(255, 255, 255),
-            font=self.font_bold,
+        score_text = str(int(score)) if float(score).is_integer() else str(score)
+        terminal = self.env.get_terminal(state)
+        narrow = width < 150
+        tiny = width < 70
+        action_short = {
+            "north": "N",
+            "east": "E",
+            "south": "S",
+            "west": "W",
+            "stay": "stay",
+            "Terminal": "end",
+            "No action": "—",
+        }.get(action_name, action_name)
+        first = f"Step {step_num}: {action_name}" if not narrow else f"S{step_num} {action_short}"
+        if width >= 400:
+            first = f"PACMAN  /  Step {step_num}: {action_name}"
+        second = (
+            f"Score: {score_text}   Pellets: {pellets}"
+            if not narrow
+            else f"+{score_text}  P:{pellets}"
         )
-        # Line 2: score / pellets
-        draw.text(
-            (6, text_y + 18),
-            f"Score: {score_display}    Pellets: {len(pellets)}",
-            fill=(255, 255, 255),
-            font=self.font_regular,
+        third = (
+            "Ghost belief: relative mass"
+            if not narrow
+            else ("G rel." if tiny else "Ghost: rel. mass")
         )
-        # Line 3: belief legend (red swatch + caption). Caption text is
-        # kept short so it fits the maze-width canvas at small tile sizes.
-        legend_x = 6
-        legend_y = text_y + 36
-        draw.rectangle(
-            [legend_x, legend_y + 2, legend_x + 14, legend_y + 14],
-            fill=(255, 0, 0, 220),
-        )
-        draw.text(
-            (legend_x + 20, legend_y),
-            "= ghost belief",
-            fill=(255, 255, 255),
-            font=self.font_regular,
-        )
-
-        # Second swatch + caption — only rendered when dangerous areas are
-        # configured so the legend stays compact for vanilla PacMan runs.
-        has_danger = bool(getattr(self.env, "dangerous_areas", None))
-        if has_danger:
-            danger_x = legend_x + 130
-            draw.rectangle(
-                [danger_x, legend_y + 2, danger_x + 14, legend_y + 14],
-                fill=(255, 0, 0, 110),
+        if terminal:
+            fourth = (
+                ("WIN" if pellets == 0 else "OVER")
+                if tiny
+                else ("YOU WIN!" if pellets == 0 else "GAME OVER")
             )
-            draw.text(
-                (danger_x + 20, legend_y),
-                "= danger zone",
-                fill=(255, 255, 255),
-                font=self.font_regular,
+        else:
+            fourth = (
+                "Danger zone"
+                if getattr(self.env, "dangerous_areas", None)
+                else "World state / selected action"
             )
-
-        if self.env.get_terminal(state):
-            banner = "YOU WIN!" if len(pellets) == 0 else "GAME OVER"
-            color = (0, 255, 0) if len(pellets) == 0 else (255, 80, 80)
-            # Push the banner right of the danger-zone caption when present,
-            # otherwise keep the historical x-offset.
-            banner_x = legend_x + (260 if has_danger else 130)
-            draw.text(
-                (banner_x, legend_y),
-                banner,
-                fill=color,
-                font=self.font_bold,
-            )
+            if narrow:
+                fourth = "Danger" if getattr(self.env, "dangerous_areas", None) else "State/action"
+        pad = min(6, max(1, width // 16))
+        for index, text in enumerate((first, second, third, fourth)):
+            size = (18 if index == 0 else 14) if width >= 400 else (14 if index == 0 else 12)
+            font = self._fit_text(draw, text, max(1, width - 2 * pad), size, index == 0)
+            color = (241, 229, 177) if index == 0 else (195, 207, 224)
+            if index == 2:
+                color = (255, 124, 119)
+            if index == 3 and terminal:
+                color = (135, 247, 151) if pellets == 0 else (255, 110, 93)
+            draw.text((pad, top + 4 + index * 18), text, font=font, fill=color)
 
     def _render_frame(
         self,
@@ -360,25 +241,17 @@ class PacManVisualizer:
         tile_size: int,
         belief: Optional[Belief] = None,
     ) -> Image.Image:
-        """Render a single frame of the visualization."""
-        rows, cols = self.env.maze_size
-        # Reserve 80 px below the maze for: step+action, score+pellets,
-        # belief legend, and an optional terminal-state banner.
-        canvas = Image.new("RGBA", (cols * tile_size, rows * tile_size + 80))
-        draw = ImageDraw.Draw(canvas)
-
-        self._draw_maze_background(draw, tile_size)
-        # Dangerous areas sit just above the maze background so the belief
-        # heatmap, pellets, ghosts, and PacMan all remain readable on top.
-        self._draw_dangerous_areas(canvas, tile_size)
-        # Belief overlay sits beneath pellets/ghosts/pacman so it doesn't
-        # obscure them; pellets remain visible on top of the heatmap.
+        key = self._scene_key(tile_size)
+        if self._background is None or self._background_key != key:
+            self._background = self._build_background(tile_size)
+            self._background_key = key
+            self._palette = None
+        canvas = self._background.copy()
         self._draw_ghost_belief(belief, canvas, tile_size)
-        self._draw_pellets(state, draw, tile_size)
+        self._draw_pellets(state, canvas, tile_size)
         self._draw_ghosts(state, canvas, sprites, tile_size)
-        self._draw_pacman(state, canvas, draw, sprites, tile_size)
-        self._draw_text_overlay(state, draw, step_num, action_name, tile_size)
-
+        self._draw_pacman(state, canvas, tile_size, action_name)
+        self._draw_text_overlay(state, ImageDraw.Draw(canvas), step_num, action_name, tile_size)
         return canvas
 
     def _generate_frames(
@@ -389,34 +262,72 @@ class PacManVisualizer:
         tile_size: int,
         beliefs: Optional[List[Optional[Belief]]] = None,
     ) -> List[Image.Image]:
-        """Generate all frames for the visualization."""
         frames = []
-        for i, state in enumerate(path):
-            if i < len(actions):
-                action_name = self.env.action_names[actions[i]]
-            else:
-                action_name = "Terminal"
-            belief = beliefs[i] if beliefs is not None and i < len(beliefs) else None
-            frame = self._render_frame(state, i + 1, action_name, sprites, tile_size, belief=belief)
-            frames.append(frame)
-
+        for index, state in enumerate(path):
+            action = actions[index] if index < len(actions) else None
+            name = (
+                self.env.action_names[action]
+                if action is not None
+                else ("Terminal" if self.env.get_terminal(state) else "No action")
+            )
+            belief = beliefs[index] if beliefs is not None and index < len(beliefs) else None
+            frames.append(self._render_frame(state, index + 1, name, sprites, tile_size, belief))
         return frames
 
-    def _save_animated_gif(self, frames: List[Image.Image], cache_path: Path) -> None:
-        """Save frames as an animated GIF."""
-        cache_path.parent.mkdir(parents=True, exist_ok=True)
+    def _build_palette(self, reference: Image.Image) -> Image.Image:
+        # Put entity art and tinted tiles next to the scene when choosing colors,
+        # so small ghosts, yellow highlights and red mass retain their detail.
+        atlas = Image.new("RGB", (512, 256), (8, 10, 16))
+        for index, (name, direction) in enumerate((("player", "east"), ("ghost", "east"))):
+            art = character(name, 96, direction)
+            atlas.paste(art, (index * 128, 0), art)
+        for index, alpha in enumerate((45, 90, 135, 180)):
+            tint = tile(64, False).copy()
+            tint.alpha_composite(Image.new("RGBA", (64, 64), (255, 0, 0, alpha)))
+            atlas.paste(tint, (index * 64, 128))
+        for index in range(8):
+            art = ghost(64, index)
+            atlas.paste(art, (index * 64, 192), art)
+        colors = atlas.quantize(colors=96, method=Image.Quantize.MEDIANCUT)
+        scene = reference.convert("RGB").quantize(colors=144, method=Image.Quantize.MEDIANCUT)
+        entries = (scene.getpalette() or [])[:432] + (colors.getpalette() or [])[:288]
+        for color in (
+            (255, 255, 245),
+            (241, 229, 177),
+            (195, 207, 224),
+            (255, 124, 119),
+            (135, 247, 151),
+            (255, 110, 93),
+            (8, 10, 16),
+            (61, 80, 107),
+        ):
+            entries.extend(color)
+        entries.extend([0] * (768 - len(entries)))
+        master = Image.new("P", (1, 1))
+        master.putpalette(entries)
+        return master
 
-        if frames:
-            frames[0].save(
-                cache_path,
-                save_all=True,
-                append_images=frames[1:],
-                duration=1000,
-                loop=0,
+    def _save_animated_gif(self, frames: List[Image.Image], cache_path: Path) -> None:
+        if not frames:
+            return
+        if self._palette is None:
+            self._palette = self._build_palette(
+                self._background if self._background is not None else frames[0]
             )
-            print(f"Sprite-based visualization saved as GIF: {cache_path}")
-        else:
-            print("No frames generated for visualization")
+        indexed = [
+            frame.convert("RGB").quantize(palette=self._palette, dither=Image.Dither.NONE)
+            for frame in frames
+        ]
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        indexed[0].save(
+            cache_path,
+            save_all=True,
+            append_images=indexed[1:],
+            duration=1000,
+            loop=0,
+            optimize=False,
+            disposal=1,
+        )
 
     def visualize_path(
         self,
@@ -425,51 +336,27 @@ class PacManVisualizer:
         cache_path: Path,
         beliefs: Optional[List[Optional[Belief]]] = None,
     ) -> None:
-        """Visualize PacMan path through the maze using sprite-based rendering.
-
-        Args:
-            path: List of state arrays representing the path through the maze.
-            actions: List of actions taken at each step.
-            cache_path: Path where the GIF should be saved.
-            beliefs: Optional per-frame beliefs. When supplied, each frame
-                overlays a translucent red heatmap over the cells the
-                belief assigns non-zero ghost-occupation probability.
-
-        Raises:
-            TypeError: If cache_path is not a Path object.
-        """
         if not isinstance(cache_path, Path):
             raise TypeError("cache_path must be a Path object")
-
-        frames = self._generate_frames(path, actions, self.sprites, self.tile_size, beliefs=beliefs)
+        if not path:
+            raise ValueError("Cannot visualize empty path")
+        frames = self._generate_frames(path, actions, self.sprites, self.tile_size, beliefs)
         self._save_animated_gif(frames, cache_path)
 
     def cache_visualization(self, history: List[StepData], cache_path: Path) -> None:
-        """Cache visualization of episode history.
-
-        Args:
-            history: List of StepData objects representing the episode
-            cache_path: Path where the GIF should be saved
-
-        Raises:
-            TypeError: If history or cache_path have wrong types
-            ValueError: If history is empty or cache_path doesn't end with .gif
-        """
         if not isinstance(history, List):
             raise TypeError("history must be a List object")
         if not history:
             raise ValueError("Cannot visualize empty history")
-        for step in history:
-            if not isinstance(step, StepData):
-                raise TypeError("history must be a List of StepData objects")
+        if any(not isinstance(step, StepData) for step in history):
+            raise TypeError("history must be a List of StepData objects")
         if not isinstance(cache_path, Path):
             raise TypeError("cache_path must be a Path object")
-        if not str(cache_path).endswith(".gif"):
+        if cache_path.suffix != ".gif":
             raise ValueError("cache_path must end with .gif")
-
-        # Extract path, actions, and per-step beliefs from history.
-        path = [step.state for step in history]
-        actions = [step.action for step in history[:-1]]  # Last step has no action
-        beliefs: List[Optional[Belief]] = [step.belief for step in history]
-
-        self.visualize_path(path, actions, cache_path, beliefs=beliefs)
+        self.visualize_path(
+            [step.state for step in history],
+            [step.action for step in history],
+            cache_path,
+            beliefs=[step.belief for step in history],
+        )
