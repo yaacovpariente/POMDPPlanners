@@ -697,12 +697,14 @@ class TestSerialization:
 
         Given: A non-default T-Maze
         When: It is serialized and rebuilt
-        Then: The rebuild is equal, shares its ``config_id``, and keeps its geometry
+        Then: The rebuild is a ``TMazePOMDP``, is equal, shares its ``config_id``,
+            and keeps its geometry
 
         Test type: unit
         """
         env = _env(stem_length=6, arm_length=2, cue_accuracy=1.0)
         rebuilt = TMazePOMDP.from_dict(env.to_dict())
+        assert isinstance(rebuilt, TMazePOMDP)
         assert rebuilt == env
         assert rebuilt.config_id == env.config_id
         assert rebuilt.junction == env.junction
