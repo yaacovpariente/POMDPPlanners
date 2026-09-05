@@ -27,6 +27,7 @@ Directory Structure:
 """
 
 import hashlib
+import random
 import shutil
 import warnings
 from collections import deque
@@ -38,6 +39,11 @@ import pytest
 
 from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.simulation import StepData
+from POMDPPlanners.environments.battleship_pomdp.battleship_belief import BattleshipBelief
+from POMDPPlanners.environments.battleship_pomdp.battleship_pomdp import BattleshipPOMDP
+from POMDPPlanners.environments.battleship_pomdp.battleship_visualizer import (
+    BattleshipVisualizer,
+)
 from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp import (
     RockSamplePOMDP,
 )
@@ -101,9 +107,10 @@ from POMDPPlanners.environments.t_maze_pomdp.maze_pomdp import (
 )
 from POMDPPlanners.environments.t_maze_pomdp.t_maze_visualizer import TMazeVisualizer
 from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
-    continuous_maze_pinned_kwargs,
+    battleship_pinned_kwargs,
     continuous_laser_tag_pinned_kwargs,
     continuous_light_dark_pinned_kwargs,
+    continuous_maze_pinned_kwargs,
     continuous_push_pinned_kwargs,
     discrete_maze_pinned_kwargs,
     laser_tag_pinned_kwargs,
@@ -211,6 +218,74 @@ def compare_or_create_golden_file(output_path: Path, golden_name: str, test_name
             f"  3. Re-run test to create new golden file\n"
             f"{'='*70}\n"
         )
+
+
+def build_battleship_env() -> BattleshipPOMDP:
+    """Build the Battleship environment the golden visualization is rendered for."""
+    return BattleshipPOMDP(discount_factor=0.99, **battleship_pinned_kwargs())
+
+
+def create_deterministic_battleship_episode(seed: int = 7) -> List[StepData]:
+    """Create a deterministic Battleship episode for visualization testing.
+
+    The probe sequence is fixed, and the belief attached to each step is the real
+    :class:`BattleshipBelief` rather than a mock: the belief panel is the part of
+    the visualization most likely to regress, so hashing a mock belief would
+    leave it untested. The belief update is deterministic given the observations,
+    but drawing its particles is not, so the seed is pinned.
+
+    Both RNGs are seeded, not just NumPy. ``WeightedParticleBelief.sample`` draws
+    the true board with the stdlib ``random``, which ``conftest`` seeds once at
+    import rather than per test — so seeding NumPy alone would leave the fleet,
+    the observations and therefore the golden hash dependent on which tests ran
+    first. The repeated-render determinism test cannot catch that, because it
+    renders one already-built history twice.
+
+    Args:
+        seed: Random seed pinning the initial board and the particle draws.
+
+    Returns:
+        List of StepData objects representing the episode history.
+    """
+    random.seed(seed)
+    np.random.seed(seed)
+    env = build_battleship_env()
+
+    belief = BattleshipBelief.from_environment(env, n_particles=32)
+    state = belief.sample()
+    history: List[StepData] = []
+
+    # A fixed scan: two corners, then a diagonal sweep across the board.
+    action_sequence = [0, 4, 6, 12, 18, 24, 7, 11, 13, 17]
+
+    for action in action_sequence:
+        next_state, obs, reward = env.sample_next_step(state, action)
+        history.append(
+            StepData(
+                state=state,
+                action=action,
+                next_state=next_state,
+                observation=obs,
+                reward=reward,
+                belief=belief,
+            )
+        )
+        belief = belief.update(action=action, observation=obs, pomdp=env)
+        state = next_state
+        if env.is_terminal(state):
+            break
+
+    history.append(
+        StepData(
+            state=state,
+            action=None,
+            next_state=None,
+            observation=None,
+            reward=None,
+            belief=belief,
+        )
+    )
+    return history
 
 
 def create_deterministic_rock_sample_episode(seed: int = 42) -> List[StepData]:
@@ -921,6 +996,29 @@ class TestVisualizationConsistency:
             "test_rock_sample_visualization_consistency",
         )
 
+    def test_battleship_visualization_consistency(self, temp_output_dir):
+        """Test Battleship visualization produces consistent output.
+
+        Purpose: Validates that Battleship visualizations are deterministic
+
+        Given: A deterministic Battleship episode with a fixed probe sequence
+        When: Visualization is created from the episode
+        Then: Output matches golden file hash (or creates golden if missing)
+
+        Test type: integration
+        """
+        history = create_deterministic_battleship_episode(seed=7)
+        visualizer = BattleshipVisualizer(build_battleship_env())
+
+        output_path = temp_output_dir / "battleship_test.gif"
+        visualizer.create_visualization(history, output_path)
+
+        compare_or_create_golden_file(
+            output_path,
+            "battleship_visualization.gif",
+            "test_battleship_visualization_consistency",
+        )
+
     def test_pacman_visualization_consistency(self, temp_output_dir):
         """Test PacMan visualization produces consistent output.
 
@@ -1232,6 +1330,32 @@ class TestVisualizationConsistency:
 
 class TestVisualizationDeterminism:
     """Test that visualizations are deterministic when re-run with same inputs."""
+
+    def test_battleship_repeated_visualization_identical(self, temp_output_dir):
+        """Test that repeated Battleship visualizations are byte-for-byte identical.
+
+        Purpose: Validates absolute determinism of Battleship rendering, which
+            the golden-hash check cannot cover outside the project's Docker
+            image. Nothing in the renderer may depend on iteration order or on
+            a fresh random draw, and this is what proves it.
+
+        Given: One episode rendered twice from the same history
+        When: Both renders use identical inputs
+        Then: Output files have identical SHA256 hashes
+
+        Test type: unit
+        """
+        history = create_deterministic_battleship_episode(seed=7)
+        visualizer = BattleshipVisualizer(build_battleship_env())
+
+        first_path = temp_output_dir / "battleship_first.gif"
+        second_path = temp_output_dir / "battleship_second.gif"
+        visualizer.create_visualization(history, first_path)
+        visualizer.create_visualization(history, second_path)
+
+        assert compute_file_hash(first_path) == compute_file_hash(second_path), (
+            "Battleship visualization is not deterministic"
+        )
 
     def test_rock_sample_repeated_visualization_identical(self, temp_output_dir):
         """Test that repeated RockSample visualizations are byte-for-byte identical.
