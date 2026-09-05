@@ -1356,8 +1356,8 @@ def test_visualizer_preserves_scene_elements_and_safety_events(pomdp, tmp_path: 
     assert _count_color(frames[1], visualizer.ORANGE) > 100
     assert _count_color(frames[-1], visualizer.RED) > 100
     # The terminal banner must leave the step/action card readable.
-    assert _count_color(frames[-1].crop((90, 200, 230, 232)), visualizer.RED) == 0
-    assert _count_color(frames[-1].crop((0, 60, 650, 135)), visualizer.RED) > 100
+    assert _count_color(frames[-1].crop((900, 145, 1100, 195)), visualizer.RED) == 0
+    assert _count_color(frames[-1].crop((1130, 230, 1545, 300)), visualizer.RED) > 100
 
     states, actions, rewards = visualizer._extract_episode_data(  # pylint: disable=protected-access
         _visualization_history()
@@ -1393,6 +1393,10 @@ def test_visualizer_preserves_scene_elements_and_safety_events(pomdp, tmp_path: 
 @pytest.mark.parametrize("end_position", [(0.0, 9.0), (9.0, 0.0)])
 def test_visualizer_labels_follow_wide_and_tall_trajectories(pomdp, monkeypatch, end_position):
     """Aspect changes keep captions beside the axes and the full banner on canvas."""
+    from POMDPPlanners.environments.safety_ant_velocity_pomdp import (
+        safety_ant_velocity_visualizer as renderer,
+    )
+
     visualizer = SafeAntVelocityVisualizer(pomdp)
     states = [np.array([0.0, 0.0, 0.0, 0.0]), np.array([*end_position, 4.0, 0.0])]
     geometry = visualizer._geometry(states)  # pylint: disable=protected-access
@@ -1401,17 +1405,24 @@ def test_visualizer_labels_follow_wide_and_tall_trajectories(pomdp, monkeypatch,
     vertical_positions = {}
     original_text = ImageDraw.ImageDraw.text
     original_vertical = visualizer._vertical_text  # pylint: disable=protected-access
+    original_sprite = renderer.ant_sprite
+    sprite_sizes = []
+
+    def capture_sprite(size):
+        sprite_sizes.append(size)
+        return original_sprite(size)
 
     def capture_text(draw, xy, text, *args, **kwargs):
         text_positions[text] = xy
         return original_text(draw, xy, text, *args, **kwargs)
 
-    def capture_vertical(image, center, text, font):
+    def capture_vertical(image, center, text, font, **kwargs):
         vertical_positions[text] = center
-        return original_vertical(image, center, text, font)
+        return original_vertical(image, center, text, font, **kwargs)
 
     monkeypatch.setattr(ImageDraw.ImageDraw, "text", capture_text)
     monkeypatch.setattr(visualizer, "_vertical_text", capture_vertical)
+    monkeypatch.setattr(renderer, "ant_sprite", capture_sprite)
     background = visualizer._build_static_background(
         states, geometry
     )  # pylint: disable=protected-access
@@ -1423,8 +1434,10 @@ def test_visualizer_labels_follow_wide_and_tall_trajectories(pomdp, monkeypatch,
     assert main[0] < x_caption[0] < main[2]
     assert main[3] < x_caption[1] < main[3] + 70
     assert main[1] < vertical_positions["Y Position"][1] < main[3]
-    header = np.asarray(frame.crop((0, 60, 650, 135)))
+    assert main[0] - 70 < vertical_positions["Y Position"][0] < main[0] - 40
+    assert sprite_sizes[0] < min(main[2] - main[0], main[3] - main[1]) * 0.4
+    header = np.asarray(frame.crop((1100, 220, 1560, 320)))
     banner_x = np.where(np.all(header == visualizer.RED, axis=2))[1]
     assert len(banner_x) > 100
     assert banner_x.min() > 0
-    assert banner_x.max() < 649
+    assert banner_x.max() < 459

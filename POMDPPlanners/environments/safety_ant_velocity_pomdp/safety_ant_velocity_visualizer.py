@@ -11,6 +11,10 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 from POMDPPlanners.core.simulation import StepData
+from POMDPPlanners.environments.safety_ant_velocity_pomdp.safety_ant_assets import (
+    ant_sprite,
+    concrete_texture,
+)
 
 
 class SafeAntVelocityVisualizer:
@@ -21,17 +25,16 @@ class SafeAntVelocityVisualizer:
     FRAME_DURATION_MS = 1250
 
     WHITE = (255, 255, 255)
-    BLACK = (24, 24, 27)
-    GRID = (220, 224, 230)
-    BLUE = (37, 70, 235)
-    DARK_BLUE = (25, 45, 145)
-    GREEN = (22, 163, 74)
+    BLACK = (218, 226, 232)
+    GRID = (40, 52, 60)
+    BLUE = (48, 156, 255)
+    GREEN = (98, 225, 157)
     ORANGE = (245, 158, 11)
     RED = (220, 38, 38)
-    PURPLE = (147, 51, 234)
+    PURPLE = (188, 72, 220)
 
-    MAIN_BOX = (80, 185, 600, 705)
-    SPEED_BOX = (825, 70, 1340, 705)
+    MAIN_BOX = (70, 110, 770, 710)
+    SPEED_BOX = (950, 385, 1530, 690)
 
     def __init__(self, env: Any):
         self.env = env
@@ -40,7 +43,7 @@ class SafeAntVelocityVisualizer:
         self._fonts = {
             "small": self._load_font(16),
             "body": self._load_font(19),
-            "title": self._load_font(24),
+            "title": self._load_font(34),
             "status": self._load_font(22),
         }
 
@@ -51,8 +54,30 @@ class SafeAntVelocityVisualizer:
         states, actions, rewards = self._extract_episode_data(history)
         geometry = self._geometry(states)
         background = self._build_static_background(states, geometry)
+        palette = background.quantize(colors=192)
+        colors = list(palette.getpalette() or [])[:576]
+        reserved = [
+            self.BLUE,
+            self.GREEN,
+            self.PURPLE,
+            self.ORANGE,
+            self.RED,
+            self.BLACK,
+            self.WHITE,
+        ]
+        reserved += [
+            (round(18 * f), round(97 * f), round(195 * f)) for f in np.linspace(0.15, 1, 32)
+        ]
+        reserved += [
+            (round(18 + 150 * f), round(97 + 130 * f), round(195 + 60 * f))
+            for f in np.linspace(0, 1, 16)
+        ]
+        colors += [channel for color in reserved for channel in color]
+        palette.putpalette((colors + [0] * 768)[:768])
         frames = [
-            self._render_frame(background, states, actions, rewards, geometry, frame)
+            self._render_frame(background, states, actions, rewards, geometry, frame).quantize(
+                palette=palette, dither=Image.Dither.NONE
+            )
             for frame in range(len(states))
         ]
 
@@ -102,60 +127,95 @@ class SafeAntVelocityVisualizer:
     def _build_static_background(
         self, states: Sequence[np.ndarray], geometry: dict[str, float]
     ) -> Image.Image:
-        image = Image.new("RGB", (self.WIDTH, self.HEIGHT), self.WHITE)
+        image = Image.new("RGB", (self.WIDTH, self.HEIGHT), (12, 19, 25))
+        image.paste(concrete_texture(840, 800), (0, 0))
         draw = ImageDraw.Draw(image)
+        for offset in range(15):
+            draw.line(
+                (840 + offset, 0, 840 + offset, 800),
+                fill=(8 + offset // 2, 13 + offset // 2, 17 + offset // 2),
+            )
+        draw.rounded_rectangle((24, 22, 814, 777), radius=12, outline=(97, 103, 101), width=2)
+        draw.line((30, 24, 807, 24), fill=(229, 224, 207), width=2)
         main = self._main_box(geometry)
         speed = self.SPEED_BOX
-
-        self._draw_grid(draw, main)
+        draw.text((49, 46), "FIELD / TRAJECTORY", fill=(55, 65, 64), font=self._fonts["body"])
+        draw.text((885, 35), "Safe Ant Velocity", fill=self.WHITE, font=self._fonts["title"])
+        draw.text(
+            (888, 82),
+            "MOTION CONTROL  /  EPISODE TELEMETRY",
+            fill=(127, 148, 160),
+            font=self._fonts["small"],
+        )
+        draw.rounded_rectangle(
+            (883, 118, 1560, 327), radius=14, fill=(19, 29, 37), outline=(53, 68, 77), width=1
+        )
+        draw.line((902, 120, 1541, 120), fill=(82, 102, 113))
+        draw.rounded_rectangle(
+            (883, 345, 1560, 754), radius=14, fill=(15, 24, 31), outline=(49, 64, 74)
+        )
+        draw.text((914, 355), "SPEED OVER TIME", fill=self.WHITE, font=self._fonts["body"])
         self._draw_grid(draw, speed)
-        draw.rectangle(main, outline=self.BLACK, width=2)
-        draw.rectangle(speed, outline=self.BLACK, width=2)
-        draw.text(
-            (45, 150),
-            "Safety Ant Velocity POMDP: Trajectory & Safety Zones",
-            fill=self.BLACK,
-            font=self._fonts["title"],
+        draw.line(
+            (speed[0], speed[1], speed[0], speed[3], speed[2], speed[3]),
+            fill=(117, 137, 148),
+            width=1,
         )
-        draw.text((985, 25), "Speed Over Time", fill=self.BLACK, font=self._fonts["title"])
-        draw.text(
-            ((main[0] + main[2]) // 2, main[3] + 40),
-            "X Position",
-            fill=self.BLACK,
-            font=self._fonts["body"],
-            anchor="mt",
-        )
-        draw.text((1020, 745), "Time Step", fill=self.BLACK, font=self._fonts["body"])
-        self._vertical_text(
-            image, (15, (main[1] + main[3]) // 2), "Y Position", self._fonts["body"]
-        )
-        self._vertical_text(image, (755, 455), "Speed (Velocity Magnitude)", self._fonts["body"])
-
-        self._draw_axis_labels(draw, main, geometry)
         self._draw_speed_axis_labels(draw, speed, len(states), geometry["speed_max"])
-        safe_y = self._speed_y(self.safe_velocity_threshold, geometry)
-        critical_y = self._speed_y(self.safe_velocity_threshold * 1.5, geometry)
-        self._dashed_line(draw, (speed[0], safe_y), (speed[2], safe_y), self.ORANGE, 3)
-        draw.line((speed[0], critical_y, speed[2], critical_y), fill=self.RED, width=3)
-
-        draw.text((1370, 78), "Safety Threshold", fill=self.BLACK, font=self._fonts["small"])
+        draw.text((1210, 727), "Time Step", fill=(142, 164, 177), font=self._fonts["small"])
+        self._vertical_text(image, (887, 535), "Speed (Velocity Magnitude)", self._fonts["small"])
+        for value, color in (
+            (self.safe_velocity_threshold, self.ORANGE),
+            (self.safe_velocity_threshold * 1.5, self.RED),
+        ):
+            y = self._speed_y(value, geometry)
+            self._dashed_line(draw, (speed[0], y), (speed[2], y), color, 2)
         draw.text(
-            (1370, 100),
-            f"({self.safe_velocity_threshold:.1f})",
+            (1185, 354),
+            f"Safe {self.safe_velocity_threshold:.1f}",
             fill=self.ORANGE,
             font=self._fonts["small"],
         )
-        draw.text((1370, 134), "Critical Threshold", fill=self.BLACK, font=self._fonts["small"])
         draw.text(
-            (1370, 156),
-            f"({self.safe_velocity_threshold * 1.5:.1f})",
+            (1350, 354),
+            f"Critical {self.safe_velocity_threshold * 1.5:.1f}",
             fill=self.RED,
             font=self._fonts["small"],
         )
-        draw.ellipse((665, 205, 687, 227), fill=self.BLUE, outline=self.DARK_BLUE, width=3)
-        draw.text((700, 204), "Ant", fill=self.BLACK, font=self._fonts["body"])
-        draw.line((665, 250, 690, 250), fill=self.BLUE, width=4)
-        draw.text((700, 239), "Trajectory", fill=self.BLACK, font=self._fonts["body"])
+        for index in range(5):
+            f = index / 4
+            x = round(main[0] + f * (main[2] - main[0]))
+            y = round(main[3] - f * (main[3] - main[1]))
+            draw.line((x, main[3], x, main[3] + 6), fill=(63, 71, 72))
+            draw.text(
+                (x - 12, main[3] + 11),
+                f"{geometry['x_min'] + f * (geometry['x_max'] - geometry['x_min']):.1f}",
+                fill=(51, 61, 63),
+                font=self._fonts["small"],
+            )
+            draw.text(
+                (main[0] - 42, y - 8),
+                f"{geometry['y_min'] + f * (geometry['y_max'] - geometry['y_min']):.1f}",
+                fill=(51, 61, 63),
+                font=self._fonts["small"],
+            )
+        draw.text(
+            ((main[0] + main[2]) // 2, main[3] + 38),
+            "X Position",
+            fill=(48, 58, 60),
+            font=self._fonts["small"],
+            anchor="mt",
+        )
+        self._vertical_text(
+            image,
+            (max(6, main[0] - 64), (main[1] + main[3]) // 2),
+            "Y Position",
+            self._fonts["small"],
+            color=(48, 58, 60),
+        )
+        draw.text((885, 769), "VELOCITY", fill=self.GREEN, font=self._fonts["small"])
+        draw.text((1020, 769), "APPLIED FORCE", fill=self.PURPLE, font=self._fonts["small"])
+        draw.text((1210, 769), "TRAJECTORY", fill=self.BLUE, font=self._fonts["small"])
         return image
 
     def _render_frame(
@@ -178,7 +238,10 @@ class SafeAntVelocityVisualizer:
 
         path = [self._world_point(candidate[:2], geometry) for candidate in states[: frame + 1]]
         if len(path) > 1:
-            draw.line(path, fill=self.BLUE, width=4, joint="curve")
+            draw.line(
+                [(x + 1, y + 2) for x, y in path], fill=(100, 113, 125), width=5, joint="curve"
+            )
+            draw.line(path, fill=self.BLUE, width=3, joint="curve")
 
         radius = (
             max(0.1, speed / self.safe_velocity_threshold)
@@ -194,12 +257,6 @@ class SafeAntVelocityVisualizer:
             )
             self._world_circle(draw, point, critical_radius, geometry, self.RED)
 
-        draw.ellipse(
-            (point[0] - 10, point[1] - 10, point[0] + 10, point[1] + 10),
-            fill=self.BLUE,
-            outline=self.DARK_BLUE,
-            width=3,
-        )
         if speed > 0.01:
             self._arrow(
                 draw, point, self._world_point(position + velocity * 0.5, geometry), self.GREEN
@@ -213,6 +270,10 @@ class SafeAntVelocityVisualizer:
                 )
                 self._arrow(draw, point, target, self.PURPLE)
 
+        main = self._main_box(geometry)
+        sprite_size = max(8, min(100, round(min(main[2] - main[0], main[3] - main[1]) * 0.35)))
+        sprite = ant_sprite(sprite_size)
+        scene.paste(sprite, (point[0] - sprite.width // 2, point[1] - sprite.height // 2), sprite)
         main = self._main_box(geometry)
         image.paste(scene.crop(main), main)
         draw = ImageDraw.Draw(image)
@@ -236,39 +297,41 @@ class SafeAntVelocityVisualizer:
         action_name = f"Force Level {actions[frame]}" if frame < len(actions) else "Terminal"
         self._text_box(
             draw,
-            (90, 195),
+            (907, 145),
             f"Step: {frame + 1}/{len(states)}\nAction: {action_name}",
-            (205, 235, 255),
+            (19, 29, 37),
         )
         self._text_box(
             draw,
-            (90, 260),
+            (1138, 145),
             f"Velocity: [{velocity[0]:.2f}, {velocity[1]:.2f}]\nSpeed: {speed:.2f}",
-            (255, 248, 190),
+            (19, 29, 37),
         )
         self._text_box(
             draw,
-            (90, 325),
+            (907, 223),
             f"Step Reward: {rewards[frame]:.1f}\nTotal Reward: {sum(rewards[: frame + 1]):.1f}",
-            (200, 245, 205),
+            (19, 29, 37),
         )
         self._draw_status(draw, speed)
         return image
 
     def _draw_status(self, draw: ImageDraw.ImageDraw, speed: float) -> None:
         if speed > self.safe_velocity_threshold * 1.5:
-            text, color = "CRITICAL VIOLATION / TERMINAL STATE", self.RED
+            text, color = "CRITICAL / TERMINAL", self.RED
         elif speed > self.safe_velocity_threshold:
             text, color = "SAFETY VIOLATION", self.ORANGE
         else:
             text, color = "SAFE OPERATION", self.GREEN
-        bounds = draw.textbbox((0, 0), text, font=self._fonts["status"])
-        width = bounds[2] - bounds[0]
-        main = self.MAIN_BOX
-        x = main[0] + (main[2] - main[0] - width) // 2
-        y = 80
-        draw.rounded_rectangle((x - 12, y, x + width + 12, y + 37), radius=8, fill=color)
-        draw.text((x, y + 6), text, fill=self.WHITE, font=self._fonts["status"])
+        draw.rounded_rectangle(
+            (1133, 236, 1539, 296),
+            radius=10,
+            fill=tuple(int(c * 0.13) for c in color),
+            outline=color,
+            width=2,
+        )
+        draw.ellipse((1153, 258, 1167, 272), fill=color)
+        draw.text((1183, 255), text, fill=color, font=self._fonts["status"])
 
     def _draw_grid(self, draw: ImageDraw.ImageDraw, box: tuple[int, int, int, int]) -> None:
         left, top, right, bottom = box
@@ -277,24 +340,6 @@ class SafeAntVelocityVisualizer:
             y = top + (bottom - top) * index // 8
             draw.line((x, top, x, bottom), fill=self.GRID, width=1)
             draw.line((left, y, right, y), fill=self.GRID, width=1)
-
-    def _draw_axis_labels(
-        self, draw: ImageDraw.ImageDraw, box: tuple[int, int, int, int], geometry: dict[str, float]
-    ) -> None:
-        left, _, right, bottom = box
-        top = box[1]
-        for index in range(5):
-            fraction = index / 4
-            x_value = geometry["x_min"] + fraction * (geometry["x_max"] - geometry["x_min"])
-            y_value = geometry["y_min"] + fraction * (geometry["y_max"] - geometry["y_min"])
-            x = left + int(fraction * (right - left))
-            y = bottom - int(fraction * (bottom - top))
-            draw.text(
-                (x - 20, bottom + 8), f"{x_value:.1f}", fill=self.BLACK, font=self._fonts["small"]
-            )
-            draw.text(
-                (left - 48, y - 9), f"{y_value:.1f}", fill=self.BLACK, font=self._fonts["small"]
-            )
 
     def _draw_speed_axis_labels(
         self,
@@ -315,7 +360,7 @@ class SafeAntVelocityVisualizer:
                 font=self._fonts["small"],
             )
             draw.text(
-                (left - 48, y - 9),
+                (left - 28, y - 9),
                 f"{speed_max * fraction:.1f}",
                 fill=self.BLACK,
                 font=self._fonts["small"],
@@ -412,7 +457,7 @@ class SafeAntVelocityVisualizer:
             (bounds[0] - 5, bounds[1] - 4, bounds[2] + 5, bounds[3] + 4),
             radius=4,
             fill=color,
-            outline=self.BLACK,
+            outline=(41, 57, 66),
             width=1,
         )
         draw.multiline_text(position, text, fill=self.BLACK, font=self._fonts["body"], spacing=3)
@@ -423,13 +468,18 @@ class SafeAntVelocityVisualizer:
         center: tuple[int, int],
         text: str,
         font: ImageFont.ImageFont | ImageFont.FreeTypeFont,
+        *,
+        color: tuple[int, int, int] = BLACK,
     ) -> None:
         bounds = tuple(round(value) for value in font.getbbox(text))
         temporary = Image.new(
             "RGBA", (bounds[2] - bounds[0], bounds[3] - bounds[1]), (255, 255, 255, 0)
         )
         ImageDraw.Draw(temporary).text(
-            (-bounds[0], -bounds[1]), text, fill=SafeAntVelocityVisualizer.BLACK, font=font
+            (-bounds[0], -bounds[1]),
+            text,
+            fill=color,
+            font=font,
         )
         rotated = temporary.rotate(90, expand=True)
         image.paste(rotated, (center[0], center[1] - rotated.height // 2), rotated)
@@ -447,10 +497,11 @@ class SafeAntVelocityVisualizer:
         height = bottom - top
         x_span = geometry["x_max"] - geometry["x_min"]
         y_span = geometry["y_max"] - geometry["y_min"]
-        if x_span > y_span:
-            bottom = top + round(height * y_span / x_span)
-        elif y_span > x_span:
-            right = left + round(width * x_span / y_span)
+        scale = min(width / x_span, height / y_span)
+        plot_width, plot_height = round(x_span * scale), round(y_span * scale)
+        left += (width - plot_width) // 2
+        top += (height - plot_height) // 2
+        right, bottom = left + plot_width, top + plot_height
         return left, top, right, bottom
 
     @staticmethod
