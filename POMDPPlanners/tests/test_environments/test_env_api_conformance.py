@@ -89,6 +89,7 @@ from POMDPPlanners.environments.push_pomdp.push_pomdp import PushPOMDP
 from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp import RockSamplePOMDP
 from POMDPPlanners.environments.safety_ant_velocity_pomdp import SafeAntVelocityPOMDP
 from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
+from POMDPPlanners.environments.t_maze_pomdp.t_maze_pomdp import TMazePOMDP
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
     cartpole_pinned_kwargs,
@@ -106,6 +107,7 @@ from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
     rock_sample_pinned_kwargs,
     safety_ant_velocity_pinned_kwargs,
     sanity_pinned_kwargs,
+    t_maze_pinned_kwargs,
     tiger_pinned_kwargs,
 )
 
@@ -181,6 +183,10 @@ def _build_continuous_laser_tag_discrete() -> ContinuousLaserTagPOMDPDiscreteAct
     )
 
 
+def _build_t_maze() -> TMazePOMDP:
+    return TMazePOMDP(discount_factor=0.95, **t_maze_pinned_kwargs())
+
+
 def _build_safety_ant() -> SafeAntVelocityPOMDP:
     return SafeAntVelocityPOMDP(discount_factor=0.95, **safety_ant_velocity_pinned_kwargs())
 
@@ -204,6 +210,7 @@ ENV_BUILDERS: List[Tuple[str, EnvBuilder]] = [
     ("ContinuousLaserTagPOMDP", _build_continuous_laser_tag),
     ("ContinuousLaserTagPOMDPDiscreteActions", _build_continuous_laser_tag_discrete),
     ("SafeAntVelocityPOMDP", _build_safety_ant),
+    ("TMazePOMDP", _build_t_maze),
 ]
 
 

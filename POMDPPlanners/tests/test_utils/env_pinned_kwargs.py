@@ -394,3 +394,17 @@ def safety_ant_velocity_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
     }
     pinned.update(overrides)
     return pinned
+
+
+def t_maze_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
+    """Pinned optional defaults for ``TMazePOMDP``."""
+    pinned: Dict[str, Any] = {
+        "stem_length": 4,
+        "arm_length": 1,
+        "cue_accuracy": 0.9,
+        "goal_reward": 10.0,
+        "wrong_goal_penalty": 10.0,
+        "step_penalty": 1.0,
+    }
+    pinned.update(overrides)
+    return pinned
