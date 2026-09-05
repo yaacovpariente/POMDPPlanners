@@ -12,7 +12,7 @@ renderer.  The exact pixels are covered by the golden-file test.
 import ast
 import hashlib
 from pathlib import Path
-from typing import List
+from typing import List, cast
 
 import numpy as np
 import pytest
@@ -86,7 +86,10 @@ def _episode(n_steps: int = 5, n_particles: int = 8) -> List[StepData]:
 
 def _paths(steps: List[StepData]):
     path = [s.state for s in steps]
-    beliefs = [s.belief.to_unique_support_distribution() for s in steps]
+    beliefs = [
+        cast(WeightedParticleBelief, s.belief).to_unique_support_distribution()
+        for s in steps
+    ]
     actions = [s.action for s in steps]
     return path, beliefs, actions
 
@@ -110,7 +113,7 @@ def test_gif_frame_count_and_size(env_fixture, request, tmp_path):
     assert out.exists()
     with Image.open(out) as gif:
         assert gif.size == CANVAS_SIZE
-        assert gif.n_frames == len(steps)
+        assert getattr(gif, "n_frames") == len(steps)
 
 
 @pytest.mark.parametrize("env_fixture", ["continuous_env", "discrete_env"])
@@ -127,7 +130,7 @@ def test_environment_cache_visualization_uses_this_renderer(env_fixture, request
     out = tmp_path / "agent_path_0.gif"
     assert out.exists()
     with Image.open(out) as gif:
-        assert gif.n_frames == 3
+        assert getattr(gif, "n_frames") == 3
         assert gif.size == CANVAS_SIZE
 
 
@@ -440,4 +443,4 @@ def test_visualize_path_accepts_mismatched_belief_list_length(continuous_env, tm
     LightDarkPOMDPVisualizer(continuous_env).visualize_path(path, [], ["right"], out)
 
     with Image.open(out) as gif:
-        assert gif.n_frames == 4
+        assert getattr(gif, "n_frames") == 4
