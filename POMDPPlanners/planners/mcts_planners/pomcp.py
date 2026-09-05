@@ -138,7 +138,16 @@ class POMCP(ArenaPathSimulationPolicy):
 
         action_id = self.get_explored_action_node(tree=tree, belief_id=belief_id)
 
-        state = tree.get_belief(belief_id).sample()
+        # ``state`` is the one threaded in from the parent's transition, and it
+        # is the one the generative model is called on. Silver & Veness (2010)
+        # draw a state once, in SEARCH, and SIMULATE then uses the passed ``s``
+        # for ``G(s, a)`` all the way down. Re-drawing here from
+        # ``tree.get_belief(belief_id)`` (as this line used to) broke the
+        # algorithm twice over: the terminal test above and the transition
+        # below would be about different states, and ``update_nodes`` would
+        # append the *re-drawn* state to B(h), so a non-root node's particle
+        # bag could only ever duplicate its first particle and never gain a
+        # new one. See ``test_pomcp_correctness.py`` for the regressions.
         next_state, next_observation, reward = self.environment.sample_next_step(
             state=state, action=tree.get_action(action_id)
         )
