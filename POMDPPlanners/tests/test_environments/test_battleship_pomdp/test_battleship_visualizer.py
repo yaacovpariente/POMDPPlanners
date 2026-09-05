@@ -351,6 +351,74 @@ class TestLabels:
             plt.close(fig)
 
 
+class TestLayout:
+    """Where the drawn pieces actually land.
+
+    Measured on the rendered figure, not on the numbers that produced it: the
+    left legend once ran wider than its own panel and overlapped the middle
+    one, and every string in the picture was still correct while it did.
+    """
+
+    _MIN_GAP_PX = 16.0
+
+    @staticmethod
+    def _laid_out_figure(env):
+        """The figure with the margins the saved GIF is drawn with, plus a caption."""
+        visualizer = BattleshipVisualizer(env)
+        fig, axes, artists = visualizer._setup_figure()  # pylint: disable=protected-access
+        # The longest caption any frame produces, so the test measures the
+        # worst case rather than an empty string.
+        artists["caption"].set_text(
+            "Step 3 of 18 - the agent is about to probe row 2, column 4 (yellow ring)\n"
+            "Result of this probe: MISS - water.   Reward: -0.10.   "
+            "Ship cells found before this probe: 1 of 7"
+        )
+        visualizer._apply_layout(fig)  # pylint: disable=protected-access
+        fig.canvas.draw()
+        return fig, axes, artists
+
+    def test_panel_legends_do_not_overlap_each_other(self, env) -> None:
+        """Purpose: overlapping legends were the reported defect.
+
+        Given: the figure laid out exactly as the saved GIF is
+        When: the legends' rendered bounding boxes are measured in pixels
+        Then: each legend ends at least 16 px left of the next one's start
+
+        Test type: unit
+        """
+        fig, axes, _ = self._laid_out_figure(env)
+        try:
+            renderer = fig.canvas.get_renderer()
+            boxes = [ax.get_legend().get_window_extent(renderer) for ax in axes]
+            for left, right in zip(boxes, boxes[1:]):
+                assert right.x0 - left.x1 >= self._MIN_GAP_PX
+        finally:
+            plt.close(fig)
+
+    def test_nothing_is_clipped_or_written_over_the_caption(self, env) -> None:
+        """Purpose: curing the overlap by spreading out could push text off the figure.
+
+        Given: the figure laid out exactly as the saved GIF is
+        When: the legends' and caption's rendered boxes are compared to the
+              figure bounds and to each other
+        Then: every box is inside the figure and no legend reaches the caption
+
+        Test type: unit
+        """
+        fig, axes, artists = self._laid_out_figure(env)
+        try:
+            renderer = fig.canvas.get_renderer()
+            width, height = fig.canvas.get_width_height()
+            caption = artists["caption"].get_window_extent(renderer)
+            boxes = [ax.get_legend().get_window_extent(renderer) for ax in axes]
+            for box in boxes + [caption]:
+                assert 0 <= box.x0 and box.x1 <= width
+                assert 0 <= box.y0 and box.y1 <= height
+            assert min(box.y0 for box in boxes) > caption.y1
+        finally:
+            plt.close(fig)
+
+
 class TestOutput:
     """The file the environment writes."""
 
