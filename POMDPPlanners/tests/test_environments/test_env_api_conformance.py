@@ -80,6 +80,10 @@ from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp imp
 from POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp import (
     DiscreteLightDarkPOMDP,
 )
+from POMDPPlanners.environments.maze_pomdp import (
+    ContinuousMazePOMDP,
+    DiscreteMazePOMDP,
+)
 from POMDPPlanners.environments.mountain_car_pomdp import MountainCarPOMDP
 from POMDPPlanners.environments.pacman_pomdp import PacManPOMDP
 from POMDPPlanners.environments.push_pomdp.continuous_push_pomdp import (
@@ -90,10 +94,12 @@ from POMDPPlanners.environments.push_pomdp.push_pomdp import PushPOMDP
 from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp import RockSamplePOMDP
 from POMDPPlanners.environments.safety_ant_velocity_pomdp import SafeAntVelocityPOMDP
 from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
+from POMDPPlanners.environments.t_maze_pomdp.t_maze_pomdp import TMazePOMDP
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
     battleship_pinned_kwargs,
     cartpole_pinned_kwargs,
+    continuous_maze_pinned_kwargs,
     continuous_laser_tag_discrete_actions_pinned_kwargs,
     continuous_laser_tag_pinned_kwargs,
     continuous_light_dark_discrete_actions_pinned_kwargs,
@@ -101,6 +107,7 @@ from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
     continuous_push_discrete_actions_pinned_kwargs,
     continuous_push_pinned_kwargs,
     discrete_light_dark_pinned_kwargs,
+    discrete_maze_pinned_kwargs,
     laser_tag_pinned_kwargs,
     mountain_car_pinned_kwargs,
     pacman_pinned_kwargs,
@@ -108,6 +115,7 @@ from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
     rock_sample_pinned_kwargs,
     safety_ant_velocity_pinned_kwargs,
     sanity_pinned_kwargs,
+    t_maze_pinned_kwargs,
     tiger_pinned_kwargs,
 )
 
@@ -187,6 +195,18 @@ def _build_continuous_laser_tag_discrete() -> ContinuousLaserTagPOMDPDiscreteAct
     )
 
 
+def _build_t_maze() -> TMazePOMDP:
+    return TMazePOMDP(discount_factor=0.95, **t_maze_pinned_kwargs())
+
+
+def _build_discrete_maze() -> DiscreteMazePOMDP:
+    return DiscreteMazePOMDP(discount_factor=0.95, **discrete_maze_pinned_kwargs())
+
+
+def _build_continuous_maze() -> ContinuousMazePOMDP:
+    return ContinuousMazePOMDP(discount_factor=0.95, **continuous_maze_pinned_kwargs())
+
+
 def _build_safety_ant() -> SafeAntVelocityPOMDP:
     return SafeAntVelocityPOMDP(discount_factor=0.95, **safety_ant_velocity_pinned_kwargs())
 
@@ -210,6 +230,9 @@ ENV_BUILDERS: List[Tuple[str, EnvBuilder]] = [
     ("ContinuousLaserTagPOMDP", _build_continuous_laser_tag),
     ("ContinuousLaserTagPOMDPDiscreteActions", _build_continuous_laser_tag_discrete),
     ("SafeAntVelocityPOMDP", _build_safety_ant),
+    ("TMazePOMDP", _build_t_maze),
+    ("DiscreteMazePOMDP", _build_discrete_maze),
+    ("ContinuousMazePOMDP", _build_continuous_maze),
     ("BattleshipPOMDP", _build_battleship),
 ]
 
