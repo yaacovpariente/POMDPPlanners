@@ -20,13 +20,16 @@ Directory Structure:
         ├── laser_tag_visualization.gif
         ├── continuous_laser_tag_visualization.gif
         ├── continuous_push_visualization.gif
-        ├── t_maze_visualization.gif
+        ├── discrete_maze_visualization.gif
+        ├── continuous_maze_visualization.gif
+        ├── t_maze_visualization.gif  # compatibility layout
         └── safety_ant_velocity_visualization.gif
 """
 
 import hashlib
 import shutil
 import warnings
+from collections import deque
 from pathlib import Path
 from typing import Any, List
 
@@ -48,6 +51,11 @@ from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp imp
 )
 from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_visualizer import (
     LightDarkPOMDPVisualizer,
+)
+from POMDPPlanners.environments.maze_pomdp import (
+    ContinuousMazePOMDP,
+    DiscreteMazePOMDP,
+    MazeVisualizer,
 )
 from POMDPPlanners.environments.push_pomdp.push_pomdp import PushPOMDP
 from POMDPPlanners.environments.push_pomdp.push_pomdp_visualizer import (
@@ -87,11 +95,17 @@ from POMDPPlanners.environments.t_maze_pomdp.t_maze_pomdp import (
     TMazePOMDP,
     create_t_maze_state,
 )
+from POMDPPlanners.environments.t_maze_pomdp.maze_pomdp import (
+    ACTION_OFFSETS,
+    create_maze_state,
+)
 from POMDPPlanners.environments.t_maze_pomdp.t_maze_visualizer import TMazeVisualizer
 from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
+    continuous_maze_pinned_kwargs,
     continuous_laser_tag_pinned_kwargs,
     continuous_light_dark_pinned_kwargs,
     continuous_push_pinned_kwargs,
+    discrete_maze_pinned_kwargs,
     laser_tag_pinned_kwargs,
     pacman_pinned_kwargs,
     push_pinned_kwargs,
@@ -778,6 +792,72 @@ def _create_t_maze_belief(state: np.ndarray, left_weight: float) -> WeightedPart
     )
 
 
+def create_deterministic_maze_episode(env) -> List[StepData]:
+    """Walk a generated Maze to its left goal with a two-particle goal belief."""
+    parents = {env.start_cell: None}
+    queue = deque([env.start_cell])
+    while queue:
+        cell = queue.popleft()
+        if cell == env.left_goal_cell:
+            break
+        for neighbour in env.geometry.neighbours(cell):
+            if neighbour not in parents:
+                parents[neighbour] = cell
+                queue.append(neighbour)
+    cells = []
+    cell = env.left_goal_cell
+    while cell is not None:
+        cells.append(cell)
+        cell = parents[cell]
+    cells.reverse()
+
+    state = create_maze_state(env.start_cell, GOAL_LEFT)
+    history: List[StepData] = []
+    for index, (first, second) in enumerate(zip(cells, cells[1:])):
+        offset = (second[0] - first[0], second[1] - first[1])
+        if isinstance(env, DiscreteMazePOMDP):
+            action = next(name for name, delta in ACTION_OFFSETS.items() if delta == offset)
+        else:
+            action = np.asarray(offset, dtype=np.float64)
+        next_state = env.sample_next_state(state, action)
+        observation = OBSERVATION_LEFT_CUE if index == 0 else OBSERVATION_EMPTY
+        weight = 0.5 if index == 0 else 0.9
+        history.append(
+            StepData(
+                state=state,
+                action=action,
+                next_state=next_state,
+                observation=observation,
+                reward=env.reward(state, action, next_state),
+                belief=WeightedParticleBelief(
+                    particles=[
+                        create_maze_state(state[:2], GOAL_LEFT, state[3]),
+                        create_maze_state(state[:2], GOAL_RIGHT, state[3]),
+                    ],
+                    log_weights=np.log(np.array([weight, 1.0 - weight])),
+                ),
+            )
+        )
+        state = next_state
+    history.append(
+        StepData(
+            state=state,
+            action=None,
+            next_state=state,
+            observation=None,
+            reward=0.0,
+            belief=WeightedParticleBelief(
+                particles=[
+                    create_maze_state(state[:2], GOAL_LEFT, state[3]),
+                    create_maze_state(state[:2], GOAL_RIGHT, state[3]),
+                ],
+                log_weights=np.log(np.array([0.9, 0.1])),
+            ),
+        )
+    )
+    return history
+
+
 @pytest.fixture
 def temp_output_dir(tmp_path):
     """Create temporary directory for test outputs."""
@@ -1120,6 +1200,33 @@ class TestVisualizationConsistency:
             output_path,
             "t_maze_visualization.gif",
             "test_t_maze_visualization_consistency",
+        )
+
+    @pytest.mark.parametrize(
+        "env,golden_name",
+        [
+            (
+                DiscreteMazePOMDP(discount_factor=0.95, **discrete_maze_pinned_kwargs()),
+                "discrete_maze_visualization.gif",
+            ),
+            (
+                ContinuousMazePOMDP(
+                    discount_factor=0.95, **continuous_maze_pinned_kwargs()
+                ),
+                "continuous_maze_visualization.gif",
+            ),
+        ],
+        ids=["discrete_maze", "continuous_maze"],
+    )
+    def test_maze_visualization_consistency(self, temp_output_dir, env, golden_name):
+        """Both public Maze variants render deterministic generated geometry."""
+        history = create_deterministic_maze_episode(env)
+        output_path = temp_output_dir / golden_name
+        MazeVisualizer(env).create_visualization(history, output_path)
+        compare_or_create_golden_file(
+            output_path,
+            golden_name,
+            f"test_{golden_name.removesuffix('.gif')}_consistency",
         )
 
 

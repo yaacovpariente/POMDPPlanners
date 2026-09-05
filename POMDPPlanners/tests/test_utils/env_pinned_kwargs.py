@@ -408,3 +408,27 @@ def t_maze_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
     }
     pinned.update(overrides)
     return pinned
+
+
+def discrete_maze_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
+    """Pinned optional defaults for ``DiscreteMazePOMDP``."""
+    pinned: Dict[str, Any] = {
+        "maze_width": 7,
+        "maze_height": 9,
+        "maze_seed": 0,
+        "loop_fraction": 0.15,
+        "cue_accuracy": 0.9,
+        "goal_reward": 10.0,
+        "wrong_goal_penalty": 10.0,
+        "step_penalty": 1.0,
+    }
+    pinned.update(overrides)
+    return pinned
+
+
+def continuous_maze_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
+    """Pinned optional defaults for ``ContinuousMazePOMDP``."""
+    pinned = discrete_maze_pinned_kwargs()
+    pinned["max_step_size"] = 1.0
+    pinned.update(overrides)
+    return pinned
