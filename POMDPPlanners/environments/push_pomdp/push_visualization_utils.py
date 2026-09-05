@@ -32,7 +32,7 @@ OBSTACLE = (255, 102, 102)
 OBSTACLE_EDGE = (139, 0, 0)
 DANGER = (255, 178, 178)
 ACTION = (255, 0, 0)
-PUSH_LINE = (255, 102, 102)
+PUSH_LINE = (255, 0, 0)
 STEP_BOX = (190, 224, 235)
 DISTANCE_BOX = (255, 255, 224)
 REWARD_BOX = (144, 238, 144)
@@ -42,10 +42,28 @@ COLLISION_BOX = (240, 128, 128)
 COLLISION_TEXT = (139, 0, 0)
 
 ACCENT_COLORS: Tuple[Tuple[int, int, int], ...] = (
-    WHITE, BLACK, GRID, ROBOT, ROBOT_EDGE, ROBOT_RADIUS, OBJECT, OBJECT_EDGE,
-    TARGET, TARGET_EDGE, OBSTACLE, OBSTACLE_EDGE, DANGER, ACTION, PUSH_LINE,
-    STEP_BOX, DISTANCE_BOX, REWARD_BOX, SUCCESS_BOX, SUCCESS_TEXT,
-    COLLISION_BOX, COLLISION_TEXT,
+    WHITE,
+    BLACK,
+    GRID,
+    ROBOT,
+    ROBOT_EDGE,
+    ROBOT_RADIUS,
+    OBJECT,
+    OBJECT_EDGE,
+    TARGET,
+    TARGET_EDGE,
+    OBSTACLE,
+    OBSTACLE_EDGE,
+    DANGER,
+    ACTION,
+    PUSH_LINE,
+    STEP_BOX,
+    DISTANCE_BOX,
+    REWARD_BOX,
+    SUCCESS_BOX,
+    SUCCESS_TEXT,
+    COLLISION_BOX,
+    COLLISION_TEXT,
 )
 
 
@@ -60,7 +78,13 @@ FONT_TITLE = _font(20)
 FONT_STATUS = _font(24)
 
 
-def draw_arrow(draw: ImageDraw.ImageDraw, start: Tuple[float, float], end: Tuple[float, float], color: Tuple[int, int, int], width: int) -> None:
+def draw_arrow(
+    draw: ImageDraw.ImageDraw,
+    start: Tuple[float, float],
+    end: Tuple[float, float],
+    color: Tuple[int, int, int],
+    width: int,
+) -> None:
     """Draw a line and a filled triangular head."""
     draw.line((start, end), fill=color, width=width)
     dx, dy = end[0] - start[0], end[1] - start[1]
@@ -70,10 +94,19 @@ def draw_arrow(draw: ImageDraw.ImageDraw, start: Tuple[float, float], end: Tuple
     ux, uy = dx / length, dy / length
     head, wing = 11 + width, 6 + width / 2
     base_x, base_y = end[0] - ux * head, end[1] - uy * head
-    draw.polygon((end, (base_x - uy * wing, base_y + ux * wing), (base_x + uy * wing, base_y - ux * wing)), fill=color)
+    draw.polygon(
+        (end, (base_x - uy * wing, base_y + ux * wing), (base_x + uy * wing, base_y - ux * wing)),
+        fill=color,
+    )
 
 
-def draw_star(draw: ImageDraw.ImageDraw, center: Tuple[float, float], outer: float, fill: Tuple[int, int, int], outline: Tuple[int, int, int]) -> None:
+def draw_star(
+    draw: ImageDraw.ImageDraw,
+    center: Tuple[float, float],
+    outer: float,
+    fill: Tuple[int, int, int],
+    outline: Tuple[int, int, int],
+) -> None:
     """Draw the target marker without a font glyph."""
     points = []
     for index in range(10):
@@ -83,7 +116,16 @@ def draw_star(draw: ImageDraw.ImageDraw, center: Tuple[float, float], outer: flo
     draw.polygon(points, fill=fill, outline=outline)
 
 
-def draw_text_box(draw: ImageDraw.ImageDraw, xy: Tuple[int, int], text: str, fill: Tuple[int, int, int], font: Any = FONT_NORMAL, text_fill: Tuple[int, int, int] = BLACK, outline: Tuple[int, int, int] = BLACK, padding: int = 8) -> Tuple[int, int, int, int]:
+def draw_text_box(
+    draw: ImageDraw.ImageDraw,
+    xy: Tuple[int, int],
+    text: str,
+    fill: Tuple[int, int, int],
+    font: Any = FONT_NORMAL,
+    text_fill: Tuple[int, int, int] = BLACK,
+    outline: Tuple[int, int, int] = BLACK,
+    padding: int = 8,
+) -> Tuple[float, float, float, float]:
     """Draw a measured multiline label and return its box."""
     bounds = draw.multiline_textbbox(xy, text, font=font, spacing=3)
     box = (bounds[0] - padding, bounds[1] - padding, bounds[2] + padding, bounds[3] + padding)
@@ -117,7 +159,7 @@ class PushRendererBase(ABC):
         lo, hi = self._world_limits
         return min(PLOT_RIGHT - PLOT_LEFT, PLOT_BOTTOM - PLOT_TOP) / (hi - lo)
 
-    def _to_px(self, point: Sequence[float]) -> Tuple[float, float]:
+    def _to_px(self, point: Sequence[float] | np.ndarray) -> Tuple[float, float]:
         lo, hi = self._world_limits
         x, y = float(point[0]), float(point[1])
         px = PLOT_LEFT + (x - lo) / (hi - lo) * (PLOT_RIGHT - PLOT_LEFT)
@@ -125,7 +167,14 @@ class PushRendererBase(ABC):
         return px, py
 
     def _scene_key(self) -> Tuple[Any, ...]:
-        return (type(self).__name__, float(self.grid_size), float(self.dangerous_area_radius), np.asarray(self.obstacles, dtype=float).tobytes(), np.asarray(self.dangerous_areas, dtype=float).tobytes(), self._variant_scene_key())
+        return (
+            type(self).__name__,
+            float(self.grid_size),
+            float(self.dangerous_area_radius),
+            np.asarray(self.obstacles, dtype=float).tobytes(),
+            np.asarray(self.dangerous_areas, dtype=float).tobytes(),
+            self._variant_scene_key(),
+        )
 
     def _variant_scene_key(self) -> Tuple[Any, ...]:
         return ()
@@ -141,7 +190,13 @@ class PushRendererBase(ABC):
         self._background_build_count += 1
         canvas = Image.new("RGB", CANVAS_SIZE, WHITE)
         draw = ImageDraw.Draw(canvas)
-        draw.text(((PLOT_LEFT + PLOT_RIGHT) // 2, 12), self.title, fill=BLACK, font=FONT_TITLE, anchor="ma")
+        draw.text(
+            ((PLOT_LEFT + PLOT_RIGHT) // 2, 12),
+            self.title,
+            fill=BLACK,
+            font=FONT_TITLE,
+            anchor="ma",
+        )
         draw.rectangle((PLOT_LEFT, PLOT_TOP, PLOT_RIGHT, PLOT_BOTTOM), outline=BLACK, width=1)
         tick_step = max(1, int(round(self.grid_size / 5)))
         for tick in range(0, int(self.grid_size) + 1, tick_step):
@@ -151,7 +206,13 @@ class PushRendererBase(ABC):
             draw.line((PLOT_LEFT, py, PLOT_RIGHT, py), fill=GRID, width=1)
             draw.text((px, PLOT_BOTTOM + 8), str(tick), fill=BLACK, font=FONT_SMALL, anchor="ma")
             draw.text((PLOT_LEFT - 10, py), str(tick), fill=BLACK, font=FONT_SMALL, anchor="rm")
-        draw.text(((PLOT_LEFT + PLOT_RIGHT) // 2, 976), "X Position", fill=BLACK, font=FONT_NORMAL, anchor="mm")
+        draw.text(
+            ((PLOT_LEFT + PLOT_RIGHT) // 2, 976),
+            "X Position",
+            fill=BLACK,
+            font=FONT_NORMAL,
+            anchor="mm",
+        )
         label = Image.new("RGBA", (130, 30), (255, 255, 255, 0))
         label_draw = ImageDraw.Draw(label)
         label_draw.text((65, 15), "Y Position", fill=BLACK, font=FONT_NORMAL, anchor="mm")
@@ -173,21 +234,34 @@ class PushRendererBase(ABC):
         left, top, right = 1032, 46, 1194
         entries = self._legend_entries()
         bottom = top + 30 + len(entries) * 31
-        draw.rounded_rectangle((left, top, right, bottom), radius=5, fill=WHITE, outline=(190, 190, 190))
+        draw.rounded_rectangle(
+            (left, top, right, bottom), radius=5, fill=WHITE, outline=(190, 190, 190)
+        )
         for index, (name, kind) in enumerate(entries):
             y = top + 22 + index * 31
             self._draw_legend_symbol(draw, (left + 21, y), kind)
             draw.text((left + 45, y), name, fill=BLACK, font=FONT_SMALL, anchor="lm")
 
     def _legend_entries(self) -> List[Tuple[str, str]]:
-        return [("Robot", "robot"), ("Object", "object"), ("Target", "target"), ("Obstacles", "obstacle"), ("Dangerous Areas", "danger"), ("Action", "action")]
+        return [
+            ("Robot", "robot"),
+            ("Object", "object"),
+            ("Target", "target"),
+            ("Obstacles", "obstacle"),
+            ("Dangerous Areas", "danger"),
+            ("Action", "action"),
+        ]
 
-    def _draw_legend_symbol(self, draw: ImageDraw.ImageDraw, center: Tuple[int, int], kind: str) -> None:
+    def _draw_legend_symbol(
+        self, draw: ImageDraw.ImageDraw, center: Tuple[int, int], kind: str
+    ) -> None:
         x, y = center
         if kind == "robot":
             draw.ellipse((x - 10, y - 10, x + 10, y + 10), fill=ROBOT, outline=ROBOT_EDGE, width=2)
         elif kind == "radius":
-            draw.ellipse((x - 10, y - 10, x + 10, y + 10), fill=ROBOT_RADIUS, outline=(120, 120, 220))
+            draw.ellipse(
+                (x - 10, y - 10, x + 10, y + 10), fill=ROBOT_RADIUS, outline=(120, 120, 220)
+            )
         elif kind == "object":
             draw.rectangle((x - 9, y - 9, x + 9, y + 9), fill=OBJECT, outline=OBJECT_EDGE, width=2)
         elif kind == "target":
@@ -218,17 +292,30 @@ class PushRendererBase(ABC):
         frames = self.render_frames(history)
         master = self._build_palette(frames[0])
         indexed = [frame.quantize(palette=master, dither=Image.Dither.NONE) for frame in frames]
-        indexed[0].save(cache_path, save_all=True, append_images=indexed[1:], duration=GIF_DURATION_MS, loop=0, optimize=False, disposal=2)
+        indexed[0].save(
+            cache_path,
+            save_all=True,
+            append_images=indexed[1:],
+            duration=GIF_DURATION_MS,
+            loop=0,
+            optimize=False,
+            disposal=2,
+        )
 
     def render_frames(self, history: List[StepData]) -> List[Image.Image]:
         """Return RGB frames; useful for tests and GIF encoding."""
         background = self._get_static_background()
         rewards = [step.reward for step in history]
-        return [self._render_frame(background.copy(), history, rewards, index) for index in range(len(history))]
+        return [
+            self._render_frame(background.copy(), history, rewards, index)
+            for index in range(len(history))
+        ]
 
     @staticmethod
     def _build_palette(reference: Image.Image) -> Image.Image:
-        adaptive = reference.quantize(colors=256 - len(ACCENT_COLORS), method=Image.Quantize.MEDIANCUT)
+        adaptive = reference.quantize(
+            colors=256 - len(ACCENT_COLORS), method=Image.Quantize.MEDIANCUT
+        )
         entries = (adaptive.getpalette() or [])[: 3 * (256 - len(ACCENT_COLORS))]
         for color in ACCENT_COLORS:
             entries.extend(color)
@@ -237,13 +324,16 @@ class PushRendererBase(ABC):
         master.putpalette(entries)
         return master
 
-    def _render_frame(self, canvas: Image.Image, history: List[StepData], rewards: List[float | None], frame: int) -> Image.Image:
+    def _render_frame(
+        self, canvas: Image.Image, history: List[StepData], rewards: List[float | None], frame: int
+    ) -> Image.Image:
         draw = ImageDraw.Draw(canvas)
         state = np.asarray(history[frame].state, dtype=float)
         robot_pos, object_pos, target_pos = state[:2], state[2:4], state[4:6]
         distance_to_target = float(np.linalg.norm(object_pos - target_pos))
         robot_to_object = float(np.linalg.norm(robot_pos - object_pos))
         action = history[frame].action if frame < len(history) - 1 else None
+        self._draw_variant_robot(draw, robot_pos)
         if action is not None:
             direction = self._action_vector(action)
             norm = float(np.linalg.norm(direction))
@@ -255,46 +345,93 @@ class PushRendererBase(ABC):
                     draw.line((start, self._to_px(object_pos)), fill=PUSH_LINE, width=3)
                     draw_arrow(draw, start, end, ACTION, 6)
                 draw_arrow(draw, start, end, ACTION, 4)
-        self._draw_variant_robot(draw, robot_pos)
         self._draw_entities(draw, robot_pos, object_pos, target_pos)
-        self._draw_frame_text(draw, frame, len(history), action, rewards, distance_to_target, robot_to_object)
+        self._draw_frame_text(
+            draw, frame, len(history), action, rewards, distance_to_target, robot_to_object
+        )
         robot_collision, object_collision = self._collisions(robot_pos, object_pos)
         if distance_to_target < 0.5:
-            self._draw_centered_status(draw, "TARGET REACHED!\nEpisode Complete", 0.50, SUCCESS_BOX, SUCCESS_TEXT)
+            self._draw_centered_status(
+                draw, "TARGET REACHED!\nEpisode Complete", 0.50, SUCCESS_BOX, SUCCESS_TEXT
+            )
         if robot_collision or object_collision:
-            names = [name for name, hit in (("Robot", robot_collision), ("Object", object_collision)) if hit]
-            self._draw_centered_status(draw, f"{' & '.join(names)} Collision!", 0.70, COLLISION_BOX, COLLISION_TEXT)
+            names = [
+                name
+                for name, hit in (("Robot", robot_collision), ("Object", object_collision))
+                if hit
+            ]
+            self._draw_centered_status(
+                draw, f"{' & '.join(names)} Collision!", 0.70, COLLISION_BOX, COLLISION_TEXT
+            )
         return canvas
 
     def _draw_variant_robot(self, draw: ImageDraw.ImageDraw, robot_pos: np.ndarray) -> None:
         del draw, robot_pos
 
-    def _draw_entities(self, draw: ImageDraw.ImageDraw, robot_pos: np.ndarray, object_pos: np.ndarray, target_pos: np.ndarray) -> None:
+    def _draw_entities(
+        self,
+        draw: ImageDraw.ImageDraw,
+        robot_pos: np.ndarray,
+        object_pos: np.ndarray,
+        target_pos: np.ndarray,
+    ) -> None:
         rx, ry = self._to_px(robot_pos)
         ox, oy = self._to_px(object_pos)
         tx, ty = self._to_px(target_pos)
         draw_star(draw, (tx, ty), 14, TARGET, TARGET_EDGE)
-        draw.rectangle((ox - 10, oy - 10, ox + 10, oy + 10), fill=OBJECT, outline=OBJECT_EDGE, width=3)
+        draw.rectangle(
+            (ox - 10, oy - 10, ox + 10, oy + 10), fill=OBJECT, outline=OBJECT_EDGE, width=3
+        )
         draw.ellipse((rx - 11, ry - 11, rx + 11, ry + 11), fill=ROBOT, outline=ROBOT_EDGE, width=3)
 
-    def _draw_frame_text(self, draw: ImageDraw.ImageDraw, frame: int, frame_count: int, action: Any, rewards: List[float | None], distance_to_target: float, robot_to_object: float) -> None:
+    def _draw_frame_text(
+        self,
+        draw: ImageDraw.ImageDraw,
+        frame: int,
+        frame_count: int,
+        action: Any,
+        rewards: List[float | None],
+        distance_to_target: float,
+        robot_to_object: float,
+    ) -> None:
         label = "Terminal" if action is None else self._format_action(action)
         draw_text_box(draw, (99, 58), f"Step: {frame + 1}/{frame_count}\nAction: {label}", STEP_BOX)
         arrow = self._distance_arrow()
-        draw_text_box(draw, (99, 151), f"Object {arrow} Target: {distance_to_target:.2f}\nRobot {arrow} Object: {robot_to_object:.2f}", DISTANCE_BOX)
+        draw_text_box(
+            draw,
+            (99, 151),
+            f"Object {arrow} Target: {distance_to_target:.2f}\nRobot {arrow} Object: {robot_to_object:.2f}",
+            DISTANCE_BOX,
+        )
         current = rewards[frame] if rewards[frame] is not None else 0.0
         total = sum(value for value in rewards[: frame + 1] if value is not None)
-        draw_text_box(draw, (99, 244), f"Step Reward: {current:.1f}\nTotal Reward: {total:.1f}", REWARD_BOX)
+        draw_text_box(
+            draw, (99, 244), f"Step Reward: {current:.1f}\nTotal Reward: {total:.1f}", REWARD_BOX
+        )
 
     def _distance_arrow(self) -> str:
         return "<->"
 
-    def _draw_centered_status(self, draw: ImageDraw.ImageDraw, text: str, vertical_fraction: float, fill: Tuple[int, int, int], text_fill: Tuple[int, int, int]) -> None:
-        center = ((PLOT_LEFT + PLOT_RIGHT) // 2, int(PLOT_TOP + vertical_fraction * (PLOT_BOTTOM - PLOT_TOP)))
-        bounds = draw.multiline_textbbox(center, text, font=FONT_STATUS, anchor="mm", align="center", spacing=4)
+    def _draw_centered_status(
+        self,
+        draw: ImageDraw.ImageDraw,
+        text: str,
+        vertical_fraction: float,
+        fill: Tuple[int, int, int],
+        text_fill: Tuple[int, int, int],
+    ) -> None:
+        center = (
+            (PLOT_LEFT + PLOT_RIGHT) // 2,
+            int(PLOT_TOP + vertical_fraction * (PLOT_BOTTOM - PLOT_TOP)),
+        )
+        bounds = draw.multiline_textbbox(
+            center, text, font=FONT_STATUS, anchor="mm", align="center", spacing=4
+        )
         box = (bounds[0] - 18, bounds[1] - 16, bounds[2] + 18, bounds[3] + 16)
         draw.rounded_rectangle(box, radius=12, fill=fill, outline=text_fill, width=3)
-        draw.multiline_text(center, text, fill=text_fill, font=FONT_STATUS, anchor="mm", align="center", spacing=4)
+        draw.multiline_text(
+            center, text, fill=text_fill, font=FONT_STATUS, anchor="mm", align="center", spacing=4
+        )
 
     @abstractmethod
     def _action_vector(self, action: Any) -> np.ndarray:

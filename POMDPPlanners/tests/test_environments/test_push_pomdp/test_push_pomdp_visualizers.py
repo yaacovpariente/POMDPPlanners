@@ -4,10 +4,10 @@
 
 from hashlib import sha256
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
-from PIL import Image
+from PIL import GifImagePlugin, Image
 import pytest
 
 from POMDPPlanners.core.simulation import StepData
@@ -23,6 +23,7 @@ from POMDPPlanners.environments.push_pomdp.push_visualization_utils import (
     GIF_DURATION_MS,
     OBJECT,
     OBSTACLE,
+    PUSH_LINE,
     ROBOT,
     ROBOT_RADIUS,
     SUCCESS_BOX,
@@ -54,10 +55,7 @@ class _ContinuousFixture:
     dangerous_area_radius = 0.8
 
     def _is_circle_colliding_with_obstacle(self, pos: np.ndarray, radius: float) -> bool:
-        return bool(
-            abs(pos[0] - 4.0) <= 0.7 + radius
-            and abs(pos[1] - 4.0) <= 0.5 + radius
-        )
+        return bool(abs(pos[0] - 4.0) <= 0.7 + radius and abs(pos[1] - 4.0) <= 0.5 + radius)
 
     def _is_point_colliding_with_obstacle(self, pos: np.ndarray) -> bool:
         return bool(abs(pos[0] - 4.0) <= 0.7 and abs(pos[1] - 4.0) <= 0.5)
@@ -99,6 +97,7 @@ def test_push_gif_keeps_frames_size_duration_and_repeated_states(
     visualizer.create_visualization(history, output)
 
     with Image.open(output) as gif:
+        assert isinstance(gif, GifImagePlugin.GifImageFile)
         assert gif.size == CANVAS_SIZE
         assert gif.n_frames == len(history)
         durations = []
@@ -148,7 +147,7 @@ def test_push_static_background_is_built_once(visualizer: Any, history: list[Ste
 
 def _pixel(frame: Image.Image, visualizer: Any, point: tuple[float, float]) -> tuple[int, int, int]:
     x, y = visualizer._to_px(point)
-    return frame.getpixel((round(x), round(y)))
+    return cast(tuple[int, int, int], frame.getpixel((round(x), round(y))))
 
 
 def _has_color(frame: Image.Image, color: tuple[int, int, int]) -> bool:
@@ -181,8 +180,23 @@ def test_continuous_push_frames_preserve_scene_and_events() -> None:
     assert _pixel(first, visualizer, (1.7, 1.0)) == OBJECT
     assert _pixel(first, visualizer, (4.0, 1.0)) == TARGET
     assert _has_color(first, ACTION), "push and continuous action arrows must stay visible"
+    assert (
+        _pixel(first, visualizer, (1.2, 1.0)) == ACTION
+    ), "arrow tail must overlay the radius disc"
     assert _has_color(collision, COLLISION_BOX)
     assert _has_color(terminal, SUCCESS_BOX)
+
+
+def test_push_connection_is_distinct_from_obstacles() -> None:
+    visualizer = PushPOMDPVisualizer(_DiscreteFixture())  # type: ignore[arg-type]
+    history = [
+        _step([1, 1, 1, 1.7, 4, 1], "right", -1.0),
+        _step([1, 1, 1, 1.7, 4, 1], None, None),
+    ]
+    frame = visualizer.render_frames(history)[0]
+    assert _pixel(frame, visualizer, (1.0, 1.35)) == PUSH_LINE
+    assert _pixel(frame, visualizer, (7.0, 2.0)) == OBSTACLE
+    assert PUSH_LINE != OBSTACLE
 
 
 @pytest.mark.parametrize(
