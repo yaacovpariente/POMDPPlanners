@@ -66,6 +66,7 @@ from POMDPPlanners.core.environment import (
     SpaceType,
 )
 from POMDPPlanners.core.simulation.history import History, StepData
+from POMDPPlanners.environments.battleship_pomdp.battleship_pomdp import BattleshipPOMDP
 from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
 from POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_pomdp import (
     ContinuousLaserTagPOMDP,
@@ -96,6 +97,7 @@ from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
 from POMDPPlanners.environments.t_maze_pomdp.t_maze_pomdp import TMazePOMDP
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
+    battleship_pinned_kwargs,
     cartpole_pinned_kwargs,
     continuous_maze_pinned_kwargs,
     continuous_laser_tag_discrete_actions_pinned_kwargs,
@@ -151,6 +153,10 @@ def _build_continuous_push_discrete() -> ContinuousPushPOMDPDiscreteActions:
     return ContinuousPushPOMDPDiscreteActions(
         discount_factor=0.95, **continuous_push_discrete_actions_pinned_kwargs()
     )
+
+
+def _build_battleship() -> BattleshipPOMDP:
+    return BattleshipPOMDP(discount_factor=0.99, **battleship_pinned_kwargs())
 
 
 def _build_rock_sample() -> RockSamplePOMDP:
@@ -227,6 +233,7 @@ ENV_BUILDERS: List[Tuple[str, EnvBuilder]] = [
     ("TMazePOMDP", _build_t_maze),
     ("DiscreteMazePOMDP", _build_discrete_maze),
     ("ContinuousMazePOMDP", _build_continuous_maze),
+    ("BattleshipPOMDP", _build_battleship),
 ]
 
 
