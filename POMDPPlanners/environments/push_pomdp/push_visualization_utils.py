@@ -13,6 +13,11 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 from POMDPPlanners.core.simulation import StepData
+from POMDPPlanners.environments.push_pomdp.push_visualization_assets import (
+    paste_sprite,
+    paste_obstacle,
+    stone_texture,
+)
 
 CANVAS_SIZE = (1200, 1000)
 PLOT_LEFT, PLOT_TOP, PLOT_RIGHT, PLOT_BOTTOM = 80, 38, 981, 939
@@ -28,8 +33,8 @@ OBJECT = (255, 165, 0)
 OBJECT_EDGE = (255, 140, 0)
 TARGET = (218, 165, 0)
 TARGET_EDGE = (184, 134, 11)
-OBSTACLE = (255, 102, 102)
-OBSTACLE_EDGE = (139, 0, 0)
+OBSTACLE = (174, 88, 61)
+OBSTACLE_EDGE = (94, 43, 29)
 DANGER = (255, 178, 178)
 ACTION = (255, 0, 0)
 PUSH_LINE = (255, 0, 0)
@@ -74,7 +79,7 @@ def _font(size: int) -> Any:
 
 FONT_SMALL = _font(14)
 FONT_NORMAL = _font(17)
-FONT_TITLE = _font(20)
+FONT_TITLE = _font(24)
 FONT_STATUS = _font(24)
 
 
@@ -130,6 +135,7 @@ def draw_text_box(
     bounds = draw.multiline_textbbox(xy, text, font=font, spacing=3)
     box = (bounds[0] - padding, bounds[1] - padding, bounds[2] + padding, bounds[3] + padding)
     draw.rounded_rectangle(box, radius=8, fill=fill, outline=outline, width=2)
+    draw.line((box[0] + 8, box[1] + 2, box[2] - 8, box[1] + 2), fill=(245, 235, 205), width=1)
     draw.multiline_text(xy, text, fill=text_fill, font=font, spacing=3)
     return box
 
@@ -188,59 +194,100 @@ class PushRendererBase(ABC):
 
     def _build_static_background(self) -> Image.Image:
         self._background_build_count += 1
-        canvas = Image.new("RGB", CANVAS_SIZE, WHITE)
+        canvas = stone_texture(*CANVAS_SIZE, dark=True).copy()
+        canvas.paste(
+            stone_texture(PLOT_RIGHT - PLOT_LEFT, PLOT_BOTTOM - PLOT_TOP), (PLOT_LEFT, PLOT_TOP)
+        )
         draw = ImageDraw.Draw(canvas)
         draw.text(
-            ((PLOT_LEFT + PLOT_RIGHT) // 2, 12),
+            ((PLOT_LEFT + PLOT_RIGHT) // 2, 5),
             self.title,
-            fill=BLACK,
+            fill=(247, 222, 172),
             font=FONT_TITLE,
             anchor="ma",
         )
-        draw.rectangle((PLOT_LEFT, PLOT_TOP, PLOT_RIGHT, PLOT_BOTTOM), outline=BLACK, width=1)
+        for inset, color in ((-5, (27, 24, 20)), (-3, (167, 145, 108)), (-1, (68, 57, 43))):
+            draw.rectangle(
+                (PLOT_LEFT + inset, PLOT_TOP + inset, PLOT_RIGHT - inset, PLOT_BOTTOM - inset),
+                outline=color,
+                width=2,
+            )
+        for tile in range(0, int(self.grid_size) + 1):
+            px, _ = self._to_px((tile, 0))
+            _, py = self._to_px((0, tile))
+            draw.line((px, PLOT_TOP, px, PLOT_BOTTOM), fill=(132, 116, 91))
+            draw.line((px + 1, PLOT_TOP, px + 1, PLOT_BOTTOM), fill=(184, 166, 135))
+            draw.line((PLOT_LEFT, py, PLOT_RIGHT, py), fill=(132, 116, 91))
+            draw.line((PLOT_LEFT, py + 1, PLOT_RIGHT, py + 1), fill=(184, 166, 135))
         tick_step = max(1, int(round(self.grid_size / 5)))
         for tick in range(0, int(self.grid_size) + 1, tick_step):
             px, _ = self._to_px((tick, 0))
             _, py = self._to_px((0, tick))
-            draw.line((px, PLOT_TOP, px, PLOT_BOTTOM), fill=GRID, width=1)
-            draw.line((PLOT_LEFT, py, PLOT_RIGHT, py), fill=GRID, width=1)
-            draw.text((px, PLOT_BOTTOM + 8), str(tick), fill=BLACK, font=FONT_SMALL, anchor="ma")
-            draw.text((PLOT_LEFT - 10, py), str(tick), fill=BLACK, font=FONT_SMALL, anchor="rm")
+            draw.text(
+                (px, PLOT_BOTTOM + 8), str(tick), fill=(233, 222, 195), font=FONT_SMALL, anchor="ma"
+            )
+            draw.text(
+                (PLOT_LEFT - 10, py), str(tick), fill=(233, 222, 195), font=FONT_SMALL, anchor="rm"
+            )
         draw.text(
             ((PLOT_LEFT + PLOT_RIGHT) // 2, 976),
             "X Position",
-            fill=BLACK,
+            fill=(233, 222, 195),
             font=FONT_NORMAL,
             anchor="mm",
         )
         label = Image.new("RGBA", (130, 30), (255, 255, 255, 0))
         label_draw = ImageDraw.Draw(label)
-        label_draw.text((65, 15), "Y Position", fill=BLACK, font=FONT_NORMAL, anchor="mm")
+        label_draw.text((65, 15), "Y Position", fill=(233, 222, 195), font=FONT_NORMAL, anchor="mm")
         rotated = label.rotate(90, expand=True)
         canvas.paste(rotated, (13, (CANVAS_SIZE[1] - rotated.height) // 2), rotated)
         radius = float(self.dangerous_area_radius) * self._px_per_unit
         for center in self.dangerous_areas:
             x, y = self._to_px(center)
-            draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill=DANGER)
-        self._draw_static_obstacles(draw)
-        self._draw_legend(draw)
+            hazard_draw = ImageDraw.Draw(canvas, "RGBA")
+            hazard_draw.ellipse(
+                (x - radius, y - radius, x + radius, y + radius),
+                fill=(185, 58, 37, 95),
+                outline=(170, 65, 44, 220),
+                width=2,
+            )
+        self._draw_static_obstacles(canvas)
+        self._draw_legend(canvas)
         return canvas
 
     @abstractmethod
-    def _draw_static_obstacles(self, draw: ImageDraw.ImageDraw) -> None:
+    def _draw_static_obstacles(self, canvas: Image.Image) -> None:
         """Draw variant-specific obstacle geometry."""
 
-    def _draw_legend(self, draw: ImageDraw.ImageDraw) -> None:
+    def _draw_legend(self, canvas: Image.Image) -> None:
+        draw = ImageDraw.Draw(canvas)
         left, top, right = 1032, 46, 1194
         entries = self._legend_entries()
         bottom = top + 30 + len(entries) * 31
         draw.rounded_rectangle(
-            (left, top, right, bottom), radius=5, fill=WHITE, outline=(190, 190, 190)
+            (left, top, right, bottom),
+            radius=8,
+            fill=(37, 32, 25),
+            outline=(181, 152, 102),
+            width=2,
         )
         for index, (name, kind) in enumerate(entries):
             y = top + 22 + index * 31
-            self._draw_legend_symbol(draw, (left + 21, y), kind)
-            draw.text((left + 45, y), name, fill=BLACK, font=FONT_SMALL, anchor="lm")
+            if kind in ("robot", "object", "target"):
+                paste_sprite(canvas, kind, (left + 21, y), 32)
+            elif kind == "obstacle":
+                paste_obstacle(canvas, (left + 11, y - 10, left + 31, y + 10), circle=True)
+            elif kind == "danger":
+                canvas.paste(stone_texture(128, 128).crop((50, 50, 74, 64)), (left + 9, y - 7))
+                ImageDraw.Draw(canvas, "RGBA").rectangle(
+                    (left + 9, y - 7, left + 32, y + 6),
+                    fill=(185, 58, 37, 95),
+                    outline=(170, 65, 44, 220),
+                    width=1,
+                )
+            else:
+                self._draw_legend_symbol(draw, (left + 21, y), kind)
+            draw.text((left + 45, y), name, fill=(239, 227, 200), font=FONT_SMALL, anchor="lm")
 
     def _legend_entries(self) -> List[Tuple[str, str]]:
         return [
@@ -345,7 +392,7 @@ class PushRendererBase(ABC):
                     draw.line((start, self._to_px(object_pos)), fill=PUSH_LINE, width=3)
                     draw_arrow(draw, start, end, ACTION, 6)
                 draw_arrow(draw, start, end, ACTION, 4)
-        self._draw_entities(draw, robot_pos, object_pos, target_pos)
+        self._draw_entities(canvas, robot_pos, object_pos, target_pos)
         self._draw_frame_text(
             draw, frame, len(history), action, rewards, distance_to_target, robot_to_object
         )
@@ -370,7 +417,7 @@ class PushRendererBase(ABC):
 
     def _draw_entities(
         self,
-        draw: ImageDraw.ImageDraw,
+        canvas: Image.Image,
         robot_pos: np.ndarray,
         object_pos: np.ndarray,
         target_pos: np.ndarray,
@@ -378,11 +425,9 @@ class PushRendererBase(ABC):
         rx, ry = self._to_px(robot_pos)
         ox, oy = self._to_px(object_pos)
         tx, ty = self._to_px(target_pos)
-        draw_star(draw, (tx, ty), 14, TARGET, TARGET_EDGE)
-        draw.rectangle(
-            (ox - 10, oy - 10, ox + 10, oy + 10), fill=OBJECT, outline=OBJECT_EDGE, width=3
-        )
-        draw.ellipse((rx - 11, ry - 11, rx + 11, ry + 11), fill=ROBOT, outline=ROBOT_EDGE, width=3)
+        paste_sprite(canvas, "target", (tx, ty), 52)
+        paste_sprite(canvas, "object", (ox, oy), 54)
+        paste_sprite(canvas, "robot", (rx, ry), 52)
 
     def _draw_frame_text(
         self,
