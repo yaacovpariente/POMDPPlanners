@@ -18,7 +18,9 @@ Available Environments:
     ContinuousLightDarkPOMDP: Continuous light-dark navigation problem
     LaserTagPOMDP: Pursuit-evasion problem with robot tagging opponent
     RockSamplePOMDP: Rock sampling problem with sensor-based rock quality evaluation
-    TMazePOMDP: T-maze memory task with a single-use noisy cue and a delayed reward
+    DiscreteMazePOMDP: Seeded maze memory task with cell actions
+    ContinuousMazePOMDP: The same maze with real displacement actions
+    TMazePOMDP: Compatibility class for the original T-shaped layout
 
 Factory Functions:
     get_environment: Create environment instances by name with parameters
@@ -47,7 +49,11 @@ from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp import (
 )
 from POMDPPlanners.environments.safety_ant_velocity_pomdp import SafeAntVelocityPOMDP
 from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
-from POMDPPlanners.environments.t_maze_pomdp.t_maze_pomdp import TMazePOMDP
+from POMDPPlanners.environments.maze_pomdp import (
+    ContinuousMazePOMDP,
+    DiscreteMazePOMDP,
+)
+from POMDPPlanners.environments.t_maze_pomdp import TMazePOMDP
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 
 __all__ = [
@@ -65,6 +71,8 @@ __all__ = [
     "ContinuousLaserTagPOMDPDiscreteActions",
     "RockSamplePOMDP",
     "PacManPOMDP",
+    "DiscreteMazePOMDP",
+    "ContinuousMazePOMDP",
     "TMazePOMDP",
 ]
 
@@ -84,6 +92,9 @@ ENVIRONMENT_REGISTRY: Dict[str, Type] = {
     "ContinuousLaserTagPOMDPDiscreteActions": ContinuousLaserTagPOMDPDiscreteActions,
     "RockSamplePOMDP": RockSamplePOMDP,
     "PacManPOMDP": PacManPOMDP,
+    "DiscreteMazePOMDP": DiscreteMazePOMDP,
+    "ContinuousMazePOMDP": ContinuousMazePOMDP,
+    # Compatibility name for saved configurations using the original T layout.
     "TMazePOMDP": TMazePOMDP,
 }
 

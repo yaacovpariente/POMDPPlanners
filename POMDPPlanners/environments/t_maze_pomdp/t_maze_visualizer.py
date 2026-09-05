@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""T-Maze POMDP visualization.
+"""Maze POMDP visualization.
 
 Renders one episode as an animated GIF: the T-shaped corridor, the agent's path,
 the cue cell, and — the part a POMDP visualization exists for — the belief.
@@ -57,14 +57,13 @@ from matplotlib.patches import Circle, Rectangle  # noqa: E402
 import numpy as np  # noqa: E402
 
 from POMDPPlanners.core.simulation import StepData  # noqa: E402
-from POMDPPlanners.environments.t_maze_pomdp.t_maze_pomdp import (  # noqa: E402
+from POMDPPlanners.environments.t_maze_pomdp.maze_pomdp import (  # noqa: E402
     GOAL_LEFT,
     OBSERVATION_LEFT_CUE,
     OBSERVATION_RIGHT_CUE,
     STATE_GOAL,
     STATE_X,
     STATE_Y,
-    TMazePOMDP,
 )
 
 # Palette. The field / corridor pair is the Light-Dark contrast; the agent red,
@@ -105,14 +104,14 @@ _STYLE: Dict[str, Any] = {
 }
 
 
-class TMazeVisualizer:
-    """Renders a :class:`~POMDPPlanners.environments.t_maze_pomdp.t_maze_pomdp.TMazePOMDP` episode.
+class MazeVisualizer:
+    """Render a generated Maze or a legacy T-shaped Maze episode.
 
     Attributes:
         environment: The maze whose geometry is drawn.
     """
 
-    def __init__(self, environment: TMazePOMDP) -> None:
+    def __init__(self, environment: Any) -> None:
         """Initialize the visualizer.
 
         Args:
@@ -163,7 +162,7 @@ class TMazeVisualizer:
             anim.save(cache_path, writer="pillow", fps=1)
             plt.close(figure)
 
-    # ── Static scene ────────────────────────────────────────────────────
+    # Static scene
     def _setup_figure(self):
         """Build the figure: map on the left, legend / readout / bars on the right."""
         env = self.environment
@@ -175,8 +174,9 @@ class TMazeVisualizer:
         panel_axes = figure.add_subplot(grid[0, 1])
         bar_axes = figure.add_subplot(grid[1, 1])
 
-        xs = [cell[0] for cell in env.valid_cells]
-        ys = [cell[1] for cell in env.valid_cells]
+        cells = self._walkable_cells()
+        xs = [cell[0] for cell in cells]
+        ys = [cell[1] for cell in cells]
         margin = 0.6
         map_axes.set_xlim(min(xs) - margin, max(xs) + margin)
         map_axes.set_ylim(min(ys) - margin, max(ys) + margin)
@@ -188,7 +188,8 @@ class TMazeVisualizer:
         for spine in map_axes.spines.values():
             spine.set_color(_OUTLINE)
             spine.set_linewidth(1.2)
-        map_axes.set_title(f"T-Maze — cue accuracy {env.cue_accuracy:.2f}", pad=10)
+        mode = "continuous" if not self._draws_cell_guides() else "discrete"
+        map_axes.set_title(f"Maze ({mode}) — cue accuracy {env.cue_accuracy:.2f}", pad=10)
 
         panel_axes.set_axis_off()
 
@@ -208,14 +209,15 @@ class TMazeVisualizer:
     def _draw_corridor(self, axes) -> None:
         """Fill the walkable cells and trace one heavy outline around them."""
         env = self.environment
-        for x, y in sorted(env.valid_cells):
+        guide_color = _CORRIDOR_EDGE if self._draws_cell_guides() else _CORRIDOR
+        for x, y in sorted(self._walkable_cells()):
             axes.add_patch(
                 Rectangle(
                     (x - 0.5, y - 0.5),
                     1.0,
                     1.0,
                     facecolor=_CORRIDOR,
-                    edgecolor=_CORRIDOR_EDGE,
+                    edgecolor=guide_color,
                     linewidth=0.6,
                     zorder=0,
                 )
@@ -234,7 +236,7 @@ class TMazeVisualizer:
             One ``(x0, y0, x1, y1)`` per wall edge, in a sorted, RNG-free order so
             the drawing is reproducible.
         """
-        cells = self.environment.valid_cells
+        cells = self._walkable_cells()
         segments: List[Tuple[float, float, float, float]] = []
         for x, y in sorted(cells):
             if (x, y + 1) not in cells:
@@ -265,9 +267,10 @@ class TMazeVisualizer:
     def _create_animated_artists(self, map_axes, panel_axes, bar_axes) -> dict:
         """Create every artist a frame updates, plus the static legend."""
         env = self.environment
+        left_goal, right_goal = self._goal_cells()
 
         left_tint = Rectangle(
-            (env.left_endpoint[0] - 0.5, env.left_endpoint[1] - 0.5),
+            (left_goal[0] - 0.5, left_goal[1] - 0.5),
             1.0,
             1.0,
             facecolor=_BELIEF,
@@ -276,7 +279,7 @@ class TMazeVisualizer:
             zorder=2,
         )
         right_tint = Rectangle(
-            (env.right_endpoint[0] - 0.5, env.right_endpoint[1] - 0.5),
+            (right_goal[0] - 0.5, right_goal[1] - 0.5),
             1.0,
             1.0,
             facecolor=_BELIEF,
@@ -306,7 +309,7 @@ class TMazeVisualizer:
             markersize=12,
             zorder=4,
         )
-        for endpoint in (env.left_endpoint, env.right_endpoint):
+        for endpoint in (left_goal, right_goal):
             map_axes.plot(
                 [endpoint[0]],
                 [endpoint[1]],
@@ -395,7 +398,7 @@ class TMazeVisualizer:
                    markeredgecolor=_START, markeredgewidth=2.0, markersize=10, label="start"),
             Line2D([], [], marker="s", color="none", markerfacecolor="none",
                    markeredgecolor=_OUTLINE, markeredgewidth=1.6, markersize=11,
-                   label="arm endpoints"),
+                   label="candidate goals"),
             Line2D([], [], marker="s", color="none", markerfacecolor=_BELIEF, alpha=0.6,
                    markersize=11, label="goal-side belief"),
         ]
@@ -410,7 +413,7 @@ class TMazeVisualizer:
             borderpad=0.6,
         )
 
-    # ── Per-frame ───────────────────────────────────────────────────────
+    # Per-frame
     def _draw_frame(
         self,
         frame: int,
@@ -426,7 +429,7 @@ class TMazeVisualizer:
             [row[STATE_X] for row in states[: frame + 1]],
             [row[STATE_Y] for row in states[: frame + 1]],
         )
-        goal_cell = self.environment.goal_endpoint(float(state[STATE_GOAL]))
+        goal_cell = self._goal_cell(float(state[STATE_GOAL]))
         artists["true_goal"].set_data([goal_cell[0]], [goal_cell[1]])
 
         positions, weights, left_probability = self._read_belief(beliefs[frame])
@@ -476,8 +479,30 @@ class TMazeVisualizer:
         artists["right_tint"].set_alpha(0.55 * right)
         artists["left_bar"].set_width(left)
         artists["right_bar"].set_width(right)
-        TMazeVisualizer._place_bar_label(artists["left_value"], left, 1.0)
-        TMazeVisualizer._place_bar_label(artists["right_value"], right, 0.0)
+        MazeVisualizer._place_bar_label(artists["left_value"], left, 1.0)
+        MazeVisualizer._place_bar_label(artists["right_value"], right, 0.0)
+
+    def _walkable_cells(self):
+        """Return corridor cells for either public API generation."""
+        if hasattr(self.environment, "walkable_cells"):
+            return self.environment.walkable_cells
+        return self.environment.valid_cells
+
+    def _goal_cells(self) -> Tuple[Tuple[int, int], Tuple[int, int]]:
+        """Return candidate goals for generated and compatibility environments."""
+        if hasattr(self.environment, "left_goal_cell"):
+            return self.environment.left_goal_cell, self.environment.right_goal_cell
+        return self.environment.left_endpoint, self.environment.right_endpoint
+
+    def _goal_cell(self, goal_side: float) -> Tuple[int, int]:
+        """Return the true goal without exposing it as planner information."""
+        if hasattr(self.environment, "goal_cell"):
+            return self.environment.goal_cell(goal_side)
+        return self.environment.goal_endpoint(goal_side)
+
+    def _draws_cell_guides(self) -> bool:
+        """Draw guides only when positions are discrete cells."""
+        return bool(getattr(self.environment, "draws_cell_guides", True))
 
     @staticmethod
     def _place_bar_label(label, value: float, row: float) -> None:
@@ -548,4 +573,8 @@ class TMazeVisualizer:
         return positions, probs, left_mass
 
 
-__all__ = ["TMazeVisualizer"]
+# The old class name remains an import alias for saved code. Public titles and new
+# documentation use Maze.
+TMazeVisualizer = MazeVisualizer
+
+__all__ = ["MazeVisualizer", "TMazeVisualizer"]

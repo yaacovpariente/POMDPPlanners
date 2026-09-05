@@ -57,4 +57,45 @@ def t_maze_qa_belief_particles() -> int:
     return 100
 
 
-__all__ = ["t_maze_qa_belief_particles", "t_maze_qa_pft_dpw_kwargs"]
+def discrete_maze_qa_pft_dpw_kwargs(**overrides: Any) -> Dict[str, Any]:
+    """PFT-DPW settings used by the bounded generated-Maze QA run.
+
+    This is the best tested discrete configuration at the fixed 0.1-second
+    decision budget. It is a reproducible QA input, not a claim that every maze
+    size or seed is solved.
+    """
+    pinned: Dict[str, Any] = {
+        "depth": 20,
+        "k_a": 4.0,
+        "alpha_a": 0.0,
+        "k_o": 3.0,
+        "alpha_o": 0.0,
+        "exploration_constant": 10.0,
+        "time_out_in_seconds": 0.1,
+    }
+    pinned.update(overrides)
+    return pinned
+
+
+def continuous_maze_qa_pft_dpw_kwargs(**overrides: Any) -> Dict[str, Any]:
+    """Best bounded continuous-Maze PFT-DPW configuration tested in QA.
+
+    The caller must use a sampler restricted to the four unit cardinal moves.
+    Deeper search with 200 particles did not improve the bounded probe, so this
+    keeps the cheaper depth-20, 100-particle setting. It is not a success claim.
+    """
+    return discrete_maze_qa_pft_dpw_kwargs(**overrides)
+
+
+def maze_qa_belief_particles() -> int:
+    """Particle count used by both generated-Maze QA configurations."""
+    return 100
+
+
+__all__ = [
+    "continuous_maze_qa_pft_dpw_kwargs",
+    "discrete_maze_qa_pft_dpw_kwargs",
+    "maze_qa_belief_particles",
+    "t_maze_qa_belief_particles",
+    "t_maze_qa_pft_dpw_kwargs",
+]
