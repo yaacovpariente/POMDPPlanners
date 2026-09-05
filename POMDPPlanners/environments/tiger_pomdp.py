@@ -33,7 +33,7 @@ from POMDPPlanners.core.environment import (
     SpaceInfo,
     SpaceType,
 )
-from POMDPPlanners.core.simulation import History, MetricValue
+from POMDPPlanners.core.simulation import History, MetricValue, StepData
 from POMDPPlanners.core.simulation.step_info_metrics import (
     EpisodeReduction,
     StepInfoMetric,
@@ -274,6 +274,16 @@ class TigerPOMDP(DiscreteActionsEnvironment):
 
     def cache_history_artifacts(self, history: History, cache_path: Path) -> None:
         pass
+
+    def cache_visualization(
+        self, history: List[StepData], output_dir: Path, episode_index: int
+    ) -> None:
+        """Save the recorded episode without sampling the Tiger model."""
+        from POMDPPlanners.environments.tiger_visualizer import TigerVisualizer
+
+        TigerVisualizer().create_visualization(
+            history, output_dir / f"agent_path_{episode_index}.gif"
+        )
 
     def is_equal_observation(self, observation1: Any, observation2: Any) -> bool:
         return observation1 == observation2
