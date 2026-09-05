@@ -40,6 +40,7 @@ from POMDPPlanners.planners.mcts_planners.beta_zero.beta_zero_network import (
     AbstractBetaZeroNetwork,
 )
 from POMDPPlanners.planners.mcts_planners.constrained_zero.constrained_puct import (
+    _compute_safety_mask,
     spuct_action_progressive_widening_arena,
 )
 from POMDPPlanners.planners.mcts_planners.constrained_zero.constrained_training import (
@@ -272,6 +273,38 @@ class ConstrainedZero(BetaZero):
         self._failure_dict.clear()
         self._delta_dict.clear()
         return super()._learn_tree(belief)
+
+    def _select_final_action(self, tree: Tree, root_id: int) -> Any:
+        """Return the best-value root action among those judged safe.
+
+        The search already masks unsafe actions: ``spuct_selection_arena``
+        scores ``I(f(a) <= Delta') * PUCT(a)`` and falls back to the
+        unconstrained score only when no action qualifies. Without this
+        override the base class answered with a reward-only ``argmax`` over
+        Q, so a search that carefully avoided an unsafe action could still
+        hand that action back to the caller — which is the whole point of a
+        chance-constrained planner.
+
+        The mask and its all-unsafe fallback are the ones the search already
+        uses (:func:`_compute_safety_mask`), so search and answer now apply a
+        single rule rather than two. Moss et al. (IJCAI 2024) define the
+        recommended action the same way: the best value among the actions
+        estimated to satisfy the chance constraint.
+
+        Ties and the empty-mask case follow ``argmax`` and the shared mask
+        helper respectively, so nothing new is invented here.
+        """
+        children = tree.get_children_ids(root_id)
+        if not children:
+            raise ValueError("belief node has no action children")
+        failure_probs = np.array([self._failure_dict.get(cid, 0.0) for cid in children])
+        safety_mask = _compute_safety_mask(failure_probs, self._get_delta_prime(root_id))
+        q_values = np.array([tree.get_q_value(cid) for cid in children])
+        # Mask by exclusion rather than multiplication: multiplying a negative
+        # Q by a 0/1 mask would make an unsafe action's -100 look like 0 and
+        # win the maximum outright.
+        masked = np.where(safety_mask > 0.0, q_values, -np.inf)
+        return tree.get_action(children[int(np.argmax(masked))])
 
     def _simulate_path(self, tree: Tree, belief_id: int, depth: int) -> float:
         if depth > self.depth:
