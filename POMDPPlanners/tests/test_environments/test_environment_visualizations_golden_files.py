@@ -20,6 +20,7 @@ Directory Structure:
         ├── laser_tag_visualization.gif
         ├── continuous_laser_tag_visualization.gif
         ├── continuous_push_visualization.gif
+        ├── t_maze_visualization.gif
         └── safety_ant_velocity_visualization.gif
 """
 
@@ -78,6 +79,14 @@ from POMDPPlanners.environments.safety_ant_velocity_pomdp.safety_ant_velocity_po
 from POMDPPlanners.environments.safety_ant_velocity_pomdp.safety_ant_velocity_visualizer import (
     SafeAntVelocityVisualizer,
 )
+from POMDPPlanners.environments.t_maze_pomdp.t_maze_pomdp import (
+    GOAL_LEFT,
+    GOAL_RIGHT,
+    OBSERVATION_EMPTY,
+    TMazePOMDP,
+    create_t_maze_state,
+)
+from POMDPPlanners.environments.t_maze_pomdp.t_maze_visualizer import TMazeVisualizer
 from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
     continuous_laser_tag_pinned_kwargs,
     continuous_light_dark_pinned_kwargs,
@@ -87,6 +96,7 @@ from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
     push_pinned_kwargs,
     rock_sample_pinned_kwargs,
     safety_ant_velocity_pinned_kwargs,
+    t_maze_pinned_kwargs,
 )
 
 
@@ -684,6 +694,72 @@ def create_deterministic_continuous_push_episode(seed: int = 42) -> List[StepDat
     return history
 
 
+
+def create_deterministic_t_maze_episode() -> List[StepData]:
+    """Create a deterministic T-Maze episode with a genuinely spread belief.
+
+    The action sequence walks up the stem, past the cue cell, to the junction and
+    then into the left arm, so the frames cover every phase the visualizer draws:
+    cue unseen, cue emitting, cue consumed, and a terminal endpoint.
+
+    The belief is built by hand rather than by running a filter, and it is
+    deliberately *not* a point mass: it carries one particle per goal side, with
+    the weights swinging to 0.9 / 0.1 on the step that reads the cue. A point-mass
+    belief would render the same picture whether the goal-side view worked or not.
+
+    Returns:
+        The episode's step records, terminal bookkeeping step included.
+    """
+    env = TMazePOMDP(discount_factor=0.95, **t_maze_pinned_kwargs())
+    goal_side = GOAL_LEFT
+    state = create_t_maze_state(env.start_cell, goal_side)
+    actions = ["up", "up", "up", "up", "left"]
+    # Weight on the true (left) side per step: flat until the cue is read on the
+    # first move, then held through the corridor, as a correct filter would.
+    left_weights = [0.5, 0.9, 0.9, 0.9, 0.9]
+
+    history: List[StepData] = []
+    for action, left_weight in zip(actions, left_weights):
+        next_state = env.sample_next_state(state, action)
+        observation = OBSERVATION_EMPTY
+        history.append(
+            StepData(
+                state=state,
+                action=action,
+                next_state=next_state,
+                observation=observation,
+                reward=env.reward(state, action, next_state),
+                belief=_create_t_maze_belief(env, left_weight),
+            )
+        )
+        state = next_state
+        if env.is_terminal(state):
+            break
+
+    history.append(
+        StepData(
+            state=state,
+            action=None,
+            next_state=state,
+            observation=None,
+            reward=0.0,
+            belief=_create_t_maze_belief(env, left_weights[-1]),
+        )
+    )
+    return history
+
+
+def _create_t_maze_belief(env: TMazePOMDP, left_weight: float) -> WeightedParticleBelief:
+    """A two-particle belief carrying ``left_weight`` on the left goal side."""
+    return WeightedParticleBelief(
+        particles=[
+            create_t_maze_state(env.start_cell, GOAL_LEFT),
+            create_t_maze_state(env.start_cell, GOAL_RIGHT),
+        ],
+        log_weights=np.log(np.array([left_weight, 1.0 - left_weight])),
+    )
+
+
 @pytest.fixture
 def temp_output_dir(tmp_path):
     """Create temporary directory for test outputs."""
@@ -998,6 +1074,34 @@ class TestVisualizationConsistency:
             output_path,
             "safety_ant_velocity_visualization.gif",
             "test_safety_ant_velocity_visualization_consistency",
+        )
+
+
+    def test_t_maze_visualization_consistency(self, temp_output_dir):
+        """Test T-Maze visualization produces consistent output.
+
+        Purpose: Validates that T-Maze visualizations are deterministic, including
+            the belief overlay, which is the part a human reads to check the
+            observation model did anything
+
+        Given: A deterministic T-Maze episode with a hand-built spread belief
+        When: Visualization is created from the episode
+        Then: Output matches golden file hash (or creates golden if missing)
+
+        Test type: integration
+        """
+        history = create_deterministic_t_maze_episode()
+
+        env = TMazePOMDP(discount_factor=0.95, **t_maze_pinned_kwargs())
+        visualizer = TMazeVisualizer(env)
+
+        output_path = temp_output_dir / "t_maze_test.gif"
+        visualizer.create_visualization(history, output_path)
+
+        compare_or_create_golden_file(
+            output_path,
+            "t_maze_visualization.gif",
+            "test_t_maze_visualization_consistency",
         )
 
 
