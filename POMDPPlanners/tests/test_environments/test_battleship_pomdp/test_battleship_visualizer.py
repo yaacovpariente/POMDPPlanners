@@ -12,6 +12,10 @@ panel that is the belief.
 
 from pathlib import Path
 
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt  # noqa: E402  pylint: disable=wrong-import-position
 import numpy as np
 import pytest
 
@@ -21,6 +25,9 @@ from POMDPPlanners.environments.battleship_pomdp import (
     BattleshipPOMDP,
 )
 from POMDPPlanners.environments.battleship_pomdp.battleship_visualizer import (
+    _HIT,
+    _MISS,
+    _UNKNOWN,
     BattleshipVisualizer,
 )
 from POMDPPlanners.tests.test_utils.env_pinned_kwargs import battleship_pinned_kwargs
@@ -153,6 +160,195 @@ class TestFrames:
         marginal = BattleshipVisualizer(env)._belief_marginal(plain)  # pylint: disable=protected-access
         assert marginal.shape == (env.num_cells,)
         assert np.all((marginal >= 0.0) & (marginal <= 1.0))
+
+
+class TestLabels:
+    """What the picture says about itself.
+
+    A reader who has not seen the code has only the titles, the legends and the
+    caption to go on. These tests pin the wording that carries the meaning, so a
+    later edit cannot quietly drop an explanation and leave an unlabelled mark.
+    """
+
+    @staticmethod
+    def _figure_text(fig) -> str:
+        """Every string drawn anywhere on the figure, joined.
+
+        The figure is drawn first: tick labels are only formatted at draw time,
+        so reading them off an undrawn figure returns empty strings.
+        """
+        fig.canvas.draw()
+        return "\n".join(
+            artist.get_text() for artist in fig.findobj(match=plt.Text)
+        )
+
+    @staticmethod
+    def _legend_entries(ax) -> dict:
+        """``{label: colour}`` for the legend under ``ax``.
+
+        The colour is read off the handle, not the text, because a legend that
+        names the right things next to the wrong swatches is exactly as
+        misleading as no legend at all.
+        """
+        legend = ax.get_legend()
+        assert legend is not None, "panel has no legend"
+        entries = {}
+        for handle, text in zip(legend.legend_handles, legend.get_texts()):
+            colour = handle.get_markerfacecolor()
+            if colour in ("none", "None"):
+                colour = handle.get_markeredgecolor()
+            entries[text.get_text()] = matplotlib.colors.to_hex(colour)
+        return entries
+
+    def test_every_panel_says_what_it_shows(self, env) -> None:
+        """Purpose: "Belief" alone does not tell a reader what the panel is of.
+
+        Given: a fresh figure
+        When: each panel's text is read
+        Then: each panel carries its own plain-words description and its own
+              row/column axis labels
+
+        Test type: unit
+        """
+        fig, axes, _ = BattleshipVisualizer(env)._setup_figure()  # pylint: disable=protected-access
+        try:
+            fig.canvas.draw()
+            descriptions = (
+                "what the agent has observed so far",
+                "estimated chance a cell contains a ship",
+                "actual ship layout, hidden from the agent",
+            )
+            for ax, description in zip(axes, descriptions):
+                panel_text = "\n".join(
+                    artist.get_text() for artist in ax.findobj(match=plt.Text)
+                )
+                assert description in panel_text
+                assert ax.get_xlabel() == "column"
+                assert ax.get_ylabel() == "row"
+        finally:
+            plt.close(fig)
+
+    def test_every_mark_and_colour_has_a_legend_entry(self, env) -> None:
+        """Purpose: an unexplained mark is the defect this change exists to fix.
+
+        The probe ring and the ground-truth crosses used to be drawn with no
+        legend at all, so a reader could not tell what either meant.
+
+        Given: a fresh figure
+        When: each panel's legend is read
+        Then: every mark is named, on the panel that draws it, and each key's
+              colour is the colour that mark is actually drawn in
+
+        Test type: unit
+        """
+        visualizer = BattleshipVisualizer(env)
+        fig, axes, artists = visualizer._setup_figure()  # pylint: disable=protected-access
+        try:
+            agent = self._legend_entries(axes[0])
+            assert agent == {
+                "not probed yet": "#c9ccd1",
+                "probed - water (miss)": "#2f6fb5",
+                "probed - ship (hit)": "#c0392b",
+                "probing now - result not on the board yet": "#ffd21f",
+            }
+            # The agent panel's fills are the colormap the panel is drawn with,
+            # so a recoloured board cannot drift away from its own legend.
+            colormap = artists["agent"].get_cmap()
+            for code, label in zip(
+                (_UNKNOWN, _MISS, _HIT),
+                ("not probed yet", "probed - water (miss)", "probed - ship (hit)"),
+            ):
+                assert matplotlib.colors.to_hex(colormap(code)) == agent[label]
+            assert (
+                matplotlib.colors.to_hex(artists["probe_marker"].get_edgecolor()[0])
+                == agent["probing now - result not on the board yet"]
+            )
+
+            belief = self._legend_entries(axes[1])
+            colormap = artists["belief"].get_cmap()
+            assert (
+                belief["100% - almost certainly a ship"]
+                == matplotlib.colors.to_hex(colormap(1.0))
+            )
+            assert (
+                belief["0% - almost certainly water"]
+                == matplotlib.colors.to_hex(colormap(0.0))
+            )
+
+            truth = self._legend_entries(axes[2])
+            colormap = artists["truth"].get_cmap()
+            assert truth["ship cell"] == matplotlib.colors.to_hex(colormap(1.0))
+            assert truth["water"] == matplotlib.colors.to_hex(colormap(0.0))
+            assert (
+                truth["already probed"]
+                == matplotlib.colors.to_hex(artists["truth_probe"].get_facecolor()[0])
+            )
+        finally:
+            plt.close(fig)
+
+    def test_belief_colourbar_is_labelled_as_a_percentage(self, env) -> None:
+        """Purpose: a bar running 0.0 to 1.0 with no unit is not a probability.
+
+        Given: a fresh figure
+        When: the belief colourbar's text is read
+        Then: it is labelled and ticked from 0% to 100%
+
+        Test type: unit
+        """
+        fig, _, _ = BattleshipVisualizer(env)._setup_figure()  # pylint: disable=protected-access
+        try:
+            text = self._figure_text(fig)
+            assert "chance the cell contains a ship" in text
+            for tick in ("0%", "25%", "50%", "75%", "100%"):
+                assert tick in text
+        finally:
+            plt.close(fig)
+
+    def test_caption_does_not_claim_the_current_probe_is_resolved(
+        self, env, episode
+    ) -> None:
+        """Purpose: the boards in a frame are the state *before* its own action.
+
+        The ring marks a cell the agent has chosen but not yet probed, and the
+        hit tally counts only earlier probes. A caption saying the ring is
+        already a hit would describe a board the frame does not draw.
+
+        Given: the first frame of an episode
+        When: the caption is rendered
+        Then: it says the probe is about to happen and dates the tally to before it
+
+        Test type: unit
+        """
+        visualizer = BattleshipVisualizer(env)
+        frames = visualizer._build_frames(episode)  # pylint: disable=protected-access
+        fig, axes, artists = visualizer._setup_figure()  # pylint: disable=protected-access
+        try:
+            visualizer._animation_function(frames, axes, artists)(0)  # pylint: disable=protected-access
+            caption = artists["caption"].get_text()
+            assert "about to probe row 0, column 0" in caption
+            assert "Ship cells found before this probe" in caption
+        finally:
+            plt.close(fig)
+
+    def test_terminal_frame_describes_no_probe(self, env, episode) -> None:
+        """Purpose: the last recorded step has no action, so nothing is pending.
+
+        Given: the terminal frame of an episode
+        When: the caption is rendered
+        Then: it says the episode is over and reports the final tally plainly
+
+        Test type: unit
+        """
+        visualizer = BattleshipVisualizer(env)
+        frames = visualizer._build_frames(episode)  # pylint: disable=protected-access
+        fig, axes, artists = visualizer._setup_figure()  # pylint: disable=protected-access
+        try:
+            visualizer._animation_function(frames, axes, artists)(len(frames) - 1)  # pylint: disable=protected-access
+            caption = artists["caption"].get_text()
+            assert "episode over, no further probe" in caption
+            assert "before this probe" not in caption
+        finally:
+            plt.close(fig)
 
 
 class TestOutput:
