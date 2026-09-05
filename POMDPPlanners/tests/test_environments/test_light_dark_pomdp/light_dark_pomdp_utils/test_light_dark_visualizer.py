@@ -5,7 +5,7 @@
 These cover the properties the renderer is supposed to guarantee rather than the
 exact picture: determinism, the cached-background compositing model, hazards
 drawn as translucent probability fields rather than walls, the preserved world
-geometry and public API, and that both Light-Dark variants go through the same
+geometry and public API, and that all three Light-Dark variants use the same
 renderer.  The exact pixels are covered by the golden-file test.
 """
 
@@ -22,6 +22,7 @@ from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.simulation import StepData
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
     ContinuousLightDarkPOMDP,
+    ContinuousLightDarkPOMDPDiscreteActions,
 )
 from POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp import (
     DiscreteLightDarkPOMDP,
@@ -56,6 +57,11 @@ def continuous_env():
 
 
 @pytest.fixture
+def continuous_discrete_env():
+    return ContinuousLightDarkPOMDPDiscreteActions(discount_factor=0.95)
+
+
+@pytest.fixture
 def discrete_env():
     return DiscreteLightDarkPOMDP(discount_factor=0.95, name="TestDiscreteLightDark")
 
@@ -87,8 +93,7 @@ def _episode(n_steps: int = 5, n_particles: int = 8) -> List[StepData]:
 def _paths(steps: List[StepData]):
     path = [s.state for s in steps]
     beliefs = [
-        cast(WeightedParticleBelief, s.belief).to_unique_support_distribution()
-        for s in steps
+        cast(WeightedParticleBelief, s.belief).to_unique_support_distribution() for s in steps
     ]
     actions = [s.action for s in steps]
     return path, beliefs, actions
@@ -101,9 +106,11 @@ def _sha256(path: Path) -> str:
 # --- output shape --------------------------------------------------------
 
 
-@pytest.mark.parametrize("env_fixture", ["continuous_env", "discrete_env"])
+@pytest.mark.parametrize(
+    "env_fixture", ["continuous_env", "continuous_discrete_env", "discrete_env"]
+)
 def test_gif_frame_count_and_size(env_fixture, request, tmp_path):
-    """Both variants produce one GIF frame per recorded step at the fixed size."""
+    """All variants produce one GIF frame per recorded step at the fixed size."""
     env = request.getfixturevalue(env_fixture)
     steps = _episode(n_steps=6)
     out = tmp_path / "episode.gif"
@@ -116,7 +123,9 @@ def test_gif_frame_count_and_size(env_fixture, request, tmp_path):
         assert getattr(gif, "n_frames") == len(steps)
 
 
-@pytest.mark.parametrize("env_fixture", ["continuous_env", "discrete_env"])
+@pytest.mark.parametrize(
+    "env_fixture", ["continuous_env", "continuous_discrete_env", "discrete_env"]
+)
 def test_environment_cache_visualization_uses_this_renderer(env_fixture, request, tmp_path):
     """The inherited ``Environment.cache_visualization`` path still works.
 
@@ -303,10 +312,49 @@ def test_belief_particles_are_drawn(continuous_env):
     assert added[:, 0].mean() > added[:, 2].mean()
 
 
+@pytest.mark.parametrize("sprite_name", ["rover", "beacon", "goal"])
+def test_packaged_art_is_transparent_detailed_and_cached(sprite_name):
+    sprite_factory = getattr(light_dark_assets, f"{sprite_name}_sprite")
+    sprite = sprite_factory(60)
+    assert sprite is sprite_factory(60)
+    assert sprite.mode == "RGBA"
+    assert sprite.size == (60, 60)
+    rgba = np.asarray(sprite)
+    assert np.all(rgba[[0, -1]][:, [0, -1], 3] == 0)
+    assert np.count_nonzero(rgba[:, :, 3] > 200) > 300
+    assert len(np.unique(rgba[rgba[:, :, 3] > 200, :3], axis=0)) > 100
+
+
+@pytest.mark.parametrize("size", [CANVAS_SIZE, (1, 1), (3, 7), (20, 4)])
+def test_palette_analysis_samples_without_resizing_frames(monkeypatch, size):
+    original = Image.Image.quantize
+    sizes = []
+
+    def tracked(image, *args, **kwargs):
+        sizes.append(image.size)
+        return original(image, *args, **kwargs)
+
+    monkeypatch.setattr(Image.Image, "quantize", tracked)
+    reference = Image.new("RGB", size, (130, 105, 80))
+    master = LightDarkPOMDPVisualizer._build_palette(reference)
+    assert sizes == [(max(1, size[0] // 2), max(1, size[1] // 2))]
+    assert reference.size == size
+    palette = master.getpalette()
+    assert palette is not None and len(palette) == 768
+    entries = [tuple(palette[i : i + 3]) for i in range(0, 768, 3)]
+    assert all(color in entries for color in visualizer_module.ACCENT_COLORS)
+
+
 def _headlight_centroid(sprite):
     """Where the rover's two bright headlights sit, in sprite pixels."""
-    rgb = np.asarray(sprite.convert("RGB")).astype(int)
-    mask = (rgb[:, :, 0] > 240) & (rgb[:, :, 1] > 230) & (rgb[:, :, 2] > 180)
+    rgba = np.asarray(sprite.convert("RGBA")).astype(int)
+    # Ignore the arbitrary RGB values of transparent antialiasing pixels.
+    mask = (
+        (rgba[:, :, 0] > 240)
+        & (rgba[:, :, 1] > 230)
+        & (rgba[:, :, 2] > 180)
+        & (rgba[:, :, 3] > 200)
+    )
     ys, xs = np.nonzero(mask)
     assert xs.size > 0, "rover sprite has no headlights to locate"
     return float(xs.mean()), float(ys.mean())
@@ -331,9 +379,10 @@ def test_rover_sprite_rotates_to_its_heading():
     wx, wy = _headlight_centroid(west)
     centre = east.width / 2.0
 
-    assert ex > centre and abs(ey - centre) < 3.0, "heading 0 must point +x"
-    assert ny < centre and abs(nx - centre) < 3.0, "heading 90 must point up on screen"
-    assert wx < centre and abs(wy - centre) < 3.0, "heading 180 must point -x"
+    tolerance = 3.0
+    assert ex > centre and abs(ey - centre) < tolerance, "heading 0 must point +x"
+    assert ny < centre and abs(nx - centre) < tolerance, "heading 90 must point up on screen"
+    assert wx < centre and abs(wy - centre) < tolerance, "heading 180 must point -x"
 
 
 def test_headings_follow_the_actions_and_hold_when_there_is_none(continuous_env):
