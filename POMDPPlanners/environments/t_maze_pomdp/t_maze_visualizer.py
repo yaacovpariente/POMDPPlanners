@@ -3,28 +3,48 @@
 """T-Maze POMDP visualization.
 
 Renders one episode as an animated GIF: the T-shaped corridor, the agent's path,
-the cue's delivery phase, and — the part a POMDP visualization exists for — the
-belief.
+the cue cell, and — the part a POMDP visualization exists for — the belief.
+
+The frame is split in two, and the split is the point. The **left two thirds** are
+the playable map and nothing else is ever drawn there, so the corridor never
+competes with a status line for the same pixels. The **right third** carries the
+legend, the step / action / observation readout and the goal-side belief bars.
+
+Layout and colour follow the two visualizers this repository already has for
+grid-world POMDPs:
+
+* ``light_dark_visualizer`` — the unreachable field is filled a dark grey so the
+  walkable region reads as the bright object in the picture, the grid is off, the
+  legend sits outside the map, the agent and its path are red, the belief
+  particles are yellow and sized by weight, and the goal is a green star. The cue
+  cell borrows the beacons' white radial glow, because it plays the same role: it
+  is the one place in the world that emits information.
+* ``laser_tag_visualizer`` — the readout lines are rounded, filled text boxes, and
+  the legend is built from explicit proxy handles rather than from label strings
+  scattered over the drawing calls.
 
 Two belief views are drawn, because the T-Maze hides two different things:
 
-* **Position particles.** Scattered over the corridor, sized by weight, following
-  the convention ``laser_tag_visualizer`` and ``pacman_visualizer`` set. Position
-  is in principle observable here, so this cloud is normally a single point; when
-  it is not, the belief has gone wrong and that is worth seeing.
-* **Goal-side posterior.** The hidden variable the task actually turns on. Each
-  arm endpoint is shaded in proportion to the belief mass on that side, and the
-  two numbers are printed. Watching this jump at the cue cell and then hold flat
-  through the corridor is how a human checks that the observation model and the
-  belief update do what the environment says they do.
+* **Position particles.** Drawn as unfilled rings, sized by weight. Position is in
+  principle observable here, so this cloud is normally a single ring sitting
+  exactly on the agent — a filled marker would simply disappear under it. When the
+  ring is *not* on the agent the belief has gone wrong, and that is worth seeing.
+* **Goal-side posterior.** The hidden variable the task actually turns on. It is
+  shown twice: as a faint tint over each arm endpoint, so it is visible where the
+  decision is made, and as two labelled bars in the side panel, so it is readable
+  as a number. The true goal side is marked separately with a green star; that is
+  observer information the planner does not have.
 
 Nothing here draws from an RNG and nothing is iterated out of order, so two
 renders of one history are byte-identical — which is what the golden-file test
-compares.
+compares. The whole render also runs inside an isolated matplotlib style context,
+so a caller that has set a seaborn theme (``returns_plots`` sets ``whitegrid``
+globally before this runs in a real simulation) neither changes the output nor
+finds its own theme disturbed afterwards.
 """
 
 from pathlib import Path
-from typing import Any, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import matplotlib
 
@@ -32,22 +52,57 @@ matplotlib.use("Agg")
 # pylint: disable=wrong-import-position
 import matplotlib.pyplot as plt  # noqa: E402
 from matplotlib import animation  # noqa: E402
-from matplotlib.patches import Rectangle  # noqa: E402
+from matplotlib.lines import Line2D  # noqa: E402
+from matplotlib.patches import Circle, Rectangle  # noqa: E402
 import numpy as np  # noqa: E402
 
 from POMDPPlanners.core.simulation import StepData  # noqa: E402
 from POMDPPlanners.environments.t_maze_pomdp.t_maze_pomdp import (  # noqa: E402
-    CUE_CONSUMED,
-    CUE_EMITTING,
     GOAL_LEFT,
-    STATE_CUE_PHASE,
+    OBSERVATION_LEFT_CUE,
+    OBSERVATION_RIGHT_CUE,
     STATE_GOAL,
     STATE_X,
     STATE_Y,
     TMazePOMDP,
 )
 
-_CUE_PHASE_LABELS = {0.0: "unseen", CUE_EMITTING: "emitting", CUE_CONSUMED: "consumed"}
+# Palette. The field / corridor pair is the Light-Dark contrast; the agent red,
+# belief yellow and goal green are that visualizer's marker colours.
+_FIELD = "#3d4148"
+_CORRIDOR = "#e9edf2"
+_CORRIDOR_EDGE = "#b9c2cc"
+_OUTLINE = "#11151a"
+_AGENT = "#d62728"
+_PATH = "#d62728"
+_BELIEF = "#ffe11a"
+_GOAL = "#2ca02c"
+_CUE = "#1f77b4"
+_START = "#8c8c8c"
+_PANEL_TEXT = "#1b1f24"
+
+# Observation alphabet as a reader sees it. The state's cue-delivery phase is a
+# program value and is deliberately never shown: it is not something the agent
+# observed.
+_OBSERVATION_LABELS: Dict[Any, str] = {
+    OBSERVATION_LEFT_CUE: "left cue",
+    OBSERVATION_RIGHT_CUE: "right cue",
+}
+_NOTHING = "—"
+
+# rcParams the render pins. Applied on top of matplotlib's own defaults inside a
+# style context, so whatever theme the caller had set is both ignored here and
+# restored afterwards.
+_STYLE: Dict[str, Any] = {
+    "figure.facecolor": "white",
+    "savefig.facecolor": "white",
+    "axes.grid": False,
+    "axes.facecolor": "white",
+    "axes.edgecolor": "black",
+    "font.size": 10.0,
+    "axes.titlesize": 13.0,
+    "text.color": _PANEL_TEXT,
+}
 
 
 class TMazeVisualizer:
@@ -84,95 +139,276 @@ class TMazeVisualizer:
         states = [np.asarray(step.state, dtype=np.float64) for step in history]
         actions = [step.action for step in history]
         beliefs = [getattr(step, "belief", None) for step in history]
+        # ``StepData.observation`` is what the world returned *after* the step's
+        # action, so the reading the agent holds while standing on frame ``f`` is
+        # the one recorded on frame ``f - 1``.
+        observations = [None] + [getattr(step, "observation", None) for step in history[:-1]]
 
-        figure, axes = self._setup_figure()
-        self._draw_corridor(axes)
-        artists = self._create_animated_artists(axes)
+        # "default" resets every rcParam to matplotlib's own, discarding any
+        # seaborn theme the caller installed; the context manager puts the
+        # caller's rcParams back on exit.
+        with plt.style.context(["default", _STYLE]):
+            figure, map_axes, panel_axes, bar_axes = self._setup_figure()
+            self._draw_corridor(map_axes)
+            artists = self._create_animated_artists(map_axes, panel_axes, bar_axes)
 
-        def draw_frame(frame: int):
-            return self._draw_frame(frame, states, actions, beliefs, artists)
+            def draw_frame(frame: int):
+                return self._draw_frame(
+                    frame, states, actions, observations, beliefs, artists
+                )
 
-        anim = animation.FuncAnimation(
-            figure, draw_frame, frames=len(states), blit=False, repeat=False
-        )
-        anim.save(cache_path, writer="pillow", fps=1)
-        plt.close(figure)
+            anim = animation.FuncAnimation(
+                figure, draw_frame, frames=len(states), blit=False, repeat=False
+            )
+            anim.save(cache_path, writer="pillow", fps=1)
+            plt.close(figure)
 
     # ── Static scene ────────────────────────────────────────────────────
     def _setup_figure(self):
+        """Build the figure: map on the left, legend / readout / bars on the right."""
         env = self.environment
-        figure, axes = plt.subplots(figsize=(6.0, 6.0))
-        axes.set_xlim(-env.arm_length - 1, env.arm_length + 1)
-        axes.set_ylim(-1, env.stem_length + 1)
-        axes.set_aspect("equal")
-        axes.set_xlabel("x (0 = stem, negative = left arm)")
-        axes.set_ylabel("y (0 = start, stem_length = junction)")
-        axes.set_title(f"{env.name}: cue accuracy {env.cue_accuracy:.2f}")
-        return figure, axes
+        figure = plt.figure(figsize=(10.0, 6.0))
+        grid = figure.add_gridspec(
+            2, 2, width_ratios=[1.9, 1.0], height_ratios=[3.0, 1.0], wspace=0.06, hspace=0.18
+        )
+        map_axes = figure.add_subplot(grid[:, 0])
+        panel_axes = figure.add_subplot(grid[0, 1])
+        bar_axes = figure.add_subplot(grid[1, 1])
+
+        xs = [cell[0] for cell in env.valid_cells]
+        ys = [cell[1] for cell in env.valid_cells]
+        margin = 0.6
+        map_axes.set_xlim(min(xs) - margin, max(xs) + margin)
+        map_axes.set_ylim(min(ys) - margin, max(ys) + margin)
+        map_axes.set_aspect("equal")
+        map_axes.set_facecolor(_FIELD)
+        map_axes.grid(False)
+        map_axes.set_xticks([])
+        map_axes.set_yticks([])
+        for spine in map_axes.spines.values():
+            spine.set_color(_OUTLINE)
+            spine.set_linewidth(1.2)
+        map_axes.set_title(f"T-Maze — cue accuracy {env.cue_accuracy:.2f}", pad=10)
+
+        panel_axes.set_axis_off()
+
+        bar_axes.set_xlim(0.0, 1.0)
+        bar_axes.set_ylim(-0.6, 1.6)
+        bar_axes.set_yticks([0, 1])
+        bar_axes.set_yticklabels(["right", "left"])
+        bar_axes.set_xticks([0.0, 0.5, 1.0])
+        bar_axes.tick_params(labelsize=8, length=2)
+        bar_axes.grid(False)
+        for side in ("top", "right"):
+            bar_axes.spines[side].set_visible(False)
+        bar_axes.set_title("belief over goal side", fontsize=9, pad=4)
+
+        return figure, map_axes, panel_axes, bar_axes
 
     def _draw_corridor(self, axes) -> None:
+        """Fill the walkable cells and trace one heavy outline around them."""
         env = self.environment
         for x, y in sorted(env.valid_cells):
             axes.add_patch(
                 Rectangle(
-                    (x - 0.5, y - 0.5), 1.0, 1.0, facecolor="whitesmoke", edgecolor="lightgray"
+                    (x - 0.5, y - 0.5),
+                    1.0,
+                    1.0,
+                    facecolor=_CORRIDOR,
+                    edgecolor=_CORRIDOR_EDGE,
+                    linewidth=0.6,
+                    zorder=0,
                 )
             )
-        self._label_cell(axes, env.start_cell, "start", "tab:green")
-        self._label_cell(axes, env.cue_cell, "cue", "tab:orange")
-        self._label_cell(axes, env.junction, "junction", "tab:gray")
-        self._label_cell(axes, env.left_endpoint, "L", "tab:blue")
-        self._label_cell(axes, env.right_endpoint, "R", "tab:blue")
+        for x0, y0, x1, y1 in self._boundary_segments():
+            axes.plot(
+                [x0, x1], [y0, y1], "-", color=_OUTLINE, linewidth=2.6, solid_capstyle="round",
+                zorder=1,
+            )
+        self._draw_cue_glow(axes, env.cue_cell)
+
+    def _boundary_segments(self) -> List[Tuple[float, float, float, float]]:
+        """Cell edges with a walkable cell on one side and the field on the other.
+
+        Returns:
+            One ``(x0, y0, x1, y1)`` per wall edge, in a sorted, RNG-free order so
+            the drawing is reproducible.
+        """
+        cells = self.environment.valid_cells
+        segments: List[Tuple[float, float, float, float]] = []
+        for x, y in sorted(cells):
+            if (x, y + 1) not in cells:
+                segments.append((x - 0.5, y + 0.5, x + 0.5, y + 0.5))
+            if (x, y - 1) not in cells:
+                segments.append((x - 0.5, y - 0.5, x + 0.5, y - 0.5))
+            if (x - 1, y) not in cells:
+                segments.append((x - 0.5, y - 0.5, x - 0.5, y + 0.5))
+            if (x + 1, y) not in cells:
+                segments.append((x + 0.5, y - 0.5, x + 0.5, y + 0.5))
+        return segments
 
     @staticmethod
-    def _label_cell(axes, cell: Tuple[int, int], text: str, color: str) -> None:
-        axes.text(
-            cell[0],
-            cell[1] - 0.42,
-            text,
-            ha="center",
-            va="bottom",
-            fontsize=7,
-            color=color,
-        )
+    def _draw_cue_glow(axes, cell: Tuple[int, int]) -> None:
+        """Halo the cue cell the way Light-Dark halos a beacon: it emits information."""
+        for index in range(10):
+            axes.add_patch(
+                Circle(
+                    (float(cell[0]), float(cell[1])),
+                    0.30 + index * 0.035,
+                    facecolor="white",
+                    edgecolor="none",
+                    alpha=float(0.30 * np.exp(-index * 0.35)),
+                    zorder=1,
+                )
+            )
 
-    def _create_animated_artists(self, axes) -> dict:
+    def _create_animated_artists(self, map_axes, panel_axes, bar_axes) -> dict:
+        """Create every artist a frame updates, plus the static legend."""
         env = self.environment
-        left_shade = Rectangle(
+
+        left_tint = Rectangle(
             (env.left_endpoint[0] - 0.5, env.left_endpoint[1] - 0.5),
             1.0,
             1.0,
-            facecolor="tab:blue",
-            edgecolor="tab:blue",
+            facecolor=_BELIEF,
+            edgecolor="none",
             alpha=0.0,
+            zorder=2,
         )
-        right_shade = Rectangle(
+        right_tint = Rectangle(
             (env.right_endpoint[0] - 0.5, env.right_endpoint[1] - 0.5),
             1.0,
             1.0,
-            facecolor="tab:blue",
-            edgecolor="tab:blue",
+            facecolor=_BELIEF,
+            edgecolor="none",
             alpha=0.0,
+            zorder=2,
         )
-        axes.add_patch(left_shade)
-        axes.add_patch(right_shade)
+        map_axes.add_patch(left_tint)
+        map_axes.add_patch(right_tint)
+
+        # Fixed scene markers. Drawn once; the frame loop never touches them.
+        map_axes.plot(
+            [env.start_cell[0]],
+            [env.start_cell[1]],
+            "s",
+            color=_START,
+            markersize=11,
+            markerfacecolor="none",
+            markeredgewidth=2.0,
+            zorder=3,
+        )
+        map_axes.plot(
+            [env.cue_cell[0]],
+            [env.cue_cell[1]],
+            "^",
+            color=_CUE,
+            markersize=12,
+            zorder=4,
+        )
+        for endpoint in (env.left_endpoint, env.right_endpoint):
+            map_axes.plot(
+                [endpoint[0]],
+                [endpoint[1]],
+                "s",
+                color=_OUTLINE,
+                markersize=15,
+                markerfacecolor="none",
+                markeredgewidth=1.6,
+                zorder=3,
+            )
+
+        self._add_legend(panel_axes)
+
+        # Both bars share the goal-side belief colour so the panel reads as one
+        # quantity; the true goal keeps green to itself.
+        left_bar, right_bar = bar_axes.barh(
+            [1, 0],
+            [0.0, 0.0],
+            height=0.55,
+            color=_BELIEF,
+            edgecolor=_OUTLINE,
+            linewidth=0.8,
+            zorder=2,
+        )
+        left_value = bar_axes.text(0.0, 1.0, "", va="center", ha="left", fontsize=9)
+        right_value = bar_axes.text(0.0, 0.0, "", va="center", ha="left", fontsize=9)
+
         return {
-            "belief_scatter": axes.scatter([], [], c="tab:purple", alpha=0.5, s=30, zorder=2),
-            "agent": axes.plot([], [], "o", color="tab:red", markersize=14, zorder=3)[0],
-            "trail": axes.plot([], [], "-", color="tab:red", alpha=0.4, zorder=1)[0],
-            "true_goal": axes.plot([], [], "*", color="gold", markersize=18, zorder=2)[0],
-            "left_shade": left_shade,
-            "right_shade": right_shade,
-            "status": axes.text(
-                0.02,
-                0.98,
+            "trail": map_axes.plot([], [], "-", color=_PATH, alpha=0.55, linewidth=2.5, zorder=5)[
+                0
+            ],
+            "agent": map_axes.plot(
+                [], [], "o", color=_AGENT, markersize=13, zorder=6
+            )[0],
+            # Unfilled so it survives sitting exactly on top of the agent.
+            "belief_ring": map_axes.scatter(
+                [],
+                [],
+                s=[],
+                facecolors="none",
+                edgecolors=_BELIEF,
+                linewidths=2.2,
+                zorder=7,
+            ),
+            "true_goal": map_axes.plot(
+                [], [], "*", color=_GOAL, markersize=20, zorder=8
+            )[0],
+            "left_tint": left_tint,
+            "right_tint": right_tint,
+            "left_bar": left_bar,
+            "right_bar": right_bar,
+            "left_value": left_value,
+            "right_value": right_value,
+            "readout": panel_axes.text(
+                0.0,
+                0.42,
                 "",
-                transform=axes.transAxes,
+                transform=panel_axes.transAxes,
                 ha="left",
                 va="top",
-                fontsize=8,
+                fontsize=10,
+                linespacing=1.7,
+                bbox={
+                    "boxstyle": "round,pad=0.5",
+                    "facecolor": "#f2f4f7",
+                    "edgecolor": "#c3cad3",
+                },
             ),
         }
+
+    @staticmethod
+    def _add_legend(panel_axes) -> None:
+        """Legend built from proxy handles, as ``laser_tag_visualizer`` does."""
+        handles = [
+            Line2D([], [], marker="o", color="none", markerfacecolor=_AGENT, markersize=10,
+                   label="agent"),
+            Line2D([], [], color=_PATH, alpha=0.55, linewidth=2.5, label="path so far"),
+            Line2D([], [], marker="o", color="none", markerfacecolor="none",
+                   markeredgecolor=_BELIEF, markeredgewidth=2.2, markersize=12,
+                   label="belief particles"),
+            Line2D([], [], marker="*", color="none", markerfacecolor=_GOAL,
+                   markeredgecolor=_GOAL, markersize=14, label="true goal (observer only)"),
+            Line2D([], [], marker="^", color="none", markerfacecolor=_CUE,
+                   markeredgecolor=_CUE, markersize=10, label="cue cell"),
+            Line2D([], [], marker="s", color="none", markerfacecolor="none",
+                   markeredgecolor=_START, markeredgewidth=2.0, markersize=10, label="start"),
+            Line2D([], [], marker="s", color="none", markerfacecolor="none",
+                   markeredgecolor=_OUTLINE, markeredgewidth=1.6, markersize=11,
+                   label="arm endpoints"),
+            Line2D([], [], marker="s", color="none", markerfacecolor=_BELIEF, alpha=0.6,
+                   markersize=11, label="goal-side belief"),
+        ]
+        panel_axes.legend(
+            handles=handles,
+            loc="upper left",
+            bbox_to_anchor=(-0.02, 1.06),
+            frameon=True,
+            framealpha=0.95,
+            fontsize=9,
+            handletextpad=0.8,
+            borderpad=0.6,
+        )
 
     # ── Per-frame ───────────────────────────────────────────────────────
     def _draw_frame(
@@ -180,6 +416,7 @@ class TMazeVisualizer:
         frame: int,
         states: List[np.ndarray],
         actions: List[Any],
+        observations: List[Any],
         beliefs: List[Any],
         artists: dict,
     ):
@@ -194,29 +431,70 @@ class TMazeVisualizer:
 
         positions, weights, left_probability = self._read_belief(beliefs[frame])
         if positions.size:
-            artists["belief_scatter"].set_offsets(positions)
-            artists["belief_scatter"].set_sizes(weights * 300.0)
+            artists["belief_ring"].set_offsets(positions)
+            artists["belief_ring"].set_sizes(120.0 + weights * 700.0)
         else:
-            artists["belief_scatter"].set_offsets(np.empty((0, 2)))
+            artists["belief_ring"].set_offsets(np.empty((0, 2)))
+            artists["belief_ring"].set_sizes(np.empty(0))
 
-        if left_probability is None:
-            artists["left_shade"].set_alpha(0.0)
-            artists["right_shade"].set_alpha(0.0)
-            belief_text = "belief over goal side: unavailable"
-        else:
-            artists["left_shade"].set_alpha(0.65 * float(left_probability))
-            artists["right_shade"].set_alpha(0.65 * float(1.0 - left_probability))
-            belief_text = (
-                f"belief over goal side: L {left_probability:.2f} / R {1 - left_probability:.2f}"
-            )
+        self._update_goal_belief(left_probability, artists)
 
-        artists["status"].set_text(
-            f"step {frame}  action {actions[frame]}\n"
-            f"true goal: {'L' if float(state[STATE_GOAL]) == GOAL_LEFT else 'R'}   "
-            f"cue: {_CUE_PHASE_LABELS.get(float(state[STATE_CUE_PHASE]), '?')}\n"
-            f"{belief_text}"
+        action = actions[frame]
+        observation = observations[frame]
+        artists["readout"].set_text(
+            f"Step {frame + 1} / {len(states)}\n"
+            f"Action: {action if action is not None else _NOTHING}\n"
+            f"Last observation: {self._observation_label(observation)}\n"
+            f"True goal: {'left' if float(state[STATE_GOAL]) == GOAL_LEFT else 'right'}"
         )
         return list(artists.values())
+
+    @staticmethod
+    def _observation_label(observation: Any) -> str:
+        """Render an observation for a human, without leaking program identifiers."""
+        if observation is None:
+            return _NOTHING
+        return _OBSERVATION_LABELS.get(observation, "no cue")
+
+    @staticmethod
+    def _update_goal_belief(left_probability: Optional[float], artists: dict) -> None:
+        """Drive the arm tints and the two panel bars from the goal-side posterior."""
+        if left_probability is None:
+            artists["left_tint"].set_alpha(0.0)
+            artists["right_tint"].set_alpha(0.0)
+            artists["left_bar"].set_width(0.0)
+            artists["right_bar"].set_width(0.0)
+            artists["left_value"].set_position((0.02, 1.0))
+            artists["left_value"].set_horizontalalignment("left")
+            artists["left_value"].set_text("unavailable")
+            artists["right_value"].set_text("")
+            return
+
+        left = float(left_probability)
+        right = 1.0 - left
+        artists["left_tint"].set_alpha(0.55 * left)
+        artists["right_tint"].set_alpha(0.55 * right)
+        artists["left_bar"].set_width(left)
+        artists["right_bar"].set_width(right)
+        TMazeVisualizer._place_bar_label(artists["left_value"], left, 1.0)
+        TMazeVisualizer._place_bar_label(artists["right_value"], right, 0.0)
+
+    @staticmethod
+    def _place_bar_label(label, value: float, row: float) -> None:
+        """Print a bar's number beside it, or inside it when it would run off the axis.
+
+        Args:
+            label: The text artist for this bar.
+            value: The probability the bar shows, in ``[0, 1]``.
+            row: The bar's y position.
+        """
+        if value > 0.72:
+            label.set_position((value - 0.03, row))
+            label.set_horizontalalignment("right")
+        else:
+            label.set_position((value + 0.03, row))
+            label.set_horizontalalignment("left")
+        label.set_text(f"{value:.2f}")
 
     @staticmethod
     def _read_belief(belief: Any) -> Tuple[np.ndarray, np.ndarray, Optional[float]]:
