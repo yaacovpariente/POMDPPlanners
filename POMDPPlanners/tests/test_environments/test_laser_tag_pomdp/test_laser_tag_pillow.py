@@ -4,6 +4,7 @@
 import builtins
 import hashlib
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import patch
 
 import numpy as np
@@ -27,7 +28,7 @@ def visualizer():
 
 
 def history():
-    belief = SimpleNamespace(
+    belief: Any = SimpleNamespace(
         to_unique_support_distribution=lambda: SimpleNamespace(
             values=[np.array([1, 1, 5, 3, 0])], probs=np.array([1.0])
         )
@@ -85,7 +86,8 @@ def test_scene_rays_beliefs_paths_and_tag(visualizer):
     )
     assert color_count(frame, (0, 128, 0)) > 0
     wall_pixel = tuple(map(round, visualizer._world_to_pixel((3, 2))))
-    assert background.getpixel(wall_pixel) == (76, 76, 76)
+    wall = background.getpixel(wall_pixel)
+    assert max(wall) < 90 and wall[2] >= wall[0]
     segments = visualizer._laser_segments(np.array([1, 2]), np.array([6, 4]))
     assert any(np.array_equal(end, np.array([2.0, 2.0])) for _, end in segments)
 

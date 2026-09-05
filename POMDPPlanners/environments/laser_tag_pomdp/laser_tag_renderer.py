@@ -11,6 +11,8 @@ from POMDPPlanners.core.simulation import StepData
 from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_assets import (
     _render_opponent_pillow,
     _render_robot_pillow,
+    metal_texture,
+    draw_wall,
 )
 
 CANVAS_SIZE = (1400, 800)
@@ -43,6 +45,8 @@ class LaserTagFrameRenderer:
         self._y_label = "Y"
         self._robot_img = _render_robot_pillow()
         self._opponent_img = _render_opponent_pillow()
+        self._background_cache = None
+        self._background_key = None
 
     def create_visualization(self, history: List[StepData], cache_path: Path) -> None:
         """Save one one-second frame per recorded state, including terminal records."""
@@ -74,7 +78,7 @@ class LaserTagFrameRenderer:
             append_images=frames[1:],
             duration=1000,
             loop=0,
-            disposal=2,
+            disposal=1,
             optimize=False,
         )
 
@@ -114,69 +118,91 @@ class LaserTagFrameRenderer:
 
     def _build_background(self) -> Image.Image:
         """Rasterize the world and axes once for this episode."""
+        key = (
+            self.grid_size.tobytes(),
+            self._wall_rectangles.tobytes(),
+            tuple(map(tuple, self.dangerous_areas)),
+            self.dangerous_area_radius,
+            self._title,
+            self._x_label,
+            self._y_label,
+        )
+        if key == self._background_key and self._background_cache is not None:
+            return self._background_cache
         width, height = self.grid_size
-        self._scale = min(1240 / (width + 1), 680 / (height + 1))
+        self._scale = min(1060 / (width + 1), 650 / (height + 1))
         plot_width, plot_height = (width + 1) * self._scale, (height + 1) * self._scale
-        self._left = (CANVAS_SIZE[0] - plot_width) / 2
-        self._top = 65 + (680 - plot_height) / 2
+        self._left = 65 + (1060 - plot_width) / 2
+        self._top = 75 + (650 - plot_height) / 2
         self._bottom = self._top + plot_height
         self._right = self._left + plot_width
         self._font = ImageFont.load_default(size=16)
         self._title_font = ImageFont.load_default(size=23)
         self._tag_font = ImageFont.load_default(size=32)
         self._robot_sprite = Image.fromarray(self._robot_img).resize(
-            (89, 89), Image.Resampling.LANCZOS
+            (75, 75), Image.Resampling.LANCZOS
         )
         self._opponent_sprite = Image.fromarray(self._opponent_img).resize(
-            (89, 89), Image.Resampling.LANCZOS
+            (75, 75), Image.Resampling.LANCZOS
         )
-        image = Image.new("RGB", CANVAS_SIZE, "white")
+        image = metal_texture(*CANVAS_SIZE).copy()
         draw = ImageDraw.Draw(image)
         draw.text(
-            (700, 23),
+            (595, 23),
             self._title,
-            fill="black",
+            fill=(225, 231, 228),
             font=self._title_font,
             anchor="mt",
         )
-        draw.rectangle((self._left, self._top, self._right, self._bottom), outline="#444444")
+        for inset, color in ((-6, (11, 15, 18)), (-4, (111, 125, 130)), (-1, (18, 23, 27))):
+            draw.rectangle(
+                (self._left + inset, self._top + inset, self._right - inset, self._bottom - inset),
+                outline=color,
+                width=2,
+            )
         # Bound the tick count for large arenas.
         tick_step = max(1, int(np.ceil(max(width, height) / 12)))
         for x in np.arange(0, width + 0.001, tick_step):
             px, _ = self._world_to_pixel((x, 0))
-            draw.line((px, self._top, px, self._bottom), fill="#eeeeee")
-            draw.text((px, self._bottom + 8), f"{x:g}", fill="black", font=self._font, anchor="mt")
+            draw.line((px, self._top, px, self._bottom), fill=(21, 27, 31))
+            draw.line((px + 1, self._top, px + 1, self._bottom), fill=(61, 71, 76))
+            draw.text(
+                (px, self._bottom + 8), f"{x:g}", fill=(221, 225, 217), font=self._font, anchor="mt"
+            )
         for y in np.arange(0, height + 0.001, tick_step):
             _, py = self._world_to_pixel((0, y))
-            draw.line((self._left, py, self._right, py), fill="#eeeeee")
-            draw.text((self._left - 10, py), f"{y:g}", fill="black", font=self._font, anchor="rm")
-        draw.text((700, 783), self._x_label, fill="black", font=self._font, anchor="mb")
+            draw.line((self._left, py, self._right, py), fill=(21, 27, 31))
+            draw.line((self._left, py + 1, self._right, py + 1), fill=(61, 71, 76))
+            draw.text(
+                (self._left - 10, py), f"{y:g}", fill=(221, 225, 217), font=self._font, anchor="rm"
+            )
+        draw.text((595, 783), self._x_label, fill=(221, 225, 217), font=self._font, anchor="mb")
         label_bounds = self._font.getbbox(self._y_label)
         label = Image.new(
-            "RGB",
+            "RGBA",
             (
                 round(label_bounds[2] - label_bounds[0]) + 2,
                 round(label_bounds[3] - label_bounds[1]) + 2,
             ),
-            "white",
+            (0, 0, 0, 0),
         )
         ImageDraw.Draw(label).text(
-            (0, 0), self._y_label, fill="black", font=self._font, anchor="lt"
+            (0, 0), self._y_label, fill=(221, 225, 217), font=self._font, anchor="lt"
         )
         label = label.rotate(90, expand=True)
-        image.paste(label, (round(max(8, self._left - 55)), round(400 - label.height / 2)))
+        image.paste(label, (round(max(8, self._left - 55)), round(400 - label.height / 2)), label)
         axes = image.copy()
         for cx, cy, hx, hy in self._wall_rectangles:
             first = self._world_to_pixel((cx - hx, cy + hy))
             second = self._world_to_pixel((cx + hx, cy - hy))
-            draw.rectangle(
+            draw_wall(
+                image,
                 (
                     min(first[0], second[0]),
                     min(first[1], second[1]),
                     max(first[0], second[0]),
                     max(first[1], second[1]),
                 ),
-                fill="#4c4c4c",
             )
         overlay = ImageDraw.Draw(image, "RGBA")
         for center in self.dangerous_areas:
@@ -191,14 +217,11 @@ class LaserTagFrameRenderer:
         )
         axes.paste(image.crop(bounds), bounds[:2])
         image = axes
-        self._draw_legend(ImageDraw.Draw(image))
-        self._legend_bounds = (
-            round(self._right - 155),
-            round(self._top + 14),
-            round(self._right - 14),
-            round(self._top + 161),
-        )
+        self._draw_legend(image)
+        self._legend_bounds = (1150, 240, 1390, 635)
         self._legend = image.crop(self._legend_bounds)
+        self._background_key = key
+        self._background_cache = image
         return image
 
     def _make_palette(self, background: Image.Image) -> Image.Image:
@@ -227,8 +250,10 @@ class LaserTagFrameRenderer:
             (255, 160, 160),
         ]
         palette = Image.new("P", (1, 1))
-        adaptive = background.quantize(colors=256 - len(colors))
+        adaptive = background.quantize(colors=256 - len(colors) - 64)
         values = [channel for color in colors for channel in color]
+        for sprite in (self._robot_sprite, self._opponent_sprite):
+            values += (sprite.convert("RGB").quantize(colors=32).getpalette() or [])[:96]
         values += (adaptive.getpalette() or [])[: 768 - len(values)]
         palette.putpalette(values + [0] * (768 - len(values)))
         return palette
@@ -294,7 +319,7 @@ class LaserTagFrameRenderer:
             draw.line(
                 (self._world_to_pixel(start_point), self._world_to_pixel(end_point)),
                 fill=LASER_COLOR,
-                width=1,
+                width=2,
             )
         self._draw_belief(draw, belief)
         robot_path = [rp] if robot_path is None else robot_path
@@ -338,16 +363,30 @@ class LaserTagFrameRenderer:
         clipped = background.copy()
         clipped.paste(image.crop(bounds), bounds[:2])
         draw = ImageDraw.Draw(clipped)
-        x, y = self._left + 18, self._top + 14
-        draw.rounded_rectangle((x, y, x + 225, y + 28), radius=4, fill="wheat")
+        x, y = 1160, 90
+        draw.rounded_rectangle(
+            (x, y, x + 218, y + 32), radius=5, fill="wheat", outline=(136, 115, 78), width=2
+        )
         draw.text((x + 7, y + 5), f"Step: {index + 1}/{count}", fill="black", font=self._font)
         if text:
-            draw.rounded_rectangle((x, y + 48, x + 280, y + 76), radius=4, fill="lightblue")
-            draw.text((x + 7, y + 53), text, fill="black", font=self._font)
+            draw.rounded_rectangle(
+                (x, y + 48, x + 218, y + 108),
+                radius=5,
+                fill="lightblue",
+                outline=(91, 121, 139),
+                width=2,
+            )
+            draw.multiline_text(
+                (x + 7, y + 53),
+                text.replace("Action: ", "Action:\n"),
+                fill="black",
+                font=self._font,
+                spacing=5,
+            )
         if is_tag:
             tagged = self._is_successful_tag(rp, op)
             draw.text(
-                (x, self._bottom - 48),
+                (x, 680),
                 "TAGGED!" if tagged else "MISSED!",
                 fill="green" if tagged else "red",
                 font=self._tag_font,
@@ -355,9 +394,12 @@ class LaserTagFrameRenderer:
         clipped.paste(self._legend, self._legend_bounds[:2])
         return clipped
 
-    def _draw_legend(self, draw) -> None:
-        x, y = self._right - 155, self._top + 14
-        draw.rounded_rectangle((x, y, x + 140, y + 146), radius=5, fill="white", outline="#aaaaaa")
+    def _draw_legend(self, image) -> None:
+        draw = ImageDraw.Draw(image)
+        x, y = 1155, 245
+        draw.rounded_rectangle(
+            (x, y, x + 225, y + 378), radius=8, fill=(21, 26, 29), outline=(112, 130, 140), width=2
+        )
         for offset, (label, color) in enumerate(
             (
                 ("Robot", "#D32F2F"),
@@ -366,8 +408,17 @@ class LaserTagFrameRenderer:
                 ("Opp. belief", OPPONENT_BELIEF_COLOR),
                 ("Laser", LASER_COLOR),
                 ("Action", "red"),
+                ("Robot path", (255, 160, 160)),
+                ("Opponent path", (144, 202, 249)),
+                ("Hazard", (112, 39, 42)),
             )
         ):
-            row = y + 10 + offset * 22
-            draw.rectangle((x + 10, row + 3, x + 20, row + 13), fill=color)
-            draw.text((x + 28, row), label, fill="black", font=self._font)
+            row = y + 20 + offset * 38
+            if offset < 2:
+                sprite = (self._robot_sprite if offset == 0 else self._opponent_sprite).resize(
+                    (34, 34), Image.Resampling.LANCZOS
+                )
+                image.paste(sprite, (x + 9, row - 8), sprite)
+            else:
+                draw.rectangle((x + 18, row + 3, x + 32, row + 13), fill=color)
+            draw.text((x + 53, row), label, fill=(229, 231, 222), font=self._font)

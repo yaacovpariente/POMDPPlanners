@@ -1,5 +1,7 @@
 # Cached LaserTag visualization
 
+Historical flat-renderer measurements. The final [visual redesign and current recordings](../lasertag_redesign/README.md) supersede this report, including its legend-overlap limitation.
+
 Both LaserTag variants now copy a cached Pillow background for each frame and draw the recorded state over it. Shared drawing lives in a neutral renderer; continuous geometry and discrete grid rules remain in their own adapters.
 
 Public constructors, the 1400 × 800 canvas, and one-second frame timing are unchanged. Sprites, fonts, legends, and palette change the pixels. Discrete belief marker area still follows probability; continuous support markers stay equally sized. Terminal records remain separate frames.
