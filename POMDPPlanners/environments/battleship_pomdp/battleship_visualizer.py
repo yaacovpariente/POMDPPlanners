@@ -21,6 +21,15 @@ Renders an episode as an animated GIF with three panels per frame:
   the agent. It exists so a reviewer can check the other two panels against what
   was really on the board.
 
+Every frame is drawn *before* its own action resolves.
+:class:`~POMDPPlanners.core.simulation.StepData` records the state a step was
+taken *from*, so the boards show the situation the agent chose from, while the
+step's observation and reward are the outcome of the probe it is about to make.
+The labels say exactly that: the ring marks the cell being probed now, the
+crosses mark cells probed earlier, and the caption reports this probe's result
+separately from the tally of what was already known. Labelling the ring as a
+resolved hit or miss would claim the panels show something they do not.
+
 Classes:
     BattleshipVisualizer: Renders Battleship episodes.
 """
@@ -48,7 +57,34 @@ _MISS = 1
 _HIT = 2
 
 _AGENT_VIEW_COLORS = ("#c9ccd1", "#2f6fb5", "#c0392b")
-_AGENT_VIEW_LABELS = ("unprobed", "miss", "hit")
+_AGENT_VIEW_LABELS = (
+    "not probed yet",
+    "probed - water (miss)",
+    "probed - ship (hit)",
+)
+
+# Marks drawn on top of the boards.
+_PROBE_RING_COLOR = "#ffd21f"
+_PROBED_CROSS_COLOR = "#c0392b"
+
+# Panel headings. Each is a short name plus one plain sentence, because the
+# name alone ("Belief") does not tell a reader what the picture is of.
+_PANEL_HEADINGS = (
+    ("Agent view", "what the agent has observed so far"),
+    ("Belief", "estimated chance a cell contains a ship"),
+    ("Ground truth", "actual ship layout, hidden from the agent"),
+)
+
+_TITLE_FONTSIZE = 12
+_SUBTITLE_FONTSIZE = 9.5
+_LEGEND_FONTSIZE = 9
+_CAPTION_FONTSIZE = 11
+_AXIS_LABEL_FONTSIZE = 9.5
+
+# Legend swatches sit on a light panel, so every one carries a thin dark edge;
+# without it the pale "not probed yet" grey and the yellow ring vanish.
+_LEGEND_EDGE = "#333333"
+_LEGEND_FACE = "#f2f3f5"
 
 
 class BattleshipVisualizer:
@@ -162,8 +198,24 @@ class BattleshipVisualizer:
             )
         return frames
 
+    def _square_handle(self, color: str, label: str) -> Any:
+        """A filled square legend key, outlined so pale fills stay visible."""
+        return plt.Line2D(
+            [0], [0], marker="s", linestyle="", markersize=10, color=color,
+            markeredgecolor=_LEGEND_EDGE, markeredgewidth=0.6, label=label,
+        )
+
+    def _panel_legend(self, ax: Axes, handles: List[Any], ncol: int) -> None:
+        """Put a legend under ``ax``, below the axis label."""
+        ax.legend(
+            handles=handles, loc="upper center", bbox_to_anchor=(0.5, -0.16),
+            ncol=ncol, fontsize=_LEGEND_FONTSIZE, frameon=True,
+            facecolor=_LEGEND_FACE, edgecolor="#d0d3d8", framealpha=1.0,
+            handletextpad=0.5, columnspacing=1.2, borderpad=0.6,
+        )
+
     def _setup_figure(self) -> Tuple[Figure, List[Axes], Dict[str, Any]]:
-        fig_temp, axes_temp = plt.subplots(1, 3, figsize=(13.5, 5.0))
+        fig_temp, axes_temp = plt.subplots(1, 3, figsize=(15.0, 6.6))
         fig = cast(Figure, fig_temp)
         axes = [cast(Axes, ax) for ax in np.atleast_1d(axes_temp).ravel()]
 
@@ -181,32 +233,77 @@ class BattleshipVisualizer:
             blank, cmap="Greys", vmin=0.0, vmax=1.0, interpolation="nearest"
         )
 
-        titles = (
-            "Agent view (probed cells only)",
-            "Belief: P(ship in cell)",
-            "Ground truth (hidden from agent)",
-        )
-        for ax, title in zip(axes, titles):
-            ax.set_title(title, fontsize=10)
+        # White cell separators read well on the coloured panels, but the truth
+        # panel draws water as white, where a white grid disappears.
+        grid_colors = ("white", "white", "#b6bac0")
+        for ax, (name, description), grid_color in zip(axes, _PANEL_HEADINGS, grid_colors):
+            ax.set_title(name, fontsize=_TITLE_FONTSIZE, fontweight="bold", pad=22)
+            ax.text(
+                0.5, 1.035, description, transform=ax.transAxes, ha="center",
+                va="bottom", fontsize=_SUBTITLE_FONTSIZE, color="#444444",
+            )
+            ax.set_xlabel("column", fontsize=_AXIS_LABEL_FONTSIZE)
+            ax.set_ylabel("row", fontsize=_AXIS_LABEL_FONTSIZE)
             ax.set_xticks(range(self.board_size))
             ax.set_yticks(range(self.board_size))
             ax.set_xticks(np.arange(-0.5, self.board_size, 1), minor=True)
             ax.set_yticks(np.arange(-0.5, self.board_size, 1), minor=True)
-            ax.grid(which="minor", color="white", linewidth=1.0)
+            ax.grid(which="minor", color=grid_color, linewidth=1.0)
             ax.tick_params(which="minor", length=0)
 
-        handles = [
-            plt.Line2D([0], [0], marker="s", linestyle="", markersize=10, color=color, label=label)
+        agent_handles = [
+            self._square_handle(color, label)
             for color, label in zip(_AGENT_VIEW_COLORS, _AGENT_VIEW_LABELS)
         ]
-        axes[0].legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, -0.08), ncol=3,
-                       fontsize=8, frameon=False)
-        fig.colorbar(artists["belief"], ax=axes[1], fraction=0.046, pad=0.04)
+        agent_handles.append(
+            plt.Line2D(
+                [0], [0], marker="o", linestyle="", markersize=11,
+                markerfacecolor="none", markeredgecolor=_PROBE_RING_COLOR,
+                markeredgewidth=2.5,
+                label="probing now - result not on the board yet",
+            )
+        )
+        self._panel_legend(axes[0], agent_handles, ncol=2)
 
-        artists["probe_marker"] = axes[0].scatter([], [], s=180, facecolors="none",
-                                                  edgecolors="yellow", linewidths=2.5, zorder=5)
-        artists["truth_probe"] = axes[2].scatter([], [], s=30, marker="x", c="#c0392b", zorder=5)
-        artists["caption"] = fig.text(0.5, 0.02, "", ha="center", fontsize=10)
+        colorbar = fig.colorbar(artists["belief"], ax=axes[1], fraction=0.046, pad=0.04)
+        colorbar.set_ticks([0.0, 0.25, 0.5, 0.75, 1.0])
+        colorbar.set_ticklabels(["0%", "25%", "50%", "75%", "100%"])
+        colorbar.set_label("chance the cell contains a ship", fontsize=_LEGEND_FONTSIZE)
+        colorbar.ax.tick_params(labelsize=_LEGEND_FONTSIZE)
+        self._panel_legend(
+            axes[1],
+            [
+                self._square_handle("#fde725", "100% - almost certainly a ship"),
+                self._square_handle("#440154", "0% - almost certainly water"),
+            ],
+            ncol=2,
+        )
+
+        self._panel_legend(
+            axes[2],
+            [
+                self._square_handle("#000000", "ship cell"),
+                self._square_handle("#ffffff", "water"),
+                plt.Line2D(
+                    [0], [0], marker="x", linestyle="", markersize=8,
+                    color=_PROBED_CROSS_COLOR, markeredgewidth=1.8,
+                    label="already probed",
+                ),
+            ],
+            ncol=3,
+        )
+
+        artists["probe_marker"] = axes[0].scatter(
+            [], [], s=180, facecolors="none", edgecolors=_PROBE_RING_COLOR,
+            linewidths=2.5, zorder=5,
+        )
+        artists["truth_probe"] = axes[2].scatter(
+            [], [], s=30, marker="x", c=_PROBED_CROSS_COLOR, zorder=5
+        )
+        artists["caption"] = fig.text(
+            0.5, 0.055, "", ha="center", va="center", fontsize=_CAPTION_FONTSIZE,
+            linespacing=1.6,
+        )
         return fig, axes, artists
 
     def _animation_function(
@@ -221,13 +318,35 @@ class BattleshipVisualizer:
             artists["belief"].set_data(frame["belief"])
             artists["truth"].set_data(frame["truth"])
 
+            step_text = f"Step {frame['index'] + 1} of {frame['total']}"
             if frame["action"] is None:
+                # The last recorded step carries no action: the boards are the
+                # final situation and there is no probe to describe.
                 artists["probe_marker"].set_offsets(np.empty((0, 2)))
-                action_text = "terminal"
+                headline = f"{step_text} - episode over, no further probe"
+                detail = f"Ship cells found: {frame['hits']} of {num_ship_cells}"
             else:
                 row, col = divmod(int(frame["action"]), board_size)
                 artists["probe_marker"].set_offsets(np.array([[col, row]]))
-                action_text = f"probe ({row}, {col})"
+                headline = (
+                    f"{step_text} - the agent is about to probe "
+                    f"row {row}, column {col} (yellow ring)"
+                )
+                observation_text = "-" if frame["observation"] is None else (
+                    "HIT - a ship is there"
+                    if int(frame["observation"])
+                    else "MISS - water"
+                )
+                reward_text = (
+                    "-" if frame["reward"] is None else f"{float(frame['reward']):+.2f}"
+                )
+                detail = (
+                    f"Result of this probe: {observation_text}.   "
+                    f"Reward: {reward_text}.   "
+                    f"Ship cells found before this probe: "
+                    f"{frame['hits']} of {num_ship_cells}"
+                )
+            artists["caption"].set_text(f"{headline}\n{detail}")
 
             probed_rows, probed_cols = np.nonzero(frame["probed"])
             if probed_rows.size:
@@ -235,15 +354,6 @@ class BattleshipVisualizer:
             else:
                 artists["truth_probe"].set_offsets(np.empty((0, 2)))
 
-            observation_text = "-" if frame["observation"] is None else (
-                "HIT" if int(frame["observation"]) else "miss"
-            )
-            reward_text = "-" if frame["reward"] is None else f"{float(frame['reward']):+.2f}"
-            artists["caption"].set_text(
-                f"step {frame['index'] + 1}/{frame['total']}   "
-                f"action: {action_text}   observation: {observation_text}   "
-                f"reward: {reward_text}   hits: {frame['hits']}/{num_ship_cells}"
-            )
             return (
                 artists["agent"],
                 artists["belief"],
@@ -261,6 +371,9 @@ class BattleshipVisualizer:
             fig, animate, frames=num_frames, interval=1000, blit=False, repeat=False
         )
         cache_path.parent.mkdir(parents=True, exist_ok=True)
-        fig.subplots_adjust(bottom=0.16)
+        # Reserved margins, not tight_layout: the legends and the two-line
+        # caption live outside the axes, and a layout solver that ignored
+        # them would clip whichever frame happened to have the longest text.
+        fig.subplots_adjust(left=0.05, right=0.97, top=0.85, bottom=0.30, wspace=0.30)
         ani.save(cache_path, writer="pillow", fps=1)
         plt.close(fig)
