@@ -55,6 +55,20 @@ from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp import (
 )
 
 
+def battleship_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
+    """Pinned optional defaults for ``BattleshipPOMDP``."""
+    pinned: Dict[str, Any] = {
+        "board_size": 5,
+        "ship_lengths": (3, 2, 2),
+        "allow_adjacent_ships": True,
+        "hit_reward": 1.0,
+        "miss_penalty": 0.1,
+        "max_layouts": 2_000_000,
+    }
+    pinned.update(overrides)
+    return pinned
+
+
 def tiger_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
     """Pinned optional defaults for ``TigerPOMDP`` (no non-framework optionals)."""
     pinned: Dict[str, Any] = {}
@@ -392,5 +406,43 @@ def safety_ant_velocity_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
         "safety_violation_penalty": -100.0,
         "movement_reward_scale": 1.0,
     }
+    pinned.update(overrides)
+    return pinned
+
+
+def t_maze_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
+    """Pinned optional defaults for ``TMazePOMDP``."""
+    pinned: Dict[str, Any] = {
+        "stem_length": 4,
+        "arm_length": 1,
+        "cue_accuracy": 0.9,
+        "goal_reward": 10.0,
+        "wrong_goal_penalty": 10.0,
+        "step_penalty": 1.0,
+    }
+    pinned.update(overrides)
+    return pinned
+
+
+def discrete_maze_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
+    """Pinned optional defaults for ``DiscreteMazePOMDP``."""
+    pinned: Dict[str, Any] = {
+        "maze_width": 7,
+        "maze_height": 9,
+        "maze_seed": 0,
+        "loop_fraction": 0.15,
+        "cue_accuracy": 0.9,
+        "goal_reward": 10.0,
+        "wrong_goal_penalty": 10.0,
+        "step_penalty": 1.0,
+    }
+    pinned.update(overrides)
+    return pinned
+
+
+def continuous_maze_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
+    """Pinned optional defaults for ``ContinuousMazePOMDP``."""
+    pinned = discrete_maze_pinned_kwargs()
+    pinned["max_step_size"] = 1.0
     pinned.update(overrides)
     return pinned

@@ -183,32 +183,52 @@ def test_action(planner, belief):
 
 
 def test_progressive_widening_constraints(planner, belief):
-    """Test that progressive widening constraints are respected in the tree."""
+    """Progressive widening respects ``k * N**alpha``, exponent included.
+
+    The bound used here is the full ``int(k * visits**alpha) + 1``, not the
+    constant ``int(k) + 1`` that stood here before. The two agree only because
+    this fixture pins ``alpha_a = alpha_o = 0``; writing the constant hid the
+    exponent entirely, so the same assertion would have passed against an
+    implementation that ignored ``alpha`` altogether. The exponent's effect is
+    exercised separately, at a non-zero alpha, in
+    ``test_arena_backup_arithmetic.py::test_icvar_pft_progressive_widening_respects_the_visit_exponent``.
+
+    ``action_count >= 0`` also stood here and is true of every integer; the
+    tree is now required to contain the action nodes the search must have
+    built, so a search that expanded nothing fails.
+    """
     tree, _ = planner._learn_tree(belief=belief)
 
     belief_count = 0
     action_count = 0
     for node_id in range(len(tree)):
         children = tree.children_ids[node_id]
+        visit_count = tree.visit_count[node_id]
         if tree.kind[node_id] == BELIEF:
             belief_count += 1
-            max_allowed = int(planner.k_a + 1)
+            max_allowed = int(planner.k_a * (visit_count**planner.alpha_a)) + 1
             assert len(children) <= max_allowed, (
                 f"Belief node {node_id} has {len(children)} children but should have at most "
-                f"{max_allowed} (k_a={planner.k_a}, visit_count={tree.visit_count[node_id]}, "
+                f"{max_allowed} (k_a={planner.k_a}, visit_count={visit_count}, "
                 f"alpha_a={planner.alpha_a})"
             )
         else:
             action_count += 1
-            max_allowed = int(planner.k_o + 1)
+            max_allowed = int(planner.k_o * (visit_count**planner.alpha_o)) + 1
             assert len(children) <= max_allowed, (
                 f"Action node {node_id} has {len(children)} children but should have at most "
-                f"{max_allowed} (k_o={planner.k_o}, visit_count={tree.visit_count[node_id]}, "
+                f"{max_allowed} (k_o={planner.k_o}, visit_count={visit_count}, "
                 f"alpha_o={planner.alpha_o})"
             )
 
-    assert belief_count >= 1, "Tree should contain at least the root belief node"
-    assert action_count >= 0, "Tree should contain zero or more action nodes"
+    assert belief_count >= 2, (
+        f"the tree holds {belief_count} belief nodes; a search of "
+        f"{planner.n_simulations} simulations must expand past the root, or the per-node "
+        "assertions above only ever saw the root"
+    )
+    assert (
+        action_count >= 1
+    ), f"the tree holds {action_count} action nodes; the search expanded no action at all"
 
 
 def test_tree_structure_comprehensive(planner, belief):

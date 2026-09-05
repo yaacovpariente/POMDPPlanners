@@ -149,6 +149,20 @@ class History:
             "average_reward_time": self.average_reward_time,
             "actual_num_steps": self.actual_num_steps,
             "reach_terminal_state": self.reach_terminal_state,
+            # ``from_dict`` has always read this key back; ``to_dict`` never
+            # wrote it, so a round trip silently dropped every planner metric
+            # the episode recorded. Written as a list to match the field's
+            # declared type (one entry per decision); ``from_dict`` still
+            # accepts the older single-dict shape.
+            "policy_run_data": [
+                {
+                    "info_variables": [
+                        {"name": variable.name, "value": variable.value}
+                        for variable in run_data.info_variables
+                    ]
+                }
+                for run_data in self.policy_run_data
+            ],
         }
 
     @classmethod
@@ -187,13 +201,22 @@ class History:
             PolicyRunData,
         )
 
+        def _to_run_data(entry: Any) -> "PolicyRunData":
+            if isinstance(entry, PolicyRunData):
+                return entry
+            return PolicyRunData(
+                info_variables=[
+                    PolicyInfoVariable(name=iv["name"], value=iv["value"])
+                    for iv in entry.get("info_variables", [])
+                ]
+            )
+
         policy_run_data = data.get("policy_run_data", None)
         if isinstance(policy_run_data, dict):
-            info_variables = [
-                PolicyInfoVariable(name=iv["name"], value=iv["value"])
-                for iv in policy_run_data.get("info_variables", [])
-            ]
-            policy_run_data = [PolicyRunData(info_variables=info_variables)]
+            # Legacy shape: a single decision's run data, not a list.
+            policy_run_data = [_to_run_data(policy_run_data)]
+        elif isinstance(policy_run_data, list):
+            policy_run_data = [_to_run_data(entry) for entry in policy_run_data]
         elif policy_run_data is None:
             policy_run_data = []
 
