@@ -8,6 +8,7 @@ include setup.py
 # `include_dirs=[...]` points at paths that don't exist in the tarball.
 recursive-include POMDPPlanners *.cpp *.hpp *.h
 recursive-include POMDPPlanners *.pyi
+recursive-include POMDPPlanners/environments/rock_sample_pomdp/visualization_assets *.png
 
 # Drop build/test artifacts that sometimes get picked up.
 global-exclude __pycache__
