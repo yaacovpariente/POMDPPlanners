@@ -296,6 +296,24 @@ class LightDarkPOMDPVisualizer:
             outline=(120, 110, 98),
             width=1,
         )
+        draw.rectangle(
+            [PLOT_LEFT - 4, PLOT_TOP - 4, PLOT_RIGHT + 3, PLOT_BOTTOM + 3],
+            outline=(59, 55, 48),
+            width=3,
+        )
+        draw.line(
+            [
+                (PLOT_LEFT - 3, PLOT_BOTTOM + 2),
+                (PLOT_LEFT - 3, PLOT_TOP - 3),
+                (PLOT_RIGHT + 2, PLOT_TOP - 3),
+            ],
+            fill=(151, 136, 113),
+            width=1,
+        )
+        for bx in (PLOT_LEFT - 2, PLOT_RIGHT + 1):
+            for by in (PLOT_TOP - 2, PLOT_BOTTOM + 1):
+                draw.ellipse((bx - 2, by - 2, bx + 2, by + 2), fill=(100, 93, 80))
+                draw.line((bx - 1, by, bx + 1, by), fill=(23, 22, 20))
 
     def _draw_legend(self, canvas: Image.Image, draw: ImageDraw.ImageDraw) -> None:
         font = get_font(18)
@@ -316,20 +334,34 @@ class LightDarkPOMDPVisualizer:
             outline=COLOR_PANEL_EDGE,
             width=1,
         )
+        draw.rounded_rectangle(
+            [LEGEND_LEFT + 2, top + 2, LEGEND_RIGHT - 2, top + height - 2],
+            radius=9,
+            outline=(43, 42, 38),
+            width=2,
+        )
+        draw.line(
+            [(LEGEND_LEFT + 11, top + 3), (LEGEND_RIGHT - 11, top + 3)],
+            fill=(131, 120, 101),
+            width=1,
+        )
+        for bolt_x in (LEGEND_LEFT + 8, LEGEND_RIGHT - 8):
+            for bolt_y in (top + 8, top + height - 8):
+                draw.ellipse((bolt_x - 2, bolt_y - 2, bolt_x + 2, bolt_y + 2), fill=(115, 107, 91))
+                draw.line((bolt_x - 1, bolt_y, bolt_x + 1, bolt_y), fill=(29, 27, 23))
         icon_x = LEGEND_LEFT + 26
         text_x = LEGEND_LEFT + 48
         for i, (kind, label) in enumerate(rows):
             cy = top + 11 + row_h // 2 + i * row_h
             if kind == "beacon":
-                draw.polygon(
-                    [(icon_x, cy - 9), (icon_x + 10, cy + 7), (icon_x - 10, cy + 7)],
-                    fill=COLOR_BEACON_MARK,
-                )
+                sprite = beacon_sprite(26)
+                canvas.paste(sprite, (icon_x - 13, cy - 13), sprite)
             elif kind == "goal":
                 sprite = goal_sprite(22)
                 canvas.paste(sprite, (icon_x - 11, cy - 11), sprite)
             elif kind == "start":
-                draw.ellipse([icon_x - 9, cy - 9, icon_x + 9, cy + 9], fill=COLOR_START)
+                sprite = start_sprite(20)
+                canvas.paste(sprite, (icon_x - 10, cy - 10), sprite)
             elif kind == "obstacle":
                 draw.ellipse([icon_x - 9, cy - 9, icon_x + 9, cy + 9], fill=(58, 56, 58))
             else:
@@ -592,13 +624,11 @@ class LightDarkPOMDPVisualizer:
         path_px = [self._to_px(*_xy(p)) for p in path]
         belief_px = [self._prepare_belief(b) for b in agent_belief_path]
         vectors = [
-            self._action_vector(actions[i] if i < len(actions) else None)
-            for i in range(len(path))
+            self._action_vector(actions[i] if i < len(actions) else None) for i in range(len(path))
         ]
         headings = self._headings(vectors)
         labels = [
-            self._action_label(actions[i] if i < len(actions) else None)
-            for i in range(len(path))
+            self._action_label(actions[i] if i < len(actions) else None) for i in range(len(path))
         ]
 
         frames: List[Image.Image] = []
@@ -626,9 +656,14 @@ class LightDarkPOMDPVisualizer:
         Every frame then shares this palette, which also lets the encoder skip a
         colour analysis per frame.
         """
-        adaptive = reference.quantize(
-            colors=256 - len(ACCENT_COLORS), method=Image.Quantize.MEDIANCUT
+        # A half-size nearest-neighbour sample keeps actual scene colours and
+        # avoids median-cut analysis of 800,000 pixels for every saved episode.
+        # Only palette selection is sampled; output frames stay full-size.
+        sample = reference.resize(
+            (max(1, reference.width // 2), max(1, reference.height // 2)),
+            Image.Resampling.NEAREST,
         )
+        adaptive = sample.quantize(colors=256 - len(ACCENT_COLORS), method=Image.Quantize.MEDIANCUT)
         entries = adaptive.getpalette() or []
         entries = entries[: 3 * (256 - len(ACCENT_COLORS))]
         for color in ACCENT_COLORS:
