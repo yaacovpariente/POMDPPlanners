@@ -445,12 +445,22 @@ class TMazePOMDP(DiscreteActionsEnvironment):
         return probs
 
     def sample_observation(self, next_state: Any, action: Any, n_samples: int = 1) -> Any:
-        """Draw an observation from ``P(o | s')``. ``action`` does not enter it."""
+        """Draw an observation from ``P(o | s')``. ``action`` does not enter it.
+
+        Inlined rather than routed through a freshly built
+        :class:`~POMDPPlanners.core.distributions.DiscreteDistribution`: this runs
+        once per node expansion inside a tree search on a wall-clock budget, so an
+        allocation and a validation pass per call buys nothing. The draw is the
+        distribution's own — one ``np.random.rand`` per sample, in order, against
+        the cumulative probabilities — so the RNG stream is unchanged.
+        """
         del action
-        probs = self._observation_probs(next_state)
-        distribution = DiscreteDistribution(values=list(OBSERVATIONS), probs=probs)
-        samples = distribution.sample(n_samples)
-        return samples[0] if n_samples == 1 else samples
+        cumulative = np.cumsum(self._observation_probs(next_state))
+        last = len(OBSERVATIONS) - 1
+        if n_samples == 1:
+            return OBSERVATIONS[min(int(np.searchsorted(cumulative, np.random.rand())), last)]
+        indices = np.clip(np.searchsorted(cumulative, np.random.rand(n_samples)), 0, last)
+        return [OBSERVATIONS[index] for index in indices]
 
     def observation_log_probability(
         self, next_state: Any, action: Any, observations: Any
@@ -470,22 +480,34 @@ class TMazePOMDP(DiscreteActionsEnvironment):
     def observation_log_probability_per_state(
         self, next_states: Any, action: Any, observation: Any
     ) -> np.ndarray:
-        """Log ``Z(o | s')`` of one observation against many candidate states."""
+        """Log ``Z(o | s')`` of one observation against many candidate states.
+
+        Vectorised over the particles rather than looped: this is the particle
+        filter's reweighting step, so it runs once per belief update over every
+        particle, and the likelihood is a two-way choice that numpy can express
+        directly. The three cases below are exactly the ones
+        :meth:`_observation_probs` enumerates.
+        """
         del action
         states_array = np.asarray(next_states, dtype=np.float64)
         if states_array.ndim == 1:
             states_array = states_array.reshape(1, -1)
-        return np.array(
-            [
-                float(
-                    self.observation_log_probability(
-                        next_state=row, action=None, observations=[observation]
-                    )[0]
-                )
-                for row in states_array
-            ],
-            dtype=np.float64,
-        )
+
+        emitting = states_array[:, STATE_CUE_PHASE] == CUE_EMITTING
+        if observation == OBSERVATION_EMPTY:
+            # Only a non-emitting state can produce "empty", and it does so with
+            # probability 1.
+            return np.where(emitting, -np.inf, 0.0)
+        if observation not in (OBSERVATION_LEFT_CUE, OBSERVATION_RIGHT_CUE):
+            return np.full(len(states_array), -np.inf, dtype=np.float64)
+
+        names_left = observation == OBSERVATION_LEFT_CUE
+        goal_is_left = states_array[:, STATE_GOAL] == GOAL_LEFT
+        matches = goal_is_left if names_left else ~goal_is_left
+        with np.errstate(divide="ignore"):
+            log_accuracy = float(np.log(self.cue_accuracy))
+            log_error = float(np.log(1.0 - self.cue_accuracy))
+        return np.where(emitting, np.where(matches, log_accuracy, log_error), -np.inf)
 
     def is_equal_observation(self, observation1: Any, observation2: Any) -> bool:
         """Observations are labels, so equality is string equality."""
