@@ -183,8 +183,16 @@ def test_node_statistics(planner, initial_belief):
     Purpose: Validates that sparse sampling node statistics are properly initialized and computed for all node types
 
     Given: BeliefNode with uniform initial belief, sparse sampling tree built with branching_factor=2, depth=2
-    When: _build_tree creates tree structure and computes statistics for all nodes
-    Then: Leaf nodes have immediate_cost/q_value/visit_count, ActionNodes have visit_count/q_value, BeliefNodes have v_value/visit_count
+    When: _build_tree creates the tree and _update_node_statistics computes every node's statistics
+    Then: Leaf actions hold visit_count 1 and a q_value equal to their immediate cost; non-leaf
+        actions hold a positive visit count and a finite q_value; belief nodes hold a v_value
+        equal to the minimum of their action children's q_values
+
+    This used to call ``_build_tree`` and then assert ``hasattr`` on every
+    node. ``hasattr`` is true of the class attributes whether or not the
+    update ever ran, and the update it names — ``_update_node_statistics`` —
+    was never called, so the test passed on an untouched tree. It now runs the
+    update and asserts the values it produced.
 
     Test type: unit
     """
@@ -194,19 +202,30 @@ def test_node_statistics(planner, initial_belief):
         children=tuple(),  # Initialize with empty tuple
     )
     planner._build_tree(belief_node=tree, current_depth=0)
+    planner._update_node_statistics(tree)
 
-    # Check that all nodes have statistics
+    leaves = non_leaf_actions = beliefs = 0
     for node in PostOrderIter(tree):
         if node.is_leaf:
-            assert hasattr(node, "immediate_cost")
-            assert hasattr(node, "q_value")
-            assert hasattr(node, "visit_count")
+            leaves += 1
+            assert isinstance(node, ActionNode)
+            assert node.visit_count == 1
+            assert node.immediate_cost is not None
+            assert node.q_value == node.immediate_cost
         elif isinstance(node, ActionNode):
-            assert hasattr(node, "visit_count")
-            assert hasattr(node, "q_value")
+            non_leaf_actions += 1
+            assert node.visit_count > 0
+            assert np.isfinite(node.q_value)
+            assert node.immediate_cost is not None
         elif isinstance(node, BeliefNode):
-            assert hasattr(node, "v_value")
-            assert hasattr(node, "visit_count")
+            beliefs += 1
+            assert node.v_value == min(child.q_value for child in node.children)
+            assert node.visit_count == sum(child.visit_count for child in node.children)
+
+    assert leaves > 0 and non_leaf_actions > 0 and beliefs > 0, (
+        f"the walk saw leaves={leaves}, non-leaf actions={non_leaf_actions}, "
+        f"beliefs={beliefs}; every branch must occur or its assertions never ran"
+    )
 
 
 def test_leaf_node_statistics(planner, initial_belief):

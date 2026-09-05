@@ -99,9 +99,21 @@ class ArenaPathSimulationPolicy(Policy):
         if not tree.children_ids[root_id]:
             action = self._sample_random_action(belief=belief)
         else:
-            action = tree.best_action_by_reward(root_id)
+            action = self._select_final_action(tree=tree, root_id=root_id)
 
         return [action], PolicyRunData(info_variables=tree_metrics)
+
+    def _select_final_action(self, tree: Tree, root_id: int) -> Any:
+        """Choose the action to return to the caller once the search is done.
+
+        Search selection and final selection are separate rules. The default —
+        the highest-Q root action — is what every reward-maximising planner on
+        this base wants. A planner whose search applies an extra criterion (a
+        safety mask, a constraint) must apply the same criterion here too;
+        otherwise it searches under one rule and answers under another.
+        Overridden by ``ConstrainedZero``.
+        """
+        return tree.best_action_by_reward(root_id)
 
     def _sample_random_action(self, belief: Belief) -> Any:
         if self.environment.space_info.action_space == SpaceType.DISCRETE:
