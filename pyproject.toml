@@ -99,6 +99,7 @@ include = ["POMDPPlanners*"]
 
 [tool.setuptools.package-data]
 "POMDPPlanners.environments" = ["tiger_visualization_assets/*.png"]
+"POMDPPlanners.environments.mountain_car_pomdp" = ["assets/*.png", "assets/*.jpg"]
 "POMDPPlanners.environments.laser_tag_pomdp" = ["laser_tag_sprite_sheet.png"]
 "POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils" = ["art/*.png"]
 "POMDPPlanners.environments.rock_sample_pomdp" = ["visualization_assets/*.png"]

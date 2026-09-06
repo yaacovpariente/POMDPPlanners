@@ -14,8 +14,10 @@ from POMDPPlanners.environments.mountain_car_pomdp.mountain_car_pomdp import (
     MountainCarPOMDP,
     MountainCarPOMDPMetrics,
 )
+from .mountain_car_visualizer import MountainCarVisualizer
 
 __all__ = [
     "MountainCarPOMDP",
     "MountainCarPOMDPMetrics",
+    "MountainCarVisualizer",
 ]
