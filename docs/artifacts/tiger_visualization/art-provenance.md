@@ -1,0 +1,7 @@
+# Chamber artwork
+
+Generated with the built-in OpenAI image-generation tool for this change, then copied unchanged into POMDPPlanners/environments/tiger_visualization_assets/chamber.png. The renderer resizes it once and draws all changing text in code. No transparency extraction was needed.
+
+Final prompt:
+
+> Use case: stylized-concept. Asset type: static background for an 800x500 Tiger POMDP episode renderer. Generate a premium realistic painterly game-art scene, landscape 8:5 composition. A torchlit medieval stone chamber viewed straight on, with exactly TWO equal wooden doors side-by-side, LEFT and RIGHT geometrically symmetrical, centered near x=27% and73%, stretching y=20% to92%. Detailed thick arched sandstone frames, dark brown vertical wood grain, black wrought iron bands and hinges, dimensional ring handles, amber torch sconces far left and far right, warm raking light and worn stone floor. Keep both doors closed. Both doors identical; nothing indicates a tiger or treasure location. Camera frontal, no fisheye. Upper 15% is quiet dark stone for code-drawn HUD, lower8% clear stone floor. Each door has an EMPTY dark metal plaque at its center, with NO letters. This is reusable static art, all dynamic labels/probabilities/actions added in code. NO TEXT, numbers, signs, tiger, treasure, human, animal, arrows, graphics, frames, border or watermark. Rich texture and polished lighting, believable materials, readable at small resolution. Full opaque raster, no transparency needed.

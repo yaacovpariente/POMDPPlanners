@@ -1,0 +1,52 @@
+{
+  "arm": "before",
+  "seed": 42,
+  "host": "Yaacovs-MacBook-Air.local",
+  "python": "3.12.14",
+  "pillow": "12.3.0",
+  "first_save_seconds": 0.6153998329536989,
+  "seconds": [
+    0.5940997499856167,
+    0.6448536660172977,
+    0.6027834580163471,
+    0.5936114169890061,
+    0.6723692920058966
+  ],
+  "median_seconds": 0.6027834580163471,
+  "bytes": 124875,
+  "frames": 20,
+  "dimensions": [
+    800,
+    500
+  ],
+  "durations_ms": [
+    500,
+    500,
+    500,
+    500,
+    500,
+    500,
+    500,
+    500,
+    500,
+    500,
+    500,
+    500,
+    500,
+    500,
+    500,
+    500,
+    500,
+    500,
+    500,
+    500
+  ],
+  "sha256": [
+    "3a80efe66ca869e096ef860be0d647cb7689d39c228216d131edda02a58a0b1a",
+    "3a80efe66ca869e096ef860be0d647cb7689d39c228216d131edda02a58a0b1a",
+    "3a80efe66ca869e096ef860be0d647cb7689d39c228216d131edda02a58a0b1a",
+    "3a80efe66ca869e096ef860be0d647cb7689d39c228216d131edda02a58a0b1a",
+    "3a80efe66ca869e096ef860be0d647cb7689d39c228216d131edda02a58a0b1a"
+  ],
+  "provenance": "Standalone diagnostic capture tool"
+}
