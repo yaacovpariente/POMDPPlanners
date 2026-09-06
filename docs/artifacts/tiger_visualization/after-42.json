@@ -1,0 +1,52 @@
+{
+  "arm": "after",
+  "seed": 42,
+  "host": "Yaacovs-MacBook-Air.local",
+  "python": "3.12.14",
+  "pillow": "12.3.0",
+  "first_save_seconds": 0.18075891595799476,
+  "seconds": [
+    0.10635916702449322,
+    0.10740795801393688,
+    0.10785829101223499,
+    0.10691220901207998,
+    0.10697879199869931
+  ],
+  "median_seconds": 0.10697879199869931,
+  "bytes": 4145014,
+  "frames": 20,
+  "dimensions": [
+    800,
+    500
+  ],
+  "durations_ms": [
+    500,
+    500,
+    500,
+    500,
+    500,
+    500,
+    500,
+    500,
+    500,
+    500,
+    500,
+    500,
+    500,
+    500,
+    500,
+    500,
+    500,
+    500,
+    500,
+    500
+  ],
+  "sha256": [
+    "66febc2041cf11e4a37379ebe925df09149f515a4c33f04dce24590ded83d0fa",
+    "66febc2041cf11e4a37379ebe925df09149f515a4c33f04dce24590ded83d0fa",
+    "66febc2041cf11e4a37379ebe925df09149f515a4c33f04dce24590ded83d0fa",
+    "66febc2041cf11e4a37379ebe925df09149f515a4c33f04dce24590ded83d0fa",
+    "66febc2041cf11e4a37379ebe925df09149f515a4c33f04dce24590ded83d0fa"
+  ],
+  "provenance": "New package TigerVisualizer"
+}
