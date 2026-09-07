@@ -4,14 +4,15 @@ Simulations
 The simulation framework provides comprehensive tools for running experiments, managing episodes, tuning hyperparameters, and analyzing results across different environments and planners.
 
 Simulation Components
---------------------
+---------------------
 
 **Core Simulation**
 
 .. autosummary::
    :toctree: ../api/
 
-   POMDPPlanners.simulations.simulator.Simulator
+   POMDPPlanners.simulations.simulator.BaseSimulator
+   POMDPPlanners.simulations.simulator.POMDPSimulator
    POMDPPlanners.simulations.episodes.run_episode
 
 **Experiment Management**
@@ -19,8 +20,9 @@ Simulation Components
 .. autosummary::
    :toctree: ../api/
 
-   POMDPPlanners.simulations.simulations_api.SimulationsAPI
-   POMDPPlanners.simulations.hyper_parameter_tuning_simulations.HyperParameterTuningSimulations
+   POMDPPlanners.simulations.simulation_apis.simulations_api_interface.SimulationsAPIInterface
+   POMDPPlanners.simulations.simulation_apis.local_simulations_api.LocalSimulationsAPI
+   POMDPPlanners.simulations.hyper_parameter_tuning_simulations.HyperParameterOptimizer
 
 **Statistics & Analysis**
 
@@ -28,10 +30,10 @@ Simulation Components
    :toctree: ../api/
 
    POMDPPlanners.simulations.simulation_statistics.compute_statistics_environment_policy_pair
-   POMDPPlanners.utils.statistics.compute_confidence_interval
+   POMDPPlanners.utils.statistics_utils.confidence_interval
 
 Basic Simulation Usage
----------------------
+----------------------
 
 **Single Episode**
 
@@ -241,7 +243,7 @@ Distributed Computing
    results = task_manager.gather_results(futures)
 
 Statistical Analysis
--------------------
+--------------------
 
 **Performance Metrics**
 
@@ -335,6 +337,6 @@ Visualization and Reporting
 See Also
 --------
 
-- :doc:`../examples/experiments` - Complete experiment examples
-- :doc:`../api/simulations` - Full simulation API reference
-- :doc:`../contributing` - Contributing simulation studies
+- :doc:`../examples/planners_comparison` - Complete experiment examples
+- :doc:`../api/POMDPPlanners.simulations` - Full simulation API reference
+- :doc:`../environments/custom` - Adding an environment to run studies on
