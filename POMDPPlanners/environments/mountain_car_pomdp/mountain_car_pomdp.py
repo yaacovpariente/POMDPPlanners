@@ -166,6 +166,7 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
         state = self.__dict__.copy()
         state["_trans_kernel_cache"] = {}
         state["_obs_kernel_cache"] = {}
+        state.pop("_episode_visualizer", None)
         return state
 
     def __setstate__(self, state: Dict[str, Any]) -> None:
@@ -380,8 +381,11 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
     def cache_visualization(
         self, history: List[StepData], output_dir: Path, episode_index: int
     ) -> None:
-        # No per-episode visualization for this environment.
-        pass
+        from .mountain_car_visualizer import MountainCarVisualizer
+
+        if not hasattr(self, "_episode_visualizer"):
+            self._episode_visualizer = MountainCarVisualizer(self)
+        self._episode_visualizer.save(history, output_dir / f"agent_path_{episode_index}.gif")
 
     def is_equal_observation(
         self, observation1: Tuple[float, float], observation2: Tuple[float, float]

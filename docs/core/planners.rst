@@ -4,7 +4,7 @@ Planners
 POMDP planners compute optimal actions given belief states. POMDPPlanners provides state-of-the-art algorithms from Monte Carlo Tree Search to sparse sampling approaches.
 
 Planning Algorithm Categories
-----------------------------
+-----------------------------
 
 **Monte Carlo Tree Search (MCTS)**
 
@@ -30,7 +30,7 @@ Planning Algorithm Categories
    POMDPPlanners.planners.open_loop_planners.discrete_action_sequences_planner.DiscreteActionSequencesPlanner
 
 Planner Interface
-----------------
+-----------------
 
 All planners inherit from the base Policy class:
 
@@ -40,7 +40,7 @@ All planners inherit from the base Policy class:
    :show-inheritance:
 
 Algorithm Details
-----------------
+-----------------
 
 **POMCP (Partially Observable Monte Carlo Planning)**
    - Uses Upper Confidence Bounds (UCB) for action selection
@@ -84,7 +84,7 @@ Choosing the Right Planner
    - POMCP with limited simulations: Balance speed/quality
 
 Basic Usage Example
-------------------
+-------------------
 
 .. code-block:: python
 
@@ -109,7 +109,7 @@ Basic Usage Example
    print(f"Planning time: {run_data.info_variables['planning_time']:.3f}s")
 
 Configuration Parameters
------------------------
+------------------------
 
 **Common Parameters:**
    - ``num_simulations``: Number of MCTS simulations
@@ -154,6 +154,6 @@ To implement a custom planner, inherit from the Policy base class:
 See Also
 --------
 
-- :doc:`../examples/planners` - Planner usage examples
+- :doc:`../examples/planners_comparison` - Planner usage examples
 - :doc:`beliefs` - Belief state representations
-- :doc:`../api/planners` - Complete API reference
+- :doc:`../api/POMDPPlanners.planners` - Complete API reference

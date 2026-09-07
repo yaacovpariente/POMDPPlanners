@@ -513,5 +513,5 @@ Next Steps
 
 - Try :doc:`planners_comparison` for comparing optimized policies
 - See :doc:`basic_usage` for using optimized policies in simulations
-- Check the :doc:`../api/simulations` for advanced simulation features
-- Explore the :doc:`../api/core` for detailed API reference
+- Check the :doc:`../api/POMDPPlanners.simulations` for advanced simulation features
+- Explore the :doc:`../api/POMDPPlanners.core` for detailed API reference
