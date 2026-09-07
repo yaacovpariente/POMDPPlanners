@@ -391,4 +391,4 @@ Next Steps
 
 **API Reference**
 
-Browse the complete API documentation: :doc:`api/POMDPPlanners`
+Browse the complete API documentation: :doc:`api/modules`
