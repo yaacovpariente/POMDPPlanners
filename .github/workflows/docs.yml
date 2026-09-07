@@ -33,7 +33,7 @@ jobs:
       - name: Generate API documentation
         run: |
           cd docs
-          sphinx-apidoc -o api ../POMDPPlanners tests --force --module-first
+          sphinx-apidoc -o api ../POMDPPlanners ../POMDPPlanners/tests --force --module-first
 
       - name: Build documentation
         run: |
