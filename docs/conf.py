@@ -31,6 +31,7 @@ release = "0.5.0"
 # ones.
 extensions = [
     "sphinx.ext.autodoc",
+    "sphinx.ext.autosummary",
     "sphinx.ext.viewcode",
     "sphinx.ext.napoleon",  # For Google/NumPy style docstrings
     "sphinx.ext.intersphinx",
@@ -43,6 +44,11 @@ extensions = [
 extlinks = {
     "gh": ("https://github.com/yaacovpariente/POMDPPlanners/pull/%s", "#%s"),
 }
+
+# Generate the stub pages that the ``autosummary`` tables link to. Without this
+# the tables render as empty headings, which is how the environment lists went
+# missing from the published site.
+autosummary_generate = True
 
 # Napoleon settings for Google-style docstrings
 napoleon_google_docstring = True
@@ -114,22 +120,16 @@ html_sidebars = {
 autodoc_typehints = "description"
 autodoc_typehints_format = "short"
 
-# Mock imports for external dependencies
-autodoc_mock_imports = [
-    "numpy",
-    "scipy",
-    "matplotlib",
-    "torch",
-    "gym",
-    "gymnasium",
-    "dask",
-    "joblib",
-    "pandas",
-    "ray",
-    "dask_jobqueue",
-    "PIL",
-    "cv2",
-]
+# Mock imports for external dependencies.
+#
+# Deliberately empty. The docs build installs the package itself
+# (``pip install -e ".[docs]"``), so numpy, torch, ray and friends are all
+# genuinely importable. Mocking them anyway broke ``autosummary``: the stub
+# generator imports each documented object for real, and a mocked numpy made
+# every ``POMDPPlanners.environments.*`` import fail, so the environment tables
+# rendered as empty headings. Only list a module here if it is truly absent
+# from the docs environment.
+autodoc_mock_imports: list[str] = []
 
 # -- Options for intersphinx mapping ----------------------------------------
 

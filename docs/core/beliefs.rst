@@ -22,7 +22,7 @@ Belief Representations
    POMDPPlanners.core.belief.get_initial_belief
 
 Base Belief Interface
---------------------
+---------------------
 
 All belief representations inherit from the base Belief class:
 
@@ -47,7 +47,7 @@ Particle Filter Beliefs
    - Faster sampling operations
 
 Belief Operations
-----------------
+-----------------
 
 **Sampling from Beliefs**
 
@@ -91,7 +91,7 @@ Belief Operations
    initial_state = belief.sample()
 
 Belief Updates
--------------
+--------------
 
 Beliefs are updated based on actions and observations:
 
@@ -109,7 +109,7 @@ Beliefs are updated based on actions and observations:
    )
 
 Advanced Belief Operations
--------------------------
+--------------------------
 
 **State Probability Queries**
 
@@ -194,7 +194,7 @@ To create custom belief representations:
            pass
 
 Performance Considerations
--------------------------
+--------------------------
 
 **Particle Count**
    - More particles → better approximation, slower computation
@@ -214,6 +214,6 @@ Performance Considerations
 See Also
 --------
 
-- :doc:`../examples/beliefs` - Belief usage examples
+- :doc:`../examples/basic_usage` - Belief usage examples
 - :doc:`planners` - How planners use beliefs
-- :doc:`../api/core` - Complete API reference
+- :doc:`../api/POMDPPlanners.core` - Complete API reference
