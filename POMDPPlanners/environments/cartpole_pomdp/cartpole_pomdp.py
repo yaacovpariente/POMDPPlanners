@@ -34,7 +34,7 @@ from POMDPPlanners.core.environment import (
     SpaceInfo,
     SpaceType,
 )
-from POMDPPlanners.core.simulation import History, MetricValue
+from POMDPPlanners.core.simulation import History, MetricValue, StepData
 from POMDPPlanners.core.simulation.step_info_metrics import (
     EpisodeReduction,
     StepInfoMetric,
@@ -372,6 +372,14 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
             | (theta > self.theta_threshold_radians)
         )
         return np.where(terminated, 0.0, 1.0)
+
+    def cache_visualization(
+        self, history: List[StepData], output_dir: Path, episode_index: int
+    ) -> None:
+        """Save recorded states and outcomes without stepping the environment."""
+        from POMDPPlanners.environments.cartpole_pomdp.cartpole_visualizer import CartPoleVisualizer
+
+        CartPoleVisualizer(self).save(history, output_dir / f"agent_path_{episode_index}.gif")
 
     def is_terminal(self, state: np.ndarray) -> bool:
         x, theta = state[0], state[2]
