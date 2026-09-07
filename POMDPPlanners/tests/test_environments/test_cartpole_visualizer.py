@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from PIL import Image, ImageDraw
+from PIL import GifImagePlugin, Image, ImageDraw
 
 from POMDPPlanners.core.simulation import StepData
 from POMDPPlanners.environments.cartpole_pomdp.cartpole_pomdp import CartPolePOMDP
@@ -126,6 +126,7 @@ def test_gif_metadata_repeated_states_and_determinism(env, tmp_path, count):
     first = tmp_path / "nested/agent_path_0.gif"
     assert first.read_bytes() == (tmp_path / "nested/agent_path_1.gif").read_bytes()
     with Image.open(first) as gif:
+        assert isinstance(gif, GifImagePlugin.GifImageFile)
         assert gif.size == viz.CANVAS_SIZE
         assert gif.n_frames == count
         assert gif.info["loop"] == 0
