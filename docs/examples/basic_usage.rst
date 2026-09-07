@@ -1,5 +1,5 @@
 Basic Usage Examples
-===================
+====================
 
 This page provides simple, working examples to get you started with POMDPPlanners quickly.
 
@@ -34,7 +34,7 @@ Let's solve the Tiger POMDP problem step by step:
    print(f"Planning took {run_data.info_variables['planning_time']:.3f} seconds")
 
 Running a Complete Episode
--------------------------
+--------------------------
 
 Here's how to run a full episode with belief updates:
 
@@ -65,7 +65,7 @@ Here's how to run a full episode with belief updates:
        print(f"Step {i}: Action={step.action}, Observation={step.observation}, Reward={step.reward}")
 
 Multiple Episodes with Statistics
---------------------------------
+---------------------------------
 
 Run multiple episodes and compute statistics:
 
@@ -168,7 +168,7 @@ Working with Different Environments
    print(f"Navigation action: {action}")
 
 Comparing Multiple Algorithms
-----------------------------
+-----------------------------
 
 .. code-block:: python
 
@@ -203,7 +203,7 @@ Comparing Multiple Algorithms
        print(f"{name}: {avg_reward:.3f}")
 
 Visualization Example
---------------------
+---------------------
 
 .. code-block:: python
 
@@ -270,7 +270,7 @@ Visualization Example
    plt.show()
 
 Quick Configuration Tips
------------------------
+------------------------
 
 **Performance Tuning**
    - Start with ``num_simulations=100`` for quick testing
@@ -290,7 +290,7 @@ Quick Configuration Tips
 Next Steps
 ----------
 
-- Try :doc:`environments` for more environment examples
-- See :doc:`planners` for advanced planner usage
-- Check :doc:`experiments` for large-scale experiment setup
-- Explore the :doc:`../api/core` for detailed API reference
+- Try :doc:`../environments/index` for the environment catalog
+- See :doc:`../core/planners` for advanced planner usage
+- Check :doc:`../core/simulations` for large-scale experiment setup
+- Explore the :doc:`../api/POMDPPlanners.core` for detailed API reference

@@ -146,7 +146,7 @@ Complete Example
     print("\\nStudy complete! Check './planners_comparison_results' for detailed logs.")
 
 Expected Output and Analysis
----------------------------
+----------------------------
 
 **Performance Metrics:**
 The simulation will generate comprehensive statistics including:
@@ -180,9 +180,10 @@ The study will reveal:
    - Statistical analysis provides confidence in comparative conclusions
 
 Customization Options
---------------------
+---------------------
 
 **Environment Modifications:**
+
 .. code-block:: python
 
     # Modify environment parameters
@@ -192,6 +193,7 @@ Customization Options
     risk_averse_config = RiskAverseEnvironmentConfigsAPI(discount_factor=0.95)
 
 **Action Sampler Customization:**
+
 .. code-block:: python
 
     # Customize action samplers for different environments
@@ -207,6 +209,7 @@ Customization Options
     custom_discrete_sampler = DiscreteActionSampler(actions=[0, 1, 2, 3, 4, 5])
 
 **Planner Tuning:**
+
 .. code-block:: python
 
     # Adjust progressive widening parameters
@@ -221,6 +224,7 @@ Customization Options
     )
 
 **Simulation Scale:**
+
 .. code-block:: python
 
     # Scale up for production studies
@@ -235,6 +239,7 @@ Customization Options
     ]
 
 **Advanced Analysis:**
+
 .. code-block:: python
 
     # Enable additional statistical analysis

@@ -24,7 +24,7 @@ Core dependencies are automatically installed with the package:
 - Gymnasium >= 0.26.0 (for Gym environments)
 
 Installation Methods
--------------------
+--------------------
 
 Development Installation (Recommended)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -89,7 +89,7 @@ Virtual environments isolate your project dependencies and prevent conflicts wit
    deactivate
 
 Development Dependencies
------------------------
+------------------------
 
 For contributors and developers, install additional development tools:
 
@@ -109,7 +109,7 @@ Development dependencies include:
 - **Pre-commit**: pre-commit hooks for code formatting
 
 Optional Dependencies
---------------------
+---------------------
 
 **Distributed Computing**
 
@@ -140,7 +140,7 @@ For neural network-based components:
    pip install tensorflow         # TensorFlow
 
 Verification
------------
+------------
 
 Verify your installation by running the test suite:
 
@@ -161,7 +161,7 @@ Verify your installation by running the test suite:
    "
 
 Troubleshooting
---------------
+---------------
 
 **Common Issues**
 
@@ -215,7 +215,7 @@ Troubleshooting
 - For CentOS/RHEL: ``sudo yum install python3-devel``
 
 Getting Help
------------
+------------
 
 If you encounter installation issues:
 
