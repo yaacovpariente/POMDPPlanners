@@ -101,6 +101,7 @@ What is in the package
 
    core/planners
    planners/adaops/index
+   planners/hyp_despot/index
    core/beliefs
 
 .. toctree::

@@ -23,6 +23,7 @@ Planning Algorithm Categories
    POMDPPlanners.planners.scenario_tree_planners.despot.DESPOT
    POMDPPlanners.planners.scenario_tree_planners.ardespot.ARDESPOT
    POMDPPlanners.planners.scenario_tree_planners.adaops.AdaOPS
+   POMDPPlanners.planners.scenario_tree_planners.hyp_despot.HypDESPOT
 
 **Sparse Sampling**
 

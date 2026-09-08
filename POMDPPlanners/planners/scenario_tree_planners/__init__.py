@@ -28,6 +28,7 @@ from POMDPPlanners.planners.scenario_tree_planners.ardespot import (
 )
 from POMDPPlanners.planners.scenario_tree_planners.adaops import AdaOPS, AdaOPSMetrics
 from POMDPPlanners.planners.scenario_tree_planners.despot import DESPOT, DESPOTMetrics
+from POMDPPlanners.planners.scenario_tree_planners.hyp_despot import HypDESPOT, HypDESPOTMetrics
 
 __all__ = [
     "DESPOT",
@@ -36,4 +37,6 @@ __all__ = [
     "ARDESPOTMetrics",
     "AdaOPS",
     "AdaOPSMetrics",
+    "HypDESPOT",
+    "HypDESPOTMetrics",
 ]
