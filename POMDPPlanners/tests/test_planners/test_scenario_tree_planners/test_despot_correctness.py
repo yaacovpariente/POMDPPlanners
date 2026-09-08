@@ -28,7 +28,10 @@ from unittest.mock import Mock
 import numpy as np
 import pytest
 
-from POMDPPlanners.core.belief import UnweightedParticleBeliefStateUpdate
+from POMDPPlanners.core.belief import (
+    UnweightedParticleBeliefStateUpdate,
+    WeightedParticleBeliefStateUpdate,
+)
 from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
@@ -1476,6 +1479,105 @@ def test_each_decision_gets_a_fresh_scenario_stream_table():
     second = [planner._streams.seed_for(scenario_id=i, depth=0) for i in range(4)]
 
     assert first != second, "both decisions used the identical scenario stream table"
+
+
+def test_a_belief_with_raw_weights_still_takes_the_resampling_path():
+    """``WeightedParticleBeliefStateUpdate`` is resampled, not sampled from.
+
+    Purpose: The weight attribute is not uniform across this repository's belief
+    classes -- ``WeightedParticleBelief`` precomputes ``normalized_weights``,
+    ``WeightedParticleBeliefStateUpdate`` keeps raw ``weights`` and normalizes
+    only inside its own ``sample``. Reading only the first pushed the second
+    onto the ``belief.sample()`` fallback, whose stdlib ``random`` draw
+    :meth:`action` then rewinds, so every decision from an unchanged belief saw
+    the identical ``K`` states.
+
+    Given: A ``WeightedParticleBeliefStateUpdate`` holding ``ROOT`` at raw
+        weight ``3.0`` and ``NEXT`` at ``1.0`` -- a 0.75 / 0.25 split written
+        unnormalized -- and ``K = 8``.
+    When: Scenario states are drawn.
+    Then: The split is the exact 6 / 2 of systematic resampling, which the
+        independent-draw fallback would only hit by luck.
+
+    Test type: unit
+    """
+    belief = WeightedParticleBeliefStateUpdate(particles=[ROOT, NEXT], weights=[3.0, 1.0])
+    env = ChainEnv(discount_factor=DISCOUNT)
+    planner = _chain_planner(env, depth=2, n_scenarios=8, n_simulations=0)
+
+    states = planner._sample_scenario_states(belief=belief)
+
+    assert states.count(ROOT) == 6, f"expected the 6/2 systematic split, got {states}"
+    assert states.count(NEXT) == 2
+
+
+def test_consecutive_decisions_on_a_raw_weight_belief_are_not_frozen():
+    """Two decisions from one unchanged raw-weight belief see different scenarios.
+
+    Purpose: This is the observable symptom of the attribute mismatch above --
+    with the fallback taken, three consecutive ``action`` calls drew byte-for-byte
+    identical scenario sets, so the planner stopped being a randomized
+    approximation for the whole episode.
+
+    Given: A raw-weight belief split ``0.5 / 0.5`` and ``K = 3``, where
+        systematic resampling gives two possible compositions.
+    When: Scenarios are drawn twenty times.
+    Then: Both compositions appear.
+
+    Test type: unit
+    """
+    belief = WeightedParticleBeliefStateUpdate(particles=[ROOT, NEXT], weights=[1.0, 1.0])
+    env = ChainEnv(discount_factor=DISCOUNT)
+    planner = _chain_planner(env, depth=2, n_scenarios=3, n_simulations=0)
+
+    compositions = {tuple(planner._sample_scenario_states(belief=belief)) for _ in range(20)}
+
+    assert compositions == {
+        (ROOT, ROOT, NEXT),
+        (ROOT, NEXT, NEXT),
+    }, f"got {compositions}; a frozen scenario set would give exactly one"
+
+
+def test_a_particleless_belief_does_not_leak_into_the_global_generators():
+    """Planning leaves both global streams exactly as it found them.
+
+    Purpose: The particle-less fallback seeds the global generators so its draw
+    is reproducible, but ``action`` only captured and restored them when
+    determinization was on. With it off, every decision overwrote the
+    simulator's numpy stream, so the planner's internals became an input to the
+    episode's own randomness.
+
+    Given: A belief with no particle list, and a planner with
+        ``use_determinized_scenarios=False``.
+    When: Scenario states are drawn.
+    Then: Both the numpy and the stdlib generator states are unchanged, and two
+        successive draws still differ.
+
+    Test type: unit
+    """
+
+    class _ParticlelessBelief:
+        """Minimal stand-in for a Gaussian belief: samples, holds no particles."""
+
+        def sample(self) -> float:
+            return float(np.random.normal())
+
+    env = ChainEnv(discount_factor=DISCOUNT)
+    planner = _chain_planner(
+        env, depth=2, n_scenarios=4, n_simulations=0, use_determinized_scenarios=False
+    )
+    belief = _ParticlelessBelief()
+
+    np.random.seed(4321)
+    random.seed(4321)
+    numpy_before, python_before = np.random.get_state(), random.getstate()
+
+    first = planner._sample_scenario_states(belief=belief)  # type: ignore[arg-type]
+
+    numpy_after, python_after = np.random.get_state(), random.getstate()
+    assert np.array_equal(numpy_before[1], numpy_after[1]) and numpy_before[2] == numpy_after[2]
+    assert python_before == python_after
+    assert first != planner._sample_scenario_states(belief=belief)  # type: ignore[arg-type]
 
 
 def test_bounds_bracket_the_achievable_return_at_every_node():
