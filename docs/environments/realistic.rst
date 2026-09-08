@@ -24,6 +24,16 @@ Racetrack
 wraps HighwayEnv's ``racetrack-v0``. It is the easiest of the four to run — one
 ``pip install highway-env``, no server.
 
+.. figure:: ../images/racetrack_recorded_episode.gif
+   :alt: Saved Racetrack episode with the ego trail, heading, and a recorded opponent.
+   :width: 480px
+
+   Three states from a saved episode, rendered by the package from recorded
+   ``StepData`` rather than by replaying the simulator. The blue line traces the
+   ego vehicle across the first two action rows; the green marker and short line
+   show its final successor position and heading, and the red marker shows the
+   opponent recorded in that final state.
+
 Its point is the **matched pair**: one dynamics, reward and track, with two
 observation configurations selected by ``ObservationMode.MDP`` or
 ``ObservationMode.POMDP``. A planner's score gap between the two isolates the
