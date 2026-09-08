@@ -100,6 +100,8 @@ What is in the package
    :hidden:
 
    core/planners
+   planners/adaops/index
+   planners/hyp_despot/index
    core/beliefs
 
 .. toctree::

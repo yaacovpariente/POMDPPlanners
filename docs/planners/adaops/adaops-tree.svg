@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="280" viewBox="0 0 760 280">
+  <style>.t{font:14px sans-serif}.h{font:bold 16px sans-serif}.b{fill:#dbeafe;stroke:#2563eb;stroke-width:2}.a{fill:#fef3c7;stroke:#d97706;stroke-width:2}.m{fill:#dcfce7;stroke:#16a34a;stroke-width:2}.e{stroke:#475569;stroke-width:2}.dash{stroke:#16a34a;stroke-width:2;stroke-dasharray:6 4}</style>
+  <text x="70" y="25" class="h">Unpacked observations</text><text x="475" y="25" class="h">AdaOPS packing</text>
+  <circle cx="165" cy="65" r="28" class="b"/><text x="145" y="70" class="t">b, w</text>
+  <rect x="137" y="112" width="56" height="36" rx="6" class="a"/><text x="157" y="136" class="t">a</text>
+  <line x1="165" y1="93" x2="165" y2="112" class="e"/>
+  <line x1="145" y1="148" x2="90" y2="195" class="e"/><line x1="165" y1="148" x2="165" y2="195" class="e"/><line x1="185" y1="148" x2="240" y2="195" class="e"/>
+  <circle cx="80" cy="220" r="25" class="b"/><circle cx="165" cy="220" r="25" class="b"/><circle cx="250" cy="220" r="25" class="b"/>
+  <text x="55" y="260" class="t">o1: w1</text><text x="140" y="260" class="t">o2: w2</text><text x="225" y="260" class="t">o3: w3</text>
+  <circle cx="555" cy="65" r="28" class="b"/><text x="535" y="70" class="t">b, w</text>
+  <rect x="527" y="112" width="56" height="36" rx="6" class="a"/><text x="547" y="136" class="t">a</text><line x1="555" y1="93" x2="555" y2="112" class="e"/>
+  <line x1="540" y1="148" x2="500" y2="195" class="e"/><line x1="570" y1="148" x2="620" y2="195" class="e"/>
+  <circle cx="490" cy="220" r="28" class="m"/><circle cx="630" cy="220" r="28" class="b"/>
+  <text x="445" y="260" class="t">o1+o2: p1+p2</text><text x="600" y="260" class="t">o3: p3</text>
+  <path d="M 565 220 Q 555 175 515 215" fill="none" class="dash"/><text x="525" y="190" class="t">L1 ≤ delta</text>
+  <text x="415" y="105" class="t">shared particles; different weights</text>
+</svg>
