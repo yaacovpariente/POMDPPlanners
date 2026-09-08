@@ -426,6 +426,21 @@ class TestLayout:
 class TestOutput:
     """The file the environment writes."""
 
+    def test_package_exports_visualizer(self) -> None:
+        """Purpose: the package promises the renderer as a public export.
+
+        Given: an installed POMDPPlanners package
+        When: BattleshipVisualizer is imported from the Battleship package
+        Then: the public export is the renderer class
+
+        Test type: integration
+        """
+        from POMDPPlanners.environments.battleship_pomdp import (  # pylint: disable=import-outside-toplevel
+            BattleshipVisualizer as ExportedBattleshipVisualizer,
+        )
+
+        assert ExportedBattleshipVisualizer is BattleshipVisualizer
+
     def test_cache_visualization_writes_a_named_gif(self, env, episode, tmp_path: Path) -> None:
         """Purpose: the environment owns the filename; callers pass a directory.
 

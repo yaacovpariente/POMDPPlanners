@@ -24,6 +24,9 @@ from POMDPPlanners.environments.battleship_pomdp.battleship_pomdp import (
     create_battleship_state,
 )
 from POMDPPlanners.environments.battleship_pomdp.battleship_belief import BattleshipBelief
+from POMDPPlanners.environments.battleship_pomdp.battleship_visualizer import (
+    BattleshipVisualizer,
+)
 
 __all__ = [
     "HIT",
@@ -34,6 +37,7 @@ __all__ = [
     "BattleshipPOMDPMetrics",
     "BattleshipState",
     "BattleshipStepChannel",
+    "BattleshipVisualizer",
     "FleetLayoutTable",
     "create_battleship_state",
     "get_layout_table",
