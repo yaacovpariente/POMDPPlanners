@@ -15,7 +15,7 @@ import numpy as np
 import pytest
 
 from POMDPPlanners.core.belief import WeightedParticleBelief
-from POMDPPlanners.environments.t_maze_pomdp.t_maze_pomdp import (
+from POMDPPlanners.environments.maze_pomdp.t_maze_pomdp import (
     ACTIONS,
     CUE_CONSUMED,
     CUE_EMITTING,

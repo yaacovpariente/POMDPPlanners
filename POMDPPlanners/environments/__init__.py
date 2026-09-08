@@ -52,8 +52,8 @@ from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
 from POMDPPlanners.environments.maze_pomdp import (
     ContinuousMazePOMDP,
     DiscreteMazePOMDP,
+    TMazePOMDP,
 )
-from POMDPPlanners.environments.t_maze_pomdp import TMazePOMDP
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 
 __all__ = [

@@ -1,7 +1,11 @@
 # SPDX-License-Identifier: MIT
 
-"""Public Maze renderer; the old module path remains a compatibility alias."""
+"""Compatibility alias for :mod:`POMDPPlanners.environments.maze_pomdp.maze_visualizer`."""
 
-from POMDPPlanners.environments.t_maze_pomdp.t_maze_visualizer import MazeVisualizer
+from POMDPPlanners.environments.maze_pomdp.maze_visualizer import (  # noqa: F401
+    MazeVisualizer,
+)
 
-__all__ = ["MazeVisualizer"]
+__all__ = [
+    "MazeVisualizer",
+]
