@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="390" viewBox="0 0 900 390">
+  <style>
+    text{font:14px sans-serif;fill:#172033}.title{font-size:18px;font-weight:bold}
+    .belief{fill:#dbeafe;stroke:#2563eb;stroke-width:2}.action{fill:#dcfce7;stroke:#16a34a;stroke-width:2}
+    .gpu{fill:#fef3c7;stroke:#d97706;stroke-width:2}.edge{stroke:#64748b;stroke-width:2}.worker{stroke:#7c3aed;stroke-width:3;stroke-dasharray:6 4}
+  </style>
+  <text x="120" y="28" class="title">DESPOT: serial leaf work</text>
+  <circle cx="220" cy="75" r="28" class="belief"/><text x="204" y="80">b₀</text>
+  <line x1="205" y1="100" x2="155" y2="145" class="edge"/><line x1="235" y1="100" x2="285" y2="145" class="edge"/>
+  <rect x="125" y="145" width="60" height="34" rx="5" class="action"/><text x="140" y="167">a₀</text>
+  <rect x="255" y="145" width="60" height="34" rx="5" class="action"/><text x="270" y="167">a₁</text>
+  <line x1="155" y1="179" x2="155" y2="225" class="edge"/><line x1="285" y1="179" x2="285" y2="225" class="edge"/>
+  <circle cx="155" cy="252" r="27" class="belief"/><circle cx="285" cy="252" r="27" class="belief"/>
+  <text x="137" y="257">b(o₄)</text><text x="267" y="257">b(o₇)</text>
+  <rect x="115" y="315" width="210" height="42" rx="7" class="gpu"/><text x="139" y="341">one leaf evaluated at a time</text>
+  <line x1="155" y1="279" x2="185" y2="315" class="edge"/>
+
+  <text x="555" y="28" class="title">HyP-DESPOT: shared tree + CUDA batch</text>
+  <circle cx="660" cy="75" r="28" class="belief"/><text x="644" y="80">b₀</text>
+  <line x1="645" y1="100" x2="595" y2="145" class="edge"/><line x1="675" y1="100" x2="725" y2="145" class="edge"/>
+  <rect x="565" y="145" width="60" height="34" rx="5" class="action"/><text x="580" y="167">a₀</text>
+  <rect x="695" y="145" width="60" height="34" rx="5" class="action"/><text x="710" y="167">a₁</text>
+  <line x1="595" y1="179" x2="595" y2="225" class="edge"/><line x1="725" y1="179" x2="725" y2="225" class="edge"/>
+  <circle cx="595" cy="252" r="27" class="belief"/><circle cx="725" cy="252" r="27" class="belief"/>
+  <text x="577" y="257">b(o₄)</text><text x="707" y="257">b(o₇)</text>
+  <path d="M500 85 C535 90 545 175 580 224" fill="none" class="worker"/><text x="462" y="78">worker 1</text>
+  <path d="M820 85 C785 90 775 175 740 224" fill="none" class="worker"/><text x="796" y="78">worker 2</text>
+  <rect x="535" y="315" width="250" height="42" rx="7" class="gpu"/><text x="552" y="341">CUDA: leaves × actions × scenarios</text>
+  <line x1="595" y1="279" x2="625" y2="315" class="edge"/><line x1="725" y1="279" x2="695" y2="315" class="edge"/>
+  <text x="370" y="382">Blue circles: weighted scenario beliefs · green boxes: actions · dashed purple: CPU traversal · gold: leaf kernels</text>
+</svg>

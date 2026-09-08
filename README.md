@@ -150,6 +150,7 @@ Self-contained Jupyter notebooks with executable end-to-end examples live in
 | iCVaR POMCPOW / iCVaR PFT-DPW / iCVaR Sparse Sampling | Risk-averse planning with iterated CVaR objectives |
 | DESPOT / AR-DESPOT | Scenario-tree search with lower and upper value bounds |
 | AdaOPS | Adaptive weighted-particle search with L1 belief packing |
+| HyP-DESPOT | Shared CPU scenario tree with batched CUDA leaf evaluation |
 | VOPP | Fully GPU-vectorized online POMDP planning (Hoerger et al., 2025) |
 | Discrete Action Sequences | Open-loop baseline planner |
 

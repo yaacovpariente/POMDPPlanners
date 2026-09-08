@@ -397,3 +397,6 @@ Next Steps
 **API Reference**
 
 Browse the complete API documentation: :doc:`api/modules`
+
+HyP-DESPOT is available only for environments that expose a deterministic
+``hyp_despot_cuda_model`` on ``cuda:0``. It never falls back to CPU DESPOT.
