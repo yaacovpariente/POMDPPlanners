@@ -45,7 +45,11 @@ from POMDPPlanners.planners.scenario_tree_planners.adaptive_particles import (
     l1_weight_distance,
     normalize_weights,
 )
-from POMDPPlanners.planners.scenario_tree_planners.despot import DESPOT, TINY
+from POMDPPlanners.planners.scenario_tree_planners.despot import (
+    DESPOT,
+    TERMINAL_OBSERVATION,
+    TINY,
+)
 from POMDPPlanners.utils.config_to_id import config_to_id
 from POMDPPlanners.utils.tree_statistics import TreeMetrics, compute_arena_tree_metrics
 
@@ -363,7 +367,9 @@ class AdaOPS(DESPOT):
     def _root_particles(self, belief: Belief) -> Tuple[List[Any], np.ndarray]:
         particles = getattr(belief, "particles", None)
         if particles is None or len(particles) == 0:
-            particles = [belief.sample() for _ in range(self.max_particles)]
+            # Inherited so the draw is seeded from the planner's own generator
+            # and the caller's global RNG streams are restored afterwards.
+            particles = self._sample_from_belief_sampler(belief, self.max_particles)
             weights = np.full(len(particles), 1.0 / len(particles))
         else:
             particles = list(particles)
@@ -426,8 +432,8 @@ class AdaOPS(DESPOT):
             generated_mass: Dict[Any, float] = {}
             for state, weight in zip(particles, weights):
                 if self.environment.is_terminal(state=state):
-                    next_state, observation, reward = state, "<terminal>", 0.0
-                    key = "<terminal>"
+                    next_state, observation, reward = state, TERMINAL_OBSERVATION, 0.0
+                    key = TERMINAL_OBSERVATION
                 else:
                     next_state, observation, reward = self.environment.sample_next_step(
                         state, action
@@ -446,10 +452,10 @@ class AdaOPS(DESPOT):
             tree.set_immediate_reward(action_id, float(np.dot(weights, rewards)))
             retained: List[Tuple[int, np.ndarray]] = []
             for key, observation in unique.items():
-                if key == "<terminal>":
+                if key is TERMINAL_OBSERVATION:
                     posterior = normalize_weights(
                         [
-                            weight if obs == "<terminal>" else 0.0
+                            weight if obs is TERMINAL_OBSERVATION else 0.0
                             for weight, obs in zip(weights, observations)
                         ]
                     )

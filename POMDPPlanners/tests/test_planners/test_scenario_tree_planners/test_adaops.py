@@ -12,11 +12,19 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from typing import cast
 
 from POMDPPlanners.core.tree.arena import ACTION, BELIEF
 from POMDPPlanners.planners import POLICY_REGISTRY, AdaOPS
 from POMDPPlanners.planners.scenario_tree_planners.adaops import AdaOPSMetrics
-from POMDPPlanners.tests.test_planners.planner_fixtures import ROOT, ChainEnv, chain_belief
+from POMDPPlanners.core.belief import WeightedParticleBelief
+from POMDPPlanners.tests.test_planners.planner_fixtures import (
+    END,
+    NEXT,
+    ROOT,
+    ChainEnv,
+    chain_belief,
+)
 from POMDPPlanners.tests.test_planners.test_scenario_tree_planners.test_despot_correctness import (
     CoinEnv,
 )
@@ -53,7 +61,7 @@ def test_registration_metrics_and_alternating_topology_are_exercised():
     actions, run_data = planner.action(chain_belief(ROOT))
     tree = planner._last_tree
     assert POLICY_REGISTRY["AdaOPS"] is AdaOPS
-    assert actions[0] in planner.environment.get_actions()
+    assert actions[0] in cast(ChainEnv, planner.environment).get_actions()
     assert tree is not None and len(tree) > 3
     assert any(
         tree.kind[node] == BELIEF and tree.parent_id[node] is not None for node in range(len(tree))
@@ -96,7 +104,7 @@ def test_root_kld_sampling_obeys_particle_caps_even_for_uniform_input():
     belief = chain_belief(ROOT)
     belief.particles = [ROOT] * 20
     tree, root = planner._learn_tree(belief)
-    assert len(tree.get_belief(root).particles) == 5
+    assert len(cast(WeightedParticleBelief, tree.get_belief(root)).particles) == 5
     assert tree.data[root].weights.tolist() == pytest.approx([0.2] * 5)
 
 
@@ -158,7 +166,9 @@ def test_configuration_identity_reset_pickle_and_snapshot_immutability(tmp_path:
     planner.save(config_path)
     loaded = AdaOPS.load(config_path)
     assert loaded.config_id == planner.config_id
-    assert loaded.action(chain_belief(ROOT))[0][0] in loaded.environment.get_actions()
+    assert (
+        loaded.action(chain_belief(ROOT))[0][0] in cast(ChainEnv, loaded.environment).get_actions()
+    )
 
     binned = _planner(
         state_binner=state_bin,
@@ -170,7 +180,7 @@ def test_configuration_identity_reset_pickle_and_snapshot_immutability(tmp_path:
     binned.save(binned_path)
     loaded_binned = AdaOPS.load(binned_path)
     assert loaded_binned.config_id == binned.config_id
-    assert loaded_binned._state_binner(ROOT) == ROOT
+    assert cast(AdaOPS, loaded_binned)._state_binner(ROOT) == ROOT
 
     path = tmp_path / "search.json"
     planner.export_search_state(path)
@@ -183,7 +193,7 @@ def test_configuration_identity_reset_pickle_and_snapshot_immutability(tmp_path:
 def test_budget_boundaries_and_metrics_reset_between_calls():
     zero = _planner(n_simulations=0)
     actions, run_data = zero.action(chain_belief(ROOT))
-    assert actions[0] in zero.environment.get_actions()
+    assert actions[0] in cast(ChainEnv, zero.environment).get_actions()
     metrics = {item.name: item.value for item in run_data.info_variables}
     assert metrics[AdaOPSMetrics.N_TRIALS.value] == 0
     assert metrics[AdaOPSMetrics.STOPPED_BY_TRIALS.value] == 1
@@ -209,3 +219,128 @@ def test_metrics_survive_the_simulation_history_record_shape():
     persisted = {item.name: item.value for item in restored.policy_run_data[0].info_variables}
     assert persisted == original
     assert set(persisted) == set(AdaOPS.get_info_variable_names())
+
+
+# ---------------------------------------------------------------------------
+# Regression tests for the 2026-09-08 review findings
+# ---------------------------------------------------------------------------
+
+
+class _SamplerOnlyBelief:
+    """A belief that can only be sampled from -- no ``particles`` list.
+
+    This is the branch ``_root_particles`` falls back to, and the one no
+    existing fixture reached, which is how the global-RNG leak stayed hidden.
+    """
+
+    particles = None
+
+    def __init__(self, state=ROOT):
+        self._state = state
+        self.samples = 0
+
+    def sample(self, n_samples: int = 1):
+        del n_samples
+        self.samples += 1
+        # The particle carries the uniform it was drawn with, so a test can see
+        # which random stream the draw actually ran on.
+        return (self._state, round(float(np.random.random()), 12))
+
+
+def test_particle_less_belief_does_not_leak_into_the_global_rng():
+    """Sampling a belief with no particle list must restore global state."""
+    np.random.seed(1234)
+    import random as _random
+
+    _random.seed(1234)
+    expected_np = np.random.get_state()[1].copy()
+    expected_pos = np.random.get_state()[2]
+    expected_py = _random.getstate()
+    untouched_next_draw = float(np.random.random())
+    np.random.seed(1234)
+    _random.seed(1234)
+
+    planner = _planner()
+    planner._call_index = 0
+    planner._particle_rng = np.random.default_rng(planner.random_seed)
+    planner._scenario_rng = planner._particle_rng
+    belief = _SamplerOnlyBelief()
+    particles, weights = planner._root_particles(belief)
+
+    assert belief.samples == planner.max_particles
+    assert len(particles) == len(weights) >= planner.min_particles
+    # Compare the whole Mersenne state, position included: a restore that put
+    # back the key but not the position would pass a prefix-only check.
+    assert np.random.get_state()[1].tolist() == expected_np.tolist()
+    assert np.random.get_state()[2] == expected_pos
+    assert _random.getstate() == expected_py, "python random stream was perturbed"
+    # The decisive check: the caller's next draw is the one it would have got
+    # had the planner never run.
+    np.random.seed(1234)
+    _random.seed(1234)
+    assert float(np.random.random()) == pytest.approx(untouched_next_draw)
+
+
+def test_particle_less_root_depends_on_the_planner_seed_not_the_caller_stream():
+    """The root draw must come from the planner's own generator.
+
+    The two calls below differ only in the caller's global numpy seed. If the
+    draw still ran on the unseeded global stream the particles would track that
+    caller seed instead of ``random_seed``.
+    """
+
+    def draw(planner_seed, caller_seed):
+        planner = _planner(random_seed=planner_seed)
+        planner._call_index = 0
+        planner._particle_rng = np.random.default_rng(planner_seed)
+        planner._scenario_rng = planner._particle_rng
+        np.random.seed(caller_seed)
+        return planner._root_particles(_SamplerOnlyBelief())[0]
+
+    assert draw(11, 999) == draw(11, 4242), "root particles tracked the caller's RNG"
+    assert draw(11, 999) != draw(31, 999), "root particles ignored the planner seed"
+
+
+class _TerminalStringObsEnv(ChainEnv):
+    """A ChainEnv whose real observation for ``next`` is the text ``<terminal>``.
+
+    ``END`` is terminal, so one particle takes AdaOPS's terminal branch while
+    the other emits an observation whose *string* value used to be the terminal
+    bucket's key. The two must stay separate branches.
+    """
+
+    TEXT = "<terminal>"
+
+    def sample_observation(self, next_state, action, n_samples: int = 1):
+        del action
+        observation = self.TEXT if next_state == END else next_state
+        return observation if n_samples == 1 else [observation] * n_samples
+
+    def observation_log_probability(self, next_state, action, observations):
+        del action
+        expected = self.TEXT if next_state == END else next_state
+        return np.array(
+            [0.0 if obs == expected else -50.0 for obs in observations], dtype=np.float64
+        )
+
+
+def test_terminal_bucket_does_not_swallow_a_matching_string_observation():
+    """A real ``"<terminal>"`` observation must not merge into the terminal
+    bucket (review finding 6)."""
+    from POMDPPlanners.planners.scenario_tree_planners.despot import TERMINAL_OBSERVATION
+
+    environment = _TerminalStringObsEnv(discount_factor=0.5, terminal_states=(END,))
+    planner = _planner(environment=environment, n_simulations=1)
+    # One terminal particle and one live particle whose observation is the text.
+    belief = WeightedParticleBelief(particles=[END, NEXT], log_weights=np.array([-1.0, -1.0]))
+    tree, root = planner._learn_tree(belief)
+
+    action_ids = [node for node in tree.children_ids[root]]
+    assert action_ids
+    for action_id in action_ids:
+        keys = [key for (parent, key) in tree.obs_child_lookup if parent == action_id]
+        assert TERMINAL_OBSERVATION in keys, "terminal scenarios lost their own branch"
+        assert (
+            _TerminalStringObsEnv.TEXT in keys
+        ), "the real string observation was merged into the terminal bucket"
+        assert len(set(keys)) == 2
