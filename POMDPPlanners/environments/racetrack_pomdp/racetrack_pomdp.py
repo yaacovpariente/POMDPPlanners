@@ -641,6 +641,18 @@ class RacetrackPOMDP(Environment):
             return None
         return self._session.render_frame()
 
+    def cache_visualization(
+        self, history: List[Any], output_dir: Path, episode_index: int
+    ) -> None:
+        """Save a recorded episode without querying or advancing the live simulator."""
+        from POMDPPlanners.environments.racetrack_pomdp.racetrack_visualizer import (
+            RacetrackVisualizer,
+        )
+
+        RacetrackVisualizer(self.max_tracked_agents).save(
+            history, output_dir / f"agent_path_{episode_index}.gif"
+        )
+
     def _reset(self) -> np.ndarray:
         session = self._get_session()
         if self.seed is not None and not self._seeded:

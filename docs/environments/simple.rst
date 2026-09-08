@@ -56,6 +56,16 @@ discovers that reversing first is what wins.
    next_state = env.sample_next_state(state, 1)
    print(state, next_state, env.sample_observation(next_state, 1))
 
+.. figure:: ../images/mountaincar_recorded_history.gif
+   :alt: Three MountainCar history frames showing the car on the hill, noisy observations, particle and Gaussian beliefs, and the terminal goal state.
+   :width: 800px
+
+   Package-rendered example of three supplied history rows, with recorded
+   states ``[position, velocity]`` of ``[-0.95, -0.02]``, ``[-0.15, 0.03]``,
+   and ``[0.50, -0.01]``. The first two rows show noisy observations and
+   particle then Gaussian beliefs; the last is a terminal row at the goal.
+   These rows illustrate the renderer, not a continuous simulated rollout.
+
 See also
 --------
 
