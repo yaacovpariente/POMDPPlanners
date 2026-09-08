@@ -36,7 +36,7 @@ def test_terminal_bookkeeping_keeps_final_state_once(tmp_path):
     RacetrackVisualizer(1).save(history, output)
 
     with Image.open(output) as decoded:
-        assert decoded.n_frames == 2
+        assert getattr(decoded, "n_frames") == 2
 
 
 def test_normal_history_adds_last_successor_and_can_save_still(tmp_path):
@@ -50,7 +50,7 @@ def test_normal_history_adds_last_successor_and_can_save_still(tmp_path):
     visualizer.save(history, still)
 
     with Image.open(animation) as decoded:
-        assert decoded.n_frames == 3
+        assert getattr(decoded, "n_frames") == 3
         decoded.seek(2)
         final_animation = decoded.convert("RGB")
     with Image.open(still) as decoded_still:
@@ -66,7 +66,7 @@ def test_package_hook_uses_history_without_live_calls(tmp_path):
     env.cache_visualization([_step(state, state)], tmp_path, 4)
 
     with Image.open(tmp_path / "agent_path_4.gif") as decoded:
-        assert decoded.n_frames == 2
+        assert getattr(decoded, "n_frames") == 2
     env.render_frame.assert_not_called()
 
 
