@@ -692,3 +692,102 @@ def test_exporting_before_any_search_is_an_error_not_an_empty_file():
     with tempfile.TemporaryDirectory() as tmpdir:
         with pytest.raises(ValueError, match="no search state"):
             planner.export_search_state(Path(tmpdir) / "dump.json")
+
+
+def test_eta_is_an_excess_uncertainty_parameter_not_a_fraction_of_the_initial_gap():
+    """Pin what ``eta`` actually does, because the docstring once said otherwise.
+
+    Purpose: The stopping test is the paper's excess uncertainty at the root,
+        ``E(b0) = (u - l) - eta (u - l) = (1 - eta)(u - l)``. Nothing stores the
+        gap's *starting* width, so a search does not stop when the gap has
+        halved at ``eta = 0.5``; it stops when the residual reaches numerical
+        noise. A reader who believes the old wording would pick ``eta`` wrongly.
+
+    Given: A planner with ``eta = 0.5`` and a hand-set root interval.
+    When: ``_should_stop`` is asked at gaps of 1.0, 0.5 and ``TINY``.
+    Then: Only the last stops, and ``eta`` scales the absolute threshold.
+
+    Test type: unit
+    """
+    from POMDPPlanners.planners.scenario_tree_planners.despot import TINY
+
+    environment = ChainEnv(discount_factor=0.5)
+    planner = _planner(environment, discount_factor=0.5, eta=0.5, n_simulations=1)
+    tree, root = planner._learn_tree(chain_belief(ROOT))
+    planner._gap_closed = False
+    planner._stalled = False
+
+    def gap_stops(gap: float) -> bool:
+        tree.lower_confidence_bound[root] = 0.0
+        tree.upper_confidence_bound[root] = gap
+        planner._gap_closed = False
+        return planner._should_stop(tree=tree, root_id=root)
+
+    assert not gap_stops(1.0)
+    # Half of the starting width: the old docstring implied this stops. It does not.
+    assert not gap_stops(0.5)
+    # The real threshold is TINY / (1 - eta).
+    assert gap_stops(TINY / (1.0 - planner.eta) * 0.999)
+    assert not gap_stops(TINY / (1.0 - planner.eta) * 1.001)
+
+
+def test_eta_scales_the_per_depth_weighted_excess_uncertainty_target():
+    """``eta`` is not inert: it sets the WEU target every branch is judged by.
+
+    Purpose: Rejecting the review's claim that ``eta`` "barely changes"
+        anything needs the other half of equation (5) pinned -- the
+        ``eta * root_gap * gamma^(-d)`` target used to pick an observation
+        branch.
+
+    Given: Two planners identical but for ``eta``.
+    When: The same action node's branch score is computed.
+    Then: The larger ``eta`` yields the smaller (more forgiving) score.
+
+    Test type: unit
+    """
+    environment = ChainEnv(discount_factor=0.5)
+    planner = _planner(environment, discount_factor=0.5, eta=0.1, n_simulations=2)
+    tree, root = planner._learn_tree(chain_belief(ROOT))
+    action_id = tree.children_ids[root][0]
+    tree.lower_confidence_bound[root] = 0.0
+    tree.upper_confidence_bound[root] = 10.0
+
+    # One tree, one node, only ``eta`` changed, so nothing else can explain a
+    # difference in the score.
+    scores = {}
+    for eta in (0.1, 0.9):
+        planner.eta = eta
+        scores[eta] = planner._best_excess_uncertainty_child(tree, action_id)[1]
+
+    child_id = tree.children_ids[action_id][0]
+    width = tree.upper_confidence_bound[child_id] - tree.lower_confidence_bound[child_id]
+    weight = tree.weight[child_id] / tree.weight[action_id]
+    gamma = planner.discount_factor
+    depth = tree.data[child_id].depth
+    for eta, score in scores.items():
+        expected = weight * (width - eta * 10.0 * gamma ** (-depth))
+        assert score == pytest.approx(expected), f"WEU at eta={eta} is not equation (5)"
+    assert scores[0.9] < scores[0.1], "eta does not move the branch-selection target"
+
+
+def test_the_terminal_observation_sentinel_survives_copy_and_pickle():
+    """Identity matching only works if the singleton stays a singleton.
+
+    Purpose: AdaOPS and DESPOT both key their terminal branch on ``is``. A
+        planner is pickled into worker processes and its tree is deep-copied
+        for a search-state snapshot, so a sentinel that copies into a new
+        instance would silently stop matching and terminal scenarios would be
+        treated as a real observation named ``<terminal>``.
+
+    Test type: unit
+    """
+    import copy as copy_module
+    import pickle as pickle_module
+
+    from POMDPPlanners.planners.scenario_tree_planners.despot import TERMINAL_OBSERVATION
+
+    assert copy_module.copy(TERMINAL_OBSERVATION) is TERMINAL_OBSERVATION
+    assert copy_module.deepcopy(TERMINAL_OBSERVATION) is TERMINAL_OBSERVATION
+    assert pickle_module.loads(pickle_module.dumps(TERMINAL_OBSERVATION)) is TERMINAL_OBSERVATION
+    nested = pickle_module.loads(pickle_module.dumps({"o": [TERMINAL_OBSERVATION]}))
+    assert nested["o"][0] is TERMINAL_OBSERVATION

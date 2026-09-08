@@ -103,7 +103,7 @@ def test_contract_rejects_empty_actions_missing_bounds_and_factored(monkeypatch)
     with pytest.raises(HypDESPOTCompatibilityError, match="factored"):
         validate_cuda_contract(model, [0], torch.device("cuda:0"))
     model.supports_factored_step = False
-    model.leaf_bounds = None
+    model.leaf_bounds = None  # type: ignore[assignment]
     with pytest.raises(HypDESPOTCompatibilityError, match="leaf_bounds"):
         validate_cuda_contract(model, [0], torch.device("cuda:0"))
 
@@ -256,3 +256,111 @@ def test_cuda_batch_has_real_leaf_action_scenario_work_and_masks():
     expected = states[0][0, 0] + 0 + (0 + 7) * 0.01
     assert result.rewards[0].item() == pytest.approx(expected.item(), abs=1e-6)
     assert bool(result.terminal.any())
+
+
+# ---------------------------------------------------------------------------
+# Regression tests for the 2026-09-08 review findings
+# ---------------------------------------------------------------------------
+
+
+class _EnvironmentWithoutModel(_Environment):
+    """Environment that carries no ``hyp_despot_cuda_model`` of its own.
+
+    The documented way to plan on such an environment is the explicit
+    ``model=`` argument, so this is the fixture that exposes whether the
+    planner survives a pickle round trip on that path.
+    """
+
+    def __init__(self):  # pylint: disable=super-init-not-called
+        pass
+
+
+class _ForeignModel(_Model):
+    """A second, distinguishable model, to catch a silent substitution."""
+
+
+def test_normalize_cuda_device_matches_indexed_and_bare_cuda():
+    """``cuda`` and ``cuda:0`` name the same GPU (review finding 4)."""
+    from POMDPPlanners.planners.scenario_tree_planners.hyp_despot_cuda import (
+        normalize_cuda_device,
+    )
+
+    assert normalize_cuda_device(torch.device("cuda")) == torch.device("cuda", 0)
+    assert normalize_cuda_device("cuda") == normalize_cuda_device(torch.device("cuda:0"))
+    # Non-CUDA devices are returned untouched, so the CPU/MPS rejections stand.
+    assert normalize_cuda_device(torch.device("cpu")) == torch.device("cpu")
+    assert normalize_cuda_device(torch.device("cuda:1")) == torch.device("cuda", 1)
+
+
+def test_contract_accepts_bare_cuda_planner_device_against_indexed_model(monkeypatch):
+    """A ``device="cuda"`` planner and a ``cuda:0`` model are a valid pair."""
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(torch.version, "cuda", "12.1")
+    validate_cuda_contract(_Model("cuda:0"), [0], torch.device("cuda"))
+    validate_cuda_contract(_Model("cuda"), [0], torch.device("cuda:0"))
+
+
+def test_pickle_keeps_the_explicit_model_when_the_environment_has_none(monkeypatch):
+    """An explicit ``model=`` must survive pickling (review finding 3)."""
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(torch.version, "cuda", "12.1")
+    model = _Model("cuda:0")
+    planner = HypDESPOT(
+        _EnvironmentWithoutModel(), 0.9, 3, "hyp", n_scenarios=2, n_traversals=2, model=model
+    )
+    restored = pickle.loads(pickle.dumps(planner))
+    assert isinstance(restored._model, _Model)
+    assert restored._model_override is not None
+
+
+def test_pickle_does_not_swap_an_explicit_model_for_an_unrelated_environment_one(monkeypatch):
+    """The environment's model must not silently replace an explicit one."""
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(torch.version, "cuda", "12.1")
+    environment = _Environment()  # carries its own, different, model
+    explicit = _ForeignModel("cuda:0")
+    planner = HypDESPOT(environment, 0.9, 3, "hyp", n_scenarios=2, n_traversals=2, model=explicit)
+    assert planner._model is explicit
+    restored = pickle.loads(pickle.dumps(planner))
+    assert isinstance(restored._model, _ForeignModel), "explicit model was swapped on unpickle"
+
+
+def test_pickle_still_re_resolves_the_environment_supplied_model(monkeypatch):
+    """When the model came from the environment it is re-resolved, not copied."""
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(torch.version, "cuda", "12.1")
+    environment = _Environment()
+    planner = HypDESPOT(
+        environment,
+        0.9,
+        3,
+        "hyp",
+        n_scenarios=2,
+        n_traversals=2,
+        model=environment.hyp_despot_cuda_model,
+    )
+    state = planner.__getstate__()
+    assert state["_model_override"] is None, "environment-owned model should not travel"
+    restored = pickle.loads(pickle.dumps(planner))
+    assert restored._model is restored.environment.hyp_despot_cuda_model
+
+
+def test_bare_cuda_resolves_to_the_process_current_device_not_hard_coded_zero(monkeypatch):
+    """A bare ``cuda`` names the current device, so the one-GPU guard still bites.
+
+    On a box where ``torch.cuda.set_device(1)`` has run, ``torch.device("cuda")``
+    means ``cuda:1``. Filling in ``0`` regardless would let that configuration
+    pass the "one GPU only" check and then fail later against tensors on the
+    other GPU, with a message naming the wrong device.
+    """
+    from POMDPPlanners.planners.scenario_tree_planners.hyp_despot_cuda import (
+        normalize_cuda_device,
+    )
+
+    monkeypatch.setattr(torch.cuda, "current_device", lambda: 1)
+    assert normalize_cuda_device(torch.device("cuda")) == torch.device("cuda", 1)
+
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(torch.version, "cuda", "12.1")
+    with pytest.raises(HypDESPOTCompatibilityError, match="one GPU"):
+        validate_cuda_contract(_Model("cuda:1"), [0], torch.device("cuda"))

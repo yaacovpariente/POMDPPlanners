@@ -25,9 +25,35 @@ class CUDAExpansionResult:
     kernel_device_index: int
 
 
+def normalize_cuda_device(device: torch.device | str) -> torch.device:
+    """Give a CUDA device an explicit index so ``==`` compares like for like.
+
+    ``torch.device("cuda")`` carries index ``None`` while every tensor's
+    ``.device`` carries an explicit ``0``; the two name the same GPU but are
+    not equal in PyTorch. Normalizing once at the boundary keeps the contract
+    checks from rejecting a valid configuration.
+
+    A bare ``cuda`` resolves to the process's *current* device, not to ``0``,
+    so that is what is filled in. Hard-coding ``0`` would let a planner on a
+    box where ``torch.cuda.set_device(1)`` has run slip past the single-GPU
+    guard below and then fail much later with a message naming the wrong GPU.
+    """
+    resolved: torch.device = device if isinstance(device, torch.device) else torch.device(device)
+    if resolved.type == "cuda" and resolved.index is None:
+        try:
+            index = int(torch.cuda.current_device())
+        except (RuntimeError, AssertionError):
+            # No usable CUDA runtime. The availability check rejects this
+            # anyway; assume 0 so the comparison stays well defined.
+            index = 0
+        return torch.device("cuda", index)
+    return resolved
+
+
 def validate_cuda_contract(
     model: HypDESPOTCUDAmodel, actions: Sequence[object], device: torch.device
 ) -> None:
+    device = normalize_cuda_device(device)
     if not torch.cuda.is_available():
         raise HypDESPOTCompatibilityError("HypDESPOT requires CUDA PyTorch and an NVIDIA GPU")
     if torch.version.cuda is None:
@@ -38,7 +64,8 @@ def validate_cuda_contract(
         raise HypDESPOTCompatibilityError("HypDESPOT model.device must be a CUDA device")
     if device.index not in (None, 0):
         raise HypDESPOTCompatibilityError("HypDESPOT supports one GPU only (cuda:0)")
-    if getattr(model, "device", None) != device:
+    model_device = getattr(model, "device", None)
+    if model_device is None or normalize_cuda_device(model_device) != device:
         raise HypDESPOTCompatibilityError("model.device must exactly match the planner CUDA device")
     if not actions:
         raise HypDESPOTCompatibilityError(
@@ -70,7 +97,8 @@ def _tensor(
             f"{name} must be a torch.Tensor; host values are forbidden"
         )
     tensor: Tensor = value
-    if tensor.device != device:
+    device = normalize_cuda_device(device)
+    if normalize_cuda_device(tensor.device) != device:
         raise HypDESPOTCompatibilityError(
             f"{name} must remain on {device}; hidden host/device copies are forbidden"
         )
@@ -95,7 +123,7 @@ def expand_cuda_leaves(
     """Evaluate all Cartesian leaf/action/scenario rows in one device batch."""
     if not leaf_states:
         raise ValueError("leaf_states must not be empty")
-    device, width = model.device, leaf_states[0].shape[1]
+    device, width = normalize_cuda_device(model.device), leaf_states[0].shape[1]
     states_parts, id_parts, leaf_parts, action_parts, scenario_parts = [], [], [], [], []
     for leaf_index, (states, ids) in enumerate(zip(leaf_states, leaf_scenario_ids)):
         _tensor(states, "leaf states", device, states.shape[0])
@@ -184,5 +212,6 @@ __all__ = [
     "CUDAExpansionResult",
     "HypDESPOTCompatibilityError",
     "expand_cuda_leaves",
+    "normalize_cuda_device",
     "validate_cuda_contract",
 ]

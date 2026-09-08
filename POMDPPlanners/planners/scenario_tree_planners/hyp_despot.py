@@ -574,9 +574,28 @@ class HypDESPOT(Policy):
         return copy.deepcopy(self._last_snapshot)
 
     def __getstate__(self):
+        """Drop the lock and the tree; keep an explicit model override.
+
+        ``_model`` itself is re-resolved on unpickling rather than stored,
+        which avoids a second reference to the same object -- the environment
+        is in the state and already carries it. An explicit ``model=``
+        argument is different: it is the only record of which model this
+        planner was built with, so it has to travel, or the restored planner
+        silently binds to whatever the environment happens to expose. The one
+        exception is the case where the two are the same object, where storing
+        it would pickle the model twice and break the ``is`` relationship on
+        the way back.
+        """
         state = self.__dict__.copy()
-        for key in ("_tree_lock", "_nodes", "_model", "_model_override", "_last_snapshot"):
+        for key in ("_tree_lock", "_nodes", "_model", "_last_snapshot"):
             state.pop(key, None)
+        if state.get("_model_override") is not None and state["_model_override"] is getattr(
+            self.environment, "hyp_despot_cuda_model", None
+        ):
+            state["_model_override"] = None
+            state["_model_override_from_environment"] = True
+        else:
+            state["_model_override_from_environment"] = False
         return state
 
     def __setstate__(self, state):
@@ -584,11 +603,19 @@ class HypDESPOT(Policy):
             setattr(self, key, value)
         self._tree_lock = threading.RLock()
         self._last_snapshot = None
-        resolved_model = getattr(self.environment, "hyp_despot_cuda_model", None)
+        from_environment = getattr(self, "_model_override_from_environment", False)
+        override = getattr(self, "_model_override", None)
+        resolved_model = (
+            override
+            if override is not None
+            else getattr(self.environment, "hyp_despot_cuda_model", None)
+        )
         if resolved_model is None:
             raise HypDESPOTCompatibilityError(
                 "unpickled environment must expose hyp_despot_cuda_model"
             )
+        if from_environment:
+            self._model_override = resolved_model
         self._model = cast(HypDESPOTCUDAmodel, resolved_model)
         validate_cuda_contract(self._model, self._actions, torch.device(self.device))
         self._reset_transient()

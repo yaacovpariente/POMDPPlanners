@@ -3163,3 +3163,32 @@ class TestHyperParamRunnerUseCases:
             assert optimization_results[0].environment == env
             assert optimization_results[0].environment.name == "RealTiger"
             assert results["summary"]["environment_name"] == "RealTiger"
+
+
+def test_compatible_planner_docstring_matches_the_live_registry():
+    """The pinned example list must equal what the function really returns.
+
+    Purpose: The docstring's example is executed as a doctest in CI, but only
+        inside Docker. Every new planner that is Tiger-compatible silently
+        invalidates it -- that is how ``AdaOPS`` and ``HypDESPOT`` were left
+        out. This test fails in the plain local suite the moment the two drift.
+
+    Test type: unit
+    """
+    import re
+
+    from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+    from POMDPPlanners.utils.hyperparameter_tuning_and_eval import (
+        get_benchmark_hyperparameter_planners,
+    )
+
+    docstring = get_benchmark_hyperparameter_planners.__doc__ or ""
+    match = re.search(r"Compatible planners: (\[[^\]]*\])", docstring)
+    assert match, "the docstring no longer pins an example planner list"
+    documented = [name.strip().strip("'\"") for name in match.group(1)[1:-1].split(",")]
+
+    actual = [
+        planner.__name__
+        for planner in get_benchmark_hyperparameter_planners(TigerPOMDP(discount_factor=0.95))
+    ]
+    assert documented == actual
