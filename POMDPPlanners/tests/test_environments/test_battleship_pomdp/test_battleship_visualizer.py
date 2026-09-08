@@ -250,10 +250,10 @@ class TestLabels:
         try:
             agent = self._legend_entries(axes[0])
             assert agent == {
-                "not probed yet": "#c9ccd1",
-                "probed - water (miss)": "#2f6fb5",
-                "probed - ship (hit)": "#c0392b",
-                "probing now - result not on the board yet": "#ffd21f",
+                "not probed yet": "#e5edf1",
+                "probed - water (miss)": "#c5e1e9",
+                "probed - ship (hit)": "#bf4b36",
+                "probing now - result not on the board yet": "#e7a624",
             }
             # The agent panel's fills are the colormap the panel is drawn with,
             # so a recoloured board cannot drift away from its own legend.
@@ -271,11 +271,11 @@ class TestLabels:
             belief = self._legend_entries(axes[1])
             colormap = artists["belief"].get_cmap()
             assert (
-                belief["100% - almost certainly a ship"]
+                belief["100% - certainly a ship"]
                 == to_hex(colormap(1.0))
             )
             assert (
-                belief["0% - almost certainly water"]
+                belief["0% - certainly water"]
                 == to_hex(colormap(0.0))
             )
 
@@ -464,3 +464,69 @@ class TestOutput:
         """
         with pytest.raises(ValueError, match=r"\.gif"):
             BattleshipVisualizer(env).create_visualization(episode, tmp_path / "x.mp4")
+
+
+class TestRedesign:
+    """Check the visible marks against data and measure the saved layout."""
+
+    def test_boards_have_equal_size(self, env):
+        visualizer = BattleshipVisualizer(env)
+        fig, axes, _ = visualizer._setup_figure()
+        try:
+            visualizer._apply_layout(fig)
+            fig.canvas.draw()
+            boxes = [ax.get_window_extent() for ax in axes]
+            assert np.allclose([box.width for box in boxes], boxes[0].width)
+            assert np.allclose([box.height for box in boxes], boxes[0].height)
+            assert boxes[0].width >= 350
+        finally:
+            plt.close(fig)
+
+    def test_symbols_and_numbers_follow_each_record(self, env, episode):
+        visualizer = BattleshipVisualizer(env)
+        frames = visualizer._build_frames(episode)
+        fig, axes, artists = visualizer._setup_figure()
+        try:
+            animate = visualizer._animation_function(frames, axes, artists)
+            for index, frame in enumerate(frames):
+                animate(index)
+                assert [patch.get_visible() for patch in artists["ship_cells"]] == list(
+                    frame["truth"].astype(bool).flat)
+                for key, code in (("hit_marks", _HIT), ("miss_marks", _MISS)):
+                    rows, cols = np.nonzero(frame["agent_view"] == code)
+                    np.testing.assert_array_equal(artists[key].get_offsets(),
+                                                  np.column_stack((cols, rows)))
+                assert [text.get_text() for text in artists["probabilities"]] == [
+                    f"{probability:.0%}" for probability in frame["belief"].flat]
+                if frame["action"] is not None:
+                    row, col = divmod(int(frame["action"]), env.board_size)
+                    np.testing.assert_array_equal(artists["probe_marker"].get_offsets(), [[col, row]])
+                    assert f"{float(frame['reward']):+.2f}" in artists["caption"].get_text()
+                else:
+                    assert artists["probe_marker"].get_offsets().shape == (0, 2)
+        finally:
+            plt.close(fig)
+
+    def test_missing_belief_is_not_zero_probability(self, env, episode):
+        visualizer = BattleshipVisualizer(env)
+        frames = visualizer._build_frames(episode)
+        frames[0]["belief"][:] = np.nan
+        fig, axes, artists = visualizer._setup_figure()
+        try:
+            visualizer._animation_function(frames, axes, artists)(0)
+            assert all(text.get_text() == "—" for text in artists["probabilities"])
+            assert to_hex(artists["belief"].get_cmap()(np.nan)) != to_hex(
+                artists["belief"].get_cmap()(0.0))
+        finally:
+            plt.close(fig)
+
+    def test_decoded_gif_keeps_records_and_pacing(self, env, episode, tmp_path):
+        from PIL import Image
+        path = tmp_path / "review.gif"
+        BattleshipVisualizer(env).create_visualization(episode, path)
+        with Image.open(path) as gif:
+            assert gif.n_frames == len(episode)
+            assert gif.size == (1500, 850)
+            for index in range(gif.n_frames):
+                gif.seek(index)
+                assert gif.info["duration"] == (2400 if index == len(episode)-1 else 1400)

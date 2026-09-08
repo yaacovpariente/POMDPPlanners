@@ -35,14 +35,15 @@ Classes:
 """
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Tuple, cast
+from typing import TYPE_CHECKING, Any, Dict, List, Tuple
 
 import numpy as np
-from matplotlib import animation
 from matplotlib.axes import Axes
-from matplotlib.colors import ListedColormap
+from matplotlib.colors import ListedColormap, LinearSegmentedColormap
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
+from matplotlib.patches import FancyBboxPatch
+from PIL import Image
 import matplotlib.pyplot as plt
 
 from POMDPPlanners.core.simulation import StepData
@@ -58,7 +59,7 @@ _UNKNOWN = 0
 _MISS = 1
 _HIT = 2
 
-_AGENT_VIEW_COLORS = ("#c9ccd1", "#2f6fb5", "#c0392b")
+_AGENT_VIEW_COLORS = ("#e5edf1", "#c5e1e9", "#bf4b36")
 _AGENT_VIEW_LABELS = (
     "not probed yet",
     "probed - water (miss)",
@@ -66,8 +67,8 @@ _AGENT_VIEW_LABELS = (
 )
 
 # Marks drawn on top of the boards.
-_PROBE_RING_COLOR = "#ffd21f"
-_PROBED_CROSS_COLOR = "#c0392b"
+_PROBE_RING_COLOR = "#e7a624"
+_PROBED_CROSS_COLOR = "#f5ad76"
 
 # Panel headings. Each is a short name plus one plain sentence, because the
 # name alone ("Belief") does not tell a reader what the picture is of.
@@ -77,16 +78,11 @@ _PANEL_HEADINGS = (
     ("Ground truth", "actual ship layout, hidden from the agent"),
 )
 
-_TITLE_FONTSIZE = 12
-_SUBTITLE_FONTSIZE = 9.5
 _LEGEND_FONTSIZE = 9
-_CAPTION_FONTSIZE = 11
-_AXIS_LABEL_FONTSIZE = 9.5
 
 # Legend swatches sit on a light panel, so every one carries a thin dark edge;
 # without it the pale "not probed yet" grey and the yellow ring vanish.
 _LEGEND_EDGE = "#333333"
-_LEGEND_FACE = "#f2f3f5"
 
 
 class BattleshipVisualizer:
@@ -217,119 +213,124 @@ class BattleshipVisualizer:
         inside the panel it explains.
         """
         ax.legend(
-            handles=handles, loc="upper center", bbox_to_anchor=(0.5, -0.16),
+            handles=handles, loc="upper center", bbox_to_anchor=(0.5, -0.17),
             ncol=1, fontsize=_LEGEND_FONTSIZE, frameon=True,
-            facecolor=_LEGEND_FACE, edgecolor="#d0d3d8", framealpha=1.0,
+            facecolor="white", edgecolor="white", framealpha=1.0,
             handletextpad=0.5, labelspacing=0.45, borderpad=0.6,
         )
 
     def _setup_figure(self) -> Tuple[Figure, List[Axes], Dict[str, Any]]:
-        fig_temp, axes_temp = plt.subplots(1, 3, figsize=(15.0, 6.6))
-        fig = cast(Figure, fig_temp)
-        axes = [cast(Axes, ax) for ax in np.atleast_1d(axes_temp).ravel()]
-
-        agent_cmap = ListedColormap(_AGENT_VIEW_COLORS)
-        blank = np.zeros((self.board_size, self.board_size))
-
+        """Build equal-sized boards with a separate header, keys and outcome strip."""
+        fig = plt.figure(figsize=(15, 8.5), facecolor="#f3f5f4")
+        axes = []
+        ink, muted = "#193746", "#526c78"
+        fig.text(0.045, 0.945, "BATTLESHIP", fontsize=25, weight="bold", color=ink)
+        fig.text(0.045, 0.902, "Search a hidden fleet  /  compare evidence, belief and reality",
+                 fontsize=12, color=muted)
         artists: Dict[str, Any] = {}
-        artists["agent"] = axes[0].imshow(
-            blank, cmap=agent_cmap, vmin=_UNKNOWN, vmax=_HIT, interpolation="nearest"
-        )
-        artists["belief"] = axes[1].imshow(
-            blank, cmap="viridis", vmin=0.0, vmax=1.0, interpolation="nearest"
-        )
-        artists["truth"] = axes[2].imshow(
-            blank, cmap="Greys", vmin=0.0, vmax=1.0, interpolation="nearest"
-        )
-
-        # White cell separators read well on the coloured panels, but the truth
-        # panel draws water as white, where a white grid disappears.
-        grid_colors = ("white", "white", "#b6bac0")
-        for ax, (name, description), grid_color in zip(axes, _PANEL_HEADINGS, grid_colors):
-            ax.set_title(name, fontsize=_TITLE_FONTSIZE, fontweight="bold", pad=22)
-            ax.text(
-                0.5, 1.035, description, transform=ax.transAxes, ha="center",
-                va="bottom", fontsize=_SUBTITLE_FONTSIZE, color="#444444",
-            )
-            ax.set_xlabel("column", fontsize=_AXIS_LABEL_FONTSIZE)
-            ax.set_ylabel("row", fontsize=_AXIS_LABEL_FONTSIZE)
+        artists["status"] = fig.text(0.955, 0.943, "", ha="right", fontsize=15,
+                                      weight="bold", color=ink)
+        artists["phase"] = fig.text(0.955, 0.903, "Boards show the state before this probe",
+                 ha="right", fontsize=11, color=muted)
+        for i, (name, description) in enumerate(_PANEL_HEADINGS):
+            left = 0.025 + i * 0.325
+            card = FancyBboxPatch((left, 0.20), 0.31, 0.65,
+                                 boxstyle="round,pad=0.005,rounding_size=0.015",
+                                 transform=fig.transFigure, facecolor="white",
+                                 edgecolor="#d8e2e5", linewidth=1, zorder=-1)
+            fig.add_artist(card)
+            ax = fig.add_axes((left + 0.036, 0.395, 0.24, 0.424))
+            axes.append(ax)
+            ax.set_title(name, fontsize=15, fontweight="bold", color=ink, pad=32)
+            ax.text(0.5, 1.035, description, transform=ax.transAxes, ha="center",
+                    va="bottom", fontsize=9, color=muted)
+            ax.set_xlabel("column", fontsize=9, color=muted, labelpad=2)
+            ax.set_ylabel("row", fontsize=9, color=muted, labelpad=2)
             ax.set_xticks(range(self.board_size))
             ax.set_yticks(range(self.board_size))
             ax.set_xticks(np.arange(-0.5, self.board_size, 1), minor=True)
             ax.set_yticks(np.arange(-0.5, self.board_size, 1), minor=True)
-            ax.grid(which="minor", color=grid_color, linewidth=1.0)
-            ax.tick_params(which="minor", length=0)
+            ax.grid(which="minor", color="white", linewidth=2)
+            ax.tick_params(which="both", length=0, labelsize=9, colors=muted)
+            for spine in ax.spines.values():
+                spine.set_color("#9bb1bd")
+                spine.set_linewidth(1.2)
 
-        agent_handles = [
-            self._square_handle(color, label)
-            for color, label in zip(_AGENT_VIEW_COLORS, _AGENT_VIEW_LABELS)
-        ]
-        agent_handles.append(
-            Line2D(
-                [0], [0], marker="o", linestyle="", markersize=11,
-                markerfacecolor="none", markeredgecolor=_PROBE_RING_COLOR,
-                markeredgewidth=2.5,
-                label="probing now - result not on the board yet",
-            )
-        )
+        blank = np.zeros((self.board_size, self.board_size))
+        belief_cmap = LinearSegmentedColormap.from_list(
+            "battleship_probability", ["#edf4f2", "#77bcb3", "#125650"]).with_extremes(bad="#dce0e4")
+        for key, ax, cmap, vmax in zip(
+            ("agent", "belief", "truth"), axes,
+            (ListedColormap(_AGENT_VIEW_COLORS), belief_cmap,
+             ListedColormap(("#e4f0f4", "#35576a"))), (2, 1, 1),
+        ):
+            artists[key] = ax.imshow(blank, cmap=cmap, vmin=0, vmax=vmax,
+                                     interpolation="nearest")
+
+        agent_handles = [self._square_handle(color, label)
+                         for color, label in zip(_AGENT_VIEW_COLORS, _AGENT_VIEW_LABELS)]
+        agent_handles.append(Line2D(
+            [0], [0], marker="o", linestyle="", markersize=11,
+            markerfacecolor="none", markeredgecolor=_PROBE_RING_COLOR,
+            markeredgewidth=2.5, label="probing now - result not on the board yet"))
         self._panel_legend(axes[0], agent_handles)
-
-        colorbar = fig.colorbar(artists["belief"], ax=axes[1], fraction=0.046, pad=0.04)
-        colorbar.set_ticks([0.0, 0.25, 0.5, 0.75, 1.0])
+        self._panel_legend(axes[1], [
+            self._square_handle("#125650", "100% - certainly a ship"),
+            self._square_handle("#edf4f2", "0% - certainly water"),
+        ])
+        self._panel_legend(axes[2], [
+            self._square_handle("#35576a", "ship cell"),
+            self._square_handle("#e4f0f4", "water"),
+            Line2D([0], [0], marker="x", linestyle="", markersize=8,
+                   color=_PROBED_CROSS_COLOR, markeredgewidth=1.8, label="already probed"),
+        ])
+        for ax, note in zip(axes, (
+            "Cross = hit; dot = miss",
+            "Cell labels rounded; — = belief unavailable",
+            "Each shape marks one occupied cell",
+        )):
+            ax.text(.5, -.145, note, transform=ax.transAxes, ha="center",
+                    fontsize=9, color=muted)
+        colorbar = fig.colorbar(artists["belief"], cax=fig.add_axes((0.393, 0.205, 0.20, 0.012)),
+                                orientation="horizontal")
+        colorbar.set_ticks([0, .25, .5, .75, 1])
         colorbar.set_ticklabels(["0%", "25%", "50%", "75%", "100%"])
-        colorbar.set_label("chance the cell contains a ship", fontsize=_LEGEND_FONTSIZE)
-        colorbar.ax.tick_params(labelsize=_LEGEND_FONTSIZE)
-        self._panel_legend(
-            axes[1],
-            [
-                self._square_handle("#fde725", "100% - almost certainly a ship"),
-                self._square_handle("#440154", "0% - almost certainly water"),
-            ],
-        )
-
-        self._panel_legend(
-            axes[2],
-            [
-                self._square_handle("#000000", "ship cell"),
-                self._square_handle("#ffffff", "water"),
-                Line2D(
-                    [0], [0], marker="x", linestyle="", markersize=8,
-                    color=_PROBED_CROSS_COLOR, markeredgewidth=1.8,
-                    label="already probed",
-                ),
-            ],
-        )
+        colorbar.ax.tick_params(labelsize=8, length=0, colors=muted)
+        colorbar.set_label("chance the cell contains a ship", fontsize=9, color=muted)
+        colorbar.outline.set_visible(False)
 
         artists["probe_marker"] = axes[0].scatter(
-            [], [], s=180, facecolors="none", edgecolors=_PROBE_RING_COLOR,
-            linewidths=2.5, zorder=5,
-        )
+            [], [], s=380, facecolors="none", edgecolors=_PROBE_RING_COLOR,
+            linewidths=3, zorder=6)
         artists["truth_probe"] = axes[2].scatter(
-            [], [], s=30, marker="x", c=_PROBED_CROSS_COLOR, zorder=5
-        )
+            [], [], s=90, marker="x", c=_PROBED_CROSS_COLOR, linewidths=2, zorder=5)
+        artists["hit_marks"] = axes[0].scatter(
+            [], [], s=85, marker="x", c="white", linewidths=2, zorder=5)
+        artists["miss_marks"] = axes[0].scatter(
+            [], [], s=28, marker="o", c="#376d80", zorder=5)
+        artists["ship_cells"] = []
+        artists["probabilities"] = []
+        for row in range(self.board_size):
+            for col in range(self.board_size):
+                # Occupancy stores ship cells, not identities or orientations.
+                patch = FancyBboxPatch((col-.33, row-.33), .66, .66,
+                                      boxstyle="round,pad=0,rounding_size=0.13",
+                                      facecolor="#35576a", edgecolor="#8facbb",
+                                      linewidth=1.5, zorder=3, visible=False)
+                axes[2].add_patch(patch)
+                artists["ship_cells"].append(patch)
+                text = axes[1].text(col, row, "", ha="center", va="center",
+                                    fontsize=max(5, min(12, 60/self.board_size)), zorder=3)
+                artists["probabilities"].append(text)
         artists["caption"] = fig.text(
-            0.5, 0.055, "", ha="center", va="center", fontsize=_CAPTION_FONTSIZE,
-            linespacing=1.6,
-        )
+            0.5, 0.075, "", ha="center", va="center", fontsize=11,
+            color=ink, linespacing=1.8)
         return fig, axes, artists
 
     @staticmethod
     def _apply_layout(fig: Figure) -> None:
-        """Set the margins the saved frames are drawn with.
-
-        Reserved margins, not tight_layout: the legends and the two-line
-        caption live outside the axes, and a layout solver that ignored them
-        would clip whichever frame happened to have the longest text. The
-        bottom margin has to hold a single-column legend stacked under each
-        panel and still leave the two-line caption clear of it.
-
-        Kept separate from :meth:`_save` so a layout test can measure the same
-        figure the GIF is drawn from instead of restating these numbers.
-
-        Args:
-            fig: The figure to lay out.
-        """
-        fig.subplots_adjust(left=0.05, right=0.97, top=0.85, bottom=0.36, wspace=0.30)
+        """Axes use fixed equal-sized slots so a colorbar cannot shrink a board."""
+        del fig
 
     def _animation_function(
         self, frames: List[Dict[str, Any]], axes: List[Axes], artists: Dict[str, Any]
@@ -341,8 +342,24 @@ class BattleshipVisualizer:
             frame = frames[min(frame_index, len(frames) - 1)]
             artists["agent"].set_data(frame["agent_view"])
             artists["belief"].set_data(frame["belief"])
-            artists["truth"].set_data(frame["truth"])
+            # Water is the base; inset shapes show precisely the occupied cells.
+            artists["truth"].set_data(np.zeros_like(frame["truth"]))
+            for patch, occupied in zip(artists["ship_cells"], frame["truth"].flat):
+                patch.set_visible(bool(occupied))
+            for text, probability in zip(artists["probabilities"], frame["belief"].flat):
+                text.set_text("—" if not np.isfinite(probability) else f"{probability:.0%}")
+                text.set_color("white" if probability > .6 else "#193746")
+                text.set_visible(self.board_size <= 10)
+            for key, code in (("hit_marks", _HIT), ("miss_marks", _MISS)):
+                rows, cols = np.nonzero(frame["agent_view"] == code)
+                artists[key].set_offsets(np.column_stack((cols, rows)))
+            artists["status"].set_text(
+                f"{frame['index'] + 1:02d} / {frame['total']:02d}   |   "
+                f"{frame['hits']} of {num_ship_cells} ship cells found")
 
+            artists["phase"].set_text(
+                "Final recorded state" if frame["action"] is None
+                else "Boards show the state before this probe")
             step_text = f"Step {frame['index'] + 1} of {frame['total']}"
             if frame["action"] is None:
                 # The last recorded step carries no action: the boards are the
@@ -355,7 +372,7 @@ class BattleshipVisualizer:
                 artists["probe_marker"].set_offsets(np.array([[col, row]]))
                 headline = (
                     f"{step_text} - the agent is about to probe "
-                    f"row {row}, column {col} (yellow ring)"
+                    f"row {row}, column {col} (amber ring)"
                 )
                 observation_text = "-" if frame["observation"] is None else (
                     "HIT - a ship is there"
@@ -392,10 +409,16 @@ class BattleshipVisualizer:
         return animate
 
     def _save(self, fig: Figure, animate: Any, num_frames: int, cache_path: Path) -> None:
-        ani = animation.FuncAnimation(
-            fig, animate, frames=num_frames, interval=1000, blit=False, repeat=False
-        )
-        cache_path.parent.mkdir(parents=True, exist_ok=True)
         self._apply_layout(fig)
-        ani.save(cache_path, writer="pillow", fps=1)
-        plt.close(fig)
+        images = []
+        try:
+            for index in range(num_frames):
+                animate(index)
+                fig.canvas.draw()
+                images.append(Image.fromarray(np.asarray(fig.canvas.buffer_rgba()).copy()).convert("RGB"))
+            cache_path.parent.mkdir(parents=True, exist_ok=True)
+            images[0].save(cache_path, save_all=True, append_images=images[1:],
+                           duration=[1400] * (num_frames - 1) + [2400],
+                           loop=0, disposal=2)
+        finally:
+            plt.close(fig)
