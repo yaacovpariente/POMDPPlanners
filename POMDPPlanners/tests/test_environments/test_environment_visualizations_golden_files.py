@@ -93,7 +93,7 @@ from POMDPPlanners.environments.safety_ant_velocity_pomdp.safety_ant_velocity_po
 from POMDPPlanners.environments.safety_ant_velocity_pomdp.safety_ant_velocity_visualizer import (
     SafeAntVelocityVisualizer,
 )
-from POMDPPlanners.environments.t_maze_pomdp.t_maze_pomdp import (
+from POMDPPlanners.environments.maze_pomdp.t_maze_pomdp import (
     GOAL_LEFT,
     GOAL_RIGHT,
     OBSERVATION_EMPTY,
@@ -101,11 +101,11 @@ from POMDPPlanners.environments.t_maze_pomdp.t_maze_pomdp import (
     TMazePOMDP,
     create_t_maze_state,
 )
-from POMDPPlanners.environments.t_maze_pomdp.maze_pomdp import (
+from POMDPPlanners.environments.maze_pomdp.maze_pomdp import (
     ACTION_OFFSETS,
     create_maze_state,
 )
-from POMDPPlanners.environments.t_maze_pomdp.t_maze_visualizer import TMazeVisualizer
+from POMDPPlanners.environments.maze_pomdp.maze_visualizer import MazeVisualizer
 from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
     battleship_pinned_kwargs,
     continuous_laser_tag_pinned_kwargs,
@@ -1289,7 +1289,7 @@ class TestVisualizationConsistency:
         history = create_deterministic_t_maze_episode()
 
         env = TMazePOMDP(discount_factor=0.95, **t_maze_pinned_kwargs())
-        visualizer = TMazeVisualizer(env)
+        visualizer = MazeVisualizer(env)
 
         output_path = temp_output_dir / "t_maze_test.gif"
         visualizer.create_visualization(history, output_path)

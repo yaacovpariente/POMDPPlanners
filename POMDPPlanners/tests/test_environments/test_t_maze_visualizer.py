@@ -30,7 +30,7 @@ import seaborn as sns
 
 from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.simulation import StepData
-from POMDPPlanners.environments.t_maze_pomdp.t_maze_pomdp import (
+from POMDPPlanners.environments.maze_pomdp.t_maze_pomdp import (
     GOAL_LEFT,
     GOAL_RIGHT,
     OBSERVATION_EMPTY,
@@ -38,7 +38,7 @@ from POMDPPlanners.environments.t_maze_pomdp.t_maze_pomdp import (
     TMazePOMDP,
     create_t_maze_state,
 )
-from POMDPPlanners.environments.t_maze_pomdp.t_maze_visualizer import TMazeVisualizer
+from POMDPPlanners.environments.maze_pomdp.maze_visualizer import MazeVisualizer
 from POMDPPlanners.tests.test_utils.env_pinned_kwargs import t_maze_pinned_kwargs
 
 # rcParams the seaborn theme moves and the visualizer must not inherit.
@@ -129,7 +129,7 @@ class TestTMazeVisualizerStyleIsolation:
         Test type: integration
         """
         history = _episode(env)
-        visualizer = TMazeVisualizer(env)
+        visualizer = MazeVisualizer(env)
 
         plt.style.use("default")
         default_gif = tmp_path / "default.gif"
@@ -164,7 +164,7 @@ class TestTMazeVisualizerStyleIsolation:
         before = {key: matplotlib.rcParams[key] for key in _WATCHED_RC_KEYS}
         assert before["axes.grid"] is True, "Precondition: whitegrid turns the grid on."
 
-        TMazeVisualizer(env).create_visualization(_episode(env), tmp_path / "themed.gif")
+        MazeVisualizer(env).create_visualization(_episode(env), tmp_path / "themed.gif")
 
         after = {key: matplotlib.rcParams[key] for key in _WATCHED_RC_KEYS}
         assert after == before, (
@@ -194,7 +194,7 @@ class TestTMazeVisualizerReadout:
         Test type: unit
         """
         history = _episode(env)
-        visualizer = TMazeVisualizer(env)
+        visualizer = MazeVisualizer(env)
         states = [np.asarray(step.state, dtype=np.float64) for step in history]
         actions = [step.action for step in history]
         beliefs = [step.belief for step in history]
@@ -243,7 +243,7 @@ class TestTMazeVisualizerReadout:
         Test type: unit
         """
         history = _episode(env)
-        visualizer = TMazeVisualizer(env)
+        visualizer = MazeVisualizer(env)
         states = [np.asarray(step.state, dtype=np.float64) for step in history]
 
         with plt.style.context(["default"]):
@@ -305,7 +305,7 @@ class TestTMazeVisualizerGeometry:
             if (cell[0] + step[0], cell[1] + step[1]) not in cells
         )
 
-        segments = TMazeVisualizer(env)._boundary_segments()
+        segments = MazeVisualizer(env)._boundary_segments()
 
         assert len(segments) == expected
         for x0, y0, x1, y1 in segments:

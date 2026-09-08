@@ -9,7 +9,7 @@ import pytest
 
 from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.simulation import StepData
-from POMDPPlanners.environments.t_maze_pomdp.maze_pomdp import (
+from POMDPPlanners.environments.maze_pomdp.maze_pomdp import (
     GOAL_LEFT,
     GOAL_RIGHT,
     OBSERVATION_LEFT_CUE,
@@ -17,7 +17,7 @@ from POMDPPlanners.environments.t_maze_pomdp.maze_pomdp import (
     DiscreteMazePOMDP,
     create_maze_state,
 )
-from POMDPPlanners.environments.t_maze_pomdp.t_maze_visualizer import MazeVisualizer
+from POMDPPlanners.environments.maze_pomdp.maze_visualizer import MazeVisualizer
 
 
 def _belief(state):
