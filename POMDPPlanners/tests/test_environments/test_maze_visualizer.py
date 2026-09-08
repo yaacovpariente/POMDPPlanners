@@ -64,9 +64,7 @@ def test_renderer_draws_every_walkable_cell_and_no_background_grid(env_type):
         # when corridor cells are dropped, because _draw_cue_glow adds Circles.
         rectangles = [patch for patch in map_axes.patches if isinstance(patch, Rectangle)]
         assert len(rectangles) == len(env.walkable_cells)
-        drawn = {
-            (round(patch.get_x() + 0.5), round(patch.get_y() + 0.5)) for patch in rectangles
-        }
+        drawn = {(round(patch.get_x() + 0.5), round(patch.get_y() + 0.5)) for patch in rectangles}
         assert drawn == set(env.walkable_cells)
         assert not any(line.get_visible() for line in map_axes.get_xgridlines())
         assert "Maze" in map_axes.get_title(loc="left")
@@ -119,8 +117,13 @@ def test_reward_readout_uses_completed_transitions_only():
     visualizer = MazeVisualizer(env)
     figure, map_axes, panel_axes, bar_axes = visualizer._setup_figure()
     artists = visualizer._create_animated_artists(map_axes, panel_axes, bar_axes)
-    args = ([step.state for step in history], [step.action for step in history],
-            [None, history[0].observation], [step.belief for step in history], artists)
+    args = (
+        [step.state for step in history],
+        [step.action for step in history],
+        [None, history[0].observation],
+        [step.belief for step in history],
+        artists,
+    )
     visualizer._draw_frame(0, *args, rewards=[-0.25, 9.0])
     assert "Last reward: —" in artists["readout"].get_text()
     assert "Total reward: +0" in artists["readout"].get_text()
@@ -129,8 +132,9 @@ def test_reward_readout_uses_completed_transitions_only():
     assert "Total reward: -0.25" in artists["readout"].get_text()
     assert artists["left_bar"].get_width() == pytest.approx(0.8)
     assert artists["right_bar"].get_width() == pytest.approx(0.2)
-    np.testing.assert_array_equal(artists["true_goal"].get_data(),
-                                  np.array(env.left_goal_cell).reshape(2, 1))
+    np.testing.assert_array_equal(
+        artists["true_goal"].get_data(), np.array(env.left_goal_cell).reshape(2, 1)
+    )
     plt.close(figure)
 
 
@@ -140,9 +144,15 @@ def test_readout_and_key_fit_without_covering_belief_chart():
     visualizer = MazeVisualizer(env)
     figure, map_axes, panel_axes, bar_axes = visualizer._setup_figure()
     artists = visualizer._create_animated_artists(map_axes, panel_axes, bar_axes)
-    visualizer._draw_frame(1, [s.state for s in history], [s.action for s in history],
-                           [None, history[0].observation], [s.belief for s in history],
-                           artists, rewards=[-0.01, 0])
+    visualizer._draw_frame(
+        1,
+        [s.state for s in history],
+        [s.action for s in history],
+        [None, history[0].observation],
+        [s.belief for s in history],
+        artists,
+        rewards=[-0.01, 0],
+    )
     figure.canvas.draw()
     renderer = figure.canvas.get_renderer()
     readout = artists["readout"].get_window_extent(renderer)

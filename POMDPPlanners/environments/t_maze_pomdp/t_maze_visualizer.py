@@ -119,7 +119,12 @@ class MazeVisualizer:
 
             def draw_frame(frame: int):
                 return self._draw_frame(
-                    frame, states, actions, observations, beliefs, artists,
+                    frame,
+                    states,
+                    actions,
+                    observations,
+                    beliefs,
+                    artists,
                     rewards=rewards,
                 )
 
@@ -136,11 +141,20 @@ class MazeVisualizer:
         figure = plt.figure(figsize=(12.0, 8.0), dpi=100)
         figure.text(0.055, 0.945, "MAZE", fontsize=24, weight="bold", color=_OUTLINE)
         mode = "continuous" if not self._draws_cell_guides() else "discrete"
-        figure.text(0.19, 0.952, f"{mode.capitalize()} navigation  /  Hidden goal",
-                    fontsize=12, color="#576874")
-        figure.text(0.055, 0.045,
-                    "Observer view · Star marks the hidden true goal. Rings show recorded belief.",
-                    fontsize=10, color="#576874")
+        figure.text(
+            0.19,
+            0.952,
+            f"{mode.capitalize()} navigation  /  Hidden goal",
+            fontsize=12,
+            color="#576874",
+        )
+        figure.text(
+            0.055,
+            0.045,
+            "Observer view · Star marks the hidden true goal. Rings show recorded belief.",
+            fontsize=10,
+            color="#576874",
+        )
         map_axes = figure.add_axes((0.055, 0.105, 0.575, 0.755))
         panel_axes = figure.add_axes((0.69, 0.105, 0.27, 0.755))
         bar_axes = figure.add_axes((0.72, 0.43, 0.235, 0.11))
@@ -160,19 +174,47 @@ class MazeVisualizer:
             spine.set_color(_OUTLINE)
             spine.set_linewidth(1.2)
         mode = "continuous" if not self._draws_cell_guides() else "discrete"
-        map_axes.set_title(f"Maze ({mode}) — cue accuracy {env.cue_accuracy:.2f}", pad=12, loc="left", fontsize=11, color="#576874")
+        map_axes.set_title(
+            f"Maze ({mode}) — cue accuracy {env.cue_accuracy:.2f}",
+            pad=12,
+            loc="left",
+            fontsize=11,
+            color="#576874",
+        )
 
         panel_axes.set_axis_off()
-        panel_axes.text(0, 1.0, "EPISODE", transform=panel_axes.transAxes,
-                        fontsize=11, weight="bold", color=_OUTLINE, va="top")
-        panel_axes.text(0, 0.60, "GOAL BELIEF", transform=panel_axes.transAxes,
-                        fontsize=11, weight="bold", color=_OUTLINE)
-        panel_axes.text(0, 0.35, "MAP KEY", transform=panel_axes.transAxes,
-                        fontsize=11, weight="bold", color=_OUTLINE)
+        panel_axes.text(
+            0,
+            1.0,
+            "EPISODE",
+            transform=panel_axes.transAxes,
+            fontsize=11,
+            weight="bold",
+            color=_OUTLINE,
+            va="top",
+        )
+        panel_axes.text(
+            0,
+            0.60,
+            "GOAL BELIEF",
+            transform=panel_axes.transAxes,
+            fontsize=11,
+            weight="bold",
+            color=_OUTLINE,
+        )
+        panel_axes.text(
+            0,
+            0.35,
+            "MAP KEY",
+            transform=panel_axes.transAxes,
+            fontsize=11,
+            weight="bold",
+            color=_OUTLINE,
+        )
         for y in (0.65, 0.39):
-            panel_axes.plot([0, 1], [y, y], transform=panel_axes.transAxes,
-                            color="#d6d8d1", linewidth=1)
-
+            panel_axes.plot(
+                [0, 1], [y, y], transform=panel_axes.transAxes, color="#d6d8d1", linewidth=1
+            )
 
         bar_axes.set_xlim(0.0, 1.0)
         bar_axes.set_ylim(-0.6, 1.6)
@@ -205,7 +247,12 @@ class MazeVisualizer:
             )
         for x0, y0, x1, y1 in self._boundary_segments():
             axes.plot(
-                [x0, x1], [y0, y1], "-", color=_OUTLINE, linewidth=1.6, solid_capstyle="round",
+                [x0, x1],
+                [y0, y1],
+                "-",
+                color=_OUTLINE,
+                linewidth=1.6,
+                solid_capstyle="round",
                 zorder=1,
             )
         self._draw_cue_glow(axes, env.cue_cell)
@@ -302,9 +349,18 @@ class MazeVisualizer:
                 zorder=3,
             )
 
-            map_axes.annotate(label, endpoint, xytext=(0, 13), textcoords="offset points",
-                              ha="center", fontsize=9, weight="bold", color=_OUTLINE,
-                              bbox=dict(facecolor=_CORRIDOR, edgecolor="none", pad=1), zorder=9)
+            map_axes.annotate(
+                label,
+                endpoint,
+                xytext=(0, 13),
+                textcoords="offset points",
+                ha="center",
+                fontsize=9,
+                weight="bold",
+                color=_OUTLINE,
+                bbox=dict(facecolor=_CORRIDOR, edgecolor="none", pad=1),
+                zorder=9,
+            )
 
         self._add_legend(panel_axes)
 
@@ -327,8 +383,14 @@ class MazeVisualizer:
                 0
             ],
             "agent": map_axes.plot(
-                [], [], "o", color=_AGENT, markersize=11, markeredgecolor="white",
-                markeredgewidth=1.5, zorder=6
+                [],
+                [],
+                "o",
+                color=_AGENT,
+                markersize=11,
+                markeredgecolor="white",
+                markeredgewidth=1.5,
+                zorder=6,
             )[0],
             # Unfilled so it survives sitting exactly on top of the agent.
             "belief_ring": map_axes.scatter(
@@ -340,9 +402,7 @@ class MazeVisualizer:
                 linewidths=2.2,
                 zorder=7,
             ),
-            "true_goal": map_axes.plot(
-                [], [], "*", color=_GOAL, markersize=20, zorder=8
-            )[0],
+            "true_goal": map_axes.plot([], [], "*", color=_GOAL, markersize=20, zorder=8)[0],
             "left_tint": left_tint,
             "right_tint": right_tint,
             "left_bar": left_bar,
@@ -365,23 +425,79 @@ class MazeVisualizer:
     def _add_legend(panel_axes) -> None:
         """Legend built from proxy handles, as ``laser_tag_visualizer`` does."""
         handles = [
-            Line2D([], [], marker="o", color="none", markerfacecolor=_AGENT, markersize=10,
-                   label="agent"),
+            Line2D(
+                [],
+                [],
+                marker="o",
+                color="none",
+                markerfacecolor=_AGENT,
+                markersize=10,
+                label="agent",
+            ),
             Line2D([], [], color=_PATH, alpha=0.55, linewidth=2.5, label="path so far"),
-            Line2D([], [], marker="o", color="none", markerfacecolor="none",
-                   markeredgecolor=_BELIEF, markeredgewidth=2.2, markersize=12,
-                   label="belief particles"),
-            Line2D([], [], marker="*", color="none", markerfacecolor=_GOAL,
-                   markeredgecolor=_GOAL, markersize=14, label="true goal (observer only)"),
-            Line2D([], [], marker="^", color="none", markerfacecolor=_CUE,
-                   markeredgecolor=_CUE, markersize=10, label="cue cell"),
-            Line2D([], [], marker="s", color="none", markerfacecolor="none",
-                   markeredgecolor=_START, markeredgewidth=2.0, markersize=10, label="start"),
-            Line2D([], [], marker="s", color="none", markerfacecolor="none",
-                   markeredgecolor=_OUTLINE, markeredgewidth=1.6, markersize=11,
-                   label="candidate goals"),
-            Line2D([], [], marker="s", color="none", markerfacecolor=_BELIEF, alpha=0.6,
-                   markersize=11, label="goal-side belief"),
+            Line2D(
+                [],
+                [],
+                marker="o",
+                color="none",
+                markerfacecolor="none",
+                markeredgecolor=_BELIEF,
+                markeredgewidth=2.2,
+                markersize=12,
+                label="belief particles",
+            ),
+            Line2D(
+                [],
+                [],
+                marker="*",
+                color="none",
+                markerfacecolor=_GOAL,
+                markeredgecolor=_GOAL,
+                markersize=14,
+                label="true goal (observer only)",
+            ),
+            Line2D(
+                [],
+                [],
+                marker="^",
+                color="none",
+                markerfacecolor=_CUE,
+                markeredgecolor=_CUE,
+                markersize=10,
+                label="cue cell",
+            ),
+            Line2D(
+                [],
+                [],
+                marker="s",
+                color="none",
+                markerfacecolor="none",
+                markeredgecolor=_START,
+                markeredgewidth=2.0,
+                markersize=10,
+                label="start",
+            ),
+            Line2D(
+                [],
+                [],
+                marker="s",
+                color="none",
+                markerfacecolor="none",
+                markeredgecolor=_OUTLINE,
+                markeredgewidth=1.6,
+                markersize=11,
+                label="candidate goals",
+            ),
+            Line2D(
+                [],
+                [],
+                marker="s",
+                color="none",
+                markerfacecolor=_BELIEF,
+                alpha=0.6,
+                markersize=11,
+                label="goal-side belief",
+            ),
         ]
         panel_axes.legend(
             handles=handles,
@@ -430,8 +546,9 @@ class MazeVisualizer:
         reward_text = ""
         if rewards is not None:
             previous = f"{rewards[frame - 1]:+.3g}" if frame else _NOTHING
-            reward_text = (f"\nLast reward: {previous}"
-                           f"\nTotal reward: {sum(rewards[:frame]):+.3g}")
+            reward_text = (
+                f"\nLast reward: {previous}" f"\nTotal reward: {sum(rewards[:frame]):+.3g}"
+            )
         artists["readout"].set_text(
             f"Step {frame + 1} / {len(states)}\n"
             f"Action: {action if action is not None else _NOTHING}\n"
