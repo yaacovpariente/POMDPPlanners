@@ -1,46 +1,11 @@
 # SPDX-License-Identifier: MIT
 
-"""Maze POMDP visualization.
+"""Maze episode renderer with exact map geometry and recorded belief overlays.
 
-Renders one episode as an animated GIF: the T-shaped corridor, the agent's path,
-the cue cell, and — the part a POMDP visualization exists for — the belief.
-
-The frame is split in two, and the split is the point. The **left two thirds** are
-the playable map and nothing else is ever drawn there, so the corridor never
-competes with a status line for the same pixels. The **right third** carries the
-legend, the step / action / observation readout and the goal-side belief bars.
-
-Layout and colour follow the two visualizers this repository already has for
-grid-world POMDPs:
-
-* ``light_dark_visualizer`` — the unreachable field is filled a dark grey so the
-  walkable region reads as the bright object in the picture, the grid is off, the
-  legend sits outside the map, the agent and its path are red, the belief
-  particles are yellow and sized by weight, and the goal is a green star. The cue
-  cell borrows the beacons' white radial glow, because it plays the same role: it
-  is the one place in the world that emits information.
-* ``laser_tag_visualizer`` — the readout lines are rounded, filled text boxes, and
-  the legend is built from explicit proxy handles rather than from label strings
-  scattered over the drawing calls.
-
-Two belief views are drawn, because the T-Maze hides two different things:
-
-* **Position particles.** Drawn as unfilled rings, sized by weight. Position is in
-  principle observable here, so this cloud is normally a single ring sitting
-  exactly on the agent — a filled marker would simply disappear under it. When the
-  ring is *not* on the agent the belief has gone wrong, and that is worth seeing.
-* **Goal-side posterior.** The hidden variable the task actually turns on. It is
-  shown twice: as a faint tint over each arm endpoint, so it is visible where the
-  decision is made, and as two labelled bars in the side panel, so it is readable
-  as a number. The true goal side is marked separately with a green star; that is
-  observer information the planner does not have.
-
-Nothing here draws from an RNG and nothing is iterated out of order, so two
-renders of one history are byte-identical — which is what the golden-file test
-compares. The whole render also runs inside an isolated matplotlib style context,
-so a caller that has set a seaborn theme (``returns_plots`` sets ``whitegrid``
-globally before this runs in a real simulation) neither changes the output nor
-finds its own theme disturbed afterwards.
+The map shows observer truth; the side panel separates recorded information,
+goal belief, and the symbol key. Frames show the state before the listed action,
+with observation and reward from the preceding transition. Rendering is
+RNG-free and isolated from the caller's matplotlib style.
 """
 
 from pathlib import Path
@@ -68,14 +33,14 @@ from POMDPPlanners.environments.t_maze_pomdp.maze_pomdp import (  # noqa: E402
 
 # Palette. The field / corridor pair is the Light-Dark contrast; the agent red,
 # belief yellow and goal green are that visualizer's marker colours.
-_FIELD = "#3d4148"
-_CORRIDOR = "#e9edf2"
-_CORRIDOR_EDGE = "#b9c2cc"
-_OUTLINE = "#11151a"
-_AGENT = "#d62728"
-_PATH = "#d62728"
-_BELIEF = "#ffe11a"
-_GOAL = "#2ca02c"
+_FIELD = "#263747"
+_CORRIDOR = "#f4f1e8"
+_CORRIDOR_EDGE = "#d6d8d1"
+_OUTLINE = "#182733"
+_AGENT = "#c74636"
+_PATH = "#c74636"
+_BELIEF = "#e7ae38"
+_GOAL = "#278365"
 _CUE = "#1f77b4"
 _START = "#8c8c8c"
 _PANEL_TEXT = "#1b1f24"
@@ -93,8 +58,8 @@ _NOTHING = "—"
 # style context, so whatever theme the caller had set is both ignored here and
 # restored afterwards.
 _STYLE: Dict[str, Any] = {
-    "figure.facecolor": "white",
-    "savefig.facecolor": "white",
+    "figure.facecolor": "#f7f5ef",
+    "savefig.facecolor": "#f7f5ef",
     "axes.grid": False,
     "axes.facecolor": "white",
     "axes.edgecolor": "black",
@@ -138,6 +103,7 @@ class MazeVisualizer:
         states = [np.asarray(step.state, dtype=np.float64) for step in history]
         actions = [step.action for step in history]
         beliefs = [getattr(step, "belief", None) for step in history]
+        rewards = [step.reward for step in history]
         # ``StepData.observation`` is what the world returned *after* the step's
         # action, so the reading the agent holds while standing on frame ``f`` is
         # the one recorded on frame ``f - 1``.
@@ -153,26 +119,31 @@ class MazeVisualizer:
 
             def draw_frame(frame: int):
                 return self._draw_frame(
-                    frame, states, actions, observations, beliefs, artists
+                    frame, states, actions, observations, beliefs, artists,
+                    rewards=rewards,
                 )
 
             anim = animation.FuncAnimation(
                 figure, draw_frame, frames=len(states), blit=False, repeat=False
             )
-            anim.save(cache_path, writer="pillow", fps=1)
+            anim.save(cache_path, writer="pillow", fps=2)
             plt.close(figure)
 
     # Static scene
     def _setup_figure(self):
         """Build the figure: map on the left, legend / readout / bars on the right."""
         env = self.environment
-        figure = plt.figure(figsize=(10.0, 6.0))
-        grid = figure.add_gridspec(
-            2, 2, width_ratios=[1.9, 1.0], height_ratios=[3.0, 1.0], wspace=0.06, hspace=0.18
-        )
-        map_axes = figure.add_subplot(grid[:, 0])
-        panel_axes = figure.add_subplot(grid[0, 1])
-        bar_axes = figure.add_subplot(grid[1, 1])
+        figure = plt.figure(figsize=(12.0, 8.0), dpi=100)
+        figure.text(0.055, 0.945, "MAZE", fontsize=24, weight="bold", color=_OUTLINE)
+        mode = "continuous" if not self._draws_cell_guides() else "discrete"
+        figure.text(0.19, 0.952, f"{mode.capitalize()} navigation  /  Hidden goal",
+                    fontsize=12, color="#576874")
+        figure.text(0.055, 0.045,
+                    "Observer view · Star marks the hidden true goal. Rings show recorded belief.",
+                    fontsize=10, color="#576874")
+        map_axes = figure.add_axes((0.055, 0.105, 0.575, 0.755))
+        panel_axes = figure.add_axes((0.69, 0.105, 0.27, 0.755))
+        bar_axes = figure.add_axes((0.72, 0.43, 0.235, 0.11))
 
         cells = self._walkable_cells()
         xs = [cell[0] for cell in cells]
@@ -189,9 +160,19 @@ class MazeVisualizer:
             spine.set_color(_OUTLINE)
             spine.set_linewidth(1.2)
         mode = "continuous" if not self._draws_cell_guides() else "discrete"
-        map_axes.set_title(f"Maze ({mode}) — cue accuracy {env.cue_accuracy:.2f}", pad=10)
+        map_axes.set_title(f"Maze ({mode}) — cue accuracy {env.cue_accuracy:.2f}", pad=12, loc="left", fontsize=11, color="#576874")
 
         panel_axes.set_axis_off()
+        panel_axes.text(0, 1.0, "EPISODE", transform=panel_axes.transAxes,
+                        fontsize=11, weight="bold", color=_OUTLINE, va="top")
+        panel_axes.text(0, 0.60, "GOAL BELIEF", transform=panel_axes.transAxes,
+                        fontsize=11, weight="bold", color=_OUTLINE)
+        panel_axes.text(0, 0.35, "MAP KEY", transform=panel_axes.transAxes,
+                        fontsize=11, weight="bold", color=_OUTLINE)
+        for y in (0.65, 0.39):
+            panel_axes.plot([0, 1], [y, y], transform=panel_axes.transAxes,
+                            color="#d6d8d1", linewidth=1)
+
 
         bar_axes.set_xlim(0.0, 1.0)
         bar_axes.set_ylim(-0.6, 1.6)
@@ -202,7 +183,7 @@ class MazeVisualizer:
         bar_axes.grid(False)
         for side in ("top", "right"):
             bar_axes.spines[side].set_visible(False)
-        bar_axes.set_title("belief over goal side", fontsize=9, pad=4)
+        bar_axes.set_facecolor("#f7f5ef")
 
         return figure, map_axes, panel_axes, bar_axes
 
@@ -224,7 +205,7 @@ class MazeVisualizer:
             )
         for x0, y0, x1, y1 in self._boundary_segments():
             axes.plot(
-                [x0, x1], [y0, y1], "-", color=_OUTLINE, linewidth=2.6, solid_capstyle="round",
+                [x0, x1], [y0, y1], "-", color=_OUTLINE, linewidth=1.6, solid_capstyle="round",
                 zorder=1,
             )
         self._draw_cue_glow(axes, env.cue_cell)
@@ -309,7 +290,7 @@ class MazeVisualizer:
             markersize=12,
             zorder=4,
         )
-        for endpoint in (left_goal, right_goal):
+        for label, endpoint in zip(("L", "R"), (left_goal, right_goal)):
             map_axes.plot(
                 [endpoint[0]],
                 [endpoint[1]],
@@ -321,6 +302,10 @@ class MazeVisualizer:
                 zorder=3,
             )
 
+            map_axes.annotate(label, endpoint, xytext=(0, 13), textcoords="offset points",
+                              ha="center", fontsize=9, weight="bold", color=_OUTLINE,
+                              bbox=dict(facecolor=_CORRIDOR, edgecolor="none", pad=1), zorder=9)
+
         self._add_legend(panel_axes)
 
         # Both bars share the goal-side belief colour so the panel reads as one
@@ -328,9 +313,9 @@ class MazeVisualizer:
         left_bar, right_bar = bar_axes.barh(
             [1, 0],
             [0.0, 0.0],
-            height=0.55,
+            height=0.42,
             color=_BELIEF,
-            edgecolor=_OUTLINE,
+            edgecolor="none",
             linewidth=0.8,
             zorder=2,
         )
@@ -342,7 +327,8 @@ class MazeVisualizer:
                 0
             ],
             "agent": map_axes.plot(
-                [], [], "o", color=_AGENT, markersize=13, zorder=6
+                [], [], "o", color=_AGENT, markersize=11, markeredgecolor="white",
+                markeredgewidth=1.5, zorder=6
             )[0],
             # Unfilled so it survives sitting exactly on top of the agent.
             "belief_ring": map_axes.scatter(
@@ -365,18 +351,13 @@ class MazeVisualizer:
             "right_value": right_value,
             "readout": panel_axes.text(
                 0.0,
-                0.42,
+                0.94,
                 "",
                 transform=panel_axes.transAxes,
                 ha="left",
                 va="top",
                 fontsize=10,
-                linespacing=1.7,
-                bbox={
-                    "boxstyle": "round,pad=0.5",
-                    "facecolor": "#f2f4f7",
-                    "edgecolor": "#c3cad3",
-                },
+                linespacing=1.55,
             ),
         }
 
@@ -405,10 +386,11 @@ class MazeVisualizer:
         panel_axes.legend(
             handles=handles,
             loc="upper left",
-            bbox_to_anchor=(-0.02, 1.06),
-            frameon=True,
+            bbox_to_anchor=(-0.04, 0.32),
+            frameon=False,
             framealpha=0.95,
             fontsize=9,
+            labelspacing=0.55,
             handletextpad=0.8,
             borderpad=0.6,
         )
@@ -422,6 +404,7 @@ class MazeVisualizer:
         observations: List[Any],
         beliefs: List[Any],
         artists: dict,
+        rewards: Optional[List[float]] = None,
     ):
         state = states[frame]
         artists["agent"].set_data([state[STATE_X]], [state[STATE_Y]])
@@ -444,11 +427,17 @@ class MazeVisualizer:
 
         action = actions[frame]
         observation = observations[frame]
+        reward_text = ""
+        if rewards is not None:
+            previous = f"{rewards[frame - 1]:+.3g}" if frame else _NOTHING
+            reward_text = (f"\nLast reward: {previous}"
+                           f"\nTotal reward: {sum(rewards[:frame]):+.3g}")
         artists["readout"].set_text(
             f"Step {frame + 1} / {len(states)}\n"
             f"Action: {action if action is not None else _NOTHING}\n"
             f"Last observation: {self._observation_label(observation)}\n"
-            f"True goal: {'left' if float(state[STATE_GOAL]) == GOAL_LEFT else 'right'}"
+            f"True goal: {'left' if float(state[STATE_GOAL]) == GOAL_LEFT else 'right'} (observer)"
+            f"{reward_text}"
         )
         return list(artists.values())
 
