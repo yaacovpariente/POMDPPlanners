@@ -15,6 +15,16 @@ Planning Algorithm Categories
    POMDPPlanners.planners.mcts_planners.pft_dpw.PFT_DPW
    POMDPPlanners.planners.mcts_planners.sparse_pft.SparsePFT
 
+**Bounded Belief-Tree Search**
+
+.. autosummary::
+   :toctree: ../api/
+
+   POMDPPlanners.planners.scenario_tree_planners.despot.DESPOT
+   POMDPPlanners.planners.scenario_tree_planners.ardespot.ARDESPOT
+   POMDPPlanners.planners.scenario_tree_planners.adaops.AdaOPS
+   POMDPPlanners.planners.scenario_tree_planners.hyp_despot.HypDESPOT
+
 **Sparse Sampling**
 
 .. autosummary::

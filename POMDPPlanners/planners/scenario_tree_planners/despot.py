@@ -10,8 +10,8 @@ a running average of sampled returns. Search proceeds in *trials*: each trial
 walks from the root down the branch that currently looks best under the upper
 bound and least resolved under the gap between the bounds, expands the leaf it
 reaches, and then backs the bounds up along the path it came down. The search
-stops when the root's bounds have closed to within ``(1 - eta)`` of their
-current width, or when the budget runs out.
+stops when the root's residual excess uncertainty ``(1 - eta)(u - l)`` has
+fallen to numerical noise, or when the budget runs out.
 
 Why that is not MCTS: there is no exploration bonus, no visit-count-driven
 selection, and no averaging of returns. Branching is driven entirely by
@@ -125,6 +125,12 @@ class _TerminalObservation:
     them their own child -- with both bounds pinned to zero -- keeps
     ``sum_o w_o == w_b`` exactly, so the weighted averages in equation (2) stay
     correct instead of quietly renormalizing over the survivors.
+
+    Matched by object identity, never by value, so no real observation can
+    collide with it. That only holds if the singleton survives a round trip:
+    a search tree is deep-copied for a snapshot and pickled with the planner,
+    and without ``__reduce__`` each copy would be a *new* instance that fails
+    every ``is TERMINAL_OBSERVATION`` test afterwards.
     """
 
     __slots__ = ()
@@ -132,8 +138,23 @@ class _TerminalObservation:
     def __repr__(self) -> str:
         return "<terminal>"
 
+    def __reduce__(self):
+        return (_terminal_observation, ())
+
+    def __copy__(self):
+        return self
+
+    def __deepcopy__(self, memo):
+        del memo
+        return self
+
 
 TERMINAL_OBSERVATION = _TerminalObservation()
+
+
+def _terminal_observation() -> "_TerminalObservation":
+    """Module-level factory so ``pickle`` restores the singleton, not a copy."""
+    return TERMINAL_OBSERVATION
 
 
 class DESPOTMetrics(Enum):
@@ -220,8 +241,16 @@ class DESPOT(ArenaPathSimulationPolicy):
             the planner optimises the ``D``-step discounted return.
         name: Unique identifier for this planner instance.
         n_scenarios: ``K``, the number of determinized scenarios per decision.
-        eta: Target-precision parameter in ``(0, 1)``. The search stops once the
-            root gap has shrunk to ``eta`` of its own width. ``eta = 1`` is
+        eta: Target-precision parameter ``xi`` in ``(0, 1)``, used in the
+            excess-uncertainty rule (5). It sets how much of the root gap a
+            node is allowed to keep before a trial stops descending into it:
+            a node at depth ``d`` is resolved once its width falls below
+            ``eta (u(root) - l(root)) gamma^(-d)``. At the root itself
+            (``d = 0``) that leaves the residual ``(1 - eta)(u - l)``, so the
+            search stops when the root gap reaches numerical noise scaled by
+            ``1 / (1 - eta)`` -- it is *not* a fraction of the gap's starting
+            width, and nothing here stores that starting width. Lower ``eta``
+            makes deep nodes get resolved more tightly. ``eta = 1`` is
             rejected: it makes the stopping test true before the first trial,
             so the planner would return without searching.
         pruning_constant: ``lambda`` in equation (8). ``0`` disables
@@ -572,8 +601,15 @@ class DESPOT(ArenaPathSimulationPolicy):
             return uniform
         return array / total
 
-    def _sample_from_belief_sampler(self, belief: Belief) -> List[Any]:
-        """``K`` draws from a belief that has no particle list of its own.
+    def _sample_from_belief_sampler(
+        self, belief: Belief, n_draws: Optional[int] = None
+    ) -> List[Any]:
+        """``n_draws`` draws from a belief that has no particle list of its own.
+
+        ``n_draws`` defaults to ``K``; subclasses that size their root set
+        differently (AdaOPS uses ``max_particles``) pass their own count so
+        they inherit the seed capture/restore below instead of reimplementing
+        the draw and leaking into the caller's global streams.
 
         The draw is seeded from the planner's private generator, so it is fresh
         on every call yet reproducible from ``scenario_seed``. Both global
@@ -589,7 +625,8 @@ class DESPOT(ArenaPathSimulationPolicy):
             seed = int(self._scenario_rng.integers(0, 2**32))
             np.random.seed(seed)
             random.seed(seed)
-            return [belief.sample() for _ in range(self.n_scenarios)]
+            count = self.n_scenarios if n_draws is None else int(n_draws)
+            return [belief.sample() for _ in range(count)]
         finally:
             ScenarioRandomStreams.restore_global_state(saved_state)
 
