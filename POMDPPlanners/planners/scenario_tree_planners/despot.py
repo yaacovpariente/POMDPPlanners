@@ -526,19 +526,72 @@ class DESPOT(ArenaPathSimulationPolicy):
         belief see identical scenarios.
         """
         particles = getattr(belief, "particles", None)
-        weights = getattr(belief, "normalized_weights", None)
-        if particles is None or weights is None or len(particles) == 0:
+        if particles is None or len(particles) == 0:
             # Gaussian and mixture beliefs have no particle list; fall back to
-            # their own sampler, seeded from the private generator so the draw
-            # is fresh per call but still reproducible from ``scenario_seed``.
-            np.random.seed(int(self._scenario_rng.integers(0, 2**32)))
-            return [belief.sample() for _ in range(self.n_scenarios)]
+            # their own sampler.
+            return self._sample_from_belief_sampler(belief=belief)
 
-        cumulative = np.cumsum(np.asarray(weights, dtype=np.float64))
+        weights = self._particle_weights(belief=belief, n_particles=len(particles))
+        cumulative = np.cumsum(weights)
         offset = float(self._scenario_rng.random()) / self.n_scenarios
         positions = offset + np.arange(self.n_scenarios, dtype=np.float64) / self.n_scenarios
         indices = np.clip(np.searchsorted(cumulative, positions), 0, len(particles) - 1)
         return [particles[int(index)] for index in indices]
+
+    @staticmethod
+    def _particle_weights(belief: Belief, n_particles: int) -> np.ndarray:
+        """Normalized weight per particle, uniform when the belief carries none.
+
+        The belief classes disagree on the attribute: ``WeightedParticleBelief``
+        precomputes ``normalized_weights``, ``WeightedParticleBeliefStateUpdate``
+        keeps raw ``weights`` and normalizes only inside its own ``sample``, and
+        the unweighted particle beliefs expose neither. Reading only
+        ``normalized_weights`` pushed the latter two onto the ``belief.sample()``
+        fallback, which draws from the stdlib ``random`` stream that
+        :meth:`action` then rewinds -- so every decision from an unchanged
+        belief saw the identical scenario set. Resolving the attribute here puts
+        every particle belief back on the systematic-resampling path.
+
+        A belief whose weights are missing, mis-shaped, non-finite or sum to
+        zero is treated as uniform rather than refused: systematic resampling of
+        a degenerate weight vector is undefined, and a uniform draw over the
+        particles the belief does hold is still a usable scenario set.
+        """
+        uniform = np.full(n_particles, 1.0 / n_particles, dtype=np.float64)
+        raw = getattr(belief, "normalized_weights", None)
+        if raw is None:
+            raw = getattr(belief, "weights", None)
+        if raw is None:
+            return uniform
+
+        array = np.asarray(raw, dtype=np.float64).reshape(-1)
+        if array.shape[0] != n_particles or not np.all(np.isfinite(array)):
+            return uniform
+        total = float(array.sum())
+        if total <= 0.0 or np.any(array < 0.0):
+            return uniform
+        return array / total
+
+    def _sample_from_belief_sampler(self, belief: Belief) -> List[Any]:
+        """``K`` draws from a belief that has no particle list of its own.
+
+        The draw is seeded from the planner's private generator, so it is fresh
+        on every call yet reproducible from ``scenario_seed``. Both global
+        streams are seeded because the planner cannot tell which one an
+        arbitrary belief's ``sample`` reaches for, and both are put back
+        afterwards: seeding was previously unconditional while :meth:`action`
+        only restored global state when determinization was on, so a planner
+        with ``use_determinized_scenarios=False`` silently overwrote the
+        simulator's numpy stream on every decision.
+        """
+        saved_state = ScenarioRandomStreams.capture_global_state()
+        try:
+            seed = int(self._scenario_rng.integers(0, 2**32))
+            np.random.seed(seed)
+            random.seed(seed)
+            return [belief.sample() for _ in range(self.n_scenarios)]
+        finally:
+            ScenarioRandomStreams.restore_global_state(saved_state)
 
     def _construct_tree_using_n_simulations(self, tree: Tree, root_id: int) -> None:
         if self.n_simulations is None:
