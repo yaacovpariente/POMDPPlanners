@@ -1249,7 +1249,7 @@ def test_a_trial_down_one_action_leaves_the_other_actions_subtree_untouched():
     tree.data[root_id].best_upper_action_id = action_children[0]
     untouched_id = action_children[1]
 
-    def snapshot(node_id: int) -> List[Tuple[int, Any, ...]]:
+    def snapshot(node_id: int) -> List[Tuple[Any, ...]]:
         records = []
         pending = [node_id]
         while pending:
