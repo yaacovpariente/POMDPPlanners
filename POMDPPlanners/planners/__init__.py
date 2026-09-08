@@ -29,6 +29,7 @@ from POMDPPlanners.planners.sparse_sampling_planners.icvar_sparse_sampling impor
     ICVaRSparseSampling,
 )
 from POMDPPlanners.planners.scenario_tree_planners.ardespot import ARDESPOT
+from POMDPPlanners.planners.scenario_tree_planners.adaops import AdaOPS
 from POMDPPlanners.planners.scenario_tree_planners.despot import DESPOT
 
 __all__ = [
@@ -48,6 +49,7 @@ __all__ = [
     "ICVaRSparseSampling",
     "DESPOT",
     "ARDESPOT",
+    "AdaOPS",
 ]
 
 # Registry of available policies
@@ -67,6 +69,7 @@ POLICY_REGISTRY: Dict[str, Type] = {
     "ICVaRSparseSampling": ICVaRSparseSampling,
     "DESPOT": DESPOT,
     "ARDESPOT": ARDESPOT,
+    "AdaOPS": AdaOPS,
 }
 
 
