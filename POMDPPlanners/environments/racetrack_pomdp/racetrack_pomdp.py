@@ -641,15 +641,19 @@ class RacetrackPOMDP(Environment):
             return None
         return self._session.render_frame()
 
-    def cache_visualization(
-        self, history: List[Any], output_dir: Path, episode_index: int
-    ) -> None:
+    def cache_visualization(self, history: List[Any], output_dir: Path, episode_index: int) -> None:
         """Save a recorded episode without querying or advancing the live simulator."""
         from POMDPPlanners.environments.racetrack_pomdp.racetrack_visualizer import (
             RacetrackVisualizer,
         )
 
-        RacetrackVisualizer(self.max_tracked_agents).save(
+        from POMDPPlanners.environments.racetrack_pomdp.racetrack_visualizer_track import (
+            reference_track_lanes,
+        )
+
+        # racetrack-v0's layout is fixed. Unknown scenarios must not inherit its road.
+        lanes = reference_track_lanes() if self.env_id == DEFAULT_ENV_ID else None
+        RacetrackVisualizer(self.max_tracked_agents, self.action_presets, lanes).save(
             history, output_dir / f"agent_path_{episode_index}.gif"
         )
 
