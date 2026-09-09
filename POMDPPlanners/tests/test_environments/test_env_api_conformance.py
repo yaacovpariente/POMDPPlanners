@@ -94,7 +94,7 @@ from POMDPPlanners.environments.push_pomdp.push_pomdp import PushPOMDP
 from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp import RockSamplePOMDP
 from POMDPPlanners.environments.safety_ant_velocity_pomdp import SafeAntVelocityPOMDP
 from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
-from POMDPPlanners.environments.t_maze_pomdp.t_maze_pomdp import TMazePOMDP
+from POMDPPlanners.environments.maze_pomdp.t_maze_pomdp import TMazePOMDP
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
     battleship_pinned_kwargs,

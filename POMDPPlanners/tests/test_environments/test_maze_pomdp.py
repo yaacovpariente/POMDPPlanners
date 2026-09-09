@@ -13,7 +13,7 @@ from POMDPPlanners.environments.maze_pomdp import (
     DiscreteMazePOMDP,
     MazeGeometry,
 )
-from POMDPPlanners.environments.t_maze_pomdp.maze_pomdp import (
+from POMDPPlanners.environments.maze_pomdp.maze_pomdp import (
     ACTION_OFFSETS,
     CUE_CONSUMED,
     CUE_EMITTING,
@@ -25,7 +25,7 @@ from POMDPPlanners.environments.t_maze_pomdp.maze_pomdp import (
     OBSERVATION_RIGHT_CUE,
     create_maze_state,
 )
-from POMDPPlanners.environments.t_maze_pomdp.t_maze_pomdp import TMazePOMDP
+from POMDPPlanners.environments.maze_pomdp.t_maze_pomdp import TMazePOMDP
 
 
 def _path(geometry, target):
