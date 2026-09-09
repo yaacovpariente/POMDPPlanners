@@ -17,7 +17,8 @@ registry:
 
 .. note::
 
-   ``get_environment`` covers the classic suite only. ``ContinuousPushPOMDP``,
+   ``get_environment`` covers the classic suite only. Import ``BattleshipPOMDP``
+   directly. ``ContinuousPushPOMDP``,
    ``ContinuousPushPOMDPDiscreteActions`` and the realistic worlds (CARLA,
    Isaac Lab, nuPlan, Racetrack) are not in the registry — import those classes
    directly.
@@ -55,6 +56,13 @@ actually stores.
      - discrete
      - none
      - :doc:`rock_sample`
+   * - ``BattleshipPOMDP``
+     - Find every cell of a hidden fleet with exact hit/miss probes.
+     - occupancy and probe flags
+     - discrete
+     - discrete
+     - none
+     - :doc:`battleship`
    * - ``PacManPOMDP``
      - Clear every pellet while dodging noisily-observed ghosts.
      - vector (pac, ghosts, pellets)
@@ -211,6 +219,7 @@ Guides
 
    tiger
    rock_sample
+   battleship
    pacman
    maze
    light_dark
