@@ -83,6 +83,27 @@ actually stores.
      - continuous
      - none
      - :doc:`light_dark`
+   * - ``DiscreteMazePOMDP``
+     - Remember a cue while navigating a generated grid maze.
+     - ``[x, y, goal_side, cue_phase]``
+     - discrete
+     - discrete
+     - none
+     - :doc:`maze`
+   * - ``ContinuousMazePOMDP``
+     - Navigate the same maze with bounded displacements.
+     - ``[x, y, goal_side, cue_phase]``
+     - continuous
+     - discrete
+     - none
+     - :doc:`maze`
+   * - ``TMazePOMDP``
+     - Remember a cue until choosing an arm of a T corridor.
+     - ``[x, y, goal_side, cue_phase]``
+     - discrete
+     - discrete
+     - none
+     - :doc:`maze`
    * - ``CartPolePOMDP``
      - Balance a pole seeing only noisy sensor readings.
      - ``[x, ẋ, θ, θ̇]``
