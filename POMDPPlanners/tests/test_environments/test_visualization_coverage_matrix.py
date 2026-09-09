@@ -166,10 +166,10 @@ FAMILIES: Tuple[EnvironmentFamily, ...] = (
         hooks=(("cartpole_pomdp/cartpole_pomdp.py", "CartPolePOMDP"),),
         docs_page="cartpole.rst",
         docs_section=None,
-        image=(
-            "POMDPPlanners/tests/test_environments/golden_visualizations/"
-            "cartpole_visualization.gif"
-        ),
+        # The docs copy, byte-identical to the golden GIF the renderer test
+        # pins. The matrix checks the file the page actually embeds, so this
+        # row follows the page rather than the test fixture.
+        image="docs/images/cartpole_visualization.gif",
     ),
     EnvironmentFamily(
         package="push_pomdp",
