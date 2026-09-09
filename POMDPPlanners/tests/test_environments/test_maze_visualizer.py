@@ -2,7 +2,10 @@
 
 """Renderer checks specific to the generated Maze variants."""
 
+from typing import cast
+
 import matplotlib.pyplot as plt
+from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.patches import Rectangle
 import numpy as np
 import pytest
@@ -154,9 +157,10 @@ def test_readout_and_key_fit_without_covering_belief_chart():
         rewards=[-0.01, 0],
     )
     figure.canvas.draw()
-    renderer = figure.canvas.get_renderer()
+    renderer = cast(FigureCanvasAgg, figure.canvas).get_renderer()
     readout = artists["readout"].get_window_extent(renderer)
     bars = bar_axes.get_tightbbox(renderer)
+    assert bars is not None
     legend = panel_axes.get_legend().get_window_extent(renderer)
     assert not readout.overlaps(bars)
     assert not legend.overlaps(bars)
@@ -169,7 +173,7 @@ def test_readout_and_key_fit_without_covering_belief_chart():
 
 
 def test_gif_size_pacing_and_public_alias(tmp_path):
-    from PIL import Image
+    from PIL import GifImagePlugin, Image
     from POMDPPlanners.environments.maze_pomdp import MazeVisualizer as PublicVisualizer
 
     assert PublicVisualizer is MazeVisualizer
@@ -177,6 +181,7 @@ def test_gif_size_pacing_and_public_alias(tmp_path):
     path = tmp_path / "review.gif"
     PublicVisualizer(env).create_visualization(_history(env, np.array([0.0, 0.4])), path)
     with Image.open(path) as gif:
+        assert isinstance(gif, GifImagePlugin.GifImageFile)
         assert gif.size == (1200, 800)
         assert gif.n_frames == 2
         for frame in range(gif.n_frames):
