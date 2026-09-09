@@ -17,7 +17,9 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402  pylint: disable=wrong-import-position
-from matplotlib.backends.backend_agg import FigureCanvasAgg  # noqa: E402  pylint: disable=wrong-import-position
+from matplotlib.backends.backend_agg import (
+    FigureCanvasAgg,
+)  # noqa: E402  pylint: disable=wrong-import-position
 from matplotlib.colors import to_hex  # noqa: E402  pylint: disable=wrong-import-position
 from matplotlib.text import Text  # noqa: E402  pylint: disable=wrong-import-position
 import numpy as np
@@ -63,8 +65,9 @@ def _episode(env: BattleshipPOMDP):
         belief = belief.update(action=action, observation=observation, pomdp=env)
         state = next_state
     history.append(
-        StepData(state=state, action=None, next_state=None, observation=None, reward=None,
-                 belief=belief)
+        StepData(
+            state=state, action=None, next_state=None, observation=None, reward=None, belief=belief
+        )
     )
     return history
 
@@ -81,7 +84,9 @@ class TestFrames:
 
         Test type: unit
         """
-        frames = BattleshipVisualizer(env)._build_frames(episode)  # pylint: disable=protected-access
+        frames = BattleshipVisualizer(env)._build_frames(
+            episode
+        )  # pylint: disable=protected-access
         assert len(frames) == len(episode)
         assert [frame["index"] for frame in frames] == list(range(len(episode)))
 
@@ -98,7 +103,9 @@ class TestFrames:
 
         Test type: unit
         """
-        frames = BattleshipVisualizer(env)._build_frames(episode)  # pylint: disable=protected-access
+        frames = BattleshipVisualizer(env)._build_frames(
+            episode
+        )  # pylint: disable=protected-access
         for frame, step in zip(frames, episode):
             probed = env.probed(step.state).reshape(env.board_size, env.board_size)
             assert np.all(frame["agent_view"][~probed] == 0)
@@ -112,7 +119,9 @@ class TestFrames:
 
         Test type: unit
         """
-        frames = BattleshipVisualizer(env)._build_frames(episode)  # pylint: disable=protected-access
+        frames = BattleshipVisualizer(env)._build_frames(
+            episode
+        )  # pylint: disable=protected-access
         for frame, step in zip(frames, episode):
             probed = env.probed(step.state).reshape(env.board_size, env.board_size)
             occupancy = env.occupancy(step.state).reshape(env.board_size, env.board_size)
@@ -128,7 +137,9 @@ class TestFrames:
 
         Test type: unit
         """
-        frames = BattleshipVisualizer(env)._build_frames(episode)  # pylint: disable=protected-access
+        frames = BattleshipVisualizer(env)._build_frames(
+            episode
+        )  # pylint: disable=protected-access
         for frame in frames[1:]:
             assert np.array_equal(frame["truth"], frames[0]["truth"])
 
@@ -141,7 +152,9 @@ class TestFrames:
 
         Test type: unit
         """
-        frames = BattleshipVisualizer(env)._build_frames(episode)  # pylint: disable=protected-access
+        frames = BattleshipVisualizer(env)._build_frames(
+            episode
+        )  # pylint: disable=protected-access
         for frame, step in zip(frames, episode):
             expected = step.belief.occupancy_marginal(env).reshape(env.board_size, env.board_size)
             assert np.allclose(frame["belief"], expected)
@@ -155,13 +168,17 @@ class TestFrames:
 
         Test type: unit
         """
-        from POMDPPlanners.core.belief import WeightedParticleBelief  # pylint: disable=import-outside-toplevel
+        from POMDPPlanners.core.belief import (
+            WeightedParticleBelief,
+        )  # pylint: disable=import-outside-toplevel
 
         particles = np.asarray(BattleshipBelief.from_environment(env, 8).particles)
         plain = WeightedParticleBelief(
             particles=list(particles), log_weights=np.linspace(-1.0, -0.1, 8)
         )
-        marginal = BattleshipVisualizer(env)._belief_marginal(plain)  # pylint: disable=protected-access
+        marginal = BattleshipVisualizer(env)._belief_marginal(
+            plain
+        )  # pylint: disable=protected-access
         assert marginal.shape == (env.num_cells,)
         assert np.all((marginal >= 0.0) & (marginal <= 1.0))
 
@@ -182,9 +199,7 @@ class TestLabels:
         so reading them off an undrawn figure returns empty strings.
         """
         fig.canvas.draw()
-        return "\n".join(
-            artist.get_text() for artist in fig.findobj(match=Text)
-        )
+        return "\n".join(artist.get_text() for artist in fig.findobj(match=Text))
 
     @staticmethod
     def _legend_entries(ax) -> dict:
@@ -223,9 +238,7 @@ class TestLabels:
                 "actual ship layout, hidden from the agent",
             )
             for ax, description in zip(axes, descriptions):
-                panel_text = "\n".join(
-                    artist.get_text() for artist in ax.findobj(match=Text)
-                )
+                panel_text = "\n".join(artist.get_text() for artist in ax.findobj(match=Text))
                 assert description in panel_text
                 assert ax.get_xlabel() == "column"
                 assert ax.get_ylabel() == "row"
@@ -250,10 +263,10 @@ class TestLabels:
         try:
             agent = self._legend_entries(axes[0])
             assert agent == {
-                "not probed yet": "#c9ccd1",
-                "probed - water (miss)": "#2f6fb5",
-                "probed - ship (hit)": "#c0392b",
-                "probing now - result not on the board yet": "#ffd21f",
+                "not probed yet": "#e5edf1",
+                "probed - water (miss)": "#c5e1e9",
+                "probed - ship (hit)": "#bf4b36",
+                "probing now - result not on the board yet": "#e7a624",
             }
             # The agent panel's fills are the colormap the panel is drawn with,
             # so a recoloured board cannot drift away from its own legend.
@@ -270,23 +283,14 @@ class TestLabels:
 
             belief = self._legend_entries(axes[1])
             colormap = artists["belief"].get_cmap()
-            assert (
-                belief["100% - almost certainly a ship"]
-                == to_hex(colormap(1.0))
-            )
-            assert (
-                belief["0% - almost certainly water"]
-                == to_hex(colormap(0.0))
-            )
+            assert belief["100% - certainly a ship"] == to_hex(colormap(1.0))
+            assert belief["0% - certainly water"] == to_hex(colormap(0.0))
 
             truth = self._legend_entries(axes[2])
             colormap = artists["truth"].get_cmap()
             assert truth["ship cell"] == to_hex(colormap(1.0))
             assert truth["water"] == to_hex(colormap(0.0))
-            assert (
-                truth["already probed"]
-                == to_hex(artists["truth_probe"].get_facecolor()[0])
-            )
+            assert truth["already probed"] == to_hex(artists["truth_probe"].get_facecolor()[0])
         finally:
             plt.close(fig)
 
@@ -308,9 +312,7 @@ class TestLabels:
         finally:
             plt.close(fig)
 
-    def test_caption_does_not_claim_the_current_probe_is_resolved(
-        self, env, episode
-    ) -> None:
+    def test_caption_does_not_claim_the_current_probe_is_resolved(self, env, episode) -> None:
         """Purpose: the boards in a frame are the state *before* its own action.
 
         The ring marks a cell the agent has chosen but not yet probed, and the
@@ -327,7 +329,9 @@ class TestLabels:
         frames = visualizer._build_frames(episode)  # pylint: disable=protected-access
         fig, axes, artists = visualizer._setup_figure()  # pylint: disable=protected-access
         try:
-            visualizer._animation_function(frames, axes, artists)(0)  # pylint: disable=protected-access
+            visualizer._animation_function(frames, axes, artists)(
+                0
+            )  # pylint: disable=protected-access
             caption = artists["caption"].get_text()
             assert "about to probe row 0, column 0" in caption
             assert "Ship cells found before this probe" in caption
@@ -347,7 +351,9 @@ class TestLabels:
         frames = visualizer._build_frames(episode)  # pylint: disable=protected-access
         fig, axes, artists = visualizer._setup_figure()  # pylint: disable=protected-access
         try:
-            visualizer._animation_function(frames, axes, artists)(len(frames) - 1)  # pylint: disable=protected-access
+            visualizer._animation_function(frames, axes, artists)(
+                len(frames) - 1
+            )  # pylint: disable=protected-access
             caption = artists["caption"].get_text()
             assert "episode over, no further probe" in caption
             assert "before this probe" not in caption
@@ -479,3 +485,97 @@ class TestOutput:
         """
         with pytest.raises(ValueError, match=r"\.gif"):
             BattleshipVisualizer(env).create_visualization(episode, tmp_path / "x.mp4")
+
+
+class TestRedesign:
+    """Check the visible marks against data and measure the saved layout."""
+
+    def test_boards_have_equal_size(self, env):
+        visualizer = BattleshipVisualizer(env)
+        fig, axes, _ = visualizer._setup_figure()
+        try:
+            visualizer._apply_layout(fig)
+            fig.canvas.draw()
+            boxes = [ax.get_window_extent() for ax in axes]
+            assert np.allclose([box.width for box in boxes], boxes[0].width)
+            assert np.allclose([box.height for box in boxes], boxes[0].height)
+            assert boxes[0].width >= 350
+        finally:
+            plt.close(fig)
+
+    def test_symbols_and_numbers_follow_each_record(self, env, episode):
+        visualizer = BattleshipVisualizer(env)
+        frames = visualizer._build_frames(episode)
+        fig, axes, artists = visualizer._setup_figure()
+        try:
+            animate = visualizer._animation_function(frames, axes, artists)
+            for index, frame in enumerate(frames):
+                animate(index)
+                assert [patch.get_visible() for patch in artists["ship_cells"]] == list(
+                    frame["truth"].astype(bool).flat
+                )
+                for key, code in (("hit_marks", _HIT), ("miss_marks", _MISS)):
+                    rows, cols = np.nonzero(frame["agent_view"] == code)
+                    np.testing.assert_array_equal(
+                        artists[key].get_offsets(), np.column_stack((cols, rows))
+                    )
+                assert [text.get_text() for text in artists["probabilities"]] == [
+                    f"{probability:.0%}" for probability in frame["belief"].flat
+                ]
+                if frame["action"] is not None:
+                    row, col = divmod(int(frame["action"]), env.board_size)
+                    np.testing.assert_array_equal(
+                        artists["probe_marker"].get_offsets(), [[col, row]]
+                    )
+                    assert f"{float(frame['reward']):+.2f}" in artists["caption"].get_text()
+                else:
+                    assert artists["probe_marker"].get_offsets().shape == (0, 2)
+        finally:
+            plt.close(fig)
+
+    def test_missing_belief_is_not_zero_probability(self, env, episode):
+        visualizer = BattleshipVisualizer(env)
+        frames = visualizer._build_frames(episode)
+        frames[0]["belief"][:] = np.nan
+        fig, axes, artists = visualizer._setup_figure()
+        try:
+            visualizer._animation_function(frames, axes, artists)(0)
+            assert all(text.get_text() == "—" for text in artists["probabilities"])
+            assert to_hex(artists["belief"].get_cmap()(np.nan)) != to_hex(
+                artists["belief"].get_cmap()(0.0)
+            )
+        finally:
+            plt.close(fig)
+
+    def test_decoded_gif_keeps_records_and_pacing(self, env, episode, tmp_path):
+        from typing import cast
+
+        from PIL import Image
+        from PIL.GifImagePlugin import GifImageFile
+
+        path = tmp_path / "review.gif"
+        BattleshipVisualizer(env).create_visualization(episode, path)
+        with Image.open(path) as image:
+            gif = cast(GifImageFile, image)
+            assert gif.n_frames == len(episode)
+            assert gif.size == (1500, 850)
+            for index in range(gif.n_frames):
+                gif.seek(index)
+                assert gif.info["duration"] == (2400 if index == len(episode) - 1 else 1400)
+
+
+class TestBackendCompatibility:
+    def test_svg_canvas_matches_agg_gif(self, env, episode, tmp_path):
+        """A non-raster canvas must save the same recorded frames as Agg."""
+        from matplotlib.backends.backend_svg import FigureCanvasSVG
+
+        visualizer = BattleshipVisualizer(env)
+        expected = tmp_path / "agg.gif"
+        visualizer.create_visualization(episode, expected)
+        frames = visualizer._build_frames(episode)
+        fig, axes, artists = visualizer._setup_figure()
+        FigureCanvasSVG(fig)
+        animate = visualizer._animation_function(frames, axes, artists)
+        actual = tmp_path / "svg.gif"
+        visualizer._save(fig, animate, len(frames), actual)
+        assert actual.read_bytes() == expected.read_bytes()
