@@ -5,12 +5,6 @@ on:
     branches: [ "master", "develop" ]
   pull_request:
     branches: [ "master", "develop" ]
-  schedule:
-    # Daily at 02:17 UTC. GitHub only loads this file from the default
-    # branch, so the schedule stays defined here but the job checks out
-    # develop below.
-    - cron: "17 2 * * *"
-  workflow_dispatch:
 
 permissions:
   contents: read
@@ -22,11 +16,6 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-      with:
-        # Scheduled runs are dispatched from the default branch; check out
-        # develop so the nightly suite tests the active branch. An empty
-        # ref keeps the default checkout for every other event.
-        ref: ${{ github.event_name == 'schedule' && 'develop' || '' }}
 
     - name: Free up disk space
       run: |
@@ -97,10 +86,9 @@ jobs:
     - name: Run unit tests inside Docker
       # Run the full suite (slow tests included) on direct pushes to or PRs
       # targeting master/develop, so regressions in slow integration tests
-      # are caught at PR time rather than only by the nightly run.
+      # are caught at PR time rather than by the weekly cron.
       run: |
-        if [ "${{ github.event_name }}" = "schedule" ] \
-          || [ "${{ github.ref }}" = "refs/heads/master" ] \
+        if [ "${{ github.ref }}" = "refs/heads/master" ] \
           || [ "${{ github.ref }}" = "refs/heads/develop" ] \
           || [ "${{ github.base_ref }}" = "master" ] \
           || [ "${{ github.base_ref }}" = "develop" ]; then
