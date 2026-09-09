@@ -1,6 +1,22 @@
 CartPole
 ========
 
+.. figure:: ../images/cartpole_visualization.gif
+   :alt: Three CartPole history frames showing the cart and pole, the particle
+         belief support, the noisy observation, the reward and the
+         within-limits status.
+   :width: 800px
+
+   Package-rendered example of three supplied history rows, with recorded
+   states ``[x, v, angle, ang.vel.]`` of ``[0, 0, 0, 0]``,
+   ``[0.1, -0.1, 0.15, 0.2]`` and ``[0.2, 0.1, -0.22, 0.3]``. The first row
+   pushes left, the second pushes right, and the third is the final
+   bookkeeping row with no action. Each row draws the true cart and pole, the
+   belief's particle support in ``x``, the recorded reward, the noisy
+   observation, and whether the state is still within the position and angle
+   limits — the last row is outside them. These rows illustrate the renderer,
+   not a continuous simulated rollout.
+
 Balance a pole on a cart by pushing left or right, seeing only a noisy reading
 of the four-dimensional state. The dynamics are the familiar Gym CartPole; the
 partial observability comes from adding Gaussian sensor noise to every
