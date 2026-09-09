@@ -191,6 +191,7 @@ Guides
    tiger
    rock_sample
    pacman
+   maze
    light_dark
    cartpole
    push
