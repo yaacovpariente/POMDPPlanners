@@ -92,10 +92,60 @@ def maze_qa_belief_particles() -> int:
     return 100
 
 
+
+def occupancy_grid_mapping_qa_pft_dpw_kwargs(**overrides: Any) -> Dict[str, Any]:
+    """PFT-DPW settings used for the occupancy-grid mapping QA and smoke run.
+
+    The environment has no torch vectorized model, so QA runs PFT-DPW on the
+    scalar ``Environment`` API rather than VOPP.
+
+    Both widening constants are set to *disable* widening. Progressive widening
+    exists to keep a large or continuous branching factor manageable, and the
+    action side has three actions, so ``k_a = 3`` with ``alpha_a = 0`` admits
+    every one of them and no action is excluded by an accident of the sampler.
+    The observation side is genuinely continuous -- a 24-beam range vector, so
+    every simulated reading is unique -- and there ``k_o = 3`` with
+    ``alpha_o = 0`` is doing real work: it caps each action node at three
+    observation children so the particle sets under them get revisited instead
+    of the tree spending its whole budget on one-visit leaves.
+
+    ``depth`` is 10 against a 40-step episode. It is short on purpose: one scan
+    resolves the cells around the robot, so the information a plan can still
+    gain falls away quickly with depth, and spending the budget on width rather
+    than length is the better trade here. It is a QA input, not a tuned value.
+
+    Args:
+        **overrides: Values merged on top of the pinned ones (overrides win).
+
+    Returns:
+        Constructor kwargs for :class:`~POMDPPlanners.planners.mcts_planners.pft_dpw.PFT_DPW`,
+        minus ``environment``, ``discount_factor``, ``name`` and ``action_sampler``,
+        which the caller supplies.
+    """
+    pinned: Dict[str, Any] = {
+        "depth": 10,
+        "k_a": 3.0,
+        "alpha_a": 0.0,
+        "k_o": 3.0,
+        "alpha_o": 0.0,
+        "exploration_constant": 5.0,
+        "time_out_in_seconds": 1,
+    }
+    pinned.update(overrides)
+    return pinned
+
+
+def occupancy_grid_mapping_qa_belief_particles() -> int:
+    """Thirty whole-map particles: a bounded QA input, with no diversity guarantee."""
+    return 30
+
+
 __all__ = [
     "continuous_maze_qa_pft_dpw_kwargs",
     "discrete_maze_qa_pft_dpw_kwargs",
     "maze_qa_belief_particles",
+    "occupancy_grid_mapping_qa_belief_particles",
+    "occupancy_grid_mapping_qa_pft_dpw_kwargs",
     "t_maze_qa_belief_particles",
     "t_maze_qa_pft_dpw_kwargs",
 ]

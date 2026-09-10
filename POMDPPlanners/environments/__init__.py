@@ -21,6 +21,7 @@ Available Environments:
     DiscreteMazePOMDP: Seeded maze memory task with cell actions
     ContinuousMazePOMDP: The same maze with real displacement actions
     TMazePOMDP: Compatibility class for the original T-shaped layout
+    OccupancyGridMappingPOMDP: Occupancy-grid mapping and exploration with a range sensor
 
 Factory Functions:
     get_environment: Create environment instances by name with parameters
@@ -43,6 +44,9 @@ from POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp impor
 )
 from POMDPPlanners.environments.mountain_car_pomdp import MountainCarPOMDP
 from POMDPPlanners.environments.pacman_pomdp import PacManPOMDP
+from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.occupancy_grid_mapping_pomdp import (
+    OccupancyGridMappingPOMDP,
+)
 from POMDPPlanners.environments.push_pomdp.push_pomdp import PushPOMDP
 from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp import (
     RockSamplePOMDP,
@@ -74,6 +78,7 @@ __all__ = [
     "DiscreteMazePOMDP",
     "ContinuousMazePOMDP",
     "TMazePOMDP",
+    "OccupancyGridMappingPOMDP",
 ]
 
 # Registry of available environments
@@ -96,6 +101,7 @@ ENVIRONMENT_REGISTRY: Dict[str, Type] = {
     "ContinuousMazePOMDP": ContinuousMazePOMDP,
     # Compatibility name for saved configurations using the original T layout.
     "TMazePOMDP": TMazePOMDP,
+    "OccupancyGridMappingPOMDP": OccupancyGridMappingPOMDP,
 }
 
 

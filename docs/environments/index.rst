@@ -17,7 +17,8 @@ registry:
 
 .. note::
 
-   ``get_environment`` covers the classic suite only. Import ``BattleshipPOMDP``
+   ``get_environment`` covers the classic suite only, which now includes
+   ``OccupancyGridMappingPOMDP``. Import ``BattleshipPOMDP``
    directly. ``ContinuousPushPOMDP``,
    ``ContinuousPushPOMDPDiscreteActions`` and the realistic worlds (CARLA,
    Isaac Lab, nuPlan, Racetrack) are not in the registry — import those classes
@@ -63,6 +64,13 @@ actually stores.
      - discrete
      - none
      - :doc:`battleship`
+   * - ``OccupancyGridMappingPOMDP``
+     - Explore an unknown grid world, paid for the entropy it maps away.
+     - ``[step, pose, true map, log-odds map]``
+     - discrete
+     - continuous
+     - none
+     - :doc:`occupancy_grid_mapping`
    * - ``PacManPOMDP``
      - Clear every pellet while dodging noisily-observed ghosts.
      - vector (pac, ghosts, pellets)
@@ -220,6 +228,7 @@ Guides
    tiger
    rock_sample
    battleship
+   occupancy_grid_mapping
    pacman
    maze
    light_dark
@@ -268,6 +277,7 @@ API listing
    :toctree: ../api/
 
    POMDPPlanners.environments.rock_sample_pomdp.RockSamplePOMDP
+   POMDPPlanners.environments.occupancy_grid_mapping_pomdp.OccupancyGridMappingPOMDP
    POMDPPlanners.environments.pacman_pomdp.PacManPOMDP
    POMDPPlanners.environments.laser_tag_pomdp.LaserTagPOMDP
    POMDPPlanners.environments.laser_tag_pomdp.ContinuousLaserTagPOMDP
