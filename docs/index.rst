@@ -70,7 +70,7 @@ What is in the package
 
 - ``POMDPPlanners.core`` — the abstractions: ``Environment``, ``Policy``,
   ``Belief``, distributions and search trees.
-- ``POMDPPlanners.environments`` — 16 benchmark environments plus four wrappers
+- ``POMDPPlanners.environments`` — 20 benchmark environments plus four wrappers
   around external simulators.
 - ``POMDPPlanners.planners`` — MCTS planners (POMCP, PFT-DPW, Sparse PFT),
   sparse sampling, and open-loop planners.
