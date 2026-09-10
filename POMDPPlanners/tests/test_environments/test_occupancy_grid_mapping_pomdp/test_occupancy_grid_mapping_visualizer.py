@@ -374,12 +374,13 @@ def test_a_saved_gif_holds_one_frame_per_step(env, tmp_path: Path):
     Test type: integration
     """
     # pylint: disable-next=import-outside-toplevel
-    from PIL import Image
+    from PIL import GifImagePlugin, Image
 
     history = _episode(env, steps=4)
     path = tmp_path / "episode.gif"
     OccupancyGridMappingVisualizer(env).create_visualization(history, path)
     with Image.open(path) as gif:
+        assert isinstance(gif, GifImagePlugin.GifImageFile)
         assert gif.format == "GIF"
         assert gif.n_frames == len(history)
         assert gif.size == CANVAS_SIZE
