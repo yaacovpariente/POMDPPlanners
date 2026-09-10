@@ -38,7 +38,7 @@ from POMDPPlanners.core.environment import DiscreteActionsEnvironment, SpaceType
 from POMDPPlanners.core.policy import PolicyInfoVariable, PolicyRunData, PolicySpaceInfo
 from POMDPPlanners.core.tree.arena import ACTION, BELIEF, Tree
 from POMDPPlanners.planners.planners_utils.scenario_streams import ScenarioRandomStreams
-from POMDPPlanners.planners.scenario_tree_planners.adaptive_particles import (
+from POMDPPlanners.planners.scenario_tree_planners.adaops.adaptive_particles import (
     adaptive_resample,
     design_effect,
     effective_sample_size,
