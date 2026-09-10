@@ -864,8 +864,9 @@ class OccupancyGridMappingPOMDP(DiscreteActionsEnvironment):
             output_dir: Directory to write into.
             episode_index: Zero-based episode index, used to name the file.
         """
-        # Imported lazily: matplotlib is heavy and every parallel worker imports
-        # this module, while almost none of them render anything.
+        # Imported lazily: every parallel worker imports this module while
+        # almost none of them render anything, so the renderer's textures,
+        # sprites and palette tables stay out of a planning run's memory.
         # pylint: disable-next=import-outside-toplevel
         from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.occupancy_grid_mapping_visualizer import (  # noqa: E501
             OccupancyGridMappingVisualizer,

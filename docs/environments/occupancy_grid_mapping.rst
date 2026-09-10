@@ -104,7 +104,7 @@ fraction. ``average_obstacle_collisions`` counts blocked moves;
 It is not a unique-cell count.
 
 .. image:: ../images/occupancy_grid_mapping_visualization.gif
-   :alt: Observed inverse map, particle occupancy marginals, and true map with robot pose.
+   :alt: Observed map, the weighted map estimate, and the true map with the robot pose.
    :width: 100%
 
 The left panel shows the observation-derived inverse map. The middle shows
