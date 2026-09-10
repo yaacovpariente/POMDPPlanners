@@ -284,8 +284,8 @@ class OccupancyGridMappingVisualizer:
         self._panel_legend(
             axes[1],
             [
-                self._square_handle("#1d3b4a", "every particle says occupied"),
-                self._square_handle("#f5f9fa", "every particle says free"),
+                self._square_handle("#1d3b4a", "weighted occupancy probability = 1"),
+                self._square_handle("#f5f9fa", "weighted occupancy probability = 0"),
                 self._square_handle("#dce0e4", "no belief recorded"),
             ],
         )

@@ -9,12 +9,15 @@ prior replay then reweights fresh map hypotheses against the complete history.
 """
 
 import time
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 import numpy as np
 
 from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.utils.config_to_id import config_to_id
+
+if TYPE_CHECKING:
+    from .occupancy_grid_mapping_pomdp import OccupancyGridMappingPOMDP
 
 
 class OccupancyGridMappingBelief(WeightedParticleBelief):
@@ -92,6 +95,7 @@ class OccupancyGridMappingBelief(WeightedParticleBelief):
     def update(self, action, observation, pomdp, state=None):
         """Condition on observations only; the runner's true state is ignored."""
         del state
+        pomdp = cast("OccupancyGridMappingPOMDP", pomdp)
         started = time.perf_counter()
         replay_ess = None
         proposals = 0
@@ -128,7 +132,7 @@ class OccupancyGridMappingBelief(WeightedParticleBelief):
         result.replay_proposals = proposals
         return result
 
-    def _replay_prior(self, pomdp, history):
+    def _replay_prior(self, pomdp: "OccupancyGridMappingPOMDP", history):
         """Restore support from original prior; never change a hidden map to fit."""
         for attempt in range(8):
             candidates = np.asarray(pomdp.initial_state_dist().sample(512))
