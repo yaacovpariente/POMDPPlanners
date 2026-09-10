@@ -62,6 +62,7 @@ class ParticleMeanStdRepresentation(BeliefRepresentation):
     belief's particle set.
 
     Supported belief types:
+
     - ``WeightedParticleBelief`` / ``WeightedParticleBeliefStateUpdate``:
       uses normalised weights for statistics.
     - ``GaussianBelief``: extracts mean and diagonal of covariance.
