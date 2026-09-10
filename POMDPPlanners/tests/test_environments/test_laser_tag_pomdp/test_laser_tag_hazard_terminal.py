@@ -353,9 +353,13 @@ def test_continuous_discrete_actions_variant_threads_flag():
     assert env.reward_requires_next_state is True
     # reward with next_state=None must resample via the vector-accepting parent
     # transition (the str-label override would otherwise KeyError).
+    #
+    # Start half a unit short of the danger centre (5, 3), not on it: a discrete
+    # move is exactly the danger radius, so starting on the centre lands on the
+    # boundary, where the kernel's ``<=`` test is a coin flip against float noise.
     np.random.seed(0)
     _native.set_seed(0)
-    reward = env.reward(np.array([5.0, 3.0, 8.0, 2.0, 0.0]), "up")
+    reward = env.reward(np.array([5.0, 2.5, 8.0, 2.0, 0.0]), "up")
     assert reward == pytest.approx(-env.step_cost - env.dangerous_area_penalty)
 
 
