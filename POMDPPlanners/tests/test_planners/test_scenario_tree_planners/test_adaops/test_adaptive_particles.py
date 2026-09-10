@@ -5,7 +5,7 @@
 import numpy as np
 import pytest
 
-from POMDPPlanners.planners.scenario_tree_planners.adaptive_particles import (
+from POMDPPlanners.planners.scenario_tree_planners.adaops.adaptive_particles import (
     adaptive_resample,
     bounded_kld_sample_size,
     design_effect,

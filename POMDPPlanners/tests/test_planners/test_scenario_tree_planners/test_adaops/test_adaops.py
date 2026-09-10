@@ -173,7 +173,8 @@ def test_configuration_identity_reset_pickle_and_snapshot_immutability(tmp_path:
     binned = _planner(
         state_binner=state_bin,
         state_binner_id=(
-            "POMDPPlanners.tests.test_planners.test_scenario_tree_planners." "test_adaops.state_bin"
+            "POMDPPlanners.tests.test_planners.test_scenario_tree_planners.test_adaops."
+            "test_adaops.state_bin"
         ),
     )
     binned_path = tmp_path / "binned.json"
