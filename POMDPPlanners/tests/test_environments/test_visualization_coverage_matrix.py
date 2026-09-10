@@ -122,6 +122,19 @@ FAMILIES: Tuple[EnvironmentFamily, ...] = (
         image="docs/artifacts/battleship_redesign/review.gif",
     ),
     EnvironmentFamily(
+        package="occupancy_grid_mapping_pomdp",
+        label="OccupancyGridMapping",
+        hooks=(
+            (
+                "occupancy_grid_mapping_pomdp/occupancy_grid_mapping_pomdp.py",
+                "OccupancyGridMappingPOMDP",
+            ),
+        ),
+        docs_page="occupancy_grid_mapping.rst",
+        docs_section=None,
+        image="docs/images/occupancy_grid_mapping_visualization.gif",
+    ),
+    EnvironmentFamily(
         package="pacman_pomdp",
         label="PacMan",
         hooks=(("pacman_pomdp/pacman_pomdp.py", "PacManPOMDP"),),

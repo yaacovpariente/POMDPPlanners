@@ -446,3 +446,35 @@ def continuous_maze_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
     pinned["max_step_size"] = 1.0
     pinned.update(overrides)
     return pinned
+
+
+def occupancy_grid_mapping_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
+    """Pinned optional defaults for ``OccupancyGridMappingPOMDP``.
+
+    ``start_row`` and ``start_col`` default to ``None`` in the constructor and
+    are substituted with the grid centre, so the substituted value is pinned
+    here rather than ``None`` -- the convention this module documents.
+    """
+    pinned: Dict[str, Any] = {
+        "num_rows": 10,
+        "num_cols": 10,
+        "num_beams": 24,
+        "field_of_view_degrees": 360.0,
+        "max_range_cells": 3.5,
+        "range_noise_std_cells": 0.35,
+        "hit_probability": 0.85,
+        "miss_probability": 0.15,
+        "log_odds_clamp": 6.0,
+        "num_obstacles": 3,
+        "max_obstacle_size": 2,
+        "has_boundary_wall": True,
+        "start_row": 5,
+        "start_col": 5,
+        "start_heading": 0,
+        "move_failure_probability": 0.0,
+        "max_steps": 40,
+        "entropy_threshold_fraction": 0.25,
+        "step_cost": 0.0,
+    }
+    pinned.update(overrides)
+    return pinned

@@ -85,6 +85,9 @@ from POMDPPlanners.environments.maze_pomdp import (
     DiscreteMazePOMDP,
 )
 from POMDPPlanners.environments.mountain_car_pomdp import MountainCarPOMDP
+from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.occupancy_grid_mapping_pomdp import (
+    OccupancyGridMappingPOMDP,
+)
 from POMDPPlanners.environments.pacman_pomdp import PacManPOMDP
 from POMDPPlanners.environments.push_pomdp.continuous_push_pomdp import (
     ContinuousPushPOMDP,
@@ -110,6 +113,7 @@ from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
     discrete_maze_pinned_kwargs,
     laser_tag_pinned_kwargs,
     mountain_car_pinned_kwargs,
+    occupancy_grid_mapping_pinned_kwargs,
     pacman_pinned_kwargs,
     push_pinned_kwargs,
     rock_sample_pinned_kwargs,
@@ -157,6 +161,12 @@ def _build_continuous_push_discrete() -> ContinuousPushPOMDPDiscreteActions:
 
 def _build_battleship() -> BattleshipPOMDP:
     return BattleshipPOMDP(discount_factor=0.99, **battleship_pinned_kwargs())
+
+
+def _build_occupancy_grid_mapping() -> OccupancyGridMappingPOMDP:
+    return OccupancyGridMappingPOMDP(
+        discount_factor=0.95, **occupancy_grid_mapping_pinned_kwargs()
+    )
 
 
 def _build_rock_sample() -> RockSamplePOMDP:
@@ -234,6 +244,7 @@ ENV_BUILDERS: List[Tuple[str, EnvBuilder]] = [
     ("DiscreteMazePOMDP", _build_discrete_maze),
     ("ContinuousMazePOMDP", _build_continuous_maze),
     ("BattleshipPOMDP", _build_battleship),
+    ("OccupancyGridMappingPOMDP", _build_occupancy_grid_mapping),
 ]
 
 
