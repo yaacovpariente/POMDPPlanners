@@ -13,7 +13,7 @@ from POMDPPlanners.planners.scenario_tree_planners.hyp_despot import (
     HypDESPOT,
     ObservationBranch,
 )
-from POMDPPlanners.planners.scenario_tree_planners.hyp_despot_cuda import (
+from POMDPPlanners.planners.scenario_tree_planners.hyp_despot.hyp_despot_cuda import (
     CUDAExpansionResult,
     HypDESPOTCompatibilityError,
     expand_cuda_leaves,
@@ -281,7 +281,7 @@ class _ForeignModel(_Model):
 
 def test_normalize_cuda_device_matches_indexed_and_bare_cuda():
     """``cuda`` and ``cuda:0`` name the same GPU (review finding 4)."""
-    from POMDPPlanners.planners.scenario_tree_planners.hyp_despot_cuda import (
+    from POMDPPlanners.planners.scenario_tree_planners.hyp_despot.hyp_despot_cuda import (
         normalize_cuda_device,
     )
 
@@ -353,7 +353,7 @@ def test_bare_cuda_resolves_to_the_process_current_device_not_hard_coded_zero(mo
     pass the "one GPU only" check and then fail later against tensors on the
     other GPU, with a message naming the wrong device.
     """
-    from POMDPPlanners.planners.scenario_tree_planners.hyp_despot_cuda import (
+    from POMDPPlanners.planners.scenario_tree_planners.hyp_despot.hyp_despot_cuda import (
         normalize_cuda_device,
     )
 
