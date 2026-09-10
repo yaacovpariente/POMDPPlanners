@@ -88,10 +88,12 @@ Classes:
     OccupancyGridMappingPOMDP: The environment.
 """
 
+# pylint: disable=too-many-lines  # one environment, its sensor plumbing and its metrics
+
 from enum import Enum, IntEnum
 from pathlib import Path
 from collections.abc import Hashable
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
@@ -185,6 +187,7 @@ class OccupancyGridMappingMetrics(Enum):
 OccupancyGridState = np.ndarray
 
 
+# pylint: disable-next=too-many-public-methods
 class OccupancyGridMappingPOMDP(DiscreteActionsEnvironment):
     """Explore an unknown 2-D world by driving the entropy out of its map.
 
@@ -262,7 +265,7 @@ class OccupancyGridMappingPOMDP(DiscreteActionsEnvironment):
         True
     """
 
-    # pylint: disable-next=too-many-arguments,too-many-locals,too-many-statements
+    # pylint: disable-next=too-many-arguments,too-many-branches,too-many-locals,too-many-statements
     def __init__(
         self,
         num_rows: int = 10,
@@ -1094,12 +1097,12 @@ class OccupancyGridMappingPOMDP(DiscreteActionsEnvironment):
 
 def create_occupancy_grid_state(
     environment: OccupancyGridMappingPOMDP,
-    occupancy: Sequence[float],
+    occupancy: Union[Sequence[float], np.ndarray],
     row: Optional[int] = None,
     col: Optional[int] = None,
     heading: Optional[int] = None,
     step: int = 0,
-    log_odds: Optional[Sequence[float]] = None,
+    log_odds: Optional[Union[Sequence[float], np.ndarray]] = None,
 ) -> OccupancyGridState:
     """Build a state vector for ``environment`` from its parts.
 

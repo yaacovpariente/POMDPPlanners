@@ -3,8 +3,8 @@
 """Ray casting and the inverse sensor model for occupancy-grid mapping.
 
 This module holds the two halves of the sensor that
-:class:`~POMDPPlanners.environments.occupancy_grid_mapping_pomdp.occupancy_grid_mapping_pomdp.OccupancyGridMappingPOMDP`
-is built on, kept apart from the environment so each can be tested on its own:
+``OccupancyGridMappingPOMDP`` is built on, kept apart from the environment so
+each can be tested on its own:
 
 * **Forward model** -- :func:`cast_scan` casts ``num_beams`` rays from a grid
   cell over a field of view and reports one range per beam.
