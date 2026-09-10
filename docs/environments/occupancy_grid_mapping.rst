@@ -1,104 +1,117 @@
 Occupancy grid mapping
 ======================
 
-``OccupancyGridMappingPOMDP`` drops a robot into a 2-D world it has never seen
-and pays it for finding out what the world looks like. There is no goal cell and
-no object to fetch: the task is the map. The robot carries a range sensor, keeps
-an occupancy grid of the cells around it, and is rewarded for the uncertainty it
-drives out of that grid.
+``OccupancyGridMappingPOMDP`` models a robot mapping a hidden static grid with
+known pose and noisy range scans. The default world is 10 by 10 cells with a
+boundary wall and three random rectangular obstacles. The robot starts at the
+centre, facing north. Actions are forward one cell, turn left and turn right.
+Integer pose is a design simplification; particle-based MCTS also supports
+continuous states.
 
 .. code-block:: python
 
    from POMDPPlanners.environments.occupancy_grid_mapping_pomdp import (
-       OccupancyGridMappingPOMDP,
+       OccupancyGridMappingPOMDP, OccupancyGridMappingBelief,
    )
 
-   env = OccupancyGridMappingPOMDP(num_rows=10, num_cols=10, num_beams=24)
+   env = OccupancyGridMappingPOMDP()
+   belief = OccupancyGridMappingBelief.initial(env, n_particles=30)
 
-The default world is a 10 by 10 grid walled on the outside, with three
-rectangular obstacles of up to 2 by 2 cells placed at random inside it. The
-robot starts at the centre facing north. The map is drawn afresh at the start of
-each episode and never changes within one, so the map is what a belief is over.
+State and observation contract
+------------------------------
 
-Actions, observations and rewards
----------------------------------
+The state contains the step, row, column, heading, hidden true occupancy,
+observation-derived map log-odds, and last noisy scan. Its length is
+``4 + 2 * num_cells + num_beams``. The hidden map constrains motion and produces
+nominal ranges. Gaussian noise is drawn once in the transition, then the same
+scan is stored, used for mapping, and revealed by the observation.
 
-Three actions: ``0`` move forward one cell along the heading, ``1`` turn left,
-``2`` turn right. Headings are ``N``, ``E``, ``S``, ``W``; rows grow downwards.
-A forward move into an occupied cell or off the grid leaves the robot where it
-was, wastes the step, and is counted as a collision.
+Observations contain ``[row, column, heading, ranges...]``. Pose is exact and
+integer. Repeated observation calls on one successor reveal the same stored
+scan. Gaussian ranges are unbounded; they are never clipped in the sampler.
+The augmented observation kernel is a point mass. The predictive density
+``p(observation | prior state, action)`` combines Gaussian ranges with the
+probability of the observed motion outcome.
 
-The observation is ``[row, column, heading, range × num_beams]``. The pose is
-reported exactly: this is *mapping with known poses*, the classical setting for
-occupancy grids, and adding localisation would make it a different problem. Each
-beam reports the centre-to-centre distance to the first occupied cell it meets,
-or the sensor's maximum range when it meets none, plus Gaussian noise of
-``range_noise_std_cells``. The noisy ranges are not clipped back to the sensor's
-range, because clipping would put a point mass at the ends that the Gaussian
-likelihood cannot represent.
+The initial observation contains known pose and zero range placeholders.
+It is a sentinel before any scan and is never applied to the map.
 
-The reward is the reduction in the occupancy grid's binary entropy, in bits —
-the information-gain exploration objective of Bourgault et al. (2002). It is a
-*belief-dependent* reward, which no other environment here has, and it is
-expressed by carrying the robot's own occupancy grid inside the state next to
-the hidden true map. A belief particle therefore holds one candidate world and
-the map the robot would have built in it, so averaging this reward over the
-particles is exactly the expected information gain.
+Mapping and reward
+------------------
 
-The grid is stored as log-odds, ``l = log(p / (1 - p))``, initialised to zero —
-``p = 0.5``, unknown. The update is additive there, so a cell seen a hundred
-times is a sum rather than a hundred multiplications of small numbers.
-Probabilities appear only where entropy is computed and where the visualization
-draws. Accumulated log-odds are clamped to ``±log_odds_clamp``, which stops a
-cell swept by many beams from becoming unrevisable.
+Log-odds start at zero, or occupancy probability 0.5. The inverse update reads
+only the previous log-odds and observed pose/ranges. A reading below maximum
+range selects the nearest ray-cell centre; cells before it get free evidence,
+the selected cell gets occupied evidence, and cells after it remain unchanged.
+Negative readings select the first valid cell. Ties select the nearer cell.
+A reading at or above maximum range marks the full in-grid ray free.
+The robot's observed cell also receives free evidence. Log-odds are clamped.
 
-Per beam, the inverse sensor model marks the cells the beam passed through as
-free, the cell it stopped on as occupied, and leaves everything behind that cell
-alone — the beam saw nothing there. A beam that returns nothing marks its whole
-length free and marks no cell occupied. That last case is what makes exploration
-work: without it, looking into open space would be indistinguishable from not
-looking. The cell the robot is standing in is marked free too, since the robot
-is in it and no beam ever reports it.
+A true hit exactly at maximum range and a miss have identical range laws.
+They therefore produce identical updates for the same reading. Without an
+observed hit flag, this ambiguity cannot be removed. Gaussian noise can place
+an apparent hit beyond a real obstacle or before it; the mapper follows the
+measurement, not hidden truth.
 
-An episode ends when the grid's entropy falls to
-``entropy_threshold_fraction`` of its initial value (25% by default — an average
-of a quarter of a bit per cell), or when ``max_steps`` transitions have been
-taken. Nothing here can fail: a wall stops the robot and costs it a step, but
-ends nothing.
+Simulation reward is the realised decrease in the observed inverse map's
+summed binary entropy, minus ``step_cost``. The environment declares
+``reward_requires_next_state=True`` so the runner supplies that realised map.
+When a planner requests reward without a successor, the explicit fallback uses
+eight fixed antithetic Gaussian samples per motion outcome to approximate the
+expected decrease. This deterministic integration consumes no simulation RNG,
+but has integration error. It updates each hypothetical map with the same
+observation-based rule as the actual map.
 
-Metrics
--------
+This is an exploration surrogate inspired by entropy-reduction objectives,
+not exact posterior information gain. The inverse map treats cells and beam
+increments as independent. Repeated correlated beams can create confidence in
+an incorrect map. Low entropy measures confidence, not map accuracy.
 
-``task_completion_rate`` is the fraction of episodes whose map was resolved.
-``ended_by_goal``, ``ended_by_failure`` and ``ended_by_timeout`` say why each
-episode stopped and sum to one; ``ended_by_failure`` is always zero here.
-``final_residual_entropy_bits`` and ``max_resolved_cell_fraction`` say how far
-an unfinished episode got, and ``average_obstacle_collisions`` and
-``average_new_cells_visited`` describe how it moved.
+An episode completes when the observed inverse map's entropy reaches
+``entropy_threshold_fraction`` of its initial value (25% by default).
+``max_steps`` (40 by default) ends an unfinished episode. Reward and completion
+use the inverse estimate; neither substitutes the true occupancy grid.
 
-Recorded visualization
-----------------------
+Filtering and limits
+--------------------
+
+Use ``OccupancyGridMappingBelief`` with PFT_DPW. Ordinary
+``get_initial_belief`` returns a bootstrap filter which cannot condition this
+stored continuous scan correctly. No core planner changes are needed.
+
+The custom filter installs the observed scan and its map update in every
+particle. It weights whole-map hypotheses by the predictive Gaussian density
+and exact motion probability, with no epsilon floor for impossible poses.
+Routine resampling is disabled to retain low-weight hypotheses. If every
+particle contradicts observed motion, bounded prior replay tests up to 4096
+fresh maps against the entire observation history and resamples surviving
+weighted maps. It raises if that search finds no support.
+
+Thirty particles is a QA resource choice, not a guarantee against degeneracy.
+Reweighting cannot create missing maps. Prior replay is finite importance
+sampling and may leave only one effective hypothesis. Inspect effective sample
+size, unique maps, restarts and map error alongside completion. Unweighted
+rejection filters are unsuitable for exact matching of continuous scans.
+
+Metrics and visualization
+-------------------------
+
+``task_completion_rate`` reports threshold crossing. ``ended_by_goal``,
+``ended_by_failure`` and ``ended_by_timeout`` report episode endings; failure
+is always zero. Progress metrics include residual entropy and resolved-cell
+fraction. ``average_obstacle_collisions`` counts blocked moves;
+``average_successful_translations`` counts successful moves, including revisits.
+It is not a unique-cell count.
 
 .. image:: ../images/occupancy_grid_mapping_visualization.gif
-   :alt: Three grids side by side - the robot's occupancy grid, the belief's per-cell occupancy probability, and the true map with the robot's pose.
+   :alt: Observed inverse map, particle occupancy marginals, and true map with robot pose.
    :width: 100%
 
-The left grid is the map the robot has built, shaded from white (believed free)
-through grey (unknown) to dark (believed occupied). The middle grid is the
-belief over whole worlds, projected to the chance each cell is occupied — a
-particle here is an entire map, and a hundred overlaid maps are not a picture of
-anything, so the per-cell marginal is what is drawn. The right grid is the real
-map with the robot's pose and heading, shown for review; the planner never sees
-it.
+The left panel shows the observation-derived inverse map. The middle shows
+weighted occupancy marginals over whole-map particles. The right shows the
+hidden true map for review. Panels depict the state before the captioned action;
+the caption's reward is the realised inverse-map entropy reduction.
 
-Panels show the state before the displayed action, and the caption reports that
-action and the information it gained. A planner that is exploring well drives
-the grey out of the left grid; a filter that is tracking well makes the middle
-grid approach the right one.
-
-No vectorized model
--------------------
-
-This environment has no torch vectorized model and no C++ native model, so it
-cannot be run under VOPP. ``PFT_DPW`` takes the scalar ``Environment`` directly
-and works on it as it stands.
+There is no torch vectorized or C++ model. VOPP is unsupported. Scalar PFT_DPW
+uses the environment and custom belief shown above. Sensor contract version 2
+changes cache identity; old results and GIFs describe the earlier behavior.

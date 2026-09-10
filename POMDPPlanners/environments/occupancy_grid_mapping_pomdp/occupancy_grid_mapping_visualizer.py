@@ -60,9 +60,9 @@ if TYPE_CHECKING:
 _ACTION_LABELS = ("move forward", "turn left", "turn right")
 
 _PANEL_HEADINGS = (
-    ("Occupancy grid", "what the robot has mapped so far"),
+    ("Observed inverse map", "approximate occupancy from measured scans"),
     ("Belief over the map", "chance a cell is occupied, over the belief's worlds"),
-    ("Ground truth", "the real map and pose, hidden from the robot"),
+    ("Ground truth", "hidden occupancy; the robot knows its pose"),
 )
 
 _INK = "#193746"
@@ -271,9 +271,7 @@ class OccupancyGridMappingVisualizer:
             axes,
             (occupancy_cmap, occupancy_cmap, ListedColormap(("#f5f9fa", "#1d3b4a"))),
         ):
-            artists[key] = ax.imshow(
-                blank, cmap=cmap, vmin=0.0, vmax=1.0, interpolation="nearest"
-            )
+            artists[key] = ax.imshow(blank, cmap=cmap, vmin=0.0, vmax=1.0, interpolation="nearest")
 
         self._panel_legend(
             axes[0],
@@ -322,11 +320,23 @@ class OccupancyGridMappingVisualizer:
         colorbar.outline.set_visible(False)
 
         artists["robot_grid"] = axes[0].scatter(
-            [], [], s=150, marker="o", facecolors="none", edgecolors=_ROBOT_COLOR,
-            linewidths=2.5, zorder=6,
+            [],
+            [],
+            s=150,
+            marker="o",
+            facecolors="none",
+            edgecolors=_ROBOT_COLOR,
+            linewidths=2.5,
+            zorder=6,
         )
         artists["robot_truth"] = axes[2].scatter(
-            [], [], s=190, marker="^", c=_ROBOT_COLOR, edgecolors="#7a5300", linewidths=1.0,
+            [],
+            [],
+            s=190,
+            marker="^",
+            c=_ROBOT_COLOR,
+            edgecolors="#7a5300",
+            linewidths=1.0,
             zorder=6,
         )
         artists["heading_arrow"] = axes[2].annotate(
@@ -386,7 +396,7 @@ class OccupancyGridMappingVisualizer:
                     f"facing {heading_text}; about to {action_text}"
                 )
                 detail = (
-                    f"Information gained by this action: {reward_text} bits.   "
+                    f"Observed map entropy reduction: {reward_text} bits.   "
                     f"Map entropy before it: {frame['entropy']:.2f} bits "
                     f"(resolved at {threshold:.2f} or below)"
                 )

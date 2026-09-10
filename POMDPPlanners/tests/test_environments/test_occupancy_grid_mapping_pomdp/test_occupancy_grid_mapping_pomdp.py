@@ -117,7 +117,7 @@ def test_a_wall_blocks_the_robot_and_is_counted_as_a_collision(open_room_env):
     assert open_room_env.pose(next_state) == (1, 3, 0)
     info = open_room_env.step_info(state, int(OccupancyGridAction.FORWARD), next_state)
     assert info[OccupancyGridStepChannel.OBSTACLE_COLLISION.value] == 1.0
-    assert info[OccupancyGridStepChannel.VISITED_NEW_CELL.value] == 0.0
+    assert info[OccupancyGridStepChannel.SUCCESSFUL_TRANSLATION.value] == 0.0
 
 
 def test_the_hidden_map_is_never_altered_by_the_robot(open_room_env):
@@ -140,81 +140,13 @@ def test_the_hidden_map_is_never_altered_by_the_robot(open_room_env):
         np.testing.assert_array_equal(open_room_env.true_map(state), original)
 
 
-def test_a_failing_move_is_a_second_reachable_successor():
-    """With move noise on, staying put is a real outcome with a real probability.
-
-    Purpose: ``move_failure_probability`` is the environment's only transition
-        noise, and a particle filter reweighting against
-        ``transition_log_probability`` needs both branches to be reachable and
-        correctly weighted, not merely documented.
-
-    Given: An environment with a one-in-four chance of a failed move
-    When: Both successors are scored
-    Then: They are distinct states whose probabilities are 0.75 and 0.25
-
-    Test type: unit
-    """
-    env = OccupancyGridMappingPOMDP(
-        num_rows=7, num_cols=7, max_range_cells=2.5,
-        num_obstacles=0, move_failure_probability=0.25,
-    )
-    state = create_occupancy_grid_state(env, _empty_room(env))
-    # pylint: disable-next=protected-access
-    successors, probabilities = env._transition_outcomes(state, int(OccupancyGridAction.FORWARD))
-    assert [env.pose(successor) for successor in successors] == [(2, 3, 0), (3, 3, 0)]
-    np.testing.assert_allclose(probabilities, [0.75, 0.25])
-    log_probs = env.transition_log_probability(
-        state, int(OccupancyGridAction.FORWARD), successors
-    )
-    np.testing.assert_allclose(np.exp(log_probs), [0.75, 0.25])
 
 
 # -- observation model ---------------------------------------------------
 
 
-def test_cells_behind_an_obstacle_stay_unknown(open_room_env):
-    """Occlusion is real: the beam stops, and so does the knowledge.
-
-    Purpose: An inverse sensor model that swept past its hit cell would resolve
-        the whole map from the start cell, and the exploration problem would
-        disappear without anything failing.
-
-    Given: A room with a wall segment across the robot's north side
-    When: The robot steps up to it and scans
-    Then: The cell immediately behind the wall is still at log-odds zero
-
-    Test type: unit
-    """
-    occupancy = _empty_room(open_room_env)
-    occupancy[2, 2:5] = 1.0
-    state = create_occupancy_grid_state(open_room_env, occupancy, row=4, col=3, heading=0)
-    scanned = open_room_env.sample_next_state(state, int(OccupancyGridAction.FORWARD))
-    log_odds = open_room_env.log_odds(scanned)
-    assert log_odds[2, 3] > 0.0, "the wall itself should read as occupied"
-    assert log_odds[1, 3] == 0.0, "the cell behind the wall should still be unknown"
 
 
-def test_the_pose_is_reported_exactly_and_the_ranges_are_not(open_room_env):
-    """Known poses, noisy ranges -- the split the environment is built on.
-
-    Purpose: If the pose were noisy this would be a SLAM problem; if the ranges
-        were exact the particle likelihood would be a hard 0/1 filter that kills
-        every disagreeing map on the first step. Both halves matter.
-
-    Given: A state in an empty room
-    When: Two readings are drawn from it
-    Then: Their pose blocks are identical and exact, and their range blocks differ
-
-    Test type: unit
-    """
-    np.random.seed(0)
-    state = create_occupancy_grid_state(open_room_env, _empty_room(open_room_env))
-    scanned = open_room_env.sample_next_state(state, int(OccupancyGridAction.FORWARD))
-    first = open_room_env.sample_observation(scanned, 0)
-    second = open_room_env.sample_observation(scanned, 0)
-    np.testing.assert_array_equal(first[:3], np.array([2.0, 3.0, 0.0]))
-    np.testing.assert_array_equal(first[:3], second[:3])
-    assert not np.allclose(first[3:], second[3:])
 
 
 def test_a_reading_from_the_wrong_pose_has_zero_likelihood(open_room_env):
@@ -241,85 +173,13 @@ def test_a_reading_from_the_wrong_pose_has_zero_likelihood(open_room_env):
     assert scores[1] == -np.inf
 
 
-def test_the_likelihood_prefers_the_map_the_scan_came_from(open_room_env):
-    """The range block carries information about which world this is.
-
-    Purpose: A likelihood that did not separate maps would leave the belief at
-        its prior forever, and the belief panel of every visualization would be
-        meaningless while every contract still passed.
-
-    Given: Two states with the same pose but different obstacles
-    When: A reading drawn from the first is scored under both
-    Then: The first scores higher
-
-    Test type: integration
-    """
-    np.random.seed(1)
-    truth = _empty_room(open_room_env)
-    truth[3, 5] = 1.0
-    other = _empty_room(open_room_env)
-    other[5, 3] = 1.0
-    true_state = create_occupancy_grid_state(open_room_env, truth, row=3, col=3)
-    other_state = create_occupancy_grid_state(open_room_env, other, row=3, col=3)
-    observation = open_room_env.sample_observation(true_state, 0)
-    scores = open_room_env.observation_log_probability_per_state(
-        [true_state, other_state], 0, observation
-    )
-    assert scores[0] > scores[1]
 
 
 # -- reward --------------------------------------------------------------
 
 
-def test_reward_equals_the_entropy_the_step_removes(open_room_env):
-    """The reward is the entropy difference, not a stand-in for it.
-
-    Purpose: The environment's whole claim is that it implements the
-        information-gain objective. A reward correlated with information gain --
-        a count of newly-touched cells, say -- would look right in every episode
-        summary and be a different objective.
-
-    Given: A robot in an empty room and a deterministic transition
-    When: The reward and the two states' entropies are computed independently
-    Then: The reward is the difference of the two entropies
-
-    Test type: unit
-    """
-    state = create_occupancy_grid_state(open_room_env, _empty_room(open_room_env))
-    next_state = open_room_env.sample_next_state(state, int(OccupancyGridAction.FORWARD))
-    expected = grid_entropy_bits(open_room_env.log_odds(state)) - grid_entropy_bits(
-        open_room_env.log_odds(next_state)
-    )
-    assert open_room_env.reward(state, int(OccupancyGridAction.FORWARD)) == pytest.approx(
-        expected
-    )
 
 
-def test_repeated_scans_from_one_spot_pay_less_and_less(open_room_env):
-    """Standing still and re-measuring buys sharpening, and only until the clamp.
-
-    Purpose: A turn under a 360-degree fan re-scans exactly the same cells, so
-        it is not free -- repeated measurement genuinely sharpens an occupancy
-        grid, which is what the additive log-odds update is *for*. What must
-        hold is that the sharpening decays: if it did not, the best policy would
-        be to spin in place forever and the environment would not be an
-        exploration problem at all. The clamp is what makes it decay.
-
-    Given: A robot turning in place in an empty room
-    When: The reward of each successive turn is recorded
-    Then: The first is positive, the sequence never rises, and it reaches zero
-
-    Test type: unit
-    """
-    state = create_occupancy_grid_state(open_room_env, _empty_room(open_room_env))
-    rewards = []
-    for _ in range(8):
-        rewards.append(open_room_env.reward(state, int(OccupancyGridAction.TURN_LEFT)))
-        state = open_room_env.sample_next_state(state, int(OccupancyGridAction.TURN_LEFT))
-    assert rewards[0] > 0.0
-    assert all(later <= earlier for earlier, later in zip(rewards, rewards[1:]))
-    assert rewards[1] < rewards[0]
-    assert rewards[-1] == pytest.approx(0.0, abs=1e-6)
 
 
 def test_the_first_scan_of_an_unknown_room_pays(open_room_env):

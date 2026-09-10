@@ -136,15 +136,7 @@ def occupancy_grid_mapping_qa_pft_dpw_kwargs(**overrides: Any) -> Dict[str, Any]
 
 
 def occupancy_grid_mapping_qa_belief_particles() -> int:
-    """Particle count for the occupancy-grid mapping QA belief.
-
-    Small on purpose. A particle here is a whole map plus the occupancy grid
-    that goes with it, and PFT-DPW re-filters the whole set at every node it
-    expands, so the particle count is the dominant cost of a decision rather
-    than a free accuracy knob. Thirty keeps a decision inside its wall-clock
-    budget while leaving the belief wide enough that a single unlucky
-    reweighting does not collapse it.
-    """
+    """Thirty whole-map particles: a bounded QA input, with no diversity guarantee."""
     return 30
 
 

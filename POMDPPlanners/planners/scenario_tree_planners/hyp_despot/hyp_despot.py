@@ -25,7 +25,7 @@ from torch import Tensor
 from POMDPPlanners.core.environment import SpaceType
 from POMDPPlanners.core.environment.hyp_despot_cuda_model import HypDESPOTCUDAmodel
 from POMDPPlanners.core.policy import Policy, PolicyInfoVariable, PolicyRunData, PolicySpaceInfo
-from POMDPPlanners.planners.scenario_tree_planners.hyp_despot_cuda import (
+from POMDPPlanners.planners.scenario_tree_planners.hyp_despot.hyp_despot_cuda import (
     CUDAExpansionResult,
     HypDESPOTCompatibilityError,
     expand_cuda_leaves,

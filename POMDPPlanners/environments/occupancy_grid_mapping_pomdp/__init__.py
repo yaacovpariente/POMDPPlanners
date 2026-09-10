@@ -39,6 +39,7 @@ from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.occupancy_grid_sens
 )
 
 __all__ = [
+    "OccupancyGridMappingBelief",
     "COL_INDEX",
     "HEADING_INDEX",
     "HEADING_LABELS",
@@ -62,3 +63,5 @@ __all__ = [
     "sample_occupancy_map",
     "scan_log_odds_delta",
 ]
+
+from .occupancy_grid_mapping_belief import OccupancyGridMappingBelief

@@ -15,11 +15,10 @@ each can be tested on its own:
   evidence, the cell it stops in gets occupied evidence, and cells behind that
   one are left untouched because the beam never saw them.
 
-**Both are deterministic.** Range noise is added by the environment's
-observation sampler, not here, and deliberately never reaches the map update:
-the map a robot builds is the map its *nominal* scan implies. Keeping the two
-apart is what lets the transition kernel stay a function of ``(state, action)``
-while the observation likelihood stays a plain Gaussian.
+The forward ray cast is noise-free. The transition adds Gaussian noise before
+``observed_scan_log_odds_delta`` interprets the measured ranges. The legacy
+``scan_log_odds_delta`` helper operates on explicit hit/slot arrays and is used
+only by geometry tests; the environment never uses hidden hits for mapping.
 
 Geometry conventions, fixed here and relied on by every caller:
 
@@ -76,9 +75,7 @@ def log_odds_from_probability(probability: float) -> float:
             number of further readings could ever revise.
     """
     if not 0.0 < probability < 1.0:
-        raise ValueError(
-            f"probability must be strictly inside (0, 1), got {probability}"
-        )
+        raise ValueError(f"probability must be strictly inside (0, 1), got {probability}")
     return float(math.log(probability / (1.0 - probability)))
 
 
@@ -152,9 +149,7 @@ def build_ray_templates(
     if num_beams < 1:
         raise ValueError(f"num_beams must be at least 1, got {num_beams}")
     if not 0.0 < field_of_view_degrees <= 360.0:
-        raise ValueError(
-            f"field_of_view_degrees must be in (0, 360], got {field_of_view_degrees}"
-        )
+        raise ValueError(f"field_of_view_degrees must be in (0, 360], got {field_of_view_degrees}")
     if max_range_cells <= 0.0:
         raise ValueError(f"max_range_cells must be positive, got {max_range_cells}")
 
@@ -343,3 +338,45 @@ def scan_log_odds_delta(
             occupied_log_odds
         )
     return delta
+
+
+def observed_scan_log_odds_delta(
+    observed_ranges,
+    template,
+    row,
+    col,
+    num_rows,
+    num_cols,
+    max_range_cells,
+    free_log_odds,
+    occupied_log_odds,
+):
+    """Map measured ranges without consulting occupancy or hidden hit flags.
+
+    A reading below maximum selects the nearest valid ray-cell centre; ties
+    select the nearer cell. A reading at/above maximum frees the full ray.
+    Out-of-grid cells and padded template slots never receive evidence.
+    Gaussian tails remain in the observation; only this inverse interpretation
+    selects grid cells. Negative readings select the first valid cell.
+    """
+    offsets, distances = template
+    rows = offsets[:, :, 0] + row
+    cols = offsets[:, :, 1] + col
+    valid = (
+        (rows >= 0) & (rows < num_rows) & (cols >= 0) & (cols < num_cols) & np.isfinite(distances)
+    )
+    # Once a ray leaves the grid it cannot return (straight rays, convex grid).
+    valid = np.logical_and.accumulate(valid, axis=1)
+    has_cell = valid.any(axis=1)
+    nearest = np.argmin(
+        np.where(valid, np.abs(distances - observed_ranges[:, None]), np.inf), axis=1
+    )
+    hit = (observed_ranges < max_range_cells) & has_cell
+    slots = np.arange(distances.shape[1])[None, :]
+    free = valid & ((slots < nearest[:, None]) | ~hit[:, None])
+    occupied = valid & (slots == nearest[:, None]) & hit[:, None]
+    flat = rows * num_cols + cols
+    return (
+        np.bincount(flat[free], minlength=num_rows * num_cols) * free_log_odds
+        + np.bincount(flat[occupied], minlength=num_rows * num_cols) * occupied_log_odds
+    )

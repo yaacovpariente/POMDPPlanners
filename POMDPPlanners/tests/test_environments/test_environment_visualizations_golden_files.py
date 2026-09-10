@@ -65,6 +65,7 @@ from POMDPPlanners.environments.maze_pomdp import (
 )
 from POMDPPlanners.environments.occupancy_grid_mapping_pomdp import (
     OccupancyGridAction,
+    OccupancyGridMappingBelief,
     OccupancyGridMappingPOMDP,
 )
 from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.occupancy_grid_mapping_visualizer import (  # noqa: E501
@@ -240,7 +241,7 @@ def create_deterministic_occupancy_grid_mapping_episode(seed: int = 3) -> List[S
     """Create a deterministic occupancy-grid mapping episode for the golden GIF.
 
     The action sequence is fixed, and the belief attached to each step is a real
-    :class:`WeightedParticleBelief` rather than a mock: the belief panel is the
+    :class:`OccupancyGridMappingBelief` rather than a mock: the belief panel is the
     part of this visualization most likely to regress, and hashing a mock belief
     would leave it untested. Both the resampling inside the filter and the
     sensor noise are random, so the seed is pinned.
@@ -260,7 +261,7 @@ def create_deterministic_occupancy_grid_mapping_episode(seed: int = 3) -> List[S
     np.random.seed(seed)
     env = build_occupancy_grid_mapping_env()
 
-    belief = get_initial_belief(env, n_particles=24)
+    belief = OccupancyGridMappingBelief.initial(env, n_particles=24)
     state = env.initial_state_dist().sample()[0]
     history: List[StepData] = []
 

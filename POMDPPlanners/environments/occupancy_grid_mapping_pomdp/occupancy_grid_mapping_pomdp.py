@@ -1,91 +1,27 @@
 # SPDX-License-Identifier: MIT
 
-"""Occupancy-grid mapping and exploration as a POMDP.
+"""Occupancy-grid exploration with known integer pose and noisy range scans.
 
-A robot is dropped into a 2-D world it has never seen, carrying a range sensor
-and nothing else. Its job is to *find out what the world looks like*: to drive
-the uncertainty out of an occupancy grid over the world's cells. There is no
-goal cell to reach and no object to find. The task is the map.
+State: [step, row, col, heading, hidden occupancy(C), inverse-map log-odds(C),
+last noisy ranges(B)]. The transition samples motion and an unbounded Gaussian
+scan, stores that scan and applies its inverse sensor update. Observation
+reveals the exact pose and stored ranges. Hidden occupancy is used only by the
+forward motion/sensor model, never by the inverse map update.
 
-That makes the reward **belief-dependent** rather than state-dependent, which
-is what distinguishes this environment from every other grid world here. The
-agent is paid the *entropy reduction* of its occupancy grid, in bits -- the
-information-gain exploration objective of Bourgault et al. (2002). Nothing about
-the world changes when the robot drives; only what it knows does.
+A range at or above the maximum is interpreted as a miss. A shorter range
+selects the nearest ray cell (negative readings select the first cell). Thus a
+hit exactly at maximum range and a miss have identical observation laws and
+identical updates for equal readings. This ambiguity is intentional; no hidden
+hit flag is supplied to the robot.
 
-How that is expressed inside a state-based API
-----------------------------------------------
-The occupancy grid the robot accumulates is carried **inside the state**,
-alongside the true map:
+The map is an approximate independent-cell inverse estimate. Its entropy is
+not the entropy of the posterior over whole maps. Realised reward and completion use the observed inverse map. Planning
+without a successor uses fixed Gaussian integration of its expected reduction. Repeated correlated beams can create false
+confidence. The separate whole-map particle belief predicts scans and motion.
+Use OccupancyGridMappingBelief to condition the augmented state correctly.
 
-* the **true map** is hidden and constant for the whole episode -- this is the
-  uncertainty a belief is actually over;
-* the **occupancy grid**, held as log-odds, is a deterministic accumulation of
-  the scans taken from the poses visited, so it is a legitimate state variable
-  rather than bookkeeping the runner keeps on the side.
-
-A belief particle therefore carries one hypothesised world *and* the map the
-robot would have built if that world were the real one. Averaging the per-step
-entropy reduction over the particles -- which every planner here does when it
-averages rewards over a belief -- recovers exactly the expected information gain
-the exploration literature maximises. No special belief-reward hook is needed
-and no other environment's behaviour changes.
-
-Log-odds, not probabilities, is the internal representation, for the standard
-reason: the update is additive there, so a cell observed a hundred times is a
-sum rather than a hundred multiplications of small numbers, and nothing
-underflows. Probabilities appear only where entropy is computed and where the
-visualizer draws.
-
-State
------
-One ``float64`` vector, ``4 + 2 * num_cells`` long:
-
-``[step, row, col, heading, true_occupancy(num_cells), log_odds(num_cells)]``
-
-``heading`` is an index into ``0=N, 1=E, 2=S, 3=W``; ``row`` grows downwards.
-
-Actions
--------
-Three, discrete: ``0`` move forward one cell, ``1`` turn left, ``2`` turn right.
-A forward move into an occupied cell or off the grid leaves the robot where it
-was. This is the discrete formulation, chosen because every solver in this
-repository that can consume a generative environment is a particle-based tree
-search over a discrete action set; see the module's documentation page.
-
-Observation
------------
-``[row, col, heading, range(num_beams)]``. The pose is reported exactly:
-occupancy grid mapping is classically posed as *mapping with known poses*
-(Moravec and Elfes 1985; Thrun, Burgard and Fox, ch. 9), and localisation is a
-different problem that would change what this environment measures. The ranges
-are the nominal ray-cast ranges plus zero-mean Gaussian noise.
-
-The noisy ranges are **not** clipped back into ``[0, max_range_cells]``.
-Clipping would put a point mass at each end that a Gaussian density cannot
-represent, so the likelihood used to weight particles would stop matching the
-sampler. ContinuousLightDark leaves its sampler unclipped for the same reason.
-
-Range noise reaches the *likelihood* but never the *map update*: the log-odds
-accumulated in the state are built from the nominal scan. Keeping the two apart
-is what lets the transition stay a function of ``(state, action)`` while the
-observation model stays a plain Gaussian; the approximation it buys is small,
-because the inverse sensor model applies a fixed increment per cell and noise of
-well under a cell rarely moves which cell that is.
-
-Termination
------------
-Two ways, and the metrics tell them apart:
-
-* the occupancy grid's total entropy falls to ``entropy_threshold_fraction`` of
-  its initial value -- the map is resolved, the task is complete;
-* ``max_steps`` transitions have been taken -- the budget ran out.
-
-Classes:
-    OccupancyGridAction: The three action indices.
-    OccupancyGridStepChannel: Per-step measurement channels.
-    OccupancyGridMappingMetrics: Metric names.
-    OccupancyGridMappingPOMDP: The environment.
+Integer pose and three actions are a chosen simplification. Particle-based
+MCTS also supports continuous states; it does not require this discretization.
 """
 
 # pylint: disable=too-many-lines  # one environment, its sensor plumbing and its metrics
@@ -121,7 +57,7 @@ from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.occupancy_grid_sens
     cast_scan,
     grid_entropy_bits,
     log_odds_from_probability,
-    scan_log_odds_delta,
+    observed_scan_log_odds_delta,
 )
 
 
@@ -166,7 +102,7 @@ class OccupancyGridStepChannel(Enum):
     RESIDUAL_ENTROPY_BITS = "residual_entropy_bits"
     RESOLVED_CELL_FRACTION = "resolved_cell_fraction"
     OBSTACLE_COLLISION = "obstacle_collision"
-    VISITED_NEW_CELL = "visited_new_cell"
+    SUCCESSFUL_TRANSLATION = "successful_translation"
 
 
 class OccupancyGridMappingMetrics(Enum):
@@ -180,7 +116,7 @@ class OccupancyGridMappingMetrics(Enum):
     FINAL_RESIDUAL_ENTROPY_BITS = "final_residual_entropy_bits"
     MAX_RESOLVED_CELL_FRACTION = "max_resolved_cell_fraction"
     AVERAGE_OBSTACLE_COLLISIONS = "average_obstacle_collisions"
-    AVERAGE_NEW_CELLS_VISITED = "average_new_cells_visited"
+    AVERAGE_SUCCESSFUL_TRANSLATIONS = "average_successful_translations"
 
 
 #: Type alias for an occupancy-grid mapping state.
@@ -189,80 +125,11 @@ OccupancyGridState = np.ndarray
 
 # pylint: disable-next=too-many-public-methods
 class OccupancyGridMappingPOMDP(DiscreteActionsEnvironment):
-    """Explore an unknown 2-D world by driving the entropy out of its map.
+    """Explore until observed inverse-map entropy reaches its threshold.
 
-    Dynamics:
-        Deterministic by default. ``FORWARD`` advances one cell along the
-        heading unless the target cell is occupied in the episode's true map or
-        lies off the grid, in which case the robot stays put. Turning is always
-        possible. Setting ``move_failure_probability`` above zero makes an
-        otherwise-successful forward move fail with that probability, which is
-        the only source of transition noise.
-
-    Observation model:
-        A ray-cast scan, sampled from the true map, plus the robot's exact pose.
-        Per beam the nominal range is the centre-to-centre distance to the first
-        occupied cell the beam meets, or ``max_range_cells`` if it meets none
-        before running out of range or leaving the grid. Gaussian noise of
-        ``range_noise_std_cells`` is added to each nominal range.
-
-    Reward:
-        The expected reduction in the occupancy grid's binary entropy, in bits
-        -- the information-gain exploration objective of Bourgault, Makarenko,
-        Williams, Grocholsky and Durrant-Whyte, *Information based adaptive
-        robotic exploration* (IROS 2002). Expected rather than realised, so the
-        reward stays a function of ``(state, action)`` and
-        :attr:`reward_requires_next_state` stays ``False``; with deterministic
-        motion the two coincide exactly. ``step_cost`` is subtracted on every
-        step and defaults to zero, leaving the pure information-gain objective.
-
-        The gain can be negative: a cell already believed occupied that then
-        receives free-space evidence moves back towards ``p = 0.5``, and the
-        grid's entropy rises. The declared range covers that.
-
-    Terminal:
-        Entropy at or below ``entropy_threshold_fraction`` of the initial
-        all-unknown entropy (the map is resolved), or ``max_steps`` transitions
-        taken. There is no failure terminal -- bumping into a wall wastes a step
-        and is counted, but does not end anything.
-
-    Attributes:
-        num_rows: Grid rows.
-        num_cols: Grid columns.
-        num_cells: ``num_rows * num_cols``.
-        num_beams: Beams per scan.
-        field_of_view_degrees: Angular width of the beam fan.
-        max_range_cells: Sensor range, in cell widths.
-        range_noise_std_cells: Standard deviation of the per-beam range noise.
-        hit_probability: Inverse sensor model's ``p(occupied | beam stopped here)``.
-        miss_probability: Inverse sensor model's ``p(occupied | beam passed through)``.
-        log_odds_clamp: Symmetric bound the accumulated log-odds are held inside.
-        num_obstacles: Rectangular blocks the map prior places per episode.
-        max_obstacle_size: Largest block side length.
-        has_boundary_wall: Whether the outer ring of cells is walled.
-        start_row: Robot's start row.
-        start_col: Robot's start column.
-        start_heading: Robot's start heading index.
-        move_failure_probability: Chance an otherwise-valid forward move fails.
-        max_steps: Transitions allowed before the episode is out of budget.
-        entropy_threshold_fraction: Fraction of the initial entropy at or below
-            which the map counts as resolved.
-        step_cost: Constant charge per step.
-
-    Example:
-        >>> import numpy as np
-        >>> np.random.seed(0)
-        >>> env = OccupancyGridMappingPOMDP()
-        >>> state = env.initial_state_dist().sample()[0]
-        >>> env.is_terminal(state)
-        False
-        >>> next_state, observation, reward = env.sample_next_step(
-        ...     state, OccupancyGridAction.FORWARD
-        ... )
-        >>> observation.shape
-        (27,)
-        >>> bool(reward > 0.0)  # the first scan resolves cells, so it pays
-        True
+    Motion checks the hidden static grid. Each transition draws a fresh noisy
+    scan. Realised reward is inverse-map entropy reduction minus step cost;
+    planning uses a numerical expectation. Either can be negative. Timeout is max_steps.
     """
 
     # pylint: disable-next=too-many-arguments,too-many-branches,too-many-locals,too-many-statements
@@ -314,9 +181,7 @@ class OccupancyGridMappingPOMDP(DiscreteActionsEnvironment):
                 little over a third of the grid, so the robot must travel to
                 finish the map rather than resolving it from the start cell.
             range_noise_std_cells: Per-beam Gaussian range noise. Defaults to
-                0.35 cells -- a tenth of the sensor's range, big enough that the
-                likelihood separates hypotheses softly rather than killing
-                every disagreeing particle outright.
+                0.35 cells -- a tenth of the sensor's range, used by the forward sensor model. Finite map particles can still collapse.
             hit_probability: Inverse sensor model probability for the cell a
                 beam stops in. Defaults to 0.85.
             miss_probability: Inverse sensor model probability for a cell a beam
@@ -373,8 +238,7 @@ class OccupancyGridMappingPOMDP(DiscreteActionsEnvironment):
             raise ValueError(f"max_steps must be at least 1, got {max_steps}")
         if not 0.0 <= entropy_threshold_fraction <= 1.0:
             raise ValueError(
-                "entropy_threshold_fraction must be in [0, 1], got "
-                f"{entropy_threshold_fraction}"
+                "entropy_threshold_fraction must be in [0, 1], got " f"{entropy_threshold_fraction}"
             )
         if log_odds_clamp <= 0.0:
             raise ValueError(f"log_odds_clamp must be positive, got {log_odds_clamp}")
@@ -442,7 +306,12 @@ class OccupancyGridMappingPOMDP(DiscreteActionsEnvironment):
             )
 
         self.num_cells = num_cells
-        self.state_size = POSE_WIDTH + 2 * num_cells
+        self.scan_offset = POSE_WIDTH + 2 * num_cells
+        self.state_size = self.scan_offset + self.num_beams
+        self.sensor_contract_version = 2
+        # Fixed antithetic integration points leave the simulation RNG untouched.
+        points = np.random.RandomState(0).normal(size=(4, self.num_beams))
+        self._reward_noise = np.concatenate([points, -points])
         self.map_offset = POSE_WIDTH
         self.log_odds_offset = POSE_WIDTH + num_cells
         #: Entropy of the all-unknown grid, in bits: one bit per cell.
@@ -583,79 +452,54 @@ class OccupancyGridMappingPOMDP(DiscreteActionsEnvironment):
             return row, col, heading, True
         return target_row, target_col, heading, False
 
-    def _state_after_scan(
-        self, state: OccupancyGridState, row: int, col: int, heading: int
-    ) -> OccupancyGridState:
-        """Return ``state`` advanced one step to the given pose, scan applied.
-
-        Args:
-            state: The state being stepped from.
-            row: The pose's row.
-            col: The pose's column.
-            heading: The pose's heading index.
-
-        Returns:
-            A fresh state vector: step incremented, pose set, and the occupancy
-            grid updated by the inverse sensor model for a scan taken from the
-            new pose against this state's true map.
-        """
-        next_state = np.array(state, dtype=np.float64, copy=True)
-        next_state[STEP_INDEX] += 1.0
-        next_state[ROW_INDEX] = float(row)
-        next_state[COL_INDEX] = float(col)
-        next_state[HEADING_INDEX] = float(heading)
-
-        occupancy = self.true_map(state)
-        template = self._ray_templates[heading]
-        _, hit, stop_slot = cast_scan(
-            occupancy=occupancy,
-            row=row,
-            col=col,
-            template=template,
-            max_range_cells=self.max_range_cells,
+    def state_from_observation(self, state, observation):
+        """Advance using only prior map and observed pose/ranges for mapping."""
+        observation = np.asarray(observation, dtype=float)
+        if observation.shape != (3 + self.num_beams,) or not np.all(np.isfinite(observation)):
+            raise ValueError("observation must contain finite pose and ranges")
+        row, col, heading = observation[:3]
+        if (
+            not np.array_equal(observation[:3], np.round(observation[:3]))
+            or not 0 <= row < self.num_rows
+            or not 0 <= col < self.num_cols
+            or not 0 <= heading < NUM_HEADINGS
+        ):
+            raise ValueError("observation pose must be an in-grid integer pose")
+        row, col, heading = int(row), int(col), int(heading)
+        next_state = np.array(state, dtype=float, copy=True)
+        next_state[STEP_INDEX] += 1
+        next_state[1:4] = observation[:3]
+        next_state[self.scan_offset :] = observation[3:]
+        delta = observed_scan_log_odds_delta(
+            observation[3:],
+            self._ray_templates[heading],
+            row,
+            col,
+            self.num_rows,
+            self.num_cols,
+            self.max_range_cells,
+            self.free_log_odds,
+            self.occupied_log_odds,
         )
-        delta = scan_log_odds_delta(
-            hit=hit,
-            stop_slot=stop_slot,
-            template=template,
-            row=row,
-            col=col,
-            num_rows=self.num_rows,
-            num_cols=self.num_cols,
-            free_log_odds=self.free_log_odds,
-            occupied_log_odds=self.occupied_log_odds,
-        )
-        # The robot occupies the cell it is standing in, so that cell is free by
-        # direct evidence. No beam ever reports it -- every ray template starts
-        # one cell out -- so without this the robot's own trail would stay at
-        # p = 0.5 forever and the map could never be fully resolved.
         delta[row * self.num_cols + col] += self.free_log_odds
-
         end = self.log_odds_offset + self.num_cells
-        np.clip(
+        next_state[self.log_odds_offset : end] = np.clip(
             next_state[self.log_odds_offset : end] + delta,
             -self.log_odds_clamp,
             self.log_odds_clamp,
-            out=next_state[self.log_odds_offset : end],
         )
         return next_state
 
-    def _transition_outcomes(
+    def _state_after_pose(self, state, row, col, heading):
+        """Motion-only successor, before drawing the scan."""
+        result = np.array(state, dtype=float, copy=True)
+        result[1:4] = row, col, heading
+        return result
+
+    def _motion_outcomes(
         self, state: OccupancyGridState, action: int
     ) -> Tuple[List[OccupancyGridState], np.ndarray]:
-        """Enumerate the successors of ``(state, action)`` with their probabilities.
-
-        There are at most two: the move succeeds, or ``move_failure_probability``
-        makes it fail and the robot stays where it is while still taking a scan.
-        Turning and a blocked forward move have a single outcome.
-
-        Args:
-            state: The state being stepped from.
-            action: The action taken.
-
-        Returns:
-            ``(successors, probabilities)`` with the probabilities summing to 1.
-        """
+        """Enumerate moved poses and probabilities before advancing step or scan."""
         row, col, heading = self.pose(state)
         occupancy = self.true_map(state)
         next_row, next_col, next_heading, blocked = self._next_pose(
@@ -664,66 +508,65 @@ class OccupancyGridMappingPOMDP(DiscreteActionsEnvironment):
         moved = (next_row, next_col) != (row, col)
         if not moved or self.move_failure_probability <= 0.0:
             del blocked
-            return [self._state_after_scan(state, next_row, next_col, next_heading)], np.array(
+            return [self._state_after_pose(state, next_row, next_col, next_heading)], np.array(
                 [1.0]
             )
         return (
             [
-                self._state_after_scan(state, next_row, next_col, next_heading),
-                self._state_after_scan(state, row, col, heading),
+                self._state_after_pose(state, next_row, next_col, next_heading),
+                self._state_after_pose(state, row, col, heading),
             ],
             np.array([1.0 - self.move_failure_probability, self.move_failure_probability]),
         )
 
-    def sample_next_state(
-        self, state: OccupancyGridState, action: int, n_samples: int = 1
-    ) -> Any:
-        """Move the robot, take a scan and fold it into the occupancy grid.
+    def sample_next_state(self, state, action, n_samples=1):
+        """Sample motion and Gaussian ranges, then apply the observed scan."""
+        successors, probabilities = self._motion_outcomes(state, action)
+        samples = []
+        for _ in range(int(n_samples)):
+            index = (
+                0 if len(successors) == 1 else np.random.choice(len(successors), p=probabilities)
+            )
+            moved = successors[index]
+            ranges = self.nominal_scan(moved) + np.random.normal(
+                0.0, self.range_noise_std_cells, self.num_beams
+            )
+            samples.append(self.state_from_observation(state, np.r_[moved[1:4], ranges]))
+        return samples[0] if n_samples == 1 else np.asarray(samples)
 
-        Args:
-            state: Current state.
-            action: One of :class:`OccupancyGridAction`.
-            n_samples: How many successors to draw. Defaults to 1.
+    def predictive_observation_log_probability(self, state, action, observation):
+        """Integrate discrete motion; score the continuous scan before it is stored.
 
-        Returns:
-            A single ``float64`` state when ``n_samples == 1``, else an
-            ``(n_samples, state_size)`` ``float64`` array.
+        This is p(o | s,a), not p(o | augmented next_state,a). The conditional
+        filter uses it as its importance weight and installs o deterministically.
         """
-        successors, probabilities = self._transition_outcomes(state, action)
-        if n_samples == 1:
-            if len(successors) == 1:
-                return successors[0]
-            index = int(np.random.choice(len(successors), p=probabilities))
-            return successors[index]
-        count = int(n_samples)
-        if len(successors) == 1:
-            return np.tile(successors[0], (count, 1))
-        indices = np.random.choice(len(successors), size=count, p=probabilities)
-        return np.stack([successors[int(index)] for index in indices])
+        observation = np.asarray(observation, dtype=float)
+        if observation.shape != (3 + self.num_beams,) or not np.all(np.isfinite(observation)):
+            return -np.inf
+        successors, probabilities = self._motion_outcomes(state, action)
+        score = -np.inf
+        for moved, probability in zip(successors, probabilities):
+            if probability <= 0 or not np.array_equal(moved[1:4], observation[:3]):
+                continue
+            residual = (observation[3:] - self.nominal_scan(moved)) / self.range_noise_std_cells
+            log_density = -0.5 * np.sum(residual**2) - self.num_beams * np.log(
+                self.range_noise_std_cells * np.sqrt(2 * np.pi)
+            )
+            score = np.logaddexp(score, np.log(probability) + log_density)
+        return float(score)
 
-    def transition_log_probability(
-        self, state: OccupancyGridState, action: int, next_states: Any
-    ) -> np.ndarray:
-        """Log-probability of each candidate successor.
-
-        Args:
-            state: Current state.
-            action: The action taken.
-            next_states: Candidate successors.
-
-        Returns:
-            ``(N,)`` ``float64`` array; ``-inf`` for anything the transition
-            cannot produce.
-        """
-        successors, probabilities = self._transition_outcomes(state, action)
-        candidates = np.asarray(next_states, dtype=np.float64)
-        if candidates.ndim == 1:
-            candidates = candidates.reshape(1, -1)
-        log_probs = np.full(candidates.shape[0], -np.inf, dtype=np.float64)
-        for successor, probability in zip(successors, probabilities):
-            matches = np.all(np.isclose(candidates, successor, atol=1e-9), axis=1)
-            log_probs[matches] = float(np.log(probability)) if probability > 0.0 else -np.inf
-        return log_probs
+    def transition_log_probability(self, state, action, next_states):
+        """Density on the scan coordinates with deterministic map/pose constraints."""
+        candidates = np.atleast_2d(np.asarray(next_states, dtype=float))
+        scores = np.full(len(candidates), -np.inf)
+        for index, candidate in enumerate(candidates):
+            observation = np.r_[candidate[1:4], candidate[self.scan_offset :]]
+            score = self.predictive_observation_log_probability(state, action, observation)
+            if np.isfinite(score) and np.array_equal(
+                candidate, self.state_from_observation(state, observation)
+            ):
+                scores[index] = score
+        return scores
 
     # -- observations ---------------------------------------------------
 
@@ -746,72 +589,19 @@ class OccupancyGridMappingPOMDP(DiscreteActionsEnvironment):
         )
         return ranges
 
-    def sample_observation(
-        self, next_state: OccupancyGridState, action: int, n_samples: int = 1
-    ) -> Any:
-        """Report the robot's pose exactly and its ranges with Gaussian noise.
-
-        Args:
-            next_state: The post-transition state.
-            action: The action taken. Unused: the sensor reads the world, not
-                the manoeuvre that reached it.
-            n_samples: How many readings to draw. Defaults to 1.
-
-        Returns:
-            ``(3 + num_beams,)`` ``float64`` when ``n_samples == 1``, else
-            ``(n_samples, 3 + num_beams)``.
-        """
+    def sample_observation(self, next_state, action, n_samples=1):
+        """Reveal the scan already drawn in the transition; do not draw twice."""
         del action
-        row, col, heading = self.pose(next_state)
-        nominal = self.nominal_scan(next_state)
-        count = int(n_samples)
-        noise = np.random.normal(0.0, self.range_noise_std_cells, size=(count, self.num_beams))
-        observations = np.empty((count, 3 + self.num_beams), dtype=np.float64)
-        observations[:, 0] = float(row)
-        observations[:, 1] = float(col)
-        observations[:, 2] = float(heading)
-        observations[:, 3:] = nominal[None, :] + noise
-        if n_samples == 1:
-            return observations[0]
-        return observations
+        observation = np.r_[
+            np.asarray(self.pose(next_state), dtype=float), next_state[self.scan_offset :]
+        ]
+        return observation if n_samples == 1 else np.tile(observation, (int(n_samples), 1))
 
-    def observation_log_probability(
-        self, next_state: OccupancyGridState, action: int, observations: Any
-    ) -> np.ndarray:
-        """Log-likelihood of each candidate reading under ``next_state``.
-
-        The pose block is reported exactly, so a candidate whose pose disagrees
-        with ``next_state`` has zero likelihood -- that is what lets a particle
-        filter reject a hypothesised map under which the robot's forward move
-        would have been blocked when in fact it was not. The range block is a
-        product of independent Gaussians about the nominal scan.
-
-        Args:
-            next_state: The post-transition state.
-            action: The action taken. Unused.
-            observations: Candidate readings.
-
-        Returns:
-            ``(N,)`` ``float64`` array of log-densities.
-        """
-        del action
-        row, col, heading = self.pose(next_state)
-        nominal = self.nominal_scan(next_state)
-        candidates = np.asarray(observations, dtype=np.float64)
-        if candidates.ndim == 1:
-            candidates = candidates.reshape(1, -1)
-
-        pose_matches = (
-            (np.abs(candidates[:, 0] - float(row)) < 0.5)
-            & (np.abs(candidates[:, 1] - float(col)) < 0.5)
-            & (np.abs(candidates[:, 2] - float(heading)) < 0.5)
-        )
-        residuals = candidates[:, 3:] - nominal[None, :]
-        variance = self.range_noise_std_cells**2
-        log_density = -0.5 * np.sum(residuals**2, axis=1) / variance - 0.5 * self.num_beams * (
-            np.log(2.0 * np.pi) + np.log(variance)
-        )
-        return np.where(pose_matches, log_density, -np.inf)
+    def observation_log_probability(self, next_state, action, observations):
+        """Point mass on the exact pose and stored scan of the augmented state."""
+        expected = self.sample_observation(next_state, action)
+        candidates = np.atleast_2d(np.asarray(observations, dtype=float))
+        return np.where(np.all(candidates == expected, axis=1), 0.0, -np.inf)
 
     def is_equal_observation(self, observation1: Any, observation2: Any) -> bool:
         """Check whether two readings are the same array of numbers."""
@@ -840,39 +630,32 @@ class OccupancyGridMappingPOMDP(DiscreteActionsEnvironment):
 
     # -- reward ---------------------------------------------------------
 
-    def reward(
-        self, state: OccupancyGridState, action: int, next_state: Any = None
-    ) -> float:
-        """Expected reduction in the occupancy grid's entropy, in bits.
+    @property
+    def reward_requires_next_state(self):
+        """Simulation reward measures the realised observed map change."""
+        return True
 
-        This is the information-gain exploration reward of Bourgault,
-        Makarenko, Williams, Grocholsky and Durrant-Whyte, *Information based
-        adaptive robotic exploration* (IROS 2002): the agent is paid for what it
-        learns about the map, and for nothing else.
+    def reward(self, state, action, next_state=None):
+        """Score realised map change, or estimate its expectation for planning.
 
-        The expectation is taken over the transition's outcomes rather than
-        scored against the realised one, which keeps the reward a pure function
-        of ``(state, action)`` and lets :attr:`reward_requires_next_state` stay
-        ``False``. Under the default deterministic motion there is one outcome
-        and the two definitions coincide exactly.
-
-        Args:
-            state: The state the action is taken from.
-            action: The action taken.
-            next_state: Unused; see above.
-
-        Returns:
-            Entropy reduction in bits, minus ``step_cost``. Negative when the
-            scan pushes cells back towards ``p = 0.5``.
+        Simulation supplies next_state and receives the observed inverse-map
+        entropy difference. PFT_DPW's belief reward calls without a successor;
+        that explicit fallback uses eight fixed antithetic Gaussian samples.
+        The numerical expectation is approximate and uses no global randomness.
+        Neither quantity is posterior whole-map information gain.
         """
-        del next_state
-        successors, probabilities = self._transition_outcomes(state, action)
-        before = self.entropy_bits(state)
-        gain = sum(
-            float(probability) * (before - self.entropy_bits(successor))
-            for successor, probability in zip(successors, probabilities)
-        )
-        return float(gain) - self.step_cost
+        if next_state is not None:
+            return self.entropy_bits(state) - self.entropy_bits(next_state) - self.step_cost
+        successors, probabilities = self._motion_outcomes(state, action)
+        after = 0.0
+        for moved, probability in zip(successors, probabilities):
+            nominal = self.nominal_scan(moved)
+            for noise in self._reward_noise:
+                observation = np.r_[moved[1:4], nominal + self.range_noise_std_cells * noise]
+                after += probability * self.entropy_bits(
+                    self.state_from_observation(state, observation)
+                )
+        return self.entropy_bits(state) - after / len(self._reward_noise) - self.step_cost
 
     # -- terminal / initial ---------------------------------------------
 
@@ -917,15 +700,14 @@ class OccupancyGridMappingPOMDP(DiscreteActionsEnvironment):
         """The pre-scan reading: the known start pose and no ranges yet.
 
         Returns:
-            A point mass on the start pose with every range reported at the
-            sensor's maximum, which is what "nothing detected" means here and
-            carries no information about the map.
+            A point mass on the start pose with zero range placeholders. This initial sentinel is never
+            passed to the inverse map update and carries no map information.
         """
         observation = np.empty(3 + self.num_beams, dtype=np.float64)
         observation[0] = float(self.start_row)
         observation[1] = float(self.start_col)
         observation[2] = float(self.start_heading)
-        observation[3:] = self.max_range_cells
+        observation[3:] = 0.0
         return DiscreteDistribution(values=[observation], probs=np.array([1.0]))
 
     # -- metrics --------------------------------------------------------
@@ -955,15 +737,13 @@ class OccupancyGridMappingPOMDP(DiscreteActionsEnvironment):
             action was taken.
         """
         collision = 0.0
-        visited_new_cell = 0.0
+        successful_translation = 0.0
         if action is not None and next_state is not None:
             row, col, heading = self.pose(state)
-            _, _, _, blocked = self._next_pose(
-                row, col, heading, int(action), self.true_map(state)
-            )
+            _, _, _, blocked = self._next_pose(row, col, heading, int(action), self.true_map(state))
             next_row, next_col, _ = self.pose(next_state)
             collision = float(blocked)
-            visited_new_cell = float((next_row, next_col) != (row, col))
+            successful_translation = float((next_row, next_col) != (row, col))
 
         grid_state = state if next_state is None else next_state
         residual_entropy = self.entropy_bits(grid_state)
@@ -985,7 +765,7 @@ class OccupancyGridMappingPOMDP(DiscreteActionsEnvironment):
             OccupancyGridStepChannel.RESIDUAL_ENTROPY_BITS.value: residual_entropy,
             OccupancyGridStepChannel.RESOLVED_CELL_FRACTION.value: resolved_fraction,
             OccupancyGridStepChannel.OBSTACLE_COLLISION.value: collision,
-            OccupancyGridStepChannel.VISITED_NEW_CELL.value: visited_new_cell,
+            OccupancyGridStepChannel.SUCCESSFUL_TRANSLATION.value: successful_translation,
         }
 
     def get_metric_specs(self) -> List[StepInfoMetric]:
@@ -1045,8 +825,8 @@ class OccupancyGridMappingPOMDP(DiscreteActionsEnvironment):
                 per_episode=EpisodeReduction.SUM,
             ),
             StepInfoMetric(
-                name=OccupancyGridMappingMetrics.AVERAGE_NEW_CELLS_VISITED.value,
-                channel=OccupancyGridStepChannel.VISITED_NEW_CELL.value,
+                name=OccupancyGridMappingMetrics.AVERAGE_SUCCESSFUL_TRANSLATIONS.value,
+                channel=OccupancyGridStepChannel.SUCCESSFUL_TRANSLATION.value,
                 per_episode=EpisodeReduction.SUM,
             ),
         ]
@@ -1126,15 +906,11 @@ def create_occupancy_grid_state(
     state[STEP_INDEX] = float(step)
     state[ROW_INDEX] = float(environment.start_row if row is None else row)
     state[COL_INDEX] = float(environment.start_col if col is None else col)
-    state[HEADING_INDEX] = float(
-        environment.start_heading if heading is None else heading
-    )
+    state[HEADING_INDEX] = float(environment.start_heading if heading is None else heading)
     state[environment.map_offset : environment.map_offset + environment.num_cells] = np.asarray(
         occupancy, dtype=np.float64
     ).ravel()
     if log_odds is not None:
         end = environment.log_odds_offset + environment.num_cells
-        state[environment.log_odds_offset : end] = np.asarray(
-            log_odds, dtype=np.float64
-        ).ravel()
+        state[environment.log_odds_offset : end] = np.asarray(log_odds, dtype=np.float64).ravel()
     return state
