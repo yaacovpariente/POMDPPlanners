@@ -11,6 +11,7 @@ Exports:
     OccupancyGridMappingVectorizedBelief: Its batched twin.
     OccupancyGridMappingVectorizedUpdater: The batched kernels behind it.
     create_occupancy_grid_mapping_belief: Factory choosing between the two filters.
+    RangeNoiseModel: The selectable per-beam range noise laws.
 """
 
 from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.occupancy_grid_mapping_pomdp import (
@@ -35,6 +36,7 @@ from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.occupancy_grid_sens
     HEADING_LABELS,
     HEADING_STEPS,
     NUM_HEADINGS,
+    RangeNoiseModel,
     build_ray_templates,
     cast_scan,
     grid_entropy_bits,
@@ -62,6 +64,7 @@ __all__ = [
     "OccupancyGridMappingPOMDP",
     "OccupancyGridState",
     "OccupancyGridStepChannel",
+    "RangeNoiseModel",
     "build_ray_templates",
     "cast_scan",
     "create_occupancy_grid_state",

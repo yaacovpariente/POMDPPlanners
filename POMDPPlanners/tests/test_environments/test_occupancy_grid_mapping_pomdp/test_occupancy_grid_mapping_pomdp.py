@@ -19,6 +19,7 @@ from POMDPPlanners.environments.occupancy_grid_mapping_pomdp import (
     OccupancyGridMappingMetrics,
     OccupancyGridMappingPOMDP,
     OccupancyGridStepChannel,
+    RangeNoiseModel,
     create_occupancy_grid_state,
     grid_entropy_bits,
 )
@@ -442,3 +443,117 @@ def test_config_id_is_unchanged_by_using_the_environment(env):
         state, _, _ = env.sample_next_step(state, int(np.random.randint(3)))
     assert env.config_id == before
     assert env.config_id == OccupancyGridMappingPOMDP().config_id
+
+
+# -- range noise model configuration ---------------------------------------
+
+
+def test_range_noise_model_accepts_its_string_name_and_rejects_unknown_ones():
+    """A YAML config can name the law; a typo fails at construction.
+
+    Test type: unit
+    """
+    env = OccupancyGridMappingPOMDP(range_noise_model="truncated_normal")
+    assert env.range_noise_model is RangeNoiseModel.TRUNCATED_NORMAL
+    assert OccupancyGridMappingPOMDP().range_noise_model is RangeNoiseModel.GAUSSIAN
+    with pytest.raises(ValueError, match="range_noise_model"):
+        OccupancyGridMappingPOMDP(range_noise_model="clipped")
+    with pytest.raises(ValueError, match="range_noise_std_cells"):
+        OccupancyGridMappingPOMDP(range_noise_model="truncated_normal", range_noise_std_cells=0.0)
+
+
+def test_the_two_range_laws_have_distinct_identities_that_survive_serialization():
+    """A truncated-normal run must never read a Gaussian cache, or vice versa.
+
+    Purpose: ``config_id`` keys the result cache and the belief identities
+        hang off the updater's. If the mode were not in them, the two laws
+        would silently share cached episodes.
+
+    Given: Two otherwise identical environments, one per law
+    When: Their ids are compared, and the truncated one is round-tripped
+        through ``to_dict`` / ``from_dict`` and through pickle
+    Then: The ids differ, the rebuilt environments keep the enum member and
+        the id, and the sensor contract version is 3
+
+    Test type: unit
+    """
+    import pickle  # pylint: disable=import-outside-toplevel
+
+    gaussian = OccupancyGridMappingPOMDP()
+    truncated = OccupancyGridMappingPOMDP(range_noise_model=RangeNoiseModel.TRUNCATED_NORMAL)
+    assert gaussian.config_id != truncated.config_id
+    assert gaussian != truncated
+    assert gaussian.sensor_contract_version == truncated.sensor_contract_version == 3
+    assert truncated.to_dict()["params"]["range_noise_model"]["value"] == "truncated_normal"
+    for rebuilt in (
+        OccupancyGridMappingPOMDP.from_dict(truncated.to_dict()),
+        pickle.loads(pickle.dumps(truncated)),
+    ):
+        assert isinstance(rebuilt, OccupancyGridMappingPOMDP)
+        assert rebuilt.range_noise_model is RangeNoiseModel.TRUNCATED_NORMAL
+        assert rebuilt.config_id == truncated.config_id
+        assert rebuilt == truncated
+    updaters = {
+        env.range_noise_model: env._batched_kernels  # pylint: disable=protected-access
+        for env in (gaussian, truncated)
+    }
+    assert (
+        updaters[RangeNoiseModel.GAUSSIAN].config_id
+        != updaters[RangeNoiseModel.TRUNCATED_NORMAL].config_id
+    )
+
+
+def test_gaussian_mode_reproduces_the_original_seeded_scan(open_room_env):
+    """The default law draws exactly what the environment drew before the option.
+
+    Purpose: This is the regression guard for "no silent behaviour change":
+        the pre-option transition was ``nominal + normal(0, sigma)`` from the
+        global stream, and a seeded run must still produce those numbers.
+
+    Test type: unit
+    """
+    env = open_room_env
+    state = create_occupancy_grid_state(env, _empty_room(env))
+    moved = env.sample_next_state(state, int(OccupancyGridAction.TURN_LEFT))
+    np.random.seed(3)
+    successor = env.sample_next_state(state, int(OccupancyGridAction.TURN_LEFT))
+    np.random.seed(3)
+    expected = env.nominal_scan(moved) + np.random.normal(
+        0.0, env.range_noise_std_cells, env.num_beams
+    )
+    np.testing.assert_array_equal(successor[env.scan_offset :], expected)
+    observation = env.sample_observation(successor, int(OccupancyGridAction.TURN_LEFT))
+    residual = (observation[3:] - env.nominal_scan(moved)) / env.range_noise_std_cells
+    pooled = -0.5 * np.sum(residual**2) - env.num_beams * np.log(
+        env.range_noise_std_cells * np.sqrt(2 * np.pi)
+    )
+    assert env.predictive_observation_log_probability(
+        state, int(OccupancyGridAction.TURN_LEFT), observation
+    ) == pytest.approx(pooled)
+
+
+def test_truncated_mode_never_stores_or_reveals_a_negative_range():
+    """A long noisy rollout keeps every stored scan and observation non-negative.
+
+    Purpose: The map update and the returned observation read the same stored
+        scan, so one check on the state covers both; the noise is set high
+        enough that the Gaussian law would go negative many times.
+
+    Test type: integration
+    """
+    env = OccupancyGridMappingPOMDP(
+        num_rows=7,
+        num_cols=7,
+        max_range_cells=2.5,
+        num_obstacles=2,
+        range_noise_std_cells=1.5,
+        range_noise_model="truncated_normal",
+        max_steps=200,
+    )
+    np.random.seed(5)
+    state = env.initial_state_dist().sample()[0]
+    for _ in range(120):
+        action = int(np.random.randint(3))
+        state, observation, _ = env.sample_next_step(state, action)
+        assert observation[3:].min() >= 0.0
+        np.testing.assert_array_equal(observation[3:], state[env.scan_offset :])

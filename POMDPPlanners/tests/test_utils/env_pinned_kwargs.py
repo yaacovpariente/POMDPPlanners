@@ -44,6 +44,9 @@ from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp imp
 from POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp import (
     ObservationModelType as DiscreteLightDarkObservationModelType,
 )
+from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.occupancy_grid_sensor import (
+    RangeNoiseModel as OccupancyGridRangeNoiseModel,
+)
 from POMDPPlanners.environments.pacman_pomdp.pacman_pomdp import (
     RewardModelType as PacManRewardModelType,
 )
@@ -462,6 +465,7 @@ def occupancy_grid_mapping_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
         "field_of_view_degrees": 360.0,
         "max_range_cells": 3.5,
         "range_noise_std_cells": 0.35,
+        "range_noise_model": OccupancyGridRangeNoiseModel.GAUSSIAN,
         "hit_probability": 0.85,
         "miss_probability": 0.15,
         "log_odds_clamp": 6.0,

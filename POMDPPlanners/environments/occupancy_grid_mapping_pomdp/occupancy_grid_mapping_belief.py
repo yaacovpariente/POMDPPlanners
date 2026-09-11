@@ -3,7 +3,8 @@
 
 The proposal installs the observed scan rather than drawing an independent
 scan that would match it with probability zero. Importance weights are the
-predictive Gaussian density times the exact motion probability. No epsilon
+predictive range density, under the environment's selected range law, times
+the exact motion probability. No epsilon
 floor admits impossible poses. Whole-map support can still collapse; a bounded
 prior replay then reweights fresh map hypotheses against the complete history.
 """

@@ -24,15 +24,53 @@ State and observation contract
 The state contains the step, row, column, heading, hidden true occupancy,
 observation-derived map log-odds, and last noisy scan. Its length is
 ``4 + 2 * num_cells + num_beams``. The hidden map constrains motion and produces
-nominal ranges. Gaussian noise is drawn once in the transition, then the same
+nominal ranges. Range noise is drawn once in the transition, then the same
 scan is stored, used for mapping, and revealed by the observation.
 
 Observations contain ``[row, column, heading, ranges...]``. Pose is exact and
 integer. Repeated observation calls on one successor reveal the same stored
-scan. Gaussian ranges are unbounded; they are never clipped in the sampler.
-The augmented observation kernel is a point mass. The predictive density
-``p(observation | prior state, action)`` combines Gaussian ranges with the
-probability of the observed motion outcome.
+scan. The augmented observation kernel is a point mass. The predictive density
+``p(observation | prior state, action)`` combines the per-beam range density
+with the probability of the observed motion outcome.
+
+Range noise model
+-----------------
+
+``range_noise_model`` selects the per-beam range law that
+``range_noise_std_cells`` parametrises. Both laws are centred on the noise-free
+range ``rho`` and neither truncates above the maximum range.
+
+``gaussian`` (the default) is the unbounded normal ``N(rho, sigma^2)``. It is
+what every result produced before the option existed used, and its seeded
+draws are unchanged, so earlier runs still reproduce. A reading below zero is
+possible under it; the inverse model treats such a reading as a hit in the
+first ray cell.
+
+``truncated_normal`` is the same normal conditioned on ``z >= 0``:
+
+.. math::
+
+   p(z \mid \rho, \sigma) = \frac{\phi((z - \rho) / \sigma)}{\sigma \, \Phi(\rho / \sigma)}
+   \quad \text{for } z \ge 0, \qquad 0 \text{ otherwise.}
+
+It is a renormalised density, not a clamp: no probability mass is moved onto
+zero. The normaliser ``Phi(rho / sigma)`` depends on the nominal range, so two
+map particles that predict different ranges for one beam are normalised
+differently, and both filters carry that term per beam and per particle. A
+negative reading has zero likelihood under this law. Sampling inverts the
+truncated distribution exactly, with one uniform per beam, so no tail is
+dropped and no draw is rejected. With the default ``sigma = 0.35`` a beam at
+full range sits ten standard deviations above zero and the two laws agree to
+machine precision; they differ where an obstacle is within a few standard
+deviations of the robot.
+
+.. code-block:: python
+
+   env = OccupancyGridMappingPOMDP(range_noise_model="truncated_normal")
+
+The mode is part of ``config_id`` and of both filters' identities, so results
+cached under one law are never reused for the other. The sensor contract
+version is 3 from this option onwards.
 
 The initial observation contains known pose and zero range placeholders.
 It is a sentinel before any scan and is never applied to the map.
@@ -50,7 +88,7 @@ The robot's observed cell also receives free evidence. Log-odds are clamped.
 
 A true hit exactly at maximum range and a miss have identical range laws.
 They therefore produce identical updates for the same reading. Without an
-observed hit flag, this ambiguity cannot be removed. Gaussian noise can place
+observed hit flag, this ambiguity cannot be removed. Range noise can place
 an apparent hit beyond a real obstacle or before it; the mapper follows the
 measurement, not hidden truth.
 
@@ -58,9 +96,10 @@ Simulation reward is the realised decrease in the observed inverse map's
 summed binary entropy, minus ``step_cost``. The environment declares
 ``reward_requires_next_state=True`` so the runner supplies that realised map.
 When a planner requests reward without a successor, the explicit fallback uses
-eight fixed antithetic Gaussian samples per motion outcome to approximate the
-expected decrease. This deterministic integration consumes no simulation RNG,
-but has integration error. It updates each hypothetical map with the same
+eight fixed antithetic unit-normal points per motion outcome, mapped through
+the selected range law, to approximate the expected decrease. This
+deterministic integration consumes no simulation RNG, but has integration
+error. It updates each hypothetical map with the same
 observation-based rule as the actual map.
 
 This is an exploration surrogate inspired by entropy-reduction objectives,
@@ -81,8 +120,9 @@ Use one of the environment's two whole-map filters with PFT_DPW. Ordinary
 stored continuous scan correctly. No core planner changes are needed.
 
 Both filters install the observed scan and its map update in every
-particle. They weight whole-map hypotheses by the predictive Gaussian density
-and exact motion probability, with no epsilon floor for impossible poses.
+particle. They weight whole-map hypotheses by the predictive range density
+of the selected law and exact motion probability, with no epsilon floor for
+impossible poses.
 Routine resampling is disabled to retain low-weight hypotheses. If every
 particle contradicts observed motion, bounded prior replay tests up to 4096
 fresh maps against the entire observation history and resamples surviving
@@ -132,5 +172,7 @@ hidden true map for review. Panels depict the state before the captioned action;
 the caption's reward is the realised inverse-map entropy reduction.
 
 There is no torch vectorized or C++ model. VOPP is unsupported. Scalar PFT_DPW
-uses the environment and the whole-map filters shown above. Sensor contract version 2
-changes cache identity; old results and GIFs describe the earlier behavior.
+uses the environment and the whole-map filters shown above. Sensor contract
+versions 2 and 3 each changed cache identity; old results and GIFs describe
+the earlier behavior. The golden GIF is rendered in the default Gaussian mode
+and is unchanged by the truncated option.

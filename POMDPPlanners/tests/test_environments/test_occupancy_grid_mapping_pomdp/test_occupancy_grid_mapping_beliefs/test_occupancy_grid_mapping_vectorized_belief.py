@@ -116,11 +116,21 @@ class TestConstruction:
 
 
 class TestUpdate:
-    @pytest.mark.parametrize("move_failure_probability", [0.0, 0.25])
-    def test_chained_updates_match_the_scalar_filter(self, move_failure_probability):
+    @pytest.mark.parametrize(
+        ("move_failure_probability", "range_noise_model", "range_noise_std_cells"),
+        [
+            (0.0, "gaussian", 0.35),
+            (0.25, "gaussian", 0.35),
+            (0.0, "truncated_normal", 1.0),
+            (0.25, "truncated_normal", 1.0),
+        ],
+    )
+    def test_chained_updates_match_the_scalar_filter(
+        self, move_failure_probability, range_noise_model, range_noise_std_cells
+    ):
         """Purpose: the vectorized filter is a drop-in replacement, so an
         episode's worth of conditioning must give identical particles and
-        weights, not just the same distribution.
+        weights, not just the same distribution -- under either range law.
 
         Given: Both filters over the same 20 prior maps and a true world.
         When: Twelve observed steps are conditioned on, in the same order.
@@ -129,7 +139,11 @@ class TestUpdate:
 
         Test type: integration
         """
-        env = make_env(move_failure_probability=move_failure_probability)
+        env = make_env(
+            move_failure_probability=move_failure_probability,
+            range_noise_model=range_noise_model,
+            range_noise_std_cells=range_noise_std_cells,
+        )
         scalar, vectorized = paired_filters(env)
         np.random.seed(17)
         true_state = env.initial_state_dist().sample()[0]
