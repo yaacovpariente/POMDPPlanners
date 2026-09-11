@@ -3,15 +3,18 @@
 
 import numpy as np
 import pytest
+from scipy.special import log_ndtr  # pylint: disable=no-name-in-module
+from scipy.stats import truncnorm
 
 from POMDPPlanners.environments.occupancy_grid_mapping_pomdp import (
     OccupancyGridMappingPOMDP,
     OccupancyGridMappingBelief,
+    RangeNoiseModel,
     create_occupancy_grid_state,
 )
 
 
-def scenario(noise=0.35):
+def scenario(noise=0.35, range_noise_model=RangeNoiseModel.GAUSSIAN):
     """One east-facing beam whose endpoint is two cells from the robot."""
     env = OccupancyGridMappingPOMDP(
         num_rows=7,
@@ -22,6 +25,7 @@ def scenario(noise=0.35):
         has_boundary_wall=False,
         num_obstacles=0,
         range_noise_std_cells=noise,
+        range_noise_model=range_noise_model,
     )
     empty = np.zeros((7, 7))
     hit = empty.copy()
@@ -207,3 +211,99 @@ def test_realised_reward_uses_the_same_observation_as_reported_mapping():
     successor, observation, reward = env.sample_next_step(state, 2)
     reconstructed = env.state_from_observation(state, observation)
     assert reward == pytest.approx(env.entropy_bits(state) - env.entropy_bits(reconstructed))
+
+
+# -- truncated-normal range law ---------------------------------------------
+
+TRUNCATED = RangeNoiseModel.TRUNCATED_NORMAL
+
+
+def test_truncated_normal_is_sampled_once_nonnegative_and_scored_with_its_normaliser():
+    """The truncated law follows the same one-draw contract with a proper density.
+
+    With ``sigma = 1.5`` and a nominal range of 2 the Gaussian would put about
+    nine percent of its mass below zero, so the truncation is doing real work.
+    """
+    env, state, _ = scenario(noise=1.5, range_noise_model=TRUNCATED)
+    np.random.seed(4)
+    samples = env.sample_next_state(state, 2, 4000)
+    ranges = samples[:, env.scan_offset]
+    reference = truncnorm(a=-2 / 1.5, b=np.inf, loc=2, scale=1.5)
+    assert ranges.min() >= 0
+    assert ranges.mean() == pytest.approx(reference.mean(), abs=0.06)
+    assert ranges.std() == pytest.approx(reference.std(), abs=0.06)
+    observation = env.sample_observation(samples[0], 2)
+    # The stored scan and the revealed observation are the same numbers.
+    np.testing.assert_array_equal(observation[3:], samples[0, env.scan_offset :])
+    np.testing.assert_array_equal(env.sample_observation(samples[0], 2, 3), [observation] * 3)
+    assert env.observation_log_probability(samples[0], 2, observation)[0] == 0
+    expected = (
+        -0.5 * ((observation[-1] - 2) / 1.5) ** 2
+        - np.log(1.5 * np.sqrt(2 * np.pi))
+        - log_ndtr(2 / 1.5)
+    )
+    assert env.predictive_observation_log_probability(state, 2, observation) == pytest.approx(
+        expected
+    )
+    assert env.transition_log_probability(state, 2, samples[:1])[0] == pytest.approx(expected)
+    np.testing.assert_array_equal(env.state_from_observation(state, observation), samples[0])
+
+
+def test_a_negative_reading_has_no_support_under_the_truncated_law_only():
+    """The truncated law scores an impossible reading ``-inf``; the Gaussian does not."""
+    truncated, state, _ = scenario(noise=1.5, range_noise_model=TRUNCATED)
+    gaussian, _, _ = scenario(noise=1.5)
+    negative = np.array([3, 3, 1, -0.2])
+    assert truncated.predictive_observation_log_probability(state, 2, negative) == -np.inf
+    assert np.isfinite(gaussian.predictive_observation_log_probability(state, 2, negative))
+    forged = truncated.state_from_observation(state, negative)
+    assert truncated.transition_log_probability(state, 2, [forged])[0] == -np.inf
+    assert np.isfinite(gaussian.transition_log_probability(state, 2, [forged])[0])
+    assert truncated.predictive_observation_log_probability(
+        state, 2, np.array([3, 3, 1, 0.0])
+    ) > -np.inf
+
+
+def test_truncated_filter_weights_carry_each_particle_normaliser():
+    """Posterior odds include the per-particle ``Phi(rho / sigma)``, and the
+    correction favours the nearer hypothesis relative to the Gaussian."""
+    env, empty, hit = scenario(noise=1.5, range_noise_model=TRUNCATED)
+    env.true_map(hit)[3, 4] = 1  # nominal 1 for ``hit``, 2 for ``empty``
+    belief = OccupancyGridMappingBelief([empty, hit], np.log([0.5, 0.5]))
+    observation = np.array([3, 3, 1, 1.5])
+    result = belief.update(2, observation, env, state=hit)
+    gaussian_ratio = np.exp(
+        -0.5 * ((1.5 - 1) / 1.5) ** 2 + 0.5 * ((1.5 - 2) / 1.5) ** 2
+    )
+    truncated_ratio = gaussian_ratio * np.exp(log_ndtr(2 / 1.5) - log_ndtr(1 / 1.5))
+    weights = result.normalized_weights
+    assert weights[1] / weights[0] == pytest.approx(truncated_ratio)
+    assert truncated_ratio > gaussian_ratio
+    scores = np.array(
+        [env.predictive_observation_log_probability(s, 2, observation) for s in [empty, hit]]
+    )
+    assert scores[1] - scores[0] == pytest.approx(np.log(truncated_ratio))
+    np.testing.assert_array_equal(
+        env.log_odds(result.particles[0]), env.log_odds(result.particles[1])
+    )
+
+
+def test_truncated_expected_reward_is_deterministic_and_matches_gaussian_far_from_zero():
+    """The quadrature represents the selected law without touching the RNG."""
+    truncated, state, _ = scenario(noise=1.5, range_noise_model=TRUNCATED)
+    gaussian, same_state, _ = scenario(noise=1.5)
+    np.random.seed(9)
+    expected_next_random = np.random.random()
+    np.random.seed(9)
+    reward = truncated.reward(state, 2)
+    assert np.random.random() == expected_next_random
+    assert truncated.reward(state, 2) == reward
+    assert truncated.reward_range[0] <= reward <= truncated.reward_range[1]
+    assert reward != pytest.approx(gaussian.reward(same_state, 2))
+    # At the default noise the beam sits about six deviations above zero and
+    # the two laws integrate over the same scans.
+    narrow_truncated, narrow_state, _ = scenario(range_noise_model=TRUNCATED)
+    narrow_gaussian, _, _ = scenario()
+    assert narrow_truncated.reward(narrow_state, 2) == pytest.approx(
+        narrow_gaussian.reward(narrow_state, 2), abs=1e-6
+    )

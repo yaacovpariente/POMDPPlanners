@@ -561,8 +561,9 @@ class OccupancyGridMappingVisualizer:
         endpoints: List[Tuple[float, float]] = []
         hits: List[bool] = []
         for (delta_row, delta_col), measured in zip(directions, np.asarray(ranges, dtype=float)):
-            # The noise is unclipped, so a reading can land past the sensor's
-            # range or below zero. Both are drawn clamped, because that is what
+            # The noise is unclipped above the range, and below zero too in
+            # Gaussian mode, so a reading can land past the sensor's range or
+            # below zero. Both are drawn clamped, because that is what
             # the inverse model does with them: it treats anything at or beyond
             # max_range_cells as a miss that frees the whole ray, and the beam
             # is drawn to the range with no end spark to say exactly that.

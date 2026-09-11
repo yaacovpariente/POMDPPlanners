@@ -3,10 +3,17 @@
 """Occupancy-grid exploration with known integer pose and noisy range scans.
 
 State: [step, row, col, heading, hidden occupancy(C), inverse-map log-odds(C),
-last noisy ranges(B)]. The transition samples motion and an unbounded Gaussian
-scan, stores that scan and applies its inverse sensor update. Observation
-reveals the exact pose and stored ranges. Hidden occupancy is used only by the
-forward motion/sensor model, never by the inverse map update.
+last noisy ranges(B)]. The transition samples motion and a noisy scan, stores
+that scan and applies its inverse sensor update. Observation reveals the exact
+pose and stored ranges. Hidden occupancy is used only by the forward
+motion/sensor model, never by the inverse map update.
+
+The per-beam range law is selected by ``range_noise_model``: the unbounded
+Gaussian (the default, and the law every earlier result used), or the same
+normal truncated to ``[0, +inf)`` so that no reading can be negative. The
+truncated law is a renormalised density, not a clamp, and its normaliser
+depends on each beam's nominal range, so it enters every likelihood per beam.
+Neither law truncates above the maximum range.
 
 A range at or above the maximum is interpreted as a miss. A shorter range
 selects the nearest ray cell (negative readings select the first cell). Thus a
@@ -16,8 +23,8 @@ hit flag is supplied to the robot.
 
 The map is an approximate independent-cell inverse estimate. Its entropy is
 not the entropy of the posterior over whole maps. Realised reward and completion use the observed inverse map. Planning
-without a successor uses fixed Gaussian integration of its expected reduction. Repeated correlated beams can create false
-confidence. The separate whole-map particle belief predicts scans and motion.
+without a successor uses a fixed antithetic quadrature, mapped through the selected range law, of its expected
+reduction. Repeated correlated beams can create false confidence. The separate whole-map particle belief predicts scans and motion.
 Use OccupancyGridMappingBelief, or its batched twin in the
 occupancy_grid_mapping_beliefs package, to condition the augmented state correctly.
 
@@ -54,11 +61,16 @@ from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.occupancy_grid_maps
 from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.occupancy_grid_sensor import (
     HEADING_STEPS,
     NUM_HEADINGS,
+    RangeNoiseModel,
     build_ray_templates,
     cast_scan,
     grid_entropy_bits,
     log_odds_from_probability,
     observed_scan_log_odds_delta,
+    quadrature_ranges,
+    resolve_range_noise_model,
+    sample_ranges,
+    scan_log_density,
 )
 
 
@@ -142,6 +154,7 @@ class OccupancyGridMappingPOMDP(DiscreteActionsEnvironment):
         field_of_view_degrees: float = 360.0,
         max_range_cells: float = 3.5,
         range_noise_std_cells: float = 0.35,
+        range_noise_model: Union[RangeNoiseModel, str] = RangeNoiseModel.GAUSSIAN,
         hit_probability: float = 0.85,
         miss_probability: float = 0.15,
         log_odds_clamp: float = 6.0,
@@ -183,6 +196,16 @@ class OccupancyGridMappingPOMDP(DiscreteActionsEnvironment):
                 finish the map rather than resolving it from the start cell.
             range_noise_std_cells: Per-beam Gaussian range noise. Defaults to
                 0.35 cells -- a tenth of the sensor's range, used by the forward sensor model. Finite map particles can still collapse.
+            range_noise_model: Which per-beam range law that standard deviation
+                parametrises. Defaults to ``RangeNoiseModel.GAUSSIAN``, the
+                unbounded normal, which is what every result before this option
+                existed was produced under. ``RangeNoiseModel.TRUNCATED_NORMAL``
+                truncates it to ``[0, +inf)`` and renormalises, so no beam can
+                report a negative distance -- a reading a real range finder
+                cannot produce, and one the untruncated law assigns real
+                probability to whenever a nominal range is within a few standard
+                deviations of zero. Accepts the member or its string value.
+                Readings above the maximum range are not truncated either way.
             hit_probability: Inverse sensor model probability for the cell a
                 beam stops in. Defaults to 0.85.
             miss_probability: Inverse sensor model probability for a cell a beam
@@ -235,6 +258,9 @@ class OccupancyGridMappingPOMDP(DiscreteActionsEnvironment):
                 "range_noise_std_cells must be positive: a zero-width Gaussian has no "
                 f"density for the particle filter to weight with, got {range_noise_std_cells}"
             )
+        # Raises on an unknown name, so a typo in a config file fails at
+        # construction rather than silently selecting the default law.
+        range_noise_model = resolve_range_noise_model(range_noise_model)
         if max_steps < 1:
             raise ValueError(f"max_steps must be at least 1, got {max_steps}")
         if not 0.0 <= entropy_threshold_fraction <= 1.0:
@@ -279,6 +305,7 @@ class OccupancyGridMappingPOMDP(DiscreteActionsEnvironment):
         self.field_of_view_degrees = float(field_of_view_degrees)
         self.max_range_cells = float(max_range_cells)
         self.range_noise_std_cells = float(range_noise_std_cells)
+        self.range_noise_model = range_noise_model
         self.hit_probability = float(hit_probability)
         self.miss_probability = float(miss_probability)
         self.log_odds_clamp = float(log_odds_clamp)
@@ -309,8 +336,13 @@ class OccupancyGridMappingPOMDP(DiscreteActionsEnvironment):
         self.num_cells = num_cells
         self.scan_offset = POSE_WIDTH + 2 * num_cells
         self.state_size = self.scan_offset + self.num_beams
-        self.sensor_contract_version = 2
+        # Bumped from 2 when range_noise_model was added: the range law is part
+        # of the sensor contract, so a cached episode from before the option
+        # existed must not be reused for one after it.
+        self.sensor_contract_version = 3
         # Fixed antithetic integration points leave the simulation RNG untouched.
+        # They are unit normals; ``quadrature_ranges`` maps them into the
+        # selected range law at use time.
         points = np.random.RandomState(0).normal(size=(4, self.num_beams))
         self._reward_noise = np.concatenate([points, -points])
         self.map_offset = POSE_WIDTH
@@ -521,7 +553,7 @@ class OccupancyGridMappingPOMDP(DiscreteActionsEnvironment):
         )
 
     def sample_next_state(self, state, action, n_samples=1):
-        """Sample motion and Gaussian ranges, then apply the observed scan."""
+        """Sample motion and noisy ranges, then apply the observed scan."""
         successors, probabilities = self._motion_outcomes(state, action)
         samples = []
         for _ in range(int(n_samples)):
@@ -529,8 +561,8 @@ class OccupancyGridMappingPOMDP(DiscreteActionsEnvironment):
                 0 if len(successors) == 1 else np.random.choice(len(successors), p=probabilities)
             )
             moved = successors[index]
-            ranges = self.nominal_scan(moved) + np.random.normal(
-                0.0, self.range_noise_std_cells, self.num_beams
+            ranges = sample_ranges(
+                self.nominal_scan(moved), self.range_noise_std_cells, self.range_noise_model
             )
             samples.append(self.state_from_observation(state, np.r_[moved[1:4], ranges]))
         return samples[0] if n_samples == 1 else np.asarray(samples)
@@ -549,9 +581,16 @@ class OccupancyGridMappingPOMDP(DiscreteActionsEnvironment):
         for moved, probability in zip(successors, probabilities):
             if probability <= 0 or not np.array_equal(moved[1:4], observation[:3]):
                 continue
-            residual = (observation[3:] - self.nominal_scan(moved)) / self.range_noise_std_cells
-            log_density = -0.5 * np.sum(residual**2) - self.num_beams * np.log(
-                self.range_noise_std_cells * np.sqrt(2 * np.pi)
+            # Under truncation the normaliser is Phi(nominal / sigma), which
+            # differs from beam to beam and from particle to particle, so the
+            # helper scores the scan under whichever law is selected.
+            log_density = float(
+                scan_log_density(
+                    observation[3:],
+                    self.nominal_scan(moved),
+                    self.range_noise_std_cells,
+                    self.range_noise_model,
+                )
             )
             score = np.logaddexp(score, np.log(probability) + log_density)
         return float(score)
@@ -641,9 +680,11 @@ class OccupancyGridMappingPOMDP(DiscreteActionsEnvironment):
 
         Simulation supplies next_state and receives the observed inverse-map
         entropy difference. PFT_DPW's belief reward calls without a successor;
-        that explicit fallback uses eight fixed antithetic Gaussian samples.
-        The numerical expectation is approximate and uses no global randomness.
-        Neither quantity is posterior whole-map information gain.
+        that explicit fallback uses eight fixed antithetic unit-normal points
+        mapped through the selected range law, so under truncation it never
+        integrates over a scan the law cannot produce. The numerical
+        expectation is approximate and uses no global randomness. Neither
+        quantity is posterior whole-map information gain.
         """
         if next_state is not None:
             return self.entropy_bits(state) - self.entropy_bits(next_state) - self.step_cost
@@ -652,7 +693,12 @@ class OccupancyGridMappingPOMDP(DiscreteActionsEnvironment):
         for moved, probability in zip(successors, probabilities):
             nominal = self.nominal_scan(moved)
             for noise in self._reward_noise:
-                observation = np.r_[moved[1:4], nominal + self.range_noise_std_cells * noise]
+                observation = np.r_[
+                    moved[1:4],
+                    quadrature_ranges(
+                        nominal, noise, self.range_noise_std_cells, self.range_noise_model
+                    ),
+                ]
                 after += probability * self.entropy_bits(
                     self.state_from_observation(state, observation)
                 )
@@ -709,6 +755,7 @@ class OccupancyGridMappingPOMDP(DiscreteActionsEnvironment):
             self.field_of_view_degrees,
             self.max_range_cells,
             self.range_noise_std_cells,
+            self.range_noise_model,
             self.free_log_odds,
             self.occupied_log_odds,
             self.log_odds_clamp,

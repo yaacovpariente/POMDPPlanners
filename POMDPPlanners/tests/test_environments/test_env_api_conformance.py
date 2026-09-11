@@ -164,8 +164,18 @@ def _build_battleship() -> BattleshipPOMDP:
 
 
 def _build_occupancy_grid_mapping() -> OccupancyGridMappingPOMDP:
+    return OccupancyGridMappingPOMDP(discount_factor=0.95, **occupancy_grid_mapping_pinned_kwargs())
+
+
+def _build_occupancy_grid_mapping_truncated_normal() -> OccupancyGridMappingPOMDP:
+    # The second range law is a different observation model on the same
+    # class, so it gets its own registry entry; the wider noise is what makes
+    # the truncation actually bite on the pinned world.
     return OccupancyGridMappingPOMDP(
-        discount_factor=0.95, **occupancy_grid_mapping_pinned_kwargs()
+        discount_factor=0.95,
+        **occupancy_grid_mapping_pinned_kwargs(
+            range_noise_model="truncated_normal", range_noise_std_cells=1.0
+        ),
     )
 
 
@@ -245,6 +255,7 @@ ENV_BUILDERS: List[Tuple[str, EnvBuilder]] = [
     ("ContinuousMazePOMDP", _build_continuous_maze),
     ("BattleshipPOMDP", _build_battleship),
     ("OccupancyGridMappingPOMDP", _build_occupancy_grid_mapping),
+    ("OccupancyGridMappingPOMDP[truncated_normal]", _build_occupancy_grid_mapping_truncated_normal),
 ]
 
 
@@ -772,8 +783,7 @@ def test_reward_batch_agrees_with_looped_reward(env_builder: EnvBuilder) -> None
     looped = np.array([float(env.reward(state, action)) for state in states])
 
     assert np.allclose(batched, looped), (
-        f"{type(env).__name__}.reward_batch disagrees with looped reward: "
-        f"{batched} vs {looped}"
+        f"{type(env).__name__}.reward_batch disagrees with looped reward: " f"{batched} vs {looped}"
     )
 
 
@@ -1081,8 +1091,7 @@ def test_inequality_survives_a_changed_discount_factor(env_builder: EnvBuilder) 
     second.discount_factor = first.discount_factor / 2.0
 
     assert first != second, (
-        f"{type(first).__name__} compares equal to an env with a different "
-        "discount factor"
+        f"{type(first).__name__} compares equal to an env with a different " "discount factor"
     )
     assert first.config_id != second.config_id
 
@@ -1291,9 +1300,9 @@ def test_step_info_tolerates_terminal_bookkeeping_step(env_builder: EnvBuilder) 
         "bookkeeping step; the contract is a flat name -> scalar mapping"
     )
     for channel, value in info.items():
-        assert isinstance(channel, str), (
-            f"{type(env).__name__}.step_info used a non-string channel name {channel!r}"
-        )
+        assert isinstance(
+            channel, str
+        ), f"{type(env).__name__}.step_info used a non-string channel name {channel!r}"
         assert isinstance(value, (int, float)) and not isinstance(value, bool), (
             f"{type(env).__name__}.step_info reported {channel!r} as "
             f"{type(value).__name__}; values must be plain picklable scalars"
@@ -1454,6 +1463,5 @@ def test_same_seed_reproduces_trajectory(env_builder: EnvBuilder) -> None:
     second = _rollout(env_builder(), seed=1234)
     assert first, "rollout produced no steps; the determinism check would be vacuous"
     assert first == second, (
-        f"{type(env_builder()).__name__} produced two different trajectories from the "
-        "same seed"
+        f"{type(env_builder()).__name__} produced two different trajectories from the " "same seed"
     )
