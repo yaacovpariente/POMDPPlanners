@@ -37,7 +37,7 @@ from typing import Any, List
 import numpy as np
 import pytest
 
-from POMDPPlanners.core.belief import WeightedParticleBelief
+from POMDPPlanners.core.belief import WeightedParticleBelief, get_initial_belief
 from POMDPPlanners.core.simulation import StepData
 from POMDPPlanners.environments.battleship_pomdp.battleship_belief import BattleshipBelief
 from POMDPPlanners.environments.battleship_pomdp.battleship_pomdp import BattleshipPOMDP
@@ -62,6 +62,14 @@ from POMDPPlanners.environments.maze_pomdp import (
     ContinuousMazePOMDP,
     DiscreteMazePOMDP,
     MazeVisualizer,
+)
+from POMDPPlanners.environments.occupancy_grid_mapping_pomdp import (
+    OccupancyGridAction,
+    OccupancyGridMappingBelief,
+    OccupancyGridMappingPOMDP,
+)
+from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.occupancy_grid_mapping_visualizer import (  # noqa: E501
+    OccupancyGridMappingVisualizer,
 )
 from POMDPPlanners.environments.push_pomdp.push_pomdp import PushPOMDP
 from POMDPPlanners.environments.push_pomdp.push_pomdp_visualizer import (
@@ -114,6 +122,7 @@ from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
     continuous_push_pinned_kwargs,
     discrete_maze_pinned_kwargs,
     laser_tag_pinned_kwargs,
+    occupancy_grid_mapping_pinned_kwargs,
     pacman_pinned_kwargs,
     push_pinned_kwargs,
     rock_sample_pinned_kwargs,
@@ -218,6 +227,85 @@ def compare_or_create_golden_file(output_path: Path, golden_name: str, test_name
             f"  3. Re-run test to create new golden file\n"
             f"{'='*70}\n"
         )
+
+
+
+def build_occupancy_grid_mapping_env() -> OccupancyGridMappingPOMDP:
+    """Build the environment the occupancy-grid mapping golden GIF is rendered for."""
+    return OccupancyGridMappingPOMDP(
+        discount_factor=0.95, **occupancy_grid_mapping_pinned_kwargs()
+    )
+
+
+def create_deterministic_occupancy_grid_mapping_episode(seed: int = 3) -> List[StepData]:
+    """Create a deterministic occupancy-grid mapping episode for the golden GIF.
+
+    The action sequence is fixed, and the belief attached to each step is a real
+    :class:`OccupancyGridMappingBelief` rather than a mock: the belief panel is the
+    part of this visualization most likely to regress, and hashing a mock belief
+    would leave it untested. Both the resampling inside the filter and the
+    sensor noise are random, so the seed is pinned.
+
+    Both RNGs are seeded, not just NumPy, for the reason the Battleship fixture
+    documents: ``conftest`` seeds the stdlib ``random`` once at import, so
+    seeding NumPy alone would leave the golden hash dependent on which tests ran
+    before this one.
+
+    Args:
+        seed: Random seed pinning the true map, the scans and the resampling.
+
+    Returns:
+        List of StepData objects representing the episode history.
+    """
+    random.seed(seed)
+    np.random.seed(seed)
+    env = build_occupancy_grid_mapping_env()
+
+    belief = OccupancyGridMappingBelief.initial(env, n_particles=24)
+    state = env.initial_state_dist().sample()[0]
+    history: List[StepData] = []
+
+    # A fixed tour: drive out, turn, drive out again, so the frames show the
+    # occupancy grid growing along a path rather than from one vantage point.
+    action_sequence = [
+        OccupancyGridAction.FORWARD,
+        OccupancyGridAction.FORWARD,
+        OccupancyGridAction.TURN_RIGHT,
+        OccupancyGridAction.FORWARD,
+        OccupancyGridAction.FORWARD,
+        OccupancyGridAction.TURN_RIGHT,
+        OccupancyGridAction.FORWARD,
+        OccupancyGridAction.FORWARD,
+    ]
+
+    for action in action_sequence:
+        next_state, observation, reward = env.sample_next_step(state, int(action))
+        history.append(
+            StepData(
+                state=state,
+                action=int(action),
+                next_state=next_state,
+                observation=observation,
+                reward=reward,
+                belief=belief,
+                info=env.step_info(state, int(action), next_state),
+            )
+        )
+        belief = belief.update(action=int(action), observation=observation, pomdp=env)
+        state = next_state
+
+    history.append(
+        StepData(
+            state=state,
+            action=None,
+            next_state=None,
+            observation=None,
+            reward=None,
+            belief=belief,
+            info=env.step_info(state, None, None),
+        )
+    )
+    return history
 
 
 def build_battleship_env() -> BattleshipPOMDP:
@@ -996,6 +1084,32 @@ class TestVisualizationConsistency:
             "test_rock_sample_visualization_consistency",
         )
 
+
+    def test_occupancy_grid_mapping_visualization_consistency(self, temp_output_dir):
+        """Test occupancy-grid mapping visualization produces consistent output.
+
+        Purpose: Validates that occupancy-grid mapping visualizations are
+            deterministic
+
+        Given: A deterministic mapping episode with a fixed action sequence and
+            a real particle belief
+        When: Visualization is created from the episode
+        Then: Output matches golden file hash (or creates golden if missing)
+
+        Test type: integration
+        """
+        history = create_deterministic_occupancy_grid_mapping_episode(seed=3)
+        visualizer = OccupancyGridMappingVisualizer(build_occupancy_grid_mapping_env())
+
+        output_path = temp_output_dir / "occupancy_grid_mapping_test.gif"
+        visualizer.create_visualization(history, output_path)
+
+        compare_or_create_golden_file(
+            output_path,
+            "occupancy_grid_mapping_visualization.gif",
+            "test_occupancy_grid_mapping_visualization_consistency",
+        )
+
     def test_battleship_visualization_consistency(self, temp_output_dir):
         """Test Battleship visualization produces consistent output.
 
@@ -1330,6 +1444,34 @@ class TestVisualizationConsistency:
 
 class TestVisualizationDeterminism:
     """Test that visualizations are deterministic when re-run with same inputs."""
+
+
+    def test_occupancy_grid_mapping_repeated_visualization_identical(self, temp_output_dir):
+        """Test that repeated mapping visualizations are byte-for-byte identical.
+
+        Purpose: Validates absolute determinism of the occupancy-grid mapping
+            renderer, which the golden-hash check cannot cover outside the
+            project's Docker image. The belief panel averages over a particle
+            collection, which is exactly the kind of place an iteration order or
+            a stray draw would leak in.
+
+        Given: One episode rendered twice from the same history
+        When: Both renders use identical inputs
+        Then: Output files have identical SHA256 hashes
+
+        Test type: unit
+        """
+        history = create_deterministic_occupancy_grid_mapping_episode(seed=3)
+        visualizer = OccupancyGridMappingVisualizer(build_occupancy_grid_mapping_env())
+
+        first_path = temp_output_dir / "occupancy_grid_mapping_first.gif"
+        second_path = temp_output_dir / "occupancy_grid_mapping_second.gif"
+        visualizer.create_visualization(history, first_path)
+        visualizer.create_visualization(history, second_path)
+
+        assert compute_file_hash(first_path) == compute_file_hash(
+            second_path
+        ), "Occupancy-grid mapping visualization is not deterministic"
 
     def test_battleship_repeated_visualization_identical(self, temp_output_dir):
         """Test that repeated Battleship visualizations are byte-for-byte identical.
