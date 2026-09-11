@@ -37,7 +37,7 @@ class DiscreteActionSequencesPlanner(Policy):
     - **Open-loop**: Plans a complete action sequence without considering future observations
     - **Closed-loop**: Re-plans at each step based on new observations (like MCTS algorithms)
 
-    This approach is computationally intensive (O(|A|^depth)) but provides optimal
+    This approach is computationally intensive (``O(|A|^depth)``) but provides optimal
     solutions for the open-loop setting when the action space is manageable.
 
     Args:

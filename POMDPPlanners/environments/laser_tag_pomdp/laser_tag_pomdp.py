@@ -8,6 +8,7 @@ where an agent must navigate a grid to tag an opponent that moves stochastically
 The agent has noisy observations of the opponent's location.
 
 The LaserTag problem features:
+
 - A grid-based environment (default 7x11) with optional walls
 - Robot and opponent moving on discrete grid cells
 - 5 possible actions: North, South, East, West, Tag

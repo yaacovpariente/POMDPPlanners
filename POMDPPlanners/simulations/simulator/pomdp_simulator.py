@@ -260,7 +260,9 @@ class POMDPSimulator(BaseSimulator):
             Dictionary with two-level nesting:
             - First level: environment name -> policy metrics dict
             - Second level: policy class name -> list of metric names
+
             Each list contains metric names in the order they will appear in simulation results:
+
             1. Environment-specific metrics
             2. Policy info variables (prefixed with "policy_info_")
             3. Standard metrics (return, CVaR, timing, etc.)

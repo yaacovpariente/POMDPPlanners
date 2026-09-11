@@ -11,13 +11,14 @@ the center and ``(hx, hy)`` the half-extents.  Entity radii are used for
 circle-AABB overlap tests during collision resolution.
 
 Functions:
-    ray_aabb_distances: Vectorized ray-AABB slab intersection for multiple
-        rays originating from a single point against an array of AABBs.
-    ray_circle_distance: Distance along a ray to the nearest intersection
-        with a circle.
-    compute_laser_measurements: Full 8-direction laser scan from a position.
-    resolve_wall_collision: Push a circular entity out of overlapping AABBs.
-    clamp_to_grid: Clamp a 2-D position to the grid boundaries.
+
+    - ``ray_aabb_distances``: Vectorized ray-AABB slab intersection for multiple
+      rays originating from a single point against an array of AABBs.
+    - ``ray_circle_distance``: Distance along a ray to the nearest intersection
+      with a circle.
+    - ``compute_laser_measurements``: Full 8-direction laser scan from a position.
+    - ``resolve_wall_collision``: Push a circular entity out of overlapping AABBs.
+    - ``clamp_to_grid``: Clamp a 2-D position to the grid boundaries.
 """
 
 from __future__ import annotations

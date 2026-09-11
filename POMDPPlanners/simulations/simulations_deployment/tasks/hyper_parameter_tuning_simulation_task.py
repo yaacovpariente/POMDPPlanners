@@ -422,6 +422,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
                 - num_steps: Number of steps per episode
                 - parameters_to_optimize: List of (parameter_name, direction) tuples
                 - optimized_metric_values: Dict of optimized metric values
+
             None: If optimization fails
 
         Raises:
@@ -1084,6 +1085,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
                 - 'config_id': Configuration ID for this optimization task
                 - 'best_trial_number': Number of the best trial
                 - 'best_trial_statistics': Statistics from the best trial
+
             None: If no optimization has been run yet
         """
         return getattr(self, "_last_optimization_metadata", None)
