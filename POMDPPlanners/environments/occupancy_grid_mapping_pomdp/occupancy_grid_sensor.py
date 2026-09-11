@@ -15,8 +15,11 @@ each can be tested on its own:
   evidence, the cell it stops in gets occupied evidence, and cells behind that
   one are left untouched because the beam never saw them.
 
-The forward ray cast is noise-free. The transition adds Gaussian noise before
-``observed_scan_log_odds_delta`` interprets the measured ranges. The legacy
+The forward ray cast is noise-free. The transition adds per-beam range noise
+before ``observed_scan_log_odds_delta`` interprets the measured ranges. Two
+noise laws live here, selected by the environment's ``range_noise_model``: the
+original unbounded Gaussian, and a normal truncated to ``[0, +inf)`` for callers
+who need a range law that cannot produce a negative reading. The legacy
 ``scan_log_odds_delta`` helper operates on explicit hit/slot arrays and is used
 only by geometry tests; the environment never uses hidden hits for mapping.
 
@@ -37,12 +40,31 @@ Functions:
     scan_log_odds_delta: Inverse sensor model for one scan.
     log_odds_from_probability: Convert a probability to log-odds.
     grid_entropy_bits: Binary entropy of an occupancy grid, in bits.
+    gaussian_log_density: Per-beam log density of the unbounded range law.
+    truncated_normal_log_norm: Per-beam log normaliser of the truncated law.
+    truncated_normal_log_density: Per-beam log density of the truncated law.
+    truncated_normal_from_upper_tail: Quantile function of the truncated law.
+    sample_truncated_normal_ranges: Draw truncated-normal ranges.
+    resolve_range_noise_model: Coerce a string or member to a range noise model.
+    range_log_density: Per-beam log density under the selected range law.
+    scan_log_density: Whole-scan log density under the selected range law.
+    sample_ranges: Draw noisy ranges under the selected range law.
+    quadrature_ranges: Transform fixed quadrature points under the selected law.
+
+Classes:
+    RangeNoiseModel: Which per-beam range noise law the sensor uses.
 """
 
 import math
-from typing import List, Tuple
+from enum import Enum
+from typing import List, Tuple, Union
 
 import numpy as np
+from numpy.typing import ArrayLike
+
+# The normal CDF, its inverse and its log are compiled ufuncs that pylint
+# cannot see inside scipy.special, as with the native extensions elsewhere.
+from scipy.special import log_ndtr, ndtr, ndtri  # pylint: disable=no-name-in-module
 
 
 #: Number of headings. North, east, south, west, in that order.
@@ -380,3 +402,303 @@ def observed_scan_log_odds_delta(
         np.bincount(flat[free], minlength=num_rows * num_cols) * free_log_odds
         + np.bincount(flat[occupied], minlength=num_rows * num_cols) * occupied_log_odds
     )
+
+
+def gaussian_log_density(values: ArrayLike, nominal: ArrayLike, std: float) -> np.ndarray:
+    """Per-beam log density of ``values`` under ``N(nominal, std^2)``.
+
+    The untruncated range law, kept here beside its truncated twin so the two
+    branches of the sensor read as one pair rather than as an addition bolted
+    onto the environment.
+
+    Args:
+        values: Measured ranges, any shape broadcastable against ``nominal``.
+        nominal: Noise-free ranges of the same broadcast shape.
+        std: Range noise standard deviation. Positive.
+
+    Returns:
+        Log densities, of the broadcast shape.
+    """
+    residual = (np.asarray(values, dtype=np.float64) - np.asarray(nominal, dtype=np.float64)) / std
+    return -0.5 * residual**2 - math.log(std * math.sqrt(2.0 * math.pi))
+
+
+def truncated_normal_log_norm(nominal: ArrayLike, std: float) -> np.ndarray:
+    """``log Phi(nominal / std)``: the truncation normaliser, per beam.
+
+    This is the mass the untruncated normal would have put below zero, divided
+    out. It depends on ``nominal``, so it is a per-beam and per-state quantity,
+    not a constant that can be hoisted out of a particle loop: two map particles
+    that predict different ranges for the same beam are normalised differently,
+    and dropping that difference would quietly bias every importance weight.
+
+    Computed with ``log_ndtr`` rather than ``log(ndtr(x))``: once ``nominal``
+    is more than about eight standard deviations above zero, ``ndtr`` rounds to
+    exactly 1 and the log to exactly 0, whereas ``log_ndtr`` still returns the
+    true ``-Phi(-x)`` tail. The difference is far below anything a particle
+    weight can feel, but there is no reason to throw it away.
+
+    Args:
+        nominal: Noise-free ranges, non-negative, any shape.
+        std: Range noise standard deviation. Positive.
+
+    Returns:
+        The log normaliser, of ``nominal``'s shape. Always non-positive, and
+        effectively ``0.0`` once ``nominal`` is several ``std`` above zero.
+    """
+    return log_ndtr(np.asarray(nominal, dtype=np.float64) / std)
+
+
+def truncated_normal_log_density(
+    values: ArrayLike, nominal: ArrayLike, std: float
+) -> np.ndarray:
+    """Per-beam log density of a normal truncated to ``[0, +inf)``.
+
+    ``f(z | rho, sigma) = phi((z - rho)/sigma) / (sigma * Phi(rho/sigma))`` for
+    ``z >= 0``, and zero below. A negative reading is impossible under this law,
+    so it scores ``-inf`` rather than the small-but-finite score the untruncated
+    normal would give it -- that is the whole point of the option.
+
+    Args:
+        values: Measured ranges, any shape broadcastable against ``nominal``.
+        nominal: Noise-free ranges, non-negative, of the same broadcast shape.
+        std: Range noise standard deviation. Positive.
+
+    Returns:
+        Log densities of the broadcast shape, ``-inf`` where ``values < 0``.
+    """
+    values = np.asarray(values, dtype=np.float64)
+    density = gaussian_log_density(values, nominal, std) - truncated_normal_log_norm(nominal, std)
+    return np.where(values >= 0.0, density, -np.inf)
+
+
+def truncated_normal_from_upper_tail(
+    upper_tail: ArrayLike, nominal: ArrayLike, std: float
+) -> np.ndarray:
+    """Quantile function of the ``[0, +inf)``-truncated normal, by upper tail.
+
+    Returns the ``z >= 0`` whose upper-tail probability under the truncated law
+    is ``upper_tail``. Written in the upper tail rather than the lower one
+    because that is the numerically safe direction here: the factor
+    ``Phi(nominal/std)`` is the one close to 1, and
+
+        z = nominal - std * Phi^-1(upper_tail * Phi(nominal / std))
+
+    then degenerates gracefully. At the environment's defaults a beam at full
+    range sits ten standard deviations above zero, ``Phi(10) == 1.0`` in double
+    precision, and the expression reduces exactly to the untruncated quantile --
+    so turning truncation on costs nothing where truncation does not bite.
+
+    Exact inversion, so it is equally usable for drawing samples (feed uniforms)
+    and for transforming a fixed quadrature rule (feed ``Phi(-point)``). Neither
+    use rejects, loops, or drops a tail.
+
+    Args:
+        upper_tail: Upper-tail probabilities in ``(0, 1]``, any shape
+            broadcastable against ``nominal``. A value of exactly ``0`` would
+            map to ``+inf``; callers drawing uniforms must exclude it.
+        nominal: Noise-free ranges, non-negative, of the same broadcast shape.
+        std: Range noise standard deviation. Positive.
+
+    Returns:
+        Ranges of the broadcast shape, all ``>= 0``.
+    """
+    nominal = np.asarray(nominal, dtype=np.float64)
+    upper_tail = np.asarray(upper_tail, dtype=np.float64)
+    values = nominal - std * ndtri(upper_tail * ndtr(nominal / std))
+    # Only a floating-point guard on the boundary itself: ``upper_tail == 1``
+    # is the lower end of the support, an exact zero analytically, and
+    # ``ndtri(ndtr(x))`` returns it a few ulps off on either side. It is not a
+    # clamp -- no interior probability mass is moved onto zero, because no
+    # interior tail value reaches it.
+    return np.where(upper_tail >= 1.0, 0.0, np.maximum(values, 0.0))
+
+
+def sample_truncated_normal_ranges(nominal: ArrayLike, std: float) -> np.ndarray:
+    """Draw one truncated-normal range per entry of ``nominal``.
+
+    Draws from the global NumPy stream, like every other generative path in this
+    environment, consuming exactly one uniform per beam.
+
+    Args:
+        nominal: Noise-free ranges, non-negative, any shape.
+        std: Range noise standard deviation. Positive.
+
+    Returns:
+        Sampled ranges of ``nominal``'s shape, all ``>= 0``.
+    """
+    nominal = np.asarray(nominal, dtype=np.float64)
+    # ``random_sample`` yields [0, 1); the complement moves that to (0, 1] so an
+    # exact zero -- which the quantile maps to +inf -- can never be drawn.
+    upper_tail = 1.0 - np.random.random_sample(nominal.shape)
+    return truncated_normal_from_upper_tail(upper_tail, nominal, std)
+
+
+class RangeNoiseModel(Enum):
+    """Which per-beam range noise law the sensor draws from and scores with.
+
+    Attributes:
+        GAUSSIAN: Unbounded ``N(rho, sigma^2)``. The original law, and the
+            default, so existing results stay reproducible.
+        TRUNCATED_NORMAL: The same normal truncated to ``[0, +inf)`` and
+            renormalised, for callers who need a range law that cannot report a
+            negative distance. Readings above the nominal maximum range are
+            untouched; only the impossible side is cut off.
+    """
+
+    GAUSSIAN = "gaussian"
+    TRUNCATED_NORMAL = "truncated_normal"
+
+
+def resolve_range_noise_model(value: Union[RangeNoiseModel, str]) -> RangeNoiseModel:
+    """Coerce a member or its string value to a :class:`RangeNoiseModel`.
+
+    Strings are accepted so an environment can be configured from a YAML file
+    without importing the enum.
+
+    Args:
+        value: A :class:`RangeNoiseModel`, or one of its string values.
+
+    Returns:
+        The matching member.
+
+    Raises:
+        ValueError: If ``value`` names no member. The message lists the valid
+            names, because a silently accepted typo here would fall through to
+            whichever branch is written first and look like a modelling result.
+    """
+    if isinstance(value, RangeNoiseModel):
+        return value
+    try:
+        return RangeNoiseModel(value)
+    except ValueError as error:
+        valid = ", ".join(repr(member.value) for member in RangeNoiseModel)
+        raise ValueError(
+            f"range_noise_model must be one of {valid} or a RangeNoiseModel, got {value!r}"
+        ) from error
+
+
+def range_log_density(
+    values: ArrayLike, nominal: ArrayLike, std: float, model: RangeNoiseModel
+) -> np.ndarray:
+    """Per-beam log density of measured ranges under the selected law.
+
+    Args:
+        values: Measured ranges, any shape broadcastable against ``nominal``.
+        nominal: Noise-free ranges of the same broadcast shape.
+        std: Range noise standard deviation. Positive.
+        model: Which range law to score under.
+
+    Returns:
+        Log densities of the broadcast shape. Sum over the beam axis for a
+        scan's log density -- note the truncated law's normaliser varies per
+        beam, so that sum is not the constant it is under the Gaussian law.
+
+    Raises:
+        ValueError: If ``model`` is not a known range noise model.
+    """
+    if model is RangeNoiseModel.GAUSSIAN:
+        return gaussian_log_density(values, nominal, std)
+    if model is RangeNoiseModel.TRUNCATED_NORMAL:
+        return truncated_normal_log_density(values, nominal, std)
+    raise ValueError(f"unknown range noise model: {model}")
+
+
+def scan_log_density(
+    values: ArrayLike, nominal: ArrayLike, std: float, model: RangeNoiseModel
+) -> np.ndarray:
+    """Log density of whole scans: the per-beam densities summed over the last axis.
+
+    Under the Gaussian law the normaliser is one constant for the whole scan,
+    and it is applied once, after the sum, in the arithmetic the environment
+    used before the truncated law existed. Summing ``range_log_density`` per
+    beam instead would give the same value up to rounding -- and that rounding
+    is enough to move a particle filter's weights by a few ulps, which is a
+    silent change to every seeded Gaussian result, including the golden
+    visualization. Under the truncated law the normaliser is per beam, so
+    there the per-beam sum is the only correct form.
+
+    Args:
+        values: Measured ranges, shape ``(..., num_beams)``, broadcastable
+            against ``nominal``.
+        nominal: Noise-free ranges of the same broadcast shape.
+        std: Range noise standard deviation. Positive.
+        model: Which range law to score under.
+
+    Returns:
+        Log densities of the broadcast shape with the last axis removed.
+
+    Raises:
+        ValueError: If ``model`` is not a known range noise model.
+    """
+    values = np.asarray(values, dtype=np.float64)
+    nominal = np.asarray(nominal, dtype=np.float64)
+    if model is RangeNoiseModel.GAUSSIAN:
+        residual = (values - nominal) / std
+        num_beams = np.broadcast_shapes(values.shape, nominal.shape)[-1]
+        return -0.5 * np.sum(residual**2, axis=-1) - num_beams * np.log(std * np.sqrt(2 * np.pi))
+    if model is RangeNoiseModel.TRUNCATED_NORMAL:
+        return np.sum(truncated_normal_log_density(values, nominal, std), axis=-1)
+    raise ValueError(f"unknown range noise model: {model}")
+
+
+def sample_ranges(nominal: ArrayLike, std: float, model: RangeNoiseModel) -> np.ndarray:
+    """Draw one noisy range per entry of ``nominal`` under the selected law.
+
+    Draws from the global NumPy stream. The Gaussian branch keeps its original
+    ``np.random.normal`` call, and therefore its exact seeded output, so a run
+    that does not select truncation reproduces bit for bit.
+
+    Args:
+        nominal: Noise-free ranges, non-negative, any shape.
+        std: Range noise standard deviation. Positive.
+        model: Which range law to draw from.
+
+    Returns:
+        Sampled ranges of ``nominal``'s shape.
+
+    Raises:
+        ValueError: If ``model`` is not a known range noise model.
+    """
+    nominal = np.asarray(nominal, dtype=np.float64)
+    if model is RangeNoiseModel.GAUSSIAN:
+        return nominal + np.random.normal(0.0, std, nominal.shape)
+    if model is RangeNoiseModel.TRUNCATED_NORMAL:
+        return sample_truncated_normal_ranges(nominal, std)
+    raise ValueError(f"unknown range noise model: {model}")
+
+
+def quadrature_ranges(
+    nominal: ArrayLike, standard_points: ArrayLike, std: float, model: RangeNoiseModel
+) -> np.ndarray:
+    """Map fixed unit-normal quadrature points to ranges under the selected law.
+
+    The expected-reward integral uses a fixed antithetic set of unit normals so
+    it consumes no global randomness. Under truncation those points must be
+    pushed through the truncated quantile function rather than scaled and
+    shifted, or the integral would average over scans the model cannot produce
+    -- including negative ones, which is exactly what the option exists to
+    prevent. Transforming by upper-tail probability keeps the points antithetic,
+    because ``Phi(-x)`` and ``Phi(x)`` sum to one.
+
+    Args:
+        nominal: Noise-free ranges, non-negative, broadcastable against
+            ``standard_points``.
+        standard_points: Unit-variance integration points of the same broadcast
+            shape.
+        std: Range noise standard deviation. Positive.
+        model: Which range law the points are integrating over.
+
+    Returns:
+        Ranges of the broadcast shape.
+
+    Raises:
+        ValueError: If ``model`` is not a known range noise model.
+    """
+    nominal = np.asarray(nominal, dtype=np.float64)
+    standard_points = np.asarray(standard_points, dtype=np.float64)
+    if model is RangeNoiseModel.GAUSSIAN:
+        return nominal + std * standard_points
+    if model is RangeNoiseModel.TRUNCATED_NORMAL:
+        return truncated_normal_from_upper_tail(ndtr(-standard_points), nominal, std)
+    raise ValueError(f"unknown range noise model: {model}")

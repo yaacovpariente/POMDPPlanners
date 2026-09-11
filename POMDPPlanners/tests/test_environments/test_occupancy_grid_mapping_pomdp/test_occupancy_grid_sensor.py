@@ -10,17 +10,30 @@ would still pass every shared contract while quietly measuring the wrong thing.
 """
 
 import math
+from typing import Any
 
 import numpy as np
 import pytest
+from scipy.integrate import quad
+from scipy.special import log_ndtr  # pylint: disable=no-name-in-module
+from scipy.stats import kstest, truncnorm
 
 from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.occupancy_grid_sensor import (
     NUM_HEADINGS,
+    RangeNoiseModel,
     build_ray_templates,
     cast_scan,
+    gaussian_log_density,
     grid_entropy_bits,
     log_odds_from_probability,
+    quadrature_ranges,
+    range_log_density,
+    resolve_range_noise_model,
+    sample_ranges,
+    scan_log_density,
     scan_log_odds_delta,
+    truncated_normal_from_upper_tail,
+    truncated_normal_log_density,
 )
 
 
@@ -359,3 +372,283 @@ def test_certain_evidence_is_rejected(probability):
     """
     with pytest.raises(ValueError):
         log_odds_from_probability(probability)
+
+
+# -- range noise laws -----------------------------------------------------
+
+
+def _reference(nominal, std) -> Any:
+    """SciPy's truncated normal on ``[0, +inf)`` with the same parameters."""
+    return truncnorm(a=-nominal / std, b=np.inf, loc=nominal, scale=std)
+
+
+def test_truncated_samples_are_nonnegative_where_gaussian_samples_are_not():
+    """The truncated law never produces a negative range; the Gaussian does.
+
+    Purpose: The option exists to prevent negative readings. Checking the
+        Gaussian side too proves the mode switch does something, rather than
+        the nominal range merely being far from zero.
+
+    Given: A nominal range half a standard deviation above zero
+    When: Twenty thousand ranges are drawn under each law
+    Then: Every truncated draw is ``>= 0`` and some Gaussian draw is ``< 0``
+
+    Test type: unit
+    """
+    nominal = np.full(20000, 0.5)
+    np.random.seed(0)
+    truncated = sample_ranges(nominal, 1.0, RangeNoiseModel.TRUNCATED_NORMAL)
+    np.random.seed(0)
+    gaussian = sample_ranges(nominal, 1.0, RangeNoiseModel.GAUSSIAN)
+    assert truncated.min() >= 0.0
+    assert gaussian.min() < 0.0
+    assert truncated.shape == gaussian.shape == nominal.shape
+
+
+@pytest.mark.parametrize("nominal", [0.0, 0.3, 1.0, 3.0])
+def test_truncated_density_integrates_to_one_over_the_nonnegative_axis(nominal):
+    """The truncated density is a proper density on ``[0, +inf)``.
+
+    Purpose: A clamp at zero would leave the density integrating to less
+        than one below the point mass; a forgotten normaliser would leave it
+        integrating to ``Phi(rho / sigma)``. Quadrature catches both.
+
+    Given: A nominal range within a few standard deviations of zero
+    When: ``exp(log density)`` is integrated over ``[0, +inf)``
+    Then: The mass is one, and the density is zero below zero
+
+    Test type: unit
+    """
+    std = 1.0
+    mass, error = quad(
+        lambda z: math.exp(float(truncated_normal_log_density(z, nominal, std))), 0.0, np.inf
+    )
+    assert mass == pytest.approx(1.0, abs=max(1e-8, 10 * error))
+    assert np.isneginf(truncated_normal_log_density(-1e-9, nominal, std))
+
+
+def test_truncated_log_density_matches_the_hand_written_formula():
+    """``log phi((z-rho)/sigma) - log sigma - log Phi(rho/sigma)``, by hand.
+
+    Purpose: The implementation must be checked against the formula, not
+        against itself.
+
+    Test type: unit
+    """
+    z, nominal, std = 0.8, 0.5, 0.7
+    residual = (z - nominal) / std
+    log_phi = -0.5 * residual**2 - 0.5 * math.log(2 * math.pi)
+    big_phi = 0.5 * (1.0 + math.erf(nominal / std / math.sqrt(2)))
+    expected = log_phi - math.log(std) - math.log(big_phi)
+    assert float(truncated_normal_log_density(z, nominal, std)) == pytest.approx(expected)
+    assert float(
+        range_log_density(z, nominal, std, RangeNoiseModel.TRUNCATED_NORMAL)
+    ) == pytest.approx(expected)
+    assert float(range_log_density(z, nominal, std, RangeNoiseModel.GAUSSIAN)) == pytest.approx(
+        log_phi - math.log(std)
+    )
+
+
+@pytest.mark.parametrize("std", [0.35, 1.0, 2.0])
+def test_truncated_log_density_matches_scipy_across_the_supported_noise_range(std):
+    """Agreement with SciPy's ``truncnorm`` for small and large ``rho / sigma``.
+
+    Purpose: ``log Phi(rho/sigma)`` must be computed with ``log_ndtr`` so it
+        stays exact where ``log(ndtr(x))`` would lose digits; comparing over
+        nominal ranges from zero to ten standard deviations covers both ends.
+
+    Test type: unit
+    """
+    nominal = np.array([0.0, 0.2, 1.0, 3.5])
+    values = np.linspace(0.0, 6.0, 25)[:, None]
+    ours = truncated_normal_log_density(values, nominal[None, :], std)
+    reference = np.stack(
+        [_reference(rho, std).logpdf(values[:, 0]) for rho in nominal], axis=1
+    )
+    np.testing.assert_allclose(ours, reference, rtol=1e-10, atol=1e-10)
+
+
+def test_the_normaliser_depends_on_the_nominal_range():
+    """Two beams with different nominal ranges get different normalisers.
+
+    Purpose: The normaliser is what makes the truncated law differ from the
+        Gaussian for particle weighting. It must be a per-beam quantity, larger
+        (a bigger correction) for a nominal range closer to zero, and vanish
+        once the nominal range is far from zero.
+
+    Test type: unit
+    """
+    std = 1.0
+    near, far, remote = 0.3, 2.0, 12.0
+    z = 1.0
+    correction = {
+        rho: float(
+            truncated_normal_log_density(z, rho, std) - gaussian_log_density(z, rho, std)
+        )
+        for rho in (near, far, remote)
+    }
+    assert correction[near] == pytest.approx(-float(log_ndtr(near / std)))
+    assert correction[far] == pytest.approx(-float(log_ndtr(far / std)))
+    assert correction[near] > correction[far] > correction[remote] >= 0.0
+    assert correction[remote] == pytest.approx(0.0, abs=1e-15)
+
+
+def test_a_negative_reading_is_impossible_only_under_the_truncated_law():
+    """Test type: unit"""
+    nominal = np.array([0.5, 2.0])
+    values = np.array([-0.1, 1.0])
+    truncated = range_log_density(values, nominal, 1.0, RangeNoiseModel.TRUNCATED_NORMAL)
+    gaussian = range_log_density(values, nominal, 1.0, RangeNoiseModel.GAUSSIAN)
+    assert np.isneginf(truncated[0]) and np.isfinite(truncated[1])
+    assert np.all(np.isfinite(gaussian))
+    # Zero itself is inside the support.
+    assert np.isfinite(truncated_normal_log_density(0.0, 0.5, 1.0))
+
+
+@pytest.mark.parametrize("ratio", [0.2, 1.0, 3.0, 10.0])
+def test_the_quantile_function_inverts_the_truncated_upper_tail(ratio):
+    """``sf(quantile(u)) == u`` against SciPy, over the whole tail.
+
+    Purpose: Exact inversion is what makes sampling unbiased and the
+        quadrature transform exact; a quantile that is off in either tail
+        would bias every draw there.
+
+    Given: Nominal ranges from a fifth of a standard deviation to ten
+    When: Upper-tail probabilities from ``1e-9`` to ``1`` are mapped to ranges
+    Then: SciPy's survival function returns the input probability, every
+        range is non-negative, and ``u = 1`` lands exactly on zero
+
+    Test type: unit
+    """
+    std = 0.7
+    nominal = ratio * std
+    upper_tail = np.concatenate([np.logspace(-9, -1, 17), np.linspace(0.1, 1.0, 19)])
+    ranges = truncated_normal_from_upper_tail(upper_tail, nominal, std)
+    assert np.all(ranges >= 0.0)
+    assert ranges[-1] == 0.0
+    assert np.all(np.diff(ranges) <= 0.0)
+    interior = upper_tail < 1.0
+    np.testing.assert_allclose(
+        _reference(nominal, std).sf(ranges[interior]), upper_tail[interior], rtol=1e-7
+    )
+
+
+@pytest.mark.parametrize(
+    ("nominal", "std"),
+    [(0.5, 1.0), (1.0, 1.5), (3.5, 2.0), (2.0, 0.35)],
+)
+def test_truncated_samples_follow_the_truncated_distribution(nominal, std):
+    """Sample moments and the empirical CDF match the truncated normal.
+
+    Purpose: Non-negativity alone would also be satisfied by a clamp or by
+        rejection with a dropped tail. Matching the mean, the standard
+        deviation and the whole empirical CDF at noise levels where the
+        truncation removes a large share of the mass is what shows the draws
+        come from the right law.
+
+    Given: Noise standard deviations up to twice the nominal range
+    When: Two hundred thousand ranges are drawn
+    Then: Mean and standard deviation agree with SciPy within three standard
+        errors, and a Kolmogorov-Smirnov test does not reject the law
+
+    Test type: unit
+    """
+    count = 200000
+    np.random.seed(int(nominal * 100 + std * 10))
+    draws = sample_ranges(np.full(count, nominal), std, RangeNoiseModel.TRUNCATED_NORMAL)
+    reference = _reference(nominal, std)
+    assert draws.min() >= 0.0
+    mean_tolerance = 3 * reference.std() / math.sqrt(count)
+    assert draws.mean() == pytest.approx(reference.mean(), abs=mean_tolerance)
+    assert draws.std() == pytest.approx(reference.std(), rel=0.02)
+    assert kstest(draws, reference.cdf).pvalue > 0.01
+
+
+def test_gaussian_sampling_is_bit_identical_to_the_original_direct_draw():
+    """Selecting the Gaussian law reproduces the pre-option draw exactly.
+
+    Purpose: Existing seeded results must still reproduce, so the Gaussian
+        branch must consume the global stream exactly as ``nominal +
+        normal(0, sigma)`` did.
+
+    Test type: unit
+    """
+    nominal = np.array([1.0, 2.5, 3.5, 0.0])
+    np.random.seed(21)
+    sampled = sample_ranges(nominal, 0.35, RangeNoiseModel.GAUSSIAN)
+    np.random.seed(21)
+    np.testing.assert_array_equal(sampled, nominal + np.random.normal(0.0, 0.35, 4))
+
+
+def test_quadrature_points_reduce_to_gaussian_far_from_zero_and_stay_antithetic():
+    """The reward quadrature is exact where truncation cannot bite and
+    stays a paired rule where it does.
+
+    Purpose: The expected-reward points must represent the selected law. Far
+        from zero the two laws coincide, so the transformed points must equal
+        the Gaussian ones; near zero they must all be non-negative and the
+        antithetic pairing must survive in upper-tail probability, or the
+        rule would lose its variance cancellation.
+
+    Test type: unit
+    """
+    points = np.random.RandomState(0).normal(size=(4, 3))
+    points = np.concatenate([points, -points])
+    std = 0.35
+    # Ten or more standard deviations above zero: ``Phi(rho / sigma)`` is 1.0
+    # in double precision, so the two laws must agree exactly, not just closely.
+    far = np.array([3.5, 4.0, 10.0])
+    np.testing.assert_allclose(
+        quadrature_ranges(far, points, std, RangeNoiseModel.TRUNCATED_NORMAL),
+        quadrature_ranges(far, points, std, RangeNoiseModel.GAUSSIAN),
+        rtol=0.0,
+        atol=1e-12,
+    )
+    np.testing.assert_array_equal(
+        quadrature_ranges(far, points, std, RangeNoiseModel.GAUSSIAN), far + std * points
+    )
+    near = np.array([0.1, 0.3, 0.5])
+    mapped = quadrature_ranges(near, points, 1.0, RangeNoiseModel.TRUNCATED_NORMAL)
+    assert mapped.shape == points.shape
+    assert np.all(mapped >= 0.0)
+    assert not np.allclose(mapped, near + points)
+    for beam, rho in enumerate(near):
+        tails = _reference(rho, 1.0).sf(mapped[:, beam])
+        np.testing.assert_allclose(tails[:4] + tails[4:], 1.0, rtol=1e-9)
+
+
+def test_scan_log_density_keeps_the_original_gaussian_arithmetic():
+    """The whole-scan Gaussian score is the pre-option pooled formula, bit for bit.
+
+    Purpose: The particle filter's weights under the default law must not move
+        by even an ulp, or every seeded Gaussian result -- the golden
+        visualization included -- silently changes. The truncated score is the
+        per-beam sum, because its normaliser is per beam.
+
+    Test type: unit
+    """
+    rng = np.random.RandomState(3)
+    nominal = rng.uniform(0.5, 3.5, size=(5, 24))
+    values = nominal + rng.normal(0.0, 0.35, size=(5, 24))
+    std = 0.35
+    residual = (values - nominal) / std
+    pooled = -0.5 * np.sum(residual**2, axis=1) - 24 * np.log(std * np.sqrt(2 * np.pi))
+    np.testing.assert_array_equal(
+        scan_log_density(values, nominal, std, RangeNoiseModel.GAUSSIAN), pooled
+    )
+    np.testing.assert_array_equal(
+        scan_log_density(values, nominal, std, RangeNoiseModel.TRUNCATED_NORMAL),
+        np.sum(truncated_normal_log_density(values, nominal, std), axis=1),
+    )
+    assert scan_log_density(values[0], nominal[0], std, RangeNoiseModel.GAUSSIAN) == pooled[0]
+
+
+def test_resolve_range_noise_model_accepts_strings_and_rejects_typos():
+    """Test type: unit"""
+    assert resolve_range_noise_model("truncated_normal") is RangeNoiseModel.TRUNCATED_NORMAL
+    assert resolve_range_noise_model("gaussian") is RangeNoiseModel.GAUSSIAN
+    assert resolve_range_noise_model(RangeNoiseModel.GAUSSIAN) is RangeNoiseModel.GAUSSIAN
+    with pytest.raises(ValueError, match="truncated_normal"):
+        resolve_range_noise_model("truncated")
+    with pytest.raises(ValueError, match="unknown range noise model"):
+        range_log_density(np.zeros(1), np.zeros(1), 1.0, "gaussian")  # type: ignore[arg-type]

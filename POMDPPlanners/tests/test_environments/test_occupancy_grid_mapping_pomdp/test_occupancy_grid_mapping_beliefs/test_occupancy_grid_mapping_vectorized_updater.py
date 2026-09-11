@@ -17,6 +17,7 @@ from POMDPPlanners.environments.occupancy_grid_mapping_pomdp import (
     OccupancyGridAction,
     OccupancyGridMappingPOMDP,
     OccupancyGridMappingVectorizedUpdater,
+    RangeNoiseModel,
 )
 from POMDPPlanners.tests.test_core.test_belief.vectorized_updater_test_utils import (
     assert_batch_obs_log_likelihood_matches_loop,
@@ -27,6 +28,7 @@ from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
 )
 
 ACTIONS = [int(action) for action in OccupancyGridAction]
+RANGE_NOISE_MODELS = list(RangeNoiseModel)
 
 
 def make_env(**overrides):
@@ -366,3 +368,124 @@ class TestGenerativeInterface:
         scores = updater.batch_observation_log_likelihood(successors, action, observation)
         assert scores[5] == 0.0
         assert np.count_nonzero(np.isfinite(scores)) == 1
+
+
+# ---------------------------------------------------------------------------
+# Truncated-normal range law
+# ---------------------------------------------------------------------------
+
+
+def truncated_env(**overrides):
+    """The pinned world under the truncated law, noisy enough for it to bite.
+
+    At ``sigma = 1.0`` a beam stopping one cell away sits one standard
+    deviation above zero, so the per-particle normaliser is far from one and
+    a batched path that hoisted it into a constant would fail every parity
+    check below.
+    """
+    return make_env(
+        range_noise_std_cells=1.0, range_noise_model=RangeNoiseModel.TRUNCATED_NORMAL, **overrides
+    )
+
+
+class TestTruncatedNormalMode:
+    def test_from_environment_copies_the_law_and_the_identity_tracks_it(self, updater):
+        """Purpose: the updater must score under the environment's law, and
+        two updaters under different laws must cache differently.
+
+        Test type: unit
+        """
+        assert updater.range_noise_model is RangeNoiseModel.GAUSSIAN
+        truncated = OccupancyGridMappingVectorizedUpdater.from_environment(
+            make_env(range_noise_model="truncated_normal")
+        )
+        assert truncated.range_noise_model is RangeNoiseModel.TRUNCATED_NORMAL
+        assert truncated.config_id != updater.config_id
+        with pytest.raises(ValueError, match="range_noise_model"):
+            OccupancyGridMappingVectorizedUpdater(
+                num_rows=5,
+                num_cols=5,
+                num_beams=4,
+                field_of_view_degrees=360.0,
+                max_range_cells=2.0,
+                range_noise_std_cells=0.5,
+                free_log_odds=-1.0,
+                occupied_log_odds=1.0,
+                log_odds_clamp=6.0,
+                move_failure_probability=0.0,
+                range_noise_model="clipped",
+            )
+
+    @pytest.mark.parametrize("move_failure_probability", [0.0, 0.25])
+    @pytest.mark.parametrize("action", ACTIONS)
+    def test_predictive_density_matches_scalar_with_per_particle_normalisers(
+        self, action, move_failure_probability
+    ):
+        """Purpose: the batched importance weight must carry each particle's
+        own ``Phi(rho / sigma)`` per beam, exactly as the scalar path does.
+
+        Given: Particles at mixed poses with maps that put obstacles at
+            different distances, under the truncated law with wide noise.
+        When: Both paths score an observation drawn from one particle.
+        Then: They agree to floating-point precision, the drawn-from particle
+            is finite, and the scores are not what the Gaussian law gives.
+
+        Test type: unit
+        """
+        env = truncated_env(move_failure_probability=move_failure_probability)
+        updater = OccupancyGridMappingVectorizedUpdater.from_environment(env)
+        particles = diverse_particles(env)
+        observation = observation_from(env, particles[7], action)
+        batched = updater.batch_predictive_log_likelihood(particles, action, observation)
+        scalar = np.array(
+            [
+                env.predictive_observation_log_probability(particle, action, observation)
+                for particle in particles
+            ]
+        )
+        np.testing.assert_allclose(batched, scalar, rtol=1e-12, atol=1e-12)
+        assert np.isfinite(batched[7])
+        gaussian = OccupancyGridMappingVectorizedUpdater.from_environment(
+            make_env(
+                range_noise_std_cells=1.0, move_failure_probability=move_failure_probability
+            )
+        ).batch_predictive_log_likelihood(particles, action, observation)
+        finite = np.isfinite(batched)
+        assert np.array_equal(finite, np.isfinite(gaussian))
+        assert np.all(batched[finite] > gaussian[finite])
+
+    def test_a_negative_reading_has_no_support_in_the_batched_path(self):
+        """Test type: unit"""
+        env = truncated_env()
+        updater = OccupancyGridMappingVectorizedUpdater.from_environment(env)
+        particles = diverse_particles(env)
+        observation = observation_from(env, particles[0], 0)
+        observation[5] = -0.01
+        assert np.all(np.isneginf(updater.batch_predictive_log_likelihood(particles, 0, observation)))
+        observation[5] = 0.0
+        assert np.isfinite(updater.batch_predictive_log_likelihood(particles, 0, observation)[0])
+
+    @pytest.mark.parametrize("action", ACTIONS)
+    def test_batch_transition_matches_scalar_under_shared_seed_and_stays_nonnegative(
+        self, action
+    ):
+        """Purpose: the truncated sampler consumes one uniform per beam in the
+        same order on both paths, so the successors must be bit-identical, and
+        no stored range may be negative.
+
+        Test type: unit
+        """
+        env = truncated_env()
+        updater = OccupancyGridMappingVectorizedUpdater.from_environment(env)
+        particles = diverse_particles(env)
+        assert_batch_transition_matches_loop(
+            updater, particles, action, env.sample_next_state, atol=0.0, seed=5
+        )
+        np.random.seed(5)
+        successors = updater.batch_transition(particles, action)
+        assert successors[:, env.scan_offset :].min() >= 0.0
+        np.random.seed(5)
+        gaussian = OccupancyGridMappingVectorizedUpdater.from_environment(
+            make_env(range_noise_std_cells=1.0)
+        ).batch_transition(particles, action)
+        assert gaussian[:, env.scan_offset :].min() < 0.0

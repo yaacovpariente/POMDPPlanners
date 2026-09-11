@@ -9,8 +9,11 @@ so this module does them for all particles in one call:
 
 * :meth:`OccupancyGridMappingVectorizedUpdater.batch_predictive_log_likelihood`
   casts one batched scan over every hidden map and scores the observed ranges
-  under the Gaussian range law and the exact motion probability. It is the
-  batched form of ``predictive_observation_log_probability``.
+  under the environment's range law and the exact motion probability. It is
+  the batched form of ``predictive_observation_log_probability``. The range
+  law is selected by ``range_noise_model``: the unbounded Gaussian, or the
+  normal truncated to ``[0, +inf)`` whose normaliser depends on each beam's
+  nominal range and is therefore scored per beam and per particle.
 * :meth:`OccupancyGridMappingVectorizedUpdater.batch_state_from_observation`
   installs the observed pose and scan and applies the inverse sensor update.
   The inverse-sensor delta depends only on the observation and the observed
@@ -19,7 +22,7 @@ so this module does them for all particles in one call:
 
 The two methods of the shared updater interface are also implemented, as the
 batched forms of ``sample_next_state`` and ``observation_log_probability``:
-a generative transition that draws motion and a fresh Gaussian scan, and the
+a generative transition that draws motion and a fresh noisy scan, and the
 point-mass likelihood on the stored scan. They make the updater a faithful
 batched copy of the environment's generative model, which is what the shared
 equivalence tests check. The conditional filter does not use them, because a
@@ -31,7 +34,7 @@ Classes:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, List, Tuple
+from typing import TYPE_CHECKING, Any, List, Tuple, Union
 
 import numpy as np
 
@@ -41,8 +44,13 @@ from POMDPPlanners.core.belief.vectorized_particle_belief_updater import (
 from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.occupancy_grid_sensor import (
     HEADING_STEPS,
     NUM_HEADINGS,
+    RangeNoiseModel,
     build_ray_templates,
     observed_scan_log_odds_delta,
+    quadrature_ranges,
+    resolve_range_noise_model,
+    sample_ranges,
+    scan_log_density,
 )
 from POMDPPlanners.utils.config_to_id import config_to_id
 
@@ -73,7 +81,8 @@ class OccupancyGridMappingVectorizedUpdater(VectorizedParticleBeliefUpdater):
         num_cols: Grid columns.
         num_beams: Beams per scan.
         max_range_cells: Sensor range in cell widths.
-        range_noise_std_cells: Per-beam Gaussian range noise.
+        range_noise_std_cells: Per-beam range noise standard deviation.
+        range_noise_model: Which per-beam range law that deviation parametrises.
         move_failure_probability: Chance an otherwise-valid forward move fails.
 
     Example:
@@ -107,6 +116,7 @@ class OccupancyGridMappingVectorizedUpdater(VectorizedParticleBeliefUpdater):
         log_odds_clamp: float,
         move_failure_probability: float,
         sensor_contract_version: int = 2,
+        range_noise_model: Union[RangeNoiseModel, str] = RangeNoiseModel.GAUSSIAN,
     ):
         """Initialize the updater from the environment's sensor and motion settings.
 
@@ -116,19 +126,26 @@ class OccupancyGridMappingVectorizedUpdater(VectorizedParticleBeliefUpdater):
             num_beams: Beams per scan.
             field_of_view_degrees: Angular width of the fan, centred on the heading.
             max_range_cells: Sensor range in cell widths.
-            range_noise_std_cells: Per-beam Gaussian range noise. Must be positive.
+            range_noise_std_cells: Per-beam range noise standard deviation. Must
+                be positive.
             free_log_odds: Increment for a cell a beam passes through. Negative.
             occupied_log_odds: Increment for the cell a beam stops in. Positive.
             log_odds_clamp: Symmetric bound on accumulated log-odds.
             move_failure_probability: Chance an otherwise-valid forward move fails.
             sensor_contract_version: The environment's sensor contract version,
                 carried into the identifier so a contract change invalidates caches.
+            range_noise_model: Which per-beam range law ``range_noise_std_cells``
+                parametrises. Defaults to the unbounded Gaussian, the law every
+                updater built before the option existed used. Accepts the
+                member or its string value.
 
         Raises:
-            ValueError: If ``range_noise_std_cells`` is not positive.
+            ValueError: If ``range_noise_std_cells`` is not positive, or
+                ``range_noise_model`` names no known law.
         """
         if range_noise_std_cells <= 0.0:
             raise ValueError(f"range_noise_std_cells must be positive, got {range_noise_std_cells}")
+        self.range_noise_model = resolve_range_noise_model(range_noise_model)
         self.num_rows = int(num_rows)
         self.num_cols = int(num_cols)
         self.num_beams = int(num_beams)
@@ -146,7 +163,6 @@ class OccupancyGridMappingVectorizedUpdater(VectorizedParticleBeliefUpdater):
         self.log_odds_offset = _POSE_WIDTH + self.num_cells
         self.scan_offset = _POSE_WIDTH + 2 * self.num_cells
         self.state_size = self.scan_offset + self.num_beams
-        self._log_norm = -self.num_beams * np.log(self.range_noise_std_cells * np.sqrt(2 * np.pi))
         self._ray_templates = build_ray_templates(
             num_beams=self.num_beams,
             field_of_view_degrees=self.field_of_view_degrees,
@@ -177,6 +193,7 @@ class OccupancyGridMappingVectorizedUpdater(VectorizedParticleBeliefUpdater):
             log_odds_clamp=env.log_odds_clamp,
             move_failure_probability=env.move_failure_probability,
             sensor_contract_version=env.sensor_contract_version,
+            range_noise_model=env.range_noise_model,
         )
 
     # ------------------------------------------------------------------
@@ -189,8 +206,8 @@ class OccupancyGridMappingVectorizedUpdater(VectorizedParticleBeliefUpdater):
         """Score ``p(observation | particle, action)`` for every particle.
 
         Integrates the discrete motion outcomes and scores the observed ranges
-        under the Gaussian range law of each particle's hidden map, before the
-        observation is stored. Matches the environment's scalar
+        under the selected range law against each particle's hidden map,
+        before the observation is stored. Matches the environment's scalar
         ``predictive_observation_log_probability`` particle by particle.
 
         Args:
@@ -220,8 +237,15 @@ class OccupancyGridMappingVectorizedUpdater(VectorizedParticleBeliefUpdater):
                 continue
             index = np.flatnonzero(matched)
             nominal = self._nominal_scans(maps[index], rows[index], cols[index], headings[index])
-            residual = (observation[3:][None, :] - nominal) / self.range_noise_std_cells
-            log_density = -0.5 * np.sum(residual**2, axis=1) + self._log_norm
+            # Under truncation the normaliser is a function of each beam's
+            # nominal range, so it differs across particles and cannot be
+            # hoisted into one constant; the helper handles both laws.
+            log_density = scan_log_density(
+                observation[3:][None, :],
+                nominal,
+                self.range_noise_std_cells,
+                self.range_noise_model,
+            )
             scores[index] = np.logaddexp(scores[index], np.log(probabilities[index]) + log_density)
         return scores
 
@@ -313,9 +337,14 @@ class OccupancyGridMappingVectorizedUpdater(VectorizedParticleBeliefUpdater):
                 continue
             nominal = self._nominal_scans(maps[live], rows[live], cols[live], headings[live])
             # Lay the K noisy scans of each particle out as K * n independent
-            # particles, so one inverse-sensor call covers all of them.
-            ranges = (
-                nominal[None, :, :] + self.range_noise_std_cells * noise_points[:, None, :]
+            # particles, so one inverse-sensor call covers all of them. The
+            # unit-normal points are mapped through the selected law, so under
+            # truncation the integral averages over scans that law can produce.
+            ranges = quadrature_ranges(
+                nominal[None, :, :],
+                noise_points[:, None, :],
+                self.range_noise_std_cells,
+                self.range_noise_model,
             ).reshape(num_points * len(live), self.num_beams)
             deltas = self._scan_deltas(
                 ranges,
@@ -354,11 +383,11 @@ class OccupancyGridMappingVectorizedUpdater(VectorizedParticleBeliefUpdater):
     # ------------------------------------------------------------------
 
     def batch_transition(self, particles: np.ndarray, action: Any) -> np.ndarray:
-        """Draw motion and a fresh Gaussian scan for every particle, then map it.
+        """Draw motion and a fresh noisy scan for every particle, then map it.
 
         The batched form of the environment's ``sample_next_state``. Draws from
         the global NumPy stream: one uniform per particle that has two motion
-        outcomes, then ``(N, num_beams)`` normals.
+        outcomes, then ``(N, num_beams)`` range draws under the selected law.
 
         Args:
             particles: State array of shape ``(N, state_size)``.
@@ -382,9 +411,7 @@ class OccupancyGridMappingVectorizedUpdater(VectorizedParticleBeliefUpdater):
                 cols = np.where(stay, stay_cols, cols)
                 headings = np.where(stay, stay_headings, headings)
         nominal = self._nominal_scans(self._maps(particles), rows, cols, headings)
-        ranges = nominal + np.random.normal(
-            0.0, self.range_noise_std_cells, (count, self.num_beams)
-        )
+        ranges = sample_ranges(nominal, self.range_noise_std_cells, self.range_noise_model)
         poses = np.stack([rows, cols, headings], axis=1).astype(np.float64)
         delta = self._scan_deltas(ranges, rows, cols, headings)
         return self._install(particles, poses, ranges, delta)
@@ -433,6 +460,7 @@ class OccupancyGridMappingVectorizedUpdater(VectorizedParticleBeliefUpdater):
                 "field_of_view_degrees": self.field_of_view_degrees,
                 "max_range_cells": self.max_range_cells,
                 "range_noise_std_cells": self.range_noise_std_cells,
+                "range_noise_model": self.range_noise_model.value,
                 "free_log_odds": self.free_log_odds,
                 "occupied_log_odds": self.occupied_log_odds,
                 "log_odds_clamp": self.log_odds_clamp,
