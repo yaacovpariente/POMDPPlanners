@@ -90,19 +90,18 @@ def _summarize(histories) -> Dict[str, float]:
     }
 
 
-def _run(
+def _run(  # pylint: disable=too-many-arguments
     label: str,
     belief_type: BeliefType,
     episodes: int,
     n_jobs: int,
     results_dir: Path,
+    n_particles: int,
     **planner_overrides,
 ) -> Dict[str, float]:
     env = OccupancyGridMappingPOMDP(discount_factor=0.95, **occupancy_grid_mapping_pinned_kwargs())
     np.random.seed(0)
-    belief = create_environment_belief(
-        env, belief_type, n_particles=occupancy_grid_mapping_qa_belief_particles()
-    )
+    belief = create_environment_belief(env, belief_type, n_particles=n_particles)
     params = EnvironmentRunParams(
         environment=env,
         belief=belief,
@@ -145,6 +144,12 @@ def main() -> None:
     parser.add_argument("--time-out", type=int, default=1)
     parser.add_argument("--n-jobs", type=int, default=1)
     parser.add_argument(
+        "--particles",
+        type=int,
+        default=occupancy_grid_mapping_qa_belief_particles(),
+        help="Map particles per belief. Defaults to the QA setting.",
+    )
+    parser.add_argument(
         "--results-dir", type=Path, default=Path("results") / "occupancy_belief_benchmark"
     )
     parser.add_argument(
@@ -154,31 +159,38 @@ def main() -> None:
 
     fixed_work = {
         label: _run(
-            f"fixed_work_{label}",
+            f"fixed_work_{label}_{args.particles}p",
             belief_type,
             args.episodes,
             args.n_jobs,
             args.results_dir,
+            args.particles,
             n_simulations=args.n_simulations,
             time_out_in_seconds=None,
         )
         for label, belief_type in BELIEF_TYPES.items()
     }
-    _print_table(f"fixed work: {args.n_simulations} simulations per decision", fixed_work)
+    _print_table(
+        f"fixed work: {args.n_simulations} simulations per decision, {args.particles} particles",
+        fixed_work,
+    )
 
     if not args.skip_fixed_time:
         fixed_time = {
             label: _run(
-                f"fixed_time_{label}",
+                f"fixed_time_{label}_{args.particles}p",
                 belief_type,
                 args.episodes,
                 args.n_jobs,
                 args.results_dir,
+                args.particles,
                 time_out_in_seconds=args.time_out,
             )
             for label, belief_type in BELIEF_TYPES.items()
         }
-        _print_table(f"fixed time: {args.time_out}s per decision", fixed_time)
+        _print_table(
+            f"fixed time: {args.time_out}s per decision, {args.particles} particles", fixed_time
+        )
 
 
 if __name__ == "__main__":
