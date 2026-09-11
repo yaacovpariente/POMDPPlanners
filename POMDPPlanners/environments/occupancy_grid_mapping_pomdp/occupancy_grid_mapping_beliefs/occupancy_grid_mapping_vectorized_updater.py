@@ -34,19 +34,23 @@ Classes:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, List, Tuple, Union
+from typing import TYPE_CHECKING, Any, List, Optional, Tuple, Union
 
 import numpy as np
 
 from POMDPPlanners.core.belief.vectorized_particle_belief_updater import (
     VectorizedParticleBeliefUpdater,
 )
+from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.occupancy_update_rules import (
+    OccupancyUpdateRule,
+    default_update_rule,
+    non_default_update_rule_id,
+)
 from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.occupancy_grid_sensor import (
     HEADING_STEPS,
     NUM_HEADINGS,
     RangeNoiseModel,
     build_ray_templates,
-    observed_scan_log_odds_delta,
     quadrature_ranges,
     resolve_range_noise_model,
     sample_ranges,
@@ -84,6 +88,7 @@ class OccupancyGridMappingVectorizedUpdater(VectorizedParticleBeliefUpdater):
         range_noise_std_cells: Per-beam range noise standard deviation.
         range_noise_model: Which per-beam range law that deviation parametrises.
         move_failure_probability: Chance an otherwise-valid forward move fails.
+        update_rule: How an observed scan changes a particle's map.
 
     Example:
         >>> import numpy as np
@@ -117,6 +122,7 @@ class OccupancyGridMappingVectorizedUpdater(VectorizedParticleBeliefUpdater):
         move_failure_probability: float,
         sensor_contract_version: int = 2,
         range_noise_model: Union[RangeNoiseModel, str] = RangeNoiseModel.GAUSSIAN,
+        update_rule: Optional[OccupancyUpdateRule] = None,
     ):
         """Initialize the updater from the environment's sensor and motion settings.
 
@@ -138,6 +144,12 @@ class OccupancyGridMappingVectorizedUpdater(VectorizedParticleBeliefUpdater):
                 parametrises. Defaults to the unbounded Gaussian, the law every
                 updater built before the option existed used. Accepts the
                 member or its string value.
+            update_rule: How an observed scan changes a particle's map.
+                Defaults to ``None``, which rebuilds the environment's original
+                rule from ``free_log_odds``, ``occupied_log_odds`` and
+                ``log_odds_clamp``. Pass the environment's own rule so the
+                batched kernels and the scalar transition cannot disagree;
+                :meth:`from_environment` does exactly that.
 
         Raises:
             ValueError: If ``range_noise_std_cells`` is not positive, or
@@ -157,6 +169,11 @@ class OccupancyGridMappingVectorizedUpdater(VectorizedParticleBeliefUpdater):
         self.log_odds_clamp = float(log_odds_clamp)
         self.move_failure_probability = float(move_failure_probability)
         self.sensor_contract_version = int(sensor_contract_version)
+        self.update_rule = (
+            default_update_rule(self.free_log_odds, self.occupied_log_odds, self.log_odds_clamp)
+            if update_rule is None
+            else update_rule
+        )
 
         self.num_cells = self.num_rows * self.num_cols
         self.map_offset = _POSE_WIDTH
@@ -194,6 +211,7 @@ class OccupancyGridMappingVectorizedUpdater(VectorizedParticleBeliefUpdater):
             move_failure_probability=env.move_failure_probability,
             sensor_contract_version=env.sensor_contract_version,
             range_noise_model=env.range_noise_model,
+            update_rule=env.update_rule,
         )
 
     # ------------------------------------------------------------------
@@ -281,21 +299,19 @@ class OccupancyGridMappingVectorizedUpdater(VectorizedParticleBeliefUpdater):
         ):
             raise ValueError("observation pose must be an in-grid integer pose")
         row, col, heading = int(row), int(col), int(heading)
-        delta = observed_scan_log_odds_delta(
-            observation[3:],
-            self._ray_templates[heading],
+        end = self.log_odds_offset + self.num_cells
+        updated = self.update_rule.shared_update_log_odds(
+            particles[:, self.log_odds_offset : end],
             row,
             col,
+            heading,
+            observation[3:],
+            self._ray_templates,
             self.num_rows,
             self.num_cols,
             self.max_range_cells,
-            self.free_log_odds,
-            self.occupied_log_odds,
         )
-        delta[row * self.num_cols + col] += self.free_log_odds
-        return self._install(
-            particles, observation[None, :3], observation[None, 3:], delta[None, :]
-        )
+        return self._install(particles, observation[None, :3], observation[None, 3:], updated)
 
     def batch_expected_reward(
         self,
@@ -346,16 +362,12 @@ class OccupancyGridMappingVectorizedUpdater(VectorizedParticleBeliefUpdater):
                 self.range_noise_std_cells,
                 self.range_noise_model,
             ).reshape(num_points * len(live), self.num_beams)
-            deltas = self._scan_deltas(
+            updated = self._updated_log_odds(
+                np.tile(log_odds[live], (num_points, 1)),
                 ranges,
                 np.tile(rows[live], num_points),
                 np.tile(cols[live], num_points),
                 np.tile(headings[live], num_points),
-            )
-            updated = np.clip(
-                np.tile(log_odds[live], (num_points, 1)) + deltas,
-                -self.log_odds_clamp,
-                self.log_odds_clamp,
             )
             entropies = self.entropy_bits_rows(updated).reshape(num_points, len(live))
             after[live] += probabilities[live] * entropies.sum(axis=0)
@@ -413,8 +425,11 @@ class OccupancyGridMappingVectorizedUpdater(VectorizedParticleBeliefUpdater):
         nominal = self._nominal_scans(self._maps(particles), rows, cols, headings)
         ranges = sample_ranges(nominal, self.range_noise_std_cells, self.range_noise_model)
         poses = np.stack([rows, cols, headings], axis=1).astype(np.float64)
-        delta = self._scan_deltas(ranges, rows, cols, headings)
-        return self._install(particles, poses, ranges, delta)
+        end = self.log_odds_offset + self.num_cells
+        updated = self._updated_log_odds(
+            particles[:, self.log_odds_offset : end], ranges, rows, cols, headings
+        )
+        return self._install(particles, poses, ranges, updated)
 
     def batch_observation_log_likelihood(
         self, next_particles: np.ndarray, action: Any, observation: np.ndarray
@@ -450,7 +465,10 @@ class OccupancyGridMappingVectorizedUpdater(VectorizedParticleBeliefUpdater):
 
     @property
     def config_id(self) -> str:
-        """Deterministic identifier of the sensor and motion settings."""
+        """Deterministic identifier of the sensor, motion and mapping settings."""
+        rule_id = non_default_update_rule_id(
+            self.update_rule, self.free_log_odds, self.occupied_log_odds, self.log_odds_clamp
+        )
         return config_to_id(
             {
                 "class": type(self).__name__,
@@ -466,6 +484,10 @@ class OccupancyGridMappingVectorizedUpdater(VectorizedParticleBeliefUpdater):
                 "log_odds_clamp": self.log_odds_clamp,
                 "move_failure_probability": self.move_failure_probability,
                 "sensor_contract_version": self.sensor_contract_version,
+                # Absent for the original rule, which the three log-odds
+                # settings above already describe in full, so every belief
+                # cached before rules became pluggable still matches.
+                **({} if rule_id is None else {"update_rule": rule_id}),
             }
         )
 
@@ -583,72 +605,56 @@ class OccupancyGridMappingVectorizedUpdater(VectorizedParticleBeliefUpdater):
             ranges[index] = np.where(hit, hit_ranges, self.max_range_cells)
         return ranges
 
-    def _scan_deltas(
-        self, observed_ranges: np.ndarray, rows: np.ndarray, cols: np.ndarray, headings: np.ndarray
+    def _updated_log_odds(
+        self,
+        log_odds: np.ndarray,
+        observed_ranges: np.ndarray,
+        rows: np.ndarray,
+        cols: np.ndarray,
+        headings: np.ndarray,
     ) -> np.ndarray:
-        """Per-particle inverse-sensor increments for per-particle readings.
+        """Apply the map update rule to one scan per particle.
 
-        The batched form of ``observed_scan_log_odds_delta`` plus the free
-        evidence on the robot's own cell, used by the generative transition
-        where every particle has its own scan.
+        Used by the generative transition and by the expected-reward integral,
+        where every particle has its own reading. Delegates to the environment's
+        rule, so the batched path cannot drift from the scalar one.
+
+        Args:
+            log_odds: ``(N, num_cells)`` previous log-odds.
+            observed_ranges: ``(N, num_beams)`` measured ranges.
+            rows: ``(N,)`` robot rows.
+            cols: ``(N,)`` robot columns.
+            headings: ``(N,)`` heading indices.
+
+        Returns:
+            ``(N, num_cells)`` next log-odds.
         """
-        count = observed_ranges.shape[0]
-        deltas = np.zeros((count, self.num_cells), dtype=np.float64)
-        slot_offsets = np.arange(count) * self.num_cells
-        for heading in np.unique(headings):
-            index = np.flatnonzero(headings == heading)
-            offsets, distances = self._ray_templates[int(heading)]
-            length = distances.shape[1]
-            ray_rows = offsets[None, :, :, 0] + rows[index, None, None]
-            ray_cols = offsets[None, :, :, 1] + cols[index, None, None]
-            valid = (
-                (ray_rows >= 0)
-                & (ray_rows < self.num_rows)
-                & (ray_cols >= 0)
-                & (ray_cols < self.num_cols)
-                & np.isfinite(distances)[None]
-            )
-            valid = np.logical_and.accumulate(valid, axis=2)
-            has_cell = valid.any(axis=2)
-            gaps = np.abs(distances[None] - observed_ranges[index][:, :, None])
-            nearest = np.argmin(np.where(valid, gaps, np.inf), axis=2)
-            hit = (observed_ranges[index] < self.max_range_cells) & has_cell
-            slots = np.arange(length)[None, None, :]
-            free = valid & ((slots < nearest[:, :, None]) | ~hit[:, :, None])
-            occupied = valid & (slots == nearest[:, :, None]) & hit[:, :, None]
-            flat = ray_rows * self.num_cols + ray_cols + slot_offsets[index][:, None, None]
-            deltas += (
-                np.bincount(flat[free], minlength=count * self.num_cells).reshape(
-                    count, self.num_cells
-                )
-                * self.free_log_odds
-            )
-            deltas += (
-                np.bincount(flat[occupied], minlength=count * self.num_cells).reshape(
-                    count, self.num_cells
-                )
-                * self.occupied_log_odds
-            )
-        deltas[np.arange(count), rows * self.num_cols + cols] += self.free_log_odds
-        return deltas
+        return self.update_rule.batch_update_log_odds(
+            log_odds,
+            rows,
+            cols,
+            headings,
+            observed_ranges,
+            self._ray_templates,
+            self.num_rows,
+            self.num_cols,
+            self.max_range_cells,
+        )
 
     def _install(
-        self, particles: np.ndarray, poses: np.ndarray, ranges: np.ndarray, deltas: np.ndarray
+        self, particles: np.ndarray, poses: np.ndarray, ranges: np.ndarray, log_odds: np.ndarray
     ) -> np.ndarray:
-        """Advance the step, write pose and scan, and accumulate clamped log-odds.
+        """Advance the step and write the pose, the scan and the updated map.
 
-        ``poses``, ``ranges`` and ``deltas`` broadcast over the particle axis,
-        so one observation shared by every particle and one per particle both
-        go through here.
+        The map arrives already updated and clamped, because the clamp belongs
+        to the update rule rather than to this bookkeeping. ``poses`` and
+        ``ranges`` broadcast over the particle axis, so one observation shared
+        by every particle and one per particle both go through here.
         """
         successors = particles.copy()
         successors[:, _STEP_INDEX] += 1
         successors[:, _ROW_INDEX : _ROW_INDEX + 3] = poses
         successors[:, self.scan_offset :] = ranges
         end = self.log_odds_offset + self.num_cells
-        successors[:, self.log_odds_offset : end] = np.clip(
-            successors[:, self.log_odds_offset : end] + deltas,
-            -self.log_odds_clamp,
-            self.log_odds_clamp,
-        )
+        successors[:, self.log_odds_offset : end] = log_odds
         return successors

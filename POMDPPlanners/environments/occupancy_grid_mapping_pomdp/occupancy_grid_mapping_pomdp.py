@@ -58,6 +58,11 @@ from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.occupancy_grid_maps
     optional_int,
     resolve_keep_free,
 )
+from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.occupancy_update_rules import (
+    OccupancyUpdateRule,
+    default_update_rule,
+    non_default_update_rule_id,
+)
 from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.occupancy_grid_sensor import (
     HEADING_STEPS,
     NUM_HEADINGS,
@@ -66,7 +71,6 @@ from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.occupancy_grid_sens
     cast_scan,
     grid_entropy_bits,
     log_odds_from_probability,
-    observed_scan_log_odds_delta,
     quadrature_ranges,
     resolve_range_noise_model,
     sample_ranges,
@@ -158,6 +162,7 @@ class OccupancyGridMappingPOMDP(DiscreteActionsEnvironment):
         hit_probability: float = 0.85,
         miss_probability: float = 0.15,
         log_odds_clamp: float = 6.0,
+        update_rule: Optional[OccupancyUpdateRule] = None,
         num_obstacles: int = 3,
         max_obstacle_size: int = 2,
         has_boundary_wall: bool = True,
@@ -216,6 +221,17 @@ class OccupancyGridMappingPOMDP(DiscreteActionsEnvironment):
             log_odds_clamp: Symmetric bound on accumulated log-odds. Defaults to
                 6.0 (``p ~= 0.9975``). Clamping is what stops a cell swept by
                 many beams from becoming unrevisable.
+            update_rule: How an observed scan changes the map. Defaults to
+                ``None``, which builds the original rule
+                (``NearestCellLogOddsUpdateRule``) from ``hit_probability``,
+                ``miss_probability`` and ``log_odds_clamp`` -- so every result
+                and every cached episode from before this argument existed is
+                reproduced exactly. Supply an ``OccupancyUpdateRule`` to map
+                with a different law; the scalar transition, the batched
+                particle kernels and both rewards all use the one you supply.
+                A rule other than the default changes the environment's
+                ``config_id``, so its results cannot be served from a cache
+                filled under another rule.
             num_obstacles: Rectangular blocks placed per episode. Defaults to 3.
             max_obstacle_size: Largest block side length. Defaults to 2.
             has_boundary_wall: Whether the outer ring is occupied. Defaults to
@@ -367,6 +383,29 @@ class OccupancyGridMappingPOMDP(DiscreteActionsEnvironment):
                 f"got {self.miss_probability}"
             )
 
+        # Underscored so the rule object itself stays out of ``config_id`` and
+        # ``__eq__``: the *default* rule is nothing but the three settings
+        # above restated, so letting it into the identity would change every
+        # existing config_id for no change in behaviour. What does go into the
+        # identity is the line below -- an attribute that exists only when the
+        # rule is not the default one, so a non-default rule can never be
+        # served a cached result produced under the original update.
+        self._update_rule = (
+            default_update_rule(self.free_log_odds, self.occupied_log_odds, self.log_odds_clamp)
+            if update_rule is None
+            else update_rule
+        )
+        if not isinstance(self._update_rule, OccupancyUpdateRule):
+            raise TypeError(
+                "update_rule must be an OccupancyUpdateRule, got "
+                f"{type(self._update_rule).__name__}"
+            )
+        rule_id = non_default_update_rule_id(
+            self._update_rule, self.free_log_odds, self.occupied_log_odds, self.log_odds_clamp
+        )
+        if rule_id is not None:
+            self.update_rule_config_id = rule_id
+
         # Derived read-only ray geometry. Underscored so it stays out of
         # ``config_id`` and ``__eq__``: it is a pure function of num_beams,
         # field_of_view_degrees and max_range_cells, all of which are already in
@@ -377,6 +416,11 @@ class OccupancyGridMappingPOMDP(DiscreteActionsEnvironment):
             field_of_view_degrees=self.field_of_view_degrees,
             max_range_cells=self.max_range_cells,
         )
+
+    @property
+    def update_rule(self) -> OccupancyUpdateRule:
+        """The rule that turns an observed scan into the next map."""
+        return self._update_rule
 
     # -- state accessors ------------------------------------------------
 
@@ -503,23 +547,17 @@ class OccupancyGridMappingPOMDP(DiscreteActionsEnvironment):
         next_state[STEP_INDEX] += 1
         next_state[1:4] = observation[:3]
         next_state[self.scan_offset :] = observation[3:]
-        delta = observed_scan_log_odds_delta(
-            observation[3:],
-            self._ray_templates[heading],
+        end = self.log_odds_offset + self.num_cells
+        next_state[self.log_odds_offset : end] = self._update_rule.update_log_odds(
+            next_state[self.log_odds_offset : end],
             row,
             col,
+            heading,
+            observation[3:],
+            self._ray_templates[heading],
             self.num_rows,
             self.num_cols,
             self.max_range_cells,
-            self.free_log_odds,
-            self.occupied_log_odds,
-        )
-        delta[row * self.num_cols + col] += self.free_log_odds
-        end = self.log_odds_offset + self.num_cells
-        next_state[self.log_odds_offset : end] = np.clip(
-            next_state[self.log_odds_offset : end] + delta,
-            -self.log_odds_clamp,
-            self.log_odds_clamp,
         )
         return next_state
 
@@ -761,6 +799,7 @@ class OccupancyGridMappingPOMDP(DiscreteActionsEnvironment):
             self.log_odds_clamp,
             self.move_failure_probability,
             self.sensor_contract_version,
+            self._update_rule.config_id,
         )
         cached = vars(self).get("_batched_kernels_cache")
         if cached is None or cached[0] != key:

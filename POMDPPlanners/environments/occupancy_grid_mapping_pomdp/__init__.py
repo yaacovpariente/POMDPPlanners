@@ -12,6 +12,10 @@ Exports:
     OccupancyGridMappingVectorizedUpdater: The batched kernels behind it.
     create_occupancy_grid_mapping_belief: Factory choosing between the two filters.
     RangeNoiseModel: The selectable per-beam range noise laws.
+    OccupancyUpdateRule: Abstract map update rule, written on log-odds.
+    ProbabilityOccupancyUpdateRule: Abstract map update rule, written on
+        occupancy probabilities.
+    NearestCellLogOddsUpdateRule: The original rule, and the default.
 """
 
 from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.occupancy_grid_mapping_pomdp import (
@@ -32,6 +36,12 @@ from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.occupancy_grid_maps
     OccupancyGridInitialStateDistribution,
     sample_occupancy_map,
 )
+from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.occupancy_update_rules import (
+    NearestCellLogOddsUpdateRule,
+    OccupancyUpdateRule,
+    ProbabilityOccupancyUpdateRule,
+    default_update_rule,
+)
 from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.occupancy_grid_sensor import (
     HEADING_LABELS,
     HEADING_STEPS,
@@ -39,37 +49,47 @@ from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.occupancy_grid_sens
     RangeNoiseModel,
     build_ray_templates,
     cast_scan,
+    batch_observed_scan_evidence_counts,
     grid_entropy_bits,
     log_odds_from_probability,
+    observed_scan_evidence_counts,
+    observed_scan_log_odds_delta,
     scan_log_odds_delta,
 )
 
 __all__ = [
-    "OccupancyGridMappingBelief",
-    "OccupancyGridMappingVectorizedBelief",
-    "OccupancyGridMappingVectorizedUpdater",
-    "create_occupancy_grid_mapping_belief",
     "COL_INDEX",
     "HEADING_INDEX",
     "HEADING_LABELS",
     "HEADING_STEPS",
     "NUM_HEADINGS",
-    "POSE_WIDTH",
-    "RESOLVED_LOG_ODDS",
-    "ROW_INDEX",
-    "STEP_INDEX",
+    "NearestCellLogOddsUpdateRule",
     "OccupancyGridAction",
     "OccupancyGridInitialStateDistribution",
+    "OccupancyGridMappingBelief",
     "OccupancyGridMappingMetrics",
     "OccupancyGridMappingPOMDP",
+    "OccupancyGridMappingVectorizedBelief",
+    "OccupancyGridMappingVectorizedUpdater",
     "OccupancyGridState",
     "OccupancyGridStepChannel",
+    "OccupancyUpdateRule",
+    "POSE_WIDTH",
+    "ProbabilityOccupancyUpdateRule",
+    "RESOLVED_LOG_ODDS",
+    "ROW_INDEX",
     "RangeNoiseModel",
+    "STEP_INDEX",
+    "batch_observed_scan_evidence_counts",
     "build_ray_templates",
     "cast_scan",
+    "create_occupancy_grid_mapping_belief",
     "create_occupancy_grid_state",
+    "default_update_rule",
     "grid_entropy_bits",
     "log_odds_from_probability",
+    "observed_scan_evidence_counts",
+    "observed_scan_log_odds_delta",
     "sample_occupancy_map",
     "scan_log_odds_delta",
 ]
