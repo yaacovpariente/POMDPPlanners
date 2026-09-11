@@ -18,7 +18,8 @@ The map is an approximate independent-cell inverse estimate. Its entropy is
 not the entropy of the posterior over whole maps. Realised reward and completion use the observed inverse map. Planning
 without a successor uses fixed Gaussian integration of its expected reduction. Repeated correlated beams can create false
 confidence. The separate whole-map particle belief predicts scans and motion.
-Use OccupancyGridMappingBelief to condition the augmented state correctly.
+Use OccupancyGridMappingBelief, or its batched twin in the
+occupancy_grid_mapping_beliefs package, to condition the augmented state correctly.
 
 Integer pose and three actions are a chosen simplification. Particle-based
 MCTS also supports continuous states; it does not require this discretization.
@@ -657,6 +658,69 @@ class OccupancyGridMappingPOMDP(DiscreteActionsEnvironment):
                 )
         return self.entropy_bits(state) - after / len(self._reward_noise) - self.step_cost
 
+    def reward_batch(self, states, action, next_states=None):
+        """Batched :meth:`reward`: one array pass instead of one call per state.
+
+        A belief-space planner asks for the expected reward of every particle
+        at every node it expands, and without a successor each scalar call
+        integrates eight hypothetical scans. Doing all particles and all
+        integration points in one batched inverse-sensor call is what makes
+        the planner's decision time drop; the values are the scalar ones.
+
+        Args:
+            states: Sequence of ``N`` states.
+            action: Action executed from each state.
+            next_states: Optional realised successors, length ``N``.
+
+        Returns:
+            Rewards of shape ``(N,)``.
+        """
+        states = np.asarray(states, dtype=np.float64).reshape(-1, self.state_size)
+        kernels = self._batched_kernels
+        if next_states is not None:
+            successors = np.asarray(next_states, dtype=np.float64).reshape(-1, self.state_size)
+            end = self.log_odds_offset + self.num_cells
+            return (
+                kernels.entropy_bits_rows(states[:, self.log_odds_offset : end])
+                - kernels.entropy_bits_rows(successors[:, self.log_odds_offset : end])
+                - self.step_cost
+            )
+        return kernels.batch_expected_reward(states, action, self._reward_noise, self.step_cost)
+
+    @property
+    def _batched_kernels(self):
+        """The batched sensor and motion kernels, built on first use.
+
+        Underscored and lazily built for the same reason as the ray templates:
+        a pure function of settings already in the identity, and not worth
+        shipping to every worker.
+        """
+        # pylint: disable-next=import-outside-toplevel
+        from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.occupancy_grid_mapping_beliefs.occupancy_grid_mapping_vectorized_updater import (  # noqa: E501
+            OccupancyGridMappingVectorizedUpdater,
+        )
+
+        # Keyed on the settings so a test that edits one after construction
+        # gets kernels that match, not a stale copy.
+        key = (
+            self.num_rows,
+            self.num_cols,
+            self.num_beams,
+            self.field_of_view_degrees,
+            self.max_range_cells,
+            self.range_noise_std_cells,
+            self.free_log_odds,
+            self.occupied_log_odds,
+            self.log_odds_clamp,
+            self.move_failure_probability,
+            self.sensor_contract_version,
+        )
+        cached = vars(self).get("_batched_kernels_cache")
+        if cached is None or cached[0] != key:
+            cached = (key, OccupancyGridMappingVectorizedUpdater.from_environment(self))
+            vars(self)["_batched_kernels_cache"] = cached
+        return cached[1]
+
     # -- terminal / initial ---------------------------------------------
 
     def is_terminal(self, state: OccupancyGridState) -> bool:
@@ -834,13 +898,14 @@ class OccupancyGridMappingPOMDP(DiscreteActionsEnvironment):
     # -- pickling -------------------------------------------------------
 
     def __getstate__(self) -> Dict[str, Any]:
-        """Drop the ray templates before pickling.
+        """Drop the ray templates and the batched kernels before pickling.
 
-        They are a derived read-only artifact rebuilt in milliseconds, and this
+        Both are derived read-only artifacts rebuilt in milliseconds, and this
         environment is shipped to every parallel worker once per task.
         """
         state = self.__dict__.copy()
         state["_ray_templates"] = None
+        state.pop("_batched_kernels_cache", None)
         return state
 
     def __setstate__(self, state: Dict[str, Any]) -> None:

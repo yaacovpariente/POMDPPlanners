@@ -11,11 +11,12 @@ continuous states.
 .. code-block:: python
 
    from POMDPPlanners.environments.occupancy_grid_mapping_pomdp import (
-       OccupancyGridMappingPOMDP, OccupancyGridMappingBelief,
+       OccupancyGridMappingPOMDP,
    )
+   from POMDPPlanners.utils.belief_factory import create_environment_belief
 
    env = OccupancyGridMappingPOMDP()
-   belief = OccupancyGridMappingBelief.initial(env, n_particles=30)
+   belief = create_environment_belief(env, n_particles=30)
 
 State and observation contract
 ------------------------------
@@ -75,17 +76,35 @@ use the inverse estimate; neither substitutes the true occupancy grid.
 Filtering and limits
 --------------------
 
-Use ``OccupancyGridMappingBelief`` with PFT_DPW. Ordinary
+Use one of the environment's two whole-map filters with PFT_DPW. Ordinary
 ``get_initial_belief`` returns a bootstrap filter which cannot condition this
 stored continuous scan correctly. No core planner changes are needed.
 
-The custom filter installs the observed scan and its map update in every
-particle. It weights whole-map hypotheses by the predictive Gaussian density
+Both filters install the observed scan and its map update in every
+particle. They weight whole-map hypotheses by the predictive Gaussian density
 and exact motion probability, with no epsilon floor for impossible poses.
 Routine resampling is disabled to retain low-weight hypotheses. If every
 particle contradicts observed motion, bounded prior replay tests up to 4096
 fresh maps against the entire observation history and resamples surviving
 weighted maps. It raises if that search finds no support.
+
+``OccupancyGridMappingVectorizedBelief`` is the default from
+``create_environment_belief`` and from ``BeliefType.VECTORIZED_PARTICLE``. It
+scores all particles with one batched ray cast and applies one shared
+inverse-sensor delta to all of them, so an update costs a few array
+operations rather than two environment calls per particle. It gives the same
+particles, weights, history and restart count as the scalar filter for the
+same seed. ``OccupancyGridMappingBelief`` is the scalar reference, available
+as ``BeliefType.PARTICLE``. Its updater also exposes the batched generative
+transition and point-mass observation likelihood that the shared vectorized
+updater interface expects, but the filter does not use them: a freshly drawn
+scan matches the observed one with probability zero.
+
+The environment's ``reward_batch`` uses the same kernels. A belief-space
+planner asks for the expected reward of every particle at every node it
+expands, and without a successor each scalar call integrates eight
+hypothetical scans; batching those is where most of PFT_DPW's decision time
+goes, so it is what makes the planner faster with either filter.
 
 Thirty particles is a QA resource choice, not a guarantee against degeneracy.
 Reweighting cannot create missing maps. Prior replay is finite importance
@@ -113,5 +132,5 @@ hidden true map for review. Panels depict the state before the captioned action;
 the caption's reward is the realised inverse-map entropy reduction.
 
 There is no torch vectorized or C++ model. VOPP is unsupported. Scalar PFT_DPW
-uses the environment and custom belief shown above. Sensor contract version 2
+uses the environment and the whole-map filters shown above. Sensor contract version 2
 changes cache identity; old results and GIFs describe the earlier behavior.
