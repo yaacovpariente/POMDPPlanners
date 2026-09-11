@@ -16,21 +16,23 @@ does the inference between them.
 package, constructing the model, or running the belief never loads the simulator.
 
 Classes:
-    RacetrackPOMDP: Forward-only adapter exposing a racetrack session as a world.
-    RacetrackModelPOMDP: Abstract planner-side model; concrete models differ only in
-        where curvature comes from.
-    KnownTrackModel: Planner knows the circuit and looks curvature up by arclength.
-    ObservedTrackModel: Planner estimates curvature from the road it can see.
-    TrackGeometry: Piecewise-constant curvature of a lap, indexed by arclength.
-    RacetrackVectorizedModel: Batched torch counterpart of that model, for VOPP.
-    TrackedAgentsBelief: Particle belief that stamps observed detections onto particles.
-    SensorObservationModel: The POMDP arm's ego pose, lane camera and detections.
-    KinematicsObservationModel: The MDP arm's near-fully-observed kinematics table.
-    WorldSensors: What the world measures before its reading leaves the simulator.
-    SensorConfig: Every width and limit those sensors are simulated at.
-    ObservationMode: Selects the fully-observed or partially-observed arm.
-    RacetrackMetric: Episode-level metric names.
-    RacetrackStepChannel: Per-step measurement channel names.
+
+    - ``RacetrackPOMDP``: Forward-only adapter exposing a racetrack session as a world.
+    - ``RacetrackModelPOMDP``: Abstract planner-side model; concrete models differ only
+      in where curvature comes from.
+    - ``KnownTrackModel``: Planner knows the circuit and looks curvature up by arclength.
+    - ``ObservedTrackModel``: Planner estimates curvature from the road it can see.
+    - ``TrackGeometry``: Piecewise-constant curvature of a lap, indexed by arclength.
+    - ``RacetrackVectorizedModel``: Batched torch counterpart of that model, for VOPP.
+    - ``TrackedAgentsBelief``: Particle belief that stamps observed detections onto
+      particles.
+    - ``SensorObservationModel``: The POMDP arm's ego pose, lane camera and detections.
+    - ``KinematicsObservationModel``: The MDP arm's near-fully-observed kinematics table.
+    - ``WorldSensors``: What the world measures before its reading leaves the simulator.
+    - ``SensorConfig``: Every width and limit those sensors are simulated at.
+    - ``ObservationMode``: Selects the fully-observed or partially-observed arm.
+    - ``RacetrackMetric``: Episode-level metric names.
+    - ``RacetrackStepChannel``: Per-step measurement channel names.
 """
 
 from POMDPPlanners.environments.racetrack_pomdp.racetrack_belief import TrackedAgentsBelief

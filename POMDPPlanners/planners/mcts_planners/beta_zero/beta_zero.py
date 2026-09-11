@@ -89,6 +89,7 @@ class BetaZero(ArenaDoubleProgressiveWideningMCTSPolicy, TrainablePolicy):
        Q-weighted policy targets, and trains the network.
 
     The planner has two modes:
+
     - **Online planning** via ``action(belief)``: builds an MCTS tree with
       PUCT and network value estimates.
     - **Offline training** via ``fit()``: alternates data collection and

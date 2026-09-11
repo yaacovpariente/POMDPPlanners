@@ -260,6 +260,9 @@ API listing
    POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.ContinuousLightDarkPOMDP
    POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp.DiscreteLightDarkPOMDP
    POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.ContinuousLightDarkPOMDPDiscreteActions
+   POMDPPlanners.environments.maze_pomdp.DiscreteMazePOMDP
+   POMDPPlanners.environments.maze_pomdp.ContinuousMazePOMDP
+   POMDPPlanners.environments.maze_pomdp.TMazePOMDP
 
 **Manipulation**
 
@@ -277,6 +280,7 @@ API listing
    :toctree: ../api/
 
    POMDPPlanners.environments.rock_sample_pomdp.RockSamplePOMDP
+   POMDPPlanners.environments.battleship_pomdp.BattleshipPOMDP
    POMDPPlanners.environments.occupancy_grid_mapping_pomdp.OccupancyGridMappingPOMDP
    POMDPPlanners.environments.pacman_pomdp.PacManPOMDP
    POMDPPlanners.environments.laser_tag_pomdp.LaserTagPOMDP
