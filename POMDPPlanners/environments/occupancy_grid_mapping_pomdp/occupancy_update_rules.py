@@ -114,6 +114,40 @@ class OccupancyUpdateRule(ABC):
         True
     """
 
+    #: Class-level default so ``__setattr__`` below works before ``__init__``
+    #: has run. :meth:`freeze` shadows it with an instance attribute, which is
+    #: what makes the frozen state survive pickling.
+    _frozen = False
+
+    def freeze(self) -> "OccupancyUpdateRule":
+        """Make this rule read-only, and return it.
+
+        An environment calls this on the rule it adopts. The rule's parameters
+        were folded into that environment's ``config_id`` at that moment, and
+        the identifier is a string, not a live view -- so a later
+        ``rule.occupied_log_odds = 0.5`` would map under a different law while
+        the cache still answered to the old identity. Refusing the assignment
+        is cheaper than making every identifier live.
+
+        Freezing is idempotent, so one rule shared by two environments is fine.
+
+        Returns:
+            ``self``, so the call can be chained onto construction.
+        """
+        object.__setattr__(self, "_frozen", True)
+        return self
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        """Assign, unless the rule has been attached to an environment."""
+        if self._frozen:
+            raise AttributeError(
+                f"{type(self).__name__} is attached to an environment and is read-only. "
+                "Its parameters are already part of that environment's config_id, so "
+                f"setting {name!r} here would change the mapping law without changing "
+                "the identity its results are cached under. Build a new rule instead."
+            )
+        object.__setattr__(self, name, value)
+
     def __init_subclass__(cls, **kwargs: Any) -> None:
         """Teach the serializer about every concrete rule, including a user's.
 
@@ -190,6 +224,10 @@ class OccupancyUpdateRule(ABC):
         Returns:
             ``(N, num_cells)`` next log-odds.
         """
+        if log_odds.shape[0] == 0:
+            # np.stack refuses an empty list, and an empty particle array is a
+            # real state for a filter whose motion outcomes left a branch dead.
+            return np.zeros_like(log_odds)
         return np.stack(
             [
                 self.update_log_odds(

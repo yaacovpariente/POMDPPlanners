@@ -405,6 +405,11 @@ class OccupancyGridMappingPOMDP(DiscreteActionsEnvironment):
         )
         if rule_id is not None:
             self.update_rule_config_id = rule_id
+        # The identifier above is a string taken once, not a live view of the
+        # rule. Freezing the rule is what stops a later
+        # ``env.update_rule.occupied_log_odds = 0.5`` from mapping under a
+        # different law while the cache still answers to the old identity.
+        self._update_rule.freeze()
 
         # Derived read-only ray geometry. Underscored so it stays out of
         # ``config_id`` and ``__eq__``: it is a pure function of num_beams,

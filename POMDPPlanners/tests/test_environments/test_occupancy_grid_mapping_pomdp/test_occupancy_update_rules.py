@@ -31,6 +31,9 @@ from POMDPPlanners.environments.occupancy_grid_mapping_pomdp import (
 from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.occupancy_grid_mapping_beliefs import (
     OccupancyGridMappingVectorizedUpdater,
 )
+from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.occupancy_grid_sensor import (
+    observed_scan_evidence_counts,
+)
 from POMDPPlanners.tests.test_environments.test_occupancy_grid_mapping_pomdp.test_occupancy_grid_mapping_beliefs.test_occupancy_grid_mapping_vectorized_updater import (  # noqa: E501
     diverse_particles,
     make_env,
@@ -559,10 +562,6 @@ def test_a_probability_rule_returning_an_impossible_value_is_rejected():
             """Return an impossible probability."""
             return probabilities + 2.0
 
-        def parameters(self):
-            """No parameters beyond the clamp."""
-            return super().parameters()
-
     # Driven with the default rule: the broken one raises on the first
     # transition, which would fail the test before it reached its assertion.
     default_env = make_env()
@@ -571,3 +570,176 @@ def test_a_probability_rule_returning_an_impossible_value_is_rejected():
     env = make_env(update_rule=OutOfRangeRule())
     with pytest.raises(ValueError, match="outside"):
         env.state_from_observation(particle, observation)
+
+
+# ----------------------------------------------------------------------
+# The base class's own batched fallback.
+# ----------------------------------------------------------------------
+
+
+class ScalarOnlyDecayRule(OccupancyUpdateRule):
+    """A rule with no batched override, so the base class's loop is exercised.
+
+    It halves the prior before folding the scan in, which makes the result
+    depend on both the previous map and the scan -- a fallback that silently
+    dropped either would not survive the comparison below.
+    """
+
+    def update_log_odds(
+        self,
+        log_odds,
+        row,
+        col,
+        heading,
+        observed_ranges,
+        template,
+        num_rows,
+        num_cols,
+        max_range_cells,
+    ):
+        """Halve the prior, add one unit of evidence per sighting, clamp at 6."""
+        free_counts, occupied_counts = observed_scan_evidence_counts(
+            observed_ranges, template, row, col, num_rows, num_cols, max_range_cells
+        )
+        delta = occupied_counts - free_counts
+        return np.clip(0.5 * np.asarray(log_odds, dtype=np.float64) + delta, -6.0, 6.0)
+
+    def parameters(self):
+        """No parameters."""
+        return {}
+
+
+def test_the_default_batched_form_equals_looping_the_scalar_one():
+    """Purpose: a rule that implements only the scalar form must still be usable.
+
+    Given: A rule with no batched override, and one scan per particle.
+    When: ``batch_update_log_odds`` and an explicit loop over
+        ``update_log_odds`` are both applied.
+    Then: The results are equal element by element, so the fallback is not a
+        second, subtly different implementation of the rule.
+
+    Test type: unit
+    """
+    env = make_env(update_rule=ScalarOnlyDecayRule())
+    rng = np.random.RandomState(29)
+    count = 10
+    rows = rng.randint(1, env.num_rows - 1, count)
+    cols = rng.randint(1, env.num_cols - 1, count)
+    headings = rng.randint(0, 4, count)
+    ranges = rng.uniform(-0.5, env.max_range_cells + 1.0, (count, env.num_beams))
+    log_odds = rng.normal(0.0, 3.0, (count, env.num_cells))
+    templates = env._ray_templates  # pylint: disable=protected-access
+
+    batched = env.update_rule.batch_update_log_odds(
+        log_odds,
+        rows,
+        cols,
+        headings,
+        ranges,
+        templates,
+        env.num_rows,
+        env.num_cols,
+        env.max_range_cells,
+    )
+    expected = np.stack(
+        [
+            env.update_rule.update_log_odds(
+                log_odds[index],
+                int(rows[index]),
+                int(cols[index]),
+                int(headings[index]),
+                ranges[index],
+                templates[int(headings[index])],
+                env.num_rows,
+                env.num_cols,
+                env.max_range_cells,
+            )
+            for index in range(count)
+        ]
+    )
+    assert np.array_equal(batched, expected)
+
+
+def test_the_default_batched_form_accepts_an_empty_particle_array():
+    """Purpose: an empty particle set is a real state, not an error.
+
+    Given: No particles at all, which a filter reaches when every motion
+        outcome of a branch was pruned.
+    When: The base class's batched form and the default rule's own are called.
+    Then: Both return an empty map array of the right shape rather than
+        raising, which ``np.stack`` of an empty list would.
+
+    Test type: unit
+    """
+    env = make_env()
+    empty_maps = np.zeros((0, env.num_cells))
+    empty_int = np.zeros(0, dtype=np.int64)
+    empty_ranges = np.zeros((0, env.num_beams))
+    templates = env._ray_templates  # pylint: disable=protected-access
+
+    for rule in (ScalarOnlyDecayRule(), env.update_rule):
+        result = rule.batch_update_log_odds(
+            empty_maps,
+            empty_int,
+            empty_int,
+            empty_int,
+            empty_ranges,
+            templates,
+            env.num_rows,
+            env.num_cols,
+            env.max_range_cells,
+        )
+        assert result.shape == (0, env.num_cells)
+
+
+def test_an_attached_rule_cannot_be_mutated_behind_the_identity():
+    """Purpose: a rule's parameters must not change after they were hashed.
+
+    Given: An environment built with a custom rule, whose ``config_id`` already
+        carries that rule's parameters.
+    When: One of those parameters is assigned on the rule object afterwards.
+    Then: The assignment is refused, because the identifier is a string taken
+        once rather than a live view, so the change would map under a different
+        law while the cache still answered to the old identity.
+
+    Test type: unit
+    """
+    rule = OddsProductProbabilityRule()
+    env = make_env(update_rule=rule)
+    assert env.update_rule is rule
+    with pytest.raises(AttributeError, match="read-only"):
+        rule.hit_probability = 0.5
+    # Through the environment's own handle too: ``setattr`` rather than a dotted
+    # assignment because the property is typed as the abstract base, which has
+    # no such attribute.
+    with pytest.raises(AttributeError, match="read-only"):
+        setattr(env.update_rule, "hit_probability", 0.5)
+    assert rule.hit_probability == 0.85
+
+
+def test_a_rule_is_mutable_until_an_environment_adopts_it():
+    """Purpose: freezing must not make a rule awkward to build.
+
+    Given: A freshly constructed rule.
+    When: Its parameters are set, as a subclass constructor does.
+    Then: The assignments succeed, and the environment built from it is
+        identified by the values in force at that moment.
+
+    Test type: unit
+    """
+    rule = OddsProductProbabilityRule()
+    rule.hit_probability = 0.9
+    assert (
+        make_env(update_rule=rule).config_id
+        == make_env(update_rule=OddsProductProbabilityRule(hit_probability=0.9)).config_id
+    )
+
+
+def test_a_frozen_rule_stays_frozen_through_pickling():
+    """Purpose: the environment reaches a worker by pickle, rules included.
+
+    Test type: unit
+    """
+    env = pickle.loads(pickle.dumps(make_env(update_rule=OddsProductProbabilityRule())))
+    with pytest.raises(AttributeError, match="read-only"):
+        setattr(env.update_rule, "hit_probability", 0.5)

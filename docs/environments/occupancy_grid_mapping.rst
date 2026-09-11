@@ -122,6 +122,12 @@ a scan is classified rather than only the arithmetic on the counts; implement
 its batched method as well if the rule runs inside a planner's belief update,
 since the default loops over the scalar one.
 
+A rule becomes read-only the moment an environment or an updater adopts it.
+Its parameters are hashed into that object's ``config_id`` once, so allowing
+``env.update_rule.occupied_log_odds = 0.5`` afterwards would map under a
+different law while the cache still answered to the old identity. Build a new
+rule and a new environment instead.
+
 ``parameters()`` is both the rule's contribution to the environment's
 ``config_id`` and the keyword arguments it is rebuilt from, so a subclass must
 accept every key it reports and report every parameter that changes the update.

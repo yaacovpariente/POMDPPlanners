@@ -174,6 +174,10 @@ class OccupancyGridMappingVectorizedUpdater(VectorizedParticleBeliefUpdater):
             if update_rule is None
             else update_rule
         )
+        # Read-only from here on, for the same reason as in the environment:
+        # ``config_id`` below takes the rule's identifier once per call, but a
+        # belief cached under it would outlive an in-place parameter change.
+        self.update_rule.freeze()
 
         self.num_cells = self.num_rows * self.num_cols
         self.map_offset = _POSE_WIDTH
