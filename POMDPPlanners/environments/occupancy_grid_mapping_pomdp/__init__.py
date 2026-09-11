@@ -7,6 +7,10 @@ Exports:
     OccupancyGridAction: Its three action indices.
     OccupancyGridMappingVisualizer: Episode renderer.
     OccupancyGridInitialStateDistribution: The per-episode map prior.
+    OccupancyGridMappingBelief: The scalar conditional whole-map filter.
+    OccupancyGridMappingVectorizedBelief: Its batched twin.
+    OccupancyGridMappingVectorizedUpdater: The batched kernels behind it.
+    create_occupancy_grid_mapping_belief: Factory choosing between the two filters.
 """
 
 from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.occupancy_grid_mapping_pomdp import (
@@ -40,6 +44,9 @@ from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.occupancy_grid_sens
 
 __all__ = [
     "OccupancyGridMappingBelief",
+    "OccupancyGridMappingVectorizedBelief",
+    "OccupancyGridMappingVectorizedUpdater",
+    "create_occupancy_grid_mapping_belief",
     "COL_INDEX",
     "HEADING_INDEX",
     "HEADING_LABELS",
@@ -65,3 +72,8 @@ __all__ = [
 ]
 
 from .occupancy_grid_mapping_belief import OccupancyGridMappingBelief
+from .occupancy_grid_mapping_beliefs import (
+    OccupancyGridMappingVectorizedBelief,
+    OccupancyGridMappingVectorizedUpdater,
+    create_occupancy_grid_mapping_belief,
+)

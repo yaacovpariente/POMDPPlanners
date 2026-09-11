@@ -125,6 +125,11 @@ _ENV_FACTORY_REGISTRY: dict[str, tuple[str, str, BeliefType]] = {
         "create_rocksample_belief",
         BeliefType.VECTORIZED_PARTICLE,
     ),
+    "OccupancyGridMappingPOMDP": (
+        "POMDPPlanners.environments.occupancy_grid_mapping_pomdp.occupancy_grid_mapping_beliefs",
+        "create_occupancy_grid_mapping_belief",
+        BeliefType.VECTORIZED_PARTICLE,
+    ),
 }
 
 
