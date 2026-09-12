@@ -127,7 +127,9 @@ class RockSampleObservationCpp:
     Observation codes: ``0=none``, ``1=good``, ``2=bad``. Movement / sample
     actions deterministically produce ``none``; check actions produce a
     noisy Bernoulli flip whose probability depends on Euclidean distance to
-    the queried rock via ``exp(-distance / sensor_efficiency)``.
+    the queried rock via Smith & Simmons (2004),
+    ``(1 + 2 ** (-distance / sensor_efficiency)) / 2``, which decays from 1
+    to 0.5 so a far check is uninformative rather than wrong.
     """
 
     next_state: Tuple[float, ...]

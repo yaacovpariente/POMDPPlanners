@@ -50,7 +50,10 @@ class RockSampleVectorizedUpdater(VectorizedParticleBeliefUpdater):
         map_cols: Number of grid columns.
         num_rocks: Number of rocks in the environment.
         rock_positions: Array of shape (R, 2) with rock (row, col) positions.
-        sensor_efficiency: Sensor noise parameter (higher = less noise).
+        sensor_efficiency: Distance at which the check sensor is 75%
+            accurate (Smith & Simmons' ``d0``).
+        sensor_contract_version: The environment's observation-law version,
+            carried so a belief cached under an older law is a cache miss.
     """
 
     def __init__(  # pylint: disable=too-many-arguments
@@ -60,6 +63,7 @@ class RockSampleVectorizedUpdater(VectorizedParticleBeliefUpdater):
         num_rocks: int,
         rock_positions: np.ndarray,
         sensor_efficiency: float,
+        sensor_contract_version: int = 2,
         dangerous_areas_arr: Optional[np.ndarray] = None,
         dangerous_area_radius: float = 1.0,
         dangerous_area_hit_probability: float = 1.0,
@@ -72,6 +76,7 @@ class RockSampleVectorizedUpdater(VectorizedParticleBeliefUpdater):
         self.num_rocks = num_rocks
         self.rock_positions = np.asarray(rock_positions, dtype=np.int32)
         self.sensor_efficiency = sensor_efficiency
+        self.sensor_contract_version = int(sensor_contract_version)
         # Hazard-terminal parameters (only consumed when the flag is enabled;
         # the flag-off path builds the legacy 7-arg native kernel).
         self._dangerous_areas_arr = (
@@ -95,6 +100,7 @@ class RockSampleVectorizedUpdater(VectorizedParticleBeliefUpdater):
             num_rocks=len(env.rock_positions),
             rock_positions=rock_pos,
             sensor_efficiency=env.sensor_efficiency,
+            sensor_contract_version=env.sensor_contract_version,
             dangerous_areas_arr=env._dangerous_areas_arr,  # pylint: disable=protected-access
             dangerous_area_radius=env.dangerous_area_radius,
             dangerous_area_hit_probability=env.dangerous_area_hit_probability,
@@ -189,6 +195,7 @@ class RockSampleVectorizedUpdater(VectorizedParticleBeliefUpdater):
             "num_rocks": self.num_rocks,
             "rock_positions": self.rock_positions.tolist(),
             "sensor_efficiency": self.sensor_efficiency,
+            "sensor_contract_version": self.sensor_contract_version,
             "is_dangerous_area_hit_terminal": self._is_dangerous_area_hit_terminal,
         }
         if self._is_dangerous_area_hit_terminal:
