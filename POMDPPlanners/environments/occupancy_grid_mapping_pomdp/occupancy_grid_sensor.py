@@ -38,6 +38,10 @@ Functions:
     build_ray_templates: Precompute the cells each beam crosses, per heading.
     cast_scan: Cast one scan against a true occupancy grid.
     scan_log_odds_delta: Inverse sensor model for one scan.
+    observed_scan_evidence_counts: Classify one measured scan into per-cell
+        free and occupied sighting counts.
+    batch_observed_scan_evidence_counts: The same for one scan per particle.
+    observed_scan_log_odds_delta: Log-odds increments of one measured scan.
     log_odds_from_probability: Convert a probability to log-odds.
     grid_entropy_bits: Binary entropy of an occupancy grid, in bits.
     gaussian_log_density: Per-beam log density of the unbounded range law.
@@ -362,7 +366,7 @@ def scan_log_odds_delta(
     return delta
 
 
-def observed_scan_log_odds_delta(
+def observed_scan_evidence_counts(
     observed_ranges,
     template,
     row,
@@ -370,16 +374,36 @@ def observed_scan_log_odds_delta(
     num_rows,
     num_cols,
     max_range_cells,
-    free_log_odds,
-    occupied_log_odds,
 ):
-    """Map measured ranges without consulting occupancy or hidden hit flags.
+    """Classify measured ranges into per-cell free and occupied sighting counts.
+
+    This is the geometric half of the inverse sensor model, split out from the
+    arithmetic half so that a rule written on probabilities and the built-in
+    log-odds rule classify a scan in exactly one place. It consults neither the
+    hidden occupancy nor a hidden hit flag.
 
     A reading below maximum selects the nearest valid ray-cell centre; ties
     select the nearer cell. A reading at/above maximum frees the full ray.
     Out-of-grid cells and padded template slots never receive evidence.
     Gaussian tails remain in the observation; only this inverse interpretation
     selects grid cells. Negative readings select the first valid cell.
+
+    The robot's own cell is not counted here. It takes one free sighting of its
+    own, which every caller adds, because it is evidence from the robot being
+    there rather than from any beam.
+
+    Args:
+        observed_ranges: ``(num_beams,)`` measured ranges.
+        template: The heading's ``(offsets, distances)`` pair.
+        row: Robot row.
+        col: Robot column.
+        num_rows: Grid rows.
+        num_cols: Grid columns.
+        max_range_cells: Sensor range in cell widths.
+
+    Returns:
+        A ``(free_counts, occupied_counts)`` pair of ``(num_rows * num_cols,)``
+        integer arrays in row-major order, each counting one entry per beam.
     """
     offsets, distances = template
     rows = offsets[:, :, 0] + row
@@ -399,9 +423,98 @@ def observed_scan_log_odds_delta(
     occupied = valid & (slots == nearest[:, None]) & hit[:, None]
     flat = rows * num_cols + cols
     return (
-        np.bincount(flat[free], minlength=num_rows * num_cols) * free_log_odds
-        + np.bincount(flat[occupied], minlength=num_rows * num_cols) * occupied_log_odds
+        np.bincount(flat[free], minlength=num_rows * num_cols),
+        np.bincount(flat[occupied], minlength=num_rows * num_cols),
     )
+
+
+def batch_observed_scan_evidence_counts(
+    observed_ranges,
+    ray_templates,
+    rows,
+    cols,
+    headings,
+    num_rows,
+    num_cols,
+    max_range_cells,
+):
+    """Batched :func:`observed_scan_evidence_counts`: one scan per particle.
+
+    Particles are grouped by heading so that one array pass covers every
+    particle that shares a ray template. Rows of the two count arrays are
+    disjoint between groups, so the per-group accumulation below gives each
+    particle exactly the counts its own scan implies.
+
+    Args:
+        observed_ranges: ``(N, num_beams)`` measured ranges, one row per particle.
+        ray_templates: The per-heading ``(offsets, distances)`` pairs.
+        rows: ``(N,)`` robot rows.
+        cols: ``(N,)`` robot columns.
+        headings: ``(N,)`` heading indices.
+        num_rows: Grid rows.
+        num_cols: Grid columns.
+        max_range_cells: Sensor range in cell widths.
+
+    Returns:
+        A ``(free_counts, occupied_counts)`` pair of ``(N, num_rows * num_cols)``
+        integer arrays.
+    """
+    count = observed_ranges.shape[0]
+    num_cells = int(num_rows) * int(num_cols)
+    free_counts = np.zeros((count, num_cells), dtype=np.int64)
+    occupied_counts = np.zeros((count, num_cells), dtype=np.int64)
+    slot_offsets = np.arange(count) * num_cells
+    for heading in np.unique(headings):
+        index = np.flatnonzero(headings == heading)
+        offsets, distances = ray_templates[int(heading)]
+        length = distances.shape[1]
+        ray_rows = offsets[None, :, :, 0] + rows[index, None, None]
+        ray_cols = offsets[None, :, :, 1] + cols[index, None, None]
+        valid = (
+            (ray_rows >= 0)
+            & (ray_rows < num_rows)
+            & (ray_cols >= 0)
+            & (ray_cols < num_cols)
+            & np.isfinite(distances)[None]
+        )
+        valid = np.logical_and.accumulate(valid, axis=2)
+        has_cell = valid.any(axis=2)
+        gaps = np.abs(distances[None] - observed_ranges[index][:, :, None])
+        nearest = np.argmin(np.where(valid, gaps, np.inf), axis=2)
+        hit = (observed_ranges[index] < max_range_cells) & has_cell
+        slots = np.arange(length)[None, None, :]
+        free = valid & ((slots < nearest[:, :, None]) | ~hit[:, :, None])
+        occupied = valid & (slots == nearest[:, :, None]) & hit[:, :, None]
+        flat = ray_rows * num_cols + ray_cols + slot_offsets[index][:, None, None]
+        free_counts += np.bincount(flat[free], minlength=count * num_cells).reshape(
+            count, num_cells
+        )
+        occupied_counts += np.bincount(flat[occupied], minlength=count * num_cells).reshape(
+            count, num_cells
+        )
+    return free_counts, occupied_counts
+
+
+def observed_scan_log_odds_delta(
+    observed_ranges,
+    template,
+    row,
+    col,
+    num_rows,
+    num_cols,
+    max_range_cells,
+    free_log_odds,
+    occupied_log_odds,
+):
+    """Map measured ranges without consulting occupancy or hidden hit flags.
+
+    Classification is :func:`observed_scan_evidence_counts`; this function only
+    turns its two counts into the log-odds increment each cell accumulates.
+    """
+    free_counts, occupied_counts = observed_scan_evidence_counts(
+        observed_ranges, template, row, col, num_rows, num_cols, max_range_cells
+    )
+    return free_counts * free_log_odds + occupied_counts * occupied_log_odds
 
 
 def gaussian_log_density(values: ArrayLike, nominal: ArrayLike, std: float) -> np.ndarray:
@@ -449,9 +562,7 @@ def truncated_normal_log_norm(nominal: ArrayLike, std: float) -> np.ndarray:
     return log_ndtr(np.asarray(nominal, dtype=np.float64) / std)
 
 
-def truncated_normal_log_density(
-    values: ArrayLike, nominal: ArrayLike, std: float
-) -> np.ndarray:
+def truncated_normal_log_density(values: ArrayLike, nominal: ArrayLike, std: float) -> np.ndarray:
     """Per-beam log density of a normal truncated to ``[0, +inf)``.
 
     ``f(z | rho, sigma) = phi((z - rho)/sigma) / (sigma * Phi(rho/sigma))`` for
