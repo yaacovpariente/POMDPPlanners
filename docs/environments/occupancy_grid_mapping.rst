@@ -86,6 +86,57 @@ Negative readings select the first valid cell. Ties select the nearer cell.
 A reading at or above maximum range marks the full in-grid ray free.
 The robot's observed cell also receives free evidence. Log-odds are clamped.
 
+That rule is the default, not a fixed property of the environment. It is
+``NearestCellLogOddsUpdateRule``, built from ``hit_probability``,
+``miss_probability`` and ``log_odds_clamp``, and it is what every result
+produced before the rule became pluggable used. The ``update_rule`` constructor
+argument replaces it, and one rule object serves the scalar transition, the
+batched particle kernels and both rewards, so the three cannot disagree::
+
+    from POMDPPlanners.environments.occupancy_grid_mapping_pomdp import (
+        OccupancyGridMappingPOMDP,
+        ProbabilityOccupancyUpdateRule,
+    )
+
+
+    class DampedOddsRule(ProbabilityOccupancyUpdateRule):
+        """Half the usual confidence per sighting."""
+
+        def update_probabilities(self, probabilities, free_counts, occupied_counts):
+            ratio = 0.4**free_counts * 2.5**occupied_counts
+            scaled = probabilities * ratio
+            return scaled / (1.0 - probabilities + scaled)
+
+        def parameters(self):
+            return super().parameters()
+
+
+    env = OccupancyGridMappingPOMDP(update_rule=DampedOddsRule())
+
+Subclass ``ProbabilityOccupancyUpdateRule`` to write the update on occupancy
+probabilities, as the literature states it: the base class classifies the scan
+into per-cell free and occupied sighting counts, converts ``L`` to ``p`` before
+your method and back after it, and applies the clamp. Subclass
+``OccupancyUpdateRule`` instead to work directly on log-odds, or to change how
+a scan is classified rather than only the arithmetic on the counts; implement
+its batched method as well if the rule runs inside a planner's belief update,
+since the default loops over the scalar one.
+
+A rule becomes read-only the moment an environment or an updater adopts it.
+Its parameters are hashed into that object's ``config_id`` once, so allowing
+``env.update_rule.occupied_log_odds = 0.5`` afterwards would map under a
+different law while the cache still answered to the old identity. Build a new
+rule and a new environment instead.
+
+``parameters()`` is both the rule's contribution to the environment's
+``config_id`` and the keyword arguments it is rebuilt from, so a subclass must
+accept every key it reports and report every parameter that changes the update.
+The default rule contributes nothing, because the three settings that define it
+are already in the configuration -- so a default environment's ``config_id`` is
+what it always was, and every cached episode stays valid. Any other rule does
+contribute, so its results can never be served from a cache filled under a
+different rule.
+
 A true hit exactly at maximum range and a miss have identical range laws.
 They therefore produce identical updates for the same reading. Without an
 observed hit flag, this ambiguity cannot be removed. Range noise can place
