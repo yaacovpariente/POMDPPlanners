@@ -8,7 +8,10 @@ RockSample
 A robot on a grid must sample the good rocks and skip the bad ones, then leave
 by walking east off the right-hand edge. Whether a rock is good is hidden; a
 long-range sensor answers, but its accuracy decays with distance as
-``exp(-distance / sensor_efficiency)``.
+``(1 + 2 ** (-distance / sensor_efficiency)) / 2`` — the accuracy of Smith &
+Simmons, "Heuristic Search Value Iteration for POMDPs" (2004). It is ``1.0`` at
+the rock and falls towards ``0.5``, never below, so a check from far away tells
+you nothing rather than telling you the opposite of the truth.
 
 This is the standard long-horizon information-gathering benchmark. Getting a
 good score means walking *towards* a rock to make its reading trustworthy, which
@@ -62,8 +65,8 @@ Key settings
      - Number and placement of rocks. This sets the action-space size.
    * - ``sensor_efficiency``
      - ``10.0``
-     - Larger means the sensor stays accurate further away, so the problem gets
-       easier. (The docstring says 20.0; the code says 10.0.)
+     - Distance in cells at which a check is 75% accurate. Larger means the
+       sensor stays accurate further away, so the problem gets easier.
    * - ``dangerous_areas``
      - ``None``
      - Hazard cells. Adds a safety dimension on top of the information problem.

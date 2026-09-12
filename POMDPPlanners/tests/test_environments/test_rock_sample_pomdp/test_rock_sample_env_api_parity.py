@@ -251,7 +251,7 @@ def test_check_action_sample_frequency_matches_log_probability() -> None:
         same Bernoulli(p) it reports via ``observation_log_probability``.
 
     Given: A bad rock at distance sqrt(2) with sensor_efficiency=2.0; the
-        analytic P(obs='bad' | bad rock) = exp(-sqrt(2)/2) ≈ 0.493.
+        analytic P(obs='bad' | bad rock) = (1 + 2 ** (-sqrt(2)/2)) / 2 ≈ 0.806.
     When: 5_000 observations are drawn under check action 5.
     Then: Empirical frequency of 'bad' is within 3/sqrt(5000) ≈ 0.0424 of
         analytic, matching Wilson-style sample tolerance.
