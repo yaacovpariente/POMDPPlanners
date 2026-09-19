@@ -206,6 +206,14 @@ FAMILIES: Tuple[EnvironmentFamily, ...] = (
         images=("docs/images/multiagent_firefighting_visualization.gif",),
     ),
     EnvironmentFamily(
+        package="snake_pomdp",
+        label="Snake",
+        hooks=(("snake_pomdp/snake_pomdp.py", "SnakePOMDP"),),
+        docs_page="snake.rst",
+        docs_section=None,
+        images=("docs/images/snake_visualization.gif",),
+    ),
+    EnvironmentFamily(
         package="pacman_pomdp",
         label="PacMan",
         hooks=(("pacman_pomdp/pacman_pomdp.py", "PacManPOMDP"),),
@@ -684,6 +692,82 @@ def test_documentation_declares_every_image_it_embeds(page_name):
     assert not problems, "\n".join(problems)
 
 
+def short_table_rows(page: Path) -> List[str]:
+    """Rows of a ``list-table`` that carry fewer cells than the table declares.
+
+    reStructuredText does not pad a short row, it drops the whole table and
+    emits a build warning nobody reads, so the catalog silently loses an entry.
+    That is what happened to the ``CaptureTheFlagPOMDP`` row in ``index.rst``,
+    which arrived with three cells in a seven-column table.
+
+    Only tables that declare ``:widths:`` are checked, because that is the only
+    place the intended column count is written down rather than inferred from
+    the rows -- and inferring it from the rows is exactly what a short row
+    would corrupt.
+
+    Args:
+        page: Path to the reStructuredText file.
+
+    Returns:
+        One message per short row, naming the file, line and cell counts.
+    """
+    lines = page.read_text(encoding="utf-8").split("\n")
+    problems: List[str] = []
+    index = 0
+    while index < len(lines):
+        if not lines[index].strip().startswith(".. list-table::"):
+            index += 1
+            continue
+        table_indent = len(lines[index]) - len(lines[index].lstrip())
+        widths = None
+        index += 1
+        while index < len(lines) and (
+            not lines[index].strip()
+            or lines[index].strip() == ""
+            or lines[index].strip().startswith(":")
+        ):
+            option = lines[index].strip()
+            if option.startswith(":widths:"):
+                widths = len(option.split(":", 2)[2].split())
+            index += 1
+
+        rows: List[Tuple[int, int]] = []
+        cells: Optional[int] = None
+        start = 0
+        while index < len(lines):
+            line, text = lines[index], lines[index].strip()
+            outdented = len(line) - len(line.lstrip()) <= table_indent
+            if text and outdented and not text.startswith(("*", "-")):
+                break
+            if text.startswith("* -") or text == "*":
+                if cells is not None:
+                    rows.append((start, cells))
+                cells, start = 1, index + 1
+            elif cells is not None and (text == "-" or text.startswith("- ")):
+                cells += 1
+            index += 1
+        if cells is not None:
+            rows.append((start, cells))
+
+        if widths is not None:
+            for line_number, count in rows:
+                if count != widths:
+                    problems.append(
+                        f"{page.relative_to(REPO_ROOT)}:{line_number}: table row has "
+                        f"{count} cells, but the table declares {widths} columns."
+                    )
+    return problems
+
+
+@pytest.mark.parametrize(
+    "page_name", sorted(path.name for path in DOCS_ENVIRONMENTS_DIR.glob("*.rst"))
+)
+def test_no_documentation_table_drops_a_row(page_name):
+    """A short row makes reStructuredText discard the whole table, quietly."""
+    problems = short_table_rows(DOCS_ENVIRONMENTS_DIR / page_name)
+    assert not problems, "\n".join(problems)
+
+
 def _family_with(**overrides) -> EnvironmentFamily:
     """Copy the Tiger row with fields replaced, for the failure-message tests."""
     base = FAMILIES_BY_PACKAGE["tiger_pomdp"]
@@ -912,6 +996,63 @@ def test_option_lines_are_not_mistaken_for_a_next_line_target(tmp_path, monkeypa
         tmp_path,
     )
     assert referenced_images(page) == {"docs/images/widget.gif"}
+
+
+def test_a_short_table_row_is_reported_with_its_line(tmp_path, monkeypatch):
+    """The check has to fail on the shape that actually shipped, not just run.
+
+    Purpose: This is the defect the ``CaptureTheFlagPOMDP`` row had -- a row
+        with three cells in a seven-column table. Asserting only that the real
+        pages pass would leave a check that could never fail.
+    """
+    page = tmp_path / "docs" / "environments" / "widget.rst"
+    page.parent.mkdir(parents=True)
+    page.write_text(
+        "Widget\n======\n\n"
+        ".. list-table::\n"
+        "   :header-rows: 1\n"
+        "   :widths: 20 20 20\n"
+        "\n"
+        "   * - Environment\n"
+        "     - Purpose\n"
+        "     - Guide\n"
+        "   * - ``WidgetPOMDP``\n"
+        "     - :doc:`widget`\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "POMDPPlanners.tests.test_environments.test_visualization_coverage_matrix.REPO_ROOT",
+        tmp_path,
+    )
+    problems = short_table_rows(page)
+    assert len(problems) == 1
+    assert "2 cells" in problems[0] and "3 columns" in problems[0]
+
+
+def test_an_empty_cell_written_as_a_bare_dash_still_counts(tmp_path, monkeypatch):
+    """An empty cell is a cell, so counting only ``- `` would flag good tables.
+
+    Purpose: Several argument tables leave the description of a required
+        argument blank, written as a bare ``-``. A check that missed those
+        would report seven healthy pages and get switched off.
+    """
+    page = tmp_path / "docs" / "environments" / "widget.rst"
+    page.parent.mkdir(parents=True)
+    page.write_text(
+        "Widget\n======\n\n"
+        ".. list-table::\n"
+        "   :widths: 20 20 20\n"
+        "\n"
+        "   * - ``discount_factor``\n"
+        "     - *required*\n"
+        "     -\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "POMDPPlanners.tests.test_environments.test_visualization_coverage_matrix.REPO_ROOT",
+        tmp_path,
+    )
+    assert not short_table_rows(page)
 
 
 def test_empty_image_counts_as_missing(tmp_path, monkeypatch):
