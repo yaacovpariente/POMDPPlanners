@@ -5,15 +5,23 @@
 The ship sits on row 0 of a ``W`` by ``H`` grid and may step left, step right,
 stay, or fire. Above it, ``N`` chickens patrol sideways and bounce off the
 walls; each step a patrolling chicken may switch, unseen, into a dive and start
-dropping one row per step. A projectile rises one row per step and kills the
-first chicken it reaches, dying with it. The episode ends when the flock is
-cleared, when a chicken reaches the ship's cell, or when the step budget runs
-out.
+dropping one row per step. The episode ends when the flock is cleared, when a
+chicken reaches the ship's cell, or when the step budget runs out.
 
-**What is hidden.** The ship's own column, its cooldown and the sky full of its
-own projectiles are all known exactly -- they follow from the actions it took.
-What it does not know is where the chickens are and which of them are diving,
-and it learns that from two sensors that each give half an answer:
+**The gun is hitscan.** A shot resolves inside the step that fired it, killing
+the lowest live chicken in the ship's column at unlimited range, and it is
+resolved *before* the dive coins are flipped and before the flock moves. So the
+ship hits what it aimed at rather than where the flock ends up, and the only
+rate limiter is ``fire_cooldown``. A travelling bolt was tried first and was the
+wrong model for this grid: a bolt climbing one row per step against chickens
+stepping sideways every step is dodged by accident rather than by any decision
+the flock makes, which turns aiming into waiting and made most shots miss for
+reasons the ship could not have reasoned about.
+
+**What is hidden.** The ship's own column and its cooldown are known exactly --
+they follow from the actions it took. What it does not know is where the
+chickens are and which of them are diving, and it learns that from two sensors
+that each give half an answer:
 
 * the **camera** covers a cone opening upward from the ship and reports a
   chicken's *column* offset, with noise, saying nothing about its row;
@@ -32,10 +40,10 @@ multiplies a factor in for *every* chicken rather than only the reported ones.
 reaches row 0 outside the ship's column pulls up: it goes back to patrolling at
 the top row, keeping its column and direction. Without such a rule a dive would
 either have to carry the chicken off the grid -- which would let the flock clear
-itself and make the completion bonus free -- or park it permanently on a row no
-projectile can reach, which is unwinnable. And the dive coin is flipped *before*
-the chickens move, so a chicken that switches this step also drops this step;
-flipping it afterwards would delay every dive by one step for no gain.
+itself and make the completion bonus free -- or park it permanently on row 0,
+below the rows the gun covers, which is unwinnable. And the dive coin is flipped
+*before* the chickens move, so a chicken that switches this step also drops this
+step; flipping it afterwards would delay every dive by one step for no gain.
 
 Classes:
     CrazyChickenPOMDP: The environment.
@@ -78,7 +86,6 @@ from POMDPPlanners.environments.crazy_chicken_pomdp.crazy_chicken_schema import 
     COOLDOWN_INDEX,
     MODE_DIVE,
     MODE_PATROL,
-    NO_PROJECTILE,
     OBSERVATION_CHICKEN_WIDTH,
     OBSERVATION_SHIP_WIDTH,
     OBSERVED_CAMERA_OFFSET,
@@ -94,7 +101,6 @@ from POMDPPlanners.environments.crazy_chicken_pomdp.crazy_chicken_schema import 
     chicken_slots,
     make_state,
     observation_size,
-    projectile_rows,
     state_size,
 )
 from POMDPPlanners.environments.crazy_chicken_pomdp.crazy_chicken_sensors import (
@@ -122,19 +128,28 @@ _MIN_EPISODES_FOR_CONFIDENCE_INTERVAL = 2
 class CrazyChickenAction(IntEnum):
     """The ship's four actions.
 
+    ``STAY`` is index 0 on purpose. The shared conformance harness takes
+    ``get_actions()[0]`` as *the* representative action for a whole family of
+    contract checks -- hashing, batched reward, whether the reward really needs
+    the realised successor -- and the do-nothing action is the honest
+    representative. Putting ``FIRE`` there instead would make those checks
+    incidentally exercise the gun, and the reward check in particular would then
+    see only the shot's deterministic kill and miss the one term the transition
+    actually decides.
+
     Attributes:
-        FIRE: Launch a projectile, if the cooldown is over and this column is
-            clear. Otherwise it behaves exactly like ``STAY``, and no shot cost
-            is charged.
+        STAY: Hold position.
         LEFT: Step one column left, clamped at the wall.
         RIGHT: Step one column right, clamped at the wall.
-        STAY: Hold position.
+        FIRE: Shoot straight up the ship's column, if the cooldown is over.
+            The shot resolves in the same step. Otherwise it behaves exactly
+            like ``STAY``, and no shot cost is charged.
     """
 
-    FIRE = 0
+    STAY = 0
     LEFT = 1
     RIGHT = 2
-    STAY = 3
+    FIRE = 3
 
 
 class ObservationMode(Enum):
@@ -251,7 +266,7 @@ class CrazyChickenPOMDP(DiscreteActionsEnvironment):
         Args:
             num_columns: Grid width. Defaults to 8. Wide enough that the ship
                 cannot cover the whole sky from one place, narrow enough that a
-                projectile is worth aiming.
+                shot is worth aiming.
             num_rows: Grid height. Defaults to 7, so a chicken that starts at the
                 top takes six steps to reach the ship -- long enough for the
                 ship to notice the dive and answer it.
@@ -323,9 +338,9 @@ class CrazyChickenPOMDP(DiscreteActionsEnvironment):
             )
         if int(num_chickens) < 1:
             raise ValueError(f"num_chickens must be at least 1, got {num_chickens}")
-        # Placements are drawn without replacement so that one projectile can
-        # never be worth two kills, which would put the reward above its
-        # declared maximum.
+        # Placements are drawn without replacement: two chickens on one start
+        # cell waste a slot, since a hitscan shot only ever removes the lowest
+        # chicken in its column.
         available_cells = (int(num_rows) - 1) * int(num_columns)
         if int(num_chickens) > available_cells:
             raise ValueError(
@@ -374,31 +389,29 @@ class CrazyChickenPOMDP(DiscreteActionsEnvironment):
         # The bound is enumerated rather than estimated, because a wrong reward
         # range is the single most repeated bug in this repository.
         #
-        # Best step: no shot fired (firing only ever subtracts), every
-        # projectile in flight connects, and that empties the flock. At most one
-        # projectile exists per column, and chickens never share a cell, so a
-        # single step cannot kill more than ``min(num_chickens, num_columns)``.
-        # The clear bonus is paid in the same step as the kills that earned it.
+        # Best step: the gun is hitscan, so a step kills at most one chicken --
+        # and a kill can only happen on a step that fired, so the shot cost is
+        # part of the best case rather than something the best case avoids. The
+        # best step is therefore the shot that kills the last chicken and
+        # collects the completion bonus with it.
         #
-        # Worst step: the step cost, a shot that was genuinely fired, and a
-        # chicken reaching the ship, with the kill and clear terms contributing
-        # nothing. This bound is deliberately *conservative* rather than tight.
-        # Under the current kill rule those last two cannot actually coincide: a
-        # chicken can only reach the ship by diving into its column, a shot is
-        # launched into that same column, and the rising shot meets the falling
-        # chicken -- so firing protects the ship's column for exactly the step
-        # it is fired. Tightening the bound to
-        # ``-step_cost - max(shot_cost, ship_hit_penalty)`` would make it depend
-        # on that argument, and a later change to how a projectile and a dive
-        # resolve would then silently put a real reward outside the declared
-        # range. A declared range that is one shot cost too wide costs nothing.
+        # Worst step: the step cost, a shot that discharged, and a chicken
+        # reaching the ship, with no kill and no bonus. That sum is deliberately
+        # *not* reachable, and the reason is not obvious, so it is written down
+        # here: the gun kills the lowest chicken in the ship's column over rows
+        # 1 upward, and a chicken can only reach the ship by diving down that
+        # same column -- so any step that could be overrun gave the shot a
+        # target, and the kill reward comes back. Firing into a genuinely empty
+        # column cannot be overrun at all. The worst a run can actually score is
+        # being overrun without firing, one shot cost above this bound.
         #
-        # The clear bonus and the ship hit genuinely cannot coincide, which is
-        # why the maximum above leaves the penalty out: a chicken that reaches
-        # the ship is alive, so the flock is not clear.
-        most_kills_in_one_step = min(int(num_chickens), int(num_columns))
-        max_reward = float(kill_reward) * most_kills_in_one_step + float(clear_reward)
-        max_reward -= float(step_cost)
+        # Keeping the wider bound costs nothing, and it survives a change to the
+        # gun's reach; a tight bound derived from the argument above would not.
+        #
+        # The clear bonus and the ship hit cannot coincide: a chicken that
+        # reaches the ship is alive, so the flock is not clear. That is why the
+        # maximum leaves the penalty out.
+        max_reward = float(kill_reward) + float(clear_reward) - float(step_cost) - float(shot_cost)
         min_reward = -float(step_cost) - float(shot_cost) - float(ship_hit_penalty)
 
         super().__init__(
@@ -438,7 +451,7 @@ class CrazyChickenPOMDP(DiscreteActionsEnvironment):
         #: The ship starts in the middle, which is the only column from which
         #: both walls are the same distance away.
         self.ship_start_column = self.num_columns // 2
-        self.state_size = state_size(self.num_chickens, self.num_columns)
+        self.state_size = state_size(self.num_chickens)
         self.observation_size = (
             self.state_size
             if self.observation_mode is ObservationMode.FULL
@@ -460,17 +473,6 @@ class CrazyChickenPOMDP(DiscreteActionsEnvironment):
             Rows of ``(column, row, direction, mode, alive)``.
         """
         return chicken_slots(np.asarray(state, dtype=np.float64), self.num_chickens)
-
-    def projectiles(self, state: CrazyChickenState) -> np.ndarray:
-        """Return the per-column projectile rows of ``state`` as a view.
-
-        Args:
-            state: A state vector.
-
-        Returns:
-            One row per column, :data:`NO_PROJECTILE` where empty.
-        """
-        return projectile_rows(np.asarray(state, dtype=np.float64), self.num_chickens)
 
     def ship_column(self, state: CrazyChickenState) -> int:
         """Return the ship's column in ``state``.
@@ -497,7 +499,7 @@ class CrazyChickenPOMDP(DiscreteActionsEnvironment):
     # -- dynamics -------------------------------------------------------
 
     def get_actions(self) -> List[int]:
-        """Return the four actions: fire, left, right, stay."""
+        """Return the four actions: stay, left, right, fire."""
         return [int(action) for action in CrazyChickenAction]
 
     def hash_action(self, action: Any) -> Hashable:
@@ -505,27 +507,55 @@ class CrazyChickenPOMDP(DiscreteActionsEnvironment):
         return int(action)
 
     def fires(self, state: CrazyChickenState, action: Any) -> bool:
-        """Whether ``action`` actually launches a projectile from ``state``.
+        """Whether ``action`` actually discharges the gun from ``state``.
 
-        A ``FIRE`` that the cooldown blocks, or that finds this column already
-        holding a projectile, does exactly what ``STAY`` does and is charged
-        nothing. This is deterministic in ``(state, action)``, which is why the
-        shot cost can be scored without a successor.
+        The cooldown is the only thing that can block it. A ``FIRE`` during
+        cooldown does exactly what ``STAY`` does and is charged nothing. This is
+        deterministic in ``(state, action)``, which is why the shot cost can be
+        scored without a successor.
 
         Args:
             state: The state fired from.
             action: The action taken.
 
         Returns:
-            ``True`` if a projectile leaves the ship.
+            ``True`` if the gun discharges.
         """
         if int(action) != int(CrazyChickenAction.FIRE):
             return False
+        return bool(np.asarray(state, dtype=np.float64)[COOLDOWN_INDEX] <= 0.0)
+
+    def shot_target(self, state: CrazyChickenState) -> int:
+        """Which chicken slot a shot fired from ``state`` would kill.
+
+        The lowest live chicken in the ship's column, over rows 1 to ``H - 1``.
+        Lowest rather than nearest-by-slot so the outcome cannot depend on the
+        order the flock happens to be stored in; ties between two chickens that
+        have walked onto one cell go to the lower slot, which is arbitrary but
+        deterministic and cannot be observed apart.
+
+        Args:
+            state: The state fired from, *before* the flock moves.
+
+        Returns:
+            The slot index, or ``-1`` when the column is empty and the shot
+            misses.
+        """
         values = np.asarray(state, dtype=np.float64)
-        if values[COOLDOWN_INDEX] > 0.0:
-            return False
         column = self.ship_column(values)
-        return bool(self.projectiles(values)[column] == NO_PROJECTILE)
+        flock = chicken_slots(values, self.num_chickens)
+        target, lowest = -1, float("inf")
+        for index in range(self.num_chickens):
+            if flock[index, CHICKEN_ALIVE] <= 0.0:
+                continue
+            if int(flock[index, CHICKEN_COLUMN]) != column:
+                continue
+            row = float(flock[index, CHICKEN_ROW])
+            if row < 1.0:
+                continue
+            if row < lowest:
+                target, lowest = index, row
+        return target
 
     def _moved_ship_column(self, state: CrazyChickenState, action: Any) -> int:
         """Where the ship ends up, clamped at the walls."""
@@ -558,10 +588,20 @@ class CrazyChickenPOMDP(DiscreteActionsEnvironment):
     ) -> CrazyChickenState:
         """Advance one step, with this step's dive coins drawn or supplied.
 
-        The order is: flip the dive coins, move the ship, move the chickens,
-        move the projectiles and launch any new one, resolve kills, then resolve
-        whatever reached row 0. Dives are decided before the chickens move so
-        that a chicken which switches this step also drops this step.
+        The order is: move the ship, resolve the shot, flip the dive coins, move
+        the chickens, then settle whatever reached row 0.
+
+        The shot is resolved *before* the flock moves, and that ordering is the
+        whole design. The ship chooses an action from an observation of where
+        the chickens are now, so it must be able to hit what it aimed at; if the
+        shot were resolved after the step, a chicken stepping sideways would
+        dodge it without ever deciding to, and aiming would collapse into
+        waiting.
+
+        Dives are decided after the shot but before the chickens move, so a
+        chicken that switches this step also drops this step -- and a chicken
+        shot this step never gets to dive, which is what makes shooting a live
+        defence rather than only an attack.
 
         Args:
             state: The state to advance.
@@ -586,11 +626,18 @@ class CrazyChickenPOMDP(DiscreteActionsEnvironment):
         )
 
         flock = chicken_slots(successor, self.num_chickens)
+        if fired:
+            # Aimed from the successor, whose ship column is already set -- but
+            # FIRE never moves the ship, so this is the column the observation
+            # the ship acted on described.
+            target = self.shot_target(successor)
+            if target >= 0:
+                flock[target, CHICKEN_ALIVE] = 0.0
+
         alive = flock[:, CHICKEN_ALIVE] > 0.0
         coins = self._draw_dive_switches() if switches is None else np.asarray(switches, dtype=bool)
         flock[alive & (flock[:, CHICKEN_MODE] == MODE_PATROL) & coins, CHICKEN_MODE] = MODE_DIVE
 
-        old_rows = np.array(flock[:, CHICKEN_ROW], copy=True)
         diving = alive & (flock[:, CHICKEN_MODE] == MODE_DIVE)
         patrolling = alive & ~diving
         flock[diving, CHICKEN_ROW] -= 1.0
@@ -607,69 +654,8 @@ class CrazyChickenPOMDP(DiscreteActionsEnvironment):
             flock[patrolling, CHICKEN_DIRECTION] = directions
             flock[patrolling, CHICKEN_COLUMN] = columns + directions
 
-        sky = projectile_rows(successor, self.num_chickens)
-        old_projectiles = np.array(sky, copy=True)
-        in_flight = old_projectiles != NO_PROJECTILE
-        sky[in_flight] = old_projectiles[in_flight] + 1.0
-        sky[in_flight & (old_projectiles + 1.0 > self.num_rows - 1)] = NO_PROJECTILE
-        if fired:
-            old_projectiles[ship_column] = 0.0
-            sky[ship_column] = 1.0
-
-        self._resolve_kills(flock, sky, old_projectiles, old_rows)
         self._resolve_arrivals(flock, ship_column, successor)
         return successor
-
-    def _resolve_kills(
-        self,
-        flock: np.ndarray,
-        sky: np.ndarray,
-        old_projectiles: np.ndarray,
-        old_rows: np.ndarray,
-    ) -> None:
-        """Kill every chicken a projectile reached, and the projectile with it.
-
-        A projectile and a chicken meet when they end the step in the same cell
-        *or* when they swapped past each other -- a chicken diving down through
-        a projectile rising up would otherwise pass through it untouched, which
-        is the one case a naive same-cell test gets visibly wrong.
-
-        The column tested is the chicken's column after it moved. A patrolling
-        chicken that steps sideways into a rising projectile's column is hit;
-        one that steps out of it is not.
-
-        A projectile kills at most one chicken -- it is destroyed by the first
-        one it reaches, which is the *lowest* candidate rather than the one in
-        the lowest-numbered slot. The two differ only when two chickens share a
-        column within the one row a projectile crosses, but picking by slot
-        index there would make the outcome depend on the order the flock happens
-        to be stored in, which is not a fact about the world.
-
-        Args:
-            flock: The successor's chicken block, modified in place.
-            sky: The successor's projectile rows, modified in place.
-            old_projectiles: Projectile rows before they rose, with the newly
-                fired shot recorded at row 0.
-            old_rows: Chicken rows before they moved.
-        """
-        for column in range(self.num_columns):
-            if sky[column] == NO_PROJECTILE:
-                continue
-            new_row = sky[column]
-            old_row = old_projectiles[column]
-            struck = -1
-            for index in range(self.num_chickens):
-                if flock[index, CHICKEN_ALIVE] <= 0.0:
-                    continue
-                if flock[index, CHICKEN_COLUMN] != column:
-                    continue
-                if new_row < flock[index, CHICKEN_ROW] or old_row > old_rows[index]:
-                    continue
-                if struck < 0 or flock[index, CHICKEN_ROW] < flock[struck, CHICKEN_ROW]:
-                    struck = index
-            if struck >= 0:
-                flock[struck, CHICKEN_ALIVE] = 0.0
-                sky[column] = NO_PROJECTILE
 
     def _resolve_arrivals(self, flock: np.ndarray, ship_column: int, successor: np.ndarray) -> None:
         """Settle every live chicken that reached row 0.
@@ -1028,18 +1014,27 @@ class CrazyChickenPOMDP(DiscreteActionsEnvironment):
 
     @property
     def reward_requires_next_state(self) -> bool:
-        """Kills, the clear bonus and the ship hit are all decided by the transition."""
+        """The ship hit is the one term the dive coins decide.
+
+        Under the hitscan gun the kill and the completion bonus are both
+        determined by ``(state, action)`` -- the shot resolves before anything
+        random happens. The ship hit is not: whether a chicken reaches row 0
+        depends on the dive coins this step, so the realised successor is still
+        what the penalty has to be scored against.
+        """
         return True
 
     def reward(self, state: Any, action: Any, next_state: Any = None) -> float:
-        """Score one step: kills and the clear bonus, less the shot and step costs.
+        """Score one step: the kill and the clear bonus, less the shot and step costs.
 
-        Without a successor only the part that is already determined can be
-        scored -- the step cost and, if the shot really leaves the ship, its
-        cost. That fallback is deliberately not an expectation over kills: a
-        planner asking for the reward of a belief node gets a number it can
-        compare across actions (firing is charged, missing is not), and the
-        realised kill is scored on the step it actually happens.
+        Without a successor, everything except the ship hit is still exact,
+        because a hitscan shot resolves before the dive coins are flipped: the
+        step cost, the shot cost, the kill it scores and the bonus if that kill
+        was the last one are all functions of ``(state, action)`` alone. Only
+        the ``-ship_hit_penalty`` term is missing, and it is deliberately not
+        replaced by its expectation -- a planner comparing actions at a belief
+        node sees the real value of a shot that connects, and the risk it took
+        is charged on the step the flock actually gets through.
 
         Args:
             state: The state the step was taken from.
@@ -1051,6 +1046,11 @@ class CrazyChickenPOMDP(DiscreteActionsEnvironment):
         """
         charged = -self.step_cost - (self.shot_cost if self.fires(state, action) else 0.0)
         if next_state is None:
+            if not self.fires(state, action) or self.shot_target(state) < 0:
+                return float(charged)
+            charged += self.kill_reward
+            if self.live_chicken_count(state) == 1:
+                charged += self.clear_reward
             return float(charged)
         before = self.live_chicken_count(state)
         after = self.live_chicken_count(next_state)
@@ -1107,7 +1107,6 @@ class CrazyChickenPOMDP(DiscreteActionsEnvironment):
         if self.observation_mode is ObservationMode.FULL:
             observation = make_state(
                 num_chickens=self.num_chickens,
-                num_columns=self.num_columns,
                 ship_column=self.ship_start_column,
                 chickens=np.zeros((self.num_chickens, 5), dtype=np.float64),
             )
@@ -1370,7 +1369,6 @@ def create_crazy_chicken_state(
     cooldown: int = 0,
     ship_hit: bool = False,
     step: int = 0,
-    projectiles: Optional[Sequence[float]] = None,
 ) -> CrazyChickenState:
     """Build a state vector for ``environment`` from its parts.
 
@@ -1382,18 +1380,15 @@ def create_crazy_chicken_state(
         cooldown: Steps remaining before the ship may fire. Defaults to 0.
         ship_hit: Whether a chicken has reached the ship. Defaults to ``False``.
         step: Step counter. Defaults to 0.
-        projectiles: Per-column projectile rows. Defaults to an empty sky.
 
     Returns:
         A ``float64`` state vector of length ``environment.state_size``.
     """
     return make_state(
         num_chickens=environment.num_chickens,
-        num_columns=environment.num_columns,
         ship_column=(environment.ship_start_column if ship_column is None else int(ship_column)),
         chickens=chickens,
         cooldown=cooldown,
         ship_hit=ship_hit,
         step=step,
-        projectiles=projectiles,
     )

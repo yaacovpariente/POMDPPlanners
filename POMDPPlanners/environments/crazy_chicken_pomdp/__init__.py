@@ -37,7 +37,6 @@ from POMDPPlanners.environments.crazy_chicken_pomdp.crazy_chicken_schema import 
     COOLDOWN_INDEX,
     MODE_DIVE,
     MODE_PATROL,
-    NO_PROJECTILE,
     OBSERVATION_CHICKEN_WIDTH,
     OBSERVATION_SHIP_WIDTH,
     OBSERVED_CAMERA_OFFSET,
@@ -53,7 +52,6 @@ from POMDPPlanners.environments.crazy_chicken_pomdp.crazy_chicken_schema import 
     chicken_slots,
     make_state,
     observation_size,
-    projectile_rows,
     state_size,
 )
 from POMDPPlanners.environments.crazy_chicken_pomdp.crazy_chicken_sensors import (
@@ -81,7 +79,6 @@ __all__ = [
     "CrazyChickenVisualizer",
     "MODE_DIVE",
     "MODE_PATROL",
-    "NO_PROJECTILE",
     "OBSERVATION_CHICKEN_WIDTH",
     "OBSERVATION_SHIP_WIDTH",
     "OBSERVED_CAMERA_OFFSET",
@@ -101,7 +98,6 @@ __all__ = [
     "make_state",
     "noiseless_preset",
     "observation_size",
-    "projectile_rows",
     "radar_sees",
     "resolve_observation_mode",
     "rounded_normal_pmf",

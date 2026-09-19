@@ -4,9 +4,14 @@
 
 Two panels side by side, on one dark arcade page.
 
-* **The sky** -- the true world. Ship, chickens, projectiles, and the two
-  sensor footprints drawn over the grid: the camera cone as a pale wedge opening
-  upward from the ship, the radar as a ring at its radius. A chicken's sprite
+* **The sky** -- the true world. Ship, chickens, the beam of a shot fired this
+  step, and the two sensor footprints drawn over the grid: the camera cone as a
+  pale wedge opening upward from the ship, the radar as a ring at its radius.
+  The gun is hitscan, so a shot is a flash down the ship's whole column on the
+  step that fired it and nothing on any other step -- there is no bolt to
+  follow, because a shot never survives the step it was fired in. The chicken it
+  killed is still drawn, because the frame shows the state the ship fired
+  *from*; the next frame is where it is gone. A chicken's sprite
   says which mode it is in, because the mode is the hidden variable the whole
   observation model exists to reveal: a patrolling chicken is drawn upright with
   its walking direction marked, a diving one head-down. The two sensors are
@@ -39,7 +44,7 @@ Classes:
 """
 
 from pathlib import Path
-from typing import TYPE_CHECKING, List, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, List, Optional, Tuple
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
@@ -52,7 +57,6 @@ from POMDPPlanners.environments.crazy_chicken_pomdp.crazy_chicken_schema import 
     CHICKEN_MODE,
     CHICKEN_ROW,
     MODE_DIVE,
-    NO_PROJECTILE,
     SHIP_COLUMN_INDEX,
     STEP_INDEX,
     chicken_slots,
@@ -64,7 +68,7 @@ if TYPE_CHECKING:
     )
 
 
-_ACTION_LABELS = ("fire", "move left", "move right", "hold")
+_ACTION_LABELS = ("hold", "move left", "move right", "fire")
 
 COLOR_PAGE = (12, 14, 24)
 COLOR_PANEL = (20, 24, 40)
@@ -282,16 +286,32 @@ class CrazyChickenVisualizer:
             tip = (right - 3) if direction > 0 else (left + 3)
             draw.line([mid_x, top + 7, tip, top + 7], fill=colour, width=2)
 
-    def _draw_shots(
-        self, draw: ImageDraw.ImageDraw, origin: Tuple[int, int], sky: Sequence[float]
+    def _draw_beam(
+        self, draw: ImageDraw.ImageDraw, origin: Tuple[int, int], ship: int, struck: int
     ) -> None:
-        """Draw one bolt per column that holds a projectile."""
-        for column, row in enumerate(sky):
-            if row == NO_PROJECTILE:
-                continue
-            left, top, right, bottom = self._cell_box(origin, column, int(round(float(row))))
-            mid = (left + right) // 2
-            draw.line([mid, top + 6, mid, bottom - 6], fill=COLOR_SHOT, width=3)
+        """Flash the ship's column, and ring the chicken the shot took.
+
+        Drawn only on a step whose action actually discharged the gun. The beam
+        stops at the chicken it killed rather than running to the top of the
+        grid, so a reader can see what the shot bought; a shot into an empty
+        column runs the full height and rings nothing.
+
+        Args:
+            draw: The frame's drawing context.
+            origin: Top-left pixel of the panel.
+            ship: The ship's column.
+            struck: Row of the chicken killed, or ``-1`` for a miss.
+        """
+        top_row = self._rows - 1 if struck < 0 else struck
+        left, _, right, bottom = self._cell_box(origin, ship, 0)
+        _, top, _, _ = self._cell_box(origin, ship, top_row)
+        mid = (left + right) // 2
+        draw.line([mid, bottom - 8, mid, top + 4], fill=COLOR_SHOT, width=3)
+        if struck >= 0:
+            box = self._cell_box(origin, ship, struck)
+            draw.ellipse(
+                [box[0] + 2, box[1] + 2, box[2] - 2, box[3] - 2], outline=COLOR_SHOT, width=2
+            )
 
     # -- belief ---------------------------------------------------------
 
@@ -373,11 +393,20 @@ class CrazyChickenVisualizer:
                 slot[CHICKEN_MODE] == MODE_DIVE,
                 int(round(float(slot[CHICKEN_DIRECTION]))),
             )
-        self._draw_shots(
-            draw,
-            sky_origin,
-            self.environment.projectiles(state).tolist(),
-        )
+        if step.action is not None and self.environment.fires(state, step.action):
+            target = self.environment.shot_target(state)
+            struck = (
+                -1
+                if target < 0
+                else int(
+                    round(
+                        float(
+                            chicken_slots(state, self.environment.num_chickens)[target][CHICKEN_ROW]
+                        )
+                    )
+                )
+            )
+            self._draw_beam(draw, sky_origin, ship, struck)
         self._draw_ship(draw, sky_origin, ship)
         self._draw_ship(draw, belief_origin, ship)
         draw.text(
@@ -414,7 +443,7 @@ class CrazyChickenVisualizer:
         """
         return (
             "blue lines: edges of the camera cone    green arc: radar range",
-            "yellow: patrolling    red, head down: diving    pale bolt: shot in flight",
+            "yellow: patrolling    red, head down: diving    pale beam: this step's shot",
         )
 
     def create_visualization(self, history: List[StepData], output_path: Path) -> None:

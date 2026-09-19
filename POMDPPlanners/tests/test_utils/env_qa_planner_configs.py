@@ -108,9 +108,10 @@ def crazy_chicken_qa_pft_dpw_kwargs(**overrides: Any) -> Dict[str, Any]:
     leaves. ``k_o = 4`` with ``alpha_o = 0`` caps each action node at four
     observation children so the particle sets under them get revisited.
 
-    ``depth`` is 20 against a 60-step episode. A shot takes several steps to
-    reach the flock and a dive takes several to arrive, so a plan shorter than
-    that cannot see either land; twenty covers both with room over.
+    ``depth`` is 20 against a 60-step episode. The gun is hitscan, so a shot
+    lands within its own step and depth is not about waiting for it; what depth
+    buys here is seeing a dive arrive, and seeing the cooldown steps between one
+    shot and the next. Twenty covers several of both with room over.
 
     ``time_out_in_seconds`` is a wall-clock budget, so PFT-DPW hits it exactly
     and needs no simulation-count calibration. The 1.0 s value sits inside the

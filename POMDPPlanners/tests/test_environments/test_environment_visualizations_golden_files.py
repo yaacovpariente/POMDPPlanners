@@ -269,10 +269,11 @@ def create_deterministic_crazy_chicken_episode(seed: int = 11) -> List[StepData]
     state = env.initial_state_dist().sample()[0]
     history: List[StepData] = []
 
-    # Shoot, sidestep, shoot again: the frames show a projectile in flight, the
-    # ship moving under the flock, and the belief tightening as the sensors
-    # report.
-    action_sequence = [1, 0, 3, 2, 0, 2, 3, 0, 1, 0, 3, 0]
+    # Shoot, sidestep, shoot again: the frames show a beam flashing up the
+    # ship's column on the steps that fired, the ship moving under the flock,
+    # and the belief tightening as the sensors report. Indices follow
+    # CrazyChickenAction: 0 stay, 1 left, 2 right, 3 fire.
+    action_sequence = [1, 3, 0, 2, 3, 2, 0, 3, 1, 3, 0, 3]
 
     for action in action_sequence:
         if env.is_terminal(state):

@@ -17,39 +17,51 @@ ship starts in the middle column with an empty sky.
 Dynamics
 --------
 
-Actions are fire, left, right and stay. A move is clamped at the walls. ``FIRE``
-launches a projectile only when the cooldown has expired and the ship's own
-column holds no projectile; otherwise it behaves exactly like ``STAY`` and costs
-nothing, because nothing left the ship.
+Actions are stay, left, right and fire, in that index order. A move is clamped
+at the walls. ``FIRE`` discharges only when the cooldown has expired; otherwise
+it behaves exactly like ``STAY`` and costs nothing, because nothing left the
+ship.
 
-A projectile rises one row per step and leaves the grid above the top row. At
-most one projectile exists per column, which is what makes ``fire_cooldown`` and
-the ship's position both matter.
+**The gun is hitscan.** A shot resolves inside the step that fired it, killing
+the lowest live chicken in the ship's column over rows 1 to ``num_rows - 1``, at
+unlimited range. A shot into a column with no live chicken misses and is charged
+the shot cost alone. ``fire_cooldown`` is the only rate limiter.
+
+The shot is resolved **before** the dive coins are flipped and before the flock
+moves, and that ordering is the design rather than an implementation detail. The
+ship picks its action from an observation of where the chickens are *now*, so it
+has to be able to hit what it aimed at. An earlier version fired a bolt that
+climbed one row per step; against chickens stepping sideways every step it was
+dodged by accident rather than by any decision the flock made, so aiming
+collapsed into waiting and most shots missed for reasons the ship could not have
+reasoned about.
+
+One consequence worth naming: a chicken shot this step never gets to dive, so
+firing is a live defence as well as an attack.
 
 A chicken is either patrolling or diving, and which it is stays hidden. A
 patrolling chicken steps one column along its direction and reverses at a wall;
-a diving chicken drops one row. Each step every patrolling chicken switches into
-a dive with probability ``dive_probability``. The coin is flipped *before* the
-chickens move, so a chicken that switches this step also drops this step.
-
-A projectile kills the chicken it reaches, and dies with it. "Reaches" covers
-both ending the step in the same cell and swapping past it, so a chicken diving
-down through a rising projectile is hit rather than passing through.
+a diving chicken drops one row. Each step every surviving patrolling chicken
+switches into a dive with probability ``dive_probability``. The coin is flipped
+after the shot but *before* the chickens move, so a chicken that switches this
+step also drops this step.
 
 A chicken that reaches row 0 in the ship's column destroys it and ends the
 episode. One that reaches row 0 anywhere else **pulls up**: it goes back to
 patrolling at the top row, keeping its column and direction. That rule is an
 addition to the original design proposal, which left the case open. Without it a
 dive would either carry the chicken off the grid -- letting the flock clear
-itself and making the completion bonus free -- or park it on row 0 where no
-projectile can reach it, which is unwinnable.
+itself and making the completion bonus free -- or park it on row 0, below the
+rows the gun covers, which is unwinnable.
 
 State and observation contract
 ------------------------------
 
 The state is ``[step, ship column, cooldown, ship hit, (column, row, direction,
-mode, alive) per chicken, projectile row per column]``, so its length is
-``4 + 5 * num_chickens + num_columns``. A dead chicken keeps its slot.
+mode, alive) per chicken]``, so its length is ``4 + 5 * num_chickens``. A dead
+chicken keeps its slot. Nothing records a shot: a hitscan shot never survives
+the step that fired it, so there is nothing in flight for the state to carry and
+the only thing the gun leaves behind is the cooldown.
 
 An observation is ``[own-column reading, (camera reported, camera offset, radar
 reported, radar rows, radar drop) per chicken]``, of length
@@ -125,21 +137,31 @@ Reward and termination
 ----------------------
 
 +10 per chicken killed, -1 per shot actually fired, -0.1 every step, -50 when a
-chicken reaches the ship, +50 when the last chicken dies. The declared reward
-range is enumerated rather than estimated: the best step fires nothing, connects
-with every projectile in flight and empties the flock, and no step can kill more
-than ``min(num_chickens, num_columns)`` chickens because there is at most one
-projectile per column and no two chickens start on one cell; the worst step
-takes the step cost, a shot that really left the ship, and a ship hit, all three
-of which can stack. The clear bonus and the ship hit cannot coincide, because a
-chicken that reaches the ship is alive.
+chicken reaches the ship, +50 when the last chicken dies. A shot that connects
+therefore pays ``-0.1 - 1 + 10`` on the step it was fired.
 
-``reward_requires_next_state`` is ``True``: kills, the clear bonus and the ship
-hit are all decided by the transition. A call without a successor returns only
-the part already determined -- the step cost, and the shot cost when the shot
-really leaves the ship. That fallback is deliberately not an expectation over
-kills, so a planner scoring a belief node still sees firing charged and a
-blocked ``FIRE`` charged nothing, while the kill is paid on the step it happens.
+The declared reward range is enumerated rather than estimated. A step kills at
+most one chicken, and a kill can only happen on a step that fired, so the best
+step is the shot that takes the last chicken and collects the bonus with it:
+``kill_reward + clear_reward - step_cost - shot_cost``.
+
+The declared minimum stacks the step cost, the shot cost and the ship-hit
+penalty, and that sum is deliberately **not reachable**. The gun kills the
+lowest chicken in the ship's column, and a chicken can only reach the ship by
+diving down that same column, so any step that could be overrun gave the shot a
+target and the kill reward comes back; firing into a genuinely empty column
+cannot be overrun at all. The worst a run can actually score is being overrun
+without firing, exactly one shot cost above the bound. The wider bound is kept
+because it costs nothing and survives a change to the gun's reach, where a tight
+one derived from that argument would not.
+
+``reward_requires_next_state`` is ``True``, but only because of the ship hit.
+Under hitscan the kill and the completion bonus are functions of
+``(state, action)`` alone -- the shot resolves before anything random happens --
+so a call without a successor returns everything except the ``-50``. That
+missing term is deliberately not replaced by its expectation: a planner
+comparing actions at a belief node sees the real value of a shot that connects,
+and the risk it took is charged on the step the flock actually gets through.
 
 An episode ends when the flock is cleared, when a chicken reaches the ship, or
 at ``max_steps``.
@@ -179,7 +201,8 @@ from the ship to a live chicken, so larger means closer and the distance itself
 is recoverable by subtraction. It is reported this way round because the episode
 reduction available for a severity is ``MAX`` and there is no ``MIN``.
 
-``shot_accuracy`` is kills per shot. It is the one metric that is not a channel
+``shot_accuracy`` is kills per shot, which under hitscan is simply hits per
+shot. It is the one metric that is not a channel
 reduction -- a ratio of two per-episode sums cannot be expressed as a reduction
 over a single channel, and a mean of per-step ratios is not the episode's ratio
 -- so it is computed in ``compute_metrics`` from the same two channels the
@@ -191,8 +214,11 @@ rather than scored as zero.
    :width: 100%
 
 The left panel is the true world: the ship, the chickens with their mode shown
-by the sprite, the projectiles in flight, the edges of the camera cone and the
-radar's ring. The right panel is the belief's weighted per-cell chance that a
+by the sprite, the beam of a shot fired on that step, the edges of the camera
+cone and the radar's ring. The beam appears only on steps that discharged the
+gun and stops at the chicken it killed, which is ringed; a shot into an empty
+column runs the full height and rings nothing. There is no bolt to follow,
+because a shot never survives the step it was fired in. The right panel is the belief's weighted per-cell chance that a
 chicken is there. Drawing the particles themselves is this repository's usual
 choice for a low-dimensional state, and the belief here is a particle cloud --
 but one particle is a whole flock, and a few hundred overlaid flocks are a smear

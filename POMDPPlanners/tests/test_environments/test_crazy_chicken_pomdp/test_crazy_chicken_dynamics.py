@@ -25,7 +25,6 @@ from POMDPPlanners.environments.crazy_chicken_pomdp import (
     CHICKEN_ROW,
     MODE_DIVE,
     MODE_PATROL,
-    NO_PROJECTILE,
     SHIP_HIT_INDEX,
     CrazyChickenAction,
     CrazyChickenPOMDP,
@@ -136,178 +135,114 @@ def test_dive_coin_is_flipped_before_the_chickens_move():
     assert chicken[CHICKEN_ROW] == 2
 
 
-def test_fire_launches_a_projectile_just_above_the_ship():
-    """A shot appears on row 1 of the ship's column.
+def test_fire_kills_the_lowest_chicken_in_the_ships_column_at_any_range():
+    """A shot resolves in the same step, at unlimited range, from the bottom up.
 
-    Given: An empty sky and no cooldown.
+    Purpose: This is the whole hitscan rule. A shot that travelled would leave
+        the top chicken alive for several steps and let either of them walk out
+        of the column meanwhile; here the ship gets exactly what it aimed at.
+
+    Given: Two chickens stacked in the ship's column, at rows 1 and 3, and a
+        third elsewhere.
     When: The ship fires.
-    Then: Its column holds a projectile at row 1 and every other column is empty.
+    Then: Only the row-1 chicken dies, whatever the range to the other.
 
     Test type: unit
     """
-    env = build_env()
-    state = create_crazy_chicken_state(
-        env, chickens=[[0, 3, 1, MODE_PATROL, 0], [4, 3, -1, MODE_PATROL, 0]]
-    )
-    sky = env.projectiles(env.sample_next_state(state, int(CrazyChickenAction.FIRE)))
-    assert sky[env.ship_start_column] == 1.0
-    assert np.count_nonzero(sky != NO_PROJECTILE) == 1
-
-
-def test_fire_during_cooldown_behaves_exactly_like_stay():
-    """A blocked ``FIRE`` costs nothing and launches nothing.
-
-    Purpose: The shot cost is charged on ``fires``, not on the action label. If
-        a blocked fire were still charged, a planner would learn to avoid the
-        action rather than to time it.
-
-    Given: A ship with one step of cooldown left.
-    When: It fires.
-    Then: No projectile appears, and the reward equals the reward for staying.
-
-    Test type: unit
-    """
-    env = build_env(fire_cooldown=2)
+    env = build_env(num_rows=5, num_chickens=3)
+    column = env.ship_start_column
     state = create_crazy_chicken_state(
         env,
-        chickens=[[0, 3, 1, MODE_PATROL, 0], [4, 3, -1, MODE_PATROL, 0]],
-        cooldown=1,
+        chickens=[
+            [column, 3, 1, MODE_PATROL, 1],
+            [column, 1, 1, MODE_PATROL, 1],
+            [0, 4, 1, MODE_PATROL, 1],
+        ],
     )
-    assert not env.fires(state, int(CrazyChickenAction.FIRE))
-    successor = env.sample_next_state(state, int(CrazyChickenAction.FIRE))
-    assert np.all(env.projectiles(successor) == NO_PROJECTILE)
-    assert env.reward(state, int(CrazyChickenAction.FIRE), successor) == pytest.approx(
-        env.reward(state, int(CrazyChickenAction.STAY), successor)
-    )
-
-
-def test_a_column_already_holding_a_projectile_blocks_a_new_one():
-    """One projectile per column, which is what makes the ship's position matter.
-
-    Given: A ship whose own column already holds a projectile.
-    When: It fires.
-    Then: Nothing new is launched, and the existing shot simply rises.
-
-    Test type: unit
-    """
-    env = build_env()
-    column = 2
-    projectiles = [NO_PROJECTILE] * 5
-    projectiles[column] = 1.0
-    state = create_crazy_chicken_state(
-        env,
-        chickens=[[0, 3, 1, MODE_PATROL, 0], [4, 3, -1, MODE_PATROL, 0]],
-        ship_column=column,
-        projectiles=projectiles,
-    )
-    assert not env.fires(state, int(CrazyChickenAction.FIRE))
-    sky = env.projectiles(env.sample_next_state(state, int(CrazyChickenAction.FIRE)))
-    assert sky[column] == 2.0
-
-
-def test_a_projectile_kills_the_lowest_chicken_it_reaches_not_the_first_slot():
-    """A shot is stopped by the first chicken in its path, by row, not by slot.
-
-    Purpose: Two chickens can share a column inside the one row a projectile
-        crosses. Resolving by slot index there would make the outcome depend on
-        the order the flock happens to be stored in, which is not a fact about
-        the world and would make the transition disagree with itself after any
-        reordering.
-
-    Given: A projectile about to rise into row 2, with a chicken already in
-        slot 0 at row 2 and another in slot 1 diving from row 3 to row 2.
-    When: One step is taken.
-    Then: Exactly one of them dies -- the one that is lower after the step --
-        and the shot is spent.
-
-    Test type: unit
-    """
-    env = build_env(num_rows=5, num_chickens=2)
-    projectiles = [NO_PROJECTILE] * 5
-    projectiles[2] = 1.0
-    state = create_crazy_chicken_state(
-        env,
-        chickens=[[2, 3, 1, MODE_DIVE, 1], [2, 2, 1, MODE_DIVE, 1]],
-        projectiles=projectiles,
-    )
-    successor = env.sample_next_state(state, int(CrazyChickenAction.STAY))
-    flock = env.chickens(successor)
-    assert env.live_chicken_count(successor) == 1
-    # Slot 1 ends the step on row 1, below slot 0's row 2, so it is the one the
-    # rising shot meets first.
+    assert env.shot_target(state) == 1
+    flock = env.chickens(env.sample_next_state(state, int(CrazyChickenAction.FIRE)))
     assert flock[1][CHICKEN_ALIVE] == 0.0
     assert flock[0][CHICKEN_ALIVE] == 1.0
-    assert env.projectiles(successor)[2] == NO_PROJECTILE
+    assert flock[2][CHICKEN_ALIVE] == 1.0
 
 
-def test_a_projectile_kills_the_chicken_it_reaches_and_dies_with_it():
-    """A hit removes both the chicken and the shot.
-
-    Given: A projectile on row 1 and a patrolling chicken on row 2 of the same
-        column that the shot rises into.
-    When: One step is taken.
-    Then: The chicken is dead and the column is empty.
+def test_fire_into_an_empty_column_misses_and_only_costs_the_shot():
+    """A shot with nothing above it is charged and buys nothing.
 
     Test type: unit
     """
     env = build_env()
-    projectiles = [NO_PROJECTILE] * 5
-    projectiles[3] = 1.0
-    # Walking left from column 4 puts the chicken in column 3 as the shot
-    # arrives on row 2, which is the co-location case.
     state = create_crazy_chicken_state(
-        env,
-        chickens=[[4, 2, -1, MODE_PATROL, 1], [0, 3, 1, MODE_PATROL, 0]],
-        projectiles=projectiles,
+        env, chickens=[[0, 3, 1, MODE_PATROL, 1], [4, 3, -1, MODE_PATROL, 1]], ship_column=2
     )
-    successor = env.sample_next_state(state, int(CrazyChickenAction.STAY))
+    assert env.shot_target(state) == -1
+    assert env.fires(state, int(CrazyChickenAction.FIRE))
+    successor = env.sample_next_state(state, int(CrazyChickenAction.FIRE))
+    assert env.live_chicken_count(successor) == 2
+    assert env.reward(state, int(CrazyChickenAction.FIRE), successor) == pytest.approx(
+        -env.step_cost - env.shot_cost
+    )
+
+
+def test_the_shot_is_resolved_before_the_chickens_move():
+    """The ship hits where the flock was, not where it goes.
+
+    Purpose: This ordering is the point of the redesign. Resolving the shot
+        after the step would let a chicken step sideways out of the column and
+        dodge a shot it never decided to dodge, which is what made the
+        travelling bolt unusable.
+
+    Given: A chicken in the ship's column walking right, so that after the step
+        it is one column over, and a dive rate of 1 so every coin also flips.
+    When: The ship fires.
+    Then: It dies anyway.
+
+    Test type: unit
+    """
+    env = build_env(dive_probability=1.0)
+    column = env.ship_start_column
+    state = create_crazy_chicken_state(
+        env, chickens=[[column, 2, 1, MODE_PATROL, 1], [0, 3, 1, MODE_PATROL, 1]]
+    )
+    flock = env.chickens(env.sample_next_state(state, int(CrazyChickenAction.FIRE)))
+    assert flock[0][CHICKEN_ALIVE] == 0.0
+
+
+def test_a_chicken_shot_this_step_never_gets_to_dive():
+    """Shooting is a defence as well as an attack.
+
+    Given: A chicken one row above the ship, in its column, and a dive rate of 1
+        so it would certainly reach the ship this step.
+    When: The ship fires instead of dodging.
+    Then: The chicken is dead and the ship is unharmed.
+
+    Test type: unit
+    """
+    env = build_env(dive_probability=1.0)
+    column = env.ship_start_column
+    state = create_crazy_chicken_state(
+        env, chickens=[[column, 1, 1, MODE_PATROL, 1], [0, 3, 1, MODE_PATROL, 1]]
+    )
+    successor = env.sample_next_state(state, int(CrazyChickenAction.FIRE))
     assert env.chickens(successor)[0][CHICKEN_ALIVE] == 0.0
-    assert env.projectiles(successor)[3] == NO_PROJECTILE
+    assert successor[SHIP_HIT_INDEX] == 0.0
 
 
-def test_a_diving_chicken_cannot_pass_through_a_rising_projectile():
-    """A shot and a dive that swap rows still collide.
+def test_the_gun_never_reaches_row_zero():
+    """The shot covers rows 1 upward, which is why a pulled-up chicken exists.
 
-    Purpose: A naive same-cell test misses exactly this case, and it is the one
-        a player would notice first: the chicken dives through the bullet.
-
-    Given: A projectile on row 1 and a diving chicken on row 2 of that column.
-    When: One step is taken, so the shot rises to 2 and the chicken drops to 1.
-    Then: The chicken is dead.
+    Purpose: Row 0 is the ship's own row. A chicken there has already ended the
+        episode one way or the other, so including it in the gun's reach would
+        be dead code that hid the pull-up rule's reason for existing.
 
     Test type: unit
     """
     env = build_env()
-    projectiles = [NO_PROJECTILE] * 5
-    projectiles[2] = 1.0
+    column = env.ship_start_column
     state = create_crazy_chicken_state(
-        env,
-        chickens=[[2, 2, 1, MODE_DIVE, 1], [0, 3, 1, MODE_PATROL, 0]],
-        projectiles=projectiles,
+        env, chickens=[[column, 0, 1, MODE_PATROL, 1], [0, 3, 1, MODE_PATROL, 0]]
     )
-    successor = env.sample_next_state(state, int(CrazyChickenAction.STAY))
-    assert env.chickens(successor)[0][CHICKEN_ALIVE] == 0.0
-
-
-def test_a_projectile_leaves_the_grid_above_the_top_row():
-    """A shot that reaches the top is gone, not parked there.
-
-    Given: A projectile on the top row.
-    When: One step is taken.
-    Then: Its column is empty again.
-
-    Test type: unit
-    """
-    env = build_env()
-    projectiles = [NO_PROJECTILE] * 5
-    projectiles[1] = float(env.num_rows - 1)
-    state = create_crazy_chicken_state(
-        env,
-        chickens=[[0, 3, 1, MODE_PATROL, 0], [4, 3, -1, MODE_PATROL, 0]],
-        projectiles=projectiles,
-    )
-    sky = env.projectiles(env.sample_next_state(state, int(CrazyChickenAction.STAY)))
-    assert sky[1] == NO_PROJECTILE
+    assert env.shot_target(state) == -1
 
 
 def test_a_chicken_reaching_the_ship_ends_the_episode():
@@ -339,8 +274,8 @@ def test_a_chicken_reaching_row_zero_elsewhere_pulls_up():
 
     Purpose: This rule is an addition to the design proposal, and it is what
         keeps the task both winnable and non-trivial: without it a chicken
-        either leaves the grid, clearing the flock for free, or parks on a row
-        no projectile can reach.
+        either leaves the grid, clearing the flock for free, or parks on row 0,
+        below the rows the gun covers.
 
     Given: A diving chicken on row 1, two columns away from the ship.
     When: One step is taken.
@@ -379,26 +314,27 @@ def test_ship_movement_is_clamped_at_both_walls():
 def test_clearing_the_flock_pays_the_bonus_and_ends_the_episode():
     """The last kill is worth the kill reward and the completion bonus together.
 
-    Given: One live chicken about to be hit by a rising projectile.
-    When: The step is taken.
+    Given: One live chicken left, standing in the ship's column.
+    When: The ship fires.
     Then: The flock is empty, the state is terminal, and the reward is the kill
-        plus the bonus less the step cost.
+        plus the bonus less the step and shot costs -- which is also the
+        declared maximum.
 
     Test type: unit
     """
     env = build_env()
-    projectiles = [NO_PROJECTILE] * 5
-    projectiles[1] = 1.0
+    column = env.ship_start_column
     state = create_crazy_chicken_state(
-        env,
-        chickens=[[1, 2, 1, MODE_DIVE, 1], [0, 3, 1, MODE_PATROL, 0]],
-        projectiles=projectiles,
+        env, chickens=[[column, 2, 1, MODE_PATROL, 1], [0, 3, 1, MODE_PATROL, 0]]
     )
-    successor = env.sample_next_state(state, int(CrazyChickenAction.STAY))
+    successor = env.sample_next_state(state, int(CrazyChickenAction.FIRE))
     assert env.live_chicken_count(successor) == 0
     assert env.is_terminal(successor)
-    assert env.reward(state, int(CrazyChickenAction.STAY), successor) == pytest.approx(
-        env.kill_reward + env.clear_reward - env.step_cost
+    assert env.reward(state, int(CrazyChickenAction.FIRE), successor) == pytest.approx(
+        env.kill_reward + env.clear_reward - env.step_cost - env.shot_cost
+    )
+    assert env.reward(state, int(CrazyChickenAction.FIRE), successor) == pytest.approx(
+        env.reward_range[1]
     )
 
 
@@ -414,90 +350,115 @@ def test_timeout_is_terminal_at_max_steps():
     assert env.is_terminal(state)
 
 
-def test_the_declared_maximum_reward_is_attained_by_the_step_it_enumerates():
-    """The best step really is worth the declared maximum, to the cent.
+def test_firing_always_kills_when_it_could_be_overrun_so_the_minimum_is_conservative():
+    """A shot and a ship hit can coincide, but never without a kill.
 
-    Purpose: A reward range that is merely *wide enough* drifts silently when
-        the reward changes. Pinning the upper end to the specific step the
-        constructor enumerates makes a change to the kill or clear term fail
-        here rather than in a CVaR estimator downstream.
+    Purpose: The declared minimum stacks the step cost, the shot cost and the
+        ship-hit penalty. That sum is deliberately *not* reachable, and the
+        reason is worth pinning because it is not obvious. The gun kills the
+        lowest chicken in the ship's column over rows 1 upward, and a chicken
+        can only reach the ship by diving down that same column -- so if
+        anything could overrun the ship this step, the shot had a target, and
+        the kill reward comes back. Firing into a genuinely empty column cannot
+        be overrun at all.
 
-    Given: A world whose two chickens sit on separate columns, each under a
-        projectile about to reach it.
-    When: The ship holds position, both chickens die and the flock is cleared.
-    Then: The reward equals the declared maximum.
+        Keeping the wider bound costs nothing and survives a change to the
+        gun's reach; deriving a tight one from this argument would not.
+
+    Given: Two chickens stacked on one cell of the ship's column one row up,
+        which is the closest the dynamics get to firing while being overrun,
+        with a dive rate of 1.
+    When: The ship fires.
+    Then: One dies, the ship is destroyed, and the reward is the declared
+        minimum plus exactly the kill reward -- still inside the range.
 
     Test type: unit
     """
-    env = build_env()
-    projectiles = [NO_PROJECTILE] * 5
-    projectiles[0] = 1.0
-    projectiles[1] = 1.0
-    before = create_crazy_chicken_state(
-        env,
-        chickens=[[0, 2, 1, MODE_DIVE, 1], [1, 2, 1, MODE_DIVE, 1]],
-        projectiles=projectiles,
+    env = build_env(dive_probability=1.0)
+    column = env.ship_start_column
+    state = create_crazy_chicken_state(
+        env, chickens=[[column, 1, 1, MODE_PATROL, 1], [column, 1, -1, MODE_PATROL, 1]]
     )
-    after = env.sample_next_state(before, int(CrazyChickenAction.STAY))
-    assert env.live_chicken_count(after) == 0
-    assert env.reward(before, int(CrazyChickenAction.STAY), after) == pytest.approx(
-        env.reward_range[1]
+    successor = env.sample_next_state(state, int(CrazyChickenAction.FIRE))
+    assert env.live_chicken_count(successor) == 1
+    assert successor[SHIP_HIT_INDEX] == 1.0
+    worst_while_firing = env.reward(state, int(CrazyChickenAction.FIRE), successor)
+    assert worst_while_firing == pytest.approx(env.reward_range[0] + env.kill_reward)
+    assert worst_while_firing >= env.reward_range[0]
+
+
+def test_the_worst_reachable_step_is_being_overrun_without_firing():
+    """The lowest reward a run can actually score is the hit alone.
+
+    Test type: unit
+    """
+    env = build_env(dive_probability=1.0)
+    column = env.ship_start_column
+    state = create_crazy_chicken_state(
+        env, chickens=[[column, 1, 1, MODE_PATROL, 1], [4, 3, -1, MODE_PATROL, 1]]
     )
+    overrun = env.sample_next_state(state, int(CrazyChickenAction.STAY))
+    assert overrun[SHIP_HIT_INDEX] == 1.0
+    worst = env.reward(state, int(CrazyChickenAction.STAY), overrun)
+    assert worst == pytest.approx(-env.step_cost - env.ship_hit_penalty)
+    assert worst == pytest.approx(env.reward_range[0] + env.shot_cost)
+    assert worst >= env.reward_range[0]
 
 
-def test_firing_protects_the_ship_column_so_the_minimum_is_conservative():
-    """The worst reward is a ship hit alone, one shot cost above the declared floor.
+def test_a_shot_into_its_own_column_protects_the_ship_that_step():
+    """The ordinary case: firing clears the column the flock would come down.
 
-    Purpose: The declared minimum stacks the shot cost onto the ship hit even
-        though the two cannot in fact coincide -- a shot rising out of the
-        ship's column meets the chicken diving into it. That is a recorded
-        decision, not an oversight: tightening the bound would make it depend on
-        how a projectile and a dive resolve, and a later change there would put
-        a real reward outside the declared range with nothing to catch it. This
-        test records both halves, so if the kill rule ever changes and the two
-        *do* coincide, the first assertion fails and the decision comes back
-        into view.
+    Purpose: The counterpart to the test above. The declared minimum is
+        reachable, but only through the stacked case -- in every ordinary
+        position a shot up the ship's column removes exactly the chicken that
+        was about to arrive. Recording both halves means a change to the gun's
+        reach fails here rather than silently widening what the ship risks.
 
-    Given: A diving chicken one row above the ship.
-    When: The ship fires.
-    Then: The chicken is shot down rather than reaching the ship, and the worst
-        reward actually reachable -- the same dive with the ship holding
-        position -- sits exactly one shot cost above the declared minimum.
+    Test type: unit
+    """
+    env = build_env(dive_probability=1.0)
+    column = env.ship_start_column
+    state = create_crazy_chicken_state(
+        env, chickens=[[column, 1, 1, MODE_PATROL, 1], [4, 3, -1, MODE_PATROL, 1]]
+    )
+    shot = env.sample_next_state(state, int(CrazyChickenAction.FIRE))
+    assert shot[SHIP_HIT_INDEX] == 0.0
+    assert env.chickens(shot)[0][CHICKEN_ALIVE] == 0.0
+
+
+def test_reward_without_a_successor_scores_the_kill_it_can_already_see():
+    """Everything but the ship hit is exact without a successor.
+
+    Purpose: A hitscan shot resolves before anything random happens, so the
+        kill and the completion bonus are functions of ``(state, action)``
+        alone. A planner comparing actions at a belief node therefore sees the
+        real value of a shot that connects, instead of only its cost -- which
+        under the travelling bolt was all the fallback could offer.
 
     Test type: unit
     """
     env = build_env()
     column = env.ship_start_column
-    before = create_crazy_chicken_state(
-        env, chickens=[[column, 1, 1, MODE_DIVE, 1], [4, 3, -1, MODE_PATROL, 1]]
+    hitting = create_crazy_chicken_state(
+        env, chickens=[[column, 3, 1, MODE_PATROL, 1], [4, 3, -1, MODE_PATROL, 1]]
     )
-    shot = env.sample_next_state(before, int(CrazyChickenAction.FIRE))
-    assert shot[SHIP_HIT_INDEX] == 0.0
-    assert env.chickens(shot)[0][CHICKEN_ALIVE] == 0.0
-
-    overrun = env.sample_next_state(before, int(CrazyChickenAction.STAY))
-    assert overrun[SHIP_HIT_INDEX] == 1.0
-    worst = env.reward(before, int(CrazyChickenAction.STAY), overrun)
-    assert worst == pytest.approx(env.reward_range[0] + env.shot_cost)
-    assert worst >= env.reward_range[0]
-
-
-def test_reward_without_a_successor_charges_only_what_is_already_decided():
-    """The no-successor fallback is the step cost plus a shot that really fired.
-
-    Purpose: The fallback is the number a belief-space planner compares actions
-        with. Making it an expectation over kills would be a different
-        objective; making it zero would hide the cost of firing.
-
-    Test type: unit
-    """
-    env = build_env()
-    state = create_crazy_chicken_state(
-        env, chickens=[[1, 3, 1, MODE_PATROL, 1], [4, 3, -1, MODE_PATROL, 1]]
+    assert env.reward(hitting, int(CrazyChickenAction.STAY)) == pytest.approx(-env.step_cost)
+    assert env.reward(hitting, int(CrazyChickenAction.FIRE)) == pytest.approx(
+        -env.step_cost - env.shot_cost + env.kill_reward
     )
-    assert env.reward(state, int(CrazyChickenAction.STAY)) == pytest.approx(-env.step_cost)
-    assert env.reward(state, int(CrazyChickenAction.FIRE)) == pytest.approx(
+
+    missing = create_crazy_chicken_state(
+        env, chickens=[[0, 3, 1, MODE_PATROL, 1], [4, 3, -1, MODE_PATROL, 1]], ship_column=2
+    )
+    assert env.reward(missing, int(CrazyChickenAction.FIRE)) == pytest.approx(
         -env.step_cost - env.shot_cost
+    )
+
+    last_one = create_crazy_chicken_state(
+        env, chickens=[[column, 3, 1, MODE_PATROL, 1], [4, 3, -1, MODE_PATROL, 0]]
+    )
+    assert env.reward(last_one, int(CrazyChickenAction.FIRE)) == pytest.approx(
+        -env.step_cost - env.shot_cost + env.kill_reward + env.clear_reward
     )
 
 
@@ -532,9 +493,8 @@ def test_transition_log_probability_agrees_with_the_dive_coins_it_implies():
 def test_chickens_never_start_two_to_a_cell():
     """The flock prior places chickens on distinct cells.
 
-    Purpose: Two chickens on one cell would let a single projectile score two
-        kills, which is the one way a step could exceed the declared reward
-        maximum.
+    Purpose: Two chickens on one start cell would waste a slot, since a hitscan
+        shot only ever removes the lowest chicken in its column.
 
     Test type: unit
     """

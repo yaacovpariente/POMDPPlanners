@@ -21,7 +21,6 @@ from POMDPPlanners.environments.crazy_chicken_pomdp import (
     CHICKEN_ROW,
     MODE_DIVE,
     MODE_PATROL,
-    NO_PROJECTILE,
     OBSERVATION_SHIP_WIDTH,
     CrazyChickenAction,
     CrazyChickenMetrics,
@@ -130,23 +129,19 @@ def metric(metrics, name: str) -> float:
 def test_a_cleared_episode_reports_a_goal_ending_and_its_kills():
     """Clearing the flock is a completion, a goal ending, and two kills.
 
-    Given: Two chickens each about to be hit by a rising projectile.
+    Given: Two chickens stacked in the ship's column, so two shots clear them.
     When: The episode runs to its terminal state.
     Then: Completion is 1, ``ended_by_goal`` is 1, the other two endings are 0,
         and two kills are counted.
 
     Test type: integration
     """
-    env = build_env()
-    projectiles = [NO_PROJECTILE] * 5
-    projectiles[0] = 1.0
-    projectiles[1] = 1.0
+    env = build_env(num_rows=6)
+    column = env.ship_start_column
     state = create_crazy_chicken_state(
-        env,
-        chickens=[[0, 2, 1, MODE_DIVE, 1], [1, 2, 1, MODE_DIVE, 1]],
-        projectiles=projectiles,
+        env, chickens=[[column, 4, 1, MODE_PATROL, 1], [column, 5, 1, MODE_PATROL, 1]]
     )
-    metrics = env.compute_metrics([run_episode(env, [int(CrazyChickenAction.STAY)] * 5, state)])
+    metrics = env.compute_metrics([run_episode(env, [int(CrazyChickenAction.FIRE)] * 5, state)])
     assert metric(metrics, CrazyChickenMetrics.TASK_COMPLETION_RATE.value) == 1.0
     assert metric(metrics, CrazyChickenMetrics.ENDED_BY_GOAL.value) == 1.0
     assert metric(metrics, CrazyChickenMetrics.ENDED_BY_FAILURE.value) == 0.0
@@ -205,30 +200,27 @@ def test_shot_accuracy_is_kills_per_shot_over_the_episode():
         than the episode's true 0.5 only by coincidence, so the check uses an
         episode where the two differ.
 
-    Given: An episode with three shots and one kill.
+    Given: An episode that fires repeatedly at a column holding one chicken:
+        the first shot connects, the rest hit nothing.
     When: The metrics are computed.
-    Then: ``shot_accuracy`` is one third, and the two counts agree with it.
+    Then: ``shot_accuracy`` is the episode's kills-over-shots ratio, it is
+        strictly below one, and it agrees with the two counts.
 
     Test type: integration
     """
-    env = build_env(num_rows=5, max_steps=20)
-    projectiles = [NO_PROJECTILE] * 5
+    env = build_env(num_rows=6, num_chickens=2, max_steps=20)
+    column = env.ship_start_column
     state = create_crazy_chicken_state(
-        env,
-        chickens=[[2, 1, 1, MODE_DIVE, 1], [4, 4, -1, MODE_PATROL, 1]],
-        ship_column=2,
-        projectiles=projectiles,
+        env, chickens=[[column, 5, 1, MODE_PATROL, 1], [0, 1, 1, MODE_PATROL, 1]]
     )
-    # Fire, then fire twice more once the first shot has left the column. The
-    # first shot meets the diving chicken; the rest sail past the patrolling one.
-    actions = [int(CrazyChickenAction.FIRE)] * 6
-    history = run_episode(env, actions, state)
+    history = run_episode(env, [int(CrazyChickenAction.FIRE)] * 6, state)
     metrics = env.compute_metrics([history])
     shots = metric(metrics, CrazyChickenMetrics.AVERAGE_SHOTS_FIRED.value)
     kills = metric(metrics, CrazyChickenMetrics.AVERAGE_CHICKENS_KILLED.value)
     accuracy = metric(metrics, CrazyChickenMetrics.SHOT_ACCURACY.value)
-    assert shots > 0
+    assert shots > kills > 0
     assert accuracy == pytest.approx(kills / shots)
+    assert accuracy < 1.0
 
 
 def test_shot_accuracy_is_reported_even_when_no_episode_fired():
