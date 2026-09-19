@@ -64,6 +64,9 @@ actually stores.
      - discrete
      - none
      - :doc:`battleship`
+   * - ``CaptureTheFlagPOMDP``
+     - Two teams, two flags: steal theirs and get home without being tagged.
+     - :doc:`capture_the_flag`
    * - ``OccupancyGridMappingPOMDP``
      - Explore an unknown grid world, paid for the entropy it maps away.
      - ``[step, pose, true map, log-odds map]``
@@ -235,6 +238,7 @@ Guides
    tiger
    rock_sample
    battleship
+   capture_the_flag
    occupancy_grid_mapping
    multiagent_firefighting
    pacman
@@ -289,6 +293,7 @@ API listing
 
    POMDPPlanners.environments.rock_sample_pomdp.RockSamplePOMDP
    POMDPPlanners.environments.battleship_pomdp.BattleshipPOMDP
+   POMDPPlanners.environments.capture_the_flag_pomdp.CaptureTheFlagPOMDP
    POMDPPlanners.environments.occupancy_grid_mapping_pomdp.OccupancyGridMappingPOMDP
    POMDPPlanners.environments.multiagent_firefighting_pomdp.MultiAgentFirefightingPOMDP
    POMDPPlanners.environments.pacman_pomdp.PacManPOMDP
