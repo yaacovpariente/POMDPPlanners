@@ -286,8 +286,21 @@ class SnakeInitialStateDistribution(Distribution):
         return ((centre, centre), (centre, centre - 1), (centre, centre - 2))
 
     def free_cells(self) -> np.ndarray:
-        """Flat indices of the cells the starting body leaves free."""
-        occupied = {row * self.grid_size + col for row, col in self.body}
+        """Flat indices of the cells the starting body leaves free.
+
+        Off-grid body cells are skipped rather than folded into a flat index.
+        ``SnakePOMDP.free_cells`` skips them too, and the two answers have to
+        agree: this one decides where the food really spawns and the other
+        decides where the belief thinks it can be, so a divergence is a prior
+        that is wrong about a cell with nothing to report it. The environment's
+        ``grid_size >= 4`` check means no reachable body has an off-grid cell,
+        so this is the second lock on the same door rather than a live case.
+        """
+        occupied = {
+            row * self.grid_size + col
+            for row, col in self.body
+            if 0 <= row < self.grid_size and 0 <= col < self.grid_size
+        }
         return np.array(
             [cell for cell in range(self.grid_size**2) if cell not in occupied],
             dtype=np.int64,
@@ -457,9 +470,17 @@ class SnakePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public
             ValueError: If the geometry, the sensor settings or the limits are
                 outside their valid ranges.
         """
-        if grid_size < 3:
+        # Four, not three. The starting body runs west from the centre column
+        # ``grid_size // 2`` and occupies three columns, so a 3-wide grid puts
+        # its tail at column -1 -- outside the grid, which the state's own
+        # invariant forbids. That was not a loud failure: the tail's flat index
+        # wrapped onto a playable cell, so the belief's prior put mass on a cell
+        # the food could never spawn in and nothing raised.
+        if grid_size < 4:
             raise ValueError(
-                f"grid_size must be at least 3 to hold the starting body, got {grid_size}"
+                "grid_size must be at least 4: the starting body is three cells running "
+                f"west from column grid_size // 2, and needs all three inside the grid, "
+                f"got {grid_size}"
             )
         if target_length <= 3:
             raise ValueError(

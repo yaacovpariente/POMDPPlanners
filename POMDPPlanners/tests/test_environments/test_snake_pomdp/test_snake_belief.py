@@ -375,3 +375,26 @@ def test_particles_are_legal_states_drawn_from_the_posterior():
         assert env.body(particle) == moved
         assert env.food(particle) not in moved
         assert not env.is_terminal(particle)
+
+
+def test_serialization_preserves_the_exact_posterior():
+    """The distribution survives ``to_dict``; the particles alone would not.
+
+    Purpose: A finite sample cannot be inverted back into the distribution it
+        came from, so a belief serialized without this field returns as a Monte
+        Carlo summary of itself and the visualization's belief layer loses its
+        resolution.
+
+    Test type: unit
+    """
+    env = build_env()
+    belief = SnakeBelief.from_environment(env, n_particles=8)
+    stored = belief.to_dict()
+    assert "food_probabilities" in stored
+    assert np.allclose(np.asarray(stored["food_probabilities"]), belief.food_probabilities)
+    rebuilt = SnakeBelief(
+        particles=np.asarray(stored["particles"], dtype=np.float64),
+        log_weights=np.asarray(stored["log_weights"], dtype=np.float64),
+        food_probabilities=np.asarray(stored["food_probabilities"], dtype=np.float64),
+    )
+    assert np.allclose(rebuilt.marginal(env), belief.marginal(env))

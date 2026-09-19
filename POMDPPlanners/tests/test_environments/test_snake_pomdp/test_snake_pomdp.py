@@ -755,6 +755,7 @@ def test_the_initial_food_is_uniform_over_the_free_cells():
 @pytest.mark.parametrize(
     "kwargs, message",
     [
+        ({"grid_size": 3}, "grid_size"),
         ({"grid_size": 2}, "grid_size"),
         ({"target_length": 3}, "target_length"),
         ({"detection_probability": 1.5}, "detection_probability"),
@@ -770,3 +771,27 @@ def test_invalid_configurations_are_refused_at_construction(kwargs, message):
     """
     with pytest.raises(ValueError, match=message):
         build_env(**kwargs)
+
+
+def test_the_starting_body_fits_inside_every_accepted_grid():
+    """No accepted ``grid_size`` puts a body cell outside the grid.
+
+    Purpose: The starting body runs three columns west from ``grid_size // 2``,
+        so a 3-wide grid puts its tail at column -1. That was accepted once, and
+        it did not raise: the off-grid tail's flat index wrapped onto a playable
+        cell, so the two "which cells are free" answers -- the sampler's and the
+        belief prior's -- disagreed about one cell with nothing to report it.
+    Given: Every grid size from the smallest accepted one upwards.
+    When: The starting body and the two free-cell sets are computed.
+    Then: Every body cell is in the grid, and the two answers agree.
+
+    Test type: unit
+    """
+    for grid_size in range(4, 14):
+        env = build_env(grid_size=grid_size, target_length=4)
+        distribution = env.initial_state_dist()
+        for cell in distribution.body:
+            assert env.in_grid(cell), f"{cell} is outside a {grid_size}x{grid_size} grid"
+        assert np.array_equal(
+            distribution.free_cells(), env.free_cells(distribution.body)
+        ), f"free-cell sets disagree at grid_size={grid_size}"

@@ -140,6 +140,31 @@ class SnakeBelief(WeightedParticleBelief):
             None if food_probabilities is None else np.asarray(food_probabilities, dtype=np.float64)
         )
 
+    def to_dict(self) -> dict:
+        """Preserve the exact posterior across a serialization round trip.
+
+        The inherited ``to_dict`` carries the particles and their weights, which
+        is everything a generic particle belief is. It is not everything this
+        one is: the exact distribution the particles were drawn from cannot be
+        recovered from a finite sample of it, so a serialized belief would come
+        back as a Monte Carlo summary of itself and the visualization's belief
+        layer would lose its resolution.
+
+        This follows the convention ``OccupancyGridMappingBelief`` sets. It is
+        only half a fix: ``History.from_dict`` reconstructs the literal
+        ``WeightedParticleBelief`` and no subclass, so a belief read back out of
+        a serialized history is still a plain dict. Keeping the field here is
+        what makes that a framework gap rather than lost data.
+
+        Returns:
+            The inherited fields plus the exact posterior over the food cell.
+        """
+        result = super().to_dict()
+        result["food_probabilities"] = (
+            None if self.food_probabilities is None else self.food_probabilities.tolist()
+        )
+        return result
+
     @classmethod
     def from_environment(cls, pomdp: Environment, n_particles: int = 100) -> "SnakeBelief":
         """Build the prior belief for ``pomdp``.
