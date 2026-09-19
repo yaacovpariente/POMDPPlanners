@@ -661,7 +661,7 @@ class TestObservationModel:
 
         Given: Robot far from rock with check action and very low sensor efficiency
         When: Observation probabilities are calculated via env.observation_log_probability
-        Then: Observation probabilities are closer to random
+        Then: The reading still favours the truth, but by less than at the rock
 
         Test type: unit
         """
@@ -677,10 +677,10 @@ class TestObservationModel:
         log_probs = pomdp.observation_log_probability(state, 6, ["good", "bad", "none"])
         probs = np.exp(log_probs)
         # Distance = sqrt((0-1)^2 + (0-2)^2) = sqrt(5) ≈ 2.24
-        # Efficiency = exp(-2.24/2.0) ≈ 0.33
-        # For bad rock: P(good) = 1-0.33 = 0.67, P(bad) = 0.33
-        assert 0.6 < probs[0] < 0.8  # P(good|bad_rock) should be high due to low efficiency
-        assert 0.2 < probs[1] < 0.4  # P(bad|bad_rock) should be low
+        # Accuracy = (1 + 2^(-2.24/2.0)) / 2 ≈ 0.73
+        # For a bad rock: P(bad) = 0.73, P(good) = 1 - 0.73 = 0.27
+        assert 0.2 < probs[0] < 0.35  # P(good|bad_rock) is the error rate, below half
+        assert 0.65 < probs[1] < 0.8  # P(bad|bad_rock) is the accuracy, above half
         assert probs[2] < 1e-200  # Effectively zero probability of "none"
 
     def test_observation_check_invalid_rock(self):

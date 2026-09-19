@@ -5,7 +5,10 @@
 // The RockSample transition is deterministic (no RNG) and the observation is
 // a 3-way categorical over {none=0, good=1, bad=2} with a Bernoulli flip
 // whose probability depends on the Euclidean distance between the robot and
-// the queried rock via ``exp(-distance / sensor_efficiency)``. The state is
+// the queried rock via Smith & Simmons (2004),
+// ``(1 + 2^(-distance / sensor_efficiency)) / 2``, which decays from 1 at
+// distance 0 to 0.5 in the limit: a far check is uninformative, never wrong.
+// The state is
 // ``[robot_row, robot_col, rock_0, ..., rock_{R-1}]`` with terminal sentinel
 // ``[-1, -1, ...]``.
 //
@@ -49,7 +52,9 @@ constexpr int kObsBad = 2;
 // (log-pdf) paths agree on the same floored value (~ -690.776) for
 // impossible events. ``std::log`` is not constexpr in C++17 so the log
 // constant is a hard-coded ``static const double`` matching
-// ``std::log(kProbFloor)``.
+// ``std::log(kProbFloor)``. Since ``check_sensor_accuracy`` is bounded in
+// [0.5, 1], neither check branch can underflow any more; the floor is kept
+// only for the deterministic "none" branches, which are genuinely zero.
 constexpr double kProbFloor = 1e-300;
 static const double kLogProbFloor = -690.7755278982137;  // == std::log(kProbFloor)
 
@@ -63,6 +68,18 @@ static const double kLogProbFloor = -690.7755278982137;  // == std::log(kProbFlo
 //   Anything else is silently treated as a "check on nonexistent rock":
 //   no state change, observation is deterministic "none". This mirrors the
 //   Python per-particle fallback branch.
+
+// Rock-check sensor accuracy, Smith & Simmons (2004) "Heuristic Search Value
+// Iteration for POMDPs": accuracy(d) = (1 + 2^(-d / d0)) / 2, so accuracy is
+// 1 at the rock, 0.75 at d == d0, and tends to 0.5 as d grows. It is never
+// below 0.5, so a distant check is uninformative rather than misleading.
+//
+// Every caller goes through this one function, and it takes the half-life
+// itself (not a precomputed reciprocal), so the scalar and batched paths are
+// bit-identical instead of agreeing only to within a rounding step.
+inline double check_sensor_accuracy(double distance, double half_life) {
+    return 0.5 * (1.0 + std::exp2(-distance / half_life));
+}
 
 struct EnvParams {
     int map_rows;
@@ -753,7 +770,7 @@ class RockSampleObservationCpp {
 
         const std::int32_t rock_r = env_.rock_rows[static_cast<std::size_t>(rock_idx)];
         const std::int32_t rock_c = env_.rock_cols[static_cast<std::size_t>(rock_idx)];
-        const double inv_sigma = 1.0 / env_.sensor_efficiency;
+        const double half_life = env_.sensor_efficiency;
         const std::size_t rock_offset = static_cast<std::size_t>(2 + rock_idx);
 
         const double *data = next_particles.data();
@@ -768,7 +785,7 @@ class RockSampleObservationCpp {
             const double dr = robot_row - static_cast<double>(rock_r);
             const double dc = robot_col - static_cast<double>(rock_c);
             const double distance = std::sqrt(dr * dr + dc * dc);
-            const double efficiency = std::exp(-distance * inv_sigma);
+            const double efficiency = check_sensor_accuracy(distance, half_life);
             const bool rock_good = row[rock_offset] > 0.5;
             double prob;
             if (observation == kObsGood) {
@@ -808,7 +825,7 @@ class RockSampleObservationCpp {
         const double dr = state[0] - static_cast<double>(rock_r);
         const double dc = state[1] - static_cast<double>(rock_c);
         const double distance = std::sqrt(dr * dr + dc * dc);
-        return std::exp(-distance / env_.sensor_efficiency);
+        return check_sensor_accuracy(distance, env_.sensor_efficiency);
     }
 
     EnvParams env_;
