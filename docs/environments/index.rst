@@ -18,7 +18,7 @@ registry:
 .. note::
 
    ``get_environment`` covers the classic suite only, which now includes
-   ``OccupancyGridMappingPOMDP``. Import ``BattleshipPOMDP``
+   ``OccupancyGridMappingPOMDP`` and ``CrazyChickenPOMDP``. Import ``BattleshipPOMDP``
    directly. ``ContinuousPushPOMDP``,
    ``ContinuousPushPOMDPDiscreteActions`` and the realistic worlds (CARLA,
    Isaac Lab, nuPlan, Racetrack) are not in the registry — import those classes
@@ -71,6 +71,13 @@ actually stores.
      - continuous
      - none
      - :doc:`occupancy_grid_mapping`
+   * - ``CrazyChickenPOMDP``
+     - Shoot down a diving flock seen through a split camera/radar reading.
+     - ``[ship, chickens, shots]``
+     - discrete
+     - discrete
+     - none
+     - :doc:`crazy_chicken`
    * - ``PacManPOMDP``
      - Clear every pellet while dodging noisily-observed ghosts.
      - vector (pac, ghosts, pellets)
@@ -229,6 +236,7 @@ Guides
    rock_sample
    battleship
    occupancy_grid_mapping
+   crazy_chicken
    pacman
    maze
    light_dark
@@ -282,6 +290,7 @@ API listing
    POMDPPlanners.environments.rock_sample_pomdp.RockSamplePOMDP
    POMDPPlanners.environments.battleship_pomdp.BattleshipPOMDP
    POMDPPlanners.environments.occupancy_grid_mapping_pomdp.OccupancyGridMappingPOMDP
+   POMDPPlanners.environments.crazy_chicken_pomdp.CrazyChickenPOMDP
    POMDPPlanners.environments.pacman_pomdp.PacManPOMDP
    POMDPPlanners.environments.laser_tag_pomdp.LaserTagPOMDP
    POMDPPlanners.environments.laser_tag_pomdp.ContinuousLaserTagPOMDP

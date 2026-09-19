@@ -68,6 +68,10 @@ from POMDPPlanners.core.environment import (
 from POMDPPlanners.core.simulation.history import History, StepData
 from POMDPPlanners.environments.battleship_pomdp.battleship_pomdp import BattleshipPOMDP
 from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
+from POMDPPlanners.environments.crazy_chicken_pomdp.crazy_chicken_pomdp import (
+    CrazyChickenPOMDP,
+    ObservationMode as CrazyChickenObservationMode,
+)
 from POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_pomdp import (
     ContinuousLaserTagPOMDP,
     ContinuousLaserTagPOMDPDiscreteActions,
@@ -109,6 +113,7 @@ from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
     continuous_light_dark_pinned_kwargs,
     continuous_push_discrete_actions_pinned_kwargs,
     continuous_push_pinned_kwargs,
+    crazy_chicken_pinned_kwargs,
     discrete_light_dark_pinned_kwargs,
     discrete_maze_pinned_kwargs,
     laser_tag_pinned_kwargs,
@@ -161,6 +166,20 @@ def _build_continuous_push_discrete() -> ContinuousPushPOMDPDiscreteActions:
 
 def _build_battleship() -> BattleshipPOMDP:
     return BattleshipPOMDP(discount_factor=0.99, **battleship_pinned_kwargs())
+
+
+def _build_crazy_chicken() -> CrazyChickenPOMDP:
+    return CrazyChickenPOMDP(discount_factor=0.95, **crazy_chicken_pinned_kwargs())
+
+
+def _build_crazy_chicken_fully_observable() -> CrazyChickenPOMDP:
+    # The fully observable mode is a different observation model on the same
+    # dynamics and the same reward, so it gets its own registry entry rather
+    # than riding along on the partially observable one.
+    return CrazyChickenPOMDP(
+        discount_factor=0.95,
+        **crazy_chicken_pinned_kwargs(observation_mode=CrazyChickenObservationMode.FULL),
+    )
 
 
 def _build_occupancy_grid_mapping() -> OccupancyGridMappingPOMDP:
@@ -254,6 +273,8 @@ ENV_BUILDERS: List[Tuple[str, EnvBuilder]] = [
     ("DiscreteMazePOMDP", _build_discrete_maze),
     ("ContinuousMazePOMDP", _build_continuous_maze),
     ("BattleshipPOMDP", _build_battleship),
+    ("CrazyChickenPOMDP", _build_crazy_chicken),
+    ("CrazyChickenPOMDP[fully_observable]", _build_crazy_chicken_fully_observable),
     ("OccupancyGridMappingPOMDP", _build_occupancy_grid_mapping),
     ("OccupancyGridMappingPOMDP[truncated_normal]", _build_occupancy_grid_mapping_truncated_normal),
 ]

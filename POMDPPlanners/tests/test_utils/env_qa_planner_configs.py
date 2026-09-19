@@ -93,6 +93,55 @@ def maze_qa_belief_particles() -> int:
 
 
 
+def crazy_chicken_qa_pft_dpw_kwargs(**overrides: Any) -> Dict[str, Any]:
+    """PFT-DPW settings used for the Crazy Chicken QA run.
+
+    The environment has no torch vectorized model, so QA runs PFT-DPW on the
+    scalar ``Environment`` API rather than VOPP.
+
+    Both widening constants disable widening. The action side has four actions,
+    so ``k_a = 4`` with ``alpha_a = 0`` admits every one of them and no action
+    is excluded by an accident of the sampler. The observation side is where
+    widening would otherwise bite hardest: a reading carries one slot per
+    chicken with integer noise on each, so almost every simulated observation is
+    unique and an unwidened tree would spend its whole budget on one-visit
+    leaves. ``k_o = 4`` with ``alpha_o = 0`` caps each action node at four
+    observation children so the particle sets under them get revisited.
+
+    ``depth`` is 20 against a 60-step episode. A shot takes several steps to
+    reach the flock and a dive takes several to arrive, so a plan shorter than
+    that cannot see either land; twenty covers both with room over.
+
+    ``time_out_in_seconds`` is a wall-clock budget, so PFT-DPW hits it exactly
+    and needs no simulation-count calibration. The 1.0 s value sits inside the
+    1-2 s band ``planner-calibration`` recommends for MCTS planners.
+
+    Args:
+        **overrides: Values merged on top of the pinned ones (overrides win).
+
+    Returns:
+        Constructor kwargs for :class:`~POMDPPlanners.planners.mcts_planners.pft_dpw.PFT_DPW`,
+        minus ``environment``, ``discount_factor``, ``name`` and ``action_sampler``,
+        which the caller supplies.
+    """
+    pinned: Dict[str, Any] = {
+        "depth": 20,
+        "k_a": 4.0,
+        "alpha_a": 0.0,
+        "k_o": 4.0,
+        "alpha_o": 0.0,
+        "exploration_constant": 20.0,
+        "time_out_in_seconds": 1.0,
+    }
+    pinned.update(overrides)
+    return pinned
+
+
+def crazy_chicken_qa_belief_particles() -> int:
+    """Particle count for the initial belief the Crazy Chicken QA gate ran with."""
+    return 200
+
+
 def occupancy_grid_mapping_qa_pft_dpw_kwargs(**overrides: Any) -> Dict[str, Any]:
     """PFT-DPW settings used for the occupancy-grid mapping QA and smoke run.
 
@@ -142,6 +191,8 @@ def occupancy_grid_mapping_qa_belief_particles() -> int:
 
 __all__ = [
     "continuous_maze_qa_pft_dpw_kwargs",
+    "crazy_chicken_qa_belief_particles",
+    "crazy_chicken_qa_pft_dpw_kwargs",
     "discrete_maze_qa_pft_dpw_kwargs",
     "maze_qa_belief_particles",
     "occupancy_grid_mapping_qa_belief_particles",

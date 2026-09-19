@@ -161,6 +161,14 @@ FAMILIES: Tuple[EnvironmentFamily, ...] = (
         images=("docs/artifacts/battleship_redesign/review.gif",),
     ),
     EnvironmentFamily(
+        package="crazy_chicken_pomdp",
+        label="CrazyChicken",
+        hooks=(("crazy_chicken_pomdp/crazy_chicken_pomdp.py", "CrazyChickenPOMDP"),),
+        docs_page="crazy_chicken.rst",
+        docs_section=None,
+        images=("docs/images/crazy_chicken_visualization.gif",),
+    ),
+    EnvironmentFamily(
         package="occupancy_grid_mapping_pomdp",
         label="OccupancyGridMapping",
         hooks=(
