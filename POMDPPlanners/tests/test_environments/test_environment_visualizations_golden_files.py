@@ -11,6 +11,11 @@ Golden File Testing Workflow:
     2. Subsequent runs: Compare new output against golden file using hash
     3. Update golden files: Delete old golden file and re-run test to regenerate
 
+Every environment is one entry in :data:`GOLDEN_VISUALIZATIONS`, naming how
+its episode is built and how it is rendered. The two tests at the bottom of
+this file are parametrized over that registry, so adding an environment means
+adding an entry rather than pasting two more test methods.
+
 Directory Structure:
     POMDPPlanners/tests/test_environments/golden_visualizations/
         ├── rock_sample_visualization.gif
@@ -31,8 +36,9 @@ import random
 import shutil
 import warnings
 from collections import deque
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, List, cast
+from typing import Any, Callable, List, Tuple, cast
 
 import numpy as np
 import pytest
@@ -1298,6 +1304,329 @@ def create_deterministic_capture_the_flag_episode(seed: int = 0) -> List[StepDat
     return history
 
 
+@dataclass(frozen=True)
+class GoldenVisualization:
+    """One environment's entry in the golden-visualization suite.
+
+    Every environment used to carry its own copy of two near-identical test
+    methods, differing only in which episode factory and visualizer they named
+    and in four strings. Adding an environment meant pasting both, at the same
+    place every other author pasted theirs, which is what made this file
+    conflict on every pair of concurrent environment branches.
+
+    An entry names what is genuinely per-environment -- how the episode is
+    built and how it is rendered -- and the two tests below are parametrized
+    over the registry.
+
+    Attributes:
+        name: Slug used for the parametrization id and to derive the golden
+            file name, which every environment here follows.
+        build_history: Builds the episode to render. Called inside the test, so
+            an environment constructed here is constructed at the same point in
+            the global RNG stream as it was when each test built its own.
+        render: Renders a history to a path. Environments do not agree on the
+            method name -- ``create_visualization``, ``cache_visualization``,
+            ``create_animation`` and ``render_episode`` are all in use -- so
+            the call is spelled out per environment rather than assumed.
+        check_repeated_render: Whether the determinism suite also renders this
+            environment twice and compares the bytes. That check is what covers
+            renderers outside the Docker image, and it is worth its runtime on
+            the ones whose panels average over a particle collection.
+    """
+
+    name: str
+    build_history: Callable[[], List[StepData]]
+    render: Callable[[List[StepData], Path], None]
+    check_repeated_render: bool = False
+
+    @property
+    def golden_file(self) -> str:
+        """Name of this environment's golden GIF inside :data:`GOLDEN_DIR`."""
+        return f"{self.name}_visualization.gif"
+
+
+def _render_battleship(history: List[StepData], output_path: Path) -> None:
+    """Render a Battleship episode."""
+    BattleshipVisualizer(build_battleship_env()).create_visualization(history, output_path)
+
+
+def _render_capture_the_flag(history: List[StepData], output_path: Path) -> None:
+    """Render a CaptureTheFlag episode."""
+    CaptureTheFlagVisualizer(build_capture_the_flag_env()).render_episode(history, output_path)
+
+
+def _render_chicheck_invaders(history: List[StepData], output_path: Path) -> None:
+    """Render a Chicheck Invaders episode."""
+    ChicheckInvadersVisualizer(build_chicheck_invaders_env()).create_visualization(
+        history, output_path
+    )
+
+
+def _render_continuous_laser_tag(history: List[StepData], output_path: Path) -> None:
+    """Render a continuous LaserTag episode."""
+    env = ContinuousLaserTagPOMDP(
+        discount_factor=0.95,
+        **continuous_laser_tag_pinned_kwargs(
+            robot_transition_cov_matrix=np.eye(2) * 0.01,
+            opponent_transition_cov_matrix=np.eye(2) * 0.01,
+        ),
+    )
+    visualizer = ContinuousLaserTagVisualizer(
+        grid_size=env.grid_size,
+        walls=env.walls,
+        robot_radius=env.robot_radius,
+        opponent_radius=env.opponent_radius,
+        dangerous_areas=env.dangerous_areas,
+        dangerous_area_radius=env.dangerous_area_radius,
+    )
+    visualizer.create_visualization(history, output_path)
+
+
+def _render_continuous_push(history: List[StepData], output_path: Path) -> None:
+    """Render a continuous Push episode."""
+    env = ContinuousPushPOMDP(
+        discount_factor=0.99,
+        **continuous_push_pinned_kwargs(
+            grid_size=10,
+            obstacles=[(3.0, 3.0, 0.5), (6.0, 6.0, 0.5)],
+            state_transition_cov_matrix=np.eye(2) * 0.01,
+        ),
+    )
+    ContinuousPushPOMDPVisualizer(env).create_visualization(history, output_path)
+
+
+def _render_laser_tag(history: List[StepData], output_path: Path) -> None:
+    """Render a discrete LaserTag episode."""
+    env = LaserTagPOMDP(
+        discount_factor=0.95,
+        **laser_tag_pinned_kwargs(
+            transition_error_prob=0.0,  # Explicitly set for deterministic behavior
+        ),
+    )
+    visualizer = LaserTagVisualizer(
+        floor_shape=env.floor_shape,
+        walls=env.walls,
+        dangerous_areas=list(env.dangerous_areas),
+        dangerous_area_radius=env.dangerous_area_radius,
+    )
+    visualizer.create_visualization(history, output_path)
+
+
+def _render_light_dark(history: List[StepData], output_path: Path) -> None:
+    """Render a continuous Light-Dark episode."""
+    env = ContinuousLightDarkPOMDP(
+        discount_factor=0.95,
+        **continuous_light_dark_pinned_kwargs(),
+    )
+    LightDarkPOMDPVisualizer(env).cache_visualization(history, output_path)
+
+
+def _render_multiagent_firefighting(history: List[StepData], output_path: Path) -> None:
+    """Render a multi-agent firefighting episode."""
+    MultiAgentFirefightingVisualizer(build_multiagent_firefighting_env()).create_visualization(
+        history, output_path
+    )
+
+
+def _render_occupancy_grid_mapping(history: List[StepData], output_path: Path) -> None:
+    """Render an occupancy-grid mapping episode."""
+    OccupancyGridMappingVisualizer(build_occupancy_grid_mapping_env()).create_visualization(
+        history, output_path
+    )
+
+
+def _render_pacman(history: List[StepData], output_path: Path) -> None:
+    """Render a PacMan episode."""
+    env = PacManPOMDP(
+        discount_factor=0.95,
+        **pacman_pinned_kwargs(
+            maze_size=(7, 7),
+            num_ghosts=2,
+            initial_ghost_positions=None,
+            ghost_strategies=None,
+        ),
+    )
+    PacManVisualizer(env).cache_visualization(history, output_path)
+
+
+def _render_push(history: List[StepData], output_path: Path) -> None:
+    """Render a discrete Push episode."""
+    env = PushPOMDP(
+        discount_factor=0.95,
+        **push_pinned_kwargs(
+            grid_size=8,
+            transition_error_prob=0.0,  # Explicitly set for deterministic behavior
+        ),
+    )
+    PushPOMDPVisualizer(env).create_visualization(history, output_path)
+
+
+def _render_rock_sample(history: List[StepData], output_path: Path) -> None:
+    """Render a RockSample episode."""
+    env = RockSamplePOMDP(
+        discount_factor=0.95,
+        **rock_sample_pinned_kwargs(
+            map_size=(5, 5),
+            rock_positions=[(1, 1), (2, 3), (4, 2)],
+            dangerous_areas=[(2, 2)],
+            dangerous_area_radius=1.0,
+        ),
+    )
+    RockSampleVisualizer(env).create_visualization(history, output_path)
+
+
+def _render_safety_ant_velocity(history: List[StepData], output_path: Path) -> None:
+    """Render a SafeAntVelocity episode."""
+    env = SafeAntVelocityPOMDP(
+        discount_factor=0.95,
+        **safety_ant_velocity_pinned_kwargs(),
+    )
+    SafeAntVelocityVisualizer(env).create_animation(history, output_path)
+
+
+def _render_t_maze(history: List[StepData], output_path: Path) -> None:
+    """Render a T-Maze episode."""
+    env = TMazePOMDP(discount_factor=0.95, **t_maze_pinned_kwargs())
+    MazeVisualizer(env).create_visualization(history, output_path)
+
+
+# Both public Maze variants generate their geometry from a pinned ``maze_seed``,
+# so the environment the history is walked on and the one the visualizer draws
+# have to be the same object for the golden file to mean anything.
+_DISCRETE_MAZE_ENV = DiscreteMazePOMDP(discount_factor=0.95, **discrete_maze_pinned_kwargs())
+_CONTINUOUS_MAZE_ENV = ContinuousMazePOMDP(discount_factor=0.95, **continuous_maze_pinned_kwargs())
+
+
+def _render_maze(env: Any) -> Callable[[List[StepData], Path], None]:
+    """Build a renderer for one Maze variant.
+
+    Args:
+        env: The Maze environment whose geometry the history was walked on.
+
+    Returns:
+        A renderer that draws a history of ``env`` to a path.
+    """
+
+    def render(history: List[StepData], output_path: Path) -> None:
+        MazeVisualizer(env).create_visualization(history, output_path)
+
+    return render
+
+
+# Alphabetical by name, for the reason test_registration_lists_are_sorted.py
+# gives: two environment branches then insert at different lines.
+GOLDEN_VISUALIZATIONS: Tuple[GoldenVisualization, ...] = (
+    GoldenVisualization(
+        name="battleship",
+        build_history=lambda: create_deterministic_battleship_episode(seed=7),
+        render=_render_battleship,
+        check_repeated_render=True,
+    ),
+    GoldenVisualization(
+        name="capture_the_flag",
+        build_history=lambda: create_deterministic_capture_the_flag_episode(seed=0),
+        render=_render_capture_the_flag,
+    ),
+    GoldenVisualization(
+        name="chicheck_invaders",
+        build_history=lambda: create_deterministic_chicheck_invaders_episode(seed=11),
+        render=_render_chicheck_invaders,
+        check_repeated_render=True,
+    ),
+    GoldenVisualization(
+        name="continuous_laser_tag",
+        build_history=lambda: create_deterministic_continuous_laser_tag_episode(seed=42),
+        render=_render_continuous_laser_tag,
+    ),
+    GoldenVisualization(
+        name="continuous_maze",
+        build_history=lambda: create_deterministic_maze_episode(_CONTINUOUS_MAZE_ENV),
+        render=_render_maze(_CONTINUOUS_MAZE_ENV),
+    ),
+    GoldenVisualization(
+        name="continuous_push",
+        build_history=lambda: create_deterministic_continuous_push_episode(seed=42),
+        render=_render_continuous_push,
+    ),
+    GoldenVisualization(
+        name="discrete_maze",
+        build_history=lambda: create_deterministic_maze_episode(_DISCRETE_MAZE_ENV),
+        render=_render_maze(_DISCRETE_MAZE_ENV),
+    ),
+    GoldenVisualization(
+        name="laser_tag",
+        build_history=lambda: create_deterministic_laser_tag_episode(seed=42),
+        render=_render_laser_tag,
+    ),
+    GoldenVisualization(
+        name="light_dark",
+        build_history=lambda: create_deterministic_light_dark_episode(seed=42),
+        render=_render_light_dark,
+    ),
+    GoldenVisualization(
+        name="multiagent_firefighting",
+        build_history=lambda: create_deterministic_multiagent_firefighting_episode(seed=5),
+        render=_render_multiagent_firefighting,
+        check_repeated_render=True,
+    ),
+    GoldenVisualization(
+        name="occupancy_grid_mapping",
+        build_history=lambda: create_deterministic_occupancy_grid_mapping_episode(seed=3),
+        render=_render_occupancy_grid_mapping,
+        check_repeated_render=True,
+    ),
+    GoldenVisualization(
+        name="pacman",
+        build_history=lambda: create_deterministic_pacman_episode(seed=42),
+        render=_render_pacman,
+    ),
+    GoldenVisualization(
+        name="push",
+        build_history=lambda: create_deterministic_push_episode(seed=42),
+        render=_render_push,
+    ),
+    GoldenVisualization(
+        name="rock_sample",
+        build_history=lambda: create_deterministic_rock_sample_episode(seed=42),
+        render=_render_rock_sample,
+        check_repeated_render=True,
+    ),
+    GoldenVisualization(
+        name="safety_ant_velocity",
+        build_history=lambda: create_deterministic_safety_ant_velocity_episode(seed=42),
+        render=_render_safety_ant_velocity,
+    ),
+    GoldenVisualization(
+        name="t_maze",
+        build_history=create_deterministic_t_maze_episode,
+        render=_render_t_maze,
+    ),
+)
+
+REPEATED_RENDER_VISUALIZATIONS: Tuple[GoldenVisualization, ...] = tuple(
+    spec for spec in GOLDEN_VISUALIZATIONS if spec.check_repeated_render
+)
+
+
+def test_golden_visualization_registry_is_alphabetical():
+    """Test that the golden-visualization registry is in alphabetical order.
+
+    Purpose: This file is where the last three environment branches conflicted,
+        because each appended its entry at the same line
+
+    Given: :data:`GOLDEN_VISUALIZATIONS`
+    When: The entry names are read in declaration order
+    Then: They are already sorted
+
+    Test type: unit
+    """
+    names = [spec.name for spec in GOLDEN_VISUALIZATIONS]
+    assert names == sorted(names), (
+        "GOLDEN_VISUALIZATIONS must be alphabetical by name so two environment "
+        f"branches insert at different lines, got {names}"
+    )
+
+
 @pytest.mark.skipif(
     not Path("/.dockerenv").exists(),
     reason=(
@@ -1316,511 +1645,49 @@ class TestVisualizationConsistency:
     On subsequent runs, new outputs are compared against golden files.
     """
 
-    def test_rock_sample_visualization_consistency(self, temp_output_dir):
-        """Test RockSample visualization produces consistent output.
-
-        Purpose: Validates that RockSample visualizations are deterministic
-
-        Given: A deterministic RockSample episode with fixed seed
-        When: Visualization is created from the episode
-        Then: Output matches golden file hash (or creates golden if missing)
-
-        Test type: integration
-        """
-        # Create deterministic episode
-        history = create_deterministic_rock_sample_episode(seed=42)
-
-        # Create environment and visualizer
-        env = RockSamplePOMDP(
-            discount_factor=0.95,
-            **rock_sample_pinned_kwargs(
-                map_size=(5, 5),
-                rock_positions=[(1, 1), (2, 3), (4, 2)],
-                dangerous_areas=[(2, 2)],
-                dangerous_area_radius=1.0,
-            ),
-        )
-        visualizer = RockSampleVisualizer(env)
-
-        # Generate visualization
-        output_path = temp_output_dir / "rock_sample_test.gif"
-        visualizer.create_visualization(history, output_path)
-
-        # Compare against golden file
-        compare_or_create_golden_file(
-            output_path,
-            "rock_sample_visualization.gif",
-            "test_rock_sample_visualization_consistency",
-        )
-
-    def test_multiagent_firefighting_visualization_consistency(self, temp_output_dir):
-        """Test multi-agent firefighting visualization produces consistent output.
-
-        Purpose: Validates that firefighting visualizations are deterministic,
-            including the two belief panels, which average over a particle
-            collection and are where an iteration order or a stray draw would
-            leak in
-
-        Given: A deterministic firefighting episode with a fixed joint-action
-            sequence and a real weighted particle belief
-        When: Visualization is created from the episode
-        Then: Output matches golden file hash (or creates golden if missing)
-
-        Test type: integration
-        """
-        history = create_deterministic_multiagent_firefighting_episode(seed=5)
-        visualizer = MultiAgentFirefightingVisualizer(build_multiagent_firefighting_env())
-
-        output_path = temp_output_dir / "multiagent_firefighting_test.gif"
-        visualizer.create_visualization(history, output_path)
-
-        compare_or_create_golden_file(
-            output_path,
-            "multiagent_firefighting_visualization.gif",
-            "test_multiagent_firefighting_visualization_consistency",
-        )
-
-    def test_occupancy_grid_mapping_visualization_consistency(self, temp_output_dir):
-        """Test occupancy-grid mapping visualization produces consistent output.
-
-        Purpose: Validates that occupancy-grid mapping visualizations are
-            deterministic
-
-        Given: A deterministic mapping episode with a fixed action sequence and
-            a real particle belief
-        When: Visualization is created from the episode
-        Then: Output matches golden file hash (or creates golden if missing)
-
-        Test type: integration
-        """
-        history = create_deterministic_occupancy_grid_mapping_episode(seed=3)
-        visualizer = OccupancyGridMappingVisualizer(build_occupancy_grid_mapping_env())
-
-        output_path = temp_output_dir / "occupancy_grid_mapping_test.gif"
-        visualizer.create_visualization(history, output_path)
-
-        compare_or_create_golden_file(
-            output_path,
-            "occupancy_grid_mapping_visualization.gif",
-            "test_occupancy_grid_mapping_visualization_consistency",
-        )
-
-    def test_chicheck_invaders_visualization_consistency(self, temp_output_dir):
-        """Test Chicheck Invaders visualization produces consistent output.
-
-        Purpose: Validates that Chicheck Invaders visualizations are deterministic
-
-        Given: A deterministic Chicheck Invaders episode with a fixed action
-            sequence and a real particle belief
-        When: Visualization is created from the episode
-        Then: Output matches golden file hash (or creates golden if missing)
-
-        Test type: integration
-        """
-        history = create_deterministic_chicheck_invaders_episode(seed=11)
-        visualizer = ChicheckInvadersVisualizer(build_chicheck_invaders_env())
-
-        output_path = temp_output_dir / "chicheck_invaders_test.gif"
-        visualizer.create_visualization(history, output_path)
-
-        compare_or_create_golden_file(
-            output_path,
-            "chicheck_invaders_visualization.gif",
-            "test_chicheck_invaders_visualization_consistency",
-        )
-
-    def test_capture_the_flag_visualization_consistency(self, temp_output_dir):
-        """Test CaptureTheFlag visualization produces consistent output.
-
-        Purpose: Validates that CaptureTheFlag visualizations are deterministic,
-            including the belief overlay, whose marginals are recomputed per
-            frame and would betray any unordered iteration.
-
-        Given: A deterministic CaptureTheFlag episode with a real particle belief
-        When: Visualization is created from the episode
-        Then: Output matches golden file hash (or creates golden if missing)
-
-        Test type: integration
-        """
-        history = create_deterministic_capture_the_flag_episode(seed=0)
-        visualizer = CaptureTheFlagVisualizer(build_capture_the_flag_env())
-
-        output_path = temp_output_dir / "capture_the_flag_test.gif"
-        visualizer.render_episode(history, output_path)
-
-        compare_or_create_golden_file(
-            output_path,
-            "capture_the_flag_visualization.gif",
-            "test_capture_the_flag_visualization_consistency",
-        )
-
-    def test_battleship_visualization_consistency(self, temp_output_dir):
-        """Test Battleship visualization produces consistent output.
-
-        Purpose: Validates that Battleship visualizations are deterministic
-
-        Given: A deterministic Battleship episode with a fixed probe sequence
-        When: Visualization is created from the episode
-        Then: Output matches golden file hash (or creates golden if missing)
-
-        Test type: integration
-        """
-        history = create_deterministic_battleship_episode(seed=7)
-        visualizer = BattleshipVisualizer(build_battleship_env())
-
-        output_path = temp_output_dir / "battleship_test.gif"
-        visualizer.create_visualization(history, output_path)
-
-        compare_or_create_golden_file(
-            output_path,
-            "battleship_visualization.gif",
-            "test_battleship_visualization_consistency",
-        )
-
-    def test_pacman_visualization_consistency(self, temp_output_dir):
-        """Test PacMan visualization produces consistent output.
-
-        Purpose: Validates that PacMan visualizations are deterministic
-
-        Given: A deterministic PacMan episode with fixed seed
-        When: Visualization is created from the episode
-        Then: Output matches golden file hash (or creates golden if missing)
-
-        Test type: integration
-        """
-        # Create deterministic episode
-        history = create_deterministic_pacman_episode(seed=42)
-
-        # Create environment and visualizer
-        env = PacManPOMDP(
-            discount_factor=0.95,
-            **pacman_pinned_kwargs(
-                maze_size=(7, 7),
-                num_ghosts=2,
-                initial_ghost_positions=None,
-                ghost_strategies=None,
-            ),
-        )
-        visualizer = PacManVisualizer(env)
-
-        # Generate visualization
-        output_path = temp_output_dir / "pacman_test.gif"
-        visualizer.cache_visualization(history, output_path)
-
-        # Compare against golden file
-        compare_or_create_golden_file(
-            output_path,
-            "pacman_visualization.gif",
-            "test_pacman_visualization_consistency",
-        )
-
-    def test_light_dark_visualization_consistency(self, temp_output_dir):
-        """Test LightDark visualization produces consistent output.
-
-        Purpose: Validates that LightDark visualizations are deterministic
-
-        Given: A deterministic LightDark episode with fixed seed
-        When: Visualization is created from the episode
-        Then: Output matches golden file hash (or creates golden if missing)
-
-        Test type: integration
-        """
-        # Create deterministic episode
-        history = create_deterministic_light_dark_episode(seed=42)
-
-        # Create environment and visualizer
-        env = ContinuousLightDarkPOMDP(
-            discount_factor=0.95,
-            **continuous_light_dark_pinned_kwargs(),
-        )
-        visualizer = LightDarkPOMDPVisualizer(env)
-
-        # Generate visualization
-        output_path = temp_output_dir / "light_dark_test.gif"
-        visualizer.cache_visualization(history, output_path)
-
-        # Compare against golden file
-        compare_or_create_golden_file(
-            output_path,
-            "light_dark_visualization.gif",
-            "test_light_dark_visualization_consistency",
-        )
-
-    def test_push_visualization_consistency(self, temp_output_dir):
-        """Test Push visualization produces consistent output.
-
-        Purpose: Validates that Push visualizations are deterministic
-
-        Given: A deterministic Push episode with fixed seed
-        When: Visualization is created from the episode
-        Then: Output matches golden file hash (or creates golden if missing)
-
-        Test type: integration
-        """
-        # Create deterministic episode
-        history = create_deterministic_push_episode(seed=42)
-
-        # Create environment and visualizer
-        env = PushPOMDP(
-            discount_factor=0.95,
-            **push_pinned_kwargs(
-                grid_size=8,
-                transition_error_prob=0.0,  # Explicitly set for deterministic behavior
-            ),
-        )
-        visualizer = PushPOMDPVisualizer(env)
-
-        # Generate visualization
-        output_path = temp_output_dir / "push_test.gif"
-        visualizer.create_visualization(history, output_path)
-
-        # Compare against golden file
-        compare_or_create_golden_file(
-            output_path,
-            "push_visualization.gif",
-            "test_push_visualization_consistency",
-        )
-
-    def test_laser_tag_visualization_consistency(self, temp_output_dir):
-        """Test LaserTag visualization produces consistent output.
-
-        Purpose: Validates that LaserTag visualizations are deterministic
-
-        Given: A deterministic LaserTag episode with fixed seed
-        When: Visualization is created from the episode
-        Then: Output matches golden file hash (or creates golden if missing)
-
-        Test type: integration
-        """
-        # Create deterministic episode
-        history = create_deterministic_laser_tag_episode(seed=42)
-
-        # Create environment and visualizer
-        env = LaserTagPOMDP(
-            discount_factor=0.95,
-            **laser_tag_pinned_kwargs(
-                transition_error_prob=0.0,  # Explicitly set for deterministic behavior
-            ),
-        )
-        visualizer = LaserTagVisualizer(
-            floor_shape=env.floor_shape,
-            walls=env.walls,
-            dangerous_areas=list(env.dangerous_areas),
-            dangerous_area_radius=env.dangerous_area_radius,
-        )
-
-        # Generate visualization
-        output_path = temp_output_dir / "laser_tag_test.gif"
-        visualizer.create_visualization(history, output_path)
-
-        # Compare against golden file
-        compare_or_create_golden_file(
-            output_path,
-            "laser_tag_visualization.gif",
-            "test_laser_tag_visualization_consistency",
-        )
-
-    def test_continuous_laser_tag_visualization_consistency(self, temp_output_dir):
-        """Test Continuous LaserTag visualization produces consistent output.
-
-        Purpose: Validates that Continuous LaserTag visualizations are deterministic
-
-        Given: A deterministic Continuous LaserTag episode with fixed seed
-        When: Visualization is created from the episode
-        Then: Output matches golden file hash (or creates golden if missing)
-
-        Test type: integration
-        """
-        # Create deterministic episode
-        history = create_deterministic_continuous_laser_tag_episode(seed=42)
-
-        # Create environment and visualizer
-        env = ContinuousLaserTagPOMDP(
-            discount_factor=0.95,
-            **continuous_laser_tag_pinned_kwargs(
-                robot_transition_cov_matrix=np.eye(2) * 0.01,
-                opponent_transition_cov_matrix=np.eye(2) * 0.01,
-            ),
-        )
-        visualizer = ContinuousLaserTagVisualizer(
-            grid_size=env.grid_size,
-            walls=env.walls,
-            robot_radius=env.robot_radius,
-            opponent_radius=env.opponent_radius,
-            dangerous_areas=env.dangerous_areas,
-            dangerous_area_radius=env.dangerous_area_radius,
-        )
-
-        # Generate visualization
-        output_path = temp_output_dir / "continuous_laser_tag_test.gif"
-        visualizer.create_visualization(history, output_path)
-
-        # Compare against golden file
-        compare_or_create_golden_file(
-            output_path,
-            "continuous_laser_tag_visualization.gif",
-            "test_continuous_laser_tag_visualization_consistency",
-        )
-
-    def test_continuous_push_visualization_consistency(self, temp_output_dir):
-        """Test Continuous Push visualization produces consistent output.
-
-        Purpose: Validates that Continuous Push visualizations are deterministic
-
-        Given: A deterministic Continuous Push episode with fixed seed
-        When: Visualization is created from the episode
-        Then: Output matches golden file hash (or creates golden if missing)
-
-        Test type: integration
-        """
-        # Create deterministic episode
-        history = create_deterministic_continuous_push_episode(seed=42)
-
-        # Create environment and visualizer
-        env = ContinuousPushPOMDP(
-            discount_factor=0.99,
-            **continuous_push_pinned_kwargs(
-                grid_size=10,
-                obstacles=[(3.0, 3.0, 0.5), (6.0, 6.0, 0.5)],
-                state_transition_cov_matrix=np.eye(2) * 0.01,
-            ),
-        )
-        visualizer = ContinuousPushPOMDPVisualizer(env)
-
-        # Generate visualization
-        output_path = temp_output_dir / "continuous_push_test.gif"
-        visualizer.create_visualization(history, output_path)
-
-        # Compare against golden file
-        compare_or_create_golden_file(
-            output_path,
-            "continuous_push_visualization.gif",
-            "test_continuous_push_visualization_consistency",
-        )
-
-    def test_safety_ant_velocity_visualization_consistency(self, temp_output_dir):
-        """Test SafeAntVelocity visualization produces consistent output.
-
-        Purpose: Validates that SafeAntVelocity visualizations are deterministic
-
-        Given: A deterministic SafeAntVelocity episode with fixed seed
-        When: Visualization is created from the episode
-        Then: Output matches golden file hash (or creates golden if missing)
-
-        Test type: integration
-        """
-        # Create deterministic episode
-        history = create_deterministic_safety_ant_velocity_episode(seed=42)
-
-        # Create environment and visualizer
-        env = SafeAntVelocityPOMDP(
-            discount_factor=0.95,
-            **safety_ant_velocity_pinned_kwargs(),
-        )
-        visualizer = SafeAntVelocityVisualizer(env)
-
-        # Generate visualization
-        output_path = temp_output_dir / "safety_ant_velocity_test.gif"
-        visualizer.create_animation(history, output_path)
-
-        # Compare against golden file
-        compare_or_create_golden_file(
-            output_path,
-            "safety_ant_velocity_visualization.gif",
-            "test_safety_ant_velocity_visualization_consistency",
-        )
-
-    def test_t_maze_visualization_consistency(self, temp_output_dir):
-        """Test T-Maze visualization produces consistent output.
-
-        Purpose: Validates that T-Maze visualizations are deterministic, including
-            the belief overlay, which is the part a human reads to check the
-            observation model did anything
-
-        Given: A deterministic T-Maze episode with a hand-built spread belief
-        When: Visualization is created from the episode
-        Then: Output matches golden file hash (or creates golden if missing)
-
-        Test type: integration
-        """
-        history = create_deterministic_t_maze_episode()
-
-        env = TMazePOMDP(discount_factor=0.95, **t_maze_pinned_kwargs())
-        visualizer = MazeVisualizer(env)
-
-        output_path = temp_output_dir / "t_maze_test.gif"
-        visualizer.create_visualization(history, output_path)
-
-        compare_or_create_golden_file(
-            output_path,
-            "t_maze_visualization.gif",
-            "test_t_maze_visualization_consistency",
-        )
-
     @pytest.mark.parametrize(
-        "env,golden_name",
-        [
-            (
-                DiscreteMazePOMDP(discount_factor=0.95, **discrete_maze_pinned_kwargs()),
-                "discrete_maze_visualization.gif",
-            ),
-            (
-                ContinuousMazePOMDP(discount_factor=0.95, **continuous_maze_pinned_kwargs()),
-                "continuous_maze_visualization.gif",
-            ),
-        ],
-        ids=["discrete_maze", "continuous_maze"],
+        "spec", GOLDEN_VISUALIZATIONS, ids=[spec.name for spec in GOLDEN_VISUALIZATIONS]
     )
-    def test_maze_visualization_consistency(self, temp_output_dir, env, golden_name):
-        """Both public Maze variants render deterministic generated geometry."""
-        history = create_deterministic_maze_episode(env)
-        output_path = temp_output_dir / golden_name
-        MazeVisualizer(env).create_visualization(history, output_path)
+    def test_visualization_consistency(self, temp_output_dir, spec):
+        """Test that an environment's visualization produces consistent output.
+
+        Purpose: Validates that every registered visualizer is deterministic,
+            including the belief panels that average over a particle collection,
+            which is where an unordered iteration or a stray draw would leak in
+
+        Given: A deterministic episode built by the environment's own factory
+        When: Visualization is created from the episode
+        Then: Output matches golden file hash (or creates golden if missing)
+
+        Test type: integration
+        """
+        history = spec.build_history()
+        output_path = temp_output_dir / f"{spec.name}_test.gif"
+        spec.render(history, output_path)
+
         compare_or_create_golden_file(
             output_path,
-            golden_name,
-            f"test_{golden_name.removesuffix('.gif')}_consistency",
+            spec.golden_file,
+            f"test_visualization_consistency[{spec.name}]",
         )
 
 
 class TestVisualizationDeterminism:
     """Test that visualizations are deterministic when re-run with same inputs."""
 
-    def test_multiagent_firefighting_repeated_visualization_identical(self, temp_output_dir):
-        """Test that repeated firefighting visualizations are byte-for-byte identical.
+    @pytest.mark.parametrize(
+        "spec",
+        REPEATED_RENDER_VISUALIZATIONS,
+        ids=[spec.name for spec in REPEATED_RENDER_VISUALIZATIONS],
+    )
+    def test_repeated_visualization_identical(self, temp_output_dir, spec):
+        """Test that repeated visualizations are byte-for-byte identical.
 
-        Purpose: Validates absolute determinism of the firefighting renderer,
-            which the golden-hash check cannot cover outside the project's
-            Docker image. Two of its three panels are weighted means over a
-            particle collection, which is exactly where an unordered iteration
-            or a stray draw would show up.
-
-        Given: One episode rendered twice from the same history
-        When: Both renders use identical inputs
-        Then: Output files have identical SHA256 hashes
-
-        Test type: unit
-        """
-        history = create_deterministic_multiagent_firefighting_episode(seed=5)
-        visualizer = MultiAgentFirefightingVisualizer(build_multiagent_firefighting_env())
-
-        first_path = temp_output_dir / "multiagent_firefighting_first.gif"
-        second_path = temp_output_dir / "multiagent_firefighting_second.gif"
-        visualizer.create_visualization(history, first_path)
-        visualizer.create_visualization(history, second_path)
-
-        assert compute_file_hash(first_path) == compute_file_hash(
-            second_path
-        ), "Multi-agent firefighting visualization is not deterministic"
-
-    def test_occupancy_grid_mapping_repeated_visualization_identical(self, temp_output_dir):
-        """Test that repeated mapping visualizations are byte-for-byte identical.
-
-        Purpose: Validates absolute determinism of the occupancy-grid mapping
-            renderer, which the golden-hash check cannot cover outside the
-            project's Docker image. The belief panel averages over a particle
-            collection, which is exactly the kind of place an iteration order or
-            a stray draw would leak in.
+        Purpose: Validates absolute determinism of a renderer, which the
+            golden-hash check cannot cover outside the project's Docker image.
+            The registered environments are the ones whose panels are weighted
+            means over a particle collection, which is exactly where an
+            unordered iteration or a fresh random draw would show up.
 
         Given: One episode rendered twice from the same history
         When: Both renders use identical inputs
@@ -1828,110 +1695,16 @@ class TestVisualizationDeterminism:
 
         Test type: unit
         """
-        history = create_deterministic_occupancy_grid_mapping_episode(seed=3)
-        visualizer = OccupancyGridMappingVisualizer(build_occupancy_grid_mapping_env())
+        history = spec.build_history()
+        first_path = temp_output_dir / f"{spec.name}_first.gif"
+        second_path = temp_output_dir / f"{spec.name}_second.gif"
+        spec.render(history, first_path)
+        spec.render(history, second_path)
 
-        first_path = temp_output_dir / "occupancy_grid_mapping_first.gif"
-        second_path = temp_output_dir / "occupancy_grid_mapping_second.gif"
-        visualizer.create_visualization(history, first_path)
-        visualizer.create_visualization(history, second_path)
-
-        assert compute_file_hash(first_path) == compute_file_hash(
-            second_path
-        ), "Occupancy-grid mapping visualization is not deterministic"
-
-    def test_chicheck_invaders_repeated_visualization_identical(self, temp_output_dir):
-        """Test that repeated Chicheck Invaders visualizations are byte-for-byte identical.
-
-        Purpose: Validates absolute determinism of the Chicheck Invaders renderer,
-            which the golden-hash check cannot cover outside the project's
-            Docker image. The belief panel sums a weighted marginal over a
-            particle collection, which is exactly the kind of place an iteration
-            order or a stray draw would leak in.
-
-        Given: One episode rendered twice from the same history
-        When: Both renders use identical inputs
-        Then: Output files have identical SHA256 hashes
-
-        Test type: unit
-        """
-        history = create_deterministic_chicheck_invaders_episode(seed=11)
-        visualizer = ChicheckInvadersVisualizer(build_chicheck_invaders_env())
-
-        first_path = temp_output_dir / "chicheck_invaders_first.gif"
-        second_path = temp_output_dir / "chicheck_invaders_second.gif"
-        visualizer.create_visualization(history, first_path)
-        visualizer.create_visualization(history, second_path)
-
-        assert compute_file_hash(first_path) == compute_file_hash(
-            second_path
-        ), "Chicheck Invaders visualization is not deterministic"
-
-    def test_battleship_repeated_visualization_identical(self, temp_output_dir):
-        """Test that repeated Battleship visualizations are byte-for-byte identical.
-
-        Purpose: Validates absolute determinism of Battleship rendering, which
-            the golden-hash check cannot cover outside the project's Docker
-            image. Nothing in the renderer may depend on iteration order or on
-            a fresh random draw, and this is what proves it.
-
-        Given: One episode rendered twice from the same history
-        When: Both renders use identical inputs
-        Then: Output files have identical SHA256 hashes
-
-        Test type: unit
-        """
-        history = create_deterministic_battleship_episode(seed=7)
-        visualizer = BattleshipVisualizer(build_battleship_env())
-
-        first_path = temp_output_dir / "battleship_first.gif"
-        second_path = temp_output_dir / "battleship_second.gif"
-        visualizer.create_visualization(history, first_path)
-        visualizer.create_visualization(history, second_path)
-
-        assert compute_file_hash(first_path) == compute_file_hash(
-            second_path
-        ), "Battleship visualization is not deterministic"
-
-    def test_rock_sample_repeated_visualization_identical(self, temp_output_dir):
-        """Test that repeated RockSample visualizations are byte-for-byte identical.
-
-        Purpose: Validates absolute determinism of visualization generation
-
-        Given: A deterministic episode visualized twice
-        When: Both visualizations use identical inputs
-        Then: Output files have identical SHA256 hashes
-
-        Test type: unit
-        """
-        # Create deterministic episode
-        history = create_deterministic_rock_sample_episode(seed=42)
-
-        # Create environment and visualizer
-        env = RockSamplePOMDP(
-            discount_factor=0.95,
-            **rock_sample_pinned_kwargs(
-                map_size=(5, 5),
-                rock_positions=[(1, 1), (2, 3), (4, 2)],
-                dangerous_areas=[(2, 2)],
-                dangerous_area_radius=1.0,
-            ),
-        )
-        visualizer = RockSampleVisualizer(env)
-
-        # Generate two visualizations
-        output_path_1 = temp_output_dir / "viz_1.gif"
-        output_path_2 = temp_output_dir / "viz_2.gif"
-
-        visualizer.create_visualization(history, output_path_1)
-        visualizer.create_visualization(history, output_path_2)
-
-        # Compare hashes
-        hash_1 = compute_file_hash(output_path_1)
-        hash_2 = compute_file_hash(output_path_2)
-
-        assert hash_1 == hash_2, (
-            f"Repeated visualizations should be identical.\n"
-            f"Hash 1: {hash_1}\n"
-            f"Hash 2: {hash_2}"
+        first_hash = compute_file_hash(first_path)
+        second_hash = compute_file_hash(second_path)
+        assert first_hash == second_hash, (
+            f"{spec.name} visualization is not deterministic.\n"
+            f"Hash 1: {first_hash}\n"
+            f"Hash 2: {second_hash}"
         )
