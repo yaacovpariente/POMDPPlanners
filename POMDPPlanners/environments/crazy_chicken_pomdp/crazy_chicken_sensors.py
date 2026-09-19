@@ -81,11 +81,26 @@ def rounded_normal_pmf(
         return np.asarray(readings == mean, dtype=np.float64)
     upper = (readings + 0.5 - mean) / std
     lower = (readings - 0.5 - mean) / std
+    # Evaluated on whichever tail keeps both CDF values away from 1.0. Taking
+    # ``Phi(upper) - Phi(lower)`` everywhere loses the upper tail completely:
+    # by about 8.3 standard deviations both terms round to exactly 1.0 and the
+    # difference is 0, while the mirror-image reading on the low side still
+    # carries its true ~1e-17. That error is *one-directional*, which is worse
+    # than losing both -- two equally implausible particles end up separated by
+    # the impossible floor's 1e18 in log-weight purely by the sign of their
+    # offset, so the belief would systematically prefer chickens below the
+    # reading to chickens above it. ``Phi(-lower) - Phi(-upper)`` is the same
+    # quantity with both arguments reflected into the accurate tail.
+    mass = np.where(
+        lower > 0.0,
+        _standard_normal_cdf(-lower) - _standard_normal_cdf(-upper),
+        _standard_normal_cdf(upper) - _standard_normal_cdf(lower),
+    )
     # Clipped at zero rather than left to float error: the two CDFs are
     # subtracted, and for a reading many standard deviations away the
-    # difference can come out as a tiny negative, whose logarithm is a NaN that
-    # then poisons a particle's whole weight.
-    return np.maximum(_standard_normal_cdf(upper) - _standard_normal_cdf(lower), 0.0)
+    # difference can still come out as a tiny negative, whose logarithm is a
+    # NaN that then poisons a particle's whole weight.
+    return np.maximum(mass, 0.0)
 
 
 def sample_rounded_normal(mean: float, std: float) -> int:

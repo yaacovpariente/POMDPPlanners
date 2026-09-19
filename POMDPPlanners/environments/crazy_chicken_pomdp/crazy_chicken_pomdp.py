@@ -309,8 +309,10 @@ class CrazyChickenPOMDP(DiscreteActionsEnvironment):
                 member or its string value.
             kill_reward: Paid per chicken killed. Defaults to 10.0.
             shot_cost: Charged per shot *actually* fired. Defaults to 1.0. A
-                ``FIRE`` that the cooldown or an occupied column blocks costs
-                nothing, because nothing left the ship.
+                ``FIRE`` the cooldown blocks costs nothing, because the gun
+                never discharged. The cooldown is the only thing that can block
+                it; a shot into a column with no chicken in it does discharge,
+                misses, and is charged.
             step_cost: Charged every step. Defaults to 0.1.
             ship_hit_penalty: Charged when a chicken reaches the ship. Defaults
                 to 50.0.
@@ -411,7 +413,18 @@ class CrazyChickenPOMDP(DiscreteActionsEnvironment):
         # The clear bonus and the ship hit cannot coincide: a chicken that
         # reaches the ship is alive, so the flock is not clear. That is why the
         # maximum leaves the penalty out.
-        max_reward = float(kill_reward) + float(clear_reward) - float(step_cost) - float(shot_cost)
+        # ``max`` over the two candidates, not just the firing one: the
+        # constructor only requires the five amounts to be non-negative, so a
+        # configuration with ``shot_cost > kill_reward + clear_reward`` is legal
+        # and under it the best step is a plain ``STAY``, which scores
+        # ``-step_cost``. DESPOT consumes ``reward_range`` as a hard
+        # branch-and-bound bound and its own comment says an unusable range
+        # voids the paper's guarantee, so this end has to hold for every
+        # configuration the constructor admits rather than only the sane ones.
+        max_reward = max(
+            float(kill_reward) + float(clear_reward) - float(step_cost) - float(shot_cost),
+            -float(step_cost),
+        )
         min_reward = -float(step_cost) - float(shot_cost) - float(ship_hit_penalty)
 
         super().__init__(
@@ -714,6 +727,7 @@ class CrazyChickenPOMDP(DiscreteActionsEnvironment):
         candidates = np.atleast_2d(np.asarray(next_states, dtype=np.float64))
         scores = np.full(len(candidates), IMPOSSIBLE_LOG_PROBABILITY, dtype=np.float64)
         before = chicken_slots(np.asarray(state, dtype=np.float64), self.num_chickens)
+        eligible = self.coin_eligible_slots(state, action)
         for index, candidate in enumerate(candidates):
             if candidate.shape != (self.state_size,):
                 continue
@@ -723,7 +737,7 @@ class CrazyChickenPOMDP(DiscreteActionsEnvironment):
             rebuilt = self._step_once(state, action, switches=switched)
             if not np.array_equal(rebuilt, candidate):
                 continue
-            scores[index] = self._dive_coin_log_probability(before, switched)
+            scores[index] = self._dive_coin_log_probability(eligible, switched)
         return scores
 
     def _implied_dive_switches(
@@ -731,11 +745,26 @@ class CrazyChickenPOMDP(DiscreteActionsEnvironment):
     ) -> Optional[np.ndarray]:
         """Which chickens must have switched into a dive to reach ``candidate``.
 
-        A chicken that is dead in the candidate, or that pulled up, tells us
-        nothing about its coin, so its mode is read back from whether the
-        candidate's rebuild matches -- which the caller checks. Here only the
-        unambiguous reading is returned: a live chicken that was patrolling and
-        is now diving must have switched.
+        Three signatures give a live chicken's coin away, and all three are
+        needed:
+
+        * it is **diving** in the candidate, having been patrolling before -- the
+          ordinary case, including the chicken that dived into the ship's cell,
+          which keeps its dive mode;
+        * it is back at the **top row in the same column**, having been on row 1
+          -- the pull-up. :meth:`_resolve_arrivals` resets that chicken to
+          ``MODE_PATROL``, so reading only the mode would call a chicken that
+          dived off the bottom "never switched", rebuild it as a sideways patrol
+          step, and score a successor the sampler really produces at the
+          impossible floor. A chicken that did *not* switch cannot forge this
+          signature: it would still be on row 1, and its sideways step always
+          changes the column;
+        * anything else -- it did not switch.
+
+        A slot whose coin the sampler discards (already dead, already diving, or
+        killed by this step's shot) is read as "did not switch" and then ignored
+        by :meth:`coin_eligible_slots`, so whatever is returned for it is
+        harmless. The caller's exact rebuild check is the backstop.
 
         Args:
             before: The prior state's chicken block.
@@ -749,21 +778,65 @@ class CrazyChickenPOMDP(DiscreteActionsEnvironment):
         if after.shape != before.shape:
             return None
         was_patrolling = before[:, CHICKEN_MODE] == MODE_PATROL
-        # A dead-or-pulled-up chicken's stored mode is patrol whatever its coin
-        # was, so the only coin that can be read back is one that left a live
-        # diving chicken behind. Every other slot is assumed not to have
-        # switched, and the caller's exact rebuild check rejects the reading if
-        # that assumption was wrong.
+        alive_after = after[:, CHICKEN_ALIVE] > 0.0
         now_diving = after[:, CHICKEN_MODE] == MODE_DIVE
-        return was_patrolling & now_diving
+        pulled_up = (
+            alive_after
+            & (after[:, CHICKEN_MODE] == MODE_PATROL)
+            & (before[:, CHICKEN_ROW] == 1.0)
+            & (after[:, CHICKEN_ROW] == float(self.num_rows - 1))
+            & (after[:, CHICKEN_COLUMN] == before[:, CHICKEN_COLUMN])
+        )
+        return was_patrolling & (now_diving | pulled_up)
 
-    def _dive_coin_log_probability(self, before: np.ndarray, switches: np.ndarray) -> float:
-        """Log-probability of the dive coins ``switches`` from a prior block.
+    def coin_eligible_slots(self, state: CrazyChickenState, action: Any) -> np.ndarray:
+        """Which slots' dive coins actually change the successor of ``(state, action)``.
 
-        Only a live, patrolling chicken has a coin that matters; every other
-        slot's coin is drawn but discarded, so it contributes nothing.
+        A coin is drawn for every slot on every step, but :meth:`_step_once`
+        only applies it where the chicken is *still* alive and patrolling --
+        and "still alive" is evaluated **after** the shot. A chicken the shot
+        just killed therefore has its coin drawn and discarded, exactly like a
+        chicken that was already dead.
+
+        That asymmetry is the whole reason this is a method rather than two
+        lines repeated in the sampler and the scorer. Scoring against the
+        pre-shot flock counted the victim's coin as "held", which put a
+        spurious ``log(1 - dive_probability)`` into every ``FIRE`` that killed a
+        patroller -- so that action's transition summed to less than one -- and
+        at ``dive_probability = 1`` it made every candidate successor
+        unscoreable, because the victim sat in the eligible set with its switch
+        false.
+
+        Args:
+            state: The state the step is taken from.
+            action: The action taken.
+
+        Returns:
+            A boolean mask of length ``num_chickens``.
         """
-        eligible = (before[:, CHICKEN_ALIVE] > 0.0) & (before[:, CHICKEN_MODE] == MODE_PATROL)
+        values = np.asarray(state, dtype=np.float64)
+        flock = chicken_slots(values, self.num_chickens)
+        eligible = (flock[:, CHICKEN_ALIVE] > 0.0) & (flock[:, CHICKEN_MODE] == MODE_PATROL)
+        if self.fires(values, action):
+            # FIRE never moves the ship, so the column the shot is aimed down is
+            # the same before and after the move, and this target is the one
+            # _step_once removes.
+            target = self.shot_target(values)
+            if target >= 0:
+                eligible[target] = False
+        return eligible
+
+    def _dive_coin_log_probability(self, eligible: np.ndarray, switches: np.ndarray) -> float:
+        """Log-probability of the dive coins ``switches`` over the eligible slots.
+
+        Args:
+            eligible: Mask from :meth:`coin_eligible_slots`.
+            switches: The coins those slots are claimed to have shown.
+
+        Returns:
+            The log-probability, or the impossible floor when the claim is one a
+            degenerate ``dive_probability`` cannot produce.
+        """
         if self.dive_probability <= 0.0:
             return 0.0 if not np.any(switches & eligible) else IMPOSSIBLE_LOG_PROBABILITY
         if self.dive_probability >= 1.0:
@@ -1324,9 +1397,12 @@ class CrazyChickenPOMDP(DiscreteActionsEnvironment):
             output_dir: Directory to write into.
             episode_index: Zero-based episode index, used to name the file.
         """
-        # Imported lazily: every parallel worker imports this module while
-        # almost none of them render anything, so the renderer's sprites and
-        # palette tables stay out of a planning run's memory.
+        # Imported inside the method rather than at module scope so that this
+        # module does not depend on the renderer: the import graph stays
+        # one-way, and a change to the renderer cannot break an environment
+        # that never draws. It buys no memory back in practice -- the package's
+        # ``__init__`` imports the visualizer eagerly, so any worker that
+        # imports the environment by its package name already paid for Pillow.
         # pylint: disable-next=import-outside-toplevel
         from POMDPPlanners.environments.crazy_chicken_pomdp.crazy_chicken_visualizer import (
             CrazyChickenVisualizer,

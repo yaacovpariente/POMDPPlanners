@@ -26,6 +26,7 @@ from POMDPPlanners.environments.crazy_chicken_pomdp import (
     CrazyChickenMetrics,
     CrazyChickenPOMDP,
     CrazyChickenStepChannel,
+    ObservationMode,
     create_crazy_chicken_belief,
     create_crazy_chicken_state,
     noiseless_preset,
@@ -388,3 +389,121 @@ def test_reinvigoration_moves_an_unreported_chicken():
     # Never onto the ship's own row: a particle there asserts the episode has
     # already been lost, which no jitter should be able to claim.
     assert all(row >= 1.0 for _, row in cells)
+
+
+def test_the_belief_panel_renders_occupancy_probability_not_expected_count():
+    """A cell two chickens share is painted once, not twice.
+
+    Purpose: The panel's docstring promises the weighted chance that a cell
+        holds a chicken. Summing one weight per live chicken renders the
+        expected chicken *count* instead, and a ``clip`` to 1 hides the
+        overflow rather than fixing it -- a single certain particle with two
+        chickens stacked would paint that cell exactly as a certain particle
+        with one. Sideways patrols walk into each other, so stacked cells are
+        reachable rather than theoretical.
+
+    Given: One particle, certain, with two of its three chickens on one cell
+        and the third elsewhere.
+    When: The marginal is computed.
+    Then: Both occupied cells read 1.0, and the grid sums to 2.0 -- the number
+        of occupied cells -- rather than 3.0, the number of chickens.
+
+    Test type: unit
+    """
+    # pylint: disable-next=import-outside-toplevel
+    from POMDPPlanners.environments.crazy_chicken_pomdp import CrazyChickenVisualizer
+
+    env = build_env(num_chickens=3)
+    state = create_crazy_chicken_state(
+        env,
+        chickens=[
+            [1, 2, 1, MODE_PATROL, 1],
+            [1, 2, -1, MODE_PATROL, 1],
+            [3, 1, 1, MODE_PATROL, 1],
+        ],
+    )
+    belief = placeholder_belief(state)
+    # pylint: disable-next=protected-access
+    grid = CrazyChickenVisualizer(env)._occupancy_marginal(belief)
+
+    assert grid[2, 1] == pytest.approx(1.0)
+    assert grid[1, 3] == pytest.approx(1.0)
+    assert float(grid.sum()) == pytest.approx(2.0)
+
+
+def test_a_fully_observable_belief_collapses_onto_the_observed_state():
+    """In FULL mode the belief is a point mass on what was observed.
+
+    Purpose: The likelihood is one only on an exact array match, so every
+        particle drawn from the flock prior floors, and
+        ``WeightedParticleBelief`` normalises an all-floor vector to a *uniform*
+        one. That is indistinguishable from a healthy prior, so the registered
+        ``CrazyChickenPOMDP[fully_observable]`` baseline would have run on a
+        belief that was uniform over particles all known to be wrong.
+
+    Given: The fully observable environment and one filtered step.
+    When: The belief is updated with the observation.
+    Then: Every particle equals the true state.
+
+    Test type: integration
+    """
+    env = build_env(num_chickens=2, observation_mode=ObservationMode.FULL)
+    np.random.seed(2)
+    belief = create_crazy_chicken_belief(env, n_particles=25)
+    state = env.initial_state_dist().sample()[0]
+
+    next_state, observation, _ = env.sample_next_step(state, int(CrazyChickenAction.STAY))
+    belief = belief.update(action=int(CrazyChickenAction.STAY), observation=observation, pomdp=env)
+    assert all(
+        np.array_equal(np.asarray(p, dtype=np.float64), next_state) for p in belief.particles
+    ), "a fully observable belief must be a point mass on the observed state"
+
+
+def test_a_belief_every_particle_contradicts_is_rebuilt_from_the_reading():
+    """When no particle can explain the reading, the particles are replaced.
+
+    Purpose: Resampling cannot recover here -- it draws from the particles that
+        are already wrong -- and the normalise-to-uniform path makes the
+        collapse invisible. Under the noiseless preset one contradicted slot is
+        enough to reach it.
+
+    Given: The noiseless preset, a reading taken from the true state, and a
+        belief whose particles all put the flock somewhere that reading rules
+        out.
+    When: The belief is updated.
+    Then: Every particle can explain the reading afterwards.
+
+    Test type: integration
+    """
+    env = CrazyChickenPOMDP(
+        num_columns=5,
+        num_rows=4,
+        num_chickens=1,
+        dive_probability=0.0,
+        max_steps=20,
+        discount_factor=0.95,
+        **noiseless_preset(),
+    )
+    truth = create_crazy_chicken_state(env, chickens=[[2, 1, 1, MODE_PATROL, 1]], ship_column=2)
+    observation = env.sample_observation(truth, None)
+
+    # Every particle puts the chicken where the reading says it is not.
+    wrong = create_crazy_chicken_state(env, chickens=[[4, 3, 1, MODE_PATROL, 1]], ship_column=2)
+    np.random.seed(0)
+    belief = create_crazy_chicken_belief(env, n_particles=30)
+    belief.particles = [np.array(wrong, copy=True) for _ in range(30)]
+    assert all(
+        env.observation_log_probability_single(p, None, observation) <= -1e17
+        for p in belief.particles
+    ), "fixture is wrong: the particles must all contradict the reading"
+
+    refreshed = belief.update(
+        action=int(CrazyChickenAction.STAY), observation=observation, pomdp=env
+    )
+    scores = [
+        env.observation_log_probability_single(p, None, observation) for p in refreshed.particles
+    ]
+    assert all(score > -1e17 for score in scores), (
+        "after a total collapse every particle should be able to explain the reading, "
+        f"but {sum(score <= -1e17 for score in scores)} of {len(scores)} still cannot"
+    )

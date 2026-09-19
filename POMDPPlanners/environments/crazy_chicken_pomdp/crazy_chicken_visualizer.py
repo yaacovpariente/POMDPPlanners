@@ -316,7 +316,11 @@ class CrazyChickenVisualizer:
     # -- belief ---------------------------------------------------------
 
     def _occupancy_marginal(self, belief: Optional[object]) -> np.ndarray:
-        """Weighted chance that each cell holds a live chicken, under the belief.
+        """Weighted chance that each cell holds *at least one* live chicken.
+
+        This is an occupancy probability, not an expected count: each particle
+        contributes its whole weight to a cell once, no matter how many of its
+        chickens are standing on it.
 
         Args:
             belief: The step's belief, or ``None``.
@@ -339,6 +343,14 @@ class CrazyChickenVisualizer:
             state = np.asarray(particle, dtype=np.float64)
             if state.shape != (self.environment.state_size,):
                 continue
+            # One particle contributes its weight to a cell *once*, however many
+            # of its chickens stand there. Adding a weight per chicken would
+            # render the expected chicken **count**, which is a different
+            # quantity: two particles agreeing that one cell holds two chickens
+            # would paint it as though it were certain, and a ``clip`` to 1
+            # would hide the overflow rather than fix it. Patrols walking into
+            # each other do stack, so this is reachable rather than theoretical.
+            occupied = np.zeros_like(grid, dtype=bool)
             flock = chicken_slots(state, self.environment.num_chickens)
             for slot in flock:
                 if slot[CHICKEN_ALIVE] <= 0.0:
@@ -346,7 +358,11 @@ class CrazyChickenVisualizer:
                 column = int(round(float(slot[CHICKEN_COLUMN])))
                 row = int(round(float(slot[CHICKEN_ROW])))
                 if 0 <= column < self._columns and 0 <= row < self._rows:
-                    grid[row, column] += float(weight)
+                    occupied[row, column] = True
+            grid += float(weight) * occupied
+        # A probability by construction now: a convex combination of indicator
+        # grids. The bound is belt and braces against a weight vector that does
+        # not quite sum to one.
         return np.clip(grid, 0.0, 1.0)
 
     def _draw_belief(

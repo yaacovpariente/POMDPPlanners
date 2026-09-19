@@ -339,6 +339,14 @@ class CrazyChickenInitialStateDistribution(Distribution):
         slots = chicken_slots(state, self.num_chickens)
         if not np.all(slots[:, CHICKEN_ALIVE] == 1.0):
             return False
+        # The two categorical fields are checked as well as the positions. A
+        # candidate carrying direction 0 or mode 7 is not a state this prior can
+        # draw, and handing it positive mass would let a malformed particle be
+        # weighted as though it were an ordinary one.
+        if not np.all(np.isin(slots[:, CHICKEN_DIRECTION], (-1.0, 1.0))):
+            return False
+        if not np.all(np.isin(slots[:, CHICKEN_MODE], (MODE_PATROL, MODE_DIVE))):
+            return False
         columns = slots[:, CHICKEN_COLUMN]
         rows = slots[:, CHICKEN_ROW]
         if not np.all((columns >= 0) & (columns < self.num_columns)):

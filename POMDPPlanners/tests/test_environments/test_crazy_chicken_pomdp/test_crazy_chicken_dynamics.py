@@ -513,3 +513,152 @@ def test_a_flock_larger_than_the_grid_is_rejected_at_construction():
     """
     with pytest.raises(ValueError, match="do not fit"):
         CrazyChickenPOMDP(num_columns=3, num_rows=2, num_chickens=4, discount_factor=0.95)
+
+
+@pytest.mark.parametrize("dive_probability", [0.0, 0.15, 1.0])
+@pytest.mark.parametrize("action", list(CrazyChickenAction))
+def test_transition_log_probability_sums_to_one_over_reachable_successors(action, dive_probability):
+    """Every action's transition is a distribution, at every dive rate.
+
+    Purpose: This is the check that would have caught two separate scoring
+        bugs, and neither showed up in a per-rule test. The coin eligibility
+        was read off the *pre-shot* flock while the sampler applies coins to
+        the post-shot flock, so a ``FIRE`` that killed a patroller counted the
+        victim's discarded coin as "held" and summed to ``1 - dive_probability``
+        instead of 1 -- and at ``dive_probability = 1`` it sent every candidate
+        to the impossible floor. Separately, a chicken that dived off the bottom
+        and pulled up was reset to ``MODE_PATROL``, so its coin could not be
+        read back and a successor the sampler really produces scored the floor.
+
+        Only ``FIRE`` exposes the first and only a pull-up exposes the second,
+        which is why this sweeps every action rather than the one
+        ``get_actions()[0]`` the shared conformance probe happens to pick.
+
+    Given: A world where the ship's column holds a patroller the shot can kill
+        and another chicken sits on row 1 off to the side, so both a kill and a
+        pull-up are reachable in one step.
+    When: Successors are sampled repeatedly, deduplicated, and scored.
+    Then: Their probabilities sum to one, and none of them is impossible.
+
+    Test type: integration
+    """
+    env = build_env(num_columns=4, num_rows=4, num_chickens=3, dive_probability=dive_probability)
+    column = env.ship_start_column
+    state = create_crazy_chicken_state(
+        env,
+        chickens=[
+            [column, 2, 1, MODE_PATROL, 1],
+            [0, 1, 1, MODE_PATROL, 1],
+            [3, 3, -1, MODE_PATROL, 1],
+        ],
+    )
+
+    np.random.seed(11)
+    seen = {}
+    for _ in range(3000):
+        successor = env.sample_next_state(state, int(action))
+        seen[successor.tobytes()] = successor
+
+    successors = list(seen.values())
+    scores = env.transition_log_probability(state, int(action), successors)
+    assert np.all(scores > -1e17), (
+        f"{action.name} at dive_probability={dive_probability}: "
+        f"{int(np.count_nonzero(scores <= -1e17))} of {len(successors)} successors the "
+        f"sampler really produced score as impossible"
+    )
+    assert float(np.exp(scores).sum()) == pytest.approx(1.0, abs=1e-9), (
+        f"{action.name} at dive_probability={dive_probability}: transition sums to "
+        f"{float(np.exp(scores).sum())}, not 1"
+    )
+
+
+def test_a_pulled_up_chickens_coin_is_read_back_from_its_row_jump():
+    """The successor of a dive that pulled up is scoreable.
+
+    Purpose: ``_resolve_arrivals`` resets a pulled-up chicken to ``MODE_PATROL``,
+        so its dive coin cannot be read off the final mode. Reading only the
+        mode rebuilt it as a sideways patrol step, the rebuild did not match,
+        and a successor the sampler really produces scored the impossible floor.
+        This is the exact repro, with the coin forced.
+
+    Test type: unit
+    """
+    env = build_env(num_columns=4, num_rows=4, num_chickens=1, dive_probability=1.0)
+    state = create_crazy_chicken_state(env, chickens=[[0, 1, 1, MODE_PATROL, 1]], ship_column=2)
+    successor = env.sample_next_state(state, int(CrazyChickenAction.STAY))
+    chicken = env.chickens(successor)[0]
+    # It dived off the bottom away from the ship and came back at the top.
+    assert successor[SHIP_HIT_INDEX] == 0.0
+    assert (chicken[CHICKEN_ROW], chicken[CHICKEN_COLUMN]) == (env.num_rows - 1, 0)
+    assert chicken[CHICKEN_MODE] == MODE_PATROL
+
+    score = env.transition_log_probability(state, int(CrazyChickenAction.STAY), [successor])
+    assert score[0] == pytest.approx(0.0), "a certain pull-up must score probability 1"
+
+
+def test_a_shot_victims_discarded_coin_is_not_scored():
+    """Killing a patroller does not leave a phantom coin in the transition.
+
+    Purpose: The sampler draws a coin per slot but applies it only where the
+        chicken is still alive *after* the shot. Counting the victim's coin as
+        held is what made ``FIRE`` sum to ``1 - dive_probability``.
+
+    Given: The only live chicken standing in the ship's column, so the shot
+        certainly kills it and no coin survives.
+    When: The one reachable successor is scored.
+    Then: It has probability 1, for any dive rate.
+
+    Test type: unit
+    """
+    for dive_probability in (0.0, 0.15, 1.0):
+        env = build_env(num_chickens=1, dive_probability=dive_probability)
+        column = env.ship_start_column
+        state = create_crazy_chicken_state(env, chickens=[[column, 2, 1, MODE_PATROL, 1]])
+        successor = env.sample_next_state(state, int(CrazyChickenAction.FIRE))
+        assert env.live_chicken_count(successor) == 0
+        score = env.transition_log_probability(state, int(CrazyChickenAction.FIRE), [successor])
+        assert score[0] == pytest.approx(0.0), (
+            f"at dive_probability={dive_probability} the shot victim's discarded coin "
+            f"was scored: {score[0]}"
+        )
+
+
+def test_the_declared_maximum_covers_a_configuration_where_firing_never_pays():
+    """The reward range holds for every configuration the constructor admits.
+
+    Purpose: The maximum is derived from the best *firing* step, but the
+        constructor only requires the five amounts to be non-negative. With
+        ``shot_cost`` above ``kill_reward + clear_reward`` the best step is a
+        plain ``STAY``, which scores ``-step_cost`` -- above a maximum computed
+        from the firing branch alone. DESPOT consumes ``reward_range`` as a hard
+        branch-and-bound bound, so a range the environment can escape voids its
+        guarantee somewhere far from here.
+
+    Test type: unit
+    """
+    env = build_env(kill_reward=1.0, clear_reward=1.0, shot_cost=100.0, step_cost=0.1)
+    state = create_crazy_chicken_state(
+        env, chickens=[[0, 3, 1, MODE_PATROL, 1], [4, 3, -1, MODE_PATROL, 1]]
+    )
+    successor = env.sample_next_state(state, int(CrazyChickenAction.STAY))
+    staying = env.reward(state, int(CrazyChickenAction.STAY), successor)
+    assert staying == pytest.approx(-env.step_cost)
+    assert (
+        staying <= env.reward_range[1]
+    ), f"a plain STAY scores {staying}, above the declared maximum {env.reward_range[1]}"
+
+
+def test_the_flock_prior_rejects_a_malformed_direction_or_mode():
+    """A candidate with a nonsense categorical field gets no prior mass.
+
+    Test type: unit
+    """
+    env = build_env(num_chickens=1)
+    prior = env.initial_state_dist()
+    good = create_crazy_chicken_state(env, chickens=[[1, 2, 1, MODE_PATROL, 1]])
+    assert float(prior.probability([good])[0]) > 0.0
+
+    for field, value in ((CHICKEN_DIRECTION, 0.0), (CHICKEN_MODE, 7.0)):
+        bad = np.array(good, copy=True)
+        env.chickens(bad)[0][field] = value
+        assert float(prior.probability([bad])[0]) == 0.0
