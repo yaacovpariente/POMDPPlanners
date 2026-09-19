@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""State and observation layout for the Crazy Chicken POMDP, and its state prior.
+"""State and observation layout for the Chicheck Invaders POMDP, and its state prior.
 
 Both a state and an observation are fixed-length ``float64`` vectors. Fixed
 length is what lets a particle filter hold them in one array and what lets two
@@ -34,7 +34,7 @@ same things compare equal field by field and hash alike. The ``reported`` flags
 are what disambiguate a masked zero from a genuine reading of zero.
 
 Classes:
-    CrazyChickenInitialStateDistribution: The per-episode chicken placement prior.
+    ChicheckInvadersInitialStateDistribution: The per-episode chicken placement prior.
 
 Functions:
     chicken_block: Slice bounds of one chicken's fields inside a state.
@@ -186,7 +186,7 @@ def make_state(
     return state
 
 
-class CrazyChickenInitialStateDistribution(Distribution):
+class ChicheckInvadersInitialStateDistribution(Distribution):
     """Where the chickens are when an episode starts, and nothing else.
 
     The ship's column, its cooldown and the empty sky are identical in every

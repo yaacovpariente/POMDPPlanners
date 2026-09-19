@@ -63,10 +63,10 @@ from POMDPPlanners.environments.maze_pomdp import (
     DiscreteMazePOMDP,
     MazeVisualizer,
 )
-from POMDPPlanners.environments.crazy_chicken_pomdp import (
-    CrazyChickenPOMDP,
-    CrazyChickenVisualizer,
-    create_crazy_chicken_belief,
+from POMDPPlanners.environments.chicheck_invaders_pomdp import (
+    ChicheckInvadersPOMDP,
+    ChicheckInvadersVisualizer,
+    create_chicheck_invaders_belief,
 )
 from POMDPPlanners.environments.occupancy_grid_mapping_pomdp import (
     OccupancyGridAction,
@@ -127,7 +127,7 @@ from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
     continuous_push_pinned_kwargs,
     discrete_maze_pinned_kwargs,
     laser_tag_pinned_kwargs,
-    crazy_chicken_pinned_kwargs,
+    chicheck_invaders_pinned_kwargs,
     occupancy_grid_mapping_pinned_kwargs,
     pacman_pinned_kwargs,
     push_pinned_kwargs,
@@ -236,16 +236,16 @@ def compare_or_create_golden_file(output_path: Path, golden_name: str, test_name
 
 
 
-def build_crazy_chicken_env() -> CrazyChickenPOMDP:
-    """Build the environment the Crazy Chicken golden GIF is rendered for."""
-    return CrazyChickenPOMDP(discount_factor=0.95, **crazy_chicken_pinned_kwargs())
+def build_chicheck_invaders_env() -> ChicheckInvadersPOMDP:
+    """Build the environment the Chicheck Invaders golden GIF is rendered for."""
+    return ChicheckInvadersPOMDP(discount_factor=0.95, **chicheck_invaders_pinned_kwargs())
 
 
-def create_deterministic_crazy_chicken_episode(seed: int = 11) -> List[StepData]:
-    """Create a deterministic Crazy Chicken episode for the golden GIF.
+def create_deterministic_chicheck_invaders_episode(seed: int = 11) -> List[StepData]:
+    """Create a deterministic Chicheck Invaders episode for the golden GIF.
 
     The action sequence is fixed and the belief attached to each step is a real
-    :class:`CrazyChickenBelief` rather than a mock, for the reason the
+    :class:`ChicheckInvadersBelief` rather than a mock, for the reason the
     occupancy-grid fixture gives: the belief panel is the part of this
     visualization most likely to regress, and hashing a mock belief would leave
     it untested.
@@ -264,15 +264,15 @@ def create_deterministic_crazy_chicken_episode(seed: int = 11) -> List[StepData]
     """
     random.seed(seed)
     np.random.seed(seed)
-    env = build_crazy_chicken_env()
-    belief = create_crazy_chicken_belief(env, n_particles=60)
+    env = build_chicheck_invaders_env()
+    belief = create_chicheck_invaders_belief(env, n_particles=60)
     state = env.initial_state_dist().sample()[0]
     history: List[StepData] = []
 
     # Shoot, sidestep, shoot again: the frames show a beam flashing up the
     # ship's column on the steps that fired, the ship moving under the flock,
     # and the belief tightening as the sensors report. Indices follow
-    # CrazyChickenAction: 0 stay, 1 left, 2 right, 3 fire.
+    # ChicheckInvadersAction: 0 stay, 1 left, 2 right, 3 fire.
     action_sequence = [1, 3, 0, 2, 3, 2, 0, 3, 1, 3, 0, 3]
 
     for action in action_sequence:
@@ -1187,28 +1187,28 @@ class TestVisualizationConsistency:
             "test_occupancy_grid_mapping_visualization_consistency",
         )
 
-    def test_crazy_chicken_visualization_consistency(self, temp_output_dir):
-        """Test Crazy Chicken visualization produces consistent output.
+    def test_chicheck_invaders_visualization_consistency(self, temp_output_dir):
+        """Test Chicheck Invaders visualization produces consistent output.
 
-        Purpose: Validates that Crazy Chicken visualizations are deterministic
+        Purpose: Validates that Chicheck Invaders visualizations are deterministic
 
-        Given: A deterministic Crazy Chicken episode with a fixed action
+        Given: A deterministic Chicheck Invaders episode with a fixed action
             sequence and a real particle belief
         When: Visualization is created from the episode
         Then: Output matches golden file hash (or creates golden if missing)
 
         Test type: integration
         """
-        history = create_deterministic_crazy_chicken_episode(seed=11)
-        visualizer = CrazyChickenVisualizer(build_crazy_chicken_env())
+        history = create_deterministic_chicheck_invaders_episode(seed=11)
+        visualizer = ChicheckInvadersVisualizer(build_chicheck_invaders_env())
 
-        output_path = temp_output_dir / "crazy_chicken_test.gif"
+        output_path = temp_output_dir / "chicheck_invaders_test.gif"
         visualizer.create_visualization(history, output_path)
 
         compare_or_create_golden_file(
             output_path,
-            "crazy_chicken_visualization.gif",
-            "test_crazy_chicken_visualization_consistency",
+            "chicheck_invaders_visualization.gif",
+            "test_chicheck_invaders_visualization_consistency",
         )
 
     def test_battleship_visualization_consistency(self, temp_output_dir):
@@ -1574,10 +1574,10 @@ class TestVisualizationDeterminism:
             second_path
         ), "Occupancy-grid mapping visualization is not deterministic"
 
-    def test_crazy_chicken_repeated_visualization_identical(self, temp_output_dir):
-        """Test that repeated Crazy Chicken visualizations are byte-for-byte identical.
+    def test_chicheck_invaders_repeated_visualization_identical(self, temp_output_dir):
+        """Test that repeated Chicheck Invaders visualizations are byte-for-byte identical.
 
-        Purpose: Validates absolute determinism of the Crazy Chicken renderer,
+        Purpose: Validates absolute determinism of the Chicheck Invaders renderer,
             which the golden-hash check cannot cover outside the project's
             Docker image. The belief panel sums a weighted marginal over a
             particle collection, which is exactly the kind of place an iteration
@@ -1589,17 +1589,17 @@ class TestVisualizationDeterminism:
 
         Test type: unit
         """
-        history = create_deterministic_crazy_chicken_episode(seed=11)
-        visualizer = CrazyChickenVisualizer(build_crazy_chicken_env())
+        history = create_deterministic_chicheck_invaders_episode(seed=11)
+        visualizer = ChicheckInvadersVisualizer(build_chicheck_invaders_env())
 
-        first_path = temp_output_dir / "crazy_chicken_first.gif"
-        second_path = temp_output_dir / "crazy_chicken_second.gif"
+        first_path = temp_output_dir / "chicheck_invaders_first.gif"
+        second_path = temp_output_dir / "chicheck_invaders_second.gif"
         visualizer.create_visualization(history, first_path)
         visualizer.create_visualization(history, second_path)
 
         assert compute_file_hash(first_path) == compute_file_hash(
             second_path
-        ), "Crazy Chicken visualization is not deterministic"
+        ), "Chicheck Invaders visualization is not deterministic"
 
     def test_battleship_repeated_visualization_identical(self, temp_output_dir):
         """Test that repeated Battleship visualizations are byte-for-byte identical.

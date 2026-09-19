@@ -1,17 +1,17 @@
-Crazy Chicken
+Chicheck Invaders
 =============
 
-``CrazyChickenPOMDP`` is an arcade shooter written as a POMDP. A ship on row 0
+``ChicheckInvadersPOMDP`` is an arcade shooter written as a POMDP. A ship on row 0
 of a grid has to clear a flock of chickens before one of them reaches it. The
 default world is 8 columns by 7 rows with 4 chickens and a 60-step budget. The
 ship starts in the middle column with an empty sky.
 
 .. code-block:: python
 
-   from POMDPPlanners.environments.crazy_chicken_pomdp import CrazyChickenPOMDP
+   from POMDPPlanners.environments.chicheck_invaders_pomdp import ChicheckInvadersPOMDP
    from POMDPPlanners.utils.belief_factory import create_environment_belief
 
-   env = CrazyChickenPOMDP()
+   env = ChicheckInvadersPOMDP()
    belief = create_environment_belief(env, n_particles=200)
 
 Dynamics
@@ -125,13 +125,13 @@ certainty is the reading.
 
 .. code-block:: python
 
-   from POMDPPlanners.environments.crazy_chicken_pomdp import (
-       CrazyChickenPOMDP,
+   from POMDPPlanners.environments.chicheck_invaders_pomdp import (
+       ChicheckInvadersPOMDP,
        noiseless_preset,
    )
 
-   deterministic_sensors = CrazyChickenPOMDP(**noiseless_preset())
-   fully_observable = CrazyChickenPOMDP(observation_mode="full")
+   deterministic_sensors = ChicheckInvadersPOMDP(**noiseless_preset())
+   fully_observable = ChicheckInvadersPOMDP(observation_mode="full")
 
 Reward and termination
 ----------------------
@@ -169,7 +169,7 @@ at ``max_steps``.
 Belief
 ------
 
-``CrazyChickenBelief`` is a weighted particle filter with reinvigoration, and it
+``ChicheckInvadersBelief`` is a weighted particle filter with reinvigoration, and it
 is what ``create_environment_belief`` returns. The interesting half of the work
 is done by the likelihood above rather than by any special code: particles that
 put chickens where the sensors would have seen them die off on their own.
@@ -209,7 +209,7 @@ over a single channel, and a mean of per-step ratios is not the episode's ratio
 counts are built from. Episodes that never fired are left out of the average
 rather than scored as zero.
 
-.. image:: ../images/crazy_chicken_visualization.gif
+.. image:: ../images/chicheck_invaders_visualization.gif
    :alt: The true sky with ship, chickens and shots, beside the belief's weighted chance of a chicken per cell.
    :width: 100%
 

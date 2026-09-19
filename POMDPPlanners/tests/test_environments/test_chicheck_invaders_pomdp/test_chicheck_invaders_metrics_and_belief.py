@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""What a Crazy Chicken episode reports, and how its belief recovers.
+"""What a Chicheck Invaders episode reports, and how its belief recovers.
 
 The conformance suite checks that every declared channel is emitted and every
 declared metric name is produced. What it cannot check is whether the numbers
@@ -15,20 +15,20 @@ import pytest
 
 from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.simulation.history import History, StepData
-from POMDPPlanners.environments.crazy_chicken_pomdp import (
+from POMDPPlanners.environments.chicheck_invaders_pomdp import (
     CHICKEN_ALIVE,
     CHICKEN_COLUMN,
     CHICKEN_ROW,
     MODE_DIVE,
     MODE_PATROL,
     OBSERVATION_SHIP_WIDTH,
-    CrazyChickenAction,
-    CrazyChickenMetrics,
-    CrazyChickenPOMDP,
-    CrazyChickenStepChannel,
+    ChicheckInvadersAction,
+    ChicheckInvadersMetrics,
+    ChicheckInvadersPOMDP,
+    ChicheckInvadersStepChannel,
     ObservationMode,
-    create_crazy_chicken_belief,
-    create_crazy_chicken_state,
+    create_chicheck_invaders_belief,
+    create_chicheck_invaders_state,
     noiseless_preset,
 )
 
@@ -45,7 +45,7 @@ def build_env(**overrides):
         "discount_factor": 0.95,
     }
     settings.update(overrides)
-    return CrazyChickenPOMDP(**settings)
+    return ChicheckInvadersPOMDP(**settings)
 
 
 def placeholder_belief(state) -> WeightedParticleBelief:
@@ -139,15 +139,15 @@ def test_a_cleared_episode_reports_a_goal_ending_and_its_kills():
     """
     env = build_env(num_rows=6)
     column = env.ship_start_column
-    state = create_crazy_chicken_state(
+    state = create_chicheck_invaders_state(
         env, chickens=[[column, 4, 1, MODE_PATROL, 1], [column, 5, 1, MODE_PATROL, 1]]
     )
-    metrics = env.compute_metrics([run_episode(env, [int(CrazyChickenAction.FIRE)] * 5, state)])
-    assert metric(metrics, CrazyChickenMetrics.TASK_COMPLETION_RATE.value) == 1.0
-    assert metric(metrics, CrazyChickenMetrics.ENDED_BY_GOAL.value) == 1.0
-    assert metric(metrics, CrazyChickenMetrics.ENDED_BY_FAILURE.value) == 0.0
-    assert metric(metrics, CrazyChickenMetrics.ENDED_BY_TIMEOUT.value) == 0.0
-    assert metric(metrics, CrazyChickenMetrics.AVERAGE_CHICKENS_KILLED.value) == 2.0
+    metrics = env.compute_metrics([run_episode(env, [int(ChicheckInvadersAction.FIRE)] * 5, state)])
+    assert metric(metrics, ChicheckInvadersMetrics.TASK_COMPLETION_RATE.value) == 1.0
+    assert metric(metrics, ChicheckInvadersMetrics.ENDED_BY_GOAL.value) == 1.0
+    assert metric(metrics, ChicheckInvadersMetrics.ENDED_BY_FAILURE.value) == 0.0
+    assert metric(metrics, ChicheckInvadersMetrics.ENDED_BY_TIMEOUT.value) == 0.0
+    assert metric(metrics, ChicheckInvadersMetrics.AVERAGE_CHICKENS_KILLED.value) == 2.0
 
 
 def test_a_lost_episode_reports_a_failure_ending_and_a_hit_taken():
@@ -161,15 +161,15 @@ def test_a_lost_episode_reports_a_failure_ending_and_a_hit_taken():
     """
     env = build_env()
     column = env.ship_start_column
-    state = create_crazy_chicken_state(
+    state = create_chicheck_invaders_state(
         env, chickens=[[column, 1, 1, MODE_DIVE, 1], [4, 3, -1, MODE_PATROL, 1]]
     )
-    metrics = env.compute_metrics([run_episode(env, [int(CrazyChickenAction.STAY)] * 5, state)])
-    assert metric(metrics, CrazyChickenMetrics.TASK_COMPLETION_RATE.value) == 0.0
-    assert metric(metrics, CrazyChickenMetrics.ENDED_BY_FAILURE.value) == 1.0
-    assert metric(metrics, CrazyChickenMetrics.ENDED_BY_GOAL.value) == 0.0
-    assert metric(metrics, CrazyChickenMetrics.ENDED_BY_TIMEOUT.value) == 0.0
-    assert metric(metrics, CrazyChickenMetrics.AVERAGE_HITS_TAKEN.value) == 1.0
+    metrics = env.compute_metrics([run_episode(env, [int(ChicheckInvadersAction.STAY)] * 5, state)])
+    assert metric(metrics, ChicheckInvadersMetrics.TASK_COMPLETION_RATE.value) == 0.0
+    assert metric(metrics, ChicheckInvadersMetrics.ENDED_BY_FAILURE.value) == 1.0
+    assert metric(metrics, ChicheckInvadersMetrics.ENDED_BY_GOAL.value) == 0.0
+    assert metric(metrics, ChicheckInvadersMetrics.ENDED_BY_TIMEOUT.value) == 0.0
+    assert metric(metrics, ChicheckInvadersMetrics.AVERAGE_HITS_TAKEN.value) == 1.0
 
 
 def test_an_episode_that_runs_out_of_steps_reports_a_timeout():
@@ -178,18 +178,20 @@ def test_an_episode_that_runs_out_of_steps_reports_a_timeout():
     Test type: integration
     """
     env = build_env(max_steps=4)
-    state = create_crazy_chicken_state(
+    state = create_chicheck_invaders_state(
         env, chickens=[[0, 3, 1, MODE_PATROL, 1], [4, 3, -1, MODE_PATROL, 1]]
     )
-    metrics = env.compute_metrics([run_episode(env, [int(CrazyChickenAction.STAY)] * 10, state)])
+    metrics = env.compute_metrics(
+        [run_episode(env, [int(ChicheckInvadersAction.STAY)] * 10, state)]
+    )
     endings = [
-        metric(metrics, CrazyChickenMetrics.ENDED_BY_GOAL.value),
-        metric(metrics, CrazyChickenMetrics.ENDED_BY_FAILURE.value),
-        metric(metrics, CrazyChickenMetrics.ENDED_BY_TIMEOUT.value),
+        metric(metrics, ChicheckInvadersMetrics.ENDED_BY_GOAL.value),
+        metric(metrics, ChicheckInvadersMetrics.ENDED_BY_FAILURE.value),
+        metric(metrics, ChicheckInvadersMetrics.ENDED_BY_TIMEOUT.value),
     ]
     assert endings == [0.0, 0.0, 1.0]
     assert sum(endings) == pytest.approx(1.0)
-    assert metric(metrics, CrazyChickenMetrics.AVERAGE_EPISODE_LENGTH.value) == 5.0
+    assert metric(metrics, ChicheckInvadersMetrics.AVERAGE_EPISODE_LENGTH.value) == 5.0
 
 
 def test_shot_accuracy_is_kills_per_shot_over_the_episode():
@@ -211,14 +213,14 @@ def test_shot_accuracy_is_kills_per_shot_over_the_episode():
     """
     env = build_env(num_rows=6, num_chickens=2, max_steps=20)
     column = env.ship_start_column
-    state = create_crazy_chicken_state(
+    state = create_chicheck_invaders_state(
         env, chickens=[[column, 5, 1, MODE_PATROL, 1], [0, 1, 1, MODE_PATROL, 1]]
     )
-    history = run_episode(env, [int(CrazyChickenAction.FIRE)] * 6, state)
+    history = run_episode(env, [int(ChicheckInvadersAction.FIRE)] * 6, state)
     metrics = env.compute_metrics([history])
-    shots = metric(metrics, CrazyChickenMetrics.AVERAGE_SHOTS_FIRED.value)
-    kills = metric(metrics, CrazyChickenMetrics.AVERAGE_CHICKENS_KILLED.value)
-    accuracy = metric(metrics, CrazyChickenMetrics.SHOT_ACCURACY.value)
+    shots = metric(metrics, ChicheckInvadersMetrics.AVERAGE_SHOTS_FIRED.value)
+    kills = metric(metrics, ChicheckInvadersMetrics.AVERAGE_CHICKENS_KILLED.value)
+    accuracy = metric(metrics, ChicheckInvadersMetrics.SHOT_ACCURACY.value)
     assert shots > kills > 0
     assert accuracy == pytest.approx(kills / shots)
     assert accuracy < 1.0
@@ -233,11 +235,11 @@ def test_shot_accuracy_is_reported_even_when_no_episode_fired():
     Test type: integration
     """
     env = build_env()
-    state = create_crazy_chicken_state(
+    state = create_chicheck_invaders_state(
         env, chickens=[[0, 3, 1, MODE_PATROL, 1], [4, 3, -1, MODE_PATROL, 1]]
     )
-    metrics = env.compute_metrics([run_episode(env, [int(CrazyChickenAction.STAY)] * 3, state)])
-    assert metric(metrics, CrazyChickenMetrics.SHOT_ACCURACY.value) == 0.0
+    metrics = env.compute_metrics([run_episode(env, [int(ChicheckInvadersAction.STAY)] * 3, state)])
+    assert metric(metrics, ChicheckInvadersMetrics.SHOT_ACCURACY.value) == 0.0
     assert set(env.get_metric_names()) <= {value.name for value in metrics}
 
 
@@ -248,17 +250,17 @@ def test_encroachment_is_the_grid_span_less_the_nearest_chicken_distance():
     """
     env = build_env()
     span = env.max_chicken_distance
-    close = create_crazy_chicken_state(
+    close = create_chicheck_invaders_state(
         env, chickens=[[2, 1, 1, MODE_PATROL, 1], [4, 3, -1, MODE_PATROL, 1]], ship_column=2
     )
     info = env.step_info(close, None, None)
-    assert info[CrazyChickenStepChannel.CHICKEN_ENCROACHMENT_CELLS.value] == span - 1.0
+    assert info[ChicheckInvadersStepChannel.CHICKEN_ENCROACHMENT_CELLS.value] == span - 1.0
 
-    cleared = create_crazy_chicken_state(
+    cleared = create_chicheck_invaders_state(
         env, chickens=[[2, 1, 1, MODE_PATROL, 0], [4, 3, -1, MODE_PATROL, 0]]
     )
     cleared_info = env.step_info(cleared, None, None)
-    assert cleared_info[CrazyChickenStepChannel.CHICKEN_ENCROACHMENT_CELLS.value] == 0.0
+    assert cleared_info[ChicheckInvadersStepChannel.CHICKEN_ENCROACHMENT_CELLS.value] == 0.0
 
 
 def test_step_info_tolerates_the_terminal_bookkeeping_step():
@@ -267,13 +269,13 @@ def test_step_info_tolerates_the_terminal_bookkeeping_step():
     Test type: unit
     """
     env = build_env()
-    state = create_crazy_chicken_state(
+    state = create_chicheck_invaders_state(
         env, chickens=[[0, 3, 1, MODE_PATROL, 0], [4, 3, -1, MODE_PATROL, 0]]
     )
     info = env.step_info(state, None, None)
-    assert info[CrazyChickenStepChannel.FLOCK_CLEARED.value] == 1.0
-    assert info[CrazyChickenStepChannel.CHICKENS_KILLED.value] == 0.0
-    assert info[CrazyChickenStepChannel.SHOT_FIRED.value] == 0.0
+    assert info[ChicheckInvadersStepChannel.FLOCK_CLEARED.value] == 1.0
+    assert info[ChicheckInvadersStepChannel.CHICKENS_KILLED.value] == 0.0
+    assert info[ChicheckInvadersStepChannel.SHOT_FIRED.value] == 0.0
 
 
 def test_the_belief_concentrates_on_the_true_flock_under_exact_sensors():
@@ -292,7 +294,7 @@ def test_the_belief_concentrates_on_the_true_flock_under_exact_sensors():
 
     Test type: integration
     """
-    env = CrazyChickenPOMDP(
+    env = ChicheckInvadersPOMDP(
         num_columns=4,
         num_rows=3,
         num_chickens=1,
@@ -302,12 +304,12 @@ def test_the_belief_concentrates_on_the_true_flock_under_exact_sensors():
         **noiseless_preset(),
     )
     np.random.seed(4)
-    belief = create_crazy_chicken_belief(env, n_particles=400)
+    belief = create_chicheck_invaders_belief(env, n_particles=400)
     state = env.initial_state_dist().sample()[0]
     for _ in range(5):
-        next_state, observation, _ = env.sample_next_step(state, int(CrazyChickenAction.STAY))
+        next_state, observation, _ = env.sample_next_step(state, int(ChicheckInvadersAction.STAY))
         belief = belief.update(
-            action=int(CrazyChickenAction.STAY), observation=observation, pomdp=env
+            action=int(ChicheckInvadersAction.STAY), observation=observation, pomdp=env
         )
         state = next_state
 
@@ -344,8 +346,8 @@ def test_reinvigoration_leaves_a_reported_chicken_alone():
     Test type: unit
     """
     env = build_env(num_chickens=1)
-    state = create_crazy_chicken_state(env, chickens=[[2, 2, 1, MODE_PATROL, 1]])
-    belief = create_crazy_chicken_belief(env, n_particles=8, reinvigoration_fraction=1.0)
+    state = create_chicheck_invaders_state(env, chickens=[[2, 2, 1, MODE_PATROL, 1]])
+    belief = create_chicheck_invaders_belief(env, n_particles=8, reinvigoration_fraction=1.0)
     belief.particles = [np.array(state, copy=True) for _ in range(8)]
 
     reported = np.zeros(env.observation_size, dtype=np.float64)
@@ -355,7 +357,7 @@ def test_reinvigoration_leaves_a_reported_chicken_alone():
 
     np.random.seed(0)
     refreshed = belief.reinvigorate(
-        action=int(CrazyChickenAction.STAY), observation=reported, pomdp=env, belief=belief
+        action=int(ChicheckInvadersAction.STAY), observation=reported, pomdp=env, belief=belief
     )
     for particle in refreshed.particles:
         slot = env.chickens(np.asarray(particle, dtype=np.float64))[0]
@@ -368,15 +370,15 @@ def test_reinvigoration_moves_an_unreported_chicken():
     Test type: unit
     """
     env = build_env(num_chickens=1)
-    state = create_crazy_chicken_state(env, chickens=[[2, 2, 1, MODE_PATROL, 1]])
-    belief = create_crazy_chicken_belief(env, n_particles=40, reinvigoration_fraction=1.0)
+    state = create_chicheck_invaders_state(env, chickens=[[2, 2, 1, MODE_PATROL, 1]])
+    belief = create_chicheck_invaders_belief(env, n_particles=40, reinvigoration_fraction=1.0)
     belief.particles = [np.array(state, copy=True) for _ in range(40)]
     silent = np.zeros(env.observation_size, dtype=np.float64)
     silent[0] = float(env.ship_column(state))
 
     np.random.seed(1)
     refreshed = belief.reinvigorate(
-        action=int(CrazyChickenAction.STAY), observation=silent, pomdp=env, belief=belief
+        action=int(ChicheckInvadersAction.STAY), observation=silent, pomdp=env, belief=belief
     )
     cells = {
         (
@@ -411,10 +413,10 @@ def test_the_belief_panel_renders_occupancy_probability_not_expected_count():
     Test type: unit
     """
     # pylint: disable-next=import-outside-toplevel
-    from POMDPPlanners.environments.crazy_chicken_pomdp import CrazyChickenVisualizer
+    from POMDPPlanners.environments.chicheck_invaders_pomdp import ChicheckInvadersVisualizer
 
     env = build_env(num_chickens=3)
-    state = create_crazy_chicken_state(
+    state = create_chicheck_invaders_state(
         env,
         chickens=[
             [1, 2, 1, MODE_PATROL, 1],
@@ -424,7 +426,7 @@ def test_the_belief_panel_renders_occupancy_probability_not_expected_count():
     )
     belief = placeholder_belief(state)
     # pylint: disable-next=protected-access
-    grid = CrazyChickenVisualizer(env)._occupancy_marginal(belief)
+    grid = ChicheckInvadersVisualizer(env)._occupancy_marginal(belief)
 
     assert grid[2, 1] == pytest.approx(1.0)
     assert grid[1, 3] == pytest.approx(1.0)
@@ -438,7 +440,7 @@ def test_a_fully_observable_belief_collapses_onto_the_observed_state():
         particle drawn from the flock prior floors, and
         ``WeightedParticleBelief`` normalises an all-floor vector to a *uniform*
         one. That is indistinguishable from a healthy prior, so the registered
-        ``CrazyChickenPOMDP[fully_observable]`` baseline would have run on a
+        ``ChicheckInvadersPOMDP[fully_observable]`` baseline would have run on a
         belief that was uniform over particles all known to be wrong.
 
     Given: The fully observable environment and one filtered step.
@@ -449,11 +451,13 @@ def test_a_fully_observable_belief_collapses_onto_the_observed_state():
     """
     env = build_env(num_chickens=2, observation_mode=ObservationMode.FULL)
     np.random.seed(2)
-    belief = create_crazy_chicken_belief(env, n_particles=25)
+    belief = create_chicheck_invaders_belief(env, n_particles=25)
     state = env.initial_state_dist().sample()[0]
 
-    next_state, observation, _ = env.sample_next_step(state, int(CrazyChickenAction.STAY))
-    belief = belief.update(action=int(CrazyChickenAction.STAY), observation=observation, pomdp=env)
+    next_state, observation, _ = env.sample_next_step(state, int(ChicheckInvadersAction.STAY))
+    belief = belief.update(
+        action=int(ChicheckInvadersAction.STAY), observation=observation, pomdp=env
+    )
     assert all(
         np.array_equal(np.asarray(p, dtype=np.float64), next_state) for p in belief.particles
     ), "a fully observable belief must be a point mass on the observed state"
@@ -475,7 +479,7 @@ def test_a_belief_every_particle_contradicts_is_rebuilt_from_the_reading():
 
     Test type: integration
     """
-    env = CrazyChickenPOMDP(
+    env = ChicheckInvadersPOMDP(
         num_columns=5,
         num_rows=4,
         num_chickens=1,
@@ -484,13 +488,13 @@ def test_a_belief_every_particle_contradicts_is_rebuilt_from_the_reading():
         discount_factor=0.95,
         **noiseless_preset(),
     )
-    truth = create_crazy_chicken_state(env, chickens=[[2, 1, 1, MODE_PATROL, 1]], ship_column=2)
+    truth = create_chicheck_invaders_state(env, chickens=[[2, 1, 1, MODE_PATROL, 1]], ship_column=2)
     observation = env.sample_observation(truth, None)
 
     # Every particle puts the chicken where the reading says it is not.
-    wrong = create_crazy_chicken_state(env, chickens=[[4, 3, 1, MODE_PATROL, 1]], ship_column=2)
+    wrong = create_chicheck_invaders_state(env, chickens=[[4, 3, 1, MODE_PATROL, 1]], ship_column=2)
     np.random.seed(0)
-    belief = create_crazy_chicken_belief(env, n_particles=30)
+    belief = create_chicheck_invaders_belief(env, n_particles=30)
     belief.particles = [np.array(wrong, copy=True) for _ in range(30)]
     assert all(
         env.observation_log_probability_single(p, None, observation) <= -1e17
@@ -498,7 +502,7 @@ def test_a_belief_every_particle_contradicts_is_rebuilt_from_the_reading():
     ), "fixture is wrong: the particles must all contradict the reading"
 
     refreshed = belief.update(
-        action=int(CrazyChickenAction.STAY), observation=observation, pomdp=env
+        action=int(ChicheckInvadersAction.STAY), observation=observation, pomdp=env
     )
     scores = [
         env.observation_log_probability_single(p, None, observation) for p in refreshed.particles

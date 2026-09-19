@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""The Crazy Chicken observation model: what it draws and what it scores.
+"""The Chicheck Invaders observation model: what it draws and what it scores.
 
 The two halves of an observation model can be wrong independently -- a sampler
 that draws from one law and a likelihood that scores another look fine in
@@ -15,14 +15,14 @@ import itertools
 import numpy as np
 import pytest  # noqa: F401
 
-from POMDPPlanners.environments.crazy_chicken_pomdp import (
+from POMDPPlanners.environments.chicheck_invaders_pomdp import (
     MODE_DIVE,
     MODE_PATROL,
     OBSERVATION_SHIP_WIDTH,
-    CrazyChickenAction,
-    CrazyChickenPOMDP,
+    ChicheckInvadersAction,
+    ChicheckInvadersPOMDP,
     ObservationMode,
-    create_crazy_chicken_state,
+    create_chicheck_invaders_state,
     noiseless_preset,
     rounded_normal_pmf,
 )
@@ -44,7 +44,7 @@ def build_env(**overrides):
         "discount_factor": 0.95,
     }
     settings.update(overrides)
-    return CrazyChickenPOMDP(**settings)
+    return ChicheckInvadersPOMDP(**settings)
 
 
 def enumerate_observations(env):
@@ -101,7 +101,7 @@ def test_observation_probabilities_sum_to_one(chicken):
     Test type: unit
     """
     env = build_env()
-    state = create_crazy_chicken_state(env, chickens=[chicken])
+    state = create_chicheck_invaders_state(env, chickens=[chicken])
     total = 0.0
     for observation in enumerate_observations(env):
         observation[0] = float(env.ship_column(state))
@@ -125,7 +125,7 @@ def test_sampled_observation_frequencies_match_the_likelihood():
     Test type: unit
     """
     env = build_env()
-    state = create_crazy_chicken_state(env, chickens=[[1, 2, 1, MODE_PATROL, 1]])
+    state = create_chicheck_invaders_state(env, chickens=[[1, 2, 1, MODE_PATROL, 1]])
     draws = 20_000
     np.random.seed(17)
     counts: dict = {}
@@ -159,7 +159,7 @@ def test_a_reading_from_outside_a_sensors_reach_is_impossible():
     Test type: unit
     """
     env = build_env(num_columns=9, num_rows=9, camera_slope=0.25, radar_radius=2.0)
-    state = create_crazy_chicken_state(env, chickens=[[8, 1, 1, MODE_PATROL, 1]], ship_column=0)
+    state = create_chicheck_invaders_state(env, chickens=[[8, 1, 1, MODE_PATROL, 1]], ship_column=0)
     camera, radar = env.sensor_reach(state)
     assert not camera[0] and not radar[0]
 
@@ -186,8 +186,10 @@ def test_silence_inside_both_sensors_costs_the_two_miss_chances():
     Test type: unit
     """
     env = build_env(num_columns=9, num_rows=9, camera_slope=0.25, radar_radius=2.0)
-    seen = create_crazy_chicken_state(env, chickens=[[0, 1, 1, MODE_PATROL, 1]], ship_column=0)
-    unseen = create_crazy_chicken_state(env, chickens=[[8, 1, 1, MODE_PATROL, 1]], ship_column=0)
+    seen = create_chicheck_invaders_state(env, chickens=[[0, 1, 1, MODE_PATROL, 1]], ship_column=0)
+    unseen = create_chicheck_invaders_state(
+        env, chickens=[[8, 1, 1, MODE_PATROL, 1]], ship_column=0
+    )
     assert all(env.sensor_reach(seen))
     assert not any(env.sensor_reach(unseen))
 
@@ -215,10 +217,10 @@ def test_the_noiseless_preset_makes_the_reading_a_function_of_the_state():
 
     Test type: unit
     """
-    env = CrazyChickenPOMDP(
+    env = ChicheckInvadersPOMDP(
         num_columns=5, num_rows=4, num_chickens=2, discount_factor=0.95, **noiseless_preset()
     )
-    state = create_crazy_chicken_state(
+    state = create_chicheck_invaders_state(
         env, chickens=[[1, 2, 1, MODE_PATROL, 1], [3, 1, -1, MODE_DIVE, 1]]
     )
     readings = set()
@@ -246,17 +248,17 @@ def test_camera_reports_the_column_offset_and_radar_the_row_and_drop():
 
     Test type: unit
     """
-    env = CrazyChickenPOMDP(
+    env = ChicheckInvadersPOMDP(
         num_columns=5, num_rows=5, num_chickens=1, discount_factor=0.95, **noiseless_preset()
     )
     base = OBSERVATION_SHIP_WIDTH
-    diving = create_crazy_chicken_state(env, chickens=[[4, 2, 1, MODE_DIVE, 1]], ship_column=2)
+    diving = create_chicheck_invaders_state(env, chickens=[[4, 2, 1, MODE_DIVE, 1]], ship_column=2)
     reading = env.sample_observation(diving, None)
     assert reading[base + 0] == 1.0 and reading[base + 1] == 2.0
     assert reading[base + 2] == 1.0 and reading[base + 3] == 2.0
     assert reading[base + 4] == -1.0
 
-    patrolling = create_crazy_chicken_state(
+    patrolling = create_chicheck_invaders_state(
         env, chickens=[[4, 2, 1, MODE_PATROL, 1]], ship_column=2
     )
     patrol_reading = env.sample_observation(patrolling, None)
@@ -270,10 +272,10 @@ def test_fully_observable_mode_returns_the_state_itself():
     Test type: unit
     """
     env = build_env(num_chickens=2, observation_mode=ObservationMode.FULL)
-    state = create_crazy_chicken_state(
+    state = create_chicheck_invaders_state(
         env, chickens=[[1, 2, 1, MODE_PATROL, 1], [0, 1, -1, MODE_DIVE, 1]]
     )
-    reading = env.sample_observation(state, int(CrazyChickenAction.STAY))
+    reading = env.sample_observation(state, int(ChicheckInvadersAction.STAY))
     assert np.array_equal(reading, state)
     assert env.observation_log_probability_single(state, None, reading) == pytest.approx(0.0)
     assert env.observation_log_probability_single(state, None, reading + 1.0) < -1e17
@@ -301,7 +303,7 @@ def test_masked_fields_are_zero_so_equal_readings_hash_alike():
     Test type: unit
     """
     env = build_env(num_chickens=2)
-    state = create_crazy_chicken_state(
+    state = create_chicheck_invaders_state(
         env, chickens=[[1, 2, 1, MODE_PATROL, 1], [0, 1, -1, MODE_DIVE, 1]]
     )
     np.random.seed(3)
@@ -326,10 +328,10 @@ def test_batched_and_per_state_likelihood_paths_agree():
     """
     env = build_env(num_chickens=2)
     states = [
-        create_crazy_chicken_state(
+        create_chicheck_invaders_state(
             env, chickens=[[1, 2, 1, MODE_PATROL, 1], [0, 1, -1, MODE_DIVE, 1]]
         ),
-        create_crazy_chicken_state(
+        create_chicheck_invaders_state(
             env, chickens=[[0, 2, -1, MODE_DIVE, 1], [2, 1, 1, MODE_PATROL, 1]]
         ),
     ]

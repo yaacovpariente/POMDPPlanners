@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""The uninformed baseline the Crazy Chicken QA pass measures against.
+"""The uninformed baseline the Chicheck Invaders QA pass measures against.
 
 A completion rate on its own proves nothing: an environment whose flock clears
 itself, or whose terminal condition fires immediately, is "solved" by anything

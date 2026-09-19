@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""Renders a Crazy Chicken episode as an animated GIF that reads like the game.
+"""Renders a Chicheck Invaders episode as an animated GIF that reads like the game.
 
 Two panels side by side, on one dark arcade page.
 
@@ -40,7 +40,7 @@ iterates over an unordered collection, so re-rendering one history twice gives
 two byte-identical files -- which is what the golden test hashes.
 
 Classes:
-    CrazyChickenVisualizer: Renders Crazy Chicken episodes.
+    ChicheckInvadersVisualizer: Renders Chicheck Invaders episodes.
 """
 
 from pathlib import Path
@@ -50,7 +50,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 from POMDPPlanners.core.simulation import StepData
-from POMDPPlanners.environments.crazy_chicken_pomdp.crazy_chicken_schema import (
+from POMDPPlanners.environments.chicheck_invaders_pomdp.chicheck_invaders_schema import (
     CHICKEN_ALIVE,
     CHICKEN_COLUMN,
     CHICKEN_DIRECTION,
@@ -63,8 +63,8 @@ from POMDPPlanners.environments.crazy_chicken_pomdp.crazy_chicken_schema import 
 )
 
 if TYPE_CHECKING:
-    from POMDPPlanners.environments.crazy_chicken_pomdp.crazy_chicken_pomdp import (
-        CrazyChickenPOMDP,
+    from POMDPPlanners.environments.chicheck_invaders_pomdp.chicheck_invaders_pomdp import (
+        ChicheckInvadersPOMDP,
     )
 
 
@@ -123,24 +123,24 @@ def _font(size: int) -> ImageFont.FreeTypeFont:
         font = ImageFont.load_default(size=size)
     except TypeError as exc:  # pragma: no cover - only on Pillow < 10.1
         raise RuntimeError(
-            "The Crazy Chicken renderer needs Pillow >= 10.1 for scalable default fonts."
+            "The Chicheck Invaders renderer needs Pillow >= 10.1 for scalable default fonts."
         ) from exc
     if not isinstance(font, ImageFont.FreeTypeFont):  # pragma: no cover
         raise RuntimeError(
-            "The Crazy Chicken renderer needs a FreeType-enabled Pillow for scalable "
+            "The Chicheck Invaders renderer needs a FreeType-enabled Pillow for scalable "
             f"fonts; this one returned {type(font).__name__}."
         )
     return font
 
 
-class CrazyChickenVisualizer:
-    """Renders an episode of :class:`CrazyChickenPOMDP` to an animated GIF.
+class ChicheckInvadersVisualizer:
+    """Renders an episode of :class:`ChicheckInvadersPOMDP` to an animated GIF.
 
     Attributes:
         environment: The environment whose geometry every frame is drawn from.
     """
 
-    def __init__(self, environment: "CrazyChickenPOMDP"):
+    def __init__(self, environment: "ChicheckInvadersPOMDP"):
         """Initialize the renderer.
 
         Args:
@@ -176,7 +176,7 @@ class CrazyChickenVisualizer:
         """Draw the page, the two panel wells and their headings, once."""
         page = Image.new("RGB", (self._width, self._height), COLOR_PAGE)
         draw = ImageDraw.Draw(page)
-        draw.text((MARGIN, 18), "Crazy Chicken", font=self._title_font, fill=COLOR_TEXT)
+        draw.text((MARGIN, 18), "Chicheck Invaders", font=self._title_font, fill=COLOR_TEXT)
         headings = (
             ("The sky", "true flock, ship and shots; hidden from the ship"),
             ("What the ship believes", "weighted chance of a chicken per cell"),
@@ -475,7 +475,7 @@ class CrazyChickenVisualizer:
                 rejects a single-frame GIF for exactly that reason.
         """
         if not history:
-            raise ValueError("cannot render a Crazy Chicken episode with no recorded steps")
+            raise ValueError("cannot render a Chicheck Invaders episode with no recorded steps")
         background = self._background()
         frames = [self._frame(step, background) for step in history]
         output_path = Path(output_path)

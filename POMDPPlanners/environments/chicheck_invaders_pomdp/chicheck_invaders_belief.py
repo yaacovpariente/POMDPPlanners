@@ -18,7 +18,7 @@ ways that bites in this world:
   that happened to guess its direction wrong never come back, because nothing
   in the transition moves a particle from one patrol phase to another.
 
-:class:`CrazyChickenBelief` answers both with the same move: after the usual
+:class:`ChicheckInvadersBelief` answers both with the same move: after the usual
 reweight and resample, a fraction of the particles have the *unobserved*
 chickens re-drawn -- a fresh direction, a fresh mode, and a one-cell jitter of
 the position -- while every chicken the sensors just reported is left exactly as
@@ -26,10 +26,10 @@ the weights found it. Perturbing a chicken the camera just located would throw
 away the only hard information the step produced.
 
 Classes:
-    CrazyChickenBelief: Weighted particle belief with flock reinvigoration.
+    ChicheckInvadersBelief: Weighted particle belief with flock reinvigoration.
 
 Functions:
-    create_crazy_chicken_belief: Build the initial belief for an environment.
+    create_chicheck_invaders_belief: Build the initial belief for an environment.
 """
 
 from typing import Any, List, Optional
@@ -41,12 +41,12 @@ from POMDPPlanners.core.belief.particle_beliefs import (
     WeightedParticleBeliefReinvigoration,
 )
 from POMDPPlanners.core.environment import Environment
-from POMDPPlanners.environments.crazy_chicken_pomdp.crazy_chicken_pomdp import (
+from POMDPPlanners.environments.chicheck_invaders_pomdp.chicheck_invaders_pomdp import (
     IMPOSSIBLE_LOG_PROBABILITY,
-    CrazyChickenPOMDP,
+    ChicheckInvadersPOMDP,
     ObservationMode,
 )
-from POMDPPlanners.environments.crazy_chicken_pomdp.crazy_chicken_schema import (
+from POMDPPlanners.environments.chicheck_invaders_pomdp.chicheck_invaders_schema import (
     CHICKEN_ALIVE,
     CHICKEN_COLUMN,
     CHICKEN_DIRECTION,
@@ -64,14 +64,14 @@ from POMDPPlanners.environments.crazy_chicken_pomdp.crazy_chicken_schema import 
     SHIP_COLUMN_INDEX,
     chicken_slots,
 )
-from POMDPPlanners.environments.crazy_chicken_pomdp.crazy_chicken_sensors import (
+from POMDPPlanners.environments.chicheck_invaders_pomdp.chicheck_invaders_sensors import (
     camera_sees,
     radar_sees,
 )
 from POMDPPlanners.utils.config_to_id import config_to_id
 
 
-class CrazyChickenBelief(WeightedParticleBeliefReinvigoration):
+class ChicheckInvadersBelief(WeightedParticleBeliefReinvigoration):
     """Weighted particle belief that re-draws the chickens it cannot see.
 
     Attributes:
@@ -153,7 +153,7 @@ class CrazyChickenBelief(WeightedParticleBeliefReinvigoration):
         observation: Any,
         pomdp: Environment,
         belief: "WeightedParticleBelief",
-    ) -> "CrazyChickenBelief":
+    ) -> "ChicheckInvadersBelief":
         """Collapse onto the truth, rebuild after a wipe-out, or re-draw a few.
 
         Three cases, in order of how much of the belief they replace.
@@ -164,7 +164,7 @@ class CrazyChickenBelief(WeightedParticleBeliefReinvigoration):
         all-floor vector to a uniform one, which makes the belief a uniform
         distribution over particles that are all known to be wrong -- and the
         wrongness is invisible, because uniform weights are what a healthy prior
-        looks like too. Since ``CrazyChickenPOMDP[fully_observable]`` is a
+        looks like too. Since ``ChicheckInvadersPOMDP[fully_observable]`` is a
         registered environment, that would leave the advertised baseline running
         on a permanently meaningless belief. The right belief for a fully
         observable world is a point mass on what was observed, so that is what
@@ -237,9 +237,9 @@ class CrazyChickenBelief(WeightedParticleBeliefReinvigoration):
         particles: List[Any],
         log_weights: np.ndarray,
         belief: "WeightedParticleBelief",
-    ) -> "CrazyChickenBelief":
+    ) -> "ChicheckInvadersBelief":
         """Wrap ``particles`` back up as a belief of this class."""
-        return CrazyChickenBelief(
+        return ChicheckInvadersBelief(
             particles=particles,
             log_weights=log_weights,
             num_chickens=self.num_chickens,
@@ -255,7 +255,8 @@ class CrazyChickenBelief(WeightedParticleBeliefReinvigoration):
     def _is_fully_observable(pomdp: Environment) -> bool:
         """Whether ``pomdp`` hands out the state as its observation."""
         return (
-            isinstance(pomdp, CrazyChickenPOMDP) and pomdp.observation_mode is ObservationMode.FULL
+            isinstance(pomdp, ChicheckInvadersPOMDP)
+            and pomdp.observation_mode is ObservationMode.FULL
         )
 
     def _every_particle_contradicts(
@@ -268,7 +269,7 @@ class CrazyChickenBelief(WeightedParticleBeliefReinvigoration):
         normalised weight vector looks identical whether every particle was
         plausible or every particle was impossible.
         """
-        if not isinstance(pomdp, CrazyChickenPOMDP) or not particles:
+        if not isinstance(pomdp, ChicheckInvadersPOMDP) or not particles:
             return False
         scores = pomdp.observation_log_probability_per_state(particles, None, observation)
         return bool(np.all(np.asarray(scores) <= IMPOSSIBLE_LOG_PROBABILITY))
@@ -331,7 +332,7 @@ class CrazyChickenBelief(WeightedParticleBeliefReinvigoration):
         cells = [
             (column, row) for row in range(1, self.num_rows) for column in range(self.num_columns)
         ]
-        if isinstance(pomdp, CrazyChickenPOMDP):
+        if isinstance(pomdp, ChicheckInvadersPOMDP):
             offsets = np.array([column - ship for column, _ in cells], dtype=np.float64)
             rows = np.array([row for _, row in cells], dtype=np.float64)
             hidden = ~camera_sees(offsets, rows, pomdp.camera_slope) & ~radar_sees(
@@ -386,13 +387,13 @@ class CrazyChickenBelief(WeightedParticleBeliefReinvigoration):
             )
 
 
-def create_crazy_chicken_belief(
-    env: CrazyChickenPOMDP,
+def create_chicheck_invaders_belief(
+    env: ChicheckInvadersPOMDP,
     belief_type: Optional[Any] = None,
     n_particles: int = 200,
     reinvigoration_fraction: float = 0.1,
-) -> CrazyChickenBelief:
-    """Build the initial belief for a Crazy Chicken environment.
+) -> ChicheckInvadersBelief:
+    """Build the initial belief for a Chicheck Invaders environment.
 
     Args:
         env: The environment to draw particles from.
@@ -408,7 +409,7 @@ def create_crazy_chicken_belief(
     """
     del belief_type
     particles = env.initial_state_dist().sample(n_samples=int(n_particles))
-    return CrazyChickenBelief(
+    return ChicheckInvadersBelief(
         particles=particles,
         log_weights=np.log(np.full(int(n_particles), 1.0 / int(n_particles))),
         num_chickens=env.num_chickens,

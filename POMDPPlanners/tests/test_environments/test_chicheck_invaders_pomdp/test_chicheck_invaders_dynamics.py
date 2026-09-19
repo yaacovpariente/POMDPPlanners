@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""Dynamics, reward and termination of the Crazy Chicken POMDP.
+"""Dynamics, reward and termination of the Chicheck Invaders POMDP.
 
 The cross-environment conformance suite covers the shared contracts once the
 environment is in ``ENV_BUILDERS``. What it cannot cover is whether this
@@ -17,7 +17,7 @@ draw that went the other way.
 import numpy as np
 import pytest
 
-from POMDPPlanners.environments.crazy_chicken_pomdp import (
+from POMDPPlanners.environments.chicheck_invaders_pomdp import (
     CHICKEN_ALIVE,
     CHICKEN_COLUMN,
     CHICKEN_DIRECTION,
@@ -26,9 +26,9 @@ from POMDPPlanners.environments.crazy_chicken_pomdp import (
     MODE_DIVE,
     MODE_PATROL,
     SHIP_HIT_INDEX,
-    CrazyChickenAction,
-    CrazyChickenPOMDP,
-    create_crazy_chicken_state,
+    ChicheckInvadersAction,
+    ChicheckInvadersPOMDP,
+    create_chicheck_invaders_state,
 )
 
 
@@ -44,7 +44,7 @@ def build_env(**overrides):
         "discount_factor": 0.95,
     }
     settings.update(overrides)
-    return CrazyChickenPOMDP(**settings)
+    return ChicheckInvadersPOMDP(**settings)
 
 
 def test_patrol_chicken_steps_along_its_direction():
@@ -60,10 +60,10 @@ def test_patrol_chicken_steps_along_its_direction():
     Test type: unit
     """
     env = build_env()
-    state = create_crazy_chicken_state(
+    state = create_chicheck_invaders_state(
         env, chickens=[[1, 3, 1, MODE_PATROL, 1], [4, 3, -1, MODE_PATROL, 0]]
     )
-    successor = env.sample_next_state(state, int(CrazyChickenAction.STAY))
+    successor = env.sample_next_state(state, int(ChicheckInvadersAction.STAY))
     chicken = env.chickens(successor)[0]
     assert chicken[CHICKEN_COLUMN] == 2
     assert chicken[CHICKEN_ROW] == 3
@@ -84,10 +84,10 @@ def test_patrol_chicken_bounces_off_the_wall_and_moves_in_the_same_step():
     Test type: unit
     """
     env = build_env()
-    state = create_crazy_chicken_state(
+    state = create_chicheck_invaders_state(
         env, chickens=[[4, 3, 1, MODE_PATROL, 1], [0, 3, -1, MODE_PATROL, 0]]
     )
-    chicken = env.chickens(env.sample_next_state(state, int(CrazyChickenAction.STAY)))[0]
+    chicken = env.chickens(env.sample_next_state(state, int(ChicheckInvadersAction.STAY)))[0]
     assert chicken[CHICKEN_COLUMN] == 3
     assert chicken[CHICKEN_DIRECTION] == -1
 
@@ -106,10 +106,10 @@ def test_dive_drops_one_row_and_holds_its_column():
     Test type: unit
     """
     env = build_env()
-    state = create_crazy_chicken_state(
+    state = create_chicheck_invaders_state(
         env, chickens=[[2, 3, 1, MODE_DIVE, 1], [0, 3, -1, MODE_PATROL, 0]]
     )
-    chicken = env.chickens(env.sample_next_state(state, int(CrazyChickenAction.STAY)))[0]
+    chicken = env.chickens(env.sample_next_state(state, int(ChicheckInvadersAction.STAY)))[0]
     assert (chicken[CHICKEN_COLUMN], chicken[CHICKEN_ROW]) == (2, 2)
 
 
@@ -127,10 +127,10 @@ def test_dive_coin_is_flipped_before_the_chickens_move():
     Test type: unit
     """
     env = build_env(dive_probability=1.0)
-    state = create_crazy_chicken_state(
+    state = create_chicheck_invaders_state(
         env, chickens=[[2, 3, 1, MODE_PATROL, 1], [0, 3, -1, MODE_PATROL, 0]]
     )
-    chicken = env.chickens(env.sample_next_state(state, int(CrazyChickenAction.STAY)))[0]
+    chicken = env.chickens(env.sample_next_state(state, int(ChicheckInvadersAction.STAY)))[0]
     assert chicken[CHICKEN_MODE] == MODE_DIVE
     assert chicken[CHICKEN_ROW] == 2
 
@@ -151,7 +151,7 @@ def test_fire_kills_the_lowest_chicken_in_the_ships_column_at_any_range():
     """
     env = build_env(num_rows=5, num_chickens=3)
     column = env.ship_start_column
-    state = create_crazy_chicken_state(
+    state = create_chicheck_invaders_state(
         env,
         chickens=[
             [column, 3, 1, MODE_PATROL, 1],
@@ -160,7 +160,7 @@ def test_fire_kills_the_lowest_chicken_in_the_ships_column_at_any_range():
         ],
     )
     assert env.shot_target(state) == 1
-    flock = env.chickens(env.sample_next_state(state, int(CrazyChickenAction.FIRE)))
+    flock = env.chickens(env.sample_next_state(state, int(ChicheckInvadersAction.FIRE)))
     assert flock[1][CHICKEN_ALIVE] == 0.0
     assert flock[0][CHICKEN_ALIVE] == 1.0
     assert flock[2][CHICKEN_ALIVE] == 1.0
@@ -172,14 +172,14 @@ def test_fire_into_an_empty_column_misses_and_only_costs_the_shot():
     Test type: unit
     """
     env = build_env()
-    state = create_crazy_chicken_state(
+    state = create_chicheck_invaders_state(
         env, chickens=[[0, 3, 1, MODE_PATROL, 1], [4, 3, -1, MODE_PATROL, 1]], ship_column=2
     )
     assert env.shot_target(state) == -1
-    assert env.fires(state, int(CrazyChickenAction.FIRE))
-    successor = env.sample_next_state(state, int(CrazyChickenAction.FIRE))
+    assert env.fires(state, int(ChicheckInvadersAction.FIRE))
+    successor = env.sample_next_state(state, int(ChicheckInvadersAction.FIRE))
     assert env.live_chicken_count(successor) == 2
-    assert env.reward(state, int(CrazyChickenAction.FIRE), successor) == pytest.approx(
+    assert env.reward(state, int(ChicheckInvadersAction.FIRE), successor) == pytest.approx(
         -env.step_cost - env.shot_cost
     )
 
@@ -201,10 +201,10 @@ def test_the_shot_is_resolved_before_the_chickens_move():
     """
     env = build_env(dive_probability=1.0)
     column = env.ship_start_column
-    state = create_crazy_chicken_state(
+    state = create_chicheck_invaders_state(
         env, chickens=[[column, 2, 1, MODE_PATROL, 1], [0, 3, 1, MODE_PATROL, 1]]
     )
-    flock = env.chickens(env.sample_next_state(state, int(CrazyChickenAction.FIRE)))
+    flock = env.chickens(env.sample_next_state(state, int(ChicheckInvadersAction.FIRE)))
     assert flock[0][CHICKEN_ALIVE] == 0.0
 
 
@@ -220,10 +220,10 @@ def test_a_chicken_shot_this_step_never_gets_to_dive():
     """
     env = build_env(dive_probability=1.0)
     column = env.ship_start_column
-    state = create_crazy_chicken_state(
+    state = create_chicheck_invaders_state(
         env, chickens=[[column, 1, 1, MODE_PATROL, 1], [0, 3, 1, MODE_PATROL, 1]]
     )
-    successor = env.sample_next_state(state, int(CrazyChickenAction.FIRE))
+    successor = env.sample_next_state(state, int(ChicheckInvadersAction.FIRE))
     assert env.chickens(successor)[0][CHICKEN_ALIVE] == 0.0
     assert successor[SHIP_HIT_INDEX] == 0.0
 
@@ -239,7 +239,7 @@ def test_the_gun_never_reaches_row_zero():
     """
     env = build_env()
     column = env.ship_start_column
-    state = create_crazy_chicken_state(
+    state = create_chicheck_invaders_state(
         env, chickens=[[column, 0, 1, MODE_PATROL, 1], [0, 3, 1, MODE_PATROL, 0]]
     )
     assert env.shot_target(state) == -1
@@ -257,14 +257,14 @@ def test_a_chicken_reaching_the_ship_ends_the_episode():
     """
     env = build_env()
     column = env.ship_start_column
-    state = create_crazy_chicken_state(
+    state = create_chicheck_invaders_state(
         env,
         chickens=[[column, 1, 1, MODE_DIVE, 1], [0, 3, 1, MODE_PATROL, 0]],
     )
-    successor = env.sample_next_state(state, int(CrazyChickenAction.STAY))
+    successor = env.sample_next_state(state, int(ChicheckInvadersAction.STAY))
     assert successor[SHIP_HIT_INDEX] == 1.0
     assert env.is_terminal(successor)
-    assert env.reward(state, int(CrazyChickenAction.STAY), successor) == pytest.approx(
+    assert env.reward(state, int(ChicheckInvadersAction.STAY), successor) == pytest.approx(
         -env.step_cost - env.ship_hit_penalty
     )
 
@@ -286,10 +286,10 @@ def test_a_chicken_reaching_row_zero_elsewhere_pulls_up():
     """
     env = build_env()
     column = max(env.ship_start_column - 2, 0)
-    state = create_crazy_chicken_state(
+    state = create_chicheck_invaders_state(
         env, chickens=[[column, 1, -1, MODE_DIVE, 1], [0, 3, 1, MODE_PATROL, 0]]
     )
-    successor = env.sample_next_state(state, int(CrazyChickenAction.STAY))
+    successor = env.sample_next_state(state, int(ChicheckInvadersAction.STAY))
     chicken = env.chickens(successor)[0]
     assert successor[SHIP_HIT_INDEX] == 0.0
     assert chicken[CHICKEN_ALIVE] == 1.0
@@ -305,10 +305,10 @@ def test_ship_movement_is_clamped_at_both_walls():
     """
     env = build_env()
     chickens = [[0, 3, 1, MODE_PATROL, 0], [4, 3, -1, MODE_PATROL, 0]]
-    at_left = create_crazy_chicken_state(env, chickens=chickens, ship_column=0)
-    at_right = create_crazy_chicken_state(env, chickens=chickens, ship_column=4)
-    assert env.ship_column(env.sample_next_state(at_left, int(CrazyChickenAction.LEFT))) == 0
-    assert env.ship_column(env.sample_next_state(at_right, int(CrazyChickenAction.RIGHT))) == 4
+    at_left = create_chicheck_invaders_state(env, chickens=chickens, ship_column=0)
+    at_right = create_chicheck_invaders_state(env, chickens=chickens, ship_column=4)
+    assert env.ship_column(env.sample_next_state(at_left, int(ChicheckInvadersAction.LEFT))) == 0
+    assert env.ship_column(env.sample_next_state(at_right, int(ChicheckInvadersAction.RIGHT))) == 4
 
 
 def test_clearing_the_flock_pays_the_bonus_and_ends_the_episode():
@@ -324,16 +324,16 @@ def test_clearing_the_flock_pays_the_bonus_and_ends_the_episode():
     """
     env = build_env()
     column = env.ship_start_column
-    state = create_crazy_chicken_state(
+    state = create_chicheck_invaders_state(
         env, chickens=[[column, 2, 1, MODE_PATROL, 1], [0, 3, 1, MODE_PATROL, 0]]
     )
-    successor = env.sample_next_state(state, int(CrazyChickenAction.FIRE))
+    successor = env.sample_next_state(state, int(ChicheckInvadersAction.FIRE))
     assert env.live_chicken_count(successor) == 0
     assert env.is_terminal(successor)
-    assert env.reward(state, int(CrazyChickenAction.FIRE), successor) == pytest.approx(
+    assert env.reward(state, int(ChicheckInvadersAction.FIRE), successor) == pytest.approx(
         env.kill_reward + env.clear_reward - env.step_cost - env.shot_cost
     )
-    assert env.reward(state, int(CrazyChickenAction.FIRE), successor) == pytest.approx(
+    assert env.reward(state, int(ChicheckInvadersAction.FIRE), successor) == pytest.approx(
         env.reward_range[1]
     )
 
@@ -344,7 +344,7 @@ def test_timeout_is_terminal_at_max_steps():
     Test type: unit
     """
     env = build_env(max_steps=3)
-    state = create_crazy_chicken_state(
+    state = create_chicheck_invaders_state(
         env, chickens=[[1, 3, 1, MODE_PATROL, 1], [4, 3, -1, MODE_PATROL, 1]], step=3
     )
     assert env.is_terminal(state)
@@ -376,13 +376,13 @@ def test_firing_always_kills_when_it_could_be_overrun_so_the_minimum_is_conserva
     """
     env = build_env(dive_probability=1.0)
     column = env.ship_start_column
-    state = create_crazy_chicken_state(
+    state = create_chicheck_invaders_state(
         env, chickens=[[column, 1, 1, MODE_PATROL, 1], [column, 1, -1, MODE_PATROL, 1]]
     )
-    successor = env.sample_next_state(state, int(CrazyChickenAction.FIRE))
+    successor = env.sample_next_state(state, int(ChicheckInvadersAction.FIRE))
     assert env.live_chicken_count(successor) == 1
     assert successor[SHIP_HIT_INDEX] == 1.0
-    worst_while_firing = env.reward(state, int(CrazyChickenAction.FIRE), successor)
+    worst_while_firing = env.reward(state, int(ChicheckInvadersAction.FIRE), successor)
     assert worst_while_firing == pytest.approx(env.reward_range[0] + env.kill_reward)
     assert worst_while_firing >= env.reward_range[0]
 
@@ -394,12 +394,12 @@ def test_the_worst_reachable_step_is_being_overrun_without_firing():
     """
     env = build_env(dive_probability=1.0)
     column = env.ship_start_column
-    state = create_crazy_chicken_state(
+    state = create_chicheck_invaders_state(
         env, chickens=[[column, 1, 1, MODE_PATROL, 1], [4, 3, -1, MODE_PATROL, 1]]
     )
-    overrun = env.sample_next_state(state, int(CrazyChickenAction.STAY))
+    overrun = env.sample_next_state(state, int(ChicheckInvadersAction.STAY))
     assert overrun[SHIP_HIT_INDEX] == 1.0
-    worst = env.reward(state, int(CrazyChickenAction.STAY), overrun)
+    worst = env.reward(state, int(ChicheckInvadersAction.STAY), overrun)
     assert worst == pytest.approx(-env.step_cost - env.ship_hit_penalty)
     assert worst == pytest.approx(env.reward_range[0] + env.shot_cost)
     assert worst >= env.reward_range[0]
@@ -418,10 +418,10 @@ def test_a_shot_into_its_own_column_protects_the_ship_that_step():
     """
     env = build_env(dive_probability=1.0)
     column = env.ship_start_column
-    state = create_crazy_chicken_state(
+    state = create_chicheck_invaders_state(
         env, chickens=[[column, 1, 1, MODE_PATROL, 1], [4, 3, -1, MODE_PATROL, 1]]
     )
-    shot = env.sample_next_state(state, int(CrazyChickenAction.FIRE))
+    shot = env.sample_next_state(state, int(ChicheckInvadersAction.FIRE))
     assert shot[SHIP_HIT_INDEX] == 0.0
     assert env.chickens(shot)[0][CHICKEN_ALIVE] == 0.0
 
@@ -439,25 +439,25 @@ def test_reward_without_a_successor_scores_the_kill_it_can_already_see():
     """
     env = build_env()
     column = env.ship_start_column
-    hitting = create_crazy_chicken_state(
+    hitting = create_chicheck_invaders_state(
         env, chickens=[[column, 3, 1, MODE_PATROL, 1], [4, 3, -1, MODE_PATROL, 1]]
     )
-    assert env.reward(hitting, int(CrazyChickenAction.STAY)) == pytest.approx(-env.step_cost)
-    assert env.reward(hitting, int(CrazyChickenAction.FIRE)) == pytest.approx(
+    assert env.reward(hitting, int(ChicheckInvadersAction.STAY)) == pytest.approx(-env.step_cost)
+    assert env.reward(hitting, int(ChicheckInvadersAction.FIRE)) == pytest.approx(
         -env.step_cost - env.shot_cost + env.kill_reward
     )
 
-    missing = create_crazy_chicken_state(
+    missing = create_chicheck_invaders_state(
         env, chickens=[[0, 3, 1, MODE_PATROL, 1], [4, 3, -1, MODE_PATROL, 1]], ship_column=2
     )
-    assert env.reward(missing, int(CrazyChickenAction.FIRE)) == pytest.approx(
+    assert env.reward(missing, int(ChicheckInvadersAction.FIRE)) == pytest.approx(
         -env.step_cost - env.shot_cost
     )
 
-    last_one = create_crazy_chicken_state(
+    last_one = create_chicheck_invaders_state(
         env, chickens=[[column, 3, 1, MODE_PATROL, 1], [4, 3, -1, MODE_PATROL, 0]]
     )
-    assert env.reward(last_one, int(CrazyChickenAction.FIRE)) == pytest.approx(
+    assert env.reward(last_one, int(ChicheckInvadersAction.FIRE)) == pytest.approx(
         -env.step_cost - env.shot_cost + env.kill_reward + env.clear_reward
     )
 
@@ -473,20 +473,21 @@ def test_transition_log_probability_agrees_with_the_dive_coins_it_implies():
     Test type: unit
     """
     env = build_env(dive_probability=0.25)
-    state = create_crazy_chicken_state(
+    state = create_chicheck_invaders_state(
         env, chickens=[[1, 3, 1, MODE_PATROL, 1], [4, 3, -1, MODE_PATROL, 1]]
     )
     # pylint: disable-next=protected-access
     successor = env._step_once(
-        state, int(CrazyChickenAction.STAY), switches=np.array([True, False])
+        state, int(ChicheckInvadersAction.STAY), switches=np.array([True, False])
     )
-    score = env.transition_log_probability(state, int(CrazyChickenAction.STAY), [successor])
+    score = env.transition_log_probability(state, int(ChicheckInvadersAction.STAY), [successor])
     assert score[0] == pytest.approx(np.log(0.25) + np.log(0.75))
 
     impossible = np.array(successor, copy=True)
     impossible[0] += 5.0
     assert (
-        env.transition_log_probability(state, int(CrazyChickenAction.STAY), [impossible])[0] < -1e17
+        env.transition_log_probability(state, int(ChicheckInvadersAction.STAY), [impossible])[0]
+        < -1e17
     )
 
 
@@ -498,7 +499,7 @@ def test_chickens_never_start_two_to_a_cell():
 
     Test type: unit
     """
-    env = CrazyChickenPOMDP(num_columns=4, num_rows=3, num_chickens=6, discount_factor=0.95)
+    env = ChicheckInvadersPOMDP(num_columns=4, num_rows=3, num_chickens=6, discount_factor=0.95)
     np.random.seed(5)
     for state in env.initial_state_dist().sample(50):
         flock = env.chickens(state)
@@ -512,11 +513,11 @@ def test_a_flock_larger_than_the_grid_is_rejected_at_construction():
     Test type: unit
     """
     with pytest.raises(ValueError, match="do not fit"):
-        CrazyChickenPOMDP(num_columns=3, num_rows=2, num_chickens=4, discount_factor=0.95)
+        ChicheckInvadersPOMDP(num_columns=3, num_rows=2, num_chickens=4, discount_factor=0.95)
 
 
 @pytest.mark.parametrize("dive_probability", [0.0, 0.15, 1.0])
-@pytest.mark.parametrize("action", list(CrazyChickenAction))
+@pytest.mark.parametrize("action", list(ChicheckInvadersAction))
 def test_transition_log_probability_sums_to_one_over_reachable_successors(action, dive_probability):
     """Every action's transition is a distribution, at every dive rate.
 
@@ -544,7 +545,7 @@ def test_transition_log_probability_sums_to_one_over_reachable_successors(action
     """
     env = build_env(num_columns=4, num_rows=4, num_chickens=3, dive_probability=dive_probability)
     column = env.ship_start_column
-    state = create_crazy_chicken_state(
+    state = create_chicheck_invaders_state(
         env,
         chickens=[
             [column, 2, 1, MODE_PATROL, 1],
@@ -584,15 +585,15 @@ def test_a_pulled_up_chickens_coin_is_read_back_from_its_row_jump():
     Test type: unit
     """
     env = build_env(num_columns=4, num_rows=4, num_chickens=1, dive_probability=1.0)
-    state = create_crazy_chicken_state(env, chickens=[[0, 1, 1, MODE_PATROL, 1]], ship_column=2)
-    successor = env.sample_next_state(state, int(CrazyChickenAction.STAY))
+    state = create_chicheck_invaders_state(env, chickens=[[0, 1, 1, MODE_PATROL, 1]], ship_column=2)
+    successor = env.sample_next_state(state, int(ChicheckInvadersAction.STAY))
     chicken = env.chickens(successor)[0]
     # It dived off the bottom away from the ship and came back at the top.
     assert successor[SHIP_HIT_INDEX] == 0.0
     assert (chicken[CHICKEN_ROW], chicken[CHICKEN_COLUMN]) == (env.num_rows - 1, 0)
     assert chicken[CHICKEN_MODE] == MODE_PATROL
 
-    score = env.transition_log_probability(state, int(CrazyChickenAction.STAY), [successor])
+    score = env.transition_log_probability(state, int(ChicheckInvadersAction.STAY), [successor])
     assert score[0] == pytest.approx(0.0), "a certain pull-up must score probability 1"
 
 
@@ -613,10 +614,10 @@ def test_a_shot_victims_discarded_coin_is_not_scored():
     for dive_probability in (0.0, 0.15, 1.0):
         env = build_env(num_chickens=1, dive_probability=dive_probability)
         column = env.ship_start_column
-        state = create_crazy_chicken_state(env, chickens=[[column, 2, 1, MODE_PATROL, 1]])
-        successor = env.sample_next_state(state, int(CrazyChickenAction.FIRE))
+        state = create_chicheck_invaders_state(env, chickens=[[column, 2, 1, MODE_PATROL, 1]])
+        successor = env.sample_next_state(state, int(ChicheckInvadersAction.FIRE))
         assert env.live_chicken_count(successor) == 0
-        score = env.transition_log_probability(state, int(CrazyChickenAction.FIRE), [successor])
+        score = env.transition_log_probability(state, int(ChicheckInvadersAction.FIRE), [successor])
         assert score[0] == pytest.approx(0.0), (
             f"at dive_probability={dive_probability} the shot victim's discarded coin "
             f"was scored: {score[0]}"
@@ -637,11 +638,11 @@ def test_the_declared_maximum_covers_a_configuration_where_firing_never_pays():
     Test type: unit
     """
     env = build_env(kill_reward=1.0, clear_reward=1.0, shot_cost=100.0, step_cost=0.1)
-    state = create_crazy_chicken_state(
+    state = create_chicheck_invaders_state(
         env, chickens=[[0, 3, 1, MODE_PATROL, 1], [4, 3, -1, MODE_PATROL, 1]]
     )
-    successor = env.sample_next_state(state, int(CrazyChickenAction.STAY))
-    staying = env.reward(state, int(CrazyChickenAction.STAY), successor)
+    successor = env.sample_next_state(state, int(ChicheckInvadersAction.STAY))
+    staying = env.reward(state, int(ChicheckInvadersAction.STAY), successor)
     assert staying == pytest.approx(-env.step_cost)
     assert (
         staying <= env.reward_range[1]
@@ -655,7 +656,7 @@ def test_the_flock_prior_rejects_a_malformed_direction_or_mode():
     """
     env = build_env(num_chickens=1)
     prior = env.initial_state_dist()
-    good = create_crazy_chicken_state(env, chickens=[[1, 2, 1, MODE_PATROL, 1]])
+    good = create_chicheck_invaders_state(env, chickens=[[1, 2, 1, MODE_PATROL, 1]])
     assert float(prior.probability([good])[0]) > 0.0
 
     for field, value in ((CHICKEN_DIRECTION, 0.0), (CHICKEN_MODE, 7.0)):

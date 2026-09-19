@@ -31,8 +31,8 @@ from typing import Any, Dict
 
 import numpy as np
 
-from POMDPPlanners.environments.crazy_chicken_pomdp.crazy_chicken_pomdp import (
-    ObservationMode as CrazyChickenObservationMode,
+from POMDPPlanners.environments.chicheck_invaders_pomdp.chicheck_invaders_pomdp import (
+    ObservationMode as ChicheckInvadersObservationMode,
 )
 from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp import (
     RewardModelType as LaserTagRewardModelType,
@@ -454,8 +454,8 @@ def continuous_maze_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
     return pinned
 
 
-def crazy_chicken_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
-    """Pinned optional defaults for ``CrazyChickenPOMDP``.
+def chicheck_invaders_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
+    """Pinned optional defaults for ``ChicheckInvadersPOMDP``.
 
     ``observation_mode`` is pinned as the enum member rather than its string
     value, because that is what the constructor stores and what the identity is
@@ -477,7 +477,7 @@ def crazy_chicken_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
         "drop_flag_error_probability": 0.1,
         "camera_slope": 1.0,
         "radar_radius": 6.0,
-        "observation_mode": CrazyChickenObservationMode.PARTIAL,
+        "observation_mode": ChicheckInvadersObservationMode.PARTIAL,
         "kill_reward": 10.0,
         "shot_cost": 1.0,
         "step_cost": 0.1,

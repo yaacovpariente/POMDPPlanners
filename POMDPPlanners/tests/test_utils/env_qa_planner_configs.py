@@ -92,9 +92,8 @@ def maze_qa_belief_particles() -> int:
     return 100
 
 
-
-def crazy_chicken_qa_pft_dpw_kwargs(**overrides: Any) -> Dict[str, Any]:
-    """PFT-DPW settings used for the Crazy Chicken QA run.
+def chicheck_invaders_qa_pft_dpw_kwargs(**overrides: Any) -> Dict[str, Any]:
+    """PFT-DPW settings used for the Chicheck Invaders QA run.
 
     The environment has no torch vectorized model, so QA runs PFT-DPW on the
     scalar ``Environment`` API rather than VOPP.
@@ -138,8 +137,8 @@ def crazy_chicken_qa_pft_dpw_kwargs(**overrides: Any) -> Dict[str, Any]:
     return pinned
 
 
-def crazy_chicken_qa_belief_particles() -> int:
-    """Particle count for the initial belief the Crazy Chicken QA gate ran with."""
+def chicheck_invaders_qa_belief_particles() -> int:
+    """Particle count for the initial belief the Chicheck Invaders QA gate ran with."""
     return 200
 
 
@@ -192,8 +191,8 @@ def occupancy_grid_mapping_qa_belief_particles() -> int:
 
 __all__ = [
     "continuous_maze_qa_pft_dpw_kwargs",
-    "crazy_chicken_qa_belief_particles",
-    "crazy_chicken_qa_pft_dpw_kwargs",
+    "chicheck_invaders_qa_belief_particles",
+    "chicheck_invaders_qa_pft_dpw_kwargs",
     "discrete_maze_qa_pft_dpw_kwargs",
     "maze_qa_belief_particles",
     "occupancy_grid_mapping_qa_belief_particles",

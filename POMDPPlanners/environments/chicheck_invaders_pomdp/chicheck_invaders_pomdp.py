@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""A Crazy Chicken shooter as a POMDP: clear the flock before it reaches the ship.
+"""A Chicheck Invaders shooter as a POMDP: clear the flock before it reaches the ship.
 
 The ship sits on row 0 of a ``W`` by ``H`` grid and may step left, step right,
 stay, or fire. Above it, ``N`` chickens patrol sideways and bounce off the
@@ -46,10 +46,10 @@ below the rows the gun covers, which is unwinnable. And the dive coin is flipped
 step; flipping it afterwards would delay every dive by one step for no gain.
 
 Classes:
-    CrazyChickenPOMDP: The environment.
-    CrazyChickenAction: Its four action indices.
-    CrazyChickenMetrics: The metric names it reports.
-    CrazyChickenStepChannel: The per-step channels those metrics are built from.
+    ChicheckInvadersPOMDP: The environment.
+    ChicheckInvadersAction: Its four action indices.
+    ChicheckInvadersMetrics: The metric names it reports.
+    ChicheckInvadersStepChannel: The per-step channels those metrics are built from.
     ObservationMode: Fully versus partially observable.
 """
 
@@ -77,7 +77,7 @@ from POMDPPlanners.core.simulation.step_info_metrics import (
     extract_episode_step_infos,
     require_non_empty_histories,
 )
-from POMDPPlanners.environments.crazy_chicken_pomdp.crazy_chicken_schema import (
+from POMDPPlanners.environments.chicheck_invaders_pomdp.chicheck_invaders_schema import (
     CHICKEN_ALIVE,
     CHICKEN_COLUMN,
     CHICKEN_DIRECTION,
@@ -97,13 +97,13 @@ from POMDPPlanners.environments.crazy_chicken_pomdp.crazy_chicken_schema import 
     SHIP_COLUMN_INDEX,
     SHIP_HIT_INDEX,
     STEP_INDEX,
-    CrazyChickenInitialStateDistribution,
+    ChicheckInvadersInitialStateDistribution,
     chicken_slots,
     make_state,
     observation_size,
     state_size,
 )
-from POMDPPlanners.environments.crazy_chicken_pomdp.crazy_chicken_sensors import (
+from POMDPPlanners.environments.chicheck_invaders_pomdp.chicheck_invaders_sensors import (
     camera_sees,
     radar_sees,
     rounded_normal_pmf,
@@ -125,7 +125,7 @@ IMPOSSIBLE_LOG_PROBABILITY = -1e18
 _MIN_EPISODES_FOR_CONFIDENCE_INTERVAL = 2
 
 
-class CrazyChickenAction(IntEnum):
+class ChicheckInvadersAction(IntEnum):
     """The ship's four actions.
 
     ``STAY`` is index 0 on purpose. The shared conformance harness takes
@@ -166,8 +166,8 @@ class ObservationMode(Enum):
     FULL = "full"
 
 
-class CrazyChickenStepChannel(Enum):
-    """Per-step channels reported by :meth:`CrazyChickenPOMDP.step_info`."""
+class ChicheckInvadersStepChannel(Enum):
+    """Per-step channels reported by :meth:`ChicheckInvadersPOMDP.step_info`."""
 
     FLOCK_CLEARED = "flock_cleared"
     SHIP_DESTROYED = "ship_destroyed"
@@ -178,8 +178,8 @@ class CrazyChickenStepChannel(Enum):
     CHICKEN_ENCROACHMENT_CELLS = "chicken_encroachment_cells"
 
 
-class CrazyChickenMetrics(Enum):
-    """Metric names for the Crazy Chicken environment."""
+class ChicheckInvadersMetrics(Enum):
+    """Metric names for the Chicheck Invaders environment."""
 
     TASK_COMPLETION_RATE = "task_completion_rate"
     ENDED_BY_GOAL = "ended_by_goal"
@@ -193,8 +193,8 @@ class CrazyChickenMetrics(Enum):
     SHOT_ACCURACY = "shot_accuracy"
 
 
-#: Type alias for a Crazy Chicken state.
-CrazyChickenState = np.ndarray
+#: Type alias for a Chicheck Invaders state.
+ChicheckInvadersState = np.ndarray
 
 
 def resolve_observation_mode(value: Union[ObservationMode, str]) -> ObservationMode:
@@ -222,7 +222,7 @@ def resolve_observation_mode(value: Union[ObservationMode, str]) -> ObservationM
 
 
 # pylint: disable-next=too-many-public-methods,too-many-instance-attributes
-class CrazyChickenPOMDP(DiscreteActionsEnvironment):
+class ChicheckInvadersPOMDP(DiscreteActionsEnvironment):
     """Clear a flock of chickens from a grid before one of them reaches the ship.
 
     The task is complete when every chicken slot is dead. It fails when a
@@ -256,12 +256,12 @@ class CrazyChickenPOMDP(DiscreteActionsEnvironment):
         clear_reward: float = 50.0,
         max_steps: int = 60,
         discount_factor: float = 0.95,
-        name: str = "CrazyChicken",
+        name: str = "ChicheckInvaders",
         output_dir: Optional[Path] = None,
         debug: bool = False,
         use_queue_logger: bool = False,
     ):
-        """Initialize the Crazy Chicken POMDP.
+        """Initialize the Chicheck Invaders POMDP.
 
         Args:
             num_columns: Grid width. Defaults to 8. Wide enough that the ship
@@ -319,7 +319,7 @@ class CrazyChickenPOMDP(DiscreteActionsEnvironment):
             clear_reward: Paid when the last chicken dies. Defaults to 50.0.
             max_steps: Transitions allowed per episode. Defaults to 60.
             discount_factor: Discount factor. Defaults to 0.95.
-            name: Environment name. Defaults to ``"CrazyChicken"``.
+            name: Environment name. Defaults to ``"ChicheckInvaders"``.
             output_dir: Output directory for logging. Defaults to ``None``.
             debug: Enable debug logging. Defaults to ``False``.
             use_queue_logger: Whether to use queue-based logging.
@@ -476,7 +476,7 @@ class CrazyChickenPOMDP(DiscreteActionsEnvironment):
 
     # -- state accessors ------------------------------------------------
 
-    def chickens(self, state: CrazyChickenState) -> np.ndarray:
+    def chickens(self, state: ChicheckInvadersState) -> np.ndarray:
         """Return the ``(num_chickens, 5)`` chicken block of ``state`` as a view.
 
         Args:
@@ -487,7 +487,7 @@ class CrazyChickenPOMDP(DiscreteActionsEnvironment):
         """
         return chicken_slots(np.asarray(state, dtype=np.float64), self.num_chickens)
 
-    def ship_column(self, state: CrazyChickenState) -> int:
+    def ship_column(self, state: ChicheckInvadersState) -> int:
         """Return the ship's column in ``state``.
 
         Args:
@@ -498,7 +498,7 @@ class CrazyChickenPOMDP(DiscreteActionsEnvironment):
         """
         return int(round(float(np.asarray(state, dtype=np.float64)[SHIP_COLUMN_INDEX])))
 
-    def live_chicken_count(self, state: CrazyChickenState) -> int:
+    def live_chicken_count(self, state: ChicheckInvadersState) -> int:
         """Return how many chicken slots in ``state`` are still alive.
 
         Args:
@@ -513,13 +513,13 @@ class CrazyChickenPOMDP(DiscreteActionsEnvironment):
 
     def get_actions(self) -> List[int]:
         """Return the four actions: stay, left, right, fire."""
-        return [int(action) for action in CrazyChickenAction]
+        return [int(action) for action in ChicheckInvadersAction]
 
     def hash_action(self, action: Any) -> Hashable:
         """Return a hashable key for an action (already an int)."""
         return int(action)
 
-    def fires(self, state: CrazyChickenState, action: Any) -> bool:
+    def fires(self, state: ChicheckInvadersState, action: Any) -> bool:
         """Whether ``action`` actually discharges the gun from ``state``.
 
         The cooldown is the only thing that can block it. A ``FIRE`` during
@@ -534,11 +534,11 @@ class CrazyChickenPOMDP(DiscreteActionsEnvironment):
         Returns:
             ``True`` if the gun discharges.
         """
-        if int(action) != int(CrazyChickenAction.FIRE):
+        if int(action) != int(ChicheckInvadersAction.FIRE):
             return False
         return bool(np.asarray(state, dtype=np.float64)[COOLDOWN_INDEX] <= 0.0)
 
-    def shot_target(self, state: CrazyChickenState) -> int:
+    def shot_target(self, state: ChicheckInvadersState) -> int:
         """Which chicken slot a shot fired from ``state`` would kill.
 
         The lowest live chicken in the ship's column, over rows 1 to ``H - 1``.
@@ -570,12 +570,12 @@ class CrazyChickenPOMDP(DiscreteActionsEnvironment):
                 target, lowest = index, row
         return target
 
-    def _moved_ship_column(self, state: CrazyChickenState, action: Any) -> int:
+    def _moved_ship_column(self, state: ChicheckInvadersState, action: Any) -> int:
         """Where the ship ends up, clamped at the walls."""
         delta = 0
-        if int(action) == int(CrazyChickenAction.LEFT):
+        if int(action) == int(ChicheckInvadersAction.LEFT):
             delta = -1
-        elif int(action) == int(CrazyChickenAction.RIGHT):
+        elif int(action) == int(ChicheckInvadersAction.RIGHT):
             delta = 1
         return int(min(max(self.ship_column(state) + delta, 0), self.num_columns - 1))
 
@@ -595,10 +595,10 @@ class CrazyChickenPOMDP(DiscreteActionsEnvironment):
     # pylint: disable-next=too-many-locals
     def _step_once(
         self,
-        state: CrazyChickenState,
+        state: ChicheckInvadersState,
         action: Any,
         switches: Optional[np.ndarray] = None,
-    ) -> CrazyChickenState:
+    ) -> ChicheckInvadersState:
         """Advance one step, with this step's dive coins drawn or supplied.
 
         The order is: move the ship, resolve the shot, flip the dive coins, move
@@ -789,7 +789,7 @@ class CrazyChickenPOMDP(DiscreteActionsEnvironment):
         )
         return was_patrolling & (now_diving | pulled_up)
 
-    def coin_eligible_slots(self, state: CrazyChickenState, action: Any) -> np.ndarray:
+    def coin_eligible_slots(self, state: ChicheckInvadersState, action: Any) -> np.ndarray:
         """Which slots' dive coins actually change the successor of ``(state, action)``.
 
         A coin is drawn for every slot on every step, but :meth:`_step_once`
@@ -1159,7 +1159,7 @@ class CrazyChickenPOMDP(DiscreteActionsEnvironment):
 
     def initial_state_dist(self) -> Distribution:
         """A fresh flock per episode, the ship in the middle with an empty sky."""
-        return CrazyChickenInitialStateDistribution(
+        return ChicheckInvadersInitialStateDistribution(
             num_chickens=self.num_chickens,
             num_columns=self.num_columns,
             num_rows=self.num_rows,
@@ -1212,7 +1212,7 @@ class CrazyChickenPOMDP(DiscreteActionsEnvironment):
             next_state: The realised successor, or ``None`` on the terminal step.
 
         Returns:
-            The channels named by :class:`CrazyChickenStepChannel`.
+            The channels named by :class:`ChicheckInvadersStepChannel`.
         """
         subject = np.asarray(state if next_state is None else next_state, dtype=np.float64)
         cleared = float(self.live_chicken_count(subject) == 0)
@@ -1224,13 +1224,17 @@ class CrazyChickenPOMDP(DiscreteActionsEnvironment):
         fired = float(action is not None and self.fires(state, action))
 
         return {
-            CrazyChickenStepChannel.FLOCK_CLEARED.value: cleared,
-            CrazyChickenStepChannel.SHIP_DESTROYED.value: destroyed,
-            CrazyChickenStepChannel.STILL_RUNNING.value: float(cleared == 0.0 and destroyed == 0.0),
-            CrazyChickenStepChannel.RECORDED_STEP.value: 1.0,
-            CrazyChickenStepChannel.CHICKENS_KILLED.value: killed,
-            CrazyChickenStepChannel.SHOT_FIRED.value: fired,
-            CrazyChickenStepChannel.CHICKEN_ENCROACHMENT_CELLS.value: self._encroachment(subject),
+            ChicheckInvadersStepChannel.FLOCK_CLEARED.value: cleared,
+            ChicheckInvadersStepChannel.SHIP_DESTROYED.value: destroyed,
+            ChicheckInvadersStepChannel.STILL_RUNNING.value: float(
+                cleared == 0.0 and destroyed == 0.0
+            ),
+            ChicheckInvadersStepChannel.RECORDED_STEP.value: 1.0,
+            ChicheckInvadersStepChannel.CHICKENS_KILLED.value: killed,
+            ChicheckInvadersStepChannel.SHOT_FIRED.value: fired,
+            ChicheckInvadersStepChannel.CHICKEN_ENCROACHMENT_CELLS.value: self._encroachment(
+                subject
+            ),
         }
 
     def _encroachment(self, state: np.ndarray) -> float:
@@ -1257,7 +1261,7 @@ class CrazyChickenPOMDP(DiscreteActionsEnvironment):
         return float(self.max_chicken_distance - float(np.min(distances)))
 
     def get_metric_specs(self) -> List[StepInfoMetric]:
-        """Declare the Crazy Chicken metrics that a per-step channel can express.
+        """Declare the Chicheck Invaders metrics that a per-step channel can express.
 
         Completion reduces with ``ANY``: clearing the flock happens once and
         ends the episode, so it cannot be undone by a later step. The three
@@ -1277,48 +1281,48 @@ class CrazyChickenPOMDP(DiscreteActionsEnvironment):
         """
         return [
             StepInfoMetric(
-                name=CrazyChickenMetrics.TASK_COMPLETION_RATE.value,
-                channel=CrazyChickenStepChannel.FLOCK_CLEARED.value,
+                name=ChicheckInvadersMetrics.TASK_COMPLETION_RATE.value,
+                channel=ChicheckInvadersStepChannel.FLOCK_CLEARED.value,
                 per_episode=EpisodeReduction.ANY,
             ),
             StepInfoMetric(
-                name=CrazyChickenMetrics.ENDED_BY_GOAL.value,
-                channel=CrazyChickenStepChannel.FLOCK_CLEARED.value,
+                name=ChicheckInvadersMetrics.ENDED_BY_GOAL.value,
+                channel=ChicheckInvadersStepChannel.FLOCK_CLEARED.value,
                 per_episode=EpisodeReduction.LAST,
             ),
             StepInfoMetric(
-                name=CrazyChickenMetrics.ENDED_BY_FAILURE.value,
-                channel=CrazyChickenStepChannel.SHIP_DESTROYED.value,
+                name=ChicheckInvadersMetrics.ENDED_BY_FAILURE.value,
+                channel=ChicheckInvadersStepChannel.SHIP_DESTROYED.value,
                 per_episode=EpisodeReduction.LAST,
             ),
             StepInfoMetric(
-                name=CrazyChickenMetrics.ENDED_BY_TIMEOUT.value,
-                channel=CrazyChickenStepChannel.STILL_RUNNING.value,
+                name=ChicheckInvadersMetrics.ENDED_BY_TIMEOUT.value,
+                channel=ChicheckInvadersStepChannel.STILL_RUNNING.value,
                 per_episode=EpisodeReduction.LAST,
             ),
             StepInfoMetric(
-                name=CrazyChickenMetrics.AVERAGE_EPISODE_LENGTH.value,
-                channel=CrazyChickenStepChannel.RECORDED_STEP.value,
+                name=ChicheckInvadersMetrics.AVERAGE_EPISODE_LENGTH.value,
+                channel=ChicheckInvadersStepChannel.RECORDED_STEP.value,
                 per_episode=EpisodeReduction.SUM,
             ),
             StepInfoMetric(
-                name=CrazyChickenMetrics.AVERAGE_CHICKENS_KILLED.value,
-                channel=CrazyChickenStepChannel.CHICKENS_KILLED.value,
+                name=ChicheckInvadersMetrics.AVERAGE_CHICKENS_KILLED.value,
+                channel=ChicheckInvadersStepChannel.CHICKENS_KILLED.value,
                 per_episode=EpisodeReduction.SUM,
             ),
             StepInfoMetric(
-                name=CrazyChickenMetrics.AVERAGE_SHOTS_FIRED.value,
-                channel=CrazyChickenStepChannel.SHOT_FIRED.value,
+                name=ChicheckInvadersMetrics.AVERAGE_SHOTS_FIRED.value,
+                channel=ChicheckInvadersStepChannel.SHOT_FIRED.value,
                 per_episode=EpisodeReduction.SUM,
             ),
             StepInfoMetric(
-                name=CrazyChickenMetrics.AVERAGE_HITS_TAKEN.value,
-                channel=CrazyChickenStepChannel.SHIP_DESTROYED.value,
+                name=ChicheckInvadersMetrics.AVERAGE_HITS_TAKEN.value,
+                channel=ChicheckInvadersStepChannel.SHIP_DESTROYED.value,
                 per_episode=EpisodeReduction.MAX,
             ),
             StepInfoMetric(
-                name=CrazyChickenMetrics.MAX_CHICKEN_ENCROACHMENT_CELLS.value,
-                channel=CrazyChickenStepChannel.CHICKEN_ENCROACHMENT_CELLS.value,
+                name=ChicheckInvadersMetrics.MAX_CHICKEN_ENCROACHMENT_CELLS.value,
+                channel=ChicheckInvadersStepChannel.CHICKEN_ENCROACHMENT_CELLS.value,
                 per_episode=EpisodeReduction.MAX,
             ),
         ]
@@ -1326,7 +1330,7 @@ class CrazyChickenPOMDP(DiscreteActionsEnvironment):
     def get_metric_names(self) -> List[str]:
         """Every metric this environment produces, including ``shot_accuracy``."""
         return [spec.name for spec in self.get_metric_specs()] + [
-            CrazyChickenMetrics.SHOT_ACCURACY.value
+            ChicheckInvadersMetrics.SHOT_ACCURACY.value
         ]
 
     def compute_metrics(self, histories: "List[History]") -> List[MetricValue]:
@@ -1356,18 +1360,19 @@ class CrazyChickenPOMDP(DiscreteActionsEnvironment):
         ratios: List[float] = []
         for episode in extract_episode_step_infos(histories):
             shots = sum(
-                float(info.get(CrazyChickenStepChannel.SHOT_FIRED.value, 0.0)) for info in episode
+                float(info.get(ChicheckInvadersStepChannel.SHOT_FIRED.value, 0.0))
+                for info in episode
             )
             if shots <= 0.0:
                 continue
             kills = sum(
-                float(info.get(CrazyChickenStepChannel.CHICKENS_KILLED.value, 0.0))
+                float(info.get(ChicheckInvadersStepChannel.CHICKENS_KILLED.value, 0.0))
                 for info in episode
             )
             ratios.append(kills / shots)
         if not ratios:
             metrics.append(
-                MetricValue(CrazyChickenMetrics.SHOT_ACCURACY.value, 0.0, -np.inf, np.inf)
+                MetricValue(ChicheckInvadersMetrics.SHOT_ACCURACY.value, 0.0, -np.inf, np.inf)
             )
             return metrics
         lower, upper = (
@@ -1377,7 +1382,7 @@ class CrazyChickenPOMDP(DiscreteActionsEnvironment):
         )
         metrics.append(
             MetricValue(
-                CrazyChickenMetrics.SHOT_ACCURACY.value,
+                ChicheckInvadersMetrics.SHOT_ACCURACY.value,
                 float(np.mean(ratios)),
                 float(lower),
                 float(upper),
@@ -1404,12 +1409,12 @@ class CrazyChickenPOMDP(DiscreteActionsEnvironment):
         # ``__init__`` imports the visualizer eagerly, so any worker that
         # imports the environment by its package name already paid for Pillow.
         # pylint: disable-next=import-outside-toplevel
-        from POMDPPlanners.environments.crazy_chicken_pomdp.crazy_chicken_visualizer import (
-            CrazyChickenVisualizer,
+        from POMDPPlanners.environments.chicheck_invaders_pomdp.chicheck_invaders_visualizer import (
+            ChicheckInvadersVisualizer,
         )
 
-        cache_path = output_dir / f"crazy_chicken_{episode_index}.gif"
-        CrazyChickenVisualizer(self).create_visualization(history, cache_path)
+        cache_path = output_dir / f"chicheck_invaders_{episode_index}.gif"
+        ChicheckInvadersVisualizer(self).create_visualization(history, cache_path)
 
 
 def noiseless_preset(**overrides: Any) -> Dict[str, Any]:
@@ -1424,7 +1429,7 @@ def noiseless_preset(**overrides: Any) -> Dict[str, Any]:
         **overrides: Values merged on top (overrides win).
 
     Returns:
-        Keyword arguments for :class:`CrazyChickenPOMDP`.
+        Keyword arguments for :class:`ChicheckInvadersPOMDP`.
     """
     preset: Dict[str, Any] = {
         "camera_detection_probability": 1.0,
@@ -1438,14 +1443,14 @@ def noiseless_preset(**overrides: Any) -> Dict[str, Any]:
     return preset
 
 
-def create_crazy_chicken_state(
-    environment: CrazyChickenPOMDP,
+def create_chicheck_invaders_state(
+    environment: ChicheckInvadersPOMDP,
     chickens: Sequence[Sequence[float]],
     ship_column: Optional[int] = None,
     cooldown: int = 0,
     ship_hit: bool = False,
     step: int = 0,
-) -> CrazyChickenState:
+) -> ChicheckInvadersState:
     """Build a state vector for ``environment`` from its parts.
 
     Args:
