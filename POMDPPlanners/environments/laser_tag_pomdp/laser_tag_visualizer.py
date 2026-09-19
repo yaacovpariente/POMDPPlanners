@@ -74,7 +74,11 @@ class LaserTagVisualizer(LaserTagFrameRenderer):
         return f"Action: {self._ACTION_NAMES[action]}", action == 4, self._ACTION_DIRS[action]
 
     def _laser_segments(self, rp, op):
-        del op
+        # The measured ray stops at the opponent as well as at a wall or the
+        # grid edge (see ``LaserTagPOMDP._laser_distance_inline``), so the drawn
+        # beam must stop there too — otherwise the GIF shows lasers passing
+        # through the very opponent they are measuring.
+        opponent_cell = (int(op[0]), int(op[1]))
         segments = []
         for direction in (
             (-1, 0),
@@ -97,6 +101,7 @@ class LaserTagVisualizer(LaserTagFrameRenderer):
                     or col < 0
                     or col >= self.floor_shape[1]
                     or (row, col) in self._wall_cells
+                    or (row, col) == opponent_cell
                 ):
                     break
                 distance += 1
