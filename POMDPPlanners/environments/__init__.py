@@ -24,6 +24,7 @@ Available Environments:
     OccupancyGridMappingPOMDP: Occupancy-grid mapping and exploration with a range sensor
     ChicheckInvadersPOMDP: Arcade shooter with a split camera/radar observation
     MultiAgentFirefightingPOMDP: Several robots fighting a wind-driven grid fire
+    CaptureTheFlagPOMDP: Two teams racing to carry the other side's flag home
 
 Factory Functions:
     get_environment: Create environment instances by name with parameters
@@ -31,6 +32,7 @@ Factory Functions:
 
 from typing import Any, Dict, Type
 
+from POMDPPlanners.environments.capture_the_flag_pomdp import CaptureTheFlagPOMDP
 from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
 from POMDPPlanners.environments.chicheck_invaders_pomdp.chicheck_invaders_pomdp import (
     ChicheckInvadersPOMDP,
@@ -69,51 +71,53 @@ from POMDPPlanners.environments.maze_pomdp import (
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 
 __all__ = [
-    "PushPOMDP",
-    "SafeAntVelocityPOMDP",
-    "DiscreteLightDarkPOMDP",
-    "ContinuousLightDarkPOMDP",
-    "ContinuousLightDarkPOMDPDiscreteActions",
-    "TigerPOMDP",
-    "SanityPOMDP",
+    "CaptureTheFlagPOMDP",
     "CartPolePOMDP",
-    "MountainCarPOMDP",
-    "LaserTagPOMDP",
+    "ChicheckInvadersPOMDP",
     "ContinuousLaserTagPOMDP",
     "ContinuousLaserTagPOMDPDiscreteActions",
-    "RockSamplePOMDP",
-    "PacManPOMDP",
-    "DiscreteMazePOMDP",
+    "ContinuousLightDarkPOMDP",
+    "ContinuousLightDarkPOMDPDiscreteActions",
     "ContinuousMazePOMDP",
-    "TMazePOMDP",
-    "OccupancyGridMappingPOMDP",
-    "ChicheckInvadersPOMDP",
+    "DiscreteLightDarkPOMDP",
+    "DiscreteMazePOMDP",
+    "LaserTagPOMDP",
+    "MountainCarPOMDP",
     "MultiAgentFirefightingPOMDP",
+    "OccupancyGridMappingPOMDP",
+    "PacManPOMDP",
+    "PushPOMDP",
+    "RockSamplePOMDP",
+    "SafeAntVelocityPOMDP",
+    "SanityPOMDP",
+    "TMazePOMDP",
+    "TigerPOMDP",
 ]
 
 # Registry of available environments
 ENVIRONMENT_REGISTRY: Dict[str, Type] = {
+    "CaptureTheFlagPOMDP": CaptureTheFlagPOMDP,
     "CartPolePOMDP": CartPolePOMDP,
-    "MountainCarPOMDP": MountainCarPOMDP,
-    "TigerPOMDP": TigerPOMDP,
-    "PushPOMDP": PushPOMDP,
-    "SanityPOMDP": SanityPOMDP,
-    "SafeAntVelocityPOMDP": SafeAntVelocityPOMDP,
-    "DiscreteLightDarkPOMDP": DiscreteLightDarkPOMDP,
-    "ContinuousLightDarkPOMDP": ContinuousLightDarkPOMDP,
-    "ContinuousLightDarkPOMDPDiscreteActions": ContinuousLightDarkPOMDPDiscreteActions,
-    "LaserTagPOMDP": LaserTagPOMDP,
+    "ChicheckInvadersPOMDP": ChicheckInvadersPOMDP,
     "ContinuousLaserTagPOMDP": ContinuousLaserTagPOMDP,
     "ContinuousLaserTagPOMDPDiscreteActions": ContinuousLaserTagPOMDPDiscreteActions,
-    "RockSamplePOMDP": RockSamplePOMDP,
-    "PacManPOMDP": PacManPOMDP,
-    "DiscreteMazePOMDP": DiscreteMazePOMDP,
+    "ContinuousLightDarkPOMDP": ContinuousLightDarkPOMDP,
+    "ContinuousLightDarkPOMDPDiscreteActions": ContinuousLightDarkPOMDPDiscreteActions,
     "ContinuousMazePOMDP": ContinuousMazePOMDP,
+    "DiscreteLightDarkPOMDP": DiscreteLightDarkPOMDP,
+    "DiscreteMazePOMDP": DiscreteMazePOMDP,
+    "LaserTagPOMDP": LaserTagPOMDP,
+    "MountainCarPOMDP": MountainCarPOMDP,
+    "MultiAgentFirefightingPOMDP": MultiAgentFirefightingPOMDP,
+    "OccupancyGridMappingPOMDP": OccupancyGridMappingPOMDP,
+    "PacManPOMDP": PacManPOMDP,
+    "PushPOMDP": PushPOMDP,
+    "RockSamplePOMDP": RockSamplePOMDP,
+    "SafeAntVelocityPOMDP": SafeAntVelocityPOMDP,
+    "SanityPOMDP": SanityPOMDP,
     # Compatibility name for saved configurations using the original T layout.
     "TMazePOMDP": TMazePOMDP,
-    "OccupancyGridMappingPOMDP": OccupancyGridMappingPOMDP,
-    "ChicheckInvadersPOMDP": ChicheckInvadersPOMDP,
-    "MultiAgentFirefightingPOMDP": MultiAgentFirefightingPOMDP,
+    "TigerPOMDP": TigerPOMDP,
 }
 
 

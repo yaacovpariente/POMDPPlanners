@@ -61,6 +61,35 @@ from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp import (
 )
 
 
+def _continuous_laser_tag_default_walls() -> list:
+    half = 0.5
+    cells = [
+        (1, 2),
+        (3, 0),
+        (3, 4),
+        (5, 0),
+        (6, 4),
+        (9, 1),
+        (9, 4),
+        (10, 6),
+    ]
+    return [(float(r), float(c), half, half) for r, c in cells]
+
+
+def _light_dark_default_beacons() -> list:
+    return [
+        (0, 0),
+        (0, 5),
+        (0, 10),
+        (5, 0),
+        (5, 5),
+        (5, 10),
+        (10, 0),
+        (10, 5),
+        (10, 10),
+    ]
+
+
 def battleship_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
     """Pinned optional defaults for ``BattleshipPOMDP``."""
     pinned: Dict[str, Any] = {
@@ -75,65 +104,97 @@ def battleship_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
     return pinned
 
 
-def tiger_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
-    """Pinned optional defaults for ``TigerPOMDP`` (no non-framework optionals)."""
-    pinned: Dict[str, Any] = {}
-    pinned.update(overrides)
-    return pinned
+def capture_the_flag_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
+    """Pinned optional defaults for ``CaptureTheFlagPOMDP``.
 
-
-def sanity_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
-    """Pinned optional defaults for ``SanityPOMDP`` (no non-framework optionals)."""
-    pinned: Dict[str, Any] = {}
-    pinned.update(overrides)
-    return pinned
-
-
-def laser_tag_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
-    """Pinned optional defaults for ``LaserTagPOMDP``."""
+    ``trees`` and ``red_flag_candidates`` default to ``None`` in the
+    constructor and are substituted with the module-level reference field, so
+    the substituted values are pinned here rather than ``None`` -- the
+    convention this module documents.
+    """
     pinned: Dict[str, Any] = {
-        "floor_shape": (11, 7),
-        "walls": {
-            (1, 2),
-            (3, 0),
-            (3, 4),
-            (5, 0),
-            (6, 4),
-            (9, 1),
-            (9, 4),
-            (10, 6),
-        },
+        "grid_size": (9, 7),
+        "midline": 4,
+        "trees": ((2, 1), (2, 5), (3, 3), (4, 0), (4, 6), (6, 1), (6, 5)),
+        "n_blue": 2,
+        "n_red": 2,
+        "n_red_defenders": 1,
+        "blue_base": (0, 3),
+        "red_base": (8, 3),
+        "blue_flag_cell": (1, 3),
+        "red_flag_candidates": ((7, 1), (7, 5), (6, 3), (8, 2)),
+        "slip_probability": 0.1,
+        "range_error_probability": 0.2,
+        "red_pursuit_probability": 0.7,
+        "red_alert_radius": 3,
+        "freeze_steps": 3,
+        "tagger_cooldown_steps": 2,
+        "detector_half_distance_move": 1.5,
+        "detector_half_distance_scan": 4.0,
+        "score_to_win": 1,
+        "capture_reward": 100.0,
+        "concede_penalty": 100.0,
+        "tagged_penalty": 25.0,
         "tag_reward": 10.0,
-        "tag_penalty": 10.0,
-        "step_cost": 1.0,
-        "measurement_noise": 1.0,
-        "dangerous_areas": {(5, 3), (7, 1), (2, 5)},
-        "dangerous_area_radius": 1.0,
-        "dangerous_area_penalty": 5.0,
-        "initial_state": None,
-        "transition_error_prob": 0.0,
-        "reward_model_type": LaserTagRewardModelType.CONSTANT_HAZARD_PENALTY,
-        "penalty_decay": 1.0,
-        "is_dangerous_area_hit_terminal": False,
-        "opponent_policy": OpponentPolicy.EVADE,
+        "pickup_reward": 20.0,
+        "move_cost": 1.0,
+        "scan_cost": 2.0,
     }
     pinned.update(overrides)
     return pinned
 
 
-def _continuous_laser_tag_default_walls() -> list:
-    half = 0.5
-    cells = [
-        (1, 2),
-        (3, 0),
-        (3, 4),
-        (5, 0),
-        (6, 4),
-        (9, 1),
-        (9, 4),
-        (10, 6),
-    ]
-    return [(float(r), float(c), half, half) for r, c in cells]
+def cartpole_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
+    """Pinned optional defaults for ``CartPolePOMDP`` (``noise_cov`` is required)."""
+    pinned: Dict[str, Any] = {
+        "state_transition_cov": np.diag([1e-4, 1e-4, 2.5e-5, 1e-4]),
+    }
+    pinned.update(overrides)
+    return pinned
+
+
+def chicheck_invaders_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
+    """Pinned optional defaults for ``ChicheckInvadersPOMDP``.
+
+    ``observation_mode`` is pinned as the enum member rather than its string
+    value, because that is what the constructor stores and what the identity is
+    computed over; passing the string would round-trip to the same environment
+    but is one more conversion for a reader to follow.
+    """
+    pinned: Dict[str, Any] = {
+        "num_columns": 8,
+        "num_rows": 7,
+        "num_chickens": 4,
+        "fire_cooldown": 1,
+        "dive_probability": 0.15,
+        "initial_dive_probability": 0.0,
+        "camera_detection_probability": 0.9,
+        "radar_detection_probability": 0.9,
+        "ship_column_noise_std": 0.5,
+        "camera_offset_noise_std": 1.0,
+        "radar_range_noise_std": 1.0,
+        "drop_flag_error_probability": 0.1,
+        "camera_slope": 1.0,
+        "radar_radius": 6.0,
+        "observation_mode": ChicheckInvadersObservationMode.PARTIAL,
+        "kill_reward": 10.0,
+        "shot_cost": 1.0,
+        "step_cost": 0.1,
+        "ship_hit_penalty": 50.0,
+        "clear_reward": 50.0,
+        "max_steps": 60,
+    }
+    pinned.update(overrides)
+    return pinned
+
+
+def continuous_laser_tag_discrete_actions_pinned_kwargs(
+    **overrides: Any,
+) -> Dict[str, Any]:
+    """Pinned optional defaults for ``ContinuousLaserTagPOMDPDiscreteActions``."""
+    pinned = continuous_laser_tag_pinned_kwargs()
+    pinned.update(overrides)
+    return pinned
 
 
 def continuous_laser_tag_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
@@ -158,95 +219,6 @@ def continuous_laser_tag_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
         "is_dangerous_area_hit_terminal": False,
         "initial_state": None,
         "opponent_policy": OpponentPolicy.EVADE,
-    }
-    pinned.update(overrides)
-    return pinned
-
-
-def continuous_laser_tag_discrete_actions_pinned_kwargs(
-    **overrides: Any,
-) -> Dict[str, Any]:
-    """Pinned optional defaults for ``ContinuousLaserTagPOMDPDiscreteActions``."""
-    pinned = continuous_laser_tag_pinned_kwargs()
-    pinned.update(overrides)
-    return pinned
-
-
-def cartpole_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
-    """Pinned optional defaults for ``CartPolePOMDP`` (``noise_cov`` is required)."""
-    pinned: Dict[str, Any] = {
-        "state_transition_cov": np.diag([1e-4, 1e-4, 2.5e-5, 1e-4]),
-    }
-    pinned.update(overrides)
-    return pinned
-
-
-def mountain_car_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
-    """Pinned optional defaults for ``MountainCarPOMDP``."""
-    pinned: Dict[str, Any] = {
-        "state_transition_cov": np.diag([2.5e-5, 1e-6]),
-    }
-    pinned.update(overrides)
-    return pinned
-
-
-def _light_dark_default_beacons() -> list:
-    return [
-        (0, 0),
-        (0, 5),
-        (0, 10),
-        (5, 0),
-        (5, 5),
-        (5, 10),
-        (10, 0),
-        (10, 5),
-        (10, 10),
-    ]
-
-
-def discrete_light_dark_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
-    """Pinned optional defaults for ``DiscreteLightDarkPOMDP``."""
-    pinned: Dict[str, Any] = {
-        "transition_error_prob": 0.05,
-        "observation_error_prob": 0.05,
-        "beacons": _light_dark_default_beacons(),
-        "goal_state": np.array([10, 5]),
-        "start_state": np.array([0, 5]),
-        "obstacles": [(3, 7), (5, 5)],
-        "obstacle_hit_probability": 0.2,
-        "obstacle_reward": -10.0,
-        "goal_reward": 10.0,
-        "beacon_radius": 1.0,
-        "fuel_cost": 2.0,
-        "grid_size": 11,
-        "is_stochastic_reward": True,
-        "observation_model_type": DiscreteLightDarkObservationModelType.NORMAL,
-    }
-    pinned.update(overrides)
-    return pinned
-
-
-def continuous_light_dark_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
-    """Pinned optional defaults for ``ContinuousLightDarkPOMDP``."""
-    pinned: Dict[str, Any] = {
-        "state_transition_cov_matrix": np.eye(2) * 0.05,
-        "observation_cov_matrix": np.eye(2) * 0.05,
-        "beacons": _light_dark_default_beacons(),
-        "goal_state": np.array([10, 5]),
-        "start_state": np.array([0, 5]),
-        "obstacles": [(3, 7), (5, 5)],
-        "obstacle_hit_probability": 0.2,
-        "obstacle_reward": -10.0,
-        "goal_reward": 10.0,
-        "fuel_cost": 2.0,
-        "grid_size": 11,
-        "goal_state_radius": 1.5,
-        "beacon_radius": 1.0,
-        "obstacle_radius": 1.5,
-        "reward_model_type": ContinuousLightDarkRewardModelType.CONSTANT_HAZARD_PENALTY,
-        "observation_model_type": ContinuousLightDarkObservationModelType.NORMAL_NOISE,
-        "penalty_decay": 1.0,
-        "is_obstacle_hit_terminal": True,
     }
     pinned.update(overrides)
     return pinned
@@ -284,26 +256,45 @@ def continuous_light_dark_discrete_actions_pinned_kwargs(
     return pinned
 
 
-def push_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
-    """Pinned optional defaults for ``PushPOMDP``."""
+def continuous_light_dark_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
+    """Pinned optional defaults for ``ContinuousLightDarkPOMDP``."""
     pinned: Dict[str, Any] = {
-        "grid_size": 10,
-        "push_threshold": 1.0,
-        "friction_coefficient": 0.3,
-        "observation_noise": 0.1,
-        "obstacles": [],
-        "obstacle_radius": 0.5,
-        "obstacle_penalty": -10.0,
-        "obstacle_hit_probability": 1.0,
-        "dangerous_areas": [],
-        "dangerous_area_radius": 0.5,
-        "dangerous_area_penalty": -10.0,
-        "dangerous_area_hit_probability": 1.0,
-        "reward_model_type": PushRewardModelType.CONSTANT_HAZARD_PENALTY,
+        "state_transition_cov_matrix": np.eye(2) * 0.05,
+        "observation_cov_matrix": np.eye(2) * 0.05,
+        "beacons": _light_dark_default_beacons(),
+        "goal_state": np.array([10, 5]),
+        "start_state": np.array([0, 5]),
+        "obstacles": [(3, 7), (5, 5)],
+        "obstacle_hit_probability": 0.2,
+        "obstacle_reward": -10.0,
+        "goal_reward": 10.0,
+        "fuel_cost": 2.0,
+        "grid_size": 11,
+        "goal_state_radius": 1.5,
+        "beacon_radius": 1.0,
+        "obstacle_radius": 1.5,
+        "reward_model_type": ContinuousLightDarkRewardModelType.CONSTANT_HAZARD_PENALTY,
+        "observation_model_type": ContinuousLightDarkObservationModelType.NORMAL_NOISE,
         "penalty_decay": 1.0,
-        "initial_state": None,
-        "transition_error_prob": 0.0,
+        "is_obstacle_hit_terminal": True,
     }
+    pinned.update(overrides)
+    return pinned
+
+
+def continuous_maze_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
+    """Pinned optional defaults for ``ContinuousMazePOMDP``."""
+    pinned = discrete_maze_pinned_kwargs()
+    pinned["max_step_size"] = 1.0
+    pinned.update(overrides)
+    return pinned
+
+
+def continuous_push_discrete_actions_pinned_kwargs(
+    **overrides: Any,
+) -> Dict[str, Any]:
+    """Pinned optional defaults for ``ContinuousPushPOMDPDiscreteActions``."""
+    pinned = continuous_push_pinned_kwargs()
     pinned.update(overrides)
     return pinned
 
@@ -333,98 +324,23 @@ def continuous_push_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
     return pinned
 
 
-def continuous_push_discrete_actions_pinned_kwargs(
-    **overrides: Any,
-) -> Dict[str, Any]:
-    """Pinned optional defaults for ``ContinuousPushPOMDPDiscreteActions``."""
-    pinned = continuous_push_pinned_kwargs()
-    pinned.update(overrides)
-    return pinned
-
-
-def pacman_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
-    """Pinned optional defaults for ``PacManPOMDP``.
-
-    The ghost / pellet / wall ``None`` sentinels are pinned to the concrete
-    values ``__init__`` substitutes for the default ``maze_size=(7, 7)`` and
-    ``num_ghosts=1`` (auto-generated ghost corner ``(6, 6)``, corner-adjacent
-    pellets, and the predefined wall set).
-    """
+def discrete_light_dark_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
+    """Pinned optional defaults for ``DiscreteLightDarkPOMDP``."""
     pinned: Dict[str, Any] = {
-        "maze_size": (7, 7),
-        "walls": {(2, 2), (2, 3), (3, 2), (4, 4), (3, 5)},
-        "initial_pellets": [(1, 1), (1, 5), (5, 1), (5, 5)],
-        "initial_pacman_pos": (0, 0),
-        "num_ghosts": 1,
-        "initial_ghost_positions": [(6, 6)],
-        "pellet_reward": 10.0,
-        "ghost_collision_penalty": -100.0,
-        "step_penalty": -1.0,
-        "win_reward": 100.0,
-        "ghost_aggressiveness": 2.0,
-        "ghost_coordination": "independent",
-        "ghost_strategies": ["aggressive"],
-        "observation_noise_factor": 0.3,
-        "max_observation_noise": 1.5,
-        "dangerous_areas": None,
-        "dangerous_area_radius": 1.0,
-        "dangerous_area_penalty": 5.0,
-        "reward_model_type": PacManRewardModelType.CONSTANT_HAZARD_PENALTY,
-        "penalty_decay": 1.0,
-    }
-    pinned.update(overrides)
-    return pinned
-
-
-def rock_sample_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
-    """Pinned optional defaults for ``RockSamplePOMDP``."""
-    pinned: Dict[str, Any] = {
-        "map_size": (5, 5),
-        "rock_positions": [(0, 0), (2, 2), (3, 3)],
-        "init_pos": (0, 0),
-        "sensor_efficiency": 10.0,
-        "bad_rock_penalty": -10.0,
-        "good_rock_reward": 10.0,
-        "step_penalty": 0.0,
-        "sensor_use_penalty": 0.0,
-        "exit_reward": 10.0,
-        "dangerous_areas": [],
-        "dangerous_area_radius": 1.0,
-        "dangerous_area_penalty": -5.0,
-        "dangerous_area_hit_probability": 1.0,
-        "reward_model_type": RockSampleRewardModelType.CONSTANT_HAZARD_PENALTY,
-        "penalty_decay": 1.0,
-    }
-    pinned.update(overrides)
-    return pinned
-
-
-def safety_ant_velocity_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
-    """Pinned optional defaults for ``SafeAntVelocityPOMDP``."""
-    pinned: Dict[str, Any] = {
-        "safe_velocity_threshold": 2.0,
-        "max_force": 1.0,
-        "dt": 0.1,
-        "mass": 1.0,
-        "damping": 0.1,
-        "position_noise": 0.1,
-        "velocity_noise": 0.2,
-        "safety_violation_penalty": -100.0,
-        "movement_reward_scale": 1.0,
-    }
-    pinned.update(overrides)
-    return pinned
-
-
-def t_maze_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
-    """Pinned optional defaults for ``TMazePOMDP``."""
-    pinned: Dict[str, Any] = {
-        "stem_length": 4,
-        "arm_length": 1,
-        "cue_accuracy": 0.9,
+        "transition_error_prob": 0.05,
+        "observation_error_prob": 0.05,
+        "beacons": _light_dark_default_beacons(),
+        "goal_state": np.array([10, 5]),
+        "start_state": np.array([0, 5]),
+        "obstacles": [(3, 7), (5, 5)],
+        "obstacle_hit_probability": 0.2,
+        "obstacle_reward": -10.0,
         "goal_reward": 10.0,
-        "wrong_goal_penalty": 10.0,
-        "step_penalty": 1.0,
+        "beacon_radius": 1.0,
+        "fuel_cost": 2.0,
+        "grid_size": 11,
+        "is_stochastic_reward": True,
+        "observation_model_type": DiscreteLightDarkObservationModelType.NORMAL,
     }
     pinned.update(overrides)
     return pinned
@@ -446,44 +362,42 @@ def discrete_maze_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
     return pinned
 
 
-def continuous_maze_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
-    """Pinned optional defaults for ``ContinuousMazePOMDP``."""
-    pinned = discrete_maze_pinned_kwargs()
-    pinned["max_step_size"] = 1.0
+def laser_tag_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
+    """Pinned optional defaults for ``LaserTagPOMDP``."""
+    pinned: Dict[str, Any] = {
+        "floor_shape": (11, 7),
+        "walls": {
+            (1, 2),
+            (3, 0),
+            (3, 4),
+            (5, 0),
+            (6, 4),
+            (9, 1),
+            (9, 4),
+            (10, 6),
+        },
+        "tag_reward": 10.0,
+        "tag_penalty": 10.0,
+        "step_cost": 1.0,
+        "measurement_noise": 1.0,
+        "dangerous_areas": {(5, 3), (7, 1), (2, 5)},
+        "dangerous_area_radius": 1.0,
+        "dangerous_area_penalty": 5.0,
+        "initial_state": None,
+        "transition_error_prob": 0.0,
+        "reward_model_type": LaserTagRewardModelType.CONSTANT_HAZARD_PENALTY,
+        "penalty_decay": 1.0,
+        "is_dangerous_area_hit_terminal": False,
+        "opponent_policy": OpponentPolicy.EVADE,
+    }
     pinned.update(overrides)
     return pinned
 
 
-def chicheck_invaders_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
-    """Pinned optional defaults for ``ChicheckInvadersPOMDP``.
-
-    ``observation_mode`` is pinned as the enum member rather than its string
-    value, because that is what the constructor stores and what the identity is
-    computed over; passing the string would round-trip to the same environment
-    but is one more conversion for a reader to follow.
-    """
+def mountain_car_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
+    """Pinned optional defaults for ``MountainCarPOMDP``."""
     pinned: Dict[str, Any] = {
-        "num_columns": 8,
-        "num_rows": 7,
-        "num_chickens": 4,
-        "fire_cooldown": 1,
-        "dive_probability": 0.15,
-        "initial_dive_probability": 0.0,
-        "camera_detection_probability": 0.9,
-        "radar_detection_probability": 0.9,
-        "ship_column_noise_std": 0.5,
-        "camera_offset_noise_std": 1.0,
-        "radar_range_noise_std": 1.0,
-        "drop_flag_error_probability": 0.1,
-        "camera_slope": 1.0,
-        "radar_radius": 6.0,
-        "observation_mode": ChicheckInvadersObservationMode.PARTIAL,
-        "kill_reward": 10.0,
-        "shot_cost": 1.0,
-        "step_cost": 0.1,
-        "ship_hit_penalty": 50.0,
-        "clear_reward": 50.0,
-        "max_steps": 60,
+        "state_transition_cov": np.diag([2.5e-5, 1e-6]),
     }
     pinned.update(overrides)
     return pinned
@@ -567,41 +481,127 @@ def occupancy_grid_mapping_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
     return pinned
 
 
-def capture_the_flag_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
-    """Pinned optional defaults for ``CaptureTheFlagPOMDP``.
+def pacman_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
+    """Pinned optional defaults for ``PacManPOMDP``.
 
-    ``trees`` and ``red_flag_candidates`` default to ``None`` in the
-    constructor and are substituted with the module-level reference field, so
-    the substituted values are pinned here rather than ``None`` -- the
-    convention this module documents.
+    The ghost / pellet / wall ``None`` sentinels are pinned to the concrete
+    values ``__init__`` substitutes for the default ``maze_size=(7, 7)`` and
+    ``num_ghosts=1`` (auto-generated ghost corner ``(6, 6)``, corner-adjacent
+    pellets, and the predefined wall set).
     """
     pinned: Dict[str, Any] = {
-        "grid_size": (9, 7),
-        "midline": 4,
-        "trees": ((2, 1), (2, 5), (3, 3), (4, 0), (4, 6), (6, 1), (6, 5)),
-        "n_blue": 2,
-        "n_red": 2,
-        "n_red_defenders": 1,
-        "blue_base": (0, 3),
-        "red_base": (8, 3),
-        "blue_flag_cell": (1, 3),
-        "red_flag_candidates": ((7, 1), (7, 5), (6, 3), (8, 2)),
-        "slip_probability": 0.1,
-        "range_error_probability": 0.2,
-        "red_pursuit_probability": 0.7,
-        "red_alert_radius": 3,
-        "freeze_steps": 3,
-        "tagger_cooldown_steps": 2,
-        "detector_half_distance_move": 1.5,
-        "detector_half_distance_scan": 4.0,
-        "score_to_win": 1,
-        "capture_reward": 100.0,
-        "concede_penalty": 100.0,
-        "tagged_penalty": 25.0,
-        "tag_reward": 10.0,
-        "pickup_reward": 20.0,
-        "move_cost": 1.0,
-        "scan_cost": 2.0,
+        "maze_size": (7, 7),
+        "walls": {(2, 2), (2, 3), (3, 2), (4, 4), (3, 5)},
+        "initial_pellets": [(1, 1), (1, 5), (5, 1), (5, 5)],
+        "initial_pacman_pos": (0, 0),
+        "num_ghosts": 1,
+        "initial_ghost_positions": [(6, 6)],
+        "pellet_reward": 10.0,
+        "ghost_collision_penalty": -100.0,
+        "step_penalty": -1.0,
+        "win_reward": 100.0,
+        "ghost_aggressiveness": 2.0,
+        "ghost_coordination": "independent",
+        "ghost_strategies": ["aggressive"],
+        "observation_noise_factor": 0.3,
+        "max_observation_noise": 1.5,
+        "dangerous_areas": None,
+        "dangerous_area_radius": 1.0,
+        "dangerous_area_penalty": 5.0,
+        "reward_model_type": PacManRewardModelType.CONSTANT_HAZARD_PENALTY,
+        "penalty_decay": 1.0,
     }
+    pinned.update(overrides)
+    return pinned
+
+
+def push_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
+    """Pinned optional defaults for ``PushPOMDP``."""
+    pinned: Dict[str, Any] = {
+        "grid_size": 10,
+        "push_threshold": 1.0,
+        "friction_coefficient": 0.3,
+        "observation_noise": 0.1,
+        "obstacles": [],
+        "obstacle_radius": 0.5,
+        "obstacle_penalty": -10.0,
+        "obstacle_hit_probability": 1.0,
+        "dangerous_areas": [],
+        "dangerous_area_radius": 0.5,
+        "dangerous_area_penalty": -10.0,
+        "dangerous_area_hit_probability": 1.0,
+        "reward_model_type": PushRewardModelType.CONSTANT_HAZARD_PENALTY,
+        "penalty_decay": 1.0,
+        "initial_state": None,
+        "transition_error_prob": 0.0,
+    }
+    pinned.update(overrides)
+    return pinned
+
+
+def rock_sample_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
+    """Pinned optional defaults for ``RockSamplePOMDP``."""
+    pinned: Dict[str, Any] = {
+        "map_size": (5, 5),
+        "rock_positions": [(0, 0), (2, 2), (3, 3)],
+        "init_pos": (0, 0),
+        "sensor_efficiency": 10.0,
+        "bad_rock_penalty": -10.0,
+        "good_rock_reward": 10.0,
+        "step_penalty": 0.0,
+        "sensor_use_penalty": 0.0,
+        "exit_reward": 10.0,
+        "dangerous_areas": [],
+        "dangerous_area_radius": 1.0,
+        "dangerous_area_penalty": -5.0,
+        "dangerous_area_hit_probability": 1.0,
+        "reward_model_type": RockSampleRewardModelType.CONSTANT_HAZARD_PENALTY,
+        "penalty_decay": 1.0,
+    }
+    pinned.update(overrides)
+    return pinned
+
+
+def safety_ant_velocity_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
+    """Pinned optional defaults for ``SafeAntVelocityPOMDP``."""
+    pinned: Dict[str, Any] = {
+        "safe_velocity_threshold": 2.0,
+        "max_force": 1.0,
+        "dt": 0.1,
+        "mass": 1.0,
+        "damping": 0.1,
+        "position_noise": 0.1,
+        "velocity_noise": 0.2,
+        "safety_violation_penalty": -100.0,
+        "movement_reward_scale": 1.0,
+    }
+    pinned.update(overrides)
+    return pinned
+
+
+def sanity_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
+    """Pinned optional defaults for ``SanityPOMDP`` (no non-framework optionals)."""
+    pinned: Dict[str, Any] = {}
+    pinned.update(overrides)
+    return pinned
+
+
+def t_maze_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
+    """Pinned optional defaults for ``TMazePOMDP``."""
+    pinned: Dict[str, Any] = {
+        "stem_length": 4,
+        "arm_length": 1,
+        "cue_accuracy": 0.9,
+        "goal_reward": 10.0,
+        "wrong_goal_penalty": 10.0,
+        "step_penalty": 1.0,
+    }
+    pinned.update(overrides)
+    return pinned
+
+
+def tiger_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
+    """Pinned optional defaults for ``TigerPOMDP`` (no non-framework optionals)."""
+    pinned: Dict[str, Any] = {}
     pinned.update(overrides)
     return pinned
