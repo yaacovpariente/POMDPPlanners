@@ -106,6 +106,7 @@ from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp import RockS
 from POMDPPlanners.environments.safety_ant_velocity_pomdp import SafeAntVelocityPOMDP
 from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
 from POMDPPlanners.environments.maze_pomdp.t_maze_pomdp import TMazePOMDP
+from POMDPPlanners.environments.snake_pomdp.snake_pomdp import SnakePOMDP
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
     battleship_pinned_kwargs,
@@ -130,6 +131,7 @@ from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
     rock_sample_pinned_kwargs,
     safety_ant_velocity_pinned_kwargs,
     sanity_pinned_kwargs,
+    snake_pinned_kwargs,
     t_maze_pinned_kwargs,
     tiger_pinned_kwargs,
 )
@@ -222,6 +224,10 @@ def _build_multiagent_firefighting_three_robots() -> MultiAgentFirefightingPOMDP
     )
 
 
+def _build_snake() -> SnakePOMDP:
+    return SnakePOMDP(discount_factor=0.98, **snake_pinned_kwargs())
+
+
 def _build_rock_sample() -> RockSamplePOMDP:
     return RockSamplePOMDP(discount_factor=0.95, **rock_sample_pinned_kwargs())
 
@@ -306,6 +312,7 @@ ENV_BUILDERS: List[Tuple[str, EnvBuilder]] = [
     ("RockSamplePOMDP", _build_rock_sample),
     ("SafeAntVelocityPOMDP", _build_safety_ant),
     ("SanityPOMDP", _build_sanity),
+    ("SnakePOMDP", _build_snake),
     ("TMazePOMDP", _build_t_maze),
     ("TigerPOMDP", _build_tiger),
 ]

@@ -586,6 +586,25 @@ def sanity_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
     return pinned
 
 
+def snake_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
+    """Pinned optional defaults for ``SnakePOMDP``.
+
+    ``starvation_limit`` defaults to ``None`` in the constructor and is
+    substituted with ``2 * grid_size ** 2``, so the substituted value is pinned
+    here rather than ``None`` -- the convention this module documents.
+    """
+    pinned: Dict[str, Any] = {
+        "grid_size": 12,
+        "target_length": 10,
+        "window_radius": 2,
+        "detection_probability": 0.9,
+        "scent_accuracy": 0.7,
+        "starvation_limit": 288,
+    }
+    pinned.update(overrides)
+    return pinned
+
+
 def t_maze_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
     """Pinned optional defaults for ``TMazePOMDP``."""
     pinned: Dict[str, Any] = {
