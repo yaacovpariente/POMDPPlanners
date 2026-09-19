@@ -222,6 +222,8 @@ def _build_multiagent_firefighting_three_robots() -> MultiAgentFirefightingPOMDP
             num_robots=3, robot_start_cells=[(2, 2), (2, 3), (3, 2)]
         ),
     )
+
+
 def _build_snake() -> SnakePOMDP:
     return SnakePOMDP(discount_factor=0.98, **snake_pinned_kwargs())
 
