@@ -32,12 +32,13 @@ import shutil
 import warnings
 from collections import deque
 from pathlib import Path
-from typing import Any, List
+from typing import Any, List, cast
 
 import numpy as np
 import pytest
 
 from POMDPPlanners.core.belief import WeightedParticleBelief, get_initial_belief
+from POMDPPlanners.core.distributions import DiscreteDistribution
 from POMDPPlanners.core.simulation import StepData
 from POMDPPlanners.environments.battleship_pomdp.battleship_belief import BattleshipBelief
 from POMDPPlanners.environments.battleship_pomdp.battleship_pomdp import BattleshipPOMDP
@@ -1050,7 +1051,10 @@ def create_deterministic_capture_the_flag_episode(seed: int = 0) -> List[StepDat
     env = build_capture_the_flag_env()
     random.seed(seed)
     np.random.seed(seed)
-    state = env.initial_state_dist().values[2]
+    # cast: initial_state_dist is typed as the abstract Distribution, whose
+    # support is not part of that interface. Pinning one candidate keeps the
+    # golden episode deterministic.
+    state = cast(DiscreteDistribution, env.initial_state_dist()).values[2]
     particles = [env.initial_state_dist().sample()[0] for _ in range(48)]
     history: List[StepData] = []
     for _ in range(10):
