@@ -85,6 +85,9 @@ from POMDPPlanners.environments.maze_pomdp import (
     DiscreteMazePOMDP,
 )
 from POMDPPlanners.environments.mountain_car_pomdp import MountainCarPOMDP
+from POMDPPlanners.environments.multiagent_firefighting_pomdp.multiagent_firefighting_pomdp import (
+    MultiAgentFirefightingPOMDP,
+)
 from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.occupancy_grid_mapping_pomdp import (
     OccupancyGridMappingPOMDP,
 )
@@ -113,6 +116,7 @@ from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
     discrete_maze_pinned_kwargs,
     laser_tag_pinned_kwargs,
     mountain_car_pinned_kwargs,
+    multiagent_firefighting_pinned_kwargs,
     occupancy_grid_mapping_pinned_kwargs,
     pacman_pinned_kwargs,
     push_pinned_kwargs,
@@ -175,6 +179,24 @@ def _build_occupancy_grid_mapping_truncated_normal() -> OccupancyGridMappingPOMD
         discount_factor=0.95,
         **occupancy_grid_mapping_pinned_kwargs(
             range_noise_model="truncated_normal", range_noise_std_cells=1.0
+        ),
+    )
+
+
+def _build_multiagent_firefighting() -> MultiAgentFirefightingPOMDP:
+    return MultiAgentFirefightingPOMDP(
+        discount_factor=0.95, **multiagent_firefighting_pinned_kwargs()
+    )
+
+
+def _build_multiagent_firefighting_three_robots() -> MultiAgentFirefightingPOMDP:
+    # A third robot is a different action space (125 joint actions, not 25) and
+    # a different state length, so the layout arithmetic and the base-5 action
+    # decoding get covered at more than one width.
+    return MultiAgentFirefightingPOMDP(
+        discount_factor=0.95,
+        **multiagent_firefighting_pinned_kwargs(
+            num_robots=3, robot_start_cells=[(2, 2), (2, 3), (3, 2)]
         ),
     )
 
@@ -254,6 +276,8 @@ ENV_BUILDERS: List[Tuple[str, EnvBuilder]] = [
     ("DiscreteMazePOMDP", _build_discrete_maze),
     ("ContinuousMazePOMDP", _build_continuous_maze),
     ("BattleshipPOMDP", _build_battleship),
+    ("MultiAgentFirefightingPOMDP", _build_multiagent_firefighting),
+    ("MultiAgentFirefightingPOMDP[3 robots]", _build_multiagent_firefighting_three_robots),
     ("OccupancyGridMappingPOMDP", _build_occupancy_grid_mapping),
     ("OccupancyGridMappingPOMDP[truncated_normal]", _build_occupancy_grid_mapping_truncated_normal),
 ]

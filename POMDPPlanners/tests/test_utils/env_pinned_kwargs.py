@@ -451,6 +451,51 @@ def continuous_maze_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
     return pinned
 
 
+def multiagent_firefighting_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
+    """Pinned optional defaults for ``MultiAgentFirefightingPOMDP``.
+
+    ``obstacle_cells``, ``depot_cell`` and ``robot_start_cells`` default to
+    ``None`` in the constructor and are substituted with a concrete layout, so
+    the substituted values are pinned here rather than ``None`` -- the
+    convention this module documents. Each call returns fresh lists so two
+    constructions never share one backing object.
+    """
+    pinned: Dict[str, Any] = {
+        "num_rows": 10,
+        "num_cols": 10,
+        "num_robots": 2,
+        "obstacle_cells": [(5, 5), (5, 6), (6, 5), (6, 6)],
+        "depot_cell": (0, 0),
+        "robot_start_cells": [(2, 2), (2, 3)],
+        "num_initial_fires": 1,
+        "max_tank": 6,
+        "max_health": 3,
+        "sensing_radius": 2,
+        "observation_error_probability": 0.1,
+        "slip_probability": 0.05,
+        "spread_probability": 0.10,
+        "wind_gain_low": 2.0,
+        "wind_gain_high": 3.5,
+        "crosswind_attenuation": 0.5,
+        "growth_probability": 0.35,
+        "burnout_probability": 0.03,
+        "suppression_probability_unburnt": 1.0,
+        "suppression_probability_smoldering": 0.9,
+        "suppression_probability_burning": 0.6,
+        "max_steps": 100,
+        "success_reward": 100.0,
+        "step_cost": 0.1,
+        "smoldering_cell_cost": 0.5,
+        "burning_cell_cost": 1.0,
+        "burnt_cell_cost": 5.0,
+        "damage_cost": 10.0,
+        "water_cost": 0.1,
+        "is_all_robots_disabled_terminal": True,
+    }
+    pinned.update(overrides)
+    return pinned
+
+
 def occupancy_grid_mapping_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
     """Pinned optional defaults for ``OccupancyGridMappingPOMDP``.
 
