@@ -19,8 +19,8 @@ registry:
 
    ``get_environment`` covers the classic suite only, which now includes
    ``OccupancyGridMappingPOMDP``, ``ChicheckInvadersPOMDP`` and
-   ``MultiAgentFirefightingPOMDP``. Import ``BattleshipPOMDP`` directly.
-   ``ContinuousPushPOMDP``,
+   ``MultiAgentFirefightingPOMDP``. Import ``BattleshipPOMDP`` and
+   ``SnakePOMDP`` directly. ``ContinuousPushPOMDP``,
    ``ContinuousPushPOMDPDiscreteActions`` and the realistic worlds (CARLA,
    Isaac Lab, nuPlan, Racetrack) are not in the registry — import those classes
    directly.
@@ -89,6 +89,13 @@ actually stores.
      - discrete
      - none
      - :doc:`multiagent_firefighting`
+   * - ``SnakePOMDP``
+     - Grow the snake to a target length while the food stays hidden.
+     - ``[status, length, counter, food, body]``
+     - discrete
+     - discrete
+     - none
+     - :doc:`snake`
    * - ``PacManPOMDP``
      - Clear every pellet while dodging noisily-observed ghosts.
      - vector (pac, ghosts, pellets)
@@ -250,6 +257,7 @@ Guides
    occupancy_grid_mapping
    chicheck_invaders
    multiagent_firefighting
+   snake
    pacman
    maze
    light_dark
@@ -306,6 +314,7 @@ API listing
    POMDPPlanners.environments.occupancy_grid_mapping_pomdp.OccupancyGridMappingPOMDP
    POMDPPlanners.environments.chicheck_invaders_pomdp.ChicheckInvadersPOMDP
    POMDPPlanners.environments.multiagent_firefighting_pomdp.MultiAgentFirefightingPOMDP
+   POMDPPlanners.environments.snake_pomdp.SnakePOMDP
    POMDPPlanners.environments.pacman_pomdp.PacManPOMDP
    POMDPPlanners.environments.laser_tag_pomdp.LaserTagPOMDP
    POMDPPlanners.environments.laser_tag_pomdp.ContinuousLaserTagPOMDP

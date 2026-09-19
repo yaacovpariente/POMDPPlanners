@@ -206,6 +206,14 @@ FAMILIES: Tuple[EnvironmentFamily, ...] = (
         images=("docs/images/multiagent_firefighting_visualization.gif",),
     ),
     EnvironmentFamily(
+        package="snake_pomdp",
+        label="Snake",
+        hooks=(("snake_pomdp/snake_pomdp.py", "SnakePOMDP"),),
+        docs_page="snake.rst",
+        docs_section=None,
+        images=("docs/images/snake_visualization.gif",),
+    ),
+    EnvironmentFamily(
         package="pacman_pomdp",
         label="PacMan",
         hooks=(("pacman_pomdp/pacman_pomdp.py", "PacManPOMDP"),),
