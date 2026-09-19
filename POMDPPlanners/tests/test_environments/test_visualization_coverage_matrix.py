@@ -161,6 +161,17 @@ FAMILIES: Tuple[EnvironmentFamily, ...] = (
         images=("docs/artifacts/battleship_redesign/review.gif",),
     ),
     EnvironmentFamily(
+        package="capture_the_flag_pomdp",
+        label="CaptureTheFlag",
+        hooks=(("capture_the_flag_pomdp/capture_the_flag_pomdp.py", "CaptureTheFlagPOMDP"),),
+        docs_page="capture_the_flag.rst",
+        docs_section=None,
+        images=(
+            "POMDPPlanners/tests/test_environments/golden_visualizations/"
+            "capture_the_flag_visualization.gif",
+        ),
+    ),
+    EnvironmentFamily(
         package="occupancy_grid_mapping_pomdp",
         label="OccupancyGridMapping",
         hooks=(
@@ -528,10 +539,7 @@ def find_undeclared_images(page_name: str) -> List[str]:
     """
     page_path = DOCS_ENVIRONMENTS_DIR / page_name
     declared = {
-        image
-        for family in FAMILIES
-        if family.docs_page == page_name
-        for image in family.images
+        image for family in FAMILIES if family.docs_page == page_name for image in family.images
     }
     return [
         f"docs/environments/{page_name} embeds {image}, which no matrix row declares. "
@@ -804,9 +812,7 @@ def test_still_png_is_accepted_because_a_screenshot_is_not_an_animation(tmp_path
 
 def test_unreferenced_image_is_reported_with_the_page_that_should_show_it():
     """An image nothing embeds is not coverage, however real the file is."""
-    family = _family_with(
-        label="Widget", images=("docs/images/mountaincar_recorded_history.gif",)
-    )
+    family = _family_with(label="Widget", images=("docs/images/mountaincar_recorded_history.gif",))
     assert find_unreferenced_images(family) == [
         "Widget: documentation does not show its visualization -- "
         "docs/environments/tiger.rst embeds no image directive for "

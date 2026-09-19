@@ -482,3 +482,43 @@ def occupancy_grid_mapping_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
     }
     pinned.update(overrides)
     return pinned
+
+
+def capture_the_flag_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
+    """Pinned optional defaults for ``CaptureTheFlagPOMDP``.
+
+    ``trees`` and ``red_flag_candidates`` default to ``None`` in the
+    constructor and are substituted with the module-level reference field, so
+    the substituted values are pinned here rather than ``None`` -- the
+    convention this module documents.
+    """
+    pinned: Dict[str, Any] = {
+        "grid_size": (9, 7),
+        "midline": 4,
+        "trees": ((2, 1), (2, 5), (3, 3), (4, 0), (4, 6), (6, 1), (6, 5)),
+        "n_blue": 2,
+        "n_red": 2,
+        "n_red_defenders": 1,
+        "blue_base": (0, 3),
+        "red_base": (8, 3),
+        "blue_flag_cell": (1, 3),
+        "red_flag_candidates": ((7, 1), (7, 5), (6, 3), (8, 2)),
+        "slip_probability": 0.1,
+        "range_error_probability": 0.2,
+        "red_pursuit_probability": 0.7,
+        "red_alert_radius": 3,
+        "freeze_steps": 3,
+        "tagger_cooldown_steps": 2,
+        "detector_half_distance_move": 1.5,
+        "detector_half_distance_scan": 4.0,
+        "score_to_win": 1,
+        "capture_reward": 100.0,
+        "concede_penalty": 100.0,
+        "tagged_penalty": 25.0,
+        "tag_reward": 10.0,
+        "pickup_reward": 20.0,
+        "move_cost": 1.0,
+        "scan_cost": 2.0,
+    }
+    pinned.update(overrides)
+    return pinned

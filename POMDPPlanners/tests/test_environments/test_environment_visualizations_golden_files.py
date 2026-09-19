@@ -44,6 +44,10 @@ from POMDPPlanners.environments.battleship_pomdp.battleship_pomdp import Battles
 from POMDPPlanners.environments.battleship_pomdp.battleship_visualizer import (
     BattleshipVisualizer,
 )
+from POMDPPlanners.environments.capture_the_flag_pomdp import CaptureTheFlagPOMDP
+from POMDPPlanners.environments.capture_the_flag_pomdp.capture_the_flag_visualizer import (
+    CaptureTheFlagVisualizer,
+)
 from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp import (
     RockSamplePOMDP,
 )
@@ -229,12 +233,9 @@ def compare_or_create_golden_file(output_path: Path, golden_name: str, test_name
         )
 
 
-
 def build_occupancy_grid_mapping_env() -> OccupancyGridMappingPOMDP:
     """Build the environment the occupancy-grid mapping golden GIF is rendered for."""
-    return OccupancyGridMappingPOMDP(
-        discount_factor=0.95, **occupancy_grid_mapping_pinned_kwargs()
-    )
+    return OccupancyGridMappingPOMDP(discount_factor=0.95, **occupancy_grid_mapping_pinned_kwargs())
 
 
 def create_deterministic_occupancy_grid_mapping_episode(seed: int = 3) -> List[StepData]:
@@ -872,7 +873,6 @@ def create_deterministic_continuous_push_episode(seed: int = 42) -> List[StepDat
     return history
 
 
-
 def create_deterministic_t_maze_episode() -> List[StepData]:
     """Create a deterministic T-Maze episode with a genuinely spread belief.
 
@@ -1029,6 +1029,57 @@ def temp_output_dir(tmp_path):
     return output_dir
 
 
+def build_capture_the_flag_env() -> CaptureTheFlagPOMDP:
+    """Build the CaptureTheFlag environment the golden episode is rendered from."""
+    return CaptureTheFlagPOMDP(discount_factor=0.95)
+
+
+def create_deterministic_capture_the_flag_episode(seed: int = 0) -> List[StepData]:
+    """Roll a short CaptureTheFlag episode with a real weighted particle belief.
+
+    The belief matters here: the visualizer draws the marginals over the red
+    players and the red flag cell, so a history carrying placeholder beliefs
+    would exercise none of the overlay the golden file is meant to pin.
+
+    Args:
+        seed: Seed applied to both random streams before rolling.
+
+    Returns:
+        The recorded steps.
+    """
+    env = build_capture_the_flag_env()
+    random.seed(seed)
+    np.random.seed(seed)
+    state = env.initial_state_dist().values[2]
+    particles = [env.initial_state_dist().sample()[0] for _ in range(48)]
+    history: List[StepData] = []
+    for _ in range(10):
+        action = int(np.random.randint(0, len(env.get_actions())))
+        next_state = env.sample_next_state(state, action)
+        observation = env.sample_observation(next_state, action)
+        particles = [env.sample_next_state(particle, action) for particle in particles]
+        log_weights = np.array(
+            [env.observation_log_probability(p, action, [observation])[0] for p in particles]
+        )
+        log_weights = np.where(np.isfinite(log_weights), log_weights, -1e9)
+        history.append(
+            StepData(
+                state=state,
+                action=action,
+                next_state=next_state,
+                observation=observation,
+                reward=env.reward(state, action, next_state),
+                belief=WeightedParticleBelief(
+                    particles=particles, log_weights=log_weights, resampling=False
+                ),
+            )
+        )
+        state = next_state
+        if env.is_terminal(state):
+            break
+    return history
+
+
 @pytest.mark.skipif(
     not Path("/.dockerenv").exists(),
     reason=(
@@ -1084,7 +1135,6 @@ class TestVisualizationConsistency:
             "test_rock_sample_visualization_consistency",
         )
 
-
     def test_occupancy_grid_mapping_visualization_consistency(self, temp_output_dir):
         """Test occupancy-grid mapping visualization produces consistent output.
 
@@ -1108,6 +1158,31 @@ class TestVisualizationConsistency:
             output_path,
             "occupancy_grid_mapping_visualization.gif",
             "test_occupancy_grid_mapping_visualization_consistency",
+        )
+
+    def test_capture_the_flag_visualization_consistency(self, temp_output_dir):
+        """Test CaptureTheFlag visualization produces consistent output.
+
+        Purpose: Validates that CaptureTheFlag visualizations are deterministic,
+            including the belief overlay, whose marginals are recomputed per
+            frame and would betray any unordered iteration.
+
+        Given: A deterministic CaptureTheFlag episode with a real particle belief
+        When: Visualization is created from the episode
+        Then: Output matches golden file hash (or creates golden if missing)
+
+        Test type: integration
+        """
+        history = create_deterministic_capture_the_flag_episode(seed=0)
+        visualizer = CaptureTheFlagVisualizer(build_capture_the_flag_env())
+
+        output_path = temp_output_dir / "capture_the_flag_test.gif"
+        visualizer.render_episode(history, output_path)
+
+        compare_or_create_golden_file(
+            output_path,
+            "capture_the_flag_visualization.gif",
+            "test_capture_the_flag_visualization_consistency",
         )
 
     def test_battleship_visualization_consistency(self, temp_output_dir):
@@ -1386,7 +1461,6 @@ class TestVisualizationConsistency:
             "test_safety_ant_velocity_visualization_consistency",
         )
 
-
     def test_t_maze_visualization_consistency(self, temp_output_dir):
         """Test T-Maze visualization produces consistent output.
 
@@ -1422,9 +1496,7 @@ class TestVisualizationConsistency:
                 "discrete_maze_visualization.gif",
             ),
             (
-                ContinuousMazePOMDP(
-                    discount_factor=0.95, **continuous_maze_pinned_kwargs()
-                ),
+                ContinuousMazePOMDP(discount_factor=0.95, **continuous_maze_pinned_kwargs()),
                 "continuous_maze_visualization.gif",
             ),
         ],
@@ -1444,7 +1516,6 @@ class TestVisualizationConsistency:
 
 class TestVisualizationDeterminism:
     """Test that visualizations are deterministic when re-run with same inputs."""
-
 
     def test_occupancy_grid_mapping_repeated_visualization_identical(self, temp_output_dir):
         """Test that repeated mapping visualizations are byte-for-byte identical.
@@ -1495,9 +1566,9 @@ class TestVisualizationDeterminism:
         visualizer.create_visualization(history, first_path)
         visualizer.create_visualization(history, second_path)
 
-        assert compute_file_hash(first_path) == compute_file_hash(second_path), (
-            "Battleship visualization is not deterministic"
-        )
+        assert compute_file_hash(first_path) == compute_file_hash(
+            second_path
+        ), "Battleship visualization is not deterministic"
 
     def test_rock_sample_repeated_visualization_identical(self, temp_output_dir):
         """Test that repeated RockSample visualizations are byte-for-byte identical.
