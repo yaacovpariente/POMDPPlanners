@@ -182,6 +182,19 @@ FAMILIES: Tuple[EnvironmentFamily, ...] = (
         images=("docs/images/occupancy_grid_mapping_visualization.gif",),
     ),
     EnvironmentFamily(
+        package="multiagent_firefighting_pomdp",
+        label="MultiAgentFirefighting",
+        hooks=(
+            (
+                "multiagent_firefighting_pomdp/multiagent_firefighting_pomdp.py",
+                "MultiAgentFirefightingPOMDP",
+            ),
+        ),
+        docs_page="multiagent_firefighting.rst",
+        docs_section=None,
+        images=("docs/images/multiagent_firefighting_visualization.gif",),
+    ),
+    EnvironmentFamily(
         package="pacman_pomdp",
         label="PacMan",
         hooks=(("pacman_pomdp/pacman_pomdp.py", "PacManPOMDP"),),

@@ -23,6 +23,7 @@ Available Environments:
     TMazePOMDP: Compatibility class for the original T-shaped layout
     OccupancyGridMappingPOMDP: Occupancy-grid mapping and exploration with a range sensor
     ChicheckInvadersPOMDP: Arcade shooter with a split camera/radar observation
+    MultiAgentFirefightingPOMDP: Several robots fighting a wind-driven grid fire
 
 Factory Functions:
     get_environment: Create environment instances by name with parameters
@@ -47,6 +48,9 @@ from POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp impor
     DiscreteLightDarkPOMDP,
 )
 from POMDPPlanners.environments.mountain_car_pomdp import MountainCarPOMDP
+from POMDPPlanners.environments.multiagent_firefighting_pomdp.multiagent_firefighting_pomdp import (
+    MultiAgentFirefightingPOMDP,
+)
 from POMDPPlanners.environments.pacman_pomdp import PacManPOMDP
 from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.occupancy_grid_mapping_pomdp import (
     OccupancyGridMappingPOMDP,
@@ -84,6 +88,7 @@ __all__ = [
     "TMazePOMDP",
     "OccupancyGridMappingPOMDP",
     "ChicheckInvadersPOMDP",
+    "MultiAgentFirefightingPOMDP",
 ]
 
 # Registry of available environments
@@ -108,6 +113,7 @@ ENVIRONMENT_REGISTRY: Dict[str, Type] = {
     "TMazePOMDP": TMazePOMDP,
     "OccupancyGridMappingPOMDP": OccupancyGridMappingPOMDP,
     "ChicheckInvadersPOMDP": ChicheckInvadersPOMDP,
+    "MultiAgentFirefightingPOMDP": MultiAgentFirefightingPOMDP,
 }
 
 

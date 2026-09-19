@@ -18,8 +18,9 @@ registry:
 .. note::
 
    ``get_environment`` covers the classic suite only, which now includes
-   ``OccupancyGridMappingPOMDP`` and ``ChicheckInvadersPOMDP``. Import ``BattleshipPOMDP``
-   directly. ``ContinuousPushPOMDP``,
+   ``OccupancyGridMappingPOMDP``, ``ChicheckInvadersPOMDP`` and
+   ``MultiAgentFirefightingPOMDP``. Import ``BattleshipPOMDP`` directly.
+   ``ContinuousPushPOMDP``,
    ``ContinuousPushPOMDPDiscreteActions`` and the realistic worlds (CARLA,
    Isaac Lab, nuPlan, Racetrack) are not in the registry — import those classes
    directly.
@@ -73,11 +74,18 @@ actually stores.
      - :doc:`occupancy_grid_mapping`
    * - ``ChicheckInvadersPOMDP``
      - Shoot down a diving flock seen through a split camera/radar reading.
-     - ``[ship, chickens, shots]``
+     - ``[ship, chickens]``
      - discrete
      - discrete
      - none
      - :doc:`chicheck_invaders`
+   * - ``MultiAgentFirefightingPOMDP``
+     - Put out a wind-driven grid fire with several partially sighted robots.
+     - ``[step, robots, wind, cells]``
+     - discrete
+     - discrete
+     - none
+     - :doc:`multiagent_firefighting`
    * - ``PacManPOMDP``
      - Clear every pellet while dodging noisily-observed ghosts.
      - vector (pac, ghosts, pellets)
@@ -237,6 +245,7 @@ Guides
    battleship
    occupancy_grid_mapping
    chicheck_invaders
+   multiagent_firefighting
    pacman
    maze
    light_dark
@@ -291,6 +300,7 @@ API listing
    POMDPPlanners.environments.battleship_pomdp.BattleshipPOMDP
    POMDPPlanners.environments.occupancy_grid_mapping_pomdp.OccupancyGridMappingPOMDP
    POMDPPlanners.environments.chicheck_invaders_pomdp.ChicheckInvadersPOMDP
+   POMDPPlanners.environments.multiagent_firefighting_pomdp.MultiAgentFirefightingPOMDP
    POMDPPlanners.environments.pacman_pomdp.PacManPOMDP
    POMDPPlanners.environments.laser_tag_pomdp.LaserTagPOMDP
    POMDPPlanners.environments.laser_tag_pomdp.ContinuousLaserTagPOMDP
