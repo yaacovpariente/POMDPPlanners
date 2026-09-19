@@ -22,6 +22,7 @@ Available Environments:
     ContinuousMazePOMDP: The same maze with real displacement actions
     TMazePOMDP: Compatibility class for the original T-shaped layout
     OccupancyGridMappingPOMDP: Occupancy-grid mapping and exploration with a range sensor
+    ChicheckInvadersPOMDP: Arcade shooter with a split camera/radar observation
     MultiAgentFirefightingPOMDP: Several robots fighting a wind-driven grid fire
 
 Factory Functions:
@@ -31,6 +32,9 @@ Factory Functions:
 from typing import Any, Dict, Type
 
 from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
+from POMDPPlanners.environments.chicheck_invaders_pomdp.chicheck_invaders_pomdp import (
+    ChicheckInvadersPOMDP,
+)
 from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp import LaserTagPOMDP
 from POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_pomdp import (
     ContinuousLaserTagPOMDP,
@@ -83,6 +87,7 @@ __all__ = [
     "ContinuousMazePOMDP",
     "TMazePOMDP",
     "OccupancyGridMappingPOMDP",
+    "ChicheckInvadersPOMDP",
     "MultiAgentFirefightingPOMDP",
 ]
 
@@ -107,6 +112,7 @@ ENVIRONMENT_REGISTRY: Dict[str, Type] = {
     # Compatibility name for saved configurations using the original T layout.
     "TMazePOMDP": TMazePOMDP,
     "OccupancyGridMappingPOMDP": OccupancyGridMappingPOMDP,
+    "ChicheckInvadersPOMDP": ChicheckInvadersPOMDP,
     "MultiAgentFirefightingPOMDP": MultiAgentFirefightingPOMDP,
 }
 

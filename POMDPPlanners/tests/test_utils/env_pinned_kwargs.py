@@ -31,6 +31,9 @@ from typing import Any, Dict
 
 import numpy as np
 
+from POMDPPlanners.environments.chicheck_invaders_pomdp.chicheck_invaders_pomdp import (
+    ObservationMode as ChicheckInvadersObservationMode,
+)
 from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp import (
     RewardModelType as LaserTagRewardModelType,
 )
@@ -447,6 +450,41 @@ def continuous_maze_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
     """Pinned optional defaults for ``ContinuousMazePOMDP``."""
     pinned = discrete_maze_pinned_kwargs()
     pinned["max_step_size"] = 1.0
+    pinned.update(overrides)
+    return pinned
+
+
+def chicheck_invaders_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
+    """Pinned optional defaults for ``ChicheckInvadersPOMDP``.
+
+    ``observation_mode`` is pinned as the enum member rather than its string
+    value, because that is what the constructor stores and what the identity is
+    computed over; passing the string would round-trip to the same environment
+    but is one more conversion for a reader to follow.
+    """
+    pinned: Dict[str, Any] = {
+        "num_columns": 8,
+        "num_rows": 7,
+        "num_chickens": 4,
+        "fire_cooldown": 1,
+        "dive_probability": 0.15,
+        "initial_dive_probability": 0.0,
+        "camera_detection_probability": 0.9,
+        "radar_detection_probability": 0.9,
+        "ship_column_noise_std": 0.5,
+        "camera_offset_noise_std": 1.0,
+        "radar_range_noise_std": 1.0,
+        "drop_flag_error_probability": 0.1,
+        "camera_slope": 1.0,
+        "radar_radius": 6.0,
+        "observation_mode": ChicheckInvadersObservationMode.PARTIAL,
+        "kill_reward": 10.0,
+        "shot_cost": 1.0,
+        "step_cost": 0.1,
+        "ship_hit_penalty": 50.0,
+        "clear_reward": 50.0,
+        "max_steps": 60,
+    }
     pinned.update(overrides)
     return pinned
 

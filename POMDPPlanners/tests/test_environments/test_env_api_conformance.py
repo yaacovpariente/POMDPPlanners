@@ -69,6 +69,10 @@ from POMDPPlanners.core.simulation.history import History, StepData
 from POMDPPlanners.environments.battleship_pomdp.battleship_pomdp import BattleshipPOMDP
 from POMDPPlanners.environments.capture_the_flag_pomdp import CaptureTheFlagPOMDP
 from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
+from POMDPPlanners.environments.chicheck_invaders_pomdp.chicheck_invaders_pomdp import (
+    ChicheckInvadersPOMDP,
+    ObservationMode as ChicheckInvadersObservationMode,
+)
 from POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_pomdp import (
     ContinuousLaserTagPOMDP,
     ContinuousLaserTagPOMDPDiscreteActions,
@@ -114,6 +118,7 @@ from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
     continuous_light_dark_pinned_kwargs,
     continuous_push_discrete_actions_pinned_kwargs,
     continuous_push_pinned_kwargs,
+    chicheck_invaders_pinned_kwargs,
     discrete_light_dark_pinned_kwargs,
     discrete_maze_pinned_kwargs,
     laser_tag_pinned_kwargs,
@@ -167,6 +172,20 @@ def _build_continuous_push_discrete() -> ContinuousPushPOMDPDiscreteActions:
 
 def _build_battleship() -> BattleshipPOMDP:
     return BattleshipPOMDP(discount_factor=0.99, **battleship_pinned_kwargs())
+
+
+def _build_chicheck_invaders() -> ChicheckInvadersPOMDP:
+    return ChicheckInvadersPOMDP(discount_factor=0.95, **chicheck_invaders_pinned_kwargs())
+
+
+def _build_chicheck_invaders_fully_observable() -> ChicheckInvadersPOMDP:
+    # The fully observable mode is a different observation model on the same
+    # dynamics and the same reward, so it gets its own registry entry rather
+    # than riding along on the partially observable one.
+    return ChicheckInvadersPOMDP(
+        discount_factor=0.95,
+        **chicheck_invaders_pinned_kwargs(observation_mode=ChicheckInvadersObservationMode.FULL),
+    )
 
 
 def _build_occupancy_grid_mapping() -> OccupancyGridMappingPOMDP:
@@ -282,6 +301,8 @@ ENV_BUILDERS: List[Tuple[str, EnvBuilder]] = [
     ("DiscreteMazePOMDP", _build_discrete_maze),
     ("ContinuousMazePOMDP", _build_continuous_maze),
     ("BattleshipPOMDP", _build_battleship),
+    ("ChicheckInvadersPOMDP", _build_chicheck_invaders),
+    ("ChicheckInvadersPOMDP[fully_observable]", _build_chicheck_invaders_fully_observable),
     ("MultiAgentFirefightingPOMDP", _build_multiagent_firefighting),
     ("MultiAgentFirefightingPOMDP[3 robots]", _build_multiagent_firefighting_three_robots),
     ("OccupancyGridMappingPOMDP", _build_occupancy_grid_mapping),

@@ -161,6 +161,14 @@ FAMILIES: Tuple[EnvironmentFamily, ...] = (
         images=("docs/artifacts/battleship_redesign/review.gif",),
     ),
     EnvironmentFamily(
+        package="chicheck_invaders_pomdp",
+        label="ChicheckInvaders",
+        hooks=(("chicheck_invaders_pomdp/chicheck_invaders_pomdp.py", "ChicheckInvadersPOMDP"),),
+        docs_page="chicheck_invaders.rst",
+        docs_section=None,
+        images=("docs/images/chicheck_invaders_visualization.gif",),
+    ),
+    EnvironmentFamily(
         package="capture_the_flag_pomdp",
         label="CaptureTheFlag",
         hooks=(("capture_the_flag_pomdp/capture_the_flag_pomdp.py", "CaptureTheFlagPOMDP"),),
