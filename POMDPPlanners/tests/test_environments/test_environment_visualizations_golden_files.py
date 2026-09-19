@@ -61,7 +61,7 @@ from POMDPPlanners.environments.pacman_pomdp.pacman_visualizer import PacManVisu
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
     ContinuousLightDarkPOMDP,
 )
-from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_visualizer import (
+from POMDPPlanners.environments.light_dark_pomdp.visualizer.light_dark_visualizer import (
     LightDarkPOMDPVisualizer,
 )
 from POMDPPlanners.environments.maze_pomdp import (

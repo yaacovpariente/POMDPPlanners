@@ -87,6 +87,12 @@ docs = [
     "myst-parser>=0.18.0",
 ]
 
+[project.scripts]
+# The results site. A server command rather than a static export: a browser
+# refuses to let a file:// page fetch its sibling trace.json, and a run
+# directory of episode video is streamed from where it is rather than copied.
+pomdp-report = "POMDPPlanners.reporting.cli:main"
+
 [project.urls]
 Homepage = "https://github.com/yaacovpariente/POMDPPlanners"
 "Bug Reports" = "https://github.com/yaacovpariente/POMDPPlanners/issues"
@@ -102,7 +108,7 @@ include = ["POMDPPlanners*"]
 "POMDPPlanners.environments.cartpole_pomdp" = ["visualization_assets/*.png"]
 "POMDPPlanners.environments.mountain_car_pomdp" = ["assets/*.png", "assets/*.jpg"]
 "POMDPPlanners.environments.laser_tag_pomdp" = ["laser_tag_sprite_sheet.png"]
-"POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils" = ["art/*.png"]
+"POMDPPlanners.environments.light_dark_pomdp.visualizer" = ["art/*.png"]
 "POMDPPlanners.environments.rock_sample_pomdp" = ["visualization_assets/*.png"]
 "POMDPPlanners.environments.push_pomdp" = ["push_sprite_sheet.png"]
 # PacMan visualizer loads these sprites at runtime via
@@ -113,6 +119,9 @@ include = ["POMDPPlanners*"]
 # environment renderings. ~1.2MB total; ships so installed-package smoke
 # tests can run without re-downloading fixtures.
 "POMDPPlanners.tests.test_environments" = ["golden_visualizations/*"]
+# The results site serves these itself; the vendored three.js build is why
+# the viewer works with no network.
+"POMDPPlanners.reporting" = ["static/*.css", "static/vendor/*.js", "static/viewer/*.js", "static/viewer/scenes/*.js"]
 
 # ---------------------------------------------------------------------------
 # Tool configuration

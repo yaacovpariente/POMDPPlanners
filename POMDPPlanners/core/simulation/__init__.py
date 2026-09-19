@@ -24,9 +24,31 @@ from POMDPPlanners.core.simulation.tasks import (
     TaskManager,
     TaskManagerExternalDB,
 )
+from POMDPPlanners.core.simulation.belief_payloads import (
+    MAX_PAYLOAD_PARTICLES,
+    BeliefPayloadKind,
+    belief_to_payload,
+)
+from POMDPPlanners.core.simulation.traces import (
+    ArtifactKind,
+    EpisodeTrace,
+    TraceStep,
+    TRACE_SCHEMA_VERSION,
+    envelope_steps,
+    to_jsonable,
+)
 from POMDPPlanners.core.simulation.visualizers import ExperimentVisualizer
 
 __all__ = [
+    "ArtifactKind",
+    "BeliefPayloadKind",
+    "MAX_PAYLOAD_PARTICLES",
+    "belief_to_payload",
+    "EpisodeTrace",
+    "TraceStep",
+    "TRACE_SCHEMA_VERSION",
+    "envelope_steps",
+    "to_jsonable",
     "StepData",
     "History",
     "CategoricalHyperParameter",

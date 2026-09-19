@@ -30,7 +30,7 @@ from PIL import Image, ImageDraw
 from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.distributions import DiscreteDistribution
 from POMDPPlanners.core.simulation import StepData
-from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_assets import (
+from POMDPPlanners.environments.light_dark_pomdp.visualizer.light_dark_assets import (
     COLOR_BEACON_MARK,
     COLOR_BELIEF,
     COLOR_GOAL,
