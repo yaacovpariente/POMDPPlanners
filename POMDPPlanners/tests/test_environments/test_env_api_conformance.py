@@ -67,6 +67,7 @@ from POMDPPlanners.core.environment import (
 )
 from POMDPPlanners.core.simulation.history import History, StepData
 from POMDPPlanners.environments.battleship_pomdp.battleship_pomdp import BattleshipPOMDP
+from POMDPPlanners.environments.capture_the_flag_pomdp import CaptureTheFlagPOMDP
 from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
 from POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_pomdp import (
     ContinuousLaserTagPOMDP,
@@ -104,6 +105,7 @@ from POMDPPlanners.environments.maze_pomdp.t_maze_pomdp import TMazePOMDP
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
     battleship_pinned_kwargs,
+    capture_the_flag_pinned_kwargs,
     cartpole_pinned_kwargs,
     continuous_maze_pinned_kwargs,
     continuous_laser_tag_discrete_actions_pinned_kwargs,
@@ -223,6 +225,10 @@ def _build_pacman() -> PacManPOMDP:
     return PacManPOMDP(discount_factor=0.95, **pacman_pinned_kwargs())
 
 
+def _build_capture_the_flag() -> CaptureTheFlagPOMDP:
+    return CaptureTheFlagPOMDP(discount_factor=0.95, **capture_the_flag_pinned_kwargs())
+
+
 def _build_laser_tag() -> LaserTagPOMDP:
     return LaserTagPOMDP(discount_factor=0.95, **laser_tag_pinned_kwargs())
 
@@ -280,6 +286,7 @@ ENV_BUILDERS: List[Tuple[str, EnvBuilder]] = [
     ("MultiAgentFirefightingPOMDP[3 robots]", _build_multiagent_firefighting_three_robots),
     ("OccupancyGridMappingPOMDP", _build_occupancy_grid_mapping),
     ("OccupancyGridMappingPOMDP[truncated_normal]", _build_occupancy_grid_mapping_truncated_normal),
+    ("CaptureTheFlagPOMDP", _build_capture_the_flag),
 ]
 
 
@@ -911,6 +918,12 @@ def test_observation_log_probability_single_agrees_with_batched(
 # ---------------------------------------------------------------------------
 
 
+# How far the reward probe may walk from the initial state before declaring a
+# ``reward_requires_next_state=True`` flag vacuous. Long enough to leave a quiet
+# opening position, short enough that a genuinely vacuous flag still fails fast.
+_REWARD_PROBE_STEPS = 200
+
+
 @pytest.mark.parametrize("env_builder", _all_env_params())
 def test_reward_requires_next_state_is_honored(env_builder: EnvBuilder) -> None:
     """A ``True`` ``reward_requires_next_state`` really means the reward uses it.
@@ -923,14 +936,25 @@ def test_reward_requires_next_state_is_honored(env_builder: EnvBuilder) -> None:
         must not silently return a wrong number, because that is exactly
         the call a driver that missed the flag would make.
 
-    Given: An env whose ``reward_requires_next_state`` is ``True``, one
-        state, one action, and eight independently drawn next states.
+    Given: An env whose ``reward_requires_next_state`` is ``True``, a
+        reachable state, one action, and eight independently drawn next
+        states.
     When: ``reward`` is scored against each next state with the RNG
         pinned, and once with ``next_state=None``.
     Then: At least two of the eight rewards differ (the reward genuinely
         consumes ``next_state``), and the ``None`` call still returns a
         finite value inside the declared reward range rather than a
         silent NaN or out-of-range number.
+
+    Note: The probe walks forward from the initial state until it finds
+        one that separates the draws. Some environments open in a state
+        from which no single transition can reach a reward-bearing event
+        — CaptureTheFlag spawns both teams on their own bases, too far
+        apart for a tag, a pick-up or a score — so scoring only the
+        opening state would report a vacuous flag where the reward does
+        consume ``next_state`` everywhere it can. Failing after the walk
+        still means no reachable state separates the draws, which is the
+        condition this test exists to catch.
 
     Test type: integration
     """
@@ -942,15 +966,29 @@ def test_reward_requires_next_state_is_honored(env_builder: EnvBuilder) -> None:
     state = env.initial_state_dist().sample()[0]
     action = _sample_action(env)
 
-    rewards = set()
-    for draw_seed in range(8):
-        _seed_all(draw_seed)
-        next_state = env.sample_next_state(state=state, action=action)
-        _seed_all(100)
-        rewards.add(round(float(env.reward(state=state, action=action, next_state=next_state)), 9))
+    rewards: set = set()
+    for probe_step in range(_REWARD_PROBE_STEPS):
+        rewards = set()
+        for draw_seed in range(8):
+            _seed_all(draw_seed)
+            next_state = env.sample_next_state(state=state, action=action)
+            _seed_all(100)
+            rewards.add(
+                round(float(env.reward(state=state, action=action, next_state=next_state)), 9)
+            )
+        if len(rewards) > 1:
+            break
+        _seed_all(1000 + probe_step)
+        advanced = env.sample_next_state(state=state, action=action)
+        # Restart rather than break on termination: breaking would leave the
+        # last single-valued `rewards` in place and fail claiming the flag is
+        # vacuous, when in fact the walk just ran out of episode.
+        state = env.initial_state_dist().sample()[0] if env.is_terminal(advanced) else advanced
+        action = _sample_action(env)
     assert len(rewards) > 1, (
-        f"{type(env).__name__} declares reward_requires_next_state=True but scored "
-        f"eight different next states identically ({rewards}) — the flag is vacuous"
+        f"{type(env).__name__} declares reward_requires_next_state=True but no state "
+        f"reached in {_REWARD_PROBE_STEPS} steps separated eight drawn next states "
+        f"({rewards}) — the flag is vacuous"
     )
 
     fallback = float(env.reward(state=state, action=action))
