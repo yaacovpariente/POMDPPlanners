@@ -40,6 +40,9 @@ import pytest
 from POMDPPlanners.core.belief import WeightedParticleBelief, get_initial_belief
 from POMDPPlanners.core.distributions import DiscreteDistribution
 from POMDPPlanners.core.simulation import StepData
+from POMDPPlanners.environments.snake_pomdp.snake_belief import SnakeBelief
+from POMDPPlanners.environments.snake_pomdp.snake_pomdp import SnakeAction, SnakePOMDP
+from POMDPPlanners.environments.snake_pomdp.snake_visualizer import SnakeVisualizer
 from POMDPPlanners.environments.battleship_pomdp.battleship_belief import BattleshipBelief
 from POMDPPlanners.environments.battleship_pomdp.battleship_pomdp import BattleshipPOMDP
 from POMDPPlanners.environments.battleship_pomdp.battleship_visualizer import (
@@ -148,6 +151,7 @@ from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
     push_pinned_kwargs,
     rock_sample_pinned_kwargs,
     safety_ant_velocity_pinned_kwargs,
+    snake_pinned_kwargs,
     t_maze_pinned_kwargs,
 )
 
@@ -495,6 +499,85 @@ def create_deterministic_occupancy_grid_mapping_episode(seed: int = 3) -> List[S
     ]
 
     for action in action_sequence:
+        next_state, observation, reward = env.sample_next_step(state, int(action))
+        history.append(
+            StepData(
+                state=state,
+                action=int(action),
+                next_state=next_state,
+                observation=observation,
+                reward=reward,
+                belief=belief,
+                info=env.step_info(state, int(action), next_state),
+            )
+        )
+        belief = belief.update(action=int(action), observation=observation, pomdp=env)
+        state = next_state
+
+    history.append(
+        StepData(
+            state=state,
+            action=None,
+            next_state=None,
+            observation=None,
+            reward=None,
+            belief=belief,
+            info=env.step_info(state, None, None),
+        )
+    )
+    return history
+
+
+def build_snake_env() -> SnakePOMDP:
+    """Build the Snake environment the golden visualization is rendered for."""
+    return SnakePOMDP(discount_factor=0.98, **snake_pinned_kwargs(target_length=6))
+
+
+def create_deterministic_snake_episode(seed: int = 5) -> List[StepData]:
+    """Create a deterministic Snake episode for the golden GIF.
+
+    The action sequence is fixed, and the belief attached to each step is the
+    real :class:`SnakeBelief` rather than a mock: the amber belief layer is the
+    part of this visualization most likely to regress, and hashing a mock belief
+    would leave it untested. The food draw, the sighting and the scent are all
+    random, so both RNGs are seeded for the reason the Battleship fixture
+    documents -- ``conftest`` seeds the stdlib ``random`` once at import, so
+    seeding NumPy alone would leave the golden hash dependent on which tests ran
+    before this one.
+
+    Args:
+        seed: Random seed pinning the food, the readings and the particle draws.
+
+    Returns:
+        List of StepData objects representing the episode history.
+    """
+    random.seed(seed)
+    np.random.seed(seed)
+    env = build_snake_env()
+
+    belief = SnakeBelief.from_environment(env, n_particles=32)
+    state = env.initial_state_dist().sample()[0]
+    history: List[StepData] = []
+
+    # A fixed tour: run east, turn down, run south, turn back west. It sweeps
+    # the window across a good part of the board, so the frames show the belief
+    # both spreading under the scent and being cut back by the silent window.
+    action_sequence = [
+        SnakeAction.GO_STRAIGHT,
+        SnakeAction.GO_STRAIGHT,
+        SnakeAction.TURN_RIGHT,
+        SnakeAction.GO_STRAIGHT,
+        SnakeAction.GO_STRAIGHT,
+        SnakeAction.TURN_RIGHT,
+        SnakeAction.GO_STRAIGHT,
+        SnakeAction.GO_STRAIGHT,
+        SnakeAction.TURN_RIGHT,
+        SnakeAction.GO_STRAIGHT,
+    ]
+
+    for action in action_sequence:
+        if env.is_terminal(state):
+            break
         next_state, observation, reward = env.sample_next_step(state, int(action))
         history.append(
             StepData(
@@ -1454,6 +1537,29 @@ class TestVisualizationConsistency:
             "test_capture_the_flag_visualization_consistency",
         )
 
+    def test_snake_visualization_consistency(self, temp_output_dir):
+        """Test Snake visualization produces consistent output.
+
+        Purpose: Validates that Snake visualizations are deterministic
+
+        Given: A deterministic Snake episode with a fixed action sequence
+        When: Visualization is created from the episode
+        Then: Output matches golden file hash (or creates golden if missing)
+
+        Test type: integration
+        """
+        history = create_deterministic_snake_episode(seed=5)
+        visualizer = SnakeVisualizer(build_snake_env())
+
+        output_path = temp_output_dir / "snake_test.gif"
+        visualizer.create_visualization(history, output_path)
+
+        compare_or_create_golden_file(
+            output_path,
+            "snake_visualization.gif",
+            "test_snake_visualization_consistency",
+        )
+
     def test_battleship_visualization_consistency(self, temp_output_dir):
         """Test Battleship visualization produces consistent output.
 
@@ -1866,6 +1972,33 @@ class TestVisualizationDeterminism:
         assert compute_file_hash(first_path) == compute_file_hash(
             second_path
         ), "Chicheck Invaders visualization is not deterministic"
+
+    def test_snake_repeated_visualization_identical(self, temp_output_dir):
+        """Test that repeated Snake visualizations are byte-for-byte identical.
+
+        Purpose: Validates absolute determinism of Snake rendering, which the
+            golden-hash check cannot cover outside the project's Docker image.
+            The belief layer is rescaled per frame and the snake's colour
+            gradient is computed from its length, so neither may depend on
+            iteration order or on a fresh random draw.
+
+        Given: One episode rendered twice from the same history
+        When: Both renders use identical inputs
+        Then: Output files have identical SHA256 hashes
+
+        Test type: unit
+        """
+        history = create_deterministic_snake_episode(seed=5)
+        visualizer = SnakeVisualizer(build_snake_env())
+
+        first_path = temp_output_dir / "snake_first.gif"
+        second_path = temp_output_dir / "snake_second.gif"
+        visualizer.create_visualization(history, first_path)
+        visualizer.create_visualization(history, second_path)
+
+        assert compute_file_hash(first_path) == compute_file_hash(
+            second_path
+        ), "Snake visualization is not deterministic"
 
     def test_battleship_repeated_visualization_identical(self, temp_output_dir):
         """Test that repeated Battleship visualizations are byte-for-byte identical.
