@@ -15,12 +15,14 @@ import numpy as np
 import pytest
 
 from POMDPPlanners.core.belief import WeightedParticleBelief
+from POMDPPlanners.core.belief.belief_utils import is_terminal_belief
 from POMDPPlanners.environments.snake_pomdp.snake_belief import SnakeBelief
 from POMDPPlanners.environments.snake_pomdp.snake_pomdp import (
     TERMINAL_OBSERVATION,
     SnakeAction,
     SnakePOMDP,
     SnakeQuadrant,
+    SnakeTermination,
     create_snake_state,
 )
 
@@ -329,16 +331,78 @@ def test_an_impossible_reading_is_refused_rather_than_absorbed():
         belief.update(int(SnakeAction.GO_STRAIGHT), reading, env)
 
 
-def test_the_terminal_reading_falls_back_to_the_generic_update():
-    """A finished episode has nothing to condition on, and must not invent one.
+def test_the_terminal_reading_leaves_every_particle_terminal():
+    """A belief that reads as still running keeps a planner expanding a dead branch.
+
+    Purpose: The generic update propagates each particle and weights it by the
+        observation likelihood, but with resampling off a particle whose
+        successor is still running survives at floor weight instead of being
+        dropped. The belief then reads as live. Asserting only the returned
+        class, as this test once did, does not catch that.
 
     Test type: unit
     """
     env = build_env()
-    belief = SnakeBelief.from_environment(env, n_particles=16)
+    # Head at (0, 3) heading east; turning left points north, off the grid.
+    body = ((0, 3), (0, 2), (0, 1))
+    prior = np.zeros(env.num_cells)
+    free = env.free_cells(body)
+    prior[free] = 1.0 / free.size
+    belief = belief_over(env, body, prior, n_particles=16)
+
+    np.random.seed(0)
+    updated = belief.update(int(SnakeAction.TURN_LEFT), TERMINAL_OBSERVATION, env)
+    assert isinstance(updated, WeightedParticleBelief)
+    assert all(env.is_terminal(particle) for particle in updated.particles)
+    assert is_terminal_belief(updated, env)
+    assert {env.termination(particle) for particle in updated.particles} == {SnakeTermination.WALL}
+
+
+def test_a_winning_step_ends_the_belief_even_though_only_one_food_cell_wins():
+    """The win is the case the generic update gets wrong, because eating splits the particles.
+
+    Purpose: Walls, self-collisions and starvation do not depend on the food, so
+        every particle ends together and any update looks right. Winning
+        requires eating, so exactly one food cell ends the episode and the rest
+        keep running -- this is where a propagate-and-weight update leaves live
+        particles behind.
+
+    Test type: unit
+    """
+    env = build_env(target_length=4, starvation_limit=100)
+    body = ((3, 3), (3, 2), (3, 1))
+    prior = np.full(env.num_cells, 1.0 / (env.num_cells - len(body)))
+    for row, col in body:
+        prior[row * env.grid_size + col] = 0.0
+    prior /= prior.sum()
+    belief = belief_over(env, body, prior, n_particles=64)
+
+    # Going straight moves the head to (3, 4). Only food there is eaten, and
+    # eating takes the body to length 4, which is the target.
     np.random.seed(0)
     updated = belief.update(int(SnakeAction.GO_STRAIGHT), TERMINAL_OBSERVATION, env)
-    assert isinstance(updated, WeightedParticleBelief)
+
+    assert is_terminal_belief(updated, env)
+    assert all(env.is_terminal(particle) for particle in updated.particles)
+    assert {env.termination(particle) for particle in updated.particles} == {SnakeTermination.WIN}
+    assert all(len(env.body(particle)) == env.target_length for particle in updated.particles)
+
+
+def test_a_terminal_reading_no_food_cell_explains_is_refused():
+    """The terminal reading is evidence, so it can contradict the belief like any other.
+
+    Test type: unit
+    """
+    env = build_env(target_length=6, starvation_limit=100)
+    body = ((3, 3), (3, 2), (3, 1))
+    prior = np.zeros(env.num_cells)
+    prior[0 * env.grid_size + 0] = 1.0  # food at (0, 0), far from the head
+    belief = belief_over(env, body, prior)
+    # Going straight moves the head to (3, 4): no wall, no self, no win at
+    # length 3 of 6, and the counter is nowhere near the starvation limit. So
+    # nothing the belief holds could have ended this episode.
+    with pytest.raises(ValueError, match="disagree"):
+        belief.update(int(SnakeAction.GO_STRAIGHT), TERMINAL_OBSERVATION, env)
 
 
 def test_a_belief_rebuilt_from_its_particles_alone_still_updates():

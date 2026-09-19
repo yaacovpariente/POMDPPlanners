@@ -32,9 +32,43 @@ def build_env(**overrides):
     return SnakePOMDP(**kwargs)
 
 
+def belief_matching(env, state, n_particles=16):
+    """Uniform belief over the food, sharing the body the episode starts from.
+
+    ``SnakeBelief.from_environment`` builds the belief for the *initial* state,
+    whose body sits at the centre of the grid. Several tests here start from a
+    hand-placed body instead, and pairing that with the initial belief makes a
+    belief that was never tracking the episode: the terminal reading then says
+    the episode ended while the belief holds no food cell that could have ended
+    it, which the update rightly refuses.
+    """
+    body = env.body(state)
+    free = env.free_cells(body)
+    probabilities = np.zeros(env.num_cells, dtype=np.float64)
+    probabilities[free] = 1.0 / free.size
+    cells = np.random.choice(env.num_cells, size=n_particles, p=probabilities)
+    particles = np.asarray(
+        [
+            create_snake_state(
+                body=body,
+                food=(int(cell) // env.grid_size, int(cell) % env.grid_size),
+                steps_since_food=env.steps_since_food(state),
+                target_length=env.target_length,
+            )
+            for cell in cells
+        ],
+        dtype=np.float64,
+    )
+    return SnakeBelief(
+        particles=particles,
+        log_weights=np.full(n_particles, -float(np.log(n_particles))),
+        food_probabilities=probabilities,
+    )
+
+
 def episode(env, actions, state, belief=None):
     """Record a fixed action sequence the way the episode runner does."""
-    belief = SnakeBelief.from_environment(env, n_particles=16) if belief is None else belief
+    belief = belief_matching(env, state) if belief is None else belief
     steps = []
     for action in actions:
         if env.is_terminal(state):

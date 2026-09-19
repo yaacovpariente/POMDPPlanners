@@ -267,10 +267,10 @@ class SnakeBelief(WeightedParticleBelief):
             state: Unused; the true state must not leak into the belief.
 
         Returns:
-            The exact posterior belief, or -- for the terminal reading, which
-            carries no body, sighting or scent to condition on -- the generic
-            particle update, which simply propagates the particles through the
-            transition.
+            The exact posterior belief. The terminal reading names no body,
+            sighting or scent, but it is still evidence -- it rules out every
+            food cell whose step would have left the episode running -- so it
+            is conditioned on rather than propagated blindly.
 
         Raises:
             ValueError: If no food cell is consistent with the reading. That
@@ -283,14 +283,17 @@ class SnakeBelief(WeightedParticleBelief):
         del state
         env = _as_snake(pomdp)
         flat = tuple(int(value) for value in observation)
+        reference = np.asarray(self.particles[0], dtype=np.float64)
         if not flat or flat[0] != OBSERVATION_LIVE:
-            # The episode has ended. There is nothing to condition on, so fall
-            # back to the generic propagate-and-weight update rather than
-            # inventing a posterior for a state nobody will act from.
-            return super().update(action=action, observation=observation, pomdp=pomdp, state=None)
+            if env.is_terminal(reference):
+                # Already absorbing: every particle maps to itself, which is
+                # exactly what the generic update does.
+                return super().update(
+                    action=action, observation=observation, pomdp=pomdp, state=None
+                )
+            return self._terminal_update(int(action), env, reference)
 
         new_body, seen, scent = env.decode_observation(flat)
-        reference = np.asarray(self.particles[0], dtype=np.float64)
         grew = len(new_body) > env.snake_length(reference)
         counter = 0 if grew else env.steps_since_food(reference) + 1
 
@@ -317,6 +320,73 @@ class SnakeBelief(WeightedParticleBelief):
             particles=_draw_particles(env, posterior, new_body, counter, n_particles),
             log_weights=_uniform_log_weights(n_particles),
             food_probabilities=posterior,
+        )
+
+    def _terminal_update(
+        self, action: int, env: "SnakePOMDP", reference: np.ndarray
+    ) -> "SnakeBelief":
+        """Condition a live belief on the reading that says the episode ended.
+
+        Deferring this to the generic update is wrong, and quietly so. That
+        update propagates every particle and weights it by the observation
+        likelihood, but a particle whose successor is still running scores
+        ``-inf`` against the terminal reading and, with resampling off, is kept
+        at floor weight rather than dropped. The belief then holds a majority of
+        states the reading has ruled out and does not read as terminal, so a
+        planner goes on expanding a branch whose episode is over.
+
+        It only bites on a win. Walls, self-collisions and starvation do not
+        depend on where the food is, so every particle ends together and the
+        generic update happens to be right; winning requires eating, so only
+        there do the particles disagree.
+
+        The reading is evidence like any other: it keeps exactly the food cells
+        whose step would have ended the episode. Each survivor has one
+        deterministic successor -- a terminal step never respawns food -- so the
+        posterior transfers to the successors unchanged.
+
+        Args:
+            action: The action just taken.
+            env: The Snake environment.
+            reference: Any live particle; all of them share body and counter.
+
+        Returns:
+            A belief over terminal states only.
+
+        Raises:
+            ValueError: If no food cell would have ended the episode.
+        """
+        body = env.body(reference)
+        counter = env.steps_since_food(reference)
+        prior = self._flat_marginal(env)
+
+        successors = []
+        masses = []
+        for index in np.flatnonzero(prior > 0.0):
+            candidate = create_snake_state(
+                body=body,
+                food=(int(index) // env.grid_size, int(index) % env.grid_size),
+                steps_since_food=counter,
+                target_length=env.target_length,
+                status=int(SnakeTermination.RUNNING),
+            )
+            if env.transition_outcome(candidate, action)[3] is SnakeTermination.RUNNING:
+                continue
+            successors.append(env.sample_next_state(state=candidate, action=action))
+            masses.append(float(prior[index]))
+
+        total = float(sum(masses))
+        if total <= 0.0:
+            raise ValueError(
+                "the reading says the episode ended, but no food cell the belief "
+                "holds would have ended it; the belief and the world disagree"
+            )
+
+        n_particles = len(self.particles)
+        drawn = np.random.choice(len(successors), size=n_particles, p=np.asarray(masses) / total)
+        return SnakeBelief(
+            particles=np.asarray([successors[int(i)] for i in drawn], dtype=np.float64),
+            log_weights=_uniform_log_weights(n_particles),
         )
 
 
