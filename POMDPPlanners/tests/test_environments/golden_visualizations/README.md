@@ -52,7 +52,7 @@ and conflict):
 GoldenVisualization(
     name="<environment>",
     build_history=lambda: create_deterministic_<environment>_episode(seed=42),
-    render=_render_<environment>,
+    build_renderer=_renderer_<environment>,
 )
 ```
 
@@ -61,10 +61,14 @@ against `<environment>_visualization.gif`. The renderer is written out per
 environment because environments do not agree on the method name:
 
 ```python
-def _render_<environment>(history, output_path):
+def _renderer_<environment>():
     env = <Environment>POMDP(discount_factor=0.95, **<environment>_pinned_kwargs())
-    <Environment>Visualizer(env).create_visualization(history, output_path)
+    return <Environment>Visualizer(env).create_visualization
 ```
+
+It returns the draw call rather than drawing, so the determinism test can
+render twice through one visualizer and catch state a first render leaves
+behind on it.
 
 Build the history first and the environment second, as every entry does: an
 environment constructed before the history would draw from the global RNG

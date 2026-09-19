@@ -17,18 +17,10 @@ this file are parametrized over that registry, so adding an environment means
 adding an entry rather than pasting two more test methods.
 
 Directory Structure:
-    POMDPPlanners/tests/test_environments/golden_visualizations/
-        ├── rock_sample_visualization.gif
-        ├── pacman_visualization.gif
-        ├── light_dark_visualization.gif
-        ├── push_visualization.gif
-        ├── laser_tag_visualization.gif
-        ├── continuous_laser_tag_visualization.gif
-        ├── continuous_push_visualization.gif
-        ├── discrete_maze_visualization.gif
-        ├── continuous_maze_visualization.gif
-        ├── t_maze_visualization.gif  # compatibility layout
-        └── safety_ant_velocity_visualization.gif
+    One ``<name>_visualization.gif`` per registry entry, in
+    ``POMDPPlanners/tests/test_environments/golden_visualizations/``. Read the
+    registry or list the directory rather than a copy of the list here, which
+    was eleven names out of date by the time it was replaced.
 """
 
 import hashlib
@@ -1304,6 +1296,10 @@ def create_deterministic_capture_the_flag_episode(seed: int = 0) -> List[StepDat
     return history
 
 
+# What a visualizer's draw call looks like once its environment is built.
+Renderer = Callable[[List[StepData], Path], None]
+
+
 @dataclass(frozen=True)
 class GoldenVisualization:
     """One environment's entry in the golden-visualization suite.
@@ -1324,10 +1320,15 @@ class GoldenVisualization:
         build_history: Builds the episode to render. Called inside the test, so
             an environment constructed here is constructed at the same point in
             the global RNG stream as it was when each test built its own.
-        render: Renders a history to a path. Environments do not agree on the
-            method name -- ``create_visualization``, ``cache_visualization``,
-            ``create_animation`` and ``render_episode`` are all in use -- so
-            the call is spelled out per environment rather than assumed.
+        build_renderer: Builds the environment and its visualizer and returns
+            the call that draws a history to a path. It returns a renderer
+            rather than rendering, so the determinism test can render twice
+            through *one* visualizer instance and catch state a first render
+            leaves behind on it -- cached artists, accumulated figure state --
+            which is what each per-environment test used to do. Environments do
+            not agree on the method name (``create_visualization``,
+            ``cache_visualization``, ``create_animation`` and ``render_episode``
+            are all in use), so the call is named per environment.
         check_repeated_render: Whether the determinism suite also renders this
             environment twice and compares the bytes. That check is what covers
             renderers outside the Docker image, and it is worth its runtime on
@@ -1336,7 +1337,7 @@ class GoldenVisualization:
 
     name: str
     build_history: Callable[[], List[StepData]]
-    render: Callable[[List[StepData], Path], None]
+    build_renderer: Callable[[], Renderer]
     check_repeated_render: bool = False
 
     @property
@@ -1345,25 +1346,23 @@ class GoldenVisualization:
         return f"{self.name}_visualization.gif"
 
 
-def _render_battleship(history: List[StepData], output_path: Path) -> None:
-    """Render a Battleship episode."""
-    BattleshipVisualizer(build_battleship_env()).create_visualization(history, output_path)
+def _renderer_battleship() -> Renderer:
+    """Build the Battleship renderer."""
+    return BattleshipVisualizer(build_battleship_env()).create_visualization
 
 
-def _render_capture_the_flag(history: List[StepData], output_path: Path) -> None:
-    """Render a CaptureTheFlag episode."""
-    CaptureTheFlagVisualizer(build_capture_the_flag_env()).render_episode(history, output_path)
+def _renderer_capture_the_flag() -> Renderer:
+    """Build the CaptureTheFlag renderer."""
+    return CaptureTheFlagVisualizer(build_capture_the_flag_env()).render_episode
 
 
-def _render_chicheck_invaders(history: List[StepData], output_path: Path) -> None:
-    """Render a Chicheck Invaders episode."""
-    ChicheckInvadersVisualizer(build_chicheck_invaders_env()).create_visualization(
-        history, output_path
-    )
+def _renderer_chicheck_invaders() -> Renderer:
+    """Build the Chicheck Invaders renderer."""
+    return ChicheckInvadersVisualizer(build_chicheck_invaders_env()).create_visualization
 
 
-def _render_continuous_laser_tag(history: List[StepData], output_path: Path) -> None:
-    """Render a continuous LaserTag episode."""
+def _renderer_continuous_laser_tag() -> Renderer:
+    """Build the continuous LaserTag renderer."""
     env = ContinuousLaserTagPOMDP(
         discount_factor=0.95,
         **continuous_laser_tag_pinned_kwargs(
@@ -1379,11 +1378,11 @@ def _render_continuous_laser_tag(history: List[StepData], output_path: Path) -> 
         dangerous_areas=env.dangerous_areas,
         dangerous_area_radius=env.dangerous_area_radius,
     )
-    visualizer.create_visualization(history, output_path)
+    return visualizer.create_visualization
 
 
-def _render_continuous_push(history: List[StepData], output_path: Path) -> None:
-    """Render a continuous Push episode."""
+def _renderer_continuous_push() -> Renderer:
+    """Build the continuous Push renderer."""
     env = ContinuousPushPOMDP(
         discount_factor=0.99,
         **continuous_push_pinned_kwargs(
@@ -1392,11 +1391,11 @@ def _render_continuous_push(history: List[StepData], output_path: Path) -> None:
             state_transition_cov_matrix=np.eye(2) * 0.01,
         ),
     )
-    ContinuousPushPOMDPVisualizer(env).create_visualization(history, output_path)
+    return ContinuousPushPOMDPVisualizer(env).create_visualization
 
 
-def _render_laser_tag(history: List[StepData], output_path: Path) -> None:
-    """Render a discrete LaserTag episode."""
+def _renderer_laser_tag() -> Renderer:
+    """Build the discrete LaserTag renderer."""
     env = LaserTagPOMDP(
         discount_factor=0.95,
         **laser_tag_pinned_kwargs(
@@ -1409,34 +1408,32 @@ def _render_laser_tag(history: List[StepData], output_path: Path) -> None:
         dangerous_areas=list(env.dangerous_areas),
         dangerous_area_radius=env.dangerous_area_radius,
     )
-    visualizer.create_visualization(history, output_path)
+    return visualizer.create_visualization
 
 
-def _render_light_dark(history: List[StepData], output_path: Path) -> None:
-    """Render a continuous Light-Dark episode."""
+def _renderer_light_dark() -> Renderer:
+    """Build the continuous Light-Dark renderer."""
     env = ContinuousLightDarkPOMDP(
         discount_factor=0.95,
         **continuous_light_dark_pinned_kwargs(),
     )
-    LightDarkPOMDPVisualizer(env).cache_visualization(history, output_path)
+    return LightDarkPOMDPVisualizer(env).cache_visualization
 
 
-def _render_multiagent_firefighting(history: List[StepData], output_path: Path) -> None:
-    """Render a multi-agent firefighting episode."""
-    MultiAgentFirefightingVisualizer(build_multiagent_firefighting_env()).create_visualization(
-        history, output_path
-    )
+def _renderer_multiagent_firefighting() -> Renderer:
+    """Build the multi-agent firefighting renderer."""
+    visualizer = MultiAgentFirefightingVisualizer(build_multiagent_firefighting_env())
+    return visualizer.create_visualization
 
 
-def _render_occupancy_grid_mapping(history: List[StepData], output_path: Path) -> None:
-    """Render an occupancy-grid mapping episode."""
-    OccupancyGridMappingVisualizer(build_occupancy_grid_mapping_env()).create_visualization(
-        history, output_path
-    )
+def _renderer_occupancy_grid_mapping() -> Renderer:
+    """Build the occupancy-grid mapping renderer."""
+    visualizer = OccupancyGridMappingVisualizer(build_occupancy_grid_mapping_env())
+    return visualizer.create_visualization
 
 
-def _render_pacman(history: List[StepData], output_path: Path) -> None:
-    """Render a PacMan episode."""
+def _renderer_pacman() -> Renderer:
+    """Build the PacMan renderer."""
     env = PacManPOMDP(
         discount_factor=0.95,
         **pacman_pinned_kwargs(
@@ -1446,11 +1443,11 @@ def _render_pacman(history: List[StepData], output_path: Path) -> None:
             ghost_strategies=None,
         ),
     )
-    PacManVisualizer(env).cache_visualization(history, output_path)
+    return PacManVisualizer(env).cache_visualization
 
 
-def _render_push(history: List[StepData], output_path: Path) -> None:
-    """Render a discrete Push episode."""
+def _renderer_push() -> Renderer:
+    """Build the discrete Push renderer."""
     env = PushPOMDP(
         discount_factor=0.95,
         **push_pinned_kwargs(
@@ -1458,11 +1455,11 @@ def _render_push(history: List[StepData], output_path: Path) -> None:
             transition_error_prob=0.0,  # Explicitly set for deterministic behavior
         ),
     )
-    PushPOMDPVisualizer(env).create_visualization(history, output_path)
+    return PushPOMDPVisualizer(env).create_visualization
 
 
-def _render_rock_sample(history: List[StepData], output_path: Path) -> None:
-    """Render a RockSample episode."""
+def _renderer_rock_sample() -> Renderer:
+    """Build the RockSample renderer."""
     env = RockSamplePOMDP(
         discount_factor=0.95,
         **rock_sample_pinned_kwargs(
@@ -1472,22 +1469,22 @@ def _render_rock_sample(history: List[StepData], output_path: Path) -> None:
             dangerous_area_radius=1.0,
         ),
     )
-    RockSampleVisualizer(env).create_visualization(history, output_path)
+    return RockSampleVisualizer(env).create_visualization
 
 
-def _render_safety_ant_velocity(history: List[StepData], output_path: Path) -> None:
-    """Render a SafeAntVelocity episode."""
+def _renderer_safety_ant_velocity() -> Renderer:
+    """Build the SafeAntVelocity renderer."""
     env = SafeAntVelocityPOMDP(
         discount_factor=0.95,
         **safety_ant_velocity_pinned_kwargs(),
     )
-    SafeAntVelocityVisualizer(env).create_animation(history, output_path)
+    return SafeAntVelocityVisualizer(env).create_animation
 
 
-def _render_t_maze(history: List[StepData], output_path: Path) -> None:
-    """Render a T-Maze episode."""
+def _renderer_t_maze() -> Renderer:
+    """Build the T-Maze renderer."""
     env = TMazePOMDP(discount_factor=0.95, **t_maze_pinned_kwargs())
-    MazeVisualizer(env).create_visualization(history, output_path)
+    return MazeVisualizer(env).create_visualization
 
 
 # Both public Maze variants generate their geometry from a pinned ``maze_seed``,
@@ -1497,20 +1494,20 @@ _DISCRETE_MAZE_ENV = DiscreteMazePOMDP(discount_factor=0.95, **discrete_maze_pin
 _CONTINUOUS_MAZE_ENV = ContinuousMazePOMDP(discount_factor=0.95, **continuous_maze_pinned_kwargs())
 
 
-def _render_maze(env: Any) -> Callable[[List[StepData], Path], None]:
-    """Build a renderer for one Maze variant.
+def _renderer_maze(env: Any) -> Callable[[], Renderer]:
+    """Build a renderer factory for one Maze variant.
 
     Args:
         env: The Maze environment whose geometry the history was walked on.
 
     Returns:
-        A renderer that draws a history of ``env`` to a path.
+        A factory returning a renderer that draws a history of ``env``.
     """
 
-    def render(history: List[StepData], output_path: Path) -> None:
-        MazeVisualizer(env).create_visualization(history, output_path)
+    def build() -> Renderer:
+        return MazeVisualizer(env).create_visualization
 
-    return render
+    return build
 
 
 # Alphabetical by name, for the reason test_registration_lists_are_sorted.py
@@ -1519,87 +1516,87 @@ GOLDEN_VISUALIZATIONS: Tuple[GoldenVisualization, ...] = (
     GoldenVisualization(
         name="battleship",
         build_history=lambda: create_deterministic_battleship_episode(seed=7),
-        render=_render_battleship,
+        build_renderer=_renderer_battleship,
         check_repeated_render=True,
     ),
     GoldenVisualization(
         name="capture_the_flag",
         build_history=lambda: create_deterministic_capture_the_flag_episode(seed=0),
-        render=_render_capture_the_flag,
+        build_renderer=_renderer_capture_the_flag,
     ),
     GoldenVisualization(
         name="chicheck_invaders",
         build_history=lambda: create_deterministic_chicheck_invaders_episode(seed=11),
-        render=_render_chicheck_invaders,
+        build_renderer=_renderer_chicheck_invaders,
         check_repeated_render=True,
     ),
     GoldenVisualization(
         name="continuous_laser_tag",
         build_history=lambda: create_deterministic_continuous_laser_tag_episode(seed=42),
-        render=_render_continuous_laser_tag,
+        build_renderer=_renderer_continuous_laser_tag,
     ),
     GoldenVisualization(
         name="continuous_maze",
         build_history=lambda: create_deterministic_maze_episode(_CONTINUOUS_MAZE_ENV),
-        render=_render_maze(_CONTINUOUS_MAZE_ENV),
+        build_renderer=_renderer_maze(_CONTINUOUS_MAZE_ENV),
     ),
     GoldenVisualization(
         name="continuous_push",
         build_history=lambda: create_deterministic_continuous_push_episode(seed=42),
-        render=_render_continuous_push,
+        build_renderer=_renderer_continuous_push,
     ),
     GoldenVisualization(
         name="discrete_maze",
         build_history=lambda: create_deterministic_maze_episode(_DISCRETE_MAZE_ENV),
-        render=_render_maze(_DISCRETE_MAZE_ENV),
+        build_renderer=_renderer_maze(_DISCRETE_MAZE_ENV),
     ),
     GoldenVisualization(
         name="laser_tag",
         build_history=lambda: create_deterministic_laser_tag_episode(seed=42),
-        render=_render_laser_tag,
+        build_renderer=_renderer_laser_tag,
     ),
     GoldenVisualization(
         name="light_dark",
         build_history=lambda: create_deterministic_light_dark_episode(seed=42),
-        render=_render_light_dark,
+        build_renderer=_renderer_light_dark,
     ),
     GoldenVisualization(
         name="multiagent_firefighting",
         build_history=lambda: create_deterministic_multiagent_firefighting_episode(seed=5),
-        render=_render_multiagent_firefighting,
+        build_renderer=_renderer_multiagent_firefighting,
         check_repeated_render=True,
     ),
     GoldenVisualization(
         name="occupancy_grid_mapping",
         build_history=lambda: create_deterministic_occupancy_grid_mapping_episode(seed=3),
-        render=_render_occupancy_grid_mapping,
+        build_renderer=_renderer_occupancy_grid_mapping,
         check_repeated_render=True,
     ),
     GoldenVisualization(
         name="pacman",
         build_history=lambda: create_deterministic_pacman_episode(seed=42),
-        render=_render_pacman,
+        build_renderer=_renderer_pacman,
     ),
     GoldenVisualization(
         name="push",
         build_history=lambda: create_deterministic_push_episode(seed=42),
-        render=_render_push,
+        build_renderer=_renderer_push,
     ),
     GoldenVisualization(
         name="rock_sample",
         build_history=lambda: create_deterministic_rock_sample_episode(seed=42),
-        render=_render_rock_sample,
+        build_renderer=_renderer_rock_sample,
         check_repeated_render=True,
     ),
     GoldenVisualization(
         name="safety_ant_velocity",
         build_history=lambda: create_deterministic_safety_ant_velocity_episode(seed=42),
-        render=_render_safety_ant_velocity,
+        build_renderer=_renderer_safety_ant_velocity,
     ),
     GoldenVisualization(
         name="t_maze",
         build_history=create_deterministic_t_maze_episode,
-        render=_render_t_maze,
+        build_renderer=_renderer_t_maze,
     ),
 )
 
@@ -1662,8 +1659,9 @@ class TestVisualizationConsistency:
         Test type: integration
         """
         history = spec.build_history()
+        render = spec.build_renderer()
         output_path = temp_output_dir / f"{spec.name}_test.gif"
-        spec.render(history, output_path)
+        render(history, output_path)
 
         compare_or_create_golden_file(
             output_path,
@@ -1696,10 +1694,11 @@ class TestVisualizationDeterminism:
         Test type: unit
         """
         history = spec.build_history()
+        render = spec.build_renderer()
         first_path = temp_output_dir / f"{spec.name}_first.gif"
         second_path = temp_output_dir / f"{spec.name}_second.gif"
-        spec.render(history, first_path)
-        spec.render(history, second_path)
+        render(history, first_path)
+        render(history, second_path)
 
         first_hash = compute_file_hash(first_path)
         second_hash = compute_file_hash(second_path)
