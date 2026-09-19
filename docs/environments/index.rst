@@ -67,6 +67,10 @@ actually stores.
      - :doc:`battleship`
    * - ``CaptureTheFlagPOMDP``
      - Two teams, two flags: steal theirs and get home without being tagged.
+     - ``[players, flag home, carriers, counters, score]``
+     - discrete
+     - continuous
+     - none
      - :doc:`capture_the_flag`
    * - ``OccupancyGridMappingPOMDP``
      - Explore an unknown grid world, paid for the entropy it maps away.
