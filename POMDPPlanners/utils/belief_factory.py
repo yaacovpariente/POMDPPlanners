@@ -130,6 +130,15 @@ _ENV_FACTORY_REGISTRY: dict[str, tuple[str, str, BeliefType]] = {
         "create_occupancy_grid_mapping_belief",
         BeliefType.VECTORIZED_PARTICLE,
     ),
+    # PARTICLE rather than VECTORIZED_PARTICLE: Chicheck Invaders has one filter,
+    # the scalar weighted particle belief with flock reinvigoration, and no
+    # batched twin. Claiming the vectorized type would promise a batched update
+    # that does not exist.
+    "ChicheckInvadersPOMDP": (
+        "POMDPPlanners.environments.chicheck_invaders_pomdp.chicheck_invaders_belief",
+        "create_chicheck_invaders_belief",
+        BeliefType.PARTICLE,
+    ),
 }
 
 

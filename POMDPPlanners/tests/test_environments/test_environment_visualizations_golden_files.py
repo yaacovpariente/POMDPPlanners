@@ -68,6 +68,11 @@ from POMDPPlanners.environments.maze_pomdp import (
     DiscreteMazePOMDP,
     MazeVisualizer,
 )
+from POMDPPlanners.environments.chicheck_invaders_pomdp import (
+    ChicheckInvadersPOMDP,
+    ChicheckInvadersVisualizer,
+    create_chicheck_invaders_belief,
+)
 from POMDPPlanners.environments.multiagent_firefighting_pomdp import (
     FireCategory,
     FirefightingAction,
@@ -130,6 +135,7 @@ from POMDPPlanners.environments.maze_pomdp.maze_pomdp import (
 from POMDPPlanners.environments.maze_pomdp.maze_visualizer import MazeVisualizer
 from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
     battleship_pinned_kwargs,
+    chicheck_invaders_pinned_kwargs,
     continuous_laser_tag_pinned_kwargs,
     continuous_light_dark_pinned_kwargs,
     continuous_maze_pinned_kwargs,
@@ -243,6 +249,76 @@ def compare_or_create_golden_file(output_path: Path, golden_name: str, test_name
             f"{'='*70}\n"
         )
 
+
+def build_chicheck_invaders_env() -> ChicheckInvadersPOMDP:
+    """Build the environment the Chicheck Invaders golden GIF is rendered for."""
+    return ChicheckInvadersPOMDP(discount_factor=0.95, **chicheck_invaders_pinned_kwargs())
+
+
+def create_deterministic_chicheck_invaders_episode(seed: int = 11) -> List[StepData]:
+    """Create a deterministic Chicheck Invaders episode for the golden GIF.
+
+    The action sequence is fixed and the belief attached to each step is a real
+    :class:`ChicheckInvadersBelief` rather than a mock, for the reason the
+    occupancy-grid fixture gives: the belief panel is the part of this
+    visualization most likely to regress, and hashing a mock belief would leave
+    it untested.
+
+    Both RNGs are seeded, not just NumPy, for the reason the Battleship fixture
+    documents: ``conftest`` seeds the stdlib ``random`` once at import, so
+    seeding NumPy alone would leave the golden hash dependent on which tests ran
+    before this one.
+
+    Args:
+        seed: Random seed pinning the flock, the dives, the sensor noise and the
+            filter's resampling.
+
+    Returns:
+        List of StepData objects representing the episode history.
+    """
+    random.seed(seed)
+    np.random.seed(seed)
+    env = build_chicheck_invaders_env()
+    belief = create_chicheck_invaders_belief(env, n_particles=60)
+    state = env.initial_state_dist().sample()[0]
+    history: List[StepData] = []
+
+    # Shoot, sidestep, shoot again: the frames show a beam flashing up the
+    # ship's column on the steps that fired, the ship moving under the flock,
+    # and the belief tightening as the sensors report. Indices follow
+    # ChicheckInvadersAction: 0 stay, 1 left, 2 right, 3 fire.
+    action_sequence = [1, 3, 0, 2, 3, 2, 0, 3, 1, 3, 0, 3]
+
+    for action in action_sequence:
+        if env.is_terminal(state):
+            break
+        next_state, observation, reward = env.sample_next_step(state, action)
+        history.append(
+            StepData(
+                state=state,
+                action=action,
+                next_state=next_state,
+                observation=observation,
+                reward=float(reward),
+                belief=belief,
+                info=env.step_info(state, action, next_state),
+            )
+        )
+        belief = belief.update(action=action, observation=observation, pomdp=env)
+        state = next_state
+
+    history.append(
+        StepData(
+            state=state,
+            action=None,
+            next_state=None,
+            observation=None,
+            reward=None,
+            belief=belief,
+            info=env.step_info(state, None, None),
+        )
+    )
+    return history
 
 
 def build_multiagent_firefighting_env() -> MultiAgentFirefightingPOMDP:
@@ -1277,7 +1353,6 @@ class TestVisualizationConsistency:
             "test_rock_sample_visualization_consistency",
         )
 
-
     def test_multiagent_firefighting_visualization_consistency(self, temp_output_dir):
         """Test multi-agent firefighting visualization produces consistent output.
 
@@ -1328,6 +1403,30 @@ class TestVisualizationConsistency:
             output_path,
             "occupancy_grid_mapping_visualization.gif",
             "test_occupancy_grid_mapping_visualization_consistency",
+        )
+
+    def test_chicheck_invaders_visualization_consistency(self, temp_output_dir):
+        """Test Chicheck Invaders visualization produces consistent output.
+
+        Purpose: Validates that Chicheck Invaders visualizations are deterministic
+
+        Given: A deterministic Chicheck Invaders episode with a fixed action
+            sequence and a real particle belief
+        When: Visualization is created from the episode
+        Then: Output matches golden file hash (or creates golden if missing)
+
+        Test type: integration
+        """
+        history = create_deterministic_chicheck_invaders_episode(seed=11)
+        visualizer = ChicheckInvadersVisualizer(build_chicheck_invaders_env())
+
+        output_path = temp_output_dir / "chicheck_invaders_test.gif"
+        visualizer.create_visualization(history, output_path)
+
+        compare_or_create_golden_file(
+            output_path,
+            "chicheck_invaders_visualization.gif",
+            "test_chicheck_invaders_visualization_consistency",
         )
 
     def test_capture_the_flag_visualization_consistency(self, temp_output_dir):
@@ -1687,7 +1786,6 @@ class TestVisualizationConsistency:
 class TestVisualizationDeterminism:
     """Test that visualizations are deterministic when re-run with same inputs."""
 
-
     def test_multiagent_firefighting_repeated_visualization_identical(self, temp_output_dir):
         """Test that repeated firefighting visualizations are byte-for-byte identical.
 
@@ -1741,6 +1839,33 @@ class TestVisualizationDeterminism:
         assert compute_file_hash(first_path) == compute_file_hash(
             second_path
         ), "Occupancy-grid mapping visualization is not deterministic"
+
+    def test_chicheck_invaders_repeated_visualization_identical(self, temp_output_dir):
+        """Test that repeated Chicheck Invaders visualizations are byte-for-byte identical.
+
+        Purpose: Validates absolute determinism of the Chicheck Invaders renderer,
+            which the golden-hash check cannot cover outside the project's
+            Docker image. The belief panel sums a weighted marginal over a
+            particle collection, which is exactly the kind of place an iteration
+            order or a stray draw would leak in.
+
+        Given: One episode rendered twice from the same history
+        When: Both renders use identical inputs
+        Then: Output files have identical SHA256 hashes
+
+        Test type: unit
+        """
+        history = create_deterministic_chicheck_invaders_episode(seed=11)
+        visualizer = ChicheckInvadersVisualizer(build_chicheck_invaders_env())
+
+        first_path = temp_output_dir / "chicheck_invaders_first.gif"
+        second_path = temp_output_dir / "chicheck_invaders_second.gif"
+        visualizer.create_visualization(history, first_path)
+        visualizer.create_visualization(history, second_path)
+
+        assert compute_file_hash(first_path) == compute_file_hash(
+            second_path
+        ), "Chicheck Invaders visualization is not deterministic"
 
     def test_battleship_repeated_visualization_identical(self, temp_output_dir):
         """Test that repeated Battleship visualizations are byte-for-byte identical.
