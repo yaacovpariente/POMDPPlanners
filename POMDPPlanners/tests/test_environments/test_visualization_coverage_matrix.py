@@ -129,27 +129,6 @@ NON_FAMILY_ENTRIES: Dict[str, str] = {
 
 FAMILIES: Tuple[EnvironmentFamily, ...] = (
     EnvironmentFamily(
-        package="tiger_pomdp",
-        label="Tiger",
-        hooks=(("tiger_pomdp.py", "TigerPOMDP"),),
-        docs_page="tiger.rst",
-        docs_section=None,
-        images=(
-            "POMDPPlanners/tests/test_environments/golden_visualizations/tiger_visualization.gif",
-        ),
-    ),
-    EnvironmentFamily(
-        package="rock_sample_pomdp",
-        label="RockSample",
-        hooks=(("rock_sample_pomdp/rock_sample_pomdp.py", "RockSamplePOMDP"),),
-        docs_page="rock_sample.rst",
-        docs_section=None,
-        images=(
-            "POMDPPlanners/tests/test_environments/golden_visualizations/"
-            "rock_sample_visualization.gif",
-        ),
-    ),
-    EnvironmentFamily(
         package="battleship_pomdp",
         label="Battleship",
         hooks=(("battleship_pomdp/battleship_pomdp.py", "BattleshipPOMDP"),),
@@ -159,14 +138,6 @@ FAMILIES: Tuple[EnvironmentFamily, ...] = (
         # That is deliberate: docs/artifacts/battleship_redesign/README.md pins
         # this file's SHA-256 and records the golden as a separate asset.
         images=("docs/artifacts/battleship_redesign/review.gif",),
-    ),
-    EnvironmentFamily(
-        package="chicheck_invaders_pomdp",
-        label="ChicheckInvaders",
-        hooks=(("chicheck_invaders_pomdp/chicheck_invaders_pomdp.py", "ChicheckInvadersPOMDP"),),
-        docs_page="chicheck_invaders.rst",
-        docs_section=None,
-        images=("docs/images/chicheck_invaders_visualization.gif",),
     ),
     EnvironmentFamily(
         package="capture_the_flag_pomdp",
@@ -180,48 +151,54 @@ FAMILIES: Tuple[EnvironmentFamily, ...] = (
         ),
     ),
     EnvironmentFamily(
-        package="occupancy_grid_mapping_pomdp",
-        label="OccupancyGridMapping",
+        package="carla_pomdp",
+        label="CARLA",
+        hooks=(("carla_pomdp/carla_pomdp.py", "CarlaPOMDP"),),
+        docs_page="realistic.rst",
+        docs_section="CARLA",
+        images=("docs/images/carla_chase_camera.png",),
+    ),
+    EnvironmentFamily(
+        package="cartpole_pomdp",
+        label="CartPole",
+        hooks=(("cartpole_pomdp/cartpole_pomdp.py", "CartPolePOMDP"),),
+        docs_page="cartpole.rst",
+        docs_section=None,
+        # The docs copy, byte-identical to the golden GIF the renderer test
+        # pins. The matrix checks the file the page actually embeds, so this
+        # row follows the page rather than the test fixture.
+        images=("docs/images/cartpole_visualization.gif",),
+    ),
+    EnvironmentFamily(
+        package="chicheck_invaders_pomdp",
+        label="ChicheckInvaders",
+        hooks=(("chicheck_invaders_pomdp/chicheck_invaders_pomdp.py", "ChicheckInvadersPOMDP"),),
+        docs_page="chicheck_invaders.rst",
+        docs_section=None,
+        images=("docs/images/chicheck_invaders_visualization.gif",),
+    ),
+    EnvironmentFamily(
+        package="isaac_lab_pomdp",
+        label="IsaacLab",
+        hooks=(("isaac_lab_pomdp/isaac_lab_pomdp.py", "IsaacLabPOMDP"),),
+        docs_page="realistic.rst",
+        docs_section="Isaac Lab",
+        images=("docs/images/isaac_lab_franka_reach.png",),
+    ),
+    EnvironmentFamily(
+        package="laser_tag_pomdp",
+        label="LaserTag",
         hooks=(
-            (
-                "occupancy_grid_mapping_pomdp/occupancy_grid_mapping_pomdp.py",
-                "OccupancyGridMappingPOMDP",
-            ),
+            ("laser_tag_pomdp/laser_tag_pomdp.py", "LaserTagPOMDP"),
+            ("laser_tag_pomdp/continuous_laser_tag_pomdp.py", "ContinuousLaserTagPOMDP"),
         ),
-        docs_page="occupancy_grid_mapping.rst",
-        docs_section=None,
-        images=("docs/images/occupancy_grid_mapping_visualization.gif",),
-    ),
-    EnvironmentFamily(
-        package="multiagent_firefighting_pomdp",
-        label="MultiAgentFirefighting",
-        hooks=(
-            (
-                "multiagent_firefighting_pomdp/multiagent_firefighting_pomdp.py",
-                "MultiAgentFirefightingPOMDP",
-            ),
-        ),
-        docs_page="multiagent_firefighting.rst",
-        docs_section=None,
-        images=("docs/images/multiagent_firefighting_visualization.gif",),
-    ),
-    EnvironmentFamily(
-        package="snake_pomdp",
-        label="Snake",
-        hooks=(("snake_pomdp/snake_pomdp.py", "SnakePOMDP"),),
-        docs_page="snake.rst",
-        docs_section=None,
-        images=("docs/images/snake_visualization.gif",),
-    ),
-    EnvironmentFamily(
-        package="pacman_pomdp",
-        label="PacMan",
-        hooks=(("pacman_pomdp/pacman_pomdp.py", "PacManPOMDP"),),
-        docs_page="pacman.rst",
+        docs_page="laser_tag.rst",
         docs_section=None,
         images=(
             "POMDPPlanners/tests/test_environments/golden_visualizations/"
-            "pacman_visualization.gif",
+            "laser_tag_visualization.gif",
+            "POMDPPlanners/tests/test_environments/golden_visualizations/"
+            "continuous_laser_tag_visualization.gif",
         ),
     ),
     EnvironmentFamily(
@@ -257,15 +234,50 @@ FAMILIES: Tuple[EnvironmentFamily, ...] = (
         ),
     ),
     EnvironmentFamily(
-        package="cartpole_pomdp",
-        label="CartPole",
-        hooks=(("cartpole_pomdp/cartpole_pomdp.py", "CartPolePOMDP"),),
-        docs_page="cartpole.rst",
+        package="mountain_car_pomdp",
+        label="MountainCar",
+        hooks=(("mountain_car_pomdp/mountain_car_pomdp.py", "MountainCarPOMDP"),),
+        # Shares a page with SanityPOMDP, so the section heading is the check.
+        docs_page="simple.rst",
+        docs_section="MountainCarPOMDP",
+        images=("docs/images/mountaincar_recorded_history.gif",),
+    ),
+    EnvironmentFamily(
+        package="multiagent_firefighting_pomdp",
+        label="MultiAgentFirefighting",
+        hooks=(
+            (
+                "multiagent_firefighting_pomdp/multiagent_firefighting_pomdp.py",
+                "MultiAgentFirefightingPOMDP",
+            ),
+        ),
+        docs_page="multiagent_firefighting.rst",
         docs_section=None,
-        # The docs copy, byte-identical to the golden GIF the renderer test
-        # pins. The matrix checks the file the page actually embeds, so this
-        # row follows the page rather than the test fixture.
-        images=("docs/images/cartpole_visualization.gif",),
+        images=("docs/images/multiagent_firefighting_visualization.gif",),
+    ),
+    EnvironmentFamily(
+        package="occupancy_grid_mapping_pomdp",
+        label="OccupancyGridMapping",
+        hooks=(
+            (
+                "occupancy_grid_mapping_pomdp/occupancy_grid_mapping_pomdp.py",
+                "OccupancyGridMappingPOMDP",
+            ),
+        ),
+        docs_page="occupancy_grid_mapping.rst",
+        docs_section=None,
+        images=("docs/images/occupancy_grid_mapping_visualization.gif",),
+    ),
+    EnvironmentFamily(
+        package="pacman_pomdp",
+        label="PacMan",
+        hooks=(("pacman_pomdp/pacman_pomdp.py", "PacManPOMDP"),),
+        docs_page="pacman.rst",
+        docs_section=None,
+        images=(
+            "POMDPPlanners/tests/test_environments/golden_visualizations/"
+            "pacman_visualization.gif",
+        ),
     ),
     EnvironmentFamily(
         package="push_pomdp",
@@ -283,19 +295,22 @@ FAMILIES: Tuple[EnvironmentFamily, ...] = (
         ),
     ),
     EnvironmentFamily(
-        package="laser_tag_pomdp",
-        label="LaserTag",
-        hooks=(
-            ("laser_tag_pomdp/laser_tag_pomdp.py", "LaserTagPOMDP"),
-            ("laser_tag_pomdp/continuous_laser_tag_pomdp.py", "ContinuousLaserTagPOMDP"),
-        ),
-        docs_page="laser_tag.rst",
+        package="racetrack_pomdp",
+        label="Racetrack",
+        hooks=(("racetrack_pomdp/racetrack_pomdp.py", "RacetrackPOMDP"),),
+        docs_page="realistic.rst",
+        docs_section="Racetrack",
+        images=("docs/images/racetrack_recorded_episode.gif",),
+    ),
+    EnvironmentFamily(
+        package="rock_sample_pomdp",
+        label="RockSample",
+        hooks=(("rock_sample_pomdp/rock_sample_pomdp.py", "RockSamplePOMDP"),),
+        docs_page="rock_sample.rst",
         docs_section=None,
         images=(
             "POMDPPlanners/tests/test_environments/golden_visualizations/"
-            "laser_tag_visualization.gif",
-            "POMDPPlanners/tests/test_environments/golden_visualizations/"
-            "continuous_laser_tag_visualization.gif",
+            "rock_sample_visualization.gif",
         ),
     ),
     EnvironmentFamily(
@@ -315,37 +330,22 @@ FAMILIES: Tuple[EnvironmentFamily, ...] = (
         ),
     ),
     EnvironmentFamily(
-        package="mountain_car_pomdp",
-        label="MountainCar",
-        hooks=(("mountain_car_pomdp/mountain_car_pomdp.py", "MountainCarPOMDP"),),
-        # Shares a page with SanityPOMDP, so the section heading is the check.
-        docs_page="simple.rst",
-        docs_section="MountainCarPOMDP",
-        images=("docs/images/mountaincar_recorded_history.gif",),
+        package="snake_pomdp",
+        label="Snake",
+        hooks=(("snake_pomdp/snake_pomdp.py", "SnakePOMDP"),),
+        docs_page="snake.rst",
+        docs_section=None,
+        images=("docs/images/snake_visualization.gif",),
     ),
     EnvironmentFamily(
-        package="racetrack_pomdp",
-        label="Racetrack",
-        hooks=(("racetrack_pomdp/racetrack_pomdp.py", "RacetrackPOMDP"),),
-        docs_page="realistic.rst",
-        docs_section="Racetrack",
-        images=("docs/images/racetrack_recorded_episode.gif",),
-    ),
-    EnvironmentFamily(
-        package="carla_pomdp",
-        label="CARLA",
-        hooks=(("carla_pomdp/carla_pomdp.py", "CarlaPOMDP"),),
-        docs_page="realistic.rst",
-        docs_section="CARLA",
-        images=("docs/images/carla_chase_camera.png",),
-    ),
-    EnvironmentFamily(
-        package="isaac_lab_pomdp",
-        label="IsaacLab",
-        hooks=(("isaac_lab_pomdp/isaac_lab_pomdp.py", "IsaacLabPOMDP"),),
-        docs_page="realistic.rst",
-        docs_section="Isaac Lab",
-        images=("docs/images/isaac_lab_franka_reach.png",),
+        package="tiger_pomdp",
+        label="Tiger",
+        hooks=(("tiger_pomdp.py", "TigerPOMDP"),),
+        docs_page="tiger.rst",
+        docs_section=None,
+        images=(
+            "POMDPPlanners/tests/test_environments/golden_visualizations/tiger_visualization.gif",
+        ),
     ),
 )
 
