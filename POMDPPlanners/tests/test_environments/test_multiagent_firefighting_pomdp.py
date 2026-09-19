@@ -1130,13 +1130,14 @@ def test_serialization_round_trips_the_cell_sequence_arguments() -> None:
 
     Given: The default environment and one with no obstacles at all.
     When: Each is rebuilt from its own dict.
-    Then: The rebuilt environment is equal to the original, carries the same
-        ``config_id``, and holds the same layout.
+    Then: The rebuild is a ``MultiAgentFirefightingPOMDP``, is equal to the
+        original, carries the same ``config_id``, and holds the same layout.
 
     Test type: unit
     """
     for env in (build_env(), build_env(obstacle_cells=[], depot_cell=(9, 9))):
         rebuilt = MultiAgentFirefightingPOMDP.from_dict(env.to_dict())
+        assert isinstance(rebuilt, MultiAgentFirefightingPOMDP)
         assert rebuilt.config_id == env.config_id
         assert rebuilt == env
         assert rebuilt.obstacle_cells == env.obstacle_cells
