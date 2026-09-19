@@ -14,8 +14,9 @@ RockSample's discrete-action, categorical-observation contract:
 * Observations are categorical over ``{none, good, bad}``. The C++
   boundary uses integer codes; the env-API translates to strings.
   We assert the per-check Bernoulli probability matches the closed-form
-  ``exp(-distance / sensor_efficiency)`` expression and that 200K-sample
-  empirical frequencies match the analytic efficiency within 5e-3.
+  Smith & Simmons (2004) accuracy
+  ``(1 + 2 ** (-distance / sensor_efficiency)) / 2`` and that 200K-sample
+  empirical frequencies match that analytic accuracy within 5e-3.
 * The batch equivalence tests compare the native batch entry points
   against a per-particle loop over the public ``env.sample_next_state``
   / ``env.observation_log_probability`` env-API.
@@ -52,6 +53,16 @@ _INIT_POS: Tuple[int, int] = (0, 0)
 _SENSOR_EFFICIENCY: float = 10.0
 _NUM_ROCKS: int = len(_ROCK_POSITIONS)
 _STATE_DIM: int = 2 + _NUM_ROCKS
+
+
+def _accuracy(distance: float, half_life: float = _SENSOR_EFFICIENCY) -> float:
+    """Smith & Simmons (2004) check accuracy, written out independently here.
+
+    Deliberately not a call into the environment: the point of the tests
+    below is to pin the environment's law against an expression written from
+    the paper, so this must stay a separate implementation.
+    """
+    return 0.5 * (1.0 + 2.0 ** (-float(distance) / half_life))
 
 
 def _make_env() -> RockSamplePOMDP:
@@ -156,8 +167,8 @@ def test_observation_movement_returns_none(env: RockSamplePOMDP) -> None:
     [
         ((1, 1), True, 1.0),  # distance 0 -> efficiency 1.0
         ((1, 1), False, 1.0),
-        ((5, 5), True, float(np.exp(-np.sqrt(32.0) / _SENSOR_EFFICIENCY))),  # distance to (1,1)
-        ((5, 5), False, float(np.exp(-np.sqrt(32.0) / _SENSOR_EFFICIENCY))),
+        ((5, 5), True, _accuracy(np.sqrt(32.0))),  # distance to (1,1)
+        ((5, 5), False, _accuracy(np.sqrt(32.0))),
     ],
 )
 def test_observation_check_probability_matches_python_formula(
@@ -167,7 +178,8 @@ def test_observation_check_probability_matches_python_formula(
     expected_efficiency_close: float,
 ) -> None:
     """Purpose: Validates the check-action Bernoulli probability matches
-    the analytic expression ``exp(-d / sensor_efficiency)``.
+    the analytic Smith & Simmons accuracy
+    ``(1 + 2 ** (-d / sensor_efficiency)) / 2``.
 
     Given: A next_state with known robot position and rock 0 quality.
     When: env.observation_log_probability for ["good", "bad", "none"] is
@@ -212,7 +224,7 @@ def test_observation_check_sample_empirical_matches_probability(
     rocks = (True, False, True, False)  # rock 0 good
     next_state = _state(5, 5, rocks)
 
-    expected_efficiency = float(np.exp(-np.sqrt(32.0) / _SENSOR_EFFICIENCY))
+    expected_efficiency = _accuracy(np.sqrt(32.0))
 
     _native.set_seed(12345)
     samples = env.sample_observation(next_state=next_state, action=5, n_samples=200_000)

@@ -151,6 +151,15 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
     must navigate a grid, use sensors to evaluate rocks, and decide which ones
     to sample while balancing exploration costs and sampling rewards.
 
+    Observation model:
+        A check action on rock *i* returns ``"good"`` or ``"bad"``, correct
+        with probability ``(1 + 2 ** (-d / sensor_efficiency)) / 2`` where
+        ``d`` is the Euclidean distance from the robot to that rock. This is
+        the accuracy of Smith & Simmons, "Heuristic Search Value Iteration
+        for POMDPs" (2004). It is 1.0 at the rock and falls towards 0.5 with
+        distance, never below it, so a check from far away is uninformative
+        rather than misleading. Every other action returns ``"none"``.
+
     Stochasticity:
         The dangerous-area penalty can be applied either deterministically
         (the default) or stochastically. When
@@ -171,7 +180,9 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
         map_size: Grid dimensions as (rows, cols)
         rock_positions: List of rock positions as (row, col) tuples
         init_pos: Initial robot position
-        sensor_efficiency: Sensor noise parameter (higher = less noise)
+        sensor_efficiency: Distance at which the check sensor is 75% accurate
+            (Smith & Simmons' ``d0``); larger means accuracy holds up further
+            from the rock
         bad_rock_penalty: Penalty for sampling a bad rock
         good_rock_reward: Reward for sampling a good rock
         step_penalty: Cost for each action
@@ -198,7 +209,7 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
         False
     """
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-statements
         self,
         map_size: Tuple[int, int] = (5, 5),
         rock_positions: Optional[List[Tuple[int, int]]] = None,
@@ -228,7 +239,11 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
             map_size: Grid dimensions (rows, cols). Defaults to (5, 5).
             rock_positions: Rock locations. Defaults to [(0,0), (2,2), (3,3)].
             init_pos: Initial robot position. Defaults to (0, 0).
-            sensor_efficiency: Sensor parameter. Defaults to 20.0.
+            sensor_efficiency: Half-life of the check sensor's informative
+                part, in grid cells: accuracy is
+                ``(1 + 2 ** (-d / sensor_efficiency)) / 2``, so 1.0 at the
+                rock, 0.75 at ``d == sensor_efficiency``, and it approaches
+                0.5 as ``d`` grows. Defaults to 10.0.
             bad_rock_penalty: Bad rock penalty. Defaults to -10.0.
             good_rock_reward: Good rock reward. Defaults to 10.0.
             step_penalty: Action cost. Defaults to 0.0.
@@ -330,6 +345,13 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
         )
         self.init_pos = init_pos
         self.sensor_efficiency = sensor_efficiency
+        # Version 1 was the rock-check accuracy ``exp(-d / sensor_efficiency)``,
+        # which fell below 0.5 and made a far check reliably wrong. Version 2 is
+        # Smith & Simmons (2004), ``(1 + 2^(-d / sensor_efficiency)) / 2``.
+        # ``config_id`` hashes every public attribute, so bumping this is what
+        # stops a cached episode from the old observation law being reused for
+        # the new one — the constructor arguments are identical across the fix.
+        self.sensor_contract_version = 2
         self.bad_rock_penalty = bad_rock_penalty
         self.good_rock_reward = good_rock_reward
         self.step_penalty = step_penalty
