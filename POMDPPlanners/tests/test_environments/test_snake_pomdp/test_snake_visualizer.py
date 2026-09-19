@@ -80,7 +80,7 @@ def test_one_frame_is_rendered_per_recorded_step(tmp_path):
     output = tmp_path / "snake.gif"
     SnakeVisualizer(env).create_visualization(history, output)
     with Image.open(output) as handle:
-        assert handle.n_frames == len(history)
+        assert getattr(handle, "n_frames", 1) == len(history)
 
 
 @pytest.mark.parametrize(
@@ -129,7 +129,12 @@ def test_every_ending_renders(tmp_path, body, food, counter, kwargs, actions):
     SnakeVisualizer(env).create_visualization(history, output)
     assert output.stat().st_size > 0
     with Image.open(output) as handle:
-        handle.seek(handle.n_frames - 1)
+        # ``getattr`` rather than a plain attribute read: Pillow only declares
+        # ``n_frames`` on the multi-frame subclasses, so the CI image's older
+        # stubs reject the direct access on the ``ImageFile`` the opener is
+        # typed as. Seeking to the last frame and loading it is what actually
+        # decodes every frame, which is how a half-written GIF is caught.
+        handle.seek(getattr(handle, "n_frames", 1) - 1)
         handle.load()
 
 
