@@ -31,38 +31,44 @@ The snapshot tests are organized in `test_environment_visualizations_golden_file
 ### Test Classes
 
 **`TestVisualizationConsistency`** - Golden file snapshot tests
-- One test per environment (6 total)
-- Each test generates a visualization and compares it against the golden file
-- Tests are named: `test_<environment>_visualization_consistency`
+- One parametrized test over every entry in `GOLDEN_VISUALIZATIONS`
+- Each case generates a visualization and compares it against the golden file
+- Cases are named: `test_visualization_consistency[<environment>]`
+- Skipped outside the project's Docker image, where the hashes are pinned to
+  its matplotlib and PIL versions
 
 **`TestVisualizationDeterminism`** - Determinism verification tests
-- Verifies that repeated visualizations produce identical outputs
-- Confirms the snapshot tests are reliable (no randomness)
+- Renders the same history twice and compares the bytes, for the entries that
+  set `check_repeated_render`
+- Runs everywhere, so it still covers the renderers outside Docker
 
-### Test Components
+### Adding an environment
 
-Each snapshot test follows this pattern:
+Add one entry to `GOLDEN_VISUALIZATIONS`, in alphabetical order (a test
+enforces it, so that two environment branches do not insert at the same line
+and conflict):
 
 ```python
-def test_<environment>_visualization_consistency(self, temp_output_dir):
-    # 1. Create deterministic episode with fixed seed
-    history = create_deterministic_<environment>_episode(seed=42)
-
-    # 2. Create environment and visualizer
-    env = <Environment>POMDP(discount_factor=0.95)
-    visualizer = <Environment>Visualizer(env)
-
-    # 3. Generate visualization
-    output_path = temp_output_dir / "<environment>_test.gif"
-    visualizer.create_visualization(history, output_path)
-
-    # 4. Compare against golden file (or create if missing)
-    compare_or_create_golden_file(
-        output_path,
-        "<environment>_visualization.gif",
-        "test_<environment>_visualization_consistency",
-    )
+GoldenVisualization(
+    name="<environment>",
+    build_history=lambda: create_deterministic_<environment>_episode(seed=42),
+    render=_render_<environment>,
+)
 ```
+
+The golden file name is derived from `name`, so the entry above is compared
+against `<environment>_visualization.gif`. The renderer is written out per
+environment because environments do not agree on the method name:
+
+```python
+def _render_<environment>(history, output_path):
+    env = <Environment>POMDP(discount_factor=0.95, **<environment>_pinned_kwargs())
+    <Environment>Visualizer(env).create_visualization(history, output_path)
+```
+
+Build the history first and the environment second, as every entry does: an
+environment constructed before the history would draw from the global RNG
+stream at a different point and change the bytes.
 
 ### Determinism Requirements
 
@@ -89,16 +95,13 @@ For snapshot tests to be reliable, the following must be deterministic:
 
 ## Directory Structure
 
-```
-golden_visualizations/
-├── README.md                              # This file
-├── rock_sample_visualization.gif          # RockSample reference output
-├── pacman_visualization.gif               # PacMan reference output
-├── light_dark_visualization.gif           # LightDark reference output
-├── push_visualization.gif                 # Push reference output
-├── laser_tag_visualization.gif            # LaserTag reference output
-└── safety_ant_velocity_visualization.gif  # SafeAntVelocity reference output
-```
+One `<environment>_visualization.gif` per entry in `GOLDEN_VISUALIZATIONS`,
+beside this README. `ls` the directory for the current list rather than
+trusting a copy of it here.
+
+A missing file is not a failure: the test creates it and skips, and it skips
+on every later run too, so an environment whose golden file was never
+committed looks green forever. Commit the GIF.
 
 ## Workflow Examples
 
@@ -109,7 +112,7 @@ golden_visualizations/
 pytest POMDPPlanners/tests/test_environments/test_environment_visualizations_golden_files.py -v
 
 # Output:
-# test_rock_sample_visualization_consistency SKIPPED
+# test_visualization_consistency[rock_sample] SKIPPED
 # Warning: GOLDEN FILE CREATED: .../rock_sample_visualization.gif
 
 # Review generated files
@@ -123,12 +126,12 @@ ls -lh POMDPPlanners/tests/test_environments/golden_visualizations/
 pytest POMDPPlanners/tests/test_environments/test_environment_visualizations_golden_files.py -v
 
 # Output if visualizations match:
-# test_rock_sample_visualization_consistency PASSED ✓
-# test_pacman_visualization_consistency PASSED ✓
+# test_visualization_consistency[rock_sample] PASSED ✓
+# test_visualization_consistency[pacman] PASSED ✓
 # ...
 
 # Output if visualization changed:
-# test_rock_sample_visualization_consistency FAILED
+# test_visualization_consistency[rock_sample] FAILED
 # AssertionError: VISUALIZATION OUTPUT CHANGED!
 # Expected hash: abc123...
 # Actual hash:   def456...
@@ -143,13 +146,13 @@ pytest POMDPPlanners/tests/test_environments/test_environment_visualizations_gol
 rm POMDPPlanners/tests/test_environments/golden_visualizations/rock_sample_visualization.gif
 
 # Step 2: Re-run test to create new golden file
-pytest POMDPPlanners/tests/test_environments/test_environment_visualizations_golden_files.py::TestVisualizationConsistency::test_rock_sample_visualization_consistency -v
+pytest POMDPPlanners/tests/test_environments/test_environment_visualizations_golden_files.py::TestVisualizationConsistency::"test_visualization_consistency[rock_sample]" -v
 
 # Step 3: Review new golden file
 # (Open the GIF file and verify it looks correct)
 
 # Step 4: Run test again to confirm it passes
-pytest POMDPPlanners/tests/test_environments/test_environment_visualizations_golden_files.py::TestVisualizationConsistency::test_rock_sample_visualization_consistency -v
+pytest POMDPPlanners/tests/test_environments/test_environment_visualizations_golden_files.py::TestVisualizationConsistency::"test_visualization_consistency[rock_sample]" -v
 # PASSED ✓
 ```
 
@@ -174,7 +177,7 @@ pytest POMDPPlanners/tests/test_environments/test_environment_visualizations_gol
 ### Scenario 1: Unintentional Change (Bug)
 ```
 VISUALIZATION OUTPUT CHANGED!
-Test: test_rock_sample_visualization_consistency
+Test: test_visualization_consistency[rock_sample]
 Expected hash: abc123...
 Actual hash:   def456...
 ```
@@ -189,7 +192,7 @@ Actual hash:   def456...
 ### Scenario 2: Intentional Change (Feature)
 ```
 VISUALIZATION OUTPUT CHANGED!
-Test: test_rock_sample_visualization_consistency
+Test: test_visualization_consistency[rock_sample]
 Expected hash: abc123...
 Actual hash:   def456...
 ```
@@ -281,11 +284,11 @@ The first run creates the golden file and skips. Run the test a second time:
 
 ```bash
 # First run: Creates golden file
-pytest test_environment_visualizations_golden_files.py::test_rock_sample_visualization_consistency -v
+pytest test_environment_visualizations_golden_files.py -v -k "rock_sample"
 # SKIPPED - golden file created
 
 # Second run: Compares against golden file
-pytest test_environment_visualizations_golden_files.py::test_rock_sample_visualization_consistency -v
+pytest test_environment_visualizations_golden_files.py -v -k "rock_sample"
 # PASSED ✓
 ```
 
