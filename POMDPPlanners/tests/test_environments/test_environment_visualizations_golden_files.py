@@ -63,6 +63,15 @@ from POMDPPlanners.environments.maze_pomdp import (
     DiscreteMazePOMDP,
     MazeVisualizer,
 )
+from POMDPPlanners.environments.multiagent_firefighting_pomdp import (
+    FireCategory,
+    FirefightingAction,
+    MultiAgentFirefightingPOMDP,
+    MultiAgentFirefightingVisualizer,
+    WindDirection,
+    WindStrength,
+    create_firefighting_state,
+)
 from POMDPPlanners.environments.occupancy_grid_mapping_pomdp import (
     OccupancyGridAction,
     OccupancyGridMappingBelief,
@@ -122,6 +131,7 @@ from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
     continuous_push_pinned_kwargs,
     discrete_maze_pinned_kwargs,
     laser_tag_pinned_kwargs,
+    multiagent_firefighting_pinned_kwargs,
     occupancy_grid_mapping_pinned_kwargs,
     pacman_pinned_kwargs,
     push_pinned_kwargs,
@@ -228,6 +238,133 @@ def compare_or_create_golden_file(output_path: Path, golden_name: str, test_name
             f"{'='*70}\n"
         )
 
+
+
+def build_multiagent_firefighting_env() -> MultiAgentFirefightingPOMDP:
+    """Build the environment the multi-agent firefighting golden GIF is rendered for."""
+    return MultiAgentFirefightingPOMDP(
+        discount_factor=0.95, **multiagent_firefighting_pinned_kwargs()
+    )
+
+
+def create_deterministic_multiagent_firefighting_episode(seed: int = 5) -> List[StepData]:
+    """Create a deterministic firefighting episode for the golden GIF.
+
+    The belief attached to each step is a real :class:`WeightedParticleBelief`
+    rather than a mock, for the reason the occupancy-grid fixture documents:
+    two of this renderer's three panels are belief projections -- the per-cell
+    P(alight) heatmap and the histogram over the eight hidden wind values --
+    and hashing a mock belief would leave both untested.
+
+    Both RNGs are seeded, not just NumPy, for the reason the Battleship fixture
+    documents: ``conftest`` seeds the stdlib ``random`` once at import, so
+    seeding NumPy alone would leave the golden hash dependent on which tests
+    ran before this one.
+
+    Args:
+        seed: Random seed pinning the wind, the ignition cell, the spread, the
+            sensor noise and the filter's resampling.
+
+    Returns:
+        List of StepData objects representing the episode history.
+    """
+    random.seed(seed)
+    np.random.seed(seed)
+    env = build_multiagent_firefighting_env()
+
+    # The true world is stated rather than drawn. The reset distribution puts
+    # the fire in a uniformly random cell, and on most seeds that is nowhere
+    # near the robots' fixed tour -- the fire then burns itself out off-screen
+    # and the golden file shows eight frames of nothing happening. Pinning it
+    # two cells south-east of the robots, with an easterly wind carrying it
+    # away from them, is what makes the frames show suppression, heat damage
+    # and a belief narrowing onto a real front.
+    fire = np.full((env.num_rows, env.num_cols), float(FireCategory.UNBURNT))
+    fire[4, 4] = float(FireCategory.BURNING)
+    fire[4, 5] = float(FireCategory.SMOLDERING)
+    state = create_firefighting_state(
+        env,
+        robots=[(2, 2, env.max_tank, env.max_health), (2, 3, env.max_tank, env.max_health)],
+        wind=(int(WindDirection.EAST), int(WindStrength.HIGH)),
+        fire=fire,
+    )
+    # The belief starts knowing the fire and not the wind: four particles per
+    # wind value (twelve, at ninety-six particles), all carrying the true map. That is a deliberate choice for a
+    # *fixture*, not a claim about the filter. A bootstrap particle filter run
+    # from the reset prior over whole 100-cell maps is degenerate here -- no
+    # prior particle ever matches the observed front, every weight hits the
+    # epsilon floor, and both belief panels render as noise, which would leave
+    # the thing this GIF exists to check untested. Starting from the known fire
+    # isolates the half of the belief the environment is actually about: the
+    # histogram has to move off flat as the robots watch which way the fire
+    # grows, and if the observation model or the update stops working it will
+    # not.
+    particles = [
+        create_firefighting_state(
+            env,
+            robots=[
+                (2, 2, env.max_tank, env.max_health),
+                (2, 3, env.max_tank, env.max_health),
+            ],
+            wind=(index % len(WindDirection), (index // len(WindDirection)) % len(WindStrength)),
+            fire=fire,
+        )
+        for index in range(96)
+    ]
+    belief = WeightedParticleBelief(
+        particles=particles,
+        log_weights=np.log(np.full(len(particles), 1.0 / len(particles))),
+        resampling=True,
+    )
+
+    # A fixed tour: the robots take up positions north and south of the front
+    # and spray it from beside it, which is the intended play -- neither ever
+    # stands on an alight cell, so neither takes heat damage. On the fifth
+    # step both cover the burning cell at once, which is the cooperation case:
+    # two independent attempts at soaking it rather than one. Robot 1's last
+    # move is refused by the obstacle blob, so a blocked move is in frame too.
+    def joint(first: FirefightingAction, second: FirefightingAction) -> int:
+        return int(first) + 5 * int(second)
+
+    action_sequence = [
+        joint(FirefightingAction.SOUTH, FirefightingAction.SOUTH),
+        joint(FirefightingAction.EAST, FirefightingAction.SOUTH),
+        joint(FirefightingAction.EAST, FirefightingAction.SOUTH),
+        joint(FirefightingAction.SUPPRESS, FirefightingAction.EAST),
+        joint(FirefightingAction.SUPPRESS, FirefightingAction.SUPPRESS),
+        joint(FirefightingAction.EAST, FirefightingAction.EAST),
+        joint(FirefightingAction.SUPPRESS, FirefightingAction.SUPPRESS),
+    ]
+
+    history: List[StepData] = []
+    for action in action_sequence:
+        next_state, observation, reward = env.sample_next_step(state, action)
+        history.append(
+            StepData(
+                state=state,
+                action=action,
+                next_state=next_state,
+                observation=observation,
+                reward=reward,
+                belief=belief,
+                info=env.step_info(state, action, next_state),
+            )
+        )
+        belief = belief.update(action=action, observation=observation, pomdp=env)
+        state = next_state
+
+    history.append(
+        StepData(
+            state=state,
+            action=None,
+            next_state=None,
+            observation=None,
+            reward=None,
+            belief=belief,
+            info=env.step_info(state, None, None),
+        )
+    )
+    return history
 
 
 def build_occupancy_grid_mapping_env() -> OccupancyGridMappingPOMDP:
@@ -1085,6 +1222,33 @@ class TestVisualizationConsistency:
         )
 
 
+    def test_multiagent_firefighting_visualization_consistency(self, temp_output_dir):
+        """Test multi-agent firefighting visualization produces consistent output.
+
+        Purpose: Validates that firefighting visualizations are deterministic,
+            including the two belief panels, which average over a particle
+            collection and are where an iteration order or a stray draw would
+            leak in
+
+        Given: A deterministic firefighting episode with a fixed joint-action
+            sequence and a real weighted particle belief
+        When: Visualization is created from the episode
+        Then: Output matches golden file hash (or creates golden if missing)
+
+        Test type: integration
+        """
+        history = create_deterministic_multiagent_firefighting_episode(seed=5)
+        visualizer = MultiAgentFirefightingVisualizer(build_multiagent_firefighting_env())
+
+        output_path = temp_output_dir / "multiagent_firefighting_test.gif"
+        visualizer.create_visualization(history, output_path)
+
+        compare_or_create_golden_file(
+            output_path,
+            "multiagent_firefighting_visualization.gif",
+            "test_multiagent_firefighting_visualization_consistency",
+        )
+
     def test_occupancy_grid_mapping_visualization_consistency(self, temp_output_dir):
         """Test occupancy-grid mapping visualization produces consistent output.
 
@@ -1445,6 +1609,33 @@ class TestVisualizationConsistency:
 class TestVisualizationDeterminism:
     """Test that visualizations are deterministic when re-run with same inputs."""
 
+
+    def test_multiagent_firefighting_repeated_visualization_identical(self, temp_output_dir):
+        """Test that repeated firefighting visualizations are byte-for-byte identical.
+
+        Purpose: Validates absolute determinism of the firefighting renderer,
+            which the golden-hash check cannot cover outside the project's
+            Docker image. Two of its three panels are weighted means over a
+            particle collection, which is exactly where an unordered iteration
+            or a stray draw would show up.
+
+        Given: One episode rendered twice from the same history
+        When: Both renders use identical inputs
+        Then: Output files have identical SHA256 hashes
+
+        Test type: unit
+        """
+        history = create_deterministic_multiagent_firefighting_episode(seed=5)
+        visualizer = MultiAgentFirefightingVisualizer(build_multiagent_firefighting_env())
+
+        first_path = temp_output_dir / "multiagent_firefighting_first.gif"
+        second_path = temp_output_dir / "multiagent_firefighting_second.gif"
+        visualizer.create_visualization(history, first_path)
+        visualizer.create_visualization(history, second_path)
+
+        assert compute_file_hash(first_path) == compute_file_hash(
+            second_path
+        ), "Multi-agent firefighting visualization is not deterministic"
 
     def test_occupancy_grid_mapping_repeated_visualization_identical(self, temp_output_dir):
         """Test that repeated mapping visualizations are byte-for-byte identical.
