@@ -567,8 +567,11 @@
     ghostGeo.setAttribute("position", new THREE.BufferAttribute(ghostPos, 3));
     ghostGeo.setAttribute("color", new THREE.BufferAttribute(ghostCol, 3));
     ghostGeo.setDrawRange(0, 0);
+    // Deliberately dimmer than the red pole. A tight belief puts every ghost
+    // in nearly the same place, and at full brightness two hundred coincident
+    // lines burn out the true state they are drawn behind.
     var ghosts = new THREE.LineSegments(ghostGeo, new THREE.LineBasicMaterial({
-      vertexColors: true, transparent: true, opacity: 0.45, depthWrite: false
+      vertexColors: true, transparent: true, opacity: 0.26, depthWrite: false
     }));
     scene.add(ghosts);
 
@@ -588,7 +591,7 @@
     var meanGeo = new THREE.BufferGeometry();
     meanGeo.setAttribute("position", new THREE.BufferAttribute(meanPos, 3));
     var meanLine = new THREE.Line(meanGeo, new THREE.LineBasicMaterial({
-      color: new THREE.Color(0.9, 6.0, 10.5), transparent: true, opacity: 0.95,
+      color: new THREE.Color(0.5, 2.6, 4.6), transparent: true, opacity: 0.75,
       depthWrite: false
     }));
     meanLine.visible = false;
@@ -680,14 +683,19 @@
       ghostPos[base + 3] = x + poleLen * Math.sin(theta);
       ghostPos[base + 4] = PIVOT_Y + poleLen * Math.cos(theta);
       ghostPos[base + 5] = -0.006;
-      // Brighter at the tip, so the fan reads as poles rather than a haze, and
-      // brighter overall where the belief puts its mass. Above 1.0 so the
-      // heavy end blooms.
-      var hot = 0.35 + 0.65 * relativeWeight;
-      ghostCol[base] = 0.30 * hot; ghostCol[base + 1] = 1.60 * hot; ghostCol[base + 2] = 2.90 * hot;
-      ghostCol[base + 3] = 0.70 * hot;
-      ghostCol[base + 4] = 4.20 * hot;
-      ghostCol[base + 5] = 7.60 * hot;
+      /* Brighter at the tip, so the fan reads as poles rather than a haze, and
+         brighter overall where the belief puts its mass. Above 1.0 so the heavy
+         end blooms. The floor is deliberately low but not zero: a degenerate
+         cloud can leave one particle holding the whole mass and a couple of
+         hundred runaway ones holding none, and those still belong to the
+         belief. Drawn faintly they read as its support; drawn at a third
+         brightness they drown the particle that matters, and dropped
+         altogether they would show a confident belief that does not exist. */
+      var hot = 0.10 + 0.90 * relativeWeight;
+      ghostCol[base] = 0.14 * hot; ghostCol[base + 1] = 0.72 * hot; ghostCol[base + 2] = 1.30 * hot;
+      ghostCol[base + 3] = 0.35 * hot;
+      ghostCol[base + 4] = 1.90 * hot;
+      ghostCol[base + 5] = 3.40 * hot;
 
       spreadPos[slot * 3] = x;
       spreadPos[slot * 3 + 1] = RAIL_Y - 0.036;
@@ -768,9 +776,10 @@
         clearBelief();
         return belief.num_particles + " particles in an unreadable shape";
       }
-      var maxWeight = 0;
+      var maxWeight = 0, sumSquares = 0;
       for (var w = 0; w < belief.weights.length; w++) {
         if (belief.weights[w] > maxWeight) maxWeight = belief.weights[w];
+        sumSquares += belief.weights[w] * belief.weights[w];
       }
       var meanX = 0, meanTheta = 0;
       for (var p = 0; p < count; p++) {
@@ -789,6 +798,13 @@
         (belief.weighted === false ? " uniform particles" : " particles");
       if (belief.num_written < belief.num_particles) {
         label += " (heaviest " + belief.num_written + " written)";
+      }
+      /* Effective sample size, 1 / sum of squared weights. A cloud can carry
+         its full particle count and still have collapsed onto one of them, and
+         the count alone would report that as healthy. This is the number that
+         says so. */
+      if (belief.weighted !== false && sumSquares > 0) {
+        label += ", ESS " + (1 / sumSquares).toFixed(1);
       }
       return label;
     }
@@ -836,10 +852,12 @@
       /* Low and side-on, level with the hinge. The board camera's look-at is
          0.3 above the origin and the pivot is at the origin, so this puts the
          lens just above the bearing: the pole angle is the quantity a reader
-         reads, and an angle is only legible from the side. The rail is 6.4 m
-         of scene, so the camera sits back far enough to hold both limit posts. */
+         reads, and an angle is only legible from the side. The distance is set
+         by the limit posts rather than by the cart -- at 4.5 m a 36 mm lens
+         spans about 2.6 m either side of centre, so both posts stay in frame
+         and a reader can see how much rail the episode did not use. */
       camera: {
-        board: [0.45, 0.30, 4.10],
+        board: [0, 0.34, 4.50],
         top: [0, 4.60, 0.01]
       },
 
