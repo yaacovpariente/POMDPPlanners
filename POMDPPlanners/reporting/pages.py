@@ -550,8 +550,8 @@ def _episode_returns(policy: PolicyView) -> List[float]:
     return returns
 
 
-def _returns_chart(env: EnvironmentView, heading: str = "Discounted return by episode") -> str:
-    """The returns strip for every planner in one environment.
+def _returns_chart(env: EnvironmentView, heading: str = "Discounted return per episode") -> str:
+    """The histogram of episode returns for every planner in one environment.
 
     Args:
         env: The environment being shown.
@@ -562,14 +562,17 @@ def _returns_chart(env: EnvironmentView, heading: str = "Discounted return by ep
         return — a run of videos alone, for instance.
     """
     series = [(policy.name, _episode_returns(policy)) for policy in env.policies]
-    svg = charts.returns_svg(series)
+    svg = charts.histogram_svg(series, value_label="Discounted return", count_label="Episodes")
     if not svg:
         return ""
+    episodes = sum(len(values) for _, values in series)
     return (
         f"<h2>{html(heading)}</h2>"
         f'<figure class="chart-card wide">{svg}</figure>'
-        '<p class="note">One mark per episode; the rule is the mean, and the line '
-        "spans the best and worst episode.</p>"
+        f'<p class="note">How many of the {episodes} episode(s) ended in each range of '
+        "discounted return. The bins are shared across planners so the bars can be "
+        "compared; the returns are read from the episodes themselves, not from a "
+        "logged average.</p>"
     )
 
 
@@ -698,11 +701,16 @@ def _thumbnail(
 ) -> str:
     """The picture that stands for one episode in a list of them.
 
-    Chosen by artifact kind, like the player is, so an environment the site has
-    never heard of gets a thumbnail on the day it lands: a drawn recording if
-    it made one, else the first frame of its video, else a plain placeholder.
-    A trace is never the thumbnail — drawing it needs the 3D viewer, and a
-    grid of viewers is a grid of WebGL contexts.
+    An episode with a trace gets a frame of the 3D scene, drawn in the browser
+    from that trace — the same view the episode page opens with, so a card
+    looks like what clicking it gives. The recorded image is served underneath
+    and stays put until a frame has actually been drawn over it, which is what
+    a page with no WebGL, or a payload kind with no scene module yet, keeps.
+
+    Anything else falls back by artifact kind, like the player does, so an
+    environment the site has never heard of still gets a thumbnail: a drawn
+    recording if it made one, else the first frame of its video, else a plain
+    placeholder.
 
     Args:
         run: The run the episode belongs to.
@@ -714,6 +722,7 @@ def _thumbnail(
     Returns:
         HTML for the thumbnail.
     """
+    recorded = '<div class="thumb thumb-empty"><span>No recording</span></div>'
     for kind in (ArtifactKind.GIF, ArtifactKind.PLOT, ArtifactKind.VIDEO):
         artifact = next((a for a in artifacts if a.kind is kind), None)
         if artifact is None:
@@ -722,12 +731,58 @@ def _thumbnail(
         if kind is ArtifactKind.VIDEO:
             # metadata alone is enough for the first frame, and muted+playsinline
             # keeps a grid of them from ever making noise or going fullscreen.
-            return f'<video class="thumb" src="{html(src)}" preload="metadata" muted playsinline></video>'
-        return (
-            f'<img loading="lazy" class="thumb" '
-            f'alt="{html(view_label(artifact))} of episode {index}" src="{html(src)}">'
-        )
-    return '<div class="thumb thumb-empty"><span>No recording</span></div>'
+            recorded = (
+                f'<video class="thumb thumb-recorded" src="{html(src)}" '
+                'preload="metadata" muted playsinline></video>'
+            )
+        else:
+            recorded = (
+                f'<img loading="lazy" class="thumb thumb-recorded" '
+                f'alt="{html(view_label(artifact))} of episode {index}" src="{html(src)}">'
+            )
+        break
+
+    trace = next((a for a in artifacts if a.kind is ArtifactKind.TRACE), None)
+    if trace is None:
+        return recorded
+    trace_src = artifact_url(run, f"{env}/{policy}/{trace.relative_path}")
+    return (
+        recorded
+        + f'<canvas class="thumb thumb-scene" data-thumb-trace="{html(trace_src)}" '
+        f'aria-label="Scene from episode {index}" hidden></canvas>'
+    )
+
+
+def _thumbnail_scripts(policies: Sequence[PolicyView]) -> str:
+    """The scripts that draw scene thumbnails for a page's episode cards.
+
+    Loaded only when some episode on the page has a trace, and one scene module
+    per payload kind present, so a page of videos pays for none of it.
+
+    Args:
+        policies: The planners whose episodes the page lists.
+
+    Returns:
+        HTML script tags, or an empty string.
+    """
+    kinds = sorted(
+        {
+            artifact.payload_kind
+            for policy in policies
+            for artifacts in policy.episodes.values()
+            for artifact in artifacts
+            if artifact.kind is ArtifactKind.TRACE and artifact.payload_kind
+        }
+    )
+    if not kinds:
+        return ""
+    scenes = "".join(f'<script src="{html(scene_script_path(k))}"></script>' for k in kinds)
+    return (
+        '<script src="/static/vendor/three.min.js"></script>'
+        '<script src="/static/viewer/renderer-core.js"></script>'
+        + scenes
+        + '<script src="/static/viewer/thumbs.js"></script>'
+    )
 
 
 def policy_page(run: RunView, env: EnvironmentView, policy: PolicyView) -> str:
@@ -776,16 +831,14 @@ def policy_page(run: RunView, env: EnvironmentView, policy: PolicyView) -> str:
         f'<a href="{html(env_url(run, env.name))}">{html(env.name)}</a> · '
         "each card shows that episode's own recording.</p>"
         + _listing(items, "This planner produced no episode artifacts.", "Recordings")
-        + _returns_chart(
-            EnvironmentView(name=env.name, policies=[policy]),
-            "Discounted return by episode",
-        )
+        + _returns_chart(EnvironmentView(name=env.name, policies=[policy]))
         + (
             "<details><summary>Plots the run drew</summary>"
             f'<section class="gallery">{plots}</section></details>'
             if plots
             else ""
-        ),
+        )
+        + _thumbnail_scripts([policy]),
     )
 
 

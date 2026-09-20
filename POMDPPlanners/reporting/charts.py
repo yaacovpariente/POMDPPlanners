@@ -79,7 +79,9 @@ def comparison_svg(
     if not series:
         return ""
 
-    left, right, top, bottom = 124, 62, 34, 16
+    # The bottom margin holds the axis: a scale and a line saying what the bar
+    # and the whisker are. Without it a reader cannot tell a mean from a max.
+    left, right, top, bottom = 124, 62, 34, 52
     height = height or top + bottom + ROW_HEIGHT * len(series)
     plot_w = width - left - right
     plot_h = height - top - bottom
@@ -136,87 +138,168 @@ def comparison_svg(
             f'text-anchor="end">{value:.3g}</text>'
         )
 
+    # The value axis: a scale under the plot, then a line naming what is drawn.
+    axis_y = top + plot_h + 6
+    parts.append(
+        f'<line x1="{left}" y1="{axis_y:.1f}" x2="{left + plot_w}" y2="{axis_y:.1f}" '
+        'class="chart-axis"/>'
+    )
+    for value, anchor in ((low, "start"), ((low + high) / 2, "middle"), (high, "end")):
+        x = to_x(value)
+        parts.append(
+            f'<line x1="{x:.1f}" y1="{axis_y:.1f}" x2="{x:.1f}" y2="{axis_y + 4:.1f}" '
+            'class="chart-axis"/>'
+            f'<text x="{x:.1f}" y="{axis_y + 17:.1f}" class="chart-label" '
+            f'text-anchor="{anchor}">{value:.3g}</text>'
+        )
+    # The metric already titles the chart, so the axis only has to say what the
+    # two marks are. Repeating the name here ran the line past the card's edge.
+    parts.append(
+        f'<text x="{left + plot_w / 2:.1f}" y="{axis_y + 33:.1f}" class="chart-label" '
+        'text-anchor="middle">bar: value · line: confidence interval</text>'
+    )
+
     parts.append("</svg>")
     return "".join(parts)
 
 
-def returns_svg(
-    series: Sequence[Tuple[str, Sequence[float]]],
-    width: int = 700,
-) -> str:
-    """Draw each planner's episode returns as a strip, with its mean marked.
-
-    A histogram of a handful of episodes is mostly empty bins, and the run
-    writes one as a PNG anyway. What a reader wants from this plot is where
-    the episodes fell and how far apart they are, so every episode is a mark
-    on the planner's own line and the mean sits under them as a rule. It stays
-    honest at three episodes and still reads at fifty.
+def _bin_edges(values: Sequence[float], count: int) -> List[float]:
+    """Split a range into ``count`` equal bins.
 
     Args:
-        series: One ``(policy_name, returns)`` per planner, in display order.
-        width: Drawing width in user units, about CSS pixels.
+        values: Every value that must fall inside the bins.
+        count: How many bins.
+
+    Returns:
+        ``count + 1`` edges, lowest first.
+    """
+    low, high = min(values), max(values)
+    if low == high:
+        # One distinct value still needs a bin with width, or it draws nothing.
+        pad = abs(low) * 0.05 or 0.5
+        low, high = low - pad, high + pad
+    step = (high - low) / count
+    return [low + step * i for i in range(count + 1)]
+
+
+def histogram_svg(
+    series: Sequence[Tuple[str, Sequence[float]]],
+    value_label: str = "Discounted return",
+    count_label: str = "Episodes",
+    width: int = 720,
+    height: int = 320,
+) -> str:
+    """Draw each planner's values as a histogram over shared bins.
+
+    The bins are shared across planners on purpose: histograms drawn over
+    their own ranges cannot be compared, which is the whole point of putting
+    them on one plot. Both axes are named, because a bar whose axis is unnamed
+    could be a count, a mean or a maximum, and a reader should not have to
+    guess which.
+
+    Args:
+        series: One ``(policy_name, values)`` per planner.
+        value_label: Name of the binned quantity, for the horizontal axis.
+        count_label: Name of the count, for the vertical axis.
+        width: Drawing width in user units.
+        height: Drawing height in user units.
 
     Returns:
         An ``<svg>`` element as a string, or an empty string when no planner
-        has a return to plot.
+        has a value to bin.
     """
     rows = [(name, [float(v) for v in values]) for name, values in series if len(values)]
     if not rows:
         return ""
 
-    left, right, top, bottom = 150, 30, 30, 42
-    row_h = 52
-    height = top + bottom + row_h * len(rows)
+    pooled = [value for _, values in rows for value in values]
+    # Square root of the sample size, which is the usual default, kept between
+    # three and twelve so that a handful of episodes still shows shape and a
+    # long run does not turn into a comb.
+    bins = min(12, max(3, int(len(pooled) ** 0.5 + 0.5)))
+    edges = _bin_edges(pooled, bins)
+
+    counts: List[List[int]] = []
+    for _, values in rows:
+        row = [0] * bins
+        for value in values:
+            # The last bin is closed at the top, so the maximum lands in it
+            # rather than falling off the end.
+            index = min(bins - 1, int((value - edges[0]) / (edges[-1] - edges[0]) * bins))
+            row[max(0, index)] += 1
+        counts.append(row)
+
+    tallest = max(max(row) for row in counts) or 1
+    left, right, top, bottom = 62, 20, 30, 64
+    legend_h = 22 if len(rows) > 1 else 0
+    height += legend_h
     plot_w = width - left - right
+    plot_h = height - top - bottom - legend_h
 
-    spread = [value for _, values in rows for value in values]
-    low, high = _nice_bounds(spread)
-    span = high - low or 1.0
-
-    def to_x(value: float) -> float:
-        return left + (value - low) / span * plot_w
+    bin_w = plot_w / bins
+    group_w = bin_w * 0.82
+    bar_w = group_w / len(rows)
 
     parts: List[str] = [
         f'<svg class="chart" viewBox="0 0 {width} {height}" role="img" '
-        'aria-label="Discounted return of each episode, by planner" '
+        f'aria-label="Histogram of {escape(value_label)} per planner" '
         'xmlns="http://www.w3.org/2000/svg">'
     ]
 
-    # A tick at each end and at the middle: enough to read the scale without
-    # drawing an axis a strip plot does not need.
-    for value in (low, (low + high) / 2, high):
-        x = to_x(value)
+    # Horizontal rules at whole counts: a histogram's vertical axis counts
+    # episodes, so a tick at 1.5 would be meaningless.
+    step = max(1, tallest // 5)
+    for count in range(0, tallest + 1, step):
+        y = top + plot_h - (count / tallest) * plot_h
         parts.append(
-            f'<line x1="{x:.1f}" y1="{top}" x2="{x:.1f}" y2="{top + row_h * len(rows)}" '
+            f'<line x1="{left}" y1="{y:.1f}" x2="{left + plot_w}" y2="{y:.1f}" '
             'class="chart-axis"/>'
-            f'<text x="{x:.1f}" y="{height - 14}" class="chart-label" '
-            f'text-anchor="middle">{value:.3g}</text>'
+            f'<text x="{left - 8}" y="{y + 4:.1f}" class="chart-label" '
+            f'text-anchor="end">{count}</text>'
         )
 
-    for index, (name, values) in enumerate(rows):
-        cy = top + row_h * index + row_h / 2
-        mean = sum(values) / len(values)
-        parts.append(
-            f'<line x1="{left}" y1="{cy:.1f}" x2="{left + plot_w}" y2="{cy:.1f}" '
-            'class="chart-strip"/>'
-            f'<text x="{left - 12}" y="{cy + 4:.1f}" class="chart-label" '
-            f'text-anchor="end">{escape(name)}</text>'
-        )
-        if len(values) > 1:
+    for row_index, row in enumerate(counts):
+        for bin_index, count in enumerate(row):
+            if not count:
+                continue
+            bar_h = (count / tallest) * plot_h
+            x = left + bin_w * bin_index + (bin_w - group_w) / 2 + bar_w * row_index
             parts.append(
-                f'<line x1="{to_x(min(values)):.1f}" y1="{cy:.1f}" '
-                f'x2="{to_x(max(values)):.1f}" y2="{cy:.1f}" class="chart-ci"/>'
+                f'<rect x="{x:.1f}" y="{top + plot_h - bar_h:.1f}" '
+                f'width="{max(1.0, bar_w - 2):.1f}" height="{bar_h:.1f}" '
+                f'class="chart-bar series-{row_index % 6}"/>'
             )
-        for value in values:
-            parts.append(
-                f'<circle cx="{to_x(value):.1f}" cy="{cy:.1f}" r="5" class="chart-dot"/>'
-            )
+
+    # Every bin edge is labelled when there are few, else every other one, so
+    # the axis says what range each bar covers rather than only where it sits.
+    stride = 1 if bins <= 6 else 2
+    for index in range(0, bins + 1, stride):
+        x = left + bin_w * index
         parts.append(
-            f'<line x1="{to_x(mean):.1f}" y1="{cy - 13:.1f}" x2="{to_x(mean):.1f}" '
-            f'y2="{cy + 13:.1f}" class="chart-mean"/>'
-            f'<text x="{to_x(mean):.1f}" y="{cy - 18:.1f}" class="chart-value" '
-            f'text-anchor="middle">{mean:.3g}</text>'
+            f'<text x="{x:.1f}" y="{top + plot_h + 18:.1f}" class="chart-label" '
+            f'text-anchor="middle">{edges[index]:.3g}</text>'
         )
 
+    parts.append(
+        f'<line x1="{left}" y1="{top + plot_h:.1f}" x2="{left + plot_w}" '
+        f'y2="{top + plot_h:.1f}" class="chart-axis"/>'
+        f'<text x="{left + plot_w / 2:.1f}" y="{top + plot_h + 40:.1f}" '
+        f'class="chart-label" text-anchor="middle">{escape(value_label)}</text>'
+        f'<text x="16" y="{top + plot_h / 2:.1f}" class="chart-label" '
+        f'text-anchor="middle" transform="rotate(-90 16 {top + plot_h / 2:.1f})">'
+        f"{escape(count_label)}</text>"
+    )
+
+    if legend_h:
+        x = left
+        y = height - 8
+        for index, (name, values) in enumerate(rows):
+            parts.append(
+                f'<rect x="{x:.1f}" y="{y - 9:.1f}" width="11" height="11" '
+                f'class="chart-bar series-{index % 6}"/>'
+                f'<text x="{x + 16:.1f}" y="{y:.1f}" class="chart-label">'
+                f"{escape(name)} ({len(values)})</text>"
+            )
+            x += 20 + len(name) * 7.2 + 34
     parts.append("</svg>")
     return "".join(parts)

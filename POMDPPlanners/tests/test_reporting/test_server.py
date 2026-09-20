@@ -434,8 +434,14 @@ def test_a_planner_page_shows_each_episode_and_its_recorded_path(router: Router)
     _, _, page = _get(router, f"{base}/env/{TRACE_ENV}/policy/PFT_DPW")
 
     assert "Episode 0" in page and "Episode 1" in page
-    assert 'class="thumb"' in page and "agent_path_0.gif" in page
+    assert 'class="thumb thumb-recorded"' in page and "agent_path_0.gif" in page
     assert ">Return<" in page
+
+    # An episode with a trace also carries the canvas the 3D thumbnail is
+    # drawn into, and the recording stays in the page underneath it.
+    assert 'class="thumb thumb-scene"' in page and "trace_0.json" in page
+    assert "/static/viewer/thumbs.js" in page
+    assert "/static/viewer/scenes/light-dark.js" in page
 
 
 def test_artifact_route_serves_bytes_with_the_right_media_type(router: Router):

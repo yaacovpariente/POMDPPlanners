@@ -178,7 +178,13 @@
     var stage = options.stage;
     var renderer;
     try {
-      renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+      renderer = new THREE.WebGLRenderer({
+        canvas: canvas,
+        antialias: true,
+        // A thumbnail is copied out of the canvas after the frame is drawn,
+        // which needs the buffer to survive the draw call.
+        preserveDrawingBuffer: !!options.preserveDrawingBuffer
+      });
     } catch (e) {
       return null;
     }
