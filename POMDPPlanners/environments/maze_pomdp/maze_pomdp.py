@@ -125,7 +125,7 @@ from collections.abc import Hashable
 from enum import Enum
 from itertools import groupby
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
@@ -139,6 +139,9 @@ from POMDPPlanners.core.environment import (
 from POMDPPlanners.core.simulation import StepData
 from POMDPPlanners.core.simulation.step_info_metrics import EpisodeReduction, StepInfoMetric
 from POMDPPlanners.environments.maze_pomdp.maze_geometry import Cell, MazeGeometry
+
+if TYPE_CHECKING:
+    from POMDPPlanners.core.simulation.traces import EpisodeTrace
 
 # State slot indices. Deliberately the same layout the T-Maze uses, so a reader who
 # knows one knows the other and the two can share a mental model.
@@ -893,6 +896,39 @@ class BaseMazePOMDP(Environment):
 
         MazeVisualizer(self).create_visualization(
             history, output_dir / f"agent_path_{episode_index}.gif"
+        )
+
+    def build_episode_trace(
+        self, history: List[StepData], episode_index: int, policy_name: Optional[str] = None
+    ) -> "EpisodeTrace":
+        """Write this episode as data, beside the GIF.
+
+        Written once here rather than on each variant: the two share a map, a
+        cue and a reward, so they share a payload, and a viewer that could draw
+        one but not the other would be drawing the movement model instead of
+        the task.
+
+        Args:
+            history: List of step data from an episode.
+            episode_index: Zero-based episode index within its run.
+            policy_name: Name of the policy that produced the episode.
+
+        Returns:
+            The episode's trace, with payload kind ``maze.v1``.
+        """
+        # Imported here rather than at module scope, matching the GIF renderer
+        # above: the exporter pulls in the trace schema, and this module is
+        # imported by every Maze run including ones that write nothing.
+        # pylint: disable-next=import-outside-toplevel
+        from POMDPPlanners.environments.maze_pomdp.visualizer.trace_exporter import (
+            build_maze_trace,
+        )
+
+        return build_maze_trace(
+            environment=self,
+            history=history,
+            episode_index=episode_index,
+            policy_name=policy_name,
         )
 
 
