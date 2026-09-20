@@ -36,9 +36,7 @@ TIGER_PAYLOAD_KIND = "tiger.v1"
 
 def _listen_accuracy(environment: Any) -> float:
     """Probability that a listen names the side the tiger is actually on."""
-    log_probability = environment.observation_log_probability(
-        "tiger_left", "listen", ["hear_left"]
-    )
+    log_probability = environment.observation_log_probability("tiger_left", "listen", ["hear_left"])
     return float(np.exp(np.asarray(log_probability, dtype=float).reshape(-1)[0]))
 
 

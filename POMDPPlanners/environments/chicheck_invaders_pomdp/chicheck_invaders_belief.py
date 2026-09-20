@@ -167,9 +167,7 @@ class ChicheckInvadersBelief(WeightedParticleBeliefReinvigoration):
         """
         self._episode_is_running = state is not None
         try:
-            return super().update(
-                action=action, observation=observation, pomdp=pomdp, state=state
-            )
+            return super().update(action=action, observation=observation, pomdp=pomdp, state=state)
         finally:
             self._episode_is_running = False
 
@@ -314,7 +312,9 @@ class ChicheckInvadersBelief(WeightedParticleBeliefReinvigoration):
             return
         revived = int(np.random.randint(self.num_chickens))
         flock[revived, CHICKEN_ALIVE] = 1.0
-        self._seat_out_of_reach(flock[revived], int(round(float(particle[SHIP_COLUMN_INDEX]))), pomdp)
+        self._seat_out_of_reach(
+            flock[revived], int(round(float(particle[SHIP_COLUMN_INDEX]))), pomdp
+        )
 
     @staticmethod
     def _uniform_log_weights(count: int) -> np.ndarray:

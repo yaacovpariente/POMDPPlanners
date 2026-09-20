@@ -901,9 +901,7 @@ def test_lambda_max_computed_from_reward_range_and_budget(environment, action_sa
     np.testing.assert_allclose(cpft._lambda_max, expected)
 
 
-def test_lambda_max_is_disabled_when_env_declares_no_reward_range(
-    environment, action_sampler
-):
+def test_lambda_max_is_disabled_when_env_declares_no_reward_range(environment, action_sampler):
     """``_lambda_max`` falls back to ``+inf`` when the env declares no range.
 
     Purpose: Covers the documented fallback in ``_compute_lambda_max``. An env

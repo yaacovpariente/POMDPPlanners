@@ -215,7 +215,9 @@ def test_the_renderer_still_finds_its_art_after_the_move():
     where that string now points, rather than waiting for the golden GIF test
     that only runs inside the CI image.
     """
-    from POMDPPlanners.environments.tiger_pomdp.tiger_visualization import tiger_visualizer as module
+    from POMDPPlanners.environments.tiger_pomdp.tiger_visualization import (
+        tiger_visualizer as module,
+    )
 
     art = Path(module.__file__).with_name("tiger_visualization_assets") / "chamber.png"
     assert art.is_file()

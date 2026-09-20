@@ -292,7 +292,9 @@ class TigerPOMDP(DiscreteActionsEnvironment):
         # trace schema, and this module is imported by every Tiger run
         # including ones that never write anything.
         # pylint: disable-next=import-outside-toplevel
-        from POMDPPlanners.environments.tiger_pomdp.tiger_visualization.trace_exporter import build_tiger_trace
+        from POMDPPlanners.environments.tiger_pomdp.tiger_visualization.trace_exporter import (
+            build_tiger_trace,
+        )
 
         return build_tiger_trace(
             environment=self,
@@ -301,12 +303,13 @@ class TigerPOMDP(DiscreteActionsEnvironment):
             policy_name=policy_name,
         )
 
-
     def cache_visualization(
         self, history: List[StepData], output_dir: Path, episode_index: int
     ) -> None:
         """Save the recorded episode without sampling the Tiger model."""
-        from POMDPPlanners.environments.tiger_pomdp.tiger_visualization.tiger_visualizer import TigerVisualizer
+        from POMDPPlanners.environments.tiger_pomdp.tiger_visualization.tiger_visualizer import (
+            TigerVisualizer,
+        )
 
         TigerVisualizer().create_visualization(
             history, output_dir / f"agent_path_{episode_index}.gif"

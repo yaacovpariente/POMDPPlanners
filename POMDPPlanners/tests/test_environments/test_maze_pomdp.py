@@ -59,14 +59,17 @@ class TestGeneratedGeometry:
         geometry = MazeGeometry(width=width, height=height, seed=7)
         distances = geometry.shortest_path_lengths()
         assert len(distances) == len(geometry.walkable)
-        assert len(
-            {
-                geometry.start_cell,
-                geometry.cue_cell,
-                geometry.left_goal_cell,
-                geometry.right_goal_cell,
-            }
-        ) == 4
+        assert (
+            len(
+                {
+                    geometry.start_cell,
+                    geometry.cue_cell,
+                    geometry.left_goal_cell,
+                    geometry.right_goal_cell,
+                }
+            )
+            == 4
+        )
         assert geometry.left_goal_cell in distances
         assert geometry.right_goal_cell in distances
 
@@ -124,9 +127,7 @@ class TestSharedModel:
         assert rebuilt == env
         assert rebuilt.config_id == before
         action = (
-            env.get_actions()[0]
-            if isinstance(env, DiscreteMazePOMDP)
-            else np.array([0.0, 0.5])
+            env.get_actions()[0] if isinstance(env, DiscreteMazePOMDP) else np.array([0.0, 0.5])
         )
         env.sample_next_state(env.initial_state_dist().sample()[0], action)
         assert env.config_id == before
@@ -209,10 +210,7 @@ class TestCueAndRewards:
         )
         for observation in (OBSERVATION_LEFT_CUE, OBSERVATION_RIGHT_CUE, OBSERVATION_EMPTY):
             expected = np.array(
-                [
-                    env.observation_log_probability(state, "up", [observation])[0]
-                    for state in states
-                ]
+                [env.observation_log_probability(state, "up", [observation])[0] for state in states]
             )
             actual = env.observation_log_probability_per_state(states, "up", observation)
             assert np.array_equal(actual, expected)
@@ -285,9 +283,7 @@ class TestContinuousMotion:
         assert pairs, "default layout must contain at least one such diagonal"
         for origin, destination in pairs:
             state = create_maze_state(origin, GOAL_LEFT, CUE_CONSUMED)
-            action = np.array(
-                [destination[0] - origin[0], destination[1] - origin[1]], dtype=float
-            )
+            action = np.array([destination[0] - origin[0], destination[1] - origin[1]], dtype=float)
             next_state = env.sample_next_state(state, action)
             assert np.array_equal(next_state[:2], state[:2]), (origin, destination)
             assert env.step_info(state, action, next_state)["wall_collision"] == 1.0

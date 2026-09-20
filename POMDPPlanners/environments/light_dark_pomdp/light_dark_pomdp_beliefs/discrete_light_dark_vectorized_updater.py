@@ -218,9 +218,7 @@ class DiscreteLightDarkVectorizedUpdater(VectorizedParticleBeliefUpdater):
 
         return log_probs
 
-    def ruled_out_by_a_running_episode(
-        self, next_particles: np.ndarray
-    ) -> Optional[np.ndarray]:
+    def ruled_out_by_a_running_episode(self, next_particles: np.ndarray) -> Optional[np.ndarray]:
         """Which particles the robot being asked to act again has ruled out.
 
         Only the hazard-terminal configuration opts in. With the flag on the

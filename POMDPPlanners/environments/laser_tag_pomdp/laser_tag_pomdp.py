@@ -55,6 +55,7 @@ from POMDPPlanners.environments.environment_utils.dangerous_areas_kernels import
 )
 from POMDPPlanners.planners.planners_utils.rollout import python_random_rollout
 from POMDPPlanners.utils.statistics_utils import confidence_interval
+
 # pylint: disable-next=import-outside-toplevel
 from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_visualization.laser_tag_visualizer import (
     LaserTagVisualizer,

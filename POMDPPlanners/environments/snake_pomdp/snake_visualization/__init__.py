@@ -14,7 +14,9 @@ episode, and because an environment with more than one presentation file should
 keep them in one directory rather than beside its dynamics.
 """
 
-from POMDPPlanners.environments.snake_pomdp.snake_visualization.snake_visualizer import SnakeVisualizer
+from POMDPPlanners.environments.snake_pomdp.snake_visualization.snake_visualizer import (
+    SnakeVisualizer,
+)
 from POMDPPlanners.environments.snake_pomdp.snake_visualization.trace_exporter import (
     SNAKE_PAYLOAD_KIND,
     build_snake_trace,

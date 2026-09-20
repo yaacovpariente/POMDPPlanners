@@ -12,8 +12,14 @@ from PIL import GifImagePlugin, Image, ImageDraw
 
 from POMDPPlanners.core.simulation import StepData
 from POMDPPlanners.environments.pacman_pomdp.pacman_pomdp import PacManPOMDP
-from POMDPPlanners.environments.pacman_pomdp.pacman_visualization.pacman_visualizer import PacManVisualizer
-from POMDPPlanners.environments.pacman_pomdp.pacman_visualization.pacman_art import character, pellet, tile
+from POMDPPlanners.environments.pacman_pomdp.pacman_visualization.pacman_visualizer import (
+    PacManVisualizer,
+)
+from POMDPPlanners.environments.pacman_pomdp.pacman_visualization.pacman_art import (
+    character,
+    pellet,
+    tile,
+)
 from POMDPPlanners.tests.test_utils.env_pinned_kwargs import pacman_pinned_kwargs
 
 

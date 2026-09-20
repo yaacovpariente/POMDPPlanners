@@ -170,7 +170,8 @@ def test_cache_loads_art_once_and_frames_do_not_mutate_background(tmp_path):
     _palette.cache_clear()
     original_open = Image.open
     with patch(
-        "POMDPPlanners.environments.tiger_pomdp.tiger_visualization.tiger_visualizer.Image.open", wraps=original_open
+        "POMDPPlanners.environments.tiger_pomdp.tiger_visualization.tiger_visualizer.Image.open",
+        wraps=original_open,
     ) as opened:
         renderer = TigerVisualizer()
         history = [step(), step()]

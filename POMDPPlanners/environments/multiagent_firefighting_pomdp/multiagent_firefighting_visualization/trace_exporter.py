@@ -123,9 +123,7 @@ def _world_block(environment: Any) -> Dict[str, Any]:
         "growth_probability": float(environment.growth_probability),
         "burnout_probability": float(environment.burnout_probability),
         "suppression_probability_unburnt": float(environment.suppression_probability_unburnt),
-        "suppression_probability_smoldering": float(
-            environment.suppression_probability_smoldering
-        ),
+        "suppression_probability_smoldering": float(environment.suppression_probability_smoldering),
         "suppression_probability_burning": float(environment.suppression_probability_burning),
         "success_reward": float(environment.success_reward),
         "step_cost": float(environment.step_cost),

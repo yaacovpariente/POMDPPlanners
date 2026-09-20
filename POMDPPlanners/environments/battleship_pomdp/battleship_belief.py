@@ -123,9 +123,7 @@ class BattleshipBelief(WeightedParticleBelief):
         self._layout_key: Optional[tuple] = layout_key
 
     @classmethod
-    def from_environment(
-        cls, pomdp: Environment, n_particles: int = 100
-    ) -> "BattleshipBelief":
+    def from_environment(cls, pomdp: Environment, n_particles: int = 100) -> "BattleshipBelief":
         """Build the prior belief for ``pomdp``.
 
         Args:
@@ -140,9 +138,7 @@ class BattleshipBelief(WeightedParticleBelief):
             ValueError: If ``n_particles`` is not positive.
         """
         if not hasattr(pomdp, "layouts"):
-            raise TypeError(
-                f"BattleshipBelief needs a BattleshipPOMDP, got {type(pomdp).__name__}"
-            )
+            raise TypeError(f"BattleshipBelief needs a BattleshipPOMDP, got {type(pomdp).__name__}")
         if n_particles <= 0:
             raise ValueError(f"n_particles must be positive, got {n_particles}")
         env = _as_battleship(pomdp)
@@ -173,8 +169,10 @@ class BattleshipBelief(WeightedParticleBelief):
             The inherited identity, qualified by this class.
         """
         return config_to_id(
-            {"class": f"{type(self).__module__}.{type(self).__qualname__}",
-             "particles": super().config_id}
+            {
+                "class": f"{type(self).__module__}.{type(self).__qualname__}",
+                "particles": super().config_id,
+            }
         )
 
     def consistent_indices(self, pomdp: Environment) -> np.ndarray:

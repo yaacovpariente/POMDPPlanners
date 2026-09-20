@@ -280,9 +280,7 @@ class VectorizedWeightedParticleBelief(Belief):
         ruled_out = self.updater.ruled_out_by_a_running_episode(next_particles)
         if ruled_out is None:
             return next_log_weights
-        conditioned, _ = condition_log_weights_on_a_running_episode(
-            next_log_weights, ruled_out
-        )
+        conditioned, _ = condition_log_weights_on_a_running_episode(next_log_weights, ruled_out)
         return conditioned
 
     @staticmethod

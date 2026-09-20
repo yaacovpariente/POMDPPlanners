@@ -56,9 +56,7 @@ class VectorizedParticleBeliefUpdater(ABC):
             Log-likelihoods of shape (N,).
         """
 
-    def ruled_out_by_a_running_episode(
-        self, next_particles: np.ndarray
-    ) -> Optional[np.ndarray]:
+    def ruled_out_by_a_running_episode(self, next_particles: np.ndarray) -> Optional[np.ndarray]:
         """Which particles the episode's continuation has ruled out.
 
         This is the opt-in half of the conditioning described in

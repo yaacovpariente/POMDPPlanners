@@ -38,6 +38,7 @@ from POMDPPlanners.training.model_learning import (
     curve_summaries,
 )
 
+
 def _artifact_dir(run: Any) -> Path:
     """Local artifact directory of an MLflow run."""
     return Path(run.info.artifact_uri.replace("file://", ""))
@@ -88,7 +89,9 @@ def _round(round_index: int, seed: int = 0) -> RoundResult:
 
 def _ensemble(seed: int = 0) -> ProbabilisticEnsembleTransition:
     """A fitted ensemble, as its own type -- the save and fingerprint hooks are its."""
-    model = ProbabilisticEnsembleLearner(num_members=2, epochs=3, seed=seed).fit(_dataset(seed=seed))
+    model = ProbabilisticEnsembleLearner(num_members=2, epochs=3, seed=seed).fit(
+        _dataset(seed=seed)
+    )
     assert isinstance(model, ProbabilisticEnsembleTransition)
     return model
 

@@ -358,9 +358,7 @@ class Environment(ABC):  # pylint: disable=too-many-public-methods
                 and hasattr(v1, "__dict__")
                 and type(v1).__eq__ is object.__eq__
             ):
-                return _compare_values(
-                    _config_attributes(v1), _config_attributes(v2), depth + 1
-                )
+                return _compare_values(_config_attributes(v1), _config_attributes(v2), depth + 1)
             return v1 == v2
 
         # Compare all public attributes (excluding callables and private)

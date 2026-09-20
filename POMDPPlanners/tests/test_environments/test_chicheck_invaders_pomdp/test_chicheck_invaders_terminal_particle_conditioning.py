@@ -61,9 +61,7 @@ def replay(belief_type: BeliefType, n_particles: int, seed: int):
         if env.is_terminal(state):
             break
         next_state, observation, _ = env.sample_next_step(state, action)
-        belief = belief.update(
-            action=action, observation=observation, pomdp=env, state=next_state
-        )
+        belief = belief.update(action=action, observation=observation, pomdp=env, state=next_state)
         state = next_state
         if env.is_terminal(state):
             break
@@ -103,9 +101,7 @@ def test_no_weight_sits_on_terminal_states_while_the_episode_runs(belief_type, n
     )
 
 
-@pytest.mark.parametrize(
-    "belief_type", [BeliefType.VECTORIZED_PARTICLE, BeliefType.PARTICLE]
-)
+@pytest.mark.parametrize("belief_type", [BeliefType.VECTORIZED_PARTICLE, BeliefType.PARTICLE])
 def test_a_planners_update_is_not_conditioned(belief_type):
     """Inside a search tree the ship surviving is not evidence.
 
@@ -141,9 +137,7 @@ def test_a_planners_update_is_not_conditioned(belief_type):
     else:
         belief.particles = [np.array(row, copy=True) for row in particles]
 
-    in_tree = belief.update(
-        action=GOLDEN_ACTIONS[0], observation=observation, pomdp=env
-    )
+    in_tree = belief.update(action=GOLDEN_ACTIONS[0], observation=observation, pomdp=env)
     at_execution = belief.update(
         action=GOLDEN_ACTIONS[0], observation=observation, pomdp=env, state=next_state
     )

@@ -40,7 +40,9 @@ from POMDPPlanners.core.distributions import DiscreteDistribution
 from POMDPPlanners.core.simulation import StepData
 from POMDPPlanners.environments.snake_pomdp.snake_belief import SnakeBelief
 from POMDPPlanners.environments.snake_pomdp.snake_pomdp import SnakeAction, SnakePOMDP
-from POMDPPlanners.environments.snake_pomdp.snake_visualization.snake_visualizer import SnakeVisualizer
+from POMDPPlanners.environments.snake_pomdp.snake_visualization.snake_visualizer import (
+    SnakeVisualizer,
+)
 from POMDPPlanners.environments.battleship_pomdp.battleship_belief import BattleshipBelief
 from POMDPPlanners.environments.battleship_pomdp.battleship_pomdp import BattleshipPOMDP
 from POMDPPlanners.environments.battleship_pomdp.battleship_visualization.battleship_visualizer import (
@@ -57,7 +59,9 @@ from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_visualization.rock
     RockSampleVisualizer,
 )
 from POMDPPlanners.environments.pacman_pomdp.pacman_pomdp import PacManPOMDP
-from POMDPPlanners.environments.pacman_pomdp.pacman_visualization.pacman_visualizer import PacManVisualizer
+from POMDPPlanners.environments.pacman_pomdp.pacman_visualization.pacman_visualizer import (
+    PacManVisualizer,
+)
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
     ContinuousLightDarkPOMDP,
 )

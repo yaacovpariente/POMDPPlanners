@@ -108,7 +108,9 @@ class BattleshipPOMDPMetrics(Enum):
 BattleshipState = np.ndarray
 
 
-def create_battleship_state(occupancy: Sequence[int], probed: Optional[Sequence[int]] = None) -> BattleshipState:
+def create_battleship_state(
+    occupancy: Sequence[int], probed: Optional[Sequence[int]] = None
+) -> BattleshipState:
     """Build a Battleship state array.
 
     Args:
@@ -306,9 +308,7 @@ class BattleshipPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
 
     # ── dynamics ────────────────────────────────────────────────────
 
-    def sample_next_state(
-        self, state: BattleshipState, action: int, n_samples: int = 1
-    ) -> Any:
+    def sample_next_state(self, state: BattleshipState, action: int, n_samples: int = 1) -> Any:
         """Apply the probe. Deterministic, so every sample is the same state.
 
         Args:

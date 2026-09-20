@@ -77,8 +77,12 @@ def _noise_field(seed: int) -> np.ndarray:
 def _sample(field: np.ndarray, grid_x: np.ndarray, grid_y: np.ndarray) -> np.ndarray:
     """Sample a grid-space noise field at projected pixel coordinates."""
     low, high = _NOISE_SPAN
-    columns = np.clip((grid_x - low) / (high - low) * (_NOISE_RESOLUTION - 1), 0, _NOISE_RESOLUTION - 1)
-    rows = np.clip((grid_y - low) / (high - low) * (_NOISE_RESOLUTION - 1), 0, _NOISE_RESOLUTION - 1)
+    columns = np.clip(
+        (grid_x - low) / (high - low) * (_NOISE_RESOLUTION - 1), 0, _NOISE_RESOLUTION - 1
+    )
+    rows = np.clip(
+        (grid_y - low) / (high - low) * (_NOISE_RESOLUTION - 1), 0, _NOISE_RESOLUTION - 1
+    )
     return field[rows.astype(int), columns.astype(int)]
 
 
@@ -183,12 +187,14 @@ def ground_plane(
     n_detail = _sample(detail, grid_x, grid_y)
     n_coarse = _sample(coarse, grid_x, grid_y)
 
-    grass = np.array([56.0, 86.0, 42.0]) + (
-        np.array([104.0, 144.0, 74.0]) - np.array([56.0, 86.0, 42.0])
-    ) * n_base[..., None]
-    earth = np.array([104.0, 82.0, 52.0]) + (
-        np.array([158.0, 132.0, 88.0]) - np.array([104.0, 82.0, 52.0])
-    ) * n_detail[..., None]
+    grass = (
+        np.array([56.0, 86.0, 42.0])
+        + (np.array([104.0, 144.0, 74.0]) - np.array([56.0, 86.0, 42.0])) * n_base[..., None]
+    )
+    earth = (
+        np.array([104.0, 82.0, 52.0])
+        + (np.array([158.0, 132.0, 88.0]) - np.array([104.0, 82.0, 52.0])) * n_detail[..., None]
+    )
 
     if paths:
         trail = np.minimum.reduce(
@@ -204,9 +210,7 @@ def ground_plane(
     # Territory is a whisper of tint, not a second biome: saturated blue and red
     # are reserved for the units, roofs and banners, so the eye finds them.
     warm = (grid_x > midline)[..., None]
-    colour = colour * np.where(
-        warm, np.array([1.05, 0.985, 0.94]), np.array([0.97, 1.0, 1.03])
-    )
+    colour = colour * np.where(warm, np.array([1.05, 0.985, 0.94]), np.array([0.97, 1.0, 1.03]))
 
     light = 0.86 + 0.30 * _sample(coarse, grid_x * 0.5, grid_y * 0.5)
     light = light - 0.055 * np.clip(grid_x / 9, 0, 1) - 0.055 * np.clip(grid_y / 7, 0, 1)
@@ -370,9 +374,7 @@ def keep_sprite(team_blue: bool) -> Image.Image:
         draw.polygon([(14, 30), (52, 50), (52, 78), (14, 58)], fill=STONE[2])
         draw.polygon([(90, 30), (52, 50), (52, 78), (90, 58)], fill=STONE[0])
         for merlon in range(15, 90, 12):
-            draw.rectangle(
-                [merlon, 22, merlon + 6, 32], fill=STONE[3] if merlon < 52 else STONE[1]
-            )
+            draw.rectangle([merlon, 22, merlon + 6, 32], fill=STONE[3] if merlon < 52 else STONE[1])
         draw.polygon([(20, 26), (52, 6), (84, 26), (52, 40)], fill=colour[1])
         draw.polygon([(52, 6), (84, 26), (52, 40)], fill=colour[0])
         draw.polygon([(30, 58), (40, 52), (40, 76), (30, 80)], fill=(34, 26, 20))

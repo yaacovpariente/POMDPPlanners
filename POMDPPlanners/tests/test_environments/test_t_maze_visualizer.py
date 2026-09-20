@@ -211,9 +211,7 @@ class TestTMazeVisualizerReadout:
             visualizer._draw_frame(1, states, actions, observations, beliefs, artists)
             second = artists["readout"].get_text()
 
-            visualizer._draw_frame(
-                len(states) - 1, states, actions, observations, beliefs, artists
-            )
+            visualizer._draw_frame(len(states) - 1, states, actions, observations, beliefs, artists)
             terminal = artists["readout"].get_text()
             plt.close(figure)
 
@@ -267,18 +265,16 @@ class TestTMazeVisualizerReadout:
         assert offsets.shape[0] > 0, "The belief overlay drew nothing."
         assert np.allclose(offsets[:, 0], float(agent_x[0]))
         assert np.allclose(offsets[:, 1], float(agent_y[0]))
-        assert face_colors.size == 0 or np.allclose(face_colors[:, 3], 0.0), (
-            "The belief marker is filled, so it is hidden by the agent it sits on."
-        )
+        assert face_colors.size == 0 or np.allclose(
+            face_colors[:, 3], 0.0
+        ), "The belief marker is filled, so it is hidden by the agent it sits on."
         assert ring_zorder > agent_zorder
 
 
 class TestTMazeVisualizerGeometry:
     """The drawn map must cover the walkable cells and nothing else."""
 
-    @pytest.mark.parametrize(
-        "stem_length,arm_length", [(2, 1), (4, 1), (9, 4)]
-    )
+    @pytest.mark.parametrize("stem_length,arm_length", [(2, 1), (4, 1), (9, 4)])
     def test_outline_traces_only_the_walkable_region(self, stem_length, arm_length):
         """Test the heavy boundary is drawn on cell edges that face the exterior.
 
@@ -318,6 +314,6 @@ class TestTMazeVisualizerGeometry:
                 for sign in (1, -1)
             ]
             inside = [cell in cells for cell in neighbours]
-            assert any(inside) and not all(inside), (
-                f"Segment {(x0, y0, x1, y1)} does not separate corridor from exterior."
-            )
+            assert any(inside) and not all(
+                inside
+            ), f"Segment {(x0, y0, x1, y1)} does not separate corridor from exterior."

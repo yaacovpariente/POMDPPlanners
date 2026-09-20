@@ -85,7 +85,9 @@ def _world(environment: Any) -> Dict[str, Any]:
     }
 
 
-def _read_state(environment: Any, state: Any) -> Tuple[List[int], List[List[int]], List[List[int]], float, bool]:
+def _read_state(
+    environment: Any, state: Any
+) -> Tuple[List[int], List[List[int]], List[List[int]], float, bool]:
     """Pull one recorded state apart using the environment's own readers."""
     array = np.asarray(state, dtype=float).reshape(-1)
     pacman = list(environment.get_pacman_pos(array))

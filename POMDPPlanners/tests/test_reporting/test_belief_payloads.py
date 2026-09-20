@@ -146,9 +146,7 @@ def test_weighted_particle_belief_reinvigoration_is_the_same_shape():
     )
     payload = belief_to_payload(belief)
 
-    _assert_particle_payload(
-        payload, "WeightedParticleBeliefContinuousLightDarkFullCoverage", 4
-    )
+    _assert_particle_payload(payload, "WeightedParticleBeliefContinuousLightDarkFullCoverage", 4)
     assert payload["weighted"] is True
     assert payload["particles"] == POINTS
 

@@ -16,7 +16,9 @@ episode, and because three visualization files loose at the top of
 line in the coverage matrix.
 """
 
-from POMDPPlanners.environments.tiger_pomdp.tiger_visualization.tiger_visualizer import TigerVisualizer
+from POMDPPlanners.environments.tiger_pomdp.tiger_visualization.tiger_visualizer import (
+    TigerVisualizer,
+)
 from POMDPPlanners.environments.tiger_pomdp.tiger_visualization.trace_exporter import (
     TIGER_PAYLOAD_KIND,
     build_tiger_trace,

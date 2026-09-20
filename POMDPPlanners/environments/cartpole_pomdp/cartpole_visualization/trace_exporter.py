@@ -51,9 +51,7 @@ def _state_row(value: Any) -> List[float]:
     """
     row = np.asarray(value, dtype=float).reshape(-1)
     if row.size != STATE_DIMENSION:
-        raise ValueError(
-            f"CartPole trace rows need {STATE_DIMENSION} components, got {row.size}"
-        )
+        raise ValueError(f"CartPole trace rows need {STATE_DIMENSION} components, got {row.size}")
     return [float(component) for component in row]
 
 

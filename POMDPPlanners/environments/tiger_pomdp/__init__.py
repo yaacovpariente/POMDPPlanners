@@ -26,7 +26,9 @@ from POMDPPlanners.environments.tiger_pomdp.tiger_pomdp import (
     TigerPOMDPMetrics,
     TigerStepChannel,
 )
-from POMDPPlanners.environments.tiger_pomdp.tiger_visualization.tiger_visualizer import TigerVisualizer
+from POMDPPlanners.environments.tiger_pomdp.tiger_visualization.tiger_visualizer import (
+    TigerVisualizer,
+)
 
 __all__ = [
     "ACTIONS",

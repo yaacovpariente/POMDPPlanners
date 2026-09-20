@@ -6,7 +6,9 @@ from typing import TYPE_CHECKING, Any, Tuple
 
 import numpy as np
 from PIL import Image
-from POMDPPlanners.environments.push_pomdp.push_visualization.push_visualization_assets import paste_obstacle
+from POMDPPlanners.environments.push_pomdp.push_visualization.push_visualization_assets import (
+    paste_obstacle,
+)
 
 from POMDPPlanners.environments.push_pomdp.push_visualization.push_visualization_utils import (
     PushRendererBase,
