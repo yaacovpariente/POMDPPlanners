@@ -64,7 +64,7 @@ class TigerVectorizedModel:
     Example:
         >>> import torch
         >>> from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-        >>> from POMDPPlanners.environments.tiger_pomdp_vectorized_model import (
+        >>> from POMDPPlanners.environments.tiger_pomdp.tiger_pomdp_vectorized_model import (
         ...     TigerVectorizedModel,
         ... )
         >>> torch.manual_seed(0)  # doctest: +ELLIPSIS
