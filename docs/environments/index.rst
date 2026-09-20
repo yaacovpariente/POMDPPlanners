@@ -211,14 +211,14 @@ actually stores.
      - discrete
      - discrete
      - none
-     - :doc:`simple`
+     - :doc:`sanity`
    * - ``MountainCarPOMDP``
      - Build momentum up a hill from noisy readings.
      - ``[position, velocity]``
      - discrete
      - continuous
      - none
-     - :doc:`simple`
+     - :doc:`mountain_car`
    * - ``RacetrackPOMDP``
      - A matched MDP/POMDP pair on one track, to isolate partial observability.
      - HighwayEnv vehicle state
@@ -269,7 +269,8 @@ Guides
    push
    laser_tag
    safety_ant_velocity
-   simple
+   sanity
+   mountain_car
    realistic
 
 API listing

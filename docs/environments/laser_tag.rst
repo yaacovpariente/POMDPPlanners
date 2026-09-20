@@ -52,6 +52,145 @@ probability. ``opponent_policy`` selects ``EVADE`` (default; away from the
 robot's pre-move position), ``PURSUE``, or ``EVADE_WHEN_SPOTTED``, which only
 runs from the robot once a laser has actually seen it.
 
+Formal definition
+-----------------
+
+Let :math:`G` be the free cells of an :math:`M \times N` grid with wall set
+:math:`\mathcal{W}`.
+
+**State space.** Both positions and an absorbing flag:
+
+.. math::
+
+   s = (\mathbf{u},\; \mathbf{v},\; \top), \qquad
+   S = G \times G \times \{0, 1\}
+
+with :math:`\mathbf{u}` the robot and :math:`\mathbf{v}` the opponent.
+
+**Action space.**
+
+.. math::
+
+   A = \{0,1,2,3,4\} = \{\textsf{N}, \textsf{S}, \textsf{E}, \textsf{W},
+   \textsf{tag}\}
+
+The continuous variant uses :math:`(\mathrm{d}x, \mathrm{d}y, \text{tag flag})
+\in \mathbb{R}^3` instead.
+
+**Transition model.** The robot's move first. With :math:`\epsilon` =
+``transition_error_prob``, a movement action executes as commanded with
+probability :math:`1 - \epsilon` and as one of the other three otherwise:
+
+.. math::
+
+   \mathbf{u}' = \begin{cases}
+     \mathbf{u} + \Delta_{a'} & \mathbf{u} + \Delta_{a'} \in G \\
+     \mathbf{u} & \text{otherwise}
+   \end{cases}
+
+:math:`\textsf{tag}` does not move the robot. A tag on the opponent's cell
+ends the episode immediately, :math:`\top' = 1`, with no opponent draw.
+
+*The opponent* then moves under a stochastic policy with a fixed mass
+schedule. Write :math:`\mathbf{w}` for the robot cell it conditions on —
+post-move under ``PURSUE``, pre-move under ``EVADE`` and
+``EVADE_WHEN_SPOTTED`` (for a tag these coincide, since tagging does not
+move). Per axis independently, the policy puts :math:`0.4` on one neighbour:
+
+.. math::
+
+   \begin{array}{lll}
+     \texttt{PURSUE} & 0.4 \text{ on the cell toward } \mathbf{w}
+       & 0.0 \text{ away} \\
+     \texttt{EVADE} & 0.0 \text{ toward} & 0.4 \text{ away} \\
+     \text{axes aligned } (w_i = v_i) & 0.2 \text{ each way}
+       & \text{(policy-invariant)}
+   \end{array}
+
+plus :math:`0.2` on staying put. Invalid neighbours are dropped and their mass
+falls back onto *stay*, so the distribution always normalizes and a cornered
+opponent simply stands still.
+
+``EVADE_WHEN_SPOTTED`` switches on visibility: while the opponent is **not**
+on an unoccluded laser ray, it walks uniformly (:math:`0.2` per valid
+cardinal neighbour, remainder on stay); once spotted, it flees as
+``EVADE``. That makes the robot's own sensing change the opponent's dynamics
+— the reason this variant is harder than either fixed policy.
+
+**Observation model.** Eight laser ranges, one per compass direction
+:math:`\Delta_k` (N, NE, E, SE, S, SW, W, NW). The true range is the number of
+free cells before the first blocker — a wall, the grid edge, **or the
+opponent**:
+
+.. math::
+
+   \rho_k(s') = \min\{ j \geq 0 :\;
+   \mathbf{u}' + (j{+}1)\Delta_k \notin G \ \text{ or }\
+   \mathbf{u}' + (j{+}1)\Delta_k = \mathbf{v}' \}
+
+Each is read through independent noise and clipped at zero:
+
+.. math::
+
+   o_k = \max\big(0,\; \rho_k(s') + \varepsilon_k\big), \qquad
+   \varepsilon_k \sim \mathcal{N}(0, \sigma^2)
+
+with :math:`\sigma` = ``measurement_noise``. This is the whole inference
+problem: the opponent is visible only as a **shortened ray**, so a reading
+short by one is ambiguous between an opponent and the sensor's noise, and a
+ray blocked by a wall carries no information about the opponent at all.
+Terminal states emit :math:`(-1, \dots, -1)`.
+
+**Reward function.** Evaluated against the pre-transition positions for the
+tag, the realised position for the hazard:
+
+.. math::
+
+   R(s, a, s') = \begin{cases}
+     0 & \top = 1 \\
+     +\texttt{tag\_reward} + H(\mathbf{u}')
+       & a = \textsf{tag},\ \mathbf{u} = \mathbf{v} \\
+     -\texttt{tag\_penalty} + H(\mathbf{u}')
+       & a = \textsf{tag},\ \mathbf{u} \neq \mathbf{v} \\
+     -\texttt{step\_cost} + H(\mathbf{u}') & \text{otherwise}
+   \end{cases}
+
+The hazard term charges **one** penalty on a wall *or* a danger zone, not one
+for each:
+
+.. math::
+
+   H(\mathbf{u}') = -\texttt{dangerous\_area\_penalty} \cdot
+   \mathbb{1}\big[\mathbf{u}' \in \mathcal{W} \ \text{ or }\
+   \exists c:\ \lVert \mathbf{u}' - c \rVert_2 \leq \varrho \big]
+
+A mistimed tag costs ``tag_penalty`` rather than merely a step, which is what
+makes guessing expensive and the belief worth maintaining.
+
+**Initial belief.** Uniform over every pair of distinct free cells:
+
+.. math::
+
+   b_0\big((\mathbf{u}, \mathbf{v}, 0)\big) = \frac{1}{|G|(|G| - 1)},
+   \qquad \mathbf{u} \neq \mathbf{v}
+
+so the robot's *own* position starts unknown too, and the first laser reading
+must localize both. With ``initial_state`` supplied, :math:`b_0` is a point
+mass on it instead.
+
+.. note::
+
+   The opening observation is a fixed mid-range placeholder
+   :math:`(3, \dots, 3)`, not a draw from :math:`O` under :math:`b_0`. A
+   filter that weights the first reading through
+   ``observation_log_probability`` is therefore scoring a reading the
+   observation model did not produce.
+
+**Discount.** :math:`\gamma` = ``discount_factor``, required.
+
+**Terminal set.** :math:`S_T = \{s : \top = 1\}` — set by a successful tag,
+or by a hazard hit when ``is_dangerous_area_hit_terminal``.
+
 Rewards
 -------
 

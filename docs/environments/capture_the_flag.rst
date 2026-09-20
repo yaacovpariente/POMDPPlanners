@@ -40,6 +40,202 @@ it. Both scoring conditions are judged against the same carrier indices, which
 keeps blue scoring and red scoring mutually exclusive -- each needs the other
 side's flag to be home.
 
+Formal definition
+-----------------
+
+Write :math:`G` for the free cells (in bounds, not a tree), :math:`B` for blue
+and :math:`\mathcal{R}` for red, with :math:`|B| = n_b` and
+:math:`|\mathcal{R}| = n_r`. Let :math:`F = (f_1, \dots, f_K)` be the red flag
+candidates and :math:`\mathrm{d}` the Manhattan distance.
+
+**State space.** One vector holding both teams and all the bookkeeping:
+
+.. math::
+
+   s = \big(\underbrace{x^b_{1:n_b}}_{\text{blue cells}},\;
+            \underbrace{x^r_{1:n_r}}_{\text{red cells}},\;
+            \kappa,\;
+            c^r, c^b,\;
+            \phi^b_{1:n_b}, \phi^r_{1:n_r},\;
+            \psi^b_{1:n_b}, \psi^r_{1:n_r},\;
+            \sigma^b, \sigma^r \big)
+
+.. math::
+
+   S = G^{n_b} \times G^{n_r} \times \{1..K\} \times
+   \{0..n_b\} \times \{0..n_r\} \times
+   \mathbb{Z}_{\geq 0}^{2(n_b + n_r)} \times \mathbb{Z}_{\geq 0}^2
+
+Here :math:`\kappa` indexes which candidate holds the red flag, :math:`c^r` is
+the blue player carrying the red flag (:math:`0` = nobody) and :math:`c^b` the
+red player carrying the blue flag, :math:`\phi` are respawn-freeze counters,
+:math:`\psi` tagger cooldowns, and :math:`\sigma` the scores. A flag is either
+home or on a carrier's back — a dropped flag returns home at once — so one
+index replaces a second position.
+
+**Action space.** Six per player, issued as one joint action:
+
+.. math::
+
+   A = \{0, \dots, 5\}^{n_b}, \qquad |A| = 6^{n_b}
+
+encoded as a base-6 integer :math:`a = \sum_i a_i 6^i`. Per player:
+:math:`0..3` move, :math:`4` hold, :math:`5` scan. Only blue is controlled;
+red is part of :math:`T`.
+
+**Transition model.** :math:`T` is the composition of four stages, in this
+order. Let :math:`p_s` = ``slip_probability``, :math:`p_r` =
+``red_pursuit_probability``.
+
+*Stage 1 — blue moves.* A frozen player (:math:`\phi^b_i > 0`) cannot move. A
+move goes where intended with probability :math:`1 - p_s` and deflects to
+either perpendicular direction with probability :math:`p_s / 2` each; a move
+into a tree or off the field leaves the player in place:
+
+.. math::
+
+   \Pr[x^{b\prime}_i = y] = \sum_{a'} w(a') \,
+   \mathbb{1}\big[y = \mathrm{block}(x^b_i + \Delta_{a'})\big], \quad
+   w(a_i) = 1 - p_s,\; w(a_i^\perp) = \tfrac{p_s}{2}
+
+where :math:`\mathrm{block}(y) = y` if :math:`y \in G`, else the current cell.
+Two different slips can be blocked into the same cell, so the outcomes are
+accumulated.
+
+*Stage 2 — red moves.* Each red player picks a target :math:`\tau_j`
+deterministically from its role: a carrier runs for its base; an attacker for
+the blue flag cell; a defender guards the cell beside the red flag, switching
+to the nearest blue intruder in the red half once that intruder is within
+``red_alert_radius``. Let :math:`N_j` be the free 4-neighbours of
+:math:`x^r_j` together with :math:`x^r_j` itself, and
+:math:`N_j^\star \subseteq N_j` those minimizing :math:`\mathrm{d}(\cdot,
+\tau_j)`. Then
+
+.. math::
+
+   \Pr[x^{r\prime}_j = y] = \frac{1 - p_r}{|N_j|}\mathbb{1}[y \in N_j]
+   + \frac{p_r}{|N_j^\star|}\mathbb{1}[y \in N_j^\star]
+
+so red closes on its target with probability :math:`p_r` and otherwise wanders
+uniformly. A frozen red player stays put.
+
+*Stages 3–6 — deterministic resolution.* Given both teams' realised cells:
+
+1. **Pick-up.** An unfrozen blue player on the red flag cell takes the flag if
+   :math:`c^r = 0`; symmetrically for red. Lowest index wins a tie.
+2. **Tagging.** Blue player :math:`i` is tagged when it shares a cell with an
+   unfrozen, off-cooldown red player **in the red half**: it teleports to the
+   blue base, drops any flag, and gets :math:`\phi^b_i \leftarrow`
+   ``freeze_steps``, while the tagger gets :math:`\psi^r_j \leftarrow`
+   ``tagger_cooldown_steps``. Symmetric for red in the blue half.
+3. **Scoring.** Both conditions are judged against the *same*, pre-scoring
+   carrier indices:
+
+   .. math::
+
+      \text{blue scores} &\iff c^r \neq 0 \;\wedge\;
+        x^{b\prime}_{c^r} = \text{blue base} \;\wedge\; c^b = 0 \\
+      \text{red scores} &\iff c^b \neq 0 \;\wedge\;
+        x^{r\prime}_{c^b} = \text{red base} \;\wedge\; c^r = 0
+
+   which makes them mutually exclusive: each side needs the other's flag home.
+4. **Counters.** :math:`\phi, \psi` decrement toward zero, against the values
+   carried in from :math:`s`, so a freeze set this step lasts its full length.
+
+Pick-up strictly precedes tagging, so a player tagged on the flag cell has
+already taken the flag and therefore drops it. The support is the product of
+the per-player move outcomes — at most three per blue player, five per red —
+so :math:`T` is enumerated exactly rather than sampled from.
+
+**Observation model.** Blue sees its own team exactly and the red team only
+through two noisy channels. The observation is the concatenation
+
+.. math::
+
+   o = \big(x^b_{1:n_b},\; \underbrace{\hat{d}_{ij}}_{n_b \times n_r},\;
+   \underbrace{\beta_{1:n_b}}_{\text{flag detector}},\;
+   c^r,\; \mathbb{1}[c^b \neq 0],\; \phi^b_{1:n_b},\; \sigma^b, \sigma^r\big)
+
+The exact components act as a delta factor — an observation disagreeing with
+them has likelihood zero, not merely a small one. The two noisy channels:
+
+*Range badges.* Player :math:`i` reads the Manhattan distance to red player
+:math:`j`, correct with probability :math:`1 - p_e` where :math:`p_e` =
+``range_error_probability``, and off by one otherwise:
+
+.. math::
+
+   \Pr[\hat{d}_{ij} = v] = \begin{cases}
+     1 - p_e & v = d_{ij} \\
+     p_e / 2 & v = d_{ij} \pm 1
+   \end{cases}, \qquad d_{ij} = \mathrm{d}(x^{b\prime}_i, x^{r\prime}_j)
+
+clipped to :math:`[0, d_{\max}]` with the out-of-range mass folded back onto
+the endpoint, so it sums to one at the field's extremes too.
+
+*Flag detector.* A binary reading per player whose accuracy decays with
+distance to the red flag cell:
+
+.. math::
+
+   \Pr[\beta_i = 1] = \tfrac{1}{2}\big(1 + 2^{-d^f_i / d_0(a_i)}\big),
+   \qquad d^f_i = \mathrm{d}(x^{b\prime}_i, f_\kappa)
+
+with :math:`d_0(a_i) =` ``detector_half_distance_scan`` when :math:`a_i = 5`
+and ``detector_half_distance_move`` otherwise — the same
+:math:`\tfrac{1}{2}(1 + 2^{-d/d_0})` law RockSample uses, so it never drops
+below :math:`\tfrac{1}{2}`.
+
+A terminal state emits the sentinel :math:`o = (-1, \dots, -1)`.
+
+The asymmetry between the two channels is the planning problem. The
+:math:`n_b n_r` range readings **multiply**: at the default two-a-side, moving
+one red player a single cell changes two of the four readings and costs a
+factor of :math:`((1-p_e)/(p_e/2))^2 = 64` in likelihood. One flag scan barely
+separates the candidates. Strong evidence about where the enemy is, weak
+evidence about where the flag is.
+
+**Reward function.** Additive over the realised transition, so it genuinely
+needs :math:`s'` (``reward_requires_next_state`` is ``True``):
+
+.. math::
+
+   R(s, a, s') = \;&\texttt{capture\_reward} \cdot \Delta\sigma^b
+   \;-\; \texttt{concede\_penalty} \cdot \Delta\sigma^r \\
+   &-\; \texttt{tagged\_penalty} \cdot n_{\text{suffered}}
+   \;+\; \texttt{tag\_reward} \cdot n_{\text{inflicted}} \\
+   &+\; \texttt{pickup\_reward} \cdot
+     \mathbb{1}[c^r = 0 \wedge c^{r\prime} \neq 0]
+   \;-\; \sum_{i=1}^{n_b} \mathrm{cost}(a_i)
+
+with :math:`\mathrm{cost}(a_i) =` ``scan_cost`` for a scan and ``move_cost``
+otherwise, and :math:`R(s, a, s') = 0` for terminal :math:`s`. A tag is read
+off the counters: a player that was free and is now frozen for the full
+``freeze_steps`` was tagged this step. None of these terms exclude each other,
+so the declared ``reward_range`` is the joint worst case, not the largest
+single term.
+
+**Initial belief.** Everything known but the flag:
+
+.. math::
+
+   b_0\big(s(\kappa)\big) = \tfrac{1}{K}, \qquad \kappa \in \{1, \dots, K\}
+
+where :math:`s(\kappa)` spawns every blue player on the blue base, every red
+player on the red base, all counters and scores at zero. The opening
+observation is a genuine draw from :math:`O` — the mixture over candidates of
+the noise each implies — so a filter that weights it stays uniform over the
+candidates instead of favouring the nearer ones.
+
+**Discount.** :math:`\gamma` = ``discount_factor``, default :math:`0.98`.
+
+**Terminal set.** Either side reaching the target score:
+
+.. math::
+
+   S_T = \{s : \sigma^b \geq \texttt{score\_to\_win}
+   \ \text{or}\ \sigma^r \geq \texttt{score\_to\_win}\}
+
 Tagging and respawn
 -------------------
 

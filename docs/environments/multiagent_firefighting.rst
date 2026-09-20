@@ -18,6 +18,207 @@ damage for standing in flames. The task is complete when no cell is burning.
    env = MultiAgentFirefightingPOMDP()
    belief = create_environment_belief(env, n_particles=100)
 
+Formal definition
+-----------------
+
+Let the grid have :math:`H \times W` cells with obstacle set :math:`\mathcal{O}`,
+and let :math:`M` = ``num_robots``. Cell categories are
+
+.. math::
+
+   \mathcal{C} = \{\textsf{UNBURNT}, \textsf{SMOLDERING}, \textsf{BURNING},
+   \textsf{BURNT}, \textsf{WET}\} = \{0,1,2,3,4\}
+
+with :math:`\mathcal{A}\ell = \{\textsf{SMOLDERING}, \textsf{BURNING}\}` the
+alight categories. :math:`\textsf{BURNT}` and :math:`\textsf{WET}` are
+absorbing — no rule maps either back — which is what makes "no cell is alight"
+a genuine terminal state rather than a moment that can be undone.
+
+**State space.**
+
+.. math::
+
+   s = \big(t,\; (y_j, z_j, \theta_j, \eta_j)_{j=1}^{M},\;
+   (\omega_d, \omega_g),\; \mathbf{f}\big)
+
+.. math::
+
+   S = \mathbb{Z}_{\geq 0} \times
+   \big(\{0..H{-}1\} \times \{0..W{-}1\} \times \{0..\texttt{max\_tank}\}
+   \times \{0..\texttt{max\_health}\}\big)^{M}
+   \times \mathcal{W} \times \mathcal{C}^{HW}
+
+where :math:`(y_j, z_j)` is robot :math:`j`'s cell, :math:`\theta_j` its tank,
+:math:`\eta_j` its health, :math:`\mathbf{f}` the fire map, and
+
+.. math::
+
+   \mathcal{W} = \{\textsf{N},\textsf{E},\textsf{S},\textsf{W}\}
+   \times \{\textsf{LOW}, \textsf{HIGH}\}, \qquad |\mathcal{W}| = 8
+
+is the **hidden wind**, which is never observed and never changes.
+
+**Action space.** Five per robot, issued jointly:
+
+.. math::
+
+   A = \{\textsf{N}, \textsf{E}, \textsf{S}, \textsf{W},
+   \textsf{SUPPRESS}\}^{M}, \qquad |A| = 5^{M}
+
+encoded base-5. At the default :math:`M = 2` that is 25; at three robots 125,
+which is where a tree search starts to feel the branching.
+
+**Transition model.** Six stages, in this order. The order is not cosmetic.
+
+1. **Motion.** A move is admissible if the target is on the grid, not an
+   obstacle, and not :math:`\textsf{BURNT}`, judged against the *pre-step*
+   fire map. An admissible move slips with probability :math:`p_s` =
+   ``slip_probability``:
+
+   .. math::
+
+      \Pr[(y'_j, z'_j) = \text{target}] = 1 - p_s, \qquad
+      \Pr[(y'_j, z'_j) = (y_j, z_j)] = p_s
+
+   A disabled robot (:math:`\eta_j = 0`) and a suppressing robot do not move,
+   and take no draw.
+
+2. **Suppression.** Robot :math:`j` sprays iff it is live, chose
+   :math:`\textsf{SUPPRESS}`, and :math:`\theta_j > 0`; an empty tank does
+   nothing and costs nothing. A spray covers its own cell and its four
+   neighbours, and coverage **counts add** — two robots covering one cell each
+   get an independent attempt. With :math:`k` covering sprays,
+
+   .. math::
+
+      \Pr[\text{cell soaked}] = 1 - (1 - q_{\mathbf{f}})^{k}
+
+   where :math:`q_c` is ``suppression_probability_*`` for category :math:`c`
+   (and :math:`0` for the absorbing ones). A soaked cell becomes
+   :math:`\textsf{WET}`. Each sprayer then loses one tank unit; a robot
+   standing on the depot refills to ``max_tank``, which overrides the cost.
+
+3. **Spread.** A cell catches unless *every* alight neighbour fails to ignite
+   it. Write :math:`\mathcal{N}^{\uparrow}(k)` for the four-neighbours of
+   :math:`k` that are alight after suppression. The one sitting directly
+   upwind under :math:`\omega_d` gets the boosted rate; the other three the
+   attenuated one:
+
+   .. math::
+
+      \Pr[\text{$k$ ignites}] = 1 - \prod_{n \in \mathcal{N}^{\uparrow}(k)}
+      \big(1 - \varrho(n, k)\big)
+
+   .. math::
+
+      \varrho(n,k) = \begin{cases}
+        \min(1,\, p_0 \cdot g(\omega_g)) & k - n = \Delta_{\omega_d} \\
+        p_0 \,(1 - \texttt{crosswind\_attenuation}) & \text{otherwise}
+      \end{cases}
+
+   with :math:`p_0` = ``spread_probability`` and :math:`g` the gain,
+   ``wind_gain_low`` or ``wind_gain_high``. An ignited cell becomes
+   :math:`\textsf{SMOLDERING}`. Only unburnt, non-obstacle cells can catch.
+
+4. **Growth and burnout,** applied to cells alight *before* the spread stage,
+   which is what stops a cell igniting and growing to burning in one step:
+
+   .. math::
+
+      \Pr[\textsf{SMOLDERING} \to \textsf{BURNING}] &=
+        \texttt{growth\_probability} \\
+      \Pr[\textsf{BURNING} \to \textsf{BURNT}] &=
+        \texttt{burnout\_probability}
+
+5. **Heat damage,** read off the final map at each robot's final cell:
+   :math:`\eta'_j = \max(0, \eta_j - \mathrm{dmg}(\mathbf{f}'_{k_j}))`, with
+   :math:`\mathrm{dmg} = (0, 1, 2, 0, 0)` over :math:`\mathcal{C}`. At the
+   default ``max_health`` of 3 a robot survives one burning step and is
+   disabled by the second — which is what makes fighting from an *adjacent*
+   cell the intended play.
+
+6. **Bookkeeping.** :math:`t' = t + 1`, and the wind is copied unchanged.
+
+Suppression resolving before spread is what lets a robot stop a front by
+soaking the cell ahead of it in the same step. The wind never changing is what
+makes it identifiable from the spread pattern across an episode.
+
+**Observation model.** Robot fields are reported exactly; the fire map is seen
+only inside the union of the live robots' Chebyshev footprints:
+
+.. math::
+
+   V(s') = \bigcup_{j : \eta'_j > 0}
+   \{k : \lVert k - (y'_j, z'_j) \rVert_\infty \leq \texttt{sensing\_radius}\}
+
+A disabled robot sees nothing, and two robots standing together see barely
+more than one — spreading out is what buys information. The reading is
+
+.. math::
+
+   o = \big((y'_j, z'_j, \theta'_j, \eta'_j)_{j=1}^{M},\; \hat{\mathbf{f}}\big),
+   \qquad
+   \hat{f}_k = \begin{cases}
+     \textsf{UNKNOWN} = -1 & k \notin V(s') \\
+     f'_k & \text{w.p. } 1 - p_\epsilon \\
+     \mathrm{Unif}(\mathcal{C} \setminus \{f'_k\}) & \text{w.p. } p_\epsilon
+   \end{cases}
+
+with :math:`p_\epsilon` = ``observation_error_probability``: a symmetric
+confusion matrix spreading its error mass evenly over the four wrong
+categories. The observation depends on :math:`s'` alone, not on the action.
+
+Note what is **never** observed: the wind. It has to be inferred from how the
+fire spreads, and because only :math:`\omega_g` sets the downwind gain, a
+strong wind of unknown direction is a different inference problem from a weak
+one — the belief over the eight wind values need not collapse to a point for a
+planner to act well.
+
+**Reward function.** Every term reads the realised successor:
+
+.. math::
+
+   R(s, a, s') = \;&-\texttt{step\_cost}
+   \;-\; \texttt{smoldering\_cell\_cost} \cdot |\{k : f'_k = \textsf{SMOLDERING}\}| \\
+   &-\; \texttt{burning\_cell\_cost} \cdot |\{k : f'_k = \textsf{BURNING}\}| \\
+   &-\; \texttt{burnt\_cell\_cost} \cdot
+     |\{k : f'_k = \textsf{BURNT},\, f_k \neq \textsf{BURNT}\}| \\
+   &-\; \texttt{damage\_cost} \cdot \textstyle\sum_j (\eta_j - \eta'_j)
+   \;-\; \texttt{water\_cost} \cdot |\text{sprayers}| \\
+   &+\; \texttt{success\_reward} \cdot
+     \mathbb{1}\big[\{k : f'_k \in \mathcal{A}\ell\} = \emptyset\big]
+
+The success bonus is paid on the transition *into* a fire-free state, and the
+step cost is charged on that transition too — which is why the largest
+reachable reward is :math:`\texttt{success\_reward} - \texttt{step\_cost}`.
+
+**Initial belief.** Robots at known posts with full tank and health; the wind
+uniform over its eight values; ``num_initial_fires`` cells drawn uniformly
+without replacement from the non-obstacle cells and set to
+:math:`\textsf{BURNING}`:
+
+.. math::
+
+   b_0 = \delta_{\text{robots}} \otimes
+   \mathrm{Unif}(\mathcal{W}) \otimes
+   \mathrm{Unif}\big(\text{$n_0$-subsets of } \overline{\mathcal{O}}\big)
+
+The opening observation is a sentinel — known robot fields, every cell
+:math:`\textsf{UNKNOWN}` — not a scan; the first real reading arrives with the
+first transition.
+
+**Discount.** :math:`\gamma` = ``discount_factor``, default :math:`0.95`.
+
+**Terminal set.**
+
+.. math::
+
+   S_T = \{s : \{k : f_k \in \mathcal{A}\ell\} = \emptyset\}
+   \;\cup\; \{s : \forall j,\, \eta_j = 0\}
+   \;\cup\; \{s : t \geq \texttt{max\_steps}\}
+
+the middle set only when ``is_all_robots_disabled_terminal``.
+
 World and state
 ---------------
 

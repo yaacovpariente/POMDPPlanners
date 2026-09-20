@@ -1,5 +1,5 @@
 Chicheck Invaders
-=============
+=================
 
 ``ChicheckInvadersPOMDP`` is an arcade shooter written as a POMDP. A ship on row 0
 of a grid has to clear a flock of chickens before one of them reaches it. The
@@ -53,6 +53,199 @@ addition to the original design proposal, which left the case open. Without it a
 dive would either carry the chicken off the grid -- letting the flock clear
 itself and making the completion bonus free -- or park it on row 0, below the
 rows the gun covers, which is unwinnable.
+
+Formal definition
+-----------------
+
+Let :math:`W` = ``num_columns``, :math:`H` = ``num_rows`` and :math:`N` =
+``num_chickens``.
+
+**State space.** The ship's block, then one fixed slot per chicken — dead
+slots are carried for the whole episode, so the vector length never changes:
+
+.. math::
+
+   s = \big(t,\; x,\; \chi,\; \mathrm{hit},\;
+   (u_i,\, v_i,\, \delta_i,\, \mu_i,\, \alpha_i)_{i=1}^{N}\big)
+
+.. math::
+
+   S = \mathbb{Z}_{\geq 0} \times \{0..W{-}1\} \times \mathbb{Z}_{\geq 0}
+   \times \{0,1\} \times
+   \big(\{0..W{-}1\} \times \{0..H{-}1\} \times \{-1, +1\}
+   \times \{\textsf{patrol}, \textsf{dive}\} \times \{0,1\}\big)^{N}
+
+with :math:`x` the ship column, :math:`\chi` the fire cooldown, :math:`u_i,
+v_i` a chicken's column and row, :math:`\delta_i` its patrol direction,
+:math:`\mu_i` its hidden mode and :math:`\alpha_i` whether it is alive.
+
+**Action space**
+
+.. math::
+
+   A = \{\textsf{stay},\; \textsf{left},\; \textsf{right},\; \textsf{fire}\}
+     = \{0, 1, 2, 3\}
+
+**Transition model.** One step resolves in a fixed order, and the order *is*
+the design.
+
+1. **Ship moves.** :math:`x' = \mathrm{clip}(x + \Delta_a,\, 0,\, W{-}1)`,
+   with :math:`\Delta = -1, +1` for left, right and :math:`0` otherwise.
+2. **Shot resolves.** The gun discharges iff :math:`a = \textsf{fire}` and
+   :math:`\chi \leq 0`; the cooldown is the *only* thing that can block it.
+   A discharge is hitscan and kills
+
+   .. math::
+
+      \tau(s) = \arg\min_{i} \{v_i : \alpha_i = 1,\; u_i = x',\; v_i \geq 1\}
+
+   the lowest live chicken in the ship's column (ties to the lower slot),
+   setting :math:`\alpha_\tau \leftarrow 0`; :math:`\tau = \emptyset` means
+   the shot misses. Then :math:`\chi' = \texttt{fire\_cooldown}` if it fired,
+   else :math:`\max(\chi - 1, 0)`.
+3. **Dive coins.** One Bernoulli per slot, alive or not, so the number of
+   random draws a step consumes never depends on how the episode is going:
+
+   .. math::
+
+      \Pr[\mu'_i = \textsf{dive} \mid \mu_i = \textsf{patrol},\, \alpha'_i = 1]
+      = p_d = \texttt{dive\_probability}
+
+   A dive is absorbing until the chicken pulls up. This is the only
+   stochastic part of :math:`T`.
+4. **Flock moves.** A diving chicken descends, :math:`v'_i = v_i - 1`. A
+   patrolling one walks sideways and bounces off the walls, reversing *and
+   then* stepping, so it never stands still against a wall:
+
+   .. math::
+
+      \delta'_i = \begin{cases}
+        -\delta_i & u_i + \delta_i \notin \{0..W{-}1\} \\
+        \delta_i & \text{otherwise}
+      \end{cases}, \qquad u'_i = u_i + \delta'_i
+
+5. **Arrivals settle.** A live chicken at :math:`v'_i = 0` in the ship's
+   column destroys it (:math:`\mathrm{hit}' = 1`); anywhere else it pulls up
+   to :math:`v'_i = H - 1` and returns to :math:`\textsf{patrol}`.
+
+Finally :math:`t' = t + 1`. Resolving the shot **before** the flock moves is
+what lets the ship hit what it aimed at: the other order would let a chicken
+dodge by stepping sideways without deciding to, and aiming would collapse into
+waiting. Dives are decided after the shot, so a chicken shot this step never
+gets to dive — which makes shooting a live defence, not only an attack.
+
+**Observation space and model.** In ``ObservationMode.FULL`` the observation
+is the state and the problem is an MDP. In the default
+``ObservationMode.PARTIAL``:
+
+.. math::
+
+   o = \big(\hat{x},\;
+   (\,c_i,\, \hat{e}_i,\; r_i,\, \hat{n}_i,\, \hat{\beta}_i\,)_{i=1}^{N}\big)
+
+with :math:`c_i, r_i \in \{0,1\}` the camera and radar report flags. Write
+:math:`e_i = u_i - x'` for the column offset and :math:`n_i = v_i` for the row
+distance. Every numeric channel is a **rounded** Gaussian,
+
+.. math::
+
+   G_\sigma(k; \mu) = \Phi\!\Big(\frac{k + \tfrac{1}{2} - \mu}{\sigma}\Big)
+   - \Phi\!\Big(\frac{k - \tfrac{1}{2} - \mu}{\sigma}\Big)
+
+so the readings are integers, not reals. The ship reads its own column as
+:math:`\hat{x} \sim G_{\sigma_x}(\cdot\,; x')` — redundant evidence, since the
+ship's column is decided by its own actions, present so the reading is a
+complete picture rather than a chicken report with a hole in it.
+
+Each chicken is reported through two sensors with disjoint geometry. Dead
+chickens are inside neither reach, which makes a cleared slot silent rather
+than merely unlucky:
+
+.. math::
+
+   \text{camera reach}_i &\iff \alpha_i = 1 \;\wedge\;
+     |e_i| \leq \texttt{camera\_slope} \cdot n_i \\
+   \text{radar reach}_i &\iff \alpha_i = 1 \;\wedge\;
+     e_i^2 + n_i^2 \leq \texttt{radar\_radius}^2
+
+Inside reach, each sensor fires independently with its detection probability:
+
+.. math::
+
+   \Pr[c_i = 1] &= p_{\text{cam}} \cdot
+     \mathbb{1}[\text{camera reach}_i],
+     &\hat{e}_i &\sim G_{\sigma_e}(\cdot\,; e_i) \\
+   \Pr[r_i = 1] &= p_{\text{rad}} \cdot
+     \mathbb{1}[\text{radar reach}_i],
+     &\hat{n}_i &\sim G_{\sigma_n}(\cdot\,; n_i)
+
+A firing radar also returns a dropping flag, the **only** channel that reports
+the hidden mode at all, inverted with probability :math:`p_\beta` =
+``drop_flag_error_probability``:
+
+.. math::
+
+   \hat{\beta}_i = \begin{cases}
+     \beta_i & \text{w.p. } 1 - p_\beta \\
+     -1 - \beta_i & \text{w.p. } p_\beta
+   \end{cases}, \qquad
+   \beta_i = -\mathbb{1}[\mu_i = \textsf{dive}]
+
+A silent slot (:math:`c_i = r_i = 0`) contributes its own likelihood factor —
+the probability of *not* being reported — so silence is evidence too.
+:math:`O` depends on :math:`s'` only, never on the action that produced it.
+
+**Reward function.**
+
+.. math::
+
+   R(s, a, s') = \;&-\texttt{step\_cost}
+   \;-\; \texttt{shot\_cost}\cdot\mathbb{1}[\text{gun discharged}] \\
+   &+\; \texttt{kill\_reward} \cdot (n_{\text{live}}(s) - n_{\text{live}}(s')) \\
+   &-\; \texttt{ship\_hit\_penalty} \cdot
+     \mathbb{1}[\mathrm{hit}' = 1 \wedge \mathrm{hit} = 0] \\
+   &+\; \texttt{clear\_reward} \cdot
+     \mathbb{1}[n_{\text{live}}(s') = 0 \wedge n_{\text{live}}(s) > 0]
+
+A ``FIRE`` the cooldown blocks costs nothing — the gun never discharged. A
+shot into an empty column does discharge, misses, and is charged. The ship-hit
+penalty is billed on the step the ship is lost, not on every step after it:
+the flag stays set, and a driver that kept stepping a terminal state would
+otherwise charge it repeatedly.
+
+.. note::
+
+   Called without :math:`s'`, every term except the ship-hit penalty is still
+   **exact**, because a hitscan shot resolves before the dive coins are
+   flipped. The missing term is deliberately not replaced by its expectation:
+   a planner comparing actions at a belief node then sees the true value of a
+   shot that connects, and the risk it took is charged on the step the flock
+   actually gets through.
+
+**Initial belief.** The ship starts centred with an empty cooldown; the flock
+is drawn uniformly without replacement from the cells above row 0, with
+independent directions and modes:
+
+.. math::
+
+   (u_i, v_i)_{i=1}^{N} &\sim \mathrm{Unif}\big(\text{$N$-subsets of }
+     \{0..W{-}1\} \times \{1..H{-}1\}\big) \\
+   \delta_i &\sim \mathrm{Unif}\{-1, +1\}, \qquad
+   \Pr[\mu_i = \textsf{dive}] = \texttt{initial\_dive\_probability}
+
+At the default :math:`\texttt{initial\_dive\_probability} = 0` every episode
+opens with the whole flock patrolling. The opening observation is a sentinel —
+the ship's known column, every chicken slot silent — taken before any sensor
+has run, and the belief never weights particles with it.
+
+**Discount.** :math:`\gamma` = ``discount_factor``, default :math:`0.95`.
+
+**Terminal set.** Three ways to end:
+
+.. math::
+
+   S_T = \{s : \mathrm{hit} = 1\} \cup \{s : n_{\text{live}}(s) = 0\}
+   \cup \{s : t \geq \texttt{max\_steps}\}
 
 State and observation contract
 ------------------------------

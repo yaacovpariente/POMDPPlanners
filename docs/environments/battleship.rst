@@ -29,6 +29,93 @@ the agent. ``BattleshipBelief`` tracks legal fleet layouts consistent with
 observed hits and misses; its occupancy probabilities describe uncertainty
 about each cell. These probabilities are not extra sensor readings.
 
+Formal definition
+-----------------
+
+Let :math:`n` be ``board_size``, :math:`C = \{0, \dots, n^2 - 1\}` the cells in
+row-major order, and :math:`\mathcal{L} \subseteq \{0,1\}^{C}` the set of legal
+fleet layouts — the occupancy vectors reachable by placing every ship in
+``ship_lengths`` straight, within the board, without overlap (and without
+touching when ``allow_adjacent_ships=False``).
+
+**State space.** A layout paired with the set of cells probed so far:
+
+.. math::
+
+   S = \mathcal{L} \times \{0,1\}^{C}, \qquad s = (u, m)
+
+where :math:`u_j = 1` means cell :math:`j` holds a ship and :math:`m_j = 1`
+means it has been probed. The vector is stored flat as
+:math:`[u_0 \dots u_{n^2-1},\, m_0 \dots m_{n^2-1}]`.
+
+**Action space.** One probe per cell:
+
+.. math::
+
+   A = C, \qquad a = \text{row} \cdot n + \text{column}
+
+**Observation space**
+
+.. math::
+
+   \Omega = \{\textsf{MISS}, \textsf{HIT}\} = \{0, 1\}
+
+**Transition model.** Deterministic, and it never touches the fleet — probing
+only records that a cell was visited:
+
+.. math::
+
+   T\big((u', m') \mid (u, m), a\big) =
+   \mathbb{1}[u' = u] \cdot \mathbb{1}[m' = m + e_a]
+
+where :math:`e_a` sets bit :math:`a`. Because :math:`u` is constant along a
+trajectory, all uncertainty is in the initial draw; the agent is doing pure
+hypothesis elimination, never tracking a moving target.
+
+**Observation model.** Noiseless:
+
+.. math::
+
+   O(o \mid (u', m'), a) = \mathbb{1}[o = u'_a]
+
+The sensor is exact, so every probe is a hard constraint that cuts
+:math:`\mathcal{L}` down rather than reweighting it.
+
+**Reward function.** Only a *new* hit pays:
+
+.. math::
+
+   R\big((u, m), a\big) = \begin{cases}
+     +\texttt{hit\_reward} & u_a = 1 \text{ and } m_a = 0 \\
+     -\texttt{miss\_penalty} & \text{otherwise}
+   \end{cases}
+
+so :math:`R \in [-\texttt{miss\_penalty},\, \texttt{hit\_reward}]`. Re-probing a
+cell already known to hold a ship scores as water: exactly one branch fires per
+step, and nothing stacks. Note :math:`R` reads the *pre*-probe mask, which is
+what makes it a function of :math:`(s, a)` alone.
+
+**Initial belief.** Uniform over legal layouts, nothing probed:
+
+.. math::
+
+   b_0\big((u, 0)\big) = \frac{1}{|\mathcal{L}|}, \qquad u \in \mathcal{L}
+
+with the pre-probe observation fixed at :math:`\textsf{MISS}`, which carries no
+information. ``max_layouts`` caps the enumeration of :math:`\mathcal{L}` used
+by the exact belief.
+
+**Discount.** :math:`\gamma` = ``discount_factor``, default :math:`0.99`.
+
+**Terminal set.** Every occupied cell probed:
+
+.. math::
+
+   S_T = \{(u, m) : u_j \leq m_j \ \text{for all } j \in C\}
+
+Hitting the runner's step limit first is a timeout, recorded separately from
+completion.
+
 Recorded visualization
 ----------------------
 

@@ -43,6 +43,131 @@ What the agent sees and does
 
 The target sits at ``(grid_size - 1, grid_size - 1)`` and is not configurable.
 
+Formal definition
+-----------------
+
+Write the state as :math:`s = (\mathbf{r}, \mathbf{q}, \mathbf{t})` — robot,
+object and target positions — and let :math:`\mathcal{G} = [0, n{-}1]^2` with
+:math:`n` = ``grid_size``, :math:`\mathcal{O}` the obstacle discs.
+
+**State space.** Six numbers, plus a terminal slot on the continuous variant
+when a hazard-terminal flag is on:
+
+.. math::
+
+   S = \mathcal{G} \times \mathcal{G} \times \mathcal{G}
+   \subseteq \mathbb{R}^6
+
+:math:`\mathbf{t}` is a constant of the episode — it is carried in the state
+so the model is self-contained, not because it moves.
+
+**Action space.**
+
+.. math::
+
+   A = \begin{cases}
+     \{\textsf{up}, \textsf{down}, \textsf{right}, \textsf{left}\}
+       & \texttt{PushPOMDP} \\
+     \{\mathbf{d} \in \mathbb{R}^2 :
+       \lVert \mathbf{d} \rVert \leq \texttt{max\_push}\}
+       & \texttt{ContinuousPushPOMDP}
+   \end{cases}
+
+**Transition model.** The robot moves, and *then* drags the object if it is
+close enough. With displacement :math:`\mathbf{d}`, friction
+:math:`\mu` = ``friction_coefficient`` and push radius :math:`\varrho` =
+``push_threshold``:
+
+.. math::
+
+   \mathbf{r}' &= \Pi_\mathcal{G}\big(
+     \mathrm{blk}(\mathbf{r} + \mathbf{d})\big) \\
+   \mathbf{q}' &= \begin{cases}
+     \Pi_\mathcal{G}\big(\mathrm{blk}(\mathbf{q} + (1 - \mu)\mathbf{d})\big)
+       & \lVert \mathbf{r}' - \mathbf{q} \rVert_2 < \varrho \\
+     \mathbf{q} & \text{otherwise}
+   \end{cases} \\
+   \mathbf{t}' &= \mathbf{t}
+
+where :math:`\mathrm{blk}(\mathbf{y}) = \mathbf{y}` unless :math:`\mathbf{y}`
+lies in an obstacle, in which case the mover stays put, and
+:math:`\Pi_\mathcal{G}` clamps to the grid. The object moves a factor
+:math:`1 - \mu` of the robot's displacement — friction is a *slip* between
+robot and object, not a drag on the robot.
+
+Note the push test uses :math:`\mathbf{r}'`, the robot's **post-move**
+position: the robot must end its step near the object, not start there.
+
+The discrete variant adds action noise. With probability
+:math:`\epsilon` = ``transition_error_prob`` one of the other three moves
+fires instead, uniformly:
+
+.. math::
+
+   \Pr[\text{executed} = a] = 1 - \epsilon, \qquad
+   \Pr[\text{executed} = a'] = \epsilon / 3, \quad a' \neq a
+
+The continuous variant instead perturbs the displacement by
+:math:`\mathcal{N}(0, \Sigma_T)`.
+
+**Observation model.** The robot knows where *it* is; only the object is
+hidden:
+
+.. math::
+
+   o = \big(\mathbf{r}',\;
+   \Pi_\mathcal{G}(\mathbf{q}' + \boldsymbol{\varepsilon}),\;
+   \mathbf{t}\big), \qquad
+   \boldsymbol{\varepsilon} \sim
+   \mathcal{N}(0,\; \texttt{observation\_noise}^2 I_2)
+
+Robot and target slices are exact; only the two object coordinates are
+noised, then clamped to the grid. The clamp is what makes the likelihood
+non-Gaussian at the walls.
+
+**Reward function.** Distance shaping toward the target plus an exclusive
+success bonus, then the hazard terms:
+
+.. math::
+
+   R(s, a, s') = -\lVert \mathbf{q}' - \mathbf{t} \rVert_2
+   + 100 \cdot \mathbb{1}\big[\lVert \mathbf{q}' - \mathbf{t} \rVert_2
+     < 0.5\big]
+   + C(\mathbf{r}') + D(\mathbf{r}')
+
+with
+
+.. math::
+
+   C(\mathbf{r}') &= \texttt{obstacle\_penalty} \cdot
+     \mathbb{1}[\mathbf{r}' \in \mathcal{O}] \cdot
+     \mathrm{Bern}(\texttt{obstacle\_hit\_probability}) \\
+   D(\mathbf{r}') &= \texttt{dangerous\_area\_penalty} \cdot
+     \mathbb{1}[\mathbf{r}' \in \text{hazard}] \cdot
+     \mathrm{Bern}(\texttt{dangerous\_area\_hit\_probability})
+
+The shaping term is on the **object**, the penalties on the **robot**. Both
+hazard terms follow the same three ``reward_model_type`` variants as
+:doc:`rock_sample`. With either hit probability below one, ``reward`` draws a
+Bernoulli per call and is not a deterministic function of its arguments.
+
+**Initial belief.** With ``initial_state`` supplied, :math:`b_0` is a point
+mass on it. Otherwise robot and object positions are drawn at random over the
+grid, clear of the obstacles and of the target. Note :math:`\mathbf{r}` is
+then in the prior but observed exactly on the first reading, so the belief
+concentrates on the object alone.
+
+**Discount.** :math:`\gamma` = ``discount_factor``, required.
+
+**Terminal set.** The *object* reaching the target, within a fixed half-cell
+radius:
+
+.. math::
+
+   S_T = \{s : \lVert \mathbf{q} - \mathbf{t} \rVert_2 < 0.5\}
+
+The target sits at :math:`(n{-}1, n{-}1)` and is not configurable.
+
 Rewards
 -------
 

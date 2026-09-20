@@ -16,6 +16,74 @@ separate *approximated model* and execute in the simulator — see
 None of them appear in ``ENVIRONMENT_REGISTRY``, so ``get_environment`` will not
 build them, and they are outside the cross-environment API conformance suite.
 
+Formal definition
+-----------------
+
+These four are not POMDPs in the sense the rest of the catalog is. The tuple
+:math:`\langle S, A, \Omega, T, O, R, b_0, \gamma \rangle` still describes
+what they do, but :math:`T` is **not available in closed form and has no
+density**:
+
+.. math::
+
+   s' \sim T(\cdot \mid s, a) \quad\text{is realizable, but}\quad
+   T(s' \mid s, a) \ \text{is not computable}
+
+:math:`T` *is* the simulator — a physics engine, a traffic model, or a
+recorded log with reactive agents. Consequently
+``transition_log_probability`` and ``observation_log_probability`` raise
+``NotImplementedError``, and :math:`b_0` is a single realized reset rather
+than a distribution you can sample repeatedly. You do not plan on these. You
+plan on a separate approximated model :math:`\tilde{T}` whose density *is*
+computable, and execute the chosen action here — see
+:doc:`../core/simulations`.
+
+Two further departures matter:
+
+- **The world is stateful and forward-only.** There is one live state, and
+  ``sample_next_state(s, a)`` advances it. Querying from any :math:`s` other
+  than the live one raises. So :math:`T` is not even a function you may
+  evaluate at arbitrary points — a tree search cannot expand here at all.
+- **Termination is a property of the live world**, not a predicate on a state
+  vector. ``is_terminal`` refuses a state other than the current one.
+
+What *is* fully specified is :math:`S`, :math:`A`, :math:`\Omega` and
+:math:`R`.
+
+**Driving reward (CARLA and nuPlan).** Both use the same gym-carla-style
+score. Let :math:`\psi` be the ego yaw, :math:`e_\psi` the heading error,
+:math:`(v_x, v_y)` the velocity and :math:`d` the lateral offset from the
+route. The along-route speed is
+
+.. math::
+
+   v_\parallel = v_x \cos(\psi - e_\psi) + v_y \sin(\psi - e_\psi)
+
+and with steering command :math:`\delta`:
+
+.. math::
+
+   R = \;&1.0 \cdot v_\parallel
+   \;-\; 10.0 \cdot \mathbb{1}[v_\parallel > v_{\text{des}}]
+   \;-\; 1.0 \cdot \mathbb{1}\big[|d| > d_{\max}\big] \\
+   &-\; 5.0\,\delta^2
+   \;-\; 0.2\,|\delta|\,v_\parallel^2
+   \;-\; 0.1
+   \;-\; \texttt{collision\_penalty} \cdot \mathbb{1}[\text{collision}] \\
+   &+\; \texttt{success\_reward} \cdot \mathbb{1}[\text{destination}]
+
+The last two terms are CARLA's; nuPlan carries the collision term without the
+success bonus. Note :math:`R` rewards speed linearly and then penalizes
+exceeding :math:`v_{\text{des}}` by a flat :math:`-10`, so the optimum sits
+just under the limit; the :math:`|\delta| v_\parallel^2` term is what
+discourages fast turns specifically rather than turning in general.
+
+**Isaac Lab** is the one wrapper with a genuine
+:math:`o = h(s) + \text{noise}` split — state read from the physics engine,
+observation from a sensor buffer. Its :math:`R` passes through from the
+underlying task, so there is no declared ``reward_range`` and no closed form
+this page can state.
+
 Racetrack
 ---------
 

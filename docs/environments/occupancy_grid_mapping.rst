@@ -18,6 +18,160 @@ continuous states.
    env = OccupancyGridMappingPOMDP()
    belief = create_environment_belief(env, n_particles=30)
 
+Formal definition
+-----------------
+
+Let the grid have :math:`H` rows and :math:`W` columns, :math:`C = HW` cells,
+and :math:`K` = ``num_beams``.
+
+**State space.** The state is *augmented*: it carries the robot's own map
+estimate and the scan drawn this step, alongside the hidden world.
+
+.. math::
+
+   s = \big(\underbrace{t}_{\text{step}},\;
+   \underbrace{(r, c, \theta)}_{\text{pose}},\;
+   \underbrace{m}_{\text{true map}},\;
+   \underbrace{\lambda}_{\text{log-odds}},\;
+   \underbrace{z}_{\text{scan}}\big)
+
+.. math::
+
+   S = \mathbb{Z}_{\geq 0} \times
+   \big(\{0..H{-}1\} \times \{0..W{-}1\} \times \{0,1,2,3\}\big) \times
+   \{0,1\}^{C} \times [-L, L]^{C} \times \mathbb{R}^{K}
+
+of length :math:`4 + 2C + K`, with :math:`L` = ``log_odds_clamp``. The hidden
+part is :math:`m`; the robot's map :math:`\lambda` is a *statistic the agent
+computed*, not a fact about the world, and is carried in the state only so the
+reward can be a function of it.
+
+**Action space**
+
+.. math::
+
+   A = \{\textsf{forward},\; \textsf{turn\_left},\; \textsf{turn\_right}\}
+     = \{0, 1, 2\}
+
+**Transition model.** Three stages.
+
+*Motion.* Turning is deterministic, :math:`\theta' = (\theta \mp 1) \bmod 4`.
+A forward move into an occupied or out-of-bounds cell is blocked; an otherwise
+valid move fails with probability :math:`p_f` = ``move_failure_probability``:
+
+.. math::
+
+   \Pr[(r', c') = \mathrm{fwd}(r, c, \theta)] = 1 - p_f, \qquad
+   \Pr[(r', c') = (r, c)] = p_f
+
+The true map :math:`m` never changes.
+
+*Scan.* Ray-cast the :math:`K` beams of the fan from the new pose against
+:math:`m` to get noise-free ranges :math:`\rho_k`, then draw
+
+.. math::
+
+   z_k \sim \mathcal{N}(\rho_k, \sigma^2) \quad\text{or}\quad
+   \mathcal{N}_{\geq 0}(\rho_k, \sigma^2)
+
+independently per beam, per ``range_noise_model``, with :math:`\sigma` =
+``range_noise_std_cells``.
+
+*Map update.* The scan is folded into :math:`\lambda` by the inverse sensor
+model. Under the default ``NearestCellLogOddsUpdateRule``, with
+:math:`\ell_{\text{occ}} = \operatorname{logit}(\texttt{hit\_probability})` and
+:math:`\ell_{\text{free}} = \operatorname{logit}(\texttt{miss\_probability})`:
+
+.. math::
+
+   \lambda'_j = \mathrm{clip}\Big(\lambda_j + \sum_{k=1}^{K}
+   \big(\ell_{\text{occ}}\,\mathbb{1}[j = h_k]
+   + \ell_{\text{free}}\,\mathbb{1}[j \prec h_k]\big)
+   + \ell_{\text{free}}\,\mathbb{1}[j = (r', c')],\;
+   -L,\; L\Big)
+
+where :math:`h_k` is the cell beam :math:`k` stopped in and :math:`j \prec h_k`
+means :math:`j` lies on the ray before it. A beam reading at or above the
+maximum range frees its whole in-grid ray and marks nothing occupied. All terms
+are summed and clamped **once**, never per term — clamping per term would make
+the beam order matter.
+
+Finally :math:`t' = t + 1`.
+
+**Observation model.** Because the scan is drawn in the transition and stored
+in :math:`s'`, the observation kernel is a point mass:
+
+.. math::
+
+   o = (r', c', \theta', z'), \qquad
+   O(o \mid s', a) = \mathbb{1}[o = (r', c', \theta', z')]
+
+This is a deliberate reformulation, not a claim that the robot sees
+everything: all the stochasticity has been moved into :math:`T`. The quantity
+a filter actually needs is the predictive density, which integrates the
+discrete motion outcome against the per-beam range law:
+
+.. math::
+
+   p(o \mid s, a) = \sum_{u} \Pr[u \mid s, a]\,
+   \mathbb{1}\big[(r', c', \theta') = \mathrm{pose}(u)\big]
+   \prod_{k=1}^{K} p\big(z_k \mid \rho_k(u), \sigma\big)
+
+exposed as ``predictive_observation_log_probability``.
+
+**Reward function.** Entropy removed from the robot's map, in bits. Treating
+cells as independent Bernoulli variables — the assumption occupancy-grid
+mapping is defined under — write
+
+.. math::
+
+   \mathcal{H}(\lambda) = \sum_{j=1}^{C} H_b\big(\varsigma(\lambda_j)\big),
+   \qquad \varsigma(x) = \frac{1}{1 + e^{-x}}
+
+with :math:`H_b` the binary entropy in bits, so one unknown cell is worth
+exactly :math:`1.0` and a wholly unknown grid exactly :math:`C`. Then
+
+.. math::
+
+   R(s, a, s') = \mathcal{H}(\lambda) - \mathcal{H}(\lambda')
+   - \texttt{step\_cost}
+
+.. note::
+
+   Called without :math:`s'` — as a belief-space planner's expected reward
+   does — the environment returns the numerical expectation
+   :math:`\mathcal{H}(\lambda) - \mathbb{E}[\mathcal{H}(\lambda')]` over eight
+   fixed antithetic quadrature points per beam, not a fresh sample. It is an
+   approximation and uses no global randomness. Neither quantity is posterior
+   whole-map information gain.
+
+**Initial belief.** The robot's pose is known; the map is not:
+
+.. math::
+
+   b_0 = \delta_{(0,\, r_0,\, c_0,\, \theta_0)} \otimes
+   \mathrm{Prior}(m) \otimes \delta_{\lambda = 0} \otimes \delta_{z = 0}
+
+where :math:`\mathrm{Prior}(m)` places ``num_obstacles`` random rectangles of
+side at most ``max_obstacle_size``, plus the boundary wall when
+``has_boundary_wall``, keeping the start cell free. :math:`\lambda = 0` is the
+uninformative prior :math:`p = \tfrac{1}{2}` everywhere, so
+:math:`\mathcal{H}(\lambda_0) = C`. The opening observation is the start pose
+with zero ranges, a sentinel never passed to the map update.
+
+**Discount.** :math:`\gamma` = ``discount_factor``, default :math:`0.95`.
+
+**Terminal set.** Map resolved, or budget spent:
+
+.. math::
+
+   S_T = \{s : \mathcal{H}(\lambda) \leq \tau \mathcal{H}(\lambda_0)\}
+   \;\cup\; \{s : t \geq \texttt{max\_steps}\}
+
+with :math:`\tau` = ``entropy_threshold_fraction``. At the default
+:math:`\tau = 0.25` that is a quarter of a bit per cell on average, roughly
+96 % certainty per cell.
+
 State and observation contract
 ------------------------------
 
