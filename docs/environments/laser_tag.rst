@@ -39,10 +39,14 @@ What the agent sees and does
   or the same layout in continuous coordinates.
 - **Actions** — grid: integers ``0`` north, ``1`` south, ``2`` east, ``3`` west,
   ``4`` tag. Continuous: ``[dx, dy, tag_flag]``.
-- **Observations** (continuous) — eight laser ranges (N, NE, E, SE, S, SW, W,
-  NW) with Gaussian noise ``measurement_noise``. The grid variant returns a
-  tuple, the continuous one a length-8 ``np.ndarray``. Terminal grid states emit
-  ``(-1.0,) * 8``.
+- **Observations** — eight laser ranges with Gaussian noise
+  ``measurement_noise``. The grid variant returns a tuple, the continuous one a
+  length-8 ``np.ndarray``. Terminal grid states emit ``(-1.0,) * 8``. Both
+  variants sweep the same eight headings but number them differently: the grid
+  order is N, NE, E, SE, S, SW, W, NW, while the continuous order starts two
+  places later, at E. Continuous beam :math:`i` is grid beam
+  :math:`(i + 2) \bmod 8`, so a planner must not carry a beam index from one
+  variant to the other.
 
 The opponent moves with probability 0.4 along x, 0.4 along y and stays with
 probability 0.2. Those are nominal weights: when the robot is aligned on an
