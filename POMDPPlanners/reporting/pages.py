@@ -101,6 +101,7 @@ def layout(title: str, breadcrumbs: Sequence[Tuple[str, Optional[str]]], body: s
         f'<header class="topbar"><a class="brand" href="/">POMDPPlanners results</a>'
         f'<nav class="crumbs">{crumbs}</nav></header>'
         f'<main class="page">{body}</main>'
+        '<script src="/static/layout.js"></script>'
         "</body></html>"
     )
 
@@ -116,6 +117,25 @@ def _chip(status: str) -> str:
     """
     tone = {"FINISHED": "ok", "FAILED": "bad", "RUNNING": "busy"}.get(status.upper(), "flat")
     return f'<span class="chip chip-{tone}">{html(status.title())}</span>'
+
+
+def _layout_toggle() -> str:
+    """The cards-or-list switch that sits beside a page's heading.
+
+    The choice is the reader's, not the page's: a grid of cards is the way to
+    compare a handful of runs, and a list is the way to scan forty of them.
+    It is remembered per browser, so the site does not argue with whoever set
+    it every time they open another page.
+
+    Returns:
+        HTML for the switch.
+    """
+    return (
+        '<div class="layout-switch" role="group" aria-label="Layout">'
+        '<button type="button" class="tab" data-layout="cards" aria-pressed="true">Cards</button>'
+        '<button type="button" class="tab" data-layout="list" aria-pressed="false">List</button>'
+        "</div>"
+    )
 
 
 def _stats(items: Sequence[Tuple[str, str]]) -> str:
@@ -169,7 +189,7 @@ def index_page(experiments: Sequence[ExperimentView], roots: Sequence[object]) -
         )
     served = ", ".join(f"<code>{html(root)}</code>" for root in roots)
     body = (
-        "<h1>Experiments</h1>"
+        f'<div class="page-head"><h1>Experiments</h1>{_layout_toggle()}</div>'
         f'<p class="note">{len(experiments)} experiment(s), read from the MLflow stores '
         f"under {served}.</p>"
     )
@@ -203,7 +223,7 @@ def experiment_page(experiment: ExperimentView) -> str:
     return layout(
         experiment.name,
         [("Experiments", "/"), (experiment.name, None)],
-        f"<h1>{html(experiment.name)}</h1>"
+        f'<div class="page-head"><h1>{html(experiment.name)}</h1>{_layout_toggle()}</div>'
         f'<p class="note">{len(experiment.runs)} run(s), newest first.</p>'
         + (f'<div class="cards">{"".join(cards)}</div>' if cards else _table([], [])),
     )
@@ -427,7 +447,7 @@ def policy_page(run: RunView, env: EnvironmentView, policy: PolicyView) -> str:
             (env.name, env_url(run, env.name)),
             (policy.name, None),
         ],
-        f"<h1>{html(policy.name)}</h1>"
+        f'<div class="page-head"><h1>{html(policy.name)}</h1>{_layout_toggle()}</div>'
         f'<p class="note">{len(policy.episodes)} episode(s) on '
         f'<a href="{html(env_url(run, env.name))}">{html(env.name)}</a> · '
         "each card shows that episode's recorded path.</p>"
