@@ -46,7 +46,7 @@ Classes:
 from enum import Enum, IntEnum
 from pathlib import Path
 from collections.abc import Hashable, Sequence as AbcSequence
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
@@ -61,6 +61,9 @@ from POMDPPlanners.core.simulation.step_info_metrics import (
     EpisodeReduction,
     StepInfoMetric,
 )
+
+if TYPE_CHECKING:
+    from POMDPPlanners.core.simulation.traces import EpisodeTrace
 
 
 class SnakeAction(IntEnum):
@@ -1269,10 +1272,40 @@ class SnakePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public
         # Imported lazily: matplotlib is heavy and every parallel worker imports
         # this module, while almost none of them render anything.
         # pylint: disable-next=import-outside-toplevel
-        from POMDPPlanners.environments.snake_pomdp.snake_visualizer import SnakeVisualizer
+        from POMDPPlanners.environments.snake_pomdp.visualizer.snake_visualizer import (
+            SnakeVisualizer,
+        )
 
         cache_path = output_dir / f"snake_board_{episode_index}.gif"
         SnakeVisualizer(self).create_visualization(history, cache_path)
+
+    def build_episode_trace(
+        self, history: List[StepData], episode_index: int, policy_name: Optional[str] = None
+    ) -> "EpisodeTrace":
+        """Write this episode as data, beside the GIF.
+
+        Args:
+            history: List of step data from an episode.
+            episode_index: Zero-based episode index within its run.
+            policy_name: Name of the policy that produced the episode.
+
+        Returns:
+            The episode's trace, with payload kind ``snake.v1``.
+        """
+        # Imported here rather than at module scope: the exporter pulls in the
+        # trace schema, and this module is imported by every Snake run
+        # including ones that never write anything.
+        # pylint: disable-next=import-outside-toplevel
+        from POMDPPlanners.environments.snake_pomdp.visualizer.trace_exporter import (
+            build_snake_trace,
+        )
+
+        return build_snake_trace(
+            environment=self,
+            history=history,
+            episode_index=episode_index,
+            policy_name=policy_name,
+        )
 
 
 def _as_observation_list(observations: Any) -> List[SnakeObservation]:

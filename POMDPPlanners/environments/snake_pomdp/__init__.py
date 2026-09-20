@@ -6,6 +6,7 @@ Exports:
     SnakePOMDP: The environment.
     SnakeBelief: The exact belief over the hidden food cell.
     SnakeVisualizer: Episode renderer.
+    build_snake_trace: Episode trace exporter for the browser viewer.
 """
 
 from POMDPPlanners.environments.snake_pomdp.snake_pomdp import (
@@ -24,10 +25,15 @@ from POMDPPlanners.environments.snake_pomdp.snake_pomdp import (
     quadrants_for_offset,
 )
 from POMDPPlanners.environments.snake_pomdp.snake_belief import SnakeBelief
-from POMDPPlanners.environments.snake_pomdp.snake_visualizer import SnakeVisualizer
+from POMDPPlanners.environments.snake_pomdp.visualizer import (
+    SNAKE_PAYLOAD_KIND,
+    SnakeVisualizer,
+    build_snake_trace,
+)
 
 __all__ = [
     "DIRECTIONS",
+    "SNAKE_PAYLOAD_KIND",
     "TERMINAL_OBSERVATION",
     "SnakeAction",
     "SnakeBelief",
@@ -40,6 +46,7 @@ __all__ = [
     "SnakeStepChannel",
     "SnakeTermination",
     "SnakeVisualizer",
+    "build_snake_trace",
     "create_snake_state",
     "quadrants_for_offset",
 ]
