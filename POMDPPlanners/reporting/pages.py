@@ -373,9 +373,22 @@ def _player_html(run: RunView, env: str, policy: str, artifact: EpisodeArtifact)
         '<p class="viewer-status" id="viewer-status">Loading trace…</p>'
         '<script src="/static/vendor/three.min.js"></script>'
         '<script src="/static/viewer/renderer-core.js"></script>'
-        '<script src="/static/viewer/scenes/light-dark.js"></script>'
+        f'<script src="{scene_script_path(artifact.payload_kind or "")}"></script>'
         '<script src="/static/viewer/trace-player.js"></script>'
     )
+
+
+def scene_script_path(payload_kind: str) -> str:
+    """Path of the scene module that draws ``payload_kind``.
+
+    Derived by convention rather than looked up in a table, so adding an
+    environment means adding one file and editing nothing: a kind of
+    ``light_dark.v1`` loads ``scenes/light-dark.js``, which registers itself
+    under its own kind. A table here would be a merge conflict every time a new
+    environment is migrated, and a second place to forget to update.
+    """
+    name = payload_kind.split(".", 1)[0].replace("_", "-")
+    return f"/static/viewer/scenes/{name}.js"
 
 
 def episode_page(
