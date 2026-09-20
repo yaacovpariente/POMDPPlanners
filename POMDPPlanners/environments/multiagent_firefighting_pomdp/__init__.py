@@ -67,4 +67,4 @@ __all__ = [
     "default_robot_start_cells",
 ]
 
-from .multiagent_firefighting_visualizer import MultiAgentFirefightingVisualizer
+from .visualizer import MultiAgentFirefightingVisualizer

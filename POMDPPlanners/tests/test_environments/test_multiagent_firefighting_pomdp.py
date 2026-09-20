@@ -1210,7 +1210,7 @@ def test_the_renderer_has_a_label_for_every_action() -> None:
 
     Test type: unit
     """
-    from POMDPPlanners.environments.multiagent_firefighting_pomdp.multiagent_firefighting_visualizer import (  # noqa: E501
+    from POMDPPlanners.environments.multiagent_firefighting_pomdp.visualizer.multiagent_firefighting_visualizer import (  # noqa: E501
         ACTION_LABELS,
         action_labels,
     )
