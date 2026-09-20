@@ -123,8 +123,10 @@ NON_FAMILY_ENTRIES: Dict[str, str] = {
     "sanity_pomdp_vectorized_model.py": "Batched model for the sanity family.",
     "t_maze_pomdp": "Import shim kept for configurations saved before the Maze rename.",
     "tiger_pomdp_vectorized_model.py": "Batched model for the tiger family.",
-    "tiger_visualization_assets": "Image assets used by the tiger renderer.",
-    "tiger_visualizer.py": "The tiger family's renderer, which lives beside its module.",
+    "tiger_visualizer": (
+        "The tiger family's visualization package: the GIF renderer, its image "
+        "assets and the episode trace exporter, beside the module they draw."
+    ),
 }
 
 FAMILIES: Tuple[EnvironmentFamily, ...] = (
