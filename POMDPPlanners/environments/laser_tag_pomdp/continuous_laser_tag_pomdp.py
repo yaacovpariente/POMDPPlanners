@@ -69,8 +69,14 @@ from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMulti
 from POMDPPlanners.utils.statistics_utils import confidence_interval
 
 
-# Default walls matching the discrete LaserTag grid, converted to AABBs
-# Original wall cells (row, col) on an 11×7 grid with half-size 0.5
+# Default walls matching the discrete LaserTag grid, converted to AABBs.
+# Original wall cells (row, col) on an 11×7 grid with half-size 0.5.
+# The row stays the first coordinate, so continuous ``(x, y) == (row, col)``:
+# +x is grid south and +y is grid east.  The renderer draws +x rightward and
+# +y upward, so the continuous picture is the grid map turned a quarter turn.
+# That is why the laser beam order in ``continuous_laser_tag_geometry`` is
+# rotated two places from the discrete one -- see the note on
+# ``LASER_DIRECTIONS`` there before comparing beams across the two variants.
 _DEFAULT_WALL_HALF_SIZE = 0.5
 _DEFAULT_WALLS_CELLS = [
     (1, 2),

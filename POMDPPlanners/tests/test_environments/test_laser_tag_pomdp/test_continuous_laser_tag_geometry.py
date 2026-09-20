@@ -9,6 +9,9 @@ wall collision resolution, grid clamping, and batch variants.
 import numpy as np
 import pytest
 
+from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp import (
+    _LASER_DIRECTIONS as DISCRETE_DIRECTIONS,
+)
 from POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_geometry import (
     LASER_DIRECTIONS,
     batch_clamp_to_grid,
@@ -342,3 +345,70 @@ class TestBatchOperations:
         result = batch_laser_measurements(robot, opponent, 0.3, walls, grid)
         assert result.shape == (n, 8)
         assert np.all(result >= 0)
+
+
+class TestBeamFrameConvention:
+    """Pin which grid axis each continuous beam index actually sweeps.
+
+    The continuous variant embeds a discrete wall cell ``(row, col)`` at
+    ``(x, y) = (row, col)``, so +x is grid south and +y is grid east.  The two
+    variants therefore number the same eight headings differently, which is easy
+    to get wrong by reading the direction tables' names instead of measuring.
+    These tests fix the answer in executable form.
+    """
+
+    def test_beam_zero_sweeps_the_column_axis(self):
+        """Test that continuous beam 0 travels along increasing column.
+
+        Purpose: Establishes the continuous frame from behaviour, not naming.
+
+        Given: A wall built the way ``_cells_to_aabbs`` builds one from cell
+            ``(1, 2)``, and a robot sharing that cell's row coordinate but two
+            units lower in the column coordinate.
+        When: ray_aabb_distances casts all eight beams.
+        Then: Beam 0 is the beam that hits the wall, at distance 1.5, so beam 0
+            points along +col (grid east) rather than along a row.
+
+        Test type: unit
+        """
+        walls = np.array([[1.0, 2.0, 0.5, 0.5]])
+        dists = ray_aabb_distances(np.array([1.0, 0.0]), LASER_DIRECTIONS, walls)
+        assert dists[0] == pytest.approx(1.5)
+        assert [index for index, d in enumerate(dists) if d < 100.0] == [0]
+
+    def test_beam_two_sweeps_the_row_axis(self):
+        """Test that continuous beam 2 travels along increasing row.
+
+        Purpose: Confirms the other axis of the same frame.
+
+        Given: The same wall and a robot sharing its column coordinate but one
+            unit lower in the row coordinate.
+        When: ray_aabb_distances casts all eight beams.
+        Then: Beam 2 is the beam that hits the wall, so beam 2 points along +row
+            (grid south).
+
+        Test type: unit
+        """
+        walls = np.array([[1.0, 2.0, 0.5, 0.5]])
+        dists = ray_aabb_distances(np.array([0.0, 2.0]), LASER_DIRECTIONS, walls)
+        assert dists[2] == pytest.approx(0.5)
+        assert [index for index, d in enumerate(dists) if d < 100.0] == [2]
+
+    def test_beam_index_is_rotated_two_places_from_the_discrete_table(self):
+        """Test the index offset between the two variants' beam orders.
+
+        Purpose: Stops a planner or analysis from carrying a beam index across
+            the two LaserTag variants, where it would name a different heading.
+
+        Given: The discrete ``(d_row, d_col)`` table and the continuous
+            ``(x, y)`` table, read in the shared ``(x, y) = (row, col)`` frame.
+        When: Each discrete heading is matched to its continuous unit vector.
+        Then: Continuous beam ``i`` equals discrete beam ``(i + 2) % 8``.
+
+        Test type: unit
+        """
+        discrete_units = np.asarray(DISCRETE_DIRECTIONS, dtype=float)
+        discrete_units = discrete_units / np.linalg.norm(discrete_units, axis=1, keepdims=True)
+        for index in range(8):
+            expected = discrete_units[(index + 2) % 8]
+            np.testing.assert_allclose(LASER_DIRECTIONS[index], expected, atol=1e-12)

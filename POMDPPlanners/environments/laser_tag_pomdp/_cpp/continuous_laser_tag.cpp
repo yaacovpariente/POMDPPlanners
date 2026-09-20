@@ -49,7 +49,12 @@ constexpr double kRayMax = 1e4;
 constexpr double kParallelEps = 1e-12;
 constexpr double kHitEps = 1e-9;
 
-// 8 laser-ray unit direction vectors: N, NE, E, SE, S, SW, W, NW.
+// 8 laser-ray unit direction vectors, in the order +y, +x+y, +x, +x-y, -y,
+// -x-y, -x, -x+y.  Continuous positions are (x, y) = (row, col) of the
+// discrete grid, so +x is grid south and +y is grid east; in compass terms
+// this table reads E, SE, S, SW, W, NW, N, NE.  Same eight headings as the
+// discrete table but rotated two places: continuous beam i is discrete beam
+// (i + 2) % 8.
 // Matches LASER_DIRECTIONS in continuous_laser_tag_geometry.py.
 constexpr double kSqrt2Inv = 0.70710678118654752440;
 constexpr std::array<std::array<double, 2>, kObsDim> kLaserDirections = {{
