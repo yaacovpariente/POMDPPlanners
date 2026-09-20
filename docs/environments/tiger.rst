@@ -140,7 +140,7 @@ Minimal example
    print(state, observation, env.reward(state, "listen"))
 
 There is also a batched torch model,
-``POMDPPlanners.environments.tiger_pomdp_vectorized_model.TigerVectorizedModel``,
+``POMDPPlanners.environments.tiger_pomdp.tiger_pomdp_vectorized_model.TigerVectorizedModel``,
 for the vectorized planners.
 
 See also

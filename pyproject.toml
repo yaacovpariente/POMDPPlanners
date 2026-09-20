@@ -98,7 +98,7 @@ where = ["."]
 include = ["POMDPPlanners*"]
 
 [tool.setuptools.package-data]
-"POMDPPlanners.environments" = ["tiger_visualization_assets/*.png"]
+"POMDPPlanners.environments.tiger_pomdp" = ["tiger_visualization_assets/*.png"]
 "POMDPPlanners.environments.cartpole_pomdp" = ["visualization_assets/*.png"]
 "POMDPPlanners.environments.mountain_car_pomdp" = ["assets/*.png", "assets/*.jpg"]
 "POMDPPlanners.environments.laser_tag_pomdp" = ["laser_tag_sprite_sheet.png"]
