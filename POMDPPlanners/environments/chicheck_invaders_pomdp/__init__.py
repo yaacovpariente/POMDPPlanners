@@ -127,4 +127,3 @@ from .chicheck_invaders_vectorized_belief import (
     ChicheckInvadersVectorizedUpdater,
     create_chicheck_invaders_vectorized_belief,
 )
-from .chicheck_invaders_visualizer import ChicheckInvadersVisualizer
