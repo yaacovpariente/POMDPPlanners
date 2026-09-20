@@ -43,7 +43,7 @@ from POMDPPlanners.environments.snake_pomdp.snake_pomdp import SnakeAction, Snak
 from POMDPPlanners.environments.snake_pomdp.visualizer.snake_visualizer import SnakeVisualizer
 from POMDPPlanners.environments.battleship_pomdp.battleship_belief import BattleshipBelief
 from POMDPPlanners.environments.battleship_pomdp.battleship_pomdp import BattleshipPOMDP
-from POMDPPlanners.environments.battleship_pomdp.battleship_visualizer import (
+from POMDPPlanners.environments.battleship_pomdp.visualizer.battleship_visualizer import (
     BattleshipVisualizer,
 )
 from POMDPPlanners.environments.capture_the_flag_pomdp import CaptureTheFlagPOMDP
