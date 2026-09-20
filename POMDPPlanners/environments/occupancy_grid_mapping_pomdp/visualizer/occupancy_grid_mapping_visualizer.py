@@ -60,7 +60,7 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 from POMDPPlanners.core.simulation import StepData
-from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.occupancy_grid_mapping_assets import (
+from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.visualizer.occupancy_grid_mapping_assets import (  # noqa: E501
     COLOR_BEAM,
     COLOR_CHART_FOG,
     COLOR_CHART_FREE,
