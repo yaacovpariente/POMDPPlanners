@@ -1,14 +1,19 @@
 # SPDX-License-Identifier: MIT
 
-"""Maze presentation: the episode written as data for the browser viewer.
+"""Everything that turns a Maze-family episode into something you can look at.
 
-The GIF renderer is *not* in here. ``maze_pomdp.maze_visualizer`` draws the
-generated Maze and the T-Maze from one class, and the T-Maze is a separate
-environment with its own migration, so moving that file would move a file two
-environments own. It stays where both already import it from; only the trace
-exporter, which is the Maze's alone, lives here.
+The renderer itself is not here. ``MazeVisualizer`` draws every environment in
+the family — the generated Maze and the T-Maze alike — so it stays at the
+package root rather than being claimed by either one.
+
+What lives here is one trace exporter per environment: the same episodes
+written as data, for the browser viewer.
 """
 
+from POMDPPlanners.environments.maze_pomdp.visualizer.t_maze_trace_exporter import (
+    T_MAZE_PAYLOAD_KIND,
+    build_t_maze_trace,
+)
 from POMDPPlanners.environments.maze_pomdp.visualizer.trace_exporter import (
     MAZE_PAYLOAD_KIND,
     build_maze_trace,
@@ -16,5 +21,7 @@ from POMDPPlanners.environments.maze_pomdp.visualizer.trace_exporter import (
 
 __all__ = [
     "MAZE_PAYLOAD_KIND",
+    "T_MAZE_PAYLOAD_KIND",
     "build_maze_trace",
+    "build_t_maze_trace",
 ]
