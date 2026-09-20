@@ -5,6 +5,8 @@
 Exports:
     BattleshipPOMDP: The environment.
     BattleshipBelief: The exact belief over legal fleet layouts.
+    BattleshipVectorizedWeightedParticleBelief: Its batched twin, and the
+        environment's default belief.
     BattleshipVisualizer: Episode renderer.
     FleetLayoutTable: The enumerated legal layouts.
 """
@@ -24,6 +26,11 @@ from POMDPPlanners.environments.battleship_pomdp.battleship_pomdp import (
     create_battleship_state,
 )
 from POMDPPlanners.environments.battleship_pomdp.battleship_belief import BattleshipBelief
+from POMDPPlanners.environments.battleship_pomdp.battleship_vectorized_belief import (
+    BattleshipVectorizedUpdater,
+    BattleshipVectorizedWeightedParticleBelief,
+    create_battleship_belief,
+)
 from POMDPPlanners.environments.battleship_pomdp.battleship_visualizer import (
     BattleshipVisualizer,
 )
@@ -32,6 +39,8 @@ __all__ = [
     "HIT",
     "MISS",
     "BattleshipBelief",
+    "BattleshipVectorizedUpdater",
+    "BattleshipVectorizedWeightedParticleBelief",
     "BattleshipInitialStateDistribution",
     "BattleshipPOMDP",
     "BattleshipPOMDPMetrics",
@@ -39,6 +48,7 @@ __all__ = [
     "BattleshipStepChannel",
     "BattleshipVisualizer",
     "FleetLayoutTable",
+    "create_battleship_belief",
     "create_battleship_state",
     "get_layout_table",
 ]

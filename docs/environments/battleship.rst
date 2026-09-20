@@ -29,6 +29,12 @@ the agent. ``BattleshipBelief`` tracks legal fleet layouts consistent with
 observed hits and misses; its occupancy probabilities describe uncertainty
 about each cell. These probabilities are not extra sensor readings.
 
+``BattleshipVectorizedWeightedParticleBelief`` is the batched twin, and it is
+what ``create_environment_belief`` returns. It carries the same posterior --
+its particles are redrawn from the consistent layouts on every probe, so the
+two agree cell for cell -- through the vectorized updater interface, which is
+what a vectorized planner needs to hold a belief at all.
+
 Formal definition
 -----------------
 

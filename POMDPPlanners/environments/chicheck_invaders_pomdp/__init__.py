@@ -9,9 +9,12 @@ Exports:
     ChicheckInvadersStepChannel: The per-step channels behind those metrics.
     ObservationMode: Fully versus partially observable.
     ChicheckInvadersBelief: Weighted particle filter with flock reinvigoration.
+    ChicheckInvadersVectorizedBelief: Its batched twin, and the environment's
+        default belief.
     ChicheckInvadersInitialStateDistribution: The per-episode flock prior.
     ChicheckInvadersVisualizer: Episode renderer.
-    create_chicheck_invaders_belief: Builds the initial belief for an environment.
+    create_chicheck_invaders_belief: Builds the scalar belief for an environment.
+    create_chicheck_invaders_vectorized_belief: Builds the batched one.
     create_chicheck_invaders_state: Builds one state vector from its parts.
     noiseless_preset: Constructor keywords for the deterministic-sensor preset.
 """
@@ -76,6 +79,8 @@ __all__ = [
     "ChicheckInvadersPOMDP",
     "ChicheckInvadersState",
     "ChicheckInvadersStepChannel",
+    "ChicheckInvadersVectorizedBelief",
+    "ChicheckInvadersVectorizedUpdater",
     "ChicheckInvadersVisualizer",
     "MODE_DIVE",
     "MODE_PATROL",
@@ -95,6 +100,7 @@ __all__ = [
     "chicken_slots",
     "create_chicheck_invaders_belief",
     "create_chicheck_invaders_state",
+    "create_chicheck_invaders_vectorized_belief",
     "make_state",
     "noiseless_preset",
     "observation_size",
@@ -106,4 +112,9 @@ __all__ = [
 ]
 
 from .chicheck_invaders_belief import ChicheckInvadersBelief, create_chicheck_invaders_belief
+from .chicheck_invaders_vectorized_belief import (
+    ChicheckInvadersVectorizedBelief,
+    ChicheckInvadersVectorizedUpdater,
+    create_chicheck_invaders_vectorized_belief,
+)
 from .chicheck_invaders_visualizer import ChicheckInvadersVisualizer
