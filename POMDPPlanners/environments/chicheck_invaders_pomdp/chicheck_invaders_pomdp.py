@@ -113,6 +113,7 @@ from POMDPPlanners.utils.statistics_utils import confidence_interval
 
 if TYPE_CHECKING:
     from POMDPPlanners.core.simulation import History
+    from POMDPPlanners.core.simulation.traces import EpisodeTrace
 
 
 #: Log-probability standing in for an impossible observation. ``-inf`` is
@@ -1409,12 +1410,40 @@ class ChicheckInvadersPOMDP(DiscreteActionsEnvironment):
         # ``__init__`` imports the visualizer eagerly, so any worker that
         # imports the environment by its package name already paid for Pillow.
         # pylint: disable-next=import-outside-toplevel
-        from POMDPPlanners.environments.chicheck_invaders_pomdp.chicheck_invaders_visualizer import (
+        from POMDPPlanners.environments.chicheck_invaders_pomdp.visualizer import (
             ChicheckInvadersVisualizer,
         )
 
         cache_path = output_dir / f"chicheck_invaders_{episode_index}.gif"
         ChicheckInvadersVisualizer(self).create_visualization(history, cache_path)
+
+    def build_episode_trace(
+        self, history: List[StepData], episode_index: int, policy_name: Optional[str] = None
+    ) -> "EpisodeTrace":
+        """Write this episode as data, beside the GIF.
+
+        Args:
+            history: List of step data from an episode.
+            episode_index: Zero-based episode index within its run.
+            policy_name: Name of the policy that produced the episode.
+
+        Returns:
+            The episode's trace, with payload kind ``chicheck_invaders.v1``.
+        """
+        # Imported here rather than at module scope for the same reason as the
+        # renderer above: the exporter pulls in the trace schema, and most runs
+        # of this environment never write one.
+        # pylint: disable-next=import-outside-toplevel
+        from POMDPPlanners.environments.chicheck_invaders_pomdp.visualizer.trace_exporter import (
+            build_chicheck_invaders_trace,
+        )
+
+        return build_chicheck_invaders_trace(
+            environment=self,
+            history=history,
+            episode_index=episode_index,
+            policy_name=policy_name,
+        )
 
 
 def noiseless_preset(**overrides: Any) -> Dict[str, Any]:
