@@ -14,6 +14,11 @@ plus additive noise).  Because the dynamics are nonlinear, a standard
 linear Kalman filter is not applicable; only EKF (which requires analytical
 Jacobians) and UKF (Jacobian-free sigma-point propagation) are supported.
 
+The transition function and its Jacobian are module-level callable classes
+rather than closures, because ``LocalSimulationsAPI`` pickles every
+simulation task (to hash it into a cache key) and a closure cannot be
+pickled.
+
 Classes:
     GaussianBeliefUpdaterType: Enum selecting the Gaussian updater variant.
 
@@ -24,6 +29,7 @@ Functions:
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 from enum import Enum
 from typing import TYPE_CHECKING, Optional
 
@@ -137,42 +143,84 @@ def _build_updater(
     raise ValueError(f"Unknown updater type: {updater_type}")
 
 
-def _make_transition_fn(env: "MountainCarPOMDP"):
-    power = env.power
-    gravity = env.gravity
-    max_speed = env.max_speed
-    min_position = env.min_position
-    max_position = env.max_position
+@dataclass(frozen=True)
+class _MountainCarDynamicsParams:
+    """Mountain-car physics constants copied out of the environment.
 
-    def _transition_fn(x: np.ndarray, u: np.ndarray) -> np.ndarray:
+    The updaters holding these callables are pickled by joblib whenever a
+    run goes through ``LocalSimulationsAPI``, so the parameters live in a
+    module-level dataclass rather than in a closure over ``env``.
+
+    Attributes:
+        power: Acceleration applied per unit of action.
+        gravity: Gravity coefficient of the hill.
+        max_speed: Velocity clip magnitude.
+        min_position: Left wall position.
+        max_position: Right wall position.
+    """
+
+    power: float
+    gravity: float
+    max_speed: float
+    min_position: float
+    max_position: float
+
+    @classmethod
+    def from_environment(cls, env: "MountainCarPOMDP") -> "_MountainCarDynamicsParams":
+        """Copy the physics constants out of a MountainCarPOMDP instance."""
+        return cls(
+            power=env.power,
+            gravity=env.gravity,
+            max_speed=env.max_speed,
+            min_position=env.min_position,
+            max_position=env.max_position,
+        )
+
+
+@dataclass(frozen=True)
+class _MountainCarTransitionFn:
+    """Picklable deterministic mountain-car transition ``f(x, u) -> x'``."""
+
+    params: _MountainCarDynamicsParams
+
+    def __call__(self, x: np.ndarray, u: np.ndarray) -> np.ndarray:
+        p = self.params
         action = float(np.asarray(u).ravel()[0])
         position, velocity = x
 
-        velocity = velocity + action * power + math.cos(3.0 * position) * (-gravity)
-        velocity = np.clip(velocity, -max_speed, max_speed)
+        velocity = velocity + action * p.power + math.cos(3.0 * position) * (-p.gravity)
+        velocity = np.clip(velocity, -p.max_speed, p.max_speed)
         position = position + velocity
-        position = np.clip(position, min_position, max_position)
+        position = np.clip(position, p.min_position, p.max_position)
 
-        if position == min_position and velocity < 0:
+        if position == p.min_position and velocity < 0:
             velocity = 0.0
 
         return np.array([position, velocity])
 
-    return _transition_fn
+
+def _make_transition_fn(env: "MountainCarPOMDP") -> _MountainCarTransitionFn:
+    return _MountainCarTransitionFn(_MountainCarDynamicsParams.from_environment(env))
 
 
 def _mountain_car_observation_fn(x: np.ndarray) -> np.ndarray:
     return x.copy()
 
 
-def _make_transition_jacobian(env: "MountainCarPOMDP"):
-    power = env.power
-    gravity = env.gravity
-    max_speed = env.max_speed
-    min_position = env.min_position
-    max_position = env.max_position
+@dataclass(frozen=True)
+class _MountainCarTransitionJacobian:
+    """Picklable Jacobian of the mountain-car transition w.r.t. the state."""
 
-    def _transition_jacobian(x: np.ndarray, u: np.ndarray) -> np.ndarray:
+    params: _MountainCarDynamicsParams
+
+    def __call__(self, x: np.ndarray, u: np.ndarray) -> np.ndarray:
+        p = self.params
+        power = p.power
+        gravity = p.gravity
+        max_speed = p.max_speed
+        min_position = p.min_position
+        max_position = p.max_position
+
         action = float(np.asarray(u).ravel()[0])
         position, velocity = x
 
@@ -200,7 +248,9 @@ def _make_transition_jacobian(env: "MountainCarPOMDP"):
 
         return np.array([[dp_dp, dp_dv], [dv_dp, dv_dv]])
 
-    return _transition_jacobian
+
+def _make_transition_jacobian(env: "MountainCarPOMDP") -> _MountainCarTransitionJacobian:
+    return _MountainCarTransitionJacobian(_MountainCarDynamicsParams.from_environment(env))
 
 
 def _mountain_car_observation_jacobian(x: np.ndarray) -> np.ndarray:

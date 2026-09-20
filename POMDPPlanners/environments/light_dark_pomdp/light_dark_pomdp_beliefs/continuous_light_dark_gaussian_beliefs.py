@@ -9,6 +9,11 @@ pre-configured for the
 environment, with an enum-based selector for the updater type
 (Linear Kalman, EKF, or UKF).
 
+The transition function, the observation function and their Jacobians are
+module-level callables rather than lambdas, because ``LocalSimulationsAPI``
+pickles every simulation task (to hash it into a cache key) and a lambda
+cannot be pickled.
+
 Classes:
     GaussianBeliefUpdaterType: Enum selecting the Gaussian updater variant.
 
@@ -111,6 +116,26 @@ def _select_observation_covariance(
     return env.observation_cov_matrix.copy()
 
 
+def _light_dark_transition_fn(x: np.ndarray, u: np.ndarray) -> np.ndarray:
+    """Light-dark dynamics: the action is a displacement."""
+    return x + u
+
+
+def _light_dark_observation_fn(x: np.ndarray) -> np.ndarray:
+    """Light-dark observation model: the identity."""
+    return x
+
+
+def _light_dark_transition_jacobian(x: np.ndarray, u: np.ndarray) -> np.ndarray:
+    """Jacobian of ``x + u`` w.r.t. the state: the identity."""
+    return np.eye(len(x))
+
+
+def _light_dark_observation_jacobian(x: np.ndarray) -> np.ndarray:
+    """Jacobian of the identity observation: the identity."""
+    return np.eye(len(x))
+
+
 def _build_updater(
     updater_type: GaussianBeliefUpdaterType,
     Q: np.ndarray,
@@ -124,18 +149,18 @@ def _build_updater(
 
     if updater_type is GaussianBeliefUpdaterType.EKF:
         return ExtendedKalmanFilterUpdater(
-            transition_fn=lambda x, u: x + u,
-            observation_fn=lambda x: x,
-            transition_jacobian=lambda x, u: I,
-            observation_jacobian=lambda x: I,
+            transition_fn=_light_dark_transition_fn,
+            observation_fn=_light_dark_observation_fn,
+            transition_jacobian=_light_dark_transition_jacobian,
+            observation_jacobian=_light_dark_observation_jacobian,
             Q=Q,
             R=R,
         )
 
     if updater_type is GaussianBeliefUpdaterType.UKF:
         return UnscentedKalmanFilterUpdater(
-            transition_fn=lambda x, u: x + u,
-            observation_fn=lambda x: x,
+            transition_fn=_light_dark_transition_fn,
+            observation_fn=_light_dark_observation_fn,
             Q=Q,
             R=R,
         )
