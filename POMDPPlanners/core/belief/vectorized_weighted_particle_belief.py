@@ -7,6 +7,23 @@ NumPy array and delegates updates to a
 :class:`~POMDPPlanners.core.belief.vectorized_particle_belief_updater.VectorizedParticleBeliefUpdater`,
 eliminating Python-level loops over individual particles.
 
+**Execution-time conditioning.** :meth:`VectorizedWeightedParticleBelief.update`
+serves two callers that look identical and are not. The episode driver calls it
+once per real step, after the world has moved; a planner calls it thousands of
+times inside its search tree, on futures that have not happened. Only the first
+carries the evidence that the episode is still running, and it is the only one
+that passes ``state``. So the conditioning in
+:mod:`POMDPPlanners.core.belief.running_episode_conditioning` is applied only
+when ``state`` is given.
+
+That split is not a convenience. A planner must be able to reach a terminal
+belief: ``is_terminal_belief`` is how SparsePFT and ICVaR-PFT-DPW stop growing
+a branch, and PFT-DPW samples a particle for the same test. Stripping terminal
+particles inside the tree would tell the search that hazards never end an
+episode and that a goal once reached keeps paying out -- it would plan as if it
+were immortal, which is the worst possible error on exactly the hazard-terminal
+environments this conditioning exists for.
+
 Classes:
     VectorizedWeightedParticleBelief: Vectorized weighted particle filter.
 """
@@ -16,6 +33,9 @@ from typing import Any, Optional
 import numpy as np
 
 from POMDPPlanners.core.belief.base_belief import Belief
+from POMDPPlanners.core.belief.running_episode_conditioning import (
+    condition_log_weights_on_a_running_episode,
+)
 from POMDPPlanners.core.belief.vectorized_particle_belief_updater import (
     VectorizedParticleBeliefUpdater,
 )
@@ -135,7 +155,16 @@ class VectorizedWeightedParticleBelief(Belief):
             action: Action that was executed.
             observation: Observation that was received.
             pomdp: Unused. Kept for interface compatibility.
-            state: Ignored.
+            state: The state the world actually moved to. Its *value* is not
+                read -- the true state must never leak into a belief -- but
+                its presence is. Only the episode driver knows a real
+                transition happened and passes it; a planner expanding its
+                search tree does not, because inside the tree termination is
+                one of the outcomes being weighed rather than something the
+                agent has observed not to have happened. So this is what tells
+                an execution-time filter step apart from a hypothetical one,
+                and the running-episode conditioning is applied only to the
+                former.
 
         Returns:
             New VectorizedWeightedParticleBelief with updated particles and weights.
@@ -147,6 +176,9 @@ class VectorizedWeightedParticleBelief(Belief):
             next_particles, action, observation
         )
         next_log_weights = self.log_weights + log_likelihoods
+        next_log_weights = self._condition_on_a_running_episode(
+            next_particles, next_log_weights, state
+        )
 
         if self.resampling:
             next_particles, next_log_weights = self._resample(next_particles, next_log_weights)
@@ -221,6 +253,37 @@ class VectorizedWeightedParticleBelief(Belief):
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
+
+    def _condition_on_a_running_episode(
+        self,
+        next_particles: np.ndarray,
+        next_log_weights: np.ndarray,
+        state: Optional[Any],
+    ) -> np.ndarray:
+        """Spend the evidence that the agent was asked to act again.
+
+        Does nothing unless both halves are present: a real world transition
+        (``state``), and an updater that opted in by overriding
+        :meth:`VectorizedParticleBeliefUpdater.ruled_out_by_a_running_episode`.
+        Every other belief in the package keeps the weights it had.
+
+        Args:
+            next_particles: The transitioned particles.
+            next_log_weights: The log-weights the reading produced.
+            state: The driver's true next state, or ``None`` inside a planner.
+
+        Returns:
+            The log-weights to carry forward.
+        """
+        if state is None:
+            return next_log_weights
+        ruled_out = self.updater.ruled_out_by_a_running_episode(next_particles)
+        if ruled_out is None:
+            return next_log_weights
+        conditioned, _ = condition_log_weights_on_a_running_episode(
+            next_log_weights, ruled_out
+        )
+        return conditioned
 
     @staticmethod
     def _validate_init_args(
