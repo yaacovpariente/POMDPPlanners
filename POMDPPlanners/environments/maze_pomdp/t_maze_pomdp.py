@@ -743,7 +743,7 @@ class TMazePOMDP(DiscreteActionsEnvironment):
         # trace schema and the belief payloads, and this module is imported by
         # every T-Maze run including ones that never write anything.
         # pylint: disable-next=import-outside-toplevel
-        from POMDPPlanners.environments.maze_pomdp.t_maze_trace_exporter import (
+        from POMDPPlanners.environments.maze_pomdp.visualizer.t_maze_trace_exporter import (
             build_t_maze_trace,
         )
 
