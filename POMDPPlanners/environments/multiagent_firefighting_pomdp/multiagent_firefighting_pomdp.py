@@ -43,7 +43,7 @@ Classes:
 from enum import Enum
 from pathlib import Path
 from collections.abc import Hashable
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 
@@ -78,6 +78,9 @@ from POMDPPlanners.environments.multiagent_firefighting_pomdp.multiagent_firefig
     default_robot_start_cells,
     resolve_cells,
 )
+
+if TYPE_CHECKING:  # pragma: no cover - import cycle only matters to type checkers
+    from POMDPPlanners.core.simulation.traces import EpisodeTrace
 
 #: The category an unobserved cell reports. Encoded as a number because the
 #: observation is one flat ``float64`` vector of fixed shape whatever the robots
@@ -1500,12 +1503,42 @@ class MultiAgentFirefightingPOMDP(DiscreteActionsEnvironment):
         # almost none of them render anything, so the renderer's palette
         # tables and fonts stay out of a planning run's memory.
         # pylint: disable-next=import-outside-toplevel
-        from POMDPPlanners.environments.multiagent_firefighting_pomdp.multiagent_firefighting_visualizer import (  # noqa: E501
+        from POMDPPlanners.environments.multiagent_firefighting_pomdp.visualizer.multiagent_firefighting_visualizer import (  # noqa: E501
             MultiAgentFirefightingVisualizer,
         )
 
         cache_path = output_dir / f"multiagent_firefighting_{episode_index}.gif"
         MultiAgentFirefightingVisualizer(self).create_visualization(history, cache_path)
+
+    def build_episode_trace(
+        self, history: List[StepData], episode_index: int, policy_name: Optional[str] = None
+    ) -> "EpisodeTrace":
+        """Write this episode as data, beside the GIF.
+
+        Args:
+            history: Episode history.
+            episode_index: Zero-based episode index within its run.
+            policy_name: Name of the policy that produced the episode.
+
+        Returns:
+            The episode's trace, with payload kind
+            ``multiagent_firefighting.v1``.
+        """
+        # Imported here rather than at module scope, for the same reason the
+        # renderer is: the exporter pulls in the trace schema, and this module
+        # is imported by every worker of every run, almost none of which write
+        # anything.
+        # pylint: disable-next=import-outside-toplevel
+        from POMDPPlanners.environments.multiagent_firefighting_pomdp.visualizer.trace_exporter import (  # noqa: E501
+            build_multiagent_firefighting_trace,
+        )
+
+        return build_multiagent_firefighting_trace(
+            environment=self,
+            history=history,
+            episode_index=episode_index,
+            policy_name=policy_name,
+        )
 
 
 def create_firefighting_state(
