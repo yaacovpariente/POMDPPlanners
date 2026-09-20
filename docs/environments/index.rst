@@ -251,6 +251,13 @@ actually stores.
 Guides
 ------
 
+Every environment in the catalog is documented here, but there are fewer guides
+than environments: a world and its variants share one page. :doc:`maze` covers
+the discrete, continuous and T-maze versions; :doc:`light_dark`, :doc:`push`
+and :doc:`laser_tag` each cover their continuous and discrete-action forms; and
+:doc:`realistic` covers Racetrack, CARLA, Isaac Lab and nuPlan together. The
+Guide column of the catalog above says which page to open for a given class.
+
 .. toctree::
    :maxdepth: 1
 
@@ -339,4 +346,4 @@ See also
 --------
 
 - :doc:`custom` — write your own environment against the base interface.
-- :doc:`../core/planners` — the planners that run on these environments.
+- :doc:`../planners/index` — the planners that run on these environments.

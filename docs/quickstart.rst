@@ -8,10 +8,8 @@ Your First POMDP Solution
 
 Let's solve the classic Tiger POMDP problem using POMCP:
 
-AdaOPS is also available for discrete-action models whose observation
-likelihood can be scored. It needs explicit state bins to enable KLD particle
-sizing; passing no ``state_binner`` disables adaptation and uses
-``max_particles`` during resampling. See :doc:`planners/adaops/index`.
+POMCP is one of many planners — :doc:`planners/index` has the catalog and says
+which one fits which problem.
 
 .. code-block:: python
 

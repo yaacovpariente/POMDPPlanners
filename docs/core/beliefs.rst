@@ -215,5 +215,5 @@ See Also
 --------
 
 - :doc:`../examples/basic_usage` - Belief usage examples
-- :doc:`planners` - How planners use beliefs
+- :doc:`../planners/index` - How planners use beliefs
 - :doc:`../api/POMDPPlanners.core` - Complete API reference

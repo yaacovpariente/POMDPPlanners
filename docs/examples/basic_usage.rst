@@ -291,6 +291,6 @@ Next Steps
 ----------
 
 - Try :doc:`../environments/index` for the environment catalog
-- See :doc:`../core/planners` for advanced planner usage
+- See :doc:`../planners/index` for advanced planner usage
 - Check :doc:`../core/simulations` for large-scale experiment setup
 - Explore the :doc:`../api/POMDPPlanners.core` for detailed API reference
