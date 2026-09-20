@@ -172,7 +172,15 @@ class RockSampleVectorizedUpdater(VectorizedParticleBeliefUpdater):
         """
         action_idx = int(np.asarray(action).item())
         obs_int = int(np.asarray(observation).item())
-        next_arr = np.asarray(next_particles, dtype=float)
+        # The native sensor kernel is written for the canonical
+        # (N, 2 + num_rocks) layout and rejects anything wider, so a
+        # hazard-terminal env's trailing terminal slot is dropped here. Without
+        # this the vectorized belief could not run at all with
+        # ``is_dangerous_area_hit_terminal`` on -- every update raised
+        # ``next_particles must have shape (N, 2 + num_rocks)``. The slot is
+        # not sensor evidence in any case: no reading names it. It is spent
+        # instead in :meth:`ruled_out_by_a_running_episode`.
+        next_arr = np.asarray(next_particles, dtype=float)[:, : 2 + self.num_rocks]
         ref_state = self._reference_state(next_arr)
         obs_model = _native.RockSampleObservationCpp(
             next_state=ref_state,
@@ -184,6 +192,42 @@ class RockSampleVectorizedUpdater(VectorizedParticleBeliefUpdater):
             sensor_efficiency=self.sensor_efficiency,
         )
         return obs_model.batch_log_likelihood(next_arr, obs_int)
+
+    def ruled_out_by_a_running_episode(
+        self, next_particles: np.ndarray
+    ) -> Optional[np.ndarray]:
+        """Which particles the robot being asked to act again has ruled out.
+
+        Only the hazard-terminal configuration opts in, and this environment
+        is the starkest case of the three. On any action that is not a rock
+        check, ``RockSampleObservationCpp::batch_log_likelihood`` gives every
+        particle the same score -- 0.0 for the only observation a move can
+        produce -- so a move step reweights nothing at all. A particle whose
+        robot walked into a dangerous area latches its terminal slot, freezes,
+        and from then on collects that identical score forever; the check
+        sensor cannot dislodge it either, because the rock qualities it froze
+        with are as plausible as any other particle's. Measured on the pinned
+        map with two dangerous areas and the robot walked into one, the whole
+        belief ended up on terminal particles.
+
+        Robots that have exited east are ruled out for the same reason and are
+        included: the sentinel ``(-1, -1)`` position is absorbing too.
+
+        Args:
+            next_particles: The transitioned particles, shape
+                (N, 2 + num_rocks) or one column wider.
+
+        Returns:
+            The mask, matching :meth:`RockSamplePOMDP.is_terminal` per
+            particle, or ``None`` when the flag is off.
+        """
+        if not self._is_dangerous_area_hit_terminal:
+            return None
+        values = np.asarray(next_particles, dtype=float)
+        exited = (values[:, 0].astype(int) == -1) & (values[:, 1].astype(int) == -1)
+        if values.shape[1] <= 2 + self.num_rocks:
+            return exited
+        return exited | (values[:, 2 + self.num_rocks] > 0.5)
 
     @property
     def config_id(self) -> str:
