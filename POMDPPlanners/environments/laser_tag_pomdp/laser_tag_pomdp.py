@@ -70,17 +70,6 @@ from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_utils.laser_tag_
 
 
 # 8-directional laser measurements: N, NE, E, SE, S, SW, W, NW (matches LaserTagObservation)
-#
-# Entries are ``(d_row, d_col)`` in row-major grid coordinates, where row 0 is
-# the top of the grid, so north is ``(-1, 0)``.  The continuous variant's
-# ``LASER_DIRECTIONS`` in ``continuous_laser_tag_geometry`` stores ``(dx, dy)``
-# with y pointing up, so it writes the same north as ``(0, +1)``.  The raw
-# tuples therefore look contradictory, but the compass headings agree: the two
-# tables are related by ``(dx, dy) = (d_col, -d_row)`` for all eight entries.
-# Beam index i means the same heading in both variants and the readings are
-# directly comparable; only the tuple order and the sign of the vertical axis
-# differ.  Do not "align" one table to the other -- each is correct in its own
-# frame, and changing either breaks its environment.
 _LASER_DIRECTIONS: List[Tuple[int, int]] = [
     (-1, 0),
     (-1, 1),
