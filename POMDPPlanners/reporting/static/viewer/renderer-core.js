@@ -411,6 +411,20 @@
        * @param {Object} follow  {x, z, heading} of whatever chase follows.
        */
       update: function (dt, follow) {
+        /* A scene may own a mode outright. Three environments needed this and
+           each reached for a different workaround — one wrapped this factory,
+           one wrapped renderComposite — because a vertical playfield, a
+           two-body contact shot and a multi-agent crew chase cannot be
+           expressed by a single followed point at a fixed standoff. A scene
+           passes `modes: {chase: fn}` and owns that mode; everything it does
+           not name stays the rig's. */
+        var own = cfg.modes && cfg.modes[state.mode];
+        if (own) {
+          own({ dt: dt, follow: follow, camera: core.camera, pos: camPos, look: camLook, THREE: THREE });
+          core.camera.position.copy(camPos);
+          core.camera.lookAt(camLook);
+          return;
+        }
         if (state.mode === "board") {
           camPos.lerp(boardCamera(), clamp(dt * 3, 0, 1));
           camLook.lerp(new THREE.Vector3(0, 0.3, 0), clamp(dt * 3, 0, 1));
@@ -419,8 +433,12 @@
           camLook.lerp(new THREE.Vector3(0, 0, 0), clamp(dt * 3, 0, 1));
         } else if (state.mode === "chase" && follow) {
           tmp.set(Math.cos(follow.heading), 0, Math.sin(follow.heading));
+          // A scene that knows its own scale may set these; 2.9 / 1.75 suits a
+          // single body on a board this size and stays the default.
+          var back = follow.distance === undefined ? 2.9 : follow.distance;
+          var high = follow.height === undefined ? 1.75 : follow.height;
           camPos.lerp(
-            new THREE.Vector3(follow.x - tmp.x * 2.9, 1.75, follow.z - tmp.z * 2.9),
+            new THREE.Vector3(follow.x - tmp.x * back, high, follow.z - tmp.z * back),
             clamp(dt * 3.2, 0, 1)
           );
           camLook.lerp(
