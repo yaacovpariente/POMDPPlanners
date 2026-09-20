@@ -9,6 +9,8 @@ import numpy as np
 import pytest
 
 from POMDPPlanners.core.belief import WeightedParticleBelief
+from POMDPPlanners.core.distributions import DiscreteDistribution
+from POMDPPlanners.core.environment import Environment, SpaceInfo, SpaceType
 from POMDPPlanners.core.simulation import StepData
 from POMDPPlanners.core.simulation.belief_payloads import (
     MAX_PAYLOAD_PARTICLES,
@@ -175,20 +177,76 @@ def test_trace_refuses_an_incompatible_major_version():
         EpisodeTrace.from_dict(data)
 
 
+class _EnvironmentWithoutATraceExporter(Environment):
+    """The minimum an Environment can be: it implements no trace exporter.
+
+    Stands in for "any environment nobody has migrated yet", so this file does
+    not have to be edited every time one is.
+    """
+
+    def __init__(self, discount_factor: float = 0.95):
+        super().__init__(
+            discount_factor=discount_factor,
+            name="no-exporter",
+            space_info=SpaceInfo(
+                action_space=SpaceType.DISCRETE,
+                observation_space=SpaceType.DISCRETE,
+            ),
+        )
+
+    def sample_next_state(self, state, action):
+        return state
+
+    def sample_observation(self, state, action, next_state):
+        return 0
+
+    def reward(self, state, action, next_state=None):
+        return 0.0
+
+    def is_terminal(self, state) -> bool:
+        return False
+
+    def initial_state(self):
+        return 0
+
+    def actions(self, state=None):
+        return [0]
+
+    def initial_state_dist(self):
+        return DiscreteDistribution({0: 1.0})
+
+    def initial_observation_dist(self):
+        return DiscreteDistribution({0: 1.0})
+
+    def transition_log_probability(self, state, action, next_state) -> float:
+        return 0.0
+
+    def observation_log_probability(self, state, action, next_state, observation) -> float:
+        return 0.0
+
+    def is_equal_observation(self, observation1, observation2) -> bool:
+        return observation1 == observation2
+
+    def hash_action(self, action):
+        return action
+
+
 def test_environment_writes_no_trace_by_default(tmp_path: Path):
     """An environment that implements nothing writes nothing.
 
     Purpose: Adding the trace path must not change any existing environment's
     behaviour, which means the default has to be silence, not an empty file.
 
-    Given: The Tiger environment, which has no trace exporter.
+    Given: An environment that implements no trace exporter.
     When: cache_trace is called.
     Then: Nothing is returned and no file appears.
-    """
-    # pylint: disable-next=import-outside-toplevel
-    from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 
-    env = TigerPOMDP(discount_factor=0.95)
+    Note: this deliberately uses a local stub rather than naming a real
+    environment. It used to name Tiger, which made the test fail the day Tiger
+    gained an exporter — the test would then have been asserting something
+    about one environment's migration state instead of about the default.
+    """
+    env = _EnvironmentWithoutATraceExporter(discount_factor=0.95)
     assert env.cache_trace(history=[], output_dir=tmp_path, episode_index=0) is None
     assert list(tmp_path.iterdir()) == []
 
@@ -256,9 +314,7 @@ def test_light_dark_trace_inherits_the_subsampling_cap(light_dark_env):
             belief=_belief(positions),
         )
     ]
-    belief = build_light_dark_trace(light_dark_env, history, episode_index=0).payload[
-        "beliefs"
-    ][0]
+    belief = build_light_dark_trace(light_dark_env, history, episode_index=0).payload["beliefs"][0]
 
     assert belief["num_particles"] == count
     assert belief["num_written"] == MAX_PAYLOAD_PARTICLES
