@@ -289,6 +289,55 @@ def test_a_store_with_no_file_metadata_is_read_from_the_database_beside_it(tmp_p
     assert tracking_uri_for(sql_store) == f"sqlite:///{database}"
 
 
+def test_every_listing_ships_all_three_views(router: Router):
+    """Cards, list and table come from one description of the items.
+
+    Purpose: Switching view must not cost a request or lose the reader's
+    place, so all three are in the page and the switch only changes which is
+    shown. Building them from one item list is also what keeps a new listing
+    from shipping with two of the three.
+
+    Given: The pages that list things.
+    When: Each renders.
+    Then: Each carries the switch, a card grid and a table of the same items.
+    """
+    experiment, run = _run(router)
+    base = f"/run/{run.store_index}/{run.experiment_id}/{run.run_id}"
+    paths = [
+        "/",
+        f"/experiment/{experiment.store_index}/{experiment.experiment_id}",
+        base,
+        f"{base}/env/{TRACE_ENV}",
+        f"{base}/env/{TRACE_ENV}/policy/PFT_DPW",
+    ]
+    for path in paths:
+        _, _, body = _get(router, path)
+        assert 'data-layout="table"' in body, path
+        assert 'class="listing"' in body and 'class="cards"' in body, path
+        assert 'class="scroll table-view" hidden' in body, path
+
+
+def test_confidence_intervals_get_their_own_column(router: Router):
+    """An interval is a column of its own, not a suffix on the estimate.
+
+    Purpose: Written beside the number, an interval reads as part of it. The
+    metric table gives every planner two columns so it is clear which figure
+    is the estimate and which is the interval around it.
+
+    Given: A run that logged an average return with both bounds.
+    When: The environment page renders.
+    Then: The table heads the pair, and the bounds are in their own cell.
+    """
+    _, run = _run(router)
+    base = f"/run/{run.store_index}/{run.experiment_id}/{run.run_id}"
+
+    _, _, body = _get(router, f"{base}/env/{TRACE_ENV}")
+
+    assert "<th>Confidence interval</th>" in body
+    assert "<th>Value</th>" in body
+    assert '<td class="num ci">-18 – -7</td>' in body
+
+
 def test_an_episode_offers_every_recording_of_itself(router: Router):
     """Both records of one episode are reachable, not just the richest.
 

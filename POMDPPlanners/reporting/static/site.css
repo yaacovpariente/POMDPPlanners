@@ -35,6 +35,11 @@
 
 * { box-sizing: border-box; }
 
+/* `hidden` is only a default of `display: none`, so any rule that gives an
+   element a display — `.cards { display: grid }` — silently un-hides it.
+   The view switch hides panels with the attribute, so it has to win. */
+[hidden] { display: none !important; }
+
 body {
   margin: 0;
   background: var(--bg);
@@ -128,6 +133,19 @@ a.card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 }
 .layout-switch { display: flex; gap: 6px; }
 
+.table-view table { background: var(--panel); }
+.table-view th, .table-view td { padding: 8px 14px 8px 0; }
+.num { font-variant-numeric: tabular-nums; }
+.metrics th.group {
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+  font-size: 13px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.metrics td.ci { color: var(--dim); font-size: 13px; }
+
 /* List mode: one row per item, the same cards laid out along the row so the
    figures still line up down the page. */
 .cards.as-list { grid-template-columns: 1fr; gap: 8px; }
@@ -151,10 +169,10 @@ a.card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .stat-label { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--dim); }
 .stat-value { font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
 
-.episode-card { padding: 0; overflow: hidden; }
-.episode-card .card-title, .episode-card .stats { padding-inline: 14px; }
-.episode-card .card-title { padding-top: 12px; }
-.episode-card .stats { padding-bottom: 14px; gap: 10px 16px; }
+.card.has-thumb { padding: 0; overflow: hidden; }
+.card.has-thumb .card-title, .card.has-thumb .stats { padding-inline: 14px; }
+.card.has-thumb .card-title { padding-top: 12px; }
+.card.has-thumb .stats { padding-bottom: 14px; gap: 10px 16px; }
 .thumb {
   display: block;
   width: 100%;

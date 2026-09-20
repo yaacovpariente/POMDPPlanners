@@ -9,6 +9,7 @@ a metric key — is written by :func:`html` and is therefore escaped: those
 names come from user code and reach the page unchanged.
 """
 
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from html import escape
 from typing import Iterable, List, Optional, Sequence, Tuple
@@ -120,21 +121,134 @@ def _chip(status: str) -> str:
 
 
 def _layout_toggle() -> str:
-    """The cards-or-list switch that sits beside a page's heading.
+    """The view picker that sits beside a page's heading.
 
-    The choice is the reader's, not the page's: a grid of cards is the way to
-    compare a handful of runs, and a list is the way to scan forty of them.
-    It is remembered per browser, so the site does not argue with whoever set
-    it every time they open another page.
+    The choice is the reader's, not the page's: cards to compare a handful of
+    runs, a list to scan forty, a table to read the numbers down a column. It
+    is remembered per browser, so the site does not argue with whoever set it
+    every time they open another page.
 
     Returns:
-        HTML for the switch.
+        HTML for the picker.
     """
     return (
-        '<div class="layout-switch" role="group" aria-label="Layout">'
-        '<button type="button" class="tab" data-layout="cards" aria-pressed="true">Cards</button>'
-        '<button type="button" class="tab" data-layout="list" aria-pressed="false">List</button>'
-        "</div>"
+        '<div class="layout-switch" role="group" aria-label="View">'
+        + "".join(
+            f'<button type="button" class="tab" data-layout="{mode}" '
+            f'aria-pressed="{"true" if mode == "cards" else "false"}">{label}</button>'
+            for mode, label in (("cards", "Cards"), ("list", "List"), ("table", "Table"))
+        )
+        + "</div>"
+    )
+
+
+@dataclass(frozen=True)
+class ListingItem:
+    """One thing in a list of things — an experiment, a run, a planner, an episode.
+
+    Every listing on the site is built from these rather than from page-specific
+    HTML, so that all three views come from one description of the item and a
+    new listing gets them all for free.
+
+    Attributes:
+        title: The item's name, as plain text.
+        href: Where it links.
+        chip: Optional status chip, already HTML.
+        subtitle: A line under the title, as plain text.
+        fields: ``(label, value)`` figures; the table's columns come from these
+            labels, in the order the first item lists them.
+        tags: Short labels, shown as pills on a card and joined in the table.
+        footnote: A path or id, set in monospace and last.
+        thumb: Optional thumbnail HTML.
+    """
+
+    title: str
+    href: str
+    chip: str = ""
+    subtitle: str = ""
+    fields: Sequence[Tuple[str, str]] = ()
+    tags: Sequence[str] = ()
+    footnote: str = ""
+    thumb: str = ""
+
+
+def _listing(
+    items: Sequence[ListingItem],
+    empty: str = "Nothing here.",
+    tags_label: str = "Tags",
+) -> str:
+    """Render one listing in all three views, with only the chosen one shown.
+
+    All three are written into the page rather than fetched or rebuilt on
+    demand: a listing is small, and switching view must not cost a round trip
+    or lose the reader's place.
+
+    Args:
+        items: What to list.
+        empty: What to say when there is nothing.
+        tags_label: Heading for the tag column, when the items carry tags.
+
+    Returns:
+        HTML for the listing.
+    """
+    if not items:
+        return f'<p class="empty">{html(empty)}</p>'
+
+    cards = []
+    for item in items:
+        cards.append(
+            f'<a class="card{" has-thumb" if item.thumb else ""}" href="{html(item.href)}">'
+            + item.thumb
+            + f'<h3 class="card-title">{html(item.title)}{" " + item.chip if item.chip else ""}</h3>'
+            + (f'<p class="note">{html(item.subtitle)}</p>' if item.subtitle else "")
+            + _stats(item.fields)
+            + (
+                '<p class="pills">'
+                + " ".join(f'<span class="pill">{html(t)}</span>' for t in item.tags)
+                + "</p>"
+                if item.tags
+                else ""
+            )
+            + (f'<p class="path"><code>{html(item.footnote)}</code></p>' if item.footnote else "")
+            + "</a>"
+        )
+
+    # Columns follow the first item that names them, so a listing whose items
+    # carry different figures still reads as one table.
+    labels: List[str] = []
+    for item in items:
+        for label, _ in item.fields:
+            if label not in labels:
+                labels.append(label)
+    has_tags = any(item.tags for item in items)
+    has_footnote = any(item.footnote for item in items)
+
+    head = (
+        "<th>Name</th>"
+        + "".join(f"<th>{html(label)}</th>" for label in labels)
+        + (f"<th>{html(tags_label)}</th>" if has_tags else "")
+        + ("<th>Id</th>" if has_footnote else "")
+    )
+    body = []
+    for item in items:
+        values = dict(item.fields)
+        cells = [
+            f'<td><a href="{html(item.href)}">{html(item.title)}</a>'
+            f'{" " + item.chip if item.chip else ""}</td>'
+        ]
+        cells += [f'<td class="num">{values.get(label) or "—"}</td>' for label in labels]
+        if has_tags:
+            cells.append(f'<td>{", ".join(html(t) for t in item.tags) or "—"}</td>')
+        if has_footnote:
+            cells.append(f'<td><code>{html(item.footnote)}</code></td>')
+        body.append("<tr>" + "".join(cells) + "</tr>")
+
+    return (
+        '<div class="listing">'
+        f'<div class="cards">{"".join(cards)}</div>'
+        '<div class="scroll table-view" hidden>'
+        f"<table><thead><tr>{head}</tr></thead><tbody>{''.join(body)}</tbody></table>"
+        "</div></div>"
     )
 
 
@@ -167,65 +281,57 @@ def _table(headers: Sequence[str], rows: Iterable[Sequence[str]]) -> str:
 
 def index_page(experiments: Sequence[ExperimentView], roots: Sequence[object]) -> str:
     """The landing page: every experiment found under the served roots."""
-    cards = []
+    items = []
     for experiment in experiments:
         latest = experiment.runs[0] if experiment.runs else None
         envs = sorted({e.name for run in experiment.runs for e in run.environments})
-        pills = " ".join(f'<span class="pill">{html(name)}</span>' for name in envs[:6])
-        href = _url("experiment", experiment.store_index, experiment.experiment_id)
-        cards.append(
-            f'<a class="card" href="{html(href)}">'
-            f'<h2 class="card-title">{html(experiment.name)}</h2>'
-            + _stats(
-                [
+        items.append(
+            ListingItem(
+                title=experiment.name,
+                href=_url("experiment", experiment.store_index, experiment.experiment_id),
+                fields=[
                     ("Runs", str(len(experiment.runs))),
-                    ("Environments", str(len(envs)) if envs else ""),
-                    ("Latest run", html(_timestamp(latest.start_time if latest else None))),
-                ]
+                    ("Latest run", _timestamp(latest.start_time if latest else None)),
+                ],
+                tags=envs,
+                footnote=str(experiment.store_path),
             )
-            + (f'<p class="pills">{pills}</p>' if pills else "")
-            + f'<p class="path"><code>{html(experiment.store_path)}</code></p>'
-            "</a>"
         )
     served = ", ".join(f"<code>{html(root)}</code>" for root in roots)
-    body = (
+    return layout(
+        "Experiments",
+        [("Experiments", None)],
         f'<div class="page-head"><h1>Experiments</h1>{_layout_toggle()}</div>'
         f'<p class="note">{len(experiments)} experiment(s), read from the MLflow stores '
         f"under {served}.</p>"
+        + _listing(items, "No MLflow store here holds a finished run.", "Environments"),
     )
-    if not cards:
-        body += '<p class="empty">No MLflow store here holds a finished run.</p>'
-    else:
-        body += f'<div class="cards">{"".join(cards)}</div>'
-    return layout("Experiments", [("Experiments", None)], body)
 
 
 def experiment_page(experiment: ExperimentView) -> str:
     """One experiment's runs."""
-    cards = []
+    items = []
     for run in experiment.runs:
-        pills = " ".join(f'<span class="pill">{html(e.name)}</span>' for e in run.environments)
         episodes = sum(len(p.episodes) for e in run.environments for p in e.policies)
-        cards.append(
-            f'<a class="card" href="{html(run_url(run))}">'
-            f'<h2 class="card-title">{html(run.run_name)} {_chip(run.status)}</h2>'
-            + _stats(
-                [
-                    ("Started", html(_timestamp(run.start_time))),
-                    ("Environments", str(len(run.environments))),
-                    ("Episodes", str(episodes) if episodes else ""),
-                ]
+        items.append(
+            ListingItem(
+                title=run.run_name,
+                href=run_url(run),
+                chip=_chip(run.status),
+                fields=[
+                    ("Started", _timestamp(run.start_time)),
+                    ("Episodes", str(episodes)),
+                ],
+                tags=[e.name for e in run.environments],
+                footnote=run.run_id,
             )
-            + (f'<p class="pills">{pills}</p>' if pills else "")
-            + f'<p class="path"><code>{html(run.run_id)}</code></p>'
-            "</a>"
         )
     return layout(
         experiment.name,
         [("Experiments", "/"), (experiment.name, None)],
         f'<div class="page-head"><h1>{html(experiment.name)}</h1>{_layout_toggle()}</div>'
         f'<p class="note">{len(experiment.runs)} run(s), newest first.</p>'
-        + (f'<div class="cards">{"".join(cards)}</div>' if cards else _table([], [])),
+        + _listing(items, "This experiment has no runs the site can read.", "Environments"),
     )
 
 
@@ -237,23 +343,41 @@ def _metric_table(run: RunView, env: EnvironmentView) -> str:
     if not names:
         return '<p class="empty">This run logged no metrics for this environment.</p>'
 
+    # Two columns per planner — the estimate and its interval — rather than an
+    # interval tucked in beside the number, where it reads as part of it.
+    head = (
+        "<tr><th rowspan='2'>Metric</th>"
+        + "".join(f"<th colspan='2' class='group'>{html(p.name)}</th>" for p in env.policies)
+        + "</tr><tr>"
+        + "".join("<th>Value</th><th>Confidence interval</th>" for _ in env.policies)
+        + "</tr>"
+    )
+
     rows = []
     for name in names:
-        row = [html(name)]
+        cells = [f"<td>{html(name)}</td>"]
         for policy in env.policies:
             metrics = per_policy[policy.name]
             value = metrics.get(name)
             if value is None:
-                row.append('<span class="dim">—</span>')
+                cells.append('<td class="dim">—</td><td class="dim">—</td>')
                 continue
             low = metrics.get(name + charts.CI_LOWER_SUFFIX)
             high = metrics.get(name + charts.CI_UPPER_SUFFIX)
-            cell = f"{value:.4g}"
-            if low is not None and high is not None and high > low:
-                cell += f' <span class="dim">[{low:.3g}, {high:.3g}]</span>'
-            row.append(cell)
-        rows.append(row)
-    return _table(["Metric"] + [p.name for p in env.policies], rows)
+            interval = (
+                f"{low:.3g} – {high:.3g}"
+                if low is not None and high is not None and high > low
+                else '<span class="dim">—</span>'
+            )
+            cells.append(f'<td class="num">{value:.4g}</td><td class="num ci">{interval}</td>')
+        rows.append("<tr>" + "".join(cells) + "</tr>")
+
+    return (
+        '<div class="scroll"><table class="metrics">'
+        f"<thead>{head}</thead><tbody>{''.join(rows)}</tbody></table></div>"
+        '<p class="note">Intervals are the ones the run computed, at whatever '
+        "confidence level it was configured with; a dash means it reported none.</p>"
+    )
 
 
 def _comparison_charts(run: RunView, env: EnvironmentView, limit: int = 6) -> str:
@@ -310,29 +434,36 @@ def _policy_cards(run: RunView, env: EnvironmentView) -> str:
     Returns:
         HTML for the card grid.
     """
-    cards = []
+    # The figures worth a card, when the run logged them. A run that logs none
+    # of these — a new environment with metrics of its own — falls back to the
+    # first few it did log, so the card is never empty for want of a name this
+    # module happens to know.
+    headline = [
+        ("average_return", "Avg. return", "{:.3g}"),
+        ("goal_reaching_rate", "Goal rate", "{:.0%}"),
+        ("average_actual_num_steps", "Avg. steps", "{:.3g}"),
+    ]
+
+    items = []
     for policy in env.policies:
         metrics = run.metrics_for(env.name, policy.name)
-
-        def figure(key: str, fmt: str = "{:.3g}") -> str:
-            value = metrics.get(key)
-            return fmt.format(value) if value is not None else ""
-
-        cards.append(
-            f'<a class="card" href="{html(policy_url(run, env.name, policy.name))}">'
-            f'<h3 class="card-title">{html(policy.name)}</h3>'
-            f'<p class="note">{html(policy.policy_type or "planner")}</p>'
-            + _stats(
-                [
-                    ("Avg. return", figure("average_return")),
-                    ("Goal rate", figure("goal_reaching_rate", "{:.0%}")),
-                    ("Avg. steps", figure("average_actual_num_steps")),
-                    ("Episodes", str(len(policy.episodes)) if policy.episodes else ""),
-                ]
+        shown = [
+            (label, fmt.format(metrics[key])) for key, label, fmt in headline if key in metrics
+        ]
+        if not shown:
+            shown = [
+                (name.replace("_", " ").capitalize(), f"{metrics[name]:.3g}")
+                for name in charts.base_metric_names(metrics)[:3]
+            ]
+        items.append(
+            ListingItem(
+                title=policy.name,
+                href=policy_url(run, env.name, policy.name),
+                subtitle=policy.policy_type or "planner",
+                fields=shown + [("Episodes", str(len(policy.episodes)))],
             )
-            + "</a>"
         )
-    return f'<div class="cards">{"".join(cards)}</div>' if cards else ""
+    return _listing(items, "This run logged no planners for this environment.")
 
 
 def run_page(run: RunView) -> str:
@@ -359,7 +490,8 @@ def run_page(run: RunView) -> str:
             (run.experiment_name, _url("experiment", run.store_index, run.experiment_id)),
             (run.run_name, None),
         ],
-        f"<h1>{html(run.run_name)} {_chip(run.status)}</h1>"
+        f'<div class="page-head"><h1>{html(run.run_name)} {_chip(run.status)}</h1>'
+        f"{_layout_toggle()}</div>"
         f'<p class="note">Started {html(_timestamp(run.start_time))} · '
         f"run <code>{html(run.run_id)}</code></p>"
         + "".join(sections)
@@ -383,7 +515,7 @@ def environment_page(run: RunView, env: EnvironmentView) -> str:
             (run.run_name, run_url(run)),
             (env.name, None),
         ],
-        f"<h1>{html(env.name)}</h1>"
+        f'<div class="page-head"><h1>{html(env.name)}</h1>{_layout_toggle()}</div>'
         f'<p class="note">{len(env.policies)} planner(s) in run '
         f'<a href="{html(run_url(run))}">{html(run.run_name)}</a>.</p>'
         + _policy_cards(run, env)
@@ -393,33 +525,61 @@ def environment_page(run: RunView, env: EnvironmentView) -> str:
     )
 
 
+def _thumbnail(
+    run: RunView,
+    env: str,
+    policy: str,
+    index: int,
+    artifacts: Sequence[EpisodeArtifact],
+) -> str:
+    """The picture that stands for one episode in a list of them.
+
+    Chosen by artifact kind, like the player is, so an environment the site has
+    never heard of gets a thumbnail on the day it lands: a drawn recording if
+    it made one, else the first frame of its video, else a plain placeholder.
+    A trace is never the thumbnail — drawing it needs the 3D viewer, and a
+    grid of viewers is a grid of WebGL contexts.
+
+    Args:
+        run: The run the episode belongs to.
+        env: Environment name.
+        policy: Planner name.
+        index: Episode index, for the alternative text.
+        artifacts: That episode's artifacts.
+
+    Returns:
+        HTML for the thumbnail.
+    """
+    for kind in (ArtifactKind.GIF, ArtifactKind.PLOT, ArtifactKind.VIDEO):
+        artifact = next((a for a in artifacts if a.kind is kind), None)
+        if artifact is None:
+            continue
+        src = artifact_url(run, f"{env}/{policy}/{artifact.relative_path}")
+        if kind is ArtifactKind.VIDEO:
+            # metadata alone is enough for the first frame, and muted+playsinline
+            # keeps a grid of them from ever making noise or going fullscreen.
+            return f'<video class="thumb" src="{html(src)}" preload="metadata" muted playsinline></video>'
+        return (
+            f'<img loading="lazy" class="thumb" '
+            f'alt="{html(view_label(artifact))} of episode {index}" src="{html(src)}">'
+        )
+    return '<div class="thumb thumb-empty"><span>No recording</span></div>'
+
+
 def policy_page(run: RunView, env: EnvironmentView, policy: PolicyView) -> str:
     """One planner on one environment: every episode it ran."""
-    cards = []
+    items = []
     for index, artifacts in policy.episodes.items():
         summary = next((a.summary for a in artifacts if a.summary), None)
-        # The recorded path is the thumbnail when the episode drew one: a
-        # grid of paths says more about a planner at a glance than a grid of
-        # identical first frames would.
-        thumb_artifact = next(
-            (a for a in artifacts if a.kind in (ArtifactKind.GIF, ArtifactKind.PLOT)), None
-        )
-        thumb = (
-            f'<img loading="lazy" class="thumb" alt="Recorded path of episode {index}" '
-            f'src="{html(artifact_url(run, f"{env.name}/{policy.name}/{thumb_artifact.relative_path}"))}">'
-            if thumb_artifact
-            else '<div class="thumb thumb-empty"><span>No recorded path</span></div>'
-        )
         outcome = ""
         if summary and summary.reach_terminal_state is not None:
             outcome = "terminal" if summary.reach_terminal_state else "out of steps"
-        cards.append(
-            f'<a class="card episode-card" '
-            f'href="{html(episode_url(run, env.name, policy.name, index))}">'
-            f"{thumb}"
-            f'<h3 class="card-title">Episode {index}</h3>'
-            + _stats(
-                [
+        items.append(
+            ListingItem(
+                title=f"Episode {index}",
+                href=episode_url(run, env.name, policy.name, index),
+                thumb=_thumbnail(run, env.name, policy.name, index, artifacts),
+                fields=[
                     (
                         "Return",
                         f"{summary.discounted_return:.2f}"
@@ -427,10 +587,10 @@ def policy_page(run: RunView, env: EnvironmentView, policy: PolicyView) -> str:
                         else "",
                     ),
                     ("Steps", str(summary.num_steps) if summary and summary.num_steps else ""),
-                    ("Ended", html(outcome)),
-                ]
+                    ("Ended", outcome),
+                ],
+                tags=sorted({view_label(a) for a in artifacts}),
             )
-            + "</a>"
         )
     plots = "".join(
         f'<figure><img src="{html(artifact_url(run, f"{env.name}/{policy.name}/{a.relative_path}"))}" '
@@ -450,12 +610,8 @@ def policy_page(run: RunView, env: EnvironmentView, policy: PolicyView) -> str:
         f'<div class="page-head"><h1>{html(policy.name)}</h1>{_layout_toggle()}</div>'
         f'<p class="note">{len(policy.episodes)} episode(s) on '
         f'<a href="{html(env_url(run, env.name))}">{html(env.name)}</a> · '
-        "each card shows that episode's recorded path.</p>"
-        + (
-            f'<div class="cards episodes">{"".join(cards)}</div>'
-            if cards
-            else '<p class="empty">This planner produced no episode artifacts.</p>'
-        )
+        "each card shows that episode's own recording.</p>"
+        + _listing(items, "This planner produced no episode artifacts.", "Recordings")
         + (f'<h2>Plots</h2><section class="gallery">{plots}</section>' if plots else ""),
     )
 

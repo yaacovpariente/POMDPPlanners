@@ -11,10 +11,11 @@
   "use strict";
 
   var KEY = "pomdp-results-layout";
+  var MODES = { cards: 1, list: 1, table: 1 };
   var buttons = Array.prototype.slice.call(document.querySelectorAll("[data-layout]"));
   if (!buttons.length) return;
 
-  var grids = Array.prototype.slice.call(document.querySelectorAll(".cards"));
+  var listings = Array.prototype.slice.call(document.querySelectorAll(".listing"));
 
   function read() {
     try {
@@ -33,8 +34,14 @@
   }
 
   function apply(mode) {
-    grids.forEach(function (grid) {
-      grid.classList.toggle("as-list", mode === "list");
+    listings.forEach(function (listing) {
+      var cards = listing.querySelector(".cards");
+      var table = listing.querySelector(".table-view");
+      if (cards) {
+        cards.hidden = mode === "table";
+        cards.classList.toggle("as-list", mode === "list");
+      }
+      if (table) table.hidden = mode !== "table";
     });
     buttons.forEach(function (button) {
       button.setAttribute("aria-pressed", button.dataset.layout === mode ? "true" : "false");
@@ -43,10 +50,12 @@
 
   buttons.forEach(function (button) {
     button.addEventListener("click", function () {
-      write(button.dataset.layout);
-      apply(button.dataset.layout);
+      var mode = MODES[button.dataset.layout] ? button.dataset.layout : "cards";
+      write(mode);
+      apply(mode);
     });
   });
 
-  apply(read() === "list" ? "list" : "cards");
+  var stored = read();
+  apply(MODES[stored] ? stored : "cards");
 })();
