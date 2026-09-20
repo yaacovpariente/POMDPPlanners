@@ -916,10 +916,12 @@
           action: hasAction
             ? String(action) + (Number(action) === 1 ? " right" : " left")
             : "—",
+          /* CartPole has no y. The cart runs on one axis and the quantity the
+             episode turns on is the pole angle, so the readout names both
+             rather than passing the angle off as a second coordinate. */
+          pos: "x " + sample.x.toFixed(2) + " m  θ " +
+            (sample.theta * 180 / Math.PI).toFixed(1) + "°",
           x: sample.x,
-          // The player's second readout is labelled "y". CartPole has no y:
-          // this is the pole angle in degrees, which is the state component
-          // the episode actually turns on.
           y: sample.theta * 180 / Math.PI,
           reward: step.reward,
           ret: running[sample.index],
