@@ -17,7 +17,7 @@ from POMDPPlanners.core.belief import (
 )
 from POMDPPlanners.core.simulation import StepData
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-from POMDPPlanners.environments.tiger_visualizer import (
+from POMDPPlanners.environments.tiger_visualizer.tiger_visualizer import (
     CANVAS_SIZE,
     TigerVisualizer,
     _background,
@@ -170,7 +170,8 @@ def test_cache_loads_art_once_and_frames_do_not_mutate_background(tmp_path):
     _palette.cache_clear()
     original_open = Image.open
     with patch(
-        "POMDPPlanners.environments.tiger_visualizer.Image.open", wraps=original_open
+        "POMDPPlanners.environments.tiger_visualizer.tiger_visualizer.Image.open",
+        wraps=original_open,
     ) as opened:
         renderer = TigerVisualizer()
         history = [step(), step()]
