@@ -40,7 +40,7 @@ from POMDPPlanners.core.distributions import DiscreteDistribution
 from POMDPPlanners.core.simulation import StepData
 from POMDPPlanners.environments.snake_pomdp.snake_belief import SnakeBelief
 from POMDPPlanners.environments.snake_pomdp.snake_pomdp import SnakeAction, SnakePOMDP
-from POMDPPlanners.environments.snake_pomdp.snake_visualizer import SnakeVisualizer
+from POMDPPlanners.environments.snake_pomdp.visualizer.snake_visualizer import SnakeVisualizer
 from POMDPPlanners.environments.battleship_pomdp.battleship_belief import BattleshipBelief
 from POMDPPlanners.environments.battleship_pomdp.battleship_pomdp import BattleshipPOMDP
 from POMDPPlanners.environments.battleship_pomdp.battleship_visualizer import (
