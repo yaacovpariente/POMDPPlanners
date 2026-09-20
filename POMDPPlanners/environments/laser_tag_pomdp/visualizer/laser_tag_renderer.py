@@ -8,7 +8,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 from POMDPPlanners.core.simulation import StepData
-from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_assets import (
+from POMDPPlanners.environments.laser_tag_pomdp.visualizer.laser_tag_assets import (
     _render_opponent_pillow,
     _render_robot_pillow,
     metal_texture,

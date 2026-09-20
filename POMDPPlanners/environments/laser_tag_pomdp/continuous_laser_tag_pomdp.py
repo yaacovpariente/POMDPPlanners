@@ -61,7 +61,7 @@ from POMDPPlanners.environments.laser_tag_pomdp import _native
 from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_utils import (
     OpponentPolicy,
 )
-from POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_visualizer import (
+from POMDPPlanners.environments.laser_tag_pomdp.visualizer.continuous_laser_tag_visualizer import (
     ContinuousLaserTagVisualizer,
 )
 from POMDPPlanners.planners.planners_utils.rollout import python_random_rollout
@@ -1102,6 +1102,34 @@ class ContinuousLaserTagPOMDP(Environment):  # pylint: disable=too-many-public-m
         )
         visualizer.create_visualization(history, cache_path)
         self.logger.info("Saved ContinuousLaserTag visualization to %s", cache_path)
+
+    def build_episode_trace(
+        self, history: List[StepData], episode_index: int, policy_name: Optional[str] = None
+    ) -> Any:
+        """Write this episode as data, beside the GIF.
+
+        Args:
+            history: List of step data from an episode.
+            episode_index: Zero-based episode index within its run.
+            policy_name: Name of the policy that produced the episode.
+
+        Returns:
+            The episode's trace, with payload kind ``laser_tag.v1``.
+        """
+        # Imported here rather than at module scope: the exporter pulls in the
+        # trace schema, and this module is imported by every run including
+        # ones that never write anything.
+        # pylint: disable-next=import-outside-toplevel
+        from POMDPPlanners.environments.laser_tag_pomdp.visualizer.trace_exporter import (
+            build_continuous_laser_tag_trace,
+        )
+
+        return build_continuous_laser_tag_trace(
+            environment=self,
+            history=history,
+            episode_index=episode_index,
+            policy_name=policy_name,
+        )
 
     # ------------------------------------------------------------------
     # Accessors used by the vectorized updater

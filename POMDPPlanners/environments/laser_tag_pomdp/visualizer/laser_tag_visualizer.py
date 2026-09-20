@@ -7,7 +7,7 @@ from typing import List, Set, Tuple
 import numpy as np
 
 from POMDPPlanners.core.simulation import StepData
-from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_renderer import (
+from POMDPPlanners.environments.laser_tag_pomdp.visualizer.laser_tag_renderer import (
     LaserTagFrameRenderer,
 )
 

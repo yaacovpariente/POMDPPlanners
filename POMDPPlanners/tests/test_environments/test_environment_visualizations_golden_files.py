@@ -96,7 +96,7 @@ from POMDPPlanners.environments.push_pomdp.push_pomdp_visualizer import (
     PushPOMDPVisualizer,
 )
 from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp import LaserTagPOMDP
-from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_visualizer import (
+from POMDPPlanners.environments.laser_tag_pomdp.visualizer.laser_tag_visualizer import (
     LaserTagVisualizer,
 )
 from POMDPPlanners.environments.laser_tag_pomdp import (
@@ -105,7 +105,7 @@ from POMDPPlanners.environments.laser_tag_pomdp import (
 from POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_pomdp import (
     ContinuousLaserTagPOMDP,
 )
-from POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_visualizer import (
+from POMDPPlanners.environments.laser_tag_pomdp.visualizer.continuous_laser_tag_visualizer import (
     ContinuousLaserTagVisualizer,
 )
 from POMDPPlanners.environments.push_pomdp import _native as _push_native
