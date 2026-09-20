@@ -41,7 +41,7 @@ from POMDPPlanners.core.environment import (
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
 from POMDPPlanners.core.simulation.step_info_metrics import require_non_empty_histories
 from POMDPPlanners.environments.safety_ant_velocity_pomdp import _native
-from POMDPPlanners.environments.safety_ant_velocity_pomdp.visualizer import (
+from POMDPPlanners.environments.safety_ant_velocity_pomdp.safety_ant_velocity_visualization import (
     SafeAntVelocityVisualizer,
 )
 from POMDPPlanners.utils.statistics_utils import confidence_interval
@@ -323,7 +323,7 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
         # trace schema, and this module is imported by every Safety Ant run
         # including ones that never write anything.
         # pylint: disable-next=import-outside-toplevel
-        from POMDPPlanners.environments.safety_ant_velocity_pomdp.visualizer.trace_exporter import (
+        from POMDPPlanners.environments.safety_ant_velocity_pomdp.safety_ant_velocity_visualization.trace_exporter import (
             build_safety_ant_velocity_trace,
         )
 

@@ -29,7 +29,7 @@ from POMDPPlanners.environments.capture_the_flag_pomdp import (
     CaptureTheFlagPOMDP,
     decode_joint_action,
 )
-from POMDPPlanners.environments.capture_the_flag_pomdp.visualizer import (
+from POMDPPlanners.environments.capture_the_flag_pomdp.capture_the_flag_visualization import (
     CAPTURE_THE_FLAG_PAYLOAD_KIND,
     CaptureTheFlagVisualizer,
     build_capture_the_flag_trace,

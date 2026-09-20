@@ -12,7 +12,7 @@ from PIL import Image, ImageDraw, GifImagePlugin
 import pytest
 
 from POMDPPlanners.core.simulation import StepData
-from POMDPPlanners.environments.laser_tag_pomdp.visualizer.continuous_laser_tag_visualizer import (
+from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_visualization.continuous_laser_tag_visualizer import (
     ContinuousLaserTagVisualizer,
     CANVAS_SIZE,
     LASER_COLOR,
@@ -198,7 +198,7 @@ def test_sidebar_never_covers_upper_right_actor(visualizer):
 
 
 def test_actor_assets_have_real_transparency():
-    from POMDPPlanners.environments.laser_tag_pomdp.visualizer.laser_tag_assets import _sheet
+    from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_visualization.laser_tag_assets import _sheet
 
     sheet = _sheet()
     assert sheet.getchannel("A").getextrema() == (0, 255)

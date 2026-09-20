@@ -22,7 +22,7 @@ from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.simulation import StepData
 from POMDPPlanners.core.simulation.traces import EpisodeTrace
 from POMDPPlanners.environments.safety_ant_velocity_pomdp import SafeAntVelocityPOMDP
-from POMDPPlanners.environments.safety_ant_velocity_pomdp.visualizer.trace_exporter import (
+from POMDPPlanners.environments.safety_ant_velocity_pomdp.safety_ant_velocity_visualization.trace_exporter import (
     SAFETY_ANT_VELOCITY_PAYLOAD_KIND,
     build_safety_ant_velocity_trace,
 )

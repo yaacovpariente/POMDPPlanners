@@ -17,7 +17,7 @@ from POMDPPlanners.core.environment import (
 )
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
 from POMDPPlanners.utils.numba_kernels import any_point_within_radius_kernel
-from POMDPPlanners.environments.light_dark_pomdp.visualizer.light_dark_visualizer import (
+from POMDPPlanners.environments.light_dark_pomdp.light_dark_visualization.light_dark_visualizer import (
     LightDarkPOMDPVisualizer,
 )
 from POMDPPlanners.utils.config_to_id import config_to_id
@@ -360,7 +360,7 @@ class BaseLightDarkPOMDP(Environment, ABC):
         # trace schema, and this module is imported by every Light-Dark run
         # including ones that never write anything.
         # pylint: disable-next=import-outside-toplevel
-        from POMDPPlanners.environments.light_dark_pomdp.visualizer.trace_exporter import (
+        from POMDPPlanners.environments.light_dark_pomdp.light_dark_visualization.trace_exporter import (
             build_light_dark_trace,
         )
 

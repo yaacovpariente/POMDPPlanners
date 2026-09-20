@@ -31,7 +31,7 @@ from POMDPPlanners.environments.snake_pomdp.snake_vectorized_belief import (
     SnakeVectorizedWeightedParticleBelief,
     create_snake_belief,
 )
-from POMDPPlanners.environments.snake_pomdp.visualizer import SnakeVisualizer
+from POMDPPlanners.environments.snake_pomdp.snake_visualization import SnakeVisualizer
 
 __all__ = [
     "DIRECTIONS",

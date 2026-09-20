@@ -920,7 +920,7 @@ class BaseMazePOMDP(Environment):
         # above: the exporter pulls in the trace schema, and this module is
         # imported by every Maze run including ones that write nothing.
         # pylint: disable-next=import-outside-toplevel
-        from POMDPPlanners.environments.maze_pomdp.visualizer.trace_exporter import (
+        from POMDPPlanners.environments.maze_pomdp.maze_visualization.trace_exporter import (
             build_maze_trace,
         )
 

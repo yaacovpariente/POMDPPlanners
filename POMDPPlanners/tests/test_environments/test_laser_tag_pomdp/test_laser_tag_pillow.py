@@ -12,14 +12,14 @@ from PIL import GifImagePlugin, Image, ImageChops, ImageDraw
 import pytest
 
 from POMDPPlanners.core.simulation import StepData
-from POMDPPlanners.environments.laser_tag_pomdp.visualizer.laser_tag_renderer import (
+from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_visualization.laser_tag_renderer import (
     CANVAS_SIZE,
     LASER_COLOR,
     LaserTagFrameRenderer,
     OPPONENT_BELIEF_COLOR,
     ROBOT_BELIEF_COLOR,
 )
-from POMDPPlanners.environments.laser_tag_pomdp.visualizer.laser_tag_visualizer import (
+from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_visualization.laser_tag_visualizer import (
     LaserTagVisualizer,
 )
 

@@ -34,7 +34,7 @@ from POMDPPlanners.environments.multiagent_firefighting_pomdp import (
     WindStrength,
     create_firefighting_state,
 )
-from POMDPPlanners.environments.multiagent_firefighting_pomdp.visualizer.trace_exporter import (
+from POMDPPlanners.environments.multiagent_firefighting_pomdp.multiagent_firefighting_visualization.trace_exporter import (
     MULTIAGENT_FIREFIGHTING_PAYLOAD_KIND,
     build_multiagent_firefighting_trace,
 )

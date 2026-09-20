@@ -1487,7 +1487,7 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
             actions: List of actions taken at each step.
             cache_path: Path where the GIF should be saved.
         """
-        from POMDPPlanners.environments.pacman_pomdp.visualizer.pacman_visualizer import (
+        from POMDPPlanners.environments.pacman_pomdp.pacman_visualization.pacman_visualizer import (
             PacManVisualizer,
         )  # pylint: disable=import-outside-toplevel
 
@@ -1504,7 +1504,7 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
             output_dir: Directory into which the ``.gif`` visualization is written
             episode_index: Zero-based episode index, used to name the file
         """
-        from POMDPPlanners.environments.pacman_pomdp.visualizer.pacman_visualizer import (
+        from POMDPPlanners.environments.pacman_pomdp.pacman_visualization.pacman_visualizer import (
             PacManVisualizer,
         )  # pylint: disable=import-outside-toplevel
 
@@ -1529,7 +1529,7 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
         # trace schema, and this module is imported by every PacMan run
         # including ones that never write anything.
         # pylint: disable-next=import-outside-toplevel
-        from POMDPPlanners.environments.pacman_pomdp.visualizer.trace_exporter import (
+        from POMDPPlanners.environments.pacman_pomdp.pacman_visualization.trace_exporter import (
             build_pacman_trace,
         )
 

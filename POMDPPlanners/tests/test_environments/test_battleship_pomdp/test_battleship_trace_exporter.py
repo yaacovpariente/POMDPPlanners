@@ -30,7 +30,7 @@ from POMDPPlanners.environments.battleship_pomdp import (
     BattleshipPOMDP,
     BattleshipVisualizer,
 )
-from POMDPPlanners.environments.battleship_pomdp.visualizer.trace_exporter import (
+from POMDPPlanners.environments.battleship_pomdp.battleship_visualization.trace_exporter import (
     BATTLESHIP_PAYLOAD_KIND,
     MARGINAL_SOURCE_EXACT,
     MARGINAL_SOURCE_PARTICLES,

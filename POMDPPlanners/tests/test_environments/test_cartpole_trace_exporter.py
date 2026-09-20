@@ -25,7 +25,7 @@ from POMDPPlanners.environments.cartpole_pomdp.cartpole_pomdp_gaussian_beliefs i
     GaussianBeliefUpdaterType,
     create_cartpole_gaussian_belief,
 )
-from POMDPPlanners.environments.cartpole_pomdp.visualizer.trace_exporter import (
+from POMDPPlanners.environments.cartpole_pomdp.cartpole_visualization.trace_exporter import (
     CARTPOLE_PAYLOAD_KIND,
     build_cartpole_trace,
 )

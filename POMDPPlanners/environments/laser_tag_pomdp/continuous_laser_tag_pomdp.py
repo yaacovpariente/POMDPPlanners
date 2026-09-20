@@ -61,7 +61,7 @@ from POMDPPlanners.environments.laser_tag_pomdp import _native
 from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_utils import (
     OpponentPolicy,
 )
-from POMDPPlanners.environments.laser_tag_pomdp.visualizer.continuous_laser_tag_visualizer import (
+from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_visualization.continuous_laser_tag_visualizer import (
     ContinuousLaserTagVisualizer,
 )
 from POMDPPlanners.planners.planners_utils.rollout import python_random_rollout
@@ -1126,7 +1126,7 @@ class ContinuousLaserTagPOMDP(Environment):  # pylint: disable=too-many-public-m
         # trace schema, and this module is imported by every run including
         # ones that never write anything.
         # pylint: disable-next=import-outside-toplevel
-        from POMDPPlanners.environments.laser_tag_pomdp.visualizer.trace_exporter import (
+        from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_visualization.trace_exporter import (
             build_continuous_laser_tag_trace,
         )
 

@@ -119,7 +119,7 @@ from .chicheck_invaders_vectorized_belief import (
     ChicheckInvadersVectorizedUpdater,
     create_chicheck_invaders_vectorized_belief,
 )
-from .visualizer import (
+from .chicheck_invaders_visualization import (
     CHICHECK_INVADERS_PAYLOAD_KIND,
     ChicheckInvadersVisualizer,
     build_chicheck_invaders_trace,

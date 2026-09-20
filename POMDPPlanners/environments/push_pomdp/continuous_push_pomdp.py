@@ -59,7 +59,7 @@ from POMDPPlanners.environments.push_pomdp.push_pomdp_utils.push_reward_models i
 )
 from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
 from POMDPPlanners.utils.statistics_utils import confidence_interval
-from POMDPPlanners.environments.push_pomdp.visualizer.continuous_push_pomdp_visualizer import (  # pylint: disable=import-outside-toplevel
+from POMDPPlanners.environments.push_pomdp.push_visualization.continuous_push_pomdp_visualizer import (  # pylint: disable=import-outside-toplevel
     ContinuousPushPOMDPVisualizer,
 )
 
@@ -901,7 +901,7 @@ class ContinuousPushPOMDP(Environment):  # pylint: disable=too-many-public-metho
         # trace schema, and this module is imported by every Push run including
         # ones that never write anything.
         # pylint: disable-next=import-outside-toplevel
-        from POMDPPlanners.environments.push_pomdp.visualizer.trace_exporter import (
+        from POMDPPlanners.environments.push_pomdp.push_visualization.trace_exporter import (
             build_push_trace,
         )
 

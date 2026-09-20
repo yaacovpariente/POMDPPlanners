@@ -9,14 +9,14 @@ from typing import Any, cast
 import numpy as np
 from PIL import GifImagePlugin, Image
 import pytest
-from POMDPPlanners.environments.push_pomdp.visualizer.push_visualization_assets import paste_obstacle
+from POMDPPlanners.environments.push_pomdp.push_visualization.push_visualization_assets import paste_obstacle
 
 from POMDPPlanners.core.simulation import StepData
-from POMDPPlanners.environments.push_pomdp.visualizer.continuous_push_pomdp_visualizer import (
+from POMDPPlanners.environments.push_pomdp.push_visualization.continuous_push_pomdp_visualizer import (
     ContinuousPushPOMDPVisualizer,
 )
-from POMDPPlanners.environments.push_pomdp.visualizer.push_pomdp_visualizer import PushPOMDPVisualizer
-from POMDPPlanners.environments.push_pomdp.visualizer.push_visualization_utils import (
+from POMDPPlanners.environments.push_pomdp.push_visualization.push_pomdp_visualizer import PushPOMDPVisualizer
+from POMDPPlanners.environments.push_pomdp.push_visualization.push_visualization_utils import (
     ACTION,
     CANVAS_SIZE,
     COLLISION_BOX,

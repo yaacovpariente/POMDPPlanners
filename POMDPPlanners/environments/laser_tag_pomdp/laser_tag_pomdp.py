@@ -56,7 +56,7 @@ from POMDPPlanners.environments.environment_utils.dangerous_areas_kernels import
 from POMDPPlanners.planners.planners_utils.rollout import python_random_rollout
 from POMDPPlanners.utils.statistics_utils import confidence_interval
 # pylint: disable-next=import-outside-toplevel
-from POMDPPlanners.environments.laser_tag_pomdp.visualizer.laser_tag_visualizer import (
+from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_visualization.laser_tag_visualizer import (
     LaserTagVisualizer,
 )
 from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_utils import (
@@ -1625,7 +1625,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-pub
         # trace schema, and this module is imported by every LaserTag run
         # including ones that never write anything.
         # pylint: disable-next=import-outside-toplevel
-        from POMDPPlanners.environments.laser_tag_pomdp.visualizer.trace_exporter import (
+        from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_visualization.trace_exporter import (
             build_laser_tag_trace,
         )
 

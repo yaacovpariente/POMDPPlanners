@@ -30,7 +30,7 @@ from POMDPPlanners.environments.battleship_pomdp import (
     BattleshipBelief,
     BattleshipPOMDP,
 )
-from POMDPPlanners.environments.battleship_pomdp.visualizer.battleship_visualizer import (
+from POMDPPlanners.environments.battleship_pomdp.battleship_visualization.battleship_visualizer import (
     _HIT,
     _MISS,
     _UNKNOWN,

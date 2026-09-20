@@ -54,7 +54,7 @@ from POMDPPlanners.environments.push_pomdp.push_pomdp_utils.push_reward_models i
     DiscretePushRewardModel,
     RewardModelType,
 )
-from POMDPPlanners.environments.push_pomdp.visualizer.push_pomdp_visualizer import (
+from POMDPPlanners.environments.push_pomdp.push_visualization.push_pomdp_visualizer import (
     PushPOMDPVisualizer,
 )
 from POMDPPlanners.utils.statistics_utils import confidence_interval
@@ -979,7 +979,7 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
         # trace schema, and this module is imported by every Push run including
         # ones that never write anything.
         # pylint: disable-next=import-outside-toplevel
-        from POMDPPlanners.environments.push_pomdp.visualizer.trace_exporter import (
+        from POMDPPlanners.environments.push_pomdp.push_visualization.trace_exporter import (
             build_push_trace,
         )
 

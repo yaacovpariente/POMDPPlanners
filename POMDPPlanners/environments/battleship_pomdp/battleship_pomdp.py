@@ -654,7 +654,7 @@ class BattleshipPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
         """
         # Imported lazily: matplotlib is heavy and every parallel worker imports
         # this module, while almost none of them render anything.
-        from POMDPPlanners.environments.battleship_pomdp.visualizer.battleship_visualizer import (  # pylint: disable=import-outside-toplevel
+        from POMDPPlanners.environments.battleship_pomdp.battleship_visualization.battleship_visualizer import (  # pylint: disable=import-outside-toplevel
             BattleshipVisualizer,
         )
 
@@ -678,7 +678,7 @@ class BattleshipPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
         # trace schema, and this module is imported by every Battleship run
         # including ones that never write anything.
         # pylint: disable-next=import-outside-toplevel
-        from POMDPPlanners.environments.battleship_pomdp.visualizer.trace_exporter import (
+        from POMDPPlanners.environments.battleship_pomdp.battleship_visualization.trace_exporter import (
             build_battleship_trace,
         )
 

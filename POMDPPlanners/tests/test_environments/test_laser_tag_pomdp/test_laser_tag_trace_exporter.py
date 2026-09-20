@@ -41,11 +41,11 @@ from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp import (
     _LASER_DIRECTIONS,
     LaserTagPOMDP,
 )
-from POMDPPlanners.environments.laser_tag_pomdp.visualizer import (
+from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_visualization import (
     ContinuousLaserTagVisualizer,
     LaserTagVisualizer,
 )
-from POMDPPlanners.environments.laser_tag_pomdp.visualizer.trace_exporter import (
+from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_visualization.trace_exporter import (
     LASER_TAG_PAYLOAD_KIND,
     build_continuous_laser_tag_trace,
     build_laser_tag_trace,

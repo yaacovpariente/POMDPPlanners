@@ -26,7 +26,7 @@ from POMDPPlanners.core.simulation.traces import (
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
     ContinuousLightDarkPOMDP,
 )
-from POMDPPlanners.environments.light_dark_pomdp.visualizer.trace_exporter import (
+from POMDPPlanners.environments.light_dark_pomdp.light_dark_visualization.trace_exporter import (
     LIGHT_DARK_PAYLOAD_KIND,
     build_light_dark_trace,
 )

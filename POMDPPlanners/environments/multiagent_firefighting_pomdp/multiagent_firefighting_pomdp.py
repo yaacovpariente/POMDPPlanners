@@ -1503,7 +1503,7 @@ class MultiAgentFirefightingPOMDP(DiscreteActionsEnvironment):
         # almost none of them render anything, so the renderer's palette
         # tables and fonts stay out of a planning run's memory.
         # pylint: disable-next=import-outside-toplevel
-        from POMDPPlanners.environments.multiagent_firefighting_pomdp.visualizer.multiagent_firefighting_visualizer import (  # noqa: E501
+        from POMDPPlanners.environments.multiagent_firefighting_pomdp.multiagent_firefighting_visualization.multiagent_firefighting_visualizer import (  # noqa: E501
             MultiAgentFirefightingVisualizer,
         )
 
@@ -1529,7 +1529,7 @@ class MultiAgentFirefightingPOMDP(DiscreteActionsEnvironment):
         # is imported by every worker of every run, almost none of which write
         # anything.
         # pylint: disable-next=import-outside-toplevel
-        from POMDPPlanners.environments.multiagent_firefighting_pomdp.visualizer.trace_exporter import (  # noqa: E501
+        from POMDPPlanners.environments.multiagent_firefighting_pomdp.multiagent_firefighting_visualization.trace_exporter import (  # noqa: E501
             build_multiagent_firefighting_trace,
         )
 

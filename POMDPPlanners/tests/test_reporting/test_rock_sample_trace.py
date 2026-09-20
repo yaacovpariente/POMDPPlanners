@@ -31,7 +31,7 @@ from POMDPPlanners.environments.rock_sample_pomdp import RockSamplePOMDP
 from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp import (
     create_rock_sample_state,
 )
-from POMDPPlanners.environments.rock_sample_pomdp.visualizer import (
+from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_visualization import (
     ROCK_SAMPLE_PAYLOAD_KIND,
     RockSampleVisualizer,
     build_rock_sample_trace,

@@ -36,7 +36,7 @@ from POMDPPlanners.environments.maze_pomdp.maze_pomdp import (
     create_maze_state,
 )
 from POMDPPlanners.environments.maze_pomdp.maze_visualizer import MazeVisualizer
-from POMDPPlanners.environments.maze_pomdp.visualizer.trace_exporter import (
+from POMDPPlanners.environments.maze_pomdp.maze_visualization.trace_exporter import (
     MAZE_PAYLOAD_KIND,
     build_maze_trace,
 )

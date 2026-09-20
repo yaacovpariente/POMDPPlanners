@@ -380,7 +380,7 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
         self, history: List[StepData], output_dir: Path, episode_index: int
     ) -> None:
         """Save recorded states and outcomes without stepping the environment."""
-        from POMDPPlanners.environments.cartpole_pomdp.visualizer.cartpole_visualizer import (
+        from POMDPPlanners.environments.cartpole_pomdp.cartpole_visualization.cartpole_visualizer import (
             CartPoleVisualizer,
         )
 
@@ -403,7 +403,7 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
         # trace schema, and this module is imported by every CartPole run
         # including ones that never write anything.
         # pylint: disable-next=import-outside-toplevel
-        from POMDPPlanners.environments.cartpole_pomdp.visualizer.trace_exporter import (
+        from POMDPPlanners.environments.cartpole_pomdp.cartpole_visualization.trace_exporter import (
             build_cartpole_trace,
         )
 

@@ -1393,7 +1393,7 @@ def test_visualizer_preserves_scene_elements_and_safety_events(pomdp, tmp_path: 
 @pytest.mark.parametrize("end_position", [(0.0, 9.0), (9.0, 0.0)])
 def test_visualizer_labels_follow_wide_and_tall_trajectories(pomdp, monkeypatch, end_position):
     """Aspect changes keep captions beside the axes and the full banner on canvas."""
-    from POMDPPlanners.environments.safety_ant_velocity_pomdp.visualizer import (
+    from POMDPPlanners.environments.safety_ant_velocity_pomdp.safety_ant_velocity_visualization import (
         safety_ant_velocity_visualizer as renderer,
     )
 

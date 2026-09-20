@@ -1027,7 +1027,7 @@ class OccupancyGridMappingPOMDP(DiscreteActionsEnvironment):
         # almost none of them render anything, so the renderer's textures,
         # sprites and palette tables stay out of a planning run's memory.
         # pylint: disable-next=import-outside-toplevel
-        from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.visualizer.occupancy_grid_mapping_visualizer import (  # noqa: E501
+        from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.occupancy_grid_mapping_visualization.occupancy_grid_mapping_visualizer import (  # noqa: E501
             OccupancyGridMappingVisualizer,
         )
 
@@ -1051,7 +1051,7 @@ class OccupancyGridMappingPOMDP(DiscreteActionsEnvironment):
         # ``cache_visualization`` gives: the exporter reaches the renderer's
         # package, and a planning run that writes nothing should not pay for it.
         # pylint: disable-next=import-outside-toplevel
-        from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.visualizer.trace_exporter import (  # noqa: E501
+        from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.occupancy_grid_mapping_visualization.trace_exporter import (  # noqa: E501
             build_occupancy_grid_mapping_trace,
         )
 

@@ -29,12 +29,12 @@ import pytest
 
 from POMDPPlanners.core.simulation.belief_payloads import belief_to_payload
 from POMDPPlanners.core.simulation.traces import EpisodeTrace
-from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.visualizer import (
+from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.occupancy_grid_mapping_visualization import (
     OCCUPANCY_GRID_MAPPING_PAYLOAD_KIND,
     OccupancyGridMappingVisualizer,
     build_occupancy_grid_mapping_trace,
 )
-from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.visualizer.trace_exporter import (
+from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.occupancy_grid_mapping_visualization.trace_exporter import (
     MAX_TRACE_PARTICLES,
 )
 from POMDPPlanners.tests.test_environments.test_environment_visualizations_golden_files import (

@@ -1410,7 +1410,7 @@ class ChicheckInvadersPOMDP(DiscreteActionsEnvironment):
         # ``__init__`` imports the visualizer eagerly, so any worker that
         # imports the environment by its package name already paid for Pillow.
         # pylint: disable-next=import-outside-toplevel
-        from POMDPPlanners.environments.chicheck_invaders_pomdp.visualizer import (
+        from POMDPPlanners.environments.chicheck_invaders_pomdp.chicheck_invaders_visualization import (
             ChicheckInvadersVisualizer,
         )
 
@@ -1434,7 +1434,7 @@ class ChicheckInvadersPOMDP(DiscreteActionsEnvironment):
         # renderer above: the exporter pulls in the trace schema, and most runs
         # of this environment never write one.
         # pylint: disable-next=import-outside-toplevel
-        from POMDPPlanners.environments.chicheck_invaders_pomdp.visualizer.trace_exporter import (
+        from POMDPPlanners.environments.chicheck_invaders_pomdp.chicheck_invaders_visualization.trace_exporter import (
             build_chicheck_invaders_trace,
         )
 

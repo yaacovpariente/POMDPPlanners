@@ -1272,7 +1272,7 @@ class SnakePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public
         # Imported lazily: matplotlib is heavy and every parallel worker imports
         # this module, while almost none of them render anything.
         # pylint: disable-next=import-outside-toplevel
-        from POMDPPlanners.environments.snake_pomdp.visualizer.snake_visualizer import (
+        from POMDPPlanners.environments.snake_pomdp.snake_visualization.snake_visualizer import (
             SnakeVisualizer,
         )
 
@@ -1296,7 +1296,7 @@ class SnakePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public
         # trace schema, and this module is imported by every Snake run
         # including ones that never write anything.
         # pylint: disable-next=import-outside-toplevel
-        from POMDPPlanners.environments.snake_pomdp.visualizer.trace_exporter import (
+        from POMDPPlanners.environments.snake_pomdp.snake_visualization.trace_exporter import (
             build_snake_trace,
         )
 

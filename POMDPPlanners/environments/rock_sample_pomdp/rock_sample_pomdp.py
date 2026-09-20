@@ -950,7 +950,7 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
             output_dir: Directory into which the ``.gif`` visualization is written
             episode_index: Zero-based episode index, used to name the file
         """
-        from POMDPPlanners.environments.rock_sample_pomdp.visualizer.rock_sample_visualizer import (  # pylint: disable=import-outside-toplevel
+        from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_visualization.rock_sample_visualizer import (  # pylint: disable=import-outside-toplevel
             RockSampleVisualizer,
         )
 
@@ -974,7 +974,7 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
         # Imported here rather than at module scope: the exporter pulls in the
         # trace schema, and this module is imported by every RockSample run
         # including ones that never write anything.
-        from POMDPPlanners.environments.rock_sample_pomdp.visualizer.trace_exporter import (  # pylint: disable=import-outside-toplevel
+        from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_visualization.trace_exporter import (  # pylint: disable=import-outside-toplevel
             build_rock_sample_trace,
         )
 
@@ -995,7 +995,7 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
             actions: List of actions taken at each state
             cache_path: Path where to save the animation (must end with .gif)
         """
-        from POMDPPlanners.environments.rock_sample_pomdp.visualizer.rock_sample_visualizer import (  # pylint: disable=import-outside-toplevel
+        from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_visualization.rock_sample_visualizer import (  # pylint: disable=import-outside-toplevel
             RockSampleVisualizer,
         )
 

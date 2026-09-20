@@ -13,8 +13,8 @@ import numpy as np
 from PIL import Image
 
 from POMDPPlanners.core.simulation import StepData
-import POMDPPlanners.environments.laser_tag_pomdp.visualizer.continuous_laser_tag_visualizer
-from POMDPPlanners.environments.laser_tag_pomdp.visualizer.laser_tag_visualizer import (
+import POMDPPlanners.environments.laser_tag_pomdp.laser_tag_visualization.continuous_laser_tag_visualizer
+from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_visualization.laser_tag_visualizer import (
     LaserTagVisualizer,
 )
 
@@ -40,7 +40,7 @@ def fixed_history():
 
 def load_baseline():
     continuous_spec = importlib.util.spec_from_file_location(
-        "POMDPPlanners.environments.laser_tag_pomdp.visualizer.continuous_laser_tag_visualizer",
+        "POMDPPlanners.environments.laser_tag_pomdp.laser_tag_visualization.continuous_laser_tag_visualizer",
         ROOT / "baseline_renderer.py",
     )
     continuous = importlib.util.module_from_spec(continuous_spec)

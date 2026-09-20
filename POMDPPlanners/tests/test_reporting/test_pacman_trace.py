@@ -16,8 +16,8 @@ from POMDPPlanners.core.simulation.belief_payloads import (
 )
 from POMDPPlanners.core.simulation.traces import EpisodeTrace
 from POMDPPlanners.environments.pacman_pomdp.pacman_pomdp import PacManPOMDP
-from POMDPPlanners.environments.pacman_pomdp.visualizer import PacManVisualizer
-from POMDPPlanners.environments.pacman_pomdp.visualizer.trace_exporter import (
+from POMDPPlanners.environments.pacman_pomdp.pacman_visualization import PacManVisualizer
+from POMDPPlanners.environments.pacman_pomdp.pacman_visualization.trace_exporter import (
     PACMAN_PAYLOAD_KIND,
     build_pacman_trace,
 )

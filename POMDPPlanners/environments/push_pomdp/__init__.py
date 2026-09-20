@@ -17,7 +17,7 @@ from POMDPPlanners.environments.push_pomdp.continuous_push_pomdp import (
     ContinuousPushPOMDP,
     ContinuousPushPOMDPDiscreteActions,
 )
-from POMDPPlanners.environments.push_pomdp.visualizer import (
+from POMDPPlanners.environments.push_pomdp.push_visualization import (
     ContinuousPushPOMDPVisualizer,
     PushPOMDPVisualizer,
 )

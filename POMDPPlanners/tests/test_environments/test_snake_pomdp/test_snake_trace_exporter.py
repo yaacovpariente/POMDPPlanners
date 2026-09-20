@@ -23,8 +23,8 @@ from POMDPPlanners.core.simulation.belief_payloads import belief_to_payload
 from POMDPPlanners.core.simulation.traces import EpisodeTrace
 from POMDPPlanners.environments.snake_pomdp import SnakeBelief, SnakePOMDP
 from POMDPPlanners.environments.snake_pomdp.snake_pomdp import SnakeAction, SnakeTermination
-from POMDPPlanners.environments.snake_pomdp.visualizer.snake_visualizer import SnakeVisualizer
-from POMDPPlanners.environments.snake_pomdp.visualizer.trace_exporter import (
+from POMDPPlanners.environments.snake_pomdp.snake_visualization.snake_visualizer import SnakeVisualizer
+from POMDPPlanners.environments.snake_pomdp.snake_visualization.trace_exporter import (
     SNAKE_PAYLOAD_KIND,
     build_snake_trace,
 )

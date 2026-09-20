@@ -1400,7 +1400,7 @@ class CaptureTheFlagPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-ma
         """
         # Imported here so the environment stays importable without Pillow's
         # drawing stack, matching how the other environments defer visualizers.
-        from POMDPPlanners.environments.capture_the_flag_pomdp.visualizer import (  # pylint: disable=import-outside-toplevel
+        from POMDPPlanners.environments.capture_the_flag_pomdp.capture_the_flag_visualization import (  # pylint: disable=import-outside-toplevel
             CaptureTheFlagVisualizer,
         )
 
@@ -1427,7 +1427,7 @@ class CaptureTheFlagPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-ma
         # rather than through the visualizer package, whose ``__init__`` also
         # pulls in the GIF renderer and therefore Pillow.
         # pylint: disable-next=import-outside-toplevel
-        from POMDPPlanners.environments.capture_the_flag_pomdp.visualizer.trace_exporter import (
+        from POMDPPlanners.environments.capture_the_flag_pomdp.capture_the_flag_visualization.trace_exporter import (
             build_capture_the_flag_trace,
         )
 
