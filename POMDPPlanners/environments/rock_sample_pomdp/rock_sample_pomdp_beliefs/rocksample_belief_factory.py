@@ -58,8 +58,21 @@ class RockSampleVectorizedWeightedParticleBelief(VectorizedWeightedParticleBelie
         pomdp: Optional[Environment] = None,
         state: Optional[Any] = None,
     ) -> RockSampleVectorizedWeightedParticleBelief:
-        """Update belief, encoding string observations to integers."""
-        del pomdp, state  # unused — kept for interface compatibility
+        """Update belief, encoding string observations to integers.
+
+        Args:
+            action: The action just taken.
+            observation: This step's reading, as a string or already encoded.
+            pomdp: Unused; kept for interface compatibility.
+            state: Unused by value, but its presence marks this as a real step
+                of the episode rather than a planner's hypothetical, which is
+                what admits the running-episode conditioning. See
+                :class:`VectorizedWeightedParticleBelief`.
+
+        Returns:
+            The updated belief.
+        """
+        del pomdp  # unused — kept for interface compatibility
         if isinstance(observation, str):
             observation = _OBS_ENCODING[observation]
 
@@ -70,6 +83,9 @@ class RockSampleVectorizedWeightedParticleBelief(VectorizedWeightedParticleBelie
             next_particles, action, encoded_obs
         )
         next_log_weights = self.log_weights + log_likelihoods
+        next_log_weights = self._condition_on_a_running_episode(
+            next_particles, next_log_weights, state
+        )
 
         if self.resampling:
             next_particles, next_log_weights = self._resample(next_particles, next_log_weights)

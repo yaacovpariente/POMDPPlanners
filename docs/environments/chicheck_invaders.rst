@@ -362,10 +362,17 @@ at ``max_steps``.
 Belief
 ------
 
-``ChicheckInvadersBelief`` is a weighted particle filter with reinvigoration, and it
-is what ``create_environment_belief`` returns. The interesting half of the work
-is done by the likelihood above rather than by any special code: particles that
-put chickens where the sensors would have seen them die off on their own.
+``ChicheckInvadersVectorizedBelief`` is a weighted particle filter with
+reinvigoration, and it is what ``create_environment_belief`` returns. It updates
+the whole particle array at once -- particles down, chicken slots across --
+through ``ChicheckInvadersVectorizedUpdater``. ``ChicheckInvadersBelief`` is the
+scalar filter it was ported from, still available as
+``create_environment_belief(env, belief_type=BeliefType.PARTICLE)``; the two
+carry the same model.
+
+The interesting half of the work is done by the likelihood above rather than by
+any special code: particles that put chickens where the sensors would have seen
+them die off on their own.
 
 What a weight-only filter cannot do is invent a hypothesis it never held, and
 two things here need that -- the opening placement is drawn from a large set of
