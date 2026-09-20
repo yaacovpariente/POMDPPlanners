@@ -88,7 +88,7 @@ from POMDPPlanners.environments.occupancy_grid_mapping_pomdp import (
     OccupancyGridMappingBelief,
     OccupancyGridMappingPOMDP,
 )
-from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.occupancy_grid_mapping_visualizer import (  # noqa: E501
+from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.visualizer.occupancy_grid_mapping_visualizer import (  # noqa: E501
     OccupancyGridMappingVisualizer,
 )
 from POMDPPlanners.environments.push_pomdp.push_pomdp import PushPOMDP

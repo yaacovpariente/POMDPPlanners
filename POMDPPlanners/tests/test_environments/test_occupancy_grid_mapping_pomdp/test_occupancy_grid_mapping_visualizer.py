@@ -32,13 +32,13 @@ from POMDPPlanners.environments.occupancy_grid_mapping_pomdp import (
     OccupancyGridMappingPOMDP,
     create_occupancy_grid_state,
 )
-from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.occupancy_grid_mapping_assets import (
+from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.visualizer.occupancy_grid_mapping_assets import (  # noqa: E501
     COLOR_HOLO_BLANK,
     COLOR_ROBOT,
     robot_sprite_facing,
     stone_shade,
 )
-from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.occupancy_grid_mapping_visualizer import (  # noqa: E501
+from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.visualizer.occupancy_grid_mapping_visualizer import (  # noqa: E501
     CANVAS_SIZE,
     SCREEN_SIZE,
     OccupancyGridMappingVisualizer,
