@@ -9,9 +9,14 @@ given successor implies -- so the batched successor is replayed through the
 scalar step with those coins and must come back byte for byte.
 """
 
+from typing import cast
+
 import numpy as np
 import pytest
 
+from POMDPPlanners.core.belief.vectorized_weighted_particle_belief import (
+    VectorizedWeightedParticleBelief,
+)
 from POMDPPlanners.environments.chicheck_invaders_pomdp import (
     ChicheckInvadersAction,
     ChicheckInvadersPOMDP,
@@ -168,7 +173,10 @@ class TestChicheckInvadersVectorizedBelief:
         """
         env = ChicheckInvadersPOMDP(discount_factor=0.95, observation_mode=ObservationMode.FULL)
         np.random.seed(1)
-        belief = create_environment_belief(env, n_particles=32)
+        belief = cast(
+            VectorizedWeightedParticleBelief,
+            create_environment_belief(env, n_particles=32),
+        )
         state = env.initial_state_dist().sample()[0]
 
         next_state = env.sample_next_state(state, 0)
@@ -194,7 +202,10 @@ class TestChicheckInvadersVectorizedBelief:
         """
         env = ChicheckInvadersPOMDP(discount_factor=0.95, **noiseless_preset())
         np.random.seed(2)
-        belief = create_environment_belief(env, n_particles=64)
+        belief = cast(
+            VectorizedWeightedParticleBelief,
+            create_environment_belief(env, n_particles=64),
+        )
         state = env.initial_state_dist().sample()[0]
 
         scores = np.zeros(64)

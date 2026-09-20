@@ -10,9 +10,14 @@ must match the environment's own enumerated distribution. The observation
 model is deterministic given the state and is compared directly.
 """
 
+from typing import cast
+
 import numpy as np
 import pytest
 
+from POMDPPlanners.core.belief.vectorized_weighted_particle_belief import (
+    VectorizedWeightedParticleBelief,
+)
 from POMDPPlanners.environments.capture_the_flag_pomdp import (
     CaptureTheFlagPOMDP,
     CaptureTheFlagVectorizedBelief,
@@ -197,7 +202,10 @@ class TestCaptureTheFlagVectorizedBelief:
         Test type: integration
         """
         np.random.seed(0)
-        belief = create_environment_belief(env, n_particles=64)
+        belief = cast(
+            VectorizedWeightedParticleBelief,
+            create_environment_belief(env, n_particles=64),
+        )
         state = env.initial_state_dist().sample()[0]
         action = 0
 
@@ -224,7 +232,10 @@ class TestCaptureTheFlagVectorizedBelief:
         Test type: integration
         """
         np.random.seed(0)
-        belief = create_environment_belief(env, n_particles=200)
+        belief = cast(
+            VectorizedWeightedParticleBelief,
+            create_environment_belief(env, n_particles=200),
+        )
         before = np.bincount(
             belief.particles[:, env.layout.flag_cell].astype(int),
             minlength=len(env.red_flag_candidates),
@@ -262,7 +273,10 @@ class TestCaptureTheFlagVectorizedBelief:
         masses = []
         for seed in range(6):
             np.random.seed(seed)
-            belief = create_environment_belief(env, n_particles=400)
+            belief = cast(
+                VectorizedWeightedParticleBelief,
+                create_environment_belief(env, n_particles=400),
+            )
             state = env.initial_state_dist().sample()[0]
             truth = int(state[env.layout.flag_cell])
             for _ in range(15):

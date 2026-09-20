@@ -524,6 +524,8 @@ class SnakeVectorizedUpdater(VectorizedParticleBeliefUpdater):
 class SnakeVectorizedWeightedParticleBelief(VectorizedWeightedParticleBelief):
     """Vectorized particle belief that redraws when a sighting rules everything out."""
 
+    updater: SnakeVectorizedUpdater
+
     def update(
         self,
         action: Any,

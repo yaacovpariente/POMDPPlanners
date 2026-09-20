@@ -9,6 +9,8 @@ plain weight-and-resample filter fills with layouts the probes have already
 ruled out, and it does that silently. These check that this one does not.
 """
 
+from typing import cast
+
 import numpy as np
 import pytest
 
@@ -155,7 +157,10 @@ class TestBattleshipVectorizedBelief:
 
         Test type: integration
         """
-        belief = create_environment_belief(env, n_particles=64)
+        belief = cast(
+            BattleshipVectorizedWeightedParticleBelief,
+            create_environment_belief(env, n_particles=64),
+        )
         for cell, reading in _probe_sequence(env, [0, 5, 12, 20, 3, 14, 21, 7, 18, 24]):
             belief = belief.update(cell, reading, env)
 
@@ -176,7 +181,10 @@ class TestBattleshipVectorizedBelief:
 
         Test type: integration
         """
-        vectorized = create_environment_belief(env, n_particles=64)
+        vectorized = cast(
+            BattleshipVectorizedWeightedParticleBelief,
+            create_environment_belief(env, n_particles=64),
+        )
         exact = BattleshipBelief.from_environment(env, n_particles=64)
         for cell, reading in _probe_sequence(env, [0, 5, 12, 20, 3, 14, 21]):
             vectorized = vectorized.update(cell, reading, env)
@@ -220,7 +228,10 @@ class TestBattleshipVectorizedBelief:
         Test type: unit
         """
         np.random.seed(0)
-        belief = create_environment_belief(env, n_particles=32)
+        belief = cast(
+            BattleshipVectorizedWeightedParticleBelief,
+            create_environment_belief(env, n_particles=32),
+        )
         belief = belief.update(0, MISS, env)
         before = belief.consistent_indices.copy()
 

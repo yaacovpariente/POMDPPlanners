@@ -229,6 +229,8 @@ class BattleshipVectorizedWeightedParticleBelief(VectorizedWeightedParticleBelie
             through, and the owner of the layout table it redraws from.
     """
 
+    updater: BattleshipVectorizedUpdater
+
     def __init__(
         self,
         particles: np.ndarray,

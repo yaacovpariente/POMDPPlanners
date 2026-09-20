@@ -9,9 +9,14 @@ only reachability is checkable. The observation model is deterministic given
 the state and is compared directly.
 """
 
+from typing import cast
+
 import numpy as np
 import pytest
 
+from POMDPPlanners.core.belief.vectorized_weighted_particle_belief import (
+    VectorizedWeightedParticleBelief,
+)
 from POMDPPlanners.environments.multiagent_firefighting_pomdp import (
     FirefightingVectorizedBelief,
     FirefightingVectorizedUpdater,
@@ -197,7 +202,10 @@ class TestFirefightingVectorizedBelief:
         Test type: integration
         """
         np.random.seed(0)
-        belief = create_environment_belief(env, n_particles=64)
+        belief = cast(
+            VectorizedWeightedParticleBelief,
+            create_environment_belief(env, n_particles=64),
+        )
         state = env.initial_state_dist().sample()[0]
 
         next_state = env.sample_next_state(state, 0)
@@ -221,7 +229,10 @@ class TestFirefightingVectorizedBelief:
         Test type: integration
         """
         np.random.seed(0)
-        belief = create_environment_belief(env, n_particles=200)
+        belief = cast(
+            VectorizedWeightedParticleBelief,
+            create_environment_belief(env, n_particles=200),
+        )
         keys = (
             belief.particles[:, env.wind_direction_index] * 2
             + belief.particles[:, env.wind_strength_index]
@@ -260,7 +271,10 @@ class TestFirefightingVectorizedBelief:
         masses = []
         for seed in range(6):
             np.random.seed(seed)
-            belief = create_environment_belief(env, n_particles=400)
+            belief = cast(
+                VectorizedWeightedParticleBelief,
+                create_environment_belief(env, n_particles=400),
+            )
             state = env.initial_state_dist().sample()[0]
             truth = (
                 int(round(state[env.wind_direction_index])),

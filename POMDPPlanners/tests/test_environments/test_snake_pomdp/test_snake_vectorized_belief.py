@@ -9,9 +9,14 @@ environment would let them. The rest covers the redraw, which is what keeps a
 sighting -- a reading with no false positives -- from emptying the filter.
 """
 
+from typing import cast
+
 import numpy as np
 import pytest
 
+from POMDPPlanners.core.belief.vectorized_weighted_particle_belief import (
+    VectorizedWeightedParticleBelief,
+)
 from POMDPPlanners.environments.snake_pomdp import (
     SnakeAction,
     SnakePOMDP,
@@ -203,7 +208,10 @@ class TestSnakeVectorizedBelief:
         Test type: integration
         """
         np.random.seed(0)
-        belief = create_environment_belief(env, n_particles=32)
+        belief = cast(
+            VectorizedWeightedParticleBelief,
+            create_environment_belief(env, n_particles=32),
+        )
         state = env.initial_state_dist().sample()[0]
         head = env.body(state)[0]
         sighted = (head[0] + 1, head[1] + 1)
@@ -230,7 +238,10 @@ class TestSnakeVectorizedBelief:
         Test type: integration
         """
         np.random.seed(0)
-        belief = create_environment_belief(env, n_particles=100)
+        belief = cast(
+            VectorizedWeightedParticleBelief,
+            create_environment_belief(env, n_particles=100),
+        )
         state = env.initial_state_dist().sample()[0]
 
         for _ in range(25):

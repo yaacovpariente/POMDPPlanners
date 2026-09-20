@@ -9,9 +9,14 @@ A drifting copy is the failure mode these guard, since nothing else would
 notice a belief that walks through a wall the world refuses.
 """
 
+from typing import cast
+
 import numpy as np
 import pytest
 
+from POMDPPlanners.core.belief.vectorized_weighted_particle_belief import (
+    VectorizedWeightedParticleBelief,
+)
 from POMDPPlanners.environments.maze_pomdp.maze_pomdp import (
     ACTIONS,
     CUE_EMITTING,
@@ -261,7 +266,10 @@ class TestMazeBeliefFactory:
 
         Test type: unit
         """
-        belief = create_environment_belief(discrete_env, n_particles=32)
+        belief = cast(
+            VectorizedWeightedParticleBelief,
+            create_environment_belief(discrete_env, n_particles=32),
+        )
         assert isinstance(belief, MazeVectorizedWeightedParticleBelief)
 
     def test_particle_type_still_available(self, continuous_env):
@@ -295,7 +303,10 @@ class TestMazeBeliefFactory:
         Test type: integration
         """
         np.random.seed(0)
-        belief = create_environment_belief(discrete_env, n_particles=200)
+        belief = cast(
+            VectorizedWeightedParticleBelief,
+            create_environment_belief(discrete_env, n_particles=200),
+        )
 
         belief = belief.update("up", OBSERVATION_LEFT_CUE, discrete_env)
 
@@ -316,7 +327,10 @@ class TestMazeBeliefFactory:
         Test type: unit
         """
         np.random.seed(0)
-        belief = create_environment_belief(discrete_env, n_particles=16)
+        belief = cast(
+            VectorizedWeightedParticleBelief,
+            create_environment_belief(discrete_env, n_particles=16),
+        )
 
         updated = belief.update("up", "not_an_observation", discrete_env)
 
@@ -338,7 +352,10 @@ class TestMazeBeliefFactory:
         Test type: unit
         """
         np.random.seed(0)
-        belief = create_environment_belief(continuous_env, n_particles=48)
+        belief = cast(
+            VectorizedWeightedParticleBelief,
+            create_environment_belief(continuous_env, n_particles=48),
+        )
 
         updated = belief.update(np.array([0.0, 0.5]), observation, continuous_env)
 
