@@ -530,6 +530,49 @@ def run_page(run: RunView) -> str:
     )
 
 
+def _episode_returns(policy: PolicyView) -> List[float]:
+    """The discounted return of each of one planner's episodes, in order.
+
+    Read from the traces rather than from a metric, because a metric is the
+    summary and this plot is about the episodes behind it.
+
+    Args:
+        policy: The planner whose episodes to read.
+
+    Returns:
+        One return per episode that recorded one.
+    """
+    returns = []
+    for artifacts in policy.episodes.values():
+        summary = next((a.summary for a in artifacts if a.summary), None)
+        if summary and summary.discounted_return is not None:
+            returns.append(summary.discounted_return)
+    return returns
+
+
+def _returns_chart(env: EnvironmentView, heading: str = "Discounted return by episode") -> str:
+    """The returns strip for every planner in one environment.
+
+    Args:
+        env: The environment being shown.
+        heading: Heading to put above the plot.
+
+    Returns:
+        HTML for the section, or an empty string when no episode recorded a
+        return — a run of videos alone, for instance.
+    """
+    series = [(policy.name, _episode_returns(policy)) for policy in env.policies]
+    svg = charts.returns_svg(series)
+    if not svg:
+        return ""
+    return (
+        f"<h2>{html(heading)}</h2>"
+        f'<figure class="chart-card wide">{svg}</figure>'
+        '<p class="note">One mark per episode; the rule is the mean, and the line '
+        "spans the best and worst episode.</p>"
+    )
+
+
 def environment_page(run: RunView, env: EnvironmentView) -> str:
     """One environment within one run: its planners and their episode counts."""
     env_plots = "".join(
@@ -552,7 +595,13 @@ def environment_page(run: RunView, env: EnvironmentView) -> str:
         f'<a href="{html(chart_url(run, env.name))}">build a chart</a>.</p>'
         + _policy_cards(run, env)
         + _comparison_charts(run, env)
-        + (f'<h2>Plots</h2><section class="gallery">{env_plots}</section>' if env_plots else "")
+        + _returns_chart(env)
+        + (
+            "<details><summary>Plots the run drew</summary>"
+            f'<section class="gallery">{env_plots}</section></details>'
+            if env_plots
+            else ""
+        )
         + f"<details><summary>All metrics</summary>{_metric_table(run, env)}</details>",
     )
 
@@ -609,11 +658,18 @@ def chart_builder_page(run: RunView, env: EnvironmentView) -> str:
         "confidence intervals.</p>"
         '<div class="builder">'
         '<form class="builder-controls" id="chart-form">'
-        '<fieldset><legend>Planners</legend><div id="chart-policies"></div></fieldset>'
+        '<fieldset><legend>Planners</legend>'
+        '<p class="note">Tick the ones to plot; the box under each is the name it carries in the figure.</p>'
+        '<div id="chart-policies"></div></fieldset>'
         '<label>Metric <select id="chart-metric"></select></label>'
         '<label>Title <input id="chart-title" type="text" autocomplete="off"></label>'
         '<label>Value axis <input id="chart-y" type="text" autocomplete="off"></label>'
         '<label>Planner axis <input id="chart-x" type="text" autocomplete="off"></label>'
+        '<label>Style <select id="chart-style">'
+        '<option value="mono">Paper, mono</option>'
+        '<option value="colour">Paper, colour</option>'
+        '<option value="slide">Slide, dark</option>'
+        "</select></label>"
         '<label>Orientation <select id="chart-orient">'
         '<option value="vertical">Vertical bars</option>'
         '<option value="horizontal">Horizontal bars</option>'
@@ -720,7 +776,16 @@ def policy_page(run: RunView, env: EnvironmentView, policy: PolicyView) -> str:
         f'<a href="{html(env_url(run, env.name))}">{html(env.name)}</a> · '
         "each card shows that episode's own recording.</p>"
         + _listing(items, "This planner produced no episode artifacts.", "Recordings")
-        + (f'<h2>Plots</h2><section class="gallery">{plots}</section>' if plots else ""),
+        + _returns_chart(
+            EnvironmentView(name=env.name, policies=[policy]),
+            "Discounted return by episode",
+        )
+        + (
+            "<details><summary>Plots the run drew</summary>"
+            f'<section class="gallery">{plots}</section></details>'
+            if plots
+            else ""
+        ),
     )
 
 

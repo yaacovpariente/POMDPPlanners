@@ -3,10 +3,9 @@
  * The chart builder: one figure, drawn from the run's own metrics, with the
  * planners, the metric, the labels and the orientation chosen by the reader.
  *
- * The drawing is deliberately plain — black on white, one grey for the error
- * bars, no gradients or shadows — because the output is meant to go into a
- * paper, where the page is white and the figure is printed. It does not follow
- * the site's theme for the same reason: what you download is what you saw.
+ * The drawing follows a chosen style rather than the site's theme, because the
+ * figure is going somewhere else — a journal page, a colour figure, a slide —
+ * and what is on screen has to be what downloads.
  */
 (function () {
   "use strict";
@@ -18,6 +17,45 @@
   var DATA = JSON.parse(dataEl.textContent);
   var SVG_NS = "http://www.w3.org/2000/svg";
 
+  /* Three looks, because a figure goes to three places. Mono is what most
+     journals want and prints safely in black and white; colour uses the
+     Okabe–Ito palette, which stays distinguishable under every common form of
+     colour blindness; slide is the same drawing on a dark ground for a talk.
+     Whatever is on screen is what downloads. */
+  var STYLES = {
+    mono: {
+      label: "Paper, mono",
+      background: "#ffffff",
+      ink: "#111111",
+      muted: "#555555",
+      grid: "#e2e2e2",
+      bars: ["#4a4a4a", "#8c8c8c", "#2b2b2b", "#bdbdbd", "#6e6e6e"],
+      error: "#111111"
+    },
+    colour: {
+      label: "Paper, colour",
+      background: "#ffffff",
+      ink: "#111111",
+      muted: "#555555",
+      grid: "#e6e6e6",
+      bars: ["#0072B2", "#D55E00", "#009E73", "#CC79A7", "#E69F00", "#56B4E9"],
+      error: "#222222"
+    },
+    slide: {
+      label: "Slide, dark",
+      background: "#14161c",
+      ink: "#f4f2ee",
+      muted: "#b3aea6",
+      grid: "#2c303a",
+      bars: ["#5BB8F5", "#FF9B54", "#5FD2A6", "#E888B8", "#F2C14E", "#9D8DF1"],
+      error: "#f4f2ee"
+    }
+  };
+
+  function style() {
+    return STYLES[el.style.value] || STYLES.mono;
+  }
+
   var el = {
     policies: document.getElementById("chart-policies"),
     metric: document.getElementById("chart-metric"),
@@ -25,6 +63,7 @@
     yLabel: document.getElementById("chart-y"),
     xLabel: document.getElementById("chart-x"),
     orient: document.getElementById("chart-orient"),
+    style: document.getElementById("chart-style"),
     errors: document.getElementById("chart-errors"),
     values: document.getElementById("chart-values"),
     svgButton: document.getElementById("chart-svg"),
@@ -51,30 +90,35 @@
     return words.charAt(0).toUpperCase() + words.slice(1);
   }
 
-  function chosenPolicies() {
-    return Array.prototype.slice
-      .call(el.policies.querySelectorAll("input:checked"))
-      .map(function (box) { return box.value; });
+  /* Each planner's row in the controls: whether it is plotted, and what it is
+     called in the figure. A run's planner names are identifiers — PFT_DPW_1s —
+     and a paper wants "PFT-DPW (1 s)", so the label is the author's to write
+     while the data stays keyed by the name the run logged. */
+  function rows() {
+    return Array.prototype.slice.call(el.policies.querySelectorAll("[data-policy]"));
   }
 
   function series() {
     var metric = el.metric.value;
-    var chosen = chosenPolicies();
-    var rows = [];
-    DATA.policies.forEach(function (policy) {
-      if (chosen.indexOf(policy.name) === -1) return;
+    var found = [];
+    rows().forEach(function (row) {
+      var box = row.querySelector("input[type=checkbox]");
+      if (!box.checked) return;
+      var policy = DATA.policies.filter(function (p) { return p.name === box.value; })[0];
+      if (!policy) return;
       var value = policy.metrics[metric];
       if (typeof value !== "number") return;
       var low = policy.metrics[metric + DATA.ci.lower];
       var high = policy.metrics[metric + DATA.ci.upper];
-      rows.push({
-        name: policy.name,
+      var label = row.querySelector("input[type=text]").value.trim();
+      found.push({
+        name: label || policy.name,
         value: value,
         low: typeof low === "number" ? low : value,
         high: typeof high === "number" ? high : value
       });
     });
-    return rows;
+    return found;
   }
 
   function niceTicks(low, high, count) {
@@ -154,7 +198,9 @@
     if (vertical) {
       // Wide enough for the bars, and for the title, which is the reader's own
       // text: sized to the bars alone it was clipped at both ends.
-      var titleWidth = (el.title.value || "").length * 8.6 + 48;
+      // A rough advance width for 18px Helvetica at 600 weight, with the
+      // letter-spacing: too small and the title is clipped at both ends.
+      var titleWidth = (el.title.value || "").length * 10.4 + 56;
       width = Math.max(420, margin.left + margin.right + slot * rows.length, titleWidth);
     }
     var plotW = width - margin.left - margin.right;
@@ -164,14 +210,17 @@
     // them against the value axis.
     band = (vertical ? plotW : plotH) / rows.length;
 
+    var look = style();
     var svg = node("svg", {
       xmlns: SVG_NS,
       viewBox: "0 0 " + width + " " + height,
       width: width,
       height: height,
-      "font-family": "Helvetica, Arial, sans-serif"
+      "font-family": "Helvetica Neue, Helvetica, Arial, sans-serif"
     });
-    svg.appendChild(node("rect", { x: 0, y: 0, width: width, height: height, fill: "#ffffff" }));
+    svg.appendChild(node("rect", {
+      x: 0, y: 0, width: width, height: height, fill: look.background
+    }));
 
     function toValue(v) {
       var ratio = (v - low) / (high - low);
@@ -186,20 +235,20 @@
       if (vertical) {
         svg.appendChild(node("line", {
           x1: margin.left, y1: p, x2: margin.left + plotW, y2: p,
-          stroke: "#d9d9d9", "stroke-width": 1
+          stroke: look.grid, "stroke-width": 1, "stroke-dasharray": "3 4"
         }));
         svg.appendChild(node("text", {
-          x: margin.left - 10, y: p + 4, "text-anchor": "end",
-          "font-size": 13, fill: "#333333"
+          x: margin.left - 12, y: p + 4, "text-anchor": "end",
+          "font-size": 12.5, fill: look.muted
         }, format(tick)));
       } else {
         svg.appendChild(node("line", {
           x1: p, y1: margin.top, x2: p, y2: margin.top + plotH,
-          stroke: "#d9d9d9", "stroke-width": 1
+          stroke: look.grid, "stroke-width": 1, "stroke-dasharray": "3 4"
         }));
         svg.appendChild(node("text", {
           x: p, y: margin.top + plotH + 22, "text-anchor": "middle",
-          "font-size": 13, fill: "#333333"
+          "font-size": 12.5, fill: look.muted
         }, format(tick)));
       }
     });
@@ -210,13 +259,15 @@
       var thickness = Math.min(vertical ? 54 : 26, band * 0.55);
       var at = toValue(row.value);
 
+      var fill = look.bars[index % look.bars.length];
       if (vertical) {
         svg.appendChild(node("rect", {
           x: centre - thickness / 2,
           y: Math.min(zero, at),
           width: thickness,
           height: Math.max(1, Math.abs(at - zero)),
-          fill: "#4a4a4a"
+          rx: 3,
+          fill: fill
         }));
       } else {
         svg.appendChild(node("rect", {
@@ -224,7 +275,8 @@
           y: centre - thickness / 2,
           width: Math.max(1, Math.abs(at - zero)),
           height: thickness,
-          fill: "#4a4a4a"
+          rx: 3,
+          fill: fill
         }));
       }
 
@@ -233,13 +285,13 @@
         var b = toValue(row.high);
         var cap = 6;
         if (vertical) {
-          svg.appendChild(node("line", { x1: centre, y1: a, x2: centre, y2: b, stroke: "#111111", "stroke-width": 1.4 }));
-          svg.appendChild(node("line", { x1: centre - cap, y1: a, x2: centre + cap, y2: a, stroke: "#111111", "stroke-width": 1.4 }));
-          svg.appendChild(node("line", { x1: centre - cap, y1: b, x2: centre + cap, y2: b, stroke: "#111111", "stroke-width": 1.4 }));
+          svg.appendChild(node("line", { x1: centre, y1: a, x2: centre, y2: b, stroke: look.error, "stroke-width": 1.4 }));
+          svg.appendChild(node("line", { x1: centre - cap, y1: a, x2: centre + cap, y2: a, stroke: look.error, "stroke-width": 1.4 }));
+          svg.appendChild(node("line", { x1: centre - cap, y1: b, x2: centre + cap, y2: b, stroke: look.error, "stroke-width": 1.4 }));
         } else {
-          svg.appendChild(node("line", { x1: a, y1: centre, x2: b, y2: centre, stroke: "#111111", "stroke-width": 1.4 }));
-          svg.appendChild(node("line", { x1: a, y1: centre - cap, x2: a, y2: centre + cap, stroke: "#111111", "stroke-width": 1.4 }));
-          svg.appendChild(node("line", { x1: b, y1: centre - cap, x2: b, y2: centre + cap, stroke: "#111111", "stroke-width": 1.4 }));
+          svg.appendChild(node("line", { x1: a, y1: centre, x2: b, y2: centre, stroke: look.error, "stroke-width": 1.4 }));
+          svg.appendChild(node("line", { x1: a, y1: centre - cap, x2: a, y2: centre + cap, stroke: look.error, "stroke-width": 1.4 }));
+          svg.appendChild(node("line", { x1: b, y1: centre - cap, x2: b, y2: centre + cap, stroke: look.error, "stroke-width": 1.4 }));
         }
       }
 
@@ -255,13 +307,13 @@
         if (vertical) {
           svg.appendChild(node("text", {
             x: centre, y: row.value >= 0 ? edge - 9 : edge + 19,
-            "text-anchor": "middle", "font-size": 13, fill: "#111111"
+            "text-anchor": "middle", "font-size": 13, "font-weight": "600", fill: look.ink
           }, text));
         } else {
           svg.appendChild(node("text", {
             x: row.value >= 0 ? edge + 9 : edge - 9, y: centre + 4,
             "text-anchor": row.value >= 0 ? "start" : "end",
-            "font-size": 13, fill: "#111111"
+            "font-size": 13, "font-weight": "600", fill: look.ink
           }, text));
         }
       }
@@ -269,13 +321,13 @@
       // The planner's name, along the category axis.
       if (vertical) {
         svg.appendChild(node("text", {
-          x: centre, y: margin.top + plotH + 24, "text-anchor": "middle",
-          "font-size": 13, fill: "#111111"
+          x: centre, y: margin.top + plotH + 25, "text-anchor": "middle",
+          "font-size": 13.5, fill: look.ink
         }, row.name));
       } else {
         svg.appendChild(node("text", {
-          x: margin.left - 12, y: centre + 4, "text-anchor": "end",
-          "font-size": 13, fill: "#111111"
+          x: margin.left - 14, y: centre + 4, "text-anchor": "end",
+          "font-size": 13.5, fill: look.ink
         }, row.name));
       }
     });
@@ -283,17 +335,18 @@
     // Axis lines last, so they sit over the grid.
     svg.appendChild(node("line", {
       x1: margin.left, y1: margin.top, x2: margin.left, y2: margin.top + plotH,
-      stroke: "#111111", "stroke-width": 1.2
+      stroke: look.ink, "stroke-width": 1, opacity: 0.55
     }));
     svg.appendChild(node("line", {
       x1: margin.left, y1: margin.top + plotH, x2: margin.left + plotW, y2: margin.top + plotH,
-      stroke: "#111111", "stroke-width": 1.2
+      stroke: look.ink, "stroke-width": 1, opacity: 0.55
     }));
 
     if (el.title.value) {
       svg.appendChild(node("text", {
-        x: width / 2, y: 30, "text-anchor": "middle",
-        "font-size": 17, "font-weight": "bold", fill: "#111111"
+        x: width / 2, y: 32, "text-anchor": "middle",
+        "font-size": 18, "font-weight": "600", "letter-spacing": "0.2",
+        fill: look.ink
       }, el.title.value));
     }
     var valueLabel = el.yLabel.value;
@@ -302,30 +355,31 @@
       if (valueLabel) {
         svg.appendChild(node("text", {
           x: 18, y: margin.top + plotH / 2, "text-anchor": "middle", "font-size": 14,
-          fill: "#111111", transform: "rotate(-90 18 " + (margin.top + plotH / 2) + ")"
+          fill: look.muted, transform: "rotate(-90 18 " + (margin.top + plotH / 2) + ")"
         }, valueLabel));
       }
       if (categoryLabel) {
         svg.appendChild(node("text", {
           x: margin.left + plotW / 2, y: height - 16, "text-anchor": "middle",
-          "font-size": 14, fill: "#111111"
+          "font-size": 14, fill: look.muted
         }, categoryLabel));
       }
     } else {
       if (valueLabel) {
         svg.appendChild(node("text", {
           x: margin.left + plotW / 2, y: height - 14, "text-anchor": "middle",
-          "font-size": 14, fill: "#111111"
+          "font-size": 14, fill: look.muted
         }, valueLabel));
       }
       if (categoryLabel) {
         svg.appendChild(node("text", {
           x: 18, y: margin.top + plotH / 2, "text-anchor": "middle", "font-size": 14,
-          fill: "#111111", transform: "rotate(-90 18 " + (margin.top + plotH / 2) + ")"
+          fill: look.muted, transform: "rotate(-90 18 " + (margin.top + plotH / 2) + ")"
         }, categoryLabel));
       }
     }
 
+    output.style.background = look.background;
     output.appendChild(svg);
     return svg;
   }
@@ -377,7 +431,7 @@
       canvas.width = width * scale;
       canvas.height = height * scale;
       var ctx = canvas.getContext("2d");
-      ctx.fillStyle = "#ffffff";
+      ctx.fillStyle = style().background;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
       canvas.toBlob(function (blob) {
@@ -389,15 +443,28 @@
 
   // Build the controls, then draw whenever any of them changes.
   DATA.policies.forEach(function (policy) {
-    var label = document.createElement("label");
-    label.className = "check";
+    var row = document.createElement("div");
+    row.className = "policy-row";
+    row.setAttribute("data-policy", policy.name);
+
+    var toggle = document.createElement("label");
+    toggle.className = "check";
     var box = document.createElement("input");
     box.type = "checkbox";
     box.value = policy.name;
     box.checked = true;
-    label.appendChild(box);
-    label.appendChild(document.createTextNode(" " + policy.name));
-    el.policies.appendChild(label);
+    toggle.appendChild(box);
+    toggle.appendChild(document.createTextNode(" " + policy.name));
+
+    var rename = document.createElement("input");
+    rename.type = "text";
+    rename.value = policy.name;
+    rename.autocomplete = "off";
+    rename.setAttribute("aria-label", "Label for " + policy.name + " in the figure");
+
+    row.appendChild(toggle);
+    row.appendChild(rename);
+    el.policies.appendChild(row);
   });
 
   var names = metricNames();

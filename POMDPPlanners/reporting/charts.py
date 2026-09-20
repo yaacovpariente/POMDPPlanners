@@ -138,3 +138,85 @@ def comparison_svg(
 
     parts.append("</svg>")
     return "".join(parts)
+
+
+def returns_svg(
+    series: Sequence[Tuple[str, Sequence[float]]],
+    width: int = 700,
+) -> str:
+    """Draw each planner's episode returns as a strip, with its mean marked.
+
+    A histogram of a handful of episodes is mostly empty bins, and the run
+    writes one as a PNG anyway. What a reader wants from this plot is where
+    the episodes fell and how far apart they are, so every episode is a mark
+    on the planner's own line and the mean sits under them as a rule. It stays
+    honest at three episodes and still reads at fifty.
+
+    Args:
+        series: One ``(policy_name, returns)`` per planner, in display order.
+        width: Drawing width in user units, about CSS pixels.
+
+    Returns:
+        An ``<svg>`` element as a string, or an empty string when no planner
+        has a return to plot.
+    """
+    rows = [(name, [float(v) for v in values]) for name, values in series if len(values)]
+    if not rows:
+        return ""
+
+    left, right, top, bottom = 150, 30, 30, 42
+    row_h = 52
+    height = top + bottom + row_h * len(rows)
+    plot_w = width - left - right
+
+    spread = [value for _, values in rows for value in values]
+    low, high = _nice_bounds(spread)
+    span = high - low or 1.0
+
+    def to_x(value: float) -> float:
+        return left + (value - low) / span * plot_w
+
+    parts: List[str] = [
+        f'<svg class="chart" viewBox="0 0 {width} {height}" role="img" '
+        'aria-label="Discounted return of each episode, by planner" '
+        'xmlns="http://www.w3.org/2000/svg">'
+    ]
+
+    # A tick at each end and at the middle: enough to read the scale without
+    # drawing an axis a strip plot does not need.
+    for value in (low, (low + high) / 2, high):
+        x = to_x(value)
+        parts.append(
+            f'<line x1="{x:.1f}" y1="{top}" x2="{x:.1f}" y2="{top + row_h * len(rows)}" '
+            'class="chart-axis"/>'
+            f'<text x="{x:.1f}" y="{height - 14}" class="chart-label" '
+            f'text-anchor="middle">{value:.3g}</text>'
+        )
+
+    for index, (name, values) in enumerate(rows):
+        cy = top + row_h * index + row_h / 2
+        mean = sum(values) / len(values)
+        parts.append(
+            f'<line x1="{left}" y1="{cy:.1f}" x2="{left + plot_w}" y2="{cy:.1f}" '
+            'class="chart-strip"/>'
+            f'<text x="{left - 12}" y="{cy + 4:.1f}" class="chart-label" '
+            f'text-anchor="end">{escape(name)}</text>'
+        )
+        if len(values) > 1:
+            parts.append(
+                f'<line x1="{to_x(min(values)):.1f}" y1="{cy:.1f}" '
+                f'x2="{to_x(max(values)):.1f}" y2="{cy:.1f}" class="chart-ci"/>'
+            )
+        for value in values:
+            parts.append(
+                f'<circle cx="{to_x(value):.1f}" cy="{cy:.1f}" r="5" class="chart-dot"/>'
+            )
+        parts.append(
+            f'<line x1="{to_x(mean):.1f}" y1="{cy - 13:.1f}" x2="{to_x(mean):.1f}" '
+            f'y2="{cy + 13:.1f}" class="chart-mean"/>'
+            f'<text x="{to_x(mean):.1f}" y="{cy - 18:.1f}" class="chart-value" '
+            f'text-anchor="middle">{mean:.3g}</text>'
+        )
+
+    parts.append("</svg>")
+    return "".join(parts)
