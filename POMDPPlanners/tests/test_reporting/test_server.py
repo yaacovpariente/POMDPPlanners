@@ -23,7 +23,7 @@ from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp imp
     ContinuousLightDarkPOMDP,
 )
 from POMDPPlanners.reporting.server import Router, build_server, parse_range
-from POMDPPlanners.reporting.store import RunIndex, find_stores
+from POMDPPlanners.reporting.store import RunIndex, find_stores, tracking_uri_for
 from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
     continuous_light_dark_pinned_kwargs,
 )
@@ -99,12 +99,18 @@ def run_dir_fixture(tmp_path: Path) -> Path:
         mlflow.log_param("env_0_name", TRACE_ENV)
         mlflow.log_param("env_0_policy_0_name", "PFT_DPW")
         mlflow.log_param("env_0_policy_0_type", "PFT_DPW")
+        # A second planner with metrics but no artifacts: a comparison run has
+        # more than one planner per environment, and the run page only draws
+        # its comparison charts when there is something to compare.
+        mlflow.log_param("env_0_policy_1_name", "POMCP")
+        mlflow.log_param("env_0_policy_1_type", "POMCP")
         mlflow.log_param("env_1_name", VIDEO_ENV)
         mlflow.log_param("env_1_policy_0_name", "POMCPOW")
         mlflow.log_param("env_1_policy_0_type", "POMCPOW")
         mlflow.log_metric(f"{TRACE_ENV}_PFT_DPW_average_return", -12.5)
         mlflow.log_metric(f"{TRACE_ENV}_PFT_DPW_average_return_ci_lower", -18.0)
         mlflow.log_metric(f"{TRACE_ENV}_PFT_DPW_average_return_ci_upper", -7.0)
+        mlflow.log_metric(f"{TRACE_ENV}_POMCP_average_return", -20.0)
         mlflow.log_metric(f"{VIDEO_ENV}_POMCPOW_average_return", -3.25)
         # One call per child, which is what ``BaseSimulator`` does: logging the
         # environment directory itself would nest it one level deeper and the
@@ -256,6 +262,77 @@ def test_a_trace_episode_gets_the_viewer_and_a_video_episode_gets_a_video(router
     assert "<video" in video_page
     assert 'id="viewer"' not in video_page
     assert "agent_path_0.mp4" in video_page
+
+
+def test_a_store_with_no_file_metadata_is_read_from_the_database_beside_it(tmp_path: Path):
+    """An ``mlruns`` holding only artifacts is read from its ``mlflow.db``.
+
+    Purpose: MLflow 3.6 and later refuse the local file backend on some
+    installations and write metadata to SQLite instead, leaving ``mlruns``
+    with artifacts and no ``meta.yaml``. Assuming the file store made every
+    such run invisible — the site listed nothing and said nothing was wrong.
+
+    Given: A run directory of each shape.
+    When: Each is asked for its tracking URI.
+    Then: The one with no ``meta.yaml`` resolves to the database.
+    """
+    file_store = tmp_path / "file-run" / "mlruns"
+    (file_store / "0" / "abc").mkdir(parents=True)
+    (file_store / "0" / "meta.yaml").write_text("experiment_id: '0'\n", encoding="utf-8")
+
+    sql_store = tmp_path / "sql-run" / "mlruns"
+    (sql_store / "0" / "abc" / "artifacts").mkdir(parents=True)
+    database = sql_store.parent / "mlflow.db"
+    database.write_bytes(b"SQLite format 3\x00")
+
+    assert tracking_uri_for(file_store) == f"file://{file_store}"
+    assert tracking_uri_for(sql_store) == f"sqlite:///{database}"
+
+
+def test_an_episode_offers_every_recording_of_itself(router: Router):
+    """Both records of one episode are reachable, not just the richest.
+
+    Purpose: An episode leaves a trace and the path the environment drew while
+    it ran. Playing only the trace hides the recorded path behind a download
+    link, and the path is what most readers want to see first.
+
+    Given: The fixture episode, which wrote a trace and a path GIF.
+    When: Its page renders.
+    Then: It carries a tab per recording, the 3D replay open, and the path
+        image is on the page rather than only linked.
+    """
+    _, run = _run(router)
+    base = f"/run/{run.store_index}/{run.experiment_id}/{run.run_id}"
+
+    _, _, page = _get(router, f"{base}/env/{TRACE_ENV}/policy/PFT_DPW/episode/0")
+
+    assert ">3D replay<" in page and ">Recorded path<" in page
+    assert 'class="tab" data-view="0" aria-pressed="true"' in page
+    assert 'id="viewer"' in page
+    assert '<img class="player"' in page and "agent_path_0.gif" in page
+    assert "/static/viewer/views.js" in page
+
+
+def test_a_planner_page_shows_each_episode_and_its_recorded_path(router: Router):
+    """The episode list is a grid of paths, with each episode's outcome on it.
+
+    Purpose: Which episode is worth opening is a question about the episodes,
+    not about their file names: the path shows where the planner went and the
+    trace's own numbers say how it did.
+
+    Given: The fixture planner, with two episodes.
+    When: Its page renders.
+    Then: Each episode links out, shows its recorded path as the thumbnail, and
+        carries the return the trace recorded.
+    """
+    _, run = _run(router)
+    base = f"/run/{run.store_index}/{run.experiment_id}/{run.run_id}"
+
+    _, _, page = _get(router, f"{base}/env/{TRACE_ENV}/policy/PFT_DPW")
+
+    assert "Episode 0" in page and "Episode 1" in page
+    assert 'class="thumb"' in page and "agent_path_0.gif" in page
+    assert ">Return<" in page
 
 
 def test_artifact_route_serves_bytes_with_the_right_media_type(router: Router):

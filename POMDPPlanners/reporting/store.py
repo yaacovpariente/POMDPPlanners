@@ -167,6 +167,28 @@ def find_stores(roots: Sequence[Path]) -> List[Path]:
     return sorted(set(found))
 
 
+def tracking_uri_for(store: Path) -> str:
+    """Pick the tracking URI that reads one ``mlruns`` directory's metadata.
+
+    A file store keeps its metadata in ``meta.yaml`` files inside ``mlruns``.
+    MLflow 3.6 and later refuse that backend on some installations and fall
+    back to a SQLite database beside it, leaving ``mlruns`` holding only the
+    artifacts. Both layouts appear in this project's results trees, so the
+    database wins when it exists and the run directories carry no metadata.
+
+    Args:
+        store: An ``mlruns`` directory.
+
+    Returns:
+        A tracking URI for :class:`MlflowClient`.
+    """
+    database = store.parent / "mlflow.db"
+    has_file_metadata = any(store.glob("*/meta.yaml"))
+    if database.is_file() and not has_file_metadata:
+        return f"sqlite:///{database}"
+    return f"file://{store}"
+
+
 def _collect_artifacts(root: Path, recursive: bool = True) -> List[EpisodeArtifact]:
     """Classify the files under one artifact directory.
 
@@ -253,7 +275,7 @@ class RunIndex:
         experiments: List[ExperimentView] = []
 
         for store_index, store in enumerate(self.stores):
-            client = MlflowClient(tracking_uri=f"file://{store}")
+            client = MlflowClient(tracking_uri=tracking_uri_for(store))
             try:
                 found = client.search_experiments()
             except Exception:  # pylint: disable=broad-exception-caught

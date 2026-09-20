@@ -105,6 +105,38 @@ def layout(title: str, breadcrumbs: Sequence[Tuple[str, Optional[str]]], body: s
     )
 
 
+def _chip(status: str) -> str:
+    """A run's status as a coloured chip.
+
+    Args:
+        status: MLflow's status string.
+
+    Returns:
+        HTML for the chip.
+    """
+    tone = {"FINISHED": "ok", "FAILED": "bad", "RUNNING": "busy"}.get(status.upper(), "flat")
+    return f'<span class="chip chip-{tone}">{html(status.title())}</span>'
+
+
+def _stats(items: Sequence[Tuple[str, str]]) -> str:
+    """A row of labelled figures.
+
+    Args:
+        items: ``(label, value)`` pairs; a pair whose value is empty is skipped
+            rather than shown as a blank figure.
+
+    Returns:
+        HTML for the row, or an empty string when nothing is worth showing.
+    """
+    cells = "".join(
+        f'<div class="stat"><span class="stat-label">{html(label)}</span>'
+        f'<span class="stat-value">{value}</span></div>'
+        for label, value in items
+        if value
+    )
+    return f'<div class="stats">{cells}</div>' if cells else ""
+
+
 def _table(headers: Sequence[str], rows: Iterable[Sequence[str]]) -> str:
     head = "".join(f"<th>{html(h)}</th>" for h in headers)
     body = "".join("<tr>" + "".join(f"<td>{cell}</td>" for cell in row) + "</tr>" for row in rows)
@@ -115,48 +147,65 @@ def _table(headers: Sequence[str], rows: Iterable[Sequence[str]]) -> str:
 
 def index_page(experiments: Sequence[ExperimentView], roots: Sequence[object]) -> str:
     """The landing page: every experiment found under the served roots."""
-    rows = []
+    cards = []
     for experiment in experiments:
         latest = experiment.runs[0] if experiment.runs else None
-        rows.append(
-            [
-                f'<a href="{html(_url("experiment", experiment.store_index, experiment.experiment_id))}">'
-                f"{html(experiment.name)}</a>",
-                str(len(experiment.runs)),
-                html(_timestamp(latest.start_time if latest else None)),
-                f'<code class="dim">{html(experiment.store_path)}</code>',
-            ]
+        envs = sorted({e.name for run in experiment.runs for e in run.environments})
+        pills = " ".join(f'<span class="pill">{html(name)}</span>' for name in envs[:6])
+        href = _url("experiment", experiment.store_index, experiment.experiment_id)
+        cards.append(
+            f'<a class="card" href="{html(href)}">'
+            f'<h2 class="card-title">{html(experiment.name)}</h2>'
+            + _stats(
+                [
+                    ("Runs", str(len(experiment.runs))),
+                    ("Environments", str(len(envs)) if envs else ""),
+                    ("Latest run", html(_timestamp(latest.start_time if latest else None))),
+                ]
+            )
+            + (f'<p class="pills">{pills}</p>' if pills else "")
+            + f'<p class="path"><code>{html(experiment.store_path)}</code></p>'
+            "</a>"
         )
-    served = "".join(f"<li><code>{html(root)}</code></li>" for root in roots)
-    return layout(
-        "Experiments",
-        [("Experiments", None)],
+    served = ", ".join(f"<code>{html(root)}</code>" for root in roots)
+    body = (
         "<h1>Experiments</h1>"
-        f'<p class="note">Read from {len(experiments)} experiment(s) across the MLflow stores '
-        f'found under:</p><ul class="dim">{served}</ul>'
-        + _table(["Experiment", "Runs", "Latest run", "Store"], rows),
+        f'<p class="note">{len(experiments)} experiment(s), read from the MLflow stores '
+        f"under {served}.</p>"
     )
+    if not cards:
+        body += '<p class="empty">No MLflow store here holds a finished run.</p>'
+    else:
+        body += f'<div class="cards">{"".join(cards)}</div>'
+    return layout("Experiments", [("Experiments", None)], body)
 
 
 def experiment_page(experiment: ExperimentView) -> str:
     """One experiment's runs."""
-    rows = []
+    cards = []
     for run in experiment.runs:
-        env_names = ", ".join(html(e.name) for e in run.environments) or "—"
-        rows.append(
-            [
-                f'<a href="{html(run_url(run))}">{html(run.run_name)}</a>',
-                html(run.status),
-                html(_timestamp(run.start_time)),
-                env_names,
-                f'<code class="dim">{html(run.run_id)}</code>',
-            ]
+        pills = " ".join(f'<span class="pill">{html(e.name)}</span>' for e in run.environments)
+        episodes = sum(len(p.episodes) for e in run.environments for p in e.policies)
+        cards.append(
+            f'<a class="card" href="{html(run_url(run))}">'
+            f'<h2 class="card-title">{html(run.run_name)} {_chip(run.status)}</h2>'
+            + _stats(
+                [
+                    ("Started", html(_timestamp(run.start_time))),
+                    ("Environments", str(len(run.environments))),
+                    ("Episodes", str(episodes) if episodes else ""),
+                ]
+            )
+            + (f'<p class="pills">{pills}</p>' if pills else "")
+            + f'<p class="path"><code>{html(run.run_id)}</code></p>'
+            "</a>"
         )
     return layout(
         experiment.name,
         [("Experiments", "/"), (experiment.name, None)],
         f"<h1>{html(experiment.name)}</h1>"
-        + _table(["Run", "Status", "Started", "Environments", "Run id"], rows),
+        f'<p class="note">{len(experiment.runs)} run(s), newest first.</p>'
+        + (f'<div class="cards">{"".join(cards)}</div>' if cards else _table([], [])),
     )
 
 
@@ -188,6 +237,10 @@ def _metric_table(run: RunView, env: EnvironmentView) -> str:
 
 
 def _comparison_charts(run: RunView, env: EnvironmentView, limit: int = 6) -> str:
+    # A comparison of one planner is a row of single bars: it says nothing the
+    # planner's own figures do not, and it pushes everything else off screen.
+    if len(env.policies) < 2:
+        return ""
     per_policy = {p.name: run.metrics_for(env.name, p.name) for p in env.policies}
     names: List[str] = sorted(
         {name for metrics in per_policy.values() for name in charts.base_metric_names(metrics)}
@@ -227,20 +280,51 @@ def _comparison_charts(run: RunView, env: EnvironmentView, limit: int = 6) -> st
     return f'<div class="charts">{"".join(blocks)}</div>'
 
 
+def _policy_cards(run: RunView, env: EnvironmentView) -> str:
+    """One card per planner, carrying the figures a comparison is usually about.
+
+    Args:
+        run: The run being shown.
+        env: The environment whose planners to card.
+
+    Returns:
+        HTML for the card grid.
+    """
+    cards = []
+    for policy in env.policies:
+        metrics = run.metrics_for(env.name, policy.name)
+
+        def figure(key: str, fmt: str = "{:.3g}") -> str:
+            value = metrics.get(key)
+            return fmt.format(value) if value is not None else ""
+
+        cards.append(
+            f'<a class="card" href="{html(policy_url(run, env.name, policy.name))}">'
+            f'<h3 class="card-title">{html(policy.name)}</h3>'
+            f'<p class="note">{html(policy.policy_type or "planner")}</p>'
+            + _stats(
+                [
+                    ("Avg. return", figure("average_return")),
+                    ("Goal rate", figure("goal_reaching_rate", "{:.0%}")),
+                    ("Avg. steps", figure("average_actual_num_steps")),
+                    ("Episodes", str(len(policy.episodes)) if policy.episodes else ""),
+                ]
+            )
+            + "</a>"
+        )
+    return f'<div class="cards">{"".join(cards)}</div>' if cards else ""
+
+
 def run_page(run: RunView) -> str:
     """One run: its environments, and the comparison across planners in each."""
     sections = []
     for env in run.environments:
-        policy_links = " ".join(
-            f'<a class="pill" href="{html(policy_url(run, env.name, p.name))}">{html(p.name)}</a>'
-            for p in env.policies
-        )
         sections.append(
             f'<section class="env"><h2><a href="{html(env_url(run, env.name))}">'
             f"{html(env.name)}</a></h2>"
-            f'<p class="pills">{policy_links}</p>'
+            + _policy_cards(run, env)
             + _comparison_charts(run, env)
-            + _metric_table(run, env)
+            + f"<details><summary>All metrics</summary>{_metric_table(run, env)}</details>"
             + "</section>"
         )
 
@@ -255,8 +339,8 @@ def run_page(run: RunView) -> str:
             (run.experiment_name, _url("experiment", run.store_index, run.experiment_id)),
             (run.run_name, None),
         ],
-        f"<h1>{html(run.run_name)}</h1>"
-        f'<p class="note">{html(run.status)} · started {html(_timestamp(run.start_time))} · '
+        f"<h1>{html(run.run_name)} {_chip(run.status)}</h1>"
+        f'<p class="note">Started {html(_timestamp(run.start_time))} · '
         f"run <code>{html(run.run_id)}</code></p>"
         + "".join(sections)
         + f"<details><summary>Run parameters</summary>{params}</details>",
@@ -265,18 +349,6 @@ def run_page(run: RunView) -> str:
 
 def environment_page(run: RunView, env: EnvironmentView) -> str:
     """One environment within one run: its planners and their episode counts."""
-    rows = []
-    for policy in env.policies:
-        episodes = policy.episodes
-        kinds = sorted({a.kind.value for a in policy.artifacts})
-        rows.append(
-            [
-                f'<a href="{html(policy_url(run, env.name, policy.name))}">{html(policy.name)}</a>',
-                html(policy.policy_type or "—"),
-                str(len(episodes)),
-                ", ".join(html(k) for k in kinds) or "—",
-            ]
-        )
     env_plots = "".join(
         f'<figure><img src="{html(artifact_url(run, env.name + "/" + a.relative_path))}" '
         f'alt="{html(a.relative_path)}"><figcaption>{html(a.relative_path)}</figcaption></figure>'
@@ -292,26 +364,53 @@ def environment_page(run: RunView, env: EnvironmentView) -> str:
             (env.name, None),
         ],
         f"<h1>{html(env.name)}</h1>"
+        f'<p class="note">{len(env.policies)} planner(s) in run '
+        f'<a href="{html(run_url(run))}">{html(run.run_name)}</a>.</p>'
+        + _policy_cards(run, env)
         + _comparison_charts(run, env)
-        + _table(["Planner", "Type", "Episodes", "Artifact kinds"], rows)
-        + _metric_table(run, env)
-        + (f'<section class="gallery">{env_plots}</section>' if env_plots else ""),
+        + (f'<h2>Plots</h2><section class="gallery">{env_plots}</section>' if env_plots else "")
+        + f"<details><summary>All metrics</summary>{_metric_table(run, env)}</details>",
     )
 
 
 def policy_page(run: RunView, env: EnvironmentView, policy: PolicyView) -> str:
     """One planner on one environment: every episode it ran."""
-    rows = []
+    cards = []
     for index, artifacts in policy.episodes.items():
-        chosen = preferred(artifacts)
-        kinds = ", ".join(sorted({a.kind.value for a in artifacts}))
-        rows.append(
-            [
-                f'<a href="{html(episode_url(run, env.name, policy.name, index))}">'
-                f"Episode {index}</a>",
-                html(kinds),
-                html(chosen.player if chosen else "—"),
-            ]
+        summary = next((a.summary for a in artifacts if a.summary), None)
+        # The recorded path is the thumbnail when the episode drew one: a
+        # grid of paths says more about a planner at a glance than a grid of
+        # identical first frames would.
+        thumb_artifact = next(
+            (a for a in artifacts if a.kind in (ArtifactKind.GIF, ArtifactKind.PLOT)), None
+        )
+        thumb = (
+            f'<img loading="lazy" class="thumb" alt="Recorded path of episode {index}" '
+            f'src="{html(artifact_url(run, f"{env.name}/{policy.name}/{thumb_artifact.relative_path}"))}">'
+            if thumb_artifact
+            else '<div class="thumb thumb-empty"><span>No recorded path</span></div>'
+        )
+        outcome = ""
+        if summary and summary.reach_terminal_state is not None:
+            outcome = "terminal" if summary.reach_terminal_state else "out of steps"
+        cards.append(
+            f'<a class="card episode-card" '
+            f'href="{html(episode_url(run, env.name, policy.name, index))}">'
+            f"{thumb}"
+            f'<h3 class="card-title">Episode {index}</h3>'
+            + _stats(
+                [
+                    (
+                        "Return",
+                        f"{summary.discounted_return:.2f}"
+                        if summary and summary.discounted_return is not None
+                        else "",
+                    ),
+                    ("Steps", str(summary.num_steps) if summary and summary.num_steps else ""),
+                    ("Ended", html(outcome)),
+                ]
+            )
+            + "</a>"
         )
     plots = "".join(
         f'<figure><img src="{html(artifact_url(run, f"{env.name}/{policy.name}/{a.relative_path}"))}" '
@@ -329,10 +428,39 @@ def policy_page(run: RunView, env: EnvironmentView, policy: PolicyView) -> str:
             (policy.name, None),
         ],
         f"<h1>{html(policy.name)}</h1>"
-        f'<p class="note">on <a href="{html(env_url(run, env.name))}">{html(env.name)}</a></p>'
-        + _table(["Episode", "Artifacts", "Player"], rows)
-        + (f'<section class="gallery">{plots}</section>' if plots else ""),
+        f'<p class="note">{len(policy.episodes)} episode(s) on '
+        f'<a href="{html(env_url(run, env.name))}">{html(env.name)}</a> · '
+        "each card shows that episode's recorded path.</p>"
+        + (
+            f'<div class="cards episodes">{"".join(cards)}</div>'
+            if cards
+            else '<p class="empty">This planner produced no episode artifacts.</p>'
+        )
+        + (f'<h2>Plots</h2><section class="gallery">{plots}</section>' if plots else ""),
     )
+
+
+def view_label(artifact: EpisodeArtifact) -> str:
+    """Name one artifact as a way of watching the episode.
+
+    The label says what the viewer will see, not which file it came from:
+    "3D replay" and "Recorded path" are the two ways the same episode is shown,
+    and a GIF that is not a path — a board, a grid — is not called one.
+
+    Args:
+        artifact: The artifact to label.
+
+    Returns:
+        A short label for its tab.
+    """
+    if artifact.kind is ArtifactKind.TRACE:
+        return "3D replay"
+    if artifact.kind is ArtifactKind.VIDEO:
+        return "Recorded video"
+    if artifact.kind is ArtifactKind.GIF:
+        name = artifact.relative_path.rsplit("/", 1)[-1]
+        return "Recorded path" if "path" in name else "Recorded animation"
+    return "Plot"
 
 
 def _player_html(run: RunView, env: str, policy: str, artifact: EpisodeArtifact) -> str:
@@ -344,7 +472,7 @@ def _player_html(run: RunView, env: str, policy: str, artifact: EpisodeArtifact)
             f'src="{html(src)}"></video>'
         )
     if artifact.player == "image":
-        return f'<img class="player" src="{html(src)}" alt="Episode replay">'
+        return f'<img class="player" src="{html(src)}" alt="{html(view_label(artifact))}">'
     # trace-viewer
     return (
         f'<div class="viewer" id="viewer" data-trace="{html(src)}" '
@@ -398,13 +526,57 @@ def episode_page(
     index: int,
     artifacts: Sequence[EpisodeArtifact],
 ) -> str:
-    """One episode, with the player its artifacts earn."""
+    """One episode, with every way its artifacts allow of watching it.
+
+    An episode usually leaves two records of the same run: the trace, which the
+    3D viewer replays, and the recorded path the environment drew while it ran.
+    Both are offered, as tabs over one another, because they answer different
+    questions — the replay shows what the planner believed, the path shows
+    where it went.
+    """
     chosen = preferred(artifacts)
-    player = (
-        _player_html(run, env.name, policy.name, chosen)
-        if chosen
+    # Every artifact that can be shown, preferred one first, so the tab that is
+    # open on arrival is the richest view the episode produced.
+    playable = [chosen] if chosen else []
+    playable += [a for a in artifacts if a is not chosen and a.kind is not ArtifactKind.TRACE]
+
+    tabs = "".join(
+        f'<button type="button" class="tab" data-view="{i}" '
+        f'aria-pressed="{"true" if i == 0 else "false"}">{html(view_label(a))}</button>'
+        for i, a in enumerate(playable)
+    )
+    panels = "".join(
+        f'<div class="view" data-view="{i}"{"" if i == 0 else " hidden"}>'
+        f"{_player_html(run, env.name, policy.name, a)}</div>"
+        for i, a in enumerate(playable)
+    )
+    views = (
+        f'<div class="views"><div class="tabs">{tabs}</div>{panels}</div>'
+        + '<script src="/static/viewer/views.js"></script>'
+        if playable
         else '<p class="empty">This episode produced no artifact the site can play.</p>'
     )
+
+    summary = next((a.summary for a in artifacts if a.summary), None)
+    facts = _stats(
+        [
+            (
+                "Discounted return",
+                f"{summary.discounted_return:.2f}"
+                if summary and summary.discounted_return is not None
+                else "",
+            ),
+            ("Steps", str(summary.num_steps) if summary and summary.num_steps else ""),
+            (
+                "Ended",
+                ("terminal state" if summary.reach_terminal_state else "out of steps")
+                if summary and summary.reach_terminal_state is not None
+                else "",
+            ),
+            ("Views", str(len(playable)) if len(playable) > 1 else ""),
+        ]
+    )
+
     others = "".join(
         f'<li><a href="{html(artifact_url(run, f"{env.name}/{policy.name}/{a.relative_path}"))}">'
         f'{html(a.relative_path)}</a> <span class="dim">({html(a.kind.value)})</span></li>'
@@ -421,10 +593,11 @@ def episode_page(
             (f"Episode {index}", None),
         ],
         f"<h1>Episode {index}</h1>"
-        f'<p class="note">{html(policy.name)} on {html(env.name)} · '
-        f"played as <strong>{html(chosen.kind.value if chosen else 'nothing')}</strong></p>"
-        f"{player}"
-        f"<h2>Files</h2><ul>{others}</ul>",
+        f'<p class="note"><a href="{html(policy_url(run, env.name, policy.name))}">'
+        f"{html(policy.name)}</a> on "
+        f'<a href="{html(env_url(run, env.name))}">{html(env.name)}</a></p>'
+        f"{facts}{views}"
+        f'<details><summary>Files</summary><ul class="files">{others}</ul></details>',
     )
 
 

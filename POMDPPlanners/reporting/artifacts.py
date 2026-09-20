@@ -16,7 +16,7 @@ own fields — never by which environment produced it.
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence
+from typing import Dict, List, Optional, Sequence, Tuple
 
 import json
 import re
@@ -116,6 +116,11 @@ class EpisodeArtifact:
         payload_kind: For a trace, the payload identifier from its envelope;
             ``None`` otherwise. A viewer refuses a payload kind it does not
             know rather than drawing it wrong.
+        summary: For a trace, the envelope's episode-level numbers — steps,
+            discounted return, whether it reached a terminal state. Read while
+            the file is already open for its payload kind, so that listing
+            pages can show an episode's outcome without opening megabytes of
+            particles a second time.
     """
 
     kind: ArtifactKind
@@ -123,6 +128,7 @@ class EpisodeArtifact:
     relative_path: str
     episode_index: Optional[int] = None
     payload_kind: Optional[str] = None
+    summary: Optional["TraceSummary"] = None
 
     @property
     def player(self) -> str:
@@ -130,8 +136,24 @@ class EpisodeArtifact:
         return PLAYER_FOR_KIND[self.kind]
 
 
-def _trace_payload_kind(path: Path) -> Optional[str]:
-    """Return a JSON file's trace payload kind, or ``None`` if it is not a trace.
+@dataclass(frozen=True)
+class TraceSummary:
+    """The episode-level numbers a trace envelope carries.
+
+    Attributes:
+        num_steps: Steps the episode ran.
+        discounted_return: The episode's discounted return.
+        reach_terminal_state: Whether it ended in a terminal state rather than
+            by exhausting its step budget.
+    """
+
+    num_steps: Optional[int] = None
+    discounted_return: Optional[float] = None
+    reach_terminal_state: Optional[bool] = None
+
+
+def _read_trace_envelope(path: Path) -> Optional[Tuple[str, TraceSummary]]:
+    """Read a JSON file's payload kind and episode summary.
 
     The run directory also holds MLflow's own JSON tables, so a ``.json`` file
     is only a trace when it carries the envelope's identifying fields.
@@ -140,7 +162,8 @@ def _trace_payload_kind(path: Path) -> Optional[str]:
         path: The JSON file to inspect.
 
     Returns:
-        The ``payload_kind`` string, or ``None``.
+        The ``payload_kind`` and its summary, or ``None`` when the file is not
+        a trace.
     """
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
@@ -150,7 +173,18 @@ def _trace_payload_kind(path: Path) -> Optional[str]:
         return None
     if "schema_version" not in data or "payload_kind" not in data:
         return None
-    return str(data["payload_kind"])
+
+    def number(key: str):
+        value = data.get(key)
+        return value if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+
+    terminal = data.get("reach_terminal_state")
+    summary = TraceSummary(
+        num_steps=int(number("num_steps")) if number("num_steps") is not None else None,
+        discounted_return=number("discounted_return"),
+        reach_terminal_state=terminal if isinstance(terminal, bool) else None,
+    )
+    return str(data["payload_kind"]), summary
 
 
 def classify(path: Path, relative_path: str) -> Optional[EpisodeArtifact]:
@@ -168,10 +202,12 @@ def classify(path: Path, relative_path: str) -> Optional[EpisodeArtifact]:
         return None
 
     payload_kind: Optional[str] = None
+    summary: Optional[TraceSummary] = None
     if kind is ArtifactKind.TRACE:
-        payload_kind = _trace_payload_kind(path)
-        if payload_kind is None:
+        envelope = _read_trace_envelope(path)
+        if envelope is None:
             return None
+        payload_kind, summary = envelope
 
     return EpisodeArtifact(
         kind=kind,
@@ -179,6 +215,7 @@ def classify(path: Path, relative_path: str) -> Optional[EpisodeArtifact]:
         relative_path=relative_path,
         episode_index=episode_index_from_name(path.name),
         payload_kind=payload_kind,
+        summary=summary,
     )
 
 
