@@ -82,14 +82,19 @@ class CaptureTheFlagVisualizer:
         )
         self.paths = self._worn_paths()
         self.terrain = ground_plane(
-            (_VIEW_WIDTH, _VIEW_HEIGHT), _TOP_BAR, self.origin, env.midline, self.paths
+            (_VIEW_WIDTH, _VIEW_HEIGHT),
+            _TOP_BAR,
+            self.origin,
+            env.midline,
+            self.paths,
+            env.trees,
         )
         self.font = ImageFont.load_default()
 
     def _worn_paths(self) -> List[Tuple[float, float, float, float]]:
         """Return the trails worn between the bases and the crossing."""
         env = self.env
-        crossing = float(river_axis(np.array(float(env.blue_base[1])), env.midline))
+        crossing = float(river_axis(np.array(float(env.blue_base[1])), env.midline, env.trees))
         return [
             (
                 float(env.blue_base[0]),
@@ -332,7 +337,7 @@ class CaptureTheFlagVisualizer:
         """Draw the log crossing, centred on the channel it spans."""
         env = self.env
         row = float(env.blue_base[1])
-        axis = float(river_axis(np.array(row), env.midline))
+        axis = float(river_axis(np.array(row), env.midline, env.trees))
         start = iso(axis - 1.05, row, self.origin)
         end = iso(axis + 1.05, row, self.origin)
         draw = ImageDraw.Draw(canvas)
