@@ -407,14 +407,22 @@ There is **no torch vectorized model and no C++ native model**, so VOPP is
 unsupported and the environment is deliberately absent from the vectorized
 config contract. ``PFT_DPW`` takes the scalar API directly.
 
-There is no dedicated belief class either; the generic weighted particle filter
-suffices, since the observation likelihood is closed form. Be aware of what that
-costs. A bootstrap filter over whole 100-cell maps is high-dimensional, and with
-a flat prior over where the fire started it is degenerate: no prior particle
-matches the observed front, every weight lands on the epsilon floor, and both
-belief panels render as noise. Seed the particles with what the robots actually
-know at reset, use enough of them, and inspect effective sample size rather than
-trusting the wind histogram on sight. The wind itself *is* identifiable from the
-spread -- an exact posterior over the eight values, given the map, puts most of
-its mass on the true wind within about twenty-five steps -- so a flat histogram
-late in an episode is a statement about the filter, not about the environment.
+The belief is ``FirefightingVectorizedBelief``, which
+``create_environment_belief`` returns. It runs every stage of the transition
+over the particle axis and the grid at once, and it does two things a plain
+bootstrap filter does not, both because a bootstrap filter over whole 100-cell
+maps is degenerate here. The poses, tanks and healths come back from the sensor
+exactly but depend on hidden state, so weighting by them puts every weight on
+the floor and both belief panels render as noise; this belief writes the
+reported values onto the particles instead. And the wind never changes, so
+resampling across wind values deletes hypotheses no later evidence can restore;
+resampling therefore happens inside a wind value.
+
+That does not make the filter free of the usual cautions. Use enough particles
+and inspect effective sample size rather than trusting the wind histogram on
+sight. The wind *is* identifiable from the spread -- an exact posterior over the
+eight values, given the map, puts most of its mass on the true wind within about
+twenty-five steps -- but with random actions this filter is slower than that: in
+a six-episode check it held about 0.4 of its weight on the true wind after
+thirty steps, against a prior of 0.125. A flat histogram late in an episode is a
+statement about the filter, not about the environment.

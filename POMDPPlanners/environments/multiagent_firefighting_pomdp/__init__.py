@@ -5,6 +5,7 @@
 Exports:
     MultiAgentFirefightingPOMDP: The environment.
     MultiAgentFirefightingVisualizer: Episode renderer.
+    FirefightingVectorizedBelief: The environment's default belief.
     MultiAgentFirefightingInitialStateDistribution: The reset distribution.
     FireCategory: The five per-cell categories.
     FirefightingAction: The five per-robot actions.
@@ -47,11 +48,14 @@ __all__ = [
     "FirefightingState",
     "HEAT_DAMAGE",
     "MAX_HEAT_DAMAGE_PER_STEP",
+    "FirefightingVectorizedBelief",
+    "FirefightingVectorizedUpdater",
     "MultiAgentFirefightingInitialStateDistribution",
     "MultiAgentFirefightingMetrics",
     "MultiAgentFirefightingPOMDP",
     "MultiAgentFirefightingStepChannel",
     "MultiAgentFirefightingVisualizer",
+    "create_firefighting_belief",
     "NUM_CATEGORIES",
     "NUM_ROBOT_ACTIONS",
     "NUM_WIND_VALUES",
@@ -67,4 +71,9 @@ __all__ = [
     "default_robot_start_cells",
 ]
 
+from .multiagent_firefighting_vectorized_belief import (
+    FirefightingVectorizedBelief,
+    FirefightingVectorizedUpdater,
+    create_firefighting_belief,
+)
 from .multiagent_firefighting_visualizer import MultiAgentFirefightingVisualizer

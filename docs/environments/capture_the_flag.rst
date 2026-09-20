@@ -266,6 +266,27 @@ likelihood. A single flag scan, by contrast, barely separates the candidates.
 Strong evidence about where the enemy is, weak evidence about where the flag
 is -- that asymmetry is the planning problem.
 
+Belief
+------
+
+``create_environment_belief`` returns ``CaptureTheFlagVectorizedBelief``, a
+particle filter whose transition and likelihood both run over the whole
+particle set at once through ``CaptureTheFlagVectorizedUpdater``.
+
+Two parts of a reading need different treatment. Blue's own positions, the
+carrier ids, its freezes and both scores come back without noise, so the
+posterior puts all its mass on them; the belief writes them onto every particle
+rather than weighting by them, because weighting floors every particle whose
+blue player slipped differently from the real one -- most of them, most steps.
+And the flag candidate is static: nothing in the transition moves a particle
+from one candidate to another, so resampling across candidates deletes
+hypotheses permanently. Resampling therefore happens inside a candidate.
+
+What remains is a genuine filter with a sharp likelihood, so it converges on
+the true candidate in most episodes and over-commits to a wrong one in a few:
+over twelve 15-step episodes on the default field it held a mean weight near
+0.7 on the truth at 200 particles and near 0.8 at 400.
+
 Rewards and metrics
 -------------------
 
