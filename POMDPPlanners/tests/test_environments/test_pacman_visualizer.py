@@ -23,7 +23,7 @@ from POMDPPlanners.environments.pacman_pomdp.pacman_pomdp import PacManPOMDP
 from POMDPPlanners.environments.pacman_pomdp.pacman_pomdp_beliefs.pacman_vectorized_updater import (
     PacManVectorizedUpdater,
 )
-from POMDPPlanners.environments.pacman_pomdp.pacman_visualizer import PacManVisualizer
+from POMDPPlanners.environments.pacman_pomdp.visualizer.pacman_visualizer import PacManVisualizer
 from POMDPPlanners.tests.test_utils.env_pinned_kwargs import pacman_pinned_kwargs
 
 

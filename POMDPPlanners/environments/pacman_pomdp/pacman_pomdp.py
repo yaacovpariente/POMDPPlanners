@@ -23,7 +23,7 @@ Classes:
 from enum import Enum
 from pathlib import Path
 from collections.abc import Hashable
-from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Set, Tuple, Union
 
 import numpy as np
 
@@ -43,6 +43,9 @@ from POMDPPlanners.environments.pacman_pomdp.pacman_pomdp_utils.pacman_reward_mo
     PacManRewardModel,
 )
 from POMDPPlanners.utils.statistics_utils import confidence_interval
+
+if TYPE_CHECKING:
+    from POMDPPlanners.core.simulation.traces import EpisodeTrace
 
 _GHOST_COORDINATION_CODES = {"independent": 0, "coordinated": 1, "mixed": 2}
 _GHOST_STRATEGY_CODES = {"aggressive": 0, "patrol": 1, "ambush": 2}
@@ -547,6 +550,33 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
     def get_terminal(self, state: np.ndarray) -> bool:
         """Return whether the state is terminal."""
         return bool(state[self._idx_terminal] > 0.5)
+
+    def state_layout(self) -> Dict[str, int]:
+        """Return where each field sits in a state array built by :meth:`make_state`.
+
+        The readers above are the way Python code should take a state apart.
+        A consumer outside Python cannot call them — a browser viewer replaying
+        a trace gets belief particles as raw arrays and has to slice them
+        itself — so the layout is published here rather than re-derived from
+        ``num_ghosts`` and the pellet count by every such reader, which would
+        be a second definition free to drift from this one.
+
+        Returns:
+            Index of each field in the canonical layout, plus the array's
+            total ``dim``. Ghost ``g`` occupies ``ghosts_start + 2 * g`` and
+            the slot after it; the pellet mask spans ``pellets_start`` up to
+            (but excluding) ``pellets_end``.
+        """
+        return {
+            "pacman_row": int(self._idx_pac_row),
+            "pacman_col": int(self._idx_pac_col),
+            "ghosts_start": int(self._idx_ghosts_start),
+            "pellets_start": int(self._idx_pellets_start),
+            "pellets_end": int(self._idx_pellets_end),
+            "score": int(self._idx_score),
+            "terminal": int(self._idx_terminal),
+            "dim": int(self._state_dim),
+        }
 
     def _require_state_array(self, state: Any) -> np.ndarray:
         if not isinstance(state, np.ndarray) or state.shape != (self._state_dim,):
@@ -1457,7 +1487,7 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
             actions: List of actions taken at each step.
             cache_path: Path where the GIF should be saved.
         """
-        from POMDPPlanners.environments.pacman_pomdp.pacman_visualizer import (
+        from POMDPPlanners.environments.pacman_pomdp.visualizer.pacman_visualizer import (
             PacManVisualizer,
         )  # pylint: disable=import-outside-toplevel
 
@@ -1474,13 +1504,41 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
             output_dir: Directory into which the ``.gif`` visualization is written
             episode_index: Zero-based episode index, used to name the file
         """
-        from POMDPPlanners.environments.pacman_pomdp.pacman_visualizer import (
+        from POMDPPlanners.environments.pacman_pomdp.visualizer.pacman_visualizer import (
             PacManVisualizer,
         )  # pylint: disable=import-outside-toplevel
 
         cache_path = output_dir / f"agent_path_{episode_index}.gif"
         visualizer = PacManVisualizer(self)
         visualizer.cache_visualization(history, cache_path)
+
+    def build_episode_trace(
+        self, history: List[StepData], episode_index: int, policy_name: Optional[str] = None
+    ) -> "EpisodeTrace":
+        """Write this episode as data, beside the GIF.
+
+        Args:
+            history: List of step data from an episode.
+            episode_index: Zero-based episode index within its run.
+            policy_name: Name of the policy that produced the episode.
+
+        Returns:
+            The episode's trace, with payload kind ``pacman.v1``.
+        """
+        # Imported here rather than at module scope: the exporter pulls in the
+        # trace schema, and this module is imported by every PacMan run
+        # including ones that never write anything.
+        # pylint: disable-next=import-outside-toplevel
+        from POMDPPlanners.environments.pacman_pomdp.visualizer.trace_exporter import (
+            build_pacman_trace,
+        )
+
+        return build_pacman_trace(
+            environment=self,
+            history=history,
+            episode_index=episode_index,
+            policy_name=policy_name,
+        )
 
 
 class _PacManInitialObservationDistribution(Distribution):

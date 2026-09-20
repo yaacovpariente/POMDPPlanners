@@ -57,7 +57,7 @@ from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_visualizer import 
     RockSampleVisualizer,
 )
 from POMDPPlanners.environments.pacman_pomdp.pacman_pomdp import PacManPOMDP
-from POMDPPlanners.environments.pacman_pomdp.pacman_visualizer import PacManVisualizer
+from POMDPPlanners.environments.pacman_pomdp.visualizer.pacman_visualizer import PacManVisualizer
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
     ContinuousLightDarkPOMDP,
 )
