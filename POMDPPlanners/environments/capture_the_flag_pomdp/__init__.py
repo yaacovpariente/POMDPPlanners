@@ -18,12 +18,20 @@ from POMDPPlanners.environments.capture_the_flag_pomdp.capture_the_flag_pomdp_ut
     decode_joint_action,
     encode_joint_action,
 )
+from POMDPPlanners.environments.capture_the_flag_pomdp.capture_the_flag_vectorized_belief import (
+    CaptureTheFlagVectorizedBelief,
+    CaptureTheFlagVectorizedUpdater,
+    create_capture_the_flag_belief,
+)
 
 __all__ = [
-    "CaptureTheFlagPOMDP",
     "CaptureTheFlagMetrics",
+    "CaptureTheFlagPOMDP",
     "CaptureTheFlagStepChannel",
+    "CaptureTheFlagVectorizedBelief",
+    "CaptureTheFlagVectorizedUpdater",
     "RedRole",
+    "create_capture_the_flag_belief",
     "decode_joint_action",
     "encode_joint_action",
 ]

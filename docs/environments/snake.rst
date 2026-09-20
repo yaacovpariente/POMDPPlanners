@@ -228,10 +228,18 @@ carries over with the new head cell ruled out — not eating proves the food is
 not where the head has just arrived. Either prior is then multiplied by the
 likelihood of the sighting and the scent, and normalised.
 
-A generic particle filter runs on this environment too, but it is lossy here:
-a sighting rules out every cell but one, and a filter that happened to hold no
-particle there would floor every weight and resample cells the sensor has
-already excluded.
+``SnakeVectorizedWeightedParticleBelief`` is the batched alternative, and it is
+what ``create_environment_belief`` returns. It carries particles rather than the
+exact categorical, and updates them through ``SnakeVectorizedUpdater``: one
+array step for the whole set, and the likelihood of the body, the sighting and
+the scent added across it. Where a sighting rules out every particle it holds,
+it redraws the food from the cells the reading allows rather than resampling
+from particles the sensor has already excluded -- a sighting names one cell
+exactly, so that redraw is the posterior.
+
+A generic particle filter runs on this environment too, but it is lossy here for
+that same reason: it would floor every weight and resample cells the sensor has
+already ruled out.
 
 Metrics
 -------

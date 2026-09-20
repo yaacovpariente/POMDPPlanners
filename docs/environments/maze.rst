@@ -173,6 +173,23 @@ it uses the same maze geometry.
 
    ContinuousMazePOMDP: bounded displacements through a generated maze.
 
+Belief
+------
+
+``create_environment_belief`` returns a
+``MazeVectorizedWeightedParticleBelief`` for either maze. The hidden state is
+one bit -- which goal pays -- so the update is cheap per particle and the Python
+loop around it is the whole cost; ``DiscreteMazeVectorizedUpdater`` and
+``ContinuousMazeVectorizedUpdater`` do that loop's work in NumPy instead.
+
+Both reproduce the environment's event rule rather than approximating it: the
+discrete one by the same lookup table the environment builds, the continuous one
+by the segment test written as array algebra. A belief that walked through walls
+the world refuses would be searching a different maze. The continuous updater's
+positions agree with the environment's to within its cell tolerance rather than
+bit for bit, because it stops a step at the tolerance-widened cell boundary the
+same code uses to decide membership.
+
 TMazePOMDP
 ----------
 

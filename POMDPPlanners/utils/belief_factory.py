@@ -125,19 +125,50 @@ _ENV_FACTORY_REGISTRY: dict[str, tuple[str, str, BeliefType]] = {
         "create_rocksample_belief",
         BeliefType.VECTORIZED_PARTICLE,
     ),
+    # The Battleship, Snake and Chicheck Invaders entries point at beliefs that
+    # redraw or reinvigorate rather than resample: their observation models are
+    # sharp enough that a plain weight-and-resample filter empties out. Each
+    # module's docstring says how it avoids that.
+    "BattleshipPOMDP": (
+        "POMDPPlanners.environments.battleship_pomdp.battleship_vectorized_belief",
+        "create_battleship_belief",
+        BeliefType.VECTORIZED_PARTICLE,
+    ),
+    "DiscreteMazePOMDP": (
+        "POMDPPlanners.environments.maze_pomdp.maze_pomdp_beliefs",
+        "create_discrete_maze_belief",
+        BeliefType.VECTORIZED_PARTICLE,
+    ),
+    "ContinuousMazePOMDP": (
+        "POMDPPlanners.environments.maze_pomdp.maze_pomdp_beliefs",
+        "create_continuous_maze_belief",
+        BeliefType.VECTORIZED_PARTICLE,
+    ),
+    "MultiAgentFirefightingPOMDP": (
+        "POMDPPlanners.environments.multiagent_firefighting_pomdp."
+        "multiagent_firefighting_vectorized_belief",
+        "create_firefighting_belief",
+        BeliefType.VECTORIZED_PARTICLE,
+    ),
     "OccupancyGridMappingPOMDP": (
         "POMDPPlanners.environments.occupancy_grid_mapping_pomdp.occupancy_grid_mapping_beliefs",
         "create_occupancy_grid_mapping_belief",
         BeliefType.VECTORIZED_PARTICLE,
     ),
-    # PARTICLE rather than VECTORIZED_PARTICLE: Chicheck Invaders has one filter,
-    # the scalar weighted particle belief with flock reinvigoration, and no
-    # batched twin. Claiming the vectorized type would promise a batched update
-    # that does not exist.
+    "SnakePOMDP": (
+        "POMDPPlanners.environments.snake_pomdp.snake_vectorized_belief",
+        "create_snake_belief",
+        BeliefType.VECTORIZED_PARTICLE,
+    ),
+    "CaptureTheFlagPOMDP": (
+        "POMDPPlanners.environments.capture_the_flag_pomdp.capture_the_flag_vectorized_belief",
+        "create_capture_the_flag_belief",
+        BeliefType.VECTORIZED_PARTICLE,
+    ),
     "ChicheckInvadersPOMDP": (
-        "POMDPPlanners.environments.chicheck_invaders_pomdp.chicheck_invaders_belief",
-        "create_chicheck_invaders_belief",
-        BeliefType.PARTICLE,
+        "POMDPPlanners.environments.chicheck_invaders_pomdp.chicheck_invaders_vectorized_belief",
+        "create_chicheck_invaders_vectorized_belief",
+        BeliefType.VECTORIZED_PARTICLE,
     ),
 }
 
