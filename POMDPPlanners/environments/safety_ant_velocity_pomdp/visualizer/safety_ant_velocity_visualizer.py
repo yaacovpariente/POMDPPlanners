@@ -11,7 +11,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 from POMDPPlanners.core.simulation import StepData
-from POMDPPlanners.environments.safety_ant_velocity_pomdp.safety_ant_assets import (
+from POMDPPlanners.environments.safety_ant_velocity_pomdp.visualizer.safety_ant_assets import (
     ant_sprite,
     concrete_texture,
 )

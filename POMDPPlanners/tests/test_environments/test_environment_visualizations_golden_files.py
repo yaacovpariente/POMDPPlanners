@@ -118,7 +118,7 @@ from POMDPPlanners.environments.push_pomdp.continuous_push_pomdp_visualizer impo
 from POMDPPlanners.environments.safety_ant_velocity_pomdp.safety_ant_velocity_pomdp import (
     SafeAntVelocityPOMDP,
 )
-from POMDPPlanners.environments.safety_ant_velocity_pomdp.safety_ant_velocity_visualizer import (
+from POMDPPlanners.environments.safety_ant_velocity_pomdp.visualizer import (
     SafeAntVelocityVisualizer,
 )
 from POMDPPlanners.environments.maze_pomdp.t_maze_pomdp import (
