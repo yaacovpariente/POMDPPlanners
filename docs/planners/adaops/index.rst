@@ -51,6 +51,12 @@ identifier. No bins are inferred. Bounds must be valid for the configured
 horizon. Search snapshots and numeric metrics are implemented and tested;
 ten-episode planner QA is deliberately pending.
 
+Configuring the particle sizing
+-------------------------------
+
+KLD particle sizing needs explicit state bins: pass a ``state_binner``. Without
+one, adaptation is off and resampling uses ``max_particles`` instead.
+
 When to use it
 --------------
 
