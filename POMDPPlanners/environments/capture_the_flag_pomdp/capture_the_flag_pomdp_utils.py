@@ -196,7 +196,9 @@ class StateLayout:
             One ``(x, y)`` cell per blue player.
         """
         base = self.blue_pos
-        return [(int(state[base + 2 * i]), int(state[base + 2 * i + 1])) for i in range(self.n_blue)]
+        return [
+            (int(state[base + 2 * i]), int(state[base + 2 * i + 1])) for i in range(self.n_blue)
+        ]
 
     def red_cells(self, state: np.ndarray) -> List[Tuple[int, int]]:
         """Read every red player's cell out of a state vector.

@@ -48,7 +48,7 @@ def study_fixture():
         constant = trial.suggest_float("exploration_constant", 0.1, 10.0)
         trial.suggest_categorical("rollout", ["random", "greedy"])
 
-        returns = -((simulations - 300) / 300) ** 2 - constant / 20 + rng.gauss(0, 0.05)
+        returns = -(((simulations - 300) / 300) ** 2) - constant / 20 + rng.gauss(0, 0.05)
         collisions = max(0.0, 0.5 - simulations / 1000)
 
         trial.set_user_attr("metric_discounted_return", returns)

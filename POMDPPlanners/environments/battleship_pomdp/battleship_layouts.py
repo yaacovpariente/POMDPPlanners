@@ -54,7 +54,9 @@ def _ship_placements(board_size: int, length: int) -> List[Tuple[int, ...]]:
     if length < 1:
         raise ValueError(f"ship length must be at least 1, got {length}")
     if length > board_size:
-        raise ValueError(f"ship of length {length} does not fit on a {board_size}x{board_size} board")
+        raise ValueError(
+            f"ship of length {length} does not fit on a {board_size}x{board_size} board"
+        )
 
     placements: List[Tuple[int, ...]] = []
     for row in range(board_size):
@@ -66,9 +68,7 @@ def _ship_placements(board_size: int, length: int) -> List[Tuple[int, ...]]:
         return placements
     for row in range(board_size - length + 1):
         for col in range(board_size):
-            placements.append(
-                tuple((row + offset) * board_size + col for offset in range(length))
-            )
+            placements.append(tuple((row + offset) * board_size + col for offset in range(length)))
     return placements
 
 
@@ -140,7 +140,8 @@ class FleetLayoutTable:
         }
         blocked_masks = {
             length: [
-                _neighbourhood_mask(self.board_size, cells) if not self.allow_adjacent_ships
+                _neighbourhood_mask(self.board_size, cells)
+                if not self.allow_adjacent_ships
                 else sum(1 << cell for cell in cells)
                 for cells in per_length_placements[length]
             ]

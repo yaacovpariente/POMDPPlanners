@@ -114,14 +114,10 @@ def _rows(rounds: Sequence[Any]) -> List[Dict[str, Any]]:
                 "held_out_log_likelihood": float(
                     diagnostics.get("held_out_log_likelihood", float("nan"))
                 ),
-                "horizon_drift_ratio": float(
-                    diagnostics.get("horizon_drift_ratio", float("nan"))
-                ),
+                "horizon_drift_ratio": float(diagnostics.get("horizon_drift_ratio", float("nan"))),
                 # Where the holdout loss bottomed out: past it the epochs bought
                 # training loss with generalization.
-                "best_holdout_epoch": (
-                    int(np.argmin(holdout)) + 1 if holdout else None
-                ),
+                "best_holdout_epoch": (int(np.argmin(holdout)) + 1 if holdout else None),
                 # The tracker's records name the saved file; a live round result
                 # has the model itself, and its fingerprint is what ties the row
                 # to a set of parameters either way.

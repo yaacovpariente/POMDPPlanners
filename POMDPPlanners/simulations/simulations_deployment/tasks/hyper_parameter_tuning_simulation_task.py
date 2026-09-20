@@ -839,9 +839,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         """Say whether the study converged or merely ran out of budget."""
         if not isinstance(callback, EarlyStoppingCallback):
             return
-        completed = len(
-            [t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE]
-        )
+        completed = len([t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE])
         if callback.stopped_at_trial is None:
             self.logger.info(
                 "Early stopping did not fire: the front was still improving after "

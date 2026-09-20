@@ -175,9 +175,11 @@ class CaptureTheFlagVisualizer:
                 share = weight / peak
                 radius = 5 + 13 * share
                 centre = iso(cell[0], cell[1], self.origin)
-                offset = -7 + 14 * (index / max(1, len(red_marginals) - 1)) if len(
-                    red_marginals
-                ) > 1 else 0
+                offset = (
+                    -7 + 14 * (index / max(1, len(red_marginals) - 1))
+                    if len(red_marginals) > 1
+                    else 0
+                )
                 draw.ellipse(
                     [
                         centre[0] + offset - radius,
@@ -302,9 +304,7 @@ class CaptureTheFlagVisualizer:
             frozen = (
                 int(state[(layout.freeze_blue if team_blue else layout.freeze_red) + index]) > 0
             )
-            previous = (
-                blue_cells[index] if team_blue else red_cells[index]
-            )
+            previous = blue_cells[index] if team_blue else red_cells[index]
             facing = 1 if previous[0] >= cell[0] else -1
             carrying_red = team_blue and int(state[layout.carrier_red_flag]) == index + 1
             carrying_blue = (not team_blue) and int(state[layout.carrier_blue_flag]) == index + 1
@@ -322,7 +322,9 @@ class CaptureTheFlagVisualizer:
             )
             self._blit(canvas, sprite, centre, lift=10)
 
-    def _blit(self, canvas: Image.Image, sprite: Image.Image, centre: Tuple[int, int], lift: int) -> None:
+    def _blit(
+        self, canvas: Image.Image, sprite: Image.Image, centre: Tuple[int, int], lift: int
+    ) -> None:
         """Composite a sprite so its feet sit on a cell centre."""
         canvas.alpha_composite(
             sprite, (centre[0] - sprite.width // 2, centre[1] - sprite.height + lift)
@@ -360,9 +362,7 @@ class CaptureTheFlagVisualizer:
         """Draw the expanding ping that marks a scan action."""
         for radius, alpha in ((22, 200), (38, 140), (56, 86), (76, 44)):
             ring = Image.new("RGBA", (radius * 2 + 2, radius + 2), (0, 0, 0, 0))
-            ImageDraw.Draw(ring).ellipse(
-                [0, 0, radius * 2, radius], outline=(186, 234, 250, alpha)
-            )
+            ImageDraw.Draw(ring).ellipse([0, 0, radius * 2, radius], outline=(186, 234, 250, alpha))
             canvas.alpha_composite(ring, (centre[0] - radius, centre[1] - radius // 2))
 
     # ------------------------------------------------------------------ hud
@@ -388,7 +388,10 @@ class CaptureTheFlagVisualizer:
         draw.rectangle([49, 8, 57, 12], fill=RED[2])
         draw.text((64, 8), str(int(state[layout.score_red])), font=self.font, fill=(240, 238, 230))
         draw.text(
-            (100, 8), f"TURN {step_index:03d} / {total_steps:03d}", font=self.font, fill=(176, 176, 190)
+            (100, 8),
+            f"TURN {step_index:03d} / {total_steps:03d}",
+            font=self.font,
+            fill=(176, 176, 190),
         )
         blue_taken = int(state[layout.carrier_blue_flag]) != 0
         red_taken = int(state[layout.carrier_red_flag]) != 0
@@ -411,13 +414,15 @@ class CaptureTheFlagVisualizer:
         panel(draw, map_box, (18, 20, 18))
         mini = self.terrain.resize((map_box[2] - map_box[0] - 7, map_box[3] - map_box[1] - 7))
         canvas.paste(mini, (map_box[0] + 4, map_box[1] + 4))
-        for cell, colour in [
-            (cell, BLUE[3]) for cell in layout.blue_cells(state)
-        ] + [(cell, RED[3]) for cell in layout.red_cells(state)]:
+        for cell, colour in [(cell, BLUE[3]) for cell in layout.blue_cells(state)] + [
+            (cell, RED[3]) for cell in layout.red_cells(state)
+        ]:
             point = iso(cell[0], cell[1], self.origin)
             mx = map_box[0] + 4 + int(point[0] / _VIEW_WIDTH * (map_box[2] - map_box[0] - 7))
-            my = map_box[1] + 4 + int(
-                (point[1] - _TOP_BAR) / _FIELD_HEIGHT * (map_box[3] - map_box[1] - 7)
+            my = (
+                map_box[1]
+                + 4
+                + int((point[1] - _TOP_BAR) / _FIELD_HEIGHT * (map_box[3] - map_box[1] - 7))
             )
             draw.rectangle([mx - 2, my - 2, mx + 2, my + 2], fill=colour)
 
@@ -488,9 +493,7 @@ class CaptureTheFlagVisualizer:
             ValueError: If the history holds no usable state.
         """
         states = [
-            np.asarray(step.state, dtype=np.float64)
-            for step in history
-            if step.state is not None
+            np.asarray(step.state, dtype=np.float64) for step in history if step.state is not None
         ]
         if not states:
             raise ValueError("cannot render an episode with no recorded state")
@@ -527,7 +530,9 @@ class CaptureTheFlagVisualizer:
         # One shared adaptive palette, derived from a single frame: a
         # per-frame palette would be both larger and a second thing that has to
         # stay byte-stable for the golden test.
-        palette = frames[len(frames) // 2].quantize(colors=_GIF_COLOURS, method=Image.Quantize.MEDIANCUT)
+        palette = frames[len(frames) // 2].quantize(
+            colors=_GIF_COLOURS, method=Image.Quantize.MEDIANCUT
+        )
         quantized = [frame.quantize(palette=palette, dither=Image.Dither.NONE) for frame in frames]
         quantized[0].save(
             output_path,

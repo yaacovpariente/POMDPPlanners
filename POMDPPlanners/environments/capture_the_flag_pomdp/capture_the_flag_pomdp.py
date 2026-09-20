@@ -64,7 +64,15 @@ _TERMINAL_OBSERVATION_VALUE = -1.0
 # spend real time building a distribution nothing reads in full.
 _MAX_ENUMERATED_OBSERVATIONS = 8192
 
-DEFAULT_TREES: Tuple[Tuple[int, int], ...] = ((2, 1), (2, 5), (3, 3), (4, 0), (4, 6), (6, 1), (6, 5))
+DEFAULT_TREES: Tuple[Tuple[int, int], ...] = (
+    (2, 1),
+    (2, 5),
+    (3, 3),
+    (4, 0),
+    (4, 6),
+    (6, 1),
+    (6, 5),
+)
 DEFAULT_RED_FLAG_CANDIDATES: Tuple[Tuple[int, int], ...] = ((7, 1), (7, 5), (6, 3), (8, 2))
 
 
@@ -199,9 +207,7 @@ class CaptureTheFlagPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-ma
         # order would hash to different ids. Membership goes through the
         # private mirror below, which `config_id` skips.
         cells = DEFAULT_TREES if trees is None else trees
-        self.trees: Tuple[Tuple[int, int], ...] = tuple(
-            sorted((int(x), int(y)) for x, y in cells)
-        )
+        self.trees: Tuple[Tuple[int, int], ...] = tuple(sorted((int(x), int(y)) for x, y in cells))
         self._tree_cells = set(self.trees)
         self.n_blue = int(n_blue)
         self.n_red = int(n_red)
@@ -537,9 +543,9 @@ class CaptureTheFlagPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-ma
         closing = [option for option in options if manhattan(option, target) == best_distance]
         outcomes: Dict[Tuple[int, int], float] = {}
         for option in options:
-            outcomes[option] = outcomes.get(option, 0.0) + (1.0 - self.red_pursuit_probability) / len(
-                options
-            )
+            outcomes[option] = outcomes.get(option, 0.0) + (
+                1.0 - self.red_pursuit_probability
+            ) / len(options)
         for option in closing:
             outcomes[option] += self.red_pursuit_probability / len(closing)
         return sorted(outcomes.items())
@@ -579,9 +585,7 @@ class CaptureTheFlagPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-ma
         next_state = np.zeros(layout.size, dtype=np.float64)
         next_state[layout.flag_cell] = state[layout.flag_cell]
 
-        freeze_blue = [
-            max(0, int(state[layout.freeze_blue + i]) - 1) for i in range(self.n_blue)
-        ]
+        freeze_blue = [max(0, int(state[layout.freeze_blue + i]) - 1) for i in range(self.n_blue)]
         freeze_red = [max(0, int(state[layout.freeze_red + j]) - 1) for j in range(self.n_red)]
         cooldown_blue = [
             max(0, int(state[layout.cooldown_blue + i]) - 1) for i in range(self.n_blue)
@@ -833,16 +837,11 @@ class CaptureTheFlagPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-ma
         if self.is_terminal(state):
             frozen = np.asarray(state, dtype=np.float64)
             probabilities = np.array(
-                [
-                    1.0 if _same_state(candidate, frozen) else 0.0
-                    for candidate in next_states
-                ]
+                [1.0 if _same_state(candidate, frozen) else 0.0 for candidate in next_states]
             )
         else:
             successors, weights = self._successor_distribution(state, action)
-            lookup = {
-                successor.tobytes(): weight for successor, weight in zip(successors, weights)
-            }
+            lookup = {successor.tobytes(): weight for successor, weight in zip(successors, weights)}
             probabilities = np.array(
                 [lookup.get(_state_key(candidate), 0.0) for candidate in next_states]
             )
@@ -887,9 +886,7 @@ class CaptureTheFlagPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-ma
             outcomes[clipped] = outcomes.get(clipped, 0.0) + weight
         return outcomes
 
-    def _true_distances(
-        self, next_state: np.ndarray
-    ) -> Tuple[List[List[int]], List[int]]:
+    def _true_distances(self, next_state: np.ndarray) -> Tuple[List[List[int]], List[int]]:
         """Return the exact range and flag distances a state implies.
 
         Args:
@@ -926,9 +923,7 @@ class CaptureTheFlagPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-ma
             float(next_state[layout.carrier_blue_flag] != 0.0),
         ]
         suffix.extend(float(next_state[layout.freeze_blue + i]) for i in range(self.n_blue))
-        suffix.extend(
-            (float(next_state[layout.score_blue]), float(next_state[layout.score_red]))
-        )
+        suffix.extend((float(next_state[layout.score_blue]), float(next_state[layout.score_red])))
         return suffix
 
     def sample_observation(self, next_state: np.ndarray, action: int, n_samples: int = 1) -> Any:
@@ -1118,10 +1113,7 @@ class CaptureTheFlagPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-ma
         if next_array.ndim == 1:
             next_array = next_array.reshape(1, -1)
         return np.array(
-            [
-                self.reward(row, action, next_row)
-                for row, next_row in zip(state_array, next_array)
-            ],
+            [self.reward(row, action, next_row) for row, next_row in zip(state_array, next_array)],
             dtype=np.float64,
         )
 
@@ -1231,7 +1223,9 @@ class CaptureTheFlagPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-ma
         if support > _MAX_ENUMERATED_OBSERVATIONS:
             observation = list(prefix)
             range_tables, detector_tables = per_candidate[0]
-            observation.extend(float(max(table, key=lambda row: row[1])[0]) for table in range_tables)
+            observation.extend(
+                float(max(table, key=lambda row: row[1])[0]) for table in range_tables
+            )
             observation.extend(
                 float(max(table, key=lambda row: row[1])[0]) for table in detector_tables
             )
@@ -1241,8 +1235,12 @@ class CaptureTheFlagPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-ma
         merged: Dict[Tuple[float, ...], float] = {}
         for range_tables, detector_tables in per_candidate:
             for values, probability in _mixture(list(range_tables) + list(detector_tables)):
-                observation = tuple(prefix) + tuple(float(value) for value in values) + tuple(suffix)
-                merged[observation] = merged.get(observation, 0.0) + probability * weight_per_candidate
+                observation = (
+                    tuple(prefix) + tuple(float(value) for value in values) + tuple(suffix)
+                )
+                merged[observation] = (
+                    merged.get(observation, 0.0) + probability * weight_per_candidate
+                )
         keys = sorted(merged)
         return DiscreteDistribution(
             values=list(keys), probs=np.array([merged[key] for key in keys])
@@ -1298,9 +1296,7 @@ class CaptureTheFlagPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-ma
         blue_scored = int(landed[layout.score_blue]) >= self.score_to_win
         red_scored = int(landed[layout.score_red]) >= self.score_to_win
         counts = self._transition_counts(state, next_state)
-        in_enemy_half = sum(
-            1 for cell in layout.blue_cells(state) if self.is_red_half(cell)
-        )
+        in_enemy_half = sum(1 for cell in layout.blue_cells(state) if self.is_red_half(cell))
         return {
             CaptureTheFlagStepChannel.CAPTURED.value: float(blue_scored),
             CaptureTheFlagStepChannel.RECORDED_STEP.value: 1.0,

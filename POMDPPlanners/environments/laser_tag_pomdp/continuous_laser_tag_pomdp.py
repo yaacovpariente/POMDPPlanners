@@ -865,7 +865,9 @@ class ContinuousLaserTagPOMDP(Environment):  # pylint: disable=too-many-public-m
         centers = self._dangerous_areas_arr.reshape(-1, 2)
         positions = next_arr[hazard_hit, :2]
         deltas = positions[:, None, :] - centers[None, :, :]
-        counts = np.sum(np.sum(deltas * deltas, axis=2) <= (self.dangerous_area_radius**2), axis=1)
+        counts = np.sum(
+            np.sum(deltas * deltas, axis=2) <= (self.dangerous_area_radius**2), axis=1
+        )
         rewards[hazard_hit] -= counts.astype(np.float64) * float(self.dangerous_area_penalty)
         return rewards
 
