@@ -170,18 +170,20 @@ def test_continuous_ranges_are_the_environments_own(continuous_env):
 def test_discrete_beam_stops_at_the_opponent(discrete_env):
     """Test that a discrete beam ends at the opponent, not behind it.
 
-    Purpose: This is the one place the package already disagrees with itself.
-        ``LaserTagVisualizer._laser_segments`` discards the opponent and walks
-        on to the next wall, while ``sample_observation`` stops at it. The
-        exported range must follow the observation model, because that is what
-        the agent is given and what the viewer claims to be drawing.
+    Purpose: The exported range must follow the observation model, because
+        that is what the agent is given and what the viewer claims to be
+        drawing. This test used to assert the opposite of its last clause: the
+        GIF renderer discarded the opponent and walked on to the next wall
+        while ``sample_observation`` stopped at it, and the test pinned that
+        divergence. The renderer was fixed to stop at the opponent too, so the
+        assertion is now that the two AGREE — which is the property actually
+        worth protecting.
 
     Given: A state with the opponent in clear line of sight due east, with
         free cells behind it
     When: The trace is built
     Then: The east range stops one cell short of the opponent, is flagged as
-        an opponent hit, and is strictly shorter than the range the GIF's
-        opponent-blind walk reports
+        an opponent hit, and equals the length the GIF renderer draws
 
     Test type: unit
     """
@@ -204,9 +206,10 @@ def test_discrete_beam_stops_at_the_opponent(discrete_env):
     # pylint: disable-next=protected-access
     drawn = visualizer._laser_segments(np.asarray(state[:2]), np.asarray(state[2:4]))
     drawn_east = float(np.linalg.norm(drawn[east][1] - drawn[east][0]))
-    assert drawn_east > payload["laser_ranges"][0][east], (
-        "The GIF renderer walks past the opponent; the exported range must "
-        "not, because the observation model stops at it"
+    assert drawn_east == pytest.approx(payload["laser_ranges"][0][east]), (
+        "The drawn beam and the measured range must end in the same place: "
+        "the renderer stops at the opponent now, as the observation model "
+        "always did"
     )
 
 
