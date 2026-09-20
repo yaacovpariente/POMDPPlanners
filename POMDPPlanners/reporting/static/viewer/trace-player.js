@@ -130,7 +130,14 @@
       }
       el.step.textContent = "step " + hud.step + " / " + (scene.steps - 1);
       el.action.textContent = "action " + hud.action;
-      el.pos.textContent = "x " + hud.x.toFixed(2) + "  y " + hud.y.toFixed(2);
+      /* A scene may name its own position readout. "x 3.00  y 5.00" is right
+         for a continuous world and reads oddly on a grid, where the honest
+         labels are row and column. A scene returns `hud.pos` when it wants to
+         say it itself; `hud.x`/`hud.y` stay the default so existing scenes and
+         continuous worlds are unaffected. */
+      el.pos.textContent = hud.pos !== undefined && hud.pos !== null
+        ? hud.pos
+        : "x " + hud.x.toFixed(2) + "  y " + hud.y.toFixed(2);
       el.reward.textContent = hud.reward === null || hud.reward === undefined
         ? "reward —"
         : "reward " + hud.reward.toFixed(2);
