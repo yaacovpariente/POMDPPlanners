@@ -6,9 +6,9 @@ from typing import TYPE_CHECKING, Any, List, Tuple
 
 import numpy as np
 from PIL import Image, ImageDraw
-from POMDPPlanners.environments.push_pomdp.push_visualization_assets import paste_obstacle
+from POMDPPlanners.environments.push_pomdp.visualizer.push_visualization_assets import paste_obstacle
 
-from POMDPPlanners.environments.push_pomdp.push_visualization_utils import (
+from POMDPPlanners.environments.push_pomdp.visualizer.push_visualization_utils import (
     ROBOT_RADIUS,
     PushRendererBase,
 )
