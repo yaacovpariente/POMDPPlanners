@@ -25,7 +25,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 from POMDPPlanners.core.simulation import StepData
-from POMDPPlanners.environments.capture_the_flag_pomdp.capture_the_flag_assets import (
+from POMDPPlanners.environments.capture_the_flag_pomdp.visualizer.capture_the_flag_assets import (
     BLUE,
     RED,
     TILE_HEIGHT,

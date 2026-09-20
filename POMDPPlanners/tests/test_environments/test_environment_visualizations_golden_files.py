@@ -47,7 +47,7 @@ from POMDPPlanners.environments.battleship_pomdp.battleship_visualizer import (
     BattleshipVisualizer,
 )
 from POMDPPlanners.environments.capture_the_flag_pomdp import CaptureTheFlagPOMDP
-from POMDPPlanners.environments.capture_the_flag_pomdp.capture_the_flag_visualizer import (
+from POMDPPlanners.environments.capture_the_flag_pomdp.visualizer.capture_the_flag_visualizer import (  # noqa: E501
     CaptureTheFlagVisualizer,
 )
 from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp import (
