@@ -92,7 +92,7 @@ from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.visualizer.occupanc
     OccupancyGridMappingVisualizer,
 )
 from POMDPPlanners.environments.push_pomdp.push_pomdp import PushPOMDP
-from POMDPPlanners.environments.push_pomdp.push_pomdp_visualizer import (
+from POMDPPlanners.environments.push_pomdp.visualizer.push_pomdp_visualizer import (
     PushPOMDPVisualizer,
 )
 from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp import LaserTagPOMDP
@@ -112,7 +112,7 @@ from POMDPPlanners.environments.push_pomdp import _native as _push_native
 from POMDPPlanners.environments.push_pomdp.continuous_push_pomdp import (
     ContinuousPushPOMDP,
 )
-from POMDPPlanners.environments.push_pomdp.continuous_push_pomdp_visualizer import (
+from POMDPPlanners.environments.push_pomdp.visualizer.continuous_push_pomdp_visualizer import (
     ContinuousPushPOMDPVisualizer,
 )
 from POMDPPlanners.environments.safety_ant_velocity_pomdp.safety_ant_velocity_pomdp import (

@@ -13,7 +13,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 from POMDPPlanners.core.simulation import StepData
-from POMDPPlanners.environments.push_pomdp.push_visualization_assets import (
+from POMDPPlanners.environments.push_pomdp.visualizer.push_visualization_assets import (
     paste_sprite,
     paste_obstacle,
     stone_texture,

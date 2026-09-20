@@ -110,7 +110,7 @@ include = ["POMDPPlanners*"]
 "POMDPPlanners.environments.laser_tag_pomdp.visualizer" = ["laser_tag_sprite_sheet.png"]
 "POMDPPlanners.environments.light_dark_pomdp.visualizer" = ["art/*.png"]
 "POMDPPlanners.environments.rock_sample_pomdp" = ["visualization_assets/*.png"]
-"POMDPPlanners.environments.push_pomdp" = ["push_sprite_sheet.png"]
+"POMDPPlanners.environments.push_pomdp.visualizer" = ["push_sprite_sheet.png"]
 # PacMan visualizer loads these sprites at runtime via
 # visualizer/pacman_visualizer.py: `Path(__file__).with_name("img")`. The
 # directory moved into the visualizer package with the renderer that reads it,

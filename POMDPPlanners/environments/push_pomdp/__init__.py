@@ -17,9 +17,9 @@ from POMDPPlanners.environments.push_pomdp.continuous_push_pomdp import (
     ContinuousPushPOMDP,
     ContinuousPushPOMDPDiscreteActions,
 )
-from POMDPPlanners.environments.push_pomdp.push_pomdp_visualizer import PushPOMDPVisualizer
-from POMDPPlanners.environments.push_pomdp.continuous_push_pomdp_visualizer import (
+from POMDPPlanners.environments.push_pomdp.visualizer import (
     ContinuousPushPOMDPVisualizer,
+    PushPOMDPVisualizer,
 )
 
 __all__ = [
