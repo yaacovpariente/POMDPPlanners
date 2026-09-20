@@ -53,7 +53,7 @@ from POMDPPlanners.environments.capture_the_flag_pomdp.capture_the_flag_visualiz
 from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp import (
     RockSamplePOMDP,
 )
-from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_visualizer import (
+from POMDPPlanners.environments.rock_sample_pomdp.visualizer.rock_sample_visualizer import (
     RockSampleVisualizer,
 )
 from POMDPPlanners.environments.pacman_pomdp.pacman_pomdp import PacManPOMDP

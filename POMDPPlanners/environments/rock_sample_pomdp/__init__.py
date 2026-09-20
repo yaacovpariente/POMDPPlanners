@@ -25,16 +25,20 @@ from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp_beliefs impo
     RockSampleVectorizedUpdater,
     create_rocksample_belief,
 )
-from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_visualizer import (
+from POMDPPlanners.environments.rock_sample_pomdp.visualizer import (
+    ROCK_SAMPLE_PAYLOAD_KIND,
     RockSampleVisualizer,
+    build_rock_sample_trace,
 )
 
 __all__ = [
+    "ROCK_SAMPLE_PAYLOAD_KIND",
     "RewardModelType",
     "RockSamplePOMDP",
     "RockSampleState",
     "RockSampleVisualizer",
     "RockSampleVectorizedUpdater",
+    "build_rock_sample_trace",
     "create_random_rock_sample",
     "create_rock_sample_state",
     "create_rocksample_belief",
