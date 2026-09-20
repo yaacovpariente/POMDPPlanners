@@ -675,7 +675,12 @@ class SnakeVisualizer:
             polygon.set_visible(starved)
             if not starved:
                 continue
-            tip = row if upward else row
+            # Both triangles meet at the head's own row: that shared apex is the
+            # hourglass waist, so the tip never depends on `upward`. Only the
+            # direction the bulb opens in does. This used to read
+            # `row if upward else row`, a dead conditional with the same value
+            # on both branches; the geometry below is unchanged.
+            tip = row
             sign = -1.0 if upward else 1.0
             polygon.set_xy(
                 np.array(
