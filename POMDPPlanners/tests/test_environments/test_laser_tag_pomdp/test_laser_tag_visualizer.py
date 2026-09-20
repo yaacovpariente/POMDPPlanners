@@ -18,7 +18,7 @@ from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.policy import PolicyRunData
 from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.environments.laser_tag_pomdp import LaserTagPOMDP
-from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_visualizer import (
+from POMDPPlanners.environments.laser_tag_pomdp.visualizer.laser_tag_visualizer import (
     LaserTagVisualizer,
 )
 from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (

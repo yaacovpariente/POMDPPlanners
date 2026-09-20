@@ -55,7 +55,8 @@ from POMDPPlanners.environments.environment_utils.dangerous_areas_kernels import
 )
 from POMDPPlanners.planners.planners_utils.rollout import python_random_rollout
 from POMDPPlanners.utils.statistics_utils import confidence_interval
-from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_visualizer import (  # pylint: disable=import-outside-toplevel
+# pylint: disable-next=import-outside-toplevel
+from POMDPPlanners.environments.laser_tag_pomdp.visualizer.laser_tag_visualizer import (
     LaserTagVisualizer,
 )
 from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_utils import (
@@ -1606,3 +1607,31 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-pub
         )
         visualizer.create_visualization(history, cache_path)
         self.logger.info("Saved LaserTag visualization to %s", cache_path)
+
+    def build_episode_trace(
+        self, history: List[StepData], episode_index: int, policy_name: Optional[str] = None
+    ) -> Any:
+        """Write this episode as data, beside the GIF.
+
+        Args:
+            history: List of step data from an episode.
+            episode_index: Zero-based episode index within its run.
+            policy_name: Name of the policy that produced the episode.
+
+        Returns:
+            The episode's trace, with payload kind ``laser_tag.v1``.
+        """
+        # Imported here rather than at module scope: the exporter pulls in the
+        # trace schema, and this module is imported by every LaserTag run
+        # including ones that never write anything.
+        # pylint: disable-next=import-outside-toplevel
+        from POMDPPlanners.environments.laser_tag_pomdp.visualizer.trace_exporter import (
+            build_laser_tag_trace,
+        )
+
+        return build_laser_tag_trace(
+            environment=self,
+            history=history,
+            episode_index=episode_index,
+            policy_name=policy_name,
+        )

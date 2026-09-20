@@ -7,7 +7,7 @@ from POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_geometry im
     LASER_DIRECTIONS,
     compute_laser_measurements,
 )
-from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_renderer import (
+from POMDPPlanners.environments.laser_tag_pomdp.visualizer.laser_tag_renderer import (
     CANVAS_SIZE,
     LASER_COLOR,
     OPPONENT_BELIEF_COLOR,
