@@ -34,6 +34,7 @@ extensions = [
     "sphinx.ext.autosummary",
     "sphinx.ext.viewcode",
     "sphinx.ext.napoleon",  # For Google/NumPy style docstrings
+    "sphinx.ext.mathjax",  # Renders the ``.. math::`` blocks in the environment guides
     "sphinx.ext.intersphinx",
     "sphinx.ext.extlinks",  # For the :gh: pull-request role used in the changelog
     "sphinx_autodoc_typehints",  # Better type hint formatting

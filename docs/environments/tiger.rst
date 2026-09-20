@@ -23,6 +23,83 @@ What the agent sees and does
   Opening a door always returns ``"hear_nothing"``; conversely
   ``"hear_nothing"`` never follows a listen.
 
+Formal definition
+-----------------
+
+The environment is the POMDP :math:`\langle S, A, \Omega, T, O, R, b_0, \gamma
+\rangle`. Write :math:`\ell` for ``tiger_left`` and :math:`r` for
+``tiger_right``.
+
+**State space**
+
+.. math::
+
+   S = \{\ell,\; r\}
+
+**Action space**
+
+.. math::
+
+   A = \{\textsf{listen},\; \textsf{open\_left},\; \textsf{open\_right}\}
+
+**Observation space**
+
+.. math::
+
+   \Omega = \{\textsf{hear\_left},\; \textsf{hear\_right},\;
+   \textsf{hear\_nothing}\}
+
+**Transition model.** Listening leaves the tiger where it is; opening either
+door resets it to a fresh coin flip.
+
+.. math::
+
+   T(s' \mid s, \textsf{listen}) &= \mathbb{1}[s' = s] \\
+   T(s' \mid s, \textsf{open\_left}) = T(s' \mid s, \textsf{open\_right})
+   &= \tfrac{1}{2}, \quad s' \in S
+
+**Observation model.** Conditioned on the *successor* state, as everywhere in
+this codebase.
+
+.. math::
+
+   O(\textsf{hear\_left} \mid \ell, \textsf{listen}) =
+   O(\textsf{hear\_right} \mid r, \textsf{listen}) &= 0.85 \\
+   O(\textsf{hear\_right} \mid \ell, \textsf{listen}) =
+   O(\textsf{hear\_left} \mid r, \textsf{listen}) &= 0.15 \\
+   O(\textsf{hear\_nothing} \mid s', a) &= 1, \quad a \neq \textsf{listen}
+
+Note the two halves do not overlap: :math:`\textsf{hear\_nothing}` has
+probability zero under :math:`\textsf{listen}`, and the directional
+observations have probability zero under either open action.
+
+**Reward function.** Paid on the state the action is taken *from*, so
+:math:`R` does not depend on :math:`s'`.
+
+.. math::
+
+   R(s, \textsf{listen}) &= -1 \\
+   R(s, \textsf{open\_left}) &= \begin{cases}
+     -100 & s = \ell \\ +10 & s = r \end{cases} \\
+   R(s, \textsf{open\_right}) &= \begin{cases}
+     -100 & s = r \\ +10 & s = \ell \end{cases}
+
+giving :math:`R \in [-100, 10]`.
+
+**Initial belief**
+
+.. math::
+
+   b_0(\ell) = b_0(r) = \tfrac{1}{2}
+
+with the initial observation fixed at :math:`\textsf{hear\_nothing}`.
+
+**Discount.** :math:`\gamma \in [0, 1]` — the required ``discount_factor``
+argument; the class has no default.
+
+**Terminal set.** :math:`S_T = \emptyset`. No state ends an episode, so the
+horizon is whatever the caller sets.
+
 Rewards
 -------
 
@@ -63,7 +140,7 @@ Minimal example
    print(state, observation, env.reward(state, "listen"))
 
 There is also a batched torch model,
-``POMDPPlanners.environments.tiger_pomdp_vectorized_model.TigerVectorizedModel``,
+``POMDPPlanners.environments.tiger_pomdp.tiger_pomdp_vectorized_model.TigerVectorizedModel``,
 for the vectorized planners.
 
 See also

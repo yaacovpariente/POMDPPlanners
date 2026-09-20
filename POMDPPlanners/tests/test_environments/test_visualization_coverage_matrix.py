@@ -120,13 +120,7 @@ NON_FAMILY_ENTRIES: Dict[str, str] = {
     "__init__.py": "The package's own registry module.",
     "__pycache__": "Bytecode cache.",
     "environment_utils": "Shared helpers, not a world.",
-    "sanity_pomdp_vectorized_model.py": "Batched model for the sanity family.",
     "t_maze_pomdp": "Import shim kept for configurations saved before the Maze rename.",
-    "tiger_pomdp_vectorized_model.py": "Batched model for the tiger family.",
-    "tiger_visualizer": (
-        "The tiger family's visualization package: the GIF renderer, its image "
-        "assets and the episode trace exporter, beside the module they draw."
-    ),
 }
 
 FAMILIES: Tuple[EnvironmentFamily, ...] = (
@@ -239,9 +233,8 @@ FAMILIES: Tuple[EnvironmentFamily, ...] = (
         package="mountain_car_pomdp",
         label="MountainCar",
         hooks=(("mountain_car_pomdp/mountain_car_pomdp.py", "MountainCarPOMDP"),),
-        # Shares a page with SanityPOMDP, so the section heading is the check.
-        docs_page="simple.rst",
-        docs_section="MountainCarPOMDP",
+        docs_page="mountain_car.rst",
+        docs_section=None,
         images=("docs/images/mountaincar_recorded_history.gif",),
     ),
     EnvironmentFamily(
@@ -342,7 +335,7 @@ FAMILIES: Tuple[EnvironmentFamily, ...] = (
     EnvironmentFamily(
         package="tiger_pomdp",
         label="Tiger",
-        hooks=(("tiger_pomdp.py", "TigerPOMDP"),),
+        hooks=(("tiger_pomdp/tiger_pomdp.py", "TigerPOMDP"),),
         docs_page="tiger.rst",
         docs_section=None,
         images=(
@@ -594,10 +587,9 @@ def test_matrix_lists_every_environment_family():
         for entry in ENVIRONMENTS_DIR.iterdir()
         if entry.is_dir() or entry.suffix == ".py"
     }
-    keys = set(FAMILIES_BY_PACKAGE) | set(EXEMPT_FAMILIES)
-    # A family key is a directory name, except for the single-module families
-    # (tiger, sanity) whose entry on disk carries a ``.py`` suffix.
-    accounted = keys | {f"{key}.py" for key in keys} | set(NON_FAMILY_ENTRIES)
+    # A family key is a directory name: every family is a package, so a loose
+    # module under environments is either a non-family entry or an oversight.
+    accounted = set(FAMILIES_BY_PACKAGE) | set(EXEMPT_FAMILIES) | set(NON_FAMILY_ENTRIES)
     unaccounted = sorted(on_disk - accounted)
     assert not unaccounted, (
         "These entries under POMDPPlanners/environments are in neither FAMILIES, "
@@ -607,10 +599,7 @@ def test_matrix_lists_every_environment_family():
         "entry is not one."
     )
     missing = sorted(
-        package
-        for package in FAMILIES_BY_PACKAGE
-        if not (ENVIRONMENTS_DIR / package).exists()
-        and not (ENVIRONMENTS_DIR / f"{package}.py").exists()
+        package for package in FAMILIES_BY_PACKAGE if not (ENVIRONMENTS_DIR / package).is_dir()
     )
     assert (
         not missing
@@ -630,12 +619,7 @@ def test_only_sanity_and_nuplan_are_exempt():
 @pytest.mark.parametrize("package", sorted(EXEMPT_FAMILIES))
 def test_exempt_family_still_has_no_visualization_hook(package):
     """An exemption that stopped being true has to be removed, not left to rot."""
-    directory = ENVIRONMENTS_DIR / package
-    sources = (
-        sorted(directory.rglob("*.py"))
-        if directory.is_dir()
-        else [ENVIRONMENTS_DIR / f"{package}.py"]
-    )
+    sources = sorted((ENVIRONMENTS_DIR / package).rglob("*.py"))
     with_hook = [
         f"POMDPPlanners/environments/{source.relative_to(ENVIRONMENTS_DIR)}"
         for source in sources
@@ -787,12 +771,15 @@ def _family_with(**overrides) -> EnvironmentFamily:
 
 def test_missing_hook_is_reported_with_the_family_name():
     """A family whose hook went away is named, with the file and method that is gone."""
-    family = _family_with(label="Widget", hooks=(("tiger_pomdp.py", "TigerVisualizer"),))
+    family = _family_with(
+        label="Widget", hooks=(("tiger_pomdp/tiger_pomdp.py", "TigerVisualizer"),)
+    )
     problems = find_missing_hooks(family)
     assert len(problems) == 1
     assert problems[0] == (
         "Widget: package visualization hook missing -- "
-        "POMDPPlanners/environments/tiger_pomdp.py defines no class TigerVisualizer."
+        "POMDPPlanners/environments/tiger_pomdp/tiger_pomdp.py "
+        "defines no class TigerVisualizer."
     )
 
 
@@ -815,9 +802,9 @@ def test_missing_docs_page_is_reported_with_the_family_name():
 
 def test_missing_docs_section_is_reported_with_the_family_name():
     """A family sharing a page is named together with the heading that is absent."""
-    family = _family_with(label="Widget", docs_page="simple.rst", docs_section="WidgetPOMDP")
+    family = _family_with(label="Widget", docs_page="tiger.rst", docs_section="WidgetPOMDP")
     assert find_missing_docs(family) == [
-        "Widget: documentation missing -- docs/environments/simple.rst has no "
+        "Widget: documentation missing -- docs/environments/tiger.rst has no "
         '"WidgetPOMDP" section.'
     ]
 

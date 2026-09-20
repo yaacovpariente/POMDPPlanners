@@ -21,7 +21,7 @@ from POMDPPlanners.core.belief import (
 from POMDPPlanners.core.simulation import StepData
 from POMDPPlanners.core.simulation.traces import EpisodeTrace
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-from POMDPPlanners.environments.tiger_visualizer import (
+from POMDPPlanners.environments.tiger_pomdp.visualizer import (
     TIGER_PAYLOAD_KIND,
     TigerVisualizer,
     build_tiger_trace,
@@ -215,7 +215,7 @@ def test_the_renderer_still_finds_its_art_after_the_move():
     where that string now points, rather than waiting for the golden GIF test
     that only runs inside the CI image.
     """
-    from POMDPPlanners.environments.tiger_visualizer import tiger_visualizer as module
+    from POMDPPlanners.environments.tiger_pomdp.visualizer import tiger_visualizer as module
 
     art = Path(module.__file__).with_name("tiger_visualization_assets") / "chamber.png"
     assert art.is_file()
