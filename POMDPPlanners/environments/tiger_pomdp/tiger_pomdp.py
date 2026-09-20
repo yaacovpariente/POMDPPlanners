@@ -279,7 +279,7 @@ class TigerPOMDP(DiscreteActionsEnvironment):
         self, history: List[StepData], output_dir: Path, episode_index: int
     ) -> None:
         """Save the recorded episode without sampling the Tiger model."""
-        from POMDPPlanners.environments.tiger_visualizer import TigerVisualizer
+        from POMDPPlanners.environments.tiger_pomdp.tiger_visualizer import TigerVisualizer
 
         TigerVisualizer().create_visualization(
             history, output_dir / f"agent_path_{episode_index}.gif"

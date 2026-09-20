@@ -17,7 +17,7 @@ from POMDPPlanners.core.environment.vectorized_generative_model import (
     VectorizedGenerativeModel,
 )
 from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
-from POMDPPlanners.environments.sanity_pomdp_vectorized_model import (
+from POMDPPlanners.environments.sanity_pomdp.sanity_pomdp_vectorized_model import (
     SanityVectorizedModel,
 )
 

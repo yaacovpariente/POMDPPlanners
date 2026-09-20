@@ -50,7 +50,7 @@ class SanityVectorizedModel:
     Example:
         >>> import torch
         >>> from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
-        >>> from POMDPPlanners.environments.sanity_pomdp_vectorized_model import (
+        >>> from POMDPPlanners.environments.sanity_pomdp.sanity_pomdp_vectorized_model import (
         ...     SanityVectorizedModel,
         ... )
         >>> env = SanityPOMDP(discount_factor=0.95)

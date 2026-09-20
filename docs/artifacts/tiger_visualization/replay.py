@@ -7,7 +7,7 @@ import numpy as np
 from PIL import Image
 from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.simulation import StepData
-from POMDPPlanners.environments.tiger_visualizer import TigerVisualizer
+from POMDPPlanners.environments.tiger_pomdp.tiger_visualizer import TigerVisualizer
 
 
 def diagnostic(history, target):

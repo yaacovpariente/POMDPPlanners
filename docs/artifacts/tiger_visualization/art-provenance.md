@@ -1,6 +1,6 @@
 # Chamber artwork
 
-Generated with the built-in OpenAI image-generation tool for this change, then copied unchanged into POMDPPlanners/environments/tiger_visualization_assets/chamber.png. The renderer resizes it once and draws all changing text in code. No transparency extraction was needed.
+Generated with the built-in OpenAI image-generation tool for this change, then copied unchanged into POMDPPlanners/environments/tiger_pomdp/tiger_visualization_assets/chamber.png. The renderer resizes it once and draws all changing text in code. No transparency extraction was needed.
 
 Final prompt:
 
