@@ -471,11 +471,18 @@
     var running = false;
 
     function frame(now) {
-      var dt = Math.min((now - last) / 1000, 0.05);
+      /* Floored at zero as well as capped. `last` is seeded from now() while
+         this script is still running, but requestAnimationFrame reports the
+         time its frame BEGAN, which on a page that spent a second building a
+         scene is earlier — a measured first dt of -0.82 s. A negative dt drives
+         state.t below zero, and a scene that indexes a step directly then reads
+         steps[-1] and throws, killing the loop on frame one. */
+      var dt = Math.min(Math.max((now - last) / 1000, 0), 0.05);
       last = now;
       var elapsed = now / 1000;
       if (state.playing && state.steps > 1) {
         state.t += dt * state.rate * state.speed;
+        if (state.t < 0) state.t = 0;      // belt and braces: never index below zero
         if (state.t >= state.steps - 1) {
           state.t = state.steps - 1;
           state.playing = false;
