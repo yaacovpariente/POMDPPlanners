@@ -91,20 +91,57 @@ def _segment_distance(
     return np.hypot(px - (ax + t * vx), py - (ay + t * vy))
 
 
-def river_axis(grid_y: np.ndarray, midline: int) -> np.ndarray:
+# How far the channel centre is kept from a tree trunk, in grid units. The
+# water reaches 0.5 and the muddy bank 0.78, so this leaves the trunk on grass.
+_CHANNEL_CLEARANCE = 0.95
+# Rows over which a bend fades out. Wide enough to read as a meander rather
+# than a kink, narrow enough that two bends a few rows apart stay separate.
+_BEND_SPREAD = 1.15
+
+
+def _meander(grid_y: np.ndarray, midline: int) -> np.ndarray:
+    """Return the channel's wobble before it bends around anything."""
+    return midline + 0.22 * np.sin(grid_y * 0.85 + 0.6) + 0.09 * np.sin(grid_y * 2.1)
+
+
+def river_axis(
+    grid_y: np.ndarray, midline: int, obstacles: Sequence[Tuple[int, int]] = ()
+) -> np.ndarray:
     """Return the channel's centreline in grid x for a given grid y.
 
     The bridge and the water are both drawn from this one function, so the
     crossing cannot drift off the river when the wobble is retuned.
 
+    The meander alone runs straight through any obstacle sitting on the
+    neutral column -- with the default field that is the trees at ``(4, 0)``
+    and ``(4, 6)``, which were drawn standing in the water. The POMDP's only
+    obstacles are those tree cells and the river blocks nothing, so the
+    channel is what gives way: each obstacle within ``_CHANNEL_CLEARANCE`` of
+    the meander pushes the channel aside with a bend that fades over
+    ``_BEND_SPREAD`` rows.
+
+    The push is measured against the unbent meander, so two obstacles closer
+    together than ``_BEND_SPREAD`` can each shave a little off the other's
+    clearance. The default field is checked in the tests.
+
     Args:
         grid_y: Grid y coordinates.
         midline: The neutral column the channel meanders around.
+        obstacles: Cells the channel must not run through, as ``(x, y)``.
 
     Returns:
         The channel centre in grid x.
     """
-    return midline + 0.22 * np.sin(grid_y * 0.85 + 0.6) + 0.09 * np.sin(grid_y * 2.1)
+    grid_y = np.asarray(grid_y, dtype=float)
+    axis = _meander(grid_y, midline)
+    for obstacle_x, obstacle_y in obstacles:
+        row = float(obstacle_y)
+        gap = float(_meander(np.asarray(row), midline)) - float(obstacle_x)
+        if abs(gap) >= _CHANNEL_CLEARANCE:
+            continue
+        push = (_CHANNEL_CLEARANCE - abs(gap)) * (1.0 if gap >= 0.0 else -1.0)
+        axis = axis + push * np.exp(-((grid_y - row) ** 2) / (2.0 * _BEND_SPREAD * _BEND_SPREAD))
+    return axis
 
 
 # pylint: disable-next=too-many-locals
@@ -114,6 +151,7 @@ def ground_plane(
     origin: Tuple[int, int],
     midline: int,
     paths: Sequence[Tuple[float, float, float, float]],
+    obstacles: Sequence[Tuple[int, int]] = (),
 ) -> Image.Image:
     """Render the terrain for a whole viewport as one seamless bitmap.
 
@@ -127,6 +165,7 @@ def ground_plane(
         origin: Screen pixel the grid origin projects to.
         midline: Neutral column the channel meanders around.
         paths: Worn trails as ``(ax, ay, bx, by)`` segments in grid space.
+        obstacles: Cells the channel must bend around, as ``(x, y)``.
 
     Returns:
         The terrain image, sized ``(width, height - top)``.
@@ -173,7 +212,7 @@ def ground_plane(
     light = light - 0.055 * np.clip(grid_x / 9, 0, 1) - 0.055 * np.clip(grid_y / 7, 0, 1)
     colour = colour * light[..., None]
 
-    distance = np.abs(grid_x - river_axis(grid_y, midline))
+    distance = np.abs(grid_x - river_axis(grid_y, midline, obstacles))
     deep, shallow = np.array([40.0, 92.0, 124.0]), np.array([76.0, 148.0, 182.0])
     water = shallow + (deep - shallow) * np.clip((0.46 - distance) / 0.40, 0, 1)[..., None]
     water = water + (_sample(base, grid_x * 3.0, grid_y * 3.0)[..., None] - 0.5) * 22
