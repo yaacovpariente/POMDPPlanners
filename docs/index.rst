@@ -24,8 +24,8 @@ Start here
   action.
 - :doc:`environments/index` — **choose an environment**: the catalog, with each
   one's state, actions, observations and dependencies.
-- :doc:`core/planners` — **choose a planner**: POMCP, PFT-DPW, Sparse PFT,
-  sparse sampling and the open-loop planners.
+- :doc:`planners/index` — **choose a planner**: the catalog of MCTS, scenario
+  tree, sparse sampling, vectorized and open-loop planners.
 
 Install
 -------
@@ -89,19 +89,11 @@ What is in the package
 
 .. toctree::
    :maxdepth: 2
-   :caption: Environments
+   :caption: Library
    :hidden:
 
    environments/index
-
-.. toctree::
-   :maxdepth: 2
-   :caption: Planners
-   :hidden:
-
-   core/planners
-   planners/adaops/index
-   planners/hyp_despot/index
+   planners/index
    core/beliefs
 
 .. toctree::
