@@ -711,6 +711,16 @@ class TestPickling:
         )
         restored = pickle.loads(pickle.dumps(belief))
 
+        # Only EKF and UKF are parametrised here, and only they carry a
+        # transition function; the base updater does not, so say which one
+        # this is rather than reaching through the base class.
+        assert isinstance(
+            belief.updater, (ExtendedKalmanFilterUpdater, UnscentedKalmanFilterUpdater)
+        )
+        assert isinstance(
+            restored.updater, (ExtendedKalmanFilterUpdater, UnscentedKalmanFilterUpdater)
+        )
+
         state = np.array([0.05, -0.2, 0.03, 0.15])
         action = np.array([1.0])
         np.testing.assert_array_equal(
@@ -718,6 +728,9 @@ class TestPickling:
             restored.updater.transition_fn(state, action),
         )
         if updater_type is GaussianBeliefUpdaterType.EKF:
+            # Only the EKF carries a Jacobian; the UKF samples sigma points.
+            assert isinstance(belief.updater, ExtendedKalmanFilterUpdater)
+            assert isinstance(restored.updater, ExtendedKalmanFilterUpdater)
             np.testing.assert_array_equal(
                 belief.updater.transition_jacobian(state, action),
                 restored.updater.transition_jacobian(state, action),

@@ -22,6 +22,7 @@ from POMDPPlanners.environments.multiagent_firefighting_pomdp.multiagent_firefig
 from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
     multiagent_firefighting_pinned_kwargs,
 )
+from POMDPPlanners.tests.test_utils.particle_belief_typing import particle_belief
 from POMDPPlanners.tests.test_utils.terminal_particle_weight import (
     random_actions,
     replay_terminal_weights,
@@ -127,7 +128,7 @@ def test_a_belief_that_has_gone_entirely_cold_is_re_ignited_out_of_sight():
 
     np.random.seed(0)
     env = build_env()
-    belief = create_environment_belief(env, n_particles=16)
+    belief = particle_belief(create_environment_belief(env, n_particles=16))
     belief.particles[:, env.fire_offset :] = float(FireCategory.UNBURNT)
 
     state = env.initial_state_dist().sample()[0]
@@ -162,7 +163,7 @@ def test_a_planners_update_is_not_conditioned():
 
     np.random.seed(0)
     env = build_env()
-    belief = create_environment_belief(env, n_particles=16)
+    belief = particle_belief(create_environment_belief(env, n_particles=16))
     state = env.initial_state_dist().sample()[0]
     action = env.get_actions()[0]
     _, observation, _ = env.sample_next_step(state, action)

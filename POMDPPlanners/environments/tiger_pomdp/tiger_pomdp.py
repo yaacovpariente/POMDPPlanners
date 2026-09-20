@@ -23,7 +23,7 @@ Classes:
 from enum import Enum
 from pathlib import Path
 from collections.abc import Hashable
-from typing import Any, Dict, List, Optional, Sequence, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Union
 
 import numpy as np
 
@@ -39,6 +39,9 @@ from POMDPPlanners.core.simulation.step_info_metrics import (
     StepInfoMetric,
     order_and_fill_metrics,
 )
+
+if TYPE_CHECKING:
+    from POMDPPlanners.core.simulation.traces import EpisodeTrace
 
 STATES = ["tiger_left", "tiger_right"]
 ACTIONS = ["listen", "open_left", "open_right"]

@@ -26,6 +26,7 @@ from POMDPPlanners.environments.chicheck_invaders_pomdp.chicheck_invaders_schema
 from POMDPPlanners.tests.test_utils.env_pinned_kwargs import chicheck_invaders_pinned_kwargs
 from POMDPPlanners.tests.test_utils.terminal_particle_weight import terminal_weight
 from POMDPPlanners.utils.belief_factory import BeliefType, create_environment_belief
+from POMDPPlanners.tests.test_utils.particle_belief_typing import particle_belief
 
 # 0 stay, 1 left, 2 right, 3 fire -- the golden GIF's sequence.
 GOLDEN_ACTIONS = [1, 3, 0, 2, 3, 2, 0, 3, 1, 3, 0, 3]
@@ -126,7 +127,7 @@ def test_a_planners_update_is_not_conditioned(belief_type):
     random.seed(5)
     np.random.seed(5)
     env = build_env()
-    belief = create_environment_belief(env, n_particles=200, belief_type=belief_type)
+    belief = particle_belief(create_environment_belief(env, n_particles=200, belief_type=belief_type))
     state = env.initial_state_dist().sample()[0]
     next_state, observation, _ = env.sample_next_step(state, GOLDEN_ACTIONS[0])
 

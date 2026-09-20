@@ -18,6 +18,7 @@ from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp_beliefs.rock
     RockSampleVectorizedUpdater,
 )
 from POMDPPlanners.tests.test_utils.env_pinned_kwargs import rock_sample_pinned_kwargs
+from POMDPPlanners.tests.test_utils.particle_belief_typing import particle_belief
 from POMDPPlanners.tests.test_utils.terminal_particle_weight import (
     greedy_towards,
     replay_terminal_weights,
@@ -96,7 +97,7 @@ def test_the_vectorized_belief_runs_at_all_with_hazard_termination_on():
 
     np.random.seed(0)
     env = build_env()
-    belief = create_environment_belief(env, n_particles=32)
+    belief = particle_belief(create_environment_belief(env, n_particles=32))
     state = env.initial_state_dist().sample()[0]
     next_state, observation, _ = env.sample_next_step(state, env.get_actions()[0])
 

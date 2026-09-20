@@ -26,6 +26,7 @@ import numpy as np
 from POMDPPlanners.core.belief.base_belief import Belief
 from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.utils.belief_factory import create_environment_belief
+from POMDPPlanners.tests.test_utils.particle_belief_typing import particle_belief
 
 
 def terminal_weight(belief: Belief, env: Environment) -> float:
@@ -38,8 +39,9 @@ def terminal_weight(belief: Belief, env: Environment) -> float:
     Returns:
         A number in ``[0, 1]``.
     """
-    mask = np.array([bool(env.is_terminal(particle)) for particle in belief.particles])
-    weights = np.asarray(belief.normalized_weights, dtype=float)
+    particles = particle_belief(belief)
+    mask = np.array([bool(env.is_terminal(particle)) for particle in particles.particles])
+    weights = np.asarray(particles.normalized_weights, dtype=float)
     return float(weights[mask].sum())
 
 

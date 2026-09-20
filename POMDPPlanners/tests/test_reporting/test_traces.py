@@ -194,10 +194,10 @@ class _EnvironmentWithoutATraceExporter(Environment):
             ),
         )
 
-    def sample_next_state(self, state, action):
+    def sample_next_state(self, state, action, n_samples: int = 1):
         return state
 
-    def sample_observation(self, state, action, next_state):
+    def sample_observation(self, next_state, action, n_samples: int = 1):
         return 0
 
     def reward(self, state, action, next_state=None):
@@ -218,11 +218,11 @@ class _EnvironmentWithoutATraceExporter(Environment):
     def initial_observation_dist(self):
         return DiscreteDistribution({0: 1.0})
 
-    def transition_log_probability(self, state, action, next_state) -> float:
-        return 0.0
+    def transition_log_probability(self, state, action, next_states) -> np.ndarray:
+        return np.zeros(1)
 
-    def observation_log_probability(self, state, action, next_state, observation) -> float:
-        return 0.0
+    def observation_log_probability(self, next_state, action, observations) -> np.ndarray:
+        return np.zeros(1)
 
     def is_equal_observation(self, observation1, observation2) -> bool:
         return observation1 == observation2

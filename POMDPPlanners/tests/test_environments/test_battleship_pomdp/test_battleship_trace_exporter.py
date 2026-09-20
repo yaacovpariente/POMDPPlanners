@@ -17,7 +17,7 @@ different renderer from the package export, or reaching none at all.
 
 import hashlib
 from pathlib import Path
-from typing import List
+from typing import List, cast
 
 import numpy as np
 import pytest
@@ -37,6 +37,7 @@ from POMDPPlanners.environments.battleship_pomdp.battleship_visualization.trace_
     build_battleship_trace,
 )
 from POMDPPlanners.tests.test_utils.env_pinned_kwargs import battleship_pinned_kwargs
+from POMDPPlanners.tests.test_utils.particle_belief_typing import particle_belief
 
 
 @pytest.fixture(name="env")
@@ -193,9 +194,13 @@ def test_marginals_are_the_beliefs_own_exact_posterior(env: BattleshipPOMDP):
 
     assert payload["marginal_source"] == MARGINAL_SOURCE_EXACT
     for index, step in enumerate(history):
-        expected = step.belief.occupancy_marginal(env)
+        # The episode is built with Battleship's own belief, whose exact
+        # marginal is what the exporter is being checked against; StepData
+        # only promises a Belief.
+        belief = cast(BattleshipBelief, step.belief)
+        expected = belief.occupancy_marginal(env)
         assert payload["occupancy_marginals"][index] == pytest.approx(expected.tolist())
-        assert payload["support_sizes"][index] == int(step.belief.consistent_indices(env).size)
+        assert payload["support_sizes"][index] == int(belief.consistent_indices(env).size)
 
     # The support can only shrink: a probe rules layouts out and never back in.
     supports = payload["support_sizes"]
@@ -224,9 +229,10 @@ def test_a_belief_without_an_exact_marginal_is_reported_as_missing(env: Battlesh
             observation=step.observation,
             reward=step.reward,
             belief=WeightedParticleBelief(
-                particles=list(step.belief.particles),
+                particles=list(particle_belief(step.belief).particles),
                 log_weights=np.log(
-                    np.ones(len(step.belief.particles)) / len(step.belief.particles)
+                    np.ones(len(particle_belief(step.belief).particles))
+                    / len(particle_belief(step.belief).particles)
                 ),
             ),
             info=step.info,
@@ -291,4 +297,6 @@ def test_the_environment_and_the_package_render_the_same_gif(env: BattleshipPOMD
     from PIL import Image  # pylint: disable=import-outside-toplevel
 
     with Image.open(through_environment) as image:
-        assert image.n_frames > 1
+        # n_frames is declared on the multi-frame mixin, not on Image, and a
+        # GIF is only multi-frame at runtime.
+        assert getattr(image, "n_frames") > 1

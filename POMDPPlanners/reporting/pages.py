@@ -56,7 +56,16 @@ def env_url(run: RunView, env: str) -> str:
 
 def policy_url(run: RunView, env: str, policy: str) -> str:
     """URL of one planner's page within a run."""
-    return _url("run", run.store_index, run.experiment_id, run.run_id, "env", env, "policy", policy)
+    return _url(
+        "run",
+        run.store_index,
+        run.experiment_id,
+        run.run_id,
+        "env",
+        env,
+        "policy",
+        policy,
+    )
 
 
 def episode_url(run: RunView, env: str, policy: str, index: int) -> str:
@@ -73,10 +82,14 @@ def artifact_url(run: RunView, relative_path: str) -> str:
 def _timestamp(value: Optional[int]) -> str:
     if not value:
         return "—"
-    return datetime.fromtimestamp(value / 1000, tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    return datetime.fromtimestamp(value / 1000, tz=timezone.utc).strftime(
+        "%Y-%m-%d %H:%M UTC"
+    )
 
 
-def layout(title: str, breadcrumbs: Sequence[Tuple[str, Optional[str]]], body: str) -> str:
+def layout(
+    title: str, breadcrumbs: Sequence[Tuple[str, Optional[str]]], body: str
+) -> str:
     """Wrap a page body in the shared shell.
 
     Args:
@@ -89,7 +102,11 @@ def layout(title: str, breadcrumbs: Sequence[Tuple[str, Optional[str]]], body: s
         A complete HTML document.
     """
     crumbs = " / ".join(
-        f'<a href="{html(href)}">{html(label)}</a>' if href else f"<span>{html(label)}</span>"
+        (
+            f'<a href="{html(href)}">{html(label)}</a>'
+            if href
+            else f"<span>{html(label)}</span>"
+        )
         for label, href in breadcrumbs
     )
     return (
@@ -130,7 +147,11 @@ def _theme_toggle() -> str:
         + "".join(
             f'<button type="button" class="tab" data-theme-choice="{mode}" '
             f'aria-pressed="false">{label}</button>'
-            for mode, label in (("system", "Auto"), ("light", "Light"), ("dark", "Dark"))
+            for mode, label in (
+                ("system", "Auto"),
+                ("light", "Light"),
+                ("dark", "Dark"),
+            )
         )
         + "</div>"
     )
@@ -145,7 +166,9 @@ def _chip(status: str) -> str:
     Returns:
         HTML for the chip.
     """
-    tone = {"FINISHED": "ok", "FAILED": "bad", "RUNNING": "busy"}.get(status.upper(), "flat")
+    tone = {"FINISHED": "ok", "FAILED": "bad", "RUNNING": "busy"}.get(
+        status.upper(), "flat"
+    )
     return f'<span class="chip chip-{tone}">{html(status.title())}</span>'
 
 
@@ -180,7 +203,11 @@ def _layout_toggle() -> str:
         + "".join(
             f'<button type="button" class="tab" data-layout="{mode}" '
             f'aria-pressed="{"true" if mode == "cards" else "false"}">{label}</button>'
-            for mode, label in (("cards", "Cards"), ("list", "List"), ("table", "Table"))
+            for mode, label in (
+                ("cards", "Cards"),
+                ("list", "List"),
+                ("table", "Table"),
+            )
         )
         + "</div>"
     )
@@ -253,7 +280,11 @@ def _listing(
                 if item.tags
                 else ""
             )
-            + (f'<p class="path"><code>{html(item.footnote)}</code></p>' if item.footnote else "")
+            + (
+                f'<p class="path"><code>{html(item.footnote)}</code></p>'
+                if item.footnote
+                else ""
+            )
             + "</a>"
         )
 
@@ -280,11 +311,13 @@ def _listing(
             f'<td><a href="{html(item.href)}">{html(item.title)}</a>'
             f'{" " + item.chip if item.chip else ""}</td>'
         ]
-        cells += [f'<td class="num">{values.get(label) or "—"}</td>' for label in labels]
+        cells += [
+            f'<td class="num">{values.get(label) or "—"}</td>' for label in labels
+        ]
         if has_tags:
             cells.append(f'<td>{", ".join(html(t) for t in item.tags) or "—"}</td>')
         if has_footnote:
-            cells.append(f'<td><code>{html(item.footnote)}</code></td>')
+            cells.append(f"<td><code>{html(item.footnote)}</code></td>")
         body.append("<tr>" + "".join(cells) + "</tr>")
 
     return (
@@ -317,7 +350,9 @@ def _stats(items: Sequence[Tuple[str, str]]) -> str:
 
 def _table(headers: Sequence[str], rows: Iterable[Sequence[str]]) -> str:
     head = "".join(f"<th>{html(h)}</th>" for h in headers)
-    body = "".join("<tr>" + "".join(f"<td>{cell}</td>" for cell in row) + "</tr>" for row in rows)
+    body = "".join(
+        "<tr>" + "".join(f"<td>{cell}</td>" for cell in row) + "</tr>" for row in rows
+    )
     if not body:
         return '<p class="empty">Nothing here.</p>'
     return f'<div class="scroll"><table><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table></div>'
@@ -332,7 +367,9 @@ def index_page(experiments: Sequence[ExperimentView], roots: Sequence[object]) -
         items.append(
             ListingItem(
                 title=experiment.name,
-                href=_url("experiment", experiment.store_index, experiment.experiment_id),
+                href=_url(
+                    "experiment", experiment.store_index, experiment.experiment_id
+                ),
                 fields=[
                     ("Runs", str(len(experiment.runs))),
                     ("Latest run", _timestamp(latest.start_time if latest else None)),
@@ -375,14 +412,20 @@ def experiment_page(experiment: ExperimentView) -> str:
         [("Experiments", "/"), (experiment.name, None)],
         f'<div class="page-head"><h1>{html(experiment.name)}</h1>{_layout_toggle()}</div>'
         f'<p class="note">{len(experiment.runs)} run(s), newest first.</p>'
-        + _listing(items, "This experiment has no runs the site can read.", "Environments"),
+        + _listing(
+            items, "This experiment has no runs the site can read.", "Environments"
+        ),
     )
 
 
 def _metric_table(run: RunView, env: EnvironmentView) -> str:
     per_policy = {p.name: run.metrics_for(env.name, p.name) for p in env.policies}
     names: List[str] = sorted(
-        {name for metrics in per_policy.values() for name in charts.base_metric_names(metrics)}
+        {
+            name
+            for metrics in per_policy.values()
+            for name in charts.base_metric_names(metrics)
+        }
     )
     if not names:
         return '<p class="empty">This run logged no metrics for this environment.</p>'
@@ -391,7 +434,9 @@ def _metric_table(run: RunView, env: EnvironmentView) -> str:
     # interval tucked in beside the number, where it reads as part of it.
     head = (
         "<tr><th rowspan='2'>Metric</th>"
-        + "".join(f"<th colspan='2' class='group'>{html(p.name)}</th>" for p in env.policies)
+        + "".join(
+            f"<th colspan='2' class='group'>{html(p.name)}</th>" for p in env.policies
+        )
         + "</tr><tr>"
         + "".join("<th>Value</th><th>Confidence interval</th>" for _ in env.policies)
         + "</tr>"
@@ -413,7 +458,9 @@ def _metric_table(run: RunView, env: EnvironmentView) -> str:
                 if low is not None and high is not None and high > low
                 else '<span class="dim">—</span>'
             )
-            cells.append(f'<td class="num">{value:.4g}</td><td class="num ci">{interval}</td>')
+            cells.append(
+                f'<td class="num">{value:.4g}</td><td class="num ci">{interval}</td>'
+            )
         rows.append("<tr>" + "".join(cells) + "</tr>")
 
     return (
@@ -431,7 +478,11 @@ def _comparison_charts(run: RunView, env: EnvironmentView, limit: int = 6) -> st
         return ""
     per_policy = {p.name: run.metrics_for(env.name, p.name) for p in env.policies}
     names: List[str] = sorted(
-        {name for metrics in per_policy.values() for name in charts.base_metric_names(metrics)}
+        {
+            name
+            for metrics in per_policy.values()
+            for name in charts.base_metric_names(metrics)
+        }
     )
     # Headline metrics first: these are the ones a comparison is usually about.
     preferred_order = [
@@ -492,7 +543,9 @@ def _policy_cards(run: RunView, env: EnvironmentView) -> str:
     for policy in env.policies:
         metrics = run.metrics_for(env.name, policy.name)
         shown = [
-            (label, fmt.format(metrics[key])) for key, label, fmt in headline if key in metrics
+            (label, fmt.format(metrics[key]))
+            for key, label, fmt in headline
+            if key in metrics
         ]
         if not shown:
             shown = [
@@ -533,7 +586,10 @@ def run_page(run: RunView) -> str:
         run.run_name,
         [
             ("Experiments", "/"),
-            (run.experiment_name, _url("experiment", run.store_index, run.experiment_id)),
+            (
+                run.experiment_name,
+                _url("experiment", run.store_index, run.experiment_id),
+            ),
             (run.run_name, None),
         ],
         f'<div class="page-head"><h1>{html(run.run_name)} {_chip(run.status)}</h1>'
@@ -565,7 +621,9 @@ def _episode_returns(policy: PolicyView) -> List[float]:
     return returns
 
 
-def _returns_chart(env: EnvironmentView, heading: str = "Discounted return per episode") -> str:
+def _returns_chart(
+    env: EnvironmentView, heading: str = "Discounted return per episode"
+) -> str:
     """The histogram of episode returns for every planner in one environment.
 
     Args:
@@ -577,7 +635,9 @@ def _returns_chart(env: EnvironmentView, heading: str = "Discounted return per e
         return — a run of videos alone, for instance.
     """
     series = [(policy.name, _episode_returns(policy)) for policy in env.policies]
-    svg = charts.histogram_svg(series, value_label="Discounted return", count_label="Episodes")
+    svg = charts.histogram_svg(
+        series, value_label="Discounted return", count_label="Episodes"
+    )
     if not svg:
         return ""
     episodes = sum(len(values) for _, values in series)
@@ -603,7 +663,10 @@ def environment_page(run: RunView, env: EnvironmentView) -> str:
         env.name,
         [
             ("Experiments", "/"),
-            (run.experiment_name, _url("experiment", run.store_index, run.experiment_id)),
+            (
+                run.experiment_name,
+                _url("experiment", run.store_index, run.experiment_id),
+            ),
             (run.run_name, run_url(run)),
             (env.name, None),
         ],
@@ -664,7 +727,10 @@ def chart_builder_page(run: RunView, env: EnvironmentView) -> str:
         f"Chart · {env.name}",
         [
             ("Experiments", "/"),
-            (run.experiment_name, _url("experiment", run.store_index, run.experiment_id)),
+            (
+                run.experiment_name,
+                _url("experiment", run.store_index, run.experiment_id),
+            ),
             (run.run_name, run_url(run)),
             (env.name, env_url(run, env.name)),
             ("Chart", None),
@@ -676,7 +742,7 @@ def chart_builder_page(run: RunView, env: EnvironmentView) -> str:
         "confidence intervals.</p>"
         '<div class="builder">'
         '<form class="builder-controls" id="chart-form">'
-        '<fieldset><legend>Planners</legend>'
+        "<fieldset><legend>Planners</legend>"
         '<p class="note">Tick the ones to plot; the box under each is the name it carries in the figure.</p>'
         '<div id="chart-policies"></div></fieldset>'
         '<label>Metric <select id="chart-metric"></select></label>'
@@ -791,7 +857,9 @@ def _thumbnail_scripts(policies: Sequence[PolicyView]) -> str:
     )
     if not kinds:
         return ""
-    scenes = "".join(f'<script src="{html(scene_script_path(k))}"></script>' for k in kinds)
+    scenes = "".join(
+        f'<script src="{html(scene_script_path(k))}"></script>' for k in kinds
+    )
     return (
         '<script src="/static/vendor/three.min.js"></script>'
         '<script src="/static/viewer/renderer-core.js"></script>'
@@ -816,11 +884,16 @@ def policy_page(run: RunView, env: EnvironmentView, policy: PolicyView) -> str:
                 fields=[
                     (
                         "Return",
-                        f"{summary.discounted_return:.2f}"
-                        if summary and summary.discounted_return is not None
-                        else "",
+                        (
+                            f"{summary.discounted_return:.2f}"
+                            if summary and summary.discounted_return is not None
+                            else ""
+                        ),
                     ),
-                    ("Steps", str(summary.num_steps) if summary and summary.num_steps else ""),
+                    (
+                        "Steps",
+                        str(summary.num_steps) if summary and summary.num_steps else "",
+                    ),
                     ("Ended", outcome),
                 ],
                 tags=sorted({view_label(a) for a in artifacts}),
@@ -836,7 +909,10 @@ def policy_page(run: RunView, env: EnvironmentView, policy: PolicyView) -> str:
         f"{policy.name} on {env.name}",
         [
             ("Experiments", "/"),
-            (run.experiment_name, _url("experiment", run.store_index, run.experiment_id)),
+            (
+                run.experiment_name,
+                _url("experiment", run.store_index, run.experiment_id),
+            ),
             (run.run_name, run_url(run)),
             (env.name, env_url(run, env.name)),
             (policy.name, None),
@@ -890,7 +966,9 @@ def _player_html(run: RunView, env: str, policy: str, artifact: EpisodeArtifact)
             f'src="{html(src)}"></video>'
         )
     if artifact.player == "image":
-        return f'<img class="player" src="{html(src)}" alt="{html(view_label(artifact))}">'
+        return (
+            f'<img class="player" src="{html(src)}" alt="{html(view_label(artifact))}">'
+        )
     # trace-viewer
     return (
         f'<div class="viewer" id="viewer" data-trace="{html(src)}" '
@@ -956,7 +1034,9 @@ def episode_page(
     # Every artifact that can be shown, preferred one first, so the tab that is
     # open on arrival is the richest view the episode produced.
     playable = [chosen] if chosen else []
-    playable += [a for a in artifacts if a is not chosen and a.kind is not ArtifactKind.TRACE]
+    playable += [
+        a for a in artifacts if a is not chosen and a.kind is not ArtifactKind.TRACE
+    ]
 
     tabs = "".join(
         f'<button type="button" class="tab" data-view="{i}" '
@@ -980,16 +1060,24 @@ def episode_page(
         [
             (
                 "Discounted return",
-                f"{summary.discounted_return:.2f}"
-                if summary and summary.discounted_return is not None
-                else "",
+                (
+                    f"{summary.discounted_return:.2f}"
+                    if summary and summary.discounted_return is not None
+                    else ""
+                ),
             ),
             ("Steps", str(summary.num_steps) if summary and summary.num_steps else ""),
             (
                 "Ended",
-                ("terminal state" if summary.reach_terminal_state else "out of steps")
-                if summary and summary.reach_terminal_state is not None
-                else "",
+                (
+                    (
+                        "terminal state"
+                        if summary.reach_terminal_state
+                        else "out of steps"
+                    )
+                    if summary and summary.reach_terminal_state is not None
+                    else ""
+                ),
             ),
             ("Views", str(len(playable)) if len(playable) > 1 else ""),
         ]
@@ -1004,7 +1092,10 @@ def episode_page(
         f"Episode {index} · {policy.name}",
         [
             ("Experiments", "/"),
-            (run.experiment_name, _url("experiment", run.store_index, run.experiment_id)),
+            (
+                run.experiment_name,
+                _url("experiment", run.store_index, run.experiment_id),
+            ),
             (run.run_name, run_url(run)),
             (env.name, env_url(run, env.name)),
             (policy.name, policy_url(run, env.name, policy.name)),
