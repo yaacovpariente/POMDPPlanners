@@ -646,3 +646,78 @@ class TestBeliefFactoryIntegration:
         assert isinstance(belief, GaussianBelief)
         assert isinstance(belief.updater, ExtendedKalmanFilterUpdater)
         np.testing.assert_array_equal(belief.covariance, custom_cov)
+
+
+# ---------------------------------------------------------------------------
+# Pickling tests
+# ---------------------------------------------------------------------------
+
+
+class TestPickling:
+    """A Gaussian belief must survive joblib's hashing and pickling.
+
+    ``LocalSimulationsAPI`` pickles every episode task to derive its cache
+    key, so an unpicklable updater makes the belief unusable in any
+    simulation run, at every ``n_jobs``.
+    """
+
+    @pytest.mark.parametrize(
+        "updater_type",
+        [GaussianBeliefUpdaterType.EKF, GaussianBeliefUpdaterType.UKF],
+    )
+    def test_belief_is_picklable(self, env, initial_cov, updater_type):
+        """Test that a Mountain Car Gaussian belief can be pickled.
+
+        Purpose: Guards the simulation path, which pickles the belief.
+
+        Given: A Mountain Car Gaussian belief with the EKF or UKF updater.
+        When: The belief is pickled and joblib-hashed.
+        Then: Neither raises, and joblib.hash is stable across calls.
+
+        Test type: unit
+        """
+        import pickle
+
+        import joblib
+
+        belief = create_mountain_car_gaussian_belief(
+            env=env, updater_type=updater_type, initial_covariance=initial_cov
+        )
+        restored = pickle.loads(pickle.dumps(belief))
+        assert isinstance(restored, GaussianBelief)
+        assert joblib.hash(belief) == joblib.hash(belief)
+
+    @pytest.mark.parametrize(
+        "updater_type",
+        [GaussianBeliefUpdaterType.EKF, GaussianBeliefUpdaterType.UKF],
+    )
+    def test_unpickled_updater_transitions_identically(self, env, initial_cov, updater_type):
+        """Test that pickling preserves the transition function's output.
+
+        Purpose: A picklable updater is useless if the round trip loses the
+        environment's physics constants.
+
+        Given: A Mountain Car Gaussian belief.
+        When: It is pickled, restored, and its transition_fn is evaluated.
+        Then: The restored output equals the original exactly.
+
+        Test type: unit
+        """
+        import pickle
+
+        belief = create_mountain_car_gaussian_belief(
+            env=env, updater_type=updater_type, initial_covariance=initial_cov
+        )
+        restored = pickle.loads(pickle.dumps(belief))
+
+        state = np.array([-0.4, 0.01])
+        action = np.array([1.0])
+        np.testing.assert_array_equal(
+            belief.updater.transition_fn(state, action),
+            restored.updater.transition_fn(state, action),
+        )
+        if updater_type is GaussianBeliefUpdaterType.EKF:
+            np.testing.assert_array_equal(
+                belief.updater.transition_jacobian(state, action),
+                restored.updater.transition_jacobian(state, action),
+            )
