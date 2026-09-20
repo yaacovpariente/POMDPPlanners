@@ -29,7 +29,7 @@ Classes:
 from collections.abc import Hashable
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
+from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 import numpy as np
 
@@ -63,6 +63,9 @@ _TERMINAL_OBSERVATION_VALUE = -1.0
 # ``K * 3 ** (n_blue * n_red) * 2 ** n_blue``, so a large team would otherwise
 # spend real time building a distribution nothing reads in full.
 _MAX_ENUMERATED_OBSERVATIONS = 8192
+
+if TYPE_CHECKING:
+    from POMDPPlanners.core.simulation.traces import EpisodeTrace
 
 DEFAULT_TREES: Tuple[Tuple[int, int], ...] = ((2, 1), (2, 5), (3, 3), (4, 0), (4, 6), (6, 1), (6, 5))
 DEFAULT_RED_FLAG_CANDIDATES: Tuple[Tuple[int, int], ...] = ((7, 1), (7, 5), (6, 3), (8, 2))
@@ -1397,12 +1400,42 @@ class CaptureTheFlagPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-ma
         """
         # Imported here so the environment stays importable without Pillow's
         # drawing stack, matching how the other environments defer visualizers.
-        from POMDPPlanners.environments.capture_the_flag_pomdp.capture_the_flag_visualizer import (  # pylint: disable=import-outside-toplevel
+        from POMDPPlanners.environments.capture_the_flag_pomdp.visualizer import (  # pylint: disable=import-outside-toplevel
             CaptureTheFlagVisualizer,
         )
 
         CaptureTheFlagVisualizer(self).render_episode(
             history, output_dir / f"capture_the_flag_{episode_index}.gif"
+        )
+
+    def build_episode_trace(
+        self, history: List[StepData], episode_index: int, policy_name: Optional[str] = None
+    ) -> "EpisodeTrace":
+        """Write this episode as data, beside the GIF.
+
+        Args:
+            history: The episode's recorded steps.
+            episode_index: Zero-based episode index within its run.
+            policy_name: Name of the policy that produced the episode.
+
+        Returns:
+            The episode's trace, with payload kind ``capture_the_flag.v1``.
+        """
+        # Imported here rather than at module scope: the exporter pulls in the
+        # trace schema, and this module is imported by every run including the
+        # ones that never write anything. The module is imported directly
+        # rather than through the visualizer package, whose ``__init__`` also
+        # pulls in the GIF renderer and therefore Pillow.
+        # pylint: disable-next=import-outside-toplevel
+        from POMDPPlanners.environments.capture_the_flag_pomdp.visualizer.trace_exporter import (
+            build_capture_the_flag_trace,
+        )
+
+        return build_capture_the_flag_trace(
+            environment=self,
+            history=history,
+            episode_index=episode_index,
+            policy_name=policy_name,
         )
 
 
